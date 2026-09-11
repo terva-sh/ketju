@@ -1,0 +1,176 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+  <style>
+    body { margin: 0; background: #12161E; color: #E6E9EF; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: #7FA3E8; } a:hover { color: #7FA3E8; text-decoration: underline; }
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+<div style="width: 1440px; min-height: 1100px; background: #12161E; color: #E6E9EF; display: flex; flex-direction: column">
+
+<header style="height: 56px; background: #1A1F2A; border-bottom: 1px solid #2B3242; display: flex; align-items: stretch; padding: 0 40px; gap: 32px">
+  <a href="#" style="display: flex; align-items: center; font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 500; color: #E6E9EF; text-decoration: none; letter-spacing: -0.01em">Neoforum</a>
+  <nav style="display: flex; align-items: stretch; gap: 22px">
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #E6E9EF; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid #7FA3E8">Forums</a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">Unread<span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; background: #E0A650; color: #1A1F2A; padding: 1px 6px; border-radius: 9px; font-weight: 500">12</span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">New<span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; background: #E0A650; color: #1A1F2A; padding: 1px 6px; border-radius: 9px; font-weight: 500">4</span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">Participated</a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">Watching</a>
+  </nav>
+  <div style="flex-grow: 1"></div>
+  <div style="display: flex; align-items: center; gap: 16px">
+    <div style="display: flex; align-items: center; gap: 8px; width: 240px; height: 34px; padding: 0 12px; border: 1px solid #2B3242; border-radius: 4px; background: #12161E; color: #8B95A8; font-size: 13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search threads and posts</span><span style="margin-left: auto; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; border: 1px solid #3A4356; padding: 0 5px; border-radius: 3px">/</span></div>
+    <a href="#" title="Moderator queue" style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 4px; color: #B8C0CE; text-decoration: none; font-size: 13px; font-weight: 500"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M2 9h3.5l1 2h3l1-2H14"/><path d="M3.5 3h9l1.5 6v4H2V9z"/></svg><span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; background: #1E2A42; color: #7FA3E8; padding: 1px 6px; border-radius: 9px">2</span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 8px; color: #E6E9EF; text-decoration: none; font-size: 14px; font-weight: 500"><span style="width: 28px; height: 28px; border-radius: 50%; background: #7FA3E8; color: #0F1622; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">D</span>drew</a>
+  </div>
+</header>
+<main style="width: 1100px; margin: 0 auto; padding: 36px 0 48px; display: flex; flex-direction: column; gap: 32px; flex-grow: 1">
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 24px">
+    <div style="display: flex; flex-direction: column; gap: 4px">
+      <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 32px; line-height: 1.1; letter-spacing: -0.01em; color: #E6E9EF">The Thursday Group</h1>
+      <p style="margin: 0; color: #B8C0CE; font-size: 15px">12 unread posts across 5 threads since Tuesday evening.</p>
+    </div>
+    <div style="display: flex; gap: 10px; align-items: center">
+      <a href="#" style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border: 1px solid #3A4356; border-radius: 4px; color: #B8C0CE; text-decoration: none; font-size: 14px; font-weight: 500; background: #1A1F2A">Mark all read</a>
+      <a href="#" style="display: flex; align-items: center; gap: 6px; height: 36px; padding: 0 14px; border-radius: 4px; background: #7FA3E8; color: #0F1622; text-decoration: none; font-size: 14px; font-weight: 600">New thread</a>
+    </div>
+  </div>
+  <div style="display: flex; flex-direction: column; gap: 28px">
+    
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; padding: 0 20px 6px; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: #8B95A8">
+      <span>Forum</span><span style="text-align: right">Activity</span><span style="text-align: center">Unread</span><span>Last post</span>
+    </div>
+    
+<section style="display: flex; flex-direction: column; gap: 0">
+  <div style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8B95A8; padding: 0 0 8px 4px">Community</div>
+  <div style="background: #1A1F2A; border: 1px solid #2B3242; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.35); display: flex; flex-direction: column">
+    
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">General</a></div>
+        <div style="font-size: 13px; color: #8B95A8">Anything that does not fit elsewhere</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>148 threads</span><span style="color: #8B95A8">3,912 posts</span></div>
+      <div style="display: flex; justify-content: center"><a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; background: #2A2416; color: #E0A650; border: 1px solid #E0A650; padding: 1px 8px; border-radius: 10px; text-decoration: none; font-weight: 500">7 new</a></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Naming scheme for the monthly threads</a>
+        <span style="color: #8B95A8">mara · 14 min ago</span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">Introductions</a></div>
+        <div style="font-size: 13px; color: #8B95A8">Say hello when you join; one thread per person</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>31 threads</span><span style="color: #8B95A8">402 posts</span></div>
+      <div style="display: flex; justify-content: center"><span style="font-size: 12px; color: #8B95A8">—</span></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Hi from the far side of the river</a>
+        <span style="color: #8B95A8">priya · yesterday</span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; ">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">Meetups and events</a></div>
+        <div style="font-size: 13px; color: #8B95A8">Planning, RSVPs, and the photos afterwards</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>27 threads</span><span style="color: #8B95A8">1,130 posts</span></div>
+      <div style="display: flex; justify-content: center"><a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; background: #2A2416; color: #E0A650; border: 1px solid #E0A650; padding: 1px 8px; border-radius: 10px; text-decoration: none; font-weight: 500">3 new</a></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">October bonfire: date poll closes Friday</a>
+        <span style="color: #8B95A8">tomas · 2 h ago</span>
+      </div>
+    </div>
+  </div>
+</section>
+    
+<section style="display: flex; flex-direction: column; gap: 0">
+  <div style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8B95A8; padding: 0 0 8px 4px">Projects</div>
+  <div style="background: #1A1F2A; border: 1px solid #2B3242; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.35); display: flex; flex-direction: column">
+    
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">The garden build</a></div>
+        <div style="font-size: 13px; color: #8B95A8">Raised beds, irrigation, and who is watering this week</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>19 threads</span><span style="color: #8B95A8">688 posts</span></div>
+      <div style="display: flex; justify-content: center"><a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; background: #2A2416; color: #E0A650; border: 1px solid #E0A650; padding: 1px 8px; border-radius: 10px; text-decoration: none; font-weight: 500">2 new</a></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Drip line pressure is dropping at the far bed</a>
+        <span style="color: #8B95A8">ines · 5 h ago</span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">Board game nights</a></div>
+        <div style="font-size: 13px; color: #8B95A8">What we are playing, what we should buy, house rules</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>42 threads</span><span style="color: #8B95A8">1,504 posts</span></div>
+      <div style="display: flex; justify-content: center"><span style="font-size: 12px; color: #8B95A8">—</span></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Rules clarification: trading during the auction</a>
+        <span style="color: #8B95A8">sam · 3 days ago</span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; ">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">Reading group</a></div>
+        <div style="font-size: 13px; color: #8B95A8">One book a month, spoilers behind the cut</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>14 threads</span><span style="color: #8B95A8">377 posts</span></div>
+      <div style="display: flex; justify-content: center"><span style="font-size: 12px; color: #8B95A8">—</span></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">November pick: nominations open</a>
+        <span style="color: #8B95A8">mara · 6 days ago</span>
+      </div>
+    </div>
+  </div>
+</section>
+    
+<section style="display: flex; flex-direction: column; gap: 0">
+  <div style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8B95A8; padding: 0 0 8px 4px">Meta</div>
+  <div style="background: #1A1F2A; border: 1px solid #2B3242; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.35); display: flex; flex-direction: column">
+    
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">Site feedback</a></div>
+        <div style="font-size: 13px; color: #8B95A8">Bugs, requests, and how the forum itself should work</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>22 threads</span><span style="color: #8B95A8">301 posts</span></div>
+      <div style="display: flex; justify-content: center"><span style="font-size: 12px; color: #8B95A8">—</span></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Keyboard shortcut for jump to unread</a>
+        <span style="color: #8B95A8">drew · 1 week ago</span>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: minmax(0, 1fr) 150px 110px 300px; gap: 24px; align-items: center; padding: 14px 20px; ">
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+        <div style="display: flex; align-items: center; gap: 8px"><a href="#" style="font-size: 16px; font-weight: 600; color: #E6E9EF; text-decoration: none">Moderators</a><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#8B95A8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><rect x="3.5" y="7" width="9" height="7" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg></div>
+        <div style="font-size: 13px; color: #8B95A8">Visible to the moderators group</div>
+      </div>
+      <div class="tnum" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; color: #B8C0CE; display: flex; flex-direction: column; gap: 2px; align-items: flex-end"><span>9 threads</span><span style="color: #8B95A8">156 posts</span></div>
+      <div style="display: flex; justify-content: center"><span style="font-size: 12px; color: #8B95A8">—</span></div>
+      <div style="display: flex; flex-direction: column; gap: 2px; min-width: 0; font-size: 13px">
+        <a href="#" style="color: #E6E9EF; text-decoration: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Two applications waiting in the queue</a>
+        <span style="color: #8B95A8">mara · 2 h ago</span>
+      </div>
+    </div>
+  </div>
+</section>
+  </div>
+  <footer style="margin-top: auto; display: flex; gap: 20px; font-size: 12px; color: #8B95A8; padding-top: 8px">
+    <span>34 members · 1,208 posts</span><span>Press <span style="font-family: IBM Plex Mono, ui-monospace, monospace; border: 1px solid #3A4356; padding: 0 5px; border-radius: 3px">?</span> for keyboard shortcuts</span><a href="#" style="color: #8B95A8; text-decoration: none">Guidelines</a><a href="#" style="color: #8B95A8; text-decoration: none">Markdown help</a>
+  </footer>
+</main>
+</div>
+</x-dc>
+</body>
+</html>

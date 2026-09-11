@@ -1,0 +1,93 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+  <style>
+    body { margin: 0; background: #12161E; color: #E6E9EF; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: #7FA3E8; } a:hover { color: #7FA3E8; text-decoration: underline; }
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+<div style="width: 390px; min-height: 1040px; background: #12161E; color: #E6E9EF; display: flex; flex-direction: column; position: relative">
+
+<header style="height: 52px; background: #1A1F2A; border-bottom: 1px solid #2B3242; display: flex; align-items: center; padding: 0 8px; gap: 4px; position: sticky; top: 0">
+  <span style="font-family: Newsreader, Georgia, serif; font-size: 20px; font-weight: 500; color: #E6E9EF; padding-left: 10px; letter-spacing: -0.01em">Neoforum</span>
+  <div style="flex-grow: 1; min-width: 0; display: flex; align-items: center; justify-content: center"></div>
+  <a href="#" aria-label="search" style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #B8C0CE; text-decoration: none"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg></a><a href="#" aria-label="Moderator queue" style="position: relative; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #B8C0CE; text-decoration: none"><svg width="20" height="20" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M2 9h3.5l1 2h3l1-2H14"/><path d="M3.5 3h9l1.5 6v4H2V9z"/></svg><span style="position: absolute; top: 6px; right: 6px; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 10px; background: #E0A650; color: #1A1F2A; padding: 0 5px; border-radius: 8px; font-weight: 500">2</span></a>
+</header>
+<main style="display: flex; flex-direction: column; gap: 20px; padding: 18px 0 24px">
+  <div style="padding: 0 16px; display: flex; flex-direction: column; gap: 2px">
+    <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 26px; line-height: 1.15; letter-spacing: -0.01em; color: #E6E9EF">The Thursday Group</h1>
+    <p style="margin: 0; color: #B8C0CE; font-size: 14px">12 unread posts across 5 threads since Tuesday evening.</p>
+  </div>
+  
+<section style="display: flex; flex-direction: column">
+  <div style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8B95A8; padding: 0 16px 8px">Community</div>
+  <div style="background: #1A1F2A; border-top: 1px solid #2B3242; border-bottom: 1px solid #2B3242; display: flex; flex-direction: column">
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">General</span><span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; background: #2A2416; color: #E0A650; border: 1px solid #E0A650; padding: 1px 8px; border-radius: 10px; font-weight: 500; white-space: nowrap">7 new</span></div>
+      <div style="font-size: 13px; color: #8B95A8">Anything that does not fit elsewhere</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Naming scheme for the monthly threads</span><span style="color: #8B95A8; white-space: nowrap">· 14 min</span></div>
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">Introductions</span></div>
+      <div style="font-size: 13px; color: #8B95A8">One thread per person</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Hi from the far side of the river</span><span style="color: #8B95A8; white-space: nowrap">· yesterday</span></div>
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; ">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">Meetups and events</span><span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; background: #2A2416; color: #E0A650; border: 1px solid #E0A650; padding: 1px 8px; border-radius: 10px; font-weight: 500; white-space: nowrap">3 new</span></div>
+      <div style="font-size: 13px; color: #8B95A8">Planning, RSVPs, and the photos afterwards</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">October bonfire: date poll closes Friday</span><span style="color: #8B95A8; white-space: nowrap">· 2 h</span></div>
+    </a></div>
+</section>
+  
+<section style="display: flex; flex-direction: column">
+  <div style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8B95A8; padding: 0 16px 8px">Projects</div>
+  <div style="background: #1A1F2A; border-top: 1px solid #2B3242; border-bottom: 1px solid #2B3242; display: flex; flex-direction: column">
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">The garden build</span><span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; background: #2A2416; color: #E0A650; border: 1px solid #E0A650; padding: 1px 8px; border-radius: 10px; font-weight: 500; white-space: nowrap">2 new</span></div>
+      <div style="font-size: 13px; color: #8B95A8">Raised beds, irrigation, who is watering</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Drip line pressure is dropping at the far bed</span><span style="color: #8B95A8; white-space: nowrap">· 5 h</span></div>
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">Board game nights</span></div>
+      <div style="font-size: 13px; color: #8B95A8">What we are playing and house rules</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Rules clarification: trading during the auction</span><span style="color: #8B95A8; white-space: nowrap">· 3 d</span></div>
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; ">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">Reading group</span></div>
+      <div style="font-size: 13px; color: #8B95A8">One book a month, spoilers behind the cut</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">November pick: nominations open</span><span style="color: #8B95A8; white-space: nowrap">· 6 d</span></div>
+    </a></div>
+</section>
+  
+<section style="display: flex; flex-direction: column">
+  <div style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #8B95A8; padding: 0 16px 8px">Meta</div>
+  <div style="background: #1A1F2A; border-top: 1px solid #2B3242; border-bottom: 1px solid #2B3242; display: flex; flex-direction: column">
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; border-bottom: 1px solid #2B3242;">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">Site feedback</span></div>
+      <div style="font-size: 13px; color: #8B95A8">Bugs, requests, how the forum should work</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Keyboard shortcut for jump to unread</span><span style="color: #8B95A8; white-space: nowrap">· 1 w</span></div>
+    </a>
+    <a href="#" style="display: flex; flex-direction: column; gap: 4px; padding: 12px 16px; min-height: 44px; text-decoration: none; color: #E6E9EF; ">
+      <div style="display: flex; align-items: center; gap: 8px"><span style="font-size: 16px; font-weight: 600; flex-grow: 1; min-width: 0">Moderators</span><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="#8B95A8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><rect x="3.5" y="7" width="9" height="7" rx="1"/><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2"/></svg></div>
+      <div style="font-size: 13px; color: #8B95A8">Visible to the moderators group</div>
+      <div style="font-size: 13px; color: #B8C0CE; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">Two applications waiting in the queue</span><span style="color: #8B95A8; white-space: nowrap">· 2 h</span></div>
+    </a></div>
+</section>
+</main>
+<a href="#" aria-label="New thread" style="position: absolute; right: 16px; bottom: 72px; width: 56px; height: 56px; border-radius: 50%; background: #7FA3E8; color: #0F1622; display: flex; align-items: center; justify-content: center; box-shadow: 0 4px 12px rgba(0,0,0,.18)"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="m3 13 .8-3.2L10.6 3l2.4 2.4-6.8 6.8z"/><path d="m9.5 4.2 2.3 2.3"/></svg></a>
+
+<nav style="position: sticky; bottom: 0; margin-top: auto; height: 56px; background: #1A1F2A; border-top: 1px solid #2B3242; display: flex; align-items: stretch">
+  <a href="#" style="position: relative; flex: 1 1 0; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #7FA3E8; text-decoration: none; font-size: 11px; font-weight: 500; letter-spacing: 0.01em"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M2.5 7.5 8 3l5.5 4.5V13a.5.5 0 0 1-.5.5H3a.5.5 0 0 1-.5-.5z"/><path d="M6.5 13.5v-4h3v4"/></svg><span>Forums</span></a><a href="#" style="position: relative; flex: 1 1 0; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #8B95A8; text-decoration: none; font-size: 11px; font-weight: 500; letter-spacing: 0.01em"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M5 4h9M5 8h9M5 12h9"/><circle cx="2.5" cy="4" r=".75"/><circle cx="2.5" cy="8" r=".75"/><circle cx="2.5" cy="12" r=".75"/></svg><span>Unread</span><span style="position: absolute; top: 4px; left: 50%; margin-left: 4px; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 10px; background: #E0A650; color: #1A1F2A; padding: 0 5px; border-radius: 8px; font-weight: 500">12</span></a><a href="#" style="position: relative; flex: 1 1 0; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #8B95A8; text-decoration: none; font-size: 11px; font-weight: 500; letter-spacing: 0.01em"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="8" cy="8" r="5.5"/><path d="M8 5v3.5l2.5 1.5"/></svg><span>New</span><span style="position: absolute; top: 4px; left: 50%; margin-left: 4px; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 10px; background: #E0A650; color: #1A1F2A; padding: 0 5px; border-radius: 8px; font-weight: 500">4</span></a><a href="#" style="position: relative; flex: 1 1 0; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #8B95A8; text-decoration: none; font-size: 11px; font-weight: 500; letter-spacing: 0.01em"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M4 11V7.5a4 4 0 0 1 8 0V11l1 1.5H3z"/><path d="M6.5 13.5a1.5 1.5 0 0 0 3 0"/></svg><span>Alerts</span><span style="position: absolute; top: 4px; left: 50%; margin-left: 4px; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 10px; background: #E0A650; color: #1A1F2A; padding: 0 5px; border-radius: 8px; font-weight: 500">3</span></a><a href="#" style="position: relative; flex: 1 1 0; height: 56px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: #8B95A8; text-decoration: none; font-size: 11px; font-weight: 500; letter-spacing: 0.01em"><svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="8" cy="5.5" r="2.75"/><path d="M2.75 14a5.25 5.25 0 0 1 10.5 0"/></svg><span>Me</span></a>
+</nav>
+</div>
+</x-dc>
+</body>
+</html>

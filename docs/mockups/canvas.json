@@ -1,0 +1,87 @@
+{
+  "artboards": [
+    {
+      "file": "Main.dc.html",
+      "title": "Front page \u00b7 light",
+      "x": 0,
+      "y": 0,
+      "w": 1440,
+      "h": 1100
+    },
+    {
+      "file": "FrontDark.dc.html",
+      "title": "Front page \u00b7 dark",
+      "x": 1540,
+      "y": 0,
+      "w": 1440,
+      "h": 1100
+    },
+    {
+      "file": "ThreadLight.dc.html",
+      "title": "Thread page \u00b7 light",
+      "x": 0,
+      "y": 1240,
+      "w": 1440,
+      "h": 1650
+    },
+    {
+      "file": "ThreadDark.dc.html",
+      "title": "Thread page \u00b7 dark",
+      "x": 1540,
+      "y": 1240,
+      "w": 1440,
+      "h": 1650
+    },
+    {
+      "file": "MobileFrontLight.dc.html",
+      "title": "Mobile front \u00b7 light",
+      "x": 3080,
+      "y": 0,
+      "w": 390,
+      "h": 1040
+    },
+    {
+      "file": "MobileFrontDark.dc.html",
+      "title": "Mobile front \u00b7 dark",
+      "x": 3560,
+      "y": 0,
+      "w": 390,
+      "h": 1040
+    },
+    {
+      "file": "MobileThreadLight.dc.html",
+      "title": "Mobile thread \u00b7 light",
+      "x": 3080,
+      "y": 1240,
+      "w": 390,
+      "h": 1640
+    },
+    {
+      "file": "MobileThreadDark.dc.html",
+      "title": "Mobile thread \u00b7 dark",
+      "x": 3560,
+      "y": 1240,
+      "w": 390,
+      "h": 1640
+    }
+  ],
+  "annotations": [
+    {
+      "id": "source-note",
+      "x": 0,
+      "y": -170,
+      "w": 520,
+      "text": "Desktop mockups at 1440 wide, following docs/06-thread-views.md and docs/07-api-and-clients.md. Tokens and type match the design overview page. The thread page shows page 3 of a 212-post thread: a moderator post, a reply expander, a tombstone, the unread divider, a reply-to indicator with quote, an attachment, and the composer with a reply-to chip."
+    },
+    {
+      "id": "mobile-note",
+      "x": 3080,
+      "y": -170,
+      "w": 520,
+      "text": "Mobile at 390 wide. Bottom tab bar carries the cross-forum lists (Forums, Unread, New, Alerts, Me); compose is a floating button on list screens and a sticky reply bar on the thread page. Same tokens, 44 px minimum targets, one column, no nesting. Long pages scroll; the frames are tall so the whole screen is visible here."
+    }
+  ],
+  "launch": {
+    "view": "canvas"
+  }
+}

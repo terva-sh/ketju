@@ -1,0 +1,14 @@
+schema: 3
+actors:
+  - id: human:sothr
+    name: ""
+labels: []
+milestones: []
+series: []
+defaults:
+  type: task
+  priority: normal
+  actor: null
+  claim_expiry: null
+lock:
+  timeout: 10s

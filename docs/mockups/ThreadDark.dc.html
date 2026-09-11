@@ -1,0 +1,157 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:opsz,wght@6..72,400;6..72,500;6..72,600&amp;family=IBM+Plex+Sans:wght@400;500;600&amp;family=IBM+Plex+Mono:wght@400;500&amp;display=swap">
+  <style>
+    body { margin: 0; background: #12161E; color: #E6E9EF; font-family: "IBM Plex Sans", system-ui, sans-serif; font-size: 15px; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+    a { color: #7FA3E8; } a:hover { color: #7FA3E8; text-decoration: underline; }
+    .tnum { font-variant-numeric: tabular-nums; }
+  </style>
+</helmet>
+<div style="width: 1440px; min-height: 1650px; background: #12161E; color: #E6E9EF; display: flex; flex-direction: column">
+
+<header style="height: 56px; background: #1A1F2A; border-bottom: 1px solid #2B3242; display: flex; align-items: stretch; padding: 0 40px; gap: 32px">
+  <a href="#" style="display: flex; align-items: center; font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 500; color: #E6E9EF; text-decoration: none; letter-spacing: -0.01em">Neoforum</a>
+  <nav style="display: flex; align-items: stretch; gap: 22px">
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #E6E9EF; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid #7FA3E8">Forums</a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">Unread<span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; background: #E0A650; color: #1A1F2A; padding: 1px 6px; border-radius: 9px; font-weight: 500">12</span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">New<span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; background: #E0A650; color: #1A1F2A; padding: 1px 6px; border-radius: 9px; font-weight: 500">4</span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">Participated</a>
+    <a href="#" style="display: flex; align-items: center; gap: 6px; padding: 18px 2px 16px; color: #B8C0CE; text-decoration: none; font-weight: 500; font-size: 14px; border-bottom: 2px solid transparent">Watching</a>
+  </nav>
+  <div style="flex-grow: 1"></div>
+  <div style="display: flex; align-items: center; gap: 16px">
+    <div style="display: flex; align-items: center; gap: 8px; width: 240px; height: 34px; padding: 0 12px; border: 1px solid #2B3242; border-radius: 4px; background: #12161E; color: #8B95A8; font-size: 13px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5 14 14"/></svg><span>Search threads and posts</span><span style="margin-left: auto; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; border: 1px solid #3A4356; padding: 0 5px; border-radius: 3px">/</span></div>
+    <a href="#" title="Moderator queue" style="display: flex; align-items: center; gap: 6px; height: 34px; padding: 0 10px; border-radius: 4px; color: #B8C0CE; text-decoration: none; font-size: 13px; font-weight: 500"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M2 9h3.5l1 2h3l1-2H14"/><path d="M3.5 3h9l1.5 6v4H2V9z"/></svg><span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; background: #1E2A42; color: #7FA3E8; padding: 1px 6px; border-radius: 9px">2</span></a>
+    <a href="#" style="display: flex; align-items: center; gap: 8px; color: #E6E9EF; text-decoration: none; font-size: 14px; font-weight: 500"><span style="width: 28px; height: 28px; border-radius: 50%; background: #7FA3E8; color: #0F1622; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600">D</span>drew</a>
+  </div>
+</header>
+<main style="width: 900px; margin: 0 auto; padding: 28px 0 56px; display: flex; flex-direction: column; gap: 20px">
+  <nav style="display: flex; gap: 8px; font-size: 13px; color: #8B95A8"><a href="#" style="color: #8B95A8; text-decoration: none">Forums</a><span>›</span><a href="#" style="color: #8B95A8; text-decoration: none">General</a></nav>
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 12px">
+      <h1 style="margin: 0; font-family: Newsreader, Georgia, serif; font-weight: 500; font-size: 32px; line-height: 1.15; letter-spacing: -0.01em; color: #E6E9EF; text-wrap: balance">Naming scheme for the monthly threads</h1>
+      <a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11.5px; padding: 2px 8px; border-radius: 10px; background: #1E2A42; color: #7FA3E8; text-decoration: none; align-self: center">meta</a>
+    </div>
+    <div style="display: flex; gap: 14px; align-items: center; font-size: 13px; color: #8B95A8">
+      <span>started by <a href="#" style="color: #B8C0CE; text-decoration: none; font-weight: 500">mara</a> · 3 days ago</span><span>·</span><span class="tnum">212 posts</span><span>·</span><span style="display: flex; align-items: center; gap: 5px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M6 2h4l-.5 4 2.5 2.5V10H4V8.5L6.5 6zM8 10v4"/></svg>pinned until Oct 1</span><span>·</span><a href="#" style="display: flex; align-items: center; gap: 5px; color: #7FA3E8; text-decoration: none"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M1.5 8s2.5-4.5 6.5-4.5S14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8z"/><circle cx="8" cy="8" r="2"/></svg>watching <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M4 6l4 4 4-4"/></svg></a>
+    </div>
+  </div>
+  <div style="display: flex; justify-content: space-between; align-items: center; gap: 16px; padding-top: 4px">
+    <div class="tnum" style="display: flex; gap: 6px; align-items: center; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 13px"><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">‹</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">1</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">2</a><span style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #E6E9EF; color: #12161E; font-weight: 600">3</span><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">4</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">5</a><span style="color: #8B95A8; padding: 0 4px">…</span><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">9</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">›</a><span style="color: #8B95A8; margin-left: 10px; font-size: 12px">posts 51–75 of 212</span></div>
+    <div style="display: flex; gap: 8px"><a href="#" style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 1px solid #3A4356; border-radius: 4px; background: #1A1F2A; color: #B8C0CE; text-decoration: none; font-size: 13px; font-weight: 500">Only mara</a><a href="#" style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 1px solid #3A4356; border-radius: 4px; background: #1A1F2A; color: #B8C0CE; text-decoration: none; font-size: 13px; font-weight: 500">Lens</a><a href="#" style="display: flex; align-items: center; gap: 8px; height: 32px; padding: 0 12px; border: 1px solid #3A4356; border-radius: 4px; background: #1A1F2A; color: #B8C0CE; text-decoration: none; font-size: 13px; font-weight: 500">First unread<span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11px; border: 1px solid #3A4356; padding: 0 5px; border-radius: 3px; color: #8B95A8">u</span></a></div>
+  </div>
+  <section style="background: #1A1F2A; border: 1px solid #2B3242; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.35); display: flex; flex-direction: column">
+    
+    <article style="display: flex; gap: 16px; padding: 18px 24px 16px; padding-left: 24px; border-bottom: 1px solid #2B3242;">
+      <span style="width: 36px; height: 36px; border-radius: 50%; background: #6F93D6; color: #1A1F2A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; flex-shrink: 0">M</span>
+      <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+        <div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: #B8C0CE">
+          <a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; color: #8B95A8; text-decoration: none; font-size: 12px">#61</a>
+          <a href="#" style="color: #E6E9EF; font-weight: 600; text-decoration: none; font-size: 14px">mara</a><span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid #3A4356; color: #8B95A8; padding: 0 5px; border-radius: 2px">moderator</span>
+          <span>Tue 14:02</span>
+        </div>
+        <div style="font-size: 15px; line-height: 1.6; color: #E6E9EF; display: flex; flex-direction: column; gap: 8px"><p style="margin: 0">Could we agree on a naming scheme for the monthly threads before next week? "September 2026 — general" and "Sept chat" are both open right now and people are posting in both.</p></div>
+        <div style="display: flex; gap: 16px; align-items: center; padding-top: 8px"><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">quote</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">reply</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">link</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">flag</a></div>
+      </div>
+    </article>
+    
+    <article style="display: flex; gap: 16px; padding: 18px 24px 16px; padding-left: 24px; border-bottom: 1px solid #2B3242;">
+      <span style="width: 36px; height: 36px; border-radius: 50%; background: #7FA3E8; color: #1A1F2A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; flex-shrink: 0">D</span>
+      <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+        <div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: #B8C0CE">
+          <a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; color: #8B95A8; text-decoration: none; font-size: 12px">#62</a>
+          <a href="#" style="color: #E6E9EF; font-weight: 600; text-decoration: none; font-size: 14px">drew</a>
+          <span>Tue 14:10</span>
+        </div>
+        <div style="font-size: 15px; line-height: 1.6; color: #E6E9EF; display: flex; flex-direction: column; gap: 8px"><p style="margin: 0">Agreed. Month name, four-digit year, then the topic. I will merge the two open ones tonight and leave a pointer in the old one.</p></div>
+        <div style="display: flex; gap: 16px; align-items: center; padding-top: 8px"><a href="#" style="display: flex; align-items: center; gap: 4px; color: #7FA3E8; text-decoration: none; font-size: 12.5px; font-weight: 500">2 replies <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M4 6l4 4 4-4"/></svg></a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">quote</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">reply</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">link</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">flag</a></div>
+      </div>
+    </article>
+    
+    <div style="display: flex; gap: 16px; padding: 12px 24px; border-bottom: 1px solid #2B3242; align-items: center; color: #8B95A8; font-size: 13px">
+      <span style="width: 36px; height: 36px; border-radius: 50%; border: 1px dashed #3A4356; flex-shrink: 0"></span>
+      <span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px">#63</span><span style="font-style: italic">Post removed by its author.</span>
+    </div>
+    
+    <div style="display: flex; align-items: center; gap: 12px; padding: 6px 24px; background: #2A2416; color: #E0A650; border-top: 1px solid #E0A650; border-bottom: 1px solid #E0A650; font-size: 12px; font-weight: 600; letter-spacing: 0.04em">
+      <span>3 new posts below</span><span style="flex-grow: 1; border-top: 1px dashed #E0A650"></span><span style="font-weight: 400">last read #63 · Tue 14:10</span>
+    </div>
+    
+    <article style="display: flex; gap: 16px; padding: 18px 24px 16px; border-left: 3px solid #E0A650; padding-left: 21px; border-bottom: 1px solid #2B3242;">
+      <span style="width: 36px; height: 36px; border-radius: 50%; background: #A78BD6; color: #1A1F2A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; flex-shrink: 0">I</span>
+      <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+        <div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: #B8C0CE">
+          <a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; color: #8B95A8; text-decoration: none; font-size: 12px">#64</a>
+          <a href="#" style="color: #E6E9EF; font-weight: 600; text-decoration: none; font-size: 14px">ines</a>
+          <span>Tue 15:31</span><a href="#" style="margin-left: auto; display: flex; align-items: center; gap: 4px; color: #7FA3E8; text-decoration: none; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px"><svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M6 4 2 8l4 4"/><path d="M2 8h7a5 5 0 0 1 5 5v1"/></svg>#37</a>
+        </div>
+        <div style="font-size: 15px; line-height: 1.6; color: #E6E9EF; display: flex; flex-direction: column; gap: 8px"><blockquote style="margin: 0; padding: 8px 14px; border-left: 3px solid #7FA3E8; background: #222835; color: #B8C0CE; font-size: 14px; display: flex; flex-direction: column; gap: 2px"><a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 11.5px; color: #7FA3E8; text-decoration: none">#37 · mara</a><span>…the old board did this with sticky threads and it got noisy fast.</span></blockquote><p style="margin: 0">It got noisy because the stickies never expired. Pin with an end date and the problem goes away. The first post of each month gets pinned for a week, then drops back into the list.</p></div>
+        <div style="display: flex; gap: 16px; align-items: center; padding-top: 8px"><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">quote</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">reply</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">link</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">flag</a></div>
+      </div>
+    </article>
+    
+    <article style="display: flex; gap: 16px; padding: 18px 24px 16px; border-left: 3px solid #E0A650; padding-left: 21px; border-bottom: 1px solid #2B3242;">
+      <span style="width: 36px; height: 36px; border-radius: 50%; background: #5FB3A1; color: #1A1F2A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; flex-shrink: 0">T</span>
+      <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+        <div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: #B8C0CE">
+          <a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; color: #8B95A8; text-decoration: none; font-size: 12px">#65</a>
+          <a href="#" style="color: #E6E9EF; font-weight: 600; text-decoration: none; font-size: 14px">tomas</a>
+          <span>Tue 15:40</span>
+        </div>
+        <div style="font-size: 15px; line-height: 1.6; color: #E6E9EF; display: flex; flex-direction: column; gap: 8px"><p style="margin: 0">Mocked up what the forum list would look like with that scheme. The month name first keeps them sorting properly when you scan.</p>
+    <a href="#" style="display: flex; align-items: center; gap: 10px; width: 320px; padding: 8px 10px; border: 1px solid #2B3242; border-radius: 4px; background: #222835; text-decoration: none; color: #E6E9EF">
+      <span style="width: 48px; height: 36px; border-radius: 2px; background: #2A3140; flex-shrink: 0"></span>
+      <span style="display: flex; flex-direction: column; min-width: 0; font-size: 13px"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">naming-proposal.png</span><span style="color: #8B95A8; font-size: 12px; font-family: IBM Plex Mono, ui-monospace, monospace">240 KB · 1200×640</span></span>
+    </a></div>
+        <div style="display: flex; gap: 16px; align-items: center; padding-top: 8px"><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">quote</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">reply</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">link</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">flag</a></div>
+      </div>
+    </article>
+    
+    <article style="display: flex; gap: 16px; padding: 18px 24px 16px; border-left: 3px solid #E0A650; padding-left: 21px; ">
+      <span style="width: 36px; height: 36px; border-radius: 50%; background: #6F93D6; color: #1A1F2A; display: flex; align-items: center; justify-content: center; font-size: 15px; font-weight: 600; flex-shrink: 0">M</span>
+      <div style="display: flex; flex-direction: column; gap: 4px; flex-grow: 1; min-width: 0">
+        <div style="display: flex; align-items: baseline; gap: 10px; font-size: 13px; color: #B8C0CE">
+          <a href="#" style="font-family: IBM Plex Mono, ui-monospace, monospace; color: #8B95A8; text-decoration: none; font-size: 12px">#66</a>
+          <a href="#" style="color: #E6E9EF; font-weight: 600; text-decoration: none; font-size: 14px">mara</a><span style="font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; border: 1px solid #3A4356; color: #8B95A8; padding: 0 5px; border-radius: 2px">moderator</span>
+          <span>Tue 15:44</span><span style="color: #8B95A8">· edited</span>
+        </div>
+        <div style="font-size: 15px; line-height: 1.6; color: #E6E9EF; display: flex; flex-direction: column; gap: 8px"><p style="margin: 0">Works for me. Pinned until October 1 and I have merged the two September threads. Anyone who wants the old titles back, say so here.</p></div>
+        <div style="display: flex; gap: 16px; align-items: center; padding-top: 8px"><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">quote</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">reply</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">link</a><a href="#" style="color: #8B95A8; text-decoration: none; font-size: 12.5px">flag</a></div>
+      </div>
+    </article>
+  </section>
+  <div style="display: flex; justify-content: space-between; align-items: center"><div class="tnum" style="display: flex; gap: 6px; align-items: center; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 13px"><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">‹</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">1</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">2</a><span style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; background: #E6E9EF; color: #12161E; font-weight: 600">3</span><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">4</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">5</a><span style="color: #8B95A8; padding: 0 4px">…</span><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">9</a><a href="#" style="min-width: 32px; height: 32px; padding: 0 8px; display: flex; align-items: center; justify-content: center; border-radius: 4px; color: #B8C0CE; text-decoration: none; border: 1px solid #2B3242; background: #1A1F2A">›</a><span style="color: #8B95A8; margin-left: 10px; font-size: 12px">posts 51–75 of 212</span></div><span style="font-size: 12px; color: #8B95A8">Press <span style="font-family: IBM Plex Mono, ui-monospace, monospace; border: 1px solid #3A4356; padding: 0 5px; border-radius: 3px">j</span> <span style="font-family: IBM Plex Mono, ui-monospace, monospace; border: 1px solid #3A4356; padding: 0 5px; border-radius: 3px">k</span> to move between posts</span></div>
+
+  <section style="margin-top: 12px; background: #1A1F2A; border: 1px solid #2B3242; border-radius: 4px; box-shadow: 0 1px 2px rgba(0,0,0,.35); display: flex; flex-direction: column">
+    <div style="display: flex; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid #2B3242">
+      <span style="font-weight: 600; font-size: 14px">Reply</span>
+      <span style="display: flex; align-items: center; gap: 6px; font-family: IBM Plex Mono, ui-monospace, monospace; font-size: 12px; padding: 2px 8px; border-radius: 10px; background: #1E2A42; color: #7FA3E8"><svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M6 4 2 8l4 4"/><path d="M2 8h7a5 5 0 0 1 5 5v1"/></svg>#62 drew <span style="color: #8B95A8; padding-left: 4px">×</span></span>
+      <div style="flex-grow: 1"></div>
+      <div style="display: flex; gap: 2px; font-size: 13px">
+        <span style="padding: 4px 10px; border-radius: 4px; background: #222835; color: #E6E9EF; font-weight: 500">Write</span>
+        <a href="#" style="padding: 4px 10px; color: #8B95A8; text-decoration: none">Preview</a>
+      </div>
+    </div>
+    <div style="display: flex; gap: 4px; padding: 8px 16px; border-bottom: 1px solid #2B3242; color: #B8C0CE">
+      <span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M5 3h4a2.5 2.5 0 0 1 0 5H5zM5 8h4.5a2.5 2.5 0 0 1 0 5H5z"/></svg></span><span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M7 3h6M3 13h6M10 3 6 13"/></svg></span><span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M4 4h3v4H5v3H3V6zM10 4h3v4h-2v3H9V6z"/></svg></span><span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="m5 5-3 3 3 3M11 5l3 3-3 3M9.5 3l-3 10"/></svg></span><span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1"/></svg></span><span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><circle cx="8" cy="8" r="2.5"/><path d="M10.5 8v1a1.5 1.5 0 0 0 3 0V8a5.5 5.5 0 1 0-2.2 4.4"/></svg></span><span style="width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 4px"><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0"><path d="M10.5 5.5 6 10a1.8 1.8 0 0 0 2.5 2.5l5-5a3.2 3.2 0 0 0-4.5-4.5l-5 5a4.6 4.6 0 0 0 6.5 6.5l4-4"/></svg></span>
+    </div>
+    <div style="padding: 16px 20px; min-height: 120px; font-size: 15px; line-height: 1.6; color: #E6E9EF; white-space: pre-wrap">One thing to add before we lock this in: the meetups forum already uses "Oct 2026 bonfire" style titles. Should the scheme apply there too, or only to the general monthly threads?</div>
+    <div style="display: flex; align-items: center; gap: 16px; padding: 12px 20px; border-top: 1px solid #2B3242; font-size: 12.5px; color: #8B95A8">
+      <span>Draft saved 12 seconds ago</span><span>Markdown supported</span>
+      <div style="flex-grow: 1"></div>
+      <a href="#" style="height: 36px; padding: 0 12px; display: flex; align-items: center; color: #B8C0CE; text-decoration: none; font-size: 14px; font-weight: 500">Discard</a>
+      <a href="#" style="height: 36px; padding: 0 16px; display: flex; align-items: center; border-radius: 4px; background: #7FA3E8; color: #0F1622; text-decoration: none; font-size: 14px; font-weight: 600">Post reply</a>
+    </div>
+  </section>
+</main>
+</div>
+</x-dc>
+</body>
+</html>
