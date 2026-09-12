@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BSPDQRV0P5JQN866V1FKN
 title: Settle the Phase 0 thread log format decisions
 type: spike
-status: draft
+status: ready
 status_reason: null
 priority: urgent
 due_on: null
@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-11T23:10:45Z
+updated_at: 2026-09-11T23:57:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

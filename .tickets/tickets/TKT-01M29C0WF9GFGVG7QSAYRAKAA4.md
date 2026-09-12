@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C0WF9GFGVG7QSAYRAKAA4
 title: Build the in-process event bus
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: urgent
 due_on: null
@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:14:40Z
-updated_at: 2026-09-11T23:14:40Z
+updated_at: 2026-09-11T23:57:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

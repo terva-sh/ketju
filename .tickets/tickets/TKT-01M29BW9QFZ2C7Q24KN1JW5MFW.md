@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9QFZ2C7Q24KN1JW5MFW
 title: Load and validate config.toml with env overrides and file secrets
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-11T23:12:10Z
+updated_at: 2026-09-11T23:57:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

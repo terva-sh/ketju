@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9Q8C8NW2MJH9FKVZA5D
 title: Build the markdown pipeline with a renderer version
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-11T23:12:10Z
+updated_at: 2026-09-11T23:57:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

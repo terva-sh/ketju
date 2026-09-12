@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9QP2Z5XCYBBDP3V0T73
 title: "Stand up CI: build, vet, test, and the ticket store check"
 type: chore
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-11T23:12:10Z
+updated_at: 2026-09-11T23:57:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
