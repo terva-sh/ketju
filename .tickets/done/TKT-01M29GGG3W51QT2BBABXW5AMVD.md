@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M29GGG3W51QT2BBABXW5AMVD
 title: Explore what an agent-native board changes in the design
 type: spike
-status: review
-status_reason: All four criteria met and written into seven documents. Held at review rather than done because the deliverable is edits to the design documents, and the owner should read the diff before it becomes the thing later work builds on. Every position in it is the owner's answer from the interview, but the wording is mine.
+status: done
+status_reason: "Owner accepted in review: the positions are theirs and the wording is faithful. The one format commitment (frame flag bit 0) was verified against the codec's round-trip test; the missing constant is filed as TKT-01M2BXKF8F and linked to the freeze."
 priority: high
 due_on: null
 labels:
@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-12T00:33:06Z
-updated_at: 2026-09-12T02:15:57Z
+updated_at: 2026-09-12T23:00:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/review
+  name: ""
 extensions: {}
 ---
 
@@ -134,6 +134,40 @@ Whether an agent's posts count toward forum statistics and "who is online". Noth
 **agent:terva/mieli** at 2026-09-12T02:15:54Z
 
 in-progress to review: All four criteria met and written into seven documents. Held at review rather than done because the deliverable is edits to the design documents, and the owner should read the diff before it becomes the thing later work builds on. Every position in it is the owner's answer from the interview, but the wording is mine.
+
+**agent:claude-code/review** at 2026-09-12T23:00:38Z
+
+Accepted by the owner in review. The positions are confirmed as theirs and the
+wording as faithful to them.
+
+Accepted as settled: agents are first-class members rather than instruments of a
+human; `kind` is orthogonal to `role`, so an agent may hold any role; agents are
+admin-provisioned, never self-register, and hold their own revocable bearer
+credential; the linear-thread argument is unchanged, with volume handled at
+thread level by tagging rather than by collapsing posts; humans are unrestricted
+while agents are charged against a token bucket, answered with 429 rather than a
+queue.
+
+The one format commitment in this spike was verified before acceptance. Frame
+flag bit 0 is machine-authored, mirrored into the index entry flags, and the
+forward-compatibility property docs/03 claims for it does hold:
+`TestFrameUnknownFlagBitsRoundTrip` in internal/store/threadlog/frame_test.go
+asserts unknown bits survive a parse and re-append, and it passes.
+
+One gap found while reviewing, now filed as TKT-01M2BXKF8F (Declare the frame
+and index flag bits as constants): docs/03 assigns bit 0, but no code declares
+it, so three separate call sites would each have to hard-code the number. That
+ticket is linked as a dependency of TKT-01M29C5Y1E, because the freeze is what
+makes the assignment binding.
+
+Also recorded, unsolved and deliberately so: the live-update pill does not
+settle in a thread taking twenty posts a minute. Tagging keeps those threads out
+of most people's way, and the decision was to revisit it with a real agent
+thread in front of us rather than invent a throttle now.
+
+**agent:claude-code/review** at 2026-09-12T23:00:38Z
+
+review to done: Owner accepted in review: the positions are theirs and the wording is faithful. The one format commitment (frame flag bit 0) was verified against the codec's round-trip test; the missing constant is filed as TKT-01M2BXKF8F and linked to the freeze.
 
 ## Summary
 

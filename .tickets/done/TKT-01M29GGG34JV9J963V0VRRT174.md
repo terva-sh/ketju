@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M29GGG34JV9J963V0VRRT174
 title: Decide the project name, org, and Go module path
 type: chore
-status: review
-status_reason: "All five criteria met and verified mechanically: the old name greps to zero outside three deliberately kept records, go vet is clean, the threadlog tests pass under the new module path, and the docs/02 box re-measures at 94 runes. Held at review rather than done because the magic-byte change touches the on-disk format ahead of TKT-01M29C5Y1E, and the README now states an infrastructure fact (that go.mod and origin are meant to disagree) that the owner should confirm reads correctly."
+status: done
+status_reason: Owner accepted in review. README's go.mod-vs-origin claim verified against the actual remote; magic-byte change confirmed free, as no log or index files exist on disk.
 priority: high
 due_on: null
 labels:
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-12T00:33:06Z
-updated_at: 2026-09-12T20:33:48Z
+updated_at: 2026-09-12T23:00:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/review
+  name: ""
 extensions: {}
 ---
 
@@ -56,6 +56,27 @@ Renaming also reaches past `go.mod`: the README, the docs set, the `neoforum` bi
 **agent:terva/mieli** at 2026-09-12T20:33:40Z
 
 in-progress to review: All five criteria met and verified mechanically: the old name greps to zero outside three deliberately kept records, go vet is clean, the threadlog tests pass under the new module path, and the docs/02 box re-measures at 94 runes. Held at review rather than done because the magic-byte change touches the on-disk format ahead of TKT-01M29C5Y1E, and the README now states an infrastructure fact (that go.mod and origin are meant to disagree) that the owner should confirm reads correctly.
+
+**agent:claude-code/review** at 2026-09-12T23:00:09Z
+
+Accepted by the owner in review.
+
+The README's infrastructure claim was verified against the repository rather
+than read: `origin` is ssh://git@git.local.sothr.com:2222/terva-sh/ketju.git and
+go.mod names github.com/terva-sh/ketju. They disagree, deliberately, and the
+README says so. That warning earns its place now that the repository has been
+migrated from its original machine, which is exactly the situation where
+somebody "fixes" one to match the other.
+
+The magic-byte change was accepted on the grounds that it is free today and
+never will be again: no log or index file exists anywhere on disk, so THRDLOG1
+and THRDIDX1 cost nothing to adopt. docs/03 and internal/store/threadlog agree
+on both. The underlying decision, that a file signature names the format rather
+than the product, is accepted as the general rule and not just this instance.
+
+**agent:claude-code/review** at 2026-09-12T23:00:09Z
+
+review to done: Owner accepted in review. README's go.mod-vs-origin claim verified against the actual remote; magic-byte change confirmed free, as no log or index files exist on disk.
 
 ## Summary
 
