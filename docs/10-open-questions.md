@@ -4,16 +4,30 @@ Each item states the options, the current lean, and when it must be decided.
 
 ## Storage
 
-1. **Body encoding: CBOR vs JSON in the log.** Lean: CBOR (`fxamacker/cbor`
-   is pure Go, fast, well maintained), JSON supported for dumps. Decide in
-   Phase 0 after measuring decode cost; if the difference is negligible,
-   JSON's debuggability may win.
+1. **Body encoding: CBOR vs JSON in the log.** **Decided: CBOR**, with JSON
+   kept as encoding byte 2 for `neoforum dump` and debugging. Decoding a 2 KB
+   body is 8.3x faster under CBOR with one allocation instead of seven, and
+   the on-disk difference is only 2 to 5 percent, so JSON's debuggability was
+   never buying what it looked like it cost. Re-run the benchmark when Go
+   1.27's json/v2 arrives; it would have to close an 8x gap to reopen this.
+   (TKT-01M29BSPD)
 2. **Index entry width: 40 bytes with author/time/reply_to vs 16 bytes
-   offset-only.** Lean: 40. Costs 2 MB per 50 k posts and buys DB-free
-   per-thread lenses. Decide in Phase 0.
-3. **fsync policy default: `group` (≤ 5 ms) vs `always`.** Lean: `group`.
-   Posts are precious but a 5 ms window on a single-node forum is an
-   acceptable trade; operators on ZFS/battery-backed storage can set `never`.
+   offset-only.** **Decided: 40.** An author filter over a 50 k post thread
+   takes 15 us from the index against 19.8 ms when the author must be read
+   back from the log, a factor of 1300 measured warm. The memory cost is
+   1.91 MB against 0.76 MB on that thread, which also confirms the 2 MB
+   estimate in 03. (TKT-01M29BSPD)
+3. **fsync policy default: `group` vs `always`.** **Decided: `group`, with
+   drain semantics rather than a fixed window.** The actor batches whatever is
+   already queued and never waits, so a lone append pays nothing and eight
+   concurrent writers still collapse 1600 fsyncs into 400. The fixed 5 ms
+   window this document previously assumed measured 6.5x worse at the median
+   for a single writer while batching nothing at all, which is the normal
+   state of a small forum. Absolute latency remains unverified: the
+   measurement was taken under WSL on a virtual disk with a write-back cache,
+   which is not target storage. TKT-01M29C2WV6 owns verification on real
+   hardware, and the p99 target in 09 is not confirmed until it runs there.
+   (TKT-01M29BSPD)
 4. **Hard redaction tool semantics.** Zero the body in place (breaks CRC of
    that frame → reader treats as redacted) vs rewrite the log with a
    `Redacted` record type. Lean: rewrite with a new type, keep CRCs valid.

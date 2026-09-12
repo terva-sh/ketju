@@ -83,6 +83,14 @@ because bodies are written once and read many times, and the pure-Go CBOR
 libraries are fast and dependency-light; JSON remains a supported encoding for
 debugging and for `neoforum dump`.
 
+Measured in Phase 0 (TKT-01M29BSPD, harness in `spikes/format-decisions/`):
+decoding a 2 KB body costs 963 ns under CBOR against 7982 ns under
+`encoding/json`, with one allocation instead of seven, and the gap widens to
+12.5x at 8 KB. The size argument that usually travels with "binary is smaller"
+does not survive contact with the data. A body is one large UTF-8 string plus a
+handful of small fields, and JSON costs only 2 to 5 percent more bytes. Decode
+speed is the entire case for CBOR, and it is enough on its own.
+
 ### Record types
 
 | Type | Name | Body fields | Effect on projection |
@@ -141,6 +149,14 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 | 34 | 2 | Flags: deleted, moved, hidden-by-mod, has-attachments, edited | tombstones without a read |
 | 36 | 4 | Reserved | |
 
+The width is settled at 40 bytes. Measured in Phase 0 on a 50 000 post thread,
+filtering by author takes 15 us from the in-memory entries against 19.8 ms when
+the entry carries only an offset and the author has to be read back from the
+log. That is a factor of 1300, and it is the warm-cache case, so a cold thread
+is worse. The 24 extra bytes cost 1.91 MB of memory for that thread against
+0.76 MB, and 0.98 MB against 0.39 MB across 512 open threads of typical size.
+The chain and since lenses make the same trade with reply_to and created_at.
+
 Because the header records the log length the index covers, opening a thread
 is: read both headers, and if `idx.log_length == stat(log).size` the index is
 trusted; otherwise replay records from `idx.log_length` to the end and repair.
@@ -159,8 +175,11 @@ record is durable. This gives us:
 - Ordinals assigned without a lock dance: the actor knows `post_count`.
 - Exactly one writer per file, so `O_APPEND` semantics are irrelevant and
   offsets are known before the write.
-- Natural place for group commit: if several appends arrive within a few
-  milliseconds the actor writes them and issues a single `fsync`.
+- Natural place for group commit: the actor takes one append, drains whatever
+  else is already queued, and issues a single `fsync` for the whole batch. It
+  never waits to form one. That is what keeps a lone append exactly as fast
+  under `group` as under `always`, while a busy thread still collapses its
+  fsyncs.
 
 Steps for a `Post`:
 
@@ -168,7 +187,7 @@ Steps for a `Post`:
    the HTML is discarded; see caching).
 2. Encode body, build frame, compute CRC.
 3. `write` frame at end of log; `fsync(log)` (configurable: `always`,
-   `group` (default, ≤ 5 ms window), `never`).
+   `group` (default, drain and sync with no wait), `never`).
 4. Append index entry; update in-memory index; write index header lazily
    (the header's `log_length` is what makes the index trusted, so it is
    updated *after* the log fsync — the worst case on crash is an index that

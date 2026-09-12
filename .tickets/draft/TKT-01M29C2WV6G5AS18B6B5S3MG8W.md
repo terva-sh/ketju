@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:15:46Z
-updated_at: 2026-09-11T23:15:46Z
+updated_at: 2026-09-12T00:22:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,3 +49,19 @@ If a target is missed, that is a finding rather than a failure. Say which target
 - [ ] The benchmark is repeatable from a committed command rather than an ad-hoc script
 - [ ] Each target is either met or has a written explanation of the gap and the options
 - [ ] Results are compared across the fsync policies so the default is chosen on evidence
+
+## Notes
+
+**agent:terva/mieli** at 2026-09-12T00:22:49Z
+
+Inherited from TKT-01M29BSPD (Settle the Phase 0 thread log format decisions): the fsync policy default was chosen on evidence, but that evidence was taken under WSL2 on a virtual disk with a write-back cache. It is not target storage, so the docs/09 target of **append p99 under 10 ms with group fsync is currently unverified**.
+
+This ticket's third acceptance criterion, comparing the fsync policies so the default is chosen on evidence, is therefore not starting from zero but is also not satisfied by that earlier work. When this runs on real hardware, re-run `spikes/format-decisions` `TestFsyncLatency` alongside the real engine benchmark and compare:
+
+- `always`, `group(drain)`, and `group(wait 5ms)` at 1 and 8 concurrent writers
+- whether `group(drain)` still matches `always` at one writer, which is the finding the default rests on
+- whether p99 clears 10 ms at all under any policy
+
+On WSL the numbers were 0.94 ms p50 at one writer and 1.99 ms p50 at eight under drain. If real storage is an order of magnitude slower, the default still holds, because the argument for drain is structural rather than numeric. What would change is whether the Phase 0 exit target is reachable, and that is worth knowing before the format freeze rather than after.
+
+The CPU-bound decisions from that spike (CBOR, 40-byte index entries) do not need re-measuring here; the CPU was not virtualized away.
