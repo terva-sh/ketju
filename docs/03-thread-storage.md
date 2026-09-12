@@ -45,6 +45,11 @@ shorter base32 form plus a slug: `/t/h6ute4a1000001/why-we-left-slack`.
 
 ## Log file format
 
+All multi-byte integers are little-endian. The format is single-node by design
+(see Non-goals), so cross-endian portability buys nothing real, and
+little-endian is native on every target this runs on. Decided in
+TKT-01M29BW9PT.
+
 ### File header (64 bytes, written once)
 
 | Offset | Size | Field |
@@ -73,8 +78,12 @@ Every record after the header is one frame:
 | 12 | 4 | Revision number (1 for a new post, incremented by each edit) |
 | 16 | 8 | Timestamp (unix ms) |
 | 24 | 8 | Actor user id |
-| 32 | `L-32` | Body (type-specific, CBOR-encoded map) |
+| 32 | `L-28` | Body (type-specific, CBOR-encoded map) |
 | 4+L | 4 | CRC32C over bytes 0 … 4+L−1 |
+
+So `L = 28 + len(body)`, the body occupies bytes `[32, 4+L)`, and a whole frame
+occupies `4 + L + 4` bytes on disk. `L` excludes the length field, which is why
+the body is `L-28` and not `L-32`.
 
 Rationale for the split: the fixed 32-byte header lets the reindexer and the
 index builder walk a log without decoding bodies. The body is a self-describing
