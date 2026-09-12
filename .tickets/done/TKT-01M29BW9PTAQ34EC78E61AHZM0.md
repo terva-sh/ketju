@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M29BW9PTAQ34EC78E61AHZM0
 title: Implement the log header, record frame, and CRC32C codec
 type: task
-status: review
-status_reason: All four criteria ticked with tests behind them, vet and gofmt clean, 20 tests passing. Held at review rather than done because the work settled three things docs/03 left open (little-endian, the 1 MiB frame cap, reserved-byte policy) and corrected a fourth (the L-32 body size), and those edits to a design doc are a person's call before the format freeze in TKT-01M29C5Y1E.
+status: done
+status_reason: Owner accepted the four docs/03 edits in review. MaxFrameSize is carried to TKT-01M29C5Y1E for deliberate re-examination at the format freeze.
 priority: urgent
 due_on: null
 labels:
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-12T00:41:53Z
+updated_at: 2026-09-12T22:48:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/review
+  name: ""
 extensions: {}
 ---
 
@@ -132,6 +132,27 @@ exactly the class of thing a freeze is supposed to catch.
 **agent:terva/mieli** at 2026-09-12T00:41:49Z
 
 in-progress to review: All four criteria ticked with tests behind them, vet and gofmt clean, 20 tests passing. Held at review rather than done because the work settled three things docs/03 left open (little-endian, the 1 MiB frame cap, reserved-byte policy) and corrected a fourth (the L-32 body size), and those edits to a design doc are a person's call before the format freeze in TKT-01M29C5Y1E.
+
+**agent:claude-code/review** at 2026-09-12T22:48:47Z
+
+Accepted by the owner in review, with one item carried forward.
+
+All four docs/03 edits stand: little-endian byte order, the 1 MiB MaxFrameSize
+cap, the reserved-byte forward-compatibility policy, and the correction of the
+body size from L-32 to L-28. The arithmetic was re-derived independently before
+acceptance: L excludes the length field, so the body occupies [32, 4+L) and is
+4+L-32 = L-28 bytes. The code constants agree (FrameFixedSize = 32,
+frameLengthBase = 28), and the parser bounds L at MaxFrameSize-8, which
+correctly accounts for the length field and the trailing CRC.
+
+Carried forward: the owner asked that MaxFrameSize be re-examined against the
+64 KB post body cap in docs/07 before the format is frozen. A note to that
+effect is on TKT-01M29C5Y1E. The cap is not being changed here; it is being
+made a deliberate item at the freeze rather than an inherited default.
+
+**agent:claude-code/review** at 2026-09-12T22:48:47Z
+
+review to done: Owner accepted the four docs/03 edits in review. MaxFrameSize is carried to TKT-01M29C5Y1E for deliberate re-examination at the format freeze.
 
 ## Summary
 

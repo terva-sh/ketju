@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M29BSPDQRV0P5JQN866V1FKN
 title: Settle the Phase 0 thread log format decisions
 type: spike
-status: review
-status_reason: "Decisions 1, 2, and 3 are settled and written into docs/03 and docs/10. Criterion 2 is unticked on purpose: append latency was measured under WSL2, which is not target storage, so the docs/09 p99 target is unverified and TKT-01M29C2WV6 inherits it. Needs a person to accept closing on two of three criteria."
+status: done
+status_reason: Owner accepted closing on two of three criteria in review. Criterion 2 is unticked and inherited by TKT-01M29C2WV6; fsync policy is runtime config and does not gate the format freeze.
 priority: urgent
 due_on: null
 labels:
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-12T00:23:48Z
+updated_at: 2026-09-12T22:48:39Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/review
+  name: ""
 extensions: {}
 ---
 
@@ -141,6 +141,25 @@ TKT-01M29C2WV6 already owns benchmarking against the Phase 0 targets on real har
 **agent:terva/mieli** at 2026-09-12T00:23:45Z
 
 in-progress to review: Decisions 1, 2, and 3 are settled and written into docs/03 and docs/10. Criterion 2 is unticked on purpose: append latency was measured under WSL2, which is not target storage, so the docs/09 p99 target is unverified and TKT-01M29C2WV6 inherits it. Needs a person to accept closing on two of three criteria.
+
+**agent:claude-code/review** at 2026-09-12T22:48:39Z
+
+Accepted by the owner in review: closing on two of three criteria.
+
+Criterion 2 (append latency on target storage) stays unticked and is not
+satisfied by this ticket. It is inherited in full by TKT-01M29C2WV6 (Benchmark
+the storage engine against the Phase 0 targets), which already carries a note
+naming the benchmarks to re-run and the specific finding to re-test.
+
+The reasoning accepted with it: decisions 1 and 2 are format decisions and both
+rest on committed, re-runnable measurements, while decision 3 is a runtime
+config default whose argument is structural rather than numeric. Waiting on
+hardware would hold the root of the Phase 0 chain for a number that does not
+gate the format freeze.
+
+**agent:claude-code/review** at 2026-09-12T22:48:39Z
+
+review to done: Owner accepted closing on two of three criteria in review. Criterion 2 is unticked and inherited by TKT-01M29C2WV6; fsync policy is runtime config and does not gate the format freeze.
 
 ## Summary
 
