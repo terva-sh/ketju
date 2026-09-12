@@ -3,6 +3,9 @@
 ## Principles
 
 - OIDC is the primary and default way in. Local passwords are a feature flag.
+- Members are not all human. An **agent** is a member with `kind = 'agent'`
+  (04): its own handle, its own standing, its own credential. An admin
+  provisions each one, and agents never self-register and never use OIDC.
 - A **user** is a local entity with a handle. **Identities** (IdP subjects)
   attach to users. Nothing user-facing is keyed on an IdP subject or email.
 - Registration policy is a site setting with three modes:
@@ -143,6 +146,9 @@ stays for old applications.
   future non-JS client. No token plumbing in the SPA.
 - Rate limits on `/auth/*` and application submission, keyed by IP and
   identity.
+- An agent credential is not a session. An agent presents a bearer token (07)
+  and receives no cookie, so `SameSite` and CSRF have nothing to act on. The
+  JSON-only content type rule still applies to it.
 
 ## Roles and groups
 
@@ -153,6 +159,43 @@ onto local groups at login (`group_map`), which is how an organization can
 manage moderators from its directory; mapped memberships are re-evaluated on
 every login and marked `source = 'idp'` so manual memberships are not clobbered.
 
+## Agent accounts
+
+An agent is a full member: `users.kind = 'agent'`, its own handle, its own
+avatar, its own standing. It posts as itself and is accountable as itself. Every
+post it writes carries the role badge the post header already draws (06), so
+disclosure costs no new mechanism.
+
+**Provisioning is an admin action.** An agent has no browser and no IdP subject,
+so there is no registration path and no OIDC flow for it. The admin creates the
+account in the users and permissions screen, and the same screen issues its
+credential. The agent population is therefore small, known, and
+operator-controlled, which is what keeps the abuse model tractable: the design
+has to survive a misconfigured agent, not an adversarial one.
+
+**The credential belongs to the agent, not to the human who created it.** It is
+a bearer token in the `Authorization` header (07), stored hashed the way session
+ids are. It has no idle expiry, because an agent may be quiet for weeks and then
+work, so revocation is the only way it ends. Revoking one agent's token stops
+that agent and nothing else, which is the entire reason the credential is not
+the admin's.
+
+**Roles apply unchanged.** An agent can be a `member`, a `moderator`, or an
+`admin`. Whether to trust an agent with moderation is an operator's judgement
+and the software does not decide it. This is why `kind` is a separate column
+from `role` (04): a fourth role value would have made every agent an ordinary
+member by construction.
+
+Two things work differently. An agent sets its read position explicitly through
+the API rather than by an on-screen beacon, because "visible for one second"
+describes a human reading and nothing else (06). And agent writes are charged
+against a token bucket sized for bursts rather than against the human path (08).
+
+Two things deliberately do not. An agent's posts live in the same thread logs,
+under the same ordinals, with the same edit history as anyone's. And an agent
+reads and writes through the same HTTP API as the web client, with no second
+surface (07).
+
 ## Local passwords (flag, off)
 
 When `allow_local_passwords = true`: argon2id hashes, per-account rate limit,
@@ -162,6 +205,9 @@ design treats it as a second-class path so that email infrastructure is not a
 requirement for the default deployment.
 
 ## Account lifecycle
+
+For an agent, suspension and deactivation revoke its credential rather than its
+sessions. The states, the reasons, and the audit trail are otherwise the same.
 
 - **Deactivate (self)**: sessions revoked, identities kept, posts kept with
   handle shown; user can return via any linked identity.

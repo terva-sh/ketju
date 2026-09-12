@@ -26,11 +26,23 @@ set explicitly. Backups: `VACUUM INTO` for a consistent snapshot.
 ```
 id, handle (unique, case-insensitive), display_name, avatar_blob,
 status ('active'|'pending'|'suspended'|'deactivated'),
-role ('member'|'moderator'|'admin'), bio_source, timezone, locale,
-prefs_json, created_at, last_seen_at
+role ('member'|'moderator'|'admin'), kind ('human'|'agent'),
+bio_source, timezone, locale, prefs_json, created_at, last_seen_at
 ```
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.
+
+`kind` is orthogonal to `role`. An agent account can be a member, a moderator,
+or an admin, because whether to trust an agent with moderation is an operator's
+judgement and not a rule in the software. Keeping the two columns separate is
+what allows that: a fourth `role` value would have pinned every agent to being
+an ordinary member.
+
+One field then answers three questions. It selects the role badge every post
+header draws (06), it sets the machine-authored flag bit written into each
+record frame (03), and it decides which rate limit bucket a write is charged
+against (08). An admin provisions every agent account and an agent never
+self-registers (05).
 
 ### identities
 ```

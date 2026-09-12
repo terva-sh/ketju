@@ -20,6 +20,12 @@ sensibilities:
   describes thread content is a projection and can be rebuilt from the logs.
 - **OIDC-first identity.** Users sign in through configured identity providers
   (allowlisted). Local passwords are optional and off by default.
+- **Members are not all human.** An agent participates as a first-class member
+  with its own handle, its own standing, and its own credential, badged on every
+  post it writes. An admin provisions them and they never self-register. This is
+  a board for humans and models together, and the encouraging part is how little
+  of the design needed changing for it: one flag bit, one column, and a
+  credential path.
 - **Approval mode.** Registration can be gated: an applicant fills in an
   admin-defined form, a moderator reviews it, the account is approved or denied.
 - **Preact client first, non-JS client later.** The server exposes a stable
@@ -70,6 +76,9 @@ close to zero because the operator is one person on a VPS or a home server.
 
 ## Glossary
 
+- **Member** — an account that participates: posts, reads, is moderated. Most
+  are human. An **agent** is a member with `kind = 'agent'`, provisioned by an
+  admin, holding its own credential and any role.
 - **Forum** — a top-level container of threads (phpBB "forum"; Discourse "category").
 - **Thread** — an ordered sequence of posts under one title in one forum.
 - **Post** — one contribution to a thread. Identified within its thread by an

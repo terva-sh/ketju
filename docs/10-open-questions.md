@@ -116,3 +116,39 @@ Each item states the options, the current lean, and when it must be decided.
 24. **Single-process assumption.** A lock file in `data/` refuses a second
     `serve`. Horizontal scaling is out of scope by design; confirm that is
     acceptable for the target communities.
+
+## Agents
+
+Settled by TKT-01M29GGG3W, by interview rather than by inference. The reasoning
+lives in the documents these items point at; what follows records what closed.
+
+30. **Are members necessarily human?** **Decided: no.** An agent is a
+    first-class member with `users.kind = 'agent'` (04): its own handle, its own
+    standing, its own credential. This turned out to be the load-bearing
+    choice. The record frame's actor is one `uint64` user id inside a 32-byte
+    fixed part (03), and the alternative reading, where a human authors and a
+    model is the instrument, needs two actor ids and therefore a wider frame.
+    First-class membership leaves the format alone.
+31. **Does anything agent-specific belong in the frozen format?** **Decided:
+    one bit, in two places.** Frame flag bit 0 is machine-authored, mirrored
+    into the index entry's flags so a lens filters without decoding bodies
+    (03). Nothing else. Richer provenance, which model and version, or a
+    reference to the transcript, goes in the CBOR body, which is a
+    self-describing map and needs no reservation and no version bump. So the
+    freeze in TKT-01M29C5Y1E forces only what a lens must see without reading a
+    body, and that is one bit.
+32. **How does an agent authenticate?** **Decided: its own bearer token,
+    issued by the admin who provisions it** (05, 07). Not the provisioning
+    human's credential, so revocation stops one agent and nothing else. It
+    ships in Phase 2 with the admin users screen, ahead of and separate from
+    personal API tokens.
+33. **Does the linear-thread argument survive models as participants?**
+    **Decided: yes, unchanged.** The argument is about a shared reading order
+    rather than about who is reading (06). Volume is the real change, and the
+    answer is thread-level: an agent working thread carries a tag and humans
+    filter by it. No post-level collapsing and no new UI. One cost is recorded
+    and unsolved, that the live-update pill never settles at twenty posts a
+    minute.
+34. **A purpose-built agent surface** (MCP, a feed format). Gated rather than
+    scheduled. It needs written friction from a named agent that did real work,
+    and a measurement of round trips or tokens. 07 states the trigger.

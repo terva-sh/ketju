@@ -73,7 +73,7 @@ Every record after the header is one frame:
 | 0 | 4 | Frame length `L` (header + body, excludes this field and the trailing CRC) |
 | 4 | 1 | Record type |
 | 5 | 1 | Body encoding (1 = CBOR, 2 = JSON; both supported, CBOR is default) |
-| 6 | 2 | Flags |
+| 6 | 2 | Flags (bit 0 = machine-authored; bits 1–15 reserved) |
 | 8 | 4 | Post ordinal this record concerns (0 for thread-level events) |
 | 12 | 4 | Revision number (1 for a new post, incremented by each edit) |
 | 16 | 8 | Timestamp (unix ms) |
@@ -99,6 +99,30 @@ decoding a 2 KB body costs 963 ns under CBOR against 7982 ns under
 does not survive contact with the data. A body is one large UTF-8 string plus a
 handful of small fields, and JSON costs only 2 to 5 percent more bytes. Decode
 speed is the entire case for CBOR, and it is enough on its own.
+
+### Frame flags
+
+| Bit | Meaning |
+|----:|---------|
+| 0 | Machine-authored: the actor was an agent account when this record was written |
+| 1–15 | Reserved, written zero |
+
+A reader preserves bits it does not know. `ParseFrame` returns the field
+verbatim and `AppendFrame` writes back what it was given, so a log written by a
+newer build stays readable by an older one. `TestFrameUnknownFlagBitsRoundTrip`
+holds that property.
+
+The server sets bit 0 from `users.kind` (04) when it appends the record. A
+client never supplies it. The bit is not redundant with the author's account:
+`kind` is current state and can change, while the log records what was true when
+the post was written, and no projection can reconstruct that afterwards. It also
+lets a lens count or filter machine-authored posts from the index alone.
+
+Anything richer about provenance, which model and which version, or a reference
+to the conversation and tool calls that produced the text, belongs in the body
+rather than here. Bodies are self-describing maps, so those fields can arrive at
+any time without a format bump. Only what a lens must see *without* decoding a
+body has to be settled before the format freeze, and that is one bit.
 
 ### Record types
 
@@ -155,8 +179,17 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 | 16 | 8 | Author user id | author filter lens without the DB |
 | 24 | 8 | Created at (unix ms, of revision 1) | jump-to-date, "since last visit" |
 | 32 | 2 | Current revision number | cache keys, "edited" marker |
-| 34 | 2 | Flags: deleted, moved, hidden-by-mod, has-attachments, edited | tombstones without a read |
-| 36 | 4 | Reserved | |
+| 34 | 2 | Flags: deleted, moved, hidden-by-mod, has-attachments, edited, machine-authored | tombstones and the agent lens without a read |
+| 36 | 4 | Reserved | segment rollover, see below |
+
+`machine-authored` mirrors frame flag bit 0, so filtering a thread by whether a
+post was written by an agent is answered from the in-memory entries rather than
+by reading bodies back.
+
+The reserved 4 bytes at offset 36 are not general slack. They are held for the
+segment number that segment rollover would add to the offset field, described at
+the end of this document. Spare capacity for anything else is the 10 unused bits
+of the flags field.
 
 The width is settled at 40 bytes. Measured in Phase 0 on a 50 000 post thread,
 filtering by author takes 15 us from the in-memory entries against 19.8 ms when

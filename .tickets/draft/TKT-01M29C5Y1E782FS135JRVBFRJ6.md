@@ -20,6 +20,8 @@ dependencies:
   - TKT-01M29C2WTJ9M9MAAKM0PQ2XZT5
   - TKT-01M29C2WTVSF6BJT5H71GQKBVX
   - TKT-01M29C2WV6G5AS18B6B5S3MG8W
+  - TKT-01M29PARE1WYBA7PAKRWSN5QD0
+  - TKT-01M29GGG3W51QT2BBABXW5AMVD
 blocks_on: none
 references:
   - ref: design:roadmap-phase-0
@@ -27,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-11T23:17:26Z
+updated_at: 2026-09-12T02:15:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

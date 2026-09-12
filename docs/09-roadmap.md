@@ -18,8 +18,9 @@ web code exists.
   `group` fsync, random-ordinal read latency cold and warm, index rebuild
   time. Targets: append p99 < 10 ms with fsync, warm read < 100 µs, rebuild
   of 100 MB < 2 s.
-- Exit criterion: format frozen at version 1 with reserved bytes; any
-  change after this is a version bump with a migration path.
+- Exit criterion: format frozen at version 1 with reserved bytes and with
+  frame flag bit 0 assigned to machine-authored (03); any change after this
+  is a version bump with a migration path.
 
 ## Phase 1 — Walking skeleton (3–4 weeks)
 
@@ -51,7 +52,12 @@ Goal: sign in with OIDC, read and write linear threads, in one binary.
 - Moderation: lock, pin, rename, move, flags with auto-hide, tombstones,
   edit history view, suspend, audit log.
 - Admin UI: forums, users, forms, settings, queue.
-- Exit criterion: a club can open registration to strangers safely.
+- Agent accounts: `users.kind`, admin provisioning, bearer credential issue
+  and revoke in the same users screen, and the per-agent rate limit bucket
+  (05, 07, 08). This path is narrower than personal API tokens and does not
+  wait for them.
+- Exit criterion: a club can open registration to strangers safely, and an
+  admin can give an agent an account and a credential.
 
 ## Phase 3 — Lenses, unread, search, live (3 weeks)
 
@@ -90,14 +96,19 @@ Goal: sign in with OIDC, read and write linear threads, in one binary.
 
 Timeline scrubber; digest lens; bookmarks; invite mode; local passwords
 with SMTP; email notifications digest; reactions (append-only table, never
-reorder anything); personal API tokens; ActivityPub read-only export;
+reorder anything); personal API tokens for a human's own scripts, which are
+separate from the agent credentials in Phase 2; ActivityPub read-only export;
 ACME TLS; multi-language stemming via Go FTS5 tokenizers.
+
+A purpose-built agent surface, an MCP server or a feed format, is deliberately
+not on this list. It is gated on two pieces of written evidence rather than
+scheduled, and 07 states the trigger.
 
 ## Risks and mitigations
 
 | Risk | Mitigation |
 |------|------------|
-| Thread log format needs a change after data exists | version field + reserved bytes; `neoforum migrate-logs` rewrites into a new directory then swaps |
+| Thread log format needs a change after data exists | version field, the file header's 24 reserved bytes, and the unused flag bits in the frame and the index entry. The index entry's 4 reserved bytes are spoken for by segment rollover and are not slack (03). `neoforum migrate-logs` rewrites into a new directory then swaps |
 | ncruces pre-1.0 API churn | schema and SQL are driver-agnostic; modernc is a drop-in |
 | Preact 11 migration | pin 10.x; migration is documented as small |
 | Go 1.27 json/v2 strictness | golden tests from Phase 1 catch duplicate-key or UTF-8 issues early |

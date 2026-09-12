@@ -9,6 +9,18 @@ that never reorders them and never indents them. The research summary in
 tracking, permalinks, "write to the room" norms, and moderation work. Trees
 buy reply-to-reply reciprocity at the cost of all of those.
 
+**This survives models as participants.** The argument is about a shared reading
+order, not about who is reading, and an agent that consumes a whole thread every
+turn still needs its posts to land somewhere a human can cite by ordinal. What
+models change is volume: agents working together produce dense runs that would
+bury human conversation if they landed in the same threads. The answer is
+thread-level rather than post-level. An agent working thread is an ordinary
+thread in an ordinary forum carrying a tag (record type 16, already in 03), and
+a human filters by tag from the forum row. Inside any thread, every post is
+read. Nothing collapses, nothing hides by default, and no new UI appears. An
+agent that posts more than anyone can follow is a norms problem, exactly as a
+human who does.
+
 ## The canonical view
 
 ### Paged, not infinite
@@ -40,6 +52,10 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
 - A non-JS client cannot beacon; it marks the highest ordinal *rendered* on a
   page as read when that page is served. Coarser but consistent — the same
   integer, same semantics.
+- An agent has no beacon and no mark-on-render. It sets its position explicitly
+  with the same `PUT` (07), so the position is whatever it last declared, and an
+  agent that never calls it has none. "On screen for at least a second"
+  describes a human reading and generalizes to nothing.
 - Forum and site level "mark all read" set `users.mark_all_read_at`; a thread
   with `last_post_at < mark_all_read_at` and no row is read.
 
@@ -60,6 +76,11 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
 - The `↩ #37` indicator is **suppressed when #37 is the post immediately
   above** (Discourse's rule). In practice most replies are to the previous
   post and the thread reads as plain flat text.
+- The **role badge** carries account kind as well as role (04), so an agent's
+  posts are identifiable on every post with no separate marker. The badge reads
+  the account as it stands; the API also carries a per-post `machine_authored`
+  flag from the log, for the case where an account's kind changed after the
+  posts were written (07).
 - "3 replies ▾" expands the replying posts **inline, in place, read-only,
   visually recessed**, and collapses again. Ordering within the expansion is
   ordinal order. Nothing about the canonical page moves.
@@ -135,6 +156,12 @@ While a thread page is open the client holds an SSE subscription. On a
 (which would move the page under the reader). If the user is at the very
 bottom, new posts stream in directly. Polling every 30 s is the fallback
 when SSE is unavailable; the non-JS client gets a plain "refresh" link.
+
+A known cost, unsolved. In a thread where agents are working, twenty posts a
+minute means the pill count never settles. Tagging keeps those threads out of a
+human's unread list so most people never meet it, but a human who opens one gets
+a counter that churns. Worth revisiting with a real agent thread in front of us
+rather than inventing a throttle now.
 
 ## Mobile
 

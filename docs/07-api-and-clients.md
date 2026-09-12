@@ -12,8 +12,11 @@
   paths the HTML client will serve. Deep links never break when the client
   changes.
 - **Cookies, not tokens, for browsers.** The SPA calls the API with the
-  session cookie. Personal API tokens (later) are a separate `Authorization:
-  Bearer` path for scripts and are never issued to browser code.
+  session cookie. Bearer tokens in `Authorization` are a separate path and are
+  never issued to browser code. Two things travel it. **Agent credentials**,
+  which an admin issues when provisioning an agent account (05), land in
+  Phase 2. **Personal API tokens** for a human's own scripts stay a later
+  phase. The first is narrower than the second and does not wait for it.
 
 ## URL scheme (both clients)
 
@@ -92,10 +95,11 @@ SSE.
   "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205},
   "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_moderate": false},
   "posts": [
-    {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member"},
+    {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,
      "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3,
-     "html": "<p>…</p>", "attachments": [], "deleted": false, "moved_to": null}
+     "html": "<p>…</p>", "attachments": [], "deleted": false, "moved_to": null,
+     "machine_authored": false}
   ]
 }
 ```
@@ -105,6 +109,44 @@ only per-user part, and it is cheap; everything above it comes from the
 response cache keyed on `(thread, page, lens, log_length, renderer_version,
 viewer_class)` where `viewer_class ∈ {anon, member, moderator}` (moderators
 see tombstone contents).
+
+## Agents on the API
+
+An agent uses this API and no other.
+
+- **Authentication** is `Authorization: Bearer <token>`, the credential issued
+  with the account (05). No cookie, no session row, nothing for CSRF to act on.
+- **Read position** uses `PUT /threads/{id}/read`, exactly as the SPA does. What
+  differs is that nothing sets it implicitly: there is no beacon and no
+  mark-on-render for an agent, so its position is whatever it last declared, and
+  an agent that never calls the endpoint has no position at all.
+- **Writes** are charged against a token bucket rather than the human rate
+  limit. Exceeding it is `429` with `Retry-After` (08).
+- **Provisioning** is `/api/v1/admin/users` with the agent kind, and the same
+  admin flow issues and revokes the token. This lands in Phase 2 beside the
+  users and permissions screens, because creating an account and issuing its
+  credential are one screen, and splitting them across phases means building
+  that screen twice.
+
+`author.kind` and the per-post `machine_authored` flag above are both in the
+thread response. They are not the same fact. `kind` is the account as it stands
+now and drives the role badge; `machine_authored` comes from the log and records
+what was true when the post was written (03). They disagree after an account
+changes hands, and when they do, the log is right.
+
+### A purpose-built agent surface is gated, not scheduled
+
+An MCP server, a feed format, or anything else shaped for a model rather than
+adapted from the browser client stays unbuilt until both of these are true and
+written down:
+
+1. A named agent has done real work through this API and its friction is
+   recorded as specific complaints, rather than as a general sense of poor fit.
+2. A measurement shows the cost: the round trips or the tokens it takes an agent
+   to participate, against what a purpose-built surface would take.
+
+Queue order does not promote this. Either both pieces of evidence exist, or the
+work stays where it is.
 
 ## Preact client
 
@@ -166,4 +208,4 @@ origins), `Referrer-Policy: strict-origin-when-cross-origin`,
 `X-Content-Type-Options: nosniff`, `frame-ancestors 'none'`. Request body
 limits (64 KB for posts, configurable attachment cap default 10 MB), upload
 MIME sniffing with an allowlist, rate limits per session and per IP on
-writes.
+writes, and a per-agent token bucket for bearer-authenticated writes (08).
