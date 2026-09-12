@@ -41,7 +41,7 @@ extensions: {}
 
 ## Description
 
-The Phase 0 exit gate. Declare the format frozen at version 1 and commit to the consequence: every change after this is a version bump with a migration path, and `neoforum migrate-logs` rewriting into a new directory then swapping is the shape that migration takes.
+The Phase 0 exit gate. Declare the format frozen at version 1 and commit to the consequence: every change after this is a version bump with a migration path, and `ketju migrate-logs` rewriting into a new directory then swapping is the shape that migration takes.
 
 This is a decision to record rather than code to write, and it only means something if it happens on purpose at a moment when all the evidence is in. That is why it depends on the property tests, the crash tests, the fuzzing, and the benchmark. A format frozen before the benchmark is a format frozen on hope.
 

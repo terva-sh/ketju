@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate the four Neoforum mockup artboards (front page and thread page,
+"""Generate the four Ketju mockup artboards (front page and thread page,
 light and dark) from one markup source so the themes never drift.
 
 Run from this directory:  python3 generate.py
@@ -70,7 +70,7 @@ def nav(t, active):
                 f'border-bottom: 2px solid {border}">{label}{b}</a>')
     return f'''
 <header style="height: 56px; background: {t["surface"]}; border-bottom: 1px solid {t["rule"]}; display: flex; align-items: stretch; padding: 0 40px; gap: 32px">
-  <a href="#" style="display: flex; align-items: center; font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 500; color: {t["ink"]}; text-decoration: none; letter-spacing: -0.01em">Neoforum</a>
+  <a href="#" style="display: flex; align-items: center; font-family: Newsreader, Georgia, serif; font-size: 22px; font-weight: 500; color: {t["ink"]}; text-decoration: none; letter-spacing: -0.01em">Ketju</a>
   <nav style="display: flex; align-items: stretch; gap: 22px">
     {item("Forums", is_active=active=="forums")}
     {item("Unread", "12", active=="unread")}
@@ -356,7 +356,7 @@ def mobile_front(t):
       <div style="font-size: 13px; color: {t["ink2"]}; display: flex; gap: 6px; min-width: 0"><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis">{last_title}</span><span style="color: {t["muted"]}; white-space: nowrap">· {last_when}</span></div>
     </a>"""
     top = mtopbar(t,
-        f'<span style="font-family: Newsreader, Georgia, serif; font-size: 20px; font-weight: 500; color: {t["ink"]}; padding-left: 10px; letter-spacing: -0.01em">Neoforum</span>',
+        f'<span style="font-family: Newsreader, Georgia, serif; font-size: 20px; font-weight: 500; color: {t["ink"]}; padding-left: 10px; letter-spacing: -0.01em">Ketju</span>',
         '', mbtn(t, "search") + mbtn(t, "inbox", "2", "Moderator queue"))
     body = top + f"""
 <main style="display: flex; flex-direction: column; gap: 20px; padding: 18px 0 24px">

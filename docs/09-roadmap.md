@@ -13,7 +13,7 @@ web code exists.
 - `internal/store/threadlog`: file/frame/index formats from 03, thread
   actor, open-thread LRU, CRC verification, tail recovery.
 - Property and crash tests (see 02, testing). Fuzz the frame parser.
-- `neoforum dump` and `neoforum fsck` commands.
+- `ketju dump` and `ketju fsck` commands.
 - Benchmark: 50 k-post synthetic thread; measure append latency with
   `group` fsync, random-ordinal read latency cold and warm, index rebuild
   time. Targets: append p99 < 10 ms with fsync, warm read < 100 µs, rebuild
@@ -65,7 +65,7 @@ Goal: sign in with OIDC, read and write linear threads, in one binary.
 - Inline reply expansion with suppress-directly-below; quote backlinks.
 - Cross-forum `/unread`, `/new`, `/participated`, `/watching`; watches and
   mutes; notifications UI.
-- FTS5 search with snippets; `neoforum reindex --search`.
+- FTS5 search with snippets; `ketju reindex --search`.
 - SSE live updates with the "N new posts — show" pill; polling fallback.
 - Drafts; attachments with thumbnails and blob GC.
 - Web app manifest and icons so the forum can be added to a home screen;
@@ -80,7 +80,7 @@ Goal: sign in with OIDC, read and write linear threads, in one binary.
 - Slow mode, archive, thread tags.
 - User settings: sessions list, identities, timezone, page size, theme.
 - Metrics endpoint, backup documentation (rsync + `VACUUM INTO`),
-  `neoforum config check`.
+  `ketju config check`.
 - Exit criterion: v1.0 tag.
 
 ## Phase 5 — Non-JS client (post-1.0, 3–4 weeks)
@@ -108,7 +108,7 @@ scheduled, and 07 states the trigger.
 
 | Risk | Mitigation |
 |------|------------|
-| Thread log format needs a change after data exists | version field, the file header's 24 reserved bytes, and the unused flag bits in the frame and the index entry. The index entry's 4 reserved bytes are spoken for by segment rollover and are not slack (03). `neoforum migrate-logs` rewrites into a new directory then swaps |
+| Thread log format needs a change after data exists | version field, the file header's 24 reserved bytes, and the unused flag bits in the frame and the index entry. The index entry's 4 reserved bytes are spoken for by segment rollover and are not slack (03). `ketju migrate-logs` rewrites into a new directory then swaps |
 | ncruces pre-1.0 API churn | schema and SQL are driver-agnostic; modernc is a drop-in |
 | Preact 11 migration | pin 10.x; migration is documented as small |
 | Go 1.27 json/v2 strictness | golden tests from Phase 1 catch duplicate-key or UTF-8 issues early |

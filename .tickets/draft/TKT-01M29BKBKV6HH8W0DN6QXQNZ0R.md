@@ -39,13 +39,13 @@ extensions: {}
 
 `internal/store/db` plus `internal/events`: SQLite in WAL mode through a pure-Go driver, the authoritative tables that only exist here, and the projection tables rebuilt from thread logs.
 
-The rule from docs/04 is that the database holds coordination and projections, never content. Authoritative tables (users, identities, sessions, applications, forums, groups, permissions, audit_log, flags, settings) must be backed up. Projection tables (threads, post_meta, thread_tags, mentions, search, projection_state) are rebuildable with `neoforum reindex`.
+The rule from docs/04 is that the database holds coordination and projections, never content. Authoritative tables (users, identities, sessions, applications, forums, groups, permissions, audit_log, flags, settings) must be backed up. Projection tables (threads, post_meta, thread_tags, mentions, search, projection_state) are rebuildable with `ketju reindex`.
 
 The in-process event bus connects the two halves. A post append publishes an event, and the projection writer, search indexer, notifier, and SSE fan-out subscribe. Projection is asynchronous but ordered per thread and idempotent, keyed on thread_id and log offset, so a crash between the log write and the database write is repaired on startup by replaying the gap.
 
 ## Acceptance criteria
 
-- [ ] Deleting the whole database and running `neoforum reindex` reproduces every projection table from the thread logs alone
+- [ ] Deleting the whole database and running `ketju reindex` reproduces every projection table from the thread logs alone
 - [ ] Projection writes are idempotent: replaying the same log range twice leaves identical rows
 - [ ] Startup catch-up closes any gap between projection_state.log_length and the actual log length for every thread
 - [ ] Permission evaluation returns the union of the viewer's groups' rows for a forum, falling back to global rows

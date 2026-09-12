@@ -5,7 +5,7 @@ Each item states the options, the current lean, and when it must be decided.
 ## Storage
 
 1. **Body encoding: CBOR vs JSON in the log.** **Decided: CBOR**, with JSON
-   kept as encoding byte 2 for `neoforum dump` and debugging. Decoding a 2 KB
+   kept as encoding byte 2 for `ketju dump` and debugging. Decoding a 2 KB
    body is 8.3x faster under CBOR with one allocation instead of seven, and
    the on-disk difference is only 2 to 5 percent, so JSON's debuggability was
    never buying what it looked like it cost. Re-run the benchmark when Go
@@ -110,7 +110,7 @@ Each item states the options, the current lean, and when it must be decided.
 
 22. **TLS.** Reverse proxy assumed; built-in ACME later. Confirm.
 23. **Backup tooling.** Document `rsync` of `data/` plus `VACUUM INTO` for
-    the DB, or ship `neoforum backup` that does both consistently (pause
+    the DB, or ship `ketju backup` that does both consistently (pause
     thread actors, checkpoint WAL, snapshot). Lean: ship the command in
     Phase 4.
 24. **Single-process assumption.** A lock file in `data/` refuses a second

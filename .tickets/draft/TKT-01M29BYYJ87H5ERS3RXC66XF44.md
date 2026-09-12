@@ -43,6 +43,6 @@ extensions: {}
 
 ## Acceptance criteria
 
-- [ ] Every table in this migration is marked as a projection in a comment naming `neoforum reindex` as its recovery path
+- [ ] Every table in this migration is marked as a projection in a comment naming `ketju reindex` as its recovery path
 - [ ] post_meta rows stay tiny, with the indexes from docs/04 on (author_id, created_at) and (thread_id, reply_to)
 - [ ] Dropping every table in this migration and rebuilding from logs produces identical rows, tested end to end

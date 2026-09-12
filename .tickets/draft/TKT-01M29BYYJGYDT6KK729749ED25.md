@@ -1,7 +1,7 @@
 ---
 schema: 3
 id: TKT-01M29BYYJGYDT6KK729749ED25
-title: Ship neoforum config check
+title: Ship ketju config check
 type: task
 status: draft
 status_reason: null

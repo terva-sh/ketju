@@ -38,7 +38,7 @@ extensions: {}
 
 Sessions in the database rather than in a signed cookie, so that suspension and sign-out-everywhere take effect on the next request rather than at the next expiry.
 
-The cookie is `__Host-nf_session`, HttpOnly, Secure, SameSite=Lax, carrying a random 256-bit id whose hash is what the server stores. Idle expiry 30 days, hard expiry 90, and `last_used_at` slides at most once every five minutes so an active reader does not generate a write per request.
+The cookie is `__Host-ketju_session`, HttpOnly, Secure, SameSite=Lax, carrying a random 256-bit id whose hash is what the server stores. Idle expiry 30 days, hard expiry 90, and `last_used_at` slides at most once every five minutes so an active reader does not generate a write per request.
 
 The `kind` column distinguishes a user session from the pre-user session that approval mode needs, and middleware has to treat the second as authenticated-but-not-a-member rather than as signed in.
 

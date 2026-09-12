@@ -35,7 +35,11 @@ import (
 const FormatVersion uint16 = 1
 
 // Magic is the signature at the head of every thread log file.
-var Magic = [8]byte{'N', 'E', 'O', 'F', 'T', 'H', 'R', 'D'}
+//
+// It names the format, not the product. A thread log is a thread log whatever
+// the binary above it is called, so renaming the project never has to touch a
+// byte on disk, before or after the format freeze.
+var Magic = [8]byte{'T', 'H', 'R', 'D', 'L', 'O', 'G', '1'}
 
 // castagnoli is CRC32C, the checksum used throughout the format.
 var castagnoli = crc32.MakeTable(crc32.Castagnoli)

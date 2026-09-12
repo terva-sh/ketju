@@ -3,7 +3,7 @@
 Rule: **the database holds coordination and projections, never content.**
 Post bodies live only in thread logs (03). Every table below is tagged as
 either *authoritative* (only copy; must be backed up) or *projection*
-(rebuildable from thread logs with `neoforum reindex`).
+(rebuildable from thread logs with `ketju reindex`).
 
 Engine: **SQLite in WAL mode via `github.com/ncruces/go-sqlite3`** (pure
 Go, no cgo; see 01-research for the comparison and 10-open-questions for the

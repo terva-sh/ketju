@@ -12,7 +12,7 @@
   `open`, `approval`, `invite` (invite is a later phase; approval is v1).
 - Admin bootstrap never requires a password: the first user to complete
   login via a provider listed in `bootstrap.admin_subjects` (or matching
-  `bootstrap.admin_email`) becomes admin. Alternatively `neoforum admin
+  `bootstrap.admin_email`) becomes admin. Alternatively `ketju admin
   promote <handle>` from the CLI.
 
 ## Provider configuration
@@ -36,7 +36,7 @@ auto_approve = false          # if true, bypass approval mode for this provider
 key = "authelia"
 name = "Club SSO"
 issuer = "https://auth.club.example"
-client_id = "neoforum"
+client_id = "ketju"
 client_secret_file = "/run/secrets/authelia"
 claims.groups = "groups"      # optional: map an IdP groups claim …
 group_map = { "forum-mods" = "moderators" }   # … onto local groups on each login
@@ -65,7 +65,7 @@ loud log line rather than aborting the server.
    - **Not found, and the user is already signed in** → this is an account
      link: attach the identity to the current user, done.
    - **Not found, signed out** → registration path (below).
-4. Session cookie: `__Host-nf_session`, `HttpOnly`, `Secure`, `SameSite=Lax`,
+4. Session cookie: `__Host-ketju_session`, `HttpOnly`, `Secure`, `SameSite=Lax`,
    value is the random session id; the server stores its hash.
 
 Email is never used to auto-link identities across providers. Two providers

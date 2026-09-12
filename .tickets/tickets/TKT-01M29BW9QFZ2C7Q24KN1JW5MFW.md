@@ -34,7 +34,7 @@ extensions: {}
 
 ## Description
 
-`internal/config`: TOML loading, validation with errors that name the offending key, `NEOFORUM_*` environment overrides for container deployments, and `client_secret_file` style indirection so a secret never has to sit in the config file.
+`internal/config`: TOML loading, validation with errors that name the offending key, `KETJU_*` environment overrides for container deployments, and `client_secret_file` style indirection so a secret never has to sit in the config file.
 
 The split is the thing to get right. `config.toml` holds what must be readable before the database exists: bootstrap admins, OIDC providers, paths, listen address, fsync policy, and cache sizes. Everything an admin changes at runtime belongs in the `settings` table instead, and putting a key in the wrong half is the mistake this ticket exists to prevent.
 

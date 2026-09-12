@@ -37,7 +37,7 @@ extensions: {}
 
 ## Description
 
-The first user completing login through a provider whose subject or email matches `bootstrap.admin_subjects` or `bootstrap.admin_emails` becomes an admin. `neoforum admin promote <handle>` is the alternative from the command line.
+The first user completing login through a provider whose subject or email matches `bootstrap.admin_subjects` or `bootstrap.admin_emails` becomes an admin. `ketju admin promote <handle>` is the alternative from the command line.
 
 Admin bootstrap never requires a password, which is what lets the whole system ship with local passwords off by default. The matching rule needs care: an email match is only trustworthy when the provider asserts `email_verified`, and the config should say so rather than leaving an operator to discover it.
 
@@ -45,5 +45,5 @@ Admin bootstrap never requires a password, which is what lets the whole system s
 
 - [ ] A bootstrap match promotes to admin on first login and is recorded in audit_log
 - [ ] An email match is honored only when the provider asserts email_verified
-- [ ] `neoforum admin promote` works against a stopped instance with the data directory only
+- [ ] `ketju admin promote` works against a stopped instance with the data directory only
 - [ ] Bootstrap promotion is idempotent and does not demote or re-promote on later logins

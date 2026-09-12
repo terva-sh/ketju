@@ -34,7 +34,7 @@ data/
       ab/
         abcd…ef                  # attachments, content-addressed
   db/
-    neoforum.db                  # embedded database (see 04)
+    ketju.db                     # embedded database (see 04)
   config.toml
 ```
 
@@ -54,7 +54,7 @@ TKT-01M29BW9PT.
 
 | Offset | Size | Field |
 |-------:|-----:|-------|
-| 0 | 8 | Magic `NEOFTHRD` |
+| 0 | 8 | Magic `THRDLOG1` |
 | 8 | 2 | Format version (1) |
 | 10 | 2 | Header length (64) |
 | 12 | 4 | Reserved |
@@ -63,6 +63,11 @@ TKT-01M29BW9PT.
 | 32 | 8 | Forum id at creation (informational; moves are recorded as events) |
 | 40 | 20 | Reserved |
 | 60 | 4 | CRC32C of bytes 0–59 |
+
+The magic names the format, not the product. A thread log is a thread log
+whatever the binary above it is called, so renaming the project never has to
+touch a byte on disk, before or after the freeze. Branding in a file signature
+buys nothing and costs a format version bump on the day the name changes.
 
 ### Record frame
 
@@ -90,7 +95,7 @@ index builder walk a log without decoding bodies. The body is a self-describing
 map so we can add fields without a format bump. CBOR over JSON for the body
 because bodies are written once and read many times, and the pure-Go CBOR
 libraries are fast and dependency-light; JSON remains a supported encoding for
-debugging and for `neoforum dump`.
+debugging and for `ketju dump`.
 
 Measured in Phase 0 (TKT-01M29BSPD, harness in `spikes/format-decisions/`):
 decoding a 2 KB body costs 963 ns under CBOR against 7982 ns under
@@ -163,7 +168,7 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 
 | Offset | Size | Field |
 |-------:|-----:|-------|
-| 0 | 8 | Magic `NEOFIDX1` |
+| 0 | 8 | Magic `THRDIDX1` |
 | 8 | 8 | Thread id |
 | 16 | 8 | Log length this index is valid up to |
 | 24 | 4 | Post count |
@@ -288,17 +293,17 @@ invalidates rendered HTML without rewriting a single log.
 ## Durability and recovery
 
 - Startup scans `threads/` lazily: nothing is opened until requested, except
-  that `neoforum serve` validates the tail of any log whose index claims a
+  that `ketju serve` validates the tail of any log whose index claims a
   shorter length than the file (a crash mid-write). A torn final frame (bad
   length or CRC) is truncated to the last good frame boundary — since we are
   the only writer and every frame is CRC'd, this is safe.
-- `neoforum fsck` walks every log, verifies every CRC, rebuilds every index,
+- `ketju fsck` walks every log, verifies every CRC, rebuilds every index,
   and reports drift between logs and database projections.
-- `neoforum reindex [--search] [--projections]` rebuilds database projections
+- `ketju reindex [--search] [--projections]` rebuilds database projections
   and/or the search index from logs. This is the designated recovery path for
   a lost or corrupted database: users and permissions must be restored from a
   DB backup, but content never is.
-- `neoforum dump <thread-id>` prints a log as JSON lines for inspection.
+- `ketju dump <thread-id>` prints a log as JSON lines for inspection.
 
 ## Sizing
 

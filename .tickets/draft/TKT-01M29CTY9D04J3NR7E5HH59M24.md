@@ -1,7 +1,7 @@
 ---
 schema: 3
 id: TKT-01M29CTY9D04J3NR7E5HH59M24
-title: Ship neoforum reindex --search
+title: Ship ketju reindex --search
 type: task
 status: draft
 status_reason: null

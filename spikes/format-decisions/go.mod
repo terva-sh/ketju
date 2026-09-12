@@ -1,4 +1,4 @@
-module neoforum.spike/format
+module ketju.spike/format
 
 go 1.26.2
 

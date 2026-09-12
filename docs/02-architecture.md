@@ -3,7 +3,7 @@
 ## Shape of the deployment
 
 ```
-┌─────────────────────────────── neoforum (one static binary) ───────────────────────────────┐
+┌────────────────────────────────── ketju (one static binary) ───────────────────────────────┐
 │                                                                                            │
 │  net/http server ──► router ──► middleware (session, rate limit, CSRF, logging)            │
 │        │                                                                                   │
@@ -33,7 +33,7 @@ certificate or ACME (later phase) for the "just run it" case.
 ## Go module layout
 
 ```
-cmd/neoforum/            main: subcommands serve, fsck, reindex, dump, admin, config
+cmd/ketju/               main: subcommands serve, fsck, reindex, dump, admin, config
 internal/
   config/                TOML loading, validation, secrets-from-file
   store/threadlog/       log + index format, thread actor, open-thread cache (03)
@@ -92,8 +92,8 @@ permissions: the follow-up fetch is where authorization happens.
 
 `config.toml` (bootstrap, providers, paths, listen address, fsync policy,
 cache sizes) plus the `settings` table for things admins change at runtime.
-Environment variable overrides `NEOFORUM_*` for container deployments.
-`neoforum config check` validates and prints the effective config with
+Environment variable overrides `KETJU_*` for container deployments.
+`ketju config check` validates and prints the effective config with
 secrets redacted.
 
 ## Observability

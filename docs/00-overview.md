@@ -1,4 +1,4 @@
-# Neoforum — Design Overview
+# Ketju — Design Overview
 
 Status: design phase, nothing implemented. This document set is the plan.
 
@@ -8,7 +8,7 @@ A small-community discussion board in the spirit of phpBB, rebuilt with modern
 sensibilities:
 
 - **Single static Go binary.** No cgo, no external database server, no Redis,
-  no job runner. `./neoforum serve` and a data directory is the whole deployment.
+  no job runner. `./ketju serve` and a data directory is the whole deployment.
 - **Thread-based, deliberately linear.** A thread is an ordered sequence of
   posts. We never render a nested tree. Conversational relationships (replies,
   quotes) are exposed as *lenses over the linear sequence*, not as structure
@@ -45,7 +45,7 @@ close to zero because the operator is one person on a VPS or a home server.
    storage. Everything else uses the Go standard library and well-maintained
    pure-Go dependencies.
 2. **Files are the source of truth for content.** Backups are `rsync`. Recovery
-   is `neoforum reindex`.
+   is `ketju reindex`.
 3. **Linear reading is sacred.** Every alternative view is a filter or overlay
    on the ordered thread. Nothing reorders posts by "score".
 4. **Small surface, complete features.** Fewer features than Discourse, but

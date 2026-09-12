@@ -39,7 +39,7 @@ Questions 22, 23, and 24 in docs/10. The three operator-facing commitments that 
 
 TLS: a reverse proxy is assumed, with built-in ACME as a later phase. Confirm that the "just run it" case is allowed to require Caddy in front for v1.
 
-Backup: document `rsync` of the data directory plus `VACUUM INTO`, or ship a `neoforum backup` command that pauses thread actors, checkpoints the WAL, and snapshots consistently. The lean is to ship the command in Phase 4, with the documented procedure carrying earlier phases.
+Backup: document `rsync` of the data directory plus `VACUUM INTO`, or ship a `ketju backup` command that pauses thread actors, checkpoints the WAL, and snapshots consistently. The lean is to ship the command in Phase 4, with the documented procedure carrying earlier phases.
 
 Single process: a lock file in the data directory refuses a second `serve`. Horizontal scaling is out of scope by design. Confirm that is acceptable for the target communities before it becomes a hard assumption everywhere.
 

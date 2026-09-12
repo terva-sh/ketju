@@ -1,7 +1,7 @@
 ---
 schema: 3
 id: TKT-01M29CCBYX4V6ZP7N9HF8H8NCZ
-title: Implement neoforum serve with graceful shutdown
+title: Implement ketju serve with graceful shutdown
 type: task
 status: draft
 status_reason: null

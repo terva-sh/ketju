@@ -49,7 +49,7 @@ Live updates are deliberately dumb. SSE carries `{thread_id, log_length}` hints 
 
 - [ ] Every lens is reachable by URL alone with no client-only state
 - [ ] The author, chain, and since lenses execute without a database query
-- [ ] Search returns FTS5 snippets and the index is rebuildable with `neoforum reindex --search`
+- [ ] Search returns FTS5 snippets and the index is rebuildable with `ketju reindex --search`
 - [ ] SSE payloads carry no post content, and authorization happens on the follow-up fetch
 - [ ] New posts never move the page under a reader who is not at the bottom; they arrive behind a 'N new posts' pill
 - [ ] Polling every 30 s takes over when SSE is unavailable
