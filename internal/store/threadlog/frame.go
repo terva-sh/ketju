@@ -63,11 +63,12 @@ const (
 // FrameHeader is the fixed part of a record frame.
 //
 // Flags carries bits this build may not know. They round-trip untouched, which
-// is how a log written by a newer version stays readable.
+// is how a log written by a newer version stays readable. See [FrameFlags] for
+// the bit assignments; nothing in the parser interprets them.
 type FrameHeader struct {
 	Type        RecordType
 	Encoding    BodyEncoding
-	Flags       uint16
+	Flags       FrameFlags
 	Ordinal     uint32
 	Revision    uint32
 	TimestampMS int64
@@ -94,7 +95,7 @@ func AppendFrame(dst []byte, h FrameHeader, body []byte) ([]byte, error) {
 	binary.LittleEndian.PutUint32(b[frLength:], l)
 	b[frType] = byte(h.Type)
 	b[frEncoding] = byte(h.Encoding)
-	binary.LittleEndian.PutUint16(b[frFlags:], h.Flags)
+	binary.LittleEndian.PutUint16(b[frFlags:], uint16(h.Flags))
 	binary.LittleEndian.PutUint32(b[frOrdinal:], h.Ordinal)
 	binary.LittleEndian.PutUint32(b[frRevision:], h.Revision)
 	binary.LittleEndian.PutUint64(b[frTime:], uint64(h.TimestampMS))
@@ -136,7 +137,7 @@ func ParseFrameHeader(b []byte) (FrameHeader, int, error) {
 	return FrameHeader{
 		Type:        RecordType(b[frType]),
 		Encoding:    BodyEncoding(b[frEncoding]),
-		Flags:       binary.LittleEndian.Uint16(b[frFlags:]),
+		Flags:       FrameFlags(binary.LittleEndian.Uint16(b[frFlags:])),
 		Ordinal:     binary.LittleEndian.Uint32(b[frOrdinal:]),
 		Revision:    binary.LittleEndian.Uint32(b[frRevision:]),
 		TimestampMS: int64(binary.LittleEndian.Uint64(b[frTime:])),

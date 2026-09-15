@@ -107,15 +107,28 @@ speed is the entire case for CBOR, and it is enough on its own.
 
 ### Frame flags
 
-| Bit | Meaning |
-|----:|---------|
-| 0 | Machine-authored: the actor was an agent account when this record was written |
-| 1–15 | Reserved, written zero |
+| Bit | Meaning | Constant |
+|----:|---------|----------|
+| 0 | Machine-authored: the actor was an agent account when this record was written | `FrameFlagMachineAuthored` |
+| 1–15 | Reserved, written zero | `FrameFlagsReserved` |
+
+The constants are in `internal/store/threadlog/flags.go` and they are what code
+uses. This table is the wire format and stays authoritative for what is on
+disk, but no caller should ever write the number: the assignment used to live
+only here, while the server setting the bit, the index builder mirroring it and
+the lens reading it back all had to agree on a literal `1` with nothing holding
+them together. `TKT-01M2BXKF8F` closed that.
+
+Note that machine-authored is bit **0** in a frame and bit **5** in an index
+entry. The same fact has two numbers, which is why crossing between them goes
+through `FrameFlags.ToEntryFlags` rather than by hand.
 
 A reader preserves bits it does not know. `ParseFrame` returns the field
 verbatim and `AppendFrame` writes back what it was given, so a log written by a
 newer build stays readable by an older one. `TestFrameUnknownFlagBitsRoundTrip`
-holds that property.
+holds that property. Nothing in the parser interprets a flag — naming the bits
+added names, not validation, because refusing an unknown bit would destroy that
+compatibility.
 
 The server sets bit 0 from `users.kind` (04) when it appends the record. A
 client never supplies it. The bit is not redundant with the author's account:
@@ -184,12 +197,16 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 | 16 | 8 | Author user id | author filter lens without the DB |
 | 24 | 8 | Created at (unix ms, of revision 1) | jump-to-date, "since last visit" |
 | 32 | 2 | Current revision number | cache keys, "edited" marker |
-| 34 | 2 | Flags: deleted, moved, hidden-by-mod, has-attachments, edited, machine-authored | tombstones and the agent lens without a read |
+| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4), machine-authored (5) — `EntryFlags` in `flags.go`, reserved bits 6–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
 | 36 | 4 | Reserved | segment rollover, see below |
 
 `machine-authored` mirrors frame flag bit 0, so filtering a thread by whether a
 post was written by an agent is answered from the in-memory entries rather than
-by reading bodies back.
+by reading bodies back. It is a mirror and not a reference: the index has to
+answer without opening the log, which is the whole reason it exists. The bit
+moves from one word to the other only through `FrameFlags.ToEntryFlags`, since
+the two numberings disagree — bit 0 in the frame, bit 5 here — and copying a
+constant from one set into the other would compile and be wrong.
 
 The reserved 4 bytes at offset 36 are not general slack. They are held for the
 segment number that segment rollover would add to the offset field, described at

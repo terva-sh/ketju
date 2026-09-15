@@ -52,59 +52,6 @@ const (
 	ieReserved    = 36 // 4
 )
 
-// EntryFlags are the per-post bits an index entry carries so that a lens can
-// answer without reading the log.
-//
-// Six bits used, ten spare. docs/03 names those ten as the spare capacity for
-// this format — the four reserved bytes at offset 36 are NOT general slack,
-// they are held for the segment number that segment rollover would add to the
-// offset field.
-type EntryFlags uint16
-
-const (
-	// EntryDeleted marks a soft-deleted post. The Post record's bytes are
-	// still on disk and still readable for history; the reader returns a
-	// tombstone from this bit without going near them.
-	EntryDeleted EntryFlags = 1 << 0
-
-	// EntryMoved marks a post split out into another thread. The post renders
-	// as a pointer and its ordinal is never reused, which is what preserves
-	// every permalink ever issued.
-	EntryMoved EntryFlags = 1 << 1
-
-	// EntryHiddenByMod marks a post hidden by moderation, which is distinct
-	// from deleted: the author did not ask for it and may not see it.
-	EntryHiddenByMod EntryFlags = 1 << 2
-
-	// EntryHasAttachments lets a listing show a paperclip without decoding
-	// every body on the page.
-	EntryHasAttachments EntryFlags = 1 << 3
-
-	// EntryEdited marks a post with more than one revision.
-	EntryEdited EntryFlags = 1 << 4
-
-	// EntryMachineAuthored mirrors frame flag bit 0: the actor was an agent
-	// account when the record was written.
-	//
-	// Mirrored rather than referenced because the whole point of the index is
-	// to answer without opening the log. It is current-state-proof for the
-	// same reason the frame bit is: users.kind can change, and no projection
-	// can reconstruct afterwards what was true at write time.
-	EntryMachineAuthored EntryFlags = 1 << 5
-)
-
-// Has reports whether every bit in want is set.
-func (f EntryFlags) Has(want EntryFlags) bool { return f&want == want }
-
-// Visible reports whether a post should render as itself rather than as a
-// tombstone or a pointer.
-//
-// One place, so that a lens cannot answer this question differently from the
-// read path by forgetting a bit.
-func (f EntryFlags) Visible() bool {
-	return f&(EntryDeleted|EntryMoved|EntryHiddenByMod) == 0
-}
-
 // ErrIndexStale means the index does not cover the whole log. It is not
 // damage: it is the ordinary result of a crash between the log fsync and the
 // index header write, and the repair is to replay the records past
