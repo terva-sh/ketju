@@ -506,7 +506,14 @@ on top by the client or by a second, cheap query, never mixed into the cached
 payload.
 
 Renderer version is part of every cache key so upgrading the markdown pipeline
-invalidates rendered HTML without rewriting a single log.
+invalidates rendered HTML without rewriting a single log. That only works if
+the constant is honest, so the rule in `internal/render` is: **any change that
+can change the output of `Render` must bump `Version`** — an extension added
+or removed, a sanitizer rule changed, a dependency upgraded — whether or not
+any post in the corpus happens to render differently today. The rule is
+enforced, not just written down: the golden tests keep a per-case hash of the
+output, and updating a golden whose content changed is refused unless the
+version was bumped first.
 
 ## Durability and recovery
 

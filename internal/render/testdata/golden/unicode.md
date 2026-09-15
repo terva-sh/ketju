@@ -1,0 +1,9 @@
+Japanese: こんにちは、世界。
+
+Emoji: 🎣 and 🧵 and 👍🏽
+
+Right to left: مرحبا بالعالم
+
+Combining marks: é vs é
+
+Zero width joiner: 👨‍👩‍👧‍👦
