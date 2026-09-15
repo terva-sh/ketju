@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9QP2Z5XCYBBDP3V0T73
 title: "Stand up CI: build, vet, test, and the ticket store check"
 type: chore
-status: review
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:testing
     path: docs/02-architecture.md
-claim:
-  actor: agent:claude-code/ci
-  branch: main
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju
-  commit: c58a0eb29d93285fe9653918f8d9e8c78b42e269
-  session: null
-  claimed_at: 2026-09-15T00:14:10Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-15T00:40:13Z
+updated_at: 2026-09-15T00:47:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,7 +43,7 @@ CI reports repairs and never commits them, the same way it reports unformatted c
 
 ## Acceptance criteria
 
-- [ ] A pull request runs build, vet, and race-enabled tests, and a failure blocks the merge
+- [x] A pull request runs build, vet, and race-enabled tests, and a failure blocks the merge
 - [x] `git ticket check --fix --dry-run --strict` runs and a pending repair fails the build
 - [x] The pipeline runs on a clean checkout with no local state, so a missing generated file is caught
 
@@ -243,16 +236,27 @@ a tie, exactly as terva's pr.sh does.
 `.forgejo/workflows/ci.yml`: one job, nine steps, on push-to-main and
 pull_request. gofmt, `go build ./...`, `go vet ./...`, `go test -race ./...`,
 build+vet of the separate `spikes/format-decisions` module, and
-`git ticket check --fix --dry-run --strict`. Green on its first run (#1,
-d741853, 32s), with each step's log checked rather than the summary trusted.
+`git ticket check --fix --dry-run --strict`. All three criteria met and each one
+observed rather than inferred — the per-step logs were read, not the green
+summary, because a run that skipped its work looks identical from outside.
 
-Two of three criteria met. The third is not mine to finish: "a failure blocks
-the merge" is branch protection on the remote, and the ticket does not authorize
-changing a repository's settings. In `review` for that reason — the pipeline is
-built and proven, and somebody with admin needs to require the `ci` status
-context on main before this is done.
+Gating is live. main is protected with enable_push false, so nothing lands
+except through a pull request whose `ci / Build and Test (pull_request)` context
+is green. PR #1 was the proof and the first customer: it ran the workflow on the
+pull_request event, went green, and merged.
 
-Three choices worth keeping, each with a cheaper-looking wrong answer:
+Getting there turned up one thing worth keeping. The context was first required
+as `ci / Build and Test (push)`, which blocks every merge forever: Forgejo
+suffixes a status context with the event that produced it, this workflow's push
+trigger is `branches: [main]`, so a topic branch posts no `(push)` status and an
+absent required context reads as pending. The refusal was a bare HTTP 405 from
+/pulls/1/merge WHILE `(pull_request)` sat green on the same commit, which is what
+isolates it — the block was a missing context, not a failing one. Requiring
+`(push)` gains nothing in principle either: the push run on main happens after
+the merge it would gate, and status checks do not govern direct pushes at all.
+
+Three choices in the workflow worth keeping, each with a cheaper-looking wrong
+answer:
 
 golang:1.27-alpine, not the 1.25-alpine that 46 workflows on this instance use.
 go.mod requires go 1.26.2, which 1.25 cannot build at all. 1.27 is proven here
@@ -260,7 +264,7 @@ by terva; the registry mirror is curated, so an arbitrary library/* tag is not
 safe to assume.
 
 git-ticket by `go install pkg@version` pinned in `env:` at v0.17.1, not a tool
-directive in go.mod. The run proved the cost being avoided: installing it pulled
+directive in go.mod. The run proved the cost avoided: installing it pulled
 chroma/v2, go-runewidth, uax29/v2, regexp2/v2, uniseg, x/term and yaml.v3, and a
 tool directive would have put all of them in this module's graph, where a lint
 tool could change what the shipped binary builds against.
