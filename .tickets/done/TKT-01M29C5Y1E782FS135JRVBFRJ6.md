@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C5Y1E782FS135JRVBFRJ6
 title: Freeze the thread log format at version 1
 type: chore
-status: draft
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -30,12 +30,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-12T23:00:38Z
+updated_at: 2026-09-15T07:30:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/review
+  id: agent:claude-code/storage
   name: ""
 extensions: {}
 ---
@@ -50,10 +50,10 @@ Check the reserved bytes before signing. They are the only cheap room for a late
 
 ## Acceptance criteria
 
-- [ ] docs/03 records the format as frozen at version 1 with the date
-- [ ] Reserved bytes in the file header, frame header, and index entry are confirmed sufficient for segment rollover
-- [ ] Every reserved record type number is documented, including those held for split and merge
-- [ ] The version bump and migration procedure is written down before it is needed
+- [x] docs/03 records the format as frozen at version 1 with the date
+- [x] Reserved bytes in the file header, frame header, and index entry are confirmed sufficient for segment rollover
+- [x] Every reserved record type number is documented, including those held for split and merge
+- [x] The version bump and migration procedure is written down before it is needed
 
 ## Notes
 
@@ -85,3 +85,45 @@ the freeze:
 
 The current check is `l > MaxFrameSize-8` in ParseFrameHeader, bounding the
 length field before anything is allocated from it.
+
+## Summary
+
+The thread log format is frozen at version 1 as of 2026-09-15. docs/03 carries
+a "Format freeze" section stating the date, what frozen means, the evidence it
+rests on, the reserved-space audit, the MaxFrameSize decision, which record
+type numbers are held, and the migration procedure.
+
+Reserved space audited before signing. File header has 24 bytes spare, ample.
+Index entry has 4 bytes at offset 36, which is the uint32 segment number
+segment rollover needs, and that is sufficient. Two structures have no spare
+bytes and both are fine for reasons now written down rather than left to be
+rediscovered: the frame fixed part needs none, because a frame does not record
+its own position and rollover changes where frames are found rather than what
+they contain; the index header needs none, because the index is derived and
+disposable, so changing its layout costs a magic bump and one rebuild per
+thread, which fsck already does at 100 MB in 178 ms.
+
+MaxFrameSize settled at 1 MiB, answering the review note from TKT-01M29BW9PT.
+It stands, but the margin is not what was assumed. The original reasoning was
+16x headroom over a 64 KB post body; that is true of Post and false of the
+format, because every record type shares the bound. The binding case is
+PostsSplitOut carrying ordinals[]: a split naming all 50 000 posts of the
+largest plausible thread is about 150 KB with ordinals under 65536 and 250 KB
+above it, so the real margin is 4.2x to 7.2x. Comfortable, and not 16x.
+
+The ceiling that implies is now recorded for whoever implements split in Phase
+4: one PostsSplitOut can name at most about 349 000 ordinals below 65536 or
+209 000 above, and a larger split needs more than one record. Cheaper to write
+down than to discover from a refused frame.
+
+20 and 21 are documented as held rather than free — named in the catalogue,
+reported by RecordType.Reserved, refused rather than skipped by a reader. Every
+other number is unassigned rather than reserved, and the difference is stated.
+
+Migration written down before it is needed: bump the version and the magic,
+migrate-logs into a new root never in place, verify the new root with fsck,
+swap by rename with the old tree surviving, rebuild indexes rather than
+migrating them. The swap being a rename is what makes the rollback a rename.
+
+The constant in frame.go now carries the same reasoning and points at the
+freeze section, so the number and the document cannot drift apart.

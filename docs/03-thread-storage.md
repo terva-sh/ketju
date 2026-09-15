@@ -20,6 +20,115 @@ holds post bodies.
 - Storing reactions, read markers, or anything high-churn in the log.
   Those belong in the database (see 04).
 
+## Format freeze
+
+**The thread log format is frozen at version 1 as of 2026-09-15**
+(TKT-01M29C5Y1E). Everything in this document from here down is a contract.
+
+What frozen means: a change to the file header, the record frame, the index
+entry layout, or the meaning of an existing record type is a format version
+bump with a migration path, not an edit. Adding a field to a record *body* is
+not a bump — bodies are self-describing CBOR maps and that is why. Claiming a
+new record type number is not a bump either, provided it follows the rules in
+"Claiming a new record type" below.
+
+The freeze rests on evidence rather than on confidence. It was gated on the
+property tests (TKT-01M29C2WT7), the crash tests (TKT-01M29C2WTJ), the frame
+fuzzer (TKT-01M29C2WTV) and the benchmark (TKT-01M29C2WV6), all of which
+landed before this was signed. A format frozen before the numbers are in is a
+format frozen on hope.
+
+### Reserved space, audited before signing
+
+| Structure | Reserved | Enough for segment rollover? |
+|---|---|---|
+| File header (64 B) | 4 B at 12, 20 B at 40 | Yes, ample |
+| Frame fixed part (32 B) | no spare bytes; 15 spare flag bits | Not needed — see below |
+| Index entry (40 B) | 4 B at 36, 10 flag bits | Yes: a uint32 segment number |
+| Index header (32 B) | **none** | Not needed — see below |
+
+Segment rollover is the scenario the reserved bytes exist for: if a log ever
+approaches the tens of GB it becomes `.log.0001`, `.log.0002`, and an index
+entry's offset needs to say which segment it lives in. The 4 reserved bytes at
+entry offset 36 hold that segment number, and 2^32 segments at any sane segment
+size is more address space than the rest of the design could ever use.
+
+The frame fixed part has no spare bytes at all, and does not need any. A frame
+does not record its own position; the index does. Rollover changes where frames
+are found, not what they contain.
+
+The index header having no reserved bytes is deliberate and worth stating
+plainly, because it otherwise reads as an oversight. **The index is derived and
+disposable.** Changing its layout costs a magic bump from `THRDIDX1` to
+`THRDIDX2` and one rebuild per thread, which `ketju fsck --rebuild` already
+does at roughly 100 MB in 178 ms cold. Reserving space in a file you can
+regenerate is paying for insurance you will never claim.
+
+### `MaxFrameSize` at 1 MiB
+
+Settled here rather than left as an implementation detail, because a reader
+that refuses a frame the writer was willing to produce is a compatibility
+break, which makes this a format parameter.
+
+1 MiB stands. The margin, though, is not what it was assumed to be when the
+number was chosen. The reasoning then was "docs/07 caps a post body at 64 KB,
+so this is roughly sixteen times the largest legitimate frame". That is true of
+`Post` and false of the format as a whole, because every record type shares
+this one bound.
+
+The binding case is `PostsSplitOut`, which carries `ordinals[]`. Measured
+against CBOR integer widths:
+
+| Case | Body size | Headroom |
+|---|---|---|
+| Post: 64 KB source, 1000 attachments, 1000 mentions | ~146 KB | 7.2x |
+| Split naming all 50 000 posts, ordinals under 65536 | ~150 KB | 7.0x |
+| Split naming all 50 000 posts, ordinals above 65536 | ~250 KB | 4.2x |
+
+So the true margin is 4 to 7 times, not 16, and the constraint comes from split
+rather than from posts. That is still comfortable against the 50 000-post
+largest-plausible thread in "Sizing", so the bound holds.
+
+The ceiling it implies, for whoever implements split and merge in Phase 4: a
+single `PostsSplitOut` record can name at most about **349 000** ordinals below
+65536, or about **209 000** above it. A split larger than that has to be
+carried by more than one record. Writing that down now is cheaper than
+discovering it from a refused frame later.
+
+### Reserved record type numbers
+
+`20` `PostsSplitOut` and `21` `PostsMergedIn` are **held, not free**. They
+appear in the catalogue with names and no body type, they are what
+`RecordType.Reserved` reports, and a reader meeting one refuses rather than
+skipping it. Their bodies are specified in the table under "Record types" and
+will be implemented in Phase 4.
+
+Every other number is unassigned rather than reserved: `6`–`9`, `17`–`19`,
+`22`–`29`, and `31`–`0x7F` in the advisory range, and the whole critical range
+`0x80`–`0xFF`. `0x00` is never assigned. Unassigned numbers are claimed by the
+procedure in "Claiming a new record type"; held numbers are not available at
+all.
+
+### Bumping the version, when it comes to that
+
+The procedure, written down before it is needed because the moment it is
+needed is a bad moment to design it:
+
+1. Raise the format version in the file header and in `THRDLOG1`'s successor
+   magic. A reader refusing an unknown version is the point; it must not guess.
+2. `ketju migrate-logs --from DIR --to DIR` reads every log under the old root
+   and writes a new tree under a new root. It never edits in place. An
+   append-only log rewritten in place during a migration is an append-only log
+   that can be left half-converted by a power cut.
+3. Verify the new tree with `ketju fsck --root NEW`, which walks every log and
+   every checksum independently of whatever the migration thought it did.
+4. Stop the server, swap the roots by rename, start it. The old tree stays on
+   disk until somebody deletes it deliberately.
+5. Indexes are not migrated. They are rebuilt, because they are derived.
+
+The swap being a rename, and the old tree surviving it, is what makes the
+rollback a rename too.
+
 ## On-disk layout
 
 ```

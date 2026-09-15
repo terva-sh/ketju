@@ -27,9 +27,16 @@ const (
 	// MaxFrameSize caps the total on-disk size of one frame.
 	//
 	// The length field is read from disk and everything else is sized from it,
-	// so it is bounded before it is believed. docs/07 caps a post body at
-	// 64 KB and attachments live in the blob store rather than the log, so a
-	// legitimate frame is far below this.
+	// so it is bounded before it is believed.
+	//
+	// This is a FORMAT PARAMETER, not a defensive guess: a reader refusing a
+	// frame the writer was willing to produce is a compatibility break. Frozen
+	// at 1 MiB in TKT-01M29C5Y1E after measuring the largest legitimate body,
+	// which is not a post. Every record type shares this bound, and the
+	// binding case is PostsSplitOut carrying ordinals[] — about 250 KB for a
+	// split naming all 50 000 posts of the largest plausible thread, so the
+	// real margin is 4x to 7x rather than the 16x that "a post body is capped
+	// at 64 KB" suggests. See "Format freeze" in docs/03.
 	MaxFrameSize = 1 << 20
 )
 
