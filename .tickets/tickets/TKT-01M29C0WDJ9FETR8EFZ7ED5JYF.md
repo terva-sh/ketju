@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C0WDJ9FETR8EFZ7ED5JYF
 title: Implement the concurrent read path with coalesced reads
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: urgent
 due_on: null
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:14:40Z
-updated_at: 2026-09-11T23:14:40Z
+updated_at: 2026-09-15T03:16:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/storage
+  name: ""
 extensions: {}
 ---
 
