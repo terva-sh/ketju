@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9QP2Z5XCYBBDP3V0T73
 title: "Stand up CI: build, vet, test, and the ticket store check"
 type: chore
-status: in-progress
+status: review
 status_reason: null
 priority: high
 due_on: null
@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-15T00:16:30Z
+updated_at: 2026-09-15T00:18:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,8 +51,8 @@ CI reports repairs and never commits them, the same way it reports unformatted c
 ## Acceptance criteria
 
 - [ ] A pull request runs build, vet, and race-enabled tests, and a failure blocks the merge
-- [ ] `git ticket check --fix --dry-run --strict` runs and a pending repair fails the build
-- [ ] The pipeline runs on a clean checkout with no local state, so a missing generated file is caught
+- [x] `git ticket check --fix --dry-run --strict` runs and a pending repair fails the build
+- [x] The pipeline runs on a clean checkout with no local state, so a missing generated file is caught
 
 ## Implementation plan
 
@@ -133,3 +133,76 @@ The store gate was proven by breaking a copy of the store in /tmp, twice:
 - Moved a draft ticket into tickets/. Reported `location_mismatch`, "would move",
   exited 1, and left the file exactly where it was — the dry-run wrote nothing,
   which is the property AGENTS.md promises.
+
+**agent:claude-code/ci** at 2026-09-15T00:18:26Z
+
+Run #1 on d741853 (push to main): success, 32s, all nine steps green. Per-step,
+from the web route rather than the summary — a green run that skipped its work
+looks identical from the outside:
+
+  Install dependencies  2s | Checkout Code  1s | Download modules  0s
+  gofmt check  0s | build  4s | go vet  1s | go test (race)  10s
+  build the format spike  2s | ticket store is consistent  11s
+
+The three steps that could have passed by doing nothing did not:
+
+  go test (race)   -> ok github.com/terva-sh/ketju/internal/store/threadlog 1.111s
+  format spike     -> downloaded cbor/v2 and float16, so it really compiled
+  ticket store     -> installed git-ticket v0.17.1, then "No problems found."
+
+`Download modules 0s` is not a warm cache; this module has no require block.
+That, plus one small package, is the whole explanation for a 32s run, and it is
+worth knowing now so nobody reads the first slow run as a regression.
+
+The store step incidentally confirmed the reason it uses `go install` rather
+than a go.mod tool directive: installing git-ticket pulled chroma/v2 2.27.0,
+go-runewidth 0.0.29, uax29/v2, regexp2/v2, uniseg, x/term and yaml.v3. A tool
+directive would have put every one of those in this module's graph.
+
+Criterion 1 is ticked only halfway and so left unticked. The workflow does
+trigger on `pull_request` and does run build, vet and the race suite — but the
+observed run was a push, because this repository commits to main directly and
+there is no PR to point at yet. More to the point, "a failure blocks the merge"
+is branch protection with required status checks, which is a REMOTE REPOSITORY
+SETTING. The API answers 401 to an anonymous read of /branch_protections, so I
+cannot even confirm the current state, and changing a remote's settings is not
+something an agent does without the ticket saying so. Someone with admin on
+terva-sh/ketju needs to require the `ci` context on main. That is the last
+thing standing between this ticket and done.
+
+## Summary
+
+`.forgejo/workflows/ci.yml`: one job, nine steps, on push-to-main and
+pull_request. gofmt, `go build ./...`, `go vet ./...`, `go test -race ./...`,
+build+vet of the separate `spikes/format-decisions` module, and
+`git ticket check --fix --dry-run --strict`. Green on its first run (#1,
+d741853, 32s), with each step's log checked rather than the summary trusted.
+
+Two of three criteria met. The third is not mine to finish: "a failure blocks
+the merge" is branch protection on the remote, and the ticket does not authorize
+changing a repository's settings. In `review` for that reason — the pipeline is
+built and proven, and somebody with admin needs to require the `ci` status
+context on main before this is done.
+
+Three choices worth keeping, each with a cheaper-looking wrong answer:
+
+golang:1.27-alpine, not the 1.25-alpine that 46 workflows on this instance use.
+go.mod requires go 1.26.2, which 1.25 cannot build at all. 1.27 is proven here
+by terva; the registry mirror is curated, so an arbitrary library/* tag is not
+safe to assume.
+
+git-ticket by `go install pkg@version` pinned in `env:` at v0.17.1, not a tool
+directive in go.mod. The run proved the cost being avoided: installing it pulled
+chroma/v2, go-runewidth, uax29/v2, regexp2/v2, uniseg, x/term and yaml.v3, and a
+tool directive would have put all of them in this module's graph, where a lint
+tool could change what the shipped binary builds against.
+
+The spike module gets build and vet but not its tests. Root `./...` never
+reaches a separate module, so it can rot unnoticed — and its README says
+decision 1 is expected to be reopened when json/v2 lands, which a spike that no
+longer compiles makes impossible. Its tests time an fsync and build a 114 MB
+log, so running them would report the runner's disk and gate nothing.
+
+`--strict` was measured, not argued: on a scratch copy of the store, a stale
+epics.md exits 1 with it and 0 without it, printing the identical warning both
+times.
