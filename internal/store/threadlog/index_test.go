@@ -380,7 +380,7 @@ func TestParseIndexCatchesATruncatedFile(t *testing.T) {
 	}
 }
 
-func TestEntriesPageIsASubslice(t *testing.T) {
+func TestEntriesPageIsACopy(t *testing.T) {
 	entries := make([]IndexEntry, 10)
 	for i := range entries {
 		entries[i] = IndexEntry{Offset: uint64(i), Revision: 1}
@@ -390,6 +390,14 @@ func TestEntriesPageIsASubslice(t *testing.T) {
 	page := ix.Entries(3, 5)
 	if len(page) != 3 || page[0].Offset != 2 || page[2].Offset != 4 {
 		t.Errorf("Entries(3,5) = %+v, want ordinals 3..5", page)
+	}
+
+	// A copy, not an alias. The actor mutates an entry in place when a post is
+	// edited or deleted, so a caller holding an alias would see it change
+	// underneath — and would race the actor doing it.
+	page[0].Offset = 0xdeadbeef
+	if again := ix.Entries(3, 3); again[0].Offset != 2 {
+		t.Error("mutating a returned page changed the index; Entries must copy")
 	}
 	if got := ix.Entries(9, 100); len(got) != 2 {
 		t.Errorf("a page past the end should clamp, got %d entries", len(got))

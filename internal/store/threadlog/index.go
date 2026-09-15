@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"hash/crc32"
 	"io"
+	"sync"
 )
 
 // IndexMagic is the signature at the head of a sidecar index file.
@@ -282,6 +283,15 @@ func ReadEntryAt(r io.ReaderAt, ordinal uint32) (IndexEntry, error) {
 // roughly three times the memory to answer a question that subtraction already
 // answers.
 type Index struct {
+	// mu makes an Index safe to read while the actor is writing it.
+	//
+	// It guards the ENTRIES only, and it is never held across I/O. That is the
+	// property the read path depends on: a reader's worst case is waiting for
+	// one batch of in-memory updates, measured in microseconds, and never for
+	// an fsync. A reader that could block behind disk would make a busy thread
+	// slow to read, which is the whole thing docs/03 keeps readers off the
+	// actor's channel to avoid.
+	mu      sync.RWMutex
 	Header  IndexHeader
 	entries []IndexEntry
 }
@@ -326,6 +336,9 @@ func ParseIndex(b []byte) (*Index, error) {
 
 // AppendTo encodes the whole index, header first.
 func (ix *Index) AppendTo(dst []byte) []byte {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+
 	h := ix.Header
 	h.PostCount = uint32(len(ix.entries))
 	dst = h.AppendTo(dst)
@@ -336,10 +349,16 @@ func (ix *Index) AppendTo(dst []byte) []byte {
 }
 
 // Len is the number of posts.
-func (ix *Index) Len() int { return len(ix.entries) }
+func (ix *Index) Len() int {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+	return len(ix.entries)
+}
 
 // Entry returns the entry for a one-based ordinal.
 func (ix *Index) Entry(ordinal uint32) (IndexEntry, error) {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
 	if ordinal == 0 || int(ordinal) > len(ix.entries) {
 		return IndexEntry{}, fmt.Errorf("%w: ordinal %d, index holds %d posts",
 			ErrNoSuchOrdinal, ordinal, len(ix.entries))
@@ -348,12 +367,20 @@ func (ix *Index) Entry(ordinal uint32) (IndexEntry, error) {
 }
 
 // Entries returns the entries for ordinals from..to inclusive, clamped to what
-// the index holds. The result aliases the index and must not be modified.
+// the index holds.
 //
-// This is what a page of posts costs: a subslice. The read path then pays one
-// pread per post that misses the render cache, and nothing at all for a post
-// that is deleted or moved.
+// The result is a COPY. An earlier version returned a subslice, which is
+// cheaper and was wrong the moment a reader could run beside the actor: the
+// actor mutates an entry in place when a post is edited or deleted, so a
+// caller holding an alias would see a flag change under it, and the race
+// detector would be right to complain.
+//
+// A page is a few dozen entries of 40 bytes, so the copy is well under a
+// kilobyte and buys the caller a stable view for as long as it needs one.
 func (ix *Index) Entries(from, to uint32) []IndexEntry {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+
 	if from == 0 {
 		from = 1
 	}
@@ -363,7 +390,7 @@ func (ix *Index) Entries(from, to uint32) []IndexEntry {
 	if int(to) > len(ix.entries) {
 		to = uint32(len(ix.entries))
 	}
-	return ix.entries[from-1 : to]
+	return append([]IndexEntry(nil), ix.entries[from-1:to]...)
 }
 
 // Tombstoned reports whether a post renders as a tombstone or a pointer rather
@@ -383,6 +410,9 @@ func (ix *Index) Tombstoned(ordinal uint32) (bool, error) {
 // The author lens docs/03 measured: 15 us over 50 000 posts here, against
 // 19.8 ms when the author has to be read back from the log.
 func (ix *Index) ByAuthor(author uint64) []uint32 {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+
 	var out []uint32
 	for i, e := range ix.entries {
 		if e.Author == author {
@@ -397,6 +427,9 @@ func (ix *Index) ByAuthor(author uint64) []uint32 {
 // CreatedMS is revision 1's timestamp, so "since my last visit" does not drag
 // a four-year-old post back into view because somebody fixed a typo in it.
 func (ix *Index) Since(ms int64) []uint32 {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+
 	var out []uint32
 	for i, e := range ix.entries {
 		if e.CreatedMS >= ms {
@@ -411,6 +444,9 @@ func (ix *Index) Replies(ordinal uint32) []uint32 {
 	if ordinal == 0 {
 		return nil
 	}
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+
 	var out []uint32
 	for i, e := range ix.entries {
 		if e.ReplyTo == ordinal {
@@ -424,6 +460,9 @@ func (ix *Index) Replies(ordinal uint32) []uint32 {
 //
 // The agent lens, from the mirrored frame flag bit, with no body decoded.
 func (ix *Index) MachineAuthored() []uint32 {
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+
 	var out []uint32
 	for i, e := range ix.entries {
 		if e.Flags.Has(EntryMachineAuthored) {

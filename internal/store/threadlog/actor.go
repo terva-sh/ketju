@@ -116,7 +116,17 @@ type Actor struct {
 	policy SyncPolicy
 
 	reqs chan request
+	quit chan struct{}
 	done chan struct{}
+
+	// inflight counts Appends that have been admitted but not yet answered.
+	//
+	// It is what lets the request channel stay OPEN for the actor's whole life.
+	// Closing it from the receiving side to signal shutdown looks tidy and is a
+	// panic waiting to happen: a send on a closed channel panics rather than
+	// blocking, and selecting on a quit channel alongside the send does not
+	// save you, because the send case is "ready" the moment the channel closes.
+	inflight sync.WaitGroup
 
 	// Owned by the actor goroutine alone.
 	ix          *Index
@@ -136,7 +146,7 @@ type Actor struct {
 func NewActor(ix *Index, logLength int64, log LogWriter, index IndexWriter, policy SyncPolicy) *Actor {
 	a := &Actor{
 		log: log, index: index, policy: policy,
-		reqs: make(chan request), done: make(chan struct{}),
+		reqs: make(chan request), quit: make(chan struct{}), done: make(chan struct{}),
 		ix: ix, logLength: logLength,
 	}
 	go a.run()
@@ -149,11 +159,19 @@ func NewActor(ix *Index, logLength int64, log LogWriter, index IndexWriter, poli
 // path is built around: a handler that has returned 200 has returned it about
 // bytes that survived a power cut.
 func (a *Actor) Append(req Append) (Result, error) {
-	r := request{a: req, reply: make(chan answer, 1)}
+	a.mu.Lock()
+	if a.closed {
+		a.mu.Unlock()
+		return Result{}, ErrActorClosed
+	}
+	a.inflight.Add(1)
+	a.mu.Unlock()
+	defer a.inflight.Done()
 
+	r := request{a: req, reply: make(chan answer, 1)}
 	select {
 	case a.reqs <- r:
-	case <-a.done:
+	case <-a.quit:
 		return Result{}, ErrActorClosed
 	}
 
@@ -174,8 +192,13 @@ func (a *Actor) Close() error {
 		return a.closeErr
 	}
 	a.closed = true
-	close(a.reqs)
 	a.mu.Unlock()
+
+	// No new Appends can be admitted now. Wait for the ones already admitted to
+	// be answered before telling the loop to stop, so nothing is left holding a
+	// reply channel nobody will ever write to.
+	a.inflight.Wait()
+	close(a.quit)
 
 	<-a.done
 	return a.closeErr
@@ -189,8 +212,14 @@ func (a *Actor) run() {
 	defer close(a.done)
 
 	batch := make([]request, 0, 64)
-	for first := range a.reqs {
-		batch = append(batch[:0], first)
+	for {
+		select {
+		case r := <-a.reqs:
+			batch = append(batch[:0], r)
+		case <-a.quit:
+			a.shutdown()
+			return
+		}
 
 		// Drain what is ALREADY queued, and only that. Waiting for more is what
 		// would make a quiet thread slower than SyncAlways, which is exactly
@@ -199,12 +228,7 @@ func (a *Actor) run() {
 		drain:
 			for {
 				select {
-				case r, ok := <-a.reqs:
-					if !ok {
-						a.commit(batch)
-						a.shutdown()
-						return
-					}
+				case r := <-a.reqs:
 					batch = append(batch, r)
 				default:
 					break drain
@@ -214,7 +238,6 @@ func (a *Actor) run() {
 
 		a.commit(batch)
 	}
-	a.shutdown()
 }
 
 // shutdown writes and fsyncs the index on the way out. The header is written

@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:14:40Z
-updated_at: 2026-09-15T04:10:59Z
+updated_at: 2026-09-15T04:46:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -112,6 +112,10 @@ behind it, then the gate is released and the drain collects them.
 
 The first draft repeated a six-field anonymous struct across three function
 signatures. Replaced with a named `staged` type before any of it was tested.
+
+**agent:claude-code/storage** at 2026-09-15T04:46:53Z
+
+Shipped with a latent panic, found and fixed while working TKT-01M29C0WDJ. `Close` closed the request channel to signal shutdown, and `Append` selected on that send against a done channel. A send on a CLOSED channel panics rather than blocking, and selecting alongside it does not help — the send case is "ready" the moment the channel closes, so select can pick it and panic. TestAppendAfterCloseIsRefused passed on the original run purely on timing; adding a mutex to Index in the read-path ticket shifted the schedule and it panicked every time. Fixed by never closing the request channel: an inflight WaitGroup and a closed flag admit or refuse Appends, Close waits for admitted ones to be answered, and only then closes a separate quit channel the loop selects on. The lesson worth keeping is that a passing concurrency test is weak evidence when the failure mode is a race — it took an unrelated timing change to expose this.
 
 ## Summary
 

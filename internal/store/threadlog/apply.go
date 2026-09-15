@@ -32,6 +32,11 @@ func (ix *Index) Apply(h FrameHeader, body []byte, offset uint64, frameSize int)
 		return err
 	}
 
+	// The lock covers the mutation and nothing else. Decoding happens above it,
+	// outside, so a reader never waits on CBOR.
+	ix.mu.Lock()
+	defer ix.mu.Unlock()
+
 	switch b := v.(type) {
 	case *PostBody:
 		return ix.applyPost(h, b, offset, frameSize)
