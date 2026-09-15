@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-166 tickets: 12 epics and 154 children. Every ticket carries an `area:` label,
+168 tickets: 12 epics and 156 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -41,8 +41,8 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 72 in Phase 1, 33 in Phase 2, 20 in
-Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 2 carrying no
+Distribution by phase: 25 in Phase 0, 73 in Phase 1, 33 in Phase 2, 20 in
+Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 3 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-25 done, 3 ready, 138 draft.
+29 done, 0 ready, 139 draft.
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
 frozen at version 1 on 2026-09-15 (`TKT-01M29C5Y1E`). The twenty-fifth is the
@@ -68,9 +68,15 @@ ids and the sharded layout, the open-thread LRU cache, `ketju dump`,
 `ketju fsck`, CI, the frame fuzzer, property tests, crash tests, the benchmark,
 and the freeze.
 
-The three `ready` tickets are Phase 1 and unstarted — the markdown pipeline,
-config loading, and the event bus — and none of them waits on storage. Phase 1
-is where the work is now.
+**Phase 1 has started.** The three tickets that were `ready` are done: the
+markdown pipeline `TKT-01M29BW9Q8`, config loading `TKT-01M29BW9QF`, and the
+event bus `TKT-01M29C0WF9`. A fourth, `TKT-01M2JZB0`, was filed and closed
+along the way — the group-commit fsync test was passing by winning a race, and
+the event bus's own tests made it lose.
+
+That leaves the ready queue empty. Everything remaining is `draft`, and
+promotion is a person's decision, so the next section names what looks
+startable rather than starting it.
 
 ## The critical path
 
@@ -177,19 +183,25 @@ stranger.
 ## Starting
 
 Promotion is a decision for a person, and the backlog stays out of the ready
-queue until somebody makes it. Three tickets are `ready` and unclaimed, all
-Phase 1:
+queue until somebody makes it. `git ticket ready` is empty, so the next move is
+a promotion, and these are the drafts that look startable:
 
-- `TKT-01M29BW9Q8` markdown pipeline with a renderer version
-- `TKT-01M29BW9QF` config loading with env overrides and file secrets
-- `TKT-01M29C0WF9` in-process event bus
+- `TKT-01M29BSPE8` decide the pure-Go SQLite driver. A spike, and the thing
+  the whole database half is waiting behind: `TKT-01M29BW9Q1` cannot build an
+  access layer against a driver nobody has picked.
+- `TKT-01M29C5Y34` the OIDC provider registry. Its one dependency, config
+  loading, is now done, and it carries the issuer-reachability criterion this
+  round deliberately left with it rather than faking in the config loader.
+- `TKT-01M29C0WEE` quote syntax and `TKT-01M29C0WEQ` mention syntax. Both
+  extend the render pipeline that just landed, both are self-contained, and
+  neither waits on the database.
+- `TKT-01M29BW9QY` structured logging with slog. Small, and everything
+  shipped this round logs through `slog.Default` already.
 
-None of the three waits on storage, which is the point the staffing argument
-above was making: Phase 0 being finished was never what gated them.
-
-Of the six originally listed as having no dependencies, three are now done —
-the format decisions `TKT-01M29BSPD`, CI `TKT-01M29BW9QP`, and thread ids
-`TKT-01M29BW9PJ`.
+Of the six originally listed as having no dependencies, five are now done —
+the format decisions `TKT-01M29BSPD`, CI `TKT-01M29BW9QP`, thread ids
+`TKT-01M29BW9PJ`, config loading `TKT-01M29BW9QF`, and the markdown pipeline
+`TKT-01M29BW9Q8`.
 
 `git ticket ready` lists what is startable, and
 `git ticket deps ID --transitive` walks the chain for any ticket here.
