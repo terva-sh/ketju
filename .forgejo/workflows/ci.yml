@@ -74,6 +74,33 @@ jobs:
         # exactly the kind that pass locally and fail on another filesystem.
         run: go test -race ./...
 
+      - name: fuzz the frame parser and body decoder (bounded)
+        # TKT-01M29C2WTV. The parser reads a length off disk and sizes work
+        # from it, so a hostile or corrupt length must be refused before it is
+        # trusted; a panic there takes down the process for every thread, not
+        # just the damaged one.
+        #
+        # 20s each, not "until it finds something". A fuzz step with no time
+        # bound is a build that hangs, and one that runs for minutes is a build
+        # people learn to skip. This is a regression gate on a committed
+        # corpus, not a discovery run — discovery is somebody running it for an
+        # hour on a laptop and committing what it finds.
+        #
+        # Two invocations because `go test -fuzz` takes exactly one target per
+        # run. -run '^$' stops the rest of the suite running again inside each.
+        #
+        # Note that -race is deliberately absent: the race detector slows the
+        # fuzzer by roughly an order of magnitude, which buys far fewer
+        # executions for the same wall clock. The suite above already runs
+        # every deterministic test under -race.
+        #
+        # The committed corpus in testdata/fuzz/ replays on every ordinary
+        # `go test` too, so a crash found once is a regression test forever,
+        # whether or not this step runs.
+        run: |
+          go test ./internal/store/threadlog/ -run '^$' -fuzz FuzzParseFrame -fuzztime=20s
+          go test ./internal/store/threadlog/ -run '^$' -fuzz FuzzDecodeBody -fuzztime=20s
+
       - name: build the format spike
         # spikes/format-decisions/ is a SEPARATE module, so the ./... above
         # never reaches it and it can rot without anyone finding out. Its README
