@@ -1,0 +1,115 @@
+# Forgejo CI: build, gofmt, vet, the suite under the race detector, and
+# `git ticket check --fix --dry-run --strict` over this repository's ticket
+# store. TKT-01M29BW9QP.
+#
+# Conventions come from the other Go repositories on this instance, and the
+# ones that are not obvious are the ones that fail before a single step runs.
+#
+# Actions resolve against THIS Forgejo, not GitHub. A bare `actions/checkout@v4`
+# is fetched from this instance's own actions/checkout path and 404s, so
+# checkout comes from the public mirror org instead. Go comes from the internal
+# registry's golang image rather than `setup-go`, which would fail the same way
+# for the same reason.
+#
+# The image below names the internal registry, and it has to: it is a working
+# reference, not prose.
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Nothing here writes to the repository.
+permissions:
+  contents: read
+
+# One pin, so a bump is a single reviewed line. `go install` resolves this
+# through the public proxy and sum.golang.org verifies it, the same trust the
+# `go mod download` step already relies on.
+env:
+  GIT_TICKET_VERSION: v0.17.1
+
+jobs:
+  ci:
+    name: Build and Test
+    runs-on: docker
+    container:
+      # 1.27, not the 1.25-alpine that most repositories on this instance use:
+      # go.mod requires go 1.26.2, which 1.25 cannot build at all. This tag is
+      # proven here by terva. The registry mirror is curated — do not assume an
+      # arbitrary library/* image is present.
+      image: container.local.sothr.com/library/golang:1.27-alpine
+    steps:
+      - name: Install dependencies
+        # git for the checkout. gcc and musl-dev are cgo, which -race needs on
+        # alpine; without them the race step fails to LINK, which reads as a
+        # broken toolchain rather than a missing one.
+        run: apk add --no-cache git gcc musl-dev
+
+      - name: Checkout Code
+        uses: Actions-Mirrors/forgejo-actions-checkout@v6
+
+      - name: Download modules
+        # Explicit, so a network problem fails here with a clear message rather
+        # than inside the first step that happens to compile something.
+        run: go mod download
+
+      - name: gofmt check
+        # gofmt -l exits zero whether or not it printed anything, so the file
+        # list is the test. tee sends it to the log as well as the check.
+        run: test -z "$(gofmt -l . | tee /dev/stderr)"
+
+      - name: build
+        # There is no cmd/ yet, so "build the binary" is today "compile every
+        # package". When cmd/ketju lands this step covers it with no edit.
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
+
+      - name: go test (race)
+        # The suite is seconds, so there is no reason to run the cheap version.
+        # The storage property and crash tests arrive within weeks and they are
+        # exactly the kind that pass locally and fail on another filesystem.
+        run: go test -race ./...
+
+      - name: build the format spike
+        # spikes/format-decisions/ is a SEPARATE module, so the ./... above
+        # never reaches it and it can rot without anyone finding out. Its README
+        # says decision 1 is expected to be reopened when json/v2 lands, and a
+        # spike that no longer compiles is a decision nobody can reopen.
+        #
+        # Build and vet only. Its tests are measurement reports rather than
+        # assertions — TestFsyncLatency times an fsync and TestIndexWidthReport
+        # builds a 114 MB log — so running them here would report the runner's
+        # disk and gate nothing.
+        run: |
+          go -C spikes/format-decisions build ./...
+          go -C spikes/format-decisions vet ./...
+
+      - name: ticket store is consistent
+        # AGENTS.md promises CI runs exactly this command, so it runs exactly
+        # this command. It plans every repair, writes nothing, and exits 1 when
+        # one is pending: a ticket under the wrong filename, a ticket in a
+        # directory its status does not imply, a dangling parent or dependency,
+        # a dependency cycle, an unresolved merge conflict in a ticket file.
+        #
+        # --strict is the flag doing the work. epics_index_stale is a warning,
+        # so without it a stale .tickets/epics.md exits 0 and this step goes
+        # green over a condition it is here to catch. It also fails on an
+        # expired claim, and on a ticket in-progress with nobody holding it.
+        #
+        # The job reports the repair and never commits it, the same way it
+        # reports unformatted code rather than reformatting behind your back.
+        # Run `git ticket check --fix` locally and commit the result.
+        #
+        # `go install pkg@version` rather than a `tool` directive in go.mod:
+        # `go get -tool` would pull git-ticket's TUI dependency graph into this
+        # module and let a lint tool change what the shipped binary builds
+        # against. `go install` builds outside the main module and touches
+        # neither go.mod nor go.sum. GOBIN is explicit so this does not rest on
+        # the image's PATH.
+        run: |
+          GOBIN=/usr/local/bin go install "github.com/terva-sh/git-ticket/cmd/git-ticket@${GIT_TICKET_VERSION}"
+          git ticket check --fix --dry-run --strict
