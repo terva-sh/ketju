@@ -74,11 +74,16 @@ jobs:
         # exactly the kind that pass locally and fail on another filesystem.
         run: go test -race ./...
 
-      - name: fuzz the frame parser and body decoder (bounded)
+      - name: fuzz the frame parser, body decoder and id parser (bounded)
         # TKT-01M29C2WTV. The parser reads a length off disk and sizes work
         # from it, so a hostile or corrupt length must be refused before it is
         # trusted; a panic there takes down the process for every thread, not
         # just the damaged one.
+        #
+        # TKT-01M29BW9PJ adds the id parser, which reads a URL path segment —
+        # the least trusted input in the system. It checks the round trip as
+        # well as the absence of a panic, so a form that is accepted but
+        # re-encodes to something else is a failure rather than a curiosity.
         #
         # 20s each, not "until it finds something". A fuzz step with no time
         # bound is a build that hangs, and one that runs for minutes is a build
@@ -100,6 +105,7 @@ jobs:
         run: |
           go test ./internal/store/threadlog/ -run '^$' -fuzz FuzzParseFrame -fuzztime=20s
           go test ./internal/store/threadlog/ -run '^$' -fuzz FuzzDecodeBody -fuzztime=20s
+          go test ./internal/store/threadid/  -run '^$' -fuzz FuzzParse      -fuzztime=20s
 
       - name: build the format spike
         # spikes/format-decisions/ is a SEPARATE module, so the ./... above

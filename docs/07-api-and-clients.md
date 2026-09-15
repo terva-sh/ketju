@@ -87,7 +87,7 @@ SSE.
 
 ```json
 {
-  "thread": {"id": "h6ute4a1000001", "slug": "why-we-left-slack", "title": "…",
+  "thread": {"id": "3yymw47g00001", "slug": "why-we-left-slack", "title": "…",
              "forum": {"slug": "general", "name": "General"},
              "post_count": 212, "log_length": 483920, "locked": false, "pinned": null,
              "tags": ["meta"], "created_at": 1757500000000},
@@ -104,7 +104,7 @@ SSE.
 }
 ```
 
-`ETag: "h6ute4a1000001-483920-r3"`; `Vary: Cookie`. The viewer block is the
+`ETag: "3yymw47g00001-483920-r3"`; `Vary: Cookie`. The viewer block is the
 only per-user part, and it is cheap; everything above it comes from the
 response cache keyed on `(thread, page, lens, log_length, renderer_version,
 viewer_class)` where `viewer_class ∈ {anon, member, moderator}` (moderators

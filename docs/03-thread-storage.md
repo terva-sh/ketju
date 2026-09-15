@@ -38,10 +38,20 @@ data/
   config.toml
 ```
 
-Thread ids are 64-bit, time-sortable (millisecond timestamp in the high bits,
-per-process sequence in the low bits). The path shards on the first two bytes
-of the hex form so no directory exceeds a few thousand entries. URLs use a
-shorter base32 form plus a slug: `/t/h6ute4a1000001/why-we-left-slack`.
+Thread ids are 64-bit, time-sortable: a 48-bit millisecond timestamp in the
+high bits and a 16-bit per-process sequence in the low bits. The path shards on
+the first two bytes of the hex form so no directory exceeds a few thousand
+entries; the second of those bytes turns over about every 50 days and the first
+about every 35 years, so a directory fills at the rate the board is used.
+
+URLs use a shorter base32 form plus a slug. The id above is
+`/t/3yymw47g00001/why-we-left-slack`. The encoding is Crockford base32,
+thirteen lowercase characters — thirteen because 64 bits needs ceil(64/5), and
+Crockford because it drops I, L, O and U so an id can be read off a screen and
+typed back. Parsing accepts uppercase and maps the lookalikes; it refuses
+anything else rather than coercing it, since a coerced id is a valid id for
+somebody else's thread. Implemented in `internal/store/threadid`, decided in
+TKT-01M29BW9PJ.
 
 ## Log file format
 
