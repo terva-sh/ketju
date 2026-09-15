@@ -9,6 +9,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"time"
 )
 
 // recorder captures the ORDER of operations across both files.
@@ -489,6 +490,167 @@ func TestAppendAfterCloseIsRefused(t *testing.T) {
 	}
 	if err := a.Close(); err != nil {
 		t.Errorf("Close twice: %v", err)
+	}
+}
+
+// Close must be safe to call WHILE appends are in flight, and the way it is
+// safe must not depend on the scheduler.
+//
+// The first version of this actor closed the request channel to signal
+// shutdown. That panics — a send on a closed channel panics rather than
+// blocking, and selecting on a quit channel alongside the send does not save
+// you, because the send case goes "ready" the instant the channel closes. The
+// test that should have caught it passed on timing alone, and only began
+// failing when an unrelated mutex elsewhere shifted the schedule. So this test
+// does not append and then close: it lands a close at a different point among
+// concurrent appenders on every round, and checks each caller's answer against
+// what the log actually holds.
+func TestCloseRacesAppendsWithoutLosingOrPanicking(t *testing.T) {
+	const (
+		writers = 24
+		rounds  = writers + 1
+	)
+
+	for round := range rounds {
+		// Sweep where the close lands. Round 0 closes before any appender has
+		// started, the last round closes once every one of them is running,
+		// and the rounds between cover the ground in order rather than hoping
+		// a fixed interleaving happens to be the interesting one.
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			runCloseRace(t, writers, round)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(30 * time.Second):
+			// Not slowness. Close waits for every admitted append to be
+			// answered, so a hang here means one was admitted and then left
+			// holding a reply channel nobody will ever write to.
+			t.Fatalf("round %d: Close never returned", round)
+		}
+		if t.Failed() {
+			t.Fatalf("round %d failed; not running the remaining rounds", round)
+		}
+	}
+}
+
+// runCloseRace runs one round: writers appends, with Close launched after
+// closeAfter of them have been started.
+//
+// It reports with Errorf rather than Fatalf because it does not run on the test
+// goroutine, where FailNow would be a silent no-op for the rest of the round.
+func runCloseRace(t *testing.T, writers, closeAfter int) {
+	t.Helper()
+	a, lg, _, _ := newThread(t, SyncGroup)
+
+	var appends sync.WaitGroup
+	res := make([]Result, writers)
+	errs := make([]error, writers)
+	start := func(i int) {
+		appends.Add(1)
+		go func() {
+			defer appends.Done()
+			res[i], errs[i] = a.Append(post(fmt.Sprintf("post from writer %d", i)))
+		}()
+	}
+
+	for i := range closeAfter {
+		start(i)
+	}
+
+	var closing sync.WaitGroup
+	var closeErr error
+	closing.Add(1)
+	go func() {
+		defer closing.Done()
+		closeErr = a.Close()
+	}()
+
+	for i := closeAfter; i < writers; i++ {
+		start(i)
+	}
+
+	appends.Wait()
+	closing.Wait()
+
+	if closeErr != nil {
+		t.Errorf("closeAfter=%d: Close: %v", closeAfter, closeErr)
+	}
+
+	// Every append got one of exactly two answers. A success carries an
+	// ordinal; a refusal is ErrActorClosed. Anything else — a success with no
+	// ordinal, or an error from some other path — means the shutdown invented
+	// a third outcome, which a caller holding an HTTP request cannot act on.
+	var acked []uint32
+	for i, err := range errs {
+		switch {
+		case err == nil:
+			if res[i].Ordinal == 0 {
+				t.Errorf("closeAfter=%d: writer %d succeeded with no ordinal", closeAfter, i)
+			}
+			acked = append(acked, res[i].Ordinal)
+		case errors.Is(err, ErrActorClosed):
+		default:
+			t.Errorf("closeAfter=%d: writer %d: %v, want nil or ErrActorClosed", closeAfter, i, err)
+		}
+	}
+
+	// The appends that were told they succeeded are in the log, and they are
+	// the only things in it. A caller acknowledged and then dropped by the
+	// shutdown shows up here as a log that is too short; a record written for
+	// a caller that was told it was refused shows up as one that is too long.
+	rep, err := Open(bytes.NewReader(lg.bytes()), int64(len(lg.bytes())), nil)
+	if err != nil {
+		t.Errorf("closeAfter=%d: replaying what the actor wrote: %v", closeAfter, err)
+		return
+	}
+	if rep.Index.Len() != len(acked) {
+		t.Errorf("closeAfter=%d: %d appends were acknowledged, the log holds %d",
+			closeAfter, len(acked), rep.Index.Len())
+	}
+
+	// And the numbers those callers were given are still a gapless sequence.
+	// A refusal that raced a commit must not consume an ordinal.
+	sort.Slice(acked, func(i, j int) bool { return acked[i] < acked[j] })
+	for i, ord := range acked {
+		if ord != uint32(i+1) {
+			t.Errorf("closeAfter=%d: acknowledged ordinals are not 1..%d exactly once: position %d is %d\n%v",
+				closeAfter, len(acked), i, ord, acked)
+			return
+		}
+	}
+}
+
+// Close is not required to be called exactly once, and nothing in the API stops
+// two shutdown paths from reaching the same thread. Every caller must get the
+// same answer, and the quit channel must not be closed twice, which panics.
+func TestConcurrentClosesAllReturnTheSameAnswer(t *testing.T) {
+	a, _, _, _ := newThread(t, SyncGroup)
+	if _, err := a.Append(post("one")); err != nil {
+		t.Fatal(err)
+	}
+
+	const closers = 16
+	var wg sync.WaitGroup
+	errs := make([]error, closers)
+	for i := range closers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs[i] = a.Close()
+		}()
+	}
+	wg.Wait()
+
+	for i, err := range errs {
+		if err != nil {
+			t.Errorf("closer %d: %v", i, err)
+		}
+		if !errors.Is(err, errs[0]) && !errors.Is(errs[0], err) {
+			t.Errorf("closer %d returned %v, closer 0 returned %v", i, err, errs[0])
+		}
 	}
 }
 
