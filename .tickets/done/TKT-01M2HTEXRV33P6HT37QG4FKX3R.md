@@ -16,11 +16,13 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: commit:cc98160
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-15T06:00:56Z
-updated_at: 2026-09-15T06:01:25Z
+updated_at: 2026-09-15T06:14:38Z
 created_by:
   id: agent:claude-code/docs
   name: ""
