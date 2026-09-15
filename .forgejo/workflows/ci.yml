@@ -107,6 +107,20 @@ jobs:
           go test ./internal/store/threadlog/ -run '^$' -fuzz FuzzDecodeBody -fuzztime=20s
           go test ./internal/store/threadid/  -run '^$' -fuzz FuzzParse      -fuzztime=20s
 
+      - name: replay equivalence over random record sequences
+        # TKT-01M29C2WT7. The index is built two ways — replayed from the log,
+        # and maintained incrementally by the actor — and the design is only
+        # sound if they agree. A divergence is silent in production until
+        # somebody opens a thread and finds a post that will not load.
+        #
+        # The suite runs at its default bound inside the -race step above. This
+        # is the wider sweep: more sequences, longer ones, no -race, a few
+        # seconds. A failure prints the generating sequence and the exact flags
+        # to reproduce it.
+        run: |
+          go test ./internal/store/threadlog/ -run TestReplayEqualsIncrementalMaintenance \
+            -prop.cases=5000 -prop.len=120
+
       - name: build the format spike
         # spikes/format-decisions/ is a SEPARATE module, so the ./... above
         # never reaches it and it can rot without anyone finding out. Its README
