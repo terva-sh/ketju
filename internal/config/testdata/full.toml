@@ -1,0 +1,37 @@
+# Every key this version understands, with a value that is not the default, so
+# that a key silently stopping being read shows up as a test failure rather
+# than as a setting that quietly does nothing.
+
+listen = "0.0.0.0:9000"
+data_dir = "/srv/ketju"
+site_url = "https://forum.example.org"
+
+[storage]
+fsync = "always"
+open_threads = 128
+rendered_cache_mb = 64
+response_cache_mb = 16
+
+[bootstrap]
+admin_emails = ["admin@example.org"]
+admin_subjects = ["google:110000000000000000000"]
+
+[[oidc.providers]]
+key = "google"
+name = "Google"
+issuer = "https://accounts.google.com"
+client_id = "google-client"
+client_secret = "google-secret-in-file-please"
+scopes = ["openid", "email", "profile"]
+allowed_email_domains = ["example.org"]
+auto_approve = false
+
+[[oidc.providers]]
+key = "authelia"
+name = "Club SSO"
+issuer = "https://auth.club.example"
+client_id = "ketju"
+client_secret_file = "authelia-secret"
+groups_claim = "groups"
+group_map = { "forum-mods" = "moderators" }
+insecure_skip_issuer_check = false

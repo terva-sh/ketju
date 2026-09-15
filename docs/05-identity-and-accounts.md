@@ -17,11 +17,15 @@
 
 ## Provider configuration
 
-```toml
-[registration]
-mode = "approval"            # open | approval | invite
-allow_local_passwords = false
+Registration policy is **not** in this file. `mode` and
+`allow_local_passwords` are things an admin changes while the server is
+running, so they live in the `settings` table (04) and are changed in the
+admin UI. Writing them into `config.toml` is refused at startup, with a
+message naming the settings table, because a runtime setting that also
+exists in a file works right up to the day an admin changes it in the UI
+and the next restart silently puts it back.
 
+```toml
 [[oidc.providers]]
 key = "google"               # stable key stored in identities.provider_key
 name = "Google"

@@ -557,12 +557,13 @@ func TestBatchGroupsWhatWasWaiting(t *testing.T) {
 	for i := 1; i <= n; i++ {
 		b.Publish(Event{Thread: id, Ordinal: uint32(i), LogLength: int64(i)})
 	}
-	waitFor(t, "the queue to hold the whole burst", func() bool {
-		// One event may already have been taken by the runner before it
-		// blocked on the gate.
-		return statByName(t, b)["batcher"].Queued >= n-1
-	})
-
+	// No assertion on queue depth here. The runner takes an event and then
+	// drains, so how many it holds when it reaches the gate depends on how far
+	// the publisher got first -- a scheduler question, and asserting on it
+	// would be the same race that made the actor's group-commit test flaky.
+	// What is not a race: nothing feeds the gate until every event has been
+	// published, so the runner is stuck inside its first Deliver for the whole
+	// burst and the remainder is waiting in the queue when it returns.
 	go func() {
 		for range n {
 			select {

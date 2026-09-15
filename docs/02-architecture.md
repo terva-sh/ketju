@@ -92,7 +92,23 @@ permissions: the follow-up fetch is where authorization happens.
 
 `config.toml` (bootstrap, providers, paths, listen address, fsync policy,
 cache sizes) plus the `settings` table for things admins change at runtime.
-Environment variable overrides `KETJU_*` for container deployments.
+The split is the rule: **config.toml holds what must be readable before the
+database exists; everything an admin changes at runtime lives in
+`settings`.** A key written into the wrong half is refused at startup with
+the other half named, rather than quietly accepted.
+
+Environment variable overrides `KETJU_*` for container deployments, listed
+explicitly rather than derived from field names, so that renaming a Go
+field cannot silently rename a documented variable. One further rule
+applies to every one of them: `KETJU_X_FILE` supplies the value of
+`KETJU_X` from a file, which is how a secret reaches a container without
+being inherited by every child process and readable from `/proc`. Setting
+both forms is an error rather than a precedence rule.
+
+An absent key takes a documented default; an invalid key is an error naming
+the key, the value and the reason; an invalid value never becomes a zero
+value. Every problem in the file is reported in one pass.
+
 `ketju config check` validates and prints the effective config with
 secrets redacted.
 
