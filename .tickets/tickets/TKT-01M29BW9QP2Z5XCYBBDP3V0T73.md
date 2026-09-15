@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-15T00:18:40Z
+updated_at: 2026-09-15T00:37:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -169,6 +169,42 @@ cannot even confirm the current state, and changing a remote's settings is not
 something an agent does without the ticket saying so. Someone with admin on
 terva-sh/ketju needs to require the `ci` context on main. That is the last
 thing standing between this ticket and done.
+
+**agent:claude-code/ci** at 2026-09-15T00:37:29Z
+
+Branch protection is now on for main, and the required context reads
+`ci / Build and Test (push)`. Confirmed against the API rather than taken on
+trust: enable_status_check true, status_check_contexts exactly that one string.
+
+That context will never arrive on a pull request, so as configured it blocks
+every merge into main permanently.
+
+Forgejo suffixes a status context with the EVENT that produced it. Both pushed
+commits carry `ci / Build and Test (push)` and nothing else, because both were
+pushes to main. A pull request from a topic branch produces a different string,
+`ci / Build and Test (pull_request)` — and this workflow's push trigger is
+`branches: [main]`, so pushing the topic branch runs nothing at all and posts no
+`(push)` status anywhere. The required context is then simply absent from the
+head commit, which Forgejo reads as pending, which is not passing.
+
+terva learned the same distinction the expensive way; docs/plans/forgejo-workflow.md
+in that repository has a section called "Only the `pull_request` runs gate a PR",
+recording PR #240 merging with both `(pull_request)` gates green while all three
+`(push)` runs showed failure. The two sets of statuses on one sha are unrelated.
+
+Fix is one setting, no code change: require `ci / Build and Test (pull_request)`
+instead. Requiring the `(push)` context gates nothing useful in any case — the
+push run on main happens AFTER the merge it would be gating.
+
+Do not "fix" this by adding topic branches to the push trigger. That posts a
+second concurrent run of the identical suite on the same runner for every PR,
+which is the contention terva's file explicitly warns flakes timing-sensitive
+tests. The trigger is right; the required string is wrong.
+
+Not verified end to end: no pull request has been opened against this repository
+yet, so the exact `(pull_request)` context string is derived from how Forgejo
+names contexts rather than read off a real run. Opening one throwaway PR would
+settle both that and the first acceptance criterion in a single step.
 
 ## Summary
 
