@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-15 against the store. They are written by hand, so
+Counts last read 2026-09-15, after Phase 0 closed, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -52,17 +52,25 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-16 done, 4 ready, 146 draft.
+25 done, 3 ready, 138 draft.
 
-Phase 0 is 15 of 25 done. The format decisions, the frame codec, the record
-catalogue, the offset index, the flag bits, the unknown-type rule, tail
-recovery, the thread actor, the concurrent read path, the frame fuzzer and CI
-are all merged. What is left is the LRU cache, `ketju dump`, `ketju fsck`,
-thread ids and the sharded layout, the property and crash tests, the
-benchmark, and the freeze itself.
+**Phase 0 is complete.** 24 of its 25 tickets are done and the format was
+frozen at version 1 on 2026-09-15 (`TKT-01M29C5Y1E`). The twenty-fifth is the
+storage epic `TKT-01M29BKBKP` itself, which blocks on its children and still
+owns four of them in Phases 2 and 4 — hard redaction, its offline tool, thread
+archival, and split and merge. It stays open because that is the accurate
+state, not because anything in Phase 0 is outstanding.
 
-The other four `ready` tickets are Phase 1 and unstarted: the markdown
-pipeline, config loading, and the event bus, none of which wait on storage.
+What landed: the format decisions, the frame codec and CRC32C, the record
+catalogue, the offset index, the flag bits, the unknown-type partition, tail
+recovery, the thread actor with group commit, the concurrent read path, thread
+ids and the sharded layout, the open-thread LRU cache, `ketju dump`,
+`ketju fsck`, CI, the frame fuzzer, property tests, crash tests, the benchmark,
+and the freeze.
+
+The three `ready` tickets are Phase 1 and unstarted — the markdown pipeline,
+config loading, and the event bus — and none of them waits on storage. Phase 1
+is where the work is now.
 
 ## The critical path
 
@@ -78,12 +86,20 @@ TKT-01M29BSPD   settle the format decisions (CBOR, 40 byte entry, fsync default)
       → TKT-01M29C0WD8   thread actor, ordinal assignment, group commit            done
         → TKT-01M29C0WDW   tail recovery and index repair                          done
           → TKT-01M29C0WDJ   concurrent read path with coalesced reads             done
-            → property, crash and benchmark tests                                  draft
-              → TKT-01M29C5Y1E   freeze the format at version 1                    draft
+            → property, crash, fuzz and benchmark tests                            done
+              → TKT-01M29C5Y1E   freeze the format at version 1                    done
 ```
 
-The engine is built; what gates the freeze now is evidence about it. The fuzz
-target (`TKT-01M29C2WTV`) is done and runs in CI on every push.
+The gate is closed. The format is frozen at version 1 and every change from
+here is a version bump with a migration path, written down in docs/03 before
+it is needed.
+
+The freeze was signed on measurements rather than on confidence, which was the
+point of gating it on the benchmark. All four Phase 0 exit targets are met:
+append p99 0.98 ms against a 10 ms target, warm random-ordinal read 4.2 us
+against 100 us, index rebuild of a 100 MB log 178 ms cold against 2 s. The
+fourth, a cold read from a page cache miss, is 136 us and had no numeric
+target. Full tables are on `TKT-01M29C2WV6`.
 
 The freeze is the first gate and the only irreversible decision in the plan.
 After it, a format change is a version bump with a migration path. Before it,
@@ -161,20 +177,19 @@ stranger.
 ## Starting
 
 Promotion is a decision for a person, and the backlog stays out of the ready
-queue until somebody makes it. Four tickets are `ready` and unclaimed:
+queue until somebody makes it. Three tickets are `ready` and unclaimed, all
+Phase 1:
 
-- `TKT-01M29BW9PJ` thread ids and the sharded directory layout (Phase 0)
 - `TKT-01M29BW9Q8` markdown pipeline with a renderer version
 - `TKT-01M29BW9QF` config loading with env overrides and file secrets
 - `TKT-01M29C0WF9` in-process event bus
 
-Of the six originally listed as having no dependencies, two are now done: the
-format decisions `TKT-01M29BSPD` and CI `TKT-01M29BW9QP`.
+None of the three waits on storage, which is the point the staffing argument
+above was making: Phase 0 being finished was never what gated them.
 
-The three Phase 0 drafts that gate the freeze — property tests
-`TKT-01M29C2WT7`, crash tests `TKT-01M29C2WTJ`, and the benchmark
-`TKT-01M29C2WV6` — are unblocked and startable. The LRU cache
-`TKT-01M29C0WE5` is not on the freeze path.
+Of the six originally listed as having no dependencies, three are now done —
+the format decisions `TKT-01M29BSPD`, CI `TKT-01M29BW9QP`, and thread ids
+`TKT-01M29BW9PJ`.
 
 `git ticket ready` lists what is startable, and
 `git ticket deps ID --transitive` walks the chain for any ticket here.
