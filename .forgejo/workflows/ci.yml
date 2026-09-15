@@ -28,7 +28,7 @@ permissions:
 # through the public proxy and sum.golang.org verifies it, the same trust the
 # `go mod download` step already relies on.
 env:
-  GIT_TICKET_VERSION: v0.17.1
+  GIT_TICKET_VERSION: v0.18.0
 
 jobs:
   ci:
