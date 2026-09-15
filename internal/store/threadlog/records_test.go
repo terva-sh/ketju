@@ -150,7 +150,7 @@ func TestUnknownBodyFieldIsIgnored(t *testing.T) {
 // must not be confusable: one is expected forward compatibility, the other
 // would be damage if it wrapped ErrMalformed. This pins that they do not.
 func TestUnknownRecordTypeIsNotMalformed(t *testing.T) {
-	_, err := DecodeBody(RecordType(200), EncodingCBOR, []byte{0xa0})
+	_, err := DecodeBody(RecordType(99), EncodingCBOR, []byte{0xa0})
 	if !errors.Is(err, ErrUnknownRecordType) {
 		t.Fatalf("error = %v, want ErrUnknownRecordType", err)
 	}
@@ -203,7 +203,7 @@ func TestUnknownRecordTypeIsSkippedMidReplay(t *testing.T) {
 	want := []rec{
 		{TypeThreadCreated, EncodingCBOR, mustEncode(t, &ThreadCreatedBody{Title: "t", Slug: "t"})},
 		{TypePost, EncodingCBOR, post("first")},
-		{RecordType(199), EncodingCBOR, future},
+		{RecordType(99), EncodingCBOR, future},
 		{TypePost, EncodingCBOR, post("second")},
 		{TypePostsSplitOut, EncodingCBOR, future}, // reserved, also skipped
 		{TypePost, EncodingJSON, mustEncodeJSON(t, &PostBody{Source: "third"})},
@@ -246,7 +246,7 @@ func TestUnknownRecordTypeIsSkippedMidReplay(t *testing.T) {
 	if got := []string{"first", "second", "third"}; !reflect.DeepEqual(sources, got) {
 		t.Errorf("replay lost or reordered posts: got %q, want %q", sources, got)
 	}
-	if wantSkipped := []RecordType{RecordType(199), TypePostsSplitOut}; !reflect.DeepEqual(skipped, wantSkipped) {
+	if wantSkipped := []RecordType{RecordType(99), TypePostsSplitOut}; !reflect.DeepEqual(skipped, wantSkipped) {
 		t.Errorf("skipped %v, want %v", skipped, wantSkipped)
 	}
 }

@@ -144,6 +144,11 @@ body has to be settled before the format freeze, and that is one bit.
 
 ### Record types
 
+Every number below is in the advisory range (`0x01`–`0x7F`); see
+"Unrecognised record types" for what that means and how a new number is
+claimed. The constants are in `internal/store/threadlog/records.go` and code
+uses the name, never the literal.
+
 | Type | Name | Body fields | Effect on projection |
 |-----:|------|-------------|----------------------|
 | 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
@@ -171,6 +176,83 @@ into the target thread's log as new `Post` records with an `origin
 {thread_id, ordinal}` field; the source posts get a `moved` flag and render as
 a pointer. Ordinals in the source thread are never renumbered. This preserves
 every permalink ever issued.
+
+### Unrecognised record types
+
+An older binary will meet a record type a newer one wrote. What it does then is
+decided by the **high bit of the type byte**, which partitions the space:
+
+| Range | Class | A reader that does not know the type |
+|-------|-------|--------------------------------------|
+| `0x01`–`0x7F` | advisory | **may skip it**, stepping over it by the frame length |
+| `0x80`–`0xFF` | critical | **must refuse the thread** |
+| `0x00` | — | never assigned; meeting one is damage, not a newer writer |
+
+Skipping is mechanically trivial — the frame length lets a reader step over a
+record without understanding a byte of it. The hard part is knowing when
+skipping is *safe*, and the answer is not a property of the reader:
+
+> A record may be skipped by a reader that does not understand it only if
+> ignoring it cannot cause the reader to reveal content, or permit an action,
+> that the record exists to withhold or prevent.
+
+A skipped `Delete` renders a post a moderator removed. A skipped `Edit` renders
+the superseded revision, which discloses whatever the edit took out. A skipped
+`ThreadLocked` permits a reply to a locked thread. Those fail *open*. By
+contrast a skipped `Restore` leaves a post deleted and a skipped `ThreadRenamed`
+shows a stale title: those fail *closed*, and are survivable.
+
+The class has to live in the type number because a reader that does not know a
+type cannot know anything else about it. A frame flag would also work and is
+worse: the class is a property of the type rather than of one record, so
+deciding it once when the number is assigned is cheaper and much harder to get
+wrong than asking every writer to set a bit correctly every time. It would also
+spend one of the 15 reserved flag bits to say something the type byte can say
+for free.
+
+**Refusal is whole-thread.** Rendering the records before the unknown one and
+stopping there is the same disclosure wearing a friendlier face: if the record
+withheld post 3, showing posts 1–10 without applying it leaks post 3 exactly as
+skipping would. A reader that cannot read all of a thread reports that it cannot
+read the thread.
+
+Note what this rule does *not* say. Every type in the v1 table above is
+advisory, including `Delete` and `Edit`, and that is not a claim that ignoring
+them is harmless. The partition governs only a reader that does not recognise a
+type, and every build recognises the v1 catalogue. The two live cases today are
+the reserved split and merge numbers, which no Phase 0 binary implements —
+skipping those leaves posts rendering as text instead of as pointers, which is
+stale and duplicated rather than disclosed, so advisory is the correct class for
+them.
+
+The first critical type is already foreseeable: docs/10 item 4 leans toward a
+`Redacted` record for hard redaction, needed before Phase 2. An older build that
+skipped one would render content that was legally required to be removed, so it
+gets a `0x80`-range number.
+
+### Claiming a new record type
+
+The bands in the table above — 1–5 post lifecycle, 10–16 thread events, 20–21
+split and merge, 30 archival — are a **convention, not a rule**. They exist so a
+new thread event is filed among thread events rather than after the archival
+record, and a gap inside a band is the first place to look for a number.
+
+The rule is the partition, and it is binding:
+
+1. Apply the skip test above. If ignoring the record could fail open, the number
+   comes from `0x80`–`0xFF`. Otherwise from `0x01`–`0x7F`.
+2. A number is assigned once and never reused, even if the type is retired. Old
+   logs still contain it, and handing it to something else silently changes what
+   those records mean.
+3. `0x00` is never assigned.
+4. Add it to the table above and to the catalogue in
+   `internal/store/threadlog/records.go`. Membership in that map is what
+   "known" means at runtime; a type in the table and not the map is skipped or
+   refused by its range like any other unknown.
+
+There is no registry beyond this document and that map, and no range is reserved
+for private or experimental use. A fork that invents a type takes its chances
+with a future upstream number, which is the honest cost of having no coordinator.
 
 ## Index file format
 

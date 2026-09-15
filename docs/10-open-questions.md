@@ -31,7 +31,10 @@ Each item states the options, the current lean, and when it must be decided.
 4. **Hard redaction tool semantics.** Zero the body in place (breaks CRC of
    that frame → reader treats as redacted) vs rewrite the log with a
    `Redacted` record type. Lean: rewrite with a new type, keep CRCs valid.
-   Decide before Phase 2 (needed for GDPR-style requests).
+   Decide before Phase 2 (needed for GDPR-style requests). If it is a new type,
+   it takes a number from the **critical** range (`0x80`–`0xFF`, see 03): a
+   build that skipped a redaction would render content that was legally
+   required to be removed. Settled in TKT-01M29PARE1.
 5. **Reactions.** Not in v1. If added: DB table, per-post counts shown in
    the footer, never used for ordering. Decide after real usage.
 

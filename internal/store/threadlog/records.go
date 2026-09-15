@@ -44,6 +44,41 @@ const (
 	TypeThreadArchived RecordType = 30
 )
 
+// CriticalTypeBit partitions the type space by what a reader that does NOT
+// recognise a type must do with it (docs/03, "Unrecognised record types").
+//
+//	0x01-0x7F  advisory  an unknown type may be skipped by frame length
+//	0x80-0xFF  critical  an unknown type must not be skipped
+//	0x00       never assigned
+//
+// The test for assigning a new number:
+//
+//	A record may be skipped by a reader that does not understand it only if
+//	ignoring it cannot cause the reader to reveal content, or permit an
+//	action, that the record exists to withhold or prevent.
+//
+// A range rather than a frame flag because the class is a property of the
+// TYPE, not of an individual record. Deciding it once, when the number is
+// handed out, is cheaper and far harder to get wrong than asking every writer
+// to set a bit correctly on every record — and it costs none of the reserved
+// frame flag bits, since the type byte has already been parsed.
+//
+// The partition says what an IGNORANT reader must do. It is not a claim about
+// what the record means, and for a type every build knows it says nothing at
+// all. That is why nothing in 1-30 was renumbered when this rule landed: those
+// are the v1 catalogue and no build is unaware of them.
+const CriticalTypeBit RecordType = 0x80
+
+// Critical reports whether a reader that does not recognise t must refuse the
+// thread rather than skip the record.
+func (t RecordType) Critical() bool { return t&CriticalTypeBit != 0 }
+
+// Advisory reports whether a reader that does not recognise t may skip it.
+//
+// Type 0 is neither: it is never assigned, so meeting one is damage rather
+// than a record from the future.
+func (t RecordType) Advisory() bool { return t != 0 && !t.Critical() }
+
 // Bodies.
 //
 // Every body is a self-describing map on disk: string keys, not an array of
@@ -264,6 +299,21 @@ var decMode = func() cbor.DecMode {
 // failure this format's forward compatibility exists to prevent.
 var ErrUnknownRecordType = errors.New("threadlog: unknown record type")
 
+// ErrCriticalRecordType means a record's type is unknown AND sits in the
+// critical range, so the reader must not skip it.
+//
+// The correct response is to refuse the whole thread, not to render what came
+// before it. A partial render is the same exposure bug wearing a friendlier
+// face: if the record withheld post 3, showing posts 1 to 10 without applying
+// it leaks post 3 exactly as skipping would. See [RecordType.Critical].
+//
+// It WRAPS [ErrUnknownRecordType], which gives callers two questions instead
+// of one: errors.Is(err, ErrUnknownRecordType) asks "does this build know the
+// type", and errors.Is(err, ErrCriticalRecordType) asks "and is ignoring it
+// safe". A caller that only cares whether a type was recognised does not have
+// to know this distinction exists.
+var ErrCriticalRecordType = fmt.Errorf("%w in the critical range", ErrUnknownRecordType)
+
 // ErrUnsupportedEncoding means the body encoding byte names something this
 // build cannot decode.
 //
@@ -311,10 +361,18 @@ func NewBody(t RecordType) (any, bool) {
 func DecodeBody(t RecordType, enc BodyEncoding, raw []byte) (any, error) {
 	v, ok := NewBody(t)
 	if !ok {
-		if t.Reserved() {
+		switch {
+		case t.Critical():
+			return nil, fmt.Errorf("%w: type %d (%#02x) is in the critical range, "+
+				"so this thread cannot be read by this build", ErrCriticalRecordType, uint8(t), uint8(t))
+		case t.Reserved():
 			return nil, fmt.Errorf("%w: %s is reserved for a later phase", ErrUnknownRecordType, t)
+		case t == 0:
+			// Never assigned, so this is damage rather than a newer writer.
+			return nil, fmt.Errorf("%w: record type 0 is never assigned", ErrMalformed)
+		default:
+			return nil, fmt.Errorf("%w: %d", ErrUnknownRecordType, uint8(t))
 		}
-		return nil, fmt.Errorf("%w: %d", ErrUnknownRecordType, uint8(t))
 	}
 
 	switch enc {
@@ -336,10 +394,14 @@ func DecodeBody(t RecordType, enc BodyEncoding, raw []byte) (any, error) {
 // SkipUnknown reports whether err is the kind a replay steps over rather than
 // stops on.
 //
-// The distinction matters because the two look alike at the call site and
-// behave nothing alike: a record this build cannot name is expected and
-// survivable, while a checksum failure is damage and must stop the replay
-// before it projects corrupt state.
+// True for exactly one thing: an unknown type in the ADVISORY range. Not for a
+// checksum failure, which is damage and must stop the replay before it projects
+// corrupt state, and not for [ErrCriticalRecordType], which is a record from a
+// newer writer that this build has been told it is not safe to ignore.
+//
+// That last case is why this function exists rather than a bare errors.Is at
+// each call site. "Unknown type" used to mean "skip", full stop, and the two
+// kinds of unknown look identical at the point where the decision is made.
 func SkipUnknown(err error) bool {
-	return errors.Is(err, ErrUnknownRecordType)
+	return errors.Is(err, ErrUnknownRecordType) && !errors.Is(err, ErrCriticalRecordType)
 }
