@@ -9,6 +9,7 @@ import (
 	"sort"
 	"sync"
 	"testing"
+	"testing/synctest"
 	"time"
 )
 
@@ -192,50 +193,69 @@ func TestConcurrentAppendsProduceGaplessOrdinals(t *testing.T) {
 // The batch is formed deterministically rather than by hoping the scheduler
 // cooperates: the first Sync blocks on a gate, more appends queue behind it,
 // and releasing the gate lets the actor drain them all into one commit.
+//
+// "Deterministically" needs a mechanism, and closing the gate as soon as the
+// goroutines are spawned is not one — it only wins the race most of the time,
+// and an earlier version of this test did exactly that and failed roughly two
+// runs in five once the suite had enough other work in it to lose the race.
+// testing/synctest supplies the missing primitive: Wait returns when every
+// other goroutine in the bubble is durably blocked, which here is precisely
+// the state the batch is supposed to collapse — one goroutine inside the gated
+// Sync and sixteen parked on the actor's unbuffered channel. Reaching that
+// state on purpose is also what lets the fsync count be asserted exactly
+// rather than bounded.
 func TestQueuedAppendsShareOneFsync(t *testing.T) {
-	rec := &recorder{}
-	gate := make(chan struct{})
-	lg := &fakeLog{rec: rec, data: NewFileHeader(1, 1, 1).AppendTo(nil), gate: gate}
-	ixf := &fakeIndex{rec: rec}
-	a := NewActor(&Index{Header: IndexHeader{ThreadID: 1}}, int64(len(lg.data)), lg, ixf, SyncGroup)
-
 	const queued = 16
-	var wg sync.WaitGroup
 
-	// One append to occupy the actor; it blocks inside the gated Sync.
-	wg.Add(1)
-	go func() { defer wg.Done(); a.Append(post("first")) }() //nolint:errcheck
+	synctest.Test(t, func(t *testing.T) {
+		rec := &recorder{}
+		gate := make(chan struct{})
+		lg := &fakeLog{rec: rec, data: NewFileHeader(1, 1, 1).AppendTo(nil), gate: gate}
+		ixf := &fakeIndex{rec: rec}
+		a := NewActor(&Index{Header: IndexHeader{ThreadID: 1}}, int64(len(lg.data)), lg, ixf, SyncGroup)
 
-	// The rest pile up behind it. They are all sends on an unbuffered channel,
-	// so once each Append has entered the send it is queued in the runtime and
-	// the drain will collect it.
-	for i := range queued {
+		var wg sync.WaitGroup
+
+		// One append to occupy the actor; it blocks inside the gated Sync.
 		wg.Add(1)
-		go func() { defer wg.Done(); a.Append(post(fmt.Sprintf("queued %d", i))) }() //nolint:errcheck
-	}
+		go func() { defer wg.Done(); a.Append(post("first")) }() //nolint:errcheck
 
-	close(gate)
-	wg.Wait()
-	if err := a.Close(); err != nil {
-		t.Fatalf("Close: %v", err)
-	}
+		// The rest pile up behind it, each parked in a send on the actor's
+		// unbuffered channel, which is where the drain will find them.
+		for i := range queued {
+			wg.Add(1)
+			go func() { defer wg.Done(); a.Append(post(fmt.Sprintf("queued %d", i))) }() //nolint:errcheck
+		}
 
-	syncs := rec.count("log.sync")
-	if syncs > queued {
-		t.Errorf("%d appends cost %d log fsyncs; drain-batching is not collapsing them",
-			queued+1, syncs)
-	}
-	if syncs < 1 {
-		t.Fatal("no fsync at all")
-	}
-	// One write per fsync: the batch is written in a single call, not one per
-	// record, so that the fsync covers contiguous bytes.
-	if w := rec.count("log.write"); w != syncs {
-		t.Errorf("%d log writes against %d fsyncs; each commit should write once and sync once", w, syncs)
-	}
-	t.Logf("%d appends committed in %d batches", queued+1, syncs)
+		synctest.Wait()
+		close(gate)
+		wg.Wait()
+		if err := a.Close(); err != nil {
+			t.Fatalf("Close: %v", err)
+		}
 
-	// SyncAlways is the control: no batching, one fsync each.
+		// Two commits, not one: the first append was already inside its fsync
+		// when the others arrived, and no batching scheme can retroactively
+		// pull them into a sync that has already started. The sixteen that
+		// queued behind it share the second.
+		if syncs := rec.count("log.sync"); syncs != 2 {
+			t.Errorf("%d appends cost %d log fsyncs, want 2 (the one in flight, then the batch)",
+				queued+1, syncs)
+		}
+		// One write per fsync: the batch is written in a single call, not one
+		// per record, so that the fsync covers contiguous bytes.
+		if w, s := rec.count("log.write"), rec.count("log.sync"); w != s {
+			t.Errorf("%d log writes against %d fsyncs; each commit should write once and sync once", w, s)
+		}
+		if n := rec.count("index.entry"); n != queued+1 {
+			t.Errorf("%d index entries written for %d appends", n, queued+1)
+		}
+	})
+}
+
+// Criterion control: SyncAlways does not batch, so every append costs its own
+// fsync. It is what makes the count above mean something.
+func TestSyncAlwaysFsyncsEveryAppend(t *testing.T) {
 	rec2 := &recorder{}
 	lg2 := &fakeLog{rec: rec2, data: NewFileHeader(1, 1, 1).AppendTo(nil)}
 	a2 := NewActor(&Index{Header: IndexHeader{ThreadID: 1}}, int64(len(lg2.data)), lg2, &fakeIndex{rec: rec2}, SyncAlways)
