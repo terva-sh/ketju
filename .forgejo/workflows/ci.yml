@@ -121,6 +121,20 @@ jobs:
           go test ./internal/store/threadlog/ -run TestReplayEqualsIncrementalMaintenance \
             -prop.cases=5000 -prop.len=120
 
+      - name: storage benchmarks still run (not a measurement)
+        # TKT-01M29C2WV6. One iteration of each benchmark at a toy size, to
+        # catch a benchmark that stopped compiling or started failing. It is
+        # explicitly NOT a measurement: a CI runner's filesystem is shared,
+        # throttled and frequently tmpfs, so --bench.allow-volatile-fs is
+        # passed and every number this step prints is meaningless.
+        #
+        # The real figures are taken on a named machine and recorded on the
+        # ticket. See the header of bench_test.go for the command.
+        run: |
+          go test ./internal/store/threadlog/ -run '^$' -bench 'Benchmark' \
+            -benchtime=1x -bench.posts=2000 -bench.rebuildmb=4 \
+            -bench.dir="$(mktemp -d)" -bench.allow-volatile-fs -timeout=10m
+
       - name: build the format spike
         # spikes/format-decisions/ is a SEPARATE module, so the ./... above
         # never reaches it and it can rot without anyone finding out. Its README

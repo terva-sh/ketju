@@ -459,6 +459,41 @@ ever approaches the tens-of-GB range we add segment rollover (`.log.0001`) with
 the index entry offset gaining a segment number; the reserved bytes exist for
 that.
 
+### Measured envelope
+
+Taken 2026-09-15 against the real engine, on the baseline host: AMD Ryzen 9
+5950X, ext4 on an LVM volume, KVM guest. Full tables, method and caveats are on
+TKT-01M29C2WV6; the benchmarks are in `bench_test.go` and the command is in its
+header. Every figure here is a p99 unless it says otherwise.
+
+| docs/09 Phase 0 target | measured | margin |
+|---|---|---|
+| append p99 under 10 ms, group fsync | 0.98 ms (1 writer), 2.00 ms (8) | 5–10x |
+| random-ordinal read under 100 us warm | 4.2 us | 24x |
+| cold read from a page cache miss | 136 us | recorded, no target |
+| index rebuild of a 100 MB log under 2 s | 178 ms cold, 142 ms warm | 11x |
+
+All four are met. Three things the numbers say that the targets do not.
+
+An append at one writer costs no more than a bare `write`+`fsync` on the same
+filesystem — 0.854 ms against a 0.896 ms floor at p50. The engine adds nothing
+measurable to the price of durability.
+
+Group commit matches `always` at one writer and beats it 3.6x at eight
+(2.00 ms against 7.15 ms at p99). The argument for drain was always structural;
+this is the first time it has been measured on storage where fsync is real.
+
+A page of 25 posts costs 1.78x more when a quarter of them have been edited
+(18.4 us against 9.6 us at p50), because an edit lives where it was appended
+and breaks the run the read path coalesces on. Single-ordinal reads are
+unaffected. This is the cost of never rewriting history and it is small, but it
+grows with edit density rather than staying flat.
+
+Read the append figures against the fsync floor the benchmark prints beside
+them. On a filesystem where fsync does nothing — tmpfs, or a virtual disk with
+a lying cache — every durability number here would be a memory benchmark. The
+harness refuses tmpfs outright for that reason.
+
 ## Attachments
 
 Not in the log. Uploaded files are written to `blobs/sha256/xx/<hash>`,
