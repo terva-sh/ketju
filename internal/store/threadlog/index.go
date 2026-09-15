@@ -1,0 +1,487 @@
+package threadlog
+
+import (
+	"bytes"
+	"encoding/binary"
+	"errors"
+	"fmt"
+	"hash/crc32"
+	"io"
+)
+
+// IndexMagic is the signature at the head of a sidecar index file.
+//
+// Different from [Magic] on purpose. The index is derived data and the log is
+// the source of truth, so the one mistake that must never be silent is reading
+// one as the other — restoring a backup that swapped the pair, say. A distinct
+// signature turns that into [ErrBadMagic] on the first read.
+var IndexMagic = [8]byte{'T', 'H', 'R', 'D', 'I', 'D', 'X', '1'}
+
+const (
+	// IndexHeaderSize is the fixed header at the head of an index file.
+	IndexHeaderSize = 32
+
+	// IndexEntrySize is one entry, one post ordinal.
+	//
+	// Settled at 40 bytes and measured, not guessed: on a 50 000 post thread,
+	// filtering by author takes 15 us from these entries against 19.8 ms when
+	// the entry carries only an offset and the author must be read back from
+	// the log. The 24 extra bytes buy a factor of 1300, and that is the
+	// warm-cache case. See docs/03.
+	IndexEntrySize = 40
+)
+
+// Field offsets within the index header, from the docs/03 table.
+const (
+	ihMagic     = 0  // 8 bytes
+	ihThreadID  = 8  // 8
+	ihLogLength = 16 // 8
+	ihPostCount = 24 // 4
+	ihCRC       = 28 // 4, over bytes 0..27
+)
+
+// Field offsets within an index entry, from the docs/03 table.
+const (
+	ieOffset      = 0  // 8 bytes
+	ieFrameLength = 8  // 4
+	ieReplyTo     = 12 // 4
+	ieAuthor      = 16 // 8
+	ieCreatedMS   = 24 // 8
+	ieRevision    = 32 // 2
+	ieFlags       = 34 // 2
+	ieReserved    = 36 // 4
+)
+
+// EntryFlags are the per-post bits an index entry carries so that a lens can
+// answer without reading the log.
+//
+// Six bits used, ten spare. docs/03 names those ten as the spare capacity for
+// this format — the four reserved bytes at offset 36 are NOT general slack,
+// they are held for the segment number that segment rollover would add to the
+// offset field.
+type EntryFlags uint16
+
+const (
+	// EntryDeleted marks a soft-deleted post. The Post record's bytes are
+	// still on disk and still readable for history; the reader returns a
+	// tombstone from this bit without going near them.
+	EntryDeleted EntryFlags = 1 << 0
+
+	// EntryMoved marks a post split out into another thread. The post renders
+	// as a pointer and its ordinal is never reused, which is what preserves
+	// every permalink ever issued.
+	EntryMoved EntryFlags = 1 << 1
+
+	// EntryHiddenByMod marks a post hidden by moderation, which is distinct
+	// from deleted: the author did not ask for it and may not see it.
+	EntryHiddenByMod EntryFlags = 1 << 2
+
+	// EntryHasAttachments lets a listing show a paperclip without decoding
+	// every body on the page.
+	EntryHasAttachments EntryFlags = 1 << 3
+
+	// EntryEdited marks a post with more than one revision.
+	EntryEdited EntryFlags = 1 << 4
+
+	// EntryMachineAuthored mirrors frame flag bit 0: the actor was an agent
+	// account when the record was written.
+	//
+	// Mirrored rather than referenced because the whole point of the index is
+	// to answer without opening the log. It is current-state-proof for the
+	// same reason the frame bit is: users.kind can change, and no projection
+	// can reconstruct afterwards what was true at write time.
+	EntryMachineAuthored EntryFlags = 1 << 5
+)
+
+// Has reports whether every bit in want is set.
+func (f EntryFlags) Has(want EntryFlags) bool { return f&want == want }
+
+// Visible reports whether a post should render as itself rather than as a
+// tombstone or a pointer.
+//
+// One place, so that a lens cannot answer this question differently from the
+// read path by forgetting a bit.
+func (f EntryFlags) Visible() bool {
+	return f&(EntryDeleted|EntryMoved|EntryHiddenByMod) == 0
+}
+
+// ErrIndexStale means the index does not cover the whole log. It is not
+// damage: it is the ordinary result of a crash between the log fsync and the
+// index header write, and the repair is to replay the records past
+// [IndexHeader.LogLength].
+var ErrIndexStale = errors.New("threadlog: index does not cover the log")
+
+// ErrNoSuchOrdinal means an ordinal is outside the range this index holds.
+var ErrNoSuchOrdinal = errors.New("threadlog: no such ordinal")
+
+// IndexHeader is the fixed header of a sidecar index.
+//
+// LogLength is the field that matters. It records how much of the log this
+// index is known to describe, which turns trusting an index into a comparison
+// against stat() rather than an act of faith.
+type IndexHeader struct {
+	ThreadID  uint64
+	LogLength uint64
+	PostCount uint32
+}
+
+// AppendTo appends the encoded index header to dst.
+func (h IndexHeader) AppendTo(dst []byte) []byte {
+	start := len(dst)
+	dst = append(dst, make([]byte, IndexHeaderSize)...)
+	b := dst[start:]
+
+	copy(b[ihMagic:], IndexMagic[:])
+	binary.LittleEndian.PutUint64(b[ihThreadID:], h.ThreadID)
+	binary.LittleEndian.PutUint64(b[ihLogLength:], h.LogLength)
+	binary.LittleEndian.PutUint32(b[ihPostCount:], h.PostCount)
+	binary.LittleEndian.PutUint32(b[ihCRC:], crc32.Checksum(b[:ihCRC], castagnoli))
+	return dst
+}
+
+// ParseIndexHeader decodes the index header at the start of b.
+//
+// The CRC covers every other field, so a torn or corrupt header is reported as
+// [ErrChecksum] rather than believed. A caller that gets any error here
+// rebuilds the index from the log; see [RebuildRequired], which exists so that
+// decision is made in one place rather than by each caller guessing which
+// errors are recoverable.
+func ParseIndexHeader(b []byte) (IndexHeader, error) {
+	if len(b) < IndexHeaderSize {
+		return IndexHeader{}, fmt.Errorf("%w: index header needs %d bytes, got %d",
+			ErrShortBuffer, IndexHeaderSize, len(b))
+	}
+	if !bytes.Equal(b[ihMagic:ihMagic+len(IndexMagic)], IndexMagic[:]) {
+		return IndexHeader{}, fmt.Errorf("%w: index begins with %q", ErrBadMagic, b[ihMagic:ihMagic+len(IndexMagic)])
+	}
+
+	stored := binary.LittleEndian.Uint32(b[ihCRC:])
+	computed := crc32.Checksum(b[:ihCRC], castagnoli)
+	if stored != computed {
+		return IndexHeader{}, &ChecksumError{Part: "index header", Stored: stored, Computed: computed}
+	}
+
+	return IndexHeader{
+		ThreadID:  binary.LittleEndian.Uint64(b[ihThreadID:]),
+		LogLength: binary.LittleEndian.Uint64(b[ihLogLength:]),
+		PostCount: binary.LittleEndian.Uint32(b[ihPostCount:]),
+	}, nil
+}
+
+// Covers reports whether this index describes the whole of a log of logSize
+// bytes.
+//
+// This is the entire trust decision, and it is deliberately a comparison and
+// not a checksum of the log: verifying an index by rereading what it indexes
+// would cost exactly what the index exists to avoid.
+//
+// An index claiming to be LONGER than the log is not merely stale, it is
+// impossible — a truncated or replaced log — and reports false so the caller
+// rebuilds.
+func (h IndexHeader) Covers(logSize int64) bool {
+	return logSize >= 0 && h.LogLength == uint64(logSize)
+}
+
+// RebuildRequired reports whether err means the index file cannot be trusted
+// and must be rebuilt from the log.
+//
+// It is true for every way an index can be wrong about itself — bad magic, a
+// failed header CRC, a self-inconsistent or truncated file, or a log length
+// that does not match stat(). All of those are recoverable, because an index
+// is derived data: a rebuild is a sequential read of the log and loses nothing.
+//
+// It is false for [ErrNoSuchOrdinal], which is the one error here that says
+// nothing about the file. Asking for post 900 of a 40-post thread is a bad
+// question, and throwing away a perfectly good index over it would turn a
+// caller's bug into a storage cost.
+func RebuildRequired(err error) bool {
+	if err == nil || errors.Is(err, ErrNoSuchOrdinal) {
+		return false
+	}
+	return errors.Is(err, ErrBadMagic) ||
+		errors.Is(err, ErrChecksum) ||
+		errors.Is(err, ErrMalformed) ||
+		errors.Is(err, ErrShortBuffer) ||
+		errors.Is(err, ErrIndexStale)
+}
+
+// OpenIndex parses an index file and decides whether it may be trusted for a
+// log of logSize bytes.
+//
+// This is the whole open path from docs/03: read both headers, and if
+// idx.log_length == stat(log).size the index is trusted, otherwise repair. The
+// two failure modes are deliberately not merged — a corrupt index needs a full
+// rebuild, while a stale one needs only the records past
+// [IndexHeader.LogLength] replayed, and telling them apart is the difference
+// between a sequential read of the whole log and reading a few kilobytes.
+//
+// Every error returned here satisfies [RebuildRequired]. A caller that cannot
+// be bothered to distinguish them can rebuild and always be correct.
+func OpenIndex(b []byte, logSize int64) (*Index, error) {
+	ix, err := ParseIndex(b)
+	if err != nil {
+		return nil, err
+	}
+	if !ix.Header.Covers(logSize) {
+		return nil, fmt.Errorf("%w: index covers %d bytes, log is %d",
+			ErrIndexStale, ix.Header.LogLength, logSize)
+	}
+	return ix, nil
+}
+
+// IndexEntry is one post's entry.
+//
+// Exactly [IndexEntrySize] bytes in memory as well as on disk, which
+// TestIndexEntryIsFortyBytesInMemory pins. That is not tidiness: the in-memory
+// budget in docs/03 is the reason the width was argued over at all, and a field
+// reordered into padding would blow it silently.
+type IndexEntry struct {
+	Offset      uint64 // of the CURRENT revision's record
+	CreatedMS   int64  // of revision 1, so jump-to-date is stable across edits
+	Author      uint64 // user id
+	FrameLength uint32 // one pread of exactly the right size
+	ReplyTo     uint32 // ordinal, 0 = none
+	Revision    uint16 // current revision number
+	Flags       EntryFlags
+}
+
+// AppendTo appends the encoded entry to dst.
+//
+// The four reserved bytes are written zero. They are held for the segment
+// number described at the end of docs/03 and are not spare capacity for
+// anything else.
+func (e IndexEntry) AppendTo(dst []byte) []byte {
+	start := len(dst)
+	dst = append(dst, make([]byte, IndexEntrySize)...)
+	b := dst[start:]
+
+	binary.LittleEndian.PutUint64(b[ieOffset:], e.Offset)
+	binary.LittleEndian.PutUint32(b[ieFrameLength:], e.FrameLength)
+	binary.LittleEndian.PutUint32(b[ieReplyTo:], e.ReplyTo)
+	binary.LittleEndian.PutUint64(b[ieAuthor:], e.Author)
+	binary.LittleEndian.PutUint64(b[ieCreatedMS:], uint64(e.CreatedMS))
+	binary.LittleEndian.PutUint16(b[ieRevision:], e.Revision)
+	binary.LittleEndian.PutUint16(b[ieFlags:], uint16(e.Flags))
+	return dst
+}
+
+// ParseIndexEntry decodes the entry at the start of b.
+//
+// There is no per-entry checksum, by design. An entry is 40 bytes of derived
+// data guarded by the header's log-length comparison; paying four bytes and a
+// CRC per post to protect something that is rebuilt by a sequential read would
+// be the expensive way to get the same answer.
+//
+// Reserved bytes are not inspected, so a future version that puts them to use
+// stays readable here.
+func ParseIndexEntry(b []byte) (IndexEntry, error) {
+	if len(b) < IndexEntrySize {
+		return IndexEntry{}, fmt.Errorf("%w: index entry needs %d bytes, got %d",
+			ErrShortBuffer, IndexEntrySize, len(b))
+	}
+	return IndexEntry{
+		Offset:      binary.LittleEndian.Uint64(b[ieOffset:]),
+		FrameLength: binary.LittleEndian.Uint32(b[ieFrameLength:]),
+		ReplyTo:     binary.LittleEndian.Uint32(b[ieReplyTo:]),
+		Author:      binary.LittleEndian.Uint64(b[ieAuthor:]),
+		CreatedMS:   int64(binary.LittleEndian.Uint64(b[ieCreatedMS:])),
+		Revision:    binary.LittleEndian.Uint16(b[ieRevision:]),
+		Flags:       EntryFlags(binary.LittleEndian.Uint16(b[ieFlags:])),
+	}, nil
+}
+
+// EntryFileOffset returns the byte offset of ordinal n's entry.
+//
+// This is the whole design in one line: 32 + 40*(n-1) is arithmetic, so
+// reaching any post is a seek and never a scan, whether the thread has four
+// posts or four hundred thousand.
+//
+// Ordinals are one-based. Ordinal 0 means "no post" — it is what a
+// thread-level event carries in its frame — so it has no entry.
+func EntryFileOffset(ordinal uint32) (int64, error) {
+	if ordinal == 0 {
+		return 0, fmt.Errorf("%w: ordinal 0 is the thread, not a post", ErrNoSuchOrdinal)
+	}
+	return IndexHeaderSize + int64(ordinal-1)*IndexEntrySize, nil
+}
+
+// ReadEntryAt reads one entry from an index file.
+//
+// One ReadAt of exactly [IndexEntrySize] bytes at the computed offset. It does
+// not read the header, does not scan, and does not care how large the file is:
+// the caller has already decided the index is trustworthy by comparing the
+// header's log length against stat().
+func ReadEntryAt(r io.ReaderAt, ordinal uint32) (IndexEntry, error) {
+	off, err := EntryFileOffset(ordinal)
+	if err != nil {
+		return IndexEntry{}, err
+	}
+
+	var buf [IndexEntrySize]byte
+	if _, err := r.ReadAt(buf[:], off); err != nil {
+		if errors.Is(err, io.EOF) {
+			return IndexEntry{}, fmt.Errorf("%w: ordinal %d is past the end of the index",
+				ErrNoSuchOrdinal, ordinal)
+		}
+		return IndexEntry{}, fmt.Errorf("threadlog: reading index entry %d: %w", ordinal, err)
+	}
+	return ParseIndexEntry(buf[:])
+}
+
+// Index is the in-memory form: the header plus every entry, held contiguously.
+//
+// A slice rather than a map. Ordinals are dense and one-based, so the offset
+// into the slice IS the ordinal minus one, and a map would cost a hash and
+// roughly three times the memory to answer a question that subtraction already
+// answers.
+type Index struct {
+	Header  IndexHeader
+	entries []IndexEntry
+}
+
+// NewIndex builds an in-memory index. The entries are indexed by ordinal-1.
+func NewIndex(h IndexHeader, entries []IndexEntry) *Index {
+	return &Index{Header: h, entries: entries}
+}
+
+// ParseIndex decodes a whole index file.
+//
+// The header's post count is checked against the number of entries actually
+// present, so a truncated index file is caught here rather than at the first
+// read past the end.
+func ParseIndex(b []byte) (*Index, error) {
+	h, err := ParseIndexHeader(b)
+	if err != nil {
+		return nil, err
+	}
+
+	body := b[IndexHeaderSize:]
+	if len(body)%IndexEntrySize != 0 {
+		return nil, fmt.Errorf("%w: index has %d bytes after the header, not a multiple of %d",
+			ErrMalformed, len(body), IndexEntrySize)
+	}
+	n := len(body) / IndexEntrySize
+	if uint32(n) != h.PostCount {
+		return nil, fmt.Errorf("%w: header claims %d posts, file holds %d entries",
+			ErrMalformed, h.PostCount, n)
+	}
+
+	entries := make([]IndexEntry, n)
+	for i := range entries {
+		e, err := ParseIndexEntry(body[i*IndexEntrySize:])
+		if err != nil {
+			return nil, err
+		}
+		entries[i] = e
+	}
+	return &Index{Header: h, entries: entries}, nil
+}
+
+// AppendTo encodes the whole index, header first.
+func (ix *Index) AppendTo(dst []byte) []byte {
+	h := ix.Header
+	h.PostCount = uint32(len(ix.entries))
+	dst = h.AppendTo(dst)
+	for _, e := range ix.entries {
+		dst = e.AppendTo(dst)
+	}
+	return dst
+}
+
+// Len is the number of posts.
+func (ix *Index) Len() int { return len(ix.entries) }
+
+// Entry returns the entry for a one-based ordinal.
+func (ix *Index) Entry(ordinal uint32) (IndexEntry, error) {
+	if ordinal == 0 || int(ordinal) > len(ix.entries) {
+		return IndexEntry{}, fmt.Errorf("%w: ordinal %d, index holds %d posts",
+			ErrNoSuchOrdinal, ordinal, len(ix.entries))
+	}
+	return ix.entries[ordinal-1], nil
+}
+
+// Entries returns the entries for ordinals from..to inclusive, clamped to what
+// the index holds. The result aliases the index and must not be modified.
+//
+// This is what a page of posts costs: a subslice. The read path then pays one
+// pread per post that misses the render cache, and nothing at all for a post
+// that is deleted or moved.
+func (ix *Index) Entries(from, to uint32) []IndexEntry {
+	if from == 0 {
+		from = 1
+	}
+	if int(from) > len(ix.entries) || to < from {
+		return nil
+	}
+	if int(to) > len(ix.entries) {
+		to = uint32(len(ix.entries))
+	}
+	return ix.entries[from-1 : to]
+}
+
+// Tombstoned reports whether a post renders as a tombstone or a pointer rather
+// than as itself.
+//
+// Answered from flags, so a page of deleted posts costs no log reads at all.
+func (ix *Index) Tombstoned(ordinal uint32) (bool, error) {
+	e, err := ix.Entry(ordinal)
+	if err != nil {
+		return false, err
+	}
+	return !e.Flags.Visible(), nil
+}
+
+// ByAuthor returns the ordinals authored by a user, in ordinal order.
+//
+// The author lens docs/03 measured: 15 us over 50 000 posts here, against
+// 19.8 ms when the author has to be read back from the log.
+func (ix *Index) ByAuthor(author uint64) []uint32 {
+	var out []uint32
+	for i, e := range ix.entries {
+		if e.Author == author {
+			out = append(out, uint32(i)+1)
+		}
+	}
+	return out
+}
+
+// Since returns the ordinals created at or after ms.
+//
+// CreatedMS is revision 1's timestamp, so "since my last visit" does not drag
+// a four-year-old post back into view because somebody fixed a typo in it.
+func (ix *Index) Since(ms int64) []uint32 {
+	var out []uint32
+	for i, e := range ix.entries {
+		if e.CreatedMS >= ms {
+			out = append(out, uint32(i)+1)
+		}
+	}
+	return out
+}
+
+// Replies returns the ordinals that reply directly to ordinal.
+func (ix *Index) Replies(ordinal uint32) []uint32 {
+	if ordinal == 0 {
+		return nil
+	}
+	var out []uint32
+	for i, e := range ix.entries {
+		if e.ReplyTo == ordinal {
+			out = append(out, uint32(i)+1)
+		}
+	}
+	return out
+}
+
+// MachineAuthored returns the ordinals written by an agent account.
+//
+// The agent lens, from the mirrored frame flag bit, with no body decoded.
+func (ix *Index) MachineAuthored() []uint32 {
+	var out []uint32
+	for i, e := range ix.entries {
+		if e.Flags.Has(EntryMachineAuthored) {
+			out = append(out, uint32(i)+1)
+		}
+	}
+	return out
+}
