@@ -18,6 +18,7 @@ usage: ketju <command> [flags]
 
 commands:
   dump   print a thread log as JSON lines, one object per record
+  fsck   walk every log, verify every checksum, rebuild every index
 
 Run ketju <command> -h for a command's flags.
 `
@@ -32,6 +33,8 @@ func main() {
 	switch os.Args[1] {
 	case "dump":
 		err = runDump(os.Args[2:])
+	case "fsck":
+		err = runFsck(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return
