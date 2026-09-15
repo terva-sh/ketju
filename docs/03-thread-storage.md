@@ -414,6 +414,36 @@ invalidates rendered HTML without rewriting a single log.
   DB backup, but content never is.
 - `ketju dump <thread-id>` prints a log as JSON lines for inspection.
 
+### What a rebuild can and cannot tell apart
+
+Verified byte by byte in `crash_test.go`, against TKT-01M29C2WTJ.
+
+Cutting the log at any offset recovers to the largest frame boundary at or
+below the cut, with exactly the records that were fully durable and nothing
+else. Flipping any byte before the final frame is refused rather than
+truncated, because those bytes were acknowledged and cutting back to them would
+discard durable posts — with one exception.
+
+The exception is the four-byte length field. A length that overruns the end of
+the file is precisely what an interrupted write leaves behind, so a rebuild
+treats it as a torn tail and falls back. A flipped bit in a length field makes
+the same shape, and the CRC cannot help: the CRC sits at the end of the frame
+and the length is what says where that is, so the bytes are unreachable before
+they can be checked. On the test log, 35 of the 762 byte positions before the
+final frame can be flipped and still be accepted, and every one of them is
+inside a length field.
+
+The consequence is bounded, and the bound is what makes this acceptable rather
+than a hole. A rebuild never invents a record and never reports a prefix longer
+than the truth: the failure is losing durable records, not serving wrong ones.
+And a rebuild is the rare path. The index header records the log length it is
+valid to, so an ordinary open trusts the sidecar and never walks the frames —
+a corrupt length in the middle of a log does not truncate anything, which is
+also under test.
+
+`ketju fsck` is where this is meant to be caught, since it verifies every CRC
+against a log it reads whole rather than one it is trying to recover.
+
 ## Sizing
 
 Assume 2 KB average post, 500 bytes of CBOR overhead and metadata.
