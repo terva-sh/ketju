@@ -50,11 +50,12 @@ import (
 	"github.com/yuin/goldmark/v2/extension"
 	"github.com/yuin/goldmark/v2/parser"
 	"github.com/yuin/goldmark/v2/renderer/html"
+	"github.com/yuin/goldmark/v2/util"
 )
 
 // Version identifies this pipeline's output. Read the rule above before
 // changing it, and read it again before deciding not to.
-const Version = 1
+const Version = 2
 
 // MaxSource is the largest source Render will accept.
 //
@@ -66,23 +67,48 @@ const MaxSource = 256 << 10
 
 // Result is one rendered post.
 //
-// It is a struct with one field on purpose. Mentions, quotes and reply_to come
-// out of the same parse (TKT-01M29C2WWG), and adding them here later must not
-// mean changing every call site.
+// It is a struct rather than a string because mentions and reply_to come out of
+// the same parse (TKT-01M29C2WWG), and adding them must not mean changing every
+// call site.
 type Result struct {
 	// HTML is sanitized and safe to write into a page without escaping.
 	HTML string
+
+	// Quotes is every post this one quotes, in document order, for the
+	// projection writer to record as backlinks so a quoted post can show who
+	// quoted it. A quote of an ordinal the resolver does not know is not
+	// listed: there is nothing to link back to.
+	Quotes []Quote
 }
 
 // ErrTooLarge means the source exceeded MaxSource.
 var ErrTooLarge = fmt.Errorf("render: source is larger than %d bytes", MaxSource)
 
-// Render converts markdown source to sanitized HTML.
+// Context is what a render needs to know that the source does not say.
+//
+// The zero value is valid and means "nothing to resolve against", which is what
+// a composer preview has before the post exists.
+type Context struct {
+	// Posts resolves quoted ordinals. Nil means quotes are rendered
+	// optimistically as links and reported as backlinks, because a preview that
+	// declined to link would disagree with the posted result, and the promise
+	// that they match is the reason this package is the only renderer.
+	Posts PostResolver
+}
+
+// Render converts markdown source to sanitized HTML, with nothing to resolve
+// against. It is Render with an empty [Context].
+func Render(source string) (Result, error) {
+	return RenderWith(source, Context{})
+}
+
+// RenderWith converts markdown source to sanitized HTML.
 //
 // It is safe for concurrent use. The parser and renderer are built once and
 // hold no per-document state; the footnote extension keeps its state in a
-// context created per parse.
-func Render(source string) (Result, error) {
+// context created per parse, and quote resolution walks the document this call
+// produced.
+func RenderWith(source string, ctx Context) (Result, error) {
 	if len(source) > MaxSource {
 		return Result{}, ErrTooLarge
 	}
@@ -90,10 +116,11 @@ func Render(source string) (Result, error) {
 	src := []byte(source)
 	var buf bytes.Buffer
 	doc := mdParser.Parse(src)
+	quotes := resolveQuotes(doc, ctx.Posts)
 	if err := mdRenderer.Render(&buf, src, doc); err != nil {
 		return Result{}, fmt.Errorf("render: %w", err)
 	}
-	return Result{HTML: sanitize(buf.String())}, nil
+	return Result{HTML: sanitize(buf.String()), Quotes: quotes}, nil
 }
 
 // mdParser and mdRenderer are the pipeline. They are package-level because
@@ -110,7 +137,14 @@ var (
 		// It is a rendering choice, not a content change: the source keeps
 		// the straight quotes, so quoting a post still quotes what was typed.
 		extension.TypographerParser,
-	))
+	),
+		parser.WithParagraphTransformers(
+			util.Prioritized[parser.ParagraphTransformer](quoteAttribution{}, 100),
+		),
+		parser.WithASTTransformers(
+			util.Prioritized[parser.ASTTransformer](quoteBuilder{}, 100),
+		),
+	)
 
 	mdRenderer = html.New(html.WithExtensions(
 		extension.GFMHTMLRenderer,
@@ -122,5 +156,8 @@ var (
 		extension.NewTableHTMLRenderer(
 			extension.WithTableCellAlignMethod(extension.TableCellAlignAttribute),
 		),
+		// Attributed quotations. A plain blockquote keeps goldmark's own
+		// renderer, untouched.
+		NewQuoteRenderer(),
 	))
 )

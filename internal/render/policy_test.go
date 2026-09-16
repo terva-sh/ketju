@@ -154,10 +154,17 @@ func TestTheAllowlistIsAnAllowlist(t *testing.T) {
 
 	// None of these are produced by the configured pipeline, so none of them
 	// should survive the sanitizer if it were somehow handed one.
+	//
+	// <details> and <summary> used to be in this list and are not any more,
+	// because the quote extension emits them. That is a real widening and worth
+	// naming: if goldmark's raw-HTML defence were ever turned off, a post could
+	// now inject a collapsible block. Neither element takes a URL or an event
+	// handler and the only attributes allowed on them are a fixed class and an
+	// empty "open", so what a post could do with them is rearrange its own
+	// text. TestDetailsCannotCarryAnythingElse holds that line.
 	for _, h := range []string{
 		`<article>x</article>`,
 		`<aside>x</aside>`,
-		`<details open><summary>s</summary>x</details>`,
 		`<abbr title="t">x</abbr>`,
 		`<span class="x">x</span>`,
 		`<font color="red">x</font>`,
@@ -167,6 +174,32 @@ func TestTheAllowlistIsAnAllowlist(t *testing.T) {
 		got := sanitize(h)
 		if strings.Contains(got, "<") {
 			t.Errorf("sanitize(%q) kept markup: %q", h, got)
+		}
+	}
+}
+
+// TestDetailsCannotCarryAnythingElse keeps the quote markup narrow.
+//
+// <details> is allowed so a quote collapses without script. This is the
+// assertion that stops it from becoming a general-purpose container: the class
+// is matched against the one value this package writes, and "open" may only be
+// empty.
+func TestDetailsCannotCarryAnythingElse(t *testing.T) {
+	t.Parallel()
+
+	for _, h := range []string{
+		`<details class="anything" open>x</details>`,
+		`<details class="quote" onclick="alert(1)">x</details>`,
+		`<details class="quote" open="ontoggle">x</details>`,
+		`<details id="main">x</details>`,
+		`<details style="position:fixed">x</details>`,
+		`<summary class="x">s</summary>`,
+	} {
+		got := sanitize(h)
+		for _, bad := range []string{"onclick", "style=", "id=", `class="anything"`, `class="x"`, "ontoggle"} {
+			if strings.Contains(got, bad) {
+				t.Errorf("sanitize(%q) kept %q: %q", h, bad, got)
+			}
 		}
 	}
 }
@@ -329,6 +362,7 @@ var allowedElements = map[string]bool{
 	"pre": true, "code": true,
 	"a": true, "img": true,
 	"ul": true, "ol": true, "li": true, "input": true,
+	"details": true, "summary": true,
 	"table": true, "thead": true, "tbody": true, "tfoot": true,
 	"tr": true, "th": true, "td": true, "caption": true,
 	"sup": true, "div": true, "section": true,

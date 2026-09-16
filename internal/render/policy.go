@@ -71,6 +71,15 @@ var policy = sync.OnceValue(func() *bluemonday.Policy {
 	// the client or later in this pipeline, has something to key on.
 	p.AllowAttrs("class").Matching(languageClass).OnElements("code")
 
+	// Quotations. <details>/<summary> is what makes a quote collapsible with no
+	// script, which the non-JS client needs as much as the Preact one. The
+	// classes are matched against the exact values this package writes, so the
+	// markup a stylesheet keys on cannot be minted by a post.
+	p.AllowElements("details", "summary")
+	p.AllowAttrs("class").Matching(quoteClass).OnElements("details")
+	p.AllowAttrs("class").Matching(quoteDeletedClass).OnElements("p")
+	p.AllowAttrs("open").Matching(emptyValue).OnElements("details")
+
 	// Footnotes: the section wrapper, the reference anchors, and the ids the
 	// two ends use to find each other. The id patterns are goldmark's exact
 	// shapes; anything else is dropped, so a footnote label cannot mint an id
@@ -84,8 +93,9 @@ var policy = sync.OnceValue(func() *bluemonday.Policy {
 })
 
 var (
-	// goldmark writes exactly these two classes on footnote anchors.
-	footnoteLinkClass = regexp.MustCompile(`^(footnote-ref|footnote-backref)$`)
+	// The classes this pipeline writes on anchors: goldmark's two footnote
+	// classes and the quote attribution link.
+	footnoteLinkClass = regexp.MustCompile(`^(footnote-ref|footnote-backref|quote-source)$`)
 	footnoteLinkRole  = regexp.MustCompile(`^(doc-noteref|doc-backlink)$`)
 
 	footnoteSection     = regexp.MustCompile(`^footnotes$`)
@@ -104,4 +114,7 @@ var (
 	emptyValue   = regexp.MustCompile(`^$`)
 
 	tableAlign = regexp.MustCompile(`^(left|center|right)$`)
+
+	quoteClass        = regexp.MustCompile(`^quote$`)
+	quoteDeletedClass = regexp.MustCompile(`^quote-deleted$`)
 )
