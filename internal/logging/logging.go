@@ -36,6 +36,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/config"
@@ -237,20 +238,52 @@ func redactAttr(a slog.Attr) slog.Attr {
 // viewerKey types the context value so nothing else can collide with it.
 type viewerKey struct{}
 
+// viewer is a settable slot rather than a plain value, and the indirection is
+// load-bearing.
+//
+// Request logging is the outermost middleware, so that a request which panics
+// or is rejected early still produces exactly one line. Session resolution runs
+// well inside it and learns who the viewer is only then. A context value set
+// down there travels *inward* with the derived request and never reaches the
+// logger's deferred write, which is holding the original one -- so the viewer
+// would be missing from every line, on a logger that is otherwise working.
+//
+// A pointer installed on the way in and filled on the way down crosses that
+// boundary. mu guards it because a handler may set it from a goroutine it
+// started, which is unusual but not forbidden.
+type viewer struct {
+	mu  sync.Mutex
+	id  int64
+	set bool
+}
+
 // ContextWithViewer records who is making this request, for the request log.
 //
-// The session middleware sets it once authentication has happened; everything
-// downstream reads it. It is an id rather than a user because a log line wants
-// a number and because holding a user here would invite handlers to read their
-// viewer from the logging package.
+// The session middleware calls this once authentication has happened. It is an
+// id rather than a user because a log line wants a number, and because holding
+// a user here would invite handlers to read their viewer out of the logging
+// package.
 func ContextWithViewer(ctx context.Context, userID int64) context.Context {
-	return context.WithValue(ctx, viewerKey{}, userID)
+	if v, ok := ctx.Value(viewerKey{}).(*viewer); ok {
+		v.mu.Lock()
+		v.id, v.set = userID, true
+		v.mu.Unlock()
+		return ctx
+	}
+	// No slot installed: a handler tested without the middleware, or a
+	// background context. Fall back to a plain value so ViewerFrom still works.
+	return context.WithValue(ctx, viewerKey{}, &viewer{id: userID, set: true})
 }
 
 // ViewerFrom returns the viewer id recorded by ContextWithViewer.
 func ViewerFrom(ctx context.Context) (int64, bool) {
-	id, ok := ctx.Value(viewerKey{}).(int64)
-	return id, ok
+	v, ok := ctx.Value(viewerKey{}).(*viewer)
+	if !ok {
+		return 0, false
+	}
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return v.id, v.set
 }
 
 // Middleware logs one line per request.
@@ -267,6 +300,10 @@ func Middleware(log *slog.Logger) func(http.Handler) http.Handler {
 			start := time.Now()
 			rec := &recorder{ResponseWriter: w, status: http.StatusOK}
 
+			// Install the slot before anything downstream can fill it.
+			v := &viewer{}
+			r = r.WithContext(context.WithValue(r.Context(), viewerKey{}, v))
+
 			defer func() {
 				attrs := []any{
 					"method", r.Method,
@@ -276,7 +313,10 @@ func Middleware(log *slog.Logger) func(http.Handler) http.Handler {
 					"bytes", rec.written,
 					"duration_ms", time.Since(start).Milliseconds(),
 				}
-				if id, ok := ViewerFrom(r.Context()); ok {
+				v.mu.Lock()
+				id, known := v.id, v.set
+				v.mu.Unlock()
+				if known {
 					attrs = append(attrs, "viewer", id)
 				}
 				log.LogAttrs(r.Context(), levelFor(rec.status), "request", toAttrs(attrs)...)

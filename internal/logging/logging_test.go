@@ -114,14 +114,13 @@ func TestRequestLogsCarryWhatTheyMust(t *testing.T) {
 	log, buf := newLogger(t, config.Log{Level: "info", Format: "json"})
 
 	h := Middleware(log)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		*r = *r.WithContext(ContextWithViewer(r.Context(), 42))
+		ContextWithViewer(r.Context(), 42)
 		time.Sleep(2 * time.Millisecond)
 		w.WriteHeader(http.StatusCreated)
 		_, _ = w.Write([]byte("hello"))
 	}))
 
 	req := httptest.NewRequest(http.MethodPost, "/api/threads/7/posts", nil)
-	req = req.WithContext(ContextWithViewer(req.Context(), 42))
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
 	var line map[string]any
@@ -141,6 +140,35 @@ func TestRequestLogsCarryWhatTheyMust(t *testing.T) {
 	}
 	if _, ok := line["duration_ms"]; !ok {
 		t.Error("the request log carries no duration")
+	}
+}
+
+// TestAViewerSetInsideTheChainReachesTheLog is the case the pointer slot
+// exists for, and the one a plain context value silently fails.
+//
+// Request logging is outermost so that every request produces one line.
+// Session resolution runs inside it. A context value set down there travels
+// inward with the derived request and never reaches the logger's deferred
+// write, which still holds the original -- so the viewer is missing from every
+// line while the logger looks like it is working.
+func TestAViewerSetInsideTheChainReachesTheLog(t *testing.T) {
+	log, buf := newLogger(t, config.Log{Level: "info", Format: "json"})
+
+	// An inner middleware, exactly as session resolution will be written.
+	session := func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			next.ServeHTTP(w, r.WithContext(ContextWithViewer(r.Context(), 99)))
+		})
+	}
+	h := Middleware(log)(session(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if id, ok := ViewerFrom(r.Context()); !ok || id != 99 {
+			t.Errorf("the handler sees viewer %d, %v", id, ok)
+		}
+	})))
+	h.ServeHTTP(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if !strings.Contains(buf.String(), `"viewer":99`) {
+		t.Errorf("a viewer set inside the chain never reached the log:\n%s", buf.String())
 	}
 }
 
