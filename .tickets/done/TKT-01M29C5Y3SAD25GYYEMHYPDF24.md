@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C5Y3SAD25GYYEMHYPDF24
 title: Build the HTTP server, router, and middleware chain
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:architecture-deployment
     path: docs/02-architecture.md
-claim:
-  actor: agent:claude-code/web
-  branch: http-server
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju
-  commit: d0b6fb9cbc46231a5d2646de58f8bec55cd9f297
-  session: null
-  claimed_at: 2026-09-16T20:03:16Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-16T20:04:37Z
+updated_at: 2026-09-16T20:06:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
