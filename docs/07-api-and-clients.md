@@ -291,6 +291,29 @@ These sit below two other limits at other layers: `render.MaxSource` (256 KiB)
 is the renderer's own backstop, and `MaxFrameSize` (1 MiB, docs/03) is the
 storage format's bound.
 
-Still to come: upload MIME sniffing with an allowlist, rate limits per session
-and per IP on writes, and a per-agent token bucket for bearer-authenticated
-writes (08).
+### CSRF posture
+
+No token is threaded through the SPA. Three things hold instead, and none of
+them is sufficient alone:
+
+1. **Mutating API routes accept JSON only.** An HTML form can send exactly
+   three content types — `application/x-www-form-urlencoded`,
+   `multipart/form-data` and `text/plain` — and none is JSON, so a form on
+   another origin cannot produce a request the API will look at. Anything else
+   is `unsupported-media-type`.
+2. **`http.CrossOriginProtection`** rejects non-safe cross-origin browser
+   requests via `Sec-Fetch-Site`, or `Origin` against `Host`. This covers the
+   two places rule 1 cannot: the multipart upload route, which must accept a
+   form content type, and the form posts the non-JS client will make. The
+   configured `site_url` is registered as a trusted origin, because behind a
+   proxy the server sees an internal `Host` while the browser sends the public
+   one.
+3. **Session cookies are `SameSite=Lax`**, so the browser does not attach them
+   to a cross-site POST at all. That belongs to the session work, and this
+   posture assumes it.
+
+Both are on by default: security middleware that has to be opted into is
+security middleware that will be forgotten.
+
+Still to come: upload MIME sniffing with an allowlist, and the per-agent token
+bucket for bearer-authenticated writes (08).

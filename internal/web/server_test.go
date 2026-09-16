@@ -486,6 +486,7 @@ func TestAnUndeclaredOversizeBodyStillFails(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/threads",
 		strings.NewReader(strings.Repeat("x", 4096)))
+	req.Header.Set("Content-Type", "application/json")
 	// What a chunked request looks like to a handler.
 	req.ContentLength = -1
 
@@ -512,6 +513,7 @@ func TestABodyUnderTheLimitIsUntouched(t *testing.T) {
 	}, Options{Logger: log, Limits: Limits{Body: 64}})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/threads", strings.NewReader("hello"))
+	req.Header.Set("Content-Type", "application/json")
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	if got != "hello" {
 		t.Errorf("body = %q, want hello", got)

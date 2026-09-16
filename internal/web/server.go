@@ -61,10 +61,24 @@ type Options struct {
 	// for ordinary requests and the default attachment cap for uploads.
 	Limits Limits
 
-	// Session, RateLimit and CSRF are the middleware this ticket does not
-	// implement, in the positions the chain reserves for them. Each is nil
-	// until its own ticket lands: rate limiting and CSRF are TKT-01M29C800X,
-	// session resolution waits on TKT-01M29BSPEF deciding what a session is.
+	// SiteURL is the public origin, from config. It is added as a trusted
+	// origin for the CSRF check: behind a proxy the server sees an internal
+	// Host while the browser sends the public one, and without this every
+	// write from a real browser would be refused.
+	SiteURL string
+
+	// Session, RateLimit and CSRF are the middleware in the positions the
+	// chain reserves for them.
+	//
+	// RateLimit and CSRF default to the real implementations when nil, because
+	// security middleware that has to be opted into is security middleware
+	// that will be forgotten -- and the one caller that would have to remember
+	// is `ketju serve`, which is a different ticket. To disable one in a test,
+	// pass a middleware that returns its argument unchanged; that is explicit
+	// at the call site, which is where the decision should be visible.
+	//
+	// Session is nil until TKT-01M29BSPEF decides what a session is. It has no
+	// safe default: there is nothing to resolve yet.
 	//
 	// They are fields rather than a general "add middleware here" list so that
 	// the order below stays a property of this file. A chain assembled by
@@ -197,9 +211,18 @@ func group(h http.Handler) http.Handler {
 // The nil middleware are no-ops, so the order holds as each one lands rather
 // than being rediscovered.
 func chain(h http.Handler, log *slog.Logger, opts Options) http.Handler {
-	h = wrap(opts.CSRF, h)         // 7
+	csrf := opts.CSRF
+	if csrf == nil {
+		csrf = CrossOrigin(opts.SiteURL)
+	}
+	rateLimit := opts.RateLimit
+	if rateLimit == nil {
+		rateLimit = RateLimit(nil)
+	}
+
+	h = csrf(h)                    // 7
 	h = wrap(opts.Session, h)      // 6
-	h = wrap(opts.RateLimit, h)    // 5
+	h = rateLimit(h)               // 5
 	h = limitBody(opts.Limits)(h)  // 4
 	h = securityHeaders(h)         // 3
 	h = recoverPanics(log)(h)      // 2
