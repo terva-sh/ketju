@@ -53,7 +53,25 @@ Providers are an allowlist by construction: only configured issuers are ever
 contacted, and the login page only shows configured providers. Discovery
 documents and JWKS are fetched at startup and refreshed on key-rotation
 failures; a provider that fails discovery at startup is disabled with a
-loud log line rather than aborting the server.
+loud log line rather than aborting the server. A disabled provider is retried
+on each 24-hour refresh, so an IdP that was down during a deploy comes back on
+its own rather than needing a restart. If *every* provider fails, startup does
+abort: a forum nobody can sign in to should say so rather than serve an empty
+login page.
+
+An issuer must be `https`, with no per-provider escape hatch. Discovery over
+plaintext is unauthenticated, so whoever can rewrite the response chooses the
+key set, and every signature check afterwards passes against keys they minted.
+This is deliberately stricter than `insecure_skip_issuer_check`, which only
+declines to compare two issuer strings in a document that still arrived over
+TLS.
+
+Key-set refreshes provoked by an unrecognised key id are rate limited, because
+the key id is a field in a token supplied by whoever called the callback
+endpoint. Without a floor, a stream of cheap forged tokens turns this forum into
+the thing hammering someone else's identity provider. Key ids that have verified
+a token are remembered and are never rate limited, so a real rotation costs one
+fetch and nothing afterwards.
 
 ## Login flow
 

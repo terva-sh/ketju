@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C5Y342B1ZBX6XCC69MFYM
 title: Build the OIDC provider registry with discovery and JWKS refresh
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -20,16 +20,23 @@ blocks_on: none
 references:
   - ref: design:identity-providers
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1
+  branch: main
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju
+  commit: 2ba0652d8f3c8381835910093229e29561ab567d
+  session: null
+  claimed_at: 2026-09-16T18:40:14Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-11T23:17:26Z
+updated_at: 2026-09-16T18:40:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1
+  name: ""
 extensions: {}
 ---
 

@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-11T23:12:10Z
+updated_at: 2026-09-16T18:40:07Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1
+  name: ""
 extensions: {}
 ---
 
@@ -47,3 +47,52 @@ SQL stays driver-agnostic. That constraint is the mitigation for the ncruces pre
 - [ ] Concurrent writers hit BEGIN IMMEDIATE and serialize rather than failing with SQLITE_BUSY
 - [ ] Migrations run in order, are recorded, and are idempotent on a second start
 - [ ] A binary older than the recorded schema version refuses to start with a clear message
+
+## Comments
+
+**agent:claude-code/phase1** at 2026-09-16T18:40:07Z
+
+The access layer needs a decision this ticket does not yet record: how Go
+reaches the tables. Nothing in docs/04, docs/09, docs/01 or any area:db ticket
+names a tool, so "SQL stays driver-agnostic" is currently a rule with no
+mechanism behind it.
+
+Raised by the repository owner: use sqlc, generating from .sql files.
+
+### Why it fits the constraint this ticket already states
+
+sqlc's SQLite output targets database/sql. Both ncruces and modernc ship a
+database/sql driver, so the "modernc is a drop-in" mitigation in docs/09 stops
+depending on a reviewer noticing a driver-specific call and becomes something
+the generator cannot emit. That is the difference between a documented rule and
+an enforced one.
+
+sqlc does not run migrations, which suits this ticket rather than conflicting
+with it: the ordered, forward-only, recorded runner stays ours, and sqlc reads
+the migration directory as its schema source.
+
+### What was checked rather than assumed
+
+- FTS5 parses. sqlc-dev/sqlc#1797 is closed-completed, so a
+  `CREATE VIRTUAL TABLE ... USING fts5` statement in the schema path is not the
+  blocker older write-ups describe. Worth confirming against the real search
+  schema in docs/04 before committing.
+- The known SQLite timestamp trap does not apply here. sqlc maps DATETIME and
+  TIMESTAMP to time.Time, which fails against drivers storing epoch integers
+  (sqlc-dev/sqlc#3736). docs/04 already specifies unix-millisecond INTEGER
+  columns, so the trap is closed by a decision already made.
+
+### The honest costs
+
+- Dynamic queries are sqlc's weak point, and the lens-filtered thread views
+  with cursors are exactly that shape. `sqlc.slice()` covers IN-lists; some
+  view queries may still want hand-written SQL beside the generated set. That
+  is a mixed layer, and mixing should be a decision rather than a discovery.
+- Generated code must be committed and verified in CI with a diff step, or it
+  drifts from the schema silently. Without that step the type safety is a
+  claim about a file nobody regenerated.
+- It is a build-time dependency on a code generator for every schema ticket
+  that depends on this one, which is eight of them.
+
+No decision recorded here. This is the shape of the choice and what was
+verified, so that whoever decides is not starting from a blank page.
