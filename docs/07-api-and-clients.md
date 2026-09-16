@@ -75,6 +75,38 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /apply/form` `POST /apply` `GET /apply/status` `POST /apply/withdraw` | approval mode (pre-user session) |
 | `GET  /events?threads=&forums=` | SSE (outside `/api/v1` versioning: `/events`) |
 
+### Error catalogue
+
+Every error response is `application/problem+json` carrying `type`, `title`
+and `status`. `type` is the stable code; clients switch on it. Titles are
+fixed text and never interpolate anything from the request.
+
+| `type` | Status | Meaning |
+|--------|--------|---------|
+| `bad-request` | 400 | Unparseable JSON, a non-numeric parameter, a thread id that is not base32 |
+| `unauthenticated` | 401 | No viewer. The client offers a sign-in |
+| `forbidden` | 403 | There is a viewer and they may not do this. The client says so, and does not offer a sign-in |
+| `not-found` | 404 | No such endpoint *or* no such object — deliberately one code, so the API does not disclose which thread ids exist |
+| `method-not-allowed` | 405 | Right route, wrong verb |
+| `conflict` | 409 | Lost a race, or met the object's state: posting to a closed thread |
+| `gone` | 410 | Existed and was deleted. Distinct from `not-found` so a permalink can say what happened |
+| `payload-too-large` | 413 | Over a body limit: 64 KB for a post source, the attachment cap for an upload |
+| `unsupported-media-type` | 415 | A mutating request that is not JSON |
+| `validation-failed` | 422 | Understood and refused: an empty post, a title over the limit |
+| `rate-limited` | 429 | Token bucket. Carries `Retry-After` in whole seconds |
+| `internal` | 500 | A bug, or an error nothing has classified |
+| `not-implemented` | 501 | An endpoint this build does not serve — distinct from `not-found`, which means no such endpoint exists |
+| `unavailable` | 503 | Draining or a dependency is down. Retryable, unlike `internal` |
+
+These strings are API surface: renaming one or moving it to another status is
+a breaking change. The catalogue lives in `internal/problem`, and
+`internal/problem/testdata/catalogue.json` is a golden file, so any change to
+a code, status or title shows up in a diff.
+
+No error body ever carries the underlying error text. A database constraint
+name describes the schema to whoever provoked it and means nothing to a
+member, so the error goes to the log and the client gets the fixed title.
+
 ### Moderation and admin (`/api/v1/admin/*`, role-gated)
 
 Queue (flags + applications), application approve/deny, thread

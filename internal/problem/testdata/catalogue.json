@@ -1,0 +1,128 @@
+{
+  "bad-request": {
+    "status": 400,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "bad-request",
+      "title": "The request could not be understood.",
+      "status": 400
+    }
+  },
+  "conflict": {
+    "status": 409,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "conflict",
+      "title": "That conflicts with the current state.",
+      "status": 409
+    }
+  },
+  "forbidden": {
+    "status": 403,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "forbidden",
+      "title": "You may not do that.",
+      "status": 403
+    }
+  },
+  "gone": {
+    "status": 410,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "gone",
+      "title": "That has been deleted.",
+      "status": 410
+    }
+  },
+  "internal": {
+    "status": 500,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "internal",
+      "title": "The server failed to handle this request.",
+      "status": 500
+    }
+  },
+  "method-not-allowed": {
+    "status": 405,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "method-not-allowed",
+      "title": "That method is not allowed here.",
+      "status": 405
+    }
+  },
+  "not-found": {
+    "status": 404,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "not-found",
+      "title": "No such endpoint or object.",
+      "status": 404
+    }
+  },
+  "not-implemented": {
+    "status": 501,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "not-implemented",
+      "title": "This server does not implement that yet.",
+      "status": 501
+    }
+  },
+  "payload-too-large": {
+    "status": 413,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "payload-too-large",
+      "title": "That is larger than the limit.",
+      "status": 413
+    }
+  },
+  "rate-limited": {
+    "status": 429,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "rate-limited",
+      "title": "Too many requests. Try again shortly.",
+      "status": 429
+    }
+  },
+  "unauthenticated": {
+    "status": 401,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "unauthenticated",
+      "title": "You are not signed in.",
+      "status": 401
+    }
+  },
+  "unavailable": {
+    "status": 503,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "unavailable",
+      "title": "That is temporarily unavailable.",
+      "status": 503
+    }
+  },
+  "unsupported-media-type": {
+    "status": 415,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "unsupported-media-type",
+      "title": "This endpoint accepts JSON only.",
+      "status": 415
+    }
+  },
+  "validation-failed": {
+    "status": 422,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "validation-failed",
+      "title": "The request was understood but is not valid.",
+      "status": 422
+    }
+  }
+}

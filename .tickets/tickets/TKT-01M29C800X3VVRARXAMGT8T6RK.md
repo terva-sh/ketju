@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C800X3VVRARXAMGT8T6RK
 title: Set the CSRF posture and write rate limits
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-11T23:18:33Z
+updated_at: 2026-09-16T20:33:56Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/web
+  name: ""
 extensions: {}
 ---
 

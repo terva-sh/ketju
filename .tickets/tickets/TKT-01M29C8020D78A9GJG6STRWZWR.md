@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C8020D78A9GJG6STRWZWR
 title: Add security headers, CSP nonces, and request limits
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-11T23:18:33Z
+updated_at: 2026-09-16T20:33:56Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/web
+  name: ""
 extensions: {}
 ---
 

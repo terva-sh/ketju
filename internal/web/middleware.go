@@ -6,47 +6,9 @@ import (
 	"net/http"
 	"runtime"
 	"strings"
+
+	"github.com/terva-sh/ketju/internal/problem"
 )
-
-// ProblemContentType is the media type RFC 9457 defines for a problem detail.
-const ProblemContentType = "application/problem+json"
-
-// Problem is the error body every failure in this server produces.
-//
-// This is the minimum shape: the full mapping from domain errors to types and
-// titles is TKT-01M29C8018. What matters here is that the router and the
-// middleware never answer an error with a page of HTML, because the client
-// reading them is a fetch() that would report it as a parse error rather than
-// as the 404 it is.
-type Problem struct {
-	// Type is a stable machine-readable code, not a URL to visit. Clients
-	// switch on it, so it must not change when the wording does.
-	Type string `json:"type"`
-
-	// Title is a short human-readable summary. It never contains a value taken
-	// from the request: an error body is reflected straight back to whoever
-	// sent it, and echoing input is how a well-meaning message becomes a way to
-	// probe the server.
-	Title string `json:"title"`
-
-	// Status repeats the HTTP status, per RFC 9457, so a body that has been
-	// copied out of its response is still self-describing.
-	Status int `json:"status"`
-}
-
-// WriteProblem answers with an RFC 9457 problem detail.
-func WriteProblem(w http.ResponseWriter, r *http.Request, status int, code, title string) {
-	w.Header().Set("Content-Type", ProblemContentType)
-	// An error response must never be cached: a 404 stored by an intermediary
-	// outlives the deploy that added the route.
-	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(status)
-
-	if r != nil && r.Method == http.MethodHead {
-		return
-	}
-	_ = json.NewEncoder(w).Encode(Problem{Type: code, Title: title, Status: status})
-}
 
 // recoverPanics turns a panic into a 500 and keeps the server up.
 //
@@ -81,8 +43,7 @@ func recoverPanics(log *slog.Logger) func(http.Handler) http.Handler {
 				// If the handler already wrote a header this is too late and
 				// the client gets a truncated body. Nothing can be done about
 				// that here; what matters is that the process survives.
-				WriteProblem(w, r, http.StatusInternalServerError, "internal",
-					"The server failed to handle this request.")
+				problem.Write(w, r, problem.CodeInternal)
 			}()
 			next.ServeHTTP(w, r)
 		})

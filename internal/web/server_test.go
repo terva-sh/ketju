@@ -13,6 +13,7 @@ import (
 	"testing"
 
 	"github.com/terva-sh/ketju/internal/logging"
+	"github.com/terva-sh/ketju/internal/problem"
 )
 
 type safeBuf struct {
@@ -122,8 +123,8 @@ func TestAMissingGroupSays501NotFound(t *testing.T) {
 		if rec.Code != http.StatusNotImplemented {
 			t.Errorf("%s = %d, want 501", path, rec.Code)
 		}
-		if ct := rec.Header().Get("Content-Type"); ct != ProblemContentType {
-			t.Errorf("%s content type = %q, want %q", path, ct, ProblemContentType)
+		if ct := rec.Header().Get("Content-Type"); ct != problem.ContentType {
+			t.Errorf("%s content type = %q, want %q", path, ct, problem.ContentType)
 		}
 	}
 }
@@ -180,7 +181,7 @@ func TestTheCatchAllTellsAPIPathsFromApplicationPaths(t *testing.T) {
 		if rec.Header().Get("X-Group") == "spa" {
 			t.Errorf("%s was answered with the SPA shell", p)
 		}
-		if ct := rec.Header().Get("Content-Type"); ct != ProblemContentType {
+		if ct := rec.Header().Get("Content-Type"); ct != problem.ContentType {
 			t.Errorf("%s content type = %q, want a problem response", p, ct)
 		}
 		if rec.Code != http.StatusNotFound && rec.Code != http.StatusNotImplemented {
@@ -205,7 +206,7 @@ func TestAProblemBodyIsRFC9457Shaped(t *testing.T) {
 	// answers rather than the API group.
 	rec := do(h, http.MethodGet, "/api/v2/threads")
 
-	var p Problem
+	var p problem.Problem
 	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
 		t.Fatalf("the problem body is not JSON: %v\n%s", err, rec.Body.String())
 	}
@@ -252,7 +253,7 @@ func TestAPanicBecomes500AndIsLogged(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("status = %d, want 500", rec.Code)
 	}
-	if ct := rec.Header().Get("Content-Type"); ct != ProblemContentType {
+	if ct := rec.Header().Get("Content-Type"); ct != problem.ContentType {
 		t.Errorf("content type = %q, want a problem response", ct)
 	}
 
@@ -406,7 +407,7 @@ func TestTheRateLimiterCanRejectAndStillBeLogged(t *testing.T) {
 		Logger: log,
 		RateLimit: func(http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-				WriteProblem(w, r, http.StatusTooManyRequests, "rate-limited", "Slow down.")
+				problem.Write(w, r, problem.CodeRateLimited)
 			})
 		},
 	})

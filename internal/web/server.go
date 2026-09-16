@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/terva-sh/ketju/internal/logging"
+	"github.com/terva-sh/ketju/internal/problem"
 )
 
 // APIPrefix is where the JSON API lives. The version is in the path because
@@ -96,11 +97,11 @@ func New(g Groups, opts Options) http.Handler {
 
 	// One pattern per prefix in docs/02. The trailing slash is what makes a
 	// ServeMux pattern a subtree match.
-	mux.Handle(APIPrefix, group(g.API, "api"))
-	mux.Handle("/auth/", group(g.Auth, "auth"))
-	mux.Handle("/blobs/", group(g.Blobs, "blobs"))
-	mux.Handle("/events", group(g.Events, "events"))
-	mux.Handle("/assets/", group(g.Assets, "assets"))
+	mux.Handle(APIPrefix, group(g.API))
+	mux.Handle("/auth/", group(g.Auth))
+	mux.Handle("/blobs/", group(g.Blobs))
+	mux.Handle("/events", group(g.Events))
+	mux.Handle("/assets/", group(g.Assets))
 
 	// The bare "/api" and "/api/v1", registered exactly so that ServeMux does
 	// not answer them with its implicit redirect to the subtree.
@@ -110,7 +111,7 @@ func New(g Groups, opts Options) http.Handler {
 	// request body and a method are at the mercy of whatever the client does
 	// next. A 404 that says so is more useful and cannot be misfollowed.
 	notFound := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		WriteProblem(w, r, http.StatusNotFound, "not-found", "No such endpoint.")
+		problem.Write(w, r, problem.CodeNotFound)
 	})
 	mux.Handle("/api", notFound)
 	mux.Handle(strings.TrimSuffix(APIPrefix, "/"), notFound)
@@ -131,10 +132,10 @@ func New(g Groups, opts Options) http.Handler {
 	// JSON client reports as a parse error.
 	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if isAPIPath(r.URL.Path) {
-			WriteProblem(w, r, http.StatusNotFound, "not-found", "No such endpoint.")
+			problem.Write(w, r, problem.CodeNotFound)
 			return
 		}
-		group(g.SPA, "spa").ServeHTTP(w, r)
+		group(g.SPA).ServeHTTP(w, r)
 	}))
 
 	return chain(mux, log, maxBody, opts)
@@ -152,13 +153,17 @@ func isAPIPath(p string) bool {
 }
 
 // group returns h, or a handler that says the group is not implemented.
-func group(h http.Handler, name string) http.Handler {
+//
+// The 501 body does not name the group. It used to, and the name is gone
+// because the catalogue's titles are fixed text: the path already says which
+// group was asked for, so interpolating it bought nothing and would have been
+// the one title in the catalogue assembled at a call site.
+func group(h http.Handler) http.Handler {
 	if h != nil {
 		return h
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		WriteProblem(w, r, http.StatusNotImplemented, "not-implemented",
-			"The "+name+" endpoints are not built in this server yet.")
+		problem.Write(w, r, problem.CodeNotImplemented)
 	})
 }
 
