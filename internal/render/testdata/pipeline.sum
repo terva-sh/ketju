@@ -1,7 +1,7 @@
 # Per-case sha256 of the rendered output, with the renderer version that
 # produced it. A case whose hash changes here without the version changing
 # is stale HTML in every cache in the system. See render.go.
-version 2
+version 3
 blockquote 5cb8bf5c0055afc5c3a03a100a89dae1aaa611d494e005f803e8912ca4eb7a66
 breaks 5a97bc46acb9eef9271a47e7468086444734cd81b0dbb5be6319cc6a415f0e46
 code f93838719546e17e7de186c745d23b88e6bd4fe255847ae2944a96e2a5564781
@@ -12,6 +12,7 @@ headings d84f40451f433ae2977e301675a9454ab756864ac84d744db3dfa8da6b59b9b2
 images 05014ae7f724d02172ff0e183e39da79bde23e68af5f7f8c593dcf06df045dc7
 links a5e427ae1965c88ba2db159b5643c7086734efd989649c34ae243dca42925f60
 lists c15fa55998524623868fcd27244f647eaf2956ce80ec2dc3c7237e52e3c48c8c
+mentions 4799cb226325d1ff3ae6c16c1c6345485c02736bad340b75ac9ee491945a35cb
 quotes 06b3e7e0a8bd74624f7e4443f5828eaa6d2fe81f80468125b55922a5887a2c49
 tables 3aa31eba76f6846e0148e271299d7eae88c896591b074e49fd0c77e965de1f71
 typography b343ee6cc8d7c368d271f87414107fad195bf9959395e95dd7ec43fac5b6bfaa

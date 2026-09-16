@@ -95,7 +95,7 @@ var policy = sync.OnceValue(func() *bluemonday.Policy {
 var (
 	// The classes this pipeline writes on anchors: goldmark's two footnote
 	// classes and the quote attribution link.
-	footnoteLinkClass = regexp.MustCompile(`^(footnote-ref|footnote-backref|quote-source)$`)
+	footnoteLinkClass = regexp.MustCompile(`^(footnote-ref|footnote-backref|quote-source|mention)$`)
 	footnoteLinkRole  = regexp.MustCompile(`^(doc-noteref|doc-backlink)$`)
 
 	footnoteSection     = regexp.MustCompile(`^footnotes$`)

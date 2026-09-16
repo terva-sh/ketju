@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C0WEQ2SBTSZSHSV8Z989S
 title: Add mention syntax, resolution, and autocomplete data
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -20,16 +20,23 @@ blocks_on: none
 references:
   - ref: design:composer
     path: docs/06-thread-views.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1
+  branch: mention-syntax
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju
+  commit: 642e05584354acd3f259da356e9afd82bf1b9934
+  session: null
+  claimed_at: 2026-09-16T19:06:42Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:14:40Z
-updated_at: 2026-09-11T23:14:40Z
+updated_at: 2026-09-16T19:06:42Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1
+  name: ""
 extensions: {}
 ---
 

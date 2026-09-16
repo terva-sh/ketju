@@ -55,7 +55,7 @@ import (
 
 // Version identifies this pipeline's output. Read the rule above before
 // changing it, and read it again before deciding not to.
-const Version = 2
+const Version = 3
 
 // MaxSource is the largest source Render will accept.
 //
@@ -67,9 +67,9 @@ const MaxSource = 256 << 10
 
 // Result is one rendered post.
 //
-// It is a struct rather than a string because mentions and reply_to come out of
-// the same parse (TKT-01M29C2WWG), and adding them must not mean changing every
-// call site.
+// It is a struct rather than a string because quotes, mentions and reply_to all
+// come out of the same parse, and adding one must not mean changing every call
+// site. reply_to is the remaining piece (TKT-01M29C2WWG).
 type Result struct {
 	// HTML is sanitized and safe to write into a page without escaping.
 	HTML string
@@ -79,6 +79,11 @@ type Result struct {
 	// quoted it. A quote of an ordinal the resolver does not know is not
 	// listed: there is nothing to link back to.
 	Quotes []Quote
+
+	// Mentions is every user this post mentions, in document order, for the
+	// notifier and the mentions projection. A handle nobody has is not listed,
+	// and neither is a mention inside a quotation: see resolveMentions.
+	Mentions []Mention
 }
 
 // ErrTooLarge means the source exceeded MaxSource.
@@ -94,6 +99,17 @@ type Context struct {
 	// declined to link would disagree with the posted result, and the promise
 	// that they match is the reason this package is the only renderer.
 	Posts PostResolver
+
+	// Handles resolves mentioned handles. Nil means mentions render as plain
+	// text and none are reported.
+	//
+	// The asymmetry with Posts is deliberate. An unresolved quote still links
+	// to an ordinal in the thread the reader is already on, so an optimistic
+	// link is right far more often than not. An unresolved mention would link
+	// to a profile page for a person who may not exist, and a preview that
+	// promises a reader they have addressed somebody is worse than one that
+	// shows them plain text.
+	Handles HandleResolver
 }
 
 // Render converts markdown source to sanitized HTML, with nothing to resolve
@@ -117,10 +133,11 @@ func RenderWith(source string, ctx Context) (Result, error) {
 	var buf bytes.Buffer
 	doc := mdParser.Parse(src)
 	quotes := resolveQuotes(doc, ctx.Posts)
+	mentions := resolveMentions(doc, ctx.Handles)
 	if err := mdRenderer.Render(&buf, src, doc); err != nil {
 		return Result{}, fmt.Errorf("render: %w", err)
 	}
-	return Result{HTML: sanitize(buf.String()), Quotes: quotes}, nil
+	return Result{HTML: sanitize(buf.String()), Quotes: quotes, Mentions: mentions}, nil
 }
 
 // mdParser and mdRenderer are the pipeline. They are package-level because
@@ -141,6 +158,12 @@ var (
 		parser.WithParagraphTransformers(
 			util.Prioritized[parser.ParagraphTransformer](quoteAttribution{}, 100),
 		),
+		parser.WithInlineParsers(
+			// Priority below goldmark's own inline parsers: an @ inside a link
+			// destination or a code span is not a mention, and letting those
+			// parsers claim their text first is what keeps it that way.
+			util.Prioritized[parser.InlineParser](mentionParser{}, 999),
+		),
 		parser.WithASTTransformers(
 			util.Prioritized[parser.ASTTransformer](quoteBuilder{}, 100),
 		),
@@ -159,5 +182,6 @@ var (
 		// Attributed quotations. A plain blockquote keeps goldmark's own
 		// renderer, untouched.
 		NewQuoteRenderer(),
+		NewMentionRenderer(),
 	))
 )

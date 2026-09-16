@@ -21,6 +21,27 @@ const (
 	sumPath   = "testdata/pipeline.sum"
 )
 
+// goldenContext is what the corpus renders against.
+//
+// Every ordinal resolves and a fixed handful of handles do, so the corpus locks
+// the markup for a resolved quote and a resolved mention rather than only the
+// degraded forms. The unresolved shapes are covered by the unit tests, which can
+// state what they are testing; a golden file cannot.
+func goldenContext() Context {
+	return Context{
+		Posts: ResolverFunc(func(uint32) (bool, bool) { return true, false }),
+		Handles: HandleFunc(func(typed string) (int64, string, bool) {
+			switch strings.ToLower(typed) {
+			case "alice":
+				return 1, "alice", true
+			case "bob":
+				return 2, "bob", true
+			}
+			return 0, "", false
+		}),
+	}
+}
+
 // TestGoldenOutput renders every case in testdata/golden and compares the
 // result to the committed HTML.
 //
@@ -36,7 +57,7 @@ func TestGoldenOutput(t *testing.T) {
 	for _, name := range cases {
 		t.Run(name, func(t *testing.T) {
 			src := readFile(t, filepath.Join(goldenDir, name+".md"))
-			got, err := Render(src)
+			got, err := RenderWith(src, goldenContext())
 			if err != nil {
 				t.Fatalf("Render: %v", err)
 			}
@@ -73,7 +94,7 @@ func TestRendererVersionTracksOutput(t *testing.T) {
 	current := map[string]string{}
 	for _, name := range cases {
 		src := readFile(t, filepath.Join(goldenDir, name+".md"))
-		r, err := Render(src)
+		r, err := RenderWith(src, goldenContext())
 		if err != nil {
 			t.Fatalf("%s: Render: %v", name, err)
 		}
