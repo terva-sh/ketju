@@ -89,6 +89,40 @@ func TestLoadsAMinimalConfigWithDocumentedDefaults(t *testing.T) {
 // presence rather than by zero values. Writing 0 means "off"; leaving the key
 // out means "use the default", and conflating them silently substitutes 256 MB
 // for what the operator asked for.
+func TestLogDefaultsAndOverrides(t *testing.T) {
+	c := mustLoad(t, write(t, minimal), env(nil))
+	if c.Log.Level != DefaultLogLevel || c.Log.Format != DefaultLogFormat {
+		t.Errorf("log defaults = %q/%q, want %q/%q",
+			c.Log.Level, c.Log.Format, DefaultLogLevel, DefaultLogFormat)
+	}
+
+	c = mustLoad(t, write(t, minimal+"\n[log]\nlevel = \"debug\"\nformat = \"text\"\n"), env(nil))
+	if c.Log.Level != "debug" || c.Log.Format != "text" {
+		t.Errorf("log = %q/%q, want debug/text", c.Log.Level, c.Log.Format)
+	}
+
+	c = mustLoad(t, write(t, minimal), env(map[string]string{
+		"KETJU_LOG_LEVEL": "warn", "KETJU_LOG_FORMAT": "json",
+	}))
+	if c.Log.Level != "warn" || c.Log.Format != "json" {
+		t.Errorf("env override gave %q/%q, want warn/json", c.Log.Level, c.Log.Format)
+	}
+}
+
+func TestABadLogLevelOrFormatIsNamed(t *testing.T) {
+	for _, c := range []struct{ body, key string }{
+		{minimal + "\n[log]\nlevel = \"verbose\"\n", "log.level"},
+		{minimal + "\n[log]\nformat = \"yaml\"\n", "log.format"},
+	} {
+		e := loadErr(t, write(t, c.body), env(nil))
+		// The problem has to name the key, or an operator reading "invalid
+		// value" has to guess which of two settings they mistyped.
+		if !hasKey(e, c.key) {
+			t.Errorf("the error does not name %s: %v", c.key, e)
+		}
+	}
+}
+
 func TestAnExplicitZeroIsNotAnAbsentKey(t *testing.T) {
 	t.Parallel()
 

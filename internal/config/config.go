@@ -54,6 +54,8 @@ const (
 	DefaultRenderedCacheMB  = 256
 	DefaultResponseCacheMB  = 64
 	DefaultProviderScopes   = "openid email profile"
+	DefaultLogLevel         = "info"
+	DefaultLogFormat        = "auto"
 	defaultMaxCacheMB       = 1 << 20 // 1 TB, a bound to catch a typo, not a policy
 	defaultMaxOpenThreads   = 1 << 20
 	minimumOpenThreadsAllow = 1
@@ -74,8 +76,25 @@ type Config struct {
 	SiteURL string `toml:"site_url"`
 
 	Storage   Storage   `toml:"storage"`
+	Log       Log       `toml:"log"`
 	Bootstrap Bootstrap `toml:"bootstrap"`
 	OIDC      OIDC      `toml:"oidc"`
+}
+
+// Log configures the structured logger.
+type Log struct {
+	// Level is debug, info, warn or error.
+	Level string `toml:"level"`
+
+	// Format is json, text, or auto.
+	//
+	// auto writes text when the output is a terminal and JSON otherwise, which
+	// is the rule docs/02 states -- text in development, JSON in production --
+	// without asking an operator to remember a second setting. An explicit
+	// value always wins, because "auto" guessing wrong inside a container that
+	// happens to allocate a TTY is exactly when an operator needs to override
+	// it.
+	Format string `toml:"format"`
 }
 
 // Storage is the part of the thread store an operator may tune.
@@ -287,6 +306,12 @@ func applyDefaults(c *Config, present map[string]bool) {
 	}
 	if !present["storage.response_cache_mb"] {
 		c.Storage.ResponseCacheMB = DefaultResponseCacheMB
+	}
+	if !present["log.level"] {
+		c.Log.Level = DefaultLogLevel
+	}
+	if !present["log.format"] {
+		c.Log.Format = DefaultLogFormat
 	}
 	for i := range c.OIDC.Providers {
 		p := &c.OIDC.Providers[i]

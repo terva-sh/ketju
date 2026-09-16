@@ -50,6 +50,9 @@ var overrides = []Override{
 	{Env: "KETJU_DATA_DIR", Key: "data_dir", apply: func(c *Config, v string, _ *problemList) { c.DataDir = v }},
 	{Env: "KETJU_SITE_URL", Key: "site_url", apply: func(c *Config, v string, _ *problemList) { c.SiteURL = v }},
 
+	{Env: "KETJU_LOG_LEVEL", Key: "log.level", apply: func(c *Config, v string, _ *problemList) { c.Log.Level = v }},
+	{Env: "KETJU_LOG_FORMAT", Key: "log.format", apply: func(c *Config, v string, _ *problemList) { c.Log.Format = v }},
+
 	{Env: "KETJU_STORAGE_FSYNC", Key: "storage.fsync", apply: func(c *Config, v string, _ *problemList) { c.Storage.Fsync = v }},
 	{Env: "KETJU_STORAGE_OPEN_THREADS", Key: "storage.open_threads", apply: func(c *Config, v string, p *problemList) {
 		c.Storage.OpenThreads = parseInt(v, "storage.open_threads", "KETJU_STORAGE_OPEN_THREADS", p)

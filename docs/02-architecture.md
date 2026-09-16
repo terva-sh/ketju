@@ -114,7 +114,22 @@ secrets redacted.
 
 ## Observability
 
-- `slog` structured logging, JSON in production, text in dev.
+- `slog` structured logging. `log.format` is `json`, `text`, or `auto`
+  (the default), where `auto` writes text to a terminal and JSON to anything
+  else — a pipe, a file, a collector. `log.level` is `debug`, `info`, `warn` or
+  `error`. Both take `KETJU_LOG_FORMAT` / `KETJU_LOG_LEVEL`.
+- **No post source, no session id, no token and no secret ever reaches a log
+  line.** Logs leave the machine, and a body that was soft-deleted in the
+  thread log is not deleted if a copy is sitting in an aggregator. Three
+  mechanisms hold that up: a redacting `slog.Handler` that drops values by
+  attribute name, including inside groups and inside `With`; types that carry
+  secrets implementing `slog.LogValuer` (the one that survives an innocuous
+  key, and what to reach for when adding such a type); and request logging that
+  records `r.URL.Path` and never the query string, because the OIDC callback
+  arrives as `?code=…&state=…`.
+- Request log line: method, path, status, bytes, duration, and the viewer id
+  when the request is authenticated. 5xx logs at error, 4xx at warn, so a wall
+  of 404s does not train anyone to ignore the error stream.
 - `/metrics` (Prometheus text format, behind an admin token or bind
   address): request latency, cache hit ratios, thread store fsync latency,
   projection lag (log length − projected length, summed).

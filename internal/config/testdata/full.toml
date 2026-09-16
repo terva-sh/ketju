@@ -6,6 +6,10 @@ listen = "0.0.0.0:9000"
 data_dir = "/srv/ketju"
 site_url = "https://forum.example.org"
 
+[log]
+level = "debug"
+format = "text"
+
 [storage]
 fsync = "always"
 open_threads = 128

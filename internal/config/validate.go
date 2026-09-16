@@ -19,6 +19,7 @@ func validate(c *Config, p *problemList) {
 	validateListen(c.Listen, p)
 	validateDataDir(c.DataDir, p)
 	validateStorage(c.Storage, p)
+	validateLog(c.Log, p)
 	validateSiteURL(c, p)
 	validateProviders(c, p)
 	validateBootstrap(c.Bootstrap, p)
@@ -92,6 +93,24 @@ func checkCacheMB(key string, mb int, p *problemList) {
 		p.addf(key, "%d is negative; 0 disables the cache", mb)
 	case mb > defaultMaxCacheMB:
 		p.addf(key, "%d MB is larger than any machine this runs on; this is almost certainly a typo", mb)
+	}
+}
+
+// validateLog refuses an unknown level or format by name.
+//
+// Both are small closed sets, and a typo in either is the kind of mistake that
+// otherwise surfaces as "why is there no debug output" long after the restart
+// that introduced it.
+func validateLog(l Log, p *problemList) {
+	switch l.Level {
+	case "debug", "info", "warn", "error":
+	default:
+		p.add("log.level", fmt.Sprintf("%q is not a level; use debug, info, warn or error", l.Level))
+	}
+	switch l.Format {
+	case "json", "text", "auto":
+	default:
+		p.add("log.format", fmt.Sprintf("%q is not a format; use json, text or auto", l.Format))
 	}
 }
 

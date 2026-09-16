@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9QYZCT9JNZ00WNXFKR8
 title: Add structured logging with slog
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -19,16 +19,23 @@ blocks_on: none
 references:
   - ref: design:observability
     path: docs/02-architecture.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1
+  branch: main
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju
+  commit: a9d119eb66be58c859fcef2013a3154ad7fa5892
+  session: null
+  claimed_at: 2026-09-16T19:49:09Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-11T23:12:10Z
+updated_at: 2026-09-16T19:49:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1
+  name: ""
 extensions: {}
 ---
 
