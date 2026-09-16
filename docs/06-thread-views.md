@@ -113,13 +113,24 @@ the full thread at the same ordinal, so nobody gets lost in a filter.
   we ship no client-side markdown parser. The non-JS client posts a form and
   gets a preview page; same endpoint, HTML response.
 - **Quote**: selecting text in a post and clicking "quote" inserts a
-  `> ` block with an attribution line `[quote=#37]` that the renderer turns
-  into a linked blockquote; the server records the quote as a backlink.
+  `> ` block whose **first line** is the attribution `[quote=#37]`, which the
+  renderer turns into a collapsible `<details>` linked to post 37; the server
+  records the quote as a backlink. Keeping the attribution inside the
+  blockquote means a renderer that does not know the syntax still shows a
+  quotation. Quoting a deleted post renders a tombstone rather than the copied
+  text — the copy lives in the quoting post's own source, so dropping it at
+  render time is the only thing that makes a delete effective. An ordinal that
+  does not resolve degrades to a plain blockquote.
 - **Reply**: clicking "reply" on #37 sets `reply_to = 37` (shown as a chip
   in the composer, removable). Replying via the thread-bottom composer sets
   no `reply_to`. Both land at the end of the thread.
 - Mentions `@handle` autocomplete; the renderer resolves them and the server
-  records them.
+  records them. Two rules the renderer enforces and the client should match:
+  a mention is recorded by **user id**, not handle, so an old post stays
+  correct after a rename; and a mention inside a quotation renders as plain
+  text and notifies nobody, because quoting someone repeats their words rather
+  than addressing the people they addressed. A handle nobody has is text, not
+  a broken link.
 - Drafts autosave to the server (`drafts` table, one per user+thread) so a
   half-written reply survives a browser crash and appears on another device.
 - Composer sits at the **bottom** of the page after the posts (Tildes'

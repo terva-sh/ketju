@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-29 done, 0 ready, 139 draft.
+32 done, 0 ready, 136 draft.
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
 frozen at version 1 on 2026-09-15 (`TKT-01M29C5Y1E`). The twenty-fifth is the
@@ -68,13 +68,31 @@ ids and the sharded layout, the open-thread LRU cache, `ketju dump`,
 `ketju fsck`, CI, the frame fuzzer, property tests, crash tests, the benchmark,
 and the freeze.
 
-**Phase 1 has started.** The three tickets that were `ready` are done: the
-markdown pipeline `TKT-01M29BW9Q8`, config loading `TKT-01M29BW9QF`, and the
-event bus `TKT-01M29C0WF9`. A fourth, `TKT-01M2JZB0`, was filed and closed
-along the way — the group-commit fsync test was passing by winning a race, and
-the event bus's own tests made it lose.
+**Phase 1 is under way.** 7 of its 73 tickets are done.
 
-That leaves the ready queue empty. Everything remaining is `draft`, and
+The first three were the markdown pipeline `TKT-01M29BW9Q8`, config loading
+`TKT-01M29BW9QF`, and the event bus `TKT-01M29C0WF9`. A fourth, `TKT-01M2JZB0`,
+was filed and closed along the way — the group-commit fsync test was passing by
+winning a race, and the event bus's own tests made it lose.
+
+Then four more, promoted together: the OIDC provider registry
+`TKT-01M29C5Y34`, the rendered-post cache `TKT-01M29C0WF0`, quote syntax
+`TKT-01M29C0WEE`, and mention syntax `TKT-01M29C0WEQ`.
+
+Three things from that round are worth carrying forward rather than leaving in
+the commit messages:
+
+- The OIDC registry bounds its key-set refreshes. go-oidc refetches whenever a
+  token's key id misses its cache, and the key id is a field in a token supplied
+  by whoever called the callback endpoint; measured without the bound, 50 forged
+  key ids provoked 50 fetches at the identity provider.
+- The renderer version is now 3. Quotes bumped it to 2 and mentions to 3, in
+  both cases because the pipeline *can* now produce different output, not
+  because any existing golden case changed. Neither did.
+- `TKT-01M29C0WEQ` is done with its fourth criterion unticked. The autocomplete
+  endpoint needs an HTTP layer and a users table, and neither exists yet.
+
+That leaves the ready queue empty again. Everything remaining is `draft`, and
 promotion is a person's decision, so the next section names what looks
 startable rather than starting it.
 
@@ -186,17 +204,29 @@ Promotion is a decision for a person, and the backlog stays out of the ready
 queue until somebody makes it. `git ticket ready` is empty, so the next move is
 a promotion, and these are the drafts that look startable:
 
-- `TKT-01M29BSPE8` decide the pure-Go SQLite driver. A spike, and the thing
-  the whole database half is waiting behind: `TKT-01M29BW9Q1` cannot build an
-  access layer against a driver nobody has picked.
-- `TKT-01M29C5Y34` the OIDC provider registry. Its one dependency, config
-  loading, is now done, and it carries the issuer-reachability criterion this
-  round deliberately left with it rather than faking in the config loader.
-- `TKT-01M29C0WEE` quote syntax and `TKT-01M29C0WEQ` mention syntax. Both
-  extend the render pipeline that just landed, both are self-contained, and
-  neither waits on the database.
-- `TKT-01M29BW9QY` structured logging with slog. Small, and everything
-  shipped this round logs through `slog.Default` already.
+The database half is where the work now stacks up, and it is blocked on two
+decisions rather than on any code:
+
+- `TKT-01M29BSPE8` decide the pure-Go SQLite driver. docs/04 names
+  `ncruces/go-sqlite3` and docs/09 records `modernc` as the fallback, so this
+  is a confirmation rather than an investigation.
+- `TKT-01M29BW9Q1` build the access layer and the migration runner. It carries
+  an open question its description does not yet answer: **how Go reaches the
+  tables**. Nothing in docs/04, docs/09 or any `area:db` ticket names a tool,
+  so "SQL stays driver-agnostic" is currently a rule with no mechanism behind
+  it. A comment on that ticket records the sqlc option, what was verified about
+  it, and what it would cost. Eight schema tickets depend on the answer.
+
+Also startable, and independent of the database:
+
+- `TKT-01M29BSPEF` decide session implementation and pre-login state storage,
+  and `TKT-01M29C5Y3S` build the HTTP server and router. Between them they are
+  what the OIDC flow `TKT-01M29C7ZZ9` waits on, and the provider registry it
+  needs is now done.
+- `TKT-01M29BW9QY` structured logging with slog. Small, and everything shipped
+  so far logs through `slog.Default` already.
+- `TKT-01M29BW9N` decide the Phase 1 UI conventions. It gates the client work
+  and answers two questions in docs/10 rather than requiring any code.
 
 Of the six originally listed as having no dependencies, five are now done —
 the format decisions `TKT-01M29BSPD`, CI `TKT-01M29BW9QP`, thread ids
