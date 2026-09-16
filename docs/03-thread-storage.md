@@ -494,7 +494,7 @@ GET /api/threads/{id}/posts?from=41&count=20
 |-------|------|-------|----------|
 | OS page cache | raw log bytes | free | kernel |
 | Open-thread cache | decoded `.idx` + actor | N threads (default 512) | LRU, archived threads drop first |
-| Rendered-post cache | HTML + metadata per revision | bytes (default 256 MB) | LRU |
+| Rendered-post cache | HTML per revision | bytes (default 256 MB, `0` disables) | LRU; a post larger than the whole bound is refused rather than stored |
 | Response cache | serialized JSON per `(view, thread, log_length, viewer-class)` | bytes (64 MB) | LRU, invalid by construction when `log_length` changes |
 | HTTP | `ETag: "<thread_id>-<log_length>-<renderer_version>"` | client | conditional GET |
 
