@@ -3,6 +3,7 @@ package problem
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/render"
@@ -112,6 +113,15 @@ func FromError(err error) Code {
 
 	// An explicit tag wins over the table: a handler that said what it meant
 	// is more specific than a sentinel it happens to wrap.
+	// A body that blew past MaxBytesReader. It is a type rather than a
+	// sentinel, so it cannot live in the table above. Checked before the
+	// table because the read error it surfaces through is often wrapped in
+	// something more generic by the decoder that hit it.
+	var tooLarge *http.MaxBytesError
+	if errors.As(err, &tooLarge) {
+		return CodePayloadTooLarge
+	}
+
 	var c coded
 	if errors.As(err, &c) {
 		if _, ok := catalogue[c.code]; ok {

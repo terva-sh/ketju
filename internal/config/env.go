@@ -64,6 +64,10 @@ var overrides = []Override{
 		c.Storage.ResponseCacheMB = parseInt(v, "storage.response_cache_mb", "KETJU_STORAGE_RESPONSE_CACHE_MB", p)
 	}},
 
+	{Env: "KETJU_LIMITS_ATTACHMENT_MB", Key: "limits.attachment_mb", apply: func(c *Config, v string, p *problemList) {
+		c.Limits.AttachmentMB = parseInt(v, "limits.attachment_mb", "KETJU_LIMITS_ATTACHMENT_MB", p)
+	}},
+
 	{Env: "KETJU_BOOTSTRAP_ADMIN_EMAILS", Key: "bootstrap.admin_emails", apply: func(c *Config, v string, _ *problemList) {
 		c.Bootstrap.AdminEmails = splitList(v)
 	}},

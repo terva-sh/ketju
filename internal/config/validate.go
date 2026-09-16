@@ -23,6 +23,23 @@ func validate(c *Config, p *problemList) {
 	validateSiteURL(c, p)
 	validateProviders(c, p)
 	validateBootstrap(c.Bootstrap, p)
+	validateLimits(c.Limits, p)
+}
+
+// maxAttachmentMB is a sanity ceiling, not a policy. An upload is buffered
+// against this bound before anything has authenticated the uploader, so a
+// four-figure value turns one request into a memory exhaustion tool. An
+// operator who genuinely wants to host larger files wants object storage,
+// which is a different ticket and a different conversation.
+const maxAttachmentMB = 512
+
+func validateLimits(l Limits, p *problemList) {
+	if l.AttachmentMB < 1 {
+		p.addf("limits.attachment_mb", "%d is not a usable cap; an attachment limit below 1 MB refuses every real upload", l.AttachmentMB)
+	}
+	if l.AttachmentMB > maxAttachmentMB {
+		p.addf("limits.attachment_mb", "%d MB is above the ceiling of %d MB; an upload is bounded before the uploader is authenticated", l.AttachmentMB, maxAttachmentMB)
+	}
 }
 
 func validateListen(addr string, p *problemList) {

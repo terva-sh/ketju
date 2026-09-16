@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-11T23:20:57Z
+updated_at: 2026-09-16T20:52:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/web
+  name: ""
 extensions: {}
 ---
 
@@ -47,3 +47,33 @@ extensions: {}
 - [ ] The dev proxy serves the client against a live Go server with hot reload
 - [ ] index.html renders as a Go template injecting the CSP nonce and the bootstrap /me payload
 - [ ] Preact is pinned at 10.x and the pin is documented with the reason
+
+## Comments
+
+**agent:claude-code/web** at 2026-09-16T20:52:03Z
+
+Inherited check from TKT-01M29C8020 (security headers, CSP nonces).
+
+That ticket's AC3 -- "No inline script or style is needed by the client,
+verified with the CSP in report-only off" -- could not be met there, because
+the client it refers to is the one this ticket scaffolds. It was left unticked
+rather than claimed.
+
+What already exists for you to build against:
+
+- `web.DefaultShell` is a Go template rendered per response with `.Nonce`. The
+  mechanism is what has to survive being replaced by the built `index.html`:
+  a template, rendered per response, with the nonce on every script and style
+  tag. Swapping the markup is fine; dropping the per-response render is not,
+  because the nonce would go stale.
+- The policy is strict and carries no `'unsafe-inline'`, so any inline script,
+  inline style, or `on*` attribute in the built client will be blocked by the
+  browser rather than warned about.
+- `TestTheShellHasNoInlineScriptOrStyle` in `internal/web` already fails on an
+  inline body, a script without a nonce, or an `on*` attribute. Pointing it at
+  the real built shell is the cheapest way to close AC3.
+
+The remaining half is the browser one: load the real client with the CSP
+enforcing (not report-only) and confirm the console is clean. Worth doing
+before the client grows, because retrofitting means finding every inline
+handler written in the meantime.

@@ -56,6 +56,7 @@ const (
 	DefaultProviderScopes   = "openid email profile"
 	DefaultLogLevel         = "info"
 	DefaultLogFormat        = "auto"
+	DefaultAttachmentMB     = 10
 	defaultMaxCacheMB       = 1 << 20 // 1 TB, a bound to catch a typo, not a policy
 	defaultMaxOpenThreads   = 1 << 20
 	minimumOpenThreadsAllow = 1
@@ -79,6 +80,7 @@ type Config struct {
 	Log       Log       `toml:"log"`
 	Bootstrap Bootstrap `toml:"bootstrap"`
 	OIDC      OIDC      `toml:"oidc"`
+	Limits    Limits    `toml:"limits"`
 }
 
 // Log configures the structured logger.
@@ -111,6 +113,19 @@ type Storage struct {
 
 	// ResponseCacheMB bounds the serialized-response cache.
 	ResponseCacheMB int `toml:"response_cache_mb"`
+}
+
+// Limits is the part of the request limits an operator may tune.
+//
+// Only the attachment cap is here. The post body limit is fixed at 64 KB by
+// docs/07 and lives in internal/web as a constant: it is part of what the API
+// promises a client, not a dial, and an installation that quietly raised it
+// would accept posts that another installation could not federate or import.
+type Limits struct {
+	// AttachmentMB caps a single upload. docs/07 makes this configurable
+	// because what counts as a reasonable attachment depends entirely on who
+	// is running the forum and what their disk looks like.
+	AttachmentMB int `toml:"attachment_mb"`
 }
 
 // Bootstrap names the accounts that become admin on first login, so that a
@@ -312,6 +327,9 @@ func applyDefaults(c *Config, present map[string]bool) {
 	}
 	if !present["log.format"] {
 		c.Log.Format = DefaultLogFormat
+	}
+	if !present["limits.attachment_mb"] {
+		c.Limits.AttachmentMB = DefaultAttachmentMB
 	}
 	for i := range c.OIDC.Providers {
 		p := &c.OIDC.Providers[i]

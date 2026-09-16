@@ -20,14 +20,6 @@ import (
 // docs/07 puts it there: a client pins a version by pinning a URL.
 const APIPrefix = "/api/v1/"
 
-// DefaultMaxBody bounds a request body before any handler reads it.
-//
-// It is larger than render.MaxSource so that a post at the renderer's limit
-// still arrives with room for the JSON around it, and far smaller than an
-// attachment, which goes to /blobs and gets its own limit from the ticket that
-// builds it.
-const DefaultMaxBody = 1 << 20
-
 // Groups are the handler groups the router mounts, one per URL prefix in
 // docs/02.
 //
@@ -65,8 +57,9 @@ type Options struct {
 	// practice; slog.Default is used if it is nil.
 	Logger *slog.Logger
 
-	// MaxBody overrides DefaultMaxBody.
-	MaxBody int64
+	// Limits are the request body bounds. The zero value means MaxPostBody
+	// for ordinary requests and the default attachment cap for uploads.
+	Limits Limits
 
 	// Session, RateLimit and CSRF are the middleware this ticket does not
 	// implement, in the positions the chain reserves for them. Each is nil
@@ -88,11 +81,6 @@ func New(g Groups, opts Options) http.Handler {
 	if log == nil {
 		log = slog.Default()
 	}
-	maxBody := opts.MaxBody
-	if maxBody <= 0 {
-		maxBody = DefaultMaxBody
-	}
-
 	mux := http.NewServeMux()
 
 	// One pattern per prefix in docs/02. The trailing slash is what makes a
@@ -138,7 +126,7 @@ func New(g Groups, opts Options) http.Handler {
 		group(g.SPA).ServeHTTP(w, r)
 	}))
 
-	return chain(mux, log, maxBody, opts)
+	return chain(mux, log, opts)
 }
 
 // isAPIPath reports whether a path belongs to the API, including the bare
@@ -182,31 +170,40 @@ func group(h http.Handler) http.Handler {
 //     200 the recorder still held. Outside the log instead, the log line would
 //     never be written at all.
 //
-//  3. Body limit, before anything reads a body. A limit applied by each
+//  3. Security headers, outside everything that can answer a request. They are
+//     set on the way in, so they are already on the header map when the body
+//     limit answers 413, when recovery answers 500, or when the router answers
+//
+//  404. A response nobody wrote on purpose is exactly the one that must not
+//     go out without a policy.
+//
+//  4. Body limit, before anything reads a body. A limit applied by each
 //     handler is a limit the next handler forgets.
 //
-//  4. Rate limiting, before session resolution. This is the one the ticket
-//     calls out: a session lookup is a database query, so checking the limit
-//     afterwards means an unauthenticated flood costs a query per request --
-//     the limiter would be protecting the thing it is standing behind.
+//  5. Rate limiting, before session resolution. This is the one the HTTP
+//     server ticket calls out: a session lookup is a database query, so
+//     checking the limit afterwards means an unauthenticated flood costs a
+//     query per request -- the limiter would be protecting the thing it is
+//     standing behind.
 //
-//  5. Session resolution. It needs to be past the limiter, and everything
+//  6. Session resolution. It needs to be past the limiter, and everything
 //     below needs the viewer: CSRF binds its token to the session, handlers
 //     authorize against it, and the request log reports it.
 //
-//  6. CSRF, innermost. It has to be after the session because the token is
+//  7. CSRF, innermost. It has to be after the session because the token is
 //     bound to one, and it must not run before the rate limiter, or a flood of
 //     tokenless requests would be answered by the more expensive check.
 //
 // The nil middleware are no-ops, so the order holds as each one lands rather
 // than being rediscovered.
-func chain(h http.Handler, log *slog.Logger, maxBody int64, opts Options) http.Handler {
-	h = wrap(opts.CSRF, h)      // 6
-	h = wrap(opts.Session, h)   // 5
-	h = wrap(opts.RateLimit, h) // 4
-	h = limitBody(maxBody)(h)   // 3
-	h = recoverPanics(log)(h)   // 2
-	h = logging.Middleware(log)(h)
+func chain(h http.Handler, log *slog.Logger, opts Options) http.Handler {
+	h = wrap(opts.CSRF, h)         // 7
+	h = wrap(opts.Session, h)      // 6
+	h = wrap(opts.RateLimit, h)    // 5
+	h = limitBody(opts.Limits)(h)  // 4
+	h = securityHeaders(h)         // 3
+	h = recoverPanics(log)(h)      // 2
+	h = logging.Middleware(log)(h) // 1 outermost
 	return h
 }
 

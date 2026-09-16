@@ -235,9 +235,62 @@ murky. Separate handler packages over one service is clearer.
 
 ## Security headers and limits
 
-CSP with nonces (no inline scripts, `img-src 'self' data:`, no third-party
-origins), `Referrer-Policy: strict-origin-when-cross-origin`,
-`X-Content-Type-Options: nosniff`, `frame-ancestors 'none'`. Request body
-limits (64 KB for posts, configurable attachment cap default 10 MB), upload
-MIME sniffing with an allowlist, rate limits per session and per IP on
-writes, and a per-agent token bucket for bearer-authenticated writes (08).
+Every response carries these, set on the way in so they are already present
+when the body limit answers 413, recovery answers 500, or the router answers
+404 — the responses nobody wrote on purpose are the ones a per-handler header
+would miss.
+
+| Header | Value |
+|--------|-------|
+| `Content-Security-Policy` | the policy below |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` |
+| `X-Content-Type-Options` | `nosniff` |
+
+The policy, with a fresh nonce per response:
+
+```
+default-src 'self'; base-uri 'self'; object-src 'none';
+frame-ancestors 'none'; form-action 'self'; img-src 'self' data:;
+script-src 'self' 'nonce-…'; style-src 'self' 'nonce-…'; connect-src 'self'
+```
+
+`default-src 'self'` is the no-third-party-origins rule: everything the client
+needs is served from this binary. `script-src` and `style-src` carry the nonce
+and never `'unsafe-inline'` — that keyword would make the nonce decorative,
+because a browser stops checking nonces once the policy says inline script is
+fine anyway. `base-uri` stops an injected `<base>` from re-pointing every
+relative URL, and `form-action` matters for the non-JS client, which posts
+forms. `X-Frame-Options` is deliberately absent: `frame-ancestors` supersedes
+it, and a second header saying the same thing is a second place to keep in
+sync.
+
+The SPA shell is a Go template rendered per response with the nonce on every
+script and style tag, and is sent `no-store` — a cached shell would hand a
+stale nonce to the next reader and the policy would block the whole page.
+
+### Request limits
+
+| Limit | Value | Configurable |
+|-------|-------|--------------|
+| Request body | 64 KB | no — part of the API contract |
+| Upload (`POST /api/v1/blobs`) | 10 MB | yes, `limits.attachment_mb` (`KETJU_LIMITS_ATTACHMENT_MB`) |
+
+Both are refused with a `payload-too-large` problem rather than a truncated
+read. A body whose `Content-Length` is over the limit is refused before a byte
+is read; a chunked body, or one whose `Content-Length` lies, is caught by
+`MaxBytesReader` and the resulting error maps to the same code.
+
+The post limit is route-independent and fixed because it is part of what the
+API promises a client — an installation that quietly raised it would accept
+posts another installation could not take. The attachment cap is configurable
+because what counts as a reasonable attachment depends on who is running the
+forum, and is bounded above because an upload is buffered before the uploader
+is authenticated.
+
+These sit below two other limits at other layers: `render.MaxSource` (256 KiB)
+is the renderer's own backstop, and `MaxFrameSize` (1 MiB, docs/03) is the
+storage format's bound.
+
+Still to come: upload MIME sniffing with an allowlist, rate limits per session
+and per IP on writes, and a per-agent token bucket for bearer-authenticated
+writes (08).

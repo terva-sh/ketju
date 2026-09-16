@@ -446,25 +446,58 @@ func TestTheSessionViewerReachesTheRequestLog(t *testing.T) {
 
 // --- The body limit ----------------------------------------------------------
 
-func TestTheBodyLimitApplies(t *testing.T) {
+func TestADeclaredOversizeBodyIsRefusedWithoutBeingRead(t *testing.T) {
+	log, _ := testLogger()
+	reached := false
+	h := New(Groups{
+		API: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			reached = true
+		}),
+	}, Options{Logger: log, Limits: Limits{Body: 64}})
+
+	body := strings.NewReader(strings.Repeat("x", 4096))
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/threads", body)
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if reached {
+		t.Error("the handler ran for a body the server had already decided was too large")
+	}
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("status = %d, want 413", rec.Code)
+	}
+	if ct := rec.Header().Get("Content-Type"); ct != problem.ContentType {
+		t.Errorf("content type = %q, want a problem response rather than a truncated read", ct)
+	}
+}
+
+// TestAnUndeclaredOversizeBodyStillFails is the other half: a chunked body, or
+// one whose Content-Length lies, cannot be judged up front. MaxBytesReader is
+// what makes the cap real there, and the error it produces is the one
+// internal/problem maps to 413.
+func TestAnUndeclaredOversizeBodyStillFails(t *testing.T) {
 	log, _ := testLogger()
 	var readErr error
 	h := New(Groups{
 		API: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			_, readErr = io.ReadAll(r.Body)
 		}),
-	}, Options{Logger: log, MaxBody: 64})
+	}, Options{Logger: log, Limits: Limits{Body: 64}})
 
-	body := strings.NewReader(strings.Repeat("x", 4096))
-	req := httptest.NewRequest(http.MethodPost, "/api/v1/threads", body)
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/threads",
+		strings.NewReader(strings.Repeat("x", 4096)))
+	// What a chunked request looks like to a handler.
+	req.ContentLength = -1
+
 	h.ServeHTTP(httptest.NewRecorder(), req)
 
-	if readErr == nil {
-		t.Error("a body past the limit was read in full")
-	}
 	var maxErr *http.MaxBytesError
 	if !errors.As(readErr, &maxErr) {
-		t.Errorf("read error = %v, want MaxBytesError so a handler can map it to 413", readErr)
+		t.Fatalf("read error = %v, want MaxBytesError", readErr)
+	}
+	if got := problem.FromError(readErr); got != problem.CodePayloadTooLarge {
+		t.Errorf("that error maps to %s, want %s, so the client would not learn the body was too large",
+			got, problem.CodePayloadTooLarge)
 	}
 }
 
@@ -476,12 +509,41 @@ func TestABodyUnderTheLimitIsUntouched(t *testing.T) {
 			b, _ := io.ReadAll(r.Body)
 			got = string(b)
 		}),
-	}, Options{Logger: log, MaxBody: 64})
+	}, Options{Logger: log, Limits: Limits{Body: 64}})
 
 	req := httptest.NewRequest(http.MethodPost, "/api/v1/threads", strings.NewReader("hello"))
 	h.ServeHTTP(httptest.NewRecorder(), req)
 	if got != "hello" {
 		t.Errorf("body = %q, want hello", got)
+	}
+}
+
+// TestAnUploadGetsTheAttachmentCap checks the route-dependent limit. A single
+// global limit would have to be the larger of the two, which would let every
+// endpoint accept an attachment-sized body.
+func TestAnUploadGetsTheAttachmentCap(t *testing.T) {
+	log, _ := testLogger()
+	reached := 0
+	h := New(Groups{
+		API: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached++ }),
+	}, Options{Logger: log, Limits: Limits{Body: 64, Upload: 4096}})
+
+	// Too big for a post, fine for an upload.
+	payload := strings.Repeat("x", 1024)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, "/api/v1/threads", strings.NewReader(payload)))
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("post status = %d, want 413", rec.Code)
+	}
+
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodPost, UploadPath, strings.NewReader(payload)))
+	if rec.Code == http.StatusRequestEntityTooLarge {
+		t.Error("the upload route was measured against the post limit")
+	}
+	if reached != 1 {
+		t.Errorf("the upload handler ran %d times, want 1", reached)
 	}
 }
 
