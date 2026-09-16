@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C0WEEPGNGE9EDDTK1AZHN
 title: Add quote syntax, linked blockquotes, and quote backlinks
 type: task
-status: draft
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:14:40Z
-updated_at: 2026-09-16T19:04:28Z
+updated_at: 2026-09-16T19:35:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

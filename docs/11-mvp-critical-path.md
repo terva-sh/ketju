@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-32 done, 0 ready, 136 draft.
+33 done, 0 ready, 135 draft.
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
 frozen at version 1 on 2026-09-15 (`TKT-01M29C5Y1E`). The twenty-fifth is the
@@ -68,7 +68,7 @@ ids and the sharded layout, the open-thread LRU cache, `ketju dump`,
 `ketju fsck`, CI, the frame fuzzer, property tests, crash tests, the benchmark,
 and the freeze.
 
-**Phase 1 is under way.** 7 of its 73 tickets are done.
+**Phase 1 is under way.** 8 of its 73 tickets are done.
 
 The first three were the markdown pipeline `TKT-01M29BW9Q8`, config loading
 `TKT-01M29BW9QF`, and the event bus `TKT-01M29C0WF9`. A fourth, `TKT-01M2JZB0`,
