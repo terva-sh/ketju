@@ -219,12 +219,13 @@ decisions rather than on any code:
 
 Also startable, and independent of the database:
 
-- `TKT-01M29BSPEF` decide session implementation and pre-login state storage,
-  and `TKT-01M29C5Y3S` build the HTTP server and router. Between them they are
-  what the OIDC flow `TKT-01M29C7ZZ9` waits on, and the provider registry it
-  needs is now done.
-- `TKT-01M29BW9QY` structured logging with slog. Small, and everything shipped
-  so far logs through `slog.Default` already.
+- `TKT-01M29BW9QY` structured logging with slog. Small, everything shipped so
+  far logs through `slog.Default` already, and it is what `TKT-01M29C5Y3S`
+  (the HTTP server and router) depends on — so it is the one ticket standing
+  between here and the whole web half.
+- `TKT-01M29BSPEF` decide session implementation and pre-login state storage.
+  It depends on nothing, and together with the server it is what the OIDC flow
+  `TKT-01M29C7ZZ9` waits on; the provider registry that flow needs is done.
 - `TKT-01M29BW9N` decide the Phase 1 UI conventions. It gates the client work
   and answers two questions in docs/10 rather than requiring any code.
 
