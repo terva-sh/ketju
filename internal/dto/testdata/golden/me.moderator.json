@@ -1,0 +1,20 @@
+{
+  "user": {
+    "handle": "bob",
+    "display_name": "Bob Iyer",
+    "avatar": "",
+    "role": "moderator",
+    "kind": "human"
+  },
+  "unread": {
+    "threads": 3,
+    "participated": 1,
+    "watching": 2
+  },
+  "notifications": 9,
+  "settings": {
+    "timezone": "Asia/Tokyo",
+    "locale": "ja",
+    "page_size": 50
+  }
+}

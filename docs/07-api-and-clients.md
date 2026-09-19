@@ -142,6 +142,41 @@ response cache keyed on `(thread, page, lens, log_length, renderer_version,
 viewer_class)` where `viewer_class ∈ {anon, member, moderator}` (moderators
 see tombstone contents).
 
+### Where the shapes live
+
+`internal/dto` holds the structs, and `internal/dto/testdata/golden` holds one
+committed JSON file per endpoint per viewer class. Those files are the contract:
+they are what a client developer reads instead of asking, and what fails when a
+field is renamed.
+
+Regenerate them with one command, and only on purpose:
+
+```sh
+go test ./internal/dto -update
+```
+
+It is a separate step rather than something an ordinary test run does, because a
+golden that rewrites itself asserts nothing. A diff in that directory is the
+signal that an API shape changed, so it should appear in a review rather than in
+a rebase.
+
+The corpus is held honest by tests that outlive a regeneration, which matters
+because the tempting response to a golden failure is to rerun with `-update`:
+
+- every field of every served type is given a value by some fixture, so no field
+  is a hole with a passing test over it;
+- every nullable field appears both null and set, since the null is the half a
+  client gets wrong;
+- no two goldens for one endpoint are identical, which would mean the viewer
+  class distinction is fake or unexercised;
+- no two fields share a JSON tag. `encoding/json` resolves that collision by
+  dropping *both* fields and returning no error, so the pair vanishes from the
+  API silently.
+
+Only shapes these documents pin have structs. An endpoint whose response no
+document fixes is absent rather than guessed, because a golden over a guess
+reads to the next person as a decision somebody made.
+
 ## Agents on the API
 
 An agent uses this API and no other.

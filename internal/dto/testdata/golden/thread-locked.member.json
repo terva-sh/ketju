@@ -1,0 +1,52 @@
+{
+  "thread": {
+    "id": "3yymw47g000a7",
+    "slug": "office-move-decided",
+    "title": "Office move: decided",
+    "forum": {
+      "slug": "general",
+      "name": "General"
+    },
+    "post_count": 2,
+    "log_length": 1841,
+    "locked": true,
+    "pinned": null,
+    "tags": [],
+    "created_at": 1757100000000
+  },
+  "page": {
+    "number": 1,
+    "size": 25,
+    "total_pages": 1
+  },
+  "lens": null,
+  "viewer": {
+    "last_read_ordinal": 2,
+    "watch": "",
+    "can_reply": false,
+    "can_moderate": false
+  },
+  "posts": [
+    {
+      "ordinal": 1,
+      "revision": 1,
+      "author": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "created_at": 1757100000000,
+      "edited_at": null,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 1,
+      "html": "<p>We are taking the Kallio unit.</p>",
+      "attachments": [],
+      "deleted": false,
+      "moved_to": null,
+      "machine_authored": false
+    }
+  ]
+}
