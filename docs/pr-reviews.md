@@ -73,8 +73,9 @@ source. Existing organization secrets must be available to this repository.
 
 Provider, URL, model, thinking and profile are trusted workflow inputs. Defaults
 are openai-compatible, CPA API, gpt-5.6-sol, low, and code. The `summary` policy
-keeps feedback quiet; `always` is available for an intentional fresh request if
-needed. Review pin/runtime changes through a PR, test them on the action's
+keeps feedback quiet. To select `always`, change the trusted workflow through
+a PR; dispatch exposes only the PR number and request ID. A fresh request ID
+does not change publication policy. Review pin/runtime changes through a PR, test them on the action's
 fixture, and keep all publishers for this PR under the same concurrency group.
 Do not revoke shared credentials or change required-check settings as part of
 routine troubleshooting. Ask only for safe error codes, never full private logs.
