@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-19T18:06:17Z
-updated_at: 2026-09-19T18:06:17Z
+updated_at: 2026-09-19T18:08:44Z
 created_by:
   id: agent:codex/org-review-rollout
   name: ""
@@ -42,10 +42,16 @@ User-approved rollout to ketju. Install explicit manual/comment reviews with CPA
 
 ## Acceptance criteria
 
-- [ ] Pinned workflow and agent guidance are validated
+- [x] Pinned workflow and agent guidance are validated
 - [ ] Live review evidence is recorded on the installation PR
 - [ ] Installation is merged and comment requests are available
 
 ## Implementation plan
 
 Copy the verified git-ticket installation with full reviewer/helper pins and runtime checksum. Add local request and advisory-disposition instructions. Retain the existing workflow directory when CI uses .github. Validate YAML, shell snippets, links and ticket records; inspect one explicit live installation review where enabled. Reject review-on-every-push because it repeats low-value feedback. Keep required-check settings unchanged.
+
+## Notes
+
+**agent:codex/org-review-rollout** at 2026-09-19T18:08:44Z
+
+Configuration validation: actionlint 1.7.7 passed (custom docker runner accepted; external shellcheck disabled). git diff --check and git ticket check --strict passed. Workflow derives from the deployed git-ticket PR #208 installation; no consumer code is checked out. Live validation and activation remain pending.

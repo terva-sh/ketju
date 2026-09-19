@@ -186,3 +186,10 @@ skip the commit you expected to follow it.
 `docs/11-mvp-critical-path.md` is written by hand and nothing validates it.
 If you change the shape of the backlog, re-read it with
 `git ticket list --all --json` and update the document in the same commit.
+
+
+## Terva PR reviews
+
+Follow [the review guide](docs/pr-reviews.md) for explicit review requests and finding dispositions.
+Record the reviewed head/base and run links. Preserve model failures when a
+maintainer declines or defers a finding. A clean review does not authorize merge.
