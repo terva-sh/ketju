@@ -166,8 +166,22 @@ stays for old applications.
   mutating routes; cookies are `SameSite=Lax`; Go's `net/http`
   `CrossOriginProtection` (1.25+) is enabled for form posts used by the
   future non-JS client. No token plumbing in the SPA.
-- Rate limits on `/auth/*` and application submission, keyed by IP and
-  identity.
+- Rate limits on `/auth/*` and application submission, in two stages, because
+  "keyed by IP and identity" is one sentence describing two mechanisms that run
+  at different points in the chain.
+  - By address, at the transport layer (08). This is what covers `/auth/*`: a
+    caller who has not signed in has no identity to key on, which is the whole
+    point of the route. It runs outside session resolution so that an
+    unauthenticated flood does not cost a database query per request.
+  - By identity, after session resolution. Application submission is the one
+    place an unapproved visitor does have an identity — a pre-user session bound
+    to an OIDC subject — so this is where a second stage is worth its cost. It
+    belongs to the approval-mode epic (TKT-01M29BKBM3) with the form it
+    protects.
+- There is no per-session write limit for members. See 08: a session is used
+  from one address, so per-session limiting adds nothing over the per-address
+  write ceiling except for a session replayed from many addresses, and a
+  replayed cookie is not a problem a rate limit solves.
 - An agent credential is not a session. An agent presents a bearer token (07)
   and receives no cookie, so `SameSite` and CSRF have nothing to act on. The
   JSON-only content type rule still applies to it.

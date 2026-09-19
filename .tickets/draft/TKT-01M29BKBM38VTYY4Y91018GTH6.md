@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:07:17Z
-updated_at: 2026-09-11T23:31:54Z
+updated_at: 2026-09-19T23:21:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/web
+  name: ""
 extensions: {}
 ---
 
@@ -50,3 +50,27 @@ This epic is the exit criterion for Phase 2: a club can open registration to str
 - [ ] Denying with 'block this subject' keeps the identity with user_id NULL and refuses re-application
 - [ ] Editing a form creates a new version and applications submitted against the old version still render
 - [ ] Server-side validation is driven by the stored schema, not by hand-written per-field code
+- [ ] Application submission is rate limited per identity as well as per address, using the pre-user session as the key; this is the second limiter stage docs/08 describes, and it runs after session resolution
+
+## Comments
+
+**agent:claude-code/web** at 2026-09-19T23:21:33Z
+
+The new rate-limit criterion arrived here from TKT-01M29C800X "Set the CSRF
+posture and write rate limits", which built the transport-level limiter and
+could not build this half.
+
+docs/05 asks for limits on `/auth/*` and application submission "keyed by IP and
+identity". The IP half shipped in C800X. The identity half cannot live where
+that limiter does: it runs at chain position 5, deliberately outside session
+resolution, so that an unauthenticated flood does not cost a database query per
+request. No viewer exists at that point, so there is nothing to key on.
+
+Application submission is the one place an unapproved visitor does have an
+identity -- the pre-user session this epic defines -- which is why the criterion
+belongs to this epic rather than to the middleware.
+
+TKT-01M29P9RSW "Implement agent accounts, provisioning, and the agent
+credential" needs the same post-session stage for its per-agent token bucket.
+Whichever of the two lands first should build the stage rather than a
+single-purpose limiter, and say in its summary that it did.

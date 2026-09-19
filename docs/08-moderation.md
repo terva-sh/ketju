@@ -75,8 +75,20 @@ disk, not to pace anybody's posting.
 Both are keyed by address, because the limiter deliberately runs *outside*
 session resolution — a session lookup is a database query, and limiting after
 it would mean an unauthenticated flood costs a query per request. Per-identity
-limiting therefore needs a second stage after session resolution, which is
-where the per-agent token bucket above belongs.
+limiting therefore needs a second stage after session resolution. Two things
+want that stage: the per-agent token bucket above, and the per-identity limit
+on application submission in 05, where an unapproved visitor holds a pre-user
+session. Neither exists yet, and the stage should be built by whichever
+arrives first.
+
+Members get no per-session write limit, and that is a decision rather than an
+omission. A session is used from one address, so a per-session ceiling covers
+nothing the per-address ceiling above does not already cover — except a session
+replayed from many addresses at once, which is a stolen cookie, and a rate
+limit is not the answer to a stolen cookie. The runaway this would supposedly
+catch, a member's tab stuck in a retry loop, comes from one address and hits
+the ceiling above. Adding the second stage for members would buy a limiter with
+no threat left to stop.
 
 `X-Forwarded-For` is not consulted. It is trivially spoofable, so trusting it
 without a configured list of trusted proxies would not weaken the limiter but

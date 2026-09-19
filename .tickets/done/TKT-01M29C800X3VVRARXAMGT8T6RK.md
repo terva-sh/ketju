@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-16T21:04:59Z
+updated_at: 2026-09-19T23:21:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -40,13 +40,15 @@ No token plumbing in the SPA. The API is JSON-only and rejects non-JSON content 
 
 Enabling `CrossOriginProtection` now, before any form post exists, is one of the seven constraints in docs/07 that keep the second client cheap. It costs nothing today and it is awkward to retrofit once handlers exist.
 
-Rate limits belong here too: per IP and per identity on `/auth/*` and on application submission, and per session and per IP on writes.
+Rate limits belong here too, but only the transport-level half: per address on `/auth/*` and on writes, with `Retry-After` on refusal.
+
+This paragraph originally read "per IP and per identity on `/auth/*` and on application submission, and per session and per IP on writes", which contradicted docs/08. It was rewritten after the ticket shipped; the note dated 2026-09-19 records the decision and the reasoning. In short: `/auth/*` has no identity to key on, that being what the route is for; the per-identity limit on application submission moved to TKT-01M29BKBM3 with the form it protects; and per-session write limits for members were ruled out in docs/08 rather than deferred.
 
 ## Acceptance criteria
 
 - [x] A mutating API request with a non-JSON content type is refused
 - [x] CrossOriginProtection is enabled and a cross-origin form post is refused, tested
-- [ ] Auth and write rate limits are enforced per IP and per session, and a limited response says when to retry
+- [x] Auth and write rate limits are enforced per address, and a limited response says when to retry
 - [x] No CSRF token is threaded through the SPA
 
 ## Notes
@@ -186,6 +188,60 @@ module.
 **agent:claude-code/web** at 2026-09-16T21:04:59Z
 
 in-progress to done: AC1, AC2 and AC4 are met and tested; AC3 is met per IP with Retry-After but not per session. Per-session limiting is impossible at the limiter's chain position, which deliberately sits outside session resolution, and docs/08 assigns per-identity limiting to agents via TKT-01M29P9RSW rather than to humans. The ticket text and docs/08 disagree; docs/08 was followed and the conflict is recorded in the note.
+
+**agent:claude-code/web** at 2026-09-19T23:21:12Z
+
+The rate-limit conflict recorded at close is settled. The repository owner chose
+to follow docs/08; AC3 was rewritten to describe what the code does and is now
+ticked, and the description's original sentence is quoted there so the change is
+not silent.
+
+### What the conflict actually was
+
+The closing note called this a single disagreement between AC3 and docs/08. It
+was four claims in one line, and only one of them was in conflict:
+
+- `/auth/*` limited per address -- built, never disputed.
+- A limited response carries `Retry-After` -- built, never disputed.
+- Per *identity* on `/auth/*` and on application submission. Not built, and not
+  a conflict with anything. docs/05 asks for it and docs/08 does not contradict
+  it, because an applicant is not a member posting. This was read as part of the
+  conflict at close, which was wrong.
+- Per *session* on writes. This is the only sentence that fought docs/08.
+
+### Why per-session write limits were ruled out rather than deferred
+
+A session is used from one address. So a per-session write ceiling covers
+nothing the existing per-address ceiling does not already cover, with one
+exception: a session replayed from many addresses at once. That is a stolen
+cookie, and a rate limit is not the answer to a stolen cookie -- revocation is,
+and the session ticket owns it.
+
+The runaway the per-session limit is usually argued for -- a member's browser tab
+stuck in a retry loop -- comes from a single address and is stopped by the
+per-address ceiling already. Building the second stage for members would buy a
+limiter with no threat left to stop, and a limiter with no threat is a thing
+future readers tighten because they assume it must be there for a reason.
+
+The alternative considered and rejected was building the post-session stage now
+and configuring it never to fire for humans, so that TKT-01M29P9RSW would not
+have to touch middleware ordering later. That trades a real cost -- dead code
+with a test pinning its deadness -- against a saved edit in one future ticket,
+and the ordering constraint is documented in clientIP where that ticket's author
+will be reading anyway.
+
+### Where the remainder went
+
+- Per-identity limiting on application submission: TKT-01M29BKBM3
+  "Approval-mode registration and the forms system", as a new acceptance
+  criterion. It sits with the form it protects and with the pre-user session it
+  keys on, neither of which exists yet.
+- Per-agent token bucket: unchanged, still TKT-01M29P9RSW.
+- docs/05 and docs/08 disagreed with each other as well, which nobody had
+  written down: docs/05 said "keyed by IP and identity" while docs/08 described
+  per-address buckets. Both were rewritten to say that this is one sentence
+  covering two stages at different points in the chain, and to name which stage
+  each caller belongs to.
 
 ## Summary
 

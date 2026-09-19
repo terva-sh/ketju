@@ -67,9 +67,16 @@ const maxTrackedKeys = 8192
 // nothing, and a key that silently never varies is worse than an honest one.
 //
 // Per-identity limiting therefore cannot live at this position. It needs a
-// second stage after session resolution, and docs/08 says who it is for:
-// humans are unlimited, agents are charged against a token bucket. That stage
-// belongs to TKT-01M29P9RSW with the agent credential it charges against.
+// second stage after session resolution, and docs/08 names the two callers that
+// want one: the per-agent token bucket (TKT-01M29P9RSW, with the credential it
+// charges against) and the per-identity limit on application submission
+// (TKT-01M29BKBM3, where an unapproved visitor holds a pre-user session).
+// Whichever lands first builds the stage.
+//
+// Members get no per-session write limit, and that is settled rather than
+// pending: a session is used from one address, so per-session adds nothing over
+// the ceiling here except for a session replayed from many addresses, which is
+// a stolen cookie rather than a rate-limiting problem. See docs/08.
 //
 // X-Forwarded-For is deliberately not consulted. It is trivially spoofable, so
 // trusting it without a configured list of trusted proxies would not weaken

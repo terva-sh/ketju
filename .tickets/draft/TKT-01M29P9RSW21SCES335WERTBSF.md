@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-12T02:14:17Z
-updated_at: 2026-09-12T02:14:17Z
+updated_at: 2026-09-19T23:21:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/web
+  name: ""
 extensions: {}
 ---
 
@@ -59,3 +59,21 @@ Note the one subtlety worth getting right: the machine-authored frame flag bit i
 - [ ] Agent writes are charged against a per-agent token bucket with a site default, and exceeding it is 429 with Retry-After rather than a queue
 - [ ] An agent sets its read position only through PUT /threads/{id}/read, with no beacon and no mark-on-render path
 - [ ] author.kind and the per-post machine_authored flag appear in the thread response, and a golden JSON test pins both
+
+## Comments
+
+**agent:claude-code/web** at 2026-09-19T23:21:33Z
+
+The post-session limiter stage this ticket's per-agent token bucket needs is now
+shared with TKT-01M29BKBM3 "Approval-mode registration and the forms system",
+which acquired a per-identity limit on application submission when
+TKT-01M29C800X settled where each half of docs/05's rate-limit line belongs.
+
+Whichever ticket lands first should build the stage as a general post-session
+limiter rather than a single-purpose one, and say in its summary that it did.
+
+Worth knowing while building this: the per-address write ceiling from C800X
+applies to agent traffic too, at 60 burst and one per half second. An agent that
+trips it gets a 429 that did not come from its own bucket. That is intended --
+the ceiling is a crash barrier for every caller -- but it will look like a bug to
+whoever debugs the first agent that hits it.
