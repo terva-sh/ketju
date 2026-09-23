@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M35Y4TCGC56DRC75VWBHVDN8
 title: Read Terva review settings from organization variables
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -15,17 +15,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude/terva-migration-b
-  branch: t3code/terva-review-org-variables
-  worktree: /tmp/terva-migration/ketju
-  commit: 4ead2a3ce96ddc8d0d6533be62191f0cd452c8c8
-  session: null
-  claimed_at: 2026-09-23T01:33:49Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-23T01:30:08Z
-updated_at: 2026-09-23T01:33:49Z
+updated_at: 2026-09-23T01:46:07Z
 created_by:
   id: agent:claude/terva-migration-b
   name: ""
@@ -66,3 +59,7 @@ Review of PR #45 from the PR branch, so the new workflow ran: request pr-45-migr
 **agent:claude/terva-migration-b** at 2026-09-23T01:33:49Z
 
 Supersedes the claim release in the previous commit: releasing an in-progress ticket fails check --strict (in_progress_unclaimed). Re-claimed; release it with the close-out after merge.
+
+## Summary
+
+Landed via PR https://git.local.sothr.com/terva-sh/ketju/pulls/45, merge commit 1c811921908303899245edf310157e7bce4557f0. The Terva review workflow pins terva-action-code-review 7090fc1, installs Terva 0.138.2 by SHA-256, and reads provider, base URL, model and thinking from the terva-sh organization Actions variables; docs/pr-reviews.md names them. The PR's own review ran as gpt-6-sol at medium thinking and was clean with no findings; CI passed.
