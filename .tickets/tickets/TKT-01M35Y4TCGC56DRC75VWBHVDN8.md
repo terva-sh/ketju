@@ -15,10 +15,17 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude/terva-migration-b
+  branch: t3code/terva-review-org-variables
+  worktree: /tmp/terva-migration/ketju
+  commit: 4ead2a3ce96ddc8d0d6533be62191f0cd452c8c8
+  session: null
+  claimed_at: 2026-09-23T01:33:49Z
+  expires_at: null
 archive: null
 created_at: 2026-09-23T01:30:08Z
-updated_at: 2026-09-23T01:33:38Z
+updated_at: 2026-09-23T01:33:49Z
 created_by:
   id: agent:claude/terva-migration-b
   name: ""
@@ -55,3 +62,7 @@ PR https://git.local.sothr.com/terva-sh/ketju/pulls/45 opened on branch t3code/t
 **agent:claude/terva-migration-b** at 2026-09-23T01:33:38Z
 
 Review of PR #45 from the PR branch, so the new workflow ran: request pr-45-migration:agent.claude.terva-migration-b, Actions run https://git.local.sothr.com/terva-sh/ketju/actions/runs/97 (id 9089), run e332c3da-9f39-4698-b23d-88d56a8a9c89, head c98ed070f2165f0728a05084234416a12794fee1 base 93df292b6ec51d9a6cb81f197325688ed94e5233. Clean, no findings; terva-review/code success; summary comment 10179. The run reported provider openai-compatible, model gpt-6-sol, thinking medium and Terva 0.138.2, so the organization variables reached the action. 7s, 4271 input / 313 output tokens. CI on the same head passed. Nothing to disposition. A later ticket-only commit needs no new review. Close this ticket after the PR merges; merging is left to a maintainer.
+
+**agent:claude/terva-migration-b** at 2026-09-23T01:33:49Z
+
+Supersedes the claim release in the previous commit: releasing an in-progress ticket fails check --strict (in_progress_unclaimed). Re-claimed; release it with the close-out after merge.
