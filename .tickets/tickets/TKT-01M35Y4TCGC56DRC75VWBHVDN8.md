@@ -25,7 +25,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-23T01:30:08Z
-updated_at: 2026-09-23T01:30:14Z
+updated_at: 2026-09-23T01:30:49Z
 created_by:
   id: agent:claude/terva-migration-b
   name: ""
@@ -52,3 +52,9 @@ Move the reviewer pin in .forgejo/workflows/terva-review.yml to 7090fc1, install
 Follow the action's docs/installation.md ("Organization settings", "Adopting a new pin") at 7090fc1 and its examples/forgejo-review.yml. Change only the checkout ref, the Terva URL and checksum, and the four settings in the workflow; leave triggers, concurrency, allowlist, profile, publication policy and fail severity as they are. Rewrite the "Trusted configuration" paragraph of docs/pr-reviews.md to name the variables and link the action's guide for their current values rather than copying them, so the doc does not drift when the organization changes model. Open the PR, dispatch the review from the PR branch so the new workflow runs, confirm it reports gpt-6-sol at medium, and disposition every finding here.
 
 Alternatives: keeping the hardcoded values at the new pin would work but would override the organization's choice and drift from every other consumer; copying the organization's current values into docs/pr-reviews.md would go stale on the next variable change.
+
+## Notes
+
+**agent:claude/terva-migration-b** at 2026-09-23T01:30:49Z
+
+PR https://git.local.sothr.com/terva-sh/ketju/pulls/45 opened on branch t3code/terva-review-org-variables against main at 93df292b6ec51d9a6cb81f197325688ed94e5233. Local checks: git diff --check and git ticket check --strict passed; actionlint and a YAML parser are not installed here, so the workflow is first parsed by the review run itself.
