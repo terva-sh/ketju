@@ -35,15 +35,15 @@ jobs:
         uses: Actions-Mirrors/forgejo-actions-checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
           repository: terva-sh/terva-action-code-review
-          ref: c8730fee5650346b17c61babd5da8fdd9982c5d3
+          ref: 7090fc19699fda481d9138f0dcf73f80ee8cab06
           token: ${{ secrets.BOT_TOKEN }}
           path: .terva-review-action
           persist-credentials: false
       - name: Install checksum-pinned Terva
         run: |
           set -eu
-          curl --fail --silent --show-error --location --output /tmp/terva.tar.gz https://git.local.sothr.com/terva-sh/terva/releases/download/v0.137.0/terva_0.137.0_linux_amd64.tar.gz
-          echo 'e87725339de45953006441a619a22b7b0db21cc53677828744557fb3d92110b0  /tmp/terva.tar.gz' | sha256sum -c -
+          curl --fail --silent --show-error --location --output /tmp/terva.tar.gz https://git.local.sothr.com/terva-sh/terva/releases/download/v0.138.2/terva_0.138.2_linux_amd64.tar.gz
+          echo '679ae4018ada55c1f2c298656552fe460bfcdcd79edee12a0ed0e145776eb804  /tmp/terva.tar.gz' | sha256sum -c -
           tar -xzf /tmp/terva.tar.gz -C /usr/local/bin terva
       - name: Review PR
         uses: ./.terva-review-action
@@ -54,10 +54,13 @@ jobs:
           request-id: ${{ inputs.request-id || 'automatic' }}
           forgejo-token: ${{ secrets.BOT_TOKEN }}
           provider-api-key: ${{ secrets.CPA_API_KEY }}
-          provider: openai-compatible
-          base-url: https://cpa-api.local.sothr.com/v1
-          model: gpt-5.6-sol
-          thinking: low
+          # No defaults: terva-sh decides these once, as organization Actions
+          # variables. An unset one fails the run naming it (missing_provider,
+          # missing_model, missing_thinking, missing_provider_url).
+          provider: ${{ vars.TERVA_REVIEW_PROVIDER }}
+          base-url: ${{ vars.TERVA_REVIEW_BASE_URL }}
+          model: ${{ vars.TERVA_REVIEW_MODEL }}
+          thinking: ${{ vars.TERVA_REVIEW_THINKING }}
           profile: code
           publication-policy: summary
           fail-severity: medium

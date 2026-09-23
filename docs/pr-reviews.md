@@ -62,8 +62,8 @@ explore the full checkout. Keep normal CI as the deterministic validation gate.
 ## Trusted configuration
 
 The workflow fetches only reviewer commit
-`c8730fee5650346b17c61babd5da8fdd9982c5d3` into `.terva-review-action`; no consumer
-PR code is executed with review credentials. Terva 0.137.0 Linux amd64 is checked
+`7090fc19699fda481d9138f0dcf73f80ee8cab06` into `.terva-review-action`; no consumer
+PR code is executed with review credentials. Terva 0.138.2 Linux amd64 is checked
 against its pinned SHA-256. The checkout helper is pinned to mirror commit
 `d23441a48e516b6c34aea4fa41551a30e30af803` (v6.1.0). The runner requires Node >=24
 and verifies it. System packages/image tags remain provisioning dependencies.
@@ -71,8 +71,17 @@ and verifies it. System packages/image tags remain provisioning dependencies.
 `CPA_API_KEY` supplies inference authentication. Only secret references belong in
 source. Existing organization secrets must be available to this repository.
 
-Provider, URL, model, thinking and profile are trusted workflow inputs. Defaults
-are openai-compatible, CPA API, gpt-5.6-sol, low, and code. The `summary` policy
+Provider, URL, model and thinking are not set here. The action has no defaults
+for them; the workflow reads the terva-sh organization Actions variables
+`TERVA_REVIEW_PROVIDER`, `TERVA_REVIEW_BASE_URL`, `TERVA_REVIEW_MODEL` and
+`TERVA_REVIEW_THINKING`, and a run with one unset fails naming it
+(`missing_provider`, `missing_provider_url`, `missing_model`,
+`missing_thinking`). The organization's current choice is recorded in
+[the action's installation guide](https://git.local.sothr.com/terva-sh/terva-action-code-review/src/branch/main/docs/installation.md#organization-settings),
+and each review reports the model and thinking level it ran with. Variables
+carry settings only: the reviewer SHA and the Terva version and checksum stay
+pinned in this workflow, because they name executable code. Profile `code`,
+publication policy and fail severity are trusted workflow inputs. The `summary` policy
 keeps feedback quiet. To select `always`, change the trusted workflow through
 a PR; dispatch exposes only the PR number and request ID. A fresh request ID
 does not change publication policy. Review pin/runtime changes through a PR, test them on the action's
