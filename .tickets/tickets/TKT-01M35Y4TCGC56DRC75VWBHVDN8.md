@@ -15,17 +15,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude/terva-migration-b
-  branch: t3code/terva-review-org-variables
-  worktree: /tmp/terva-migration/ketju
-  commit: 93df292b6ec51d9a6cb81f197325688ed94e5233
-  session: null
-  claimed_at: 2026-09-23T01:30:14Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-23T01:30:08Z
-updated_at: 2026-09-23T01:30:49Z
+updated_at: 2026-09-23T01:33:38Z
 created_by:
   id: agent:claude/terva-migration-b
   name: ""
@@ -43,9 +36,9 @@ Move the reviewer pin in .forgejo/workflows/terva-review.yml to 7090fc1, install
 
 ## Acceptance criteria
 
-- [ ] Workflow pins 7090fc1, installs Terva 0.138.2 by SHA-256, and reads provider, base URL, model and thinking from organization variables
-- [ ] docs/pr-reviews.md names the new pin, Terva 0.138.2 and the organization variables
-- [ ] The PR's own Terva review runs with gpt-6-sol at medium thinking and every finding is dispositioned
+- [x] Workflow pins 7090fc1, installs Terva 0.138.2 by SHA-256, and reads provider, base URL, model and thinking from organization variables
+- [x] docs/pr-reviews.md names the new pin, Terva 0.138.2 and the organization variables
+- [x] The PR's own Terva review runs with gpt-6-sol at medium thinking and every finding is dispositioned
 
 ## Implementation plan
 
@@ -58,3 +51,7 @@ Alternatives: keeping the hardcoded values at the new pin would work but would o
 **agent:claude/terva-migration-b** at 2026-09-23T01:30:49Z
 
 PR https://git.local.sothr.com/terva-sh/ketju/pulls/45 opened on branch t3code/terva-review-org-variables against main at 93df292b6ec51d9a6cb81f197325688ed94e5233. Local checks: git diff --check and git ticket check --strict passed; actionlint and a YAML parser are not installed here, so the workflow is first parsed by the review run itself.
+
+**agent:claude/terva-migration-b** at 2026-09-23T01:33:38Z
+
+Review of PR #45 from the PR branch, so the new workflow ran: request pr-45-migration:agent.claude.terva-migration-b, Actions run https://git.local.sothr.com/terva-sh/ketju/actions/runs/97 (id 9089), run e332c3da-9f39-4698-b23d-88d56a8a9c89, head c98ed070f2165f0728a05084234416a12794fee1 base 93df292b6ec51d9a6cb81f197325688ed94e5233. Clean, no findings; terva-review/code success; summary comment 10179. The run reported provider openai-compatible, model gpt-6-sol, thinking medium and Terva 0.138.2, so the organization variables reached the action. 7s, 4271 input / 313 output tokens. CI on the same head passed. Nothing to disposition. A later ticket-only commit needs no new review. Close this ticket after the PR merges; merging is left to a maintainer.
