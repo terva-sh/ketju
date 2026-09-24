@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T19:59:48Z
+updated_at: 2026-09-24T20:06:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -127,6 +127,21 @@ Review 499 (head 8c2b917): one high and two medium findings, all accepted and fi
    - Fixtures: `main.sessions`, `"main"."sessions"`, `[main].[sessions]`, and `sessions_archive` as a non-door.
 
 All mutants over issue.go, insert and the scanner are killed (26, with the equivalent one excluded).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:06:57Z
+
+Review 500 (head d9063c5) marked all three of review 499's findings resolved, and raised two new medium findings. Both are accepted and fixed in chokepoint_test.go.
+
+1. **SQL assembled from several Go strings evaded the per-literal check.**
+   - The scan now folds a `+` expression built from literals, parentheses, and identifiers declared in the same file, and checks it whole and once.
+   - A variable counts as its initial value. This is the conservative choice: a false door is a question in review, while a missed one is the bug.
+   - SQL built at run time (fmt.Sprintf, a computed value) is beyond any source scan, and the test's doc now says so: the scan guards against the accidental and the obvious, and review remains the guard against the deliberate.
+   - Fixtures: a constant table name, a nested parenthesised concatenation, a variable, and two strings compared rather than joined (not a door).
+2. **An aliased UPDATE evaded the promotion guard.**
+   - The update pattern now allows `AS alias` or a bare alias between the table and SET.
+   - Fixtures: aliased Go and SQL updates of user_id and kind, and an aliased touch of last_used_at, which is not a door.
+
+All mutants over issue.go, insert and the scanner are killed (34 run). Along the way I dropped the redundant string-kind check, since strconv.Unquote refuses non-strings anyway.
 
 ## Summary
 

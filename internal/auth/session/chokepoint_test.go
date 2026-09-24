@@ -50,7 +50,7 @@ const table = `(?:["` + "`" + `\[]?\w+["` + "`" + `\]]?\s*\.\s*)?["` + "`" + `\[
 
 var (
 	sqlInsert   = regexp.MustCompile(`(?is)\b(insert|replace)\b[^;]*?\binto\s+` + table + `(?:\W|$)`)
-	sqlUpdate   = regexp.MustCompile(`(?is)\bupdate\s+(or\s+\w+\s+)?` + table + `\s+set\s+(.*?)(\bwhere\b|;|$)`)
+	sqlUpdate   = regexp.MustCompile(`(?is)\bupdate\s+(or\s+\w+\s+)?` + table + `(?:\s+(?:as\s+)?\w+)?\s+set\s+(.*?)(\bwhere\b|;|$)`)
 	sqlComment  = regexp.MustCompile(`--[^\n]*`)
 	sqlcName    = regexp.MustCompile(`(?m)^--\s*name:\s*(\w+)`)
 	updatableOK = []string{"last_used_at"}
@@ -125,25 +125,67 @@ func scanGo(rel string, f *ast.File) (doors, callers, inserters []string) {
 				if inSession && n.Sel.Name == "insert" {
 					inserters = append(inserters, rel+":"+fn)
 				}
-			case *ast.BasicLit:
-				if n.Kind != token.STRING {
+			case *ast.BasicLit, *ast.BinaryExpr:
+				// A string, or one assembled from literals and this file's
+				// constants with + (review 500), is checked whole, once.
+				sql, ok := constString(n.(ast.Expr))
+				if !ok {
 					break
 				}
-				s, err := strconv.Unquote(n.Value)
-				if err != nil {
-					s = n.Value
-				}
-				if sqlInsert.MatchString(s) {
+				if sqlInsert.MatchString(sql) {
 					doors = append(doors, rel+":"+fn+": writes INSERT INTO sessions by hand")
 				}
-				if bad := badUpdates(s); len(bad) > 0 {
+				if bad := badUpdates(sql); len(bad) > 0 {
 					doors = append(doors, rel+":"+fn+": updates sessions."+strings.Join(bad, ", sessions."))
 				}
+				return false
 			}
 			return true
 		})
 	}
 	return doors, callers, inserters
+}
+
+// constString is the value of a string expression built with + from
+// literals, and from constants and variables declared in the same file (a
+// variable by its initial value), and false for anything else. SQL built at
+// run time, with fmt.Sprintf or from a value computed on the way, is beyond
+// any scan of the source: this guards against the accidental and the
+// obvious, and review is still the guard against the deliberate.
+func constString(e ast.Expr) (string, bool) {
+	switch e := e.(type) {
+	case *ast.BasicLit:
+		s, err := strconv.Unquote(e.Value)
+		return s, err == nil
+	case *ast.ParenExpr:
+		return constString(e.X)
+	case *ast.BinaryExpr:
+		if e.Op != token.ADD {
+			return "", false
+		}
+		l, ok := constString(e.X)
+		if !ok {
+			return "", false
+		}
+		r, ok := constString(e.Y)
+		return l + r, ok
+	case *ast.Ident:
+		// A variable counts as its initial value: a false door is a
+		// question in review, a missed one is the bug.
+		if e.Obj == nil {
+			return "", false
+		}
+		spec, ok := e.Obj.Decl.(*ast.ValueSpec)
+		if !ok {
+			return "", false
+		}
+		for i, name := range spec.Names {
+			if name.Name == e.Name && i < len(spec.Values) {
+				return constString(spec.Values[i])
+			}
+		}
+	}
+	return "", false
 }
 
 // scanSQL checks a query or migration file. The one insert is the query
@@ -249,6 +291,11 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 	slices.Sort(doors)
 	want := []string{
 		"internal/other/door.go: imports sessiontest outside a test",
+		"internal/other/door.go:aliased: updates sessions.kind",
+		"internal/other/door.go:aliased: updates sessions.user_id",
+		"internal/other/door.go:assembled: updates sessions.user_id",
+		"internal/other/door.go:assembled: writes INSERT INTO sessions by hand",
+		"internal/other/door.go:assembled: writes INSERT INTO sessions by hand",
 		"internal/other/door.go:promote: updates sessions.kind, sessions.user_id",
 		"internal/other/door.go:qualified: updates sessions.user_id",
 		"internal/other/door.go:qualified: writes INSERT INTO sessions by hand",
@@ -256,6 +303,7 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 		"internal/store/db/migrations/0099_seed.sql:: inserts into sessions",
 		"internal/store/db/migrations/0100_named.sql:CreateSession: inserts into sessions",
 		"internal/store/db/queries/extra.sql:AdoptSession: updates sessions.user_id",
+		"internal/store/db/queries/extra.sql:AliasSession: updates sessions.user_id",
 		"internal/store/db/queries/extra.sql:CreateSession: inserts into sessions",
 		"internal/store/db/queries/extra.sql:CreateSessionAgain: inserts into sessions",
 		"internal/store/db/queries/extra.sql:TouchAgain: updates sessions.kind",

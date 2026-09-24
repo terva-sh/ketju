@@ -8,6 +8,9 @@ INSERT INTO sessions (id_hash, kind) VALUES (?, 'user');
 -- name: AdoptSession :exec
 UPDATE sessions SET last_used_at = ?, user_id = ? WHERE id_hash = ?;
 
+-- name: AliasSession :exec
+UPDATE sessions AS s SET user_id = ? WHERE s.id_hash = ?;
+
 -- name: TouchAgain :exec
 UPDATE OR REPLACE sessions SET "kind" = 'user' WHERE id_hash = ?;
 
