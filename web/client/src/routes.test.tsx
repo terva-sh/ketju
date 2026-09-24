@@ -18,6 +18,7 @@ const urls: [string, string][] = [
   ['/new', 'new'],
   ['/participated', 'participated'],
   ['/watching', 'watching'],
+  ['/notifications', 'notifications'],
   ['/search?q=rust', 'search'],
   ['/u/alice', 'profile'],
   ['/u/alice/posts', 'profile-posts'],

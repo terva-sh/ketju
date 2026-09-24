@@ -1,5 +1,5 @@
 import { Fragment } from 'preact';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { peekGet } from '../api/client';
 import type { ThreadPage } from '../api/dto';
@@ -12,6 +12,10 @@ import { PostPopover } from '../components/thread/PostPopover';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
 import '../components/thread/thread.css';
+import { Toolbar } from '../shell/Toolbar';
+import { threadActions } from '../shell/threadActions';
+import { isPhone } from '../state/layout';
+import { useShellContext } from '../state/shell';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
 import { NotFound } from './Placeholder';
@@ -63,6 +67,22 @@ export function ThreadScreen() {
   const landing = !view.hasPage && !params.ordinal;
   useArrival(key, res.data, params.ordinal, landing);
 
+  // The phone top bar shows the forum this thread is in, back to it, and the
+  // thread's actions in its more menu; on desktop the same actions are the
+  // toolbar under the title (docs/06 "Mobile").
+  const slug = head?.slug ?? params.slug;
+  const actions = useMemo(() => threadActions({ id: params.id, slug }), [params.id, slug]);
+  const forum = head?.forum;
+  const ctx = useMemo(
+    () => ({
+      title: forum?.name ?? 'Thread',
+      back: forum ? { href: `/f/${encodeURIComponent(forum.slug)}`, label: forum.name } : undefined,
+      actions,
+    }),
+    [forum?.slug, forum?.name, actions],
+  );
+  useShellContext(ctx, [ctx]);
+
   if (isProblem(res.error, 'not-found')) return <NotFound />;
   const page = res.data;
   return (
@@ -75,6 +95,7 @@ export function ThreadScreen() {
         )}
         <h1>{head?.title ?? 'Thread'}</h1>
         {head?.locked && <p class="locked">This thread is locked.</p>}
+        {!isPhone.value && <Toolbar actions={actions} label="Thread actions" />}
       </header>
       {res.error && <ErrorPanel error={res.error} what="This thread" onRetry={res.retry} />}
       {history ? (

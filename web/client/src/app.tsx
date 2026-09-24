@@ -2,6 +2,7 @@ import { Component, type ComponentChildren } from 'preact';
 import { LocationProvider, Router, Route, useLocation } from 'preact-iso';
 import { clientScope, Fallback, routes } from './routes';
 import { NotFound } from './screens/Placeholder';
+import { Shell } from './shell/Shell';
 
 export function App() {
   return (
@@ -14,14 +15,16 @@ export function App() {
 function Routes() {
   const { url } = useLocation();
   return (
-    <UndecodableAddress url={url}>
-      <Router>
-        {routes.map((r) => (
-          <Route key={r.path} path={r.path} component={r.component} />
-        ))}
-        <Route default component={Fallback} />
-      </Router>
-    </UndecodableAddress>
+    <Shell>
+      <UndecodableAddress url={url}>
+        <Router>
+          {routes.map((r) => (
+            <Route key={r.path} path={r.path} component={r.component} />
+          ))}
+          <Route default component={Fallback} />
+        </Router>
+      </UndecodableAddress>
+    </Shell>
   );
 }
 

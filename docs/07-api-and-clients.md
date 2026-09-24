@@ -28,7 +28,7 @@
 /t/{id}/{slug}?page=N&lens=…        thread page N with lens
 /t/{id}/{slug}/{ordinal}            permalink (redirects/anchors to the right page)
 /t/{id}/{slug}/{ordinal}/history    revision history
-/unread  /new  /participated  /watching  /search?q=…
+/unread  /new  /participated  /watching  /notifications  /search?q=…
 /u/{handle}  /u/{handle}/posts
 /settings  /settings/sessions  /settings/identities
 /apply  /apply/status

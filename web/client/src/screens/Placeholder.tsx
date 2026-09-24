@@ -1,9 +1,11 @@
+import { useShellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
 
 // Placeholder stands in for a screen phase 1 has not built yet, so every URL
 // in docs/07 already answers with the right screen's name rather than
 // NotFound. Each screen's ticket replaces its entry in routes.tsx.
 export function Placeholder({ screen, title }: { screen: string; title: string }) {
+  useShellContext({ title, actions: [] }, [title]);
   return (
     <main class="scaffold" data-screen={screen}>
       <h1>{title}</h1>

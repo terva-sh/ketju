@@ -12,6 +12,15 @@ export const viewer = signal<Me>(readBootstrap());
 // not stored, so it cannot disagree with the viewer it came from.
 export const notifications = computed(() => viewer.value.notifications);
 
+// badges are the counts the navigation shows, the same numbers at every
+// width (docs/06 "Mobile"). Only counts /me provides are here: it has none
+// for New, so New shows no badge until one exists (settled in grooming for
+// TKT-01M29CEE4K).
+export const badges = computed(() => ({
+  unread: viewer.value.unread.threads,
+  alerts: viewer.value.notifications,
+}));
+
 let refreshes = 0;
 
 // refreshViewer fetches /me and replaces the viewer with it. A failure leaves

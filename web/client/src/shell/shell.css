@@ -1,0 +1,259 @@
+/* The navigation shell, after docs/mockups/generate.py nav(), mtopbar(),
+   mbtn() and mtabbar(). Which bars render is decided in Shell.tsx by
+   state/layout.ts, not here: this file only draws them. */
+
+.shell {
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+}
+.shell-content {
+  flex: 1 0 auto;
+  min-width: 0;
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+.badge {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--unread);
+  color: var(--surface);
+  padding: 1px 6px;
+  border-radius: 9px;
+  line-height: 1.4;
+}
+
+/* Desktop and tablet. */
+.topbar.desktop {
+  height: 56px;
+  box-sizing: content-box;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: stretch;
+  gap: 32px;
+  padding-left: max(40px, env(safe-area-inset-left, 0px));
+  padding-right: max(40px, env(safe-area-inset-right, 0px));
+}
+.topbar .wordmark {
+  display: flex;
+  align-items: center;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.topbar.desktop nav {
+  display: flex;
+  align-items: stretch;
+  gap: 22px;
+  min-width: 0;
+}
+.topbar.desktop nav a {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 18px 2px 16px;
+  color: var(--ink2);
+  text-decoration: none;
+  font-weight: 500;
+  font-size: 14px;
+  white-space: nowrap;
+  border-bottom: 2px solid transparent;
+}
+.topbar.desktop nav a[aria-current='page'] {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+.topbar .tools {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.topbar .search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg);
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.topbar .icon-link {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 34px;
+  padding: 0 10px;
+  border-radius: var(--radius);
+  color: var(--ink2);
+  text-decoration: none;
+}
+.topbar .who {
+  color: var(--ink);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 500;
+}
+
+/* Phone top bar: 52 px, the title between the controls taking what is left
+   and cutting a long name short on one line. */
+.topbar.phone {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  height: 52px;
+  box-sizing: content-box;
+  background: var(--surface);
+  border-bottom: 1px solid var(--rule);
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding-left: max(8px, env(safe-area-inset-left, 0px));
+  padding-right: max(8px, env(safe-area-inset-right, 0px));
+}
+.topbar.phone .title {
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  text-align: center;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.topbar.phone .title.wordmark {
+  display: block;
+  font-weight: 500;
+  font-size: 20px;
+}
+.tb-button,
+.tb-spacer {
+  position: relative;
+  flex: none;
+  width: var(--target);
+  height: var(--target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  color: var(--ink2);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.more {
+  position: relative;
+  flex: none;
+}
+.more .menu {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  min-width: 180px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  z-index: 20;
+}
+.more .menu button {
+  min-height: var(--target);
+  padding: 0 16px;
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+.more .menu button:hover,
+.more .menu button:focus-visible {
+  background: var(--surface2);
+}
+
+/* Phone tab bar: five equal tabs, 56 px plus the home indicator's inset
+   (base.css). */
+.tabbar {
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  display: flex;
+  align-items: stretch;
+  background: var(--surface);
+  border-top: 1px solid var(--rule);
+}
+.tabbar a {
+  flex: 1 1 0;
+  min-width: 0;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  color: var(--muted);
+  text-decoration: none;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+}
+.tabbar a[aria-current='page'] {
+  color: var(--accent);
+}
+.tabbar .tab-icon {
+  position: relative;
+  display: flex;
+}
+.tabbar .badge {
+  position: absolute;
+  top: -6px;
+  left: 50%;
+  margin-left: 4px;
+  font-size: 10px;
+  padding: 0 5px;
+  border-radius: 8px;
+}
+
+/* A screen's actions, on desktop. */
+.toolbar {
+  display: flex;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.toolbar button {
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}

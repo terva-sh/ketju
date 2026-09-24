@@ -116,6 +116,7 @@ export const routes: RouteEntry[] = [
   { path: '/new', screen: 'new', component: placeholder('new', 'New') },
   { path: '/participated', screen: 'participated', component: placeholder('participated', 'Participated') },
   { path: '/watching', screen: 'watching', component: placeholder('watching', 'Watching') },
+  { path: '/notifications', screen: 'notifications', component: placeholder('notifications', 'Alerts') },
   { path: '/search', screen: 'search', component: placeholder('search', 'Search') },
   { path: '/u/:handle', screen: 'profile', component: placeholder('profile', 'Profile') },
   { path: '/u/:handle/posts', screen: 'profile-posts', component: placeholder('profile-posts', 'Posts') },
