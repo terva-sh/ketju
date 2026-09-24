@@ -9,11 +9,15 @@ CREATE TABLE users (
 	id               INTEGER PRIMARY KEY,
 	-- 3 to 30 of a-z 0-9 _ -, starting with a letter or digit, stored
 	-- lowercased (docs/04). GLOB is case-sensitive, so the character class
-	-- also refuses uppercase. NOCASE on the UNIQUE index is exact because a
-	-- handle is ASCII, and it stands behind the CHECK. domain.ValidateHandle
-	-- is the same rule in Go, and a test holds the two together.
+	-- also refuses uppercase. length() and GLOB both stop at a NUL, so the
+	-- byte length must equal the character length: that refuses an embedded
+	-- NUL and anything after it, and any multi-byte character. NOCASE on the
+	-- UNIQUE index is exact because a handle is ASCII, and it stands behind
+	-- the CHECK. domain.ValidateHandle is the same rule in Go, and a test
+	-- holds the two together.
 	handle           TEXT    NOT NULL COLLATE NOCASE UNIQUE
 		CHECK (length(handle) BETWEEN 3 AND 30
+		       AND length(CAST(handle AS BLOB)) = length(handle)
 		       AND handle NOT GLOB '*[^a-z0-9_-]*'
 		       AND substr(handle, 1, 1) GLOB '[a-z0-9]'),
 	display_name     TEXT    NOT NULL,

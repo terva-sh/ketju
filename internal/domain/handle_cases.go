@@ -27,4 +27,8 @@ var HandleCases = []HandleCase{
 	{"dréw", false, "non-ASCII letter"},
 	{"drеw", false, "Cyrillic е, a homoglyph"},
 	{"", false, "empty"},
+	// SQLite's length() and GLOB stop at a NUL, so this is the case that
+	// separates checking the characters from checking every byte.
+	{"abc\x00!", false, "embedded NUL, with a forbidden byte after it"},
+	{"abc\x00", false, "trailing NUL"},
 }

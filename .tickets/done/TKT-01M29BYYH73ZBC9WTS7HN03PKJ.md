@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T07:27:36Z
+updated_at: 2026-09-24T07:28:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -106,6 +106,10 @@ Changes from the pre-groom plan:
 - No `handle = lower(handle)`: survived, and was an equivalent mutation (see above), so the clause was removed.
 
 The flaky threadlog test (TKT-01M393S6P7) failed once more in a full local suite run, in a package this change does not touch.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:28:59Z
+
+Terva review 374 (run b27164e9-fe07-4bad-9871-762fe3f855ca, Actions run 130), head cb1fc6e8cc511310c9dc4eaf956c7bddd5f88041, base 1c605e5f9a3f03edeee4206d68467597a137f363: one medium finding, 'Handle CHECK can accept text containing an embedded NUL'. **Accepted and fixed.** It reproduced: with 'abc\\x00!' and 'abc\\x00' added to domain.HandleCases, TestHandleRuleMatchesTheSchema failed because the schema accepted both, since length() and GLOB stop at a NUL. The CHECK now also requires length(CAST(handle AS BLOB)) = length(handle), which refuses an embedded NUL and any multi-byte character. Both cases are in the shared table permanently. A follow-up review of the new head is requested.
 
 ## Summary
 
