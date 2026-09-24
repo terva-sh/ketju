@@ -56,6 +56,14 @@ func Assets() http.Handler {
 			return
 		}
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		// Go's built-in MIME table has no .woff2. It falls back to the host's
+		// mime.types, which a minimal release image need not have, and the
+		// fonts (TKT-01M29CCC0F) would then go out as octet-stream. On a host
+		// that has the file, as development machines do, this changes nothing,
+		// which is why TestTheFontsAreServed cannot tell it is missing there.
+		if strings.HasSuffix(name, ".woff2") {
+			w.Header().Set("Content-Type", "font/woff2")
+		}
 		files.ServeHTTP(w, r)
 	})
 }

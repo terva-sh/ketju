@@ -122,3 +122,49 @@ func TestTheAdminBundleIsSeparate(t *testing.T) {
 		t.Errorf("the admin chunk %s serves %d", a.File, rec.Code)
 	}
 }
+
+// TestTheFontsAreServed: the CSS system's fonts (TKT-01M29CCC0F) are in the
+// build, referenced by its stylesheet from /assets/, and served as fonts,
+// immutable, from this origin.
+func TestTheFontsAreServed(t *testing.T) {
+	entries, err := dist.ReadDir("dist/assets")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var fonts, css []string
+	for _, e := range entries {
+		switch {
+		case strings.HasSuffix(e.Name(), ".woff2"):
+			fonts = append(fonts, e.Name())
+		case strings.HasSuffix(e.Name(), ".css"):
+			b, err := dist.ReadFile("dist/assets/" + e.Name())
+			if err != nil {
+				t.Fatal(err)
+			}
+			css = append(css, string(b))
+		}
+	}
+	if len(fonts) != 9 {
+		t.Fatalf("the build has %d fonts, want 9: %v", len(fonts), fonts)
+	}
+	all := strings.Join(css, "")
+	for _, f := range fonts {
+		if !strings.Contains(all, "url(/assets/"+f+")") {
+			t.Errorf("no stylesheet refers to %s", f)
+		}
+		rec := httptest.NewRecorder()
+		Assets().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/assets/"+f, nil))
+		if rec.Code != http.StatusOK || rec.Body.Len() == 0 {
+			t.Errorf("%s serves %d with %d bytes", f, rec.Code, rec.Body.Len())
+		}
+		if ct := rec.Header().Get("Content-Type"); ct != "font/woff2" {
+			t.Errorf("%s is served as %q", f, ct)
+		}
+		if cc := rec.Header().Get("Cache-Control"); !strings.Contains(cc, "immutable") {
+			t.Errorf("%s is served with Cache-Control %q", f, cc)
+		}
+	}
+	if strings.Contains(all, "fonts.googleapis") || strings.Contains(all, "url(http") {
+		t.Error("a stylesheet refers to a font on another origin")
+	}
+}

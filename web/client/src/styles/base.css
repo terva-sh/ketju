@@ -1,0 +1,57 @@
+/* The page itself, the breakpoints, and the safe-area rules.
+
+   Breakpoints (docs/06 "Mobile"): phone below 720 px, tablet 720 to 1100 px,
+   desktop above 1100 px. Custom properties cannot appear in a media query, so
+   every stylesheet writes them literally, and only these three forms:
+     phone    @media (max-width: 719.98px)
+     tablet   @media (min-width: 720px) and (max-width: 1100px)
+     desktop  @media (min-width: 1100.02px)
+   src/state/layout.ts uses the phone query for the navigation shell, the one
+   component that changes by width rather than by CSS. breakpoints.test.ts
+   fails on any other width in a media query. */
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: var(--text);
+  line-height: var(--leading);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: var(--accent);
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* The placeholder screens, until each is built. */
+.scaffold {
+  max-width: 40rem;
+  margin: 2rem auto;
+  padding: 0 1rem;
+}
+
+/* Safe areas. index.html sets viewport-fit=cover, so the page runs under an
+   iPhone's home indicator and rounded corners; the bars that sit at the
+   bottom or across the top pad themselves clear of them. The tab bar and the
+   reply bar arrive with the navigation shell (TKT-01M29CEE4K) and the mobile
+   composer (TKT-01M29CGBVN), and take these classes. */
+.tabbar,
+.replybar {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.topbar {
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}

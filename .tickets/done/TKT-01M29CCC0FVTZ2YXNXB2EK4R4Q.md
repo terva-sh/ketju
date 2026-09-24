@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCC0FVTZ2YXNXB2EK4R4Q
 title: Build the CSS system, themes, and breakpoints
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -22,17 +22,12 @@ references:
     path: docs/06-thread-views.md
   - ref: design:mockups
     path: docs/mockups/generate.py
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/ccc0f-css-system
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: f2deccb2eb8d9d7eba546197062d4876940bd287
-  session: null
-  claimed_at: 2026-09-24T14:32:31Z
-  expires_at: null
+  - ref: ticket:TKT-01M39WBN4QAMNRBXCGD85CDJF0
+    path: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T14:33:48Z
+updated_at: 2026-09-24T14:41:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,8 +47,8 @@ Safe-area handling belongs here: `viewport-fit=cover` with `env(safe-area-inset-
 
 ## Acceptance criteria
 
-- [ ] Light and dark themes are driven by custom properties and follow prefers-color-scheme with a user override
-- [ ] The three breakpoints match docs/06 and layout changes are CSS rather than component swaps, except the navigation shell
+- [x] Light and dark themes are driven by custom properties and follow prefers-color-scheme with a user override
+- [x] The three breakpoints match docs/06 and layout changes are CSS rather than component swaps, except the navigation shell
 - [ ] Safe-area insets are applied to the bottom bars through env(safe-area-inset-*) with viewport-fit=cover, and a Playwright check at 390 px confirms the padding rules apply; real-device verification is in TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices)
 - [ ] Playwright screenshots at 390 px and 1440 px are committed beside the tests and compared against the matching file in docs/mockups/; every visible divergence is listed in the pull request description
 
@@ -100,3 +95,63 @@ Claim-time plan (2026-09-24). It revises the pre-groom plan after reading the cl
 **agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
 
 Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. An agent cannot check against a device with a home indicator, so that check moved to TKT-01M38WTKSQ; the criterion here is what an emulated viewport can prove. 'Matches the mockups' now names its method: committed screenshots compared against docs/mockups/, with every divergence listed in the PR.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:41:14Z
+
+### What was built
+**`src/styles/tokens.css`.**
+- The colours are generate.py's LIGHT and DARK dicts, one custom property per key.
+- Light is the default. Dark applies under `prefers-color-scheme: dark` when `<html>` has no data-theme, and `data-theme` light or dark is the reader's override either way.
+- There are eight avatar colours for each theme. The first four are the mockups' own, which are lighter in dark mode, with initials in the surface colour.
+- The file also holds the font stacks, the text size and leading, the radius, and the 44 px `--target`.
+
+**`src/styles/fonts.css`.** Nine Latin WOFF2 files, about 195 kB, from @fontsource 5.3.0, with each family's OFL licence beside them:
+- IBM Plex Sans 400, 500, 600 and 400 italic;
+- IBM Plex Mono 400 and 500;
+- Newsreader 400, 500 and 600.
+
+Nothing was added to package.json. Vite hashes the files into /assets/.
+
+**`src/styles/base.css`.**
+- The body type and colours.
+- The breakpoint forms, written out once in a comment.
+- The safe-area rules for `.tabbar`, `.replybar` and `.topbar`.
+- `app.css` is gone.
+
+**`src/state/theme.ts`.** `themePref` (system, light or dark) in localStorage. A stored value that is unknown or unreadable counts as system. `applyTheme` runs in main.tsx before the first render.
+
+**`src/state/layout.ts`.** `phoneQuery` and an `isPhone` signal for the navigation shell.
+
+**thread.css** now uses only tokens: its fallback aliases and literal colours are gone.
+
+**spa.go** serves `.woff2` as `font/woff2`. Go's built-in MIME table lacks it, and without the host's mime.types the fonts would go out as octet-stream. `TestTheFontsAreServed` checks that all nine fonts are referenced from /assets/, typed, immutable and same-origin. The mutant that drops the header survives on this host, whose /etc/mime.types maps woff2. The comment in spa.go says so.
+
+**vite.config.ts.**
+- `test.css: true`. Without it Vitest hands every stylesheet over empty, even as `?raw`, and my first breakpoint scan passed vacuously. The tests now also assert that the sheets were actually read.
+- `server.fs.allow` adds `docs/mockups`, so the token test can read generate.py.
+
+### Verification
+- **Vitest.**
+  - The token contract: every LIGHT and DARK value equals its token in `:root`, in the system-dark rule, and in `[data-theme=dark]`, and the two dark rules match.
+  - A breakpoint scan over every stylesheet: only the three docs/06 forms appear, and no source sets a style attribute, which the CSP forbids.
+  - The safe-area rules and `viewport-fit=cover`.
+  - theme.ts: the default, stored values, a corrupt value, storage that throws, apply, persist, and forget.
+  - The suite has 473 tests.
+- **Mutation.** 13 mutants on the CSS system, all killed. The woff2 header mutant is explained above.
+- **Local headless Chromium, against the dev server with a stubbed API; nothing committed.**
+  - `--bg` is #F6F7FA on a light system and #12161E on a dark one.
+  - `data-theme=light` under a dark system gives #F6F7FA.
+  - A stored dark choice under a light system gives data-theme=dark and #12161E before the first paint.
+  - The Plex Sans (regular and italic), Plex Mono and Newsreader faces load from same-origin files.
+  - At 719 px the pager shows its phone row and avatars are 30 px; at 720, 1100 and 1101 px it shows the wide row and avatars are 36 px. The URL did not change at any width.
+  - The thread page renders correctly in dark.
+
+### Unticked
+- **AC3: the committed Playwright check at 390 px.** The rules exist and are tested at the source, but the bars they apply to arrive with CEE4K and CGBVN, and Playwright arrives with CGBY1.
+- **AC4: screenshots against the mockups.** For the same reason.
+
+Both are carried by draft TKT-01M39WBN4Q (Commit thread page screenshots at 390 and 1440 px against the mockups), now widened to cover them and linked here.
+
+## Summary
+
+The CSS system landed. The design tokens are generate.py's light and dark colours exactly, held together by a contract test. The system theme is followed and a reader's override persists on this device. The three docs/06 breakpoints are enforced by a scan of every stylesheet. The mockups' three font families are self-hosted as Latin WOFF2 and served as font/woff2. Safe-area rules are in place for the bars that CEE4K and CGBVN will add. The thread page now uses only tokens and follows the theme. AC1 and AC2 are met. The Playwright check for AC3 and the screenshots for AC4 are carried by TKT-01M39WBN4Q.

@@ -1,5 +1,5 @@
 /// <reference types="vitest/config" />
-import { defineConfig } from 'vite';
+import { defineConfig, searchForWorkspaceRoot } from 'vite';
 import preact from '@preact/preset-vite';
 
 // The Go server listens here in development (docs/07 "Dev").
@@ -24,10 +24,18 @@ export default defineConfig({
   test: {
     environment: 'happy-dom',
     include: ['src/**/*.test.{ts,tsx}'],
+    // Without this Vitest hands every stylesheet over empty, even as ?raw,
+    // and the tests that read the CSS system's sources would pass on nothing.
+    css: true,
   },
   server: {
     port: 5173,
     strictPort: true,
+    fs: {
+      // The client's own files, and the mockups' generator, which the token
+      // test reads to hold the colours to it (src/styles/tokens.test.ts).
+      allow: [searchForWorkspaceRoot(process.cwd()), '../../docs/mockups'],
+    },
     proxy: {
       '/api': goServer,
       '/auth': goServer,

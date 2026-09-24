@@ -1,7 +1,7 @@
 ---
 schema: 3
 id: TKT-01M39WBN4QAMNRBXCGD85CDJF0
-title: Commit thread page screenshots at 390 and 1440 px against the mockups
+title: Commit Playwright screenshots and the safe-area check against the mockups
 type: task
 status: draft
 status_reason: null
@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-24T14:15:52Z
+updated_at: 2026-09-24T14:41:23Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -51,3 +51,9 @@ Once CGBY1, CEE4K and CCC0F are in, add Playwright captures of a seeded thread a
 
 - [ ] Playwright screenshots of a seeded thread at 390 px and 1440 px, light and dark, are committed beside the tests
 - [ ] Every visible divergence from the matching docs/mockups file is listed in the pull request
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:41:14Z
+
+This ticket also carries two criteria from TKT-01M29CCC0F (Build the CSS system, themes, and breakpoints), left unticked there for the same reason: nothing in the repo runs Playwright until CGBY1. First, CCC0F's AC4: screenshots at 390 and 1440 px, light and dark, of every screen the mockups draw (docs/mockups/*.dc.html: the front page, the thread, and the mobile versions of each), with every divergence listed. Second, CCC0F's AC3 Playwright check: at 390 px, the tab bar's and reply bar's computed padding comes from env(safe-area-inset-*). base.css already carries the rules (.tabbar, .replybar, .topbar), and a Vitest source test holds them; the elements themselves arrive with CEE4K and CGBVN. Emulating a non-zero inset needs a device descriptor that sets one, or reading the rule through CSSOM.

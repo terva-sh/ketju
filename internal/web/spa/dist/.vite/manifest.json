@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "assets/index-b-Ch5qRs.js",
+    "file": "assets/index-BHFdh6JJ.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -8,11 +8,58 @@
       "src/screens/admin/AdminRoot.tsx"
     ],
     "css": [
-      "assets/index-nP7Ow8dG.css"
+      "assets/index-z0t2KHI1.css"
+    ],
+    "assets": [
+      "assets/ibm-plex-sans-latin-400-normal-CDDApCn2.woff2",
+      "assets/ibm-plex-sans-latin-400-italic-CZTNEAuW.woff2",
+      "assets/ibm-plex-sans-latin-500-normal-6ng42L7E.woff2",
+      "assets/ibm-plex-sans-latin-600-normal-CuJfVYMP.woff2",
+      "assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2",
+      "assets/ibm-plex-mono-latin-500-normal-DSY6xOcd.woff2",
+      "assets/newsreader-latin-400-normal-BFBkh4jY.woff2",
+      "assets/newsreader-latin-500-normal-B66TYsaK.woff2",
+      "assets/newsreader-latin-600-normal-30OJ_TG_.woff2"
     ]
   },
+  "src/assets/fonts/ibm-plex-mono-latin-400-normal.woff2": {
+    "file": "assets/ibm-plex-mono-latin-400-normal-DMJ8VG8y.woff2",
+    "src": "src/assets/fonts/ibm-plex-mono-latin-400-normal.woff2"
+  },
+  "src/assets/fonts/ibm-plex-mono-latin-500-normal.woff2": {
+    "file": "assets/ibm-plex-mono-latin-500-normal-DSY6xOcd.woff2",
+    "src": "src/assets/fonts/ibm-plex-mono-latin-500-normal.woff2"
+  },
+  "src/assets/fonts/ibm-plex-sans-latin-400-italic.woff2": {
+    "file": "assets/ibm-plex-sans-latin-400-italic-CZTNEAuW.woff2",
+    "src": "src/assets/fonts/ibm-plex-sans-latin-400-italic.woff2"
+  },
+  "src/assets/fonts/ibm-plex-sans-latin-400-normal.woff2": {
+    "file": "assets/ibm-plex-sans-latin-400-normal-CDDApCn2.woff2",
+    "src": "src/assets/fonts/ibm-plex-sans-latin-400-normal.woff2"
+  },
+  "src/assets/fonts/ibm-plex-sans-latin-500-normal.woff2": {
+    "file": "assets/ibm-plex-sans-latin-500-normal-6ng42L7E.woff2",
+    "src": "src/assets/fonts/ibm-plex-sans-latin-500-normal.woff2"
+  },
+  "src/assets/fonts/ibm-plex-sans-latin-600-normal.woff2": {
+    "file": "assets/ibm-plex-sans-latin-600-normal-CuJfVYMP.woff2",
+    "src": "src/assets/fonts/ibm-plex-sans-latin-600-normal.woff2"
+  },
+  "src/assets/fonts/newsreader-latin-400-normal.woff2": {
+    "file": "assets/newsreader-latin-400-normal-BFBkh4jY.woff2",
+    "src": "src/assets/fonts/newsreader-latin-400-normal.woff2"
+  },
+  "src/assets/fonts/newsreader-latin-500-normal.woff2": {
+    "file": "assets/newsreader-latin-500-normal-B66TYsaK.woff2",
+    "src": "src/assets/fonts/newsreader-latin-500-normal.woff2"
+  },
+  "src/assets/fonts/newsreader-latin-600-normal.woff2": {
+    "file": "assets/newsreader-latin-600-normal-30OJ_TG_.woff2",
+    "src": "src/assets/fonts/newsreader-latin-600-normal.woff2"
+  },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-CUv0hxBg.js",
+    "file": "assets/AdminRoot-D1ev_ZPy.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,

@@ -1,0 +1,115 @@
+/* Design tokens (TKT-01M29CCC0F). The colours are docs/mockups/generate.py's
+   LIGHT and DARK dicts, one custom property per key with underscores as
+   hyphens; tokens.test.ts holds the two files equal. The mockups are the only
+   place the intended result exists, so a colour changes there first and here
+   to match.
+
+   Light is the default. Dark applies when the system asks for it and the
+   reader has not chosen, and data-theme on <html> is the reader's choice
+   either way (src/state/theme.ts). */
+
+:root {
+  color-scheme: light;
+  --bg: #F6F7FA;
+  --surface: #FFFFFF;
+  --surface2: #EEF1F6;
+  --ink: #1B2130;
+  --ink2: #4A5568;
+  --muted: #65707F;
+  --rule: #D9DEE7;
+  --rule2: #C4CBD8;
+  --accent: #2F5FB3;
+  --accent-ink: #FFFFFF;
+  --accent-soft: #E4ECFA;
+  --unread: #96600F;
+  --unread-soft: #FBF1E0;
+  --code-bg: #EEF1F6;
+  --shadow: 0 1px 2px rgba(27,33,48,.06);
+  --thumb: #DDE3EC;
+
+  /* Avatar fallbacks, by hue (components/thread/Avatar.tsx). The first four
+     are the mockups' (thread(): mara, drew, ines, tomas); the rest follow
+     them, a mid tone in light and a lifted one in dark, under surface-colour
+     initials. */
+  --avatar-0: #5B7FBF;
+  --avatar-1: #2F5FB3;
+  --avatar-2: #8A6BB5;
+  --avatar-3: #3E8E7E;
+  --avatar-4: #B5654A;
+  --avatar-5: #6B7F3A;
+  --avatar-6: #A0527A;
+  --avatar-7: #4A6B8A;
+
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+  --font-serif: Newsreader, Georgia, serif;
+  --text: 15px;
+  --leading: 1.55;
+  --radius: 4px;
+  /* The smallest standalone control on the phone layout (docs/06 "Targets"). */
+  --target: 44px;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+    --bg: #12161E;
+    --surface: #1A1F2A;
+    --surface2: #222835;
+    --ink: #E6E9EF;
+    --ink2: #B8C0CE;
+    --muted: #8B95A8;
+    --rule: #2B3242;
+    --rule2: #3A4356;
+    --accent: #7FA3E8;
+    --accent-ink: #0F1622;
+    --accent-soft: #1E2A42;
+    --unread: #E0A650;
+    --unread-soft: #2A2416;
+    --code-bg: #1E2430;
+    --shadow: 0 1px 2px rgba(0,0,0,.35);
+    --thumb: #2A3140;
+    --avatar-0: #6F93D6;
+    --avatar-1: #7FA3E8;
+    --avatar-2: #A78BD6;
+    --avatar-3: #5FB3A1;
+    --avatar-4: #D68A6F;
+    --avatar-5: #9AAE66;
+    --avatar-6: #CC7FA6;
+    --avatar-7: #7F9BB8;
+  }
+}
+
+:root[data-theme='dark'] {
+  color-scheme: dark;
+  --bg: #12161E;
+  --surface: #1A1F2A;
+  --surface2: #222835;
+  --ink: #E6E9EF;
+  --ink2: #B8C0CE;
+  --muted: #8B95A8;
+  --rule: #2B3242;
+  --rule2: #3A4356;
+  --accent: #7FA3E8;
+  --accent-ink: #0F1622;
+  --accent-soft: #1E2A42;
+  --unread: #E0A650;
+  --unread-soft: #2A2416;
+  --code-bg: #1E2430;
+  --shadow: 0 1px 2px rgba(0,0,0,.35);
+  --thumb: #2A3140;
+  --avatar-0: #6F93D6;
+  --avatar-1: #7FA3E8;
+  --avatar-2: #A78BD6;
+  --avatar-3: #5FB3A1;
+  --avatar-4: #D68A6F;
+  --avatar-5: #9AAE66;
+  --avatar-6: #CC7FA6;
+  --avatar-7: #7F9BB8;
+}
+
+/* An explicit light choice needs no values of its own: they are :root's. It
+   is named so that a dark system preference does not apply over it. */
+:root[data-theme='light'] {
+  color-scheme: light;
+}
