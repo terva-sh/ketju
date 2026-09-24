@@ -28,10 +28,12 @@ references:
     path: docs/mockups/ThreadDark.dc.html
   - ref: ticket:TKT-01M39WBN4QAMNRBXCGD85CDJF0
     path: null
+  - ref: pr:64
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T14:16:22Z
+updated_at: 2026-09-24T14:16:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
