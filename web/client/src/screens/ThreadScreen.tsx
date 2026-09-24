@@ -16,16 +16,13 @@ export function ThreadScreen() {
   const { params, path } = useRoute();
   const { route } = useLocation();
   const view = useThreadView();
-  const [head, setHead] = useState<ThreadHead | null>(null);
-  const [missing, setMissing] = useState(false);
+  // What the last answer said, and which thread it was about. It is read
+  // only when that is the thread on screen, so moving to another thread never
+  // renders the last one's title or 404, not even for the one render before
+  // its own request is made.
+  const [answer, setAnswer] = useState<{ id: string; head?: ThreadHead; missing?: boolean } | null>(null);
+  const current = answer?.id === params.id ? answer : null;
   const history = path.endsWith('/history');
-
-  // A new thread starts from nothing: the last one's title, or its 404, is
-  // not this one's.
-  useEffect(() => {
-    setHead(null);
-    setMissing(false);
-  }, [params.id]);
 
   useEffect(() => {
     const q = new URLSearchParams();
@@ -33,18 +30,18 @@ export function ThreadScreen() {
     if (view.lens) q.set('lens', view.lens);
     if (params.ordinal && !history) q.set('ordinal', params.ordinal);
     const s = q.toString();
+    const id = params.id;
     let live = true;
     fetch(`/api/v1/threads/${encodeURIComponent(params.id)}${s ? '?' + s : ''}`, {
       headers: { Accept: 'application/json' },
     })
       .then(async (r) => {
         if (!live) return;
-        if (r.status === 404) return setMissing(true);
+        if (r.status === 404) return setAnswer({ id, missing: true });
         if (!r.ok) return;
         const body = (await r.json()) as ThreadHead;
         if (!live) return;
-        setMissing(false);
-        setHead(body);
+        setAnswer({ id, head: body });
         const to = canonicalThreadUrl(location, body.thread);
         if (to) route(to, true);
       })
@@ -54,10 +51,10 @@ export function ThreadScreen() {
     };
   }, [params.id, params.ordinal, view.page, view.hasPage, view.lens, history]);
 
-  if (missing) return <NotFound />;
+  if (current?.missing) return <NotFound />;
   return (
     <main class="scaffold" data-screen={history ? 'post-history' : 'thread'}>
-      <h1>{head?.thread.title ?? 'Thread'}</h1>
+      <h1>{current?.head?.thread.title ?? 'Thread'}</h1>
       <p>
         {history ? `History of post ${params.ordinal}. ` : ''}
         Page {view.page}

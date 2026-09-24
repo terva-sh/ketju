@@ -1,9 +1,10 @@
-import { render } from 'preact';
+import { options, render, type VNode } from 'preact';
 import { act } from 'preact/test-utils';
 import { LocationProvider } from 'preact-iso';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canonicalThreadUrl, parsePage, useThreadView, type ThreadView } from './view';
 import { renderAt, route, screenOf, settle } from './testing';
+import { ThreadScreen } from './screens/ThreadScreen';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -192,6 +193,55 @@ describe('a stale slug', () => {
     await settle(root);
     expect(screenOf(root)).toBe('thread');
     expect(root.textContent).toContain('Back');
+  });
+
+  // Every render of the thread screen, not only the settled one: a stale
+  // title or 404 that shows for a single render before an effect clears it
+  // is still shown.
+  const everyRender = (root: HTMLElement) => {
+    const seen: string[] = [];
+    const prev = options.diffed;
+    options.diffed = (vnode: VNode) => {
+      if (vnode.type === ThreadScreen) seen.push(root.textContent ?? '');
+      prev?.(vnode);
+    };
+    return { seen, stop: () => (options.diffed = prev) };
+  };
+
+  it('never renders the last thread for the next one, even once', async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.includes('01k4z3j0w8x2c')
+        ? new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'First' } }), { status: 200 })
+        : new Promise<Response>(() => {}),
+    );
+    const root = await renderAt('/t/01k4z3j0w8x2c/a');
+    expect(root.textContent).toContain('First');
+    const r = everyRender(root);
+    try {
+      await route('/t/01k4z3j0w8x2d/b');
+      await settle(root);
+    } finally {
+      r.stop();
+    }
+    expect(r.seen.length).toBeGreaterThan(0);
+    expect(r.seen.filter((t) => t.includes('First'))).toEqual([]);
+  });
+
+  it("never renders the last thread's 404 for the next one, even once", async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.includes('01k4z3j0w8x2c') ? new Response('{}', { status: 404 }) : new Promise<Response>(() => {}),
+    );
+    const root = await renderAt('/t/01k4z3j0w8x2c/gone');
+    expect(screenOf(root)).toBe('not-found');
+    const r = everyRender(root);
+    try {
+      await route('/t/01k4z3j0w8x2d/b');
+      await settle(root);
+    } finally {
+      r.stop();
+    }
+    expect(r.seen.length).toBeGreaterThan(0);
+    expect(r.seen.filter((t) => t.includes('Not found'))).toEqual([]);
   });
 
   // Nor does one thread's title stay up while the next one loads.

@@ -2,11 +2,20 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { App } from './app';
 
+let mounted: HTMLElement | null = null;
+
 // renderAt renders the whole app at url, as a reader arriving there would,
-// and waits for the screen to settle: a lazy chunk, a fetch.
+// and waits for the screen to settle: a lazy chunk, a fetch. The previous
+// test's app is unmounted first; left mounted, it would go on following
+// history and render into this test.
 export async function renderAt(url: string): Promise<HTMLElement> {
+  if (mounted) {
+    const prev = mounted;
+    await act(async () => render(null, prev));
+  }
   history.replaceState(null, '', url);
   const root = document.createElement('div');
+  mounted = root;
   document.body.replaceChildren(root);
   await act(async () => {
     render(<App />, root);
