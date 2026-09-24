@@ -256,3 +256,39 @@ func TestStrayExtensionRefused(t *testing.T) {
 		}
 	}
 }
+
+// TestMigrateRefusesABadRecord: a schema_migrations table that is not exactly
+// 1..n is refused with ErrMigrations, never a panic, whatever the embedded
+// set. A clean 1..n longer than the embedded set is a newer schema instead.
+func TestMigrateRefusesABadRecord(t *testing.T) {
+	one := map[string]string{"0001_init.sql": twoMigrations["0001_init.sql"]}
+	for _, c := range []struct {
+		name    string
+		records []int64
+		want    error
+	}{
+		// The review's example: rows 0 and 1 against one embedded migration.
+		{"a zero before the real row", []int64{0}, ErrMigrations},
+		{"a gap", []int64{3}, ErrMigrations},
+		{"a clean run past the embedded set", []int64{2, 3}, ErrSchemaNewer},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			d, _ := openTest(t) // records version 1
+			err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+				for _, v := range c.records {
+					if err := q.InsertMigration(t.Context(), dbq.InsertMigrationParams{Version: v, Name: "x", Checksum: "x"}); err != nil {
+						return err
+					}
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = d.migrate(t.Context(), mapFS(one), "m")
+			if !errors.Is(err, c.want) {
+				t.Fatalf("err = %v, want %v", err, c.want)
+			}
+		})
+	}
+}

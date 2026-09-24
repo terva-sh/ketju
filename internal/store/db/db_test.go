@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"sync"
 	"testing"
 
@@ -220,7 +221,9 @@ func TestBusyIsWrapped(t *testing.T) {
 // already exists when that happens. It also checks that the WAL survives a
 // close, which is what makes one sync at open enough (TKT-01M392DP19).
 func TestOpenSyncsDirectoryAfterWAL(t *testing.T) {
-	dir := filepath.Join(t.TempDir(), "db")
+	// The directory exists already, so the only sync is the one after the
+	// WAL. TestOpenSyncsCreatedParents covers a directory Open creates.
+	dir := t.TempDir()
 	path := filepath.Join(dir, "ketju.db")
 
 	var synced []string
@@ -348,5 +351,29 @@ func TestCloseCheckpointsTheWAL(t *testing.T) {
 	}
 	if fi.Size() != 0 {
 		t.Fatalf("-wal is %d bytes after Close, want 0", fi.Size())
+	}
+}
+
+// TestOpenSyncsCreatedParents: when Open creates the data directory, the
+// parent of each directory it made is fsynced first, so the new entries are
+// durable, and the data directory itself is synced last, after the WAL.
+func TestOpenSyncsCreatedParents(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "a", "b")
+	path := filepath.Join(dir, "ketju.db")
+
+	var synced []string
+	orig := syncDir
+	syncDir = func(d string) error { synced = append(synced, d); return orig(d) }
+	t.Cleanup(func() { syncDir = orig })
+
+	d, err := Open(t.Context(), Options{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	want := []string{root, filepath.Join(root, "a"), dir}
+	if !slices.Equal(synced, want) {
+		t.Fatalf("synced %v, want %v", synced, want)
 	}
 }

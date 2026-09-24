@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-24T07:13:17Z
+updated_at: 2026-09-24T07:15:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -124,6 +124,10 @@ Terva review 368 (run 6f5ad681-8c55-4832-91db-8a58fbd799b3, Actions run 119), he
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:13:17Z
 
 Terva review 370 (run 81c595dc-be33-4cea-a261-5f6c7091f6a8, Actions run 121), head 725e72aa79e9333270f6eab2c0617481e7866c34, base 9aa4cf1b7dac9d793968462dbc3a487a3ea9eda0. Both findings from review 368 are marked resolved. Two new medium findings, **both accepted and fixed**. (1) 'Reject migration files excluded by the embed directive': the directive is now `//go:embed all:migrations`, so names starting with '.' or '_' are embedded and refused. TestEveryMigrationFileIsEmbedded no longer exempts them, and TestStrayExtensionRefused covers '_0002_thing.sql' and '.0002_thing.sql.swp'. Without all: and with a _-prefixed file on disk, the embed test fails. (2) 'Check whether the close-time checkpoint actually completed': Close closes the read pool first, scans the wal_checkpoint(TRUNCATE) result row, and returns ErrBusy when a reader blocked it. TestCloseReportsABlockedCheckpoint holds a read transaction on another handle; it fails when the busy column is ignored. TestCloseCheckpointsTheWAL checks the -wal file is empty after a clean close. A follow-up review of the new head is requested.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:15:54Z
+
+Terva review 372 (run 750c99e4-864a-4667-ac48-32e3914179be, Actions run 123), head 779bda361473114d39ac85b86f3c205cd549666b, base 9aa4cf1b7dac9d793968462dbc3a487a3ea9eda0. Both findings from review 370 are marked resolved. Two new medium findings, **both accepted and fixed**. (1) 'Sync newly created parent directories before accepting writes': Open now calls makeDirDurable, which records the directories MkdirAll will create and fsyncs the parent of each, outermost first, before the WAL sync of the data directory. TestOpenSyncsCreatedParents asserts the exact sync order for a/b; skipping the parent syncs fails it. (2) 'Reject excess migration records before indexing the embedded set': migrate first requires the recorded versions to be exactly 1..n (ErrMigrations otherwise), then compares the count (ErrSchemaNewer), and only then indexes. TestMigrateRefusesABadRecord covers the review's example (rows 0 and 1 against one embedded migration), a gap, and a clean longer run; without the 1..n check the first two are misreported as a newer schema. A follow-up review of the new head is requested.
 
 ## Comments
 

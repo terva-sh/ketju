@@ -73,16 +73,22 @@ func (d *DB) migrate(ctx context.Context, fsys fs.FS, dir string) error {
 		if err != nil {
 			return err
 		}
-		if len(have) > 0 {
-			newest := have[len(have)-1].Version
-			if newest > int64(len(want)) {
-				return fmt.Errorf("%w: the database is at schema version %d and this binary knows up to %d, "+
-					"so this binary is older than the database", ErrSchemaNewer, newest, len(want))
+		// The record must be exactly 1..n before anything is compared or
+		// indexed: a gap, a zero, or a duplicate means the table was edited
+		// by hand or by something that is not this runner.
+		for i, h := range have {
+			if h.Version != int64(i+1) {
+				return fmt.Errorf("%w: schema_migrations records version %d where %d was expected",
+					ErrMigrations, h.Version, i+1)
 			}
+		}
+		if len(have) > len(want) {
+			return fmt.Errorf("%w: the database is at schema version %d and this binary knows up to %d, "+
+				"so this binary is older than the database", ErrSchemaNewer, len(have), len(want))
 		}
 		for i, h := range have {
 			w := want[i]
-			if h.Version != w.version || h.Name != w.name || h.Checksum != w.checksum {
+			if h.Name != w.name || h.Checksum != w.checksum {
 				return fmt.Errorf("%w: recorded migration %04d_%s does not match the embedded %04d_%s "+
 					"(a migration was edited or renumbered after it ran)", ErrMigrations, h.Version, h.Name, w.version, w.name)
 			}

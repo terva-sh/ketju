@@ -99,8 +99,8 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 		return nil, errors.New("db: Options.Path is empty")
 	}
 	dir := filepath.Dir(opts.Path)
-	if err := os.MkdirAll(dir, 0o750); err != nil {
-		return nil, fmt.Errorf("db: creating %s: %w", dir, err)
+	if err := makeDirDurable(dir); err != nil {
+		return nil, err
 	}
 
 	write, err := openPool(opts.Path, commonQuery+writeQuery)
@@ -142,6 +142,37 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 	read.SetMaxIdleConns(n)
 
 	return &DB{path: opts.Path, read: read, write: write}, nil
+}
+
+// makeDirDurable creates dir and any missing parents, then fsyncs the parent
+// of each directory it created, so the new directory entries survive a power
+// loss along with whatever is later written inside them. A directory that
+// already existed is left alone.
+func makeDirDurable(dir string) error {
+	dir = filepath.Clean(dir)
+	var created []string
+	for d := dir; ; d = filepath.Dir(d) {
+		if _, err := os.Stat(d); err == nil {
+			break
+		} else if !errors.Is(err, os.ErrNotExist) {
+			return fmt.Errorf("db: checking %s: %w", d, err)
+		}
+		created = append(created, d)
+		if filepath.Dir(d) == d {
+			break
+		}
+	}
+	if err := os.MkdirAll(dir, 0o750); err != nil {
+		return fmt.Errorf("db: creating %s: %w", dir, err)
+	}
+	// Outermost first, so each parent is durable before its child is relied on.
+	for i := len(created) - 1; i >= 0; i-- {
+		parent := filepath.Dir(created[i])
+		if err := syncDir(parent); err != nil {
+			return fmt.Errorf("db: syncing %s: %w", parent, err)
+		}
+	}
+	return nil
 }
 
 // ensureWAL confirms the write connection is in WAL mode and that the -wal
