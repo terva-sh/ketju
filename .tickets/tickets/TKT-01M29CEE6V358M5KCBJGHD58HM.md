@@ -36,7 +36,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T14:03:57Z
+updated_at: 2026-09-24T14:05:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -64,33 +64,56 @@ The reply-to indicator is suppressed when the referenced post is immediately abo
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+Claim-time plan (2026-09-24). It revises the pre-groom plan after reading the client at 6cf16d8 (CEE5H merged). The pre-groom plan had no "Settled" section. Its contradiction note is resolved as it said: docs/06 is the decided text, so a returning reader lands on the page holding `last_read_ordinal + 1`.
 
 ### Approach
-1. `screens/ThreadPage.tsx` at `/t/:id/:slug` and `/t/:id/:slug/:ordinal` calls `loadThreadPage(id, page, lens)` (CEE5H), stores the result in `currentThread`, and applies the stale-slug replace (CEE52).
-2. Landing: when there is no `page` in the URL and the viewer is signed in, open the page containing `last_read_ordinal + 1` (docs/06, decided in docs/10 Q14). Then `route(url + '?page=N', true)` so the URL states the view. This needs the server to choose the page (a missing `page` means the last-read page) or to accept an ordinal; see interfaces item 7. Scroll to the divider, or to `#post-{last_read}` when the divider is off this page.
-3. `components/Post.tsx` follows the docs/06 anatomy: `<article id="post-{ordinal}">` with a header (ordinal, avatar, handle, role and kind badge, relative time, "(edited)" when `edited_at`, and the reply-to indicator), a body (`html`), attachments, and a footer (reply expander slot for CGBW6, then quote, reply, link, flag, history, more). The `#post-N` id matches the anchors `internal/render/quote.go` emits.
-4. `UnreadDivider.tsx` goes between the posts with `ordinal <= viewer.last_read_ordinal` and those above it, reading "N new posts below" where N = `thread.post_count - last_read_ordinal`. Skip it when `last_read_ordinal` is 0 (never read) or equals `post_count`.
-5. Reply-to indicator: hide it when `reply_to === null` or `reply_to_suppressed`. The server computes suppression, so the client does not repeat the rule. On click: if `#post-{n}` is in the DOM, `scrollIntoView` it; otherwise open `PostPopover`, which fetches `GET /threads/{id}/posts/{n}` (CA9C2) and offers a "go to" permalink. The same handler catches clicks on `a.quote-source`.
-6. `Pager.tsx`: desktop numbered pages ("posts 51–75 of 212"); phone "Page 3 of 9" with previous and next, 44 px each. The picker sheet is phase-2 or later.
-7. Tombstones: when `deleted` and there is no html, render `Tombstone` with the ordinal and "Post removed" in place, keeping the `id`. Moved and moderator variants belong to CKRJ (phase-2).
+1. **`screens/ThreadScreen.tsx` becomes the thread page**, keeping its routes and everything TKT-01M29CEE52 and CEE5H pinned:
+   - a keyed answer;
+   - the canonical-slug replace;
+   - a 404 renders NotFound;
+   - any other failure renders ErrorPanel with Retry.
 
-### Files
-`web/client/src/screens/ThreadPage.tsx`, `src/components/{Post,PostHeader,UnreadDivider,ReplyToIndicator,PostPopover,Pager,Tombstone,Avatar,RoleBadge,RelativeTime}.tsx`.
+   It already loads through `useResource` and `loadThreadPage`. It renders the header (title, forum), the Pager above and below, and the post list.
+2. **Landing.** With no `page` and no ordinal in the URL, the request carries no page, and the server lands a signed-in reader on the page holding their first unread post (docs/07, TKT-01M29CA9AX). The client does not choose a page.
+   - **Changed from the pre-groom plan:** the URL is not rewritten to `?page=N`. A rewrite changes the request key and costs a second request for the page on screen. A URL with no page also means "where I left off", so reloading it later lands on the new position, and the permalink stays the shareable form.
+   - **Scroll targets, in order:**
+     - the permalink's post, for `/t/id/slug/N`;
+     - `#post-N` from the hash;
+     - on a landing, the divider when it is on the page, else `#post-{last_read}`.
+3. **`components/Post.tsx`, after the docs/06 anatomy and ThreadLight.dc.html:**
+   - `<article id="post-N">`;
+   - the header: the ordinal, which links to the permalink; an avatar (`/blobs/{hash}`, or the initial on a colour derived from the handle); the display name; the role and kind badge (shown for moderator, admin and agent; plain members get none, as in the mockup); the time; "(edited)"; and the reply-to indicator;
+   - the body: the server-rendered HTML, which internal/render sanitizes;
+   - attachments;
+   - the footer: only actions that work today, "link" (the permalink) and "history". Quote, reply, flag and the reply expander arrive with their tickets (CEE79, CGBW6); no dead buttons.
+4. **Reply-to indicator (`ReplyTo`).**
+   - It is hidden when `reply_to` is null or `reply_to_suppressed` is set. The server computes suppression and the client does not repeat the rule.
+   - On click: if `#post-N` is on the page, scroll it into view without changing the URL. Otherwise open `PostPopover`, which loads `GET /threads/{id}/posts/{N}` through apiGet and offers "Go to #N".
+   - One delegated handler on the post list does the same for `a.quote-source` links in bodies (internal/render/quote.go).
+5. **`UnreadDivider`.**
+   - It goes before the first post whose ordinal exceeds `viewer.last_read_ordinal` and reads "N new posts below", with N = `post_count - last_read_ordinal`. The right side reads "last read #L".
+   - It is absent when `last_read_ordinal` is 0 or at least `post_count`, and absent on a page where no post crosses the line.
+   - Unread posts carry the edge marker class.
+6. **`Tombstone`.** When `deleted` and `html` is empty (anonymous and member viewers), it renders in place with `id="post-N"`, the ordinal, and "Post removed." A moderator's response carries the HTML, which renders as a post marked deleted. The moved variants belong to CKRJ.
+7. **`Pager`.**
+   - Desktop: numbered pages with an ellipsis window, plus "posts A–B of T".
+   - Phone: "Page N of M" with previous and next, each at least 44 px. The CSS switches between them at 720 px.
+   - Links keep the lens and drop the ordinal, through `useThreadView().setPage`. The picker sheet comes later.
+8. **Styles.** `thread.css`, imported by the screen, uses custom properties with the mockup's light values as fallbacks, so CCC0F (the CSS system, not yet built) can supply the tokens and dark theme without touching the components.
 
 ### Tests
-- AC1: Vitest with `thread.member.json` asserts the divider sits between `last_read_ordinal` and `last_read_ordinal+1`. Playwright seeds a 60-post thread with last-read 30 and page size 25, opens `/t/{id}/{slug}`, and asserts `?page=2` and the divider after #30.
-- AC2: Vitest with fixtures where `reply_to_suppressed` is true and false asserts the presence of the indicator.
-- AC3: Playwright clicks an on-page indicator and asserts `#post-N` is in view with the URL unchanged, then an off-page one and asserts the popover shows post N with a "go to" link.
-- AC4, reworded: commit screenshots at 1440 and 390 px, light and dark, compare them by eye against Thread{Light,Dark}.dc.html and MobileThread{Light,Dark}.dc.html, and list any divergence in the PR.
-- AC5: Vitest with a `deleted: true` fixture asserts `#post-N` exists with the tombstone text and ordinal.
+- **Vitest, over pages built from the member golden:**
+  - AC1: the indicator is present or absent by `reply_to` and `reply_to_suppressed`.
+  - AC2: a click on-page scrolls with the URL unchanged; an off-page click opens a popover with the fetched post and a "Go to" link; a quote-source link does the same.
+  - AC3: the tombstone has `#post-N`, its ordinal and the text, and a moderator's deleted post shows its HTML.
+  - AC5: the divider sits between `last_read_ordinal` and `+1`, with the count and its absent cases, and a landing asks for no page.
+  - The Pager's numbering, window and phone labels.
+- **AC4 (screenshots):** attempted at the end with a local headless Chromium against the built client with a stubbed API. It is ticked only if the screenshots are committed and every divergence from the mockups is listed. Playwright in CI is CGBY1's.
 
-### Design
-docs/06 "Paged, not infinite", "Landing on return", "Post anatomy", "Mobile" (Posts, Pages); docs/07 thread response shape; `dto.Post` comments; ThreadLight.dc.html ("3 new posts below", "last read #63", "Post removed by its author.").
-
-### Interactions
-Depends on CCC02, CA9AX, CEE5H and CEE52. It needs CA9C2 for the popover, which is not a declared dependency. It hosts CEE79 (composer), CGBW6 (expander), CGBWN (beacon) and CGBX4 (shortcuts). CKRJ extends tombstones.
-Contradiction: the AC says "page containing their last read ordinal", while docs/06 says the page containing `last_read_ordinal + 1`. They differ when last-read falls on a page boundary; docs/06 is the decided text.
+### Interactions (carried from the pre-groom plan)
+- It depends on CCC02, CA9AX, CEE5H and CEE52, all done. It uses CA9C2 for the popover.
+- It hosts CEE79 (composer), CGBW6 (reply expander), CGBWN (read beacon) and CGBX4 (shortcuts). CKRJ extends tombstones.
+- TKT-01M39VNEC1 matters before this page ever loads two pages of one thread at once.
 
 ## Notes
 
