@@ -17,6 +17,16 @@ RETURNING id;
 -- name: GetIdentityBySubject :one
 SELECT * FROM identities WHERE provider_key = ? AND subject = ?;
 
+-- IdentityHolder is what a sign-in decides a session on: the user an
+-- identity belongs to, if any, and that user's status. internal/auth/session
+-- reads it in the transaction that inserts the session, so nothing can
+-- change it between the check and the row.
+-- name: IdentityHolder :one
+SELECT i.user_id, u.status
+FROM identities i
+LEFT JOIN users u ON u.id = i.user_id
+WHERE i.id = ?;
+
 -- Sessions are addressed only by the hash of their id. There is deliberately
 -- no query that takes the plaintext: hashing belongs to the session store.
 

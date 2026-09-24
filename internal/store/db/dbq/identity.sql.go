@@ -238,6 +238,29 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 	return i, err
 }
 
+const identityHolder = `-- name: IdentityHolder :one
+SELECT i.user_id, u.status
+FROM identities i
+LEFT JOIN users u ON u.id = i.user_id
+WHERE i.id = ?
+`
+
+type IdentityHolderRow struct {
+	UserID sql.NullInt64
+	Status sql.NullString
+}
+
+// IdentityHolder is what a sign-in decides a session on: the user an
+// identity belongs to, if any, and that user's status. internal/auth/session
+// reads it in the transaction that inserts the session, so nothing can
+// change it between the check and the row.
+func (q *Queries) IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error) {
+	row := q.db.QueryRowContext(ctx, identityHolder, id)
+	var i IdentityHolderRow
+	err := row.Scan(&i.UserID, &i.Status)
+	return i, err
+}
+
 const listUserSessions = `-- name: ListUserSessions :many
 SELECT id_hash, kind, created_at, expires_at, last_used_at, ip, user_agent
 FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC

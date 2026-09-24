@@ -84,6 +84,11 @@ type Querier interface {
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
 	GroupsForUser(ctx context.Context, userID int64) ([]GroupsForUserRow, error)
+	// IdentityHolder is what a sign-in decides a session on: the user an
+	// identity belongs to, if any, and that user's status. internal/auth/session
+	// reads it in the transaction that inserts the session, so nothing can
+	// change it between the check and the row.
+	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
 	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error

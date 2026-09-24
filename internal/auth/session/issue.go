@@ -1,0 +1,110 @@
+package session
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"fmt"
+
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
+)
+
+// Issuing a session is the one door into the forum, so there is exactly one
+// of it (docs/09, the approval-bypass row; TKT-01M29C7ZZR). Gitea shipped the
+// bug this prevents: an approval-gated instance where one code path created
+// a session without checking approval, and a pending applicant walked in.
+// The defense is structural rather than careful review:
+//
+//   - IssueUser and IssuePreUser are the only exported ways to create a
+//     session, and both go through insert, the only caller of the generated
+//     CreateSession. chokepoint_test.go fails the build on a second caller,
+//     on a hand-written INSERT INTO sessions, and on a query that could turn
+//     a pre-user session into a user one.
+//   - Each decides from the database, in the transaction that inserts the
+//     row, not from a status a caller read earlier: a suspension that lands
+//     between a caller's read and the insert cannot be missed.
+//   - They take an identity, not a user. A sign-in is always by an identity
+//     (docs/05 "Login flow"), and the user is whoever that identity belongs
+//     to, so a caller cannot name one user and be let in as another.
+
+// Meta is what a sign-in records about where it came from.
+type Meta struct {
+	IP        string
+	UserAgent string
+	// Provider is the identity provider's key in config.toml.
+	Provider string
+}
+
+// ErrNotActive is a refusal to sign in a user whose status is not active.
+// errors.As to *NotActiveError gives the status, which the sign-in page
+// shows the reason for (docs/05 step 3).
+var ErrNotActive = errors.New("session: the user is not active")
+
+// NotActiveError is ErrNotActive with the user's status.
+type NotActiveError struct {
+	Status string
+}
+
+func (e *NotActiveError) Error() string {
+	return fmt.Sprintf("session: the user is %s, not active", e.Status)
+}
+
+func (e *NotActiveError) Is(target error) bool { return target == ErrNotActive }
+
+var (
+	// ErrNoIdentity means the identity named does not exist.
+	ErrNoIdentity = errors.New("session: no such identity")
+	// ErrNoUser means the identity has no user yet: an approval-mode
+	// applicant, who gets a pre-user session instead.
+	ErrNoUser = errors.New("session: the identity has no user")
+	// ErrHasUser means the identity already belongs to a user, who signs in
+	// as that user or not at all, never as an applicant.
+	ErrHasUser = errors.New("session: the identity already has a user")
+)
+
+// IssueUser signs in the user identityID belongs to, and returns the
+// session's cookie value and the session. It refuses with ErrNoIdentity,
+// ErrNoUser, or a *NotActiveError for any status but active — pending,
+// suspended and deactivated alike — and then writes nothing.
+func (s *Store) IssueUser(ctx context.Context, identityID int64, meta Meta) (string, Session, error) {
+	return s.insert(ctx, func(q *dbq.Queries) (newSession, error) {
+		h, err := holder(ctx, q, identityID)
+		if err != nil {
+			return newSession{}, err
+		}
+		if !h.UserID.Valid {
+			return newSession{}, ErrNoUser
+		}
+		if h.Status.String != "active" {
+			return newSession{}, &NotActiveError{Status: h.Status.String}
+		}
+		return newSession{Kind: KindUser, UserID: h.UserID.Int64, IdentityID: identityID,
+			IP: meta.IP, UserAgent: meta.UserAgent, Provider: meta.Provider}, nil
+	})
+}
+
+// IssuePreUser places an approval-mode applicant in a pre-user session bound
+// to identityID (docs/05 "mode = approval" step 1). It takes no user and can
+// write only a pre-user row, and it refuses with ErrHasUser an identity that
+// already belongs to a user: "no user, by design" is the only case it serves.
+func (s *Store) IssuePreUser(ctx context.Context, identityID int64, meta Meta) (string, Session, error) {
+	return s.insert(ctx, func(q *dbq.Queries) (newSession, error) {
+		h, err := holder(ctx, q, identityID)
+		if err != nil {
+			return newSession{}, err
+		}
+		if h.UserID.Valid {
+			return newSession{}, ErrHasUser
+		}
+		return newSession{Kind: KindPreUser, IdentityID: identityID,
+			IP: meta.IP, UserAgent: meta.UserAgent, Provider: meta.Provider}, nil
+	})
+}
+
+func holder(ctx context.Context, q *dbq.Queries, identityID int64) (dbq.IdentityHolderRow, error) {
+	h, err := q.IdentityHolder(ctx, identityID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return h, ErrNoIdentity
+	}
+	return h, err
+}

@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T19:51:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -91,3 +91,9 @@ Note: a stateless cookie cannot make a nonce strictly one-time. Replay is bounde
 - This ticket also owns /auth/logout.
 - Suspended or deactivated users get a generic 'account unavailable' page. Reason and end date are Phase 2 moderation columns.
 - The login cookie is cleared on callback, so it is single use.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T19:51:19Z
+
+The session constructors this ticket consumes landed with TKT-01M29C7ZZR (internal/auth/session/issue.go). IssueUser(ctx, identityID, Meta) signs in whoever the identity belongs to. It refuses with *NotActiveError (errors.Is ErrNotActive; .Status says which, for the unavailable page), ErrNoUser for an identity with no user (the approval branch: IssuePreUser), or ErrNoIdentity. It decides inside the transaction that inserts, so the callback needs no status read of its own for the gate. C7ZZR's AC3, testing this callback against pending, suspended and deactivated users, is carried here: suspended and deactivated by this ticket's AC4, and pending by draft TKT-01M3AFHGJD (Test the OIDC callback against a pending user).

@@ -93,9 +93,15 @@ func newWorld(t *testing.T) *world {
 	return w
 }
 
+// signIn writes a user session for userID whatever their status, as a
+// session issued before a suspension is: the lookup's handling of that is
+// what these tests are about. IssueUser, which refuses it, is tested in
+// issue_test.go.
 func (w *world) signIn(userID int64) string {
 	w.t.Helper()
-	tok, _, err := w.store.insert(w.t.Context(), newSession{Kind: KindUser, UserID: userID, IP: "192.0.2.1", UserAgent: "test"})
+	tok, _, err := w.store.insert(w.t.Context(), func(*dbq.Queries) (newSession, error) {
+		return newSession{Kind: KindUser, UserID: userID, IP: "192.0.2.1", UserAgent: "test"}, nil
+	})
 	if err != nil {
 		w.t.Fatal(err)
 	}
@@ -104,7 +110,7 @@ func (w *world) signIn(userID int64) string {
 
 func (w *world) preUser() string {
 	w.t.Helper()
-	tok, _, err := w.store.insert(w.t.Context(), newSession{Kind: KindPreUser, IdentityID: w.identity, Provider: "github"})
+	tok, _, err := w.store.IssuePreUser(w.t.Context(), w.identity, Meta{Provider: "github"})
 	if err != nil {
 		w.t.Fatal(err)
 	}

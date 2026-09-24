@@ -281,10 +281,12 @@ type newSession struct {
 }
 
 // insert creates a session and returns its token, the only time the
-// plaintext exists outside the browser. It is unexported on purpose: the
-// sign-in flow (TKT-01M29C7ZZR) wraps it in the constructors that decide who
-// may have a session, and nothing else should mint one.
-func (s *Store) insert(ctx context.Context, n newSession) (string, Session, error) {
+// plaintext exists outside the browser. decide says what the row is, and
+// runs in the transaction that writes it, so what it read is still true
+// when the row lands; an error from it writes nothing and is returned as it
+// is. insert is unexported on purpose, and its only callers are IssueUser
+// and IssuePreUser (issue.go), which decide who may have a session.
+func (s *Store) insert(ctx context.Context, decide func(*dbq.Queries) (newSession, error)) (string, Session, error) {
 	var raw [tokenBytes]byte
 	if _, err := rand.Read(raw[:]); err != nil {
 		return "", Session{}, err
@@ -294,14 +296,28 @@ func (s *Store) insert(ctx context.Context, n newSession) (string, Session, erro
 	now := s.now()
 	nullInt := func(v int64) sql.NullInt64 { return sql.NullInt64{Int64: v, Valid: v != 0} }
 	nullStr := func(v string) sql.NullString { return sql.NullString{String: v, Valid: v != ""} }
-	p := dbq.CreateSessionParams{IDHash: h, UserID: nullInt(n.UserID), IdentityID: nullInt(n.IdentityID),
-		Kind: string(n.Kind), CreatedAt: now.UnixMilli(), ExpiresAt: now.Add(HardExpiry).UnixMilli(),
-		LastUsedAt: now.UnixMilli(), Ip: nullStr(n.IP), UserAgent: nullStr(n.UserAgent), OidcProviderKey: nullStr(n.Provider)}
-	if err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error { return q.CreateSession(ctx, p) }); err != nil {
+	var n newSession
+	var refused error
+	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		if n, err = decide(q); err != nil {
+			refused = err
+			return err
+		}
+		return q.CreateSession(ctx, dbq.CreateSessionParams{IDHash: h, UserID: nullInt(n.UserID),
+			IdentityID: nullInt(n.IdentityID), Kind: string(n.Kind), CreatedAt: now.UnixMilli(),
+			ExpiresAt: now.Add(HardExpiry).UnixMilli(), LastUsedAt: now.UnixMilli(), Ip: nullStr(n.IP),
+			UserAgent: nullStr(n.UserAgent), OidcProviderKey: nullStr(n.Provider)})
+	})
+	if refused != nil {
+		return "", Session{}, refused
+	}
+	if err != nil {
 		return "", Session{}, fmt.Errorf("session: create: %w", err)
 	}
-	return token, Session{hash: h, Kind: n.Kind, IdentityID: n.IdentityID, CreatedAt: time.UnixMilli(p.CreatedAt),
-		ExpiresAt: time.UnixMilli(p.ExpiresAt), LastUsedAt: time.UnixMilli(p.LastUsedAt)}, nil
+	created := time.UnixMilli(now.UnixMilli())
+	return token, Session{hash: h, Kind: n.Kind, IdentityID: n.IdentityID, Provider: n.Provider,
+		CreatedAt: created, ExpiresAt: created.Add(HardExpiry), LastUsedAt: created}, nil
 }
 
 // Cookie is the session cookie for token, expiring with the session's hard
