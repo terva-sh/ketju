@@ -1,1 +1,0 @@
-:root{--lightningcss-light:initial;--lightningcss-dark: ;color-scheme:light dark;font-family:system-ui,sans-serif}@media (prefers-color-scheme:dark){:root{--lightningcss-light: ;--lightningcss-dark:initial}}.scaffold{max-width:40rem;margin:2rem auto;padding:0 1rem}

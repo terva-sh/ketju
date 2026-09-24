@@ -1,0 +1,354 @@
+/* The thread page, after docs/mockups/Thread*.dc.html and docs/06.
+   Colours, fonts and radii are custom properties whose fallbacks are the
+   mockups' light values, so the CSS system (TKT-01M29CCC0F) supplies the
+   tokens and the dark theme without these rules changing. */
+
+.thread-page {
+  --ink: var(--color-ink, #1b2130);
+  --ink-2: var(--color-ink-2, #4a5568);
+  --muted: var(--color-muted, #65707f);
+  --line: var(--color-line, #d9dee7);
+  --line-2: var(--color-line-2, #c4cbd8);
+  --surface: var(--color-surface, #ffffff);
+  --page: var(--color-page, #f6f7fa);
+  --link: var(--color-link, #2f5fb3);
+  --unread: var(--color-unread, #96600f);
+  --unread-bg: var(--color-unread-bg, #fbf1e0);
+  --mono: var(--font-mono, 'IBM Plex Mono', ui-monospace, monospace);
+  --serif: var(--font-serif, Newsreader, Georgia, serif);
+  --radius: var(--radius-card, 4px);
+
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 24px 16px 96px;
+  color: var(--ink);
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.thread-head .forum {
+  color: var(--muted);
+  font-size: 13px;
+  text-decoration: none;
+}
+.thread-head h1 {
+  font-family: var(--serif);
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.2;
+  margin: 4px 0 16px;
+}
+.thread-head .locked {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.posts {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 1px 2px rgba(27, 33, 48, 0.06);
+  display: flex;
+  flex-direction: column;
+}
+
+.post {
+  display: flex;
+  gap: 16px;
+  padding: 18px 24px 16px;
+  border-bottom: 1px solid var(--line);
+  scroll-margin-top: 72px;
+}
+.post:last-child {
+  border-bottom: 0;
+}
+.post.unread {
+  border-left: 3px solid var(--unread);
+  padding-left: 21px;
+}
+.post-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-grow: 1;
+  min-width: 0;
+}
+.post-header {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+  color: var(--ink-2);
+}
+.post-header .ordinal {
+  font-family: var(--mono);
+  color: var(--muted);
+  font-size: 12px;
+  text-decoration: none;
+}
+.post-header .author {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+}
+.role-badge,
+.deleted-mark {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid var(--line-2);
+  color: var(--muted);
+  padding: 0 5px;
+  border-radius: 2px;
+}
+.edited {
+  color: var(--muted);
+  font-size: 12px;
+}
+.reply-to {
+  margin-left: auto;
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--link);
+  text-decoration: none;
+  /* An inline link keeps its size but gets a larger target (docs/06). */
+  padding: 8px 4px;
+  margin-block: -8px;
+}
+.post-body {
+  font-size: 15px;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+.post-body > :first-child {
+  margin-top: 0;
+}
+.post-body > :last-child {
+  margin-bottom: 0;
+}
+.post-body a {
+  color: var(--link);
+}
+.post-body details.quote {
+  border-left: 3px solid var(--line-2);
+  padding: 2px 12px;
+  margin: 8px 0;
+  color: var(--ink-2);
+}
+.post-body details.quote blockquote {
+  margin: 4px 0;
+}
+.attachments {
+  margin: 4px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 13px;
+}
+.attachments a {
+  color: var(--link);
+}
+.attachments .size {
+  color: var(--muted);
+}
+.post-footer {
+  display: flex;
+  gap: 16px;
+  padding-top: 8px;
+  font-size: 12.5px;
+}
+.post-footer a {
+  color: var(--muted);
+  text-decoration: none;
+}
+
+.avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #ffffff;
+  font-size: 15px;
+  font-weight: 600;
+  background: #5b7fbf;
+}
+.avatar-fallback[data-hue='1'] { background: #2f5fb3; }
+.avatar-fallback[data-hue='2'] { background: #8a6bb5; }
+.avatar-fallback[data-hue='3'] { background: #3d8b7a; }
+.avatar-fallback[data-hue='4'] { background: #b5654a; }
+.avatar-fallback[data-hue='5'] { background: #6b7f3a; }
+.avatar-fallback[data-hue='6'] { background: #a0527a; }
+.avatar-fallback[data-hue='7'] { background: #4a6b8a; }
+.avatar-empty {
+  border: 1px dashed var(--line-2);
+}
+
+.tombstone {
+  align-items: center;
+  padding: 12px 24px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.tombstone .ordinal {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.tombstone-text {
+  font-style: italic;
+}
+
+.unread-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 24px;
+  background: var(--unread-bg);
+  color: var(--unread);
+  border-block: 1px solid var(--unread);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  scroll-margin-top: 72px;
+}
+.unread-divider .rule {
+  flex-grow: 1;
+  border-top: 1px dashed var(--unread);
+}
+.unread-divider .last-read {
+  font-weight: 400;
+}
+
+.pager {
+  margin: 16px 0;
+  font-size: 13px;
+}
+.pager-wide {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.pager .page,
+.pager .step {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink-2);
+  text-decoration: none;
+  box-sizing: border-box;
+}
+.pager .current {
+  background: var(--link);
+  border-color: var(--link);
+  color: #ffffff;
+}
+.pager .disabled {
+  opacity: 0.4;
+}
+.pager .gap {
+  padding: 0 4px;
+  color: var(--muted);
+}
+.pager .span {
+  color: var(--muted);
+  margin-left: 10px;
+  font-size: 12px;
+}
+.pager-narrow {
+  display: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.pager-narrow .step {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.post-popover {
+  position: fixed;
+  inset: auto 16px 16px auto;
+  width: min(560px, calc(100vw - 32px));
+  max-height: 60vh;
+  overflow: auto;
+  background: var(--surface);
+  border: 1px solid var(--line-2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(27, 33, 48, 0.18);
+  z-index: 10;
+}
+.popover-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.popover-bar .close {
+  min-width: 44px;
+  min-height: 44px;
+  border: 0;
+  background: none;
+  font-size: 20px;
+  cursor: pointer;
+}
+
+/* Phone (docs/06 "Mobile"): below 720 px. */
+@media (max-width: 719.98px) {
+  .thread-page {
+    padding: 12px 0 96px;
+  }
+  .thread-head {
+    padding: 0 16px;
+  }
+  .thread-head h1 {
+    font-size: 24px;
+  }
+  .posts {
+    border-radius: 0;
+    border-inline: 0;
+  }
+  .post {
+    gap: 12px;
+    padding: 14px 16px;
+  }
+  .post.unread {
+    padding-left: 13px;
+  }
+  .avatar {
+    width: 30px;
+    height: 30px;
+  }
+  .pager {
+    padding: 0 16px;
+  }
+  .pager-wide {
+    display: none;
+  }
+  .pager-narrow {
+    display: flex;
+  }
+  .post-footer a {
+    padding: 12px 0;
+    margin-block: -12px;
+  }
+  .unread-divider {
+    padding: 6px 16px;
+  }
+  .post-popover {
+    inset: auto 0 0 0;
+    width: auto;
+    border-radius: var(--radius) var(--radius) 0 0;
+  }
+}

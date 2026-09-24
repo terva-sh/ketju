@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "assets/index-BmQtzZ0r.js",
+    "file": "assets/index-BcdSkiP9.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -8,11 +8,11 @@
       "src/screens/admin/AdminRoot.tsx"
     ],
     "css": [
-      "assets/index-BQYzxPxd.css"
+      "assets/index-nP7Ow8dG.css"
     ]
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-ChGKrHlu.js",
+    "file": "assets/AdminRoot-B8luLwVi.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
