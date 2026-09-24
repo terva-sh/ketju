@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T12:42:15Z
+updated_at: 2026-09-24T12:44:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -58,29 +58,71 @@ Problem-details errors need one handling path here, mapping a stable type code t
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+Claim-time plan (2026-09-24). It revises the pre-groom plan after reading the client as it stands at fc7a709. The pre-groom plan had no "Settled" section; its open item is decided in "Decided at claim" below.
 
 ### Approach
-1. `src/api/client.ts`: `apiGet<T>` keeps a module-level `Map<url, {etag, body}>`, sends `If-None-Match`, and on 304 returns the stored body. `apiSend<T>` sends JSON with `Content-Type: application/json` (the only type the API accepts for mutations, docs/07 CSRF rule 1). Both parse `application/problem+json` into `ProblemError {type, status, title, retryAfter}`.
-2. `src/api/problem.ts`: `problemMessage(type)` is the one table mapping each docs/07 catalogue code (`unauthenticated`, `forbidden`, `not-found`, `gone`, `conflict`, `validation-failed`, `rate-limited`, `unavailable`, and the rest) to user-facing text. For `unauthenticated` it offers sign-in; for `forbidden` it does not. `rate-limited` uses `Retry-After`. An unknown type falls back to `internal`.
-3. `useResource<T>(key, fetcher)` returns `{data, error, loading, retry}`. It returns cached data at once and revalidates. On error it sets `loading=false` and exposes `retry`, and `<ErrorPanel>` renders the message and a Retry button. No screen shows a spinner without a terminal state.
-4. `state/viewer.ts`: the `viewer` signal is seeded from `#bootstrap` JSON; `refreshViewer()` refetches `/me`.
-5. `state/threads.ts`: `threadCache: Map<threadId, {logLength, pages: Map<pageKey, ThreadPage>}>`. `loadThreadPage(id, page, lens)` stores the response. If `thread.log_length` differs from the cached `logLength`, it replaces the whole `pages` map with only the new page rather than merging. The server keys its cache and ETag on the same log length (docs/07).
-6. `src/api/dto.ts`: hand-written TS types mirroring `internal/dto`. `src/api/dto-contract.ts` imports each golden under `internal/dto/testdata/golden/*.json` (`resolveJsonModule`) and assigns it to the matching type, so `tsc --noEmit` fails when a golden gains a field the types lack or loses one they require.
+1. `src/api/problem.ts`
+   - `ProblemError {type, status, title, retryAfter}`, and `toProblem(response)`: a problem+json body gives its `type`; any other body maps from the status through the catalogue (404 → not-found, 503 → unavailable, anything else → internal). A thrown fetch becomes the client-only code `network`.
+   - `problemMessage(p)` is the one table from code to `{text, signIn}`. It is typed as a `Record` over the code union, so a missing code does not compile.
+   - `isProblem(err, type)` is how a screen asks, instead of comparing `.type` itself.
+2. `src/api/client.ts`
+   - `apiGet<T>(url, {signal})` keeps a bounded LRU (100 entries) of `{etag, body}` per URL. It sends `If-None-Match` when it holds a tag, and a 304 answers with the held body. A 304 with nothing held is an error, never an empty success.
+   - `peekGet(url)` returns the held body.
+   - `apiSend<T>(method, url, body)` sends JSON with `Content-Type: application/json`.
+   - Errors from both are ProblemErrors.
+   - `resetApiCache()` is for tests.
+3. `src/api/resource.ts`: `useResource<T>(key, fetcher, peek?)` returns `{data, error, loading, retry}`.
+   - The answer is keyed on `key`, so a new key never shows another key's answer, not even for one render.
+   - It shows `peek()` at once while it revalidates.
+   - A superseded request is aborted and ignored.
+   - An error ends loading and keeps any data this key already had.
+   - `retry()` re-runs the request.
+4. `src/components/ErrorPanel.tsx` renders `problemMessage`, the Retry-After wait when there is one, and a Retry button. For `unauthenticated` it adds a sign-in prompt, and for `forbidden` it does not.
+5. `src/state/viewer.ts`: the `viewer` signal seeded from `#bootstrap` (moved from `src/state.ts`), a `notifications` computed from it, and `refreshViewer()`, which fetches /me.
+6. `src/state/threads.ts`
+   - `threadCache`: a signal holding `id → {logLength, header, pages}`.
+   - `loadThreadPage(id, query, signal)` stores the response. A `log_length` different from the entry's replaces the whole entry with this one page, never merging it.
+   - A `not-found` or `gone` drops the entry.
+   - `cachedThread(id)` returns the entry.
+   - The page key is the page the response names (number and lens), not the request, because a request without a page lands where the server chooses.
+7. `src/screens/ThreadScreen.tsx` stops calling fetch and uses `useResource` over `loadThreadPage`. The guarantees from TKT-01M29CEE52 hold:
+   - an id-keyed answer;
+   - no stale title or 404 for even one render;
+   - a later failure replaces a 404;
+   - a late superseded failure is ignored;
+   - the title is kept through a failure, now from `cachedThread`;
+   - the canonical-slug redirect.
+   Failure renders `ErrorPanel` with Retry.
+8. `src/api/dto.ts` holds hand-written types that mirror `internal/dto`. `src/api/dto-contract.ts` imports every golden (`resolveJsonModule`) and checks it against its type both ways: the golden must be assignable to the type (a missing or retyped field fails), and a deep no-extra-keys check makes a field the types lack fail too. Plain assignment would not catch that, because TypeScript checks excess properties only on object literals. `tsc --noEmit` runs in `npm run build`, which CI runs.
+
+### Decided at claim
+- **Retry-After:** display it; do not retry automatically. The Retry button stays enabled.
+  - An automatic retry on 429 turns the client into a load generator against a limiter that exists to shed load, and it has to be cancelled when the screen changes. Showing the wait and leaving the retry to the reader cannot do either.
+  - This choice is reversible and client-only.
+
+### Tests (Vitest, stubbed fetch)
+- AC1: the first GET stores the ETag, the second sends If-None-Match, and a 304 resolves to the first body. A 304 with nothing held is an error. The LRU evicts.
+- AC2: page 1 at log_length 100, then page 2 at 120: page 1 is gone and logLength is 120. At the same length, pages accumulate. A 404 drops the entry.
+- AC3:
+  - Every code in `internal/problem/testdata/catalogue.json` has non-empty text, and the table has no code the catalogue lacks, except `network`.
+  - A status-only error maps through the table.
+  - `unauthenticated` offers sign-in and `forbidden` does not.
+  - A source scan: no file under `src/screens` or `src/components` compares `.type` or `.status`, or calls `fetch(`, and no file outside `src/api` calls `fetch(`.
+- AC4: `useResource` with a network error, then a 200 on `retry()`: `loading` is false after the error and `data` is set after the retry. ThreadScreen's Retry button recovers the screen. The existing view tests stay green, moved to full-shaped bodies.
+- The contract: `tsc --noEmit` over `dto-contract.ts`. A Vitest test checks that every golden file is imported there, and a deliberately wrong type is proven to fail compilation, via a throwaway tsc run during development, recorded in a note.
 
 ### Files
-`web/client/src/api/{client,problem,dto,dto-contract}.ts`, `src/state/{viewer,threads}.ts`, `src/components/ErrorPanel.tsx`.
-
-### Tests (Vitest with a stubbed `fetch`)
-- AC1: the first GET stores the ETag; the second sends `If-None-Match`; a stubbed 304 resolves to the first body.
-- AC2: load page 1 at log_length 100, then page 2 at log_length 120. Assert that page 1 is gone from the cache and `logLength` is 120.
-- AC3: one test per catalogue code asserts `problemMessage` returns non-empty text. A lint-style test asserts that no file under `src/screens` or `src/components` imports anything but `problemMessage` for error text; implement it as a grep for `.type ===`.
-- AC4: a stubbed network error followed by a 200 on `retry()` asserts that `loading` goes false after the error and `data` is set after the retry.
-- The contract: `npm run typecheck` in CI covers `dto-contract.ts`.
+- `web/client/src/api/{client,problem,resource,dto,dto-contract}.ts`
+- `src/state/{viewer,threads}.ts`
+- `src/components/ErrorPanel.tsx`
+- `src/screens/ThreadScreen.tsx` and `src/screens/Placeholder.tsx` (the import moves)
+- `src/testing.tsx` (reset the caches)
+- `tsconfig.json` (`resolveJsonModule`)
+- the rebuilt `dist`
 
 ### Design
-docs/07 "Preact client" (State), "Error catalogue", "Thread response shape", "Where the shapes live"; `internal/dto/dto.go` and its goldens; `internal/problem` (catalogue golden).
+docs/07 "Preact client" (State), "Error catalogue", "Thread response shape", "Where the shapes live".
 
 ### Interactions
-Depends on CCC02 and CA99R (`/me`). Every screen ticket calls `useResource`. The later SSE client (CTYA0) calls `loadThreadPage` with `after_log_length`.
-Open in docs: whether the client should honor `Retry-After` automatically or only display it.
+- Carried from the pre-groom plan: this depends on CCC02 and CA99R (/me). Every screen ticket calls `useResource`.
+- The later SSE client, CTYA0, calls the thread endpoint with `after_log_length`. That answer is partial: only the new posts and edits. Storing it through `loadThreadPage` would replace a whole page with a fragment, so `loadThreadPage` refuses an `after_log_length` query. CTYA0 adds the merge that applies a fragment to the held page and advances `logLength`.
