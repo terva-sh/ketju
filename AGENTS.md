@@ -139,6 +139,10 @@ Ketju is a single static Go binary and a Preact client. `go.mod` declares Go
 from; read that section before planning. `internal/` is the implementation and
 `spikes/` holds throwaway programs that must still build.
 
+Phase 1 is being implemented by an autonomous run. If you are working a
+`phase-1` ticket without a person present, `docs/12-autonomous-run.md` is your
+procedure and says what you may merge; it does not apply outside that run.
+
 ### `main` is protected
 
 Direct pushes are rejected. Branch, open a pull request, and merge that.

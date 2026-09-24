@@ -227,6 +227,14 @@ work stays where it is.
 - **Page size:** 25 posts by default, 10–50 as a user setting (06). The
   default is decided (10 Q13) and appears in shared URLs, so the API and the
   client both treat it as a constant rather than a tunable.
+- **Fonts:** IBM Plex Sans, IBM Plex Mono and Newsreader, as in the
+  mockups, self-hosted as subset WOFF2 files embedded in the binary and
+  served from the same origin. The CSP allows no third-party font host.
+  They are cached apart from the code and do not count toward the 60 KB
+  budget, which measures the thread view's JavaScript and CSS. Two
+  alternatives lost. A system font stack would drift from every mockup, and
+  counting fonts inside the budget would force dropping Newsreader.
+  (Decided 2026-09-24 in Phase 1 grooming.)
 - **State:** signals for viewer, notifications, and per-thread caches keyed
   by `log_length`; SWR-style fetch wrapper that honors `ETag`.
 - **Routing:** the URL scheme above, one route per screen, lazy-loaded

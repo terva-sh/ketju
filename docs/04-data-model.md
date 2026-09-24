@@ -45,6 +45,14 @@ bio_source, timezone, locale, prefs_json, created_at, last_seen_at
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.
 
+A handle is 3 to 30 characters from `a-z`, `0-9`, `_` and `-`, starts with a
+letter or digit, and is stored lowercased. That makes `COLLATE NOCASE`
+exactly right, because it folds ASCII and a handle holds nothing else. Display
+names stay free-form Unicode. Unicode handles with NFKC folding and a
+confusables check lost: they buy non-Latin `@mentions` at the cost of
+homoglyph spoofing, which a handle in a URL and a mention must never allow.
+(Decided 2026-09-24 in Phase 1 grooming.)
+
 `kind` is orthogonal to `role`. An agent account can be a member, a moderator,
 or an admin, because whether to trust an agent with moderation is an operator's
 judgement and not a rule in the software. Keeping the two columns separate is
@@ -119,6 +127,18 @@ permission ∈ {read, create_thread, reply, upload, moderate}
 ```
 Small, explicit, phpBB-like. Evaluation: union of the user's groups'
 permissions for the forum, falling back to global rows.
+
+Membership of `everyone` is implicit for every viewer, signed in or not, and
+membership of `members` is implicit for every active user; neither is stored
+as rows. A fresh install seeds global rows granting `members` read,
+create_thread and reply, and granting `everyone` read, which applies only
+where a forum's `visibility` is `public`: a `members` forum ignores the
+`everyone` grant, and a `restricted` forum is readable only through explicit
+per-forum rows. Admins pass every check without rows (05). The result is a
+forum a friend group can use the moment it is installed, and anything tighter
+is an explicit grant. Read-only members and a private-until-granted install
+both lost on the same ground: they make the first hour of a small forum
+administration. (Decided 2026-09-24 in Phase 1 grooming.)
 
 ### audit_log
 ```

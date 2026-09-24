@@ -197,7 +197,11 @@ arrangement.
   page), search, and a "more" menu holding the thread actions that live in
   the desktop toolbar (watch, share link, moderator actions). The tab bar is
   decided over a menu button (10 Q25), because a menu hides exactly the
-  "what's new" surfaces a forum exists for.
+  "what's new" surfaces a forum exists for. Phase 1 ships all five tabs even
+  though the Unread, New, and Alerts screens are Phase 3 work: those three
+  route to a minimal placeholder until their screens land, and a badge shows
+  only a count the API already provides. The bar keeps its final shape from
+  the first release, so nobody relearns it later.
 - **Composing.** List screens have a floating "new thread" button above the
   tab bar. The thread page replaces the tab bar with a sticky reply bar
   showing the reply-to chip and the first line of any draft; tapping it

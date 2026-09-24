@@ -272,7 +272,7 @@ uses the name, never the literal.
 |-----:|------|-------------|----------------------|
 | 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
 | 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[] | new post_meta row, ordinal = thread.post_count+1 |
-| 3 | `Edit` | source, reason, reply_to | post_meta.current_revision++, edited flag |
+| 3 | `Edit` | source, reason, reply_to, mentions[] (optional) | post_meta.current_revision++, edited flag; when `mentions` is present it replaces the post's mention rows |
 | 4 | `Delete` | reason, hard (bool, always false in v1) | post_meta.deleted, tombstone shown |
 | 5 | `Restore` | reason | clears deleted |
 | 10 | `ThreadRenamed` | title, slug | thread row |
@@ -283,6 +283,16 @@ uses the name, never the literal.
 | 20 | `PostsSplitOut` | ordinals[], target_thread_id | ordinals marked moved; new thread's log gets `Post` records with `origin` |
 | 21 | `PostsMergedIn` | source_thread_id, ordinals[] | mirror of the above |
 | 30 | `ThreadArchived` | reason | thread read-only, index may be dropped from memory permanently |
+
+`Edit.mentions` was added after the version 1 freeze, on 2026-09-24. It is an
+optional key in the CBOR body map, which is the kind of change the freeze
+leaves open without a version bump (10, Q31): an older reader ignores it, and
+an `Edit` without it keeps the post's existing mentions. It exists because
+nothing downstream re-parses markdown (the renderer returns mentions
+structurally, TKT-01M29C2WWG), so a mention added in an edit would otherwise
+never reach the projection. Recording mentions at creation only lost because
+an edited-in mention would silently never notify. Re-rendering during
+projection lost because it would tie the projection to the renderer version.
 
 Deletion is soft. A `Delete` record leaves the original `Post` bytes intact;
 the reader consults the index flags and returns a tombstone. Hard deletion
@@ -529,6 +539,15 @@ version was bumped first.
   a lost or corrupted database: users and permissions must be restored from a
   DB backup, but content never is.
 - `ketju dump <thread-id>` prints a log as JSON lines for inspection.
+- Startup projection catch-up (04, `projection_state`) closes any gap between
+  a log and its projection before the listener accepts requests. A log
+  *shorter* than its projection cannot come from a crash, because the
+  projection is written after the log. It is corruption. That thread is
+  quarantined: logged at error level, reported by `/healthz` and
+  `ketju fsck`, and served as 503 until an operator repairs it. Every other
+  thread keeps serving. Refusing to start lost, because it lets one bad file
+  take the whole forum down. (Decided 2026-09-24 in Phase 1 grooming,
+  TKT-01M29C5Y1S.)
 
 ### What a rebuild can and cannot tell apart
 

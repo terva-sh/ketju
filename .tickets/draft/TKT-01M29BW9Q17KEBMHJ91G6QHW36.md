@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-24T05:08:51Z
+updated_at: 2026-09-24T05:21:02Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,6 +50,55 @@ SQL stays driver-agnostic. That constraint is the mitigation for the ncruces pre
 - [ ] sqlc is configured with the migration directory as its schema source, its version is pinned, and generated code is committed
 - [ ] CI regenerates the sqlc output and fails when it differs from what is committed
 - [ ] A test or lint fails if a package outside the access layer imports a SQLite driver directly
+
+## Implementation plan
+
+Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+
+Decided (user, 2026-09-24): sqlc generates typed `database/sql` code from `.sql` query files, and the migration directory is sqlc's schema source. Generated code is committed, and CI fails on a regeneration diff. Dynamic lens and cursor view queries are hand-written `database/sql` beside the generated set, and that split is a rule. The migration runner stays hand-rolled. SQL stays driver-agnostic. Record this decision in docs/04 "Engine" and on the ticket, with the alternatives from the 2026-09-16 comment.
+
+### Approach
+1. `db.Open(ctx, Options{Path, MaxConns})` opens `data/db/ketju.db` through ncruces's `database/sql` driver. The driver import goes in exactly one file, `driver.go`. Pragmas are set on every connection: `journal_mode=WAL`, `busy_timeout` (value open, see Open items), `foreign_keys=ON`, `synchronous=NORMAL`. The write pool's DSN adds `_txlock=immediate`.
+2. Use two pools. The read pool has MaxOpenConns clamped to 4–8. The write pool has MaxOpenConns=1, so in-process writers queue in Go. `DB.Write(ctx, func(q *dbq.Queries, tx *sql.Tx) error)` always runs BEGIN IMMEDIATE. `DB.Read(ctx, fn)` runs a read-only transaction on the read pool. Hand-written dynamic queries receive the same `*sql.Tx`.
+3. Set up sqlc:
+   - `sqlc.yaml` goes at the repo root, with `engine: sqlite`, `schema: internal/store/db/migrations`, and `queries: internal/store/db/queries`.
+   - Generated output goes to `internal/store/db/dbq`, as package `dbq` with `emit_interface: true`. Type overrides map INTEGER timestamps to `int64`, never `time.Time` (sqlc-dev/sqlc#3736 is avoided because docs/04 already chose unix ms).
+   - Each schema ticket adds `queries/<area>.sql`.
+   - Hand-written dynamic SQL lives only in `internal/store/db/views/`, and a package doc there states the rule.
+4. Pin sqlc. Use `//go:generate go run github.com/sqlc-dev/sqlc/cmd/sqlc@vX.Y.Z generate` in `internal/store/db/gen.go`. Prefer `go run pkg@version` over a `tool` directive: the CI comment on git-ticket gives the reason, which is that a tool directive pulls the generator's dependency graph into the shipped module's go.mod. Confirm at claim whether sqlc builds with `CGO_ENABLED=0`. Its PostgreSQL parser (pg_query_go) is C. If `go run` needs cgo, pin the release binary by version and sha256 in the CI step instead. The CI image already has gcc, but a slow cgo build on every run is a cost to weigh.
+5. Add a CI step "generated database code is current" to `.forgejo/workflows/ci.yml`. It runs `go generate ./internal/store/db && git diff --exit-code -- internal/store/db/dbq`, beside the gofmt step.
+6. Schema-parse smoke: `0001_init.sql` creates `schema_migrations`, and a throwaway test migration under `testdata/` exercises every construct the schema tickets plan: CHECK, a trigger with RAISE, an expression index, WITHOUT ROWID, a partial index, and FTS5. Run sqlc on it. Any construct sqlc's SQLite parser rejects is found here, before eight tickets depend on it.
+7. The migration runner is hand-rolled. It reads `migrations/NNNN_name.sql` from an `embed.FS` in numeric order and refuses gaps and duplicates. It records `(version, name, sha256, applied_at)` in `schema_migrations`, and applies each migration in its own write transaction. It refuses when a recorded checksum differs from the embedded file. It is forward-only. If the recorded maximum version is above the highest embedded version, it refuses with `db.ErrSchemaNewer`, and the message names both versions and says "this binary is older than the database".
+8. Driver-agnostic enforcement: a layering test modelled on `internal/dto/layering_test.go` asserts that only `internal/store/db/driver.go` imports `github.com/ncruces/...`. The generated code imports only `database/sql`.
+9. `DB.Close()` runs `PRAGMA wal_checkpoint(TRUNCATE)` and then closes both pools.
+
+### Files and packages
+New: `sqlc.yaml` and, under `internal/store/db/`: `db.go`, `driver.go`, `migrate.go`, `gen.go`, `migrations/0001_init.sql`, `queries/migrations.sql`, the generated `dbq/`, `views/doc.go`, and the tests. Touched: `go.mod` (ncruces only, no sqlc), `.forgejo/workflows/ci.yml` (the regen-diff step), `internal/problem/domain.go` (map `ErrSchemaNewer` and busy errors to `CodeUnavailable`), docs/04 "Engine".
+
+### Tests
+- AC1: `TestOpenSetsPragmas` reads back `journal_mode`, `busy_timeout`, and `foreign_keys` on a connection from each pool.
+- AC2: `TestConcurrentWritersSerialize` runs 32 goroutines doing read-modify-write increments through `Write`. The count must be exact, with no SQLITE_BUSY. A second variant uses two separate `DB` handles on one file, which proves that BEGIN IMMEDIATE and busy_timeout do the serializing, not the Go pool. Run under `-race`.
+- AC3: `TestMigrateTwiceIsNoop` snapshots `sqlite_schema` and `schema_migrations` across two runs and asserts they are equal. `TestMigrateRefusesGapAndChecksumDrift` runs over an `fstest.MapFS`.
+- AC4: `TestNewerSchemaRefused` asserts `errors.Is(err, ErrSchemaNewer)` and the message text.
+- Also: the sqlc parse smoke and the CI regen-diff step. Mutation check: delete one generated method and confirm the diff step fails.
+
+### Design
+docs/04-data-model.md opening "Engine" paragraph and "Conventions". docs/02-architecture.md "Go module layout" (`store/db/`). docs/09-roadmap.md "Risks and mitigations", the ncruces row. The ticket's 2026-09-16 comment on sqlc.
+
+### Interactions
+Defines `db.DB`, `Open`, `Read`, `Write`, `Migrate`, `ErrSchemaNewer`, the `dbq.Queries` generated surface, the `queries/` and `migrations/` conventions, and the `views/` rule. Consumers: BYYH7, BYYHG, BYYHQ, BYYJ0, BYYJ8, TKT-01M29CKRD, TKT-01M29CRJ3B, CCBYX. Consumes the BSPE8 findings.
+
+### Open items
+- The busy_timeout value is unstated in the docs. 5 s is a candidate, not a given.
+- Migration numbering across parallel branches will collide. Suggested rule: renumber at rebase.
+- Whether sqlc's SQLite parser accepts CREATE TRIGGER bodies with RAISE is unverified. Step 6 exists to find out. If it does not, triggers go in a migration file that sqlc's schema list skips, and the plans that use triggers (BYYHG, BYYJ0) are affected.
+
+### Settled in grooming (2026-09-24)
+
+- busy_timeout is 5000 ms, stated in docs/04 in this PR.
+- Migrations are numbered sequentially. The run has one lane, so collisions are rare; if two land, renumber on rebase before merge.
+- sqlc under `go run` may need cgo (it embeds a C parser). CI already has gcc for -race. If that still fails, pin the release binary by version and sha256.
+- Run a parse check for CREATE TRIGGER ... RAISE here, before BYYHG and BYYJ0 depend on it. If sqlc rejects it, keep the trigger DDL in a migration that sqlc is told to skip.
 
 ## Notes
 

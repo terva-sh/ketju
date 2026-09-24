@@ -154,9 +154,53 @@ transient and a merge that reported failure has sometimes succeeded.
 - a PR with a medium or higher finding you disagree with. Write the
   disposition as pr-reviews.md prescribes, mark it pending maintainer
   acceptance, and leave the PR open for a person;
-- a PR that changes `.forgejo/workflows/`, `AGENTS.md`, or this document
-  beyond its own tracking note;
+- a PR that changes `.forgejo/workflows/` beyond what "Changing CI" below
+  allows, or changes `AGENTS.md` or this document;
 - anything outside the `phase-1` milestone.
+
+## Changing CI
+
+Four tickets have to change CI:
+- the sqlc regeneration check in `W9Q1`;
+- Node and the client build in `CCC02`;
+- the bundle budget in `CGBYH`;
+- Playwright in `CGBY1`.
+
+The user allowed this on 2026-09-24, within limits. A run PR may:
+- add steps to the `Build and Test` job in `.forgejo/workflows/ci.yml`;
+- change that job's container image to a Debian-based Go image, because
+  Playwright's browsers do not run on Alpine.
+
+A run PR may not:
+- rename the job or the workflow, since the required check is matched by
+  name;
+- change triggers or permissions;
+- add a job that would need to become a required check;
+- touch `terva-review.yml`, secrets, or branch protection.
+
+Everything the gate needs runs inside the one job that is already required.
+
+## Gaps the design leaves open
+
+The pre-groom plans list the questions each ticket's design leaves open.
+Some are named in the ticket itself, and more were found while planning. You
+may settle one yourself when the answer affects only internals:
+- a name or package boundary;
+- a default nobody sees;
+- a limit that has no product meaning;
+- a query shape.
+
+Settle it the way the nearest document would. Write it into that document in
+the same PR, and say so in a ticket note.
+
+Block the ticket instead when the answer changes any of these:
+- what a member sees or can do;
+- who can see what;
+- what an operator must configure;
+- what is written to disk in a format that outlives the release.
+
+Those are product, security, and format decisions, and they belong to a
+person.
 
 ## When a ticket cannot proceed
 
@@ -167,7 +211,8 @@ whatever would unblock it, and take the next ready ticket. Block when:
 - a medium or higher review finding cannot be fixed in scope, or you disagree
   with it;
 - the design documents contradict each other or the code, and choosing
-  between them is a design decision;
+  between them is a product, security, or format decision (see "Gaps the
+  design leaves open");
 - the work would change the frozen thread log format;
 - the work needs a new external service, a credential, or a setting on the
   forge;

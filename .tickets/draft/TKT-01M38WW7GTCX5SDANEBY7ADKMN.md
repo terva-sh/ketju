@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T05:05:41Z
-updated_at: 2026-09-24T05:05:41Z
+updated_at: 2026-09-24T05:21:04Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -48,3 +48,11 @@ directory yet. `cmd/ketju` has existed since Phase 0.
 
 - [ ] go mod tidy produces no diff, and go-oidc and go-jose sit in the direct require block
 - [ ] The ci.yml comment about cmd/ describes the repository as it is
+
+## Implementation plan
+
+Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+
+1. Run `go mod tidy` and confirm go-oidc and go-jose move to the direct require block with nothing else changing. If anything else changes, say why in the commit.
+2. Rewrite the stale comment in .forgejo/workflows/ci.yml that says there is no cmd/ so it describes the tree as it is. This is a comment-only change, which docs/12 "Changing CI" allows.
+3. Verify with `go build ./... && go vet ./...` and a second `go mod tidy` that produces no diff.
