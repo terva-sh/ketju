@@ -368,3 +368,33 @@ describe('a post', () => {
     expect(at(root, '#post-1 .attachments')?.textContent).toContain('2.0 KB');
   });
 });
+
+// Review 421: the history route is not the thread page.
+describe('the post history route', () => {
+  it('says what it is and links back to the post, rather than listing the page', async () => {
+    serve(page([post(26), post(27)], { number: 2 }));
+    const root = await renderAt(`/t/${id}/why-we-left-slack/27/history`);
+    expect(root.querySelector('[data-screen]')?.getAttribute('data-screen')).toBe('post-history');
+    expect(at(root, 'h1')?.textContent).toBe(base.thread.title);
+    expect(at(root, '.history-pending h2')?.textContent).toBe('History of post #27');
+    expect(at(root, '.history-pending a')?.getAttribute('href')).toBe(`/t/${id}/why-we-left-slack/27`);
+    expect(at(root, '.posts')).toBeNull();
+    expect(at(root, '.pager')).toBeNull();
+  });
+});
+
+// Review 421: the unread edge runs through a tombstone past the read line.
+describe('an unread tombstone', () => {
+  it('carries the unread edge like the posts around it', async () => {
+    serve(page([post(1), post(2), post(3, { deleted: true, html: '' }), post(4)], { lastRead: 2, postCount: 4, totalPages: 1 }));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    expect([...root.querySelectorAll('.unread')].map((e) => e.id)).toEqual(['post-3', 'post-4']);
+    expect(at(root, '.unread-divider')?.nextElementSibling?.id).toBe('post-3');
+  });
+
+  it('does not carry it with nothing read', async () => {
+    serve(page([post(1), post(2, { deleted: true, html: '' })], { lastRead: 0, postCount: 2, totalPages: 1 }));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    expect(root.querySelectorAll('.unread').length).toBe(0);
+  });
+});

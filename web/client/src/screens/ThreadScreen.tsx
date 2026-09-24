@@ -7,7 +7,7 @@ import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Pager } from '../components/thread/Pager';
-import { Post, type ThreadRef } from '../components/thread/Post';
+import { permalink, Post, type ThreadRef } from '../components/thread/Post';
 import { PostPopover } from '../components/thread/PostPopover';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
@@ -77,9 +77,32 @@ export function ThreadScreen() {
         {head?.locked && <p class="locked">This thread is locked.</p>}
       </header>
       {res.error && <ErrorPanel error={res.error} what="This thread" onRetry={res.retry} />}
-      {page && <ThreadBody key={key} page={page} lens={view.lens} />}
-      {!page && !res.error && <p class="loading">Loading…</p>}
+      {history ? (
+        <PostHistoryPending thread={head ?? { id: params.id, slug: params.slug }} ordinal={params.ordinal} />
+      ) : (
+        <>
+          {page && <ThreadBody key={key} page={page} lens={view.lens} />}
+          {!page && !res.error && <p class="loading">Loading…</p>}
+        </>
+      )}
     </main>
+  );
+}
+
+// PostHistoryPending holds the history route's place until a post's history
+// has a screen of its own (TKT-01M39WZY8C, Build the post history screen). It
+// says what the address is, keeps the thread's title and canonical slug, and
+// links back to the post, rather than showing the thread page as if it were
+// the history (review 421).
+function PostHistoryPending({ thread, ordinal }: { thread: ThreadRef; ordinal: string }) {
+  return (
+    <section class="history-pending" data-history-for={ordinal}>
+      <h2>History of post #{ordinal}</h2>
+      <p>This screen is not built yet.</p>
+      <p>
+        <a href={permalink(thread, Number(ordinal))}>Back to post #{ordinal}</a>
+      </p>
+    </section>
   );
 }
 
@@ -120,7 +143,7 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
           <Fragment key={p.ordinal}>
             {p.ordinal === divider && <UnreadDivider unread={page.thread.post_count - lastRead} lastRead={lastRead} />}
             {p.deleted && !p.html ? (
-              <Tombstone ordinal={p.ordinal} />
+              <Tombstone ordinal={p.ordinal} unread={lastRead > 0 && p.ordinal > lastRead} />
             ) : (
               <Post post={p} thread={thread} unread={lastRead > 0 && p.ordinal > lastRead} />
             )}

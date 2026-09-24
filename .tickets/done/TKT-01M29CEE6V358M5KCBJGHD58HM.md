@@ -30,10 +30,12 @@ references:
     path: null
   - ref: pr:64
     path: null
+  - ref: ticket:TKT-01M39WZY8C6ZK5CNZCH4CPXHT1
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T14:16:41Z
+updated_at: 2026-09-24T14:27:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -183,6 +185,24 @@ I rendered the page locally in headless Chromium at 1440 and 390 px against a st
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:16:22Z
 
 Correction to the previous note's mutation line: 28 mutants were run, not 32. 27 were killed, 4 of them only after tests were added for the first-round survivors (the pager span on a partial last page, no unread edge with nothing read, one scroll per arrival, the popover closing on a page move). 1 is equivalent: lastRead >= postCount against >.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:27:44Z
+
+### Review 421, answered
+
+**Medium: the history route had become the thread page.** `/t/id/slug/N/history` rendered the ordinary post list, so the Post footer's "history" link led nowhere distinct.
+
+The route now renders a placeholder, as the other unbuilt screens do. It keeps the thread's title and slug correction, shows "History of post #N" and "This screen is not built yet", and links back to the post. It does not show the post list or the pager.
+
+No ticket covered a history screen, so I filed draft TKT-01M39WZY8C (Build the post history screen). It describes the CA9C2 endpoint's shape and access rules, and it is linked here.
+
+**Low: an unread tombstone had no unread edge.** A tombstone past the read line now carries the edge, the same way posts do. It still carries none when nothing has been read.
+
+**Tests:**
+- the history route: its screen name, the heading, the back link, and no post list or pager;
+- the tombstone edge in both cases.
+
+**Mutation:** 3 mutants, all killed. There are 371 Vitest tests.
 
 ## Summary
 
