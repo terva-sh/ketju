@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T18:14:01Z
+updated_at: 2026-09-24T18:25:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -141,6 +141,10 @@ Answered review 470 on PR #69 (head aa18704).
 Test: TestShutdownWaitsForTheProjectionRunner holds the runner back 200 ms as it returns and checks that the cache was not closed first. The step order in TestStartupOrderAndShutdown now includes "stop projection" after "close bus".
 
 Mutation check: 14 of 14 killed, including making the wait not wait and dropping the srv.Close error. CI run 316 on aa18704 passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T18:25:30Z
+
+Answered review 471 (high) on head 39e6515. If srv.Serve returned an error while requests were in flight, serve returned at once and the closers took the bus, the cache and the database away under those handlers. A failing listener now shuts down the way a signal does: it drains requests (cutting them at the deadline), then runs the closers. Serve returns the listener's error joined with anything shutdown reports. A new serveOpts.listen seam lets a test wrap the listener. TestFailingListenerDrainsFirst fails Accept while a request is blocked, and checks that nothing is closed until that request is released, that the request answers 200, and that serve returns 'serving: accept failed'. Mutation check: 16 of 16 killed, including returning straight from the failing-listener path and dropping its error. CI run 318 on 39e6515 passed, and review 471 marked both of review 470's findings resolved.
 
 ## Summary
 

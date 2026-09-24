@@ -90,6 +90,9 @@ type serveOpts struct {
 	// runReturned is called as the projection runner returns, which is how
 	// a test holds it back to see that shutdown waits for it.
 	runReturned func()
+
+	// listen wraps the listener, so a test can make accepting fail.
+	listen func(net.Listener) net.Listener
 }
 
 func runServe(args []string) error {
@@ -338,6 +341,9 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	if err != nil {
 		return fail("listening on "+cfg.Listen, err)
 	}
+	if o.listen != nil {
+		ln = o.listen(ln)
+	}
 	srv := &http.Server{Handler: root, ReadHeaderTimeout: 10 * time.Second, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelWarn)}
 	log.Info("ketju started",
 		"listen", ln.Addr().String(), "data_dir", cfg.DataDir,
@@ -347,11 +353,17 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		o.ready(ln.Addr().String())
 	}
 
+	// A listener that fails stops accepting, but the requests it already
+	// accepted are still running, so it shuts down the same way a signal
+	// does: drain them before the closers take the stores away (review
+	// 471). Its error is returned with anything shutdown reports.
 	served := make(chan error, 1)
 	go func() { served <- srv.Serve(ln) }()
+	var serveErr error
 	select {
 	case err := <-served:
-		return fail("serving", err)
+		serveErr = fail("serving", err)
+		log.Error("the listener failed; shutting down", "err", err)
 	case <-ctx.Done():
 	}
 
@@ -367,14 +379,14 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		// on: the actors still flush, which is what a restart needs.
 		log.Warn("requests still running after the drain; closing them", "drain", drain)
 		if cerr := srv.Close(); cerr != nil {
-			return fail("closing the listener after the drain", cerr)
+			return errors.Join(serveErr, fail("closing the listener after the drain", cerr))
 		}
 	case err != nil:
-		return fail("shutting the listener down", err)
+		return errors.Join(serveErr, fail("shutting the listener down", err))
 	default:
 		log.Info("requests drained")
 	}
-	return nil
+	return serveErr
 }
 
 // archived reports whether a thread is archived, from its projection row,

@@ -656,3 +656,79 @@ func TestShutdownWaitsForTheProjectionRunner(t *testing.T) {
 		t.Error("the thread cache was closed while the projection runner was still running")
 	}
 }
+
+// failingListener accepts until it is told to fail, then fails every Accept.
+type failingListener struct {
+	net.Listener
+	fail chan struct{}
+}
+
+func (l failingListener) Accept() (net.Conn, error) {
+	type result struct {
+		c   net.Conn
+		err error
+	}
+	got := make(chan result, 1)
+	go func() { c, err := l.Listener.Accept(); got <- result{c, err} }()
+	select {
+	case r := <-got:
+		return r.c, r.err
+	case <-l.fail:
+		return nil, errors.New("accept failed")
+	}
+}
+
+// A listener that fails while a request is running shuts down like a
+// signal: the request is drained before the stores are closed, and serve
+// returns the listener's error (review 471).
+func TestFailingListenerDrainsFirst(t *testing.T) {
+	path, _ := writeConfig(t, "")
+	fail := make(chan struct{})
+	entered, release := make(chan struct{}), make(chan struct{})
+	r := start(t, path, serveOpts{
+		listen: func(ln net.Listener) net.Listener { return failingListener{ln, fail} },
+		wrap: func(h http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+				if req.URL.Path == "/test/block" {
+					close(entered)
+					<-release
+					io.WriteString(w, "done")
+					return
+				}
+				h.ServeHTTP(w, req)
+			})
+		},
+	})
+	answered := make(chan int, 1)
+	go func() {
+		resp, err := http.Get("http://" + r.addr + "/test/block")
+		if err != nil {
+			answered <- 0
+			return
+		}
+		resp.Body.Close()
+		answered <- resp.StatusCode
+	}()
+	<-entered
+	close(fail)
+
+	time.Sleep(200 * time.Millisecond)
+	if slices.Contains(r.steps(), "close threads") {
+		t.Error("the stores were closed while a request was still running")
+	}
+	close(release)
+	if code := <-answered; code != http.StatusOK {
+		t.Errorf("the request in flight when the listener failed got %d", code)
+	}
+	select {
+	case err := <-r.done:
+		if err == nil || !strings.Contains(err.Error(), "serving: accept failed") {
+			t.Errorf("serve returned %v, want the listener's error", err)
+		}
+	case <-time.After(20 * time.Second):
+		t.Fatal("serve did not return after the listener failed")
+	}
+	if steps := r.steps(); !slices.Contains(steps, "drain") || !slices.Contains(steps, "release lock") {
+		t.Errorf("steps = %v", steps)
+	}
+}
