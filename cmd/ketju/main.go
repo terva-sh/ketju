@@ -1,10 +1,9 @@
 // Command ketju is the message board's binary: one static executable holding
 // the server and the offline tools.
 //
-// Only the storage tools are here so far. docs/09 puts serve, config and the
-// rest in Phase 1; dump and fsck are Phase 0 because they are what you reach
-// for when the storage is the thing that is wrong, and wanting them for the
-// first time during an incident is too late to write them.
+// dump and fsck came first, in Phase 0, because they are what you reach for
+// when the storage is the thing that is wrong, and wanting them for the first
+// time during an incident is too late to write them. serve is the server.
 package main
 
 import (
@@ -17,6 +16,7 @@ const usage = `ketju — a message board
 usage: ketju <command> [flags]
 
 commands:
+  serve  run the server
   dump   print a thread log as JSON lines, one object per record
   fsck   walk every log, verify every checksum, rebuild every index
 
@@ -31,6 +31,8 @@ func main() {
 
 	var err error
 	switch os.Args[1] {
+	case "serve":
+		err = runServe(os.Args[2:])
 	case "dump":
 		err = runDump(os.Args[2:])
 	case "fsck":

@@ -68,7 +68,8 @@ type Config struct {
 	Listen string `toml:"listen"`
 
 	// DataDir is the directory holding threads/, blobs/, db/ and config.toml.
-	// Required: there is no default that is right on two machines.
+	// Required: there is no default that is right on two machines. A relative
+	// path is resolved against the config file's directory.
 	DataDir string `toml:"data_dir"`
 
 	// SiteURL is the externally visible base URL, with no trailing slash. It
@@ -238,6 +239,16 @@ func Load(path string, getenv func(string) string) (*Config, []string, error) {
 
 	applyEnv(cfg, getenv, present, problems)
 	applyDefaults(cfg, present)
+
+	// A relative data_dir is relative to the config file, not to wherever the
+	// process happened to start: the same file must name the same directory
+	// under systemd, in a container, and from an operator's shell (settled
+	// in grooming for TKT-01M29BYYJG).
+	if cfg.DataDir != "" && !filepath.IsAbs(cfg.DataDir) {
+		if abs, err := filepath.Abs(filepath.Join(filepath.Dir(path), cfg.DataDir)); err == nil {
+			cfg.DataDir = abs
+		}
+	}
 
 	warnings := resolveSecrets(cfg, filepath.Dir(path), problems)
 	validate(cfg, problems)

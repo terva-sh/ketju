@@ -443,3 +443,21 @@ func TestMovedKeysAreSettings(t *testing.T) {
 		}
 	}
 }
+
+// A relative data_dir names a directory beside the config file, whatever the
+// working directory; an absolute one, from the file or the environment, is
+// left alone.
+func TestRelativeDataDirResolvesAgainstTheConfigFile(t *testing.T) {
+	path := write(t, "data_dir = \"data\"\n")
+	t.Chdir(t.TempDir())
+	c := mustLoad(t, path, env(nil))
+	if want := filepath.Join(filepath.Dir(path), "data"); c.DataDir != want {
+		t.Errorf("data_dir = %q, want %q", c.DataDir, want)
+	}
+	if c := mustLoad(t, path, env(map[string]string{"KETJU_DATA_DIR": "rel/env"})); c.DataDir != filepath.Join(filepath.Dir(path), "rel", "env") {
+		t.Errorf("a relative data_dir from the environment = %q", c.DataDir)
+	}
+	if c := mustLoad(t, write(t, "data_dir = \"/srv/ketju\"\n"), env(nil)); c.DataDir != "/srv/ketju" {
+		t.Errorf("an absolute data_dir = %q", c.DataDir)
+	}
+}

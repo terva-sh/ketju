@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T16:29:59Z
+updated_at: 2026-09-24T17:18:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,9 +45,9 @@ The entire storage design assumes one writer per log file. Two processes sharing
 
 ## Acceptance criteria
 
-- [ ] A second serve against the same data directory exits non-zero naming the holding process
+- [x] A second serve against the same data directory exits non-zero naming the holding process
 - [x] A lock left by a killed process is detected as stale and does not require manual deletion
-- [ ] The lock is released on graceful shutdown
+- [x] The lock is released on graceful shutdown
 - [x] The refusal message tells the operator what to check rather than only that it failed
 
 ## Implementation plan
@@ -196,6 +196,10 @@ Mutation check: 24 of 26 killed. Both survivors are equivalent:
 - dropping O_DIRECTORY, as before;
 - dropping O_NOFOLLOW on the record read: a symlinked record then resolves to a file nobody holds, and is refused as unheld anyway.
 CI run 289 on ccafdbc passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T17:18:09Z
+
+AC1 and AC3 are proven at serve level by TestSIGTERMDrainsAndExitsZero in cmd/ketju/serve_test.go (TKT-01M29CCBYX). A second ketju serve against the same data directory exits non-zero, and its output names the first's pid. After SIGTERM and a clean exit, lock.Acquire on the directory succeeds. TestDrainTimeoutStillFlushes also shows the lock released after a drain timeout, and TestStartupFailures shows it released after every failed startup. Ticked on that evidence.
 
 ## Summary
 
