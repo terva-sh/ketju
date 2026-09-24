@@ -406,3 +406,57 @@ func TestRunRetriesUntilCaughtUp(t *testing.T) {
 		t.Fatalf("caught up after %d attempts; the first five were set to fail", n)
 	}
 }
+
+// TestHeaderIsChecked: a log whose header is damaged, or which names another
+// thread, is refused before any frame is applied (review 390).
+func TestHeaderIsChecked(t *testing.T) {
+	f := newFixture(t)
+	created := rec{threadlog.TypeThreadCreated, &threadlog.ThreadCreatedBody{Title: "T", Slug: "t", ForumID: 7}}
+	post := rec{threadlog.TypePost, &threadlog.PostBody{Source: "x"}}
+
+	a, end := rawLog(t, f, created, post)
+	b, _ := rawLog(t, f, created)
+	log, err := os.ReadFile(a.LogPath(f.root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(b.LogPath(f.root), log, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.w.ProjectThread(t.Context(), b, end); err == nil || !strings.Contains(err.Error(), "names thread") {
+		t.Fatalf("thread A's log at thread B's path gave %v, want it refused", err)
+	}
+
+	log[20] ^= 0xff // inside the header, under its checksum
+	if err := os.WriteFile(a.LogPath(f.root), log, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.w.ProjectThread(t.Context(), a, end); !errors.Is(err, threadlog.ErrChecksum) {
+		t.Fatalf("a damaged header gave %v, want ErrChecksum", err)
+	}
+	if d := f.dump(); !strings.Contains(d, "threads: 0 rows") {
+		t.Fatalf("a refused log left rows:\n%s", d)
+	}
+}
+
+// TestNoThreadRowIsAnError: records that never create the thread row do not
+// mark the thread projected, whether they touch no row (an empty tag list)
+// or are skipped entirely (review 390).
+func TestNoThreadRowIsAnError(t *testing.T) {
+	f := newFixture(t)
+	for name, recs := range map[string][]rec{
+		"empty tags":     {{threadlog.TypeThreadTagged, &threadlog.ThreadTaggedBody{}}},
+		"only skippable": {{threadlog.RecordType(99), map[string]any{"x": 1}}},
+		// The row exists by the end, but not when the tag record met it.
+		"tags before created": {{threadlog.TypeThreadTagged, &threadlog.ThreadTaggedBody{}},
+			{threadlog.TypeThreadCreated, &threadlog.ThreadCreatedBody{Title: "T", Slug: "t", ForumID: 7}}},
+	} {
+		id, end := rawLog(t, f, recs...)
+		if _, err := f.w.ProjectThread(t.Context(), id, end); err == nil {
+			t.Errorf("%s: a log without ThreadCreated was marked projected", name)
+		}
+	}
+	if d := f.dump(); !strings.Contains(d, "projection_state: 0 rows") {
+		t.Fatalf("projection_state advanced for a thread with no row:\n%s", d)
+	}
+}

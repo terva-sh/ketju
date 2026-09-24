@@ -302,7 +302,7 @@ func (q *Queries) SetThreadPinned(ctx context.Context, arg SetThreadPinnedParams
 	return result.RowsAffected()
 }
 
-const setThreadProjected = `-- name: SetThreadProjected :exec
+const setThreadProjected = `-- name: SetThreadProjected :execrows
 UPDATE threads SET log_length_projected = ? WHERE id = ?
 `
 
@@ -311,9 +311,12 @@ type SetThreadProjectedParams struct {
 	ID                 int64
 }
 
-func (q *Queries) SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) error {
-	_, err := q.db.ExecContext(ctx, setThreadProjected, arg.LogLengthProjected, arg.ID)
-	return err
+func (q *Queries) SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setThreadProjected, arg.LogLengthProjected, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const setThreadTitle = `-- name: SetThreadTitle :execrows

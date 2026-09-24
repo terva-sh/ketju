@@ -291,6 +291,9 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 		if fi.Size() < upTo {
 			return fmt.Errorf("the log is %d bytes, shorter than the %d an event reported", fi.Size(), upTo)
 		}
+		if err := checkHeader(f, id); err != nil {
+			return err
+		}
 
 		var applyErr error
 		scanErr := threadlog.ScanFramesFrom(f, from, upTo, func(rec threadlog.ScanRecord) bool {
@@ -300,8 +303,12 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 		if err := errors.Join(scanErr, applyErr); err != nil {
 			return err
 		}
-		if err := q.SetThreadProjected(ctx, dbq.SetThreadProjectedParams{LogLengthProjected: upTo, ID: int64(id)}); err != nil {
+		// A log whose records never created the thread row has not been
+		// projected, whatever its frames said (review 390).
+		if n, err := q.SetThreadProjected(ctx, dbq.SetThreadProjectedParams{LogLengthProjected: upTo, ID: int64(id)}); err != nil {
 			return err
+		} else if n != 1 {
+			return fmt.Errorf("the log up to %d never created the thread", upTo)
 		}
 		return q.SetProjectionState(ctx, dbq.SetProjectionStateParams{
 			ThreadID: int64(id), LogLength: upTo, UpdatedAt: w.now().UnixMilli(),
@@ -311,6 +318,28 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 		return from, fmt.Errorf("projection: thread %s: %w", id, err)
 	}
 	return max(from, upTo), nil
+}
+
+// checkHeader reads the log's file header and refuses a damaged one, a
+// version this build cannot read, or a log that names another thread: a file
+// at the wrong path would otherwise project its rows under this thread's id
+// (review 390).
+func checkHeader(r io.ReaderAt, id threadid.ID) error {
+	b := make([]byte, threadlog.FileHeaderSize)
+	if _, err := r.ReadAt(b, 0); err != nil {
+		return fmt.Errorf("reading the file header: %w", err)
+	}
+	h, err := threadlog.ParseFileHeader(b)
+	if err != nil {
+		return err
+	}
+	if err := h.CheckVersion(); err != nil {
+		return err
+	}
+	if h.ThreadID != uint64(id) {
+		return fmt.Errorf("the log at this thread's path names thread %s", threadid.ID(h.ThreadID))
+	}
+	return nil
 }
 
 // apply projects one scanned frame.

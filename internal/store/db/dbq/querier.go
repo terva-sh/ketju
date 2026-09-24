@@ -76,7 +76,7 @@ type Querier interface {
 	SetThreadLastPost(ctx context.Context, arg SetThreadLastPostParams) (int64, error)
 	SetThreadLocked(ctx context.Context, arg SetThreadLockedParams) (int64, error)
 	SetThreadPinned(ctx context.Context, arg SetThreadPinnedParams) (int64, error)
-	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) error
+	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) (int64, error)
 	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)

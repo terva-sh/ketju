@@ -75,7 +75,7 @@ WHERE id = sqlc.arg('id');
 -- name: SetThreadArchived :execrows
 UPDATE threads SET archived = 1 WHERE id = ?;
 
--- name: SetThreadProjected :exec
+-- name: SetThreadProjected :execrows
 UPDATE threads SET log_length_projected = ? WHERE id = ?;
 
 -- A Post resets every column, for the same reason UpsertThread does.

@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:15:46Z
-updated_at: 2026-09-24T08:47:11Z
+updated_at: 2026-09-24T08:52:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -152,6 +152,24 @@ Terva review 389 of head 70adf18 (base a15a1aa): request ready-review-70adf18, A
 - **Fix, part 1.** `New` now returns an error unless DB, Root and Sweep are all set.
 - **Fix, part 2.** A failed sweep is still returned to the bus, so the hole is reported again, but the batch's events are projected first.
 - **Tests.** TestNewRequiresOptions, and TestDroppedTriggersSweep now asserts that the batch is projected when the sweep fails. Mutants for an optional sweep, a swallowed sweep error, and a sweep error that is not returned are all killed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:52:27Z
+
+Terva review 390 of head 5435485 (base a15a1aa): request ready-review-5435485, Actions run 166, run id 82db4ee7-3cb4-4a5a-8e0b-84ff4532c03a. It marked review 389's two findings resolved and raised two new mediums. Both are accepted and fixed on the next head.
+
+### 1. An empty ThreadTagged advances the projection without a thread row (medium, apply.go:175)
+
+- **Accepted.** An empty tag list touches no row, and SetThreadProjected did not check rows either.
+- **Fix, part 1.** applyTagged now requires the thread row to exist.
+- **Fix, part 2.** SetThreadProjected is `:execrows` and must hit exactly one row. A range whose records never created the thread is therefore an error, and projection_state does not advance.
+- **Test.** TestNoThreadRowIsAnError covers three logs: empty tags alone, only skippable records, and tags before ThreadCreated. The last is the case the tag check alone catches.
+- **Mutants.** Killed: removing the tag check, and letting SetThreadProjected accept zero rows. The mutant that disables only the ErrNoRows branch is equivalent, because the error still returns through the next branch with a different message.
+
+### 2. The log header is not validated (medium, writer.go:288)
+
+- **Accepted.** ProjectThread now reads and parses the file header before applying anything. It checks the checksum and magic, checks the version, and requires the header's thread id to match the thread being projected.
+- **Test.** TestHeaderIsChecked covers a copy of thread A's log at thread B's path and a flipped header byte (ErrChecksum). Neither leaves rows.
+- **Mutants.** Skipping the header check, and skipping the thread-id comparison, are both killed.
 
 ## Summary
 

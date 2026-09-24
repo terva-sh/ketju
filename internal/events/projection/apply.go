@@ -3,6 +3,7 @@ package projection
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -170,8 +171,16 @@ func applyUnpinned(ctx context.Context, q *dbq.Queries, f frame) error {
 	}))(f, "thread")
 }
 
+// applyTagged checks for the thread row first: an empty tag list touches no
+// row, so without the check a ThreadTagged for a thread the projection lacks
+// would pass unnoticed (review 390).
 func applyTagged(ctx context.Context, q *dbq.Queries, f frame) error {
 	b := f.body.(*threadlog.ThreadTaggedBody)
+	if _, err := q.GetThread(ctx, int64(f.thread)); errors.Is(err, sql.ErrNoRows) {
+		return one(0, nil)(f, "thread")
+	} else if err != nil {
+		return err
+	}
 	return replaceTags(ctx, q, f.thread, b.Tags)
 }
 
