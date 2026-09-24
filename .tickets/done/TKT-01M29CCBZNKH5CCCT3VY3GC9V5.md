@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:31:11Z
+updated_at: 2026-09-24T15:38:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,34 +52,40 @@ The entire storage design assumes one writer per log file. Two processes sharing
 
 ## Implementation plan
 
-Revised at claim (2026-09-24), after reading the code. The pre-groom approach stands; what changed is recorded here.
+Revised at claim (2026-09-24), after reading the code; revised again for review 443, which moved the flock from the file to the directory.
 
-Decided: a lock file in `data/` refuses a second `serve`, and the process stays single-process (docs/10 item 24, README; TKT-01M29BW9PB is done).
+Decided: a lock in `data/` refuses a second `serve`, and the process stays single-process (docs/10 item 24, README; TKT-01M29BW9PB is done).
 
 ### Approach
-1. New package `internal/lock`: `Acquire(dir, purpose) (*Lock, error)`, `(*Lock).Release() error`, `HeldError{Dir, Holder, ReadErr}`, `Holder{pid, host, purpose, started_at, version}`. The file is `<data_dir>/ketju.lock`.
-2. An exclusive, non-blocking flock through `syscall.Flock`, with EINTR retried. The kernel drops it when the holder dies, so a killed holder leaves nothing stale and there is no pid probing.
-3. The file is opened without O_TRUNC, so a refused open can still read the holder. After locking, it is truncated, the JSON record is written, and it is fsynced.
-4. On EWOULDBLOCK the refusal reads the record and returns `*HeldError`. The message names the directory, pid, host, and start time, and what to check: ps, systemctl status, docker ps, and a network filesystem. If the record is unreadable, it says so and still refuses.
-5. Release unlocks and closes, and leaves the file in place. Removing the file would race a process that has already opened the old inode.
-6. `lock_unix.go` (`//go:build unix`) holds the flock. `lock_other.go` refuses on every other platform with a clear message.
-7. Acquire does not create the data directory. Creating it is serve's decision (CCBYX), and a lock taken in a directory a typo just created protects nothing.
-8. Version: the binary has no version string yet, so the record carries `debug.ReadBuildInfo().Main.Version`, which is "(devel)" in a local build.
-9. No new exit code. A refusal maps to exitInternal (4) through `exitCodeFor` until serve decides otherwise; the AC asks only for non-zero. Deciding the code belongs with serve's startup failures (CCBYX AC3).
+1. New package `internal/lock`: `Acquire(dir, purpose) (*Lock, error)`, `(*Lock).Release() error`, `HeldError{Dir, Holder, ReadErr}`, `Holder{pid, host, purpose, started_at, version}`.
+2. The lock is an exclusive, non-blocking flock on the data directory itself, opened O_RDONLY|O_DIRECTORY, with EINTR retried. It is not on a file in the directory, because a file's inode can be deleted or replaced under its holder, and the next process would lock the new one (review 443). The kernel drops the flock when the holder dies, so a killed holder leaves nothing stale.
+3. `<data_dir>/ketju.lock` is only the record of who took the lock. Once the directory is locked, it is opened with O_NOFOLLOW, refused unless it is a regular file with one link (review 433), truncated, written as JSON, and fsynced. Deleting it loses a name, not the lock.
+4. On EWOULDBLOCK, the refusal reads the record (O_NOFOLLOW, bounded to 64 KiB, every field required: review 440) and returns `*HeldError`. The message names the directory, pid, host and start time, and what to check: ps, systemctl status, docker ps, and a network filesystem. If the record is unreadable or incomplete, it says so and still refuses.
+5. Release unlocks and closes the directory, and leaves the record in place.
+6. `lock_unix.go` (`//go:build unix`) holds the flock. `lock_other.go` refuses before touching anything (review 441).
+7. Acquire does not create the data directory; that is serve's decision (CCBYX).
+8. Version: `debug.ReadBuildInfo().Main.Version`, which is "(devel)" in a local build.
+9. No new exit code. A refusal maps to exitInternal (4) until serve decides otherwise (CCBYX AC3).
 
 ### Tests
 `internal/lock/lock_test.go`. A second process is this test binary re-run with `KETJU_LOCK_HELPER` set.
-- AC1: the second process's refusal is non-zero and names the pid; an in-process second open is refused as a `*HeldError` carrying the record.
-- AC2: the helper holds the lock and is killed with SIGKILL; Acquire then succeeds, the file is not deleted, and the record is rewritten.
-- AC3: after Release the lock can be taken again, by another process and by this one, and the file is still there.
-- AC4: a golden (`testdata/held.golden`, `-update`) holds both messages, with the holder named and with the record unreadable.
-- Also covered: an unreadable record still refuses, a longer old record leaves no tail, and a missing directory is not created.
-
-### Interactions
-Consumed by CCBYX (serve), first after config load, released last; the serve-level checks for AC1 and AC3 are its to carry. Also consumed by C5Y25 (reindex), with purpose "reindex". `ketju fsck --rebuild` does not take the lock, as planned.
+- AC1: the second process's refusal is non-zero and names the pid; an in-process second Acquire is refused with the record.
+- AC2: the holder is killed with SIGKILL, and Acquire then succeeds.
+- AC3: after Release the lock can be taken again, by another process and by this one.
+- AC4: a golden holds the two messages.
+- Also covered:
+  - the record deleted or replaced under a holder, which still refuses a second process;
+  - a data dir that is a file;
+  - a symlink, dangling symlink, hard link, fifo or directory at the record path;
+  - unreadable, incomplete and symlinked records;
+  - a longer old record leaving no tail;
+  - a missing directory, which is not created.
 
 ### Design
 docs/10-open-questions.md "Operations" item 24. docs/02-architecture.md "One process per data directory". README "One process per data directory". docs/03-thread-storage.md "Write path" (exactly one writer per file).
+
+### Interactions
+Consumed by CCBYX (serve), first after config load and released last; the serve-level checks for AC1 and AC3 are its to carry. Also consumed by C5Y25 (reindex), with purpose "reindex". `ketju fsck --rebuild` does not take the lock, as planned.
 
 ## Notes
 
@@ -133,6 +139,25 @@ Answered review 440 (medium). readHolder accepted any valid JSON, so {} or null 
 
 Answered review 441 (low). On a non-unix platform, openFile created ketju.lock before tryLock refused, and a missing directory gave an open error instead of the refusal. The non-unix openFile now returns the unsupported-platform error before touching anything. Checked with GOOS=windows go vet and GOOS=plan9 go build. No test runs there: CI is linux only. CI run 283 on a233731 passed.
 
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:38:19Z
+
+Answered review 443 (medium): replacing the lock file permitted two holders. The finding was right. A flock belongs to an inode, so deleting or renaming over ketju.lock while serve held it would have let a second process lock the new file.
+
+The options considered:
+- **Document the limitation**, which the review allowed. Rejected: the lock is the one guard against quiet corruption, and "don't touch this file" is exactly what a botched deploy does.
+- **Have the holder re-check its inode periodically.** Rejected: it notices only after the second process is already running.
+- **Flock the data directory itself.** Taken. The directory's inode cannot be replaced without replacing the directory, and a replaced directory is other data. ketju.lock remains, but only as the record naming the holder, and nothing decides anything from it.
+
+A consequence is that review 436's fix no longer applies: there is no refused file descriptor to read the record through. The refusal reads the record by path (O_NOFOLLOW, bounded, all fields required). A holder writes it just after locking, so in that moment a refusal reads the previous holder's record, or an empty file, which it reports as unnamed.
+
+New tests:
+- TestReplacingTheRecordDoesNotFreeTheLock covers the record deleted, then replaced by rename; both still refuse a second process.
+- TestDataDirMustBeADirectory.
+- A symlinked-record case in TestUnreadableRecordStillRefuses.
+The golden changed by one word ("lock file" became "lock record") and was regenerated with -update.
+
+Mutation check: 22 of 23 killed, against a green baseline. The survivor, dropping O_DIRECTORY from the directory open, is equivalent: a data dir that is a file then fails at writing the record, with the same ENOTDIR. The symlinked-record mutant survived the first run and is now killed by the case above. CI run 285 on 94af83f passed.
+
 ## Summary
 
-internal/lock: an exclusive flock on data/ketju.lock with a JSON record naming the holder (pid, host, purpose, start, version). A killed holder leaves nothing stale, because the kernel drops the flock. A refusal is a *HeldError whose message says what to check. Release leaves the file in place. Non-unix platforms refuse. AC2 and AC4 are met here. AC1 and AC3 are met at the lock level with a real second process, and are left unticked because they name serve; the serve-level checks are carried by TKT-01M29CCBYX.
+internal/lock: an exclusive flock on the data directory itself, so deleting or replacing a file inside it cannot free the lock. data/ketju.lock is a JSON record naming the holder (pid, host, purpose, start, version), written only while locked, with O_NOFOLLOW and single-link checks. A killed holder leaves nothing stale, because the kernel drops the flock. A refusal is a *HeldError whose message says what to check, and says so when the record is unreadable or incomplete. Non-unix platforms refuse before touching anything. AC2 and AC4 are met here. AC1 and AC3 are met at the lock level with a real second process, and are left unticked because they name serve; the serve-level checks are carried by TKT-01M29CCBYX.

@@ -17,10 +17,14 @@ var errHeld = errors.New("lock: held")
 var errUnsupported = errors.New("the data directory lock is not implemented on " + runtime.GOOS +
 	"; ketju serves only on unix-like systems")
 
-// openFile refuses before touching the directory, so a refused Acquire
-// leaves no lock file behind and says why whether or not the directory
-// exists (review 441).
+// openDir refuses before touching the directory, so a refused Acquire
+// leaves nothing behind and says why whether or not the directory exists
+// (review 441).
+func openDir(string) (*os.File, error) { return nil, errUnsupported }
+
 func openFile(string) (*os.File, error) { return nil, errUnsupported }
+
+func openRecord(string) (*os.File, error) { return nil, errUnsupported }
 
 func tryLock(*os.File) error { return errUnsupported }
 

@@ -140,12 +140,7 @@ func TestKilledHolderIsNotStale(t *testing.T) {
 		t.Fatalf("after the holder was killed: %v", err)
 	}
 	defer l.Release()
-	rf, err := os.Open(filepath.Join(dir, FileName))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rf.Close()
-	h, err := readHolder(rf)
+	h, err := readHolder(filepath.Join(dir, FileName))
 	if err != nil || h.PID != os.Getpid() {
 		t.Errorf("the record was not rewritten for the new holder: %+v, %v", h, err)
 	}
@@ -243,12 +238,28 @@ func TestUnreadableRecordStillRefuses(t *testing.T) {
 		}
 	}
 
+	// A symlink to a whole record elsewhere is not the record: a refusal
+	// naming whatever it points at would name a holder nobody recorded.
+	elsewhere := filepath.Join(t.TempDir(), "record")
+	if err := os.WriteFile(elsewhere, []byte(full), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(filepath.Join(dir, FileName))
+	if err := os.Symlink(elsewhere, filepath.Join(dir, FileName)); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Acquire(dir, "serve")
+	if held := (*HeldError)(nil); !errors.As(err, &held) || held.Holder != nil {
+		t.Errorf("a symlinked record named a holder: %v", err)
+	}
+	os.Remove(filepath.Join(dir, FileName))
+
 	// A whole record names the holder, so the cases above are refused for
 	// what they lack, not for something else.
 	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(full), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Acquire(dir, "serve")
+	_, err = Acquire(dir, "serve")
 	var held *HeldError
 	if !errors.As(err, &held) || held.Holder == nil || held.Holder.PID != 7 {
 		t.Errorf("a whole record: got %v", err)
@@ -352,5 +363,56 @@ func TestLockFileMustBeItsOwn(t *testing.T) {
 				t.Errorf("a dangling symlink's target was created: %v", err)
 			}
 		})
+	}
+}
+
+// The flock is on the directory, so the record file can be deleted or
+// replaced under a running holder without letting a second process in
+// (review 443). The refusal still stands; it just cannot name the holder.
+func TestReplacingTheRecordDoesNotFreeTheLock(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Acquire(dir, "serve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l.Release()
+	path := filepath.Join(dir, FileName)
+
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Acquire(dir, "serve")
+	var held *HeldError
+	if !errors.As(err, &held) {
+		t.Fatalf("with the record deleted: got %v, want a *HeldError", err)
+	}
+	if held.Holder != nil || held.ReadErr == nil {
+		t.Errorf("with the record deleted: holder %+v, read error %v", held.Holder, held.ReadErr)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("a refused Acquire recreated the record: %v", err)
+	}
+
+	// Replaced by rename, as an editor or a botched deploy might.
+	tmp := filepath.Join(dir, "new")
+	if err := os.WriteFile(tmp, []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(tmp, path); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := helperCmd(t, dir, "").CombinedOutput(); err == nil {
+		t.Fatalf("another process took the lock after the record was replaced:\n%s", out)
+	}
+}
+
+func TestDataDirMustBeADirectory(t *testing.T) {
+	file := filepath.Join(t.TempDir(), "data")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if l, err := Acquire(file, "serve"); err == nil {
+		l.Release()
+		t.Fatal("locked a data directory that is a file")
 	}
 }
