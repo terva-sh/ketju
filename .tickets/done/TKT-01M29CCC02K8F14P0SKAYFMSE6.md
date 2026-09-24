@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:preact-client
     path: docs/07-api-and-clients.md
+  - ref: pr:59
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T10:34:16Z
+updated_at: 2026-09-24T10:35:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
