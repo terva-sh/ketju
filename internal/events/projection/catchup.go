@@ -42,6 +42,14 @@ type Report struct {
 	// the writer's behind set, which Run retries and Lag reports.
 	Failed []threadid.ID
 
+	// Unfinished are threads whose log holds only its file header and that
+	// the projection has never seen: a crash between creating the files and
+	// appending ThreadCreated. There is nothing to project: ProjectThread
+	// has no frame to apply and records no state, so treating one as a gap
+	// would count it closed and find it open again at every catch-up. They
+	// are reported instead (review 456).
+	Unfinished []threadid.ID
+
 	// Strays are files under threads/ that are not a thread's log or index
 	// at the path its id names.
 	Strays []string
@@ -126,6 +134,12 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		size := logs[id]
 		at, known := projected[id]
 		if !known {
+			if size == threadlog.FileHeaderSize {
+				rep.Unfinished = append(rep.Unfinished, id)
+				w.log.Info("a thread log holds only its header: its creation never finished, "+
+					"and there is nothing to project", "thread", id)
+				continue
+			}
 			at = threadlog.FileHeaderSize // a thread the projection never saw
 		}
 		switch {
@@ -185,7 +199,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 
 	w.log.Info("projection catch-up finished",
 		"scanned", rep.Scanned, "closed", rep.Closed, "bytes", rep.Bytes,
-		"corrupt", len(rep.Corrupt), "failed", len(rep.Failed), "strays", len(rep.Strays),
+		"corrupt", len(rep.Corrupt), "failed", len(rep.Failed), "unfinished", len(rep.Unfinished), "strays", len(rep.Strays),
 		"elapsed", rep.Elapsed)
 	return rep, nil
 }

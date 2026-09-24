@@ -764,3 +764,40 @@ func TestCatchUpQuarantinesAHeldThread(t *testing.T) {
 		t.Errorf("lag = %+v; a quarantined thread is not behind", l)
 	}
 }
+
+// A log holding only its file header, which the projection has never seen,
+// is a thread whose creation never finished: reported, and neither counted
+// as a closed gap nor held, because there is no frame to project and no
+// state a projection would record (review 456).
+func TestHeaderOnlyLogIsUnfinished(t *testing.T) {
+	f := newFixture(t)
+	buf := f.logs()
+	id := threadid.ID(uint64(1_700_000_000_000)<<16 | 99)
+	th, err := f.cache.Create(id, 7, 1_700_000_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.cache.Release(th)
+	c := f.restart()
+	if logSize(t, f.root, id) != threadlog.FileHeaderSize {
+		t.Fatal("the setup did not leave a header-only log")
+	}
+
+	var calls atomic.Int64
+	rep, err := f.w.CatchUp(t.Context(), reopenWith(c, &calls))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(rep.Unfinished, []threadid.ID{id}) || len(rep.Failed) != 0 || len(rep.Corrupt) != 0 || rep.Closed != 0 {
+		t.Fatalf("report = %+v", rep)
+	}
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag = %+v; an unfinished thread is not behind", l)
+	}
+	if _, ok := f.projected()[id]; ok {
+		t.Error("a projection_state row was written for a thread that was never created")
+	}
+	if !strings.Contains(buf.String(), "creation never finished") {
+		t.Errorf("not logged:\n%s", buf.String())
+	}
+}
