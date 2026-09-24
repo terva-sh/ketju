@@ -6,8 +6,13 @@ RETURNING id;
 -- name: GetForum :one
 SELECT * FROM forums WHERE id = ?;
 
+-- Roots in position order, each followed by its children in position order.
+-- A child sorts by its root's position and id, then after the root itself.
 -- name: ListForums :many
-SELECT * FROM forums ORDER BY coalesce(parent_id, id), parent_id IS NOT NULL, position, id;
+SELECT f.* FROM forums AS f
+LEFT JOIN forums AS root ON root.id = f.parent_id
+ORDER BY coalesce(root.position, f.position), coalesce(f.parent_id, f.id),
+         f.parent_id IS NOT NULL, f.position, f.id;
 
 -- name: SetForumParent :exec
 UPDATE forums SET parent_id = ?, updated_at = ? WHERE id = ?;

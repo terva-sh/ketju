@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T07:50:46Z
+updated_at: 2026-09-24T07:52:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -120,6 +120,10 @@ Terva review 379 (run 874f23e7-9dad-4e67-8030-ec87f2856a7b, Actions run 141), he
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:50:46Z
 
 Terva review 380 (run 90cd900c-b5d7-4f45-b76c-4ea1985fae1b, Actions run 143), head 160f9dde5e562b513d32670b5e99d9f4c2b2b967, base e422e22113dafe542a645d09588bd3c52e5101f7. The finding from review 379 is marked resolved. One new medium finding, 'Allow an admin to take ownership of an existing IdP membership'. **Accepted and fixed.** AddAdminMembership is now INSERT ... ON CONFLICT DO UPDATE SET source='admin', added_by, added_at WHERE group_members.source = 'idp'. An admin add promotes an IdP row, so the next login's re-evaluation keeps it, and it leaves an existing admin row with its original adder and time. AddIdPMembership still never overwrites an admin row. TestGroupMemberSource covers the takeover followed by a login, and the idempotent re-add. The old plain insert fails that test on the primary key; dropping the WHERE fails it on added_at. A follow-up review of the new head is requested.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:52:19Z
+
+Terva review 381 (run 6944ffc5-d11f-4080-a991-27db28872175, Actions run 145), head 8647d281bfc1e46cd3acace8fd83c0e2224e6869, base e422e22113dafe542a645d09588bd3c52e5101f7. The finding from review 380 is marked resolved. One new medium finding, 'Order root forums by position in ListForums'. **Accepted and fixed.** ListForums now left-joins each forum to its parent and orders by the root's position, then the root's id, then root before children, then the child's position. The generated method still returns []Forum. The new TestListForumsOrder builds roots and children whose positions disagree with their ids; the old ordering fails it with [late late-a late-b early early-a]. A follow-up review of the new head is requested.
 
 ## Summary
 

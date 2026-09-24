@@ -40,6 +40,8 @@ type Querier interface {
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
 	GroupsForUser(ctx context.Context, userID int64) ([]GroupsForUserRow, error)
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
+	// Roots in position order, each followed by its children in position order.
+	// A child sorts by its root's position and id, then after the root itself.
 	ListForums(ctx context.Context) ([]Forum, error)
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListMigrations(ctx context.Context) ([]SchemaMigration, error)

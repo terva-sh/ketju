@@ -225,9 +225,14 @@ func (q *Queries) GroupsForUser(ctx context.Context, userID int64) ([]GroupsForU
 }
 
 const listForums = `-- name: ListForums :many
-SELECT id, parent_id, slug, name, description, position, visibility, archived, created_at, updated_at FROM forums ORDER BY coalesce(parent_id, id), parent_id IS NOT NULL, position, id
+SELECT f.id, f.parent_id, f.slug, f.name, f.description, f.position, f.visibility, f.archived, f.created_at, f.updated_at FROM forums AS f
+LEFT JOIN forums AS root ON root.id = f.parent_id
+ORDER BY coalesce(root.position, f.position), coalesce(f.parent_id, f.id),
+         f.parent_id IS NOT NULL, f.position, f.id
 `
 
+// Roots in position order, each followed by its children in position order.
+// A child sorts by its root's position and id, then after the root itself.
 func (q *Queries) ListForums(ctx context.Context) ([]Forum, error) {
 	rows, err := q.db.QueryContext(ctx, listForums)
 	if err != nil {

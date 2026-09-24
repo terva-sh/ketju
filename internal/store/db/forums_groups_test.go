@@ -458,3 +458,43 @@ func TestPermissionRowsForAForum(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+// TestListForumsOrder: roots come in position order, not id order, and each
+// root is followed by its own children in their position order.
+func TestListForumsOrder(t *testing.T) {
+	d, _ := openTest(t)
+	mk := func(slug string, parent, position int64) int64 {
+		var id int64
+		write(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+			var err error
+			id, err = q.CreateForum(t.Context(), dbq.CreateForumParams{
+				ParentID: sql.NullInt64{Int64: parent, Valid: parent != 0},
+				Slug:     slug, Name: slug, Position: position, Visibility: domain.VisibilityMembers, CreatedAt: 1, UpdatedAt: 1,
+			})
+			return err
+		})
+		return id
+	}
+	// Created in an order that disagrees with position at every level.
+	late := mk("late", 0, 2)
+	early := mk("early", 0, 1)
+	mk("late-b", late, 2)
+	mk("late-a", late, 1)
+	mk("early-a", early, 1)
+
+	var got []string
+	err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		forums, err := q.ListForums(t.Context())
+		for _, f := range forums {
+			got = append(got, f.Slug)
+		}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"early", "early-a", "late", "late-a", "late-b"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("ListForums = %v, want %v", got, want)
+	}
+}
