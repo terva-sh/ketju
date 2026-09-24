@@ -20,7 +20,14 @@ export function ThreadScreen() {
   // only when that is the thread on screen, so moving to another thread never
   // renders the last one's title or 404, not even for the one render before
   // its own request is made.
-  const [answer, setAnswer] = useState<{ id: string; head?: ThreadHead; missing?: boolean } | null>(null);
+  //
+  // A request that fails for any reason but 404 says so, keeping the title
+  // it had; it does not leave an earlier 404 standing, which would call a
+  // thread that exists missing. Retrying is the fetch layer's
+  // (TKT-01M29CEE5H).
+  const [answer, setAnswer] = useState<{ id: string; head?: ThreadHead; missing?: boolean; failed?: boolean } | null>(
+    null,
+  );
   const current = answer?.id === params.id ? answer : null;
   const history = path.endsWith('/history');
 
@@ -33,18 +40,21 @@ export function ThreadScreen() {
     const s = q.toString();
     const id = params.id;
     let live = true;
+    const failed = () => {
+      if (live) setAnswer((a) => ({ id, head: a?.id === id ? a.head : undefined, failed: true }));
+    };
     fetch(`/api/v1/threads/${encodeURIComponent(params.id)}${s ? '?' + s : ''}`, {
       headers: { Accept: 'application/json' },
     })
       .then(async (r) => {
         if (!live) return;
         if (r.status === 404) return setAnswer({ id, missing: true });
-        if (!r.ok) return;
+        if (!r.ok) return failed();
         const body = (await r.json()) as ThreadHead;
         if (!live) return;
         setAnswer({ id, head: body });
       })
-      .catch(() => {});
+      .catch(failed);
     return () => {
       live = false;
     };
@@ -63,6 +73,7 @@ export function ThreadScreen() {
   return (
     <main class="scaffold" data-screen={history ? 'post-history' : 'thread'}>
       <h1>{current?.head?.thread.title ?? 'Thread'}</h1>
+      {current?.failed && <p role="alert">This thread could not be loaded.</p>}
       <p>
         {history ? `History of post ${params.ordinal}. ` : ''}
         Page {view.page}

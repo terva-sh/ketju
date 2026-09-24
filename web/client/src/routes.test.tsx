@@ -1,7 +1,8 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { clientScope, routes } from './routes';
-import { renderAt, screenOf } from './testing';
+import { clientScope, nav, routes, serverOwned } from './routes';
+import { act } from 'preact/test-utils';
+import { renderAt, screenOf, settle } from './testing';
 
 // One concrete URL per line of docs/07's URL scheme, and the screen it must
 // reach. /auth/* is the server's and is not a client route.
@@ -90,10 +91,60 @@ describe('the route table', () => {
     expect(location.pathname === href).toBe(routed);
   });
 
+  // A spelling clientScope cannot see through is resolved by the browser,
+  // routed in the page, and then handed to the server by the fallback.
+  it.each(['/./auth/github/start', '/t/../auth/logout', '/%61uth/github/start'])(
+    'a link to %s still reaches the server',
+    async (href) => {
+      vi.stubGlobal('fetch', () => new Promise(() => {}));
+      const root = await renderAt('/');
+      const left: string[] = [];
+      const spy = vi.spyOn(nav, 'leave').mockImplementation((u) => void left.push(u));
+      const a = document.createElement('a');
+      a.href = href;
+      root.appendChild(a);
+      try {
+        await act(async () => {
+          a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, button: 0 }));
+        });
+        await settle(root);
+      } finally {
+        spy.mockRestore();
+      }
+      const resolved = new URL(href, location.origin).pathname;
+      expect(left.map((u) => new URL(u).pathname)).toEqual([resolved]);
+      expect(screenOf(root)).toBeNull();
+    },
+  );
+
+  it.each(['/authors', '/AUTH/github/start', '/%E0%A4%A'])('does not hand %s to the server', async (url) => {
+    const spy = vi.spyOn(nav, 'leave').mockImplementation(() => {});
+    try {
+      expect(screenOf(await renderAt(url))).toBe('not-found');
+      expect(spy).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it.each([
+    ['/auth/github/start', true],
+    ['/auth', true],
+    ['/%61uth/logout', true],
+    ['/api/v1/me', true],
+    ['/events', true],
+    ['/authors', false],
+    ['/AUTH/x', false],
+    ['/t/01k4z3j0w8x2c/auth', false],
+    ['/%E0%A4%A', false],
+  ])('serverOwned %s: %s', (path, owned) => {
+    expect(serverOwned(path)).toBe(owned);
+  });
+
   it.each([
     ['/auth/github/start', false],
     ['/auth', false],
-    ['/API/v1/me', false],
+    ['/API/v1/me', true],
     ['https://ketju.test/auth/github/start', false],
     ['//ketju.test/auth/logout', false],
     ['/events?x=1', false],

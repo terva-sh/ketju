@@ -1,6 +1,5 @@
 import { LocationProvider, Router, Route } from 'preact-iso';
-import { clientScope, routes } from './routes';
-import { NotFound } from './screens/Placeholder';
+import { clientScope, Fallback, routes } from './routes';
 
 export function App() {
   return (
@@ -9,7 +8,7 @@ export function App() {
         {routes.map((r) => (
           <Route key={r.path} path={r.path} component={r.component} />
         ))}
-        <Route default component={NotFound} />
+        <Route default component={Fallback} />
       </Router>
     </LocationProvider>
   );

@@ -1,6 +1,7 @@
 import type { AnyComponent } from 'preact';
-import { lazy } from 'preact-iso';
-import { ForumIndex, Placeholder } from './screens/Placeholder';
+import { useEffect } from 'preact/hooks';
+import { lazy, useLocation } from 'preact-iso';
+import { ForumIndex, NotFound, Placeholder } from './screens/Placeholder';
 import { ThreadScreen } from './screens/ThreadScreen';
 
 // The admin screens are their own chunk, fetched the first time an /admin
@@ -31,9 +32,47 @@ const placeholder = (screen: string, title: string): RouteEntry['component'] =>
 // internal/web/server.go (docs/02).
 //
 // preact-iso tests the raw href attribute, so an absolute or
-// protocol-relative href to the same origin is matched too.
+// protocol-relative href to the same origin is matched too. A raw href can
+// spell a path many ways (/./auth, /x/../auth, /%61uth), and no pattern over
+// the spelling catches them all; Fallback below catches the rest, after the
+// browser has resolved the path. Case matters, as it does to the server's
+// ServeMux: /AUTH is an application route there, and here.
 export const clientScope =
-  /^(?!(?:[a-z][a-z0-9+.-]*:)?(?:\/\/[^/]*)?\/(?:auth|api|blobs|events|assets)(?:[/?#]|$))/i;
+  /^(?!(?:[a-z][a-z0-9+.-]*:)?(?:\/\/[^/]*)?\/(?:auth|api|blobs|events|assets)(?:[/?#]|$))/;
+
+// serverOwned reports whether the server answers a resolved pathname rather
+// than the client. It decodes first, because the server's ServeMux does:
+// /%61uth/github/start reaches the auth handler there.
+export function serverOwned(pathname: string): boolean {
+  let p = pathname;
+  try {
+    p = decodeURIComponent(pathname);
+  } catch {
+    // A malformed escape is not a path the server routes anywhere special.
+  }
+  return /^\/(?:auth|api|blobs|events|assets)(?:\/|$)/.test(p);
+}
+
+// nav.leave hands the address to the server with a full load, in place of
+// the entry the router just pushed. An object so a test can intercept it.
+export const nav = {
+  leave(url: string) {
+    location.replace(url);
+  },
+};
+
+// Fallback is the route for an address nothing in the table matches. If the
+// browser resolved it to a server-owned path — a link clientScope could not
+// recognise from its spelling — the server gets it; otherwise it is the
+// client's NotFound.
+export function Fallback() {
+  const { url } = useLocation();
+  const leaving = serverOwned(location.pathname);
+  useEffect(() => {
+    if (leaving) nav.leave(location.href);
+  }, [url, leaving]);
+  return leaving ? null : <NotFound />;
+}
 
 // One entry per path in docs/07's URL scheme, which both clients serve, so a
 // route here is a URL the HTML client will answer too. /auth/* is not here:

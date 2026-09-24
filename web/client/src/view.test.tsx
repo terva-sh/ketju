@@ -271,6 +271,58 @@ describe('a stale slug', () => {
     expect(r.seen.filter((t) => t.includes('Not found'))).toEqual([]);
   });
 
+  // A later failure that is not a 404 says so; it does not leave the
+  // earlier 404 calling the thread missing.
+  it.each(['500', 'network'])('replaces an earlier 404 after a later %s failure', async (kind) => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => {
+      if (calls++ === 0) return new Response('{}', { status: 404 });
+      if (kind === 'network') throw new TypeError('network down');
+      return new Response('{}', { status: 500 });
+    });
+    const root = await renderAt('/t/01k4z3j0w8x2c/a');
+    expect(screenOf(root)).toBe('not-found');
+    await route('/t/01k4z3j0w8x2c/a?page=2');
+    await settle(root);
+    expect(screenOf(root)).toBe('thread');
+    expect(root.textContent).toContain('could not be loaded');
+  });
+
+  // Requests can finish out of order. An older one failing after a newer
+  // one succeeded is old news, not a failure of what is on screen.
+  it('ignores a superseded request that fails late', async () => {
+    let failFirst!: () => void;
+    let calls = 0;
+    vi.stubGlobal('fetch', (url: string) => {
+      if (calls++ === 0) return new Promise<Response>((_, reject) => (failFirst = () => reject(new TypeError('late'))));
+      return Promise.resolve(
+        new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'Newer' } }), { status: 200 }),
+      ).then((r) => (expect(url).toContain('page=2'), r));
+    });
+    const root = await renderAt('/t/01k4z3j0w8x2c/a');
+    await route('/t/01k4z3j0w8x2c/a?page=2');
+    await settle(root);
+    expect(root.textContent).toContain('Newer');
+    await act(async () => failFirst());
+    await settle(root);
+    expect(root.textContent).toContain('Newer');
+    expect(root.textContent).not.toContain('could not be loaded');
+  });
+
+  it('keeps the title through a later failure', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () =>
+      calls++ === 0
+        ? new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'Kept' } }), { status: 200 })
+        : new Response('{}', { status: 503 }),
+    );
+    const root = await renderAt('/t/01k4z3j0w8x2c/a');
+    await route('/t/01k4z3j0w8x2c/a?page=2');
+    await settle(root);
+    expect(root.textContent).toContain('Kept');
+    expect(root.textContent).toContain('could not be loaded');
+  });
+
   // Nor does one thread's title stay up while the next one loads.
   it('does not show the last thread while the next loads', async () => {
     vi.stubGlobal('fetch', async (url: string) =>

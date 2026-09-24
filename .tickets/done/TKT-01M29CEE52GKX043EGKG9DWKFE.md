@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T11:13:29Z
+updated_at: 2026-09-24T11:20:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -175,6 +175,14 @@ Review 403 (1 high, 1 medium; both fixed). Review 402's finding is marked resolv
 (1) High: preact-iso's LocationProvider intercepts every same-origin link click in scope, and with no scope that means all of them. A link to /auth/github/start would therefore have rendered the client's NotFound instead of reaching the server to start sign-in. Fix: LocationProvider gets scope={clientScope}. clientScope is a RegExp that puts the server's groups out of scope: /auth, /api, /blobs, /events and /assets, from internal/web/server.go. It matches on a path-segment boundary, with or without a scheme and host, case-insensitively, because preact-iso tests the raw href attribute. There are 10 unit cases for the regex, and 9 click tests check whether the router prevented the default. Headless Chromium against the built client and a scratch server (deleted, not committed): clicking an /auth link left the document and the server's auth handler answered, while a thread link stayed in the page.
 (2) Medium: the history route dropped its ordinal from the thread request. It now passes ?ordinal=N for a permalink and for /history alike, and the test asserts the request. Chromium's request log showed ?ordinal=42.
 Mutants, all killed: no scope, no boundary, no origin handling (twice), no case-insensitivity, a missing prefix, and the ordinal excluded for history. 88 Vitest tests; dist rebuilt.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:20:04Z
+
+Review 404 (2 medium; both fixed). Review 403's two findings are marked resolved (the first for ordinary links).
+(1) A raw href such as /./auth/github/start slipped past clientScope, because no pattern over the spelling catches every equivalent path. clientScope still handles the common case. Behind it, the default route is now Fallback: it tests the path the browser resolved, and when the server owns it, hands it over with location.replace (nav.leave). serverOwned mirrors Go's ServeMux, which I checked directly: it unescapes, so /%61uth/github/start reaches the auth handler, and it is case-sensitive, so /AUTH is an application route. clientScope therefore lost its i flag, and /API/v1/me is now in scope, as it is an SPA route on the server.
+Tests: serverOwned over 9 paths; three odd spellings clicked in the page each reach nav.leave with the resolved path; /authors, /AUTH and a malformed escape stay NotFound without leaving. Headless Chromium against the built client and a scratch server (deleted, not committed): /./auth/github/start, /t/../auth/logout and /%61uth/github/start each left the document and reached the server's auth handler; /AUTH/x stayed in the page as NotFound.
+(2) A 404 followed by a failed request for the same thread (500 or network) left NotFound up. A failure now records itself and keeps any title it had. The screen shows 'This thread could not be loaded' (role=alert) instead of NotFound; retrying is CEE5H's. Tests: 404 then 500, 404 then network, a title kept through a 503, and a superseded request failing late after a newer success, which must not mark the page failed.
+Mutants, all killed: decoding, the null render, the leave call, the case flag, the boundary, Fallback swapped for NotFound, both failure paths, keeping the head, and the live guard (killed by the late-failure test). 107 Vitest tests; dist rebuilt.
 
 ## Summary
 
