@@ -7,14 +7,14 @@ tickets, and the next fix pass overwrites it.
 | Epic | Title | Status |
 |---|---|---|
 | [TKT-01M29BKBKP8C66GXXQK4HPEZ35](draft/TKT-01M29BKBKP8C66GXXQK4HPEZ35.md) | Thread log storage engine | draft |
-| [TKT-01M29BKBKV6HH8W0DN6QXQNZ0R](draft/TKT-01M29BKBKV6HH8W0DN6QXQNZ0R.md) | Embedded database, schema, and projections | draft |
-| [TKT-01M29BKBKZW26HNHFM1YFFGVZC](draft/TKT-01M29BKBKZW26HNHFM1YFFGVZC.md) | OIDC identity, sessions, and account lifecycle | draft |
+| [TKT-01M29BKBKV6HH8W0DN6QXQNZ0R](tickets/TKT-01M29BKBKV6HH8W0DN6QXQNZ0R.md) | Embedded database, schema, and projections | ready |
+| [TKT-01M29BKBKZW26HNHFM1YFFGVZC](tickets/TKT-01M29BKBKZW26HNHFM1YFFGVZC.md) | OIDC identity, sessions, and account lifecycle | ready |
 | [TKT-01M29BKBM38VTYY4Y91018GTH6](draft/TKT-01M29BKBM38VTYY4Y91018GTH6.md) | Approval-mode registration and the forms system | draft |
-| [TKT-01M29BKBM7004ZPAA9T81HC939](draft/TKT-01M29BKBM7004ZPAA9T81HC939.md) | Markdown render pipeline and attachments | draft |
-| [TKT-01M29BKBMCNDSYHYF9WXAPDNRN](draft/TKT-01M29BKBMCNDSYHYF9WXAPDNRN.md) | JSON API and service layer | draft |
-| [TKT-01M29BN367F3YQZESM63VN26GP](draft/TKT-01M29BN367F3YQZESM63VN26GP.md) | Preact client: shell, thread UI, and both layouts | draft |
+| [TKT-01M29BKBM7004ZPAA9T81HC939](tickets/TKT-01M29BKBM7004ZPAA9T81HC939.md) | Markdown render pipeline and attachments | ready |
+| [TKT-01M29BKBMCNDSYHYF9WXAPDNRN](tickets/TKT-01M29BKBMCNDSYHYF9WXAPDNRN.md) | JSON API and service layer | ready |
+| [TKT-01M29BN367F3YQZESM63VN26GP](tickets/TKT-01M29BN367F3YQZESM63VN26GP.md) | Preact client: shell, thread UI, and both layouts | ready |
 | [TKT-01M29BN36D34YVKVRPNQD3PHDV](draft/TKT-01M29BN36D34YVKVRPNQD3PHDV.md) | Lenses, unread surfaces, search, and live updates | draft |
 | [TKT-01M29BN36JH4M1W5819D06PGPP](draft/TKT-01M29BN36JH4M1W5819D06PGPP.md) | Moderation primitives and admin surfaces | draft |
-| [TKT-01M29BN36Q9D32WQGYPFS336J0](draft/TKT-01M29BN36Q9D32WQGYPFS336J0.md) | Operations: config, CLI, observability, and release | draft |
+| [TKT-01M29BN36Q9D32WQGYPFS336J0](tickets/TKT-01M29BN36Q9D32WQGYPFS336J0.md) | Operations: config, CLI, observability, and release | ready |
 | [TKT-01M29BN36WRBJMH049G6V1GNHE](draft/TKT-01M29BN36WRBJMH049G6V1GNHE.md) | Non-JS server-rendered HTML client | draft |
 | [TKT-01M29BN370YYWN3WEFJ7DPDTWW](draft/TKT-01M29BN370YYWN3WEFJ7DPDTWW.md) | Deferred features from the Later and Maybe list | draft |
