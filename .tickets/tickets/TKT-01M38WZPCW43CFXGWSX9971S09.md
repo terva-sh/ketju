@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T11:51:49Z
+updated_at: 2026-09-24T12:42:15Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -234,3 +234,7 @@ Merged PR #60, TKT-01M29CEE52 (Build the client router and route table), as d68a
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:51:49Z
 
 Merged PR #61, TKT-01M29C5Y3E (Build the server-side session store), as 0644d0c. CI run 229 was green; its step log shows internal/auth/session, perm, store/db and web all ran under -race. Review 407 found 1 high and 1 medium. The high: a suspended admin's viewer kept the admin role. perm already ignored it, but the viewer now carries no role for an inactive user. The medium: a touch could revive a session that had just expired; the UPDATE now rechecks both cutoffs. Both fixed in 0644d0c, and the re-review (run 228) was clean. Branch deleted. Next: TKT-01M29CA99R (Implement GET /me). Its other dependencies (C801M) are done.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:42:15Z
+
+Merged PR #62, TKT-01M29CA99R (Implement GET /me), as fc7a709. CI run 240 was green; its step log shows perm, service/users, store/db and web/api ran under -race, and the client tests passed (124). Reviews 408-410 found, in turn: a lost Settled-in-grooming section (pre_user restored) and MeCounts cost; a first-request implicit-group statement and a site-wide thread scan (fixed by migration 0007's trigger-kept forum_thread_counts plus threads_forum_active); and /me panicking when Deps.Users was unset (api.New now requires every service). The re-review (run 239) was clean on fc7a709. CI run 236 hit flake TKT-01M393S6P7 once. Branch deleted. Next: TKT-01M29CEE5H (Build the fetch layer and signals state).
