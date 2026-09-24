@@ -375,12 +375,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 	}
 
 	handles := s.handleMemo(ctx)
-	rctx := render.Context{
-		Posts: render.ResolverFunc(func(o uint32) (bool, bool) {
-			tomb, err := th.Index.Tombstoned(o)
-			return err == nil, err == nil && tomb
-		}),
-	}
+	rctx := render.Context{Posts: postResolver(th)}
 
 	for _, p := range posts {
 		d := dto.Post{
@@ -453,6 +448,17 @@ func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, ha
 	}
 	s.Render.PutDeps(k, r.HTML, render.Deps{Quotes: r.Quotes, Handles: used})
 	return r.HTML, nil
+}
+
+// postResolver answers the renderer's quote lookups from th's index: a post
+// exists when the index has its ordinal, and is deleted when it is a
+// tombstone. The read path and the preview share it, so a quote cannot render
+// one way on the page and another in the composer.
+func postResolver(th *threadcache.Thread) render.PostResolver {
+	return render.ResolverFunc(func(o uint32) (bool, bool) {
+		tomb, err := th.Index.Tombstoned(o)
+		return err == nil, err == nil && tomb
+	})
 }
 
 func quotesCurrent(quotes []render.Quote, posts render.PostResolver) bool {

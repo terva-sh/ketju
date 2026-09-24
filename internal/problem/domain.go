@@ -36,6 +36,10 @@ var mapping = []struct {
 	{threadlog.ErrNoSuchOrdinal, CodeNotFound},
 	{threadid.ErrMalformed, CodeBadRequest},
 
+	// Client asked for a reply to a post that is not in the thread. The
+	// request parsed; what it names does not exist there.
+	{render.ErrInvalidReplyTo, CodeValidationFailed},
+
 	// Client asked for something the object's state refuses.
 	{threadlog.ErrActorClosed, CodeConflict},
 
