@@ -46,10 +46,15 @@ WHERE s.id_hash = sqlc.arg(id_hash)
 
 -- TouchSession slides last_used_at only when the stored value is due, so the
 -- once-per-five-minutes rule holds in the statement itself: two requests that
--- both read a due value write once between them.
+-- both read a due value write once between them. It also requires the row to
+-- be alive by the same cutoffs as LookupSession, at the time of the write, so
+-- a touch that lands just after the idle boundary cannot revive the session.
 -- name: TouchSession :execrows
 UPDATE sessions SET last_used_at = sqlc.arg(now)
-WHERE id_hash = sqlc.arg(id_hash) AND last_used_at <= sqlc.arg(due_before);
+WHERE id_hash = sqlc.arg(id_hash)
+  AND last_used_at <= sqlc.arg(due_before)
+  AND expires_at > sqlc.arg(expires_after)
+  AND last_used_at > sqlc.arg(last_used_after);
 
 -- name: ListUserSessions :many
 SELECT id_hash, kind, created_at, expires_at, last_used_at, ip, user_agent

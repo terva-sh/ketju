@@ -109,12 +109,19 @@ type Session struct {
 // Viewer is the session as the rest of the server sees it. A user whose
 // status is not active keeps their session row until something deletes it,
 // but is not Active, so they have no member rights on the very next request.
+//
+// Nor do they carry their role. domain.Viewer says a role is ignored for an
+// inactive viewer, and perm honours that, but a viewer that says "admin"
+// for a suspended admin is one careless check away from authorising them;
+// one that says nothing cannot be misread.
 func (s Session) Viewer() domain.Viewer {
 	v := domain.Viewer{SessionKey: key(s.hash), IdentityID: s.IdentityID, PreUser: s.Kind == KindPreUser}
 	if s.Kind == KindUser && s.User != nil {
 		v.UserID = s.User.ID
-		v.Role = s.User.Role
 		v.Active = s.User.Status == "active"
+		if v.Active {
+			v.Role = s.User.Role
+		}
 	}
 	return v
 }
@@ -189,7 +196,9 @@ func touchDue(t, now time.Time) bool { return !t.After(now.Add(-TouchInterval)) 
 
 // Touch slides the session's last use to now if it is due, and reports
 // whether it wrote. The statement repeats the check, so concurrent requests
-// that both saw a due value write once between them.
+// that both saw a due value write once between them, and it rechecks expiry
+// at now: a session looked up a moment before it went idle must not be
+// revived by the touch that follows.
 func (s *Store) Touch(ctx context.Context, sess Session) (bool, error) {
 	now := s.now()
 	if !touchDue(sess.LastUsedAt, now) {
@@ -198,8 +207,9 @@ func (s *Store) Touch(ctx context.Context, sess Session) (bool, error) {
 	var n int64
 	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
+		c := ExpiredBefore(now)
 		n, err = q.TouchSession(ctx, dbq.TouchSessionParams{Now: now.UnixMilli(), IDHash: sess.hash,
-			DueBefore: now.Add(-TouchInterval).UnixMilli()})
+			DueBefore: now.Add(-TouchInterval).UnixMilli(), ExpiresAfter: c.ExpiresAt, LastUsedAfter: c.LastUsedAt})
 		return err
 	})
 	if err != nil {

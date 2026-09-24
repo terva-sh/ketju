@@ -125,7 +125,9 @@ type Querier interface {
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
 	// TouchSession slides last_used_at only when the stored value is due, so the
 	// once-per-five-minutes rule holds in the statement itself: two requests that
-	// both read a due value write once between them.
+	// both read a due value write once between them. It also requires the row to
+	// be alive by the same cutoffs as LookupSession, at the time of the write, so
+	// a touch that lands just after the idle boundary cannot revive the session.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	// Clears the pin only when its scope matches, so removing a forum pin does
 	// not silently remove a global one (docs/03). SQLite evaluates every SET

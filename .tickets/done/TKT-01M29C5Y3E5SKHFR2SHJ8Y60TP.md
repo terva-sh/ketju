@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-24T11:42:36Z
+updated_at: 2026-09-24T11:47:52Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -168,6 +168,13 @@ Built and verified.
   - the request log carries `"viewer":<id>` and not the token.
 - **Mutation:** 28 mutants, 27 killed. They covered both cutoffs in Go and in SQL, the hard-expiry offset, the touch guard in SQL and in Go, the length check, strict decoding, Active, PreUser, the derived key, cookie clearing, the 500 path, the log viewer, Revoke, Live, and Touch's result. The one survivor is `s.Kind == KindUser && s.User != nil` reduced to `s.User != nil`. It is equivalent, because the schema's CHECK rules out a pre_user row with a user, and it is kept as a guard.
 - The full CI set passes locally: gofmt, build, vet, sqlc stable, and `go test -race ./...`.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:47:52Z
+
+Review 407 (1 high, 1 medium; both fixed).
+(1) High, a suspended admin keeping the admin role on the viewer. perm.Check already turns any non-member into an anonymous viewer before its admin shortcut, so no permission check passed. But domain.Viewer relied on every consumer ignoring the role of an inactive user. Session.Viewer now sets Role only when the user is Active, so a suspended viewer carries no role that anything could misread. The test world's suspended user is now an admin. The predicate table checks that its Role is empty, and runs every viewer through perm.New(db).Check on a members-only forum: only the active member is allowed.
+(2) Medium, a touch reviving an idle-expired session. TouchSession checked only that the touch was due, so a lookup just before the idle boundary followed by a touch just after it would have moved last_used_at on a dead row. The UPDATE now also requires the row to be alive by the LookupSession cutoffs, computed at the time of the write. TestTouchDoesNotRevive covers the idle boundary (lookup at 30d-1ms, touch at 30d+1ms) and the hard one (touched daily, lookup at 90d-1ms, touch at 90d+1ms): no write, and the session stays gone.
+Mutants, all 5 killed: the role set regardless of Active; each expiry condition dropped from the SQL; each cutoff passed as 0.
 
 ## Summary
 

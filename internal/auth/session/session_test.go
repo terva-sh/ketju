@@ -18,6 +18,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/logging"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/web"
@@ -44,6 +45,7 @@ type world struct {
 	member    int64
 	suspended int64
 	identity  int64
+	forum     int64
 }
 
 func newWorld(t *testing.T) *world {
@@ -60,18 +62,25 @@ func newWorld(t *testing.T) *world {
 	w.store = &Store{DB: d, Now: w.clock.now}
 	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
-		user := func(handle, status string) int64 {
+		user := func(handle, status, role string) int64 {
 			if err != nil {
 				return 0
 			}
 			var id int64
 			id, err = q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: handle, DisplayName: strings.ToUpper(handle),
-				Status: status, Role: "moderator", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+				Status: status, Role: role, Kind: "human", CreatedAt: 1, UpdatedAt: 1})
 			return id
 		}
-		w.member = user("alice", "active")
-		w.suspended = user("mallory", "suspended")
+		w.member = user("alice", "active", "moderator")
+		// An admin, suspended: the case where a role left on the viewer
+		// would matter most.
+		w.suspended = user("mallory", "suspended", "admin")
 		if err != nil {
+			return err
+		}
+		// A members-only forum, which only a member (or an admin) may read.
+		if w.forum, err = q.CreateForum(t.Context(), dbq.CreateForumParams{Slug: "staff", Name: "Staff",
+			Visibility: domain.VisibilityMembers, CreatedAt: 1, UpdatedAt: 1}); err != nil {
 			return err
 		}
 		w.identity, err = q.CreateIdentity(t.Context(), dbq.CreateIdentityParams{ProviderKey: "github",
@@ -406,7 +415,9 @@ func TestViewerPredicates(t *testing.T) {
 	}{
 		{"anonymous", "", false, false, 0, ""},
 		{"member", w.signIn(w.member), true, false, w.member, "moderator"},
-		{"suspended", w.signIn(w.suspended), false, false, w.suspended, "moderator"},
+		// Suspended: no member rights, and no role either, though the row
+		// says admin.
+		{"suspended admin", w.signIn(w.suspended), false, false, w.suspended, ""},
 		{"pre-user", w.preUser(), false, true, 0, ""},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -424,6 +435,10 @@ func TestViewerPredicates(t *testing.T) {
 			}
 			if v.Member() != c.member || v.PreUser != c.preUser || v.UserID != c.userID || v.Role != c.role {
 				t.Fatalf("viewer %+v: member=%v preUser=%v", v, v.Member(), v.PreUser)
+			}
+			d, err := perm.New(w.db).Check(t.Context(), v, w.forum, domain.PermRead)
+			if err != nil || (d == perm.Allow) != c.member {
+				t.Fatalf("reading a members-only forum: %v, %v; want allowed=%v", d, err, c.member)
 			}
 			if c.preUser && v.IdentityID != w.identity {
 				t.Fatalf("a pre-user viewer carries identity %d, want %d", v.IdentityID, w.identity)
@@ -465,6 +480,46 @@ func TestMalformedCookiesCostNoQuery(t *testing.T) {
 	// 500, not a quiet sign-out.
 	if rec := get(h, base64.RawURLEncoding.EncodeToString(raw)); rec.Code != http.StatusInternalServerError {
 		t.Fatalf("a lookup against a dead database answered %d, want 500", rec.Code)
+	}
+}
+
+// TestTouchDoesNotRevive: a session looked up a moment before it went idle,
+// and touched a moment after, stays expired. The touch rechecks expiry at the
+// time of the write.
+func TestTouchDoesNotRevive(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		first time.Duration // after creation, to the lookup
+		then  time.Duration // from the lookup to the touch
+	}{
+		{"idle", IdleExpiry - time.Millisecond, 2 * time.Millisecond},
+		{"hard", 0, 0}, // set below
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			w := newWorld(t)
+			tok := w.signIn(w.member)
+			if c.name == "hard" {
+				// Touched daily to the last day, so only the hard limit ends it.
+				for range 89 {
+					w.clock.add(24 * time.Hour)
+					s, _ := w.store.Lookup(t.Context(), tok)
+					w.store.Touch(t.Context(), s)
+				}
+				c.first, c.then = 24*time.Hour-time.Millisecond, 2*time.Millisecond
+			}
+			w.clock.add(c.first)
+			s, err := w.store.Lookup(t.Context(), tok)
+			if err != nil {
+				t.Fatalf("just before the boundary: %v", err)
+			}
+			w.clock.add(c.then)
+			if wrote, err := w.store.Touch(t.Context(), s); wrote || err != nil {
+				t.Fatalf("a touch after the boundary wrote=%v err=%v", wrote, err)
+			}
+			if _, err := w.store.Lookup(t.Context(), tok); !errors.Is(err, ErrNoSession) {
+				t.Fatalf("after the touch the session is %v, want ErrNoSession", err)
+			}
+		})
 	}
 }
 

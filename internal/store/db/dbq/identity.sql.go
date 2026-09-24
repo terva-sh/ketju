@@ -369,20 +369,33 @@ func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error 
 
 const touchSession = `-- name: TouchSession :execrows
 UPDATE sessions SET last_used_at = ?1
-WHERE id_hash = ?2 AND last_used_at <= ?3
+WHERE id_hash = ?2
+  AND last_used_at <= ?3
+  AND expires_at > ?4
+  AND last_used_at > ?5
 `
 
 type TouchSessionParams struct {
-	Now       int64
-	IDHash    sqltypes.SessionHash
-	DueBefore int64
+	Now           int64
+	IDHash        sqltypes.SessionHash
+	DueBefore     int64
+	ExpiresAfter  int64
+	LastUsedAfter int64
 }
 
 // TouchSession slides last_used_at only when the stored value is due, so the
 // once-per-five-minutes rule holds in the statement itself: two requests that
-// both read a due value write once between them.
+// both read a due value write once between them. It also requires the row to
+// be alive by the same cutoffs as LookupSession, at the time of the write, so
+// a touch that lands just after the idle boundary cannot revive the session.
 func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, touchSession, arg.Now, arg.IDHash, arg.DueBefore)
+	result, err := q.db.ExecContext(ctx, touchSession,
+		arg.Now,
+		arg.IDHash,
+		arg.DueBefore,
+		arg.ExpiresAfter,
+		arg.LastUsedAfter,
+	)
 	if err != nil {
 		return 0, err
 	}
