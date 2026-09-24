@@ -35,12 +35,28 @@ type ScanRecord struct {
 //
 // fn returning false stops the walk.
 func ScanFrames(r io.ReaderAt, size int64, fn func(ScanRecord) bool) error {
+	return ScanFramesFrom(r, FileHeaderSize, size, fn)
+}
+
+// ScanFramesFrom walks the frames in [from, size). from must be a frame
+// boundary: the file header's end, or an offset a previous walk or an append
+// reported. The projection writer uses it to resume from how far it has
+// projected (TKT-01M29C2WW5).
+//
+// size need not be the file's length. Bytes past it are not read, so a walk
+// bounded by an acknowledged log length never sees a frame an append is still
+// writing; a frame that crosses size is reported as running past the end.
+func ScanFramesFrom(r io.ReaderAt, from, size int64, fn func(ScanRecord) bool) error {
 	if size < FileHeaderSize {
 		return fmt.Errorf("%w: %d bytes, the file header alone is %d",
 			ErrLogTooShort, size, FileHeaderSize)
 	}
+	if from < FileHeaderSize || from > size {
+		return fmt.Errorf("%w: cannot start a walk at %d in a %d-byte log whose frames begin at %d",
+			ErrMalformed, from, size, FileHeaderSize)
+	}
 
-	for off := int64(FileHeaderSize); off < size; {
+	for off := from; off < size; {
 		var lb [4]byte
 		if _, err := r.ReadAt(lb[:], off); err != nil {
 			fn(ScanRecord{Offset: off, Err: fmt.Errorf("reading the length at %d: %w", off, err), Fatal: true})

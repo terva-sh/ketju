@@ -119,10 +119,17 @@ type (
 	// EditBody replaces the source of an existing post. The original Post
 	// record's bytes stay on disk untouched; the index points at the newest
 	// revision and the older ones remain readable for history.
+	//
+	// Mentions was added after the version 1 freeze as an optional key, which
+	// the freeze permits (docs/03 "Record types"). Nil means the key is absent
+	// and the post keeps its mentions; non-nil replaces them, and a non-nil
+	// empty slice is an edit that removed every mention. A plain slice with
+	// omitempty could not say that last thing.
 	EditBody struct {
-		Source  string `cbor:"source,omitempty" json:"source,omitempty"`
-		Reason  string `cbor:"reason,omitempty" json:"reason,omitempty"`
-		ReplyTo uint32 `cbor:"reply_to,omitempty" json:"reply_to,omitempty"`
+		Source   string    `cbor:"source,omitempty" json:"source,omitempty"`
+		Reason   string    `cbor:"reason,omitempty" json:"reason,omitempty"`
+		ReplyTo  uint32    `cbor:"reply_to,omitempty" json:"reply_to,omitempty"`
+		Mentions *[]uint64 `cbor:"mentions,omitempty" json:"mentions,omitempty"`
 	}
 
 	// DeleteBody soft-deletes a post. The body stays on disk and the reader

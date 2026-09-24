@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T08:16:54Z
+updated_at: 2026-09-24T08:29:08Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -198,3 +198,7 @@ Merged: TKT-01M29BYYHG (Add the forums, groups, and permissions schema), PR #51,
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:16:54Z
 
 Merged TKT-01M29C5Y2E (permission evaluation) as PR #52 at ad7dbde. The first review, 383 at c2c4a6f, raised two high findings, both accepted and fixed: invalidation is now shared by every Evaluator over the same DB, and a role change applies from the next request's Viewer. The clean review ran at ad7dbde, CI run 155, and the race step ran internal/perm. For later tickets: use perm.New(db) and route every grant, membership, visibility and role write through its methods (a layering test enforces it). TKT-01M29C5Y3E must build Viewer from the users row on every request. Filed draft TKT-01M39788AT, which asks what an archived forum does to permissions. Next: TKT-01M29CA9AX.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:29:08Z
+
+Merged TKT-01M29BYYJ8 (projection tables) as PR #53 at a15a1aa, with a clean review at a15a1aa and CI run 160. AC3 (rebuild equality) is left unticked for TKT-01M29C5Y25. For later tickets: db.ProjectionTables, db.ClearProjections (reindex empties the tables, never drops them) and dbtest.DumpProjections. Before that, TKT-01M29CA9AX (thread page) turned out to need the threads projection (BYYJ8 and C2WW5) and the viewer-state schema (BYYHQ). Those are now recorded as dependencies, and CA9AX was released to ready. Next: TKT-01M29C2WW5, then BYYHQ, then CA9AX.

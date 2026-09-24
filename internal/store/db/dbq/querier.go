@@ -35,7 +35,9 @@ type Querier interface {
 	// Login re-evaluation clears the IdP-sourced rows and re-adds what the claims
 	// say now, in one transaction. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
+	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
+	DeleteThreadTags(ctx context.Context, threadID int64) error
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
@@ -47,7 +49,9 @@ type Querier interface {
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
 	GroupsForUser(ctx context.Context, userID int64) ([]GroupsForUserRow, error)
+	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
+	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error
 	// Roots in position order, each followed by its children in position order.
 	// A child sorts by its root's position and id, then after the root itself.
 	ListForums(ctx context.Context) ([]Forum, error)
@@ -62,9 +66,31 @@ type Querier interface {
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
+	SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error)
+	SetPostRevision(ctx context.Context, arg SetPostRevisionParams) (int64, error)
+	SetProjectionState(ctx context.Context, arg SetProjectionStateParams) error
+	SetThreadArchived(ctx context.Context, id int64) (int64, error)
+	SetThreadForum(ctx context.Context, arg SetThreadForumParams) (int64, error)
+	SetThreadLastPost(ctx context.Context, arg SetThreadLastPostParams) (int64, error)
+	SetThreadLocked(ctx context.Context, arg SetThreadLockedParams) (int64, error)
+	SetThreadPinned(ctx context.Context, arg SetThreadPinnedParams) (int64, error)
+	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) error
+	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
+	// Clears the pin only when its scope matches, so removing a forum pin does
+	// not silently remove a global one (docs/03). SQLite evaluates every SET
+	// expression against the row as it was, so both CASEs see the old scope.
+	UnpinThread(ctx context.Context, arg UnpinThreadParams) (int64, error)
+	// A Post resets every column, for the same reason UpsertThread does.
+	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
+	// The projection writer's statements (TKT-01M29C2WW5). Every one sets an
+	// absolute value, never an increment, so replaying a range the database has
+	// already seen converges on the same rows.
+	// A ThreadCreated resets the whole row: replayed from the start of the log,
+	// it must undo whatever later records did before they are applied again.
+	UpsertThread(ctx context.Context, arg UpsertThreadParams) error
 }
 
 var _ Querier = (*Queries)(nil)

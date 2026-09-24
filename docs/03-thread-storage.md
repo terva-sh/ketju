@@ -476,6 +476,12 @@ The projection into the database (step 5) is asynchronous but ordered per
 thread and idempotent (keyed on `thread_id, log_offset`). A `projection_state`
 table (04) records the log length each thread has been projected up to, so a crash
 between log write and DB write is repaired on startup by replaying the gap.
+The writer is `internal/events/projection` (TKT-01M29C2WW5). It projects a
+thread a range at a time in one transaction that reads and advances
+`projection_state`, every apply sets absolute values so a replayed range
+converges, and a thread whose projection fails is held and retried and
+reported as lag rather than dropped. It opens logs read-only and never writes
+one.
 The log is the source of truth; the database catches up to it.
 
 ## Read path

@@ -1,0 +1,335 @@
+package projection
+
+import (
+	"database/sql"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/terva-sh/ketju/internal/store/db"
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
+	"github.com/terva-sh/ketju/internal/store/threadcache"
+	"github.com/terva-sh/ketju/internal/store/threadid"
+	"github.com/terva-sh/ketju/internal/store/threadlog"
+)
+
+// fixture is a migrated database, a thread cache writing real logs, and a
+// Writer over both.
+type fixture struct {
+	t     testing.TB
+	db    *db.DB
+	root  string
+	cache *threadcache.Cache
+	w     *Writer
+	next  atomic.Uint64 // shared by goroutines appending at once
+}
+
+func newFixture(t testing.TB) *fixture {
+	t.Helper()
+	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	if err := d.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	root := filepath.Join(t.TempDir(), "threads")
+	c, err := threadcache.New(root, threadcache.Options{Sync: threadlog.SyncNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	w := New(Options{DB: d, Root: root})
+	w.now = func() time.Time { return time.UnixMilli(1_790_000_000_000) }
+	return &fixture{t: t, db: d, root: root, cache: c, w: w}
+}
+
+// thread creates a thread with a ThreadCreated record and returns its id and
+// the log length after it.
+func (f *fixture) thread(title string, tags ...string) (threadid.ID, int64) {
+	f.t.Helper()
+	id := threadid.ID(uint64(1_700_000_000_000)<<16 | f.next.Add(1))
+	th, err := f.cache.Create(id, 7, 1_700_000_000_000)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	f.cache.Release(th)
+	return id, f.append(id, threadlog.Append{
+		Type: threadlog.TypeThreadCreated, Author: 3, TimeMS: 1_700_000_000_000,
+		Body: &threadlog.ThreadCreatedBody{Title: title, Slug: strings.ToLower(title), ForumID: 7, Tags: tags},
+	})
+}
+
+// append writes one record and returns the log length after it.
+func (f *fixture) append(id threadid.ID, a threadlog.Append) int64 {
+	f.t.Helper()
+	if a.TimeMS == 0 {
+		a.TimeMS = 1_700_000_100_000 + int64(f.next.Add(1))*1000
+	}
+	var res threadlog.Result
+	err := f.cache.With(id, func(th *threadcache.Thread) error {
+		var err error
+		res, err = th.Actor.Append(a)
+		return err
+	})
+	if err != nil {
+		f.t.Fatalf("appending %s: %v", a.Type, err)
+	}
+	return res.LogLength
+}
+
+func (f *fixture) post(id threadid.ID, author uint64, replyTo uint32, mentions ...uint64) int64 {
+	f.t.Helper()
+	return f.append(id, threadlog.Append{Type: threadlog.TypePost, Author: author,
+		Body: &threadlog.PostBody{Source: "text", ReplyTo: replyTo, Mentions: mentions}})
+}
+
+func (f *fixture) project(id threadid.ID, upTo int64) {
+	f.t.Helper()
+	got, err := f.w.ProjectThread(f.t.Context(), id, upTo)
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	if got != upTo {
+		f.t.Fatalf("projected to %d, want %d", got, upTo)
+	}
+}
+
+func (f *fixture) exec(query string, args ...any) {
+	f.t.Helper()
+	err := f.db.Write(f.t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		_, err := tx.ExecContext(f.t.Context(), query, args...)
+		return err
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+func (f *fixture) clear() {
+	f.t.Helper()
+	err := f.db.Write(f.t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		return db.ClearProjections(f.t.Context(), q)
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+func (f *fixture) dump() string {
+	f.t.Helper()
+	return dbtest.DumpProjections(f.t, f.db)
+}
+
+// TestReplayIsIdempotentPerRecordType is AC1. For each record type a log ends
+// in that record; it is projected, then projected again from the start of the
+// log over the rows already there, then again into emptied tables. All three
+// dumps must match, and each case also checks the row its record produced, so
+// an apply that did nothing cannot pass by being trivially repeatable.
+func TestReplayIsIdempotentPerRecordType(t *testing.T) {
+	empty := []uint64{}
+	cases := []struct {
+		typ  threadlog.RecordType
+		tail func(f *fixture, id threadid.ID) int64
+		want []string
+	}{
+		{threadlog.TypeThreadCreated, func(f *fixture, id threadid.ID) int64 { return 0 },
+			[]string{`threads: id=`, `title="Hello"`, `forum_id=7`, `author_id=3`, `tag="meta"`, `post_count=0`}},
+		{threadlog.TypePost, func(f *fixture, id threadid.ID) int64 {
+			f.post(id, 5, 0)
+			return f.post(id, 6, 1, 5, 9)
+		}, []string{"post_count=2", "last_post_author_id=6", "last_post_ordinal=2",
+			"ordinal=2 author_id=6", "reply_to=1", "mentioned_user_id=9"}},
+		{threadlog.TypeEdit, func(f *fixture, id threadid.ID) int64 {
+			f.post(id, 5, 0, 4)
+			f.post(id, 6, 0, 8)
+			f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: 5, Ordinal: 1,
+				Body: &threadlog.EditBody{Source: "fixed", ReplyTo: 0}})
+			return f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: 6, Ordinal: 2,
+				Body: &threadlog.EditBody{Source: "no mentions now", ReplyTo: 1, Mentions: &empty}})
+		}, []string{"ordinal=1 author_id=5 created_at=", "current_revision=2 edited_at=17",
+			"ordinal=2 author_id=6 created_at=", "reply_to=1 deleted=0",
+			"mentioned_user_id=4", "mentions: 1 rows", "ordinal=2 author_id=6"}},
+		{threadlog.TypeDelete, func(f *fixture, id threadid.ID) int64 {
+			f.post(id, 5, 0)
+			return f.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: 1, Ordinal: 1,
+				Body: &threadlog.DeleteBody{Reason: "spam"}})
+		}, []string{"deleted=1"}},
+		{threadlog.TypeRestore, func(f *fixture, id threadid.ID) int64 {
+			f.post(id, 5, 0)
+			f.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: 1, Ordinal: 1, Body: &threadlog.DeleteBody{}})
+			return f.append(id, threadlog.Append{Type: threadlog.TypeRestore, Author: 1, Ordinal: 1, Body: &threadlog.RestoreBody{}})
+		}, []string{"ordinal=1 author_id=5", "deleted=0"}},
+		{threadlog.TypeThreadRenamed, func(f *fixture, id threadid.ID) int64 {
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadRenamed, Author: 1,
+				Body: &threadlog.ThreadRenamedBody{Title: "Renamed", Slug: "renamed"}})
+		}, []string{`slug="renamed" title="Renamed"`}},
+		{threadlog.TypeThreadMoved, func(f *fixture, id threadid.ID) int64 {
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadMoved, Author: 1,
+				Body: &threadlog.ThreadMovedBody{ForumID: 12}})
+		}, []string{"forum_id=12"}},
+		{threadlog.TypeThreadLocked, func(f *fixture, id threadid.ID) int64 {
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadLocked, Author: 1, Body: &threadlog.ThreadLockedBody{}})
+		}, []string{"locked=1"}},
+		{threadlog.TypeThreadUnlocked, func(f *fixture, id threadid.ID) int64 {
+			f.append(id, threadlog.Append{Type: threadlog.TypeThreadLocked, Author: 1, Body: &threadlog.ThreadLockedBody{}})
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadUnlocked, Author: 1, Body: &threadlog.ThreadUnlockedBody{}})
+		}, []string{"locked=0"}},
+		{threadlog.TypeThreadPinned, func(f *fixture, id threadid.ID) int64 {
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadPinned, Author: 1,
+				Body: &threadlog.ThreadPinnedBody{Scope: "global", Until: 1_800_000_000_000}})
+		}, []string{`pinned_scope="global" pinned_until=1800000000000`}},
+		{threadlog.TypeThreadUnpinned, func(f *fixture, id threadid.ID) int64 {
+			f.append(id, threadlog.Append{Type: threadlog.TypeThreadPinned, Author: 1,
+				Body: &threadlog.ThreadPinnedBody{Scope: "forum"}})
+			// A global unpin does not clear a forum pin.
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadUnpinned, Author: 1,
+				Body: &threadlog.ThreadUnpinnedBody{Scope: "global"}})
+		}, []string{`pinned_scope="forum" pinned_until=NULL`}},
+		{threadlog.TypeThreadTagged, func(f *fixture, id threadid.ID) int64 {
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadTagged, Author: 1,
+				Body: &threadlog.ThreadTaggedBody{Tags: []string{"tools", "zeta"}}})
+		}, []string{`tag="tools"`, `tag="zeta"`, "thread_tags: 2 rows"}},
+		{threadlog.TypeThreadArchived, func(f *fixture, id threadid.ID) int64 {
+			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadArchived, Author: 1, Body: &threadlog.ThreadArchivedBody{}})
+		}, []string{"archived=1"}},
+	}
+	covered := map[threadlog.RecordType]bool{}
+	for _, c := range cases {
+		covered[c.typ] = true
+		t.Run(c.typ.String(), func(t *testing.T) {
+			f := newFixture(t)
+			id, created := f.thread("Hello", "meta")
+			end := max(created, c.tail(f, id))
+			f.project(id, end)
+			first := f.dump()
+			for _, want := range c.want {
+				if !strings.Contains(first, want) {
+					t.Errorf("the projection lacks %q:\n%s", want, first)
+				}
+			}
+			if !strings.Contains(first, fmt.Sprintf("log_length_projected=%d", end)) ||
+				!strings.Contains(first, fmt.Sprintf("log_length=%d", end)) {
+				t.Errorf("the projection does not record reaching %d:\n%s", end, first)
+			}
+
+			// Again from the start of the log, over rows scribbled with state
+			// no record put there: every apply must set, not merely add to,
+			// what it owns, or the stale values would survive the replay.
+			f.exec(`UPDATE threads SET locked = 1 - locked, archived = 1 - archived, pinned_scope = 'global',
+				pinned_until = 1, title = 'stale', slug = 'stale', forum_id = 99, post_count = 99,
+				last_post_ordinal = 99, last_post_at = 1, last_post_author_id = 99`)
+			f.exec(`UPDATE post_meta SET deleted = 1 - deleted, moved = 1, edited_at = 5, current_revision = 9,
+				reply_to = 77, author_id = 99, created_at = 1`)
+			f.exec(`INSERT INTO mentions SELECT thread_id, ordinal, 777 FROM post_meta`)
+			f.exec(`INSERT INTO thread_tags (thread_id, tag) SELECT id, 'stale' FROM threads`)
+			f.exec(`UPDATE projection_state SET log_length = ?`, threadlog.FileHeaderSize)
+			f.project(id, end)
+			if again := f.dump(); again != first {
+				t.Fatalf("replaying over stale rows did not restore them:\n%s\n---\n%s", first, again)
+			}
+			// And into empty tables, as reindex does.
+			f.clear()
+			f.project(id, end)
+			if rebuilt := f.dump(); rebuilt != first {
+				t.Fatalf("rebuilding from empty differs:\n%s\n---\n%s", first, rebuilt)
+			}
+		})
+	}
+	for typ, d := range decisions {
+		if d.apply != nil && !covered[typ] {
+			t.Errorf("%s has a projection and no case here", typ)
+		}
+	}
+}
+
+// TestEveryRecordTypeHasADecision is AC3: every type this build knows, and
+// every type docs/03 holds in reserve, has a projection or a written reason
+// it has none. A known type must project: it has a body, so it says
+// something about the thread.
+func TestEveryRecordTypeHasADecision(t *testing.T) {
+	for n := 1; n <= 255; n++ {
+		typ := threadlog.RecordType(n)
+		d, ok := decisions[typ]
+		switch {
+		case typ.Known() && (!ok || d.apply == nil):
+			t.Errorf("%s is in the catalogue and has no projection", typ)
+		case typ.Reserved() && (!ok || (d.apply == nil && d.reason == "")):
+			t.Errorf("%s is reserved and has no stated decision", typ)
+		case !typ.Known() && !typ.Reserved() && ok:
+			t.Errorf("%s is neither known nor reserved but has a decision", typ)
+		}
+	}
+}
+
+// TestProjectionKeepsTheLogReadOnly: the writer opens logs read-only, so no
+// bug in it can write a log.
+func TestProjectionKeepsTheLogReadOnly(t *testing.T) {
+	f := newFixture(t)
+	id, _ := f.thread("Hello")
+	lf, err := f.w.open(id.LogPath(f.root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+	file, ok := lf.(*os.File)
+	if !ok {
+		t.Fatalf("the default opener returned %T", lf)
+	}
+	if _, err := file.WriteAt([]byte("x"), 0); err == nil {
+		t.Fatal("a log opened by the writer accepted a write")
+	}
+}
+
+// TestMissingRowIsAnError: an Edit whose post the projection does not have
+// is an error that keeps the thread behind, not an update to nothing.
+func TestMissingRowIsAnError(t *testing.T) {
+	f := newFixture(t)
+	id, _ := f.thread("Hello")
+	end := f.post(id, 5, 0)
+	f.project(id, end)
+	f.exec(`DELETE FROM post_meta`)
+	end = f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: 5, Ordinal: 1, Body: &threadlog.EditBody{Source: "x"}})
+	got, err := f.w.ProjectThread(t.Context(), id, end)
+	if err == nil || !strings.Contains(err.Error(), "names a post the projection does not have") {
+		t.Fatalf("got %v, want a missing-post error", err)
+	}
+	if got >= end {
+		t.Fatalf("a failed projection reported reaching %d", got)
+	}
+}
+
+// TestStaleEventIsANoOp: an event naming a length the projection has already
+// passed, as one can after a sweep, changes nothing and reports where the
+// projection is.
+func TestStaleEventIsANoOp(t *testing.T) {
+	f := newFixture(t)
+	id, created := f.thread("Hello")
+	end := f.post(id, 5, 0)
+	f.project(id, end)
+	before := f.dump()
+	got, err := f.w.ProjectThread(t.Context(), id, created)
+	if err != nil || got != end {
+		t.Fatalf("a stale event gave %d, %v; want %d, nil", got, err, end)
+	}
+	if f.dump() != before {
+		t.Fatal("a stale event changed the rows")
+	}
+}
+
+// TestShortLogIsAnError: an event claiming more log than the file holds is
+// refused by name, not read past the end.
+func TestShortLogIsAnError(t *testing.T) {
+	f := newFixture(t)
+	id, end := f.thread("Hello")
+	if _, err := f.w.ProjectThread(t.Context(), id, end+100); err == nil ||
+		!strings.Contains(err.Error(), "shorter than") {
+		t.Fatalf("got %v, want the log reported as shorter than the event", err)
+	}
+}
