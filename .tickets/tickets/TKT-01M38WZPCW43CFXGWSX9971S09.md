@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T09:11:02Z
+updated_at: 2026-09-24T09:47:41Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -210,3 +210,7 @@ Merged TKT-01M29C2WW5 (projection writer) as PR #54 at 46b6a13, with a clean rev
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:11:02Z
 
 Merged TKT-01M29BYYHQ (viewer-state schema) as PR #55 at 0e70101, with a clean review at 0e70101 and CI run 174. For later tickets: UnreadCount(user, thread) and UpsertReadPosition (which only moves forward). Drafts use partial unique indexes. TKT-01M29CA9CE decides whether a new-thread draft needs a title. Next: TKT-01M29CA9AX, whose dependencies are all done now.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:47:41Z
+
+Merged PR #56, TKT-01M29CA9AX 'Implement the thread page endpoint', as aab5c59 (rebase). CI run 185 passed, and its step log shows go test -race ran over render, service/threads, threadlog and web/api. Terva: reviews 391 (1 high, 2 medium), 392 (1 medium) and 393 (3 medium) all ran and found real issues, each fixed; review 394 is clean at medium, with one low finding (empty numeric query parameters accepted), deferred to TKT-01M29CA9C2. These were not run failures, so the two-in-a-row halt rule does not apply.

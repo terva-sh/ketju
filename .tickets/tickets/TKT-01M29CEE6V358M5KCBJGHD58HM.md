@@ -29,12 +29,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T09:47:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -94,3 +94,7 @@ Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with 
 **agent:claude/phase1-groom** at 2026-09-24T05:17:38Z
 
 Criterion rewritten during Phase 1 grooming (2026-09-24). It moves to the end of the list. It said 'their last read ordinal', which differs from docs/06's last_read_ordinal + 1 when the last read post ends a page. docs/06 records the decision, so it wins.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:47:41Z
+
+The server now chooses the landing page (TKT-01M29CA9AX, merged in PR #56). With no page and no ordinal, GET /api/v1/threads/{id} serves a signed-in reader the page holding last_read_ordinal + 1, or the last page once everything is read, and ?ordinal=N serves N's page. The client reads page.number from the response and does not recompute it (plan item 2 / interfaces item 7). The ETag hashes the body, so any change the client can see is a new tag.

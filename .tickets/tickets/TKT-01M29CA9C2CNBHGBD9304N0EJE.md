@@ -17,6 +17,7 @@ origin: null
 dependencies:
   - TKT-01M29C0WDJ9FETR8EFZ7ED5JYF
   - TKT-01M29C801M9WBEAVCCC6AXNZ4Z
+  - TKT-01M29BYYJ0WJ3C7RRZQMDRP5ZB
 blocks_on: none
 references:
   - ref: design:post-anatomy
@@ -24,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T09:47:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -80,3 +81,13 @@ Open: rendering replies needs the log anyway, so the post_meta path saves only t
 ### Settled in grooming (2026-09-24)
 
 - History returns each revision's actor, time and source. The client diffs them. If that falls short of docs/07's 'revisions with diffs', fix the wording in docs/07.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:47:41Z
+
+From review 394 of TKT-01M29CA9AX (low, deferred): internal/web/api's threadQuery treats an explicitly empty numeric parameter (?page=, ?ordinal=, ?after_log_length=) as absent, because URL.Query().Get cannot tell the two apart. Docs/07 says a malformed parameter is bad-request. These endpoints will add ordinal parsing to the same handler file, so fix the parser there: check r.URL.Query()[name] for presence, and reject an empty value. Also available from CA9AX: threads.Service.View's permission ladder (Hidden 404, anon Deny 401, member Deny 403), Reader.ReadEntries/HiddenEntry, Actor.Stable, render.Cache.PutDeps with handleMemo re-checking, and the body-hash ETag.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:47:41Z
+
+Added the dependency on TKT-01M29BYYJ0 'Add the flags, audit log, blobs, and settings schema': AC3 gates history on the public_edit_history setting, and the settings table does not exist before BYYJ0.
