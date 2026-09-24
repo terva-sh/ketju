@@ -76,7 +76,10 @@ export function ThreadScreen() {
   // publishes nothing (review 490): its screen is NotFound, not the thread's.
   const missing = isProblem(res.error, 'not-found');
   const known = head ? { id: head.id, slug: head.slug } : null;
-  const canReply = res.data?.viewer.can_reply ?? false;
+  // Reply summons the composer at the foot of the thread body, so it is
+  // offered only where there is one: not on the post history route, which
+  // shows no body (review 543).
+  const canReply = !history && (res.data?.viewer.can_reply ?? false);
   const actions = useMemo(() => (known ? threadActions(known, { canReply }) : []), [known?.id, known?.slug, canReply]);
   const forum = head?.forum;
   const ctx = useMemo(

@@ -185,15 +185,12 @@ export function Composer({ thread, authorOf }: { thread: string; authorOf: (ordi
         hidden={tab !== 'preview'}
       >
         {preview.busy ? (
-          // What is held, a rendering or an error, is about other input from
-          // the moment the input changes (reviews 537 and 541), so neither
-          // is shown until replaced.
           <p class="preview-busy">Rendering…</p>
         ) : preview.error !== null ? (
           <p class="preview-error" role="alert">
             {problemMessage(preview.error).text}
           </p>
-        ) : preview.html === '' ? (
+        ) : preview.empty ? (
           <p class="preview-empty">Nothing to preview yet.</p>
         ) : (
           <div class="post-body" data-preview dangerouslySetInnerHTML={{ __html: preview.html }} />
@@ -224,25 +221,30 @@ const tools: [EditKind, IconName, string][] = [
 // usePreview renders source through POST /render once it has sat still for
 // previewDelay, in this thread and as a reply to replyTo, so quotes and the
 // reply are checked as the post's will be. A change before the answer comes
-// cancels the request, so only the newest source's rendering is ever shown,
-// and the one before it is dropped at once, not when the answer comes.
-// Empty source asks nothing.
+// cancels the request.
+//
+// Each answer is held with the input it answers, and is shown only while
+// that is still the input: the check is made as the pane renders, not by an
+// effect after it, so there is no render, however brief, in which an answer
+// or an error about other input is on screen (reviews 537, 541, 543).
+// Empty source asks nothing and shows nothing.
 function usePreview(thread: string, source: string, replyTo: number | null) {
-  const [state, setState] = useState<{ html: string; error: unknown; busy: boolean }>({ html: '', error: null, busy: false });
+  const key = JSON.stringify([thread, source, replyTo]);
+  const [held, setHeld] = useState<{ key: string; html: string; error: unknown } | null>(null);
+  const empty = source.trim() === '';
   useEffect(() => {
-    if (source.trim() === '') {
-      setState({ html: '', error: null, busy: false });
-      return;
-    }
-    setState((s) => ({ ...s, busy: true }));
+    if (empty) return;
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
       apiSend<RenderResult>('POST', '/api/v1/render', { source, thread_id: thread, reply_to: replyTo }, { signal: ctrl.signal }).then(
+        // An answer for input that has since changed is dropped rather than
+        // held: holding it would replace the newer answer it lost the race
+        // to, and it could never be shown anyway.
         (r) => {
-          if (!ctrl.signal.aborted) setState({ html: r.html, error: null, busy: false });
+          if (!ctrl.signal.aborted) setHeld({ key, html: r.html, error: null });
         },
         (err) => {
-          if (!ctrl.signal.aborted && !isAbort(err)) setState({ html: '', error: err, busy: false });
+          if (!ctrl.signal.aborted && !isAbort(err)) setHeld({ key, html: '', error: err });
         },
       );
     }, previewDelay);
@@ -250,8 +252,9 @@ function usePreview(thread: string, source: string, replyTo: number | null) {
       clearTimeout(timer);
       ctrl.abort();
     };
-  }, [thread, source, replyTo]);
-  return state;
+  }, [key]);
+  const answer = !empty && held?.key === key ? held : null;
+  return { empty, busy: !empty && answer === null, html: answer?.html ?? '', error: answer?.error ?? null };
 }
 
 // useMentions is the @handle autocomplete: which mention the caret is at the

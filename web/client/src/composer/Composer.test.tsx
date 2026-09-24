@@ -120,6 +120,15 @@ describe('where the composer is', () => {
     expect(root.querySelector('[data-shell=toolbar] [data-action=reply]')).not.toBeNull();
   });
 
+  it('is not offered on the post history route, which has no composer (review 543)', async () => {
+    serve(page());
+    const root = await renderAt(`/t/${thread.id}/${thread.slug}/2/history`);
+    expect(root.querySelector('[data-screen=post-history]')).not.toBeNull();
+    expect(root.querySelector('.composer')).toBeNull();
+    expect(root.querySelector('[data-action=reply]')).toBeNull();
+    expect(root.querySelector('[data-action=copy-link]')).not.toBeNull();
+  });
+
   it('is not there, and neither are quote and reply, for a reader who may not', async () => {
     serve(page({ canReply: false }));
     const root = await renderAt(path);

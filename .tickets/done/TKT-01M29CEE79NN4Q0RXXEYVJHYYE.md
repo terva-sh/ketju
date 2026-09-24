@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T22:51:11Z
+updated_at: 2026-09-24T23:05:36Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -167,6 +167,19 @@ Review 541 (head e608e18, Actions run 378) resolved both of review 537's finding
 - `<hr>` is dropped, and `<pre>` is kept verbatim.
 
 Tests and mutants: a test covers all of these. Nine new mutants on the walker are all killed, and so are the earlier 30.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T23:05:36Z
+
+Review 543 (head 5db822b, Actions run 380) resolved both of review 541's findings. It raised two more medium findings, both accepted and fixed.
+
+**1. "Do not offer Reply on a page without a composer".** The post history route shares ThreadScreen but shows no thread body, so a Reply action there summoned nothing.
+- Fix: `canReply` is false on the history route.
+- Test: on /history there is no composer and no Reply action, and Copy link is still there.
+
+**2. "Invalidate the previous preview before the next paint".** Busy was set by an effect, so there was one render in which an answer for the old input could still show.
+- Fix: every answer is held with the input it answers, keyed on thread, source and reply_to. The pane shows it only while that key is the current input, and the comparison is made as the pane renders, so no render can show an answer or error for other input. An answer that settles after the input changed is dropped, not held, because holding it would replace the newer answer. The out-of-order test caught exactly that regression in the first draft of this fix.
+
+Mutants: 41, all killed. They include a mutant that shows any held answer (`held !== null`) and one that drops the aborted guard.
 
 ## Summary
 
