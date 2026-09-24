@@ -23,10 +23,12 @@ references:
     path: docs/09-roadmap.md
   - ref: ticket:TKT-01M3AFHGJDQTMQ67CB8832F4AQ
     path: null
+  - ref: pr:71
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T19:51:44Z
+updated_at: 2026-09-24T19:52:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
