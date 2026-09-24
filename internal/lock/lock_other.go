@@ -29,3 +29,5 @@ func openRecord(string) (*os.File, error) { return nil, errUnsupported }
 func tryLock(*os.File) error { return errUnsupported }
 
 func unlock(*os.File) error { return nil }
+
+func running(int) bool { return true }

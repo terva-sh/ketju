@@ -120,15 +120,29 @@ func Acquire(dir, purpose string) (*Lock, error) {
 	return &Lock{d: d}, nil
 }
 
-// Release gives the lock up. The record is left in place, naming the last
-// holder.
+// Release gives the lock up. It empties the record first, while the lock is
+// still held: the next holder writes its own record only after taking the
+// lock, and a refusal in between must find no name rather than this one
+// (review 445). The file itself stays.
 func (l *Lock) Release() error {
 	if l == nil || l.d == nil {
 		return nil
 	}
 	d := l.d
 	l.d = nil
-	return errors.Join(unlock(d), d.Close())
+	return errors.Join(clearRecord(filepath.Join(d.Name(), FileName)), unlock(d), d.Close())
+}
+
+func clearRecord(path string) error {
+	f, err := openFile(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if err := f.Truncate(0); err != nil {
+		return err
+	}
+	return f.Sync()
 }
 
 // record replaces the record file's contents with this process's Holder,
@@ -157,9 +171,16 @@ func record(path, purpose string) error {
 	return f.Sync()
 }
 
-// readHolder reads the record a refused Acquire names the holder from. The
-// holder writes it just after taking the lock, so a refusal in that moment
-// reads the one before, or an empty file, which says the holder is unnamed.
+// readHolder reads the record a refused Acquire names the holder from.
+//
+// A holder writes its record just after taking the lock, so a refusal in
+// that moment can find the record of whoever held the lock before. After a
+// clean Release that is an empty file, which reads as unnamed. After a
+// holder that was killed it is that holder's record, naming a process that
+// is gone; when it names this host, the pid is checked and a record whose
+// process is not running is not believed (review 445). A record from
+// another host cannot be checked, and a pid the system has since reused
+// passes; the message says to check, and names what it read.
 func readHolder(path string) (*Holder, error) {
 	f, err := openRecord(path)
 	if err != nil {
@@ -194,6 +215,10 @@ func readHolder(path string) (*Holder, error) {
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%s holds an incomplete holder record (no %s)", path, strings.Join(missing, ", "))
+	}
+	if host, _ := os.Hostname(); h.Host == host && !running(h.PID) {
+		return nil, fmt.Errorf("%s names pid %d, which is not running: it held the lock before, "+
+			"and the process holding it now has not recorded itself yet", path, h.PID)
 	}
 	return &h, nil
 }

@@ -84,3 +84,10 @@ func tryLock(f *os.File) error {
 func unlock(f *os.File) error {
 	return syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 }
+
+// running reports whether a process with this pid exists. Signal 0 checks
+// without sending anything; EPERM means it exists and is someone else's.
+func running(pid int) bool {
+	err := syscall.Kill(pid, 0)
+	return err == nil || errors.Is(err, syscall.EPERM)
+}

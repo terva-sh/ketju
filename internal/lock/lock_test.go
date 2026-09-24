@@ -416,3 +416,64 @@ func TestDataDirMustBeADirectory(t *testing.T) {
 		t.Fatal("locked a data directory that is a file")
 	}
 }
+
+// A refusal never names a process that is not running (review 445). After a
+// clean Release the record is empty, so a holder that has taken the lock and
+// not yet written its record reads as unnamed; after a killed holder, the
+// record it left names a pid that is gone, and that is not believed either.
+func TestRefusalNeverNamesAGoneHolder(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, FileName)
+
+	l, err := Acquire(dir, "serve")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := l.Release(); err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(path); err != nil || len(b) != 0 {
+		t.Fatalf("after Release the record is %q, %v; want it empty", b, err)
+	}
+
+	// A pid that has certainly exited: a helper that ran and was reaped.
+	gone := helperCmd(t, t.TempDir(), "")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	host, _ := os.Hostname()
+	stale := fmt.Sprintf(`{"pid":%d,"host":%q,"purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`,
+		gone.Process.Pid, host)
+
+	// A holder that has locked and not yet recorded itself, standing where a
+	// killed holder's record was left.
+	startHolder(t, dir)
+	for _, c := range []struct{ name, record, want string }{
+		{"a clean release before", "", "does not hold a holder record"},
+		{"a killed holder before", stale, "which is not running"},
+	} {
+		if err := os.WriteFile(path, []byte(c.record), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Acquire(dir, "serve")
+		var held *HeldError
+		if !errors.As(err, &held) {
+			t.Fatalf("%s: got %v, want a *HeldError", c.name, err)
+		}
+		if held.Holder != nil || held.ReadErr == nil || !strings.Contains(held.ReadErr.Error(), c.want) {
+			t.Errorf("%s: holder %+v, read error %v; want no holder and %q", c.name, held.Holder, held.ReadErr, c.want)
+		}
+	}
+
+	// On another host the pid cannot be checked, so a whole record is named.
+	elsewhere := fmt.Sprintf(`{"pid":%d,"host":"another-host","purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`,
+		gone.Process.Pid)
+	if err := os.WriteFile(path, []byte(elsewhere), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Acquire(dir, "serve")
+	var held *HeldError
+	if !errors.As(err, &held) || held.Holder == nil || held.Holder.Host != "another-host" {
+		t.Errorf("a record from another host: got %v", err)
+	}
+}

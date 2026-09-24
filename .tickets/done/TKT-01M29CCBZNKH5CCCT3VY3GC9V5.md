@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:38:19Z
+updated_at: 2026-09-24T15:44:42Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -157,6 +157,25 @@ New tests:
 The golden changed by one word ("lock file" became "lock record") and was regenerated with -update.
 
 Mutation check: 22 of 23 killed, against a green baseline. The survivor, dropping O_DIRECTORY from the directory open, is equivalent: a data dir that is a file then fails at writing the record, with the same ENOTDIR. The symlinked-record mutant survived the first run and is now killed by the case above. CI run 285 on 94af83f passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:44:42Z
+
+Answered review 445 (medium): a refusal could name the previous process as the current holder. The finding was right. A new holder writes its record just after taking the directory lock, and a refusal in between read whatever record was left. Naming the wrong process is worse than naming none, because it sends an operator to kill or inspect the wrong thing.
+
+Two changes close the window:
+- **Release empties the record** while still holding the lock. After a clean shutdown a refusal in that window finds an empty file and reports the holder as unnamed.
+- **A refusal checks that the named process is running.** After a killed holder, the record left behind names a pid. When the record names this host, the pid is checked with signal 0; if the process is gone, the record is not believed and the refusal says why.
+
+Two limits remain, and are stated in readHolder's comment:
+- a record from another host cannot be checked;
+- a pid the system has since reused passes.
+Both are narrow: the first matters only on a shared (network) filesystem, which the message already tells the operator to check, and the second needs a pid reused within the moment between lock and record.
+
+Rejected: writing the record before taking the lock, which would let a refused process overwrite a live holder's record. Also rejected: retrying the read until the record changes, since there is no signal that a record is the current holder's.
+
+Test: TestRefusalNeverNamesAGoneHolder. It checks that Release leaves the record empty, then has a live holder standing behind an empty record and behind a record naming a reaped pid; both read as unnamed. A record from another host is still named.
+
+Mutation check: 26 of 27 killed. The survivor is the equivalent O_DIRECTORY mutant from before. CI run 287 on 3074872 passed.
 
 ## Summary
 
