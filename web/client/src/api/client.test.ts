@@ -168,6 +168,50 @@ describe('apiGet', () => {
     expect(peekGet('/api/v1/b')).toEqual({ n: 2 });
   });
 
+  // Review 412: an aborted request's answer is late, and is not held.
+  it('does not hold the answer to an aborted request', async () => {
+    stub(json({ n: 'old' }, { headers: { ETag: '"old"' } }));
+    const ctl = new AbortController();
+    const late = apiGet('/api/v1/x', { signal: ctl.signal });
+    ctl.abort();
+    expect(await late).toEqual({ n: 'old' });
+    expect(peekGet('/api/v1/x')).toBeUndefined();
+  });
+
+  it('keeps what it held through the aborted answer', async () => {
+    stub(json({ n: 'new' }, { headers: { ETag: '"new"' } }), json({ n: 'old' }));
+    await apiGet('/api/v1/x');
+    const ctl = new AbortController();
+    const late = apiGet('/api/v1/x', { signal: ctl.signal });
+    ctl.abort();
+    await late;
+    expect(peekGet('/api/v1/x')).toEqual({ n: 'new' });
+  });
+
+  it('keeps what it held through an aborted request refused access', async () => {
+    stub(json({ n: 'new' }, { headers: { ETag: '"new"' } }), new Response('{}', { status: 403 }));
+    await apiGet('/api/v1/x');
+    const ctl = new AbortController();
+    const late = apiGet('/api/v1/x', { signal: ctl.signal });
+    ctl.abort();
+    await late.catch(() => {});
+    expect(peekGet('/api/v1/x')).toEqual({ n: 'new' });
+  });
+
+  it('does not count an aborted 304 as a use', async () => {
+    const answers: Response[] = [];
+    for (let i = 0; i < heldLimit; i++) answers.push(json({ i }, { headers: { ETag: `"${i}"` } }));
+    answers.push(new Response(null, { status: 304 }), json({ i: 'new' }, { headers: { ETag: '"n"' } }));
+    stub(...answers);
+    for (let i = 0; i < heldLimit; i++) await apiGet(`/u/${i}`);
+    const ctl = new AbortController();
+    const late = apiGet('/u/0', { signal: ctl.signal });
+    ctl.abort();
+    await late;
+    await apiGet('/u/new'); // /u/0 is still the oldest, and goes
+    expect(peekGet('/u/0')).toBeUndefined();
+  });
+
   it('calls a 200 whose body is not JSON internal', async () => {
     stub(new Response('<html>', { status: 200 }));
     const err = await apiGet('/api/v1/x').catch((e) => e);

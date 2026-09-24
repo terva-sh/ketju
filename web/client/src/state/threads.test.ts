@@ -71,6 +71,33 @@ describe('the thread cache', () => {
     expect([...cachedThread(id)!.pages.keys()]).toEqual(['1']);
   });
 
+  // Review 412: a superseded request's refusal is as old as its success.
+  it.each([404, 410, 403, 401])('ignores a %d that answers an aborted request', async (status) => {
+    serve(page(1, 100), status);
+    await loadThreadPage(id, { page: 1 });
+    const ctl = new AbortController();
+    const late = loadThreadPage(id, { page: 2 }, ctl.signal);
+    ctl.abort();
+    await late.catch(() => {});
+    expect(cachedThread(id)!.logLength).toBe(100);
+  });
+
+  // Review 412: a page refused for its shorter length is not held under its
+  // URL either, where it would show at once on a return.
+  it('does not hold a page the cache refused as older', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(page(1, 120)), { status: 200, headers: { ETag: '"a"' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(page(2, 100)), { status: 200, headers: { ETag: '"b"' } })),
+    );
+    await loadThreadPage(id, { page: 1 });
+    await loadThreadPage(id, { page: 2 });
+    expect(peekGet(threadUrl(id, { page: 2 }))).toBeUndefined();
+    expect(peekGet(threadUrl(id, { page: 1 }))).toBeDefined();
+  });
+
   // Review 411: the held GET bodies of the thread's other pages are as stale
   // as its cached pages once the length moves, and go with them.
   it('forgets the held bodies of other pages when the length moves', async () => {

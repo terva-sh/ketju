@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T13:00:45Z
+updated_at: 2026-09-24T13:05:45Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -202,6 +202,22 @@ The sign-in offer is a prompt, not a link. The client has no provider list to li
 **Medium: held GET pages survived a change of length.** When a new length replaces a thread's entry, the held GET bodies of that thread's other pages are forgotten, keeping only the page just fetched. The URL match is on `/api/v1/threads/{id}` followed by the end, `?` or `/`, so an id that shares a prefix with this one is left alone; that has a test too.
 
 **Mutation:** all 10 mutants on the new guards are killed. There are 280 Vitest tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T13:05:45Z
+
+### Review 412, answered
+
+Review 412 confirmed all three findings from review 411 resolved. It raised two medium findings, and both came from one gap: a superseded request's answer could still change state.
+
+**The rule now:** the answer to an aborted request is returned but changes nothing, whether it is a success, a 304 or a refusal.
+- `apiGet` does not hold its body.
+- An aborted 304 does not refresh the entry's recency.
+- An aborted refusal does not drop what was held.
+- `loadThreadPage` does not forget the thread on an aborted 401, 403, 404 or 410.
+
+**A late answer that was not aborted:** such a page can still be refused by the thread cache for its shorter log length. Its held body is now dropped as well, so the obsolete page cannot show at once on a return to that URL.
+
+**Tests:** each case has its own test. Five mutants on these guards were all killed. There are 289 Vitest tests.
 
 ## Summary
 

@@ -57,21 +57,28 @@ export function pageKey(page: Pick<ThreadPage, 'page' | 'lens'>): string {
 // could once read is not shown.
 //
 // An answer to a request that was aborted, because the screen moved on, is
-// returned but not stored: whatever superseded it may already be newer.
+// returned but changes nothing, success or refusal: whatever superseded it
+// may already be newer.
 //
 // It takes no after_log_length. That answer holds only what is new on the
 // page, and storing it here would replace a page with a fragment; applying a
 // fragment to the page it extends is the live-update client's
 // (TKT-01M29CTYA0).
 export async function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortSignal): Promise<ThreadPage> {
+  const url = threadUrl(id, q);
   let page: ThreadPage;
   try {
-    page = await apiGet<ThreadPage>(threadUrl(id, q), { signal });
+    page = await apiGet<ThreadPage>(url, { signal });
   } catch (err) {
-    if (revokesAccess(err)) forgetThread(id);
+    // A superseded request's answer is older than whatever replaced it, a
+    // refusal included: it changes nothing.
+    if (revokesAccess(err) && !signal?.aborted) forgetThread(id);
     throw err;
   }
-  if (!signal?.aborted) storeThreadPage(id, page, threadUrl(id, q));
+  // A page older than the entry, which only a request that finished late can
+  // be, is not kept under its URL either, or it would be shown at once on a
+  // return there.
+  if (!signal?.aborted && !storeThreadPage(id, page, url)) forgetGets((u) => u === url);
   return page;
 }
 

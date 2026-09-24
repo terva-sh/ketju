@@ -28,17 +28,21 @@ export async function apiGet<T>(url: string, init: { signal?: AbortSignal } = {}
     // A 304 is an answer about the tag sent. With none sent there is no body
     // it can mean, and treating it as success would render nothing as data.
     if (!prior) throw new ProblemError('internal', 304);
-    hold(url, prior.etag, prior.body);
+    if (!init.signal?.aborted) hold(url, prior.etag, prior.body);
     return prior.body as T;
   }
   if (!r.ok) {
     const p = await toProblem(r);
     // An answer that withdraws access withdraws the held copy with it, so it
-    // is not shown again while the next request is in flight.
-    if (revokesAccess(p)) held.delete(url);
+    // is not shown again while the next request is in flight; unless the
+    // request was aborted, whose answer is older than what superseded it.
+    if (revokesAccess(p) && !init.signal?.aborted) held.delete(url);
     throw p;
   }
   const body = await json<T>(r);
+  // An answer to an aborted request is late: whatever superseded it may
+  // already hold something newer for this URL, so it is returned, not held.
+  if (init.signal?.aborted) return body;
   const etag = r.headers.get('ETag');
   if (etag) hold(url, etag, body);
   else held.delete(url);
