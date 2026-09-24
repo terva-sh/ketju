@@ -32,6 +32,7 @@ func qualified(ctx context.Context, db execer) {
 // compared rather than joined.
 func other(ctx context.Context, db execer) bool {
 	db.ExecContext(ctx, "INSERT INTO sessions_archive (id_hash) VALUES (?)")
+	db.ExecContext(ctx, "INSERT INTO audit (msg) VALUES ('INSERT INTO sessions is only text here') -- INSERT INTO sessions")
 	return "INSERT INTO " == "sessions (id_hash)"
 }
 
@@ -67,6 +68,8 @@ func local(ctx context.Context, db execer) {
 func nested(ctx context.Context, db execer) {
 	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = (SELECT 1 WHERE 1), kind = 'user', user_id = ? WHERE id_hash = ?")
 	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = coalesce(?, ','), (user_id, [kind]) = (?, 'where') WHERE id_hash = ?")
+	// A '--' in a string hides nothing (review 505).
+	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = '--', user_id = ? WHERE id_hash = ?")
 	// A keyword inside a string or inside a longer word is not the keyword.
 	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = 'x where, y', last_used_at = elsewhere, last_used_at = fromage, user_id = ? WHERE id_hash = ?")
 	// Not a door: all of it is last_used_at.

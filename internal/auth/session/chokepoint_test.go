@@ -51,7 +51,6 @@ const table = `(?:["` + "`" + `\[]?\w+["` + "`" + `\]]?\s*\.\s*)?["` + "`" + `\[
 var (
 	sqlInsert   = regexp.MustCompile(`(?is)\b(insert|replace)\b[^;]*?\binto\s+` + table + `(?:\W|$)`)
 	sqlUpdate   = regexp.MustCompile(`(?is)\bupdate\s+(or\s+\w+\s+)?` + table + `(?:\s+(?:as\s+)?\w+)?\s+set\b`)
-	sqlComment  = regexp.MustCompile(`--[^\n]*`)
 	sqlcName    = regexp.MustCompile(`(?m)^--\s*name:\s*(\w+)`)
 	updatableOK = []string{"last_used_at"}
 )
@@ -132,6 +131,7 @@ func scanGo(rel string, f *ast.File) (doors, callers, inserters []string) {
 				if !ok {
 					break
 				}
+				sql = stripComments(sql)
 				if sqlInsert.MatchString(sql) {
 					doors = append(doors, rel+":"+fn+": writes INSERT INTO sessions by hand")
 				}
@@ -218,7 +218,7 @@ func scanSQL(rel, src string) (doors []string) {
 	}
 	door := rel == theQuery
 	for _, s := range stmts {
-		body := sqlComment.ReplaceAllString(s.body, "")
+		body := stripComments(s.body)
 		// The first CreateSession in the door's file is the door, and uses
 		// the exemption up whether or not it passes: it may hold one insert,
 		// and no later statement may borrow its name.
@@ -234,6 +234,46 @@ func scanSQL(rel, src string) (doors []string) {
 		}
 	}
 	return doors
+}
+
+// stripComments blanks SQL's -- and /* */ comments and the contents of its
+// single-quoted strings, which are data. A "--" in a string is not a
+// comment and must not hide the statement after it (review 505), and a
+// string that mentions sessions writes nothing to them. Double quotes and
+// backticks quote identifiers in SQLite, so what they hold is kept: "sessions"
+// is the table. A quote inside a comment is not a quote either, or it would
+// unbalance the rest.
+func stripComments(src string) string {
+	out := []byte(src)
+	var quote byte
+	for i := 0; i < len(out); i++ {
+		c := out[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			} else if quote == '\'' {
+				out[i] = ' '
+			}
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+		case c == '-' && i+1 < len(out) && out[i+1] == '-':
+			for ; i < len(out) && out[i] != '\n'; i++ {
+				out[i] = ' '
+			}
+		case c == '/' && i+1 < len(out) && out[i+1] == '*':
+			end := strings.Index(string(out[i+2:]), "*/")
+			stop := len(out)
+			if end >= 0 {
+				stop = i + 2 + end + 2
+			}
+			for ; i < stop; i++ {
+				out[i] = ' '
+			}
+			i--
+		}
+	}
+	return string(out)
 }
 
 // badUpdates lists the columns an UPDATE of sessions in sql sets beyond
@@ -356,6 +396,7 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 		"internal/other/door.go:local: writes INSERT INTO sessions by hand",
 		"internal/other/door.go:nested: updates sessions.kind, sessions.user_id",
 		"internal/other/door.go:nested: updates sessions.user_id",
+		"internal/other/door.go:nested: updates sessions.user_id",
 		"internal/other/door.go:nested: updates sessions.user_id, sessions.kind",
 		"internal/other/door.go:promote: updates sessions.kind, sessions.user_id",
 		"internal/other/door.go:qualified: updates sessions.user_id",
@@ -363,6 +404,8 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 		"internal/other/door.go:sneak: writes INSERT INTO sessions by hand",
 		"internal/store/db/migrations/0099_seed.sql:: inserts into sessions",
 		"internal/store/db/migrations/0100_named.sql:CreateSession: inserts into sessions",
+		"internal/store/db/migrations/0101_quoted.sql:: inserts into sessions",
+		"internal/store/db/migrations/0102_block.sql:: inserts into sessions",
 		"internal/store/db/queries/extra.sql:AdoptSession: updates sessions.user_id",
 		"internal/store/db/queries/extra.sql:AliasSession: updates sessions.user_id",
 		"internal/store/db/queries/extra.sql:CreateSession: inserts into sessions",

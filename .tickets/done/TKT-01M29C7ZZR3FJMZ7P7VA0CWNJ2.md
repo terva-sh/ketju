@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T20:17:35Z
+updated_at: 2026-09-24T20:24:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -160,6 +160,27 @@ Review 501 (head b8cf2f2) marked both of review 500's findings resolved, and rai
    - Fixture: a two-name `t, n := "sessions", 1`, and a local SET fragment.
 
 Mutation: 42 mutants, all killed, excluding one equivalent. Dropping "where" from the clause-ending words changes nothing for valid SQL, because a WHERE clause has no top-level comma; it stays for the reader. Bracket quoting went, because no real sessions column name can contain the characters it would protect.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:24:32Z
+
+Review 505 (head 9f4e9e4) marked both of review 501's findings resolved, and raised one new medium: a '--' inside a SQL string was stripped as a comment, which could hide an insert after it on the same line. Accepted and fixed.
+
+**Fix.** The comment regex is replaced by `stripComments`, which walks the SQL once:
+- It blanks `--` and `/* */` comments.
+- It blanks the contents of single-quoted strings, which are data.
+- It keeps what double quotes and backticks hold, because those quote identifiers in SQLite and "sessions" is the table.
+- A quote inside a comment opens nothing, so a stray apostrophe in a block comment cannot unbalance the rest.
+
+The same stripper now runs over SQL folded from Go strings, so both are read alike.
+
+**Fixtures:**
+- migrations 0101 (a '--' literal before an insert) and 0102 (an apostrophe in a block comment, then the same), which are both doors;
+- 0103, which is not a door: sessions written about in comments and inside a string;
+- Go equivalents of each.
+
+All mutants are killed.
+
+**Maintainer decision (2026-09-24).** After four rounds of scanner-evasion findings, the user decided: fix this one, re-review once, and merge if the new round raises only more scan-evasion edge cases, with a follow-up draft for them. Anything outside the scanner still gets fixed first.
 
 ## Summary
 
