@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C2WWGF4ERSR2AM2QNEH8C
 title: Return structured mentions, quotes, and reply_to from the render call
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:api-render
     path: docs/07-api-and-clients.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/c2wwg-render-structure
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 8f1d368fbcb577467b2fd90f4553c9a446723b12
+  session: null
+  claimed_at: 2026-09-24T21:09:58Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:15:46Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T21:09:58Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---

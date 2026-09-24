@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T20:29:11Z
+updated_at: 2026-09-24T21:09:58Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -270,3 +270,7 @@ Merged PR #70 (TKT-01M29CEE4K, Build the app shell with both navigation layouts)
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:29:11Z
 
 Merged PR #71 (TKT-01M29C7ZZR, Route every session creation through one status-checking function) as 3ed6cf0, after reviews 499, 500, 501 and 505 were answered. All four were findings on the chokepoint scan, not the constructors. After review 505 the user decided to fix, re-review once, and merge if only more scan-evasion cases followed. The next review was clean on head 3ed6cf0, base 501ba1b. CI run 340's race step shows internal/auth/session and internal/store/db passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:09:58Z
+
+Merged PR #72 (TKT-01M29C7ZZ9, Implement the OIDC start and callback flow) as 8f1d368, after reviews 511, 512 and 513 were answered. All three were on the sign-in's replace-and-record sequence. Clean review on head 8f1d368, base 3ed6cf0. CI run 351's race step shows cmd/ketju, internal/auth/{oidc,oidctest,seal,session}, internal/service/identity and internal/web/auth passed.
