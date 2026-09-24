@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-11T23:17:26Z
+updated_at: 2026-09-24T05:06:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -45,5 +45,11 @@ The 60-second cache means a permission change takes up to a minute to apply. Tha
 
 - [ ] Evaluation is the union of group rows for the forum, falling back to global rows, with table-driven tests for each permission
 - [ ] An admin passes every permission check without needing explicit group rows
-- [ ] The cache has a bounded lifetime and a permission change applies within it
 - [ ] A restricted forum is invisible rather than forbidden to a viewer without read, and a test covers the difference
+- [ ] Cached decisions live at most 30 s and any group or permission write invalidates the cache at once; a test shows a revoked permission denied on the next request
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
+
+Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. 'A bounded lifetime' became a 30 s TTL plus immediate invalidation on group or permission writes. The TTL is a backstop; invalidation is what makes a revocation take effect at once.

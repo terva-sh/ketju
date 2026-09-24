@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-24T05:05:27Z
+updated_at: 2026-09-24T05:06:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,7 +45,13 @@ The post list needs bottom padding equal to the bar height, or the reply bar cov
 
 ## Acceptance criteria
 
-- [ ] The toolbar stays above the on-screen keyboard on real iOS and real Android, verified on device before Phase 1 exit
 - [ ] The post list has bottom padding equal to the reply bar height so the last post is never covered
 - [ ] Reply and quote from a post open the sheet prefilled
 - [ ] A draft in progress shows in the reply bar and survives closing the sheet
+- [ ] The toolbar stays above the on-screen keyboard in Playwright's emulated phone viewport, positioned from the visualViewport API; real iOS and Android verification is in TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices)
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
+
+Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. The real-device keyboard check moved to TKT-01M38WTKSQ. What stays here is what an agent can verify: the emulated phone viewport and positioning driven by visualViewport.

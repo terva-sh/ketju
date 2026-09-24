@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-11T23:22:04Z
+updated_at: 2026-09-24T05:06:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -42,7 +42,13 @@ This is the first screen anybody sees, and in a small community it is also the o
 
 ## Acceptance criteria
 
-- [ ] Rendering matches the mockups at 1440 px and 390 px
 - [ ] Unread counts render for a signed-in viewer and are absent rather than zeroed for an anonymous one
 - [ ] A forum with no threads renders a usable empty state
 - [ ] The floating new-thread control appears above the tab bar on phones
+- [ ] Playwright screenshots at 390 px and 1440 px are committed beside the tests and compared against the matching file in docs/mockups/; every visible divergence is listed in the pull request description
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
+
+Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. 'Matches the mockups' now names its method: committed Playwright screenshots at both widths compared against docs/mockups/, with every divergence listed in the PR. Automated pixel diffing lost, because the mockups are static HTML with placeholder data and would never match exactly.

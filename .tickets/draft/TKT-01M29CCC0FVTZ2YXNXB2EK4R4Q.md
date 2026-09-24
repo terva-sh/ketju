@@ -25,13 +25,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-11T23:20:57Z
+updated_at: 2026-09-24T05:06:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -47,5 +47,11 @@ Safe-area handling belongs here: `viewport-fit=cover` with `env(safe-area-inset-
 
 - [ ] Light and dark themes are driven by custom properties and follow prefers-color-scheme with a user override
 - [ ] The three breakpoints match docs/06 and layout changes are CSS rather than component swaps, except the navigation shell
-- [ ] Safe-area insets are applied to the bottom bars and verified on a device with a home indicator
-- [ ] Rendered output matches the mockups at 390 px and 1440 px
+- [ ] Safe-area insets are applied to the bottom bars through env(safe-area-inset-*) with viewport-fit=cover, and a Playwright check at 390 px confirms the padding rules apply; real-device verification is in TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices)
+- [ ] Playwright screenshots at 390 px and 1440 px are committed beside the tests and compared against the matching file in docs/mockups/; every visible divergence is listed in the pull request description
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
+
+Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. An agent cannot check against a device with a home indicator, so that check moved to TKT-01M38WTKSQ; the criterion here is what an emulated viewport can prove. 'Matches the mockups' now names its method: committed screenshots compared against docs/mockups/, with every divergence listed in the PR.

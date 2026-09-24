@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-11T23:19:48Z
+updated_at: 2026-09-24T05:06:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -42,5 +42,11 @@ That inlining is why the response has to be cheap and free of anything expensive
 ## Acceptance criteria
 
 - [ ] Returns the documented shape for an anonymous viewer, a member, a moderator, and a pre-user session
-- [ ] The response is cheap enough to inline on every shell render, with a stated query budget
 - [ ] Counts come from projections rather than being computed from logs
+- [ ] The handler issues at most 2 SQL queries per request, asserted by a test that counts them, so it can be inlined on every shell render
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
+
+Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. 'Cheap enough, with a stated query budget' did not state the budget. It is now at most 2 queries, one for the viewer and session and one for the projected counts, asserted by a test that counts queries.

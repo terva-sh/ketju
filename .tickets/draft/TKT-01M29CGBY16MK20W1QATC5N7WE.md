@@ -26,13 +26,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-11T23:23:08Z
+updated_at: 2026-09-24T05:06:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -47,4 +47,10 @@ Both viewports in CI is the mechanism behind the docs/09 mitigation for phone la
 - [ ] The suite runs at 390 px and 1440 px and a failure at either width fails CI
 - [ ] The fake issuer supports sign-in with no external network access
 - [ ] The run covers sign in, read, reply, and the unread divider end to end
-- [ ] The suite is stable enough to gate merges rather than being routinely skipped
+- [ ] The suite passes 20 consecutive local runs with no flake before the CI job becomes a merge gate, and the run count is recorded in a note
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
+
+Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. 'Stable enough to gate merges' was subjective. It now means 20 consecutive local runs with no flake before the job is made required.
