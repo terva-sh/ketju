@@ -1,10 +1,12 @@
 package spa
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -56,5 +58,67 @@ func TestAssetsServeOnlyAssets(t *testing.T) {
 		if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
 			t.Errorf("%s: a 404 with Cache-Control %q, want no-store", path, cc)
 		}
+	}
+}
+
+// TestTheAdminBundleIsSeparate is TKT-01M29CEE52's AC4, read from the build
+// itself: the admin screens are a chunk of their own, the entry reaches them
+// only by dynamic import, and the shell does not preload them. A static
+// import of anything under src/screens/admin from the reader's code would
+// fold it into the entry, and this fails.
+func TestTheAdminBundleIsSeparate(t *testing.T) {
+	b, err := dist.ReadFile("dist/.vite/manifest.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var manifest map[string]struct {
+		File           string   `json:"file"`
+		IsEntry        bool     `json:"isEntry"`
+		IsDynamicEntry bool     `json:"isDynamicEntry"`
+		Imports        []string `json:"imports"`
+		DynamicImports []string `json:"dynamicImports"`
+	}
+	if err := json.Unmarshal(b, &manifest); err != nil {
+		t.Fatal(err)
+	}
+	const entry, admin = "index.html", "src/screens/admin/AdminRoot.tsx"
+	if !manifest[entry].IsEntry {
+		t.Fatalf("no entry %s in the manifest", entry)
+	}
+	a, ok := manifest[admin]
+	if !ok || !a.IsDynamicEntry || !slices.Contains(manifest[entry].DynamicImports, admin) {
+		t.Fatalf("%s is not a dynamic import of the entry: %+v", admin, a)
+	}
+
+	// Everything the entry loads statically, transitively.
+	static := map[string]bool{}
+	var walk func(string)
+	walk = func(k string) {
+		if static[k] {
+			return
+		}
+		static[k] = true
+		for _, i := range manifest[k].Imports {
+			walk(i)
+		}
+	}
+	walk(entry)
+	for k := range static {
+		if strings.HasPrefix(k, "src/screens/admin/") || manifest[k].File == a.File {
+			t.Errorf("the entry loads %s statically", k)
+		}
+	}
+
+	shell, err := Shell()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(shell, a.File) {
+		t.Errorf("the shell references the admin chunk %s", a.File)
+	}
+	rec := httptest.NewRecorder()
+	Assets().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/"+a.File, nil))
+	if rec.Code != http.StatusOK {
+		t.Errorf("the admin chunk %s serves %d", a.File, rec.Code)
 	}
 }

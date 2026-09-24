@@ -42,6 +42,30 @@ page and not Go, the template placeholders stay unrendered in development, and
 the client falls back to an anonymous viewer when the bootstrap block does not
 parse.
 
+## Routes
+
+`src/routes.tsx` is the route table. It has one entry for every path in
+docs/07's URL scheme, which the HTML client will serve too, so adding a
+client-only route is a design change, not a detail. `routes.test.tsx` diffs
+the table against the document in both directions.
+
+A thread's page and lens are query parameters, and `useThreadView` in
+`src/view.ts` is the only place that reads or writes them. A shared link
+therefore reproduces the view.
+
+The admin screens under `src/screens/admin` are reached only through a lazy
+import, so they build to their own chunk. `internal/web/spa`'s
+`TestTheAdminBundleIsSeparate` reads the manifest and fails if the reader's
+entry chunk ever imports them statically.
+
+## Testing
+
+```sh
+npm test
+```
+
+runs Vitest under happy-dom. CI runs it after rebuilding the client.
+
 ## Versions
 
 Every dependency is pinned to an exact version, and `package-lock.json` is

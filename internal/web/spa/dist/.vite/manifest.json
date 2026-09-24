@@ -1,11 +1,23 @@
 {
   "index.html": {
-    "file": "assets/index-DWs2fapY.js",
+    "file": "assets/index-3Y8cLEFP.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
+    "dynamicImports": [
+      "src/screens/admin/AdminRoot.tsx"
+    ],
     "css": [
       "assets/index-BQYzxPxd.css"
+    ]
+  },
+  "src/screens/admin/AdminRoot.tsx": {
+    "file": "assets/AdminRoot-C_you-Zj.js",
+    "name": "AdminRoot",
+    "src": "src/screens/admin/AdminRoot.tsx",
+    "isDynamicEntry": true,
+    "imports": [
+      "index.html"
     ]
   }
 }

@@ -1,3 +1,4 @@
+/// <reference types="vitest/config" />
 import { defineConfig } from 'vite';
 import preact from '@preact/preset-vite';
 
@@ -19,6 +20,10 @@ export default defineConfig({
     modulePreload: { polyfill: false },
     // Read by the bundle budget check (TKT-01M29CGBYH).
     manifest: true,
+  },
+  test: {
+    environment: 'happy-dom',
+    include: ['src/**/*.test.{ts,tsx}'],
   },
   server: {
     port: 5173,

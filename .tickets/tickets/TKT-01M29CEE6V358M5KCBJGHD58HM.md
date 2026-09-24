@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T09:47:41Z
+updated_at: 2026-09-24T10:51:56Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -98,3 +98,7 @@ Criterion rewritten during Phase 1 grooming (2026-09-24). It moves to the end of
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:47:41Z
 
 The server now chooses the landing page (TKT-01M29CA9AX, merged in PR #56). With no page and no ordinal, GET /api/v1/threads/{id} serves a signed-in reader the page holding last_read_ordinal + 1, or the last page once everything is read, and ?ordinal=N serves N's page. The client reads page.number from the response and does not recompute it (plan item 2 / interfaces item 7). The ETag hashes the body, so any change the client can see is a new tag.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:51:56Z
+
+From TKT-01M29CEE52 (Build the client router and route table), now built: routes.tsx sends /t/:id/:slug, /t/:id/:slug/:ordinal and .../history to screens/ThreadScreen.tsx. That screen is a stand-in: it fetches the thread and replaces a stale slug. Replace it with the thread page. When you do, read page and lens only through useThreadView() (src/view.ts); hasPage tells 'no page named' from page 1, for the landing rule. After the thread loads, call canonicalThreadUrl(location, thread) and route(to, true) when it returns a URL. CEE52's AC2 and AC3 stay true only if both are kept. view.test.tsx's stale-slug test renders the app at a thread URL with a stubbed fetch, and it will keep passing through the new screen if the redirect stays.

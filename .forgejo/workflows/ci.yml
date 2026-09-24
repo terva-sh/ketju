@@ -103,6 +103,13 @@ jobs:
           git add -N internal/web/spa/dist
           git diff --exit-code -- internal/web/spa/dist
 
+      - name: client tests
+        # TKT-01M29CEE52. Vitest under happy-dom: the route table against
+        # docs/07's URL scheme, the view living in the URL, and the stale-slug
+        # redirect. The step above left node_modules installed from the
+        # lockfile, so this installs nothing.
+        run: npm --prefix web/client test
+
       - name: go vet
         run: go vet ./...
 
