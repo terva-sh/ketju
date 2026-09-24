@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T10:35:47Z
+updated_at: 2026-09-24T10:41:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -123,6 +123,10 @@ Built and verified.
 
 ### Mutation
 8 mutants over the shell, assets and the inline check. One survivor weakened the inline check itself, invisible because the built shell has nothing for it to miss. It became `TestTheInlineCheckIsNarrow`, which pins the single exemption. All are killed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:41:29Z
+
+Review 399 (medium, fixed): Assets set the year-long immutable header before serving, so a 404 for a missing /assets/ file was cacheable for a year. A client that asked for a new build's asset before this server had it would have kept the 404. Assets now fs.Stats the name first. Only an existing regular file gets the immutable header; anything else is a 404 with Cache-Control: no-store. fs.Stat also refuses unclean names (.., //, a trailing slash). TestAssetsServeOnlyAssets asserts no-store on every 404 and adds the unclean paths. Mutants: removing the stat check is killed, and so is removing no-store. Dropping IsDir survives as an equivalent mutant: dist/assets has no subdirectories, and a trailing slash is already refused. It is kept for a future subdirectory, where the file server would otherwise answer with a redirect marked immutable.
 
 ## Comments
 

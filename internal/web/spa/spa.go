@@ -32,6 +32,11 @@ func Shell() (string, error) {
 // forever and says so; a new build is new names, referenced from a shell
 // that is never cached. Directory listings are refused rather than served:
 // the listing is not a hashed file and nothing references it.
+//
+// Only a file that exists is marked immutable. A 404 says no-store, so a
+// client that asks for a new build's asset before this server has it (a
+// rolling deploy, a stale tab) asks again rather than keeping the 404 for a
+// year.
 func Assets() http.Handler {
 	root, err := fs.Sub(dist, "dist")
 	if err != nil {
@@ -39,11 +44,23 @@ func Assets() http.Handler {
 	}
 	files := http.FileServerFS(root)
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !strings.HasPrefix(r.URL.Path, "/assets/") || strings.HasSuffix(r.URL.Path, "/") {
-			http.NotFound(w, r)
+		name := strings.TrimPrefix(r.URL.Path, "/")
+		if !strings.HasPrefix(name, "assets/") {
+			notFound(w, r)
+			return
+		}
+		// fs.Stat refuses a name that is not clean (.., //, a trailing
+		// slash), so this also keeps the file server from redirecting one.
+		if info, err := fs.Stat(root, name); err != nil || info.IsDir() {
+			notFound(w, r)
 			return
 		}
 		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
 		files.ServeHTTP(w, r)
 	})
+}
+
+func notFound(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Cache-Control", "no-store")
+	http.NotFound(w, r)
 }

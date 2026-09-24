@@ -41,13 +41,20 @@ func TestTheBuildIsEmbedded(t *testing.T) {
 }
 
 // TestAssetsServeOnlyAssets: no listing, nothing outside /assets/, and a
-// missing file is a 404.
+// missing file is a 404 that no cache keeps: an asset a new build references
+// may reach this server after a client first asks for it.
 func TestAssetsServeOnlyAssets(t *testing.T) {
-	for _, path := range []string{"/assets/", "/index.html", "/.vite/manifest.json", "/assets/missing-00000000.js"} {
+	for _, path := range []string{"/assets/", "/assets", "/index.html", "/.vite/manifest.json",
+		"/assets/missing-00000000.js", "/assets/../index.html", "/assets//x.js"} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.URL.Path = path // unclean on purpose, as a raw request can be
 		rec := httptest.NewRecorder()
-		Assets().ServeHTTP(rec, httptest.NewRequest(http.MethodGet, path, nil))
+		Assets().ServeHTTP(rec, req)
 		if rec.Code != http.StatusNotFound {
 			t.Errorf("%s: %d, want 404", path, rec.Code)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+			t.Errorf("%s: a 404 with Cache-Control %q, want no-store", path, cc)
 		}
 	}
 }
