@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T20:57:50Z
+updated_at: 2026-09-24T21:05:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -150,6 +150,10 @@ Review 511 (head 3141449) raised one medium finding, accepted and fixed. A sign-
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:57:50Z
 
 Review 512 (head ad8173e) marked 511's finding resolved and raised one medium, accepted and fixed: the identity's last_login_at was written before the callback knew the sign-in would complete. The whole success sequence now lives in identity.Login(…, replaces): issue the session, end the one the browser held, and only then record the sign-in. If ending the old session fails, the new one is revoked and Login returns the error, and the handler answers 500 'Sign-in failed'. The handler keeps no partial states, and identity.Service.Sessions is now an interface of IssueUser and Revoke. TestASignInThatCannotEndTheOldSessionFails now also checks that the identity has no recorded login. This supersedes the review 511 note on where the revocation lives (it said the handler). All mutants are killed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:05:19Z
+
+Review 513 (head b45c02c) marked 512's finding resolved and raised one medium, accepted and fixed. When ending the replaced session fails, possibly because the request itself was cancelled, the newly issued session is now revoked on context.WithoutCancel(ctx) bounded by five seconds, not on the request's context. So a cancelled sign-in cannot leave its unclaimed session row behind. identity/login_test.go's TestACancelledSignInLeavesNoSessionBehind cancels the request at exactly that moment. All mutants are killed, including cleanup on the request's context.
 
 ## Summary
 

@@ -48,6 +48,9 @@ type Result struct {
 	Status string
 }
 
+// cleanupTimeout bounds ending a session a failed sign-in issued.
+const cleanupTimeout = 5 * time.Second
+
 // Sessions is the part of *session.Store a sign-in uses.
 type Sessions interface {
 	IssueUser(ctx context.Context, identityID int64, meta session.Meta) (string, session.Session, error)
@@ -119,7 +122,12 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 	}
 	if replaces != "" {
 		if err := s.Sessions.Revoke(ctx, replaces); err != nil {
-			if err2 := s.Sessions.Revoke(ctx, token); err2 != nil {
+			// The request may be what failed: cancelled mid-sign-in. The
+			// session just issued is ended on a context of its own, bounded,
+			// so a cancelled request cannot leave it behind (review 513).
+			cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+			defer cancel()
+			if err2 := s.Sessions.Revoke(cctx, token); err2 != nil {
 				err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
 			}
 			return Result{}, fmt.Errorf("identity: ending the session a sign-in replaces: %w", err)
