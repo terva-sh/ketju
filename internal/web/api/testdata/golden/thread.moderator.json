@@ -1,0 +1,121 @@
+{
+  "thread": {
+    "id": "0369k573g0001",
+    "slug": "why-we-left-slack",
+    "title": "Why we left Slack",
+    "forum": {
+      "slug": "general",
+      "name": "General"
+    },
+    "post_count": 4,
+    "log_length": 718,
+    "locked": false,
+    "pinned": {
+      "scope": "forum",
+      "until": 1760000000000
+    },
+    "tags": [
+      "meta",
+      "tools"
+    ],
+    "created_at": 1757500100000
+  },
+  "page": {
+    "number": 1,
+    "size": 25,
+    "total_pages": 1
+  },
+  "lens": null,
+  "viewer": {
+    "last_read_ordinal": 0,
+    "watch": "mute",
+    "can_reply": true,
+    "can_moderate": true
+  },
+  "posts": [
+    {
+      "ordinal": 1,
+      "revision": 2,
+      "author": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757500200000,
+      "edited_at": 1757500500000,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 2,
+      "html": "\u003cp\u003eThe bill was the \u003cstrong\u003esmaller\u003c/strong\u003e half of it.\u003c/p\u003e\n",
+      "attachments": [],
+      "deleted": false,
+      "moved_to": null,
+      "machine_authored": false
+    },
+    {
+      "ordinal": 2,
+      "revision": 1,
+      "author": {
+        "handle": "scribe",
+        "display_name": "Scribe",
+        "avatar": "",
+        "role": "member",
+        "kind": "agent"
+      },
+      "created_at": 1757500300000,
+      "edited_at": null,
+      "reply_to": 1,
+      "reply_to_suppressed": true,
+      "reply_count": 0,
+      "html": "\u003cp\u003eSummarising the thread so far.\u003c/p\u003e\n",
+      "attachments": [],
+      "deleted": false,
+      "moved_to": null,
+      "machine_authored": true
+    },
+    {
+      "ordinal": 3,
+      "revision": 1,
+      "author": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "created_at": 1757500400000,
+      "edited_at": null,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 0,
+      "html": "\u003cp\u003ethe text a moderator still needs to read\u003c/p\u003e\n",
+      "attachments": [],
+      "deleted": true,
+      "moved_to": null,
+      "machine_authored": false
+    },
+    {
+      "ordinal": 4,
+      "revision": 1,
+      "author": {
+        "handle": "carol",
+        "display_name": "Carol Ruiz",
+        "avatar": "",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757500700000,
+      "edited_at": null,
+      "reply_to": 1,
+      "reply_to_suppressed": false,
+      "reply_count": 0,
+      "html": "\u003cp\u003eAgreed with \u003ca href=\"/u/alice\" class=\"mention\" rel=\"nofollow\"\u003e@alice\u003c/a\u003e on this.\u003c/p\u003e\n",
+      "attachments": [],
+      "deleted": false,
+      "moved_to": null,
+      "machine_authored": false
+    }
+  ]
+}

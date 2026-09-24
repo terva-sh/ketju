@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -133,6 +134,12 @@ type Actor struct {
 	logLength   int64
 	headerDirty bool
 
+	// published is logLength as readers may see it, set only after the index
+	// has applied the records that length covers. A reader that takes it and
+	// then an index snapshot therefore never holds an index older than the
+	// length it reports (TKT-01M29CA9AX).
+	published atomic.Int64
+
 	mu       sync.Mutex
 	closeErr error
 	closed   bool
@@ -149,6 +156,7 @@ func NewActor(ix *Index, logLength int64, log LogWriter, index IndexWriter, poli
 		reqs: make(chan request), quit: make(chan struct{}), done: make(chan struct{}),
 		ix: ix, logLength: logLength,
 	}
+	a.published.Store(logLength)
 	go a.run()
 	return a
 }
@@ -207,6 +215,12 @@ func (a *Actor) Close() error {
 // Index returns the in-memory index. Valid only after Close; before then the
 // actor goroutine owns it.
 func (a *Actor) Index() *Index { return a.ix }
+
+// LogLength is the log's length in bytes as of the last committed batch: the
+// thread's version number. It is safe to call from any goroutine, and the
+// index already reflects every record it covers, so read it before taking an
+// index snapshot and the snapshot is at least that new.
+func (a *Actor) LogLength() int64 { return a.published.Load() }
 
 func (a *Actor) run() {
 	defer close(a.done)
@@ -324,6 +338,7 @@ func (a *Actor) commit(batch []request) {
 	}
 	a.headerDirty = true
 	a.flushHeader()
+	a.published.Store(a.logLength)
 
 	// 5. Answer.
 	for i := range staging {

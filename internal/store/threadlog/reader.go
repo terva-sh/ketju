@@ -37,6 +37,12 @@ type Post struct {
 	ReplyTo   uint32
 	Flags     EntryFlags
 
+	// RevisionMS is when the current revision was written: the timestamp of
+	// the record the entry points at. It equals CreatedMS for an unedited
+	// post and is the edit time for an edited one. Zero when Tombstone, since
+	// no record was read.
+	RevisionMS int64
+
 	// Source is the markdown of the current revision. Empty when Tombstone.
 	Source string
 
@@ -143,6 +149,22 @@ func (r *Reader) One(ordinal uint32) (Post, error) {
 	return posts[0], nil
 }
 
+// Hidden reads a post's current revision whether or not it renders as a
+// tombstone. Range never reads a tombstoned post's bytes, which is the point
+// of the flags; a moderator is the one reader entitled to them (docs/07's
+// viewer classes), and pays one read per such post.
+func (r *Reader) Hidden(ordinal uint32) (Post, error) {
+	e, err := r.ix.Entry(ordinal)
+	if err != nil {
+		return Post{}, err
+	}
+	buf := make([]byte, e.FrameLength)
+	if _, err := r.log.ReadAt(buf, int64(e.Offset)); err != nil {
+		return Post{}, &ReadError{Ordinal: ordinal, Offset: e.Offset, Err: err}
+	}
+	return decodePost(buf, ordinal, e)
+}
+
 // decodePost turns one frame into a Post.
 //
 // The record at a post's offset is a Post for an unedited one and an Edit for
@@ -159,6 +181,7 @@ func decodePost(frame []byte, ordinal uint32, e IndexEntry) (Post, error) {
 	p := Post{
 		Ordinal: ordinal, Revision: e.Revision, Author: e.Author,
 		CreatedMS: e.CreatedMS, ReplyTo: e.ReplyTo, Flags: e.Flags,
+		RevisionMS: h.TimestampMS,
 	}
 
 	v, err := DecodeBody(h.Type, h.Encoding, body)

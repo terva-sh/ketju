@@ -54,7 +54,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /forums` | tree of forums with per-forum unread counts |
 | `GET  /forums/{slug}/threads?cursor=&sort=` | thread list rows |
 | `POST /forums/{slug}/threads` | create thread `{title, source, tags}` → thread + first post |
-| `GET  /threads/{id}?page=&lens=&after_log_length=` | thread header + page of rendered posts + lens meta + viewer read position |
+| `GET  /threads/{id}?page=&ordinal=&lens=&after_log_length=` | thread header + page of rendered posts + lens meta + viewer read position |
 | `POST /threads/{id}/posts` | `{source, reply_to?, attachments?}` → rendered post, ordinal, log_length |
 | `GET  /threads/{id}/posts/{ordinal}` | single post (popover, permalink) |
 | `GET  /threads/{id}/posts/{ordinal}/replies` | direct replies (inline expander) |
@@ -141,6 +141,37 @@ only per-user part, and it is cheap; everything above it comes from the
 response cache keyed on `(thread, page, lens, log_length, renderer_version,
 viewer_class)` where `viewer_class ∈ {anon, member, moderator}` (moderators
 see tombstone contents).
+
+#### What the thread endpoint does (TKT-01M29CA9AX)
+
+- **Which page.** `?ordinal=N` is the permalink form: it serves the page
+  holding post N and wins over `page`. With neither, a signed-in viewer who
+  has read the thread lands on the page holding their first unread post (the
+  last page once they have read everything); anyone else gets page 1. An
+  ordinal or page past the end is `not-found`.
+- **The ETag** as served is longer than the example above:
+  `"<id>-<log_length>-r<renderer>-<class>-p<projected>-v<hash>"`. The class
+  is there because a moderator's page carries content a member's does not;
+  `p` is the thread row's `log_length_projected`, because the header's
+  title, tags, lock and pin come from the projection, which can trail the
+  log; `v` hashes the viewer block, page and query, so moving your own read
+  position or watch is a new tag. `If-None-Match` accepts a list, `W/` tags
+  and `*`. The response is `Cache-Control: private, no-cache`: always
+  revalidate, and a 304 when nothing moved.
+- **`after_log_length=L`** keeps the posts *on the requested page* whose
+  current revision was written at or after `L`: new posts and edits. The
+  header and viewer block are complete. A delete or restore writes no new
+  revision of the post, so a client that sees `log_length` move without a
+  post to account for it refetches the page.
+- **`watch`** is `"watch"`, `"mute"`, or `""` for neither.
+- **Access.** A thread the viewer may not see is `not-found`, as if it did
+  not exist. A readable-when-signed-in thread is `unauthenticated` to an
+  anonymous viewer and `forbidden` to a member without read. `lens` is not
+  served yet and is `bad-request`, not ignored.
+- **Goldens.** `internal/dto/testdata/golden` fixes the shape;
+  `internal/web/api/testdata/golden/thread.{anon,member,moderator}.json` are
+  what the endpoint actually serves for one seeded thread, regenerated with
+  `go test ./internal/web/api -update`.
 
 ### Where the shapes live
 

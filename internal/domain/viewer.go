@@ -1,5 +1,7 @@
 package domain
 
+import "context"
+
 // User roles (docs/04 "users", docs/05 "Roles and groups").
 const (
 	RoleMember    = "member"
@@ -31,3 +33,22 @@ func Anonymous() Viewer { return Viewer{} }
 // Member reports whether the viewer is a signed-in, active user: the
 // implicit "members" group (docs/04).
 func (v Viewer) Member() bool { return v.UserID != 0 && v.Active }
+
+type viewerKey struct{}
+
+// WithViewer returns ctx carrying v. The session middleware (TKT-01M29C5Y3E)
+// sets it once per request; nothing else should.
+func WithViewer(ctx context.Context, v Viewer) context.Context {
+	return context.WithValue(ctx, viewerKey{}, v)
+}
+
+// ViewerFrom returns the viewer ctx carries, or Anonymous when it carries
+// none. Defaulting to anonymous rather than failing is the safe direction: a
+// request that somehow skipped session resolution gets the least access, not
+// an error that a caller might handle by guessing.
+func ViewerFrom(ctx context.Context) Viewer {
+	if v, ok := ctx.Value(viewerKey{}).(Viewer); ok {
+		return v
+	}
+	return Anonymous()
+}

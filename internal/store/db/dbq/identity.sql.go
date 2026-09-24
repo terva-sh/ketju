@@ -8,6 +8,7 @@ package dbq
 import (
 	"context"
 	"database/sql"
+	"strings"
 
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
@@ -264,4 +265,58 @@ type TouchSessionParams struct {
 func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) error {
 	_, err := q.db.ExecContext(ctx, touchSession, arg.LastUsedAt, arg.IDHash)
 	return err
+}
+
+const usersByIDs = `-- name: UsersByIDs :many
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+`
+
+// The authors on one page of a thread, in one query rather than one per post.
+func (q *Queries) UsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
+	query := usersByIDs
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []User
+	for rows.Next() {
+		var i User
+		if err := rows.Scan(
+			&i.ID,
+			&i.Handle,
+			&i.DisplayName,
+			&i.AvatarBlob,
+			&i.Status,
+			&i.Role,
+			&i.Kind,
+			&i.BioSource,
+			&i.Timezone,
+			&i.Locale,
+			&i.PrefsJson,
+			&i.MarkAllReadAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastSeenAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

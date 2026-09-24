@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T08:57:07Z
+updated_at: 2026-09-24T09:11:02Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -206,3 +206,7 @@ Merged TKT-01M29BYYJ8 (projection tables) as PR #53 at a15a1aa, with a clean rev
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:57:07Z
 
 Merged TKT-01M29C2WW5 (projection writer) as PR #54 at 46b6a13, with a clean review at 46b6a13 and CI run 169. Two review rounds ran first, all findings accepted and fixed. Review 389: Delete must not move post_meta.log_offset, and Sweep became required. Review 390: a thread row must exist before a thread counts as projected, and the log header is now validated. For later tickets: projection.New(Options{DB, Root, Sweep}) returns an error if any is missing. Run(ctx) is the retry loop. ProjectThread(ctx, id, len) is idempotent catch-up. post_meta.log_offset means the current revision's record, and migration 0004's comment on it is wrong (docs/04 says so). Filed draft TKT-01M39973KG: docs/03 says reserved types are refused, while the reader skips them. Next: TKT-01M29BYYHQ, then TKT-01M29CA9AX.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:11:02Z
+
+Merged TKT-01M29BYYHQ (viewer-state schema) as PR #55 at 0e70101, with a clean review at 0e70101 and CI run 174. For later tickets: UnreadCount(user, thread) and UpsertReadPosition (which only moves forward). Drafts use partial unique indexes. TKT-01M29CA9CE decides whether a new-thread draft needs a title. Next: TKT-01M29CA9AX, whose dependencies are all done now.

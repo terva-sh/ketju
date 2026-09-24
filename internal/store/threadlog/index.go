@@ -456,6 +456,23 @@ func (ix *Index) Replies(ordinal uint32) []uint32 {
 	return out
 }
 
+// ReplyCounts returns how many posts reply directly to each of ordinals, in
+// one pass over the index rather than one Replies call per post on a page.
+func (ix *Index) ReplyCounts(ordinals []uint32) map[uint32]int {
+	out := make(map[uint32]int, len(ordinals))
+	for _, o := range ordinals {
+		out[o] = 0
+	}
+	ix.mu.RLock()
+	defer ix.mu.RUnlock()
+	for _, e := range ix.entries {
+		if _, want := out[e.ReplyTo]; want && e.ReplyTo != 0 {
+			out[e.ReplyTo]++
+		}
+	}
+	return out
+}
+
 // MachineAuthored returns the ordinals written by an agent account.
 //
 // The agent lens, from the mirrored frame flag bit, with no body decoded.

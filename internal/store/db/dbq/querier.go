@@ -105,6 +105,8 @@ type Querier interface {
 	// A ThreadCreated resets the whole row: replayed from the start of the log,
 	// it must undo whatever later records did before they are applied again.
 	UpsertThread(ctx context.Context, arg UpsertThreadParams) error
+	// The authors on one page of a thread, in one query rather than one per post.
+	UsersByIDs(ctx context.Context, ids []int64) ([]User, error)
 }
 
 var _ Querier = (*Queries)(nil)

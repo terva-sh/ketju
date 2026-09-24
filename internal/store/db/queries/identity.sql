@@ -39,3 +39,7 @@ DELETE FROM sessions WHERE user_id = ?;
 
 -- name: SetUserRole :exec
 UPDATE users SET role = ?, updated_at = ? WHERE id = ?;
+
+-- The authors on one page of a thread, in one query rather than one per post.
+-- name: UsersByIDs :many
+SELECT * FROM users WHERE id IN (sqlc.slice('ids')) ORDER BY id;

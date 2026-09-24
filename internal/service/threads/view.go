@@ -1,0 +1,436 @@
+// Package threads is the service behind the thread endpoints (docs/02
+// "Read a thread page", docs/07 "Thread response shape").
+//
+// It returns values from internal/dto and nothing HTTP-shaped beyond the
+// problem codes its errors carry, so the JSON handler and the future HTML
+// handler render the same page from the same call (docs/07 "Path to a non-JS
+// client").
+package threads
+
+import (
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+
+	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/dto"
+	"github.com/terva-sh/ketju/internal/perm"
+	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/store/db"
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/threadcache"
+	"github.com/terva-sh/ketju/internal/store/threadid"
+	"github.com/terva-sh/ketju/internal/store/threadlog"
+)
+
+// DefaultPageSize is docs/06's decided default. The per-user setting (10 to
+// 50) arrives with the settings endpoint; until then every page is this size.
+const DefaultPageSize = 25
+
+// Viewer classes (docs/07): what a response's cacheable part depends on.
+// Moderators see tombstone contents; members and anonymous viewers do not.
+const (
+	ClassAnon      = "anon"
+	ClassMember    = "member"
+	ClassModerator = "moderator"
+)
+
+// Service reads threads.
+type Service struct {
+	DB      *db.DB
+	Perm    *perm.Evaluator
+	Threads *threadcache.Cache
+	Render  *render.Cache
+}
+
+// Query is what a thread page request asks for. Zero values mean "not given".
+type Query struct {
+	// Page is one-based.
+	Page int
+	// Ordinal is a permalink: the page holding it is served. It wins over
+	// Page when both are given.
+	Ordinal uint32
+	// Lens names a filter. Only the identity lens exists yet (TKT-01M29CRJ1P
+	// adds the rest), so any value is refused.
+	Lens string
+	// After narrows the page to posts whose current revision was written at
+	// or after this log length: new posts and edits since a client's copy.
+	After    int64
+	HasAfter bool
+	// PageSize is the posts per page; zero means DefaultPageSize.
+	PageSize int
+}
+
+// Result is a served page, or the news that the client's copy is current.
+type Result struct {
+	ETag string
+	// NotModified means ifNoneMatch matched: Page is empty and nothing was
+	// rendered.
+	NotModified bool
+	Page        dto.ThreadPage
+}
+
+// View serves one page of a thread to v.
+//
+// Everything the ETag depends on is gathered first and is cheap: the thread
+// row, permissions, the viewer's own state, the log length and the index. A
+// matching ifNoneMatch returns before a single post is read or rendered.
+func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Query, ifNoneMatch string) (Result, error) {
+	if q.Lens != "" {
+		return Result{}, problem.Coded(problem.CodeBadRequest, fmt.Errorf("threads: unknown lens %q", q.Lens))
+	}
+	if !v.Member() {
+		v = domain.Anonymous()
+	}
+	size := q.PageSize
+	if size <= 0 {
+		size = DefaultPageSize
+	}
+
+	var row dbq.Thread
+	err := s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		row, err = dq.GetThread(ctx, int64(id))
+		return err
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		// Not projected is not found. A thread whose ThreadCreated has not
+		// reached the projection yet is milliseconds old.
+		return Result{}, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s has no projection row", id))
+	}
+	if err != nil {
+		return Result{}, err
+	}
+
+	switch d, err := s.Perm.Check(ctx, v, row.ForumID, domain.PermRead); {
+	case err != nil:
+		return Result{}, err
+	case d == perm.Hidden:
+		return Result{}, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s is hidden from this viewer", id))
+	case d == perm.Deny && !v.Member():
+		return Result{}, problem.Coded(problem.CodeUnauthenticated, fmt.Errorf("threads: %s needs a signed-in reader", id))
+	case d == perm.Deny:
+		return Result{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: %s is not readable by this viewer", id))
+	}
+	canModerate, err := s.Perm.Can(ctx, v, row.ForumID, domain.PermModerate)
+	if err != nil {
+		return Result{}, err
+	}
+	canReplyPerm, err := s.Perm.Can(ctx, v, row.ForumID, domain.PermReply)
+	if err != nil {
+		return Result{}, err
+	}
+	class := ClassAnon
+	switch {
+	case canModerate:
+		class = ClassModerator
+	case v.Member():
+		class = ClassMember
+	}
+
+	var (
+		forum    dbq.Forum
+		tags     []string
+		lastRead int64
+		watch    string
+	)
+	err = s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		if forum, err = dq.GetForum(ctx, row.ForumID); err != nil {
+			return fmt.Errorf("threads: the forum of %s: %w", id, err)
+		}
+		if tags, err = dq.ThreadTags(ctx, int64(id)); err != nil {
+			return err
+		}
+		if !v.Member() {
+			return nil
+		}
+		rp, err := dq.GetReadPosition(ctx, dbq.GetReadPositionParams{UserID: v.UserID, ThreadID: int64(id)})
+		switch {
+		case err == nil:
+			lastRead = rp.LastReadOrdinal
+		case !errors.Is(err, sql.ErrNoRows):
+			return err
+		}
+		watch, err = dq.ThreadWatchLevel(ctx, dbq.ThreadWatchLevelParams{
+			UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true}})
+		if errors.Is(err, sql.ErrNoRows) {
+			err = nil
+		}
+		return err
+	})
+	if err != nil {
+		return Result{}, err
+	}
+
+	viewer := dto.ThreadViewer{
+		LastReadOrdinal: int(lastRead),
+		Watch:           watch,
+		CanReply:        canReplyPerm && (row.Locked == 0 || canModerate),
+		CanModerate:     canModerate,
+	}
+
+	var res Result
+	err = s.Threads.With(id, func(th *threadcache.Thread) error {
+		// Length first, then the index: the index is then at least as new as
+		// the length the response claims (threadlog.Actor.LogLength).
+		logLength := th.Actor.LogLength()
+		ix := th.Index
+		n := ix.Len()
+
+		page, err := PageFor(q, n, size, v.Member(), lastRead)
+		if err != nil {
+			return err
+		}
+		from, to := uint32((page-1)*size+1), uint32(page*size)
+		entries := ix.Entries(from, to)
+
+		res.ETag = etag(id, logLength, class, row.LogLengthProjected, page, q, viewer)
+		if matches(ifNoneMatch, res.ETag) {
+			res.NotModified = true
+			return nil
+		}
+
+		res.Page = dto.ThreadPage{
+			Thread: header(id, row, forum, tags, n, logLength),
+			Page:   dto.Pagination{Number: page, Size: size, TotalPages: totalPages(n, size)},
+			Viewer: viewer,
+		}
+		res.Page.Posts, err = s.posts(ctx, th, id, entries, from, q, class == ClassModerator)
+		return err
+	})
+	return res, err
+}
+
+// PageFor picks the page: a permalink's, the asked-for one, the one holding
+// the first unread post for a returning member (docs/06 "Landing on
+// return"), or the first.
+func PageFor(q Query, n, size int, member bool, lastRead int64) (int, error) {
+	total := totalPages(n, size)
+	switch {
+	case q.Ordinal > 0:
+		if int(q.Ordinal) > n {
+			return 0, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: ordinal %d past the last post %d", q.Ordinal, n))
+		}
+		return int(q.Ordinal-1)/size + 1, nil
+	case q.Page > 0:
+		if q.Page > total {
+			return 0, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: page %d past the last page %d", q.Page, total))
+		}
+		return q.Page, nil
+	case member && lastRead > 0:
+		// The page holding last_read_ordinal + 1, which is past the end
+		// when everything is read: then the last page.
+		return min(int(lastRead)/size+1, total), nil
+	default:
+		return 1, nil
+	}
+}
+
+// totalPages is at least one: an empty thread still has a first page.
+func totalPages(n, size int) int {
+	return max(1, (n+size-1)/size)
+}
+
+// etag names everything the response depends on (docs/07, extended in
+// TKT-01M29CA9AX):
+//
+//   - thread id and log length, the thread's version;
+//   - renderer version, since the HTML changes with it;
+//   - viewer class, since moderators see tombstone contents;
+//   - the projected length, because the header comes from the projection,
+//     which can catch up under an unchanged log length;
+//   - the page served, which depends on the viewer's read position when the
+//     URL names none, and a digest of the viewer block, so a read position,
+//     watch or permission change is never answered with a stale 304.
+//
+// Lens and after_log_length are in the URL and therefore in the client's cache
+// key already; they are in the digest too so the ETag alone is enough.
+func etag(id threadid.ID, logLength int64, class string, projected int64, page int, q Query, v dto.ThreadViewer) string {
+	b, _ := json.Marshal(struct {
+		V     dto.ThreadViewer
+		Page  int
+		Lens  string
+		After int64
+		Has   bool
+	}{v, page, q.Lens, q.After, q.HasAfter})
+	sum := sha256.Sum256(b)
+	return fmt.Sprintf(`"%s-%d-r%d-%s-p%d-v%s"`, id, logLength, render.Version, class, projected, hex.EncodeToString(sum[:6]))
+}
+
+// matches applies If-None-Match: a list of entity tags, weak ones compared
+// weakly as RFC 9110 requires for GET, or "*".
+func matches(header, tag string) bool {
+	for _, t := range strings.Split(header, ",") {
+		t = strings.TrimPrefix(strings.TrimSpace(t), "W/")
+		if t == "*" || t == tag {
+			return true
+		}
+	}
+	return false
+}
+
+func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n int, logLength int64) dto.ThreadHeader {
+	h := dto.ThreadHeader{
+		ID:    id.String(),
+		Slug:  row.Slug,
+		Title: row.Title,
+		Forum: dto.ForumRef{Slug: forum.Slug, Name: forum.Name},
+		// From the index, not the projection, so it agrees with LogLength.
+		PostCount: n,
+		LogLength: logLength,
+		Locked:    row.Locked != 0,
+		Tags:      append([]string{}, tags...),
+		CreatedAt: dto.Millis(row.CreatedAt),
+	}
+	if row.PinnedScope.Valid {
+		h.Pinned = &dto.Pinned{Scope: row.PinnedScope.String}
+		if row.PinnedUntil.Valid {
+			until := dto.Millis(row.PinnedUntil.Int64)
+			h.Pinned.Until = &until
+		}
+	}
+	return h
+}
+
+// posts reads, renders and assembles the page's posts.
+func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid.ID,
+	entries []threadlog.IndexEntry, from uint32, q Query, moderator bool) ([]dto.Post, error) {
+	out := []dto.Post{}
+	if len(entries) == 0 {
+		return out, nil
+	}
+	to := from + uint32(len(entries)) - 1
+	read, err := th.Reader.Range(from, to)
+	if err != nil {
+		return nil, err
+	}
+
+	// after_log_length keeps the posts whose current revision was written at
+	// or after it: new posts and edits. A Delete or Restore moves no entry's
+	// offset, so it does not show here; the client refetches the page on a
+	// moderation event instead (settled in grooming).
+	var posts []threadlog.Post
+	authors := map[int64]bool{}
+	for i, p := range read {
+		if q.HasAfter && int64(entries[i].Offset) < q.After {
+			continue
+		}
+		if p.Tombstone && moderator {
+			if p, err = th.Reader.Hidden(p.Ordinal); err != nil {
+				return nil, err
+			}
+		}
+		posts = append(posts, p)
+		authors[int64(p.Author)] = true
+	}
+	if len(posts) == 0 {
+		return out, nil
+	}
+
+	users, err := s.users(ctx, authors)
+	if err != nil {
+		return nil, err
+	}
+	ordinals := make([]uint32, len(posts))
+	for i, p := range posts {
+		ordinals[i] = p.Ordinal
+	}
+	replies := th.Index.ReplyCounts(ordinals)
+	rctx := render.Context{
+		Posts: render.ResolverFunc(func(o uint32) (bool, bool) {
+			tomb, err := th.Index.Tombstoned(o)
+			return err == nil, err == nil && tomb
+		}),
+		Handles: render.HandleFunc(func(h string) (int64, string, bool) { return s.handle(ctx, h) }),
+	}
+
+	for _, p := range posts {
+		d := dto.Post{
+			Ordinal:         int(p.Ordinal),
+			Revision:        int(p.Revision),
+			Author:          users[int64(p.Author)],
+			CreatedAt:       dto.Millis(p.CreatedMS),
+			ReplyCount:      replies[p.Ordinal],
+			Attachments:     []dto.Attachment{},
+			Deleted:         p.Flags.Has(threadlog.EntryDeleted) || p.Flags.Has(threadlog.EntryHiddenByMod),
+			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
+		}
+		if p.Revision > 1 && p.RevisionMS != 0 {
+			at := dto.Millis(p.RevisionMS)
+			d.EditedAt = &at
+		}
+		if p.ReplyTo != 0 {
+			r := int(p.ReplyTo)
+			d.ReplyTo = &r
+			d.ReplyToSuppressed = p.ReplyTo == p.Ordinal-1
+		}
+		// Blob metadata arrives with the blobs table (TKT-01M29BYYJ0); until
+		// then an attachment is its hash.
+		for _, h := range p.Attachments {
+			d.Attachments = append(d.Attachments, dto.Attachment{Hash: h})
+		}
+		// A tombstone reaches here with its source only for a moderator.
+		if !p.Tombstone || moderator {
+			if d.HTML, err = s.html(id, p, rctx); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, d)
+	}
+	return out, nil
+}
+
+// html renders one post through the render cache.
+func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context) (string, error) {
+	k := render.Key{Thread: id, Ordinal: p.Ordinal, Revision: uint32(p.Revision)}
+	if html, ok := s.Render.Get(k); ok {
+		return html, nil
+	}
+	r, err := render.RenderWith(p.Source, rctx)
+	if err != nil {
+		return "", fmt.Errorf("threads: rendering %s#%d: %w", id, p.Ordinal, err)
+	}
+	s.Render.Put(k, r.HTML)
+	return r.HTML, nil
+}
+
+// users loads the page's authors in one query. An author the database does
+// not have (a projection rebuilt against an older users table, docs/04) is
+// drawn with an empty handle rather than failing the page.
+func (s *Service) users(ctx context.Context, ids map[int64]bool) (map[int64]dto.Author, error) {
+	list := make([]int64, 0, len(ids))
+	for id := range ids {
+		list = append(list, id)
+	}
+	out := make(map[int64]dto.Author, len(ids))
+	err := s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
+		us, err := dq.UsersByIDs(ctx, list)
+		for _, u := range us {
+			out[u.ID] = dto.Author{Handle: u.Handle, DisplayName: u.DisplayName,
+				Avatar: u.AvatarBlob.String, Role: u.Role, Kind: u.Kind}
+		}
+		return err
+	})
+	return out, err
+}
+
+// handle resolves a mention for the renderer.
+func (s *Service) handle(ctx context.Context, h string) (int64, string, bool) {
+	var u dbq.User
+	err := s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		u, err = dq.GetUserByHandle(ctx, h)
+		return err
+	})
+	if err != nil {
+		return 0, "", false
+	}
+	return u.ID, u.Handle, true
+}
