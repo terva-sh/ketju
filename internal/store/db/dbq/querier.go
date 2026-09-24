@@ -66,6 +66,8 @@ type Querier interface {
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
+	// log_offset is the current revision's record, as the index entry's Offset
+	// is, so a Delete or Restore (which is not a revision) leaves it alone.
 	SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error)
 	SetPostRevision(ctx context.Context, arg SetPostRevisionParams) (int64, error)
 	SetProjectionState(ctx context.Context, arg SetProjectionStateParams) error

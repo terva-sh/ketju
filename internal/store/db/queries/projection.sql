@@ -92,8 +92,10 @@ ON CONFLICT (thread_id, ordinal) DO UPDATE SET
 UPDATE post_meta SET current_revision = ?, edited_at = ?, reply_to = ?, log_offset = ?
 WHERE thread_id = ? AND ordinal = ?;
 
+-- log_offset is the current revision's record, as the index entry's Offset
+-- is, so a Delete or Restore (which is not a revision) leaves it alone.
 -- name: SetPostDeleted :execrows
-UPDATE post_meta SET deleted = ?, log_offset = ? WHERE thread_id = ? AND ordinal = ?;
+UPDATE post_meta SET deleted = ? WHERE thread_id = ? AND ordinal = ?;
 
 -- name: DeleteMentions :exec
 DELETE FROM mentions WHERE thread_id = ? AND ordinal = ?;

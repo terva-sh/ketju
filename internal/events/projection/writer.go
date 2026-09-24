@@ -53,7 +53,10 @@ type Options struct {
 	// Sweep catches up every thread from durable state. Deliver calls it when
 	// a batch reports dropped events, because those are threads this writer
 	// was never told about. Startup catch-up (TKT-01M29C5Y1S) supplies it.
-	// Nil logs the hole and leaves it for the next startup.
+	//
+	// Required. Without it a drop could only be logged, and the threads it
+	// named would stay stale until the next restart with nothing reporting
+	// them as behind (review 389).
 	Sweep func(ctx context.Context) error
 
 	// Logger receives the lag transitions. Nil means slog.Default.
@@ -97,8 +100,16 @@ type Lag struct {
 	Bytes   int64
 }
 
-// New returns a Writer.
-func New(opts Options) *Writer {
+// New returns a Writer, or an error naming the option that is missing.
+func New(opts Options) (*Writer, error) {
+	switch {
+	case opts.DB == nil:
+		return nil, errors.New("projection: Options.DB is nil")
+	case opts.Root == "":
+		return nil, errors.New("projection: Options.Root is empty")
+	case opts.Sweep == nil:
+		return nil, errors.New("projection: Options.Sweep is nil; dropped events could not be recovered")
+	}
 	log := opts.Logger
 	if log == nil {
 		log = slog.Default()
@@ -108,7 +119,7 @@ func New(opts Options) *Writer {
 		now:    time.Now,
 		open:   func(path string) (logFile, error) { return os.OpenFile(path, os.O_RDONLY, 0) },
 		behind: make(map[threadid.ID]*lag),
-	}
+	}, nil
 }
 
 // Name identifies the writer on the bus.
@@ -118,15 +129,15 @@ func (w *Writer) Name() string { return "projection" }
 // events report, and retries every thread already behind. One thread failing
 // does not stop the others, and a failure is held for retry rather than
 // returned; see the package comment.
+//
+// A batch reporting dropped events runs Sweep first. A failed sweep is the
+// one error Deliver returns, so the bus reports the hole again and the sweep
+// is retried; the batch's own events are projected either way.
 func (w *Writer) Deliver(ctx context.Context, b events.Batch) error {
+	var sweepErr error
 	if b.Dropped > 0 {
-		if w.sweep == nil {
-			w.log.Warn("projection missed events and has no sweep; startup catch-up will close the gap",
-				"dropped", b.Dropped)
-		} else if err := w.sweep(ctx); err != nil {
-			// Returned, so the bus reports the hole again on the next batch
-			// and the sweep is retried.
-			return fmt.Errorf("projection: sweeping after %d dropped events: %w", b.Dropped, err)
+		if err := w.sweep(ctx); err != nil {
+			sweepErr = fmt.Errorf("projection: sweeping after %d dropped events: %w", b.Dropped, err)
 		}
 	}
 
@@ -150,7 +161,7 @@ func (w *Writer) Deliver(ctx context.Context, b events.Batch) error {
 	for _, id := range order {
 		w.project(ctx, id, targets[id])
 	}
-	return nil
+	return sweepErr
 }
 
 // Retry projects every thread that is behind. It returns an error joining

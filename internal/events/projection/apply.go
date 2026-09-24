@@ -129,9 +129,10 @@ func applyEdit(ctx context.Context, q *dbq.Queries, f frame) error {
 
 func applyDeleted(deleted bool) applyFunc {
 	return func(ctx context.Context, q *dbq.Queries, f frame) error {
+		// log_offset stays on the current revision's record; a Delete is
+		// not a revision (review 389).
 		return one(q.SetPostDeleted(ctx, dbq.SetPostDeletedParams{
-			Deleted: flag(deleted), LogOffset: f.offset,
-			ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal),
+			Deleted: flag(deleted), ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal),
 		}))(f, "post")
 	}
 }

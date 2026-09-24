@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:15:46Z
-updated_at: 2026-09-24T08:42:32Z
+updated_at: 2026-09-24T08:47:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -134,6 +134,24 @@ The rest were killed from the start:
 - the first event winning over the highest;
 - a log opened writable;
 - a scan starting inside the header.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:47:11Z
+
+Terva review 389 of head 70adf18 (base a15a1aa): request ready-review-70adf18, Actions run 164, run id 85c1519f-f85d-4178-8185-cd27d367867e. It raised two findings, and both are accepted and fixed on the next head.
+
+### 1. Delete and Restore overwrite post_meta.log_offset (high, apply.go:121)
+
+- **Accepted.** The index's Offset is the offset of the current revision's record, and a reader loading a body from log_offset would have got the Delete frame.
+- **Fix.** SetPostDeleted no longer touches log_offset.
+- **Documentation.** Migration 0004's column comment says otherwise. It cannot be edited, because applied migrations are checksummed, so docs/04 now states the meaning and says the comment is wrong.
+- **Test.** `agreesWithIndex` compares every post_meta row with the in-memory index entry: author, created, revision, offset, reply_to and deleted. It runs after every per-type case and every random stepped projection. A mutant that moves log_offset on Delete is killed.
+
+### 2. A nil Sweep acknowledges dropped events (medium, writer.go:123)
+
+- **Accepted, and it was worse than reported.** A failed sweep also returned before the batch's own events were projected.
+- **Fix, part 1.** `New` now returns an error unless DB, Root and Sweep are all set.
+- **Fix, part 2.** A failed sweep is still returned to the bus, so the hole is reported again, but the batch's events are projected first.
+- **Tests.** TestNewRequiresOptions, and TestDroppedTriggersSweep now asserts that the batch is projected when the sweep fails. Mutants for an optional sweep, a swallowed sweep error, and a sweep error that is not returned are all killed.
 
 ## Summary
 

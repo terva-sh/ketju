@@ -268,6 +268,13 @@ PRIMARY KEY (thread_id, ordinal)
 INDEX (author_id, created_at)
 INDEX (thread_id, reply_to)
 ```
+`log_offset` is the offset of the post's current revision's record, the
+same fact as the index entry's `Offset`: a Post or Edit sets it and a Delete
+or Restore does not. Migration 0004's column comment calls it the record last
+projected into the row; that comment is wrong, and stays in the file only
+because an applied migration is checksummed (TKT-01M29C2WW5, review 389).
+Idempotence comes from `projection_state`, not from this column.
+
 Tiny rows. Exists for cross-thread questions: a user's post history,
 "replies to post X" reverse lookups when the thread is not open, moderation
 lists. The per-thread index file already answers within-thread questions.

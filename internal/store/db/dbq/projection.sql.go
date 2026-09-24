@@ -147,23 +147,19 @@ func (q *Queries) InsertThreadTag(ctx context.Context, arg InsertThreadTagParams
 }
 
 const setPostDeleted = `-- name: SetPostDeleted :execrows
-UPDATE post_meta SET deleted = ?, log_offset = ? WHERE thread_id = ? AND ordinal = ?
+UPDATE post_meta SET deleted = ? WHERE thread_id = ? AND ordinal = ?
 `
 
 type SetPostDeletedParams struct {
-	Deleted   int64
-	LogOffset int64
-	ThreadID  int64
-	Ordinal   int64
+	Deleted  int64
+	ThreadID int64
+	Ordinal  int64
 }
 
+// log_offset is the current revision's record, as the index entry's Offset
+// is, so a Delete or Restore (which is not a revision) leaves it alone.
 func (q *Queries) SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, setPostDeleted,
-		arg.Deleted,
-		arg.LogOffset,
-		arg.ThreadID,
-		arg.Ordinal,
-	)
+	result, err := q.db.ExecContext(ctx, setPostDeleted, arg.Deleted, arg.ThreadID, arg.Ordinal)
 	if err != nil {
 		return 0, err
 	}

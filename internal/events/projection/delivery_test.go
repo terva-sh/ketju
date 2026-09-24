@@ -93,6 +93,7 @@ func TestIncrementalEqualsFull(t *testing.T) {
 			if full := f.dump(); full != stepped {
 				t.Fatalf("stepped and full projections differ:\n%s\n---\n%s", stepped, full)
 			}
+			f.agreesWithIndex(id)
 		})
 	}
 }
@@ -235,9 +236,16 @@ func TestDroppedTriggersSweep(t *testing.T) {
 	if err := f.w.Deliver(t.Context(), events.Batch{}); err != nil || sweeps != 1 {
 		t.Fatalf("a batch with nothing dropped swept (%d) or failed (%v)", sweeps, err)
 	}
+	// A failed sweep is returned, and the batch's own events are still
+	// projected rather than lost with it.
 	fail = errors.New("sweep failed")
-	if err := f.w.Deliver(t.Context(), events.Batch{Dropped: 1}); !errors.Is(err, fail) {
+	id, end := f.thread("Hello")
+	err := f.w.Deliver(t.Context(), events.Batch{Dropped: 1, Events: []events.Event{{Thread: id, LogLength: end}}})
+	if !errors.Is(err, fail) {
 		t.Fatalf("a failed sweep returned %v", err)
+	}
+	if !strings.Contains(f.dump(), "threads: 1 rows") {
+		t.Fatal("the batch's events were not projected after the sweep failed")
 	}
 }
 

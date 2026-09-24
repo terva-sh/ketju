@@ -1,6 +1,7 @@
 package projection
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"os"
@@ -45,7 +46,10 @@ func newFixture(t testing.TB) *fixture {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { c.Close() })
-	w := New(Options{DB: d, Root: root})
+	w, err := New(Options{DB: d, Root: root, Sweep: func(context.Context) error { return nil }})
+	if err != nil {
+		t.Fatal(err)
+	}
 	w.now = func() time.Time { return time.UnixMilli(1_790_000_000_000) }
 	return &fixture{t: t, db: d, root: root, cache: c, w: w}
 }
@@ -240,6 +244,7 @@ func TestReplayIsIdempotentPerRecordType(t *testing.T) {
 			if rebuilt := f.dump(); rebuilt != first {
 				t.Fatalf("rebuilding from empty differs:\n%s\n---\n%s", first, rebuilt)
 			}
+			f.agreesWithIndex(id)
 		})
 	}
 	for typ, d := range decisions {
@@ -331,5 +336,76 @@ func TestShortLogIsAnError(t *testing.T) {
 	if _, err := f.w.ProjectThread(t.Context(), id, end+100); err == nil ||
 		!strings.Contains(err.Error(), "shorter than") {
 		t.Fatalf("got %v, want the log reported as shorter than the event", err)
+	}
+}
+
+// agreesWithIndex checks every post_meta row of a thread against the
+// thread's in-memory index, which is the other fold of the same log. Where
+// both hold a fact they must hold the same one; log_offset in particular is
+// the current revision's record, as IndexEntry.Offset is (review 389).
+func (f *fixture) agreesWithIndex(id threadid.ID) {
+	f.t.Helper()
+	type row struct {
+		ordinal, author, created, revision, offset int64
+		replyTo                                    sql.NullInt64
+		deleted                                    bool
+	}
+	var rows []row
+	err := f.db.Read(f.t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		rs, err := tx.QueryContext(f.t.Context(), `SELECT ordinal, author_id, created_at, current_revision,
+			log_offset, reply_to, deleted FROM post_meta WHERE thread_id = ? ORDER BY ordinal`, int64(id))
+		if err != nil {
+			return err
+		}
+		defer rs.Close()
+		for rs.Next() {
+			var r row
+			if err := rs.Scan(&r.ordinal, &r.author, &r.created, &r.revision, &r.offset, &r.replyTo, &r.deleted); err != nil {
+				return err
+			}
+			rows = append(rows, r)
+		}
+		return rs.Err()
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	err = f.cache.With(id, func(th *threadcache.Thread) error {
+		if th.Index.Len() != len(rows) {
+			f.t.Errorf("the index holds %d posts and post_meta %d", th.Index.Len(), len(rows))
+		}
+		for _, r := range rows {
+			e, err := th.Index.Entry(uint32(r.ordinal))
+			if err != nil {
+				return err
+			}
+			want := row{ordinal: r.ordinal, author: int64(e.Author), created: e.CreatedMS,
+				revision: int64(e.Revision), offset: int64(e.Offset),
+				replyTo: sql.NullInt64{Int64: int64(e.ReplyTo), Valid: e.ReplyTo != 0},
+				deleted: e.Flags.Has(threadlog.EntryDeleted)}
+			if r != want {
+				f.t.Errorf("ordinal %d: post_meta %+v, index %+v", r.ordinal, r, want)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		f.t.Fatal(err)
+	}
+}
+
+// TestNewRequiresOptions: a Writer without a database, a root or a sweep is
+// refused at construction rather than failing on its first event.
+func TestNewRequiresOptions(t *testing.T) {
+	f := newFixture(t)
+	sweep := func(context.Context) error { return nil }
+	for name, o := range map[string]Options{
+		"db":    {Root: f.root, Sweep: sweep},
+		"root":  {DB: f.db, Sweep: sweep},
+		"sweep": {DB: f.db, Root: f.root},
+	} {
+		if w, err := New(o); err == nil || w != nil {
+			t.Errorf("without %s: got %v, %v; want an error", name, w, err)
+		}
 	}
 }
