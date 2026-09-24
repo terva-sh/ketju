@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T11:35:42Z
+updated_at: 2026-09-24T11:51:49Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -230,3 +230,7 @@ Merged PR #59, TKT-01M29CCC02 (Scaffold the Preact client and its embedding), as
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:35:42Z
 
 Merged PR #60, TKT-01M29CEE52 (Build the client router and route table), as d68ae9d. CI run 222 was green; its step log shows the client build, the new 'client tests' step with 124 Vitest tests passing, and the Go race suite including internal/web/spa. The review ran seven times, 400 through 406 plus the clean one (run 221), and every round reported real findings, all fixed with tests: a 404 that stuck after navigation; the hash dropped from view changes; page=2junk accepted; stale state for one render; the slug not corrected on same-thread navigation; /auth links intercepted by the client router; the history ordinal dropped; a 404 left standing after a later failure; undecodable escapes crashing the router; and serverOwned disagreeing with ServeMux on encoded slashes, which would have been a reload loop. No review run failed to run. Branch deleted. Next: TKT-01M29C5Y3E (Build the server-side session store), then CA99R (GET /me), then CEE5H (fetch layer), then CEE6V.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:51:49Z
+
+Merged PR #61, TKT-01M29C5Y3E (Build the server-side session store), as 0644d0c. CI run 229 was green; its step log shows internal/auth/session, perm, store/db and web all ran under -race. Review 407 found 1 high and 1 medium. The high: a suspended admin's viewer kept the admin role. perm already ignored it, but the viewer now carries no role for an inactive user. The medium: a touch could revive a session that had just expired; the UPDATE now rechecks both cutoffs. Both fixed in 0644d0c, and the re-review (run 228) was clean. Branch deleted. Next: TKT-01M29CA99R (Implement GET /me). Its other dependencies (C801M) are done.
