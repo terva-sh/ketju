@@ -1,10 +1,10 @@
 import { LocationProvider, Router, Route } from 'preact-iso';
-import { routes } from './routes';
+import { clientScope, routes } from './routes';
 import { NotFound } from './screens/Placeholder';
 
 export function App() {
   return (
-    <LocationProvider>
+    <LocationProvider scope={clientScope}>
       <Router>
         {routes.map((r) => (
           <Route key={r.path} path={r.path} component={r.component} />

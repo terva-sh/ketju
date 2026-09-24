@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { routes } from './routes';
+import { clientScope, routes } from './routes';
 import { renderAt, screenOf } from './testing';
 
 // One concrete URL per line of docs/07's URL scheme, and the screen it must
@@ -47,12 +47,63 @@ describe('the route table', () => {
     expect(screenOf(await renderAt(url))).toBe(screen);
   });
 
-  it.each(['/nope', '/t/01k4z3j0w8x2c', '/admin/nope', '/f', '/u/alice/posts/extra', '/auth/github/start'])(
+  it.each(['/nope', '/t/01k4z3j0w8x2c', '/admin/nope', '/f', '/u/alice/posts/extra'])(
     '%s is not found',
     async (url) => {
       expect(screenOf(await renderAt(url))).toBe('not-found');
     },
   );
+
+  // A link to a path the server owns is left to the browser, so it reaches
+  // the server; a link to a client route is routed in the page.
+  it.each([
+    ['/auth/github/start', false],
+    ['/auth/logout', false],
+    ['/api/v1/me', false],
+    ['/blobs/abc', false],
+    ['/events', false],
+    ['/assets/index.js', false],
+    ['/t/01k4z3j0w8x2c/a-thread', true],
+    ['/admin/queue', true],
+    ['/', true],
+  ])('a click on a link to %s is routed in the page: %s', async (href, routed) => {
+    vi.stubGlobal('fetch', () => new Promise(() => {}));
+    const root = await renderAt('/');
+    const a = document.createElement('a');
+    a.href = href;
+    a.textContent = 'go';
+    root.appendChild(a);
+    let prevented: boolean | undefined;
+    // Registered after the router's, so it sees the router's decision. It
+    // then stops the default itself so the test document goes nowhere.
+    const seen = (e: Event) => {
+      prevented = e.defaultPrevented;
+      e.preventDefault();
+    };
+    addEventListener('click', seen);
+    try {
+      a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, button: 0 }));
+    } finally {
+      removeEventListener('click', seen);
+    }
+    expect(prevented).toBe(routed);
+    expect(location.pathname === href).toBe(routed);
+  });
+
+  it.each([
+    ['/auth/github/start', false],
+    ['/auth', false],
+    ['/API/v1/me', false],
+    ['https://ketju.test/auth/github/start', false],
+    ['//ketju.test/auth/logout', false],
+    ['/events?x=1', false],
+    ['/eventsource', true],
+    ['/authors', true],
+    ['/t/01k4z3j0w8x2c/auth', true],
+    ['/u/api', true],
+  ])('clientScope %s: %s', (href, inScope) => {
+    expect(clientScope.test(href)).toBe(inScope);
+  });
 
   // The table and the document say the same thing, in both directions, so
   // neither can gain a path the other lacks without this failing.

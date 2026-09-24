@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T11:08:15Z
+updated_at: 2026-09-24T11:13:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -168,6 +168,13 @@ Review 401 (medium, fixed): review 400's fixes are all marked resolved. The new 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:08:15Z
 
 Review 402 (medium, fixed): review 401's finding is marked resolved. The new finding: a stale slug was corrected only when a request came back, so following a link to an old slug of the thread already on screen did not trigger a fetch and left the old slug in the address bar. The redirect now has its own effect, keyed on the current answer and the URL, so it runs on arrival and on any navigation. A test loads the thread under its current slug, then follows a link to an old slug with an anchor. The URL becomes the canonical one with the anchor kept, and no second fetch happens. Mutants: removing url from the effect's dependencies is killed by that test; removing the redirect is killed by three tests. 70 Vitest tests; dist rebuilt.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:13:29Z
+
+Review 403 (1 high, 1 medium; both fixed). Review 402's finding is marked resolved.
+(1) High: preact-iso's LocationProvider intercepts every same-origin link click in scope, and with no scope that means all of them. A link to /auth/github/start would therefore have rendered the client's NotFound instead of reaching the server to start sign-in. Fix: LocationProvider gets scope={clientScope}. clientScope is a RegExp that puts the server's groups out of scope: /auth, /api, /blobs, /events and /assets, from internal/web/server.go. It matches on a path-segment boundary, with or without a scheme and host, case-insensitively, because preact-iso tests the raw href attribute. There are 10 unit cases for the regex, and 9 click tests check whether the router prevented the default. Headless Chromium against the built client and a scratch server (deleted, not committed): clicking an /auth link left the document and the server's auth handler answered, while a thread link stayed in the page.
+(2) Medium: the history route dropped its ordinal from the thread request. It now passes ?ordinal=N for a permalink and for /history alike, and the test asserts the request. Chromium's request log showed ?ordinal=42.
+Mutants, all killed: no scope, no boundary, no origin handling (twice), no case-insensitivity, a missing prefix, and the ordinal excluded for history. 88 Vitest tests; dist rebuilt.
 
 ## Summary
 

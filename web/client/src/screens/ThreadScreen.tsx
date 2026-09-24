@@ -28,7 +28,8 @@ export function ThreadScreen() {
     const q = new URLSearchParams();
     if (view.hasPage) q.set('page', String(view.page));
     if (view.lens) q.set('lens', view.lens);
-    if (params.ordinal && !history) q.set('ordinal', params.ordinal);
+    // A permalink, or a post's history, asks for the page holding that post.
+    if (params.ordinal) q.set('ordinal', params.ordinal);
     const s = q.toString();
     const id = params.id;
     let live = true;
