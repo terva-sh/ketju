@@ -19,16 +19,27 @@ import (
 // the per-connection callback, the busy check, and the persist-WAL control.
 
 // openPool opens a database/sql pool on path with the given DSN query, which
-// must start with "?". Every connection the pool opens gets FCNTL_PERSIST_WAL.
-func openPool(path, query string) (*sql.DB, error) {
+// must start with "?". Every connection the pool opens gets FCNTL_PERSIST_WAL,
+// and SQLite's statement trace when trace is not nil.
+func openPool(path, query string, trace func(sql string)) (*sql.DB, error) {
 	return driver.Open(fileURI(path)+query, func(c *sqlite3.Conn) error {
 		// Keep the -wal file when the last connection closes. SQLite would
 		// otherwise delete it and create a fresh one on the next open, and
 		// ncruces skips the directory fsync that a fresh file needs
 		// (TKT-01M392DP19). With the file kept, the one directory fsync in
 		// Open covers the life of the database.
-		_, err := c.FileControl("main", sqlite3.FCNTL_PERSIST_WAL, true)
-		return err
+		if _, err := c.FileControl("main", sqlite3.FCNTL_PERSIST_WAL, true); err != nil {
+			return err
+		}
+		if trace == nil {
+			return nil
+		}
+		return c.Trace(sqlite3.TRACE_STMT, func(_ sqlite3.TraceEvent, _, sql any) error {
+			if s, ok := sql.(string); ok {
+				trace(s)
+			}
+			return nil
+		})
 	})
 }
 

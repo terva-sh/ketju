@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-09-11T23:28:54Z
+updated_at: 2026-09-24T11:59:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-415af6aa
+  name: ""
 extensions: {}
 ---
 
@@ -46,3 +46,9 @@ These are the queries most likely to get slow. Unread across all forums combines
 - [ ] Unread is correct for a user with no read_positions rows, relying on mark_all_read_at
 - [ ] Query cost is bounded and measured at ten thousand threads, with the numbers recorded
 - [ ] Mark all read at forum and site level works and is reflected immediately
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:59:38Z
+
+From TKT-01M29CA99R (Implement GET /me): the unread badges in /me come from the MeCounts query (internal/store/db/queries/viewer_state.sql). A thread is unread when its newest post is past the read position and after mark_all_read_at. participated means the viewer has a post in the thread. watching means a thread-level 'watch'. A thread-level mute removes the thread from all three. Forum-level watches are not counted. The lists this ticket builds should use the same rule, or share the query, so a badge never disagrees with its list. If the lists settle the forum-watch question differently, change MeCounts in the same PR.

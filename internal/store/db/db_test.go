@@ -198,7 +198,7 @@ func TestConcurrentWritersSerialize(t *testing.T) {
 // holds the lock.
 func TestBusyIsWrapped(t *testing.T) {
 	_, path := openTest(t)
-	holder, err := openPool(path, "?_txlock=immediate")
+	holder, err := openPool(path, "?_txlock=immediate", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,7 +209,7 @@ func TestBusyIsWrapped(t *testing.T) {
 	}
 	defer tx.Rollback()
 
-	other, err := openPool(path, "?_pragma=busy_timeout(0)&_txlock=immediate")
+	other, err := openPool(path, "?_pragma=busy_timeout(0)&_txlock=immediate", nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -323,7 +323,7 @@ func TestCloseReportsABlockedCheckpoint(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	reader, err := openPool(path, "")
+	reader, err := openPool(path, "", nil)
 	if err != nil {
 		t.Fatal(err)
 	}

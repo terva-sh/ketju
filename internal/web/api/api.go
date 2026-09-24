@@ -16,12 +16,14 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/threads"
+	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 )
 
 // Deps are the services the handlers call.
 type Deps struct {
 	Threads *threads.Service
+	Users   *users.Service
 	Logger  *slog.Logger
 }
 
@@ -32,8 +34,9 @@ func New(d Deps) http.Handler {
 	if log == nil {
 		log = slog.Default()
 	}
-	h := &handlers{threads: d.Threads, log: log}
+	h := &handlers{threads: d.Threads, users: d.Users, log: log}
 	mux := http.NewServeMux()
+	mux.HandleFunc("GET /api/v1/me", h.me)
 	mux.HandleFunc("GET /api/v1/threads/{id}", h.thread)
 	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}", h.post)
 	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}/replies", h.replies)
@@ -46,7 +49,21 @@ func New(d Deps) http.Handler {
 
 type handlers struct {
 	threads *threads.Service
+	users   *users.Service
 	log     *slog.Logger
+}
+
+// me is GET /api/v1/me (docs/07): the viewer, their unread counts and their
+// settings. It is the viewer's own and changes with every read, so no cache
+// keeps it.
+func (h *handlers) me(w http.ResponseWriter, r *http.Request) {
+	me, err := h.users.Me(r.Context())
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, me)
 }
 
 // thread is GET /api/v1/threads/{id}?page=&ordinal=&lens=&after_log_length=

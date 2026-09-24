@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-11T23:24:59Z
+updated_at: 2026-09-24T11:59:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-415af6aa
+  name: ""
 extensions: {}
 ---
 
@@ -45,3 +45,9 @@ The allowlist has to be positive rather than a set of exclusions. A new endpoint
 - [ ] A test enumerates the routes and asserts that only the three documented ones accept a pre-user session
 - [ ] A pre-user session becomes a member session only through approval, never by upgrade in place
 - [ ] The client renders the status page for this session rather than a broken shell
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:59:38Z
+
+From TKT-01M29CA99R (Implement GET /me): GET /me, and the shell's bootstrap block, return the anonymous shape (user null, zero counts) for a pre-user session, because dto.Me makes a nil user the only signed-out signal and no pre-user shape is documented. The viewer does carry the distinction (domain.Viewer.PreUser and IdentityID, set by internal/auth/session). If the approval screens need /me to say 'signed in as an applicant', decide the field in docs/07 and dto.Me; CA99R's AC1 stays unticked on exactly that clause until then.

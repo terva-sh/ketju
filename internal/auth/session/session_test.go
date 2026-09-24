@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/perm"
@@ -587,4 +588,23 @@ func storedHex(t *testing.T, token string) string {
 	}
 	h := sha256.Sum256(raw)
 	return fmt.Sprintf("%x", h)
+}
+
+// TestSessiontestMatchesTheStore: the helper other packages sign in with
+// writes what the store reads, so a change to the scheme here breaks this
+// test rather than every handler test that trusts the helper.
+func TestSessiontestMatchesTheStore(t *testing.T) {
+	w := newWorld(t)
+	c := sessiontest.Cookie(sessiontest.SignIn(t, w.db, w.member, w.clock.now()))
+	if c.Name != CookieName {
+		t.Fatalf("sessiontest's cookie is %q, the store's %q", c.Name, CookieName)
+	}
+	s, err := w.store.Lookup(t.Context(), c.Value)
+	if err != nil || s.Viewer().UserID != w.member || !s.ExpiresAt.Equal(w.clock.now().Add(HardExpiry)) {
+		t.Fatalf("a sessiontest session: %+v, %v", s, err)
+	}
+	p, err := w.store.Lookup(t.Context(), sessiontest.PreUser(t, w.db, w.identity, w.clock.now()))
+	if err != nil || !p.Viewer().PreUser || p.Viewer().IdentityID != w.identity {
+		t.Fatalf("a sessiontest pre-user session: %+v, %v", p, err)
+	}
 }

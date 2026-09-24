@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CA99RTPEA1B3HG24B2KNJ
 title: Implement GET /me
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:api-resources
     path: docs/07-api-and-clients.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/ca99r-get-me
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: 0644d0cf879f27db4157bad718f1a8fea226a978
-  session: null
-  claimed_at: 2026-09-24T11:51:49Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T11:53:54Z
+updated_at: 2026-09-24T11:59:39Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,8 +42,8 @@ That inlining is why the response has to be cheap and free of anything expensive
 ## Acceptance criteria
 
 - [ ] Returns the documented shape for an anonymous viewer, a member, a moderator, and a pre-user session
-- [ ] Counts come from projections rather than being computed from logs
-- [ ] The handler issues at most 2 SQL queries per request, asserted by a test that counts them, so it can be inlined on every shell render
+- [x] Counts come from projections rather than being computed from logs
+- [x] The handler issues at most 2 SQL queries per request, asserted by a test that counts them, so it can be inlined on every shell render
 
 ## Implementation plan
 
@@ -101,3 +94,50 @@ Revised at claim (2026-09-24), after reading the code as it stands: the session 
 **agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
 
 Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. 'Cheap enough, with a stated query budget' did not state the budget. It is now at most 2 queries, one for the viewer and session and one for the projected counts, asserted by a test that counts queries.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:59:38Z
+
+Built and verified.
+
+### What landed
+- **`GET /api/v1/me`** in `internal/web/api`, marked `Cache-Control: no-store`. `api.ShellPage(users)` gives `web.Shell.SetPage` the viewer's `Me` as the bootstrap block. The title stays the default until CCBYX wires site_name.
+- **`internal/service/users`:**
+  - `Me(ctx)` reads the viewer and the session from the context. The user fields come from the session lookup that has already run.
+  - The counts come from one statement, `MeCounts`, kept per forum where `perm.Can(read)` allows (served from perm's cache).
+  - Settings: `timezone` or UTC, `locale` or en, and `page_size` from `prefs_json` when it is a JSON integer from 10 to 50, otherwise 25.
+- **`MeCounts`:**
+  - A thread is unread when its newest post is: `last_post_ordinal > coalesce(last_read_ordinal, 0)`, and after `mark_all_read_at`.
+  - Participated goes through post_meta's author index. Watching is a thread-level 'watch'. A thread-level mute excludes the thread from all three counts.
+  - The notification count comes back on every row, and there is always one row.
+- **`db.Options.Trace`:** SQLite's statement trace on both pools, only when set, so tests count what actually ran.
+- **`internal/auth/session/sessiontest`:** SignIn and PreUser for other packages' tests. The store still exports no way to mint a session. `session.TestSessiontestMatchesTheStore` keeps the helper on the store's scheme.
+
+### Decisions (alternatives considered)
+- **Not `perm.ReadableForums`.** It lists forums with a query on every call, which would have made /me three statements. Grouping the counts by forum and filtering through `perm.Can` costs nothing on a warm cache.
+- **The thread rule rather than per-post counting.** Scanning post_meta per thread is what the ticket warned would turn a page load into a table scan. The two rules agree because the newest post has both the highest ordinal and the latest time, and `TestThreadRuleMatchesPostRule` checks that over 20 random datasets: every thread, positions from none to past the end, ties in time, marks set and unset.
+- **Mute excludes; forum-level watches are not counted.** docs/06 names the surfaces without defining them. A thread mute is unambiguous. Forum watches, and exactly what each cross-forum list holds, belong to TKT-01M29CTY7K, which is noted to reuse this rule.
+- **A pre-user session and a suspended user get the anonymous shape.** `dto.Me` makes a nil user the only signed-out signal. A pre-user is not a member, and a suspended user's account is not theirs to read. Whether approval mode needs a marker is TKT-01M29CKRG9's question, which is noted there.
+
+### Acceptance criteria
+- **AC1 is not ticked: its pre-user clause has no documented shape to return.**
+  - Anonymous, member and moderator are tested: each response is decoded with `DisallowUnknownFields` and compared in full with the seeded data. That includes the counts across read, unread, muted, marked-read, watched, participated and unreadable-forum threads, and a display name containing `</script>`.
+  - Pre-user and suspended admin both return the anonymous shape and are tested to.
+  - Ticking the criterion needs CKRG9 to decide the pre-user shape.
+- **AC2:**
+  - `users` does not import threadlog or threadcache. The check covers direct imports only, because `internal/config` names threadcache's types and every package that logs reaches it transitively.
+  - Every /me test answers from a database with no thread log on disk.
+  - The rule-agreement test above.
+- **AC3, with two conditions stated here rather than hidden.**
+  - Through `web.New` with the session middleware and a warm perm cache, a member's /me and a member's shell render each run exactly 2 statements, counted from SQLite's trace: `LookupSession` and `MeCounts`. Anonymous runs 0.
+  - A request on which the session's last_used_at falls due (at most once per 5 minutes per session, docs/05) also runs the store's rate-limited UPDATE, 3 statements in all. `TestMeBudgetWhenTouchIsDue` pins that exactly, and the next request is back to 2.
+  - A cold perm cache adds perm's own lookups, at most once per 60 s TTL.
+- **Mutation:** 16 mutants, 15 killed:
+  - SQL: both unread conditions, their boundaries, the mute exclusion, the participation filter, and both notification filters;
+  - Go: the perm filter, the member guard, the default timezone and locale, notifications, watching, and the page_size bounds;
+  - the trace hook.
+  The survivor, dropping `level = 'watch'` from the watching test, is equivalent: a muted thread is already excluded from every count. The filter stays for clarity.
+- The full CI set passes locally: gofmt, build, vet, sqlc stable, and `go test -race ./...`.
+
+## Summary
+
+GET /api/v1/me returns the viewer's user, unread counts (threads, participated, watching), unread notifications and settings. It uses two statements for a member, the session lookup and one MeCounts query, filtered through perm's cache; anonymous uses none. api.ShellPage inlines the same value into the shell's bootstrap block. A pre-user or suspended session gets the anonymous shape, and AC1's pre-user clause stays open until TKT-01M29CKRG9 decides whether a marker is needed. A request whose session touch is due (at most once per 5 minutes) adds that rate-limited write. db.Options.Trace lets tests count statements.

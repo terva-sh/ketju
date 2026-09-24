@@ -68,6 +68,12 @@ type Options struct {
 	// ReadConns is the size of the read pool. Zero means 4; anything else is
 	// clamped to 4..8.
 	ReadConns int
+
+	// Trace, when set, is called with the text of every statement SQLite
+	// starts on either pool, BEGIN and COMMIT included. It is for tests that
+	// hold a handler to a query budget: counting what SQLite actually ran is
+	// the only count a refactor cannot quietly get wrong. Nil costs nothing.
+	Trace func(sql string)
 }
 
 // DB is an open database. It is safe for concurrent use.
@@ -103,7 +109,7 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 		return nil, err
 	}
 
-	write, err := openPool(opts.Path, commonQuery+writeQuery)
+	write, err := openPool(opts.Path, commonQuery+writeQuery, opts.Trace)
 	if err != nil {
 		return nil, fmt.Errorf("db: opening %s: %w", opts.Path, err)
 	}
@@ -124,7 +130,7 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 		return nil, fmt.Errorf("db: syncing %s: %w", dir, err)
 	}
 
-	read, err := openPool(opts.Path, commonQuery+readQuery)
+	read, err := openPool(opts.Path, commonQuery+readQuery, opts.Trace)
 	if err != nil {
 		write.Close()
 		return nil, fmt.Errorf("db: opening %s for reading: %w", opts.Path, err)

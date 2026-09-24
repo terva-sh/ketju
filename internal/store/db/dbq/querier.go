@@ -87,6 +87,26 @@ type Querier interface {
 	// The user fields are the ones GET /me needs, so resolving a request and
 	// answering /me share this query.
 	LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error)
+	// MeCounts is GET /me's second and last statement (the first is the session
+	// lookup): the viewer's unread notifications, and their unread threads by
+	// forum, so the service can drop the forums they cannot read from perm's
+	// cache without another query.
+	//
+	// A thread is unread when its newest post is: past the read position (0 with
+	// no row) and written after mark_all_read_at. That is UnreadCount's per-post
+	// rule (docs/04 "read_positions") applied to the post with the highest
+	// ordinal and the latest time, which is unread exactly when any post is, and
+	// it reads threads rather than scanning post_meta. A test holds the two
+	// rules together.
+	//
+	// participated is a thread the viewer has written in, found through
+	// post_meta's author index; watching is a thread-level watch. A thread the
+	// viewer muted counts nowhere. Forum-level watches are not in these counts
+	// yet: what the cross-forum lists contain is TKT-01M29CTY7K's to settle, and
+	// it should reuse this rule so the badges and the lists agree.
+	//
+	// There is always at least one row: with no unread threads, forum_id is null.
+	MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error)
 	// A post's open flags, for the auto-hide threshold (docs/08).
 	OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (int64, error)
 	// The moderator queue: open flags, newest first (docs/08).
