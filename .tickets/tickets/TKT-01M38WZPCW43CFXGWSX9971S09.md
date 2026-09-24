@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T18:30:20Z
+updated_at: 2026-09-24T19:45:43Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -262,3 +262,7 @@ Merged PR #67 (TKT-01M29C5Y1S, Implement startup projection catch-up) as 1979894
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T18:30:20Z
 
 Merged PR #69 (TKT-01M29CCBYX, Implement ketju serve with graceful shutdown) as 206d1c7, after reviews 470 and 471 were answered. Clean review on head 206d1c7, base 1979894. CI run 320's race step shows cmd/ketju and internal/config ran and passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T19:45:43Z
+
+Merged PR #70 (TKT-01M29CEE4K, Build the app shell with both navigation layouts) as 501ba1b, after review 490's three medium findings were fixed. Clean review on head 501ba1b, base 206d1c7. CI run 327's client step ran 527 tests (21 in src/shell/Shell.test.tsx), and the race step shows internal/web, internal/web/api and internal/web/spa passed.

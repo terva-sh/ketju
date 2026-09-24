@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C7ZZR3FJMZ7P7VA0CWNJ2
 title: Route every session creation through one status-checking function
 type: chore
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:risks
     path: docs/09-roadmap.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/c7zzr-session-chokepoint
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 501ba1b918a5829f1d9c97c07a0351c46884dcd9
+  session: null
+  claimed_at: 2026-09-24T19:45:44Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T19:45:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
