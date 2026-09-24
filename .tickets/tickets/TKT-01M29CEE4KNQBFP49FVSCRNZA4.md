@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CEE4KNQBFP49FVSCRNZA4
 title: Build the app shell with both navigation layouts
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -23,15 +23,22 @@ blocks_on: none
 references:
   - ref: design:mobile-nav
     path: docs/06-thread-views.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/cee4k-shell
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 206d1c75fb5b0666ac0d4f14c905ea19479f69a8
+  session: null
+  claimed_at: 2026-09-24T18:30:48Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T18:30:48Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---

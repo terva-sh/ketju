@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T17:54:16Z
+updated_at: 2026-09-24T18:30:20Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -258,3 +258,7 @@ Merged PR #66 (TKT-01M29CCBZN, Add the single-process lock file) as 60f582f. Cle
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T17:54:16Z
 
 Merged PR #67 (TKT-01M29C5Y1S, Implement startup projection catch-up) as 1979894. Reviews answered: 448, 453, 456, 462, 464. Review 468's high was deferred to draft TKT-01M3A8V7XC by the user's decision, so the merge was made with the model gate failing, on that decision. CI run 312 passed, with the projection tests and the catch-up bound (70.8 ms) in the step logs.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T18:30:20Z
+
+Merged PR #69 (TKT-01M29CCBYX, Implement ketju serve with graceful shutdown) as 206d1c7, after reviews 470 and 471 were answered. Clean review on head 206d1c7, base 1979894. CI run 320's race step shows cmd/ketju and internal/config ran and passed.
