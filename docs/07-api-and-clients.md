@@ -149,21 +149,25 @@ see tombstone contents).
   has read the thread lands on the page holding their first unread post (the
   last page once they have read everything); anyone else gets page 1. An
   ordinal or page past the end is `not-found`.
-- **The ETag** as served is longer than the example above:
-  `"<id>-<log_length>-r<renderer>-<class>-p<projected>-v<hash>"`. The class
-  is there because a moderator's page carries content a member's does not;
-  `p` is the thread row's `log_length_projected`, because the header's
-  title, tags, lock and pin come from the projection, which can trail the
-  log; `v` hashes the viewer block, page and query, so moving your own read
-  position or watch is a new tag, and the forum's name and the page's authors
-  as drawn, which change in the database without the log moving. The length
-  and the page's entries come from one snapshot of the index
-  (`threadlog.Actor.Stable`), so a tag never names a length older or newer
-  than the posts it was computed from. A cached rendering that quotes a post
-  is reused only while the quoted post's deleted state is what it was
-  rendered against. `If-None-Match` accepts a list, `W/` tags
-  and `*`. The response is `Cache-Control: private, no-cache`: always
-  revalidate, and a 304 when nothing moved.
+- **The ETag** is `"<id>-<log_length>-r<renderer>-<digest>"`, where the
+  digest hashes the page body as written. The prefix is the thread's version
+  and the pipeline, for a person reading a log. The digest is what makes the
+  tag correct: a page also depends on the projection, the users and forums
+  tables, the viewer's own state, permissions and the query, and hashing the
+  body means two different bodies never share a tag without a list of those
+  inputs to keep up to date. The cost is that a 304 still assembles the page
+  (from the render cache, mostly); what it saves is the transfer.
+  `If-None-Match` accepts a list, `W/` tags and `*`. The response is
+  `Cache-Control: private, no-cache`: always revalidate, and a 304 when
+  nothing moved.
+- **Consistency.** The length, post count, the page's entries and reply
+  counts come from one snapshot of the index (`threadlog.Actor.Stable`), and
+  the posts are read through it. Quote tombstones and mentions are resolved
+  when the page is drawn, so a body may reflect a delete a moment newer than
+  its `log_length`; the delete's own event then prompts a refetch. A cached
+  rendering is reused only while the posts it quotes keep their deleted
+  state and the handles it mentions resolve as they did; a failed handle
+  lookup fails the page rather than drawing the mention as unresolved.
 - **`after_log_length=L`** keeps the posts *on the requested page* whose
   current revision was written at or after `L`: new posts and edits. The
   header and viewer block are complete. A delete or restore writes no new

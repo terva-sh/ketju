@@ -204,8 +204,6 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			return pageErr
 		}
 
-		// The authors are drawn from the users table, which changes without
-		// the log moving, so they are read before the ETag and are part of it.
 		ids := map[int64]bool{}
 		for _, e := range snap.entries {
 			ids[int64(e.Author)] = true
@@ -215,19 +213,21 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			return err
 		}
 
-		res.ETag = etag(id, snap.logLength, class, row.LogLengthProjected, snap.page, q, viewer, forum, authors)
-		if matches(ifNoneMatch, res.ETag) {
-			res.NotModified = true
-			return nil
-		}
-
 		res.Page = dto.ThreadPage{
 			Thread: header(id, row, forum, tags, snap.n, snap.logLength),
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
-		res.Page.Posts, err = s.posts(ctx, th, id, snap, authors, q, class == ClassModerator)
-		return err
+		if res.Page.Posts, err = s.posts(ctx, th, id, snap, authors, q, class == ClassModerator); err != nil {
+			return err
+		}
+		if res.ETag, err = etag(id, snap.logLength, res.Page); err != nil {
+			return err
+		}
+		if matches(ifNoneMatch, res.ETag) {
+			res.NotModified, res.Page = true, dto.ThreadPage{}
+		}
+		return nil
 	})
 	return res, err
 }
@@ -274,37 +274,24 @@ func totalPages(n, size int) int {
 	return max(1, (n+size-1)/size)
 }
 
-// etag names everything the response depends on (docs/07, extended in
-// TKT-01M29CA9AX):
+// etag is `"<id>-<log_length>-r<renderer>-<digest>"`, the digest a hash of
+// the page as it will be written (docs/07, extended in TKT-01M29CA9AX).
 //
-//   - thread id and log length, the thread's version;
-//   - renderer version, since the HTML changes with it;
-//   - viewer class, since moderators see tombstone contents;
-//   - the projected length, because the header comes from the projection,
-//     which can catch up under an unchanged log length;
-//   - the page served, which depends on the viewer's read position when the
-//     URL names none, and a digest of the viewer block, so a read position,
-//     watch or permission change is never answered with a stale 304;
-//   - in the same digest, the forum's name and slug and the page's authors as
-//     they will be drawn: both live in the database and change without the
-//     log moving.
-//
-// Lens and after_log_length are in the URL and therefore in the client's cache
-// key already; they are in the digest too so the ETag alone is enough.
-func etag(id threadid.ID, logLength int64, class string, projected int64, page int, q Query,
-	v dto.ThreadViewer, forum dbq.Forum, authors map[int64]dto.Author) string {
-	// encoding/json writes map keys sorted, so equal authors hash equally.
-	b, _ := json.Marshal(struct {
-		V       dto.ThreadViewer
-		Page    int
-		Lens    string
-		After   int64
-		Has     bool
-		Forum   dto.ForumRef
-		Authors map[int64]dto.Author
-	}{v, page, q.Lens, q.After, q.HasAfter, dto.ForumRef{Slug: forum.Slug, Name: forum.Name}, authors})
+// The prefix names the thread's version and the pipeline that drew it, which
+// is what a person reading a log wants. The digest is what makes it correct:
+// a page depends on the log, and also on the projection, the users and forums
+// tables, the viewer's own state, permissions and the query, and a list of
+// those kept beside the code falls behind it (reviews 391 to 393 each found
+// one missing). Two different bodies therefore never share a tag. The cost
+// is that a 304 still assembles the page; the render cache makes that cheap,
+// and what a 304 saves is the transfer.
+func etag(id threadid.ID, logLength int64, page dto.ThreadPage) (string, error) {
+	b, err := json.Marshal(page)
+	if err != nil {
+		return "", fmt.Errorf("threads: hashing the page of %s: %w", id, err)
+	}
 	sum := sha256.Sum256(b)
-	return fmt.Sprintf(`"%s-%d-r%d-%s-p%d-v%s"`, id, logLength, render.Version, class, projected, hex.EncodeToString(sum[:6]))
+	return fmt.Sprintf(`"%s-%d-r%d-%s"`, id, logLength, render.Version, hex.EncodeToString(sum[:8])), nil
 }
 
 // matches applies If-None-Match: a list of entity tags, weak ones compared
@@ -370,13 +357,12 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		posts = append(posts, p)
 	}
 
-	handles, lookupErr := s.handles(ctx)
+	handles := s.handleMemo(ctx)
 	rctx := render.Context{
 		Posts: render.ResolverFunc(func(o uint32) (bool, bool) {
 			tomb, err := th.Index.Tombstoned(o)
 			return err == nil, err == nil && tomb
 		}),
-		Handles: handles,
 	}
 
 	for _, p := range posts {
@@ -406,7 +392,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		}
 		// A tombstone reaches here with its source only for a moderator.
 		if !p.Tombstone || moderator {
-			if d.HTML, err = s.html(id, p, rctx, lookupErr); err != nil {
+			if d.HTML, err = s.html(id, p, rctx, handles); err != nil {
 				return nil, err
 			}
 		}
@@ -417,26 +403,37 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 
 // html renders one post through the render cache.
 //
-// A cached rendering is reused only while every post it quotes is still in
-// the state it was rendered against: the key names this post's revision, and
-// a quote of a post deleted since must become a tombstone.
+// A cached rendering is reused only while what it was drawn against still
+// holds: every post it quotes is in the state it was rendered against (a
+// quote of a post deleted since is a tombstone), and every handle it looked up
+// resolves as it did (a handle nobody had is text, and a link once somebody
+// has it). The key names this post's revision and neither of those.
 //
-// failed reports a resolver failure during the render; a rendering made
-// through one is wrong in a way its key cannot express, so it is returned as
-// an error and not cached.
-func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, failed func() error) (string, error) {
+// A render or a check during which a handle lookup failed is an error: the
+// mention would be drawn as unresolved when it may not be, and that is
+// neither cached nor served (review 392).
+func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, handles *handleMemo) (string, error) {
 	k := render.Key{Thread: id, Ordinal: p.Ordinal, Revision: uint32(p.Revision)}
-	if html, quotes, ok := s.Render.GetQuoting(k); ok && quotesCurrent(quotes, rctx.Posts) {
+	if html, deps, ok := s.Render.GetDeps(k); ok && quotesCurrent(deps.Quotes, rctx.Posts) && handles.current(deps.Handles) {
+		if handles.err != nil {
+			return "", fmt.Errorf("threads: checking %s#%d: %w", id, p.Ordinal, handles.err)
+		}
 		return html, nil
 	}
+	var used []render.HandleLookup
+	rctx.Handles = render.HandleFunc(func(h string) (int64, string, bool) {
+		l := handles.lookup(h)
+		used = append(used, l)
+		return l.ID, l.Canonical, l.Found
+	})
 	r, err := render.RenderWith(p.Source, rctx)
 	if err == nil {
-		err = failed()
+		err = handles.err
 	}
 	if err != nil {
 		return "", fmt.Errorf("threads: rendering %s#%d: %w", id, p.Ordinal, err)
 	}
-	s.Render.PutQuoting(k, r.HTML, r.Quotes)
+	s.Render.PutDeps(k, r.HTML, render.Deps{Quotes: r.Quotes, Handles: used})
 	return r.HTML, nil
 }
 
@@ -469,20 +466,45 @@ func (s *Service) users(ctx context.Context, ids map[int64]bool) (map[int64]dto.
 	return out, err
 }
 
-// handles is the renderer's mention resolver, and a func reporting the first
-// lookup that failed. The renderer's resolvers cannot return an error, so a
-// failure is recorded here: a post rendered through one drew some mention as
-// unresolved when it may not be, and is neither cached nor served; the page
-// fails instead (review 392).
-func (s *Service) handles(ctx context.Context) (render.HandleResolver, func() error) {
-	var first error
-	return render.HandleFunc(func(h string) (int64, string, bool) {
-		id, canonical, ok, err := s.handle(ctx, h)
-		if err != nil && first == nil {
-			first = err
+// handleMemo resolves mentions for one request: each handle once however
+// many posts mention it, with the first failure kept, because the renderer's
+// resolver cannot return one.
+type handleMemo struct {
+	s    *Service
+	ctx  context.Context
+	seen map[string]render.HandleLookup
+	err  error
+}
+
+func (s *Service) handleMemo(ctx context.Context) *handleMemo {
+	return &handleMemo{s: s, ctx: ctx, seen: map[string]render.HandleLookup{}}
+}
+
+func (m *handleMemo) lookup(h string) render.HandleLookup {
+	if l, ok := m.seen[h]; ok {
+		return l
+	}
+	id, canonical, ok, err := m.s.handle(m.ctx, h)
+	if err != nil {
+		if m.err == nil {
+			m.err = err
 		}
-		return id, canonical, ok
-	}), func() error { return first }
+		// Not remembered: a failure is not an answer.
+		return render.HandleLookup{Typed: h}
+	}
+	l := render.HandleLookup{Typed: h, ID: id, Canonical: canonical, Found: ok}
+	m.seen[h] = l
+	return l
+}
+
+// current reports whether every recorded lookup still has the same answer.
+func (m *handleMemo) current(lookups []render.HandleLookup) bool {
+	for _, l := range lookups {
+		if m.lookup(l.Typed) != l {
+			return false
+		}
+	}
+	return true
 }
 
 // handle resolves a mention for the renderer. No such handle is ok=false

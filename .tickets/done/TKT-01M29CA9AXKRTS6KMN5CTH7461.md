@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T09:37:39Z
+updated_at: 2026-09-24T09:42:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -164,6 +164,24 @@ Review 391 (Terva, head 9332633): one high and two medium findings, all fixed.
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:37:39Z
 
 Review 392 (head 0fc5456): resolved 391's three findings, and raised one medium one: a failed mention lookup (any DB error) was drawn as an unresolved handle and cached under the post's revision. Fix: `handle` now tells ErrNoRows (ok=false, no error) apart from failure (error). `Service.handles` wraps it as the renderer's resolver and records the first failure, and `html` treats a render made through a failed lookup as an error, neither cached nor served. Rejected: serving the page with the mention unresolved but uncached. That hides an outage as wrong content. Tests: TestFailedLookupIsNotCached and TestHandleTellsMissingFromFailed; 3 mutants, all killed. Separately, TestQueuedAppendsShareOneFsync failed once in the full run. It is the flake in draft TKT-01M393S6P7, 'same message and cause', and fails 2/40 on origin/main against 1/40 here, so this change does not affect it.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:42:50Z
+
+Review 393 (head 0ca4b8c): 392's finding resolved; three new medium findings, all fixed.
+
+- **The ETag omitted page size**, and **quote state was read outside the snapshot**. The two share a cause: the ETag was assembled from a list of inputs kept beside the code, and each review found one more missing (391: authors and forum; 393: page size, quote state). Fix: the ETag is now `"<id>-<log_length>-r<renderer>-<digest>"`, and the digest hashes the page body as written. Two different bodies can never share a tag, whatever they depend on. AC2 still holds, since the tag names thread id, log length and renderer version.
+  - Cost: a 304 still assembles the page (mostly render-cache hits); what it saves is the transfer.
+  - Rejected: adding page size and a flags snapshot to the input list. That fixes today's two and leaves the next one to a later review.
+  - Rejected: copying every entry's flags into the snapshot for the quote resolver. O(thread) per request, and still an input list.
+  - A body may show a quote tombstone a moment newer than its log_length. That is documented in docs/07; the delete's own event prompts a refetch.
+  - class and log_length_projected left the tag, because the digest covers them.
+- **Cached unresolved mentions.** Previously filed as draft TKT-01M39C6XFM, now archived as fixed here. `render.Cache` stores `Deps{Quotes, Handles}` (`PutDeps`/`GetDeps`, replacing `PutQuoting`/`GetQuoting` from review 391), where Handles is every lookup the render made, found or not. `threads.html` re-resolves them on a hit through a per-request memo (`handleMemo`, one query per handle per request) and re-renders on any change: a new handle, a vanished one, or a new canonical spelling. A failed lookup during the check is an error, as in 392, and the memo never remembers a failure as an answer.
+  - Rejected: an ETag input for "users generation". Moot now that the digest hashes the body, and it would not fix the cached HTML.
+- Tests:
+  - TestETagCoversPageSize (it also checks that a 304 carries no page).
+  - TestMentionOfALaterHandle, TestMentionOfAHandleThatStopsResolving.
+  - TestFailedLookupIsNotCached now also covers a cached unresolved mention checked during an outage.
+- Mutation: 8 mutants. One survivor, removing the memo, only costs speed and is equivalent.
 
 ## Summary
 

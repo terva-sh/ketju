@@ -80,14 +80,45 @@ type post struct {
 }
 
 type entry struct {
-	key    Key
-	html   string
-	quotes []Quote
-	size   int64
+	key  Key
+	html string
+	deps Deps
+	size int64
 }
 
-// quoteSize is what one remembered quote costs: an ordinal and a flag.
-const quoteSize = 8
+// Deps is what a rendering depended on besides its source and the renderer:
+// the state of the posts it quotes and the answers to its handle lookups. The
+// key names neither, so a caller that stores them with [Cache.PutDeps] and,
+// on a hit, renders again when any of them has changed never serves a
+// rendering made against a thread or a users table that has since moved.
+type Deps struct {
+	// Quotes is [Result.Quotes]: a quote of a deleted post is a tombstone.
+	Quotes []Quote
+	// Handles is every mention lookup the render made, found or not: a handle
+	// nobody had renders as text, and becomes a link once somebody has it.
+	Handles []HandleLookup
+}
+
+// HandleLookup is one answer a [HandleResolver] gave.
+type HandleLookup struct {
+	Typed     string
+	ID        int64
+	Canonical string
+	Found     bool
+}
+
+func (d Deps) clone() Deps {
+	return Deps{Quotes: append([]Quote(nil), d.Quotes...), Handles: append([]HandleLookup(nil), d.Handles...)}
+}
+
+// size is what remembering d costs, estimated as for entryOverhead.
+func (d Deps) size() int64 {
+	n := int64(len(d.Quotes)) * 8
+	for _, h := range d.Handles {
+		n += 32 + int64(len(h.Typed)+len(h.Canonical))
+	}
+	return n
+}
 
 // NewCache returns a cache bounded by maxBytes.
 //
@@ -122,21 +153,16 @@ func (c *Cache) Enabled() bool { return c.maxBytes > 0 }
 
 // Get returns the cached HTML for a key.
 func (c *Cache) Get(k Key) (string, bool) {
-	html, _, ok := c.GetQuoting(k)
+	html, _, ok := c.GetDeps(k)
 	return html, ok
 }
 
-// GetQuoting returns the cached HTML for a key and the quotes it was rendered
-// against, as [Cache.PutQuoting] stored them.
-//
-// The key names the quoting post's revision, not the state of the posts it
-// quotes, and a quote of a deleted post renders as a tombstone. A caller that
-// compares each Quote.Deleted with the quoted post's state now, and renders
-// again on a difference, never serves a quotation of a post deleted since.
-func (c *Cache) GetQuoting(k Key) (string, []Quote, bool) {
+// GetDeps returns the cached HTML for a key and what it was rendered against,
+// as [Cache.PutDeps] stored it.
+func (c *Cache) GetDeps(k Key) (string, Deps, bool) {
 	if !c.Enabled() {
 		c.misses.Add(1)
-		return "", nil, false
+		return "", Deps{}, false
 	}
 	k = k.normalise()
 
@@ -145,12 +171,12 @@ func (c *Cache) GetQuoting(k Key) (string, []Quote, bool) {
 	el, ok := c.items[k]
 	if !ok {
 		c.misses.Add(1)
-		return "", nil, false
+		return "", Deps{}, false
 	}
 	c.ll.MoveToFront(el)
 	c.hits.Add(1)
 	e := el.Value.(*entry)
-	return e.html, e.quotes, true
+	return e.html, e.deps, true
 }
 
 // Put stores the HTML for a key, evicting least-recently-used entries until the
@@ -161,20 +187,19 @@ func (c *Cache) GetQuoting(k Key) (string, []Quote, bool) {
 // insert evicts anyway. The rendering is still returned to the reader who asked
 // for it; only the caching is declined.
 func (c *Cache) Put(k Key, html string) {
-	c.PutQuoting(k, html, nil)
+	c.PutDeps(k, html, Deps{})
 }
 
-// PutQuoting is Put for a rendering that depends on the posts it quotes:
-// quotes is [Result.Quotes], which [Cache.GetQuoting] hands back. The slice is
-// copied.
-func (c *Cache) PutQuoting(k Key, html string, quotes []Quote) {
+// PutDeps is Put for a rendering that depends on more than its key: deps is
+// handed back by [Cache.GetDeps]. It is copied.
+func (c *Cache) PutDeps(k Key, html string, deps Deps) {
 	if !c.Enabled() {
 		c.dropped.Add(1)
 		return
 	}
 	k = k.normalise()
-	quotes = append([]Quote(nil), quotes...)
-	size := int64(len(html)) + int64(len(quotes))*quoteSize + entryOverhead
+	deps = deps.clone()
+	size := int64(len(html)) + deps.size() + entryOverhead
 	if size > c.maxBytes {
 		c.rejected.Add(1)
 		return
@@ -186,13 +211,13 @@ func (c *Cache) PutQuoting(k Key, html string, quotes []Quote) {
 	if el, ok := c.items[k]; ok {
 		e := el.Value.(*entry)
 		c.bytes += size - e.size
-		e.html, e.quotes, e.size = html, quotes, size
+		e.html, e.deps, e.size = html, deps, size
 		c.ll.MoveToFront(el)
 		c.evictLocked()
 		return
 	}
 
-	el := c.ll.PushFront(&entry{key: k, html: html, quotes: quotes, size: size})
+	el := c.ll.PushFront(&entry{key: k, html: html, deps: deps, size: size})
 	c.items[k] = el
 	p := post{k.Thread, k.Ordinal}
 	if c.byPost[p] == nil {

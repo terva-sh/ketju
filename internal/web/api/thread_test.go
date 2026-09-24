@@ -37,6 +37,7 @@ type world struct {
 	db      *db.DB
 	cache   *threadcache.Cache
 	proj    *projection.Writer
+	svc     *threads.Service
 	handler http.Handler
 	users   map[string]int64
 	forum   int64
@@ -64,7 +65,7 @@ func newWorld(t *testing.T) *world {
 		t.Fatal(err)
 	}
 	svc := &threads.Service{DB: d, Perm: perm.New(d), Threads: c, Render: render.NewCache(1 << 20)}
-	w := &world{t: t, db: d, cache: c, proj: p, handler: New(Deps{Threads: svc}),
+	w := &world{t: t, db: d, cache: c, proj: p, svc: svc, handler: New(Deps{Threads: svc}),
 		users: map[string]int64{}, clock: 1_757_500_000_000}
 
 	for _, u := range []struct{ handle, name, role, kind string }{
@@ -267,7 +268,7 @@ func TestTombstonesByClass(t *testing.T) {
 	}
 }
 
-var etagShape = regexp.MustCompile(`^"[0-9a-z]+-\d+-r\d+-(anon|member|moderator)-p\d+-v[0-9a-f]{12}"$`)
+var etagShape = regexp.MustCompile(`^"[0-9a-z]+-\d+-r\d+-[0-9a-f]{16}"$`)
 
 // TestETagAndNotModified is AC2: the ETag names the thread, its log length
 // and the renderer version; a matching If-None-Match is a 304 with no body;
@@ -280,7 +281,7 @@ func TestETagAndNotModified(t *testing.T) {
 
 	first := w.get(carol, path)
 	tag := first.Header().Get("ETag")
-	want := fmt.Sprintf(`"%s-%d-r%d-member-`, id, end, render.Version)
+	want := fmt.Sprintf(`"%s-%d-r%d-`, id, end, render.Version)
 	if !etagShape.MatchString(tag) || tag[:len(want)] != want {
 		t.Fatalf("ETag %s, want the shape %s…", tag, want)
 	}
@@ -529,8 +530,9 @@ func TestInactiveViewerIsAnonymous(t *testing.T) {
 	if p.Viewer != (dto.ThreadViewer{}) {
 		t.Fatalf("an inactive member got the viewer block %+v", p.Viewer)
 	}
-	if tag := w.get(v, "/api/v1/threads/"+id.String()).Header().Get("ETag"); !regexp.MustCompile(`-anon-`).MatchString(tag) {
-		t.Fatalf("an inactive member's ETag is %s, not the anonymous class", tag)
+	if tag, anon := w.get(v, "/api/v1/threads/"+id.String()).Header().Get("ETag"),
+		w.get(domain.Anonymous(), "/api/v1/threads/"+id.String()).Header().Get("ETag"); tag != anon {
+		t.Fatalf("an inactive member's ETag is %s, an anonymous viewer's %s", tag, anon)
 	}
 }
 
@@ -624,5 +626,31 @@ func TestETagCoversAuthorsAndForum(t *testing.T) {
 		if rec := w.get(domain.Anonymous(), path, "If-None-Match", tag); rec.Code != http.StatusOK {
 			t.Errorf("after changing %s the old ETag still got %d", change.name, rec.Code)
 		}
+	}
+}
+
+// TestETagCoversPageSize: page 1 at two page sizes is two different pages,
+// and neither's ETag may revalidate the other (review 393).
+func TestETagCoversPageSize(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.thread(1, "Long")
+	for i := range 30 {
+		w.post(id, "alice", fmt.Sprintf("post %d", i+1), 0)
+	}
+	v := domain.Anonymous()
+	small, err := w.svc.View(t.Context(), v, id, threads.Query{Page: 1, PageSize: 10}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	large, err := w.svc.View(t.Context(), v, id, threads.Query{Page: 1, PageSize: 25}, small.ETag)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if large.NotModified || large.ETag == small.ETag || len(large.Page.Posts) != 25 {
+		t.Fatalf("size 25 against size 10's tag: not-modified=%v, tags %s and %s", large.NotModified, small.ETag, large.ETag)
+	}
+	again, err := w.svc.View(t.Context(), v, id, threads.Query{Page: 1, PageSize: 10}, small.ETag)
+	if err != nil || !again.NotModified || again.ETag != small.ETag || len(again.Page.Posts) != 0 {
+		t.Fatalf("size 10 against its own tag: %+v, %v", again, err)
 	}
 }

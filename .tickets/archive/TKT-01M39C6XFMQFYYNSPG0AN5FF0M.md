@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M39C6XFMQFYYNSPG0AN5FF0M
 title: Rendered-post cache ignores later handle resolution for mentions
 type: bug
-status: draft
+status: archived
 status_reason: null
 priority: low
 due_on: null
@@ -16,9 +16,12 @@ dependencies: []
 blocks_on: none
 references: []
 claim: null
-archive: null
+archive:
+  archived_at: 2026-09-24T09:42:34Z
+  from_status: draft
+  reason: fixed within TKT-01M29CA9AX (review 393)
 created_at: 2026-09-24T09:33:40Z
-updated_at: 2026-09-24T09:33:40Z
+updated_at: 2026-09-24T09:42:34Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -38,3 +41,13 @@ This is the mention counterpart of the quote problem that TKT-01M29CA9AX fixed i
 - Record unresolved handles in `Result`, store them with the cache entry, and re-render on a hit when any of them now resolves. Include a users "handle generation" in the ETag.
 - Invalidate the render cache for posts mentioning a handle when a user is created or renamed. That needs a reverse index from handle to posts, which the mentions projection has only for resolved mentions.
 - Accept it: handles are immutable today, and a mention made before signup going unlinked until the next edit is arguably correct.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:42:34Z
+
+Fixed in TKT-01M29CA9AX (PR #56) after review 393 raised it as a medium finding: render.Cache.PutDeps now stores every handle lookup a render made, found or not, and threads.html re-resolves them on a hit and re-renders when any answer changed. Tests: TestMentionOfALaterHandle and TestMentionOfAHandleThatStopsResolving.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:42:34Z
+
+archived from draft: fixed within TKT-01M29CA9AX (review 393)
