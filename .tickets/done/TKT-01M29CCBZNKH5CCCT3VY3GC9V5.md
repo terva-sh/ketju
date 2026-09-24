@@ -22,10 +22,12 @@ references:
     path: docs/10-open-questions.md
   - ref: design:single-process
     path: docs/02-architecture.md
+  - ref: pr:66
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:08:24Z
+updated_at: 2026-09-24T15:08:39Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
