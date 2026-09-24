@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:44:42Z
+updated_at: 2026-09-24T16:29:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -59,9 +59,9 @@ Decided: a lock in `data/` refuses a second `serve`, and the process stays singl
 ### Approach
 1. New package `internal/lock`: `Acquire(dir, purpose) (*Lock, error)`, `(*Lock).Release() error`, `HeldError{Dir, Holder, ReadErr}`, `Holder{pid, host, purpose, started_at, version}`.
 2. The lock is an exclusive, non-blocking flock on the data directory itself, opened O_RDONLY|O_DIRECTORY, with EINTR retried. It is not on a file in the directory, because a file's inode can be deleted or replaced under its holder, and the next process would lock the new one (review 443). The kernel drops the flock when the holder dies, so a killed holder leaves nothing stale.
-3. `<data_dir>/ketju.lock` is only the record of who took the lock. Once the directory is locked, it is opened with O_NOFOLLOW, refused unless it is a regular file with one link (review 433), truncated, written as JSON, and fsynced. Deleting it loses a name, not the lock.
-4. On EWOULDBLOCK, the refusal reads the record (O_NOFOLLOW, bounded to 64 KiB, every field required: review 440) and returns `*HeldError`. The message names the directory, pid, host and start time, and what to check: ps, systemctl status, docker ps, and a network filesystem. If the record is unreadable or incomplete, it says so and still refuses.
-5. Release unlocks and closes the directory, and leaves the record in place.
+3. `<data_dir>/ketju.lock` is only the record of who took the lock. Once the directory is locked, it is opened with O_NOFOLLOW, refused unless it is a regular file with one link (review 433), flocked exclusively, truncated, written as JSON, and fsynced. The holder keeps that flock for as long as it holds the lock (reviews 445 and 446). Deleting the file loses a name, not the lock.
+4. On EWOULDBLOCK, the refusal opens the record (O_NOFOLLOW, O_NONBLOCK, regular files only) and believes it only if the record is flocked, which only a live holder can do. It then reads it (bounded to 64 KiB, every field required: review 440) and returns `*HeldError`. The message names the directory, pid, host and start time, and what to check: ps, systemctl status, docker ps, and a network filesystem. If the record is unreadable or incomplete, it says so and still refuses.
+5. Release empties the record and lets go of it, then of the directory. The file stays in place.
 6. `lock_unix.go` (`//go:build unix`) holds the flock. `lock_other.go` refuses before touching anything (review 441).
 7. Acquire does not create the data directory; that is serve's decision (CCBYX).
 8. Version: `debug.ReadBuildInfo().Main.Version`, which is "(devel)" in a local build.
@@ -176,6 +176,26 @@ Rejected: writing the record before taking the lock, which would let a refused p
 Test: TestRefusalNeverNamesAGoneHolder. It checks that Release leaves the record empty, then has a live holder standing behind an empty record and behind a record naming a reaped pid; both read as unnamed. A record from another host is still named.
 
 Mutation check: 26 of 27 killed. The survivor is the equivalent O_DIRECTORY mutant from before. CI run 287 on 3074872 passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T16:29:59Z
+
+Answered review 446. Two mediums: the previous-holder naming, still present, and a fifo record that could hang a refusal.
+
+The user decided how to finish this PR: fix both and re-review once. If that round raises only further refusal-message naming edges, merge and file a follow-up. Anything high, or outside naming, is still fixed first.
+
+**Naming.** The signal-0 pid check is gone. A zombie pid passes it, and a record from another host cannot be checked at all. The holder now keeps the record file open with an exclusive flock for as long as it holds the directory lock, and Release lets go of the record before the directory. A refusal names the holder only if the record it reads is flocked by someone. The kernel drops that flock with the holder, whether it exited, was killed, is a zombie, or ran on another host. So a record left by an earlier holder is unlocked and reads as unnamed (errUnheldRecord), and so is a record replaced under a live holder, because the lock is on the inode the holder wrote. A new holder waits up to 2 s for the record's lock, since a refusal holds it only for the moment it takes to test it.
+
+**Fifo.** openRecord opens with O_NONBLOCK and refuses anything but a regular file, so a fifo with no writer is reported rather than waited on.
+
+Tests:
+- TestRefusalNeverNamesAnEarlierHolder stands in for a holder that has the directory lock but has not recorded itself, behind three records: an empty one, one naming this process on this host (a live pid, which the old check would have believed), and one from another host. None is named.
+- TestFifoRecordDoesNotBlockARefusal.
+- TestUnreadableRecordStillRefuses now checks the whole-record case before it replaces the file, because a replaced record is correctly unheld.
+
+Mutation check: 24 of 26 killed. Both survivors are equivalent:
+- dropping O_DIRECTORY, as before;
+- dropping O_NOFOLLOW on the record read: a symlinked record then resolves to a file nobody holds, and is refused as unheld anyway.
+CI run 289 on ccafdbc passed.
 
 ## Summary
 

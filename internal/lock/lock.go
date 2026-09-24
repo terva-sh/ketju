@@ -88,7 +88,8 @@ func (e *HeldError) Error() string {
 // Lock is a held lock. Release it on shutdown, after everything that writes
 // to the directory has stopped.
 type Lock struct {
-	d *os.File // the data directory, which holds the flock
+	d   *os.File // the data directory, which holds the lock
+	rec *os.File // the record, locked for as long as this holds
 }
 
 // Acquire takes the lock on dir for purpose ("serve", "reindex"). It fails
@@ -112,81 +113,103 @@ func Acquire(dir, purpose string) (*Lock, error) {
 		return nil, fmt.Errorf("lock: locking %s: %w", dir, err)
 	}
 
-	if err := record(path, purpose); err != nil {
+	rec, err := record(path, purpose)
+	if err != nil {
 		unlock(d)
 		d.Close()
 		return nil, fmt.Errorf("lock: recording the holder in %s: %w", path, err)
 	}
-	return &Lock{d: d}, nil
+	return &Lock{d: d, rec: rec}, nil
 }
 
-// Release gives the lock up. It empties the record first, while the lock is
-// still held: the next holder writes its own record only after taking the
-// lock, and a refusal in between must find no name rather than this one
-// (review 445). The file itself stays.
+// Release gives the lock up. It empties the record and lets go of it before
+// the directory, so the record never outlives the lock it names. The file
+// itself stays.
 func (l *Lock) Release() error {
 	if l == nil || l.d == nil {
 		return nil
 	}
-	d := l.d
-	l.d = nil
-	return errors.Join(clearRecord(filepath.Join(d.Name(), FileName)), unlock(d), d.Close())
+	d, rec := l.d, l.rec
+	l.d, l.rec = nil, nil
+	return errors.Join(rec.Truncate(0), rec.Sync(), unlock(rec), rec.Close(), unlock(d), d.Close())
 }
 
-func clearRecord(path string) error {
-	f, err := openFile(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	if err := f.Truncate(0); err != nil {
-		return err
-	}
-	return f.Sync()
-}
+// recordWait bounds how long a new holder waits for the record's lock. Only
+// a refusal reading the record holds it, and only for a moment.
+const recordWait = 2 * time.Second
 
-// record replaces the record file's contents with this process's Holder,
-// durably, so a refusal after a crash still names the last holder. It runs
-// only while the directory is locked, so no two processes write it at once.
-func record(path, purpose string) error {
+// record writes this process's Holder into the record file, durably, and
+// keeps the file open with an exclusive lock on it for as long as the
+// directory lock is held.
+//
+// That lock is what makes the record believable (reviews 445 and 446). A
+// refusal names the holder only if the record it reads is locked, and only
+// a live holder that wrote it can be holding that lock: the kernel drops it
+// when the holder exits or is killed, zombie or not, on whatever host. A
+// record left by a holder that is gone is unlocked, and so is one replaced
+// under a live holder, since the lock is on the inode the holder wrote.
+func record(path, purpose string) (*os.File, error) {
 	f, err := openFile(path)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	defer f.Close()
+	deadline := time.Now().Add(recordWait)
+	for {
+		err = tryLock(f)
+		if !errors.Is(err, errHeld) || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err != nil {
+		f.Close()
+		return nil, fmt.Errorf("locking the record: %w", err)
+	}
+	fail := func(err error) (*os.File, error) {
+		unlock(f)
+		f.Close()
+		return nil, err
+	}
 	host, _ := os.Hostname()
 	b, err := json.Marshal(Holder{
 		PID: os.Getpid(), Host: host, Purpose: purpose,
 		StartedAt: time.Now().UTC().Truncate(time.Second), Version: version(),
 	})
 	if err != nil {
-		return err
+		return fail(err)
 	}
 	if err := f.Truncate(0); err != nil {
-		return err
+		return fail(err)
 	}
 	if _, err := f.WriteAt(append(b, '\n'), 0); err != nil {
-		return err
+		return fail(err)
 	}
-	return f.Sync()
+	if err := f.Sync(); err != nil {
+		return fail(err)
+	}
+	return f, nil
 }
 
-// readHolder reads the record a refused Acquire names the holder from.
-//
-// A holder writes its record just after taking the lock, so a refusal in
-// that moment can find the record of whoever held the lock before. After a
-// clean Release that is an empty file, which reads as unnamed. After a
-// holder that was killed it is that holder's record, naming a process that
-// is gone; when it names this host, the pid is checked and a record whose
-// process is not running is not believed (review 445). A record from
-// another host cannot be checked, and a pid the system has since reused
-// passes; the message says to check, and names what it read.
+// errUnheldRecord is a record no live holder has locked: left by an earlier
+// holder, or not yet written by the current one.
+var errUnheldRecord = errors.New("no running holder has locked it: it was left by an earlier holder, " +
+	"and the process holding the lock now has not recorded itself yet")
+
+// readHolder reads the record a refused Acquire names the holder from, and
+// believes it only if a live holder has it locked (see record).
 func readHolder(path string) (*Holder, error) {
 	f, err := openRecord(path)
 	if err != nil {
 		return nil, err
 	}
 	defer f.Close()
+	switch err := tryLock(f); {
+	case err == nil:
+		unlock(f)
+		return nil, fmt.Errorf("%s: %w", path, errUnheldRecord)
+	case !errors.Is(err, errHeld):
+		return nil, fmt.Errorf("checking %s: %w", path, err)
+	}
 	// Bounded: a record is well under a kilobyte, and a file someone filled
 	// with something else should not be read whole into memory.
 	b, err := io.ReadAll(io.NewSectionReader(f, 0, 64<<10))
@@ -215,10 +238,6 @@ func readHolder(path string) (*Holder, error) {
 	}
 	if len(missing) > 0 {
 		return nil, fmt.Errorf("%s holds an incomplete holder record (no %s)", path, strings.Join(missing, ", "))
-	}
-	if host, _ := os.Hostname(); h.Host == host && !running(h.PID) {
-		return nil, fmt.Errorf("%s names pid %d, which is not running: it held the lock before, "+
-			"and the process holding it now has not recorded itself yet", path, h.PID)
 	}
 	return &h, nil
 }

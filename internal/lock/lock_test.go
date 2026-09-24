@@ -238,6 +238,18 @@ func TestUnreadableRecordStillRefuses(t *testing.T) {
 		}
 	}
 
+	// A whole record, written into the file the holder has locked, names
+	// the holder, so the cases above are refused for what they lack, not for
+	// something else.
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(full), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Acquire(dir, "serve")
+	var held *HeldError
+	if !errors.As(err, &held) || held.Holder == nil || held.Holder.PID != 7 {
+		t.Errorf("a whole record: got %v", err)
+	}
+
 	// A symlink to a whole record elsewhere is not the record: a refusal
 	// naming whatever it points at would name a holder nobody recorded.
 	elsewhere := filepath.Join(t.TempDir(), "record")
@@ -248,22 +260,11 @@ func TestUnreadableRecordStillRefuses(t *testing.T) {
 	if err := os.Symlink(elsewhere, filepath.Join(dir, FileName)); err != nil {
 		t.Fatal(err)
 	}
-	_, err := Acquire(dir, "serve")
+	_, err = Acquire(dir, "serve")
 	if held := (*HeldError)(nil); !errors.As(err, &held) || held.Holder != nil {
 		t.Errorf("a symlinked record named a holder: %v", err)
 	}
 	os.Remove(filepath.Join(dir, FileName))
-
-	// A whole record names the holder, so the cases above are refused for
-	// what they lack, not for something else.
-	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(full), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	_, err = Acquire(dir, "serve")
-	var held *HeldError
-	if !errors.As(err, &held) || held.Holder == nil || held.Holder.PID != 7 {
-		t.Errorf("a whole record: got %v", err)
-	}
 }
 
 func TestRecordIsTheHolder(t *testing.T) {
@@ -417,11 +418,11 @@ func TestDataDirMustBeADirectory(t *testing.T) {
 	}
 }
 
-// A refusal never names a process that is not running (review 445). After a
-// clean Release the record is empty, so a holder that has taken the lock and
-// not yet written its record reads as unnamed; after a killed holder, the
-// record it left names a pid that is gone, and that is not believed either.
-func TestRefusalNeverNamesAGoneHolder(t *testing.T) {
+// A refusal names a holder only from a record a live holder has locked
+// (reviews 445 and 446). Stand in for a holder that has taken the directory
+// lock and not yet written its record, behind each kind of record an earlier
+// holder can leave: none of them is named.
+func TestRefusalNeverNamesAnEarlierHolder(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, FileName)
 
@@ -436,21 +437,23 @@ func TestRefusalNeverNamesAGoneHolder(t *testing.T) {
 		t.Fatalf("after Release the record is %q, %v; want it empty", b, err)
 	}
 
-	// A pid that has certainly exited: a helper that ran and was reaped.
-	gone := helperCmd(t, t.TempDir(), "")
-	if err := gone.Run(); err != nil {
+	d, err := openDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer d.Close()
+	if err := tryLock(d); err != nil {
 		t.Fatal(err)
 	}
 	host, _ := os.Hostname()
-	stale := fmt.Sprintf(`{"pid":%d,"host":%q,"purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`,
-		gone.Process.Pid, host)
-
-	// A holder that has locked and not yet recorded itself, standing where a
-	// killed holder's record was left.
-	startHolder(t, dir)
-	for _, c := range []struct{ name, record, want string }{
-		{"a clean release before", "", "does not hold a holder record"},
-		{"a killed holder before", stale, "which is not running"},
+	for _, c := range []struct{ name, record string }{
+		{"a clean release before", ""},
+		// A killed holder's record: its pid may even still exist, as a zombie
+		// or reused, and it is still not the holder.
+		{"a killed holder before, on this host", fmt.Sprintf(
+			`{"pid":%d,"host":%q,"purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`, os.Getpid(), host)},
+		{"a killed holder before, on another host",
+			`{"pid":7,"host":"another-host","purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`},
 	} {
 		if err := os.WriteFile(path, []byte(c.record), 0o644); err != nil {
 			t.Fatal(err)
@@ -460,20 +463,38 @@ func TestRefusalNeverNamesAGoneHolder(t *testing.T) {
 		if !errors.As(err, &held) {
 			t.Fatalf("%s: got %v, want a *HeldError", c.name, err)
 		}
-		if held.Holder != nil || held.ReadErr == nil || !strings.Contains(held.ReadErr.Error(), c.want) {
-			t.Errorf("%s: holder %+v, read error %v; want no holder and %q", c.name, held.Holder, held.ReadErr, c.want)
+		if held.Holder != nil || !errors.Is(held.ReadErr, errUnheldRecord) {
+			t.Errorf("%s: holder %+v, read error %v; want no holder and an unheld record", c.name, held.Holder, held.ReadErr)
 		}
 	}
+}
 
-	// On another host the pid cannot be checked, so a whole record is named.
-	elsewhere := fmt.Sprintf(`{"pid":%d,"host":"another-host","purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`,
-		gone.Process.Pid)
-	if err := os.WriteFile(path, []byte(elsewhere), 0o644); err != nil {
+// A fifo at the record path with no writer must not hang a refusal, which
+// promises not to block (review 446).
+func TestFifoRecordDoesNotBlockARefusal(t *testing.T) {
+	dir := t.TempDir()
+	l, err := Acquire(dir, "serve")
+	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = Acquire(dir, "serve")
-	var held *HeldError
-	if !errors.As(err, &held) || held.Holder == nil || held.Holder.Host != "another-host" {
-		t.Errorf("a record from another host: got %v", err)
+	defer l.Release()
+	path := filepath.Join(dir, FileName)
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	if err := syscall.Mkfifo(path, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { _, err := Acquire(dir, "serve"); done <- err }()
+	select {
+	case err := <-done:
+		var held *HeldError
+		if !errors.As(err, &held) || held.Holder != nil || held.ReadErr == nil ||
+			!strings.Contains(held.ReadErr.Error(), "not a plain file") {
+			t.Errorf("got %v; want a refusal saying the record is not a plain file", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a refusal blocked on a fifo at the record path")
 	}
 }

@@ -20,10 +20,24 @@ func openDir(dir string) (*os.File, error) {
 	return os.OpenFile(dir, os.O_RDONLY|syscall.O_DIRECTORY, 0)
 }
 
-// openRecord opens the record for a refusal to read, without following a
-// symlink planted there.
+// openRecord opens the record for a refusal to read. It does not follow a
+// symlink, does not block on a fifo with no writer (review 446), and refuses
+// anything but a regular file.
 func openRecord(path string) (*os.File, error) {
-	return os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW, 0)
+	f, err := os.OpenFile(path, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	if !fi.Mode().IsRegular() {
+		f.Close()
+		return nil, fmt.Errorf("%s is not a plain file (%s)", path, fi.Mode().Type())
+	}
+	return f, nil
 }
 
 // openFile opens the record file for writing, creating it if it is not
@@ -83,11 +97,4 @@ func tryLock(f *os.File) error {
 
 func unlock(f *os.File) error {
 	return syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
-}
-
-// running reports whether a process with this pid exists. Signal 0 checks
-// without sending anything; EPERM means it exists and is someone else's.
-func running(pid int) bool {
-	err := syscall.Kill(pid, 0)
-	return err == nil || errors.Is(err, syscall.EPERM)
 }
