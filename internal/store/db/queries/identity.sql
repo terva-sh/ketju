@@ -17,6 +17,13 @@ RETURNING id;
 -- name: GetIdentityBySubject :one
 SELECT * FROM identities WHERE provider_key = ? AND subject = ?;
 
+-- RecordIdentityLogin notes a sign-in on the identity: when, and the claims
+-- the IdP asserted this time, which may have changed since the last.
+-- name: RecordIdentityLogin :exec
+UPDATE identities
+SET last_login_at = ?, raw_claims_json = ?, email = ?, email_verified = ?, updated_at = ?
+WHERE id = ?;
+
 -- IdentityHolder is what a sign-in decides a session on: the user an
 -- identity belongs to, if any, and that user's status. internal/auth/session
 -- reads it in the transaction that inserts the session, so nothing can

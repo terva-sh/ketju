@@ -461,3 +461,21 @@ func TestRelativeDataDirResolvesAgainstTheConfigFile(t *testing.T) {
 		t.Errorf("an absolute data_dir = %q", c.DataDir)
 	}
 }
+
+// The cookie key lives under the data directory unless the file says
+// otherwise, and a relative cookie_key_file is beside the config file, like
+// data_dir.
+func TestCookieKeyPath(t *testing.T) {
+	path := write(t, "data_dir = \"/srv/ketju\"\n")
+	if c := mustLoad(t, path, env(nil)); c.CookieKeyPath() != "/srv/ketju/secrets/cookie.key" {
+		t.Errorf("the default cookie key path = %q", c.CookieKeyPath())
+	}
+	rel := write(t, "data_dir = \"/srv/ketju\"\ncookie_key_file = \"keys/cookie.key\"\n")
+	t.Chdir(t.TempDir())
+	if c := mustLoad(t, rel, env(nil)); c.CookieKeyPath() != filepath.Join(filepath.Dir(rel), "keys", "cookie.key") {
+		t.Errorf("a relative cookie_key_file = %q", c.CookieKeyPath())
+	}
+	if c := mustLoad(t, path, env(map[string]string{"KETJU_COOKIE_KEY_FILE": "/run/secrets/cookie"})); c.CookieKeyPath() != "/run/secrets/cookie" {
+		t.Errorf("cookie_key_file from the environment = %q", c.CookieKeyPath())
+	}
+}

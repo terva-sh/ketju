@@ -16,6 +16,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/auth/oidc"
+	"github.com/terva-sh/ketju/internal/auth/seal"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/events"
@@ -24,6 +26,7 @@ import (
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -32,6 +35,7 @@ import (
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/web"
 	"github.com/terva-sh/ketju/internal/web/api"
+	"github.com/terva-sh/ketju/internal/web/auth"
 	"github.com/terva-sh/ketju/internal/web/spa"
 )
 
@@ -93,6 +97,10 @@ type serveOpts struct {
 
 	// listen wraps the listener, so a test can make accepting fail.
 	listen func(net.Listener) net.Listener
+
+	// idpClient reaches the identity providers; nil is http.DefaultClient. A
+	// test passes one that trusts its in-process IdP.
+	idpClient *http.Client
 }
 
 func runServe(args []string) error {
@@ -307,6 +315,40 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		return err
 	})
 
+	// Sign-in: the key that seals a sign-in's state, and the providers,
+	// discovered now so a broken IdP is a startup line rather than a
+	// reader's failed sign-in hours later (internal/auth/oidc). With none
+	// configured, nobody can sign in, and /auth/* says so.
+	step("sign-in")
+	key, keyWarning, err := seal.LoadOrCreateKey(cfg.CookieKeyPath())
+	if err != nil {
+		return fail("loading the cookie key", err)
+	}
+	if keyWarning != "" {
+		log.Warn(keyWarning)
+	}
+	sealer, err := seal.New(key)
+	if err != nil {
+		return fail("loading the cookie key", err)
+	}
+	sessions := &session.Store{DB: d}
+	authh := &auth.Handler{Sealer: sealer, Sessions: sessions, HTTPClient: o.idpClient, Logger: log,
+		Login: &identity.Service{DB: d, Sessions: sessions, Logger: log}}
+	if len(cfg.OIDC.Providers) > 0 {
+		reg, err := oidc.New(ctx, cfg, oidc.Options{Logger: log, HTTPClient: o.idpClient})
+		if err != nil {
+			return fail("discovering the identity providers", err)
+		}
+		reg.Start()
+		closers = append(closers, func() error {
+			step("close providers")
+			return reg.Close()
+		})
+		authh.Providers = reg
+	} else {
+		log.Warn("no identity providers are configured, so nobody can sign in")
+	}
+
 	step("listener")
 	perms := perm.New(d)
 	userSvc := &users.Service{DB: d, Perm: perms}
@@ -325,13 +367,14 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	shell.SetPage(api.ShellPage(userSvc))
 	var root http.Handler = web.New(web.Groups{
 		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Logger: log}),
+		Auth:   auth.New(authh),
 		Assets: spa.Assets(),
 		SPA:    shell,
 	}, web.Options{
 		Logger:  log,
 		Limits:  web.Limits{Upload: int64(cfg.Limits.AttachmentMB) << 20},
 		SiteURL: cfg.SiteURL,
-		Session: session.Middleware(&session.Store{DB: d}, log),
+		Session: session.Middleware(sessions, log),
 	})
 	if o.wrap != nil {
 		root = o.wrap(root)

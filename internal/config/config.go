@@ -77,6 +77,13 @@ type Config struct {
 	// cannot be derived from a listen address that may be behind a proxy.
 	SiteURL string `toml:"site_url"`
 
+	// CookieKeyFile is the 32-byte key that seals a sign-in's state into its
+	// cookie (internal/auth/seal). Empty means secrets/cookie.key under
+	// DataDir. Either way it is created, mode 0600, when absent, and must
+	// then persist: a new key ends every sign-in in progress. A relative
+	// path is resolved against the config file's directory.
+	CookieKeyFile string `toml:"cookie_key_file"`
+
 	Storage   Storage   `toml:"storage"`
 	Log       Log       `toml:"log"`
 	Bootstrap Bootstrap `toml:"bootstrap"`
@@ -98,6 +105,15 @@ type Log struct {
 	// happens to allocate a TTY is exactly when an operator needs to override
 	// it.
 	Format string `toml:"format"`
+}
+
+// CookieKeyPath is where the cookie key is: CookieKeyFile, or
+// secrets/cookie.key under DataDir.
+func (c *Config) CookieKeyPath() string {
+	if c.CookieKeyFile != "" {
+		return c.CookieKeyFile
+	}
+	return filepath.Join(c.DataDir, "secrets", "cookie.key")
 }
 
 // Storage is the part of the thread store an operator may tune.
@@ -247,6 +263,12 @@ func Load(path string, getenv func(string) string) (*Config, []string, error) {
 	if cfg.DataDir != "" && !filepath.IsAbs(cfg.DataDir) {
 		if abs, err := filepath.Abs(filepath.Join(filepath.Dir(path), cfg.DataDir)); err == nil {
 			cfg.DataDir = abs
+		}
+	}
+
+	if cfg.CookieKeyFile != "" && !filepath.IsAbs(cfg.CookieKeyFile) {
+		if abs, err := filepath.Abs(filepath.Join(filepath.Dir(path), cfg.CookieKeyFile)); err == nil {
+			cfg.CookieKeyFile = abs
 		}
 	}
 

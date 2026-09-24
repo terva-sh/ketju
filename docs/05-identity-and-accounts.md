@@ -97,6 +97,21 @@ it lost: every abandoned login would cost a database write, and anyone could
 fill a table by requesting `/start` in a loop. (Decided 2026-09-24, 10 Q8,
 TKT-01M29BSPEF.)
 
+The cookie is `__Host-ketju_login`. It lasts ten minutes and is cleared by the
+callback whatever the outcome, so it serves one sign-in. It is sealed with
+AES-256-GCM under a 32-byte key at `secrets/cookie.key` in the data directory,
+or at `cookie_key_file` in `config.toml`. The server creates the key, mode
+0600, the first time it starts without one. The key must then persist: a new
+one ends every sign-in in progress, though it signs nobody out. A stateless
+cookie cannot make the nonce strictly one-time. Replay is bounded instead by
+the ten minutes, by the cookie being cleared on first use, and by the IdP's
+single-use codes.
+
+A suspended, deactivated or pending account that signs in gets an "account
+unavailable" page and no session. The reason and any end date come with the
+Phase 2 moderation columns. Sign-out is `POST /auth/logout`, never a GET, so a
+page elsewhere cannot sign a reader out with an image tag. (TKT-01M29C7ZZ9.)
+
 Email is never used to auto-link identities across providers. Two providers
 asserting the same email are two identities until the user links them while
 signed in. This closes the classic "attacker controls an IdP that asserts

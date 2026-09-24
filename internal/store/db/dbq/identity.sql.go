@@ -378,6 +378,35 @@ func (q *Queries) LookupSession(ctx context.Context, arg LookupSessionParams) (L
 	return i, err
 }
 
+const recordIdentityLogin = `-- name: RecordIdentityLogin :exec
+UPDATE identities
+SET last_login_at = ?, raw_claims_json = ?, email = ?, email_verified = ?, updated_at = ?
+WHERE id = ?
+`
+
+type RecordIdentityLoginParams struct {
+	LastLoginAt   sql.NullInt64
+	RawClaimsJson sql.NullString
+	Email         sql.NullString
+	EmailVerified int64
+	UpdatedAt     int64
+	ID            int64
+}
+
+// RecordIdentityLogin notes a sign-in on the identity: when, and the claims
+// the IdP asserted this time, which may have changed since the last.
+func (q *Queries) RecordIdentityLogin(ctx context.Context, arg RecordIdentityLoginParams) error {
+	_, err := q.db.ExecContext(ctx, recordIdentityLogin,
+		arg.LastLoginAt,
+		arg.RawClaimsJson,
+		arg.Email,
+		arg.EmailVerified,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const setUserRole = `-- name: SetUserRole :exec
 UPDATE users SET role = ?, updated_at = ? WHERE id = ?
 `

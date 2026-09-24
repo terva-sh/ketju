@@ -147,6 +147,9 @@ type Querier interface {
 	// Writes go through internal/settings.Set, which refuses an unknown key or
 	// an ill-typed value and writes the audit row in the same transaction.
 	PutSetting(ctx context.Context, arg PutSettingParams) error
+	// RecordIdentityLogin notes a sign-in on the identity: when, and the claims
+	// the IdP asserted this time, which may have changed since the last.
+	RecordIdentityLogin(ctx context.Context, arg RecordIdentityLoginParams) error
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
 	// A post's direct replies when its thread is not open (post_meta_reply_to),
 	// in ordinal order as the index would give them. The replies endpoint uses it

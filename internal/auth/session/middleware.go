@@ -36,7 +36,7 @@ func Middleware(store *Store, log *slog.Logger) func(http.Handler) http.Handler 
 			}
 			sess, err := store.Lookup(r.Context(), c.Value)
 			if errors.Is(err, ErrNoSession) {
-				http.SetCookie(w, clearCookie())
+				http.SetCookie(w, ClearCookie())
 				next.ServeHTTP(w, r)
 				return
 			}

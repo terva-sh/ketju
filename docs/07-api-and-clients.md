@@ -33,7 +33,7 @@
 /settings  /settings/sessions  /settings/identities
 /apply  /apply/status
 /admin  /admin/queue  /admin/applications  /admin/forums  /admin/users  /admin/forms  /admin/settings
-/auth/{provider}/start  /auth/{provider}/callback  /auth/logout
+/auth/{provider}/start  /auth/{provider}/callback  /auth/logout (POST)
 ```
 
 `{id}` is the base32 thread id; `{slug}` is advisory — a stale slug

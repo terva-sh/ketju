@@ -19,7 +19,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T19:51:07Z
-updated_at: 2026-09-24T19:51:19Z
+updated_at: 2026-09-24T20:44:38Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -40,3 +40,9 @@ docs/05 says approval mode never creates a pending user row, but the schema allo
 ## Acceptance criteria
 
 - [ ] With the fake IdP, signing in with the identity of a user whose status is pending sets no session cookie, leaves the sessions row count unchanged, and shows the same unavailable page as suspended and deactivated
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:44:38Z
+
+The pending case this draft asks for is covered by TKT-01M29C7ZZ9's TestAnInactiveAccountGetsNoSession/pending (internal/web/auth/auth_test.go). With the in-process IdP, a pending user's sign-in answers 403 'Account unavailable', sets no session cookie, and writes no session row. So this draft's criterion is met once that PR merges, and it can be archived rather than promoted.

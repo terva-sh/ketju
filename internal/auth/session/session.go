@@ -328,8 +328,9 @@ func Cookie(token string, expires time.Time) *http.Cookie {
 		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}
 }
 
-// clearCookie tells the browser to drop a cookie that names no session.
-func clearCookie() *http.Cookie {
+// ClearCookie tells the browser to drop the session cookie: one that names
+// no session, or one just signed out.
+func ClearCookie() *http.Cookie {
 	return &http.Cookie{Name: CookieName, Value: "", Path: "/", MaxAge: -1,
 		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode}
 }
