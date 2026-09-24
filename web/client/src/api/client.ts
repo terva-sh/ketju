@@ -18,31 +18,51 @@ function hold(url: string, etag: string, body: unknown) {
   if (held.size > heldLimit) held.delete(held.keys().next().value!);
 }
 
+// latest numbers the requests to each URL, so an answer can tell whether a
+// newer request for the same URL started after it. An entry lives only while
+// a request for its URL is in flight.
+const latest = new Map<string, number>();
+let issued = 0;
+
 // apiGet fetches url as JSON, conditionally when a body is held for it.
+//
+// Only the newest request for a URL writes what is held for it. Requests for
+// one URL can overlap, and the network does not keep their order: an older
+// one finishing last, with a 200 or a 304 about the tag it sent, would put
+// back a body the newer one had replaced. An aborted request is old by
+// definition. Either way its answer is returned to its caller and changes
+// nothing here.
 export async function apiGet<T>(url: string, init: { signal?: AbortSignal } = {}): Promise<T> {
+  const n = ++issued;
+  latest.set(url, n);
+  try {
+    return await conditionalGet<T>(url, init.signal, () => latest.get(url) === n && !init.signal?.aborted);
+  } finally {
+    if (latest.get(url) === n) latest.delete(url);
+  }
+}
+
+async function conditionalGet<T>(url: string, signal: AbortSignal | undefined, current: () => boolean): Promise<T> {
   const prior = held.get(url);
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (prior) headers['If-None-Match'] = prior.etag;
-  const r = await request(url, { headers, signal: init.signal });
+  const r = await request(url, { headers, signal });
   if (r.status === 304) {
     // A 304 is an answer about the tag sent. With none sent there is no body
     // it can mean, and treating it as success would render nothing as data.
     if (!prior) throw new ProblemError('internal', 304);
-    if (!init.signal?.aborted) hold(url, prior.etag, prior.body);
+    if (current()) hold(url, prior.etag, prior.body);
     return prior.body as T;
   }
   if (!r.ok) {
     const p = await toProblem(r);
     // An answer that withdraws access withdraws the held copy with it, so it
-    // is not shown again while the next request is in flight; unless the
-    // request was aborted, whose answer is older than what superseded it.
-    if (revokesAccess(p) && !init.signal?.aborted) held.delete(url);
+    // is not shown again while the next request is in flight.
+    if (revokesAccess(p) && current()) held.delete(url);
     throw p;
   }
   const body = await json<T>(r);
-  // An answer to an aborted request is late: whatever superseded it may
-  // already hold something newer for this URL, so it is returned, not held.
-  if (init.signal?.aborted) return body;
+  if (!current()) return body;
   const etag = r.headers.get('ETag');
   if (etag) hold(url, etag, body);
   else held.delete(url);
@@ -97,4 +117,5 @@ async function json<T>(r: Response): Promise<T> {
 // resetApiCache empties the held bodies, for tests.
 export function resetApiCache() {
   held.clear();
+  latest.clear();
 }

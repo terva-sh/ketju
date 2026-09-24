@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T13:05:45Z
+updated_at: 2026-09-24T13:12:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -218,6 +218,26 @@ Review 412 confirmed all three findings from review 411 resolved. It raised two 
 **A late answer that was not aborted:** such a page can still be refused by the thread cache for its shorter log length. Its held body is now dropped as well, so the obsolete page cannot show at once on a return to that URL.
 
 **Tests:** each case has its own test. Five mutants on these guards were all killed. There are 289 Vitest tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T13:12:16Z
+
+### Review 413, answered
+
+Review 413 confirmed both findings from review 412 resolved. It raised one high and one medium finding, both about requests that overlap and finish out of order.
+
+**High: an aborted or older `/me` refresh could restore an old viewer.** `refreshViewer` numbers its calls, and only the newest one, if it was not aborted, replaces the viewer. An older refresh still returns its answer to its own caller.
+
+**Medium: overlapping GETs for one URL.** An older 304 or 200 that finished last could put back a body a newer request had replaced. `apiGet` now numbers its requests per URL, and only the newest request for a URL that was not aborted writes what is held for it: a hold, a refresh on 304, or a drop on refusal. An entry lives only while a request for its URL is in flight, so the numbering does not grow.
+
+**Tests:** each ordering has a test, with requests answered by hand in reverse order:
+- an older 304 after a newer 200;
+- an older 200 after a newer 200;
+- an older refusal after a newer success;
+- a newer request succeeding after an older one failed;
+- two URLs kept apart;
+- the viewer taking only the newest refresh, and ignoring an aborted one.
+
+**Mutation:** all 8 mutants on the new guards are killed. There are 296 Vitest tests.
 
 ## Summary
 

@@ -12,10 +12,18 @@ export const viewer = signal<Me>(readBootstrap());
 // not stored, so it cannot disagree with the viewer it came from.
 export const notifications = computed(() => viewer.value.notifications);
 
+let refreshes = 0;
+
 // refreshViewer fetches /me and replaces the viewer with it. A failure leaves
 // the viewer as it was and is the caller's to report.
+//
+// Only the newest refresh replaces the viewer, and not if it was aborted:
+// refreshes can overlap (a sign-in, then a sign-out) and finish in any order,
+// and an older one landing last would put back a viewer that is no longer
+// signed in, notification count and all.
 export async function refreshViewer(signal?: AbortSignal): Promise<Me> {
+  const n = ++refreshes;
   const me = await apiGet<Me>('/api/v1/me', { signal });
-  viewer.value = me;
+  if (n === refreshes && !signal?.aborted) viewer.value = me;
   return me;
 }

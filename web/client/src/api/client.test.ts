@@ -212,6 +212,79 @@ describe('apiGet', () => {
     expect(peekGet('/u/0')).toBeUndefined();
   });
 
+  // Review 413: overlapping requests for one URL, answered out of order.
+  // Only the newest one writes what is held.
+  describe('overlapping requests for one URL', () => {
+    // manual answers each request when the test says, in any order.
+    function manual() {
+      const pending: ((r: Response) => void)[] = [];
+      vi.stubGlobal('fetch', () => new Promise<Response>((res) => pending.push(res)));
+      return pending;
+    }
+
+    it('does not let an older 304 put back the body a newer 200 replaced', async () => {
+      stub(json({ v: 1 }, { headers: { ETag: '"1"' } }));
+      await apiGet('/api/v1/x');
+      const answer = manual();
+      const older = apiGet('/api/v1/x');
+      const newer = apiGet('/api/v1/x');
+      await Promise.resolve();
+      answer[1](json({ v: 2 }, { headers: { ETag: '"2"' } }));
+      expect(await newer).toEqual({ v: 2 });
+      answer[0](new Response(null, { status: 304 }));
+      expect(await older).toEqual({ v: 1 }); // its own answer, to its caller
+      expect(peekGet('/api/v1/x')).toEqual({ v: 2 });
+    });
+
+    it('does not let an older 200 replace a newer one', async () => {
+      const answer = manual();
+      const older = apiGet('/api/v1/x');
+      const newer = apiGet('/api/v1/x');
+      await Promise.resolve();
+      answer[1](json({ v: 'new' }, { headers: { ETag: '"n"' } }));
+      await newer;
+      answer[0](json({ v: 'old' }, { headers: { ETag: '"o"' } }));
+      await older;
+      expect(peekGet('/api/v1/x')).toEqual({ v: 'new' });
+    });
+
+    it('does not let an older refusal drop what a newer answer held', async () => {
+      const answer = manual();
+      const older = apiGet('/api/v1/x');
+      const newer = apiGet('/api/v1/x');
+      await Promise.resolve();
+      answer[1](json({ v: 'new' }, { headers: { ETag: '"n"' } }));
+      await newer;
+      answer[0](new Response('{}', { status: 403 }));
+      await older.catch(() => {});
+      expect(peekGet('/api/v1/x')).toEqual({ v: 'new' });
+    });
+
+    it('lets the newer one write even when it finishes first and the older fails', async () => {
+      const answer = manual();
+      const older = apiGet('/api/v1/x');
+      const newer = apiGet('/api/v1/x');
+      await Promise.resolve();
+      answer[0](new Response('{}', { status: 500 }));
+      await older.catch(() => {});
+      answer[1](json({ v: 'new' }, { headers: { ETag: '"n"' } }));
+      await newer;
+      expect(peekGet('/api/v1/x')).toEqual({ v: 'new' });
+    });
+
+    it('keeps requests for different URLs apart', async () => {
+      const answer = manual();
+      const a = apiGet('/api/v1/a');
+      const b = apiGet('/api/v1/b');
+      await Promise.resolve();
+      answer[1](json({ v: 'b' }, { headers: { ETag: '"b"' } }));
+      answer[0](json({ v: 'a' }, { headers: { ETag: '"a"' } }));
+      await Promise.all([a, b]);
+      expect(peekGet('/api/v1/a')).toEqual({ v: 'a' });
+      expect(peekGet('/api/v1/b')).toEqual({ v: 'b' });
+    });
+  });
+
   it('calls a 200 whose body is not JSON internal', async () => {
     stub(new Response('<html>', { status: 200 }));
     const err = await apiGet('/api/v1/x').catch((e) => e);
