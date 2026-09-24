@@ -1,4 +1,10 @@
 # Deployment example for the terva-sh Forgejo instance. See docs/pr-reviews.md.
+#
+# The reviewer is the terva-action-code-review image, v0.3.0, pinned by digest.
+# It carries the action's source, prompt templates, locked dependencies and a
+# checksum-pinned Terva, so this job checks out nothing and installs nothing:
+# the job holding BOT_TOKEN and CPA_API_KEY runs no code from this repository
+# or from the pull request.
 name: terva-review
 on:
   issue_comment:
@@ -12,6 +18,10 @@ on:
         description: Stable request ID; reuse for delivery retries
         required: true
         default: ready-review
+      carry:
+        description: true copies the last review's verdict to the head when later commits touch only .tickets/; no model runs
+        required: false
+        default: 'false'
 concurrency:
   # Replace the maintainer list here AND in the job condition below.
   # Unlisted commenters never enter an authorized PR's serialized queue.
@@ -21,46 +31,42 @@ permissions:
   contents: read
 jobs:
   review:
-    # Parsing and authorization are repeated inside the action.
+    # Parsing and authorization are repeated inside the reviewer.
     if: ${{ github.event_name != 'issue_comment' || (contains(fromJSON('["warricksothr"]'), github.actor) && github.event.issue.pull_request && startsWith(github.event.comment.body, '/terva ')) }}
     runs-on: docker
     container:
-      image: container.local.sothr.com/library/golang:1.27-alpine
+      # Pinned by digest, because a tag can be re-pushed and an executable pin
+      # must not move. `podman pull <image>:v0.3.0` prints this digest; the
+      # action's docs/installation.md#adopting-a-new-pin says what each
+      # release changes.
+      image: container.local.sothr.com/terva-sh/terva-action-code-review@sha256:35199d57112ea0048fe713a49c6087094c5bcbbeaa74d53d6dca89d9a8ba9cd7
+      # The runner prepares its workspace inside the job container, and the
+      # image's own user is unprivileged.
+      options: --user root
     steps:
-      - name: Install runtime dependencies
-        run: |
-          apk add --no-cache git nodejs npm curl tar
-          node -e 'if (Number(process.versions.node.split(".")[0]) < 24) process.exit(1)'
-      - name: Checkout pinned reviewer only
-        uses: Actions-Mirrors/forgejo-actions-checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
-        with:
-          repository: terva-sh/terva-action-code-review
-          ref: 7090fc19699fda481d9138f0dcf73f80ee8cab06
-          token: ${{ secrets.BOT_TOKEN }}
-          path: .terva-review-action
-          persist-credentials: false
-      - name: Install checksum-pinned Terva
-        run: |
-          set -eu
-          curl --fail --silent --show-error --location --output /tmp/terva.tar.gz https://git.local.sothr.com/terva-sh/terva/releases/download/v0.138.2/terva_0.138.2_linux_amd64.tar.gz
-          echo '679ae4018ada55c1f2c298656552fe460bfcdcd79edee12a0ed0e145776eb804  /tmp/terva.tar.gz' | sha256sum -c -
-          tar -xzf /tmp/terva.tar.gz -C /usr/local/bin terva
       - name: Review PR
-        uses: ./.terva-review-action
-        with:
-          repository: ${{ github.repository }}
-          pr-number: ${{ inputs.pr || github.event.issue.number }}
+        env:
+          REVIEW_SERVER: ${{ github.server_url }}
+          REVIEW_REPOSITORY: ${{ github.repository }}
+          REVIEW_PR: ${{ inputs.pr || github.event.issue.number }}
           # Manual requests only; command identity comes from comment ID/body.
-          request-id: ${{ inputs.request-id || 'automatic' }}
-          forgejo-token: ${{ secrets.BOT_TOKEN }}
-          provider-api-key: ${{ secrets.CPA_API_KEY }}
+          REVIEW_REQUEST_ID: ${{ inputs.request-id || 'automatic' }}
+          REVIEW_FORGEJO_TOKEN: ${{ secrets.BOT_TOKEN }}
+          REVIEW_PROVIDER_KEY: ${{ secrets.CPA_API_KEY }}
           # No defaults: terva-sh decides these once, as organization Actions
           # variables. An unset one fails the run naming it (missing_provider,
           # missing_model, missing_thinking, missing_provider_url).
-          provider: ${{ vars.TERVA_REVIEW_PROVIDER }}
-          base-url: ${{ vars.TERVA_REVIEW_BASE_URL }}
-          model: ${{ vars.TERVA_REVIEW_MODEL }}
-          thinking: ${{ vars.TERVA_REVIEW_THINKING }}
-          profile: code
-          publication-policy: summary
-          fail-severity: medium
+          REVIEW_PROVIDER: ${{ vars.TERVA_REVIEW_PROVIDER }}
+          REVIEW_BASE_URL: ${{ vars.TERVA_REVIEW_BASE_URL }}
+          REVIEW_MODEL: ${{ vars.TERVA_REVIEW_MODEL }}
+          REVIEW_THINKING: ${{ vars.TERVA_REVIEW_THINKING }}
+          REVIEW_PROFILE: code
+          REVIEW_PUBLICATION_POLICY: summary
+          REVIEW_FAIL_SEVERITY: medium
+          # A dispatch with carry: true writes the newest review's verdict on
+          # the head when every commit since changed only these paths or the
+          # excluded ones, and runs no model. Anything else refuses, and the
+          # head's status names the path that needs a real review.
+          REVIEW_CARRY: ${{ inputs.carry }}
+          REVIEW_CARRY_PATHS: .tickets/**
+        run: node /action/src/main.mjs
