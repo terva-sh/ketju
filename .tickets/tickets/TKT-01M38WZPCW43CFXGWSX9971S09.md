@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T14:03:57Z
+updated_at: 2026-09-24T14:32:31Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -242,3 +242,7 @@ Merged PR #62, TKT-01M29CA99R (Implement GET /me), as fc7a709. CI run 240 was gr
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:03:57Z
 
 Merged PR #63, TKT-01M29CEE5H (Build the fetch layer and signals state), as 6cf16d8, WITHOUT a clean review, by the user's explicit decision. CI run 257 was green; its step log shows 312 client tests and the Go web packages under -race. Reviews 411-420 found a run of ordering and access-revocation cases in the caches (all fixed through 417, each with tests and mutants); the user chose to fix 417's two mediums, re-review once, and merge past any further medium ordering edges with a ticket. Review 420 raised one such medium, filed as draft TKT-01M39VNEC1 (Stop returning a thread page the cache refused to its caller). Branch deleted. Next: TKT-01M29CEE6V (Build the thread page with pager and unread divider).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:32:31Z
+
+Merged PR #64, TKT-01M29CEE6V (Build the thread page with pager and unread divider), as f2deccb. CI run 263 was green; its step log shows 371 client tests and the Go web packages under -race. Review 421 found a medium (the history route rendered the thread page) and a low (unread tombstones lacked the edge); both fixed in f2deccb, and the re-review was clean on that head. AC4 (committed Playwright screenshots vs the mockups) is unticked and carried by draft TKT-01M39WBN4Q, which waits on CGBY1, CEE4K and CCC0F; the history screen is draft TKT-01M39WZY8C. Branch deleted. CGBY1 still waits on C7ZZ9, CCBYX and CEE79; next by docs/12's order (urgent, then earliest wave): TKT-01M29CCC0F (Build the CSS system, themes, and breakpoints), W0.

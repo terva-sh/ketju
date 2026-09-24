@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCC0FVTZ2YXNXB2EK4R4Q
 title: Build the CSS system, themes, and breakpoints
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -22,15 +22,22 @@ references:
     path: docs/06-thread-views.md
   - ref: design:mockups
     path: docs/mockups/generate.py
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/ccc0f-css-system
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: f2deccb2eb8d9d7eba546197062d4876940bd287
+  session: null
+  claimed_at: 2026-09-24T14:32:31Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T14:32:31Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
