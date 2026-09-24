@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-24T16:43:51Z
-updated_at: 2026-09-24T16:43:52Z
+updated_at: 2026-09-24T16:47:54Z
 created_by:
   id: agent:claude-code/multi-model-20260923
   name: ""
@@ -44,4 +44,10 @@ Move .forgejo/workflows/terva-review.yml from the terva-action-code-review compo
 
 - [x] The review workflow runs the v0.3.0 image by digest, with carry over .tickets/
 - [x] The review doc describes the image, the status as the gate, and carry
-- [ ] The PR is reviewed from its own branch
+- [x] The PR is reviewed from its own branch
+
+## Notes
+
+**agent:claude-code/multi-model-20260923** at 2026-09-24T16:47:54Z
+
+PR #68. Review request review-v0.3.0 dispatched from branch ci/review-v0.3.0, so the v0.3.0 image reviewed its own installation: run f1abfb61-5692-4af9-b78e-4c273f9eccf9 on head c413158ed5d4eba72c7876303183def22573ffe7 base 60f582f65b71f67c438479286445aeb6869a0996, terva-review/code success, no findings at the threshold. This note's commit is carried over with --input carry=true.
