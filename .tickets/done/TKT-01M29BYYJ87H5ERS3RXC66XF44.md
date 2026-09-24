@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:data-model-projections
     path: docs/04-data-model.md
+  - ref: pr:53
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T08:23:37Z
+updated_at: 2026-09-24T08:24:39Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
