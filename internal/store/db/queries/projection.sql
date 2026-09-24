@@ -23,6 +23,9 @@ DELETE FROM mentions;
 -- name: ClearProjectionState :exec
 DELETE FROM projection_state;
 
+-- name: ClearForumThreadCounts :exec
+DELETE FROM forum_thread_counts;
+
 -- The projection writer's statements (TKT-01M29C2WW5). Every one sets an
 -- absolute value, never an increment, so replaying a range the database has
 -- already seen converges on the same rows.

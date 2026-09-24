@@ -44,11 +44,14 @@ WHERE p.thread_id = sqlc.arg('thread_id')
 -- and the lists agree.
 --
 -- The shape is for cost, because the shell runs this on every page load.
--- Only one part reads the whole site: counting, per forum, the threads with
--- a post after the mark, all of which are unread to someone who never opened
--- them. Everything that depends on the viewer starts from the viewer's own
--- rows (read positions, watches, posts) and subtracts from that count, so it
--- grows with what they have touched rather than with the site.
+-- It starts from, per forum, the threads with a post after the mark, all of
+-- which are unread to someone who never opened them. With no mark that is
+-- forum_thread_counts, which triggers keep; with one it is a count per forum
+-- over threads_forum_active, which reads only the index entries after the
+-- mark (migration 0007). Neither reads every thread. Everything that depends
+-- on the viewer starts from the viewer's own rows (read positions, watches,
+-- posts) and subtracts from that count, so it grows with what they have
+-- touched rather than with the site.
 --
 -- There is always at least one row: with no unread threads, forum_id is null.
 -- name: MeCounts :many
@@ -56,10 +59,12 @@ WITH me AS (
 	SELECT coalesce(mark_all_read_at, -1) AS mark FROM users WHERE id = sqlc.arg(user_id)
 ),
 active AS (
-	SELECT t.forum_id, count(*) AS threads
-	FROM threads AS t, me
-	WHERE t.last_post_at > me.mark AND t.last_post_ordinal > 0
-	GROUP BY t.forum_id
+	SELECT c.forum_id,
+	       CASE WHEN me.mark < 0 THEN c.threads
+	            ELSE (SELECT count(*) FROM threads AS t INDEXED BY threads_forum_active
+	                  WHERE t.forum_id = c.forum_id AND t.last_post_at > me.mark AND t.last_post_ordinal > 0)
+	       END AS threads
+	FROM forum_thread_counts AS c, me
 ),
 mine AS (
 	SELECT DISTINCT thread_id FROM post_meta WHERE author_id = sqlc.arg(user_id)

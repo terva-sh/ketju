@@ -92,13 +92,6 @@ type Evaluator struct {
 
 	mu      sync.Mutex
 	entries map[cacheKey]*entry
-
-	// The ids of the implicit groups, found by slug on first use. A failed
-	// lookup is retried on the next check rather than remembered.
-	implicitMu sync.Mutex
-	implicitOK bool
-	everyoneID int64
-	membersID  int64
 }
 
 // New returns an Evaluator over d.
@@ -349,31 +342,26 @@ func (e *Evaluator) evaluate(ctx context.Context, v domain.Viewer, forumID int64
 }
 
 // evaluateMany evaluates several forums for v at once, in one statement
-// however many forums are asked about: ForumAccessRows returns each forum's
-// visibility with every permission row a group of v's holds there or
+// however many forums are asked about, and with nothing to look up first:
+// ForumAccessRows finds the implicit groups by slug itself and returns each
+// forum's visibility with every permission row a group of v's holds there or
 // globally, and the rules below are applied to those rows. A forum that does
 // not exist comes back hidden and missing.
 //
 // evaluate is this for one forum, so the rules exist once.
 func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs []int64) (map[int64]access, error) {
-	if err := e.loadImplicit(ctx); err != nil {
-		return nil, err
-	}
 	out := make(map[int64]access, len(forumIDs))
 	for _, id := range forumIDs {
 		out[id] = access{hidden: true, missing: true}
 	}
-	implicit := []int64{e.everyoneID}
-	var userID int64
+	params := dbq.ForumAccessRowsParams{EveryoneSlug: domain.GroupEveryone, ForumIds: forumIDs}
 	if v.Member() {
-		implicit = append(implicit, e.membersID)
-		userID = v.UserID
+		params.UserID, params.MembersSlug = v.UserID, domain.GroupMembers
 	}
 	var rows []dbq.ForumAccessRowsRow
 	if err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
 		var err error
-		rows, err = q.ForumAccessRows(ctx, dbq.ForumAccessRowsParams{ImplicitGroups: implicit, UserID: userID,
-			ForumIds: forumIDs})
+		rows, err = q.ForumAccessRows(ctx, params)
 		return err
 	}); err != nil {
 		return nil, err
@@ -384,6 +372,8 @@ func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs 
 		// local[group] and global[group]: what each group of v's is granted
 		// in this forum, and site-wide.
 		local, global map[int64][]domain.Permission
+		// everyone is the everyone group's id, when it holds a row here.
+		everyone int64
 	}
 	forums := map[int64]*forum{}
 	var order []int64
@@ -396,6 +386,9 @@ func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs 
 		}
 		if !r.GroupID.Valid {
 			continue
+		}
+		if r.GroupSlug.String == domain.GroupEveryone {
+			f.everyone = r.GroupID.Int64
 		}
 		if r.GrantForumID.Valid {
 			f.local[r.GroupID.Int64] = append(f.local[r.GroupID.Int64], domain.Permission(r.Permission.String))
@@ -429,7 +422,7 @@ func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs 
 			groups[g] = true
 		}
 		for g := range groups {
-			if noEveryone && g == e.everyoneID {
+			if noEveryone && g == f.everyone {
 				continue
 			}
 			granted, ok := f.local[g]
@@ -447,29 +440,6 @@ func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs 
 		out[id] = a
 	}
 	return out, nil
-}
-
-// loadImplicit finds the ids of the implicit groups by slug. The seed gives
-// them fixed ids, but looking them up keeps that a fact about the migration
-// rather than a constant repeated here.
-func (e *Evaluator) loadImplicit(ctx context.Context) error {
-	e.implicitMu.Lock()
-	defer e.implicitMu.Unlock()
-	if e.implicitOK {
-		return nil
-	}
-	return e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
-		ev, err := q.GetGroupBySlug(ctx, domain.GroupEveryone)
-		if err != nil {
-			return fmt.Errorf("perm: finding the %s group: %w", domain.GroupEveryone, err)
-		}
-		mem, err := q.GetGroupBySlug(ctx, domain.GroupMembers)
-		if err != nil {
-			return fmt.Errorf("perm: finding the %s group: %w", domain.GroupMembers, err)
-		}
-		e.everyoneID, e.membersID, e.implicitOK = ev.ID, mem.ID, true
-		return nil
-	})
 }
 
 func without(s []int64, x int64) []int64 {

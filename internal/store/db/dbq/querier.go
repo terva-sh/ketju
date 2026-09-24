@@ -29,6 +29,7 @@ type Querier interface {
 	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
 	// The one lookup the serve path may use: a quarantined blob is not found.
 	BlobForServing(ctx context.Context, hash string) (Blob, error)
+	ClearForumThreadCounts(ctx context.Context) error
 	ClearMentions(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
 	ClearProjectionState(ctx context.Context) error
@@ -59,14 +60,16 @@ type Querier interface {
 	DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64, error)
 	// ForumAccessRows is everything perm needs to evaluate a set of forums for
 	// one viewer, in one statement: each forum's visibility, with every
-	// permission row, local to it or global, held by a group the viewer is in.
-	// The viewer's groups are the implicit ones passed in (everyone, and members
-	// for a member) and their stored memberships; user_id 0 has none. A forum
-	// with no such rows still comes back once, with a null group. perm applies
-	// the rules to these rows in Go, as it always has.
+	// permission row, local to it or global, held by a group the viewer is in,
+	// and that group's slug. The viewer's groups are the implicit ones, found
+	// here by slug (everyone always; members when members_slug is not empty), and
+	// their stored memberships; user_id 0 has none. A forum with no such rows
+	// still comes back once, with a null group. perm applies the rules to these
+	// rows in Go, as it always has.
 	//
-	// user_id comes before both slices on purpose: sqlc numbers a named argument
-	// (?1), and a number after an expanded slice would point at the wrong value.
+	// The named arguments come before the slice on purpose: sqlc numbers a named
+	// argument (?1), and a number after an expanded slice would point at the
+	// wrong value.
 	ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams) ([]ForumAccessRowsRow, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
@@ -115,11 +118,14 @@ type Querier interface {
 	// and the lists agree.
 	//
 	// The shape is for cost, because the shell runs this on every page load.
-	// Only one part reads the whole site: counting, per forum, the threads with
-	// a post after the mark, all of which are unread to someone who never opened
-	// them. Everything that depends on the viewer starts from the viewer's own
-	// rows (read positions, watches, posts) and subtracts from that count, so it
-	// grows with what they have touched rather than with the site.
+	// It starts from, per forum, the threads with a post after the mark, all of
+	// which are unread to someone who never opened them. With no mark that is
+	// forum_thread_counts, which triggers keep; with one it is a count per forum
+	// over threads_forum_active, which reads only the index entries after the
+	// mark (migration 0007). Neither reads every thread. Everything that depends
+	// on the viewer starts from the viewer's own rows (read positions, watches,
+	// posts) and subtracts from that count, so it grows with what they have
+	// touched rather than with the site.
 	//
 	// There is always at least one row: with no unread threads, forum_id is null.
 	MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error)

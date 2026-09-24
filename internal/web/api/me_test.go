@@ -250,10 +250,8 @@ func TestMeShapes(t *testing.T) {
 // same.
 func TestMeBudget(t *testing.T) {
 	w := newMeWorld(t)
+	// The first request this process serves, from a brand-new perm cache.
 	alice := sessiontest.SignIn(t, w.db, w.id["alice"], w.now)
-	// A server that has answered anyone has found perm's implicit groups,
-	// once per process. Alice's cache is still cold after this.
-	w.get("/api/v1/me", sessiontest.SignIn(t, w.db, w.id["bob"], w.now))
 	for _, c := range []struct {
 		name, path, token string
 		want              []string // statement names, in order

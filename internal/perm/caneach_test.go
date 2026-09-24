@@ -15,16 +15,22 @@ import (
 )
 
 // referenceEvaluate is evaluate as it was before the batch statement
-// (TKT-01M29CA99R): one forum at a time, GetForum, GroupsForUser and
-// PermissionRows. It is kept here, unused by the package, so the batch can be
+// (TKT-01M29CA99R): one forum at a time, the implicit groups by slug,
+// GetForum, GroupsForUser and PermissionRows. It is kept here, unused by the package, so the batch can be
 // held to it over random worlds; a test comparing CanEach only with Check
 // would compare evaluateMany with itself.
 func referenceEvaluate(ctx context.Context, e *Evaluator, v domain.Viewer, forumID int64) (access, error) {
-	if err := e.loadImplicit(ctx); err != nil {
-		return access{}, err
-	}
 	a := access{perms: make(map[domain.Permission]bool)}
 	err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
+		ev, err := q.GetGroupBySlug(ctx, domain.GroupEveryone)
+		if err != nil {
+			return err
+		}
+		mem, err := q.GetGroupBySlug(ctx, domain.GroupMembers)
+		if err != nil {
+			return err
+		}
+		everyoneID, membersID := ev.ID, mem.ID
 		forum, err := q.GetForum(ctx, forumID)
 		if errors.Is(err, sql.ErrNoRows) {
 			a.hidden, a.missing = true, true
@@ -33,9 +39,9 @@ func referenceEvaluate(ctx context.Context, e *Evaluator, v domain.Viewer, forum
 		if err != nil {
 			return err
 		}
-		groups := []int64{e.everyoneID}
+		groups := []int64{everyoneID}
 		if v.Member() {
-			groups = append(groups, e.membersID)
+			groups = append(groups, membersID)
 			stored, err := q.GroupsForUser(ctx, v.UserID)
 			if err != nil {
 				return err
@@ -48,7 +54,7 @@ func referenceEvaluate(ctx context.Context, e *Evaluator, v domain.Viewer, forum
 		switch forum.Visibility {
 		case domain.VisibilityPublic:
 		case domain.VisibilityMembers:
-			groups = without(groups, e.everyoneID)
+			groups = without(groups, everyoneID)
 		case domain.VisibilityRestricted:
 			restricted = true
 		}
@@ -205,10 +211,8 @@ func TestCanEachColdCostIsFixed(t *testing.T) {
 		counting = false
 		return len(ran)
 	}
-	New(f.db).Can(t.Context(), v, forums[0], domain.PermRead) // the implicit groups, found once per Evaluator
+	// Brand-new Evaluators: nothing is looked up before the one statement.
 	one, many := New(f.db), New(f.db)
-	one.loadImplicit(t.Context())
-	many.loadImplicit(t.Context())
 	if n1, n20 := count(one, forums[:1]), count(many, forums); n1 != 1 || n20 != 1 {
 		t.Fatalf("cold CanEach ran %d statements for one forum and %d for twenty; want 1 each", n1, n20)
 	}

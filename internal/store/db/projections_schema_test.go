@@ -122,10 +122,18 @@ func TestProjectionsHaveNoForeignKeys(t *testing.T) {
 }
 
 // TestClearProjectionsEmptiesEveryTable: ClearProjections empties every table
-// in ProjectionTables and touches nothing authoritative.
+// in ProjectionTables and touches nothing authoritative. forum_thread_counts
+// also gets a row no thread accounts for, as a drift would leave, which
+// ClearThreads' triggers do not remove and reindex must.
 func TestClearProjectionsEmptiesEveryTable(t *testing.T) {
 	d, _ := openTest(t)
 	insertProjectionRows(t, d, 1)
+	if err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		_, err := tx.ExecContext(t.Context(), `INSERT INTO forum_thread_counts (forum_id, threads) VALUES (99, 3)`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
 	before := countRows(t, d, "groups")
 	for _, table := range ProjectionTables {
 		if countRows(t, d, table) == 0 {

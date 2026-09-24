@@ -50,7 +50,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 
 | Method & path | Purpose |
 |---------------|---------|
-| `GET  /me` | viewer: user, role, unread counts, pending notifications count, settings. An approval-mode applicant (a pre-user session) gets `user: null` plus `pre_user: {provider}`; a null user stays the only signed-out signal. Two statements for a member: the session lookup and one count query |
+| `GET  /me` | viewer: user, role, unread counts, pending notifications count, settings. An approval-mode applicant (a pre-user session) gets `user: null` plus `pre_user: {provider}`; a null user stays the only signed-out signal. Two statements for a member: the session lookup and one count query, plus one batched forum-access read while the permission cache is cold. Neither count reads every thread (docs/04 `forum_thread_counts`) |
 | `GET  /forums` | tree of forums with per-forum unread counts |
 | `GET  /forums/{slug}/threads?cursor=&sort=` | thread list rows |
 | `POST /forums/{slug}/threads` | create thread `{title, source, tags}` → thread + first post |

@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T07:06:22Z
-updated_at: 2026-09-24T07:06:35Z
+updated_at: 2026-09-24T12:22:19Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -46,3 +46,9 @@ The test spawns the first append and the 16 queued appends together, then calls 
 Start the first append alone, call `synctest.Wait()` so it is durably blocked on the gate inside `Sync`, then spawn the 16 and call `synctest.Wait()` again before closing the gate. The count of 2 then holds by construction. Verify with the `-count=200 -cpu 1,2,12` command above, which should report no failures.
 
 This was found during TKT-01M29BW9Q1 and left out of that PR, because a run PR stays inside its ticket's scope (docs/12). It can fail CI on any PR at about 1–2%.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:22:19Z
+
+Seen again in CI run 236 (PR #62, head 9895ef9, 2026-09-24): TestQueuedAppendsShareOneFsync failed under -race in internal/store/threadlog. The PR changed nothing in threadlog; the next push reran CI.

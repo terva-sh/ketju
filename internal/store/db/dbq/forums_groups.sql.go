@@ -130,20 +130,24 @@ func (q *Queries) DeleteIdPMemberships(ctx context.Context, userID int64) error 
 }
 
 const forumAccessRows = `-- name: ForumAccessRows :many
-SELECT f.id AS forum_id, f.visibility, p.forum_id AS grant_forum_id, p.group_id, p.permission
+SELECT f.id AS forum_id, f.visibility, p.forum_id AS grant_forum_id, p.group_id, g.slug AS group_slug,
+       p.permission
 FROM forums AS f
 LEFT JOIN permissions AS p
 	ON (p.forum_id = f.id OR p.forum_id IS NULL)
 	AND (p.group_id IN (SELECT gm.group_id FROM group_members AS gm WHERE gm.user_id = ?1)
-	     OR p.group_id IN (/*SLICE:implicit_groups*/?))
+	     OR p.group_id IN (SELECT ig.id FROM groups AS ig
+	                       WHERE ig.slug = ?2 OR ig.slug = ?3))
+LEFT JOIN groups AS g ON g.id = p.group_id
 WHERE f.id IN (/*SLICE:forum_ids*/?)
 ORDER BY f.id, p.forum_id IS NULL, p.group_id, p.permission
 `
 
 type ForumAccessRowsParams struct {
-	UserID         int64
-	ImplicitGroups []int64
-	ForumIds       []int64
+	UserID       int64
+	EveryoneSlug string
+	MembersSlug  string
+	ForumIds     []int64
 }
 
 type ForumAccessRowsRow struct {
@@ -151,31 +155,28 @@ type ForumAccessRowsRow struct {
 	Visibility   string
 	GrantForumID sql.NullInt64
 	GroupID      sql.NullInt64
+	GroupSlug    sql.NullString
 	Permission   sql.NullString
 }
 
 // ForumAccessRows is everything perm needs to evaluate a set of forums for
 // one viewer, in one statement: each forum's visibility, with every
-// permission row, local to it or global, held by a group the viewer is in.
-// The viewer's groups are the implicit ones passed in (everyone, and members
-// for a member) and their stored memberships; user_id 0 has none. A forum
-// with no such rows still comes back once, with a null group. perm applies
-// the rules to these rows in Go, as it always has.
+// permission row, local to it or global, held by a group the viewer is in,
+// and that group's slug. The viewer's groups are the implicit ones, found
+// here by slug (everyone always; members when members_slug is not empty), and
+// their stored memberships; user_id 0 has none. A forum with no such rows
+// still comes back once, with a null group. perm applies the rules to these
+// rows in Go, as it always has.
 //
-// user_id comes before both slices on purpose: sqlc numbers a named argument
-// (?1), and a number after an expanded slice would point at the wrong value.
+// The named arguments come before the slice on purpose: sqlc numbers a named
+// argument (?1), and a number after an expanded slice would point at the
+// wrong value.
 func (q *Queries) ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams) ([]ForumAccessRowsRow, error) {
 	query := forumAccessRows
 	var queryParams []interface{}
 	queryParams = append(queryParams, arg.UserID)
-	if len(arg.ImplicitGroups) > 0 {
-		for _, v := range arg.ImplicitGroups {
-			queryParams = append(queryParams, v)
-		}
-		query = strings.Replace(query, "/*SLICE:implicit_groups*/?", strings.Repeat(",?", len(arg.ImplicitGroups))[1:], 1)
-	} else {
-		query = strings.Replace(query, "/*SLICE:implicit_groups*/?", "NULL", 1)
-	}
+	queryParams = append(queryParams, arg.EveryoneSlug)
+	queryParams = append(queryParams, arg.MembersSlug)
 	if len(arg.ForumIds) > 0 {
 		for _, v := range arg.ForumIds {
 			queryParams = append(queryParams, v)
@@ -197,6 +198,7 @@ func (q *Queries) ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams
 			&i.Visibility,
 			&i.GrantForumID,
 			&i.GroupID,
+			&i.GroupSlug,
 			&i.Permission,
 		); err != nil {
 			return nil, err

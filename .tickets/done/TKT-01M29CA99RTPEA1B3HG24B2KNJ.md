@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T12:19:02Z
+updated_at: 2026-09-24T12:31:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -196,6 +196,42 @@ All killed except those stated as equivalent:
 - **perm (13):** the members-forum exclusion of everyone, the local-over-global rule, restricted with no fallback, hidden, the members group and the user id, caching a missing forum, the per-permission answer, global rows, and the membership filter.
 
 The full CI set passes locally: gofmt, build, vet, sqlc stable, the client build and tests, `go test -race ./...`, and `git ticket check --strict`.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:31:30Z
+
+### Review 409, answered
+
+**Finding 1: a cold Evaluator paid an extra statement to find the implicit groups.** `loadImplicit` is gone. ForumAccessRows now matches the everyone and members groups by slug inside the same statement, and returns each grant's group slug, so `evaluateMany` can tell an everyone grant apart without knowing the group ids up front. A cold /me is now LookupSession, MeCounts, ForumAccessRows, and me_test measures the very first request rather than warming up first. `TestCanEachColdCostIsFixed` uses brand-new Evaluators, and the reference evaluator looks the groups up by slug on its own.
+
+**Finding 2: MeCounts counted active threads by scanning every thread.** Migration 0007 adds two things.
+- `forum_thread_counts`: per forum, the threads that have a post. Triggers on `threads` maintain it (insert; delete; update of forum_id or last_post_ordinal). It is a projection table: it is in `ProjectionTables`, carries the marker, and ClearProjections clears it by name.
+- `threads_forum_active (forum_id, last_post_at, last_post_ordinal)`.
+
+MeCounts' `active` now starts from the counter. A reader with no mark takes the stored count. A reader with a mark gets a correlated count per forum over the index, `INDEXED BY`, so dropping the index is an error rather than a quiet scan.
+
+Alternatives considered:
+- A covering index alone: still a full index scan for a reader with no mark, who is the common case.
+- A count the projection writer maintains: every path that writes threads (the writer, catch-up, reindex) would have to know about it. Triggers cover them all.
+- A per-user unread counter table: kept for later if the viewer-side part ever dominates. The benchmark says it does not yet.
+
+**Tests:**
+- `TestForumThreadCountsFollowThreads`: 40 seeds × 200 random insert, delete, move, post, move-and-post and ClearThreads steps, compared after every step with a count from threads.
+- `TestForumThreadCountsBackfill`: migrates to 0006, adds threads, then runs 0007.
+- `TestMeCountsScansNoTable`: EXPLAIN QUERY PLAN of the source query. It allows SCAN only of its own CTEs and the counter.
+- The clear test plants a drifted counter row.
+
+**Mutants:** 19 mutants over the triggers, the backfill, the `active` CTE, INDEXED BY and the clear call. All are killed.
+
+**Benchmark** (10,000 threads, 20 forums, ~100,000 posts):
+
+| Reader | Before | After |
+|---|---|---|
+| Heavy (mark set, 2,000 read positions) | 5.8 ms | 4.5 ms |
+| Light (no mark) | 4.2 ms | 0.33 ms |
+
+The heavy reader's remaining cost is their own rows.
+
+docs/04 documents the table and the index, and the docs/07 /me row names the cold-cache statement.
 
 ## Summary
 

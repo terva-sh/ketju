@@ -10,6 +10,15 @@ import (
 	"database/sql"
 )
 
+const clearForumThreadCounts = `-- name: ClearForumThreadCounts :exec
+DELETE FROM forum_thread_counts
+`
+
+func (q *Queries) ClearForumThreadCounts(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearForumThreadCounts)
+	return err
+}
+
 const clearMentions = `-- name: ClearMentions :exec
 DELETE FROM mentions
 `

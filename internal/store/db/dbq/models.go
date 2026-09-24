@@ -71,6 +71,11 @@ type Forum struct {
 	UpdatedAt   int64
 }
 
+type ForumThreadCount struct {
+	ForumID int64
+	Threads int64
+}
+
 type Group struct {
 	ID          int64
 	Name        string
