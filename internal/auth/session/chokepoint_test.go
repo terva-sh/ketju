@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"slices"
@@ -29,9 +30,27 @@ var doorCallers = []string{
 
 const sessiontestImport = "github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 
+// theQuery is the one statement that may insert into sessions: the query
+// named CreateSession in this file, once (review 499).
+const theQuery = "internal/store/db/queries/identity.sql"
+
+// insertCallers are the functions allowed to call insert, which writes
+// whatever its decide function returns and checks nothing itself: a third
+// caller in this package would be a door with no status check that adds no
+// CreateSession caller (review 499).
+var insertCallers = []string{
+	"internal/auth/session/issue.go:IssuePreUser",
+	"internal/auth/session/issue.go:IssueUser",
+}
+
+// table matches the sessions table however SQLite lets it be spelled:
+// quoted with double quotes, backticks or brackets, and qualified by a
+// schema such as main or temp (review 499).
+const table = `(?:["` + "`" + `\[]?\w+["` + "`" + `\]]?\s*\.\s*)?["` + "`" + `\[]?sessions["` + "`" + `\]]?`
+
 var (
-	sqlInsert   = regexp.MustCompile(`(?is)\b(insert|replace)\b[^;]*?\binto\s+["` + "`" + `]?sessions\b`)
-	sqlUpdate   = regexp.MustCompile(`(?is)\bupdate\s+(or\s+\w+\s+)?["` + "`" + `]?sessions["` + "`" + `]?\s+set\s+(.*?)(\bwhere\b|;|$)`)
+	sqlInsert   = regexp.MustCompile(`(?is)\b(insert|replace)\b[^;]*?\binto\s+` + table + `(?:\W|$)`)
+	sqlUpdate   = regexp.MustCompile(`(?is)\bupdate\s+(or\s+\w+\s+)?` + table + `\s+set\s+(.*?)(\bwhere\b|;|$)`)
 	sqlComment  = regexp.MustCompile(`--[^\n]*`)
 	sqlcName    = regexp.MustCompile(`(?m)^--\s*name:\s*(\w+)`)
 	updatableOK = []string{"last_used_at"}
@@ -41,7 +60,7 @@ var (
 // door, and the callers of CreateSession it found, as root-relative
 // "file:func". Test files are exempt: a schema test may write a row
 // directly, and only a running server can let anyone in.
-func scan(t *testing.T, root string) (doors []string, callers []string) {
+func scan(t *testing.T, root string) (doors, callers, inserters []string) {
 	t.Helper()
 	fset := token.NewFileSet()
 	err := filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
@@ -68,8 +87,8 @@ func scan(t *testing.T, root string) (doors []string, callers []string) {
 			if err != nil {
 				return err
 			}
-			d, c := scanGo(rel, f)
-			doors, callers = append(doors, d...), append(callers, c...)
+			d, c, i := scanGo(rel, f)
+			doors, callers, inserters = append(doors, d...), append(callers, c...), append(inserters, i...)
 		case strings.HasSuffix(path, ".sql"):
 			b, err := os.ReadFile(path)
 			if err != nil {
@@ -82,10 +101,11 @@ func scan(t *testing.T, root string) (doors []string, callers []string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return doors, callers
+	return doors, callers, inserters
 }
 
-func scanGo(rel string, f *ast.File) (doors, callers []string) {
+func scanGo(rel string, f *ast.File) (doors, callers, inserters []string) {
+	inSession := path.Dir(rel) == "internal/auth/session"
 	for _, imp := range f.Imports {
 		if p, _ := strconv.Unquote(imp.Path.Value); p == sessiontestImport {
 			doors = append(doors, rel+": imports sessiontest outside a test")
@@ -101,6 +121,9 @@ func scanGo(rel string, f *ast.File) (doors, callers []string) {
 			case *ast.SelectorExpr:
 				if n.Sel.Name == "CreateSession" {
 					callers = append(callers, rel+":"+fn)
+				}
+				if inSession && n.Sel.Name == "insert" {
+					inserters = append(inserters, rel+":"+fn)
 				}
 			case *ast.BasicLit:
 				if n.Kind != token.STRING {
@@ -120,7 +143,7 @@ func scanGo(rel string, f *ast.File) (doors, callers []string) {
 			return true
 		})
 	}
-	return doors, callers
+	return doors, callers, inserters
 }
 
 // scanSQL checks a query or migration file. The one insert is the query
@@ -145,9 +168,17 @@ func scanSQL(rel, src string) (doors []string) {
 		}
 		stmts = append(stmts, stmt{src[m[2]:m[3]], src[m[1]:end]})
 	}
+	door := rel == theQuery
 	for _, s := range stmts {
 		body := sqlComment.ReplaceAllString(s.body, "")
-		if sqlInsert.MatchString(body) && !(s.name == "CreateSession" && strings.Contains(rel, "queries/")) {
+		// The first CreateSession in the door's file is the door, and uses
+		// the exemption up whether or not it passes: it may hold one insert,
+		// and no later statement may borrow its name.
+		exempt := door && s.name == "CreateSession"
+		if exempt {
+			door = false
+		}
+		if n := len(sqlInsert.FindAllString(body, -1)); n > 0 && !(exempt && n == 1) {
 			doors = append(doors, rel+":"+s.name+": inserts into sessions")
 		}
 		if bad := badUpdates(body); len(bad) > 0 {
@@ -185,7 +216,7 @@ func moduleRoot(t *testing.T) string {
 }
 
 func TestOneDoorIntoSessions(t *testing.T) {
-	doors, callers := scan(t, moduleRoot(t))
+	doors, callers, inserters := scan(t, moduleRoot(t))
 	for _, d := range doors {
 		t.Errorf("a second way into the sessions table: %s. Sessions are created only by "+
 			"IssueUser and IssuePreUser in internal/auth/session/issue.go (TKT-01M29C7ZZR).", d)
@@ -195,9 +226,14 @@ func TestOneDoorIntoSessions(t *testing.T) {
 		t.Errorf("CreateSession is called from %v, want exactly %v. A new caller is a new door: "+
 			"create sessions through IssueUser or IssuePreUser.", callers, doorCallers)
 	}
+	slices.Sort(inserters)
+	if !slices.Equal(inserters, insertCallers) {
+		t.Errorf("insert is called from %v, want exactly %v. insert checks nothing itself: "+
+			"a session is created through IssueUser or IssuePreUser, which decide who may have one.", inserters, insertCallers)
+	}
 	// The query the door runs is found, so the SQL scan is reading the
 	// queries rather than passing on nothing.
-	b, err := os.ReadFile(filepath.Join(moduleRoot(t), "internal/store/db/queries/identity.sql"))
+	b, err := os.ReadFile(filepath.Join(moduleRoot(t), theQuery))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -209,17 +245,23 @@ func TestOneDoorIntoSessions(t *testing.T) {
 // The scan is live: a tree with a door of every kind it knows is caught on
 // each, and a test file doing the same is not.
 func TestTheScanFindsASecondDoor(t *testing.T) {
-	doors, callers := scan(t, filepath.Join("testdata", "chokepoint"))
+	doors, callers, inserters := scan(t, filepath.Join("testdata", "chokepoint"))
 	slices.Sort(doors)
 	want := []string{
 		"internal/other/door.go: imports sessiontest outside a test",
 		"internal/other/door.go:promote: updates sessions.kind, sessions.user_id",
+		"internal/other/door.go:qualified: updates sessions.user_id",
+		"internal/other/door.go:qualified: writes INSERT INTO sessions by hand",
 		"internal/other/door.go:sneak: writes INSERT INTO sessions by hand",
 		"internal/store/db/migrations/0099_seed.sql:: inserts into sessions",
 		"internal/store/db/migrations/0100_named.sql:CreateSession: inserts into sessions",
 		"internal/store/db/queries/extra.sql:AdoptSession: updates sessions.user_id",
+		"internal/store/db/queries/extra.sql:CreateSession: inserts into sessions",
 		"internal/store/db/queries/extra.sql:CreateSessionAgain: inserts into sessions",
 		"internal/store/db/queries/extra.sql:TouchAgain: updates sessions.kind",
+		"internal/store/db/queries/identity.sql:CreateSession: inserts into sessions",
+		"internal/store/db/queries/identity.sql:CreateSession: inserts into sessions",
+		"internal/store/db/queries/identity.sql:Qualified: inserts into sessions",
 		"internal/store/db/queries/preamble.sql:: inserts into sessions",
 	}
 	if !slices.Equal(doors, want) {
@@ -227,5 +269,9 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 	}
 	if !slices.Equal(callers, []string{"internal/other/door.go:sneak"}) {
 		t.Errorf("CreateSession callers %v, want the one in door.go", callers)
+	}
+	slices.Sort(inserters)
+	if !slices.Equal(inserters, []string{"internal/auth/session/backdoor.go:Backdoor"}) {
+		t.Errorf("insert callers %v, want the one in backdoor.go", inserters)
 	}
 }

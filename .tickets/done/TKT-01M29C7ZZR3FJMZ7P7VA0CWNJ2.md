@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T19:52:23Z
+updated_at: 2026-09-24T19:59:48Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -109,6 +109,24 @@ Built and verified (2026-09-24).
 - **The constructors take an identity id, not a user and a status as the pre-groom plan had.** The status read had to move inside the insert's transaction anyway, and passing a user id would let a caller name the wrong user. Every docs/05 path that creates a session has an identity in hand.
 - **sessiontest is allowlisted rather than removed.** Routing it through IssueUser would take away the handler tests' way to hold a session for a user suspended after sign-in, which me_test.go's "suspended admin" case needs. The import guard confines it to tests.
 - **The scan also refuses updates that could promote a session**, not only inserts. Changing kind or user_id on a pre-user row would be a door with no INSERT in it.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T19:59:48Z
+
+Review 499 (head 8c2b917): one high and two medium findings, all accepted and fixed in chokepoint_test.go.
+
+1. **(high) Callers of insert were not guarded.**
+   - insert writes whatever its decide function returns, so a third caller in the session package would have been an unchecked door without adding a CreateSession caller.
+   - The scan now records every `.insert` selector in internal/auth/session and requires exactly issue.go:IssueUser and issue.go:IssuePreUser.
+   - Fixture: testdata/chokepoint/internal/auth/session/backdoor.go.
+2. **(medium) Any query named CreateSession was exempt.**
+   - The exemption is now the first statement named CreateSession in internal/store/db/queries/identity.sql. It is used up whether or not it passes, and it may hold one insert.
+   - Fixture: a copy of identity.sql whose first CreateSession smuggles a second insert, and whose second CreateSession borrows the name. Both are reported.
+   - Found while doing this: my first version let a later CreateSession take the exemption when the first one failed. Mutation testing showed it; it is fixed and covered.
+3. **(medium) Schema-qualified names evaded both patterns.**
+   - The table pattern now accepts a schema prefix and "", backtick or [] quoting on either part, and requires a word boundary after `sessions`, so `sessions_archive` is not the table.
+   - Fixtures: `main.sessions`, `"main"."sessions"`, `[main].[sessions]`, and `sessions_archive` as a non-door.
+
+All mutants over issue.go, insert and the scanner are killed (26, with the equivalent one excluded).
 
 ## Summary
 
