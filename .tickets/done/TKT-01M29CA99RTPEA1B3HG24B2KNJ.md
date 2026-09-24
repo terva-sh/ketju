@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T12:31:30Z
+updated_at: 2026-09-24T12:36:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -232,6 +232,22 @@ Alternatives considered:
 The heavy reader's remaining cost is their own rows.
 
 docs/04 documents the table and the index, and the docs/07 /me row names the cold-cache statement.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:36:19Z
+
+### Review 410, answered
+
+Review 410 confirmed that both findings from review 409 are resolved. It raised one medium finding: `api.New` registered `/me` even when `Deps.Users` was nil, so that route would panic on its first request. `Threads` had the same gap for the thread routes.
+
+**Fix:** `New` now requires both services and panics when it is built without one. `ShellPage` panics on a nil users service. A server wired wrongly therefore fails when it starts, not on a request.
+
+**Alternatives considered:**
+- Registering only the routes whose service is set: `/me` would quietly become a 404, which hides the wiring mistake.
+- A per-handler nil check that returns 500: this defers the failure to runtime for a mistake that is fixed when the server is built.
+
+No production code constructs the handler yet; TKT-01M29CCBYX does the wiring. The tests now pass both services.
+
+**Tests:** `TestNewRequiresEveryService` covers no users, no threads, neither, both, and `ShellPage(nil)`. The three mutants on the guards are all killed.
 
 ## Summary
 

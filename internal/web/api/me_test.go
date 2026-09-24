@@ -18,6 +18,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
+	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -92,7 +93,7 @@ func newMeWorld(t *testing.T) *meWorld {
 	}
 	shell.SetPage(ShellPage(w.users))
 	pass := func(h http.Handler) http.Handler { return h }
-	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users}), SPA: shell},
+	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: &threads.Service{DB: d, Perm: perm.New(d)}}), SPA: shell},
 		web.Options{Session: session.Middleware(store, nil), RateLimit: pass, CSRF: pass})
 	w.seed()
 	return w
@@ -341,4 +342,31 @@ func TestShellInlinesMe(t *testing.T) {
 	if !bytes.Equal(ib, sb) {
 		t.Fatalf("the shell inlines %s; /me serves %s", ib, sb)
 	}
+}
+
+// TestNewRequiresEveryService: a handler wired without a service refuses to
+// be built, rather than answering its first request to that service's route
+// with a panic (review 410).
+func TestNewRequiresEveryService(t *testing.T) {
+	d := newMeWorld(t).db
+	u, th := &users.Service{DB: d, Perm: perm.New(d)}, &threads.Service{DB: d, Perm: perm.New(d)}
+	for name, deps := range map[string]Deps{"no users": {Threads: th}, "no threads": {Users: u}, "neither": {}} {
+		t.Run(name, func(t *testing.T) {
+			defer func() {
+				if recover() == nil {
+					t.Error("New accepted it")
+				}
+			}()
+			New(deps)
+		})
+	}
+	New(Deps{Threads: th, Users: u}) // both: no panic
+	func() {
+		defer func() {
+			if recover() == nil {
+				t.Error("ShellPage accepted a nil users service")
+			}
+		}()
+		ShellPage(nil)
+	}()
 }

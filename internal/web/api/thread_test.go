@@ -21,6 +21,7 @@ import (
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/threads"
+	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -65,7 +66,7 @@ func newWorld(t *testing.T) *world {
 		t.Fatal(err)
 	}
 	svc := &threads.Service{DB: d, Perm: perm.New(d), Threads: c, Render: render.NewCache(1 << 20)}
-	w := &world{t: t, db: d, cache: c, proj: p, svc: svc, handler: New(Deps{Threads: svc}),
+	w := &world{t: t, db: d, cache: c, proj: p, svc: svc, handler: New(Deps{Threads: svc, Users: &users.Service{DB: d, Perm: perm.New(d)}}),
 		users: map[string]int64{}, clock: 1_757_500_000_000}
 
 	for _, u := range []struct{ handle, name, role, kind string }{
@@ -518,7 +519,7 @@ func TestAccess(t *testing.T) {
 func newHandlerFor(w *world) *world {
 	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20)}
 	c := *w
-	c.handler = New(Deps{Threads: svc})
+	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}})
 	return &c
 }
 

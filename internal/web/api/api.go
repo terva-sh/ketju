@@ -29,7 +29,15 @@ type Deps struct {
 
 // New returns the /api/v1 handler, for web.Groups.API. It receives full
 // paths, so routes are registered as docs/07 writes them.
+//
+// Every service is required, and a missing one panics here rather than on
+// the first request to a route that needs it: a server wired without one is
+// a build mistake, and it should not start.
 func New(d Deps) http.Handler {
+	if d.Threads == nil || d.Users == nil {
+		panic(fmt.Sprintf("api.New: Threads and Users are required (Threads set: %t, Users set: %t)",
+			d.Threads != nil, d.Users != nil))
+	}
 	log := d.Logger
 	if log == nil {
 		log = slog.Default()
