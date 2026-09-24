@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
@@ -418,5 +419,27 @@ func TestMalformedTOMLNamesTheLine(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "line") {
 		t.Errorf("error %q does not name a line", err)
+	}
+}
+
+// TestMovedKeysAreSettings: every key config.toml refuses as "moved to the
+// settings table" is a settings key, or a table whose keys are, so the message
+// never sends a reader to a setting that does not exist.
+func TestMovedKeysAreSettings(t *testing.T) {
+	var names []string
+	for _, s := range settings.All() {
+		names = append(names, s.Name)
+	}
+	for moved := range movedKeys {
+		found := false
+		for _, n := range names {
+			if n == moved || strings.HasPrefix(n, moved+".") {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("movedKeys sends %q to the settings table, which has no such key", moved)
+		}
 	}
 }

@@ -183,7 +183,9 @@ administration. (Decided 2026-09-24 in Phase 1 grooming.)
 ```
 id, at, actor_id, action, target_type, target_id, details_json, ip
 ```
-Every moderation and administration action. Append-only by convention.
+Every moderation and administration action. Append-only, and not only by
+convention: triggers refuse UPDATE and DELETE, and a test refuses any query
+or SQL literal in the tree that tries either.
 
 ### notifications
 ```
@@ -219,7 +221,9 @@ an old post unread, and a read position only moves forward.
 id, thread_id, ordinal, reporter_id, reason, note, created_at,
 status ('open'|'resolved'|'dismissed'), resolved_by, resolved_at, resolution_note
 ```
-Reports on posts; feeds the moderator queue (08).
+Reports on posts; feeds the moderator queue (08). A flag is resolved or
+dismissed in place and never deleted (a trigger refuses it). `other` requires
+a note. An open flag has no resolver, and a closed one names who and when.
 
 ### drafts
 ```
@@ -239,8 +243,13 @@ title column yet; whether it needs one is TKT-01M29CA9CE's to decide.
 ### blobs
 ```
 hash (pk), size, mime, original_name, uploaded_by, uploaded_at,
-refcount, status ('ok'|'quarantined')
+refcount, status ('ok'|'quarantined'), unreferenced_since
 ```
+`hash` is the lowercase hex SHA-256 the file is stored under (03).
+`unreferenced_since` is set when `refcount` reaches zero and cleared when it
+rises, so garbage collection can wait "seven days at zero" rather than seven
+days from upload. `BlobForServing` is the only lookup the serve path uses, and
+it does not find a quarantined blob.
 
 ### settings
 ```
@@ -249,6 +258,34 @@ key (pk), value_json, updated_at, updated_by
 Runtime-changeable settings (site name, registration mode, slow-mode
 defaults). Bootstrap and provider configuration stay in `config.toml`
 because they must be readable before the database exists.
+
+The key list is closed. `internal/settings` defines each key with its type
+and default, and `settings.Set` refuses an unknown key or an ill-typed value
+before anything is stored, writing an audit row (`setting.changed`, with the
+old and new values) in the same transaction. A key with no row reads as its
+default, so a fresh database needs no seed rows. The table itself only
+insists that `value_json` is valid JSON. The list below is checked against
+the code by `TestKeysDocumented`:
+
+<!-- settings:begin -->
+| Key | Default | Meaning |
+|-----|---------|---------|
+| `flags.auto_hide_threshold` | `3` | Open flags on a post that hide it pending review (08) |
+| `posts.delete_window_seconds` | `900` | How long after posting an author may delete a post (08) |
+| `posts.edit_window_seconds` | `86400` | How long after posting an author may edit a post (08) |
+| `posts.grace_edit_seconds` | `300` | Edits this soon after posting display as the original revision (08) |
+| `public_edit_history` | `true` | Whether members, not only moderators, may read a post's revisions (08) |
+| `registration.allow_local_passwords` | `false` | Local passwords besides a provider (05) |
+| `registration.mode` | `"approval"` | `"open"` or `"approval"`; invite is a later phase and is refused until then (05) |
+| `site_name` | `"Ketju"` | Shown in the header and page titles |
+| `slow_mode.default_seconds` | `0` | Minimum seconds between one member's posts in a thread; 0 is off (08) |
+<!-- settings:end -->
+
+Two defaults are not stated in 05 and 08 and were chosen in TKT-01M29BYYJ0.
+`registration.mode` defaults to `approval`, the v1 mode and the one that
+admits nobody unreviewed. `site_name` defaults to the product's name. The
+agent token-bucket settings (08 "Rate limits") arrive with agent accounts in
+Phase 2, which is also where their defaults get decided.
 
 ## Projection tables (rebuildable)
 

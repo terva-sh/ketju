@@ -16,15 +16,30 @@ type Querier interface {
 	// becomes 'admin', so the next login's re-evaluation no longer removes it.
 	// A row that is already 'admin' keeps its original adder and time.
 	AddAdminMembership(ctx context.Context, arg AddAdminMembershipParams) error
+	// A reference gained clears unreferenced_since; one lost sets it when the
+	// count reaches zero. refcount's CHECK refuses going below zero.
+	AddBlobRef(ctx context.Context, hash string) (int64, error)
 	// An IdP mapping never overrides a membership an admin set by hand: if the
 	// row exists already, whatever its source, it is left alone.
 	AddIdPMembership(ctx context.Context, arg AddIdPMembershipParams) error
+	// The only write audit_log has. Rows are never updated or deleted: the
+	// triggers in migration 0006 refuse it, and TestAuditLogAppendOnly refuses a
+	// query here that tries.
+	AppendAudit(ctx context.Context, arg AppendAuditParams) (int64, error)
+	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
+	// The one lookup the serve path may use: a quarantined blob is not found.
+	BlobForServing(ctx context.Context, hash string) (Blob, error)
 	ClearMentions(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
 	ClearProjectionState(ctx context.Context) error
 	ClearThreadTags(ctx context.Context) error
 	// The statements ClearProjections runs, one per table in ProjectionTables.
 	ClearThreads(ctx context.Context) error
+	// Resolving or dismissing a flag updates it in place; only an open flag can
+	// be closed, so a second moderator's click finds nothing to change.
+	CloseFlag(ctx context.Context, arg CloseFlagParams) (int64, error)
+	CreateBlob(ctx context.Context, arg CreateBlobParams) error
+	CreateFlag(ctx context.Context, arg CreateFlagParams) (int64, error)
 	CreateForum(ctx context.Context, arg CreateForumParams) (int64, error)
 	CreateGroup(ctx context.Context, arg CreateGroupParams) (int64, error)
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (int64, error)
@@ -39,12 +54,15 @@ type Querier interface {
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
 	DeleteThreadTags(ctx context.Context, threadID int64) error
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
+	DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64, error)
+	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
 	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
 	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)
 	GetReadPosition(ctx context.Context, arg GetReadPositionParams) (ReadPosition, error)
 	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
+	GetSetting(ctx context.Context, key string) (Setting, error)
 	GetThread(ctx context.Context, id int64) (Thread, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
@@ -58,13 +76,22 @@ type Querier interface {
 	ListForums(ctx context.Context) ([]Forum, error)
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListMigrations(ctx context.Context) ([]SchemaMigration, error)
+	ListSettings(ctx context.Context) ([]Setting, error)
+	// A post's open flags, for the auto-hide threshold (docs/08).
+	OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (int64, error)
+	// The moderator queue: open flags, newest first (docs/08).
+	OpenFlags(ctx context.Context, limit int64) ([]Flag, error)
 	// The rows permission evaluation (TKT-01M29C5Y2E) needs for one forum: the
 	// forum's own grants and the global ones, for the viewer's groups.
 	PermissionRows(ctx context.Context, arg PermissionRowsParams) ([]PermissionRowsRow, error)
+	// Writes go through internal/settings.Set, which refuses an unknown key or
+	// an ill-typed value and writes the audit row in the same transaction.
+	PutSetting(ctx context.Context, arg PutSettingParams) error
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
 	// IS rather than =, so a null forum_id matches the global row. Every
 	// parameter is named: see TestQueriesDoNotMixParameterStyles.
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
+	SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (int64, error)
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
 	// log_offset is the current revision's record, as the index entry's Offset

@@ -10,6 +10,29 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
+type AuditLog struct {
+	ID          int64
+	At          int64
+	ActorID     sql.NullInt64
+	Action      string
+	TargetType  string
+	TargetID    string
+	DetailsJson string
+	Ip          string
+}
+
+type Blob struct {
+	Hash              string
+	Size              int64
+	Mime              string
+	OriginalName      string
+	UploadedBy        sql.NullInt64
+	UploadedAt        int64
+	Refcount          int64
+	Status            string
+	UnreferencedSince sql.NullInt64
+}
+
 type Draft struct {
 	ID        int64
 	UserID    int64
@@ -19,6 +42,20 @@ type Draft struct {
 	ReplyTo   sql.NullInt64
 	CreatedAt int64
 	UpdatedAt int64
+}
+
+type Flag struct {
+	ID             int64
+	ThreadID       int64
+	Ordinal        int64
+	ReporterID     int64
+	Reason         string
+	Note           string
+	CreatedAt      int64
+	Status         string
+	ResolvedBy     sql.NullInt64
+	ResolvedAt     sql.NullInt64
+	ResolutionNote string
 }
 
 type Forum struct {
@@ -142,6 +179,13 @@ type Session struct {
 	UserAgent           sql.NullString
 	OidcProviderKey     sql.NullString
 	OidcRefreshTokenEnc []byte
+}
+
+type Setting struct {
+	Key       string
+	ValueJson string
+	UpdatedAt int64
+	UpdatedBy sql.NullInt64
 }
 
 type Thread struct {
