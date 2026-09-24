@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-24T06:54:12Z
+updated_at: 2026-09-24T06:55:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -93,6 +93,10 @@ The raw output stays on the benchmark machine at `~/.cache/ketju-bench/bspe8-ben
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T06:54:12Z
 
 Terva review 364 (run 39a0d3c3-51d1-4850-93f6-dab39b9e7652, Actions run 111), head 82b168b109ba558b984d5c5b600afba2c36f500e, base ac05a3caa3d2bfe29b47b0961d6fb1445bfb337a: one high finding, 'Do not treat the chosen driver as durable before the directory-fsync gap is addressed'. **Accepted and fixed.** The directory-fsync workaround is now an acceptance criterion of TKT-01M29BW9Q1, which writes the opener, so no authoritative write can land without it. docs/04 'Engine' and the spike README state that ncruces is conditional on it. The draft TKT-01M392DP19 is narrowed to the upstream report and removing the workaround later. A follow-up review of the new head is requested.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T06:55:22Z
+
+Terva review 365 (run 6b313b3a-c5b2-4977-b061-20bddb0e6443, Actions run 112), head 9b539de35e8d04ee85edc63ef50299729babb83c, base ac05a3caa3d2bfe29b47b0961d6fb1445bfb337a. Finding 1 from review 364 is marked resolved. One new medium finding, 'Bound benchmark retries when the database stays busy': the SQLITE_BUSY retry loop in bench_test.go had no limit. **Accepted and fixed.** A batch is now retried at most maxBusyRetries (3) times, then the case fails with an error that wraps the last SQLITE_BUSY. A follow-up review of the new head is requested.
 
 ## Summary
 

@@ -29,8 +29,9 @@ import (
 // and leaves the drivers' own cost. Read both against BenchmarkSyncFloor.
 //
 // busy/op counts SQLITE_BUSY returned despite the busy_timeout. The batch is
-// retried rather than failing the run, because whether a saturated pool of
-// writers starves one of them for five seconds is itself the finding.
+// retried, up to maxBusyRetries, rather than failing the run, because whether
+// a saturated pool of writers starves one of them for five seconds is itself
+// the finding.
 //
 // The figures recorded on TKT-01M29BSPE8 come from:
 //
@@ -49,6 +50,11 @@ func BenchmarkProjectionWrite(b *testing.B) {
 		}
 	}
 }
+
+// maxBusyRetries bounds how many times one batch is retried after SQLITE_BUSY.
+// The worst case observed was one busy return in several hundred batches, so
+// three in a row means the lock is stuck, not contended.
+const maxBusyRetries = 3
 
 func benchProjectionWrite(b *testing.B, d driverUnderTest, syncMode string, batch, conns int) {
 	db := openScratch(b, d, "&_pragma=synchronous("+syncMode+")")
@@ -72,7 +78,7 @@ func benchProjectionWrite(b *testing.B, d driverUnderTest, syncMode string, batc
 	for _, p := range workers {
 		wg.Go(func() {
 			for remaining.Add(-1) >= 0 {
-				for {
+				for attempt := 1; ; attempt++ {
 					err := p.commitBatch(db, batch)
 					if err == nil {
 						break
@@ -82,6 +88,13 @@ func benchProjectionWrite(b *testing.B, d driverUnderTest, syncMode string, batc
 						return
 					}
 					busy.Add(1)
+					// Each attempt may already have waited out the whole
+					// busy_timeout, so a lock that never frees must end the
+					// run rather than hang it (and CI with it).
+					if attempt == maxBusyRetries {
+						errs <- fmt.Errorf("batch still SQLITE_BUSY after %d attempts: %w", attempt, err)
+						return
+					}
 				}
 			}
 		})
