@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T07:57:27Z
+updated_at: 2026-09-24T08:16:54Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -194,3 +194,7 @@ Merged: TKT-01M29BYYH7 (Add the users, identities, and sessions schema), PR #50,
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:57:27Z
 
 Merged: TKT-01M29BYYHG (Add the forums, groups, and permissions schema), PR #51, rebased onto main at 3340bc14e2471aad6e4774c9f7c6d6761ac59c4c. Gate: CI run 148 had all 16 steps succeed, internal/domain and internal/store/db passed under -race, and the regen step ran sqlc v1.31.1 with no diff. The clean Terva review is run 0f113922 on 3340bc1. Five medium findings over four rounds were all accepted and fixed: 378 (update into implicit groups; system group ids), 379 (forum id 0 colliding with the global-grant sentinel), 380 (an admin taking over an IdP membership), 381 (root forum ordering). Every review ran. For the next tickets: migration 0003 exists, so the next is 0004. Group ids 1–4 are everyone, members, moderators and admins. PermissionRows(forum, groups) is the evaluation query. TestQueriesDoNotMixParameterStyles refuses sqlc queries that mix sqlc.arg with a bare ?; name every parameter when using sqlc.arg.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:16:54Z
+
+Merged TKT-01M29C5Y2E (permission evaluation) as PR #52 at ad7dbde. The first review, 383 at c2c4a6f, raised two high findings, both accepted and fixed: invalidation is now shared by every Evaluator over the same DB, and a role change applies from the next request's Viewer. The clean review ran at ad7dbde, CI run 155, and the race step ran internal/perm. For later tickets: use perm.New(db) and route every grant, membership, visibility and role write through its methods (a layering test enforces it). TKT-01M29C5Y3E must build Viewer from the users row on every request. Filed draft TKT-01M39788AT, which asks what an archived forum does to permissions. Next: TKT-01M29CA9AX.
