@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T14:32:31Z
+updated_at: 2026-09-24T15:04:58Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -246,3 +246,7 @@ Merged PR #63, TKT-01M29CEE5H (Build the fetch layer and signals state), as 6cf1
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:32:31Z
 
 Merged PR #64, TKT-01M29CEE6V (Build the thread page with pager and unread divider), as f2deccb. CI run 263 was green; its step log shows 371 client tests and the Go web packages under -race. Review 421 found a medium (the history route rendered the thread page) and a low (unread tombstones lacked the edge); both fixed in f2deccb, and the re-review was clean on that head. AC4 (committed Playwright screenshots vs the mockups) is unticked and carried by draft TKT-01M39WBN4Q, which waits on CGBY1, CEE4K and CCC0F; the history screen is draft TKT-01M39WZY8C. Branch deleted. CGBY1 still waits on C7ZZ9, CCBYX and CEE79; next by docs/12's order (urgent, then earliest wave): TKT-01M29CCC0F (Build the CSS system, themes, and breakpoints), W0.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:04:58Z
+
+Merged PR #65 (TKT-01M29CCC0F, Build the CSS system, themes, and breakpoints) as 945d82e after reviews 423 and 427 were answered; clean review on head 945d82e, CI run 272 step log shows 481 client tests and the Go web tests ran.

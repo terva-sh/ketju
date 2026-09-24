@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCBYX4V6ZP7N9HF8H8NCZ
 title: Implement ketju serve with graceful shutdown
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:background-work
     path: docs/02-architecture.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/ccbyx-serve
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 945d82e1da5341d0e826e18c37f2b740ba7a9eba
+  session: null
+  claimed_at: 2026-09-24T15:04:58Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T15:04:58Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
