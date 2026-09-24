@@ -21,10 +21,12 @@ blocks_on: none
 references:
   - ref: design:data-model-auth
     path: docs/04-data-model.md
+  - ref: pr:50
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T07:27:11Z
+updated_at: 2026-09-24T07:27:36Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
