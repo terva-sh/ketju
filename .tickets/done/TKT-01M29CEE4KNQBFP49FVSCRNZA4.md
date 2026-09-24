@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T19:17:40Z
+updated_at: 2026-09-24T19:41:02Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -141,6 +141,26 @@ Choices made without a decision, none of them changing what a member can see or 
 - The moderation queue icon shows for role moderator or admin, from /me's user.role. It is only a link; the server gates /admin. It has no count, because /me has none.
 - The tab bar stays on the thread page until CGBVN's reply bar exists to replace it.
 - Copy link copies the thread's canonical URL (/t/{id}/{slug}), not the page or post, and fails silently where there is no clipboard. There is no toast system yet to confirm it.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T19:41:02Z
+
+Review 490 (head e5f6f92): three medium findings, all accepted and fixed.
+
+1. **The desktop bar overflowed near 720 px.**
+   - Measuring the worst case (moderator, 30-character handle, 99+ badges) in Chromium at 720 px showed more than the reviewer said: the nav had `min-width: 0` and shrank under its links, so the search box overlapped "Watching".
+   - Fix:
+     - The wordmark, links, search and icons are `flex: none`.
+     - The tools group and the reader's handle take `min-width: 0`, and the handle is capped at 16ch with an ellipsis.
+     - A tablet block (the allowed 720–1100 px form) closes the gaps and padding, and hides the search box's label to screen-reader-only text.
+   - Measured at 720, 800, 1100 and 1101 px: no two top-bar links overlap, nothing passes the viewport, and only the handle is cut.
+2. **A not-found thread kept its context.**
+   - A not-found thread now publishes no shell context, so the phone bar shows the wordmark, no back and no menu.
+   - Actions are offered only once the thread's header is known, from the answer or the cache, and are built from the header's id and slug rather than the address's.
+3. **An outside press dropped focus.**
+   - It now returns focus to the More button when focus was in the menu.
+   - It leaves focus alone when the press is on something that already has it.
+
+Tests added for each. 527 Vitest tests pass, and all 46 shell mutants are killed, including one per fix.
 
 ## Summary
 

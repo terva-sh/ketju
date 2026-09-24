@@ -145,6 +145,22 @@ describe('the phone top bar', () => {
     const button = /\.tb-button,\n\.tb-spacer \{([^}]*)\}/.exec(css)?.[1] ?? '';
     expect(button).toContain('flex: none');
   });
+
+  // The desktop bar runs down to 720 px, where the mockup's spacing does not
+  // fit (review 490). The widths are checked in a browser; this holds the
+  // tablet rules that make them fit.
+  it('tightens the desktop bar at tablet widths', () => {
+    const tablet = css.split('@media (min-width: 720px) and (max-width: 1100px) {')[1] ?? '';
+    expect(tablet).toMatch(/\.topbar\.desktop \{[^}]*gap: 16px/);
+    expect(tablet).toMatch(/\.topbar \.search span \{[^}]*clip: rect/);
+    // The links keep their width; the reader's handle is what gives way.
+    expect(/\.topbar\.desktop nav \{([^}]*)\}/.exec(css)?.[1]).toContain('flex: none');
+    expect(/\.topbar \.tools \{([^}]*)\}/.exec(css)?.[1]).toContain('min-width: 0');
+    const who = /\.topbar \.who \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    for (const decl of ['min-width: 0', 'max-width: 16ch', 'overflow: hidden', 'white-space: nowrap', 'text-overflow: ellipsis']) {
+      expect(who).toContain(decl);
+    }
+  });
 });
 
 describe('thread actions', () => {
@@ -193,8 +209,52 @@ describe('thread actions', () => {
     expect(document.activeElement).toBe(more);
 
     await act(() => more.click());
+    expect(document.activeElement?.getAttribute('data-action')).toBe('copy-link');
     await act(() => void document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
     expect(root.querySelector('[data-shell=more-menu]')).toBeNull();
+    // Focus was on an item that is gone; it goes back to the button
+    // (review 490).
+    expect(document.activeElement).toBe(more);
+  });
+
+  it('leaves focus alone when a press outside finds it outside the menu', async () => {
+    vi.stubGlobal('fetch', async () => new Response(threadJSON(thread), { status: 200 }));
+    isPhone.value = true;
+    const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
+    const more = root.querySelector<HTMLButtonElement>('[aria-label=More]')!;
+    await act(() => more.click());
+    const search = root.querySelector<HTMLAnchorElement>('a[aria-label=Search]')!;
+    search.focus();
+    await act(() => void search.dispatchEvent(new Event('pointerdown', { bubbles: true })));
+    expect(root.querySelector('[data-shell=more-menu]')).toBeNull();
+    expect(document.activeElement).toBe(search);
+  });
+
+  // A thread that is not found is NotFound, and offers nothing to do with
+  // it (review 490).
+  it('offers no actions for a thread that is not found', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(JSON.stringify({ type: 'not-found', title: 't', status: 404 }), {
+        status: 404,
+        headers: { 'Content-Type': 'application/problem+json' },
+      }),
+    );
+    isPhone.value = true;
+    const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
+    expect(screenOf(root)).toBe('not-found');
+    expect(root.querySelector('[aria-label=More]')).toBeNull();
+    expect(root.querySelector('[aria-label^="Back to"]')).toBeNull();
+    expect(root.querySelector('[data-shell=title]')?.textContent).toBe('Ketju');
+    await setPhone(false);
+    expect(root.querySelector('[data-shell=toolbar]')).toBeNull();
+  });
+
+  it('offers no actions before the thread has been shown', async () => {
+    isPhone.value = true;
+    const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
+    expect(screenOf(root)).toBe('thread');
+    expect(root.querySelector('[aria-label=More]')).toBeNull();
+    expect(root.querySelector('[data-shell=title]')?.textContent).toBe('Thread');
   });
 
   it('leaves a screen with no actions without a menu', async () => {

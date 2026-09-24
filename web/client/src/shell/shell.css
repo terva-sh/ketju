@@ -46,6 +46,7 @@
   padding-right: max(40px, env(safe-area-inset-right, 0px));
 }
 .topbar .wordmark {
+  flex: none;
   display: flex;
   align-items: center;
   font-family: var(--font-serif);
@@ -56,10 +57,10 @@
   text-decoration: none;
 }
 .topbar.desktop nav {
+  flex: none;
   display: flex;
   align-items: stretch;
   gap: 22px;
-  min-width: 0;
 }
 .topbar.desktop nav a {
   display: flex;
@@ -79,11 +80,13 @@
 }
 .topbar .tools {
   margin-left: auto;
+  min-width: 0;
   display: flex;
   align-items: center;
   gap: 16px;
 }
 .topbar .search {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -97,6 +100,7 @@
   text-decoration: none;
 }
 .topbar .icon-link {
+  flex: none;
   position: relative;
   display: flex;
   align-items: center;
@@ -108,10 +112,42 @@
   text-decoration: none;
 }
 .topbar .who {
+  min-width: 0;
+  max-width: 16ch;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--ink);
   text-decoration: none;
   font-size: 14px;
   font-weight: 500;
+}
+
+/* Tablet: the same bar, tightened to fit from 720 px up (review 490). The
+   search box gives up its label and the gaps close; nothing is dropped. */
+@media (min-width: 720px) and (max-width: 1100px) {
+  .topbar.desktop {
+    gap: 16px;
+    padding-left: max(16px, env(safe-area-inset-left, 0px));
+    padding-right: max(16px, env(safe-area-inset-right, 0px));
+  }
+  .topbar.desktop nav {
+    gap: 14px;
+  }
+  .topbar .tools {
+    gap: 8px;
+  }
+  .topbar .search {
+    padding: 0 9px;
+  }
+  .topbar .search span {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip: rect(0 0 0 0);
+    white-space: nowrap;
+  }
 }
 
 /* Phone top bar: 52 px, the title between the controls taking what is left

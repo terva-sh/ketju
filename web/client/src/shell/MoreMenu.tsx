@@ -13,8 +13,13 @@ export function MoreMenu({ actions }: { actions: ShellAction[] }) {
   useEffect(() => {
     if (!open) return;
     root.current?.querySelector<HTMLElement>('[role=menuitem]')?.focus();
+    // A press elsewhere closes the menu. Focus was on an item, which is about
+    // to go, so it goes back to the button (review 490); a press on
+    // something focusable then takes it from there as usual.
     const away = (e: Event) => {
-      if (!root.current?.contains(e.target as Node)) setOpen(false);
+      if (root.current?.contains(e.target as Node)) return;
+      if (root.current?.contains(document.activeElement)) button.current?.focus();
+      setOpen(false);
     };
     const key = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;

@@ -69,21 +69,27 @@ export function ThreadScreen() {
 
   // The phone top bar shows the forum this thread is in, back to it, and the
   // thread's actions in its more menu; on desktop the same actions are the
-  // toolbar under the title (docs/06 "Mobile").
-  const slug = head?.slug ?? params.slug;
-  const actions = useMemo(() => threadActions({ id: params.id, slug }), [params.id, slug]);
+  // toolbar under the title (docs/06 "Mobile"). The actions are offered only
+  // for a thread the reader has been shown, and a thread that is not found
+  // publishes nothing (review 490): its screen is NotFound, not the thread's.
+  const missing = isProblem(res.error, 'not-found');
+  const known = head ? { id: head.id, slug: head.slug } : null;
+  const actions = useMemo(() => (known ? threadActions(known) : []), [known?.id, known?.slug]);
   const forum = head?.forum;
   const ctx = useMemo(
-    () => ({
-      title: forum?.name ?? 'Thread',
-      back: forum ? { href: `/f/${encodeURIComponent(forum.slug)}`, label: forum.name } : undefined,
-      actions,
-    }),
-    [forum?.slug, forum?.name, actions],
+    () =>
+      missing
+        ? null
+        : {
+            title: forum?.name ?? 'Thread',
+            back: forum ? { href: `/f/${encodeURIComponent(forum.slug)}`, label: forum.name } : undefined,
+            actions,
+          },
+    [missing, forum?.slug, forum?.name, actions],
   );
   useShellContext(ctx, [ctx]);
 
-  if (isProblem(res.error, 'not-found')) return <NotFound />;
+  if (missing) return <NotFound />;
   const page = res.data;
   return (
     <main class="thread-page" data-screen={history ? 'post-history' : 'thread'}>
