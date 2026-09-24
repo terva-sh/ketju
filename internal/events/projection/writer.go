@@ -80,6 +80,11 @@ type Writer struct {
 
 	mu     sync.Mutex
 	behind map[threadid.ID]*lag
+
+	// quarantined is the set the last CatchUp found corrupt, and last is
+	// its report.
+	quarantined map[threadid.ID]bool
+	last        *Report
 }
 
 // logFile is what the writer needs of an open log.

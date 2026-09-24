@@ -48,6 +48,13 @@ type Service struct {
 	Threads *threadcache.Cache
 	Render  *render.Cache
 
+	// Quarantined reports a thread whose log startup catch-up found shorter
+	// than its projection (projection.Writer.Quarantined). Every endpoint
+	// answers it 503 until an operator repairs it, and every other thread
+	// keeps serving (docs/03 "Durability and recovery"). Nil quarantines
+	// nothing.
+	Quarantined func(threadid.ID) bool
+
 	// trace, when set, is told which path Replies answered from. Tests use it
 	// to prove both paths ran.
 	trace func(path string)

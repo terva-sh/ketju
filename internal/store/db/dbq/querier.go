@@ -92,6 +92,9 @@ type Querier interface {
 	ListForums(ctx context.Context) ([]Forum, error)
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListMigrations(ctx context.Context) ([]SchemaMigration, error)
+	// Startup catch-up reads every thread's projected length in one statement
+	// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
+	ListProjectionLengths(ctx context.Context) ([]ListProjectionLengthsRow, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	ListUserSessions(ctx context.Context, userID sql.NullInt64) ([]ListUserSessionsRow, error)
 	// LookupSession is the whole of session resolution in one statement: the

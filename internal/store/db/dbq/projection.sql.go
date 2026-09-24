@@ -155,6 +155,40 @@ func (q *Queries) InsertThreadTag(ctx context.Context, arg InsertThreadTagParams
 	return err
 }
 
+const listProjectionLengths = `-- name: ListProjectionLengths :many
+SELECT thread_id, log_length FROM projection_state
+`
+
+type ListProjectionLengthsRow struct {
+	ThreadID  int64
+	LogLength int64
+}
+
+// Startup catch-up reads every thread's projected length in one statement
+// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
+func (q *Queries) ListProjectionLengths(ctx context.Context) ([]ListProjectionLengthsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listProjectionLengths)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectionLengthsRow
+	for rows.Next() {
+		var i ListProjectionLengthsRow
+		if err := rows.Scan(&i.ThreadID, &i.LogLength); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const repliesTo = `-- name: RepliesTo :many
 SELECT ordinal FROM post_meta WHERE thread_id = ? AND reply_to = ? ORDER BY ordinal
 `

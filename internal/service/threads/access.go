@@ -56,6 +56,12 @@ func (s *Service) access(ctx context.Context, v domain.Viewer, id threadid.ID) (
 	case d == perm.Deny:
 		return a, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: %s is not readable by this viewer", id))
 	}
+	// After the read check, so a thread hidden from v is still not-found: a
+	// 503 would tell a viewer who may not see it that it exists.
+	if s.Quarantined != nil && s.Quarantined(id) {
+		return a, problem.Coded(problem.CodeUnavailable,
+			fmt.Errorf("threads: %s is quarantined: its log is shorter than its projection", id))
+	}
 	if a.canModerate, err = s.Perm.Can(ctx, v, a.row.ForumID, domain.PermModerate); err != nil {
 		return a, err
 	}

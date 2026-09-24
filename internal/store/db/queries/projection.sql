@@ -7,6 +7,11 @@ SELECT tag FROM thread_tags WHERE thread_id = ? ORDER BY tag;
 -- name: GetProjectionState :one
 SELECT * FROM projection_state WHERE thread_id = ?;
 
+-- Startup catch-up reads every thread's projected length in one statement
+-- and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
+-- name: ListProjectionLengths :many
+SELECT thread_id, log_length FROM projection_state;
+
 -- The statements ClearProjections runs, one per table in ProjectionTables.
 -- name: ClearThreads :exec
 DELETE FROM threads;

@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:08:15Z
+updated_at: 2026-09-24T15:22:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -102,3 +102,14 @@ Claimed, read the code, and handed back before building. Its plan acquires the l
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:08:15Z
 
 Carries two checks from TKT-01M29CCBZN (Add the single-process lock file), which left its AC1 and AC3 unticked because serve did not exist yet: (1) a second ketju serve against the same data directory exits non-zero and its stderr names the holding pid; (2) after SIGTERM and a clean exit, lock.Acquire on the directory succeeds. Serve takes lock.Acquire(dataDir, "serve") right after config load and before any MkdirAll inside it or db.Open, and releases it last. Acquire does not create the data directory; serve does that first if it creates one at all. A refusal is a *lock.HeldError; whether it gets its own exit code is serve's call (currently exitInternal).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:22:34Z
+
+Carries from TKT-01M29C5Y1S (Implement startup projection catch-up), whose AC3 is left unticked until serve exists.
+
+Serve has to wire catch-up as follows:
+1. Build `reopen := func(ctx, id) (int64, error) { cache.With(id, func(th) { n = th.Actor.LogLength() }) }`.
+2. Construct the Writer with `Sweep: func(ctx) error { _, err := w.CatchUp(ctx, reopen); return err }`. The closure refers to the Writer after assignment.
+3. Run `w.CatchUp(ctx, reopen)` after migrate and before `bus.Start`. A returned error (the query or the walk failed) exits non-zero. Report.Corrupt and Report.Failed do not stop startup.
+4. Pass `Quarantined: w.Quarantined` to `threads.Service`.
+5. Only then listen. TestServeWaitsForCatchUp should assert that projection_state equals the log sizes when the ready hook fires.

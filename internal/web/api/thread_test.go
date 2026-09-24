@@ -658,3 +658,41 @@ func TestETagCoversPageSize(t *testing.T) {
 		t.Fatalf("size 10 against its own tag: %+v, %v", again, err)
 	}
 }
+
+// TestQuarantinedThreadIs503: a thread startup catch-up found corrupt is
+// answered 503 from every thread endpoint, and every other thread keeps
+// serving (docs/03 "Durability and recovery"). The check comes after the read
+// check, so a viewer who may not see the thread still gets 404, not a 503
+// that says it exists.
+func TestQuarantinedThreadIs503(t *testing.T) {
+	w := newWorld(t)
+	bad, _ := w.seed()
+	good, _ := w.thread(99, "Unaffected")
+	w.post(good, "alice", "still here", 0)
+
+	quarantine := func(w *world) *world {
+		svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20),
+			Quarantined: func(id threadid.ID) bool { return id == bad }}
+		c := *w
+		c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}})
+		return &c
+	}
+	q := quarantine(w)
+
+	for _, path := range []string{"", "/posts/1", "/posts/1/replies", "/posts/1/history"} {
+		if rec := q.get(w.viewer("alice"), "/api/v1/threads/"+bad.String()+path); rec.Code != http.StatusServiceUnavailable {
+			t.Errorf("quarantined %q: got %d, want 503: %s", path, rec.Code, rec.Body)
+		}
+		if rec := q.get(w.viewer("alice"), "/api/v1/threads/"+good.String()+path); rec.Code != http.StatusOK {
+			t.Errorf("unaffected %q: got %d, want 200: %s", path, rec.Code, rec.Body)
+		}
+	}
+
+	w.write(func(qq *dbq.Queries) error {
+		return qq.SetForumVisibility(t.Context(), dbq.SetForumVisibilityParams{
+			Visibility: domain.VisibilityRestricted, UpdatedAt: 3, ID: w.forum})
+	})
+	if rec := quarantine(w).get(w.viewer("carol"), "/api/v1/threads/"+bad.String()); rec.Code != http.StatusNotFound {
+		t.Errorf("quarantined and hidden from the viewer: got %d, want 404", rec.Code)
+	}
+}

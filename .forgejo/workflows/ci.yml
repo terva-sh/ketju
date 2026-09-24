@@ -166,6 +166,15 @@ jobs:
           go test ./internal/store/threadlog/ -run TestReplayEqualsIncrementalMaintenance \
             -prop.cases=5000 -prop.len=120
 
+      - name: projection catch-up bound over ten thousand threads (no -race)
+        # TKT-01M29C5Y1S. Startup catch-up over ten thousand threads with no
+        # drift has to finish in under 2 s on this runner, because serve does
+        # not listen until it has. The test is built without -race, which
+        # says nothing about speed, so it runs here rather than in the step
+        # above; -v puts the measured time in this step's log.
+        run: |
+          go test ./internal/events/projection/ -run '^TestCatchUpTenThousandUnderBound$' -count=1 -v
+
       - name: storage benchmarks still run (not a measurement)
         # TKT-01M29C2WV6. One iteration of each benchmark at a toy size, to
         # catch a benchmark that stopped compiling or started failing. It is
