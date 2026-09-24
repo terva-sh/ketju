@@ -90,6 +90,10 @@ type Querier interface {
 	// an ill-typed value and writes the audit row in the same transaction.
 	PutSetting(ctx context.Context, arg PutSettingParams) error
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
+	// A post's direct replies when its thread is not open (post_meta_reply_to),
+	// in ordinal order as the index would give them. The replies endpoint uses it
+	// only once the projection has reached the length it serves.
+	RepliesTo(ctx context.Context, arg RepliesToParams) ([]int64, error)
 	// IS rather than =, so a null forum_id matches the global row. Every
 	// parameter is named: see TestQueriesDoNotMixParameterStyles.
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error

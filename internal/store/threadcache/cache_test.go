@@ -381,3 +381,55 @@ func fileSize(t *testing.T, path string) int64 {
 	}
 	return fi.Size()
 }
+
+// TestPeekNeverOpens: Peek finds a thread only when it is already open, holds
+// a reference while it does, and finds nothing mid-open or after Close.
+func TestPeekNeverOpens(t *testing.T) {
+	c, _ := newCache(t, Options{Bound: 1, Sync: threadlog.SyncNever})
+	id := ids(3)
+	create(t, c, id[0], 1)
+
+	fresh, err := New(c.root, Options{Bound: 1, Sync: threadlog.SyncNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th, ok := fresh.Peek(id[0]); ok || th != nil {
+		t.Fatal("Peek found a thread nothing had opened")
+	}
+	if fresh.Len() != 0 {
+		t.Fatalf("Peek opened a thread: %d open", fresh.Len())
+	}
+	fresh.Close()
+
+	th, ok := c.Peek(id[0])
+	if !ok || th.ID != id[0] {
+		t.Fatalf("Peek of an open thread: %v, %v", th, ok)
+	}
+	// The reference Peek holds keeps the thread from eviction at a bound of
+	// 1: opening another evicts the other one instead, although the peeked
+	// thread is the least recently used.
+	create(t, c, id[1], 1)
+	c.mu.Lock()
+	_, stillOpen := c.open[id[0]]
+	c.mu.Unlock()
+	if !stillOpen {
+		t.Fatal("the thread Peek holds was evicted")
+	}
+	c.Release(th)
+
+	// Mid-open: an entry with no thread yet.
+	c.mu.Lock()
+	c.open[id[2]] = &entry{ready: make(chan struct{}), loading: true}
+	c.mu.Unlock()
+	if _, ok := c.Peek(id[2]); ok {
+		t.Fatal("Peek found a thread still being opened")
+	}
+	c.mu.Lock()
+	delete(c.open, id[2])
+	c.mu.Unlock()
+
+	c.Close()
+	if _, ok := c.Peek(id[1]); ok {
+		t.Fatal("Peek found a thread after Close")
+	}
+}

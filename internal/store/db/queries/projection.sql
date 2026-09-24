@@ -106,3 +106,9 @@ INSERT OR IGNORE INTO mentions (thread_id, ordinal, mentioned_user_id) VALUES (?
 -- name: SetProjectionState :exec
 INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (?, ?, ?)
 ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_at = excluded.updated_at;
+
+-- A post's direct replies when its thread is not open (post_meta_reply_to),
+-- in ordinal order as the index would give them. The replies endpoint uses it
+-- only once the projection has reached the length it serves.
+-- name: RepliesTo :many
+SELECT ordinal FROM post_meta WHERE thread_id = ? AND reply_to = ? ORDER BY ordinal;

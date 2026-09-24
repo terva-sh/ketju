@@ -485,6 +485,9 @@ func TestAccess(t *testing.T) {
 		{"page zero", domain.Anonymous(), base + "?page=0", http.StatusBadRequest},
 		{"page not a number", domain.Anonymous(), base + "?page=two", http.StatusBadRequest},
 		{"negative after", domain.Anonymous(), base + "?after_log_length=-1", http.StatusBadRequest},
+		{"empty page", domain.Anonymous(), base + "?page=", http.StatusBadRequest},
+		{"empty ordinal", domain.Anonymous(), base + "?ordinal=", http.StatusBadRequest},
+		{"empty after", domain.Anonymous(), base + "?after_log_length=", http.StatusBadRequest},
 		{"page past the end", domain.Anonymous(), base + "?page=2", http.StatusNotFound},
 		{"an unknown API path", domain.Anonymous(), "/api/v1/nothing", http.StatusNotFound},
 	} {
@@ -646,11 +649,11 @@ func TestETagCoversPageSize(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if large.NotModified || large.ETag == small.ETag || len(large.Page.Posts) != 25 {
+	if large.NotModified || large.ETag == small.ETag || len(large.Body.Posts) != 25 {
 		t.Fatalf("size 25 against size 10's tag: not-modified=%v, tags %s and %s", large.NotModified, small.ETag, large.ETag)
 	}
 	again, err := w.svc.View(t.Context(), v, id, threads.Query{Page: 1, PageSize: 10}, small.ETag)
-	if err != nil || !again.NotModified || again.ETag != small.ETag || len(again.Page.Posts) != 0 {
+	if err != nil || !again.NotModified || again.ETag != small.ETag || len(again.Body.Posts) != 0 {
 		t.Fatalf("size 10 against its own tag: %+v, %v", again, err)
 	}
 }

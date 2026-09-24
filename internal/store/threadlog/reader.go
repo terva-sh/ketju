@@ -215,3 +215,61 @@ func decodePost(frame []byte, ordinal uint32, e IndexEntry) (Post, error) {
 	}
 	return p, nil
 }
+
+// Revision is one version of a post as the log recorded it: the Post that
+// created it or an Edit that replaced it.
+type Revision struct {
+	Revision uint32
+	Actor    uint64
+	TimeMS   int64
+	Source   string
+	// Reason is the edit's stated reason; empty for revision 1 and for an
+	// edit that gave none.
+	Reason string
+}
+
+// History returns every revision of a post in log order, reading the log up
+// to upTo bytes.
+//
+// Revisions are not chained in the index or the format, which keeps only the
+// current one, so this is a walk of the whole log: O(log size) per call. That
+// is acceptable for a history view a person opens deliberately, and is the
+// reason nothing on the page path calls it. upTo bounds the walk at a length
+// the caller holds, so a revision being appended is never half-read.
+func (r *Reader) History(ordinal uint32, upTo int64) ([]Revision, error) {
+	if _, err := r.ix.Entry(ordinal); err != nil {
+		return nil, err
+	}
+	var (
+		out     []Revision
+		scanErr error
+	)
+	err := ScanFramesFrom(r.log, FileHeaderSize, upTo, func(rec ScanRecord) bool {
+		if rec.Err != nil {
+			scanErr = &ReadError{Ordinal: ordinal, Offset: uint64(rec.Offset), Err: rec.Err}
+			return false
+		}
+		h := rec.Header
+		if h.Ordinal != ordinal || (h.Type != TypePost && h.Type != TypeEdit) {
+			return true
+		}
+		v, err := DecodeBody(h.Type, h.Encoding, rec.Body)
+		if err != nil {
+			scanErr = &ReadError{Ordinal: ordinal, Offset: uint64(rec.Offset), Err: err}
+			return false
+		}
+		rev := Revision{Revision: h.Revision, Actor: h.Actor, TimeMS: h.TimestampMS}
+		switch b := v.(type) {
+		case *PostBody:
+			rev.Source = b.Source
+		case *EditBody:
+			rev.Source, rev.Reason = b.Source, b.Reason
+		}
+		out = append(out, rev)
+		return true
+	})
+	if err == nil {
+		err = scanErr
+	}
+	return out, err
+}

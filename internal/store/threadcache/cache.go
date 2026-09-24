@@ -235,6 +235,24 @@ func (c *Cache) Acquire(id threadid.ID) (*Thread, error) {
 	return t, nil
 }
 
+// Peek returns a thread with a reference held if it is already open, and
+// false without opening it otherwise. A caller that would answer differently
+// for an open thread, such as one that has a cheaper path when the index is
+// already in memory, asks here first; a true result must be Released.
+func (c *Cache) Peek(id threadid.ID) (*Thread, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// An entry still loading has no thread yet, and Close empties the map, so
+	// these two checks cover a thread mid-open and a closed cache.
+	e, ok := c.open[id]
+	if !ok || e.t == nil {
+		return nil, false
+	}
+	e.t.refs++
+	e.t.used = c.tick()
+	return e.t, true
+}
+
 // Release drops a reference taken by Acquire.
 func (c *Cache) Release(t *Thread) {
 	if t == nil {

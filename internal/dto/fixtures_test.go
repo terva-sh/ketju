@@ -308,6 +308,36 @@ func crossForumList() ThreadList {
 	return l
 }
 
+// singlePost is GET /threads/{id}/posts/{ordinal} for the tombstoned post,
+// the one whose body depends on the viewer, as the popover would fetch it.
+func singlePost(class string) Post {
+	return threadPage(class).Posts[2]
+}
+
+// postReplies is the inline expander for post 61, whose replies include the
+// tombstone, so the classes differ where docs/07 says they do.
+func postReplies(class string) PostReplies {
+	page := threadPage(class)
+	return PostReplies{Ordinal: 61, Posts: []Post{page.Posts[1], page.Posts[2]}}
+}
+
+// postHistory is post 61's history. A moderator's edit with a reason sits
+// beside the author's original, so actor and reason are both seen; the
+// deleted variant is what a member gets for a tombstoned post.
+func postHistory(class string) PostHistory {
+	h := PostHistory{Ordinal: 61, Revisions: []PostRevision{
+		{Revision: 1, Actor: alice, At: 1757500100000, Reason: "",
+			Source: "The bill was the *smaller* half of it."},
+		{Revision: 2, Actor: bob, At: 1757500200000, Reason: "fixed the emphasis",
+			Source: "The bill was the **smaller** half of it."},
+	}}
+	if class == tMember {
+		// The member case is the tombstone, which is the shape difference.
+		h = PostHistory{Ordinal: 63, Deleted: true, Revisions: []PostRevision{}}
+	}
+	return h
+}
+
 // corpus maps a golden file's base name to the value it pins.
 //
 // The name is "<endpoint>.<viewer class>", and the endpoint half is what the
@@ -326,6 +356,15 @@ var corpus = map[string]any{
 	"me." + tAnon:      me(tAnon),
 	"me." + tMember:    me(tMember),
 	"me." + tModerator: me(tModerator),
+
+	"post." + tMember:    singlePost(tMember),
+	"post." + tModerator: singlePost(tModerator),
+
+	"replies." + tMember:    postReplies(tMember),
+	"replies." + tModerator: postReplies(tModerator),
+
+	"history." + tMember:    postHistory(tMember),
+	"history." + tModerator: postHistory(tModerator),
 
 	"thread-locked." + tMember: lockedThread(),
 	"unread." + tMember:        crossForumList(),

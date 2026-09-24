@@ -2,6 +2,7 @@ package threadlog
 
 import (
 	"bytes"
+	"errors"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -207,5 +208,37 @@ func TestReadEntriesReadsTheSnapshot(t *testing.T) {
 	}
 	if old[1].Revision != 1 || old[1].Source == "edited" || now[1].Revision != 2 || now[1].Source != "edited" {
 		t.Fatalf("through the snapshot: %+v; live: %+v", old[1], now[1])
+	}
+}
+
+// TestHistoryIsBoundedAndOrdered: History returns a post's revisions in log
+// order with actor, time, reason and source, only up to the length asked for,
+// and refuses an ordinal the index does not hold.
+func TestHistoryIsBoundedAndOrdered(t *testing.T) {
+	lg, ix := threadWith(t, 3,
+		Append{Type: TypeEdit, Author: 7, Ordinal: 2, TimeMS: 1_800_000_000_000, Body: &EditBody{Source: "two, again", Reason: "clarity"}},
+		Append{Type: TypeEdit, Author: 8, Ordinal: 1, TimeMS: 1_800_000_000_001, Body: &EditBody{Source: "one, again"}},
+		Append{Type: TypeEdit, Author: 9, Ordinal: 2, TimeMS: 1_800_000_000_002, Body: &EditBody{Source: "two, third"}},
+	)
+	r := NewReader(bytes.NewReader(lg.bytes()), ix)
+	all, err := r.History(2, int64(len(lg.bytes())))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 3 || all[0].Source != "body of post 2" || all[0].Revision != 1 ||
+		all[1].Actor != 7 || all[1].Reason != "clarity" || all[1].TimeMS != 1_800_000_000_000 ||
+		all[2].Source != "two, third" || all[2].Revision != 3 {
+		t.Fatalf("history of 2: %+v", all)
+	}
+	// Bounded just before the last edit: two revisions.
+	e, err := ix.Entry(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if early, err := r.History(2, int64(e.Offset)); err != nil || len(early) != 2 {
+		t.Fatalf("history of 2 up to %d: %+v, %v", e.Offset, early, err)
+	}
+	if _, err := r.History(9, int64(len(lg.bytes()))); !errors.Is(err, ErrNoSuchOrdinal) {
+		t.Fatalf("history of a post past the end: %v", err)
 	}
 }

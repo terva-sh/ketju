@@ -146,6 +146,41 @@ func (q *Queries) InsertThreadTag(ctx context.Context, arg InsertThreadTagParams
 	return err
 }
 
+const repliesTo = `-- name: RepliesTo :many
+SELECT ordinal FROM post_meta WHERE thread_id = ? AND reply_to = ? ORDER BY ordinal
+`
+
+type RepliesToParams struct {
+	ThreadID int64
+	ReplyTo  sql.NullInt64
+}
+
+// A post's direct replies when its thread is not open (post_meta_reply_to),
+// in ordinal order as the index would give them. The replies endpoint uses it
+// only once the projection has reached the length it serves.
+func (q *Queries) RepliesTo(ctx context.Context, arg RepliesToParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, repliesTo, arg.ThreadID, arg.ReplyTo)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var ordinal int64
+		if err := rows.Scan(&ordinal); err != nil {
+			return nil, err
+		}
+		items = append(items, ordinal)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setPostDeleted = `-- name: SetPostDeleted :execrows
 UPDATE post_meta SET deleted = ? WHERE thread_id = ? AND ordinal = ?
 `

@@ -1,0 +1,32 @@
+{
+  "ordinal": 61,
+  "deleted": false,
+  "revisions": [
+    {
+      "revision": 1,
+      "actor": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+        "role": "member",
+        "kind": "human"
+      },
+      "at": 1757500100000,
+      "reason": "",
+      "source": "The bill was the *smaller* half of it."
+    },
+    {
+      "revision": 2,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "at": 1757500200000,
+      "reason": "fixed the emphasis",
+      "source": "The bill was the **smaller** half of it."
+    }
+  ]
+}

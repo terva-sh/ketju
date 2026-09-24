@@ -58,7 +58,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `POST /threads/{id}/posts` | `{source, reply_to?, attachments?}` → rendered post, ordinal, log_length |
 | `GET  /threads/{id}/posts/{ordinal}` | single post (popover, permalink) |
 | `GET  /threads/{id}/posts/{ordinal}/replies` | direct replies (inline expander) |
-| `GET  /threads/{id}/posts/{ordinal}/history` | revisions with diffs |
+| `GET  /threads/{id}/posts/{ordinal}/history` | revisions, each with actor, time, reason and source; the client diffs them |
 | `PATCH /threads/{id}/posts/{ordinal}` | edit `{source, reason?}` |
 | `DELETE /threads/{id}/posts/{ordinal}` | soft delete; `POST …/restore` to undo |
 | `PUT  /threads/{id}/read` | `{ordinal}` advance read position; `DELETE` marks unread |
@@ -182,6 +182,28 @@ see tombstone contents).
   `internal/web/api/testdata/golden/thread.{anon,member,moderator}.json` are
   what the endpoint actually serves for one seeded thread, regenerated with
   `go test ./internal/web/api -update`.
+
+#### The post endpoints (TKT-01M29CA9C2)
+
+`GET /threads/{id}/posts/{ordinal}` is a bare `Post`, the same assembly the
+page uses for one ordinal, so the popover and the page never disagree. Its
+`/replies` is `{ordinal, posts}` with the direct replies in ordinal order,
+answered from the index when the thread is open and from `post_meta` when it
+is not; `post_meta` is believed only once the projection has reached the
+length being served, so a reply it has not seen yet is not dropped. Its
+`/history` is `{ordinal, deleted, revisions: [{revision, actor, at, reason,
+source}]}`.
+
+- Access is the thread page's: the same 404, 401 and 403.
+- History is a members' feature: an anonymous viewer is `unauthenticated`,
+  a member is `forbidden` when `public_edit_history` is off, and a
+  moderator may always read it.
+- A deleted post is a tombstone from all three to anyone but a moderator:
+  no HTML from the first two, and `deleted: true` with no revisions from
+  history, since the old revisions are the deleted content by another route.
+- Each carries the same body-hash ETag and answers `If-None-Match` with 304.
+- History walks the whole log (revisions are not chained in the format), so
+  it is for a person opening it, not for a page.
 
 ### Where the shapes live
 

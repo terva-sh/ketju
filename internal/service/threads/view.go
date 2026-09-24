@@ -47,6 +47,10 @@ type Service struct {
 	Perm    *perm.Evaluator
 	Threads *threadcache.Cache
 	Render  *render.Cache
+
+	// trace, when set, is told which path Replies answered from. Tests use it
+	// to prove both paths ran.
+	trace func(path string)
 }
 
 // Query is what a thread page request asks for. Zero values mean "not given".
@@ -67,72 +71,36 @@ type Query struct {
 	PageSize int
 }
 
-// Result is a served page, or the news that the client's copy is current.
-type Result struct {
+// Served is a response body with its ETag, or the news that the client's
+// copy is current.
+type Served[T any] struct {
 	ETag string
-	// NotModified means ifNoneMatch matched: Page is empty and nothing was
-	// rendered.
+	// NotModified means ifNoneMatch matched, and Body is the zero value.
 	NotModified bool
-	Page        dto.ThreadPage
+	Body        T
 }
+
+// Result is a served thread page.
+type Result = Served[dto.ThreadPage]
 
 // View serves one page of a thread to v.
 //
-// Everything the ETag depends on is gathered first and is cheap: the thread
-// row, permissions, the viewer's own state, the log length and the index. A
-// matching ifNoneMatch returns before a single post is read or rendered.
+// The page is assembled from one snapshot of the index (see snapshot) and
+// its ETag hashes the result (see etag), so a 304 still assembles the page,
+// mostly from the render cache, and saves the transfer.
 func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Query, ifNoneMatch string) (Result, error) {
 	if q.Lens != "" {
 		return Result{}, problem.Coded(problem.CodeBadRequest, fmt.Errorf("threads: unknown lens %q", q.Lens))
-	}
-	if !v.Member() {
-		v = domain.Anonymous()
 	}
 	size := q.PageSize
 	if size <= 0 {
 		size = DefaultPageSize
 	}
-
-	var row dbq.Thread
-	err := s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
-		var err error
-		row, err = dq.GetThread(ctx, int64(id))
-		return err
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		// Not projected is not found. A thread whose ThreadCreated has not
-		// reached the projection yet is milliseconds old.
-		return Result{}, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s has no projection row", id))
-	}
+	a, err := s.access(ctx, v, id)
 	if err != nil {
 		return Result{}, err
 	}
-
-	switch d, err := s.Perm.Check(ctx, v, row.ForumID, domain.PermRead); {
-	case err != nil:
-		return Result{}, err
-	case d == perm.Hidden:
-		return Result{}, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s is hidden from this viewer", id))
-	case d == perm.Deny && !v.Member():
-		return Result{}, problem.Coded(problem.CodeUnauthenticated, fmt.Errorf("threads: %s needs a signed-in reader", id))
-	case d == perm.Deny:
-		return Result{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: %s is not readable by this viewer", id))
-	}
-	canModerate, err := s.Perm.Can(ctx, v, row.ForumID, domain.PermModerate)
-	if err != nil {
-		return Result{}, err
-	}
-	canReplyPerm, err := s.Perm.Can(ctx, v, row.ForumID, domain.PermReply)
-	if err != nil {
-		return Result{}, err
-	}
-	class := ClassAnon
-	switch {
-	case canModerate:
-		class = ClassModerator
-	case v.Member():
-		class = ClassMember
-	}
+	v, row, class, canModerate := a.viewer, a.row, a.class, a.canModerate
 
 	var (
 		forum    dbq.Forum
@@ -172,7 +140,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	viewer := dto.ThreadViewer{
 		LastReadOrdinal: int(lastRead),
 		Watch:           watch,
-		CanReply:        canReplyPerm && (row.Locked == 0 || canModerate),
+		CanReply:        a.canReply && (row.Locked == 0 || canModerate),
 		CanModerate:     canModerate,
 	}
 
@@ -192,56 +160,86 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			if pageErr != nil {
 				return
 			}
-			snap.from = uint32((snap.page-1)*size + 1)
-			snap.entries = th.Index.Entries(snap.from, uint32(snap.page*size))
-			ordinals := make([]uint32, len(snap.entries))
+			from := uint32((snap.page-1)*size + 1)
+			snap.entries = th.Index.Entries(from, uint32(snap.page*size))
+			snap.ordinals = make([]uint32, len(snap.entries))
 			for i := range snap.entries {
-				ordinals[i] = snap.from + uint32(i)
+				snap.ordinals[i] = from + uint32(i)
 			}
-			snap.replies = th.Index.ReplyCounts(ordinals)
+			snap.replies = th.Index.ReplyCounts(snap.ordinals)
 		})
 		if pageErr != nil {
 			return pageErr
 		}
 
-		ids := map[int64]bool{}
-		for _, e := range snap.entries {
-			ids[int64(e.Author)] = true
-		}
-		authors, err := s.users(ctx, ids)
+		authors, err := s.users(ctx, snap.authors())
 		if err != nil {
 			return err
 		}
 
-		res.Page = dto.ThreadPage{
+		res.Body = dto.ThreadPage{
 			Thread: header(id, row, forum, tags, snap.n, snap.logLength),
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
-		if res.Page.Posts, err = s.posts(ctx, th, id, snap, authors, q, class == ClassModerator); err != nil {
+		if res.Body.Posts, err = s.posts(ctx, th, id, snap, authors, q, class == ClassModerator); err != nil {
 			return err
 		}
-		if res.ETag, err = etag(id, snap.logLength, res.Page); err != nil {
-			return err
-		}
-		if matches(ifNoneMatch, res.ETag) {
-			res.NotModified, res.Page = true, dto.ThreadPage{}
-		}
-		return nil
+		return res.finish(id, snap.logLength, ifNoneMatch)
 	})
 	return res, err
 }
 
-// snapshot is one consistent view of a thread's index: the log length, the
-// post count, and the requested page's entries and reply counts, all as of
-// that length.
+// snapshot is one consistent view of a thread's index, taken inside
+// threadlog.Actor.Stable: the log length, the post count, some posts' entries
+// and their reply counts, all as of that length.
 type snapshot struct {
 	logLength int64
 	n         int
-	page      int
-	from      uint32
-	entries   []threadlog.IndexEntry
-	replies   map[uint32]int
+	page      int // the thread page's; zero elsewhere
+	// ordinals and entries are parallel, in ordinal order. The page's are
+	// contiguous; a post's replies are not.
+	ordinals []uint32
+	entries  []threadlog.IndexEntry
+	replies  map[uint32]int
+}
+
+// take fills the snapshot for ordinals, which must be in the index. Call it
+// inside Stable.
+func (snap *snapshot) take(ix *threadlog.Index, logLength int64, ordinals []uint32) error {
+	*snap = snapshot{logLength: logLength, n: ix.Len(), ordinals: ordinals,
+		entries: make([]threadlog.IndexEntry, len(ordinals))}
+	for i, o := range ordinals {
+		e, err := ix.Entry(o)
+		if err != nil {
+			return err
+		}
+		snap.entries[i] = e
+	}
+	snap.replies = ix.ReplyCounts(ordinals)
+	return nil
+}
+
+// authors are the snapshot's posts' authors, for users().
+func (snap snapshot) authors() map[int64]bool {
+	ids := map[int64]bool{}
+	for _, e := range snap.entries {
+		ids[int64(e.Author)] = true
+	}
+	return ids
+}
+
+// finish sets the ETag over the body and applies If-None-Match.
+func (r *Served[T]) finish(id threadid.ID, logLength int64, ifNoneMatch string) error {
+	var err error
+	if r.ETag, err = etag(id, logLength, r.Body); err != nil {
+		return err
+	}
+	if matches(ifNoneMatch, r.ETag) {
+		var zero T
+		r.NotModified, r.Body = true, zero
+	}
+	return nil
 }
 
 // PageFor picks the page: a permalink's, the asked-for one, the one holding
@@ -285,10 +283,10 @@ func totalPages(n, size int) int {
 // one missing). Two different bodies therefore never share a tag. The cost
 // is that a 304 still assembles the page; the render cache makes that cheap,
 // and what a 304 saves is the transfer.
-func etag(id threadid.ID, logLength int64, page dto.ThreadPage) (string, error) {
-	b, err := json.Marshal(page)
+func etag(id threadid.ID, logLength int64, body any) (string, error) {
+	b, err := json.Marshal(body)
 	if err != nil {
-		return "", fmt.Errorf("threads: hashing the page of %s: %w", id, err)
+		return "", fmt.Errorf("threads: hashing a response for %s: %w", id, err)
 	}
 	sum := sha256.Sum256(b)
 	return fmt.Sprintf(`"%s-%d-r%d-%s"`, id, logLength, render.Version, hex.EncodeToString(sum[:8])), nil
@@ -335,9 +333,20 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 	users map[int64]dto.Author, q Query, moderator bool) ([]dto.Post, error) {
 	out := []dto.Post{}
 	entries := snap.entries
-	read, err := th.Reader.ReadEntries(snap.from, entries)
-	if err != nil {
-		return nil, err
+	// One read per run of consecutive ordinals: the page is a single run, and
+	// a post's replies are usually several.
+	var read []threadlog.Post
+	for i := 0; i < len(entries); {
+		j := i + 1
+		for j < len(entries) && snap.ordinals[j] == snap.ordinals[j-1]+1 {
+			j++
+		}
+		run, err := th.Reader.ReadEntries(snap.ordinals[i], entries[i:j])
+		if err != nil {
+			return nil, err
+		}
+		read = append(read, run...)
+		i = j
 	}
 
 	// after_log_length keeps the posts whose current revision was written at
@@ -350,6 +359,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 			continue
 		}
 		if p.Tombstone && moderator {
+			var err error
 			if p, err = th.Reader.HiddenEntry(p.Ordinal, entries[i]); err != nil {
 				return nil, err
 			}
@@ -392,6 +402,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		}
 		// A tombstone reaches here with its source only for a moderator.
 		if !p.Tombstone || moderator {
+			var err error
 			if d.HTML, err = s.html(id, p, rctx, handles); err != nil {
 				return nil, err
 			}

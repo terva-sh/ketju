@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CA9C2CNBHGBD9304N0EJE
 title: Implement single post, replies, and history endpoints
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:post-anatomy
     path: docs/06-thread-views.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/ca9c2-post-endpoints
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: 1afc4e84a00134abb3e78f67c98cdf6d97ba4c61
-  session: null
-  claimed_at: 2026-09-24T10:12:34Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T10:13:50Z
+updated_at: 2026-09-24T10:22:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,10 +43,10 @@ The replies endpoint is answered from the index's reply_to column when the threa
 
 ## Acceptance criteria
 
-- [ ] A single post fetch serves the popover for a post on another page
-- [ ] Direct replies are returned in ordinal order and match between the index path and the post_meta path
-- [ ] History lists revisions with actor and time, gated by the public_edit_history setting for members
-- [ ] A tombstoned post returns its tombstone from these endpoints too, not its content
+- [x] A single post fetch serves the popover for a post on another page
+- [x] Direct replies are returned in ordinal order and match between the index path and the post_meta path
+- [x] History lists revisions with actor and time, gated by the public_edit_history setting for members
+- [x] A tombstoned post returns its tombstone from these endpoints too, not its content
 
 ## Implementation plan
 
@@ -90,3 +83,38 @@ From review 394 of TKT-01M29CA9AX (low, deferred): internal/web/api's threadQuer
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:47:41Z
 
 Added the dependency on TKT-01M29BYYJ0 'Add the flags, audit log, blobs, and settings schema': AC3 gates history on the public_edit_history setting, and the settings table does not exist before BYYJ0.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:22:33Z
+
+Built and verified. The approach followed the plan; what changed and why:
+
+### Shape of the change
+- `threads.Service.access` holds the access ladder for all four endpoints, pulled out of `View` unchanged. The page goldens did not move.
+- `Result` became `Served[T]{ETag, NotModified, Body}`, with `finish` applying the body-hash ETag and If-None-Match, so all four endpoints validate the same way.
+- `snapshot` now carries parallel `ordinals` and `entries`, filled by `take` inside `Actor.Stable`. `posts()` reads each run of consecutive ordinals with one `ReadEntries`: the page is one run, and a post's replies are usually several.
+- New:
+  - `threadcache.Cache.Peek`, which finds an already-open thread and holds a reference, and never opens.
+  - `threadlog.Reader.History(ordinal, upTo)`, a log walk bounded at the snapshot length that keeps only Post and Edit frames.
+  - The `RepliesTo` query over the existing `post_meta_reply_to` index.
+  - `dto.PostReplies`, `dto.PostHistory` and `dto.PostRevision`, with corpus goldens.
+
+### Decisions (alternatives considered)
+- **The replies post_meta path is trusted only at the served length.** The DB read of `RepliesTo` and `log_length_projected` happens in one transaction before the thread opens, and the post_meta ordinals are used only if `projected == logLength` inside Stable. Otherwise the index answers. Rejected: always trusting post_meta when the thread is closed, which drops a reply the projection has not reached (TestRepliesPostMetaBehindUsesTheIndex).
+- **The post_meta path saves only the index load**, since the bodies must be read from the log to render. That is as the plan's own open item said. It is kept because the ticket asks for it, and the agreement test is the part of it worth having.
+- **History access.** A moderator always; a member when `public_edit_history` is on, else 403; anonymous 401 whatever the setting, because docs/08 makes history a members' and moderators' view. A deleted post's history is `deleted:true` with no revisions, never 410.
+- **History returns sources, and the client diffs.** docs/07's row now says so.
+- **Peek.** The `closed` and `loading` checks turned out redundant (Close empties the map; a loading entry has no thread), and mutation confirmed both were equivalent. The code relies on the two invariants, and a comment says so.
+- **Review 394's deferred low finding is fixed here.** `threadQuery` is presence-aware, so `?page=`, `?ordinal=` and `?after_log_length=` are all bad-request. Path ordinals must be positive integers.
+
+### Tests and mutation
+- Tests:
+  - AC1: TestSinglePostMatchesThePage, where page 3's posts fetched singly are byte-identical.
+  - AC2: TestRepliesPathsAgree, six random reply graphs with edits that move or drop `reply_to` and with deletes, where every ordinal agrees across both paths and the trace shows each path ran n times. Also TestRepliesPostMetaBehindUsesTheIndex and TestRepliesInOrder.
+  - AC3: TestHistory, where 3 edits by 2 actors give 4 revisions with actor, time, reason and source; with the setting off, member 403, moderator 200, anonymous 401.
+  - AC4: TestTombstoneFromEveryEndpoint, covering the single post, a deleted reply in the replies list, and history, for a member and a moderator.
+  - TestHistoryIsBoundedAndOrdered, TestPeekNeverOpens, and the empty-parameter cases in TestAccess.
+- Mutation: 31 mutants (24 in the first pass, 7 rerun or added). Survivors that became tests: the history count including a delete frame, and Peek's reference. Two Peek checks were equivalent and have been removed. One malformed mutant was rewritten and rerun.
+
+## Summary
+
+GET /api/v1/threads/{id}/posts/{ordinal}, …/replies and …/history are implemented in internal/service/threads (posts.go, with the access ladder shared in access.go) and internal/web/api. They use the thread page's assembler, tombstones, and body-hash ETags. Replies come from the index when the thread is open and from post_meta otherwise, the latter only once the projection has reached the served length; a property test checks the two agree. History walks the log and is gated on public_edit_history for members. docs/07 documents all three, and the empty-query-parameter finding from review 394 is fixed.

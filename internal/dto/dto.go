@@ -202,6 +202,44 @@ type ThreadPage struct {
 	Posts  []Post       `json:"posts"`
 }
 
+// PostReplies is the response to GET /threads/{id}/posts/{ordinal}/replies:
+// the post's direct replies in ordinal order, for the inline expander
+// (docs/06 "Post anatomy"). GET /threads/{id}/posts/{ordinal} answers with a
+// bare Post.
+type PostReplies struct {
+	Ordinal int    `json:"ordinal"`
+	Posts   []Post `json:"posts"`
+}
+
+// PostHistory is the response to GET /threads/{id}/posts/{ordinal}/history.
+//
+// Each revision carries its source rather than a diff, and the client diffs
+// two of them (settled in grooming for TKT-01M29CA9C2; docs/08 "Post history"
+// asks for a word-level diff "computed on demand", which the client is where
+// the demand is).
+type PostHistory struct {
+	Ordinal int `json:"ordinal"`
+	// Deleted is a tombstone: a deleted post's history is withheld from
+	// everyone but a moderator, and Revisions is then empty, since the old
+	// revisions are the deleted content by another route.
+	Deleted   bool           `json:"deleted"`
+	Revisions []PostRevision `json:"revisions"`
+}
+
+// PostRevision is one version of a post: the original, or an edit.
+type PostRevision struct {
+	Revision int `json:"revision"`
+	// Actor is who wrote this revision, which for an edit may be a moderator
+	// rather than the author.
+	Actor Author `json:"actor"`
+	At    Millis `json:"at"`
+	// Reason is the edit's stated reason, empty for the original and for an
+	// edit that gave none.
+	Reason string `json:"reason"`
+	// Source is markdown, not HTML: it is what the diff is taken over.
+	Source string `json:"source"`
+}
+
 // ThreadRow is one row in a thread list, with the columns docs/06 names.
 type ThreadRow struct {
 	ID    string   `json:"id"`
