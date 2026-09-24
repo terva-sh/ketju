@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T14:42:10Z
+updated_at: 2026-09-24T14:52:31Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -153,6 +153,20 @@ Nothing was added to package.json. Vite hashes the files into /assets/.
 - **AC4: screenshots against the mockups.** For the same reason.
 
 Both are carried by draft TKT-01M39WBN4Q (Commit thread page screenshots at 390 and 1440 px against the mockups), now widened to cover them and linked here.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:52:31Z
+
+Answered review 423 (medium, "apply a stored theme before the stylesheet can paint").
+
+The module script that ran applyTheme is deferred, so a reader whose stored choice differs from the system's could see the other theme's background first. The fix is src/theme-early.js: a classic, blocking script that reads the same key and values as state/theme.ts and sets data-theme on <html>. A small Vite plugin (vite.config.ts earlyTheme) emits it as a hashed asset and puts it first in <head>. In development it is served straight from src.
+
+Alternatives considered:
+- An inline nonce'd script in index.html. The CSP would allow it, but TestTheShellHasNoInlineScriptOrStyle (internal/web) holds the shell to no inline body at all, per the earlier ticket's AC. Rejected rather than weakening that test.
+- Hand-placing the script in index.html. Vite does not bundle a classic script and warns, and the path would not be hashed, while /assets is served immutable. Rejected.
+
+Tests: src/styles/theme-early.test.ts runs the script against theme.ts's key and values (stored light and dark apply; system, unknown and empty values leave <html> alone; storage that throws is survived). It also checks that the built shell carries it as a classic script ahead of the module and the stylesheet. Mutants killed: the dark branch dropped, the key renamed, the try/catch removed (3 of 3).
+
+Browser check (Chromium, vite dev): with a stored dark choice on a light system, and the reverse, data-theme was set while document.body did not exist yet, so before any paint. With nothing stored the system theme applies. go test ./internal/web/... passes, including the nonce and no-inline shell tests.
 
 ## Summary
 

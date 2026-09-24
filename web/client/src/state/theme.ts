@@ -7,8 +7,12 @@ import { signal } from '@preact/signals';
 
 export type ThemePref = 'system' | 'light' | 'dark';
 
-const key = 'ketju.theme';
-const prefs: readonly ThemePref[] = ['system', 'light', 'dark'];
+// themeKey and themePrefs are read before first paint by a script in
+// index.html as well; theme-early.test.ts holds the two together.
+export const themeKey = 'ketju.theme';
+export const themePrefs: readonly ThemePref[] = ['system', 'light', 'dark'];
+const key = themeKey;
+const prefs = themePrefs;
 
 // readThemePref is the stored choice, or system when there is none, it is
 // not one of the three, or storage is unavailable (a private window can
