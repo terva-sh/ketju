@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"time"
 
@@ -147,8 +148,10 @@ func (k Key[T]) decode(b []byte) (T, error) {
 	if err := dec.Decode(&v); err != nil {
 		return v, fmt.Errorf("%w: %s: %v", ErrInvalidValue, k.Name, err)
 	}
-	if dec.More() {
-		return v, fmt.Errorf("%w: %s: more than one value", ErrInvalidValue, k.Name)
+	// Exactly one value: anything after it, a second value or a stray
+	// bracket, is refused rather than dropped (dec.More would pass "5}").
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return v, fmt.Errorf("%w: %s: input continues after the value", ErrInvalidValue, k.Name)
 	}
 	if k.valid != nil {
 		if err := k.valid(v); err != nil {

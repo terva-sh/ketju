@@ -96,6 +96,16 @@ func TestFlagStatusAndNoDelete(t *testing.T) {
 	if err := exec(t, d, `DELETE FROM flags WHERE id = ?`, id); err == nil {
 		t.Error("a flag was deleted")
 	}
+	// REPLACE deletes the old row without firing DELETE triggers
+	// (recursive_triggers is off by default), so it is refused at the insert.
+	for _, stmt := range []string{
+		`INSERT OR REPLACE INTO flags (id, thread_id, ordinal, reporter_id, reason, created_at) VALUES (?, 1, 1, ?, 'spam', 1)`,
+		`REPLACE INTO flags (id, thread_id, ordinal, reporter_id, reason, created_at) VALUES (?, 1, 1, ?, 'spam', 1)`,
+	} {
+		if err := exec(t, d, stmt, id, reporter); err == nil {
+			t.Errorf("%s replaced a flag", stmt)
+		}
+	}
 	if err := exec(t, d, `DELETE FROM flags`); err == nil {
 		t.Error("the flags table was emptied")
 	}
@@ -159,6 +169,20 @@ func TestAuditLogAppendOnly(t *testing.T) {
 		if err := exec(t, d, stmt, id); err == nil || !strings.Contains(err.Error(), "append-only") {
 			t.Errorf("%s: %v", stmt, err)
 		}
+	}
+	for _, stmt := range []string{
+		`INSERT OR REPLACE INTO audit_log (id, at, action) VALUES (?, 2, 'rewritten')`,
+		`REPLACE INTO audit_log (id, at, action) VALUES (?, 2, 'rewritten')`,
+	} {
+		if err := exec(t, d, stmt, id); err == nil || !strings.Contains(err.Error(), "append-only") {
+			t.Errorf("%s: %v", stmt, err)
+		}
+	}
+	var action string
+	if err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), `SELECT action FROM audit_log WHERE id = ?`, id).Scan(&action)
+	}); err != nil || action != "user.suspended" {
+		t.Errorf("the audit row now reads %q, %v", action, err)
 	}
 	if err := exec(t, d, `INSERT INTO audit_log (at, action, details_json) VALUES (1, 'x', 'not json')`); err == nil {
 		t.Error("details that are not JSON were accepted")
@@ -236,8 +260,7 @@ const hashA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 func newBlob(t *testing.T, d *DB, hash string) error {
 	t.Helper()
 	return try(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
-		return q.CreateBlob(t.Context(), dbq.CreateBlobParams{Hash: hash, Size: 10, Mime: "image/png",
-			UploadedAt: 5, UnreferencedSince: sql.NullInt64{Int64: 5, Valid: true}})
+		return q.CreateBlob(t.Context(), dbq.CreateBlobParams{Hash: hash, Size: 10, Mime: "image/png", UploadedAt: 5})
 	})
 }
 
@@ -281,7 +304,7 @@ func TestQuarantinedBlobNotServable(t *testing.T) {
 			if add {
 				n, err = q.AddBlobRef(t.Context(), hashA)
 			} else {
-				n, err = q.DropBlobRef(t.Context(), dbq.DropBlobRefParams{At: sql.NullInt64{Int64: 99, Valid: true}, Hash: hashA})
+				n, err = q.DropBlobRef(t.Context(), dbq.DropBlobRefParams{At: 99, Hash: hashA})
 			}
 			return err
 		})
@@ -296,6 +319,9 @@ func TestQuarantinedBlobNotServable(t *testing.T) {
 			t.Fatal(err)
 		}
 		return b
+	}
+	if b := blob(); b.Refcount != 0 || b.UnreferencedSince.Int64 != 5 {
+		t.Errorf("a new blob: %+v, want unreferenced since its upload at 5", b)
 	}
 	if _, err := ref(false); err == nil {
 		t.Fatal("a refcount went below zero")
@@ -322,6 +348,11 @@ func TestQuarantinedBlobNotServable(t *testing.T) {
 	}
 	if err := exec(t, d, `UPDATE blobs SET refcount = 1, unreferenced_since = 5 WHERE hash = ?`, hashA); err == nil {
 		t.Error("a referenced blob marked unreferenced was accepted")
+	}
+	// Nothing collects a blob at zero with no timestamp, so the schema
+	// refuses one (review 395).
+	if err := exec(t, d, `UPDATE blobs SET unreferenced_since = NULL WHERE hash = ?`, hashA); err == nil {
+		t.Error("an unreferenced blob with no timestamp was accepted")
 	}
 
 	for _, bad := range []string{"AAAA" + hashA[4:], hashA[:63], hashA + "a", "g" + hashA[1:]} {

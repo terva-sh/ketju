@@ -152,19 +152,21 @@ func (q *Queries) CloseFlag(ctx context.Context, arg CloseFlagParams) (int64, er
 
 const createBlob = `-- name: CreateBlob :exec
 INSERT INTO blobs (hash, size, mime, original_name, uploaded_by, uploaded_at, refcount, status, unreferenced_since)
-VALUES (?, ?, ?, ?, ?, ?, 0, 'ok', ?)
+VALUES (?1, ?2, ?3, ?4, ?5,
+	?6, 0, 'ok', ?6)
 `
 
 type CreateBlobParams struct {
-	Hash              string
-	Size              int64
-	Mime              string
-	OriginalName      string
-	UploadedBy        sql.NullInt64
-	UploadedAt        int64
-	UnreferencedSince sql.NullInt64
+	Hash         string
+	Size         int64
+	Mime         string
+	OriginalName string
+	UploadedBy   sql.NullInt64
+	UploadedAt   int64
 }
 
+// A new blob has no references yet, so it is unreferenced from the moment
+// it is uploaded; the post that carries it adds the first one.
 func (q *Queries) CreateBlob(ctx context.Context, arg CreateBlobParams) error {
 	_, err := q.db.ExecContext(ctx, createBlob,
 		arg.Hash,
@@ -173,7 +175,6 @@ func (q *Queries) CreateBlob(ctx context.Context, arg CreateBlobParams) error {
 		arg.OriginalName,
 		arg.UploadedBy,
 		arg.UploadedAt,
-		arg.UnreferencedSince,
 	)
 	return err
 }
@@ -209,12 +210,12 @@ func (q *Queries) CreateFlag(ctx context.Context, arg CreateFlagParams) (int64, 
 
 const dropBlobRef = `-- name: DropBlobRef :execrows
 UPDATE blobs SET refcount = refcount - 1,
-	unreferenced_since = CASE WHEN refcount - 1 = 0 THEN ?1 ELSE NULL END
+	unreferenced_since = CASE WHEN refcount - 1 = 0 THEN CAST(?1 AS INTEGER) ELSE NULL END
 WHERE hash = ?2
 `
 
 type DropBlobRefParams struct {
-	At   sql.NullInt64
+	At   int64
 	Hash string
 }
 

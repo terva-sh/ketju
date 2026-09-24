@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T09:58:34Z
+updated_at: 2026-09-24T10:07:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -104,6 +104,26 @@ Built and verified.
   - TestStoredValueThatNoLongerDecodes, TestGetFailureIsNotTheDefault, TestKeysDocumented, TestAllIsSorted, TestWritesGoThroughSet.
   - TestMovedKeysAreSettings in `internal/config`.
 - 33 mutants across the migration, the queries and the package, all killed. Two needed new tests: null for a key whose zero value is valid, and Get on a failing database. One needed a stronger one: canonical storage of a whitespace-padded value.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:07:46Z
+
+Review 395 (Terva, head 30564e8): one high and two medium findings, all fixed.
+
+- **high: REPLACE could overwrite an audit row.** `INSERT OR REPLACE` deletes the conflicting row without firing DELETE triggers unless `recursive_triggers` is on. It is off by default, and nothing sets it.
+  - Fix: `audit_log_no_replace` and `flags_never_replaced`, BEFORE INSERT triggers that raise when `NEW.id` already exists. The replace is refused at the insert, which fires whatever the connection's pragmas.
+  - The same hole applied to flags ("never deleted"), which the review did not name.
+  - Rejected: enabling `recursive_triggers` on every connection in the driver. It makes the guarantee depend on connection setup rather than on the schema, and it changes trigger semantics for every other table.
+- **medium: `dec.More()` is not an end-of-input check.** It returns false before `]` or `}`, so `"Ketju"]` was accepted and truncated. Fix: after the value, `dec.Token()` must return `io.EOF`.
+- **medium: a zero-reference blob could have no timestamp,** and would then never be collected.
+  - Fix: the CHECK is now `(refcount = 0) = (unreferenced_since IS NOT NULL)`, in both directions.
+  - `CreateBlob` sets `unreferenced_since` to `uploaded_at` itself; the parameter is gone.
+  - `DropBlobRef`'s `at` is `CAST(... AS INTEGER)`, so sqlc makes it a plain int64.
+- Tests added:
+  - REPLACE and INSERT OR REPLACE refused on both tables, with the audit row unchanged afterwards.
+  - A new blob is unreferenced since its upload.
+  - Nulling the timestamp at zero is refused.
+  - `"Ketju"]`, `5}` and `true,` are refused.
+- Mutation: 5 new mutants, all killed. Two first ran with an invalid-SQL mutant, a false kill, and were redone as `WHEN 0`.
 
 ## Summary
 

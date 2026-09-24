@@ -184,8 +184,10 @@ administration. (Decided 2026-09-24 in Phase 1 grooming.)
 id, at, actor_id, action, target_type, target_id, details_json, ip
 ```
 Every moderation and administration action. Append-only, and not only by
-convention: triggers refuse UPDATE and DELETE, and a test refuses any query
-or SQL literal in the tree that tries either.
+convention: triggers refuse UPDATE, DELETE, and an INSERT reusing an existing
+id (which is how `INSERT OR REPLACE` would otherwise overwrite a row without
+firing a DELETE trigger), and a test refuses any query or SQL literal in the
+tree that tries any of them.
 
 ### notifications
 ```
@@ -246,9 +248,10 @@ hash (pk), size, mime, original_name, uploaded_by, uploaded_at,
 refcount, status ('ok'|'quarantined'), unreferenced_since
 ```
 `hash` is the lowercase hex SHA-256 the file is stored under (03).
-`unreferenced_since` is set when `refcount` reaches zero and cleared when it
-rises, so garbage collection can wait "seven days at zero" rather than seven
-days from upload. `BlobForServing` is the only lookup the serve path uses, and
+`unreferenced_since` is set whenever `refcount` is zero (from the upload
+itself, since a new blob has no references yet) and is null otherwise, a
+CHECK holding the two together, so garbage collection can wait "seven days at
+zero" rather than seven days from upload. `BlobForServing` is the only lookup the serve path uses, and
 it does not find a quarantined blob.
 
 ### settings

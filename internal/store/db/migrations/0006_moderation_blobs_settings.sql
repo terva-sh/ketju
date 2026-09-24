@@ -35,6 +35,16 @@ BEGIN
 	SELECT RAISE(ABORT, 'flags are resolved or dismissed, never deleted');
 END;
 
+-- INSERT OR REPLACE removes the conflicting row without firing DELETE
+-- triggers unless recursive_triggers is on, so a replace is refused here, at
+-- the insert, where it fires whatever the connection's pragmas.
+CREATE TRIGGER flags_never_replaced
+BEFORE INSERT ON flags
+WHEN EXISTS (SELECT 1 FROM flags WHERE id = NEW.id)
+BEGIN
+	SELECT RAISE(ABORT, 'flags are resolved or dismissed, never replaced');
+END;
+
 -- Every moderation and administration action. docs/04 says append-only "by
 -- convention"; these triggers make it a property of the schema, so a
 -- mistaken UPDATE fails where it is written rather than in an audit.
@@ -64,11 +74,22 @@ BEGIN
 	SELECT RAISE(ABORT, 'audit_log is append-only');
 END;
 
+-- REPLACE, as for flags: the implicit delete fires no DELETE trigger unless
+-- recursive_triggers is on (review 395).
+CREATE TRIGGER audit_log_no_replace
+BEFORE INSERT ON audit_log
+WHEN EXISTS (SELECT 1 FROM audit_log WHERE id = NEW.id)
+BEGIN
+	SELECT RAISE(ABORT, 'audit_log is append-only');
+END;
+
 -- An uploaded file, stored at blobs/sha256/xx/<hash> (docs/03 "Attachments")
 -- and named here by its hash. refcount counts the posts referring to it.
 -- unreferenced_since is set when refcount reaches zero and cleared when it
 -- rises, so blob GC can wait "seven days at zero" rather than seven days from
--- upload (TKT-01M29C5Y2S). A quarantined blob is never served: BlobForServing
+-- upload (TKT-01M29C5Y2S). The CHECK makes the two agree in both directions:
+-- a blob at zero without the timestamp would never be collected. A
+-- quarantined blob is never served: BlobForServing
 -- is the one lookup the serve path may use, and it asks for status 'ok'.
 CREATE TABLE blobs (
 	hash               TEXT    PRIMARY KEY
@@ -81,7 +102,7 @@ CREATE TABLE blobs (
 	refcount           INTEGER NOT NULL DEFAULT 0 CHECK (refcount >= 0),
 	status             TEXT    NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'quarantined')),
 	unreferenced_since INTEGER,
-	CHECK (unreferenced_since IS NULL OR refcount = 0)
+	CHECK ((refcount = 0) = (unreferenced_since IS NOT NULL))
 ) WITHOUT ROWID;
 
 CREATE INDEX blobs_unreferenced ON blobs (unreferenced_since) WHERE unreferenced_since IS NOT NULL;

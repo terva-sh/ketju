@@ -38,6 +38,8 @@ type Querier interface {
 	// Resolving or dismissing a flag updates it in place; only an open flag can
 	// be closed, so a second moderator's click finds nothing to change.
 	CloseFlag(ctx context.Context, arg CloseFlagParams) (int64, error)
+	// A new blob has no references yet, so it is unreferenced from the moment
+	// it is uploaded; the post that carries it adds the first one.
 	CreateBlob(ctx context.Context, arg CreateBlobParams) error
 	CreateFlag(ctx context.Context, arg CreateFlagParams) (int64, error)
 	CreateForum(ctx context.Context, arg CreateForumParams) (int64, error)

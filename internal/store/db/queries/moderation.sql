@@ -31,9 +31,12 @@ RETURNING id;
 -- name: AuditLogBefore :many
 SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?;
 
+-- A new blob has no references yet, so it is unreferenced from the moment
+-- it is uploaded; the post that carries it adds the first one.
 -- name: CreateBlob :exec
 INSERT INTO blobs (hash, size, mime, original_name, uploaded_by, uploaded_at, refcount, status, unreferenced_since)
-VALUES (?, ?, ?, ?, ?, ?, 0, 'ok', ?);
+VALUES (sqlc.arg('hash'), sqlc.arg('size'), sqlc.arg('mime'), sqlc.arg('original_name'), sqlc.arg('uploaded_by'),
+	sqlc.arg('uploaded_at'), 0, 'ok', sqlc.arg('uploaded_at'));
 
 -- The one lookup the serve path may use: a quarantined blob is not found.
 -- name: BlobForServing :one
@@ -49,5 +52,5 @@ UPDATE blobs SET refcount = refcount + 1, unreferenced_since = NULL WHERE hash =
 
 -- name: DropBlobRef :execrows
 UPDATE blobs SET refcount = refcount - 1,
-	unreferenced_since = CASE WHEN refcount - 1 = 0 THEN sqlc.arg('at') ELSE NULL END
+	unreferenced_since = CASE WHEN refcount - 1 = 0 THEN CAST(sqlc.arg('at') AS INTEGER) ELSE NULL END
 WHERE hash = sqlc.arg('hash');
