@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:open-questions-db
     path: docs/10-open-questions.md
+  - ref: pr:48
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-24T06:51:22Z
+updated_at: 2026-09-24T06:52:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
