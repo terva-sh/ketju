@@ -28,8 +28,32 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
 -- name: GetSession :one
 SELECT * FROM sessions WHERE id_hash = ?;
 
--- name: TouchSession :exec
-UPDATE sessions SET last_used_at = ? WHERE id_hash = ?;
+-- LookupSession is the whole of session resolution in one statement: the
+-- session, alive by both expiry rules, and the user it belongs to (none for a
+-- pre_user session). internal/auth/session binds the cutoffs from one
+-- function, so the sweeper and this cannot disagree about what is expired.
+-- The user fields are the ones GET /me needs, so resolving a request and
+-- answering /me share this query.
+-- name: LookupSession :one
+SELECT s.id_hash, s.user_id, s.identity_id, s.kind, s.created_at, s.expires_at, s.last_used_at,
+       u.handle, u.display_name, u.avatar_blob, u.status, u.role, u.kind AS user_kind,
+       u.timezone, u.locale, u.prefs_json, u.mark_all_read_at
+FROM sessions s
+LEFT JOIN users u ON u.id = s.user_id
+WHERE s.id_hash = sqlc.arg(id_hash)
+  AND s.expires_at > sqlc.arg(expires_after)
+  AND s.last_used_at > sqlc.arg(last_used_after);
+
+-- TouchSession slides last_used_at only when the stored value is due, so the
+-- once-per-five-minutes rule holds in the statement itself: two requests that
+-- both read a due value write once between them.
+-- name: TouchSession :execrows
+UPDATE sessions SET last_used_at = sqlc.arg(now)
+WHERE id_hash = sqlc.arg(id_hash) AND last_used_at <= sqlc.arg(due_before);
+
+-- name: ListUserSessions :many
+SELECT id_hash, kind, created_at, expires_at, last_used_at, ip, user_agent
+FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC;
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE id_hash = ?;

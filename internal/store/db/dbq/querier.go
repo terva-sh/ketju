@@ -79,6 +79,14 @@ type Querier interface {
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListMigrations(ctx context.Context) ([]SchemaMigration, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
+	ListUserSessions(ctx context.Context, userID sql.NullInt64) ([]ListUserSessionsRow, error)
+	// LookupSession is the whole of session resolution in one statement: the
+	// session, alive by both expiry rules, and the user it belongs to (none for a
+	// pre_user session). internal/auth/session binds the cutoffs from one
+	// function, so the sweeper and this cannot disagree about what is expired.
+	// The user fields are the ones GET /me needs, so resolving a request and
+	// answering /me share this query.
+	LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error)
 	// A post's open flags, for the auto-hide threshold (docs/08).
 	OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (int64, error)
 	// The moderator queue: open flags, newest first (docs/08).
@@ -115,7 +123,10 @@ type Querier interface {
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
-	TouchSession(ctx context.Context, arg TouchSessionParams) error
+	// TouchSession slides last_used_at only when the stored value is due, so the
+	// once-per-five-minutes rule holds in the statement itself: two requests that
+	// both read a due value write once between them.
+	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
 	// Clears the pin only when its scope matches, so removing a forum pin does
 	// not silently remove a global one (docs/03). SQLite evaluates every SET
 	// expression against the row as it was, so both CASEs see the old scope.

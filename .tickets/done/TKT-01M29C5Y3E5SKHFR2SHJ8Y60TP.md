@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C5Y3E5SKHFR2SHJ8Y60TP
 title: Build the server-side session store
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:identity-sessions
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/c5y3e-session-store
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: d68ae9dd4c820c01b56d53c1e88bfe25e32196ba
-  session: null
-  claimed_at: 2026-09-24T11:35:42Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-24T11:37:07Z
+updated_at: 2026-09-24T11:42:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,11 +44,11 @@ The `kind` column distinguishes a user session from the pre-user session that ap
 
 ## Acceptance criteria
 
-- [ ] Session ids are stored hashed and a database dump contains nothing usable as a cookie value
-- [ ] Idle and hard expiry are both enforced, tested at their boundaries
-- [ ] last_used_at writes are rate limited to once per five minutes per session
-- [ ] Deleting a user's session rows signs them out on the next request, tested end to end
-- [ ] A pre-user session never satisfies a check for a signed-in member
+- [x] Session ids are stored hashed and a database dump contains nothing usable as a cookie value
+- [x] Idle and hard expiry are both enforced, tested at their boundaries
+- [x] last_used_at writes are rate limited to once per five minutes per session
+- [x] Deleting a user's session rows signs them out on the next request, tested end to end
+- [x] A pre-user session never satisfies a check for a signed-in member
 
 ## Implementation plan
 
@@ -123,3 +116,57 @@ From TKT-01M29BYYH7 (Add the users, identities, and sessions schema), 2026-09-24
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:12:18Z
 
 Requirement from TKT-01M29C5Y2E (permission evaluation), review 383: build domain.Viewer from the users row (role, and status == active) on every request, and never cache role or status in the session. internal/perm treats a Viewer as a per-request snapshot and short-circuits on Role == admin, so a Viewer that outlives a request would carry an admin role past its removal. SessionKey must be opaque, never the raw session id.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:42:19Z
+
+Built and verified.
+
+### What landed
+- **`internal/auth/session`:**
+  - `Store` provides Lookup, Touch, Revoke, RevokeUser and ListForUser, plus the unexported `insert`, which C7ZZR wraps.
+  - `ExpiredBefore(now) Cutoff` is the single expiry rule, and `Cutoff.Live` mirrors the SQL.
+  - `Cookie(token, expires)` builds the `__Host-ketju_session` cookie (Secure, HttpOnly, SameSite=Lax, Path=/).
+  - `From(ctx)` exposes the resolved session and its user to /me.
+  - `Middleware(store, log)` plugs into `web.Options.Session`.
+- **Queries:**
+  - `LookupSession` is one statement: the session, alive by both cutoffs, LEFT JOINed to the user fields GET /me needs.
+  - `TouchSession` now repeats the due check in its WHERE clause and returns the affected rows.
+  - `ListUserSessions`.
+- **`domain.Viewer`** gains `PreUser` and `IdentityID`. `Member()` is unchanged: a pre-user viewer has UserID 0, so it is false by construction.
+
+### Decisions (alternatives considered)
+- **The token is 32 bytes as unpadded base64url, decoded strictly.**
+  - The stored value is SHA-256 of the raw bytes, with no salt or KDF: 256 bits cannot be enumerated.
+  - A strict decoder refuses the three other spellings of the last character, which a lax decoder maps to the same bytes. One session should have one cookie value.
+  - Anything that does not decode to exactly 32 bytes is anonymous without a query, so a flood of junk cookies costs nothing.
+- **The rate limit is enforced twice.** The Go pre-check means most requests open no write transaction. The SQL guard means two racing requests that both read a due value write once between them.
+- **A database error during lookup is a 500, not an anonymous request.** The alternative, degrading to anonymous, would sign everyone out silently during an outage, and that reads as a sign-in bug.
+- **A failed touch is logged and the request proceeds.** last_used_at is a freshness hint, not a gate.
+- **Status is read through the join.** A suspended user whose rows have not yet been deleted resolves with Active=false, so they lose member rights on the next request anyway. The ticket noted this as defence in depth, beyond docs/05's "suspending deletes sessions"; it costs nothing in the one query.
+- **SessionKey (the per-session cache key) is hex of SHA-256 over the stored hash, truncated to 12 bytes.** It is neither the cookie nor the row key, so a cache key that leaks into a log or dump names nothing usable.
+- **A stale cookie is cleared (Max-Age=-1)** when it names no live session.
+- **ListForUser returns an `Info.Key` (the same derived key)** for a later "sign out this device", plus `Live` for rows that have expired but not yet been swept.
+
+### Verification
+- **AC1:** after a user and a pre-user session are created, every cell of every row is read back as text and as blob. None contains, or is contained in, the token, its raw bytes, the standard or padded base64 of those bytes, or their hex. The row is found by sha256(raw).
+- **AC2:**
+  - Idle expiry: live at 30d-1ms; not live at 30d or at 30d+1ms.
+  - Hard expiry: a session touched daily for 89 days is live at 90d-1ms and gone at 90d.
+  - `Cutoff.Live` agrees with the SQL at both boundaries.
+- **AC3:**
+  - A counting trigger on `last_used_at` shows 10 requests on a fresh session write nothing.
+  - 100 requests across 198 s, starting when the touch is due, write once. A request at 5m-1ms after that write does not write; one at 5m does.
+  - Two racing touches of the same due session write once.
+  - A touch that is not due never reaches the database (checked with a closed database).
+- **AC4:** end to end through `web.New`'s real chain. A member's cookie reaches a protected route and gets 200. After `RevokeUser`, both of their sessions get 401 on the next request, with the cookie cleared. `Revoke` ends one device and not another.
+- **AC5:** a table covering anonymous, member, suspended member and pre-user checks Member, PreUser, UserID, Role and IdentityID, and what the protected route answers. The pre-user viewer is not a member and gets 401.
+- **Also:**
+  - six malformed cookies, including the non-canonical spelling, are anonymous against a closed database;
+  - a well-formed one against the closed database gets 500;
+  - the request log carries `"viewer":<id>` and not the token.
+- **Mutation:** 28 mutants, 27 killed. They covered both cutoffs in Go and in SQL, the hard-expiry offset, the touch guard in SQL and in Go, the length check, strict decoding, Active, PreUser, the derived key, cookie clearing, the 500 path, the log viewer, Revoke, Live, and Touch's result. The one survivor is `s.Kind == KindUser && s.User != nil` reduced to `s.User != nil`. It is equivalent, because the schema's CHECK rules out a pre_user row with a user, and it is kept as a guard.
+- The full CI set passes locally: gofmt, build, vet, sqlc stable, and `go test -race ./...`.
+
+## Summary
+
+internal/auth/session is the server-side session store. The cookie is __Host-ketju_session, carrying 32 random bytes; the table holds only their SHA-256. Resolution is one query that returns the live session and the user fields /me needs. Idle (30d) and hard (90d) expiry are one Cutoff shared with the future sweeper. last_used_at slides at most once per 5 minutes, enforced in Go and in the UPDATE itself. Revocation is a DELETE and takes effect on the next request. The middleware plugs into web.Options.Session and sets domain.Viewer, which gains PreUser and IdentityID; a pre-user session is never Member().

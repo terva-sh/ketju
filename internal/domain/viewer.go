@@ -25,6 +25,13 @@ type Viewer struct {
 	// opaque and never the session id itself. Empty for anonymous viewers,
 	// who share one cache entry.
 	SessionKey string
+	// PreUser reports a pre-user session: an approval-mode applicant signed
+	// in with an identity and no user yet (docs/05). Such a viewer has
+	// UserID 0, so Member is false however the rest is set; PreUser is what
+	// lets the application screens tell them from a stranger.
+	PreUser bool
+	// IdentityID is the identity a pre-user session is bound to, 0 otherwise.
+	IdentityID int64
 }
 
 // Anonymous is the viewer for a request with no session.

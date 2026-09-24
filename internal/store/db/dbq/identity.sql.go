@@ -238,6 +238,120 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 	return i, err
 }
 
+const listUserSessions = `-- name: ListUserSessions :many
+SELECT id_hash, kind, created_at, expires_at, last_used_at, ip, user_agent
+FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC
+`
+
+type ListUserSessionsRow struct {
+	IDHash     sqltypes.SessionHash
+	Kind       string
+	CreatedAt  int64
+	ExpiresAt  int64
+	LastUsedAt int64
+	Ip         sql.NullString
+	UserAgent  sql.NullString
+}
+
+func (q *Queries) ListUserSessions(ctx context.Context, userID sql.NullInt64) ([]ListUserSessionsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listUserSessions, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListUserSessionsRow
+	for rows.Next() {
+		var i ListUserSessionsRow
+		if err := rows.Scan(
+			&i.IDHash,
+			&i.Kind,
+			&i.CreatedAt,
+			&i.ExpiresAt,
+			&i.LastUsedAt,
+			&i.Ip,
+			&i.UserAgent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lookupSession = `-- name: LookupSession :one
+SELECT s.id_hash, s.user_id, s.identity_id, s.kind, s.created_at, s.expires_at, s.last_used_at,
+       u.handle, u.display_name, u.avatar_blob, u.status, u.role, u.kind AS user_kind,
+       u.timezone, u.locale, u.prefs_json, u.mark_all_read_at
+FROM sessions s
+LEFT JOIN users u ON u.id = s.user_id
+WHERE s.id_hash = ?1
+  AND s.expires_at > ?2
+  AND s.last_used_at > ?3
+`
+
+type LookupSessionParams struct {
+	IDHash        sqltypes.SessionHash
+	ExpiresAfter  int64
+	LastUsedAfter int64
+}
+
+type LookupSessionRow struct {
+	IDHash        sqltypes.SessionHash
+	UserID        sql.NullInt64
+	IdentityID    sql.NullInt64
+	Kind          string
+	CreatedAt     int64
+	ExpiresAt     int64
+	LastUsedAt    int64
+	Handle        sql.NullString
+	DisplayName   sql.NullString
+	AvatarBlob    sql.NullString
+	Status        sql.NullString
+	Role          sql.NullString
+	UserKind      sql.NullString
+	Timezone      sql.NullString
+	Locale        sql.NullString
+	PrefsJson     sql.NullString
+	MarkAllReadAt sql.NullInt64
+}
+
+// LookupSession is the whole of session resolution in one statement: the
+// session, alive by both expiry rules, and the user it belongs to (none for a
+// pre_user session). internal/auth/session binds the cutoffs from one
+// function, so the sweeper and this cannot disagree about what is expired.
+// The user fields are the ones GET /me needs, so resolving a request and
+// answering /me share this query.
+func (q *Queries) LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error) {
+	row := q.db.QueryRowContext(ctx, lookupSession, arg.IDHash, arg.ExpiresAfter, arg.LastUsedAfter)
+	var i LookupSessionRow
+	err := row.Scan(
+		&i.IDHash,
+		&i.UserID,
+		&i.IdentityID,
+		&i.Kind,
+		&i.CreatedAt,
+		&i.ExpiresAt,
+		&i.LastUsedAt,
+		&i.Handle,
+		&i.DisplayName,
+		&i.AvatarBlob,
+		&i.Status,
+		&i.Role,
+		&i.UserKind,
+		&i.Timezone,
+		&i.Locale,
+		&i.PrefsJson,
+		&i.MarkAllReadAt,
+	)
+	return i, err
+}
+
 const setUserRole = `-- name: SetUserRole :exec
 UPDATE users SET role = ?, updated_at = ? WHERE id = ?
 `
@@ -253,18 +367,26 @@ func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error 
 	return err
 }
 
-const touchSession = `-- name: TouchSession :exec
-UPDATE sessions SET last_used_at = ? WHERE id_hash = ?
+const touchSession = `-- name: TouchSession :execrows
+UPDATE sessions SET last_used_at = ?1
+WHERE id_hash = ?2 AND last_used_at <= ?3
 `
 
 type TouchSessionParams struct {
-	LastUsedAt int64
-	IDHash     sqltypes.SessionHash
+	Now       int64
+	IDHash    sqltypes.SessionHash
+	DueBefore int64
 }
 
-func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) error {
-	_, err := q.db.ExecContext(ctx, touchSession, arg.LastUsedAt, arg.IDHash)
-	return err
+// TouchSession slides last_used_at only when the stored value is due, so the
+// once-per-five-minutes rule holds in the statement itself: two requests that
+// both read a due value write once between them.
+func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, touchSession, arg.Now, arg.IDHash, arg.DueBefore)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const usersByIDs = `-- name: UsersByIDs :many
