@@ -135,6 +135,46 @@ describe('the thread cache', () => {
       expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
     });
 
+    // Review 415: the mirror case. A newer page landed first; the older
+    // refusal, landing after it, is old news.
+    it.each([403, 401, 404, 410])('does not let an older %d erase a newer page', async (status) => {
+      const answer = manual();
+      const older = loadThreadPage(id, { page: 1 });
+      const newer = loadThreadPage(id, { page: 2 });
+      await Promise.resolve();
+      answer[1](ok(page(2, 100), '"b"'));
+      await newer;
+      answer[0](new Response('{}', { status }));
+      await older.catch(() => {});
+      expect([...cachedThread(id)!.pages.keys()]).toEqual(['2']);
+      expect(peekGet(threadUrl(id, { page: 2 }))).toBeDefined();
+    });
+
+    it('applies a refusal newer than every stored page', async () => {
+      const answer = manual();
+      const older = loadThreadPage(id, { page: 1 });
+      const newer = loadThreadPage(id, { page: 2 });
+      await Promise.resolve();
+      answer[0](ok(page(1, 100), '"a"'));
+      await older;
+      answer[1](new Response('{}', { status: 403 }));
+      await newer.catch(() => {});
+      expect(cachedThread(id)).toBeUndefined();
+      expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
+    });
+
+    it('keeps an older page that lands after a newer one at the same length', async () => {
+      const answer = manual();
+      const older = loadThreadPage(id, { page: 1 });
+      const newer = loadThreadPage(id, { page: 2 });
+      await Promise.resolve();
+      answer[1](ok(page(2, 100), '"b"'));
+      await newer;
+      answer[0](ok(page(1, 100), '"a"'));
+      await older;
+      expect([...cachedThread(id)!.pages.keys()].sort()).toEqual(['1', '2']);
+    });
+
     it('stores a request started after the refusal', async () => {
       serve(403, page(1, 100));
       await loadThreadPage(id, { page: 1 }).catch(() => {});

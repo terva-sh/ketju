@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T13:18:02Z
+updated_at: 2026-09-24T13:24:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -256,6 +256,25 @@ Review 414 confirmed both findings from review 413 resolved. It raised one high 
 - another thread's load, which is left alone.
 
 **Mutation:** all 3 mutants on the new guard are killed. There are 303 Vitest tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T13:24:32Z
+
+### Review 415, answered
+
+Review 415 confirmed the finding from review 414 resolved. It raised the mirror case as high: an older load's refusal, landing after a newer load's page had been stored, forgot the thread and erased that page. This fails safe, since nothing withheld is shown and the page is fetched again, but it is still wrong.
+
+**The fix:** each thread's outcomes are now ordered in both directions. Loads are numbered in the order they start, and per thread the cache records:
+- `refused`: the newest load whose refusal was applied;
+- `stored`: the newest load whose page was stored.
+
+A page is dropped if a newer refusal was already applied. This replaces 414's revocation counter with the same meaning. A refusal is ignored if a newer page was already stored. Pages at one length still accumulate in any order, so parallel loads of different pages do not discard each other.
+
+**Tests:**
+- the older refusal after a newer page, for each of 403, 401, 404 and 410;
+- a refusal newer than every stored page, which is applied;
+- an older page at the same length landing after a newer one, which is kept.
+
+**Mutation:** all 5 mutants are killed. There are 309 Vitest tests.
 
 ## Summary
 

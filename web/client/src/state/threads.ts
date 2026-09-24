@@ -66,24 +66,31 @@ export function pageKey(page: Pick<ThreadPage, 'page' | 'lens'>): string {
 // (TKT-01M29CTYA0).
 export async function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortSignal): Promise<ThreadPage> {
   const url = threadUrl(id, q);
-  const since = revocations.get(id) ?? 0;
+  const n = ++loads;
   let page: ThreadPage;
   try {
     page = await apiGet<ThreadPage>(url, { signal });
   } catch (err) {
     // A superseded request's answer is older than whatever replaced it, a
-    // refusal included: it changes nothing.
-    if (revokesAccess(err) && !signal?.aborted) forgetThread(id);
+    // refusal included: it changes nothing. Nor does a refusal older than a
+    // page already stored from a request that started after it.
+    if (revokesAccess(err) && !signal?.aborted && n > (stored.get(id) ?? 0)) {
+      refused.set(id, n);
+      forgetThread(id);
+    }
     throw err;
   }
   if (signal?.aborted) return page;
-  // A page that started before the thread was refused to this viewer is from
-  // before the refusal, however late it lands, and is not stored: with the
-  // entry gone there is no length left to compare it against. Nor is a page
-  // older than the entry. Neither is kept under its URL either, or it would
-  // be shown at once on a return there.
-  const refused = (revocations.get(id) ?? 0) !== since;
-  if (refused || !storeThreadPage(id, page, url)) forgetGets((u) => u === url);
+  // A page whose request started before a refusal that has been applied is
+  // from before the refusal, however late it lands, and is not stored: with
+  // the entry gone there is no length left to compare it against. Nor is a
+  // page older than the entry. Neither is kept under its URL either, or it
+  // would be shown at once on a return there.
+  if (n < (refused.get(id) ?? 0) || !storeThreadPage(id, page, url)) {
+    forgetGets((u) => u === url);
+    return page;
+  }
+  stored.set(id, Math.max(stored.get(id) ?? 0, n));
   return page;
 }
 
@@ -113,12 +120,17 @@ function isThreadUrl(url: string, id: string): boolean {
   return url === base || url.startsWith(base + '?') || url.startsWith(base + '/');
 }
 
-// revocations counts, per thread, the refusals that made it forget the
-// thread, so a load can tell whether one happened while it was in flight.
-const revocations = new Map<string, number>();
+// Loads are numbered in the order they start. Per thread, refused is the
+// newest load whose refusal was applied and stored the newest whose page was,
+// so each outcome is applied only if no newer one of the other kind already
+// was: overlapping loads can finish in any order, and the later-started one's
+// answer is the truer. Pages at one length still accumulate whatever their
+// order; the length rule above orders those.
+let loads = 0;
+const refused = new Map<string, number>();
+const stored = new Map<string, number>();
 
 function forgetThread(id: string) {
-  revocations.set(id, (revocations.get(id) ?? 0) + 1);
   forgetGets((u) => isThreadUrl(u, id));
   if (!threadCache.value.has(id)) return;
   const next = new Map(threadCache.value);
@@ -129,5 +141,6 @@ function forgetThread(id: string) {
 // resetThreadCache empties the cache, for tests.
 export function resetThreadCache() {
   threadCache.value = new Map();
-  revocations.clear();
+  refused.clear();
+  stored.clear();
 }
