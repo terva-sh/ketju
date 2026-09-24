@@ -50,7 +50,7 @@ const table = `(?:["` + "`" + `\[]?\w+["` + "`" + `\]]?\s*\.\s*)?["` + "`" + `\[
 
 var (
 	sqlInsert   = regexp.MustCompile(`(?is)\b(insert|replace)\b[^;]*?\binto\s+` + table + `(?:\W|$)`)
-	sqlUpdate   = regexp.MustCompile(`(?is)\bupdate\s+(or\s+\w+\s+)?` + table + `(?:\s+(?:as\s+)?\w+)?\s+set\s+(.*?)(\bwhere\b|;|$)`)
+	sqlUpdate   = regexp.MustCompile(`(?is)\bupdate\s+(or\s+\w+\s+)?` + table + `(?:\s+(?:as\s+)?\w+)?\s+set\b`)
 	sqlComment  = regexp.MustCompile(`--[^\n]*`)
 	sqlcName    = regexp.MustCompile(`(?m)^--\s*name:\s*(\w+)`)
 	updatableOK = []string{"last_used_at"}
@@ -175,13 +175,19 @@ func constString(e ast.Expr) (string, bool) {
 		if e.Obj == nil {
 			return "", false
 		}
-		spec, ok := e.Obj.Decl.(*ast.ValueSpec)
-		if !ok {
-			return "", false
-		}
-		for i, name := range spec.Names {
-			if name.Name == e.Name && i < len(spec.Values) {
-				return constString(spec.Values[i])
+		// Declared with const or var, or locally with := (review 501).
+		switch d := e.Obj.Decl.(type) {
+		case *ast.ValueSpec:
+			for i, name := range d.Names {
+				if name.Name == e.Name && i < len(d.Values) {
+					return constString(d.Values[i])
+				}
+			}
+		case *ast.AssignStmt:
+			for i, lhs := range d.Lhs {
+				if id, ok := lhs.(*ast.Ident); ok && id.Name == e.Name && len(d.Rhs) == len(d.Lhs) {
+					return constString(d.Rhs[i])
+				}
 			}
 		}
 	}
@@ -233,16 +239,66 @@ func scanSQL(rel, src string) (doors []string) {
 // badUpdates lists the columns an UPDATE of sessions in sql sets beyond
 // updatableOK.
 func badUpdates(sql string) (bad []string) {
-	for _, m := range sqlUpdate.FindAllStringSubmatch(sql, -1) {
-		for _, a := range strings.Split(m[2], ",") {
-			col, _, _ := strings.Cut(a, "=")
-			col = strings.Trim(strings.TrimSpace(col), "\"`")
-			if col != "" && !slices.Contains(updatableOK, strings.ToLower(col)) {
-				bad = append(bad, col)
+	for _, m := range sqlUpdate.FindAllStringIndex(sql, -1) {
+		for _, a := range setClauses(sql[m[1]:]) {
+			target, _, _ := strings.Cut(a, "=")
+			// SET (a, b) = (x, y) names its columns in a list.
+			target = strings.Trim(strings.TrimSpace(target), "()")
+			for _, col := range strings.Split(target, ",") {
+				col = strings.Trim(strings.TrimSpace(col), "\"`[]")
+				if col != "" && !slices.Contains(updatableOK, strings.ToLower(col)) {
+					bad = append(bad, col)
+				}
 			}
 		}
 	}
 	return bad
+}
+
+// setClauses splits the assignments of a SET clause, which s starts just
+// after, at its top level: a comma, a WHERE, or anything else inside
+// parentheses or quotes belongs to an expression, not to the clause
+// (review 501). The clause ends at a top-level WHERE, FROM, RETURNING,
+// semicolon or closing parenthesis.
+func setClauses(s string) (out []string) {
+	depth, start := 0, 0
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"' || c == '`':
+			quote = c
+		case c == '(':
+			depth++
+		case c == ')' && depth > 0:
+			depth--
+		case depth == 0 && (c == ')' || c == ';' || keywordAt(s, i, "where", "from", "returning")):
+			return append(out, s[start:i])
+		case depth == 0 && c == ',':
+			out = append(out, s[start:i])
+			start = i + 1
+		}
+	}
+	return append(out, s[start:])
+}
+
+// keywordAt reports whether one of words, as a whole word in any case,
+// starts s at i.
+func keywordAt(s string, i int, words ...string) bool {
+	word := func(b byte) bool { return b == '_' || '0' <= b && b <= '9' || 'a' <= b|0x20 && b|0x20 <= 'z' }
+	if i > 0 && word(s[i-1]) {
+		return false
+	}
+	for _, w := range words {
+		if j := i + len(w); j <= len(s) && strings.EqualFold(s[i:j], w) && (j == len(s) || !word(s[j])) {
+			return true
+		}
+	}
+	return false
 }
 
 func moduleRoot(t *testing.T) string {
@@ -296,6 +352,11 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 		"internal/other/door.go:assembled: updates sessions.user_id",
 		"internal/other/door.go:assembled: writes INSERT INTO sessions by hand",
 		"internal/other/door.go:assembled: writes INSERT INTO sessions by hand",
+		"internal/other/door.go:local: updates sessions.kind",
+		"internal/other/door.go:local: writes INSERT INTO sessions by hand",
+		"internal/other/door.go:nested: updates sessions.kind, sessions.user_id",
+		"internal/other/door.go:nested: updates sessions.user_id",
+		"internal/other/door.go:nested: updates sessions.user_id, sessions.kind",
 		"internal/other/door.go:promote: updates sessions.kind, sessions.user_id",
 		"internal/other/door.go:qualified: updates sessions.user_id",
 		"internal/other/door.go:qualified: writes INSERT INTO sessions by hand",
@@ -306,6 +367,7 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 		"internal/store/db/queries/extra.sql:AliasSession: updates sessions.user_id",
 		"internal/store/db/queries/extra.sql:CreateSession: inserts into sessions",
 		"internal/store/db/queries/extra.sql:CreateSessionAgain: inserts into sessions",
+		"internal/store/db/queries/extra.sql:NestedWhere: updates sessions.kind, sessions.user_id",
 		"internal/store/db/queries/extra.sql:TouchAgain: updates sessions.kind",
 		"internal/store/db/queries/identity.sql:CreateSession: inserts into sessions",
 		"internal/store/db/queries/identity.sql:CreateSession: inserts into sessions",

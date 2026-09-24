@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T20:06:57Z
+updated_at: 2026-09-24T20:17:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -142,6 +142,24 @@ Review 500 (head d9063c5) marked all three of review 499's findings resolved, an
    - Fixtures: aliased Go and SQL updates of user_id and kind, and an aliased touch of last_used_at, which is not a door.
 
 All mutants over issue.go, insert and the scanner are killed (34 run). Along the way I dropped the redundant string-kind check, since strconv.Unquote refuses non-strings anyway.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:17:35Z
+
+Review 501 (head b8cf2f2) marked both of review 500's findings resolved, and raised two new medium findings. Both are accepted and fixed in chokepoint_test.go.
+
+1. **A WHERE nested in the SET clause ended the clause early.**
+   - The update regex now finds only `UPDATE <sessions> [AS alias] SET`. `setClauses` reads the assignments at the top level, where parentheses and '', "" and backtick quotes hide their contents. The clause ends at a top-level WHERE, FROM, RETURNING, semicolon or closing parenthesis, matched as whole words.
+   - The column-list form `SET (a, b) = (...)` counts every column it names.
+   - Fixtures:
+     - the reviewer's example, in Go and in SQL;
+     - a column list with a quoted comma and a 'where' literal;
+     - keywords inside strings and inside longer words ('x where, y', elsewhere, fromage), which do not end the clause;
+     - a last_used_at-only update with a nested SELECT … WHERE … IN (1, 2), which is not a door.
+2. **A local := was not resolved.**
+   - constString now resolves identifiers declared by `:=` as well as by const and var, by their initial value.
+   - Fixture: a two-name `t, n := "sessions", 1`, and a local SET fragment.
+
+Mutation: 42 mutants, all killed, excluding one equivalent. Dropping "where" from the clause-ending words changes nothing for valid SQL, because a WHERE clause has no top-level comma; it stays for the reader. Bracket quoting went, because no real sessions column name can contain the characters it would protect.
 
 ## Summary
 

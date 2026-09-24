@@ -53,3 +53,22 @@ func aliased(ctx context.Context, db execer) {
 	// Not a door: an aliased touch.
 	db.ExecContext(ctx, "UPDATE sessions AS s SET last_used_at = ? WHERE s.id_hash = ?")
 }
+
+// A local := is resolved like a constant (review 501).
+func local(ctx context.Context, db execer) {
+	t, n := "sessions", 1
+	db.ExecContext(ctx, "INSERT INTO "+t+" (id_hash) VALUES (?)", n)
+	set := "SET kind = 'user'"
+	db.ExecContext(ctx, "UPDATE sessions "+set)
+}
+
+// A WHERE, a comma or a quote inside an expression does not end the SET
+// clause (review 501).
+func nested(ctx context.Context, db execer) {
+	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = (SELECT 1 WHERE 1), kind = 'user', user_id = ? WHERE id_hash = ?")
+	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = coalesce(?, ','), (user_id, [kind]) = (?, 'where') WHERE id_hash = ?")
+	// A keyword inside a string or inside a longer word is not the keyword.
+	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = 'x where, y', last_used_at = elsewhere, last_used_at = fromage, user_id = ? WHERE id_hash = ?")
+	// Not a door: all of it is last_used_at.
+	db.ExecContext(ctx, "UPDATE sessions SET last_used_at = (SELECT max(x) FROM t WHERE y IN (1, 2)) WHERE id_hash = ?")
+}
