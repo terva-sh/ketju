@@ -21,10 +21,12 @@ blocks_on: none
 references:
   - ref: design:api
     path: docs/07-api-and-clients.md
+  - ref: pr:75
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T05:17:53Z
-updated_at: 2026-09-24T21:50:04Z
+updated_at: 2026-09-24T21:50:21Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
