@@ -68,7 +68,7 @@ ids and the sharded layout, the open-thread LRU cache, `ketju dump`,
 `ketju fsck`, CI, the frame fuzzer, property tests, crash tests, the benchmark,
 and the freeze.
 
-**Phase 1 is under way.** The first eight of its tickets to close were these.
+**Phase 1 is under way.** Its first eight tickets closed in two rounds.
 
 The first three were the markdown pipeline `TKT-01M29BW9Q8`, config loading
 `TKT-01M29BW9QF`, and the event bus `TKT-01M29C0WF9`. A fourth, `TKT-01M2JZB0`,
