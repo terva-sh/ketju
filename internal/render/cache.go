@@ -80,10 +80,14 @@ type post struct {
 }
 
 type entry struct {
-	key  Key
-	html string
-	size int64
+	key    Key
+	html   string
+	quotes []Quote
+	size   int64
 }
+
+// quoteSize is what one remembered quote costs: an ordinal and a flag.
+const quoteSize = 8
 
 // NewCache returns a cache bounded by maxBytes.
 //
@@ -118,9 +122,21 @@ func (c *Cache) Enabled() bool { return c.maxBytes > 0 }
 
 // Get returns the cached HTML for a key.
 func (c *Cache) Get(k Key) (string, bool) {
+	html, _, ok := c.GetQuoting(k)
+	return html, ok
+}
+
+// GetQuoting returns the cached HTML for a key and the quotes it was rendered
+// against, as [Cache.PutQuoting] stored them.
+//
+// The key names the quoting post's revision, not the state of the posts it
+// quotes, and a quote of a deleted post renders as a tombstone. A caller that
+// compares each Quote.Deleted with the quoted post's state now, and renders
+// again on a difference, never serves a quotation of a post deleted since.
+func (c *Cache) GetQuoting(k Key) (string, []Quote, bool) {
 	if !c.Enabled() {
 		c.misses.Add(1)
-		return "", false
+		return "", nil, false
 	}
 	k = k.normalise()
 
@@ -129,11 +145,12 @@ func (c *Cache) Get(k Key) (string, bool) {
 	el, ok := c.items[k]
 	if !ok {
 		c.misses.Add(1)
-		return "", false
+		return "", nil, false
 	}
 	c.ll.MoveToFront(el)
 	c.hits.Add(1)
-	return el.Value.(*entry).html, true
+	e := el.Value.(*entry)
+	return e.html, e.quotes, true
 }
 
 // Put stores the HTML for a key, evicting least-recently-used entries until the
@@ -144,12 +161,20 @@ func (c *Cache) Get(k Key) (string, bool) {
 // insert evicts anyway. The rendering is still returned to the reader who asked
 // for it; only the caching is declined.
 func (c *Cache) Put(k Key, html string) {
+	c.PutQuoting(k, html, nil)
+}
+
+// PutQuoting is Put for a rendering that depends on the posts it quotes:
+// quotes is [Result.Quotes], which [Cache.GetQuoting] hands back. The slice is
+// copied.
+func (c *Cache) PutQuoting(k Key, html string, quotes []Quote) {
 	if !c.Enabled() {
 		c.dropped.Add(1)
 		return
 	}
 	k = k.normalise()
-	size := int64(len(html)) + entryOverhead
+	quotes = append([]Quote(nil), quotes...)
+	size := int64(len(html)) + int64(len(quotes))*quoteSize + entryOverhead
 	if size > c.maxBytes {
 		c.rejected.Add(1)
 		return
@@ -161,13 +186,13 @@ func (c *Cache) Put(k Key, html string) {
 	if el, ok := c.items[k]; ok {
 		e := el.Value.(*entry)
 		c.bytes += size - e.size
-		e.html, e.size = html, size
+		e.html, e.quotes, e.size = html, quotes, size
 		c.ll.MoveToFront(el)
 		c.evictLocked()
 		return
 	}
 
-	el := c.ll.PushFront(&entry{key: k, html: html, size: size})
+	el := c.ll.PushFront(&entry{key: k, html: html, quotes: quotes, size: size})
 	c.items[k] = el
 	p := post{k.Thread, k.Ordinal}
 	if c.byPost[p] == nil {

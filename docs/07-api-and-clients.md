@@ -155,7 +155,13 @@ see tombstone contents).
   `p` is the thread row's `log_length_projected`, because the header's
   title, tags, lock and pin come from the projection, which can trail the
   log; `v` hashes the viewer block, page and query, so moving your own read
-  position or watch is a new tag. `If-None-Match` accepts a list, `W/` tags
+  position or watch is a new tag, and the forum's name and the page's authors
+  as drawn, which change in the database without the log moving. The length
+  and the page's entries come from one snapshot of the index
+  (`threadlog.Actor.Stable`), so a tag never names a length older or newer
+  than the posts it was computed from. A cached rendering that quotes a post
+  is reused only while the quoted post's deleted state is what it was
+  rendered against. `If-None-Match` accepts a list, `W/` tags
   and `*`. The response is `Cache-Control: private, no-cache`: always
   revalidate, and a 304 when nothing moved.
 - **`after_log_length=L`** keeps the posts *on the requested page* whose

@@ -78,7 +78,15 @@ func (e *ReadError) Unwrap() error { return e.Err }
 // edit was appended, so it breaks the run and pays its own read — which is
 // correct, not a shortcoming, since it genuinely is somewhere else.
 func (r *Reader) Range(from, to uint32) ([]Post, error) {
-	entries := r.ix.Entries(from, to)
+	return r.ReadEntries(from, r.ix.Entries(from, to))
+}
+
+// ReadEntries is Range over entries the caller already took from the index,
+// the first of them for ordinal from. A reader holding a snapshot from
+// [Actor.Stable] reads through it rather than the live index, so the posts are
+// the revisions that snapshot names even if an edit lands in between; the log
+// is append-only, so an offset once in an entry stays readable.
+func (r *Reader) ReadEntries(from uint32, entries []IndexEntry) ([]Post, error) {
 	if len(entries) == 0 {
 		return nil, nil
 	}
@@ -158,6 +166,11 @@ func (r *Reader) Hidden(ordinal uint32) (Post, error) {
 	if err != nil {
 		return Post{}, err
 	}
+	return r.HiddenEntry(ordinal, e)
+}
+
+// HiddenEntry is Hidden for an entry the caller already holds.
+func (r *Reader) HiddenEntry(ordinal uint32, e IndexEntry) (Post, error) {
 	buf := make([]byte, e.FrameLength)
 	if _, err := r.log.ReadAt(buf, int64(e.Offset)); err != nil {
 		return Post{}, &ReadError{Ordinal: ordinal, Offset: e.Offset, Err: err}

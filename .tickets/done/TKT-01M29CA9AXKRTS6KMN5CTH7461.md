@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T09:24:39Z
+updated_at: 2026-09-24T09:33:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -140,6 +140,26 @@ Built and verified. Where things are and what was decided:
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:24:23Z
 
 Correction to the previous note: 46 distinct mutants, not 53 (45 in the first pass, of which 7 were rerun with compiling variants, plus 1 added). The two survivors named there are the only ones.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:33:57Z
+
+Review 391 (Terva, head 9332633): one high and two medium findings, all fixed.
+
+- **high, log length vs index snapshot.** `LogLength()` read first and the index after it could see a batch applied in between. The ETag then named the old length over newer entries, and could 304 against it. Fix: a sequence lock on the actor. `applying` is odd while the in-memory index takes a batch and even once `published` covers it, and `Actor.Stable(read)` retries `read` until no batch overlapped. `commit` now applies in memory inside the lock, publishes, and only then writes the index file, so a reader spins for the microseconds of `Index.Apply` and never for I/O. `View` takes the length, `Len`, the page's entries and the reply counts in one `Stable` pass, and reads the posts through `Reader.ReadEntries(from, entries)`, which is the snapshot, not the live index. `HiddenEntry` does the same for a moderator's tombstone read.
+  - Rejected: re-reading the length after the entries and retrying on a change. The length is published after the apply, so a reader could see the index mid-batch with the length unchanged.
+  - Rejected: a length field inside `Index` under its mutex. `Apply` locks per frame, so a reader could still land mid-batch.
+- **medium, cached quote of a post deleted later.** `render.Cache` now stores `Result.Quotes` with the HTML (`PutQuoting`/`GetQuoting`; `Get`/`Put` unchanged). `threads.html` reuses a hit only while every quoted post's deleted state matches. A delete also moves the log, so the ETag moves with it.
+  - Rejected: bypassing the cache for any post that quotes. Correct, but it re-renders the commonest kind of reply on every view.
+- **medium, author profiles not in the ETag.** The page's authors are now loaded before the ETag, from the snapshot's entries, and hashed into the `v` digest along with the forum's name and slug. The same gap existed for a forum rename, which the review did not name.
+  - Rejected: `max(users.updated_at)`. It depends on every writer remembering to bump `updated_at`, and it would move every page's tag for any profile change anywhere.
+- Tests:
+  - `TestStableSeesExactlyOneLength` kills a no-recheck mutant 10/10.
+  - `TestReadEntriesReadsTheSnapshot`.
+  - `TestCachedQuoteOfAPostDeletedLater`.
+  - `TestETagCoversAuthorsAndForum` (display name, role, forum name).
+  - A page-2 reply count in `TestAfterLogLength`.
+  - 12 mutants over the fixes; all killed.
+- Not fixed here: a mention cached before its handle existed stays plain text. Filed as draft TKT-01M39C6XFM, "Rendered-post cache ignores later handle resolution for mentions".
 
 ## Summary
 

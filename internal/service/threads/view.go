@@ -178,34 +178,70 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 
 	var res Result
 	err = s.Threads.With(id, func(th *threadcache.Thread) error {
-		// Length first, then the index: the index is then at least as new as
-		// the length the response claims (threadlog.Actor.LogLength).
-		logLength := th.Actor.LogLength()
-		ix := th.Index
-		n := ix.Len()
+		// One snapshot: the length the ETag names and the entries and reply
+		// counts the page is built from describe the same log. Without it an
+		// append landing between the two could be answered with a 304 for the
+		// length before it (threadlog.Actor.Stable).
+		var (
+			snap    snapshot
+			pageErr error
+		)
+		th.Actor.Stable(func(logLength int64) {
+			snap = snapshot{logLength: logLength, n: th.Index.Len()}
+			snap.page, pageErr = PageFor(q, snap.n, size, v.Member(), lastRead)
+			if pageErr != nil {
+				return
+			}
+			snap.from = uint32((snap.page-1)*size + 1)
+			snap.entries = th.Index.Entries(snap.from, uint32(snap.page*size))
+			ordinals := make([]uint32, len(snap.entries))
+			for i := range snap.entries {
+				ordinals[i] = snap.from + uint32(i)
+			}
+			snap.replies = th.Index.ReplyCounts(ordinals)
+		})
+		if pageErr != nil {
+			return pageErr
+		}
 
-		page, err := PageFor(q, n, size, v.Member(), lastRead)
+		// The authors are drawn from the users table, which changes without
+		// the log moving, so they are read before the ETag and are part of it.
+		ids := map[int64]bool{}
+		for _, e := range snap.entries {
+			ids[int64(e.Author)] = true
+		}
+		authors, err := s.users(ctx, ids)
 		if err != nil {
 			return err
 		}
-		from, to := uint32((page-1)*size+1), uint32(page*size)
-		entries := ix.Entries(from, to)
 
-		res.ETag = etag(id, logLength, class, row.LogLengthProjected, page, q, viewer)
+		res.ETag = etag(id, snap.logLength, class, row.LogLengthProjected, snap.page, q, viewer, forum, authors)
 		if matches(ifNoneMatch, res.ETag) {
 			res.NotModified = true
 			return nil
 		}
 
 		res.Page = dto.ThreadPage{
-			Thread: header(id, row, forum, tags, n, logLength),
-			Page:   dto.Pagination{Number: page, Size: size, TotalPages: totalPages(n, size)},
+			Thread: header(id, row, forum, tags, snap.n, snap.logLength),
+			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
-		res.Page.Posts, err = s.posts(ctx, th, id, entries, from, q, class == ClassModerator)
+		res.Page.Posts, err = s.posts(ctx, th, id, snap, authors, q, class == ClassModerator)
 		return err
 	})
 	return res, err
+}
+
+// snapshot is one consistent view of a thread's index: the log length, the
+// post count, and the requested page's entries and reply counts, all as of
+// that length.
+type snapshot struct {
+	logLength int64
+	n         int
+	page      int
+	from      uint32
+	entries   []threadlog.IndexEntry
+	replies   map[uint32]int
 }
 
 // PageFor picks the page: a permalink's, the asked-for one, the one holding
@@ -248,18 +284,25 @@ func totalPages(n, size int) int {
 //     which can catch up under an unchanged log length;
 //   - the page served, which depends on the viewer's read position when the
 //     URL names none, and a digest of the viewer block, so a read position,
-//     watch or permission change is never answered with a stale 304.
+//     watch or permission change is never answered with a stale 304;
+//   - in the same digest, the forum's name and slug and the page's authors as
+//     they will be drawn: both live in the database and change without the
+//     log moving.
 //
 // Lens and after_log_length are in the URL and therefore in the client's cache
 // key already; they are in the digest too so the ETag alone is enough.
-func etag(id threadid.ID, logLength int64, class string, projected int64, page int, q Query, v dto.ThreadViewer) string {
+func etag(id threadid.ID, logLength int64, class string, projected int64, page int, q Query,
+	v dto.ThreadViewer, forum dbq.Forum, authors map[int64]dto.Author) string {
+	// encoding/json writes map keys sorted, so equal authors hash equally.
 	b, _ := json.Marshal(struct {
-		V     dto.ThreadViewer
-		Page  int
-		Lens  string
-		After int64
-		Has   bool
-	}{v, page, q.Lens, q.After, q.HasAfter})
+		V       dto.ThreadViewer
+		Page    int
+		Lens    string
+		After   int64
+		Has     bool
+		Forum   dto.ForumRef
+		Authors map[int64]dto.Author
+	}{v, page, q.Lens, q.After, q.HasAfter, dto.ForumRef{Slug: forum.Slug, Name: forum.Name}, authors})
 	sum := sha256.Sum256(b)
 	return fmt.Sprintf(`"%s-%d-r%d-%s-p%d-v%s"`, id, logLength, render.Version, class, projected, hex.EncodeToString(sum[:6]))
 }
@@ -299,15 +342,13 @@ func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n in
 	return h
 }
 
-// posts reads, renders and assembles the page's posts.
-func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid.ID,
-	entries []threadlog.IndexEntry, from uint32, q Query, moderator bool) ([]dto.Post, error) {
+// posts reads, renders and assembles the page's posts, reading the
+// revisions the snapshot names rather than whatever the index holds by now.
+func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
+	users map[int64]dto.Author, q Query, moderator bool) ([]dto.Post, error) {
 	out := []dto.Post{}
-	if len(entries) == 0 {
-		return out, nil
-	}
-	to := from + uint32(len(entries)) - 1
-	read, err := th.Reader.Range(from, to)
+	entries := snap.entries
+	read, err := th.Reader.ReadEntries(snap.from, entries)
 	if err != nil {
 		return nil, err
 	}
@@ -317,32 +358,18 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 	// offset, so it does not show here; the client refetches the page on a
 	// moderation event instead (settled in grooming).
 	var posts []threadlog.Post
-	authors := map[int64]bool{}
 	for i, p := range read {
 		if q.HasAfter && int64(entries[i].Offset) < q.After {
 			continue
 		}
 		if p.Tombstone && moderator {
-			if p, err = th.Reader.Hidden(p.Ordinal); err != nil {
+			if p, err = th.Reader.HiddenEntry(p.Ordinal, entries[i]); err != nil {
 				return nil, err
 			}
 		}
 		posts = append(posts, p)
-		authors[int64(p.Author)] = true
-	}
-	if len(posts) == 0 {
-		return out, nil
 	}
 
-	users, err := s.users(ctx, authors)
-	if err != nil {
-		return nil, err
-	}
-	ordinals := make([]uint32, len(posts))
-	for i, p := range posts {
-		ordinals[i] = p.Ordinal
-	}
-	replies := th.Index.ReplyCounts(ordinals)
 	rctx := render.Context{
 		Posts: render.ResolverFunc(func(o uint32) (bool, bool) {
 			tomb, err := th.Index.Tombstoned(o)
@@ -357,7 +384,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 			Revision:        int(p.Revision),
 			Author:          users[int64(p.Author)],
 			CreatedAt:       dto.Millis(p.CreatedMS),
-			ReplyCount:      replies[p.Ordinal],
+			ReplyCount:      snap.replies[p.Ordinal],
 			Attachments:     []dto.Attachment{},
 			Deleted:         p.Flags.Has(threadlog.EntryDeleted) || p.Flags.Has(threadlog.EntryHiddenByMod),
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
@@ -388,17 +415,30 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 }
 
 // html renders one post through the render cache.
+//
+// A cached rendering is reused only while every post it quotes is still in
+// the state it was rendered against: the key names this post's revision, and
+// a quote of a post deleted since must become a tombstone.
 func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context) (string, error) {
 	k := render.Key{Thread: id, Ordinal: p.Ordinal, Revision: uint32(p.Revision)}
-	if html, ok := s.Render.Get(k); ok {
+	if html, quotes, ok := s.Render.GetQuoting(k); ok && quotesCurrent(quotes, rctx.Posts) {
 		return html, nil
 	}
 	r, err := render.RenderWith(p.Source, rctx)
 	if err != nil {
 		return "", fmt.Errorf("threads: rendering %s#%d: %w", id, p.Ordinal, err)
 	}
-	s.Render.Put(k, r.HTML)
+	s.Render.PutQuoting(k, r.HTML, r.Quotes)
 	return r.HTML, nil
+}
+
+func quotesCurrent(quotes []render.Quote, posts render.PostResolver) bool {
+	for _, q := range quotes {
+		if exists, deleted := posts.ResolvePost(q.Ordinal); !exists || deleted != q.Deleted {
+			return false
+		}
+	}
+	return true
 }
 
 // users loads the page's authors in one query. An author the database does

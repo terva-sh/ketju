@@ -3,6 +3,7 @@ package threadlog
 import (
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -140,6 +141,12 @@ type Actor struct {
 	// length it reports (TKT-01M29CA9AX).
 	published atomic.Int64
 
+	// applying is a sequence lock over the in-memory index: odd while a batch
+	// is being applied, bumped to even once published covers it. [Actor.Stable]
+	// uses it to hand a reader a length and an index that describe exactly the
+	// same log, rather than an index that may be newer than the length.
+	applying atomic.Uint64
+
 	mu       sync.Mutex
 	closeErr error
 	closed   bool
@@ -221,6 +228,27 @@ func (a *Actor) Index() *Index { return a.ix }
 // index already reflects every record it covers, so read it before taking an
 // index snapshot and the snapshot is at least that new.
 func (a *Actor) LogLength() int64 { return a.published.Load() }
+
+// Stable calls read with the published log length, and calls it again until
+// no batch was applied to the index while it ran. What read saw of the index
+// is then exactly the log at that length, neither older nor newer, which is
+// what an ETag naming the length needs of the entries it was computed from.
+//
+// read may run more than once, so it must only read, and it should be quick:
+// every batch applied while it runs costs it another pass.
+func (a *Actor) Stable(read func(logLength int64)) {
+	for {
+		seq := a.applying.Load()
+		if seq&1 == 1 {
+			runtime.Gosched()
+			continue
+		}
+		read(a.published.Load())
+		if a.applying.Load() == seq {
+			return
+		}
+	}
+}
 
 func (a *Actor) run() {
 	defer close(a.done)
@@ -321,8 +349,12 @@ func (a *Actor) commit(batch []request) {
 		}
 	}
 
-	// 4. Durable. Now, and only now, the index.
+	// 4. Durable. Now, and only now, the index: the in-memory one first,
+	//    inside the sequence lock and with no I/O, then publish, then the
+	//    index file. A reader in Stable spins only for the in-memory part.
 	a.logLength = base + int64(len(buf))
+	applied := make([]bool, len(staging))
+	a.applying.Add(1)
 	for i := range staging {
 		s := &staging[i]
 		if err := a.ix.Apply(s.header, s.body, uint64(s.offset), s.size); err != nil {
@@ -333,12 +365,18 @@ func (a *Actor) commit(batch []request) {
 			a.noteErr(fmt.Errorf("threadlog: index diverged at ordinal %d: %w", s.header.Ordinal, err))
 			continue
 		}
-		a.writeEntry(s.header.Ordinal)
+		applied[i] = true
 		s.res.LogLength = a.logLength
+	}
+	a.published.Store(a.logLength)
+	a.applying.Add(1)
+	for i := range staging {
+		if applied[i] {
+			a.writeEntry(staging[i].header.Ordinal)
+		}
 	}
 	a.headerDirty = true
 	a.flushHeader()
-	a.published.Store(a.logLength)
 
 	// 5. Answer.
 	for i := range staging {

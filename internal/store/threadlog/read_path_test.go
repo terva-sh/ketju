@@ -3,6 +3,7 @@ package threadlog
 import (
 	"bytes"
 	"sync"
+	"sync/atomic"
 	"testing"
 )
 
@@ -121,5 +122,90 @@ func TestReplyCounts(t *testing.T) {
 		if got[k] != v {
 			t.Errorf("ordinal %d: %d replies, want %d", k, got[k], v)
 		}
+	}
+}
+
+// TestStableSeesExactlyOneLength: inside Stable, the length and the index are
+// the same log, so with only posts appended the last indexed post ends exactly
+// at the length: never short of it, and never past it, which is what a bare
+// LogLength-then-index read allows while a batch is being applied.
+func TestStableSeesExactlyOneLength(t *testing.T) {
+	a, _, _, _ := newThread(t, SyncNever)
+	t.Cleanup(func() { a.Close() })
+
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	var checks atomic.Int64
+	// Several readers, because the window this closes is the few
+	// microseconds a batch spends in Index.Apply.
+	for range 4 {
+		wg.Go(func() { stableReader(t, a, stop, &checks) })
+	}
+	var writers sync.WaitGroup
+	for range 16 {
+		writers.Go(func() {
+			for range 250 {
+				if _, err := a.Append(post("x")); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		})
+	}
+	writers.Wait()
+	close(stop)
+	wg.Wait()
+	if checks.Load() == 0 {
+		t.Fatal("no reader ever ran")
+	}
+}
+
+func stableReader(t *testing.T, a *Actor, stop chan struct{}, checks *atomic.Int64) {
+	for {
+		select {
+		case <-stop:
+			return
+		default:
+		}
+		var l, end int64
+		a.Stable(func(logLength int64) {
+			l, end = logLength, int64(FileHeaderSize)
+			if n := a.Index().Len(); n > 0 {
+				e, err := a.Index().Entry(uint32(n))
+				if err != nil {
+					t.Error(err)
+					return
+				}
+				end = int64(e.Offset) + int64(e.FrameLength)
+			}
+		})
+		if end != l {
+			t.Errorf("Stable gave length %d with an index ending at %d", l, end)
+			return
+		}
+		checks.Add(1)
+	}
+}
+
+// TestReadEntriesReadsTheSnapshot: entries taken before an edit still read
+// the revision they name, so a page built from a snapshot shows the posts as
+// of that snapshot.
+func TestReadEntriesReadsTheSnapshot(t *testing.T) {
+	// threadWith is deterministic, so the same two posts without the edit
+	// give the entries a reader held before it.
+	_, ix := threadWith(t, 2)
+	before := ix.Entries(1, 2)
+	lg, edited := threadWith(t, 2, Append{Type: TypeEdit, Author: 1, Ordinal: 2, Body: &EditBody{Source: "edited"}})
+	r := NewReader(bytes.NewReader(lg.bytes()), edited)
+	old, err := r.ReadEntries(1, before)
+	if err != nil {
+		t.Fatal(err)
+	}
+	now, err := r.Range(1, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if old[1].Revision != 1 || old[1].Source == "edited" || now[1].Revision != 2 || now[1].Source != "edited" {
+		t.Fatalf("through the snapshot: %+v; live: %+v", old[1], now[1])
 	}
 }

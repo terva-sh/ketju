@@ -400,7 +400,7 @@ func TestAfterLogLength(t *testing.T) {
 		l = w.post(id, "alice", fmt.Sprintf("post %d", i+1), 0)
 	}
 	for i := range 3 {
-		w.post(id, "scribe", fmt.Sprintf("new %d", i+1), 0)
+		w.post(id, "scribe", fmt.Sprintf("new %d", i+1), 27)
 	}
 	w.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: uint64(w.users["alice"]), Ordinal: 27,
 		Body: &threadlog.EditBody{Source: "post 27, fixed"}})
@@ -414,6 +414,9 @@ func TestAfterLogLength(t *testing.T) {
 	}
 	if fmt.Sprint(got) != "[27 31 32 33]" {
 		t.Fatalf("after %d, page 2 returned ordinals %v; want [27 31 32 33]", l, got)
+	}
+	if p.Posts[0].ReplyCount != 3 {
+		t.Fatalf("post 27, replied to three times, has reply_count %d", p.Posts[0].ReplyCount)
 	}
 	if p.Thread.PostCount != 33 || p.Thread.LogLength <= l {
 		t.Fatalf("the header says %d posts at length %d", p.Thread.PostCount, p.Thread.LogLength)
@@ -579,5 +582,47 @@ func TestQuoteOfADeletedPost(t *testing.T) {
 	deleted, live := p.Posts[4].HTML, p.Posts[5].HTML
 	if strings.Contains(deleted, "what bob said") || !strings.Contains(live, "what I said") {
 		t.Fatalf("quoting deleted #3 rendered %q; quoting live #1 rendered %q", deleted, live)
+	}
+}
+
+// TestCachedQuoteOfAPostDeletedLater: a quote rendered while its target was
+// live is cached, and deleting the target afterwards turns it into a
+// tombstone on the next request rather than serving the cached quotation.
+func TestCachedQuoteOfAPostDeletedLater(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	w.post(id, "carol", "> [quote=#1]\n> what alice said\n\nquite", 0)
+	path := "/api/v1/threads/" + id.String()
+	if p := page(t, w.get(domain.Anonymous(), path)); !strings.Contains(p.Posts[4].HTML, "what alice said") {
+		t.Fatalf("the live quote rendered as %q", p.Posts[4].HTML)
+	}
+	w.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["bob"]), Ordinal: 1,
+		Body: &threadlog.DeleteBody{}})
+	if p := page(t, w.get(domain.Anonymous(), path)); strings.Contains(p.Posts[4].HTML, "what alice said") {
+		t.Fatalf("after #1 was deleted the quote still reads %q", p.Posts[4].HTML)
+	}
+}
+
+// TestETagCoversAuthorsAndForum: an author's profile or the forum's name
+// changes the page without moving the log, and the ETag moves with it.
+func TestETagCoversAuthorsAndForum(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	path := "/api/v1/threads/" + id.String()
+	for _, change := range []struct{ name, sql string }{
+		{"a display name", `UPDATE users SET display_name = 'Alice N.' WHERE handle = 'alice'`},
+		{"a role", `UPDATE users SET role = 'moderator' WHERE handle = 'scribe'`},
+		{"the forum name", `UPDATE forums SET name = 'Town square' WHERE slug = 'general'`},
+	} {
+		tag := w.get(domain.Anonymous(), path).Header().Get("ETag")
+		if err := w.db.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+			_, err := tx.ExecContext(t.Context(), change.sql)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if rec := w.get(domain.Anonymous(), path, "If-None-Match", tag); rec.Code != http.StatusOK {
+			t.Errorf("after changing %s the old ETag still got %d", change.name, rec.Code)
+		}
 	}
 }
