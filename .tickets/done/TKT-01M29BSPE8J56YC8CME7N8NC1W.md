@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-24T06:52:06Z
+updated_at: 2026-09-24T06:54:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -90,6 +90,10 @@ Three findings go beyond the criteria:
 
 The raw output stays on the benchmark machine at `~/.cache/ketju-bench/bspe8-bench.txt` and `bspe8-rerun.txt`. The README in the spike carries the table and the fallback-cost list.
 
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T06:54:12Z
+
+Terva review 364 (run 39a0d3c3-51d1-4850-93f6-dab39b9e7652, Actions run 111), head 82b168b109ba558b984d5c5b600afba2c36f500e, base ac05a3caa3d2bfe29b47b0961d6fb1445bfb337a: one high finding, 'Do not treat the chosen driver as durable before the directory-fsync gap is addressed'. **Accepted and fixed.** The directory-fsync workaround is now an acceptance criterion of TKT-01M29BW9Q1, which writes the opener, so no authoritative write can land without it. docs/04 'Engine' and the spike README state that ncruces is conditional on it. The draft TKT-01M392DP19 is narrowed to the upstream report and removing the workaround later. A follow-up review of the new head is requested.
+
 ## Summary
 
-ncruces stands. On the single-writer projection write path it matched or beat modernc at every batch size, with sync on and off; with the disk taken out it runs at 0.71× to 1.20× of modernc, well inside the 2× halt rule. FTS5 and Go tokenizers are confirmed through ext/fts5 RegisterCustom/CreateTokenizer; modernc has FTS5 and porter but no Go tokenizer API, which is the real fallback cost (listed in spikes/sqlite-driver/README.md). Findings beyond the criteria: modernc syncs with fsync where ncruces uses fdatasync; several ncruces writer connections starve each other, so W9Q1's single write connection is required (docs/04 updated); ncruces skips the directory fsync, filed as the draft TKT-01M392DP19. CI now vets the spike, runs its tests, and runs the benchmark once.
+ncruces stands, on condition that ketju works around its missing directory fsync; that workaround is now an acceptance criterion of TKT-01M29BW9Q1, before any authoritative write. On the single-writer projection write path ncruces matched or beat modernc at every batch size, with sync on and off; with the disk taken out it runs at 0.71× to 1.20× of modernc, well inside the 2× halt rule. FTS5 and Go tokenizers are confirmed through ext/fts5 RegisterCustom/CreateTokenizer; modernc has FTS5 and porter but no Go tokenizer API, which is the real fallback cost (listed in spikes/sqlite-driver/README.md). Also found: modernc syncs with fsync where ncruces uses fdatasync, and several ncruces writer connections starve each other, so W9Q1's single write connection is required (docs/04 updated). The draft TKT-01M392DP19 carries the upstream report. CI vets the spike, runs its tests, and runs the benchmark once.

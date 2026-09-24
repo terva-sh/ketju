@@ -12,8 +12,14 @@ Connection pool capped at 4–8; writes use `BEGIN IMMEDIATE`; `busy_timeout`
 set explicitly. Writes go through a single connection, so in-process writers
 queue in Go rather than in SQLite's busy handler: the driver benchmark
 (TKT-01M29BSPE8, `spikes/sqlite-driver/`) saw ncruces commits starve for
-seconds with four or eight writer connections contending. Backups:
-`VACUUM INTO` for a consistent snapshot.
+seconds with four or eight writer connections contending. The same benchmark
+found that ncruces never fsyncs the directory when SQLite asks it to after
+creating the WAL file, so a power loss could take the WAL, and the committed
+transactions in it, with it. The opener therefore fsyncs the data directory
+itself once the WAL exists and before the first authoritative write, and no
+authoritative write may happen without that step (TKT-01M29BW9Q1; the upstream
+report and eventual removal are TKT-01M392DP19). Backups: `VACUUM INTO` for a
+consistent snapshot.
 
 Access from Go: **sqlc**, generating typed `database/sql` code from `.sql`
 query files, with the migration directory as its schema source (decided

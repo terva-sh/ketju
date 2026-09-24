@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-24T06:51:22Z
+updated_at: 2026-09-24T06:53:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,6 +50,7 @@ SQL stays driver-agnostic. That constraint is the mitigation for the ncruces pre
 - [ ] sqlc is configured with the migration directory as its schema source, its version is pinned, and generated code is committed
 - [ ] CI regenerates the sqlc output and fails when it differs from what is committed
 - [ ] A test or lint fails if a package outside the access layer imports a SQLite driver directly
+- [ ] Before the first authoritative write, the opener fsyncs the data directory after the WAL file exists, working around ncruces skipping the directory fsync (TKT-01M392DP19); a test proves the directory sync is issued
 
 ## Implementation plan
 

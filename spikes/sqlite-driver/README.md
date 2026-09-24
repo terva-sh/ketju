@@ -10,7 +10,8 @@ or if the modernc fallback is ever needed.
 
 ## Result
 
-**ncruces stands.** The decision reopens only if ncruces is more than twice as
+**ncruces stands, on condition that ketju works around its missing directory
+fsync** (see below). The decision reopens only if ncruces is more than twice as
 slow as modernc on the projection write path. On the configuration ketju uses,
 with a single writer connection, it never was: it matched or beat modernc in
 every case, and it was ahead most clearly where the disk sync dominates.
@@ -58,7 +59,13 @@ writer is load-bearing, not an optimisation.
 **ncruces skips the directory fsync.** In `vfs/file.go`, `(*vfsFile).Sync`
 opens the parent directory when SQLite asks for a directory sync, then syncs
 the file a second time instead of the directory. That is true of v0.35.6 and of
-upstream main on 2026-09-24. TKT-01M392DP19 tracks a workaround.
+upstream main on 2026-09-24. A power loss just after the WAL is created could
+lose the WAL, and with it committed authoritative transactions. **The choice of
+ncruces is conditional on a workaround:** the database opener fsyncs the data
+directory itself once the WAL exists, before any authoritative write. That is an
+acceptance criterion of TKT-01M29BW9Q1, the ticket that writes the opener, so no
+authoritative write can land without it. TKT-01M392DP19 covers reporting the
+bug upstream and removing the workaround once a fixed release is pinned.
 
 ## FTS5
 
