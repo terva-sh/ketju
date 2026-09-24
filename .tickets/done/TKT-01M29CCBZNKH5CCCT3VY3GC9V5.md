@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:08:39Z
+updated_at: 2026-09-24T15:14:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -101,6 +101,25 @@ Mutation check, 10 mutants run and 10 killed. Each was a single change to the lo
 Not run, as equivalent: making unlock a no-op in Release, because closing the descriptor drops the flock anyway.
 
 AC1 and AC3 are left unticked. Both name serve ("a second serve … exits non-zero", "released on graceful shutdown"), and serve does not exist yet. At the lock level both are proven with a real second process: the refusal exits non-zero naming the pid, and after Release the lock can be taken by another process. The serve-level halves are recorded on TKT-01M29CCBYX (Implement ketju serve with graceful shutdown), whose plan already puts them in its serve test.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:14:09Z
+
+Answered review 433 on PR #66.
+
+- **High, a symlinked lock file.** Acquire truncates and rewrites what it opens, so a symlink planted at ketju.lock would aim that rewrite at another file. The open now happens in openFile (lock_unix.go), which:
+  - uses O_NOFOLLOW, so a symlink is refused, and a dangling one creates nothing;
+  - then fstats the opened file and refuses anything but a regular file with one link. A fifo is refused as not a plain file; a directory is already refused by the open. The link check matters because a hard link is the same attack without a symlink.
+  Each refusal says what it found and is not a HeldError, so the operator is not sent looking for a process. TestLockFileMustBeItsOwn covers a symlink, a dangling symlink, a hard link, a fifo and a directory, and checks the victim file is untouched.
+- **Medium, the test holder.** It used a bare select{}, which with no other goroutine can die as a deadlock before the test kills it. It now sleeps for an hour instead.
+
+Mutation check: 14 of 14 killed. That is the 10 from before (the O_TRUNC one moved to the new open) plus 4 on the new checks:
+- dropping O_NOFOLLOW;
+- dropping the regular-file check (killed once the test required the refusal wording; before that a fifo failed later, at Truncate, which made the mutant equivalent in outcome);
+- dropping the link count check;
+- dropping the symlink wording.
+go test -race -count=30 -cpu 1,4 ./internal/lock passes.
+
+CI run 277 failed in internal/store/threadlog, TestQueuedAppendsShareOneFsync ("17 appends cost 1 log fsyncs, want 2"). That is the known flake in draft TKT-01M393S6P7 (Order the group-commit fsync test so its first append is in flight), in a package this PR does not touch. internal/lock passed in that run.
 
 ## Summary
 

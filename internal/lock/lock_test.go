@@ -46,7 +46,10 @@ func helper(dir, mode string) int {
 	}
 	if mode == "hold" {
 		fmt.Println("held")
-		select {}
+		// Asleep, not blocked forever: with no other goroutine a bare select
+		// can be reported as a deadlock and end the process before the test
+		// kills it (review 433).
+		time.Sleep(time.Hour)
 	}
 	l.Release()
 	return 0
@@ -254,5 +257,69 @@ func TestMissingDirectoryIsNotCreated(t *testing.T) {
 	}
 	if _, err := os.Stat(dir); !errors.Is(err, os.ErrNotExist) {
 		t.Errorf("Acquire created %s: %v", dir, err)
+	}
+}
+
+// Acquire rewrites the file it opens, so it refuses to open anything but a
+// plain file of its own there: a symlink or a hard link would aim that
+// rewrite at another file (review 433).
+func TestLockFileMustBeItsOwn(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		want  string // what the refusal has to say it found
+		plant func(t *testing.T, lockPath, victim string)
+	}{
+		{"a symlink", "is a symlink", func(t *testing.T, lockPath, victim string) {
+			if err := os.Symlink(victim, lockPath); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"a dangling symlink", "is a symlink", func(t *testing.T, lockPath, victim string) {
+			if err := os.Symlink(victim+".absent", lockPath); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"a hard link", "has 2 links", func(t *testing.T, lockPath, victim string) {
+			if err := os.Link(victim, lockPath); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"a fifo", "not a plain file", func(t *testing.T, lockPath, _ string) {
+			if err := syscall.Mkfifo(lockPath, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}},
+		{"a directory", "is a directory", func(t *testing.T, lockPath, _ string) {
+			if err := os.Mkdir(lockPath, 0o755); err != nil {
+				t.Fatal(err)
+			}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := t.TempDir()
+			victim := filepath.Join(t.TempDir(), "precious")
+			if err := os.WriteFile(victim, []byte("do not truncate"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			c.plant(t, filepath.Join(dir, FileName), victim)
+
+			l, err := Acquire(dir, "serve")
+			if err == nil {
+				l.Release()
+				t.Fatal("acquired through a lock file that is not a plain file of its own")
+			}
+			if !strings.Contains(err.Error(), c.want) {
+				t.Errorf("the refusal does not say %q: %v", c.want, err)
+			}
+			if errors.As(err, new(*HeldError)) {
+				t.Errorf("reported as held, which sends the operator looking for a process: %v", err)
+			}
+			if b, _ := os.ReadFile(victim); string(b) != "do not truncate" {
+				t.Errorf("the other file was rewritten: %q", b)
+			}
+			if _, err := os.Stat(victim + ".absent"); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("a dangling symlink's target was created: %v", err)
+			}
+		})
 	}
 }

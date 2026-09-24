@@ -85,9 +85,7 @@ type Lock struct {
 // a lock taken in a directory that a typo just created would protect nothing.
 func Acquire(dir, purpose string) (*Lock, error) {
 	path := filepath.Join(dir, FileName)
-	// Not O_TRUNC: the holder's record has to survive a refused open, or the
-	// refusal could not say who holds the lock.
-	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
+	f, err := openFile(path)
 	if err != nil {
 		return nil, fmt.Errorf("lock: opening %s: %w", path, err)
 	}

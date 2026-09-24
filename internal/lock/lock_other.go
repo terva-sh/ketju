@@ -20,3 +20,7 @@ func tryLock(*os.File) error {
 }
 
 func unlock(*os.File) error { return nil }
+
+func openFile(path string) (*os.File, error) {
+	return os.OpenFile(path, os.O_RDWR|os.O_CREATE, 0o644)
+}

@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T07:06:22Z
-updated_at: 2026-09-24T12:22:19Z
+updated_at: 2026-09-24T15:14:09Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -52,3 +52,7 @@ This was found during TKT-01M29BW9Q1 and left out of that PR, because a run PR s
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:22:19Z
 
 Seen again in CI run 236 (PR #62, head 9895ef9, 2026-09-24): TestQueuedAppendsShareOneFsync failed under -race in internal/store/threadlog. The PR changed nothing in threadlog; the next push reran CI.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:14:09Z
+
+Recurred in CI: run 277 (PR #66, head 3aa0366), go test (race), with the same message: actor_test.go:242: 17 appends cost 1 log fsyncs, want 2. That is the second time it has failed a run PR in CI. Still a draft; not promoted by the run.

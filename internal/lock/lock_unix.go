@@ -4,12 +4,49 @@ package lock
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"syscall"
 )
 
 // errHeld is tryLock's answer when another open file holds the lock.
 var errHeld = errors.New("lock: held")
+
+// openFile opens the lock file for reading and writing, creating it if it
+// is not there, and refuses one that is not a plain file of its own.
+//
+// Acquire truncates and rewrites what it opens, so the file has to be the
+// lock file and nothing else (review 433). O_NOFOLLOW refuses a symlink,
+// which would otherwise aim that truncation at whatever it names; the check
+// after the open refuses a directory, a device or a fifo, and a hard link,
+// which is the same aim without a symlink.
+//
+// Not O_TRUNC: the holder's record has to survive a refused open, or the
+// refusal could not say who holds the lock.
+func openFile(path string) (*os.File, error) {
+	f, err := os.OpenFile(path, os.O_RDWR|os.O_CREATE|syscall.O_NOFOLLOW, 0o644)
+	if err != nil {
+		if errors.Is(err, syscall.ELOOP) {
+			return nil, fmt.Errorf("%s is a symlink; the lock file must be a plain file", path)
+		}
+		return nil, err
+	}
+	fi, err := f.Stat()
+	if err != nil {
+		f.Close()
+		return nil, err
+	}
+	st, ok := fi.Sys().(*syscall.Stat_t)
+	switch {
+	case !fi.Mode().IsRegular():
+		f.Close()
+		return nil, fmt.Errorf("%s is not a plain file (%s)", path, fi.Mode().Type())
+	case ok && st.Nlink != 1:
+		f.Close()
+		return nil, fmt.Errorf("%s has %d links; the lock file must be a file of its own", path, st.Nlink)
+	}
+	return f, nil
+}
 
 // tryLock takes an exclusive flock without waiting. A flock belongs to the
 // open file description, so a second open of the same file in this process
