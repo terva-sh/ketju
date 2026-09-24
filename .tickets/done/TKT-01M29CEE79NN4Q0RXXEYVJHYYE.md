@@ -24,10 +24,12 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:76
     path: null
+  - ref: pr:77
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T23:31:31Z
+updated_at: 2026-09-24T23:59:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -198,6 +200,10 @@ Review 555 (head 07a699c, Actions run 384) resolved review 547's finding. It rai
 - Tests: unit tests, and a screen test on the lookup URL and the insertion.
 
 Mutants: 46, all killed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T23:59:46Z
+
+Review round six on #76, head c872487 (Actions run 386), did not run: context_limit. The PR diff is about 254 KB, including the regenerated client bundle, and the five earlier rounds' bodies are in the discussion the reviewer reads. The maintainer chose to replace #76 with a fresh PR from the same branch and review it once. The merge rule is the one they set for #71: merge if it is clean or raises only further edge cases of the same kind, filing those as a follow-up draft. #76 is closed unmerged, with a pointer; #77 replaces it.
 
 ## Summary
 
