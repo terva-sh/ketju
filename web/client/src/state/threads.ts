@@ -1,5 +1,5 @@
 import { signal } from '@preact/signals';
-import { apiGet, forgetGets } from '../api/client';
+import { apiGet, forgetGets, forgetHeld } from '../api/client';
 import type { ThreadHeader, ThreadPage } from '../api/dto';
 import { revokesAccess } from '../api/problem';
 
@@ -85,9 +85,10 @@ export async function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortS
   // from before the refusal, however late it lands, and is not stored: with
   // the entry gone there is no length left to compare it against. Nor is a
   // page older than the entry. Neither is kept under its URL either, or it
-  // would be shown at once on a return there.
+  // would be shown at once on a return there; but only it is dropped, not a
+  // newer answer another request has held there since.
   if (n < (refused.get(id) ?? 0) || !storeThreadPage(id, page, url)) {
-    forgetGets((u) => u === url);
+    forgetHeld(url, page);
     return page;
   }
   stored.set(id, Math.max(stored.get(id) ?? 0, n));

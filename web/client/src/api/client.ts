@@ -81,14 +81,29 @@ export function forgetGets(matches: (url: string) => boolean) {
   for (const url of [...held.keys()]) if (matches(url)) held.delete(url);
 }
 
+// forgetHeld drops the body held for url, but only if it is body itself: a
+// caller that has decided one answer is stale must not drop a newer one that
+// replaced it there in the meantime.
+export function forgetHeld(url: string, body: unknown) {
+  if (held.get(url)?.body === body) held.delete(url);
+}
+
 // apiSend sends body as JSON, the only type the API accepts on a mutating
 // request (docs/07 CSRF rule 1), and returns the JSON answer, or undefined
 // for 204.
 export async function apiSend<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', url: string, body?: unknown): Promise<T> {
+  let payload: string | undefined;
+  try {
+    payload = body === undefined ? undefined : JSON.stringify(body);
+  } catch {
+    // A cycle or a BigInt: no request can be made, and it is the client's
+    // own fault, not the network's.
+    throw new ProblemError('internal', 0);
+  }
   const r = await request(url, {
     method,
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: payload,
   });
   if (!r.ok) throw await toProblem(r);
   if (r.status === 204) return undefined as T;

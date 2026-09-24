@@ -306,6 +306,23 @@ describe('apiSend', () => {
     expect(await apiSend('DELETE', '/api/v1/x')).toBeUndefined();
   });
 
+  // Review 417: every failure is a ProblemError, one that happens before
+  // any request is made included.
+  it.each([
+    ['a cycle', (() => {
+      const o: Record<string, unknown> = {};
+      o.self = o;
+      return o;
+    })()],
+    ['a BigInt', { n: BigInt(1) }],
+  ])('turns a body it cannot serialize (%s) into a problem, without asking', async (_, body) => {
+    const calls = stub();
+    const err = await apiSend('POST', '/api/v1/x', body).catch((e) => e);
+    expect(err).toBeInstanceOf(ProblemError);
+    expect(isProblem(err, 'internal')).toBe(true);
+    expect(calls).toEqual([]);
+  });
+
   it('throws a problem for a refusal', async () => {
     stub(
       new Response(JSON.stringify({ type: 'validation-failed', title: 't', status: 422 }), {

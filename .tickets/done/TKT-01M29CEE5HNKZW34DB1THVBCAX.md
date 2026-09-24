@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T13:24:32Z
+updated_at: 2026-09-24T13:58:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -275,6 +275,18 @@ A page is dropped if a newer refusal was already applied. This replaces 414's re
 - an older page at the same length landing after a newer one, which is kept.
 
 **Mutation:** all 5 mutants are killed. There are 309 Vitest tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T13:58:46Z
+
+### Review 417, answered
+
+Review 417 confirmed the finding from review 415 resolved. It raised two medium findings and no high. The person running this session chose: fix both, re-review once, and if that round only raises more medium ordering edges, merge anyway and file a follow-up ticket.
+
+**Medium 1: a late page could drop a newer held body.** A page refused for its shorter log length dropped whatever was held at its URL, which could be a newer answer that another request had held there since. `forgetHeld(url, body)` now drops the held body only if it is that exact page, compared by identity. `apiGet` holds and returns the same object, so identity is exact. A test covers a newer 120-length answer that must survive an older 100-length one landing after it.
+
+**Medium 2: `apiSend` could throw a raw `TypeError`.** It serialized its body outside any error handling, so a cyclic object or a BigInt threw a raw `TypeError`. That failure is now a `ProblemError` of type `internal`, raised before any request is made. The tests cover a cycle and a BigInt, and assert that no request was sent.
+
+**Mutation:** all 3 mutants are killed. There are 312 Vitest tests.
 
 ## Summary
 

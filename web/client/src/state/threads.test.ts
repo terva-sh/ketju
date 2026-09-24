@@ -175,6 +175,20 @@ describe('the thread cache', () => {
       expect([...cachedThread(id)!.pages.keys()].sort()).toEqual(['1', '2']);
     });
 
+    // Review 417: dropping a stale page's held body must not drop a newer
+    // one another request held at the same URL.
+    it('keeps the newer held body when an older page at a shorter length lands', async () => {
+      const answer = manual();
+      const older = loadThreadPage(id, { page: 1 });
+      const newer = loadThreadPage(id, { page: 1 });
+      await Promise.resolve();
+      answer[1](ok(page(1, 120), '"new"'));
+      await newer;
+      answer[0](ok(page(1, 100), '"old"'));
+      await older;
+      expect((peekGet(threadUrl(id, { page: 1 })) as ThreadPage).thread.log_length).toBe(120);
+    });
+
     it('stores a request started after the refusal', async () => {
       serve(403, page(1, 100));
       await loadThreadPage(id, { page: 1 }).catch(() => {});
