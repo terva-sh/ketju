@@ -23,10 +23,12 @@ blocks_on: none
 references:
   - ref: design:mobile-nav
     path: docs/06-thread-views.md
+  - ref: pr:70
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T19:17:12Z
+updated_at: 2026-09-24T19:17:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
