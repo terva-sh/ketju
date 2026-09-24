@@ -27,11 +27,12 @@ import (
 // Two branches that each add a migration will collide on the number. The
 // second to merge renumbers on rebase (settled in grooming, TKT-01M29BW9Q1).
 //
-// The whole directory, not migrations/*.sql: a migration saved with the
-// wrong extension must reach loadMigrations and be refused as a stray, not
+// The whole directory, not migrations/*.sql, and with all: so names starting
+// with '.' or '_' are included too: a migration saved with the wrong
+// extension or a stray prefix must reach loadMigrations and be refused, not
 // be left out of the binary without a word.
 //
-//go:embed migrations
+//go:embed all:migrations
 var migrations embed.FS
 
 // ErrSchemaNewer is returned when the database records a migration this

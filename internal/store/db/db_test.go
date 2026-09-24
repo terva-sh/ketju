@@ -292,3 +292,61 @@ func TestOpenTakesAnyPath(t *testing.T) {
 		}
 	}
 }
+
+// TestCloseReportsABlockedCheckpoint: a reader on another handle blocks the
+// TRUNCATE checkpoint, which SQLite reports in a result row, not an error.
+// Close must say so rather than claim the WAL was folded in. It waits out the
+// busy timeout first, so this test takes about five seconds.
+func TestCloseReportsABlockedCheckpoint(t *testing.T) {
+	d, path := openTest(t)
+	err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		_, err := tx.ExecContext(t.Context(), "CREATE TABLE t (x INTEGER); INSERT INTO t VALUES (1)")
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	reader, err := openPool(path, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer reader.Close()
+	tx, err := reader.BeginTx(t.Context(), &sql.TxOptions{ReadOnly: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback()
+	var x int
+	if err := tx.QueryRowContext(t.Context(), "SELECT x FROM t").Scan(&x); err != nil {
+		t.Fatal(err)
+	}
+
+	err = d.Close()
+	if !errors.Is(err, ErrBusy) {
+		t.Fatalf("Close with a reader holding the WAL = %v, want ErrBusy", err)
+	}
+}
+
+// TestCloseCheckpointsTheWAL: with no reader in the way, Close leaves the
+// -wal file empty, so everything written is in the main file.
+func TestCloseCheckpointsTheWAL(t *testing.T) {
+	d, path := openTest(t)
+	err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		_, err := tx.ExecContext(t.Context(), "CREATE TABLE t (x INTEGER); INSERT INTO t VALUES (1)")
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	fi, err := os.Stat(path + "-wal")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Size() != 0 {
+		t.Fatalf("-wal is %d bytes after Close, want 0", fi.Size())
+	}
+}

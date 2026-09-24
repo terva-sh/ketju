@@ -195,9 +195,21 @@ func (d *DB) Write(ctx context.Context, fn func(q *dbq.Queries, tx *sql.Tx) erro
 
 // Close checkpoints the WAL into the main file and closes both pools. The
 // -wal file is truncated, not removed, because every connection persists it.
+//
+// The read pool closes first, so none of this DB's own readers can hold the
+// checkpoint back. A reader on another handle still can: SQLite reports that
+// in the checkpoint's result row rather than as an error, and Close returns
+// it as ErrBusy. The pools are closed either way, and nothing is lost: the
+// WAL is replayed on the next open.
 func (d *DB) Close() error {
-	_, cpErr := d.write.Exec("PRAGMA wal_checkpoint(TRUNCATE)")
-	return errors.Join(wrap(cpErr), d.read.Close(), d.write.Close())
+	readErr := d.read.Close()
+	var busy, logFrames, checkpointed int64
+	err := d.write.QueryRow("PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed)
+	if err == nil && busy != 0 {
+		err = fmt.Errorf("%w: closing: the WAL checkpoint was blocked by a reader (%d of %d frames checkpointed)",
+			ErrBusy, checkpointed, logFrames)
+	}
+	return errors.Join(wrap(err), readErr, d.write.Close())
 }
 
 // wrap marks SQLITE_BUSY as ErrBusy, keeping the driver's error in the chain.

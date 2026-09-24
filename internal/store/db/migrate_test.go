@@ -224,8 +224,8 @@ func TestEmbeddedMigrationsLoad(t *testing.T) {
 
 // TestEveryMigrationFileIsEmbedded: whatever sits in migrations/ on disk is in
 // the binary, so loadMigrations sees a misnamed file and refuses it rather
-// than the embed pattern hiding it. Go's embed skips names starting with '.'
-// or '_' even for a whole directory, so those are excluded here too.
+// than the embed pattern hiding it. No name is exempt: a plain directory embed
+// skips names starting with '.' or '_', which is why the directive says all:.
 func TestEveryMigrationFileIsEmbedded(t *testing.T) {
 	onDisk, err := os.ReadDir("migrations")
 	if err != nil {
@@ -240,7 +240,7 @@ func TestEveryMigrationFileIsEmbedded(t *testing.T) {
 		in[e.Name()] = true
 	}
 	for _, e := range onDisk {
-		if n := e.Name(); !strings.HasPrefix(n, ".") && !strings.HasPrefix(n, "_") && !in[n] {
+		if n := e.Name(); !in[n] {
 			t.Errorf("migrations/%s is on disk but not embedded, so the runner would never see it", n)
 		}
 	}
@@ -249,8 +249,10 @@ func TestEveryMigrationFileIsEmbedded(t *testing.T) {
 // TestStrayExtensionRefused: the case the whole-directory embed exists for.
 func TestStrayExtensionRefused(t *testing.T) {
 	d, _ := openTest(t)
-	files := map[string]string{"0001_init.sql": twoMigrations["0001_init.sql"], "0002_thing.sq": "SELECT 1;"}
-	if err := d.migrate(t.Context(), mapFS(files), "m"); !errors.Is(err, ErrMigrations) {
-		t.Fatalf("err = %v, want ErrMigrations for a .sq file", err)
+	for _, stray := range []string{"0002_thing.sq", "_0002_thing.sql", ".0002_thing.sql.swp"} {
+		files := map[string]string{"0001_init.sql": twoMigrations["0001_init.sql"], stray: "SELECT 1;"}
+		if err := d.migrate(t.Context(), mapFS(files), "m"); !errors.Is(err, ErrMigrations) {
+			t.Fatalf("err = %v, want ErrMigrations for %s", err, stray)
+		}
 	}
 }
