@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: design:composer
     path: docs/06-thread-views.md
+  - ref: pr:76
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T22:33:39Z
+updated_at: 2026-09-24T22:34:17Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
