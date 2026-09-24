@@ -267,22 +267,25 @@ function useMentions(
   pending: { current: Pending | null },
 ) {
   const [at, setAt] = useState<MentionAt | null>(null);
-  const [users, setUsers] = useState<Author[]>([]);
+  // The people offered, held with the mention they were offered for, as the
+  // preview holds its answer: the list is shown only while that is still
+  // the mention being typed, checked as it renders, so no render offers
+  // people for a prefix already changed (review 547).
+  const [held, setHeld] = useState<{ key: string; users: Author[] } | null>(null);
   const [active, setActive] = useState(0);
   // The mention the author pressed Escape on stays closed until they type.
   const [dismissed, setDismissed] = useState<string | null>(null);
   const key = at ? `${at.start}:${at.typed}` : null;
 
   useEffect(() => {
-    setUsers([]);
-    if (!at) return;
+    if (!at || key === null) return;
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
       const url = `/api/v1/users?prefix=${encodeURIComponent(at.typed)}&limit=${mentionLimit}`;
       apiGet<UserSuggestions>(url, { signal: ctrl.signal }).then(
         (r) => {
           if (ctrl.signal.aborted) return;
-          setUsers(r.users);
+          setHeld({ key, users: r.users });
           setActive(0);
         },
         () => {},
@@ -294,7 +297,8 @@ function useMentions(
     };
   }, [key]);
 
-  const open = at !== null && users.length > 0 && dismissed !== key;
+  const users = key !== null && held?.key === key ? held.users : [];
+  const open = users.length > 0 && dismissed !== key;
 
   const check = () => {
     const a = area.current;
@@ -310,7 +314,6 @@ function useMentions(
     c.source.value = r.text;
     pending.current = { start: r.caret, end: r.caret, focus: true };
     setAt(null);
-    setUsers([]);
   };
 
   const close = () => setDismissed(key);

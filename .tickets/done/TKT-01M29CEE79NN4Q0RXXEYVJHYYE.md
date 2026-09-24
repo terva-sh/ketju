@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T23:05:36Z
+updated_at: 2026-09-24T23:17:42Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -180,6 +180,10 @@ Review 543 (head 5db822b, Actions run 380) resolved both of review 541's finding
 - Fix: every answer is held with the input it answers, keyed on thread, source and reply_to. The pane shows it only while that key is the current input, and the comparison is made as the pane renders, so no render can show an answer or error for other input. An answer that settles after the input changed is dropped, not held, because holding it would replace the newer answer. The out-of-order test caught exactly that regression in the first draft of this fix.
 
 Mutants: 41, all killed. They include a mutant that shows any held answer (`held !== null`) and one that drops the aborted guard.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T23:17:42Z
+
+Review 547 (head 5f294ad, Actions run 382) resolved both of review 543's findings. It raised one more medium finding: "Hide autocomplete results when the mention prefix changes". **Accepted and fixed.** The suggestions are now held with the mention key they answer, like the preview. The list opens only while that key is the current mention, so it closes the moment the prefix changes, and Enter cannot insert a handle offered for the old prefix. Tested by typing one more letter while the list is open: the list closes, Enter inserts nothing, and the new answer reopens it. The mutant that shows any held list is killed, along with all 42 others.
 
 ## Summary
 

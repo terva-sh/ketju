@@ -381,6 +381,21 @@ describe('mention autocomplete', () => {
     expect(area(root).value).toBe('@al-x ');
   });
 
+  it('offers nobody for a prefix the moment it changes, until its own answer comes (review 547)', async () => {
+    serve(page(), people);
+    const root = await renderAt(path);
+    await type(root, '@al');
+    await wait(mentionDelay + 20);
+    expect(root.querySelector('[role=listbox]')).not.toBeNull();
+    await type(root, 'i');
+    expect(root.querySelector('[role=listbox]')).toBeNull();
+    expect(area(root).getAttribute('aria-expanded')).toBe('false');
+    await key(root, 'Enter');
+    expect(area(root).value).toBe('@ali');
+    await wait(mentionDelay + 20);
+    expect(root.querySelector('[role=listbox]')).not.toBeNull();
+  });
+
   it('asks nothing where the renderer would see no mention', async () => {
     const sent = serve(page(), people);
     const root = await renderAt(path);
