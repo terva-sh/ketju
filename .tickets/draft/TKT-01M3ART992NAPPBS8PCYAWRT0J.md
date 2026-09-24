@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T22:33:12Z
-updated_at: 2026-09-24T22:33:27Z
+updated_at: 2026-09-24T22:33:56Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -44,8 +44,9 @@ Add "Post reply" and "Discard" to the composer footer, as ThreadLight draws them
 
 TKT-01M29CGBY1's "reply" step needs this.
 
-### Acceptance criteria
-- A reply posts, the composer clears, and the new post shows on the page.
-- The posted post's HTML equals the last preview of the same source. This is TKT-01M29CEE79's AC1, which was left unticked until this could be checked end to end.
-- A refused post keeps the source and says why.
-- A double click posts once.
+## Acceptance criteria
+
+- [ ] A reply posts, the composer clears, and the new post shows on the page
+- [ ] The posted post's HTML equals the last preview of the same source (TKT-01M29CEE79's AC1, end to end)
+- [ ] A refused post keeps the source and says why
+- [ ] A double click posts once
