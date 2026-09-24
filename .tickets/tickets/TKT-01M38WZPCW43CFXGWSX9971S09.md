@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T19:45:43Z
+updated_at: 2026-09-24T20:29:11Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -266,3 +266,7 @@ Merged PR #69 (TKT-01M29CCBYX, Implement ketju serve with graceful shutdown) as 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T19:45:43Z
 
 Merged PR #70 (TKT-01M29CEE4K, Build the app shell with both navigation layouts) as 501ba1b, after review 490's three medium findings were fixed. Clean review on head 501ba1b, base 206d1c7. CI run 327's client step ran 527 tests (21 in src/shell/Shell.test.tsx), and the race step shows internal/web, internal/web/api and internal/web/spa passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:29:11Z
+
+Merged PR #71 (TKT-01M29C7ZZR, Route every session creation through one status-checking function) as 3ed6cf0, after reviews 499, 500, 501 and 505 were answered. All four were findings on the chokepoint scan, not the constructors. After review 505 the user decided to fix, re-review once, and merge if only more scan-evasion cases followed. The next review was clean on head 3ed6cf0, base 501ba1b. CI run 340's race step shows internal/auth/session and internal/store/db passed.

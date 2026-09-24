@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C7ZZ9KFSNZ8WC8YP1HAYV
 title: Implement the OIDC start and callback flow
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -22,10 +22,17 @@ blocks_on: none
 references:
   - ref: design:identity-login
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/c7zz9-oidc
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 3ed6cf0e79fa2212876dc95d153e32b8f2dba46c
+  session: null
+  claimed_at: 2026-09-24T20:29:11Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T19:51:19Z
+updated_at: 2026-09-24T20:29:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
