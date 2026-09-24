@@ -38,24 +38,48 @@ const placeholder = (screen: string, title: string): RouteEntry['component'] =>
 // browser has resolved the path. Case matters, as it does to the server's
 // ServeMux: /AUTH is an application route there, and here.
 export const clientScope =
-  /^(?!(?:[a-z][a-z0-9+.-]*:)?(?:\/\/[^/]*)?\/(?:auth|api|blobs|events|assets)(?:[/?#]|$))/;
+  /^(?!(?:[a-z][a-z0-9+.-]*:)?(?:\/\/[^/]*)?\/(?:(?:auth|api|blobs|assets)(?:[/?#]|$)|events(?:[?#]|$)))/;
 
 // serverOwned reports whether the server answers a resolved pathname rather
-// than the client. It decodes first, because the server's ServeMux does:
-// /%61uth/github/start reaches the auth handler there.
+// than the client, following internal/web/server.go exactly, because a
+// guess in either direction is a bug: too narrow and a sign-in link renders
+// the client's NotFound, too wide and the server answers with the shell and
+// the client hands it back.
+//
+//   - /auth/, /blobs/ and /assets/ are ServeMux subtrees. ServeMux matches
+//     them segment by segment, unescaping each segment, so /%61uth/x is
+//     /auth/ but /auth%2Fx is not: an escaped slash is not a boundary. The
+//     bare /auth, /blobs and /assets redirect into their subtree.
+//   - /events is an exact pattern: /events/x is an application route.
+//   - /api is claimed by the fallback handler's isAPIPath, which tests the
+//     decoded path, so /api%2Fx is the API's too.
+//
+// A malformed escape is refused by the server before routing, and names
+// nothing here.
 export function serverOwned(pathname: string): boolean {
-  let p = pathname;
+  const segments = pathname.split('/');
+  let first: string;
+  let whole: string;
   try {
-    p = decodeURIComponent(pathname);
+    first = decodeURIComponent(segments[1] ?? '');
+    whole = decodeURIComponent(pathname);
   } catch {
-    // A malformed escape is not a path the server routes anywhere special.
+    return false;
   }
-  return /^\/(?:auth|api|blobs|events|assets)(?:\/|$)/.test(p);
+  if (whole === '/api' || whole.startsWith('/api/')) return true;
+  if (first === 'events') return segments.length === 2;
+  return first === 'auth' || first === 'blobs' || first === 'assets';
 }
 
 // nav.leave hands the address to the server with a full load, in place of
 // the entry the router just pushed. An object so a test can intercept it.
+//
+// nav.loadedAt is the address the server served this document at. Fallback
+// never hands that one back: the server has already answered it with the
+// shell, and handing it back would reload the page forever if the rules
+// above and the server's ever disagree.
 export const nav = {
+  loadedAt: location.pathname + location.search,
   leave(url: string) {
     location.replace(url);
   },
@@ -67,7 +91,7 @@ export const nav = {
 // client's NotFound.
 export function Fallback() {
   const { url } = useLocation();
-  const leaving = serverOwned(location.pathname);
+  const leaving = serverOwned(location.pathname) && location.pathname + location.search !== nav.loadedAt;
   useEffect(() => {
     if (leaving) nav.leave(location.href);
   }, [url, leaving]);

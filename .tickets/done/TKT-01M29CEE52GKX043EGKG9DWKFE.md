@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T11:26:20Z
+updated_at: 2026-09-24T11:31:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -189,6 +189,14 @@ Mutants, all killed: decoding, the null render, the leave call, the case flag, t
 Review 405 (medium, fixed). Review 404's two findings are marked resolved.
 The finding: preact-iso's matcher runs decodeURIComponent over path parameters inside Router's render with no guard, so a same-origin link like /f/% or /t/id/%FF threw a URIError mid-navigation. A pattern cannot tell whether an escape decodes (%FF is well-formed hex and still throws), so the fix is an error boundary, UndecodableAddress, around the Router. It catches only URIError and rethrows anything else. It renders NotFound for the URL that failed, and renders the Router again as soon as the URL changes.
 Tests: three undecodable links each give NotFound, and the next link (/unread) routes normally. Mutants, both killed: no boundary, and a boundary that never resets. Headless Chromium against the built client and a scratch server (deleted, not committed): /f/% and /t/{id}/%FF showed NotFound with no page error, and the next click routed to /unread. 110 Vitest tests; dist rebuilt.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:31:38Z
+
+Review 406 (medium, fixed). Review 405's finding is marked resolved.
+The finding: serverOwned decoded the whole path, so /auth%2Flogout counted as /auth/. It was worse than reported. ServeMux does not match that path to /auth/, so the server would answer with the shell, and the client would hand it back on every load: a reload loop.
+I checked ServeMux directly (a throwaway program, deleted). /auth%2Flogout goes to the SPA; /%61uth/x goes to /auth/; bare /auth, /assets and /blobs redirect 307 into their subtree; /events is an exact pattern, so /events/ and /events/x go to the SPA; and the real server's fallback sends /api and anything decoding to /api/... to the API through isAPIPath, which tests the decoded path.
+serverOwned now follows that exactly: segment-wise decoding for auth, blobs and assets; exact /events; whole-path decoding for /api. clientScope's events arm no longer takes /events/x. As a backstop against any future mismatch, Fallback never hands back nav.loadedAt, the address the server served this document at. The server has already answered that address with the shell, so handing it back could only loop.
+Tests: 11 new serverOwned cases, the loop guard (the load address is not handed back, and a different one is), and /auth%2Flogout and /events/x staying NotFound. Mutants, all 7 killed: the loop guard, the exact /events rule, the api rule and its boundary, segment-wise decoding, clientScope's events arm, and a missing prefix. 124 Vitest tests; dist rebuilt.
 
 ## Summary
 

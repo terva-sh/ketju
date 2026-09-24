@@ -141,7 +141,25 @@ describe('the route table', () => {
     },
   );
 
-  it.each(['/authors', '/AUTH/github/start', '/%E0%A4%A'])('does not hand %s to the server', async (url) => {
+  // The server served this document at a server-owned address, so the server
+  // treats it as an application route after all. Handing it back would
+  // reload the page forever.
+  it('never hands back the address the document was loaded at', async () => {
+    const spy = vi.spyOn(nav, 'leave').mockImplementation(() => {});
+    const was = nav.loadedAt;
+    nav.loadedAt = '/auth/github/start?x=1';
+    try {
+      expect(screenOf(await renderAt('/auth/github/start?x=1'))).toBe('not-found');
+      expect(spy).not.toHaveBeenCalled();
+      await renderAt('/auth/github/start?x=2');
+      expect(spy).toHaveBeenCalledTimes(1);
+    } finally {
+      nav.loadedAt = was;
+      spy.mockRestore();
+    }
+  });
+
+  it.each(['/authors', '/AUTH/github/start', '/%E0%A4%A', '/auth%2Flogout', '/events/x'])('does not hand %s to the server', async (url) => {
     const spy = vi.spyOn(nav, 'leave').mockImplementation(() => {});
     try {
       expect(screenOf(await renderAt(url))).toBe('not-found');
@@ -161,6 +179,16 @@ describe('the route table', () => {
     ['/AUTH/x', false],
     ['/t/01k4z3j0w8x2c/auth', false],
     ['/%E0%A4%A', false],
+    ['/auth%2Flogout', false],
+    ['/blobs%2Fabc', false],
+    ['/events/', false],
+    ['/events/x', false],
+    ['/assets', true],
+    ['/assets/x.js', true],
+    ['/blobs/abc', true],
+    ['/api', true],
+    ['/api%2Fv1%2Fme', true],
+    ['/apix', false],
   ])('serverOwned %s: %s', (path, owned) => {
     expect(serverOwned(path)).toBe(owned);
   });
@@ -172,6 +200,7 @@ describe('the route table', () => {
     ['https://ketju.test/auth/github/start', false],
     ['//ketju.test/auth/logout', false],
     ['/events?x=1', false],
+    ['/events/x', true],
     ['/eventsource', true],
     ['/authors', true],
     ['/t/01k4z3j0w8x2c/auth', true],
