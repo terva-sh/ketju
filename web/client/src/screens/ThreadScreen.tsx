@@ -14,7 +14,7 @@ interface ThreadHead {
 // (TKT-01M29CEE5H) takes it over.
 export function ThreadScreen() {
   const { params, path } = useRoute();
-  const { route } = useLocation();
+  const { route, url } = useLocation();
   const view = useThreadView();
   // What the last answer said, and which thread it was about. It is read
   // only when that is the thread on screen, so moving to another thread never
@@ -42,14 +42,21 @@ export function ThreadScreen() {
         const body = (await r.json()) as ThreadHead;
         if (!live) return;
         setAnswer({ id, head: body });
-        const to = canonicalThreadUrl(location, body.thread);
-        if (to) route(to, true);
       })
       .catch(() => {});
     return () => {
       live = false;
     };
   }, [params.id, params.ordinal, view.page, view.hasPage, view.lens, history]);
+
+  // The slug is checked whenever the address or the answer changes, not only
+  // when a request comes back: moving to an old slug of the thread already on
+  // screen asks for nothing new, and must still land on the canonical URL.
+  useEffect(() => {
+    if (!current?.head) return;
+    const to = canonicalThreadUrl(location, current.head.thread);
+    if (to) route(to, true);
+  }, [current, url]);
 
   if (current?.missing) return <NotFound />;
   return (

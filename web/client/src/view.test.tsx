@@ -154,6 +154,24 @@ describe('a stale slug', () => {
     expect(location.pathname).toBe('/t/01k4z3j0w8x2c/renamed/42/history');
   });
 
+  // The thread is already on screen and a link to an old slug of it is
+  // followed: nothing new is fetched, and the URL is still corrected.
+  it('corrects a stale slug of the thread already on screen', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => {
+      calls++;
+      return new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' } }), {
+        status: 200,
+      });
+    });
+    const root = await renderAt('/t/01k4z3j0w8x2c/renamed');
+    expect(calls).toBe(1);
+    await route('/t/01k4z3j0w8x2c/old-name#post-3');
+    await settle(root);
+    expect(location.pathname + location.hash).toBe('/t/01k4z3j0w8x2c/renamed#post-3');
+    expect(calls).toBe(1);
+  });
+
   it('is not found when the thread is not', async () => {
     vi.stubGlobal('fetch', async () => new Response('{}', { status: 404 }));
     const root = await renderAt('/t/01k4z3j0w8x2c/gone');
