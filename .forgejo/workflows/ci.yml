@@ -149,6 +149,19 @@ jobs:
           go -C spikes/format-decisions build ./...
           go -C spikes/format-decisions vet ./...
 
+      - name: check the SQLite driver spike
+        # TKT-01M29BSPE8. spikes/sqlite-driver/ is also a separate module, and
+        # it is what TKT-01M29BW9Q1 and a future modernc fallback re-measure
+        # against. Unlike the format spike its tests are assertions (the shared
+        # DSN is honoured by both drivers, FTS5 and the Go tokenizer work), so
+        # they run. The benchmark runs once at -benchtime=1x only to prove it
+        # still runs; on a runner its numbers mean nothing.
+        run: |
+          go -C spikes/sqlite-driver vet ./...
+          go -C spikes/sqlite-driver test -count=1 ./...
+          go -C spikes/sqlite-driver test -run '^$' -bench ProjectionWrite \
+            -benchtime=1x -bench.dir="$(mktemp -d)" -bench.allow-volatile-fs ./...
+
       - name: ticket store is consistent
         # AGENTS.md promises CI runs exactly this command, so it runs exactly
         # this command. It plans every repair, writes nothing, and exits 1 when

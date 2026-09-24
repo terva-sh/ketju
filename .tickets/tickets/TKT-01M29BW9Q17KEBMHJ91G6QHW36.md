@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T06:51:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -117,6 +117,10 @@ Two alternatives lost:
 - sqlc for every query would force the lens queries into fixed variants.
 
 Criteria added below for the pieces the decision creates.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T06:51:22Z
+
+From TKT-01M29BSPE8 (Decide the pure-Go SQLite driver), 2026-09-24: step 2's single-connection write pool is required, not optional. With 4 to 8 writer connections contending, ncruces commits starved for seconds without returning SQLITE_BUSY, because its busy handler retries at random with no fairness. docs/04 'Engine' now says writes go through one connection. The spike also proved the DSN keys: _txlock=immediate and _pragma=journal_mode(wal)/busy_timeout(N)/foreign_keys(on) work the same on both drivers (spikes/sqlite-driver TestSharedDSNIsHonoured). Recognise SQLITE_BUSY in exactly one helper, because the error types differ between drivers. TKT-01M392DP19 covers the ncruces directory-fsync bug.
 
 ## Comments
 

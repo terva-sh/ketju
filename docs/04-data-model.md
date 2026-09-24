@@ -9,7 +9,11 @@ Engine: **SQLite in WAL mode via `github.com/ncruces/go-sqlite3`** (pure
 Go, no cgo; see 01-research for the comparison and 10-open-questions for the
 modernc fallback). Full-text search uses **FTS5 in the same database file**.
 Connection pool capped at 4–8; writes use `BEGIN IMMEDIATE`; `busy_timeout`
-set explicitly. Backups: `VACUUM INTO` for a consistent snapshot.
+set explicitly. Writes go through a single connection, so in-process writers
+queue in Go rather than in SQLite's busy handler: the driver benchmark
+(TKT-01M29BSPE8, `spikes/sqlite-driver/`) saw ncruces commits starve for
+seconds with four or eight writer connections contending. Backups:
+`VACUUM INTO` for a consistent snapshot.
 
 Access from Go: **sqlc**, generating typed `database/sql` code from `.sql`
 query files, with the migration directory as its schema source (decided
