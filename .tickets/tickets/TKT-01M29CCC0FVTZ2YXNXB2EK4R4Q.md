@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T14:32:31Z
+updated_at: 2026-09-24T14:33:48Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -59,35 +59,41 @@ Safe-area handling belongs here: `viewport-fit=cover` with `env(safe-area-inset-
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+Claim-time plan (2026-09-24). It revises the pre-groom plan after reading the client at f2deccb (the thread page is merged).
+
+### Settled in grooming (2026-09-24), carried forward
+- Fonts are self-hosted subset WOFF2 files, embedded and served same-origin (docs/07, decided 2026-09-24). Replace the mockups' Google Fonts links in anything the client ships.
 
 ### Approach
-1. `src/styles/tokens.css`: spacing, radius, type scale and font stacks as custom properties, taken from `docs/mockups/generate.py`. The color tokens are the `LIGHT` and `DARK` dicts there (bg, surface, surface2, ink, ink2, muted, rule, rule2, accent, accent_ink, accent_soft, unread, unread_soft, code_bg, shadow, thumb), named `--bg`, `--surface`, and so on.
-2. `themes.css`: light by default; `@media (prefers-color-scheme: dark)` applies the dark values when `:root:not([data-theme])`; `[data-theme="light"]` and `[data-theme="dark"]` override. `state/theme.ts` holds `themePref` in localStorage and sets `data-theme` on `<html>`. The server-side settings endpoints are phase-4, so the override lives only on the device for now.
-3. Breakpoints from docs/06: phone `max-width: 719.98px`, tablet 720 to 1100 px, desktop `min-width: 1100.02px`. CSS custom properties cannot be used inside media queries, so write the values literally and put a comment in one place. `state/layout.ts` uses the same 720 value for the shell's `isPhone`.
-4. Self-host Newsreader, IBM Plex Sans and IBM Plex Mono (all OFL) as woff2 in `src/assets/fonts`, subset to Latin with `font-display: swap`. The mockups' Google Fonts link is blocked by the CSP.
-5. Safe-area insets: `padding-bottom: env(safe-area-inset-bottom)` on `.tabbar` and `.replybar`, and left and right insets on the phone top bar. `viewport-fit=cover` is in the index.html from CCC02.
-6. No `style="..."` strings in markup: the CSP has no `'unsafe-inline'` for style attributes. Preact's object styles go through the CSSOM and are allowed, but prefer classes.
+1. **`src/styles/tokens.css`.**
+   - The colour tokens are generate.py's `LIGHT` and `DARK` dicts, one custom property each, with underscores as hyphens: `--bg`, `--surface`, `--surface2`, `--ink`, `--ink2`, `--muted`, `--rule`, `--rule2`, `--accent`, `--accent-ink`, `--accent-soft`, `--unread`, `--unread-soft`, `--code-bg`, `--shadow`, `--thumb`.
+   - Alongside them: the font stacks, the type scale the mockups use, the radius, and the 44 px minimum target.
+   - Light is the default. Dark applies under `@media (prefers-color-scheme: dark)` when `<html>` has no `data-theme`, and `data-theme="dark"` or `"light"` overrides the system either way.
+   - A Vitest contract test reads generate.py and tokens.css as text and asserts every colour matches in both themes, so the two cannot drift.
+2. **`src/styles/fonts.css`.** Latin subsets from @fontsource 5.3.0, copied into `src/assets/fonts/` with each family's OFL licence. Nothing is added to package.json.
+   - IBM Plex Sans 400, 500, 600 and 400 italic.
+   - IBM Plex Mono 400 and 500.
+   - Newsreader 400, 500 and 600.
 
-### Files
-`web/client/src/styles/*.css`, `src/assets/fonts/*`, `src/state/theme.ts`, `src/state/layout.ts`; imported from `main.tsx`.
+   Vite hashes and emits them under /assets/, served same-origin and immutable, which `default-src 'self'` allows. All use `font-display: swap`.
+3. **`src/styles/base.css`.**
+   - The body type (Plex Sans at 15 px and 1.55 line height), the colours, links, and `.tnum`.
+   - The breakpoints, written literally because custom properties cannot appear in media queries, with one comment naming the values: phone up to 719.98 px, tablet 720 to 1100 px, desktop from 1100.02 px.
+   - The safe-area rules: `.tabbar` and `.replybar` pad the bottom with `env(safe-area-inset-bottom)`, and `.topbar` pads left and right with the matching insets. `viewport-fit=cover` is already in index.html.
+   - The shell (CEE4K) and the reply bar (CGBVN) use these classes when they land.
+   - `app.css` is replaced by these files.
+4. **`src/state/theme.ts`.** `themePref` is `system`, `light` or `dark`, persisted in localStorage.
+   - `applyTheme` sets or removes `data-theme` on `<html>`.
+   - main.tsx applies it before the first render, so an override does not flash the system theme.
+   - Syncing the preference to server settings stays open (phase 4).
+5. **`src/state/layout.ts`.** `phoneQuery` (the same 719.98 px) and an `isPhone` signal from matchMedia, for the navigation shell: the one component swap the criterion allows.
+6. **`thread.css`** moves onto the tokens. Its local fallback aliases go, and the thread page follows the theme.
 
 ### Tests
-- AC1: Vitest for `theme.ts` (system, then override, then persisted). A Playwright test with `colorScheme: 'dark'` checks the computed `--bg` equals `#12161E`, and that `data-theme="light"` overrides it.
-- AC2: a Playwright test resizes across 719, 720, 1100 and 1101 px on one route. It asserts the URL is unchanged, and that only the nav component differs in the DOM while layout is driven by computed styles.
-- AC3, reworded per grooming: at 390 px emulated, assert that the tab bar's and reply bar's computed `padding-bottom` resolves from `env(safe-area-inset-bottom)` (a CSS-source grep plus a computed-style check), and that the viewport meta contains `viewport-fit=cover`. The real-device check belongs to TKT-01M38WTK.
-- AC4, reworded: commit Playwright screenshots at 390 and 1440 px, light and dark, under `web/client/e2e/screenshots/`. Compare them by eye against the eight `docs/mockups/*.dc.html` files and list any divergence in the PR.
-
-### Design
-docs/06 "Mobile" (breakpoints, 44 px, safe area); docs/07 "Responsive"; `docs/mockups/generate.py` (tokens, `nav`, `mtabbar`, `mobile_front`, `mobile_thread`); `canvas.json` for the artboard sizes.
-
-### Interactions
-Depends on CCC02 and on BW9NW's decision (now recorded in docs/10 Q21). Every screen ticket uses these tokens. CGBXK checks targets and motion. The font weight counts toward the CGBYH budget if fonts are in scope there.
-Open in docs: whether the theme override should later sync to server settings.
-
-### Settled in grooming (2026-09-24)
-
-- Fonts are self-hosted subset WOFF2 files, embedded and served same-origin (docs/07, decided 2026-09-24). Replace the mockups' Google Fonts links in anything the client ships.
+- **AC1:** Vitest covers theme.ts (system by default, an override, persistence, and a corrupt stored value) and the token contract against generate.py. It is verified in a local headless Chromium: the computed `--bg` under `colorScheme: dark` is `#12161E`, and `data-theme=light` overrides it.
+- **AC2:** a Vitest source check that the media queries use exactly the docs/06 values. It is verified in local Chromium at 719, 720, 1100 and 1101 px on the thread page: the URL is unchanged and only the CSS differs.
+- **AC3:** the rules exist and a Vitest source check asserts them, but the elements they style (the tab bar and reply bar) are built by CEE4K and CGBVN, and nothing in the repo runs Playwright (CGBY1). This criterion is ticked only if a Playwright check is actually committed; otherwise it is left unticked with a note and carried by TKT-01M39WBN4Q.
+- **AC4:** screenshots are TKT-01M39WBN4Q's, which depends on this ticket, CEE4K and CGBY1. It is left unticked here with a note.
 
 ## Notes
 
