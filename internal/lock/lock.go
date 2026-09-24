@@ -23,6 +23,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime/debug"
@@ -90,10 +91,15 @@ func Acquire(dir, purpose string) (*Lock, error) {
 		return nil, fmt.Errorf("lock: opening %s: %w", path, err)
 	}
 	if err := tryLock(f); err != nil {
-		f.Close()
+		defer f.Close()
 		if errors.Is(err, errHeld) {
+			// Read through the descriptor that was refused, before closing
+			// it, rather than opening the path again: the record then comes
+			// from the file whose lock is held, and the window in which the
+			// holder can leave and another take its place is as short as it
+			// can be (review 436).
 			held := &HeldError{Dir: dir}
-			held.Holder, held.ReadErr = readHolder(path)
+			held.Holder, held.ReadErr = readHolder(f)
 			return nil, held
 		}
 		return nil, fmt.Errorf("lock: locking %s: %w", path, err)
@@ -139,14 +145,16 @@ func record(f *os.File, purpose string) error {
 	return f.Sync()
 }
 
-func readHolder(path string) (*Holder, error) {
-	b, err := os.ReadFile(path)
+func readHolder(f *os.File) (*Holder, error) {
+	// Bounded: a record is well under a kilobyte, and a lock file someone
+	// filled with something else should not be read whole into memory.
+	b, err := io.ReadAll(io.NewSectionReader(f, 0, 64<<10))
 	if err != nil {
 		return nil, err
 	}
 	var h Holder
 	if err := json.Unmarshal(b, &h); err != nil {
-		return nil, fmt.Errorf("%s does not hold a holder record: %w", path, err)
+		return nil, fmt.Errorf("%s does not hold a holder record: %w", f.Name(), err)
 	}
 	return &h, nil
 }

@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:14:09Z
+updated_at: 2026-09-24T15:21:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -120,6 +120,10 @@ Mutation check: 14 of 14 killed. That is the 10 from before (the O_TRUNC one mov
 go test -race -count=30 -cpu 1,4 ./internal/lock passes.
 
 CI run 277 failed in internal/store/threadlog, TestQueuedAppendsShareOneFsync ("17 appends cost 1 log fsyncs, want 2"). That is the known flake in draft TKT-01M393S6P7 (Order the group-commit fsync test so its first append is in flight), in a package this PR does not touch. internal/lock passed in that run.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:21:29Z
+
+Answered review 436 (medium). On refusal, Acquire closed the contended descriptor and then re-read the holder record by path, so a holder that left in between could be replaced in the message by whoever came next. It now reads the record through the refused descriptor before closing it, bounded to 64 KiB. That narrows the window and never resolves the path again; it cannot close the window entirely, because a record read is not atomic with a lock test. No deterministic test tells the two apart, since the difference exists only inside that race; the existing refusal tests hold the behaviour, and a mutant that drops the holder, or bounds the read below a whole record, is killed (15 of 15 lock mutants killed). CI run 279 on d16e971 passed, with internal/lock in the race step.
 
 ## Summary
 

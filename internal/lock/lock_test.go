@@ -140,7 +140,12 @@ func TestKilledHolderIsNotStale(t *testing.T) {
 		t.Fatalf("after the holder was killed: %v", err)
 	}
 	defer l.Release()
-	h, err := readHolder(filepath.Join(dir, FileName))
+	rf, err := os.Open(filepath.Join(dir, FileName))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rf.Close()
+	h, err := readHolder(rf)
 	if err != nil || h.PID != os.Getpid() {
 		t.Errorf("the record was not rewritten for the new holder: %+v, %v", h, err)
 	}
