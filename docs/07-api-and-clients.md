@@ -71,6 +71,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /notifications` `POST /notifications/read` | |
 | `POST /blobs` (multipart) `GET /blobs/{hash}` | attachments; GET is outside `/api` at `/blobs/…` with immutable caching |
 | `GET  /users/{handle}` `/users/{handle}/posts` | profiles |
+| `GET  /users?prefix=&limit=` | `{users: [author]}`: mention autocomplete, `internal/dto` `UserSuggestions`. Up to `limit` (default 8, at most 20) active members whose handle starts with `prefix`, case-insensitively, in handle order; a prefix no handle can start with is an empty list. Every handle offered is one the renderer resolves as a mention, so a handle ending in `-`, which the mention syntax reads as punctuation, is not offered. A member session is required (anonymous `unauthenticated`, pre-user `forbidden`) |
 | `GET  /settings` `PATCH /settings` | prefs; `GET/DELETE /settings/sessions` ; `GET/DELETE /settings/identities/{id}` |
 | `GET  /apply/form` `POST /apply` `GET /apply/status` `POST /apply/withdraw` | approval mode (pre-user session) |
 | `GET  /events?threads=&forums=` | SSE (outside `/api/v1` versioning: `/events`) |

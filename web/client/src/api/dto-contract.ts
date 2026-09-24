@@ -12,7 +12,17 @@
 // A golden added to the directory must be added here too; contract.test.ts
 // fails until it is.
 
-import type { ForumTree, Me, Post, PostHistory, PostReplies, RenderResult, ThreadList, ThreadPage } from './dto';
+import type {
+  ForumTree,
+  Me,
+  Post,
+  PostHistory,
+  PostReplies,
+  RenderResult,
+  ThreadList,
+  ThreadPage,
+  UserSuggestions,
+} from './dto';
 
 import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.json';
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
@@ -35,6 +45,7 @@ import threadModerator from '../../../../internal/dto/testdata/golden/thread.mod
 import threadsAnon from '../../../../internal/dto/testdata/golden/threads.anon.json';
 import threadsMember from '../../../../internal/dto/testdata/golden/threads.member.json';
 import unreadMember from '../../../../internal/dto/testdata/golden/unread.member.json';
+import usersMember from '../../../../internal/dto/testdata/golden/users.member.json';
 
 // NoExtraKeys is true when every key of U, at every depth, is a key of T.
 // null in the golden says nothing about keys, and an empty array has no
@@ -83,4 +94,5 @@ export const contract = [
   matches<ThreadList>()(threadsAnon),
   matches<ThreadList>()(threadsMember),
   matches<ThreadList>()(unreadMember),
+  matches<UserSuggestions>()(usersMember),
 ];

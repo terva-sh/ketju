@@ -387,3 +387,13 @@ type QuoteRef struct {
 	// shows its tombstone rather than the quoted words.
 	Deleted bool `json:"deleted"`
 }
+
+// UserSuggestions is GET /users?prefix= (docs/07): the members the composer
+// offers when an author types @ and the start of a handle
+// (TKT-01M38XJJKM). Each is an Author, so the list can draw a suggestion
+// the way a byline draws its author. Every handle here is one the renderer
+// resolves as a mention, which is why a handle the mention syntax cannot
+// reach is never offered.
+type UserSuggestions struct {
+	Users []Author `json:"users"`
+}

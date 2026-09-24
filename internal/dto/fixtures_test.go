@@ -381,6 +381,7 @@ var corpus = map[string]any{
 
 	"render." + tMember:       renderReply(),
 	"render-plain." + tMember: renderPlain(),
+	"users." + tMember:        userSuggestions(),
 	"unread." + tMember:       crossForumList(),
 }
 
@@ -406,4 +407,13 @@ func renderReply() RenderResult {
 // nothing: the lists are empty rather than null, and reply_to is null.
 func renderPlain() RenderResult {
 	return RenderResult{HTML: "<p>Hello.</p>\n", Mentions: []MentionRef{}, Quotes: []QuoteRef{}}
+}
+
+// userSuggestions is GET /users?prefix=al: two members, one an agent with no
+// avatar, in handle order: '-' sorts before every letter.
+func userSuggestions() UserSuggestions {
+	return UserSuggestions{Users: []Author{
+		{Handle: "al-scribe", DisplayName: "Scribe", Avatar: "", Role: "member", Kind: "agent"},
+		{Handle: "alice", DisplayName: "Alice Nakamura", Avatar: "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1", Role: "member", Kind: "human"},
+	}}
 }

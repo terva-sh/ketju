@@ -457,6 +457,64 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (int
 	return result.RowsAffected()
 }
 
+const usersByHandlePrefix = `-- name: UsersByHandlePrefix :many
+SELECT handle, display_name, avatar_blob, role, kind FROM users
+WHERE handle >= ?1 AND handle < ?2
+  AND status = 'active'
+  AND substr(handle, -1) <> '-'
+ORDER BY handle
+LIMIT ?3
+`
+
+type UsersByHandlePrefixParams struct {
+	Lo  string
+	Hi  string
+	Lim int64
+}
+
+type UsersByHandlePrefixRow struct {
+	Handle      string
+	DisplayName string
+	AvatarBlob  sql.NullString
+	Role        string
+	Kind        string
+}
+
+// Mention autocomplete (GET /api/v1/users?prefix=). lo is the prefix as
+// typed and hi is lo with '{' appended, which sorts after every handle
+// character. Both compare under the column's NOCASE collation, which folds
+// the case, so this is a range search on the handle index. A handle ending in '-' is left out: the mention parser
+// reads a trailing '-' as punctuation, so such a handle cannot be mentioned
+// and suggesting it would insert a mention of somebody else.
+func (q *Queries) UsersByHandlePrefix(ctx context.Context, arg UsersByHandlePrefixParams) ([]UsersByHandlePrefixRow, error) {
+	rows, err := q.db.QueryContext(ctx, usersByHandlePrefix, arg.Lo, arg.Hi, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []UsersByHandlePrefixRow
+	for rows.Next() {
+		var i UsersByHandlePrefixRow
+		if err := rows.Scan(
+			&i.Handle,
+			&i.DisplayName,
+			&i.AvatarBlob,
+			&i.Role,
+			&i.Kind,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const usersByIDs = `-- name: UsersByIDs :many
 SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
 `

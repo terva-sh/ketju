@@ -1,0 +1,18 @@
+{
+  "users": [
+    {
+      "handle": "al-scribe",
+      "display_name": "Scribe",
+      "avatar": "",
+      "role": "member",
+      "kind": "agent"
+    },
+    {
+      "handle": "alice",
+      "display_name": "Alice Nakamura",
+      "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+      "role": "member",
+      "kind": "human"
+    }
+  ]
+}

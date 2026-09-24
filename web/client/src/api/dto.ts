@@ -176,3 +176,9 @@ export interface RenderResult {
   // The post this one answers, validated against the thread.
   reply_to: number | null;
 }
+
+// UserSuggestions is GET /users?prefix=, the composer's mention autocomplete
+// (internal/dto UserSuggestions). Every handle is one the renderer resolves.
+export interface UserSuggestions {
+  users: Author[];
+}

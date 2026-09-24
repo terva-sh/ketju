@@ -90,3 +90,17 @@ UPDATE users SET role = ?, updated_at = ? WHERE id = ?;
 -- The authors on one page of a thread, in one query rather than one per post.
 -- name: UsersByIDs :many
 SELECT * FROM users WHERE id IN (sqlc.slice('ids')) ORDER BY id;
+
+-- name: UsersByHandlePrefix :many
+-- Mention autocomplete (GET /api/v1/users?prefix=). lo is the prefix as
+-- typed and hi is lo with '{' appended, which sorts after every handle
+-- character. Both compare under the column's NOCASE collation, which folds
+-- the case, so this is a range search on the handle index. A handle ending in '-' is left out: the mention parser
+-- reads a trailing '-' as punctuation, so such a handle cannot be mentioned
+-- and suggesting it would insert a mention of somebody else.
+SELECT handle, display_name, avatar_blob, role, kind FROM users
+WHERE handle >= sqlc.arg(lo) AND handle < sqlc.arg(hi)
+  AND status = 'active'
+  AND substr(handle, -1) <> '-'
+ORDER BY handle
+LIMIT sqlc.arg(lim);

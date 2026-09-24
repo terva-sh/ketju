@@ -204,6 +204,13 @@ type Querier interface {
 	// A ThreadCreated resets the whole row: replayed from the start of the log,
 	// it must undo whatever later records did before they are applied again.
 	UpsertThread(ctx context.Context, arg UpsertThreadParams) error
+	// Mention autocomplete (GET /api/v1/users?prefix=). lo is the prefix as
+	// typed and hi is lo with '{' appended, which sorts after every handle
+	// character. Both compare under the column's NOCASE collation, which folds
+	// the case, so this is a range search on the handle index. A handle ending in '-' is left out: the mention parser
+	// reads a trailing '-' as punctuation, so such a handle cannot be mentioned
+	// and suggesting it would insert a mention of somebody else.
+	UsersByHandlePrefix(ctx context.Context, arg UsersByHandlePrefixParams) ([]UsersByHandlePrefixRow, error)
 	// The authors on one page of a thread, in one query rather than one per post.
 	UsersByIDs(ctx context.Context, ids []int64) ([]User, error)
 }
