@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T22:38:24Z
+updated_at: 2026-09-24T22:51:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -149,6 +149,24 @@ The "built client is current" step failed: internal/web/spa/dist is committed, a
 **2. "Exclude nested quotations throughout a whole-post quote".** Only a `details.quote` directly under the body was skipped, so one inside a list item or a div was copied as this post's words.
 - Fix: `bodyText` works on a clone with every `details.quote` removed, and leaves the post's DOM alone.
 - Test: covers a quotation in a list item and one in a div, and checks the original is unchanged.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T22:51:11Z
+
+Review 541 (head e608e18, Actions run 378) resolved both of review 537's findings. It raised two more medium findings, both accepted and fixed.
+
+**1. "Hide a previous preview error when the inputs change".** The error branch was checked before the busy branch, so a failure for the old input showed while the new input rendered.
+- Fix: busy takes precedence, so neither a held rendering nor a held error is shown for input that has changed.
+- Test: extended to fail a render, type, open Preview, and see "Rendering…" and then the new rendering.
+
+**2. "Preserve rendered line breaks in whole-post quotes".** textContent dropped `<br>`. Rather than patch `<br>` alone, `bodyText` is now a small block walker over everything the renderer emits:
+- `<br>` is a line break, and a soft break or other whitespace collapses to a space.
+- A list item is one line, with a loose item's paragraphs and nested lists on lines of their own.
+- A table row is one line, with its cells joined by ` | `.
+- Headings and paragraphs are blocks.
+- A plain blockquote, div, section or footnotes block is read for its blocks.
+- `<hr>` is dropped, and `<pre>` is kept verbatim.
+
+Tests and mutants: a test covers all of these. Nine new mutants on the walker are all killed, and so are the earlier 30.
 
 ## Summary
 

@@ -232,6 +232,17 @@ describe('the preview', () => {
     await wait(previewDelay + 20);
     await click(root.querySelector('#composer-tab-preview'));
     expect(root.querySelector('.preview-error')!.textContent).toBe('That was not accepted. Check it and try again.');
+
+    // The failure was about that input; the next input's preview does not
+    // show it while it renders (review 541).
+    serve(page());
+    await click(root.querySelector('#composer-tab-write'));
+    await type(root, 'y');
+    await click(root.querySelector('#composer-tab-preview'));
+    expect(root.querySelector('.preview-error')).toBeNull();
+    expect(root.querySelector('.preview-busy')).not.toBeNull();
+    await wait(previewDelay + 20);
+    expect(root.querySelector('[data-preview]')!.innerHTML).toContain('xy');
   });
 });
 

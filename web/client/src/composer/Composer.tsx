@@ -184,14 +184,15 @@ export function Composer({ thread, authorOf }: { thread: string; authorOf: (ordi
         aria-busy={preview.busy}
         hidden={tab !== 'preview'}
       >
-        {preview.error !== null ? (
+        {preview.busy ? (
+          // What is held, a rendering or an error, is about other input from
+          // the moment the input changes (reviews 537 and 541), so neither
+          // is shown until replaced.
+          <p class="preview-busy">Rendering…</p>
+        ) : preview.error !== null ? (
           <p class="preview-error" role="alert">
             {problemMessage(preview.error).text}
           </p>
-        ) : preview.busy ? (
-          // What is held is a rendering of other input from the moment the
-          // input changes (review 537), so it is not shown until replaced.
-          <p class="preview-busy">Rendering…</p>
         ) : preview.html === '' ? (
           <p class="preview-empty">Nothing to preview yet.</p>
         ) : (

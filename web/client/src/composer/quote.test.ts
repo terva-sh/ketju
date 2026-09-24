@@ -66,6 +66,19 @@ describe('the text of a post', () => {
     expect(bodyText(el)).toBe('My first point.\n\none\ntwo\n\nx := 1');
   });
 
+  it('reads a post as a reader sees it: line breaks, loose and nested lists, tables, headings (review 541)', () => {
+    const el = body(
+      '<h2>Plan</h2>\n<p>first line<br>\nsecond   line\nsoft</p>\n' +
+        '<ul>\n<li>\n<p>loose one</p>\n<p>and more</p>\n</li>\n<li>two\n<ul>\n<li>nested</li>\n</ul>\n</li>\n</ul>\n' +
+        '<table>\n<thead>\n<tr>\n<th>a</th>\n<th>b</th>\n</tr>\n</thead>\n<tbody>\n<tr>\n<td>1</td>\n<td><em>2</em></td>\n</tr>\n</tbody>\n</table>\n' +
+        '<blockquote>\n<p>a plain quote</p>\n</blockquote>\n<hr>\n<pre><code>  indented\n\nkept\n</code></pre>\n' +
+        '<section class="footnotes">\n<hr>\n<ol>\n<li id="fn:1">\n<p>a note</p>\n</li>\n</ol>\n</section>',
+    );
+    expect(bodyText(el)).toBe(
+      'Plan\n\nfirst line\nsecond line soft\n\nloose one\nand more\ntwo\nnested\n\na | b\n1 | 2\n\na plain quote\n\n  indented\n\nkept\n\na note',
+    );
+  });
+
   it('leaves out a quotation wherever it sits, and leaves the body as it was', () => {
     const quote = (n: number, words: string) =>
       `<details class="quote" open=""><summary><a href="#post-${n}" class="quote-source">Post #${n}</a></summary>` +

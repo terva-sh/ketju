@@ -32,28 +32,98 @@ export function selectionIn(body: Element): string | null {
 // a quote with nothing selected. The post's own quotations are left out:
 // they are somebody else's words, and quoting them again would attribute
 // them to this post.
+//
+// It reads the rendered blocks the way a reader sees them (review 541): a
+// <br> is a line break, a list item or a table row a line, a table's cells
+// are separated by " | ", code keeps its lines as they are, and whitespace
+// elsewhere collapses as it does on screen. textContent alone runs lines
+// joined by a <br> together, and every item of a loose list into one.
 export function bodyText(body: Element): string {
   // On a copy, every quotation removed wherever it sits, a list item's
   // included (review 537), so no block below can carry one.
   const copy = body.cloneNode(true) as Element;
   for (const q of Array.from(copy.querySelectorAll('details.quote'))) q.remove();
   const blocks: string[] = [];
-  for (const node of Array.from(copy.childNodes)) {
-    if (node instanceof Element) {
-      if (node.matches('ul, ol')) {
-        const items = Array.from(node.children).map((li) => (li.textContent ?? '').trim());
-        blocks.push(items.filter((s) => s !== '').join('\n'));
-        continue;
-      }
-      if (node.matches('pre')) {
-        blocks.push((node.textContent ?? '').replace(/\n+$/, ''));
-        continue;
-      }
+  collect(copy, blocks);
+  return blocks.join('\n\n');
+}
+
+// The elements that start a block of their own.
+const blockTag = /^(P|H[1-6]|PRE|UL|OL|TABLE|HR|BLOCKQUOTE|DIV|SECTION|DETAILS)$/;
+
+// collect appends the blocks inside el to blocks, each one non-empty.
+function collect(el: Element, blocks: string[]) {
+  let inline = '';
+  const flush = () => {
+    const t = tidy(inline);
+    if (t !== '') blocks.push(t);
+    inline = '';
+  };
+  for (const n of Array.from(el.childNodes)) {
+    if (!(n instanceof Element) || !blockTag.test(n.tagName)) {
+      inline += inlineText(n);
+      continue;
     }
-    const text = (node.textContent ?? '').trim();
+    flush();
+    let text: string;
+    switch (n.tagName) {
+      case 'PRE':
+        text = (n.textContent ?? '').replace(/\n+$/, '');
+        break;
+      case 'UL':
+      case 'OL':
+        text = Array.from(n.children)
+          .map((li) => within(li, '\n'))
+          .filter((t) => t !== '')
+          .join('\n');
+        break;
+      case 'TABLE':
+        text = Array.from(n.querySelectorAll('tr'))
+          .map((tr) => Array.from(tr.children, (cell) => within(cell, ' ')).join(' | '))
+          .join('\n');
+        break;
+      case 'HR':
+        text = '';
+        break;
+      default:
+        if (/^(P|H[1-6])$/.test(n.tagName)) {
+          text = tidy(inlineText(n));
+        } else {
+          // A container: its blocks are blocks here.
+          collect(n, blocks);
+          text = '';
+        }
+    }
     if (text !== '') blocks.push(text);
   }
-  return blocks.filter((b) => b !== '').join('\n\n');
+  flush();
+}
+
+// within is el's blocks joined by sep: a list item's paragraphs and nested
+// lists on lines of their own, a table cell's on one line.
+function within(el: Element, sep: string): string {
+  const parts: string[] = [];
+  collect(el, parts);
+  return parts.join(sep);
+}
+
+// inlineText is the text of an inline run, with a <br> as a line break and
+// every other run of whitespace, a soft line break included, as a space.
+function inlineText(n: Node): string {
+  if (n instanceof Element) {
+    if (n.tagName === 'BR') return '\n';
+    return Array.from(n.childNodes, inlineText).join('');
+  }
+  return (n.textContent ?? '').replace(/\s+/g, ' ');
+}
+
+// tidy trims each line of an inline run and the run itself.
+function tidy(s: string): string {
+  return s
+    .split('\n')
+    .map((l) => l.trim())
+    .join('\n')
+    .trim();
 }
 
 // insertBlock puts block into source at caret as a paragraph of its own,
