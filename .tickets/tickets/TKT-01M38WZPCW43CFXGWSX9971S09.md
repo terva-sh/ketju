@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T16:36:36Z
+updated_at: 2026-09-24T17:54:16Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -254,3 +254,7 @@ Merged PR #65 (TKT-01M29CCC0F, Build the CSS system, themes, and breakpoints) as
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T16:36:36Z
 
 Merged PR #66 (TKT-01M29CCBZN, Add the single-process lock file) as 60f582f. Clean review on head 60f582f after reviews 433, 436, 440, 441, 443, 445 and 446 were answered. On review 446 the user chose to fix both findings and re-review once, merging if only further holder-naming edges remained; that round came back clean. CI run 291's race step shows internal/lock ran and passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T17:54:16Z
+
+Merged PR #67 (TKT-01M29C5Y1S, Implement startup projection catch-up) as 1979894. Reviews answered: 448, 453, 456, 462, 464. Review 468's high was deferred to draft TKT-01M3A8V7XC by the user's decision, so the merge was made with the model gate failing, on that decision. CI run 312 passed, with the projection tests and the catch-up bound (70.8 ms) in the step logs.
