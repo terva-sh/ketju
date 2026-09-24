@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T11:20:04Z
+updated_at: 2026-09-24T11:26:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -183,6 +183,12 @@ Review 404 (2 medium; both fixed). Review 403's two findings are marked resolved
 Tests: serverOwned over 9 paths; three odd spellings clicked in the page each reach nav.leave with the resolved path; /authors, /AUTH and a malformed escape stay NotFound without leaving. Headless Chromium against the built client and a scratch server (deleted, not committed): /./auth/github/start, /t/../auth/logout and /%61uth/github/start each left the document and reached the server's auth handler; /AUTH/x stayed in the page as NotFound.
 (2) A 404 followed by a failed request for the same thread (500 or network) left NotFound up. A failure now records itself and keeps any title it had. The screen shows 'This thread could not be loaded' (role=alert) instead of NotFound; retrying is CEE5H's. Tests: 404 then 500, 404 then network, a title kept through a 503, and a superseded request failing late after a newer success, which must not mark the page failed.
 Mutants, all killed: decoding, the null render, the leave call, the case flag, the boundary, Fallback swapped for NotFound, both failure paths, keeping the head, and the live guard (killed by the late-failure test). 107 Vitest tests; dist rebuilt.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:26:20Z
+
+Review 405 (medium, fixed). Review 404's two findings are marked resolved.
+The finding: preact-iso's matcher runs decodeURIComponent over path parameters inside Router's render with no guard, so a same-origin link like /f/% or /t/id/%FF threw a URIError mid-navigation. A pattern cannot tell whether an escape decodes (%FF is well-formed hex and still throws), so the fix is an error boundary, UndecodableAddress, around the Router. It catches only URIError and rethrows anything else. It renders NotFound for the URL that failed, and renders the Router again as soon as the URL changes.
+Tests: three undecodable links each give NotFound, and the next link (/unread) routes normally. Mutants, both killed: no boundary, and a boundary that never resets. Headless Chromium against the built client and a scratch server (deleted, not committed): /f/% and /t/{id}/%FF showed NotFound with no page error, and the next click routed to /unread. 110 Vitest tests; dist rebuilt.
 
 ## Summary
 

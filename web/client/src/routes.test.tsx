@@ -117,6 +117,30 @@ describe('the route table', () => {
     },
   );
 
+  // A link whose path cannot be decoded names nothing: NotFound, not a
+  // crash, and the app still routes the next link.
+  it.each(['/f/%', '/t/01k4z3j0w8x2c/%FF', '/u/%E0%A4%A/posts'])(
+    'a link to %s is not found, and the app recovers',
+    async (href) => {
+      vi.stubGlobal('fetch', () => new Promise(() => {}));
+      const root = await renderAt('/');
+      const click = async (to: string) => {
+        const a = document.createElement('a');
+        a.href = to;
+        root.appendChild(a);
+        await act(async () => {
+          a.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, composed: true, button: 0 }));
+        });
+        a.remove();
+        await settle(root);
+      };
+      await click(href);
+      expect(screenOf(root)).toBe('not-found');
+      await click('/unread');
+      expect(screenOf(root)).toBe('unread');
+    },
+  );
+
   it.each(['/authors', '/AUTH/github/start', '/%E0%A4%A'])('does not hand %s to the server', async (url) => {
     const spy = vi.spyOn(nav, 'leave').mockImplementation(() => {});
     try {
