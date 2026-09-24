@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T22:34:17Z
+updated_at: 2026-09-24T22:38:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -131,6 +131,24 @@ The composer focused itself in a `useEffect`, which runs after paint. Keys press
 - 30 hand mutants across quote.ts, mention.ts, edit.ts, Composer.tsx, Post.tsx, ThreadScreen.tsx, state/composer.ts and threadActions.ts, all killed.
 - The four first-round survivors each got a test: a backwards selection, a late answer already received, autocomplete with a range selected, and the dismissed-listbox rule.
 - The full client suite ran 581 tests. The production build passes.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T22:38:24Z
+
+Review 537 (head adca12d, Actions run 376) and CI run 377 are answered.
+
+### CI run 377
+The "built client is current" step failed: internal/web/spa/dist is committed, and I had not regenerated it. It is now rebuilt with `go generate ./internal/web/spa`. **For the next client ticket:** run that before pushing, not only Vitest and tsc.
+
+### Review 537, two medium findings, both accepted and fixed
+
+**1. "Clear the old preview when its inputs change".** Opening Preview during the debounce, or while a request was in flight, showed the rendering of the previous input.
+- Fix: while busy, the pane says "Rendering…" and does not show the held HTML.
+- Test: a new test switches to Preview right after a source change and right after a reply change.
+- Mutation: clearing the HTML in state as well would be an equivalent mutant, so it is not done.
+
+**2. "Exclude nested quotations throughout a whole-post quote".** Only a `details.quote` directly under the body was skipped, so one inside a list item or a div was copied as this post's words.
+- Fix: `bodyText` works on a clone with every `details.quote` removed, and leaves the post's DOM alone.
+- Test: covers a quotation in a list item and one in a div, and checks the original is unchanged.
 
 ## Summary
 

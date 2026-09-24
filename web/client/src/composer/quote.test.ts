@@ -66,6 +66,15 @@ describe('the text of a post', () => {
     expect(bodyText(el)).toBe('My first point.\n\none\ntwo\n\nx := 1');
   });
 
+  it('leaves out a quotation wherever it sits, and leaves the body as it was', () => {
+    const quote = (n: number, words: string) =>
+      `<details class="quote" open=""><summary><a href="#post-${n}" class="quote-source">Post #${n}</a></summary>` +
+      `<blockquote><p>${words}</p></blockquote></details>`;
+    const el = body(`<ul><li>${quote(3, 'their words')}mine</li><li>also mine</li></ul><div>${quote(4, 'more of theirs')}<p>and mine</p></div>`);
+    expect(bodyText(el)).toBe('mine\nalso mine\n\nand mine');
+    expect(el.querySelectorAll('details.quote')).toHaveLength(2);
+  });
+
   it('is the selection when it lies inside the body, and nothing when it strays out', () => {
     const el = body('<p>alpha beta gamma</p>');
     const outside = document.createElement('p');

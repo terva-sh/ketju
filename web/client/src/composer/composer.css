@@ -150,9 +150,7 @@
   min-height: 140px;
   padding: 16px 20px;
 }
-.composer-preview[aria-busy='true'] > * {
-  opacity: 0.6;
-}
+.preview-busy,
 .preview-empty {
   margin: 0;
   color: var(--muted);

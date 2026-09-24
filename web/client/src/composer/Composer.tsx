@@ -188,7 +188,11 @@ export function Composer({ thread, authorOf }: { thread: string; authorOf: (ordi
           <p class="preview-error" role="alert">
             {problemMessage(preview.error).text}
           </p>
-        ) : preview.html === '' && !preview.busy ? (
+        ) : preview.busy ? (
+          // What is held is a rendering of other input from the moment the
+          // input changes (review 537), so it is not shown until replaced.
+          <p class="preview-busy">Rendering…</p>
+        ) : preview.html === '' ? (
           <p class="preview-empty">Nothing to preview yet.</p>
         ) : (
           <div class="post-body" data-preview dangerouslySetInnerHTML={{ __html: preview.html }} />
@@ -219,7 +223,8 @@ const tools: [EditKind, IconName, string][] = [
 // usePreview renders source through POST /render once it has sat still for
 // previewDelay, in this thread and as a reply to replyTo, so quotes and the
 // reply are checked as the post's will be. A change before the answer comes
-// cancels the request, so only the newest source's rendering is ever shown.
+// cancels the request, so only the newest source's rendering is ever shown,
+// and the one before it is dropped at once, not when the answer comes.
 // Empty source asks nothing.
 function usePreview(thread: string, source: string, replyTo: number | null) {
   const [state, setState] = useState<{ html: string; error: unknown; busy: boolean }>({ html: '', error: null, busy: false });

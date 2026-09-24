@@ -189,6 +189,29 @@ describe('the preview', () => {
     expect(root.querySelector('[data-preview]')!.innerHTML).toBe('<p>first second</p>');
   });
 
+  it('drops a rendering as soon as the source or the reply it rendered changes (review 537)', async () => {
+    serve(page());
+    const root = await renderAt(path);
+    await type(root, 'first');
+    await wait(previewDelay + 20);
+    await click(root.querySelector('#composer-tab-preview'));
+    expect(root.querySelector('[data-preview]')!.innerHTML).toContain('first');
+
+    await click(root.querySelector('#composer-tab-write'));
+    await type(root, ' second');
+    await click(root.querySelector('#composer-tab-preview'));
+    expect(root.querySelector('[data-preview]')).toBeNull();
+    expect(root.querySelector('.preview-busy')).not.toBeNull();
+    await wait(previewDelay + 20);
+    expect(root.querySelector('[data-preview]')!.innerHTML).toContain('first second');
+
+    await click(root.querySelector('#post-1 [data-post-action=reply]'));
+    await click(root.querySelector('#composer-tab-preview'));
+    expect(root.querySelector('[data-preview]')).toBeNull();
+    await wait(previewDelay + 20);
+    expect(root.querySelector('[data-preview]')).not.toBeNull();
+  });
+
   it('asks nothing for an empty source, and says why a rendering failed', async () => {
     const sent = serve(page());
     const root = await renderAt(path);

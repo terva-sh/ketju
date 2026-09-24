@@ -33,10 +33,13 @@ export function selectionIn(body: Element): string | null {
 // they are somebody else's words, and quoting them again would attribute
 // them to this post.
 export function bodyText(body: Element): string {
+  // On a copy, every quotation removed wherever it sits, a list item's
+  // included (review 537), so no block below can carry one.
+  const copy = body.cloneNode(true) as Element;
+  for (const q of Array.from(copy.querySelectorAll('details.quote'))) q.remove();
   const blocks: string[] = [];
-  for (const node of Array.from(body.childNodes)) {
+  for (const node of Array.from(copy.childNodes)) {
     if (node instanceof Element) {
-      if (node.matches('details.quote')) continue;
       if (node.matches('ul, ol')) {
         const items = Array.from(node.children).map((li) => (li.textContent ?? '').trim());
         blocks.push(items.filter((s) => s !== '').join('\n'));
