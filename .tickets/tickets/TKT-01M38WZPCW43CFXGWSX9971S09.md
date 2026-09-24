@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T15:04:58Z
+updated_at: 2026-09-24T16:36:36Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -250,3 +250,7 @@ Merged PR #64, TKT-01M29CEE6V (Build the thread page with pager and unread divid
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:04:58Z
 
 Merged PR #65 (TKT-01M29CCC0F, Build the CSS system, themes, and breakpoints) as 945d82e after reviews 423 and 427 were answered; clean review on head 945d82e, CI run 272 step log shows 481 client tests and the Go web tests ran.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T16:36:36Z
+
+Merged PR #66 (TKT-01M29CCBZN, Add the single-process lock file) as 60f582f. Clean review on head 60f582f after reviews 433, 436, 440, 441, 443, 445 and 446 were answered. On review 446 the user chose to fix both findings and re-review once, merging if only further holder-naming edges remained; that round came back clean. CI run 291's race step shows internal/lock ran and passed.
