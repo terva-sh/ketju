@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCC02K8F14P0SKAYFMSE6
 title: Scaffold the Preact client and its embedding
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:preact-client
     path: docs/07-api-and-clients.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/ccc02-client-scaffold
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 70b6caf55d9697d86df5ccfabf8ac4a1cae50196
+  session: null
+  claimed_at: 2026-09-24T10:27:10Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T10:28:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -50,37 +57,36 @@ extensions: {}
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+Revised at claim, 2026-09-24, after reading internal/web (shell.go, server.go, security.go and its tests) as they stand.
 
-### Approach
-1. Create `web/client/` with Vite 8, Preact 10.x, `@preact/signals`, `preact-iso`, TypeScript, and a `package-lock.json`. Pin `preact` to `~10.x` or an exact 10 version. Record the reason (docs/10 Q20: pin 10.x through v1.0) in `web/client/README.md` and in a comment next to the dependency in package.json, if the chosen format allows one.
-2. `vite.config.ts`: `build.outDir: '../../internal/web/spa/dist'` with `emptyOutDir`; `html.cspNonce: '{{.Nonce}}'` so every emitted script and style tag carries the Go template placeholder; `build.modulePreload.polyfill: false` so no inline script is emitted; `build.manifest: true` (CGBYH reads it); `server.proxy` for `/api`, `/auth`, `/events` and `/blobs` pointing at `http://localhost:8080`.
-3. `web/client/index.html` is the Go template source. It holds a `<meta>` block for title and description, `<script type="application/json" id="bootstrap">{{.Bootstrap}}</script>`, a `<noscript>`, and the viewport meta with `viewport-fit=cover`.
-4. `internal/web/spa/spa.go`: `//go:embed all:dist`, `//go:generate sh -c "cd ../../../web/client && npm ci && npm run build"`, `ShellTemplate()`, and `Assets()` serving `/assets/*` with immutable caching for hashed files.
-5. Extend `ShellData` with `Bootstrap` (a `dto.Me` marshalled by html/template in a JSON-script context; confirm the escaping at claim) and `Meta`. Wire `web.NewShell(spa.ShellTemplate())` where the server is assembled (CCBYX `ketju serve`, if it has landed). Rewrite the ShellData doc comment, which currently argues against state in the shell, to cite docs/07.
-6. Commit `dist/`, so a clean `go build` works. Add a CI step that runs `go generate ./internal/web/spa` and then `git diff --exit-code internal/web/spa/dist`. CI needs Node: add `nodejs npm` to the existing `apk add` in `.forgejo/workflows/ci.yml`, same job, so the required context `ci / Build and Test (pull_request)` covers it. Vite 8 needs Node 20.19+ or 22.12+; check which version the golang:1.27-alpine base ships.
-
-### Files
-`web/client/**` (new); `internal/web/spa/spa.go` and `dist/` (new); `internal/web/shell.go` and `security_test.go` (touched); `.forgejo/workflows/ci.yml` (touched).
+1. **`web/client/`:** Vite 8.3, `@preact/preset-vite`, Preact pinned exactly at 10.29.8, `@preact/signals`, `preact-iso`, and TypeScript 5.9, with a committed `package-lock.json`.
+   - TypeScript 7 (the native port) was rejected for now. The scaffold wants the mature toolchain, and nothing depends on the TS version yet.
+   - `npm run build` is `tsc --noEmit && vite build`.
+   - `README.md` records the Preact pin with the reason (docs/10 Q20).
+2. **`vite.config.ts`:**
+   - `build.outDir` is `../../internal/web/spa/dist`, with `emptyOutDir`.
+   - `html.cspNonce` is `{{.Nonce}}`, so every tag Vite emits carries the Go template placeholder.
+   - `build.modulePreload.polyfill: false`, so no inline script is emitted.
+   - `build.manifest: true`, for CGBYH.
+   - `server.proxy` sends `/api`, `/auth`, `/events` and `/blobs` to `http://localhost:8080`.
+3. **`index.html`** is the Go template source: `<title>{{.Title}}</title>`, a description meta, the viewport meta with `viewport-fit=cover`, a `<noscript>`, and `<script type="application/json" id="bootstrap" nonce="{{.Nonce}}">{{.Bootstrap}}</script>`. html/template treats application/json as a JS context, so a `dto.Me` value is marshalled and escaped there; a test confirms the escaping. In dev, Vite serves the raw template, so the client falls back to an anonymous viewer when the block does not parse.
+4. **`internal/web/spa`:**
+   - `//go:embed all:dist`, with `//go:generate` running `npm ci && npm run build`.
+   - `Shell()` returns `dist/index.html`.
+   - `Assets()` serves `/assets/*` with `Cache-Control: public, max-age=31536000, immutable` and no directory listings.
+   - `dist/` is committed (settled in grooming).
+5. **`internal/web`:**
+   - `ShellData` gains `Title`, `Description` and `Bootstrap dto.Me`, and its doc comment cites docs/07.
+   - `Shell.SetPage(fn)` lets the server supply them per request. The default is the site name "ketju" and an anonymous `dto.Me`, until CA99R and CCBYX land.
+   - `DefaultShell` is removed; the security tests point at `spa.Shell()`.
+   - `TestTheShellHasNoInlineScriptOrStyle` exempts only `type="application/json"` data blocks.
+6. **CI:** new steps in Build and Test: `apk add nodejs npm`, then `go generate ./internal/web/spa` with `git diff --exit-code` and no untracked files under `dist/`. Adding steps only, per docs/12 "Changing CI".
 
 ### Tests
-- AC1: CI runs `go build ./...` on a clean checkout. A Go test in `internal/web/spa` asserts that `dist/index.html` and at least one hashed asset are embedded.
-- AC2: manual check, recorded in a ticket note. Start Go on :8080 and `npm run dev`, edit a component, and watch hot reload.
-- AC3: point `TestTheShellHasNoInlineScriptOrStyle` at `spa.ShellTemplate()`, exempting only `type="application/json"` data blocks, since the JSON bootstrap has an inline body by design. Add a test that the rendered nonce and bootstrap appear. Close the inherited TKT-01M29C8020 AC3 in the browser: load the built client with the CSP enforcing and check the console is clean (Playwright or by hand).
-- AC4: README text plus the package.json range.
-
-### Design
-docs/07 "Preact client" (Stack, Embedding, Dev) and "Security headers"; docs/02 module layout (`internal/web/spa`, `web/client`); docs/10 Q20; the comment on this ticket.
-
-### Interactions
-Blocks every client ticket. Needs CA99R for a real `/me`; until then the bootstrap is the anonymous `dto.Me`. CCBYX (serve) mounts the handlers. CGBYH reads the Vite manifest.
-Open in docs: whether `dist/` is committed. The AC's "no separate build step" implies it is.
-
-### Settled in grooming (2026-09-24)
-
-- The bootstrap /me block is `<script type="application/json" nonce>`. Exempt that type in TestTheShellHasNoInlineScriptOrStyle, because JSON data is never executed.
-- Commit the built dist/. CI rebuilds it and fails on a diff, so `go build` alone stays complete.
-- Node joins the existing Build and Test job (docs/12, Changing CI).
+- AC1: a Go test that `dist/index.html` and a hashed JS asset are embedded and served, with CI's clean `go build`.
+- AC2: a manual check, recorded in a note. `ketju serve` (CCBYX) has not landed, so the live Go server is a scratch program serving `web.New` with the real shell, assets and API. Run `npm run dev`, load the page through the proxy, edit a component, and watch HMR.
+- AC3: the shell tests against the built template, a test that the nonce and the bootstrap JSON render (with escaping), and a browser load with the CSP enforcing and a clean console.
+- AC4: the README and the exact version in package.json.
 
 ## Comments
 

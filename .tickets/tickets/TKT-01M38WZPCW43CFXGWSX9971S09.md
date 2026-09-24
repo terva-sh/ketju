@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T10:12:34Z
+updated_at: 2026-09-24T10:27:02Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -218,3 +218,7 @@ Merged PR #56, TKT-01M29CA9AX 'Implement the thread page endpoint', as aab5c59 (
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:12:34Z
 
 Merged PR #57, TKT-01M29BYYJ0 'Add the flags, audit log, blobs, and settings schema', as 1afc4e8 (rebase). CI run 191 passed, and its step log shows go test -race ran over config, settings and store/db. Terva review 395 raised 1 high and 2 medium findings, all fixed. The clean run on 1afc4e8 is 4a7f9f79. The review ran each time, so none of these is a review-run failure.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:27:02Z
+
+Merged PR #58, TKT-01M29CA9C2 'Implement single post, replies, and history endpoints', as 70b6caf (rebase). CI run 196 passed, and its step log shows go test -race ran over dto, service/threads, threadcache, threadlog and web/api. Terva was clean on the first run (3269531f).
