@@ -24,10 +24,12 @@ references:
     path: docs/mockups/generate.py
   - ref: ticket:TKT-01M39WBN4QAMNRBXCGD85CDJF0
     path: null
+  - ref: pr:65
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T14:41:14Z
+updated_at: 2026-09-24T14:42:10Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
