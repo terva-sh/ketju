@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T21:38:34Z
+updated_at: 2026-09-24T22:07:14Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -282,3 +282,10 @@ Merged PR #73 (TKT-01M29C2WWG, Return structured mentions, quotes, and reply_to 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:38:34Z
 
 Merged PR #74 (TKT-01M29CA9D4, Implement POST /render for the composer preview) as 6627c55. The first review was clean, on head 6627c55 and base 7043e2b (Actions run 362). CI run 363's client step ran 16 test files, and its race step shows internal/service/threads and internal/web/api passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T22:07:14Z
+
+Merged PR #75 (TKT-01M38XJJKM, Serve handle autocomplete for mentions) as df5f2ed. It took two rounds of findings:
+- Review 522, medium: check membership before parsing. This also fixed POST /render from #74, through the new shared internal/service/member.
+- Review 524, low: cap oversized limits instead of refusing them.
+The clean review is on head df5f2ed, base 6627c55. CI run 372's client step ran 16 test files, and its race step shows internal/service/users and internal/web/api passed. Draft TKT-01M3ANX1NF (Handles ending in '-' can never be mentioned) was filed.
