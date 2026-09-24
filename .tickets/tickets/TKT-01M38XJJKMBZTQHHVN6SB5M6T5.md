@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M38XJJKMBZTQHHVN6SB5M6T5
 title: Serve handle autocomplete for mentions
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:api
     path: docs/07-api-and-clients.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/38xjj-handle-autocomplete
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 6627c5516be2d23f9caf0efad02d0798e65ae24e
+  session: null
+  claimed_at: 2026-09-24T21:38:34Z
+  expires_at: null
 archive: null
 created_at: 2026-09-24T05:17:53Z
-updated_at: 2026-09-24T05:21:21Z
+updated_at: 2026-09-24T21:38:34Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---

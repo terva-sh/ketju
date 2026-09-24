@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T21:26:13Z
+updated_at: 2026-09-24T21:38:34Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -278,3 +278,7 @@ Merged PR #72 (TKT-01M29C7ZZ9, Implement the OIDC start and callback flow) as 8f
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:26:13Z
 
 Merged PR #73 (TKT-01M29C2WWG, Return structured mentions, quotes, and reply_to from the render call) as 7043e2b, after review 516 (uint32 ordinals on the wire) and CI run 356 (the client contract types for the new goldens) were answered. Clean review on head 7043e2b, base 8f1d368. CI run 358's client step ran 529 tests, and its race step shows internal/dto, internal/render and internal/service/threads passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:38:34Z
+
+Merged PR #74 (TKT-01M29CA9D4, Implement POST /render for the composer preview) as 6627c55. The first review was clean, on head 6627c55 and base 7043e2b (Actions run 362). CI run 363's client step ran 16 test files, and its race step shows internal/service/threads and internal/web/api passed.
