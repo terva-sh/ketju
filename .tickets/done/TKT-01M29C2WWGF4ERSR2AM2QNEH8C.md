@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:15:46Z
-updated_at: 2026-09-24T21:16:01Z
+updated_at: 2026-09-24T21:20:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -97,6 +97,14 @@ Built and verified (2026-09-24).
 - **A reply to a deleted post is accepted.** The AC refuses a nonexistent or out-of-thread ordinal. A deleted post exists, and the docs leave open whether it may be answered. Accepting is the permissive reading, and it can be narrowed later in RenderWith without changing any stored fact. This is flagged for the maintainer: if replies to deleted posts should be refused, it is a one-line change here plus a test.
 - **RenderDTO lives in internal/service/threads.** dto imports nothing of ours, render should not know the wire shape, and both CA9D4 and CA9B9 go through the threads service.
 - **QuoteRef carries deleted as well as the ordinal**, so the composer can say a quoted post is gone. It is a fact the render already has.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:20:47Z
+
+Two things on head 2e6b391, both fixed.
+
+1. CI run 356 failed at the client tests: web/client's contract test requires every Go golden to be type-checked against dto.ts, and the two new render goldens were not. dto.ts now has RenderResult, and dto-contract.ts checks render.member and render-plain.member. My mistake: before pushing I ran only routes.test.tsx rather than the whole client suite.
+
+2. Review 516 raised one medium, accepted: converting a validated uint32 ordinal to int loses range on a 32-bit build. The reviewer offered a wider wire type or rejecting out-of-range values, and the wire type was taken. RenderResult.ReplyTo and QuoteRef.Ordinal are now uint32, the renderer's and the log's own type, so RenderDTO converts nothing. Rejecting large values in RenderWith lost, because narrowing what the quote syntax accepts would change output and force a render Version bump. As it turns out, a quote's ordinal is at most nine digits by its syntax, so only reply_to could ever have overflowed. TestRenderDTOKeepsEveryOrdinal carries MaxUint32 through. The older DTOs (Post.Ordinal int, Post.ReplyTo *int) have the same latent 32-bit limit in threads/view.go, which this PR does not touch; no platform statement in the docs names 32-bit as a target.
 
 ## Summary
 

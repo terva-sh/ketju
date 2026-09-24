@@ -12,7 +12,7 @@
 // A golden added to the directory must be added here too; contract.test.ts
 // fails until it is.
 
-import type { ForumTree, Me, Post, PostHistory, PostReplies, ThreadList, ThreadPage } from './dto';
+import type { ForumTree, Me, Post, PostHistory, PostReplies, RenderResult, ThreadList, ThreadPage } from './dto';
 
 import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.json';
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
@@ -24,6 +24,8 @@ import meModerator from '../../../../internal/dto/testdata/golden/me.moderator.j
 import mePreUser from '../../../../internal/dto/testdata/golden/me.pre_user.json';
 import postMember from '../../../../internal/dto/testdata/golden/post.member.json';
 import postModerator from '../../../../internal/dto/testdata/golden/post.moderator.json';
+import renderMember from '../../../../internal/dto/testdata/golden/render.member.json';
+import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
 import repliesMember from '../../../../internal/dto/testdata/golden/replies.member.json';
 import repliesModerator from '../../../../internal/dto/testdata/golden/replies.moderator.json';
 import threadAnon from '../../../../internal/dto/testdata/golden/thread.anon.json';
@@ -72,6 +74,8 @@ export const contract = [
   matches<Post>()(postModerator),
   matches<PostReplies>()(repliesMember),
   matches<PostReplies>()(repliesModerator),
+  matches<RenderResult>()(renderMember),
+  matches<RenderResult>()(renderPlainMember),
   matches<ThreadPage>()(threadAnon),
   matches<ThreadPage>()(threadLockedMember),
   matches<ThreadPage>()(threadMember),

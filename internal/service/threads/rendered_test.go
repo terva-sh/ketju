@@ -3,6 +3,7 @@ package threads
 import (
 	"bytes"
 	"encoding/json"
+	"math"
 	"os"
 	"reflect"
 	"strings"
@@ -56,6 +57,29 @@ func TestRenderDTOMatchesTheGoldens(t *testing.T) {
 		if got := golden(t, RenderDTO(r)); !bytes.Equal(got, want) {
 			t.Errorf("%s:\ngot  %s\nwant %s", name, got, want)
 		}
+	}
+}
+
+// Every ordinal the renderer accepts arrives as it was, the largest
+// included, whatever the platform's int (review 516). A reply_to may be any
+// uint32 the thread has; a quote's is at most nine digits by its syntax.
+func TestRenderDTOKeepsEveryOrdinal(t *testing.T) {
+	top := uint32(math.MaxUint32)
+	r, err := render.RenderWith("> [quote=#999999999]\n> x\n\ny", render.Context{
+		Posts:   render.ResolverFunc(func(uint32) (bool, bool) { return true, false }),
+		ReplyTo: &top,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := RenderDTO(r)
+	if len(got.Quotes) != 1 || got.Quotes[0].Ordinal != 999999999 || got.ReplyTo == nil || *got.ReplyTo != top {
+		t.Errorf("RenderDTO = %+v", got)
+	}
+	// The result does not share the render's pointer.
+	*r.ReplyTo = 1
+	if *got.ReplyTo != top {
+		t.Error("the DTO follows the render's reply_to pointer")
 	}
 }
 

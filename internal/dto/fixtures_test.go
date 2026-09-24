@@ -387,7 +387,7 @@ var corpus = map[string]any{
 // renderReply is POST /render for a reply that quotes post 61, whose quoted
 // words are there, and post 62, which was deleted, and mentions alice.
 func renderReply() RenderResult {
-	reply := 61
+	reply := uint32(61)
 	return RenderResult{
 		// What internal/render produces for
 		// "> [quote=#61]\n> the quoted words\n\n> [quote=#62]\n> gone\n\nAgreed, @alice."

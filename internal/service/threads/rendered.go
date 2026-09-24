@@ -23,10 +23,10 @@ func RenderDTO(r render.Result) dto.RenderResult {
 		out.Mentions = append(out.Mentions, dto.MentionRef{Handle: m.Handle})
 	}
 	for _, q := range r.Quotes {
-		out.Quotes = append(out.Quotes, dto.QuoteRef{Ordinal: int(q.Ordinal), Deleted: q.Deleted})
+		out.Quotes = append(out.Quotes, dto.QuoteRef{Ordinal: q.Ordinal, Deleted: q.Deleted})
 	}
 	if r.ReplyTo != nil {
-		v := int(*r.ReplyTo)
+		v := *r.ReplyTo
 		out.ReplyTo = &v
 	}
 	return out

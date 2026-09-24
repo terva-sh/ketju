@@ -365,7 +365,12 @@ type RenderResult struct {
 	Quotes []QuoteRef `json:"quotes"`
 	// ReplyTo is the post this one answers, validated against the thread;
 	// nil for a post that answers none.
-	ReplyTo *int `json:"reply_to"`
+	//
+	// The ordinals here are uint32, the renderer's and the log's own type,
+	// rather than the int the older responses use: they come straight from
+	// a render with no conversion, so no value the renderer accepted can
+	// arrive changed, on any word size (review 516).
+	ReplyTo *uint32 `json:"reply_to"`
 }
 
 // MentionRef is one mention. It carries the handle, spelled as its owner
@@ -377,7 +382,7 @@ type MentionRef struct {
 
 // QuoteRef is one quoted post.
 type QuoteRef struct {
-	Ordinal int `json:"ordinal"`
+	Ordinal uint32 `json:"ordinal"`
 	// Deleted is true when the quoted post has been deleted, so the render
 	// shows its tombstone rather than the quoted words.
 	Deleted bool `json:"deleted"`

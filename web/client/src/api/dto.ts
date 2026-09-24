@@ -164,3 +164,15 @@ export interface Me {
   notifications: number;
   settings: Settings;
 }
+
+// RenderResult is POST /render's answer, and what the create path records
+// from the same render (internal/dto RenderResult).
+export interface RenderResult {
+  // Sanitized by the server's renderer; safe to insert as it is.
+  html: string;
+  // Handles, as their owners spell them, in document order.
+  mentions: { handle: string }[];
+  quotes: { ordinal: number; deleted: boolean }[];
+  // The post this one answers, validated against the thread.
+  reply_to: number | null;
+}
