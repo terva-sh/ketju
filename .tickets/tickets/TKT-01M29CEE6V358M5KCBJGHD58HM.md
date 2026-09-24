@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CEE6V358M5KCBJGHD58HM
 title: Build the thread page with pager and unread divider
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -26,10 +26,17 @@ references:
     path: docs/06-thread-views.md
   - ref: design:mockups-thread
     path: docs/mockups/ThreadDark.dc.html
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/cee6v-thread-page
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 6cf16d8467b3b85e06e663bd0303cddc327a8415
+  session: null
+  claimed_at: 2026-09-24T14:03:57Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T12:53:34Z
+updated_at: 2026-09-24T14:03:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -106,3 +113,7 @@ From TKT-01M29CEE52 (Build the client router and route table), now built: routes
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:53:34Z
 
 From TKT-01M29CEE5H (fetch layer). ThreadScreen already fetches through useResource(key, s => loadThreadPage(id, q, s), () => peekGet(key)), with the title falling back to cachedThread(id).header and failures rendered by ErrorPanel with Retry; build the page on that rather than a new fetch. Types are in src/api/dto.ts (ThreadPage, Post, ...). Use isProblem(err, 'not-found') rather than comparing .type: a source-scan test (src/api/one-path.test.ts) fails any screen or component that compares .type/.status or calls fetch.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:03:57Z
+
+Before this page loads two pages of one thread at once (a pager prefetch, say), TKT-01M39VNEC1 (Stop returning a thread page the cache refused to its caller) matters: loadThreadPage can resolve with a page the cache refused. ThreadScreen alone is safe because it aborts a superseded request.

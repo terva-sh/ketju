@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T12:42:15Z
+updated_at: 2026-09-24T14:03:57Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -238,3 +238,7 @@ Merged PR #61, TKT-01M29C5Y3E (Build the server-side session store), as 0644d0c.
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:42:15Z
 
 Merged PR #62, TKT-01M29CA99R (Implement GET /me), as fc7a709. CI run 240 was green; its step log shows perm, service/users, store/db and web/api ran under -race, and the client tests passed (124). Reviews 408-410 found, in turn: a lost Settled-in-grooming section (pre_user restored) and MeCounts cost; a first-request implicit-group statement and a site-wide thread scan (fixed by migration 0007's trigger-kept forum_thread_counts plus threads_forum_active); and /me panicking when Deps.Users was unset (api.New now requires every service). The re-review (run 239) was clean on fc7a709. CI run 236 hit flake TKT-01M393S6P7 once. Branch deleted. Next: TKT-01M29CEE5H (Build the fetch layer and signals state).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:03:57Z
+
+Merged PR #63, TKT-01M29CEE5H (Build the fetch layer and signals state), as 6cf16d8, WITHOUT a clean review, by the user's explicit decision. CI run 257 was green; its step log shows 312 client tests and the Go web packages under -race. Reviews 411-420 found a run of ordering and access-revocation cases in the caches (all fixed through 417, each with tests and mutants); the user chose to fix 417's two mediums, re-review once, and merge past any further medium ordering edges with a ticket. Review 420 raised one such medium, filed as draft TKT-01M39VNEC1 (Stop returning a thread page the cache refused to its caller). Branch deleted. Next: TKT-01M29CEE6V (Build the thread page with pager and unread divider).

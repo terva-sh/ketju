@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T13:58:46Z
+updated_at: 2026-09-24T14:03:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -287,6 +287,10 @@ Review 417 confirmed the finding from review 415 resolved. It raised two medium 
 **Medium 2: `apiSend` could throw a raw `TypeError`.** It serialized its body outside any error handling, so a cyclic object or a BigInt threw a raw `TypeError`. That failure is now a `ProblemError` of type `internal`, raised before any request is made. The tests cover a cycle and a BigInt, and assert that no request was sent.
 
 **Mutation:** all 3 mutants are killed. There are 312 Vitest tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:03:57Z
+
+Review 420 (head 6cf16d8) confirmed both review-417 fixes and raised one medium: a thread page the cache refuses (overtaken by a newer refusal, or at a shorter log length) is still returned to its caller. Not fixed here. The session's person had decided that after 417's fixes and one re-review, further medium ordering edges merge with a follow-up; PR #63 was merged at 6cf16d8 on CI run 257 (312 client tests, Go web packages under -race) without a clean review, by that decision. Filed TKT-01M39VNEC1 (Stop returning a thread page the cache refused to its caller). The review model's finding stands as a finding; this is a deferral, not a dismissal.
 
 ## Summary
 
