@@ -45,6 +45,7 @@ package render
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 
 	"github.com/yuin/goldmark/v2/extension"
@@ -84,10 +85,22 @@ type Result struct {
 	// notifier and the mentions projection. A handle nobody has is not listed,
 	// and neither is a mention inside a quotation: see resolveMentions.
 	Mentions []Mention
+
+	// ReplyTo is the post this one answers, validated against
+	// Context.Posts: Context.ReplyTo when that post exists in the thread,
+	// nil for a post that answers none. It never reaches the HTML, which is
+	// why validating it here did not move Version.
+	ReplyTo *uint32
 }
 
 // ErrTooLarge means the source exceeded MaxSource.
 var ErrTooLarge = fmt.Errorf("render: source is larger than %d bytes", MaxSource)
+
+// ErrInvalidReplyTo means Context.ReplyTo names no post in the thread: an
+// ordinal that does not exist, or one the resolver does not know because it
+// is in another thread. It is refused at render rather than stored, because
+// a reply link to nowhere is a fact the thread log would keep forever.
+var ErrInvalidReplyTo = errors.New("render: reply_to names no post in this thread")
 
 // Context is what a render needs to know that the source does not say.
 //
@@ -110,6 +123,15 @@ type Context struct {
 	// promises a reader they have addressed somebody is worse than one that
 	// shows them plain text.
 	Handles HandleResolver
+
+	// ReplyTo is the post the author says this one answers, nil for none. It
+	// is checked against Posts, and a render with a ReplyTo and no Posts to
+	// check it against fails: a reply can only be validated in its thread.
+	// A deleted post still exists and is accepted: only a post that is not
+	// there is refused. Whether a reply to a deleted post should be refused
+	// is open in the docs (TKT-01M29C2WWG's notes), and refusing it is a
+	// narrower rule that can be added here without changing a stored fact.
+	ReplyTo *uint32
 }
 
 // Render converts markdown source to sanitized HTML, with nothing to resolve
@@ -129,6 +151,18 @@ func RenderWith(source string, ctx Context) (Result, error) {
 		return Result{}, ErrTooLarge
 	}
 
+	var replyTo *uint32
+	if ctx.ReplyTo != nil {
+		if ctx.Posts == nil {
+			return Result{}, ErrInvalidReplyTo
+		}
+		if exists, _ := ctx.Posts.ResolvePost(*ctx.ReplyTo); !exists {
+			return Result{}, ErrInvalidReplyTo
+		}
+		r := *ctx.ReplyTo
+		replyTo = &r
+	}
+
 	src := []byte(source)
 	var buf bytes.Buffer
 	doc := mdParser.Parse(src)
@@ -137,7 +171,7 @@ func RenderWith(source string, ctx Context) (Result, error) {
 	if err := mdRenderer.Render(&buf, src, doc); err != nil {
 		return Result{}, fmt.Errorf("render: %w", err)
 	}
-	return Result{HTML: sanitize(buf.String()), Quotes: quotes, Mentions: mentions}, nil
+	return Result{HTML: sanitize(buf.String()), Quotes: quotes, Mentions: mentions, ReplyTo: replyTo}, nil
 }
 
 // mdParser and mdRenderer are the pipeline. They are package-level because

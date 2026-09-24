@@ -378,5 +378,32 @@ var corpus = map[string]any{
 	"history." + tModerator: postHistory(tModerator),
 
 	"thread-locked." + tMember: lockedThread(),
-	"unread." + tMember:        crossForumList(),
+
+	"render." + tMember:       renderReply(),
+	"render-plain." + tMember: renderPlain(),
+	"unread." + tMember:       crossForumList(),
+}
+
+// renderReply is POST /render for a reply that quotes post 61, whose quoted
+// words are there, and post 62, which was deleted, and mentions alice.
+func renderReply() RenderResult {
+	reply := 61
+	return RenderResult{
+		// What internal/render produces for
+		// "> [quote=#61]\n> the quoted words\n\n> [quote=#62]\n> gone\n\nAgreed, @alice."
+		HTML: "<details class=\"quote\" open=\"\">\n<summary><a href=\"#post-61\" class=\"quote-source\" rel=\"nofollow\">Post #61</a></summary>\n" +
+			"<blockquote>\n<p>the quoted words</p>\n</blockquote>\n</details>\n" +
+			"<details class=\"quote\" open=\"\">\n<summary><a href=\"#post-62\" class=\"quote-source\" rel=\"nofollow\">Post #62</a></summary>\n" +
+			"<blockquote>\n<p class=\"quote-deleted\">This post was deleted.</p>\n</blockquote>\n</details>\n" +
+			"<p>Agreed, <a href=\"/u/alice\" class=\"mention\" rel=\"nofollow\">@alice</a>.</p>\n",
+		Mentions: []MentionRef{{Handle: "alice"}},
+		Quotes:   []QuoteRef{{Ordinal: 61}, {Ordinal: 62, Deleted: true}},
+		ReplyTo:  &reply,
+	}
+}
+
+// renderPlain is POST /render for a post that answers, quotes and mentions
+// nothing: the lists are empty rather than null, and reply_to is null.
+func renderPlain() RenderResult {
+	return RenderResult{HTML: "<p>Hello.</p>\n", Mentions: []MentionRef{}, Quotes: []QuoteRef{}}
 }

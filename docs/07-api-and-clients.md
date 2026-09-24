@@ -64,7 +64,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `PUT  /threads/{id}/read` | `{ordinal}` advance read position; `DELETE` marks unread |
 | `POST /threads/{id}/watch` `{level}` | watch/mute |
 | `POST /threads/{id}/flags` | `{ordinal, reason, note}` |
-| `POST /render` | `{source}` → `{html, mentions, reply_to, quotes}` (composer preview) |
+| `POST /render` | `{source}` → `{html, mentions: [{handle}], quotes: [{ordinal, deleted}], reply_to}` (composer preview; the create path records the same facts from the same render, `internal/dto` `RenderResult`) |
 | `GET  /drafts/{thread_id}` `PUT` `DELETE` | composer drafts |
 | `GET  /unread` `/new` `/participated` `/watching` | cross-forum thread lists |
 | `GET  /search?q=&forum=&author=&after=&before=` | FTS5 results with snippets |

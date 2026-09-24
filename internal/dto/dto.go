@@ -33,9 +33,8 @@
 // guessed, because a golden over a guess locks the guess in and reads to the
 // next person like a decision somebody made.
 //
-// POST /render's response belongs to TKT-01M29C2WWG, which returns structured
-// mentions, quotes and reply_to from the render call, and is not duplicated
-// here.
+// POST /render's response is RenderResult (TKT-01M29C2WWG). The endpoint
+// itself is TKT-01M29CA9D4's.
 //
 // # Nulls
 //
@@ -350,4 +349,36 @@ type PreUser struct {
 	// Provider is the configured key of the identity provider they signed in
 	// with, so the status page can say which account the application is for.
 	Provider string `json:"provider"`
+}
+
+// RenderResult is what one render of a post's source says: the HTML, and the
+// facts the post carries (docs/07 POST /render). The composer preview and
+// the create path answer with this same shape from the same render call, so
+// what a preview shows is what the post will record (TKT-01M29C2WWG).
+type RenderResult struct {
+	// HTML is sanitized by internal/render and safe to insert as it is.
+	HTML string `json:"html"`
+	// Mentions is every member the post mentions, in document order. A handle
+	// nobody has is not here, and neither is a mention inside a quotation.
+	Mentions []MentionRef `json:"mentions"`
+	// Quotes is every post this one quotes, in document order.
+	Quotes []QuoteRef `json:"quotes"`
+	// ReplyTo is the post this one answers, validated against the thread;
+	// nil for a post that answers none.
+	ReplyTo *int `json:"reply_to"`
+}
+
+// MentionRef is one mention. It carries the handle, spelled as its owner
+// spells it, and not the user id, which no response exposes (settled in
+// grooming for TKT-01M29C2WWG).
+type MentionRef struct {
+	Handle string `json:"handle"`
+}
+
+// QuoteRef is one quoted post.
+type QuoteRef struct {
+	Ordinal int `json:"ordinal"`
+	// Deleted is true when the quoted post has been deleted, so the render
+	// shows its tombstone rather than the quoted words.
+	Deleted bool `json:"deleted"`
 }
