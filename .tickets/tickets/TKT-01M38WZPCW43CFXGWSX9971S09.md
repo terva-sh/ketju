@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T10:27:02Z
+updated_at: 2026-09-24T10:46:05Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -222,3 +222,7 @@ Merged PR #57, TKT-01M29BYYJ0 'Add the flags, audit log, blobs, and settings sch
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:27:02Z
 
 Merged PR #58, TKT-01M29CA9C2 'Implement single post, replies, and history endpoints', as 70b6caf (rebase). CI run 196 passed, and its step log shows go test -race ran over dto, service/threads, threadcache, threadlog and web/api. Terva was clean on the first run (3269531f).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:46:05Z
+
+Merged PR #59, TKT-01M29CCC02 (Scaffold the Preact client and its embedding), as 257372c. CI run 203 was green. The step log shows the new steps: Install Node (v24.18.1), then npm ci and the Vite build. The build reproduced the committed dist byte for byte (same hashes), which confirms CI can reach the npm registry. The race suite also ran, including internal/web/spa. Review 399 found one medium issue: a missing asset's 404 was cached as immutable. It was fixed in 257372c, and the re-review was clean. Branch deleted. Next: TKT-01M29CEE52 (Build the client router and route table), which depends only on CCC02. CEE6V needs it and CEE5H, and CEE5H waits on CA99R (GET /me).

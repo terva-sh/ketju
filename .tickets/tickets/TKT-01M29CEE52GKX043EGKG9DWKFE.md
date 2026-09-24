@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CEE52GKX043EGKG9DWKFE
 title: Build the client router and route table
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:url-scheme
     path: docs/07-api-and-clients.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/cee52-client-router
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 257372c9ffd5c13cf760606a30ed53a23488882d
+  session: null
+  claimed_at: 2026-09-24T10:46:05Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T10:47:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -50,28 +57,48 @@ A stale slug in a thread URL redirects to the current one rather than 404ing.
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+Revised at claim (2026-09-24), after reading the code as it stands: the CCC02 scaffold, preact-iso 2.12.2's Router and exec, the server's SPA fallback, and the CSP.
 
 ### Approach
-1. `src/routes.ts` exports `routes: {path, screen, admin?}[]`, transcribed one-for-one from the docs/07 "URL scheme" block: `/`, `/f/:forum`, `/f/:forum/new`, `/t/:id/:slug`, `/t/:id/:slug/:ordinal`, `/t/:id/:slug/:ordinal/history`, `/unread`, `/new`, `/participated`, `/watching`, `/search`, `/u/:handle`, `/u/:handle/posts`, `/settings`, `/settings/sessions`, `/settings/identities`, `/apply`, `/apply/status`, and `/admin` with its six children. `/auth/*` is server-only and must not be a client route.
-2. `app.tsx` builds a `preact-iso` `<Router>` from that table. Screens not built in Phase 1 map to `Placeholder` with a title, so every path still "resolves to a screen".
-3. Admin routes use `lazy(() => import('./screens/admin/AdminRoot'))` so they emit a separate chunk.
-4. State lives in the URL. `ThreadPage` reads `page` and `lens` from `useRoute().query`, and changing either calls `route()` with the new query. Nothing about the view is kept only in a signal.
-5. Stale slug: after `GET /threads/{id}` returns, if `thread.slug !== params.slug`, call `route(canonicalUrl, true)` (replace) with the same `page`, `lens` and ordinal suffix.
-6. Permalink `/t/:id/:slug/:ordinal` scrolls to `#post-N` once the containing page loads. Resolving that page needs server support; see interfaces item 7.
-
-### Files
-`web/client/src/routes.ts`, `src/app.tsx`, `src/screens/Placeholder.tsx`, `src/screens/NotFound.tsx`, `src/screens/admin/AdminRoot.tsx`.
+1. **`src/routes.ts`**
+   - Holds `routes: {path, screen}[]`, one entry per docs/07 URL scheme path except `/auth/*`, which is server-only. `:param` replaces `{param}`; `{forum-slug}` becomes `:forum`.
+   - preact-iso takes the first match in child order. Every pattern here differs in segment count or literal segments, so order does not matter, and the test proves it by resolving each URL to the screen named for it.
+2. **Screens**
+   - Screens that phase 1 has not built map to `Placeholder`, which names the screen and says it is not built yet. Every path therefore resolves to something that is not NotFound.
+   - The forum index keeps the scaffold's signed-in line. CEE6V replaces the thread screen, and each screen ticket replaces its own placeholder.
+3. **Admin**
+   - `screens/admin/AdminRoot.tsx` is imported only through `lazy(() => import(...))`, so Vite emits it as a separate chunk.
+   - The seven `/admin` paths all go to it, and it picks the section from the path.
+   - The CSP allows `'self'` in script-src, so the chunk loads without a nonce.
+4. **View state in the URL: `src/view.ts`**
+   - `useThreadView()` reads `page` and `lens` from `useLocation().query`. `setPage` and `setLens` call `route()` with the new query.
+   - No signal holds them, so a shared link is the view. CEE6V must use it; that is noted there.
+5. **Stale slug**
+   - `canonicalThreadUrl(location, thread)` is pure. It returns the URL with the thread's current slug, keeping the ordinal suffix, `/history`, and the query string byte for byte, or null when the slug is already current.
+   - The thread screen calls it after `GET /api/v1/threads/{id}` answers, and replaces the history entry.
+   - Until CEE5H lands, the thread placeholder does that one GET itself with `fetch`, passing the page and lens through. CEE5H swaps it for the fetch layer.
+   - A server-side redirect was considered and not chosen: the Go server has no thread lookup in the shell path yet (`ketju serve` is CCBYX). docs/07 already has the client handle it, and the non-JS client will do its own.
 
 ### Tests
-- AC1: a Vitest route-table test, `routes.test.ts`, holds a fixture list of concrete URLs (one per docs/07 line), matches each through preact-iso's exported matcher, and asserts it resolves to a non-NotFound screen. A second assertion diffs the table against the docs/07 list so neither side drifts silently. Parse the doc's code block if that is practical; otherwise keep a committed copy.
-- AC2: Playwright opens `/t/{id}/{slug}?page=2&lens=author:alice`, reloads, and asserts the same posts. It then opens the same URL in a new context.
-- AC3: Playwright with a seeded renamed thread opens the old slug with `?page=2&lens=…` and asserts the URL is replaced with the new slug and the query is kept.
-- AC4: a build-output check reads the Vite manifest and asserts `AdminRoot` is a dynamic chunk not imported by the entry. Playwright records network requests on `/` and asserts no admin chunk loads.
+- **Vitest 5.0.1 with happy-dom**, exact pins, run by `npm test`. CI gets an added "client tests" step after "built client is current", which reuses its `npm ci`.
+- **AC1**
+  - `routes.test.tsx` renders `<App/>` at one concrete URL per docs/07 line and asserts the screen rendered is the one named for it, never NotFound.
+  - A second test parses docs/07's URL scheme block and diffs it against the table both ways, minus `/auth`.
+  - Unknown paths, such as `/admin/nope` and `/t/x`, render NotFound.
+- **AC2**
+  - `useThreadView` reads `page` and `lens` from the URL.
+  - Setting either changes `location.search` and nothing else.
+  - A fresh render at the same URL shows the same view.
+- **AC3**
+  - Unit tests of `canonicalThreadUrl` over the thread page, the permalink, `/history`, and a query with `page` and a `lens` containing `:`.
+  - A render test with a stubbed fetch returning a new slug asserts `location` becomes the canonical URL and that history was replaced, not pushed.
+- **AC4**
+  - A Go test in `internal/web/spa` reads the embedded `.vite/manifest.json`. It asserts `src/screens/admin/AdminRoot.tsx` is a dynamic entry, and that no static import reachable from `index.html` includes it.
+  - A browser check: load `/` and `/admin` from the built client, record the network, and confirm the admin chunk loads only on `/admin`.
+- Mutation checks over the route table, the slug function, and the manifest check.
 
-### Design
-docs/07 "URL scheme", "Principles" (URLs the same in both clients), "Path to a non-JS client" rule 3; docs/06 "Paged, not infinite".
-
-### Interactions
-Depends on CCC02. Every screen ticket registers here. CEE6V owns landing and permalink scroll. CGBXK hooks route-change focus. CGBYH depends on the admin split to keep the thread-view bundle small.
-Open in docs: stale-slug handling is specified for the thread id only; forum slug renames are not addressed.
+### Out of scope
+- Permalink scrolling and landing: CEE6V.
+- Focus on route change: CGBXK.
+- The fetch layer: CEE5H.
+- Forum slug renames are undocumented (the ticket's open item); left as is.
