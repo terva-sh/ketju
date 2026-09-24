@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, apiSend, heldLimit, peekGet, resetApiCache } from './client';
+import { apiGet, apiSend, forgetGets, heldLimit, peekGet, resetApiCache } from './client';
 import { isProblem, ProblemError } from './problem';
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -141,6 +141,31 @@ describe('apiGet', () => {
     await expect(apiGet('/api/v1/x')).rejects.toBeInstanceOf(ProblemError);
     expect(await apiGet('/api/v1/x')).toEqual({ n: 1 });
     expect(calls[2].headers['If-None-Match']).toBe('"a"');
+  });
+
+  // A refusal of access takes the held copy with it; any other failure
+  // leaves it, to be revalidated on the next try.
+  it.each([404, 410, 403, 401])('drops the held body on a %d', async (status) => {
+    stub(json({ n: 1 }, { headers: { ETag: '"a"' } }), new Response('{}', { status }));
+    await apiGet('/api/v1/x');
+    await apiGet('/api/v1/x').catch(() => {});
+    expect(peekGet('/api/v1/x')).toBeUndefined();
+  });
+
+  it('keeps the held body through a 503', async () => {
+    stub(json({ n: 1 }, { headers: { ETag: '"a"' } }), new Response('{}', { status: 503 }));
+    await apiGet('/api/v1/x');
+    await apiGet('/api/v1/x').catch(() => {});
+    expect(peekGet('/api/v1/x')).toEqual({ n: 1 });
+  });
+
+  it('forgets exactly the held bodies it is asked to', async () => {
+    stub(json({ n: 1 }, { headers: { ETag: '"a"' } }), json({ n: 2 }, { headers: { ETag: '"b"' } }));
+    await apiGet('/api/v1/a');
+    await apiGet('/api/v1/b');
+    forgetGets((u) => u.endsWith('/a'));
+    expect(peekGet('/api/v1/a')).toBeUndefined();
+    expect(peekGet('/api/v1/b')).toEqual({ n: 2 });
   });
 
   it('calls a 200 whose body is not JSON internal', async () => {

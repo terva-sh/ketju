@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T12:54:03Z
+updated_at: 2026-09-24T13:00:45Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -183,6 +183,25 @@ The sign-in offer is a prompt, not a link. The client has no provider list to li
   - a nullable narrowed to null.
 - **Mutation:** 39 mutants over client, problem, resource, threads, ThreadScreen, ErrorPanel and viewer were all killed. The one that survived at first, a late success from a superseded request, got its own test.
 - **Suite and build:** Vitest has 261 tests. `tsc --noEmit` is clean. The bundle is 37.5 kB raw, 14.4 kB gzipped, and holds no golden. The rebuilt dist is reproducible, and the Go web and spa tests pass.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T13:00:45Z
+
+### Review 411, answered
+
+**High 1: a thread the viewer lost access to stayed on screen.** There were three copies to clear, and all three are now cleared.
+- `revokesAccess` (in problem.ts) names the answers that withdraw access: not-found, gone, forbidden and unauthenticated.
+- `useResource` keeps a key's data beside an error only when that error is not one of them.
+- `apiGet` drops the held body for the URL on such an answer.
+- `loadThreadPage` forgets the thread, with every held page of it.
+- A ThreadScreen test reproduces the exact case. The page was kept beside a network failure; the reader retries, the retry is refused with 403 or 401, and the title is gone. It is also gone on returning to the page.
+
+**High 2: a superseded load could roll the cache back.** Two guards, each with its own test:
+- The answer to an aborted request is returned but not stored.
+- An answer at a shorter log length than the cached entry is never stored. A served length cannot go down: the log is append-only, and docs/03's only truncation cuts a torn frame that was never acknowledged. The earlier test that accepted a shorter length "as after a reindex" was wrong on that point and is replaced.
+
+**Medium: held GET pages survived a change of length.** When a new length replaces a thread's entry, the held GET bodies of that thread's other pages are forgotten, keeping only the page just fetched. The URL match is on `/api/v1/threads/{id}` followed by the end, `?` or `/`, so an id that shares a prefix with this one is left alone; that has a test too.
+
+**Mutation:** all 10 mutants on the new guards are killed. There are 280 Vitest tests.
 
 ## Summary
 

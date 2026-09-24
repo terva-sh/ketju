@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'preact/hooks';
-import { asProblem, type ProblemError } from './problem';
+import { asProblem, revokesAccess, type ProblemError } from './problem';
 
 export interface Resource<T> {
   data: T | undefined;
@@ -24,8 +24,8 @@ interface Answer<T> {
 // about, so moving to another key never shows the last key's data or error,
 // not even for the one render before the new request starts. A superseded
 // request is aborted, and whatever it settles with is ignored. A failure
-// keeps any data this key already had, beside the error. A null key asks for
-// nothing.
+// keeps any data this key already had, beside the error, unless the failure
+// says the viewer may no longer see it. A null key asks for nothing.
 export function useResource<T>(
   key: string | null,
   fetcher: (signal: AbortSignal) => Promise<T>,
@@ -52,7 +52,15 @@ export function useResource<T>(
         // abort from somewhere else included, ends the request in an error,
         // or the screen would wait on it forever.
         if (ctl.signal.aborted) return;
-        setAnswer((a) => ({ key, data: a?.key === key ? a.data : undefined, error: asProblem(err), loading: false }));
+        // Data kept beside an error is for a failure to reach it again. An
+        // error that withdraws access withdraws the data too.
+        const keep = !revokesAccess(err);
+        setAnswer((a) => ({
+          key,
+          data: keep && a?.key === key ? a.data : undefined,
+          error: asProblem(err),
+          loading: false,
+        }));
       },
     );
     return () => ctl.abort();

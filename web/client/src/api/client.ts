@@ -1,4 +1,4 @@
-import { asProblem, isAbort, ProblemError, toProblem } from './problem';
+import { asProblem, isAbort, ProblemError, revokesAccess, toProblem } from './problem';
 
 // The API client (docs/07 "State"). Every request the client makes goes
 // through here, so an error is always a ProblemError and a cached GET is
@@ -31,7 +31,13 @@ export async function apiGet<T>(url: string, init: { signal?: AbortSignal } = {}
     hold(url, prior.etag, prior.body);
     return prior.body as T;
   }
-  if (!r.ok) throw await toProblem(r);
+  if (!r.ok) {
+    const p = await toProblem(r);
+    // An answer that withdraws access withdraws the held copy with it, so it
+    // is not shown again while the next request is in flight.
+    if (revokesAccess(p)) held.delete(url);
+    throw p;
+  }
   const body = await json<T>(r);
   const etag = r.headers.get('ETag');
   if (etag) hold(url, etag, body);
@@ -43,6 +49,12 @@ export async function apiGet<T>(url: string, init: { signal?: AbortSignal } = {}
 // screen can show at once while apiGet revalidates it.
 export function peekGet<T>(url: string): T | undefined {
   return held.get(url)?.body as T | undefined;
+}
+
+// forgetGets drops every held body whose URL matches: the held copies of
+// something the caller knows to be out of date.
+export function forgetGets(matches: (url: string) => boolean) {
+  for (const url of [...held.keys()]) if (matches(url)) held.delete(url);
 }
 
 // apiSend sends body as JSON, the only type the API accepts on a mutating

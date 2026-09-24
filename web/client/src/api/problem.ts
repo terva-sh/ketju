@@ -113,6 +113,17 @@ export function problemMessage(err: unknown): { text: string; signIn: boolean; r
   return { ...messages[p.type], retryAfter: p.retryAfter };
 }
 
+// revokesAccess is an answer that says the viewer may no longer see what they
+// asked for: it is not there, was deleted, or is not theirs to read (signed
+// out, or access withdrawn). Whatever was held for it is no longer theirs to
+// be shown, not even while retrying.
+export function revokesAccess(err: unknown): boolean {
+  return (
+    err instanceof ProblemError &&
+    (err.type === 'not-found' || err.type === 'gone' || err.type === 'forbidden' || err.type === 'unauthenticated')
+  );
+}
+
 export function isProblem(err: unknown, type: ProblemType): boolean {
   return err instanceof ProblemError && err.type === type;
 }

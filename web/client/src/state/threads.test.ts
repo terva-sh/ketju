@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { resetApiCache } from '../api/client';
+import { peekGet, resetApiCache } from '../api/client';
 import type { ThreadPage } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { threadPage } from '../testing';
@@ -51,12 +51,81 @@ describe('the thread cache', () => {
     expect([...cachedThread(id)!.pages.keys()].sort()).toEqual(['1', '1 author:alice', '2']);
   });
 
-  it('replaces even when the length goes down, as after a reindex', async () => {
+  // Review 411: a request that finishes late must not roll the cache back.
+  it('does not let an answer at a shorter length replace a longer one', async () => {
     serve(page(1, 120), page(2, 100));
     await loadThreadPage(id, { page: 1 });
     await loadThreadPage(id, { page: 2 });
-    expect(cachedThread(id)!.logLength).toBe(100);
-    expect([...cachedThread(id)!.pages.keys()]).toEqual(['2']);
+    expect(cachedThread(id)!.logLength).toBe(120);
+    expect([...cachedThread(id)!.pages.keys()]).toEqual(['1']);
+  });
+
+  it('does not store the answer to an aborted request', async () => {
+    // The same length, so only the abort keeps it out.
+    serve(page(1, 100), page(2, 100));
+    await loadThreadPage(id, { page: 1 });
+    const ctl = new AbortController();
+    const late = loadThreadPage(id, { page: 2 }, ctl.signal);
+    ctl.abort();
+    await late.catch(() => {});
+    expect([...cachedThread(id)!.pages.keys()]).toEqual(['1']);
+  });
+
+  // Review 411: the held GET bodies of the thread's other pages are as stale
+  // as its cached pages once the length moves, and go with them.
+  it('forgets the held bodies of other pages when the length moves', async () => {
+    const tagged = (p: ThreadPage, tag: string) =>
+      new Response(JSON.stringify(p), { status: 200, headers: { ETag: tag } });
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(tagged(page(1, 100), '"p1"'))
+        .mockResolvedValueOnce(tagged(page(2, 100), '"p2"'))
+        .mockResolvedValueOnce(tagged(page(1, 120), '"p1b"')),
+    );
+    await loadThreadPage(id, { page: 1 });
+    await loadThreadPage(id, { page: 2 });
+    expect(peekGet(threadUrl(id, { page: 2 }))).toBeDefined();
+    await loadThreadPage(id, { page: 1 }); // the length moves to 120
+    expect(peekGet(threadUrl(id, { page: 2 }))).toBeUndefined();
+    expect((peekGet(threadUrl(id, { page: 1 })) as ThreadPage).thread.log_length).toBe(120);
+  });
+
+  it("keeps other threads' held bodies when one thread's length moves", async () => {
+    const tagged = (p: ThreadPage, tag: string) =>
+      new Response(JSON.stringify(p), { status: 200, headers: { ETag: tag } });
+    const o = page(1, 5);
+    const otherPage = { ...o, thread: { ...o.thread, id: `${id}0` } };
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(tagged(otherPage, '"o"'))
+        .mockResolvedValueOnce(tagged(page(1, 100), '"a"'))
+        .mockResolvedValueOnce(tagged(page(1, 120), '"b"')),
+    );
+    // An id that shares a prefix with this one is another thread.
+    await loadThreadPage(`${id}0`, { page: 1 });
+    await loadThreadPage(id, { page: 1 });
+    await loadThreadPage(id, { page: 1 });
+    expect(peekGet(threadUrl(`${id}0`, { page: 1 }))).toBeDefined();
+  });
+
+  it.each([404, 410, 403, 401])('forgets the held bodies of a thread that answers %d', async (status) => {
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(new Response(JSON.stringify(page(1, 100)), { status: 200, headers: { ETag: '"a"' } }))
+        .mockResolvedValueOnce(new Response(JSON.stringify(page(2, 100)), { status: 200, headers: { ETag: '"b"' } }))
+        .mockResolvedValueOnce(new Response('{}', { status })),
+    );
+    await loadThreadPage(id, { page: 1 });
+    await loadThreadPage(id, { page: 2 });
+    await loadThreadPage(id, { page: 1 }).catch(() => {});
+    expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
+    expect(peekGet(threadUrl(id, { page: 2 }))).toBeUndefined();
   });
 
   it('files a page under the page the server answered with, not the one asked for', async () => {

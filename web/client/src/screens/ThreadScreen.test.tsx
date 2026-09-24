@@ -102,4 +102,42 @@ describe('the thread screen', () => {
     await settle(root);
     expect(root.querySelector('h1')?.textContent).toBe('Held');
   });
+
+  // Review 411: a thread the viewer loses access to is not shown on retry,
+  // though the screen was keeping it beside an earlier failure, nor at once
+  // on the next visit.
+  it.each([
+    ['forbidden', 403],
+    ['unauthenticated', 401],
+  ] as const)('stops showing a thread once it answers %s', async (type, status) => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () => {
+      calls++;
+      if (calls === 1)
+        return new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'Secret' }), {
+          status: 200,
+          headers: { ETag: '"s"' },
+        });
+      if (calls === 3) throw new TypeError('network down'); // revalidating page 1
+      if (calls === 4) return problem(type, status); // the retry
+      return new Promise<Response>(() => {}); // page 2, and anything later
+    });
+    const root = await renderAt('/t/01k4z3j0w8x2c/a');
+    await route('/t/01k4z3j0w8x2c/a?page=2');
+    await route('/t/01k4z3j0w8x2c/a');
+    await settle(root);
+    // Back on the held page, whose revalidation failed: kept, beside the error.
+    expect(calls).toBe(3);
+    expect(root.querySelector('h1')?.textContent).toBe('Secret');
+    expect(root.querySelector('[role=alert]')).not.toBeNull();
+    const retry = [...root.querySelectorAll('button')].find((x) => x.textContent === 'Retry')!;
+    await act(async () => retry.click());
+    await settle(root);
+    expect(calls).toBe(4);
+    expect(root.textContent).not.toContain('Secret');
+    await route('/t/01k4z3j0w8x2c/a?page=3');
+    await route('/t/01k4z3j0w8x2c/a');
+    await settle(root);
+    expect(root.textContent).not.toContain('Secret');
+  });
 });

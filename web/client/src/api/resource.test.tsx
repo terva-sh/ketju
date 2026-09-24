@@ -76,6 +76,27 @@ describe('useResource', () => {
     expect(m.last().error?.type).toBe('unavailable');
   });
 
+  // Review 411: an error that withdraws access withdraws the data with it.
+  it.each([
+    ['not-found', 404],
+    ['gone', 410],
+    ['forbidden', 403],
+    ['unauthenticated', 401],
+  ] as const)('drops what this key had when a retry answers %s', async (type, status) => {
+    let calls = 0;
+    const m = mount(async () => {
+      if (calls++ === 0) return 'first';
+      throw new ProblemError(type, status);
+    });
+    cleanup = m.unmount;
+    await m.show('a');
+    await flush();
+    await act(() => m.last().retry());
+    await flush();
+    expect(m.last()).toMatchObject({ data: undefined, loading: false });
+    expect(m.last().error?.type).toBe(type);
+  });
+
   it("never answers a key with another key's data or error, even for one render", async () => {
     const pending = deferred<string>();
     const m = mount(async (k) => {
