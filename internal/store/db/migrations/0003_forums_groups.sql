@@ -16,7 +16,10 @@ CREATE TABLE forums (
 	archived    INTEGER NOT NULL DEFAULT 0 CHECK (archived IN (0, 1)),
 	created_at  INTEGER NOT NULL,
 	updated_at  INTEGER NOT NULL,
-	CHECK (parent_id IS NULL OR parent_id <> id)
+	CHECK (parent_id IS NULL OR parent_id <> id),
+	-- permissions_unique maps a global grant's NULL forum_id to 0, so no
+	-- forum may have id 0 (SQLite would otherwise accept it when given).
+	CHECK (id > 0)
 );
 CREATE INDEX forums_parent ON forums (parent_id, position);
 
@@ -117,7 +120,7 @@ END;
 -- A null forum_id is a global grant. Evaluation is the union of the viewer's
 -- groups' grants for the forum, falling back to global rows (docs/04).
 -- A plain UNIQUE would treat every NULL forum_id as distinct, so uniqueness
--- is an expression index; forum ids start at 1, so 0 cannot collide.
+-- is an expression index; forums.id is CHECKed positive, so 0 cannot collide.
 CREATE TABLE permissions (
 	forum_id   INTEGER REFERENCES forums (id),
 	group_id   INTEGER NOT NULL REFERENCES groups (id),

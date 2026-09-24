@@ -172,6 +172,18 @@ func TestForumNestingDepth(t *testing.T) {
 		t.Error("a forum was inserted as its own parent")
 	}
 
+	// Forum id 0 is reserved: the permissions uniqueness index uses it to
+	// stand for a global grant.
+	for _, id := range []int{0, -1} {
+		if err := try(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+			_, err := tx.ExecContext(t.Context(), `INSERT INTO forums (id, slug, name, created_at, updated_at)
+				VALUES (?, 'zero', 'zero', 1, 1)`, id)
+			return err
+		}); err == nil {
+			t.Errorf("a forum with id %d was inserted", id)
+		}
+	}
+
 	// Allowed moves still work: a childless root under another root, and back.
 	if err := setParent(other, root); err != nil {
 		t.Errorf("moving a childless root under a root: %v", err)
