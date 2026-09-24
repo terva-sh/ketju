@@ -13,6 +13,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -861,5 +862,87 @@ func TestUnfinishedSettlesAHeldGap(t *testing.T) {
 	}
 	if l := f.w.Lag(); l.Threads != 0 {
 		t.Errorf("lag = %+v: the held gap outlived the log becoming unfinished", l)
+	}
+}
+
+// An append whose projection fails while Retry is reopening a thread holds
+// it at a newer target, and Retry projects to that, not to the length it
+// recovered before the append (review 464).
+func TestRetryKeepsAHoldMadeWhileReopening(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	id, created := f.thread("Racing")
+	f.project(id, created)
+	c := f.restart()
+	tear(t, f.root, id)
+
+	reopen, ok := flaky(c)
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	ok.Store(true)
+
+	var grown int64
+	var calls atomic.Int64
+	inner := reopenWith(c, &calls)
+	f.w.mu.Lock()
+	f.w.reopen = func(ctx context.Context, tid threadid.ID) (int64, error) {
+		n, err := inner(ctx, tid) // cuts the torn tail: n is the old length
+		// Meanwhile a post lands and its projection fails, holding the
+		// thread at the new length.
+		grown = f.post(tid, 5, 0)
+		f.w.hold(tid, created, grown)
+		return n, err
+	}
+	f.w.mu.Unlock()
+
+	if err := f.w.Retry(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if got := f.projected()[id]; got != grown {
+		t.Errorf("retried to %d; the post appended during the reopen, to %d, was dropped", got, grown)
+	}
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag = %+v", l)
+	}
+}
+
+// CatchUp and Retry take turns: a catch-up started while a retry is inside
+// its reopen waits for the retry to finish (review 464).
+func TestCatchUpWaitsForRetry(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	id, created := f.thread("Held")
+	f.project(id, created)
+	c := f.restart()
+	tear(t, f.root, id)
+	reopen, ok := flaky(c)
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	ok.Store(true)
+
+	var calls atomic.Int64
+	inner := reopenWith(c, &calls)
+	overlapped := make(chan bool, 1)
+	f.w.mu.Lock()
+	f.w.reopen = func(ctx context.Context, tid threadid.ID) (int64, error) {
+		done := make(chan struct{})
+		go func() { f.w.CatchUp(ctx, inner); close(done) }()
+		select {
+		case <-done:
+			overlapped <- true
+		case <-time.After(200 * time.Millisecond):
+			overlapped <- false
+		}
+		return inner(ctx, tid)
+	}
+	f.w.mu.Unlock()
+
+	if err := f.w.Retry(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if <-overlapped {
+		t.Error("a catch-up ran to completion inside a retry")
 	}
 }

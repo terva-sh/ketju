@@ -78,6 +78,13 @@ type Writer struct {
 	open    func(path string) (logFile, error)
 	applied func(threadid.ID, int64)
 
+	// sweeping serializes CatchUp and Retry. Both read and then rewrite the
+	// behind set and the quarantine on the strength of what they read, and
+	// two of them interleaving could each undo the other's result (review
+	// 464). Deliver is not serialized with them: it only adds to the behind
+	// set, and hold's max keeps a newer target.
+	sweeping sync.Mutex
+
 	mu     sync.Mutex
 	behind map[threadid.ID]*lag
 
@@ -182,6 +189,8 @@ func (w *Writer) Deliver(ctx context.Context, b events.Batch) error {
 // set through project, which finds it already there; one it shows shorter
 // than its projection is quarantined.
 func (w *Writer) Retry(ctx context.Context) error {
+	w.sweeping.Lock()
+	defer w.sweeping.Unlock()
 	w.mu.Lock()
 	type held struct{ target, projected int64 }
 	targets := make(map[threadid.ID]held, len(w.behind))
@@ -204,12 +213,20 @@ func (w *Writer) Retry(ctx context.Context) error {
 				w.quarantine(id, n, h.projected)
 				continue
 			}
-			// The reopened length is the true one: it replaces the held
-			// target, which may count torn bytes the open has removed.
+			// The reopened length is the true one. It replaces the held
+			// target, which may count torn bytes the open has removed, but
+			// only if nothing has held the thread again since the snapshot:
+			// an append whose projection failed meanwhile holds a newer
+			// target, which is kept (review 464).
 			target = n
 			w.mu.Lock()
 			if b := w.behind[id]; b != nil {
-				b.target = n
+				if b.target == h.target {
+					b.target = n
+				} else {
+					b.target = max(b.target, n)
+					target = b.target
+				}
 			}
 			w.mu.Unlock()
 		}

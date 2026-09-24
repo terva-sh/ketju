@@ -88,6 +88,9 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 	if reopen == nil {
 		return rep, errors.New("projection: CatchUp needs a Recover to open a thread with a gap")
 	}
+	// One sweep at a time, and never beside a Retry: see Writer.sweeping.
+	w.sweeping.Lock()
+	defer w.sweeping.Unlock()
 
 	projected := map[threadid.ID]int64{}
 	err := w.db.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
