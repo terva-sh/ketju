@@ -9,6 +9,7 @@ import (
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 )
@@ -25,25 +26,27 @@ type PreviewRequest struct {
 	ReplyTo *uint32
 }
 
+// MayPreview reports whether v may preview a post: a member
+// (member.Require), because this renders arbitrary input and is not an open
+// rendering service. The handler asks this before reading the body, so a
+// stranger is refused as one whatever they sent.
+func (s *Service) MayPreview(v domain.Viewer) error {
+	return member.Require(v, "preview a post")
+}
+
 // Preview renders source for v's composer (docs/07 POST /render), with the
 // same render the thread page draws a stored post with, so what the preview
 // shows is what the post will look like.
 //
-// A member is required: this renders arbitrary input, and it is not an open
-// rendering service. A pre-user session is forbidden, since it is somebody
-// the forum knows about who may not post yet; anyone else, an inactive
-// account included, is unauthenticated, as access treats them.
+// A member is required (MayPreview).
 //
 // With a thread, v must be able to read it, through the same access every
 // thread endpoint uses, so a thread hidden from v is not-found here too. Read
 // is enough: a preview tells v nothing a reader of the thread cannot see, and
 // whether v may reply is the create path's question.
 func (s *Service) Preview(ctx context.Context, v domain.Viewer, req PreviewRequest) (dto.RenderResult, error) {
-	switch {
-	case v.PreUser && !v.Member():
-		return dto.RenderResult{}, problem.Coded(problem.CodeForbidden, errors.New("threads: a pre-user session cannot preview a post"))
-	case !v.Member():
-		return dto.RenderResult{}, problem.Coded(problem.CodeUnauthenticated, errors.New("threads: previewing a post needs a member session"))
+	if err := s.MayPreview(v); err != nil {
+		return dto.RenderResult{}, err
 	}
 	if req.Thread == nil {
 		if req.ReplyTo != nil {

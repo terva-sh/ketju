@@ -21,8 +21,10 @@ type renderRequest struct {
 }
 
 // render is POST /api/v1/render: the composer preview. Who may ask and what
-// it renders against are the threads service's to decide (Preview); this
-// parses the body and writes the answer.
+// it renders against are the threads service's to decide (MayPreview,
+// Preview); this asks, parses the body, and writes the answer. It asks
+// first, so a stranger's malformed body is refused as a stranger's
+// (review 522).
 //
 // The body limit and the per-address write limiter are the chain's, applied
 // to every mutating API route before this runs (internal/web), so nothing
@@ -31,12 +33,17 @@ type renderRequest struct {
 // The answer is the viewer's own and is about a body no URL names, so no
 // cache keeps it.
 func (h *handlers) render(w http.ResponseWriter, r *http.Request) {
+	v := domain.ViewerFrom(r.Context())
+	if err := h.threads.MayPreview(v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	req, err := renderBody(r.Body)
 	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
-	res, err := h.threads.Preview(r.Context(), domain.ViewerFrom(r.Context()), req)
+	res, err := h.threads.Preview(r.Context(), v, req)
 	if err != nil {
 		h.fail(w, r, err)
 		return

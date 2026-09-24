@@ -3,11 +3,10 @@ package users
 import (
 	"context"
 	"database/sql"
-	"errors"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
-	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
 
@@ -19,15 +18,20 @@ const (
 	MaxSuggestions     = 20
 )
 
+// MaySuggest reports whether v may ask for suggestions: a member, as for
+// POST /render, which it serves (member.Require). Handles are not secret,
+// since every post shows its author's, but a list of accounts by prefix is a
+// directory, and a directory is for members. The handler asks this before
+// reading the query, so a stranger is refused as one whatever they sent.
+func (s *Service) MaySuggest(v domain.Viewer) error {
+	return member.Require(v, "list members")
+}
+
 // Suggest is GET /users?prefix=&limit= (docs/07): up to limit active members
 // whose handle starts with prefix, in handle order, for the composer's
 // mention autocomplete (TKT-01M38XJJKM).
 //
-// A member is required, as for POST /render, which it serves: a pre-user
-// session is forbidden, and anyone else who is not a member, an inactive
-// account included, is unauthenticated. Handles are not secret, since every
-// post shows its author's, but a list of accounts by prefix is a directory,
-// and a directory is for members.
+// A member is required (MaySuggest).
 //
 // Matching is case-insensitive, as handles are (docs/04): the query
 // compares under the handle column's NOCASE collation, which folds ASCII and
@@ -46,11 +50,8 @@ const (
 // in '-' for that reason; see UsersByHandlePrefix.
 func (s *Service) Suggest(ctx context.Context, v domain.Viewer, prefix string, limit int) (dto.UserSuggestions, error) {
 	out := dto.UserSuggestions{Users: []dto.Author{}}
-	switch {
-	case v.PreUser && !v.Member():
-		return out, problem.Coded(problem.CodeForbidden, errors.New("users: a pre-user session cannot list members"))
-	case !v.Member():
-		return out, problem.Coded(problem.CodeUnauthenticated, errors.New("users: listing members needs a member session"))
+	if err := s.MaySuggest(v); err != nil {
+		return out, err
 	}
 	if limit <= 0 {
 		limit = DefaultSuggestions

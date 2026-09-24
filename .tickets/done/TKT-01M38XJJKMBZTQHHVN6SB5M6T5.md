@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:17:53Z
-updated_at: 2026-09-24T21:50:21Z
+updated_at: 2026-09-24T21:57:27Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -100,6 +100,23 @@ Every suggestion resolves as a mention of exactly that user; the test round-trip
 ### Tests and mutants
 - Mutants: 17 hand mutants across suggest.go, users.go, the generated query, the query source (collation and `lower()` rewrites, killed by the plan test) and the route. All are killed except removing `ORDER BY handle`, which is equivalent while the plan is an index search in handle order. It is kept because SQLite promises no order without it.
 - `UserSuggestions` reuses `dto.Author`. The golden is `users.member.json`, and the client has the type and contract entry. The full client suite ran: 530 tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:57:27Z
+
+Review 522 (head 225562d, base 6627c55, Actions run 367) had one medium finding: "Check the member session before rejecting query parameters". **Accepted and fixed.**
+
+The handler returned 400 for a missing prefix or a bad limit before the service checked the viewer. So an anonymous `GET /api/v1/users` was bad-request, not unauthenticated.
+
+POST /render, from PR #74 / TKT-01M29CA9D4, had the same ordering: it parsed the body before Preview checked membership. It is fixed in the same change, because the rule is shared.
+
+### The fix
+- The new package `internal/service/member` has `Require(v, what)`, the one member-only rule: pre-user is forbidden, and any other non-member (inactive included) is unauthenticated.
+- `users.Service.MaySuggest` and `threads.Service.MayPreview` wrap it. Each handler asks before reading the request, so the rule stays in the service layer. Suggest and Preview still check for themselves, for other callers.
+
+### Tests
+- Non-members with malformed queries or bodies get 401/403 through `web.New`.
+- Service-level refusal tests.
+- Mutants: dropping either handler's early check, either service's own check, or any `Require` branch is killed.
 
 ## Summary
 

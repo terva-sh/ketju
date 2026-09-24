@@ -179,6 +179,23 @@ func TestPreviewNeedsAMember(t *testing.T) {
 			t.Errorf("%q: %d %s, want %d %s", c.who, rec.Code, rec.Body, c.want, c.code)
 		}
 	}
+	// A stranger is told they are one before anything about the body
+	// (review 522).
+	for _, c := range []struct {
+		who, body string
+		want      problem.Code
+	}{
+		{"", `not json`, problem.CodeUnauthenticated},
+		{"", `{"source":"x","nope":1}`, problem.CodeUnauthenticated},
+		{"", `{"source":"x","thread_id":"bad"}`, problem.CodeUnauthenticated},
+		{"pre-user", `{}`, problem.CodeForbidden},
+		{"pre-user", `{"source":"x","reply_to":1}`, problem.CodeForbidden},
+		{"inactive", `{"source":"x"} trailing`, problem.CodeUnauthenticated},
+	} {
+		if rec := preview(h, c.who, c.body); problemCode(t, rec) != string(c.want) {
+			t.Errorf("%q with %s: %d %s, want %s", c.who, c.body, rec.Code, rec.Body, c.want)
+		}
+	}
 	if rec := preview(h, "alice", body); rec.Code != http.StatusOK {
 		t.Errorf("a member: %d %s", rec.Code, rec.Body)
 	}

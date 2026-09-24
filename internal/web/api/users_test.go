@@ -139,6 +139,13 @@ func TestSuggestionsNeedAMember(t *testing.T) {
 		{"", "prefix=al", problem.CodeUnauthenticated},
 		{"pre-user", "prefix=al", problem.CodeForbidden},
 		{"inactive", "prefix=al", problem.CodeUnauthenticated},
+		// A stranger is told they are one before anything about the query
+		// (review 522).
+		{"", "", problem.CodeUnauthenticated},
+		{"", "prefix=al&limit=two", problem.CodeUnauthenticated},
+		{"pre-user", "", problem.CodeForbidden},
+		{"pre-user", "prefix=al&limit=0", problem.CodeForbidden},
+		{"inactive", "limit=-1", problem.CodeUnauthenticated},
 		{"carol", "", problem.CodeBadRequest},
 		{"carol", "limit=3", problem.CodeBadRequest},
 		{"carol", "prefix=al&limit=0", problem.CodeBadRequest},
