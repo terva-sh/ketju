@@ -168,8 +168,9 @@ describe('thread actions', () => {
   it('puts every toolbar action in the phone more menu', async () => {
     vi.stubGlobal('fetch', async () => new Response(threadJSON(thread), { status: 200 }));
     const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
-    const want = threadActions(thread).map((a) => a.id);
-    expect(want.length).toBeGreaterThan(0);
+    // The member golden may reply, so Reply leads the list.
+    const want = threadActions(thread, { canReply: true }).map((a) => a.id);
+    expect(want).toEqual(['reply', 'copy-link']);
     const toolbar = [...root.querySelectorAll<HTMLElement>('[data-shell=toolbar] [data-action]')].map((b) => b.dataset.action);
     expect(toolbar).toEqual(want);
     expect(root.querySelector('[aria-label=More]')).toBeNull();
@@ -203,13 +204,13 @@ describe('thread actions', () => {
     const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
     const more = root.querySelector<HTMLButtonElement>('[aria-label=More]')!;
     await act(() => more.click());
-    expect(document.activeElement?.getAttribute('data-action')).toBe('copy-link');
+    expect(document.activeElement?.getAttribute('data-action')).toBe('reply');
     await act(() => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })));
     expect(root.querySelector('[data-shell=more-menu]')).toBeNull();
     expect(document.activeElement).toBe(more);
 
     await act(() => more.click());
-    expect(document.activeElement?.getAttribute('data-action')).toBe('copy-link');
+    expect(document.activeElement?.getAttribute('data-action')).toBe('reply');
     await act(() => void document.body.dispatchEvent(new Event('pointerdown', { bubbles: true })));
     expect(root.querySelector('[data-shell=more-menu]')).toBeNull();
     // Focus was on an item that is gone; it goes back to the button

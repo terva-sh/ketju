@@ -1,4 +1,6 @@
+import { useRef } from 'preact/hooks';
 import type { Post as PostDTO } from '../../api/dto';
+import { bodyText, selectionIn } from '../../composer/quote';
 import { Avatar } from './Avatar';
 import { PostTime } from './PostTime';
 import { RoleBadge } from './RoleBadge';
@@ -17,10 +19,25 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // it. The body is the server's rendering, sanitized by internal/render; it is
 // the one place the client inserts HTML.
 //
-// The footer carries only what works today. Quote, reply and flag, and the
-// reply expander, arrive with the composer (TKT-01M29CEE79) and the expander
-// (TKT-01M29CGBW6) rather than as buttons that do nothing.
-export function Post({ post, thread, unread }: { post: PostDTO; thread: ThreadRef; unread: boolean }) {
+// The footer carries only what works today. Quote and reply are there when
+// the page offers them, which is when the reader may reply and a composer is
+// on the page to take them (TKT-01M29CEE79); flag and the reply expander
+// arrive with their own tickets (TKT-01M29CA9CE, TKT-01M29CGBW6) rather than
+// as buttons that do nothing.
+export function Post({
+  post,
+  thread,
+  unread,
+  actions,
+}: {
+  post: PostDTO;
+  thread: ThreadRef;
+  unread: boolean;
+  actions?: PostActions;
+}) {
+  // What was selected in this post when the pointer went down on quote:
+  // a click can clear a selection before its handler runs.
+  const selected = useRef<string | null>(null);
   return (
     <article
       class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' deleted' : '')}
@@ -54,6 +71,27 @@ export function Post({ post, thread, unread }: { post: PostDTO; thread: ThreadRe
           </ul>
         )}
         <footer class="post-footer">
+          {actions && (
+            <>
+              <button
+                type="button"
+                data-post-action="quote"
+                onMouseDown={(e) => {
+                  selected.current = selectionIn(bodyOf(e.currentTarget));
+                }}
+                onClick={(e) => {
+                  const body = bodyOf(e.currentTarget);
+                  actions.quote(post.ordinal, selected.current ?? selectionIn(body) ?? bodyText(body));
+                  selected.current = null;
+                }}
+              >
+                quote
+              </button>
+              <button type="button" data-post-action="reply" onClick={() => actions.reply(post.ordinal)}>
+                reply
+              </button>
+            </>
+          )}
           <a href={permalink(thread, post.ordinal)}>link</a>
           <a href={`${permalink(thread, post.ordinal)}/history`}>history</a>
         </footer>
@@ -61,6 +99,16 @@ export function Post({ post, thread, unread }: { post: PostDTO; thread: ThreadRe
     </article>
   );
 }
+
+// PostActions are what a post's quote and reply do: hand the composer the
+// quoted text, or the post to answer.
+export interface PostActions {
+  quote: (ordinal: number, text: string) => void;
+  reply: (ordinal: number) => void;
+}
+
+// bodyOf is the body of the post a footer control is in.
+const bodyOf = (el: Element) => el.closest('.post')!.querySelector('.post-body')!;
 
 // ReplyTo is the "↩ #N" indicator. It is absent for a post that answers
 // nothing, and for one whose parent is the post directly above: the server

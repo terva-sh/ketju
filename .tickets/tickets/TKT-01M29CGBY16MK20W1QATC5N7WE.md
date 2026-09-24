@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-24T05:21:21Z
+updated_at: 2026-09-24T22:33:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -89,3 +89,7 @@ Depends on CEE6V, CEE79 and BW9QP (CI). It also needs CCBYX (serve), C7ZZ9 (OIDC
 **agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
 
 Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. 'Stable enough to gate merges' was subjective. It now means 20 consecutive local runs with no flake before the job is made required.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T22:33:27Z
+
+The "reply" step needs the composer to post. That is draft TKT-01M3ART992NAPPBS8PCYAWRT0J (Post a reply from the composer), filed during TKT-01M29CEE79. It depends on TKT-01M29CA9B9 (create and reply), which is blocked by TKT-01M29P9RS0. I did not link it as a dependency of this ticket, because that would block the gate on a draft only a person can promote. Whoever promotes it should consider adding the link.

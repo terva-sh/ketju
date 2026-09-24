@@ -18,6 +18,12 @@ const paths = {
   user: <><circle cx="8" cy="5.5" r="2.75" /><path d="M2.75 14a5.25 5.25 0 0 1 10.5 0" /></>,
   more: <><circle cx="3.5" cy="8" r="1" /><circle cx="8" cy="8" r="1" /><circle cx="12.5" cy="8" r="1" /></>,
   back: <path d="m10 3-5 5 5 5" />,
+  reply: <><path d="M6 4 2 8l4 4" /><path d="M2 8h7a5 5 0 0 1 5 5v1" /></>,
+  bold: <path d="M5 3h4a2.5 2.5 0 0 1 0 5H5zM5 8h4.5a2.5 2.5 0 0 1 0 5H5z" />,
+  italic: <path d="M7 3h6M3 13h6M10 3 6 13" />,
+  quote: <path d="M4 4h3v4H5v3H3V6zM10 4h3v4h-2v3H9V6z" />,
+  code: <path d="m5 5-3 3 3 3M11 5l3 3-3 3M9.5 3l-3 10" />,
+  at: <><circle cx="8" cy="8" r="2.5" /><path d="M10.5 8v1a1.5 1.5 0 0 0 3 0V8a5.5 5.5 0 1 0-2.2 4.4" /></>,
   link: (
     <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1" />
   ),

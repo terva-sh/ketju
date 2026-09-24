@@ -1,0 +1,204 @@
+/* The reply composer, after ThreadLight's composer (docs/mockups). Every
+   colour, font and radius is a token from src/styles/tokens.css. */
+
+.composer {
+  margin-top: 12px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  display: flex;
+  flex-direction: column;
+}
+
+.composer-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 20px;
+  border-bottom: 1px solid var(--rule);
+}
+.composer-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.reply-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  padding: 2px 4px 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+.reply-chip .who {
+  font-family: var(--font-sans);
+}
+.reply-chip button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 0 4px;
+  cursor: pointer;
+}
+
+.composer-tabs {
+  display: flex;
+  gap: 2px;
+  margin-left: auto;
+}
+.composer-tabs button {
+  font: inherit;
+  font-size: 13px;
+  padding: 4px 10px;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+}
+.composer-tabs button[aria-selected='true'] {
+  background: var(--surface2);
+  color: var(--ink);
+  font-weight: 500;
+}
+
+.composer-tools {
+  display: flex;
+  gap: 4px;
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink2);
+}
+.composer-tools button {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: var(--radius);
+  background: none;
+  color: inherit;
+  cursor: pointer;
+}
+.composer-tools button:hover {
+  background: var(--surface2);
+}
+
+.composer-body {
+  position: relative;
+}
+.composer-body textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 140px;
+  padding: 16px 20px;
+  border: 0;
+  resize: vertical;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-size: 15px;
+  line-height: 1.6;
+}
+.composer-body textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.mention-list {
+  position: absolute;
+  left: 20px;
+  top: 100%;
+  z-index: 10;
+  min-width: 240px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.mention-list li {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+.mention-list li[aria-selected='true'] {
+  background: var(--accent-soft);
+}
+.mention-list .handle {
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+.mention-list .name {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.composer-preview {
+  min-height: 140px;
+  padding: 16px 20px;
+}
+.composer-preview[aria-busy='true'] > * {
+  opacity: 0.6;
+}
+.preview-empty {
+  margin: 0;
+  color: var(--muted);
+}
+
+.composer-foot {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 20px;
+  border-top: 1px solid var(--rule);
+  font-size: 12.5px;
+  color: var(--muted);
+}
+
+.post-footer button {
+  font: inherit;
+  color: var(--muted);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+/* The phone: every control is a full touch target (docs/06 "Mobile"). The
+   composer sheet that replaces this there is TKT-01M29CGBVN's. */
+@media (max-width: 719.98px) {
+  .composer-head {
+    padding: 8px 12px;
+    flex-wrap: wrap;
+  }
+  .composer-tools {
+    padding: 4px 8px;
+  }
+  .composer-tools button,
+  .composer-tabs button {
+    min-width: var(--target);
+    min-height: var(--target);
+  }
+  .reply-chip button {
+    min-width: var(--target);
+    min-height: var(--target);
+    margin-block: -12px;
+  }
+  .composer-body textarea,
+  .composer-preview {
+    padding: 12px;
+  }
+}

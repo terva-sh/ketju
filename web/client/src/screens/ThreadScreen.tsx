@@ -6,8 +6,9 @@ import type { ThreadPage } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
+import { Composer } from '../composer/Composer';
 import { Pager } from '../components/thread/Pager';
-import { permalink, Post, type ThreadRef } from '../components/thread/Post';
+import { permalink, Post, type PostActions, type ThreadRef } from '../components/thread/Post';
 import { PostPopover } from '../components/thread/PostPopover';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
@@ -15,6 +16,7 @@ import '../components/thread/thread.css';
 import { Toolbar } from '../shell/Toolbar';
 import { threadActions } from '../shell/threadActions';
 import { isPhone } from '../state/layout';
+import { quotePost, replyToPost } from '../state/composer';
 import { useShellContext } from '../state/shell';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
@@ -74,7 +76,8 @@ export function ThreadScreen() {
   // publishes nothing (review 490): its screen is NotFound, not the thread's.
   const missing = isProblem(res.error, 'not-found');
   const known = head ? { id: head.id, slug: head.slug } : null;
-  const actions = useMemo(() => (known ? threadActions(known) : []), [known?.id, known?.slug]);
+  const canReply = res.data?.viewer.can_reply ?? false;
+  const actions = useMemo(() => (known ? threadActions(known, { canReply }) : []), [known?.id, known?.slug, canReply]);
   const forum = head?.forum;
   const ctx = useMemo(
     () =>
@@ -143,6 +146,15 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   );
   const [popover, setPopover] = useState<number | null>(null);
 
+  // Quote and reply, and the composer they feed, are offered to a reader
+  // who may reply here, which the server decides (can_reply: the permission,
+  // and the lock unless they moderate).
+  const canReply = page.viewer.can_reply;
+  const actions: PostActions | undefined = canReply
+    ? { quote: (o, text) => quotePost(thread.id, o, text), reply: (o) => replyToPost(thread.id, o) }
+    : undefined;
+  const authorOf = (o: number) => page.posts.find((p) => p.ordinal === o)?.author.handle;
+
   // One handler for every link to another post in this list: a reply-to
   // indicator, or a quote's source link in a body (internal/render/quote.go).
   // A post on this page is scrolled to and the address stays as it is; one
@@ -172,12 +184,13 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
             {p.deleted && !p.html ? (
               <Tombstone ordinal={p.ordinal} unread={lastRead > 0 && p.ordinal > lastRead} />
             ) : (
-              <Post post={p} thread={thread} unread={lastRead > 0 && p.ordinal > lastRead} />
+              <Post post={p} thread={thread} unread={lastRead > 0 && p.ordinal > lastRead} actions={actions} />
             )}
           </Fragment>
         ))}
       </section>
       {pager}
+      {canReply && <Composer thread={thread.id} authorOf={authorOf} />}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
     </>
   );
