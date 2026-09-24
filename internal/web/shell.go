@@ -6,51 +6,51 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/problem"
 )
 
-// ShellData is what the SPA shell template is rendered with.
+// ShellData is what the SPA shell template is rendered with: the built
+// index.html from internal/web/spa (docs/07 "Embedding").
 //
-// It is deliberately small. The shell exists to load the client and to carry
-// the nonce; anything else the client needs it fetches from the API, where the
-// response can be cached and revalidated. Putting state in the shell means
-// putting it in a document that must not be cached, which is how a shell grows
-// into a second, worse API.
+// docs/07 puts three things in the shell besides the nonce: the current
+// page's title and description, for link unfurls, and a bootstrap /me block
+// so the first paint needs no round trip. Everything else the client fetches
+// from the API, where a response can be revalidated; the shell is never
+// cached, so what goes in it is paid for on every load.
 type ShellData struct {
 	// Nonce is this response's CSP nonce. A script or style tag in the
 	// template must carry it or the browser will refuse to run it.
 	Nonce string
+	// Title and Description are the <title> and meta description.
+	Title       string
+	Description string
+	// Bootstrap is the viewer, rendered by html/template into a
+	// <script type="application/json"> block. That element is a JavaScript
+	// context to html/template, so the value is marshalled to JSON with <, >
+	// and & escaped, and cannot close the element or open another.
+	Bootstrap dto.Me
 }
 
-// DefaultShell is the shell served until the real client lands.
-//
-// TKT-01M29CCC02 scaffolds the Preact client and replaces this with the built
-// index.html. What has to survive that replacement is the mechanism rather
-// than the markup: a Go template rendered per response, with .Nonce on every
-// script and style tag. That agreement is the reason this ticket ships a shell
-// at all instead of leaving SPA nil.
-//
-// Note there is no inline script and no inline style, which is what lets the
-// policy omit 'unsafe-inline'.
-const DefaultShell = `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ketju</title>
-<link rel="stylesheet" href="/assets/app.css">
-</head>
-<body>
-<div id="app"></div>
-<script type="module" src="/assets/app.js" nonce="{{.Nonce}}"></script>
-</body>
-</html>
-`
+// Page is what a request's shell says beyond the nonce.
+type Page struct {
+	Title       string
+	Description string
+	Bootstrap   dto.Me
+}
+
+// defaultPage is served until the server supplies its own: the product's
+// name and an anonymous viewer. The site_name setting and a real /me arrive
+// with ketju serve (TKT-01M29CCBYX) and the session (TKT-01M29CA99R).
+func defaultPage(*http.Request) (Page, error) {
+	return Page{Title: "ketju", Bootstrap: dto.Me{Settings: dto.Settings{PageSize: 25}}}, nil
+}
 
 // Shell serves the single-page application shell.
 type Shell struct {
 	tmpl *template.Template
 	log  *slog.Logger
+	page func(*http.Request) (Page, error)
 }
 
 // NewShell parses a shell template.
@@ -68,7 +68,14 @@ func NewShell(tmpl string, log *slog.Logger) (*Shell, error) {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &Shell{tmpl: t, log: log}, nil
+	return &Shell{tmpl: t, log: log, page: defaultPage}, nil
+}
+
+// SetPage sets what each request's shell carries: its title, description and
+// bootstrap viewer. An error from fn is a 500, not a shell with a guessed
+// viewer in it.
+func (s *Shell) SetPage(fn func(*http.Request) (Page, error)) {
+	s.page = fn
 }
 
 // ServeHTTP renders the shell with this response's nonce.
@@ -97,8 +104,15 @@ func (s *Shell) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// already written a partial page if it renders straight to the
 	// ResponseWriter, and a partial page arrives with a 200 nobody can take
 	// back.
+	page, err := s.page(r)
+	if err != nil {
+		s.log.ErrorContext(r.Context(), "building the SPA shell's page failed", "error", err)
+		problem.Write(w, r, problem.CodeInternal)
+		return
+	}
 	var buf bytes.Buffer
-	if err := s.tmpl.Execute(&buf, ShellData{Nonce: nonce}); err != nil {
+	if err := s.tmpl.Execute(&buf, ShellData{Nonce: nonce, Title: page.Title,
+		Description: page.Description, Bootstrap: page.Bootstrap}); err != nil {
 		s.log.ErrorContext(r.Context(), "rendering the SPA shell failed", "error", err)
 		problem.Write(w, r, problem.CodeInternal)
 		return

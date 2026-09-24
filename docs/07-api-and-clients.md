@@ -306,6 +306,14 @@ work stays where it is.
   is a Go template so the server injects `<meta>` for the current thread
   (title, description for link unfurls), a CSP nonce, and a bootstrap
   `<script type="application/json">` with `/me` to save a round trip.
+  `dist/` is committed, and CI rebuilds it from the lockfile and fails on a
+  difference, so `go build` alone ships the client that the source describes.
+  The server supplies each request's title, description and viewer through
+  `web.Shell.SetPage`. The JSON block is the one script with a body the CSP
+  tolerates: it is data and never executed. html/template escapes the viewer
+  in it as a JavaScript value, so a display name cannot close the element.
+  Assets under `/assets/` have content-hashed names and are served
+  `immutable`; the shell is `no-store`.
 - **Dev:** Vite dev server with `server.proxy` → Go on `:8080`; Go serves
   the embedded build in prod. `go generate` runs the client build so `go
   build` alone produces a complete binary when the client is unchanged.

@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>{{.Title}}</title>
+<meta name="description" content="{{.Description}}">
+<script type="module" src="/src/main.tsx"></script>
+</head>
+<body>
+<noscript>ketju needs JavaScript for now. A client that works without it is planned.</noscript>
+<div id="app"></div>
+<script type="application/json" id="bootstrap" nonce="{{.Nonce}}">{{.Bootstrap}}</script>
+</body>
+</html>

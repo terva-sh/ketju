@@ -1,12 +1,18 @@
 package web
 
 import (
+	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"golang.org/x/net/html"
+
+	"github.com/terva-sh/ketju/internal/dto"
+	"github.com/terva-sh/ketju/internal/web/spa"
 )
 
 // documentedHeaders is the set docs/07 requires on every response.
@@ -25,7 +31,7 @@ var documentedHeaders = map[string]string{
 // the page it lands on can run script.
 func TestEveryResponseCarriesTheDocumentedHeaders(t *testing.T) {
 	log, _ := testLogger()
-	shell, err := NewShell(DefaultShell, log)
+	shell, err := NewShell(builtShell(t), log)
 	if err != nil {
 		t.Fatalf("parse shell: %v", err)
 	}
@@ -110,7 +116,7 @@ func TestThePolicyNeverAllowsInlineScript(t *testing.T) {
 // that will be accepted on the next.
 func TestTheNonceIsPerResponse(t *testing.T) {
 	log, _ := testLogger()
-	shell, err := NewShell(DefaultShell, log)
+	shell, err := NewShell(builtShell(t), log)
 	if err != nil {
 		t.Fatalf("parse shell: %v", err)
 	}
@@ -142,7 +148,7 @@ func TestTheNonceIsPerResponse(t *testing.T) {
 // message the server never sees.
 func TestTheShellInjectsTheSameNonceThePolicyNames(t *testing.T) {
 	log, _ := testLogger()
-	shell, err := NewShell(DefaultShell, log)
+	shell, err := NewShell(builtShell(t), log)
 	if err != nil {
 		t.Fatalf("parse shell: %v", err)
 	}
@@ -180,7 +186,7 @@ func TestTheShellInjectsTheSameNonceThePolicyNames(t *testing.T) {
 // inherit a shell that already needed 'unsafe-inline'.
 func TestTheShellHasNoInlineScriptOrStyle(t *testing.T) {
 	log, _ := testLogger()
-	shell, err := NewShell(DefaultShell, log)
+	shell, err := NewShell(builtShell(t), log)
 	if err != nil {
 		t.Fatalf("parse shell: %v", err)
 	}
@@ -189,11 +195,20 @@ func TestTheShellHasNoInlineScriptOrStyle(t *testing.T) {
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
 
-	doc, err := html.Parse(strings.NewReader(rec.Body.String()))
+	for _, p := range inlineScriptProblems(t, rec.Body.String()) {
+		t.Error(p)
+	}
+}
+
+// inlineScriptProblems lists what in a page the policy would block: an inline
+// script or style body, a script without a nonce, and an on* attribute.
+func inlineScriptProblems(t *testing.T, page string) []string {
+	t.Helper()
+	doc, err := html.Parse(strings.NewReader(page))
 	if err != nil {
 		t.Fatalf("the shell is not parseable HTML: %v", err)
 	}
-
+	var problems []string
 	var walk func(*html.Node)
 	walk = func(n *html.Node) {
 		if n.Type == html.ElementNode && (n.Data == "script" || n.Data == "style") {
@@ -203,18 +218,22 @@ func TestTheShellHasNoInlineScriptOrStyle(t *testing.T) {
 					body.WriteString(c.Data)
 				}
 			}
-			if strings.TrimSpace(body.String()) != "" {
-				t.Errorf("<%s> has an inline body, which the policy blocks:\n%s", n.Data, body.String())
+			// A JSON data block is never executed, so its body is not inline
+			// script (settled in grooming for TKT-01M29CCC02). Any other type
+			// with a body is.
+			data := n.Data == "script" && attr(n, "type") == "application/json"
+			if strings.TrimSpace(body.String()) != "" && !data {
+				problems = append(problems, fmt.Sprintf("<%s> has an inline body, which the policy blocks:\n%s", n.Data, body.String()))
 			}
 			if n.Data == "script" && attr(n, "nonce") == "" {
-				t.Errorf("<script> has no nonce, so the policy would block it")
+				problems = append(problems, "<script> has no nonce, so the policy would block it")
 			}
 		}
 		// An inline event handler is inline script by another name.
 		if n.Type == html.ElementNode {
 			for _, a := range n.Attr {
 				if strings.HasPrefix(strings.ToLower(a.Key), "on") {
-					t.Errorf("<%s> carries the inline handler %s, which the policy blocks", n.Data, a.Key)
+					problems = append(problems, fmt.Sprintf("<%s> carries the inline handler %s, which the policy blocks", n.Data, a.Key))
 				}
 			}
 		}
@@ -223,6 +242,30 @@ func TestTheShellHasNoInlineScriptOrStyle(t *testing.T) {
 		}
 	}
 	walk(doc)
+	return problems
+}
+
+// TestTheInlineCheckIsNarrow: the check above exempts a JSON data block and
+// nothing else, so it still catches each thing it exists to catch. Without
+// this, loosening the exemption would pass: the built shell has nothing for
+// a loosened check to miss.
+func TestTheInlineCheckIsNarrow(t *testing.T) {
+	for page, want := range map[string]int{
+		`<script type="application/json" nonce="n">{"a":1}</script>`: 0,
+		`<script type="module" nonce="n" src="/a.js"></script>`:      0,
+		`<script nonce="n">alert(1)</script>`:                        1,
+		`<script type="text/javascript" nonce="n">alert(1)</script>`: 1,
+		`<script type="module" nonce="n">import "/a.js"</script>`:    1,
+		`<script type="application/ld+json" nonce="n">{}</script>`:   1,
+		`<style nonce="n">body{}</style>`:                            1,
+		`<script src="/a.js"></script>`:                              1,
+		`<script type="application/json">{"a":1}</script>`:           1,
+		`<div onclick="x()"></div>`:                                  1,
+	} {
+		if got := inlineScriptProblems(t, page); len(got) != want {
+			t.Errorf("%s: %d problems, want %d: %v", page, len(got), want, got)
+		}
+	}
 }
 
 // TestTheShellIsNotCached: the shell carries a per-response nonce, so a cached
@@ -230,7 +273,7 @@ func TestTheShellHasNoInlineScriptOrStyle(t *testing.T) {
 // script on the page.
 func TestTheShellIsNotCached(t *testing.T) {
 	log, _ := testLogger()
-	shell, _ := NewShell(DefaultShell, log)
+	shell, _ := NewShell(builtShell(t), log)
 	h := New(Groups{SPA: shell}, Options{Logger: log})
 
 	rec := httptest.NewRecorder()
@@ -245,7 +288,7 @@ func TestTheShellIsNotCached(t *testing.T) {
 // bug, and answering it with 200 and a page would hide it.
 func TestTheShellRefusesAWriteMethod(t *testing.T) {
 	log, _ := testLogger()
-	shell, _ := NewShell(DefaultShell, log)
+	shell, _ := NewShell(builtShell(t), log)
 	h := New(Groups{SPA: shell}, Options{Logger: log})
 
 	rec := httptest.NewRecorder()
@@ -261,7 +304,7 @@ func TestTheShellRefusesAWriteMethod(t *testing.T) {
 // the cause is two packages away.
 func TestTheShellWithoutANonceFailsLoudly(t *testing.T) {
 	log, buf := testLogger()
-	shell, _ := NewShell(DefaultShell, log)
+	shell, _ := NewShell(builtShell(t), log)
 
 	// Called directly, with no securityHeaders in front of it.
 	rec := httptest.NewRecorder()
@@ -325,4 +368,110 @@ func attr(n *html.Node, name string) string {
 		}
 	}
 	return ""
+}
+
+// builtShell is the real shell: the client's built index.html.
+func builtShell(t *testing.T) string {
+	t.Helper()
+	s, err := spa.Shell()
+	if err != nil {
+		t.Fatalf("the built shell: %v", err)
+	}
+	return s
+}
+
+// TestTheShellCarriesTheBootstrapAndMeta is AC3 of TKT-01M29CCC02: the built
+// index.html renders as a Go template with the nonce on every script and
+// link, the page's title and description, and the viewer as JSON in the data
+// block, escaped so that no value can close the element.
+func TestTheShellCarriesTheBootstrapAndMeta(t *testing.T) {
+	log, _ := testLogger()
+	shell, err := NewShell(builtShell(t), log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostile := "</script><script>alert(1)</script>"
+	want := dto.Me{User: &dto.Author{Handle: "alice", DisplayName: hostile, Role: "member", Kind: "human"},
+		Notifications: 2, Settings: dto.Settings{PageSize: 25}}
+	shell.SetPage(func(*http.Request) (Page, error) {
+		return Page{Title: "Why we left Slack & more", Description: `a "quoted" thread`, Bootstrap: want}, nil
+	})
+	h := New(Groups{SPA: shell}, Options{Logger: log})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/t/3yymw47g00001/why", nil))
+	body := rec.Body.String()
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, body)
+	}
+	if strings.Contains(body, "{{") || strings.Contains(body, hostile) {
+		t.Fatalf("the shell left a placeholder or an unescaped value:\n%s", body)
+	}
+
+	doc, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	nonce := nonceFromCSP(t, rec.Header().Get("Content-Security-Policy"))
+	var (
+		bootstrap, title, description string
+		scripts, links                int
+	)
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			switch {
+			case n.Data == "script" && attr(n, "id") == "bootstrap":
+				if n.FirstChild != nil {
+					bootstrap = n.FirstChild.Data
+				}
+				fallthrough
+			case n.Data == "script", n.Data == "link" && attr(n, "rel") == "stylesheet":
+				if attr(n, "nonce") != nonce {
+					t.Errorf("<%s> carries nonce %q, the policy names %q", n.Data, attr(n, "nonce"), nonce)
+				}
+				if n.Data == "script" {
+					scripts++
+				} else {
+					links++
+				}
+			case n.Data == "title" && n.FirstChild != nil:
+				title = n.FirstChild.Data
+			case n.Data == "meta" && attr(n, "name") == "description":
+				description = attr(n, "content")
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+	if scripts < 2 || links < 1 {
+		t.Errorf("%d scripts and %d stylesheets; want the module, the bootstrap block and the stylesheet", scripts, links)
+	}
+	if title != "Why we left Slack & more" || description != `a "quoted" thread` {
+		t.Errorf("title %q, description %q", title, description)
+	}
+	var got dto.Me
+	if err := json.Unmarshal([]byte(bootstrap), &got); err != nil {
+		t.Fatalf("the bootstrap block is not JSON: %v\n%s", err, bootstrap)
+	}
+	if got.User == nil || got.User.DisplayName != hostile || got.Notifications != 2 {
+		t.Errorf("the bootstrap block decodes to %+v", got)
+	}
+}
+
+// TestTheShellRefusesAFailedPage: a page that cannot be built is a 500, not
+// a shell with a guessed viewer in it.
+func TestTheShellRefusesAFailedPage(t *testing.T) {
+	log, _ := testLogger()
+	shell, err := NewShell(builtShell(t), log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	shell.SetPage(func(*http.Request) (Page, error) { return Page{}, errors.New("session store down") })
+	rec := httptest.NewRecorder()
+	New(Groups{SPA: shell}, Options{Logger: log}).ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d", rec.Code)
+	}
 }

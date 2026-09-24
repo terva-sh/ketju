@@ -210,7 +210,7 @@ func TestSafeMethodsAreNeverRefused(t *testing.T) {
 // plumbing this posture exists to avoid.
 func TestNoCSRFTokenIsThreadedThroughTheSPA(t *testing.T) {
 	log, _ := testLogger()
-	shell, err := NewShell(DefaultShell, log)
+	shell, err := NewShell(builtShell(t), log)
 	if err != nil {
 		t.Fatalf("parse shell: %v", err)
 	}

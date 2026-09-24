@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCC02K8F14P0SKAYFMSE6
 title: Scaffold the Preact client and its embedding
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:preact-client
     path: docs/07-api-and-clients.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/ccc02-client-scaffold
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: 70b6caf55d9697d86df5ccfabf8ac4a1cae50196
-  session: null
-  claimed_at: 2026-09-24T10:27:10Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T10:28:35Z
+updated_at: 2026-09-24T10:34:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,10 +43,10 @@ extensions: {}
 
 ## Acceptance criteria
 
-- [ ] `go build` produces a binary serving the client with no separate build step when the client is unchanged
-- [ ] The dev proxy serves the client against a live Go server with hot reload
-- [ ] index.html renders as a Go template injecting the CSP nonce and the bootstrap /me payload
-- [ ] Preact is pinned at 10.x and the pin is documented with the reason
+- [x] `go build` produces a binary serving the client with no separate build step when the client is unchanged
+- [x] The dev proxy serves the client against a live Go server with hot reload
+- [x] index.html renders as a Go template injecting the CSP nonce and the bootstrap /me payload
+- [x] Preact is pinned at 10.x and the pin is documented with the reason
 
 ## Implementation plan
 
@@ -88,6 +81,47 @@ Revised at claim, 2026-09-24, after reading internal/web (shell.go, server.go, s
 - AC3: the shell tests against the built template, a test that the nonce and the bootstrap JSON render (with escaping), and a browser load with the CSP enforcing and a clean console.
 - AC4: the README and the exact version in package.json.
 
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:34:16Z
+
+Built and verified.
+
+### What landed
+- **`web/client`:**
+  - Vite 8.3.0, `@preact/preset-vite` 2.10.6, Preact 10.29.8, `@preact/signals` 2.11.2, `preact-iso` 2.12.2, TypeScript 5.9.3. All exact pins, with the lockfile committed.
+  - A router with `/` and a not-found route, a viewer signal read from the bootstrap block, and one small stylesheet (the CSS system is CCC0F).
+  - The build is 10.4 KB gzipped of JS.
+- **`internal/web/spa`:** embeds `dist/`. `Shell()` returns the built template; `Assets()` serves `/assets/*` with `immutable` and 404s everything else, including listings and `.vite/`.
+- **`internal/web`:**
+  - `ShellData` gains Title, Description and `Bootstrap dto.Me`, and `Shell.SetPage` supplies them per request. A page error is a 500.
+  - `DefaultShell` is gone; every shell test runs against the built `index.html`.
+- **CI:** two added steps, "Install Node" and "built client is current" (`go generate ./internal/web/spa`, then `git diff --exit-code` including added files). Existing steps are unchanged, per docs/12.
+
+### Decisions (alternatives considered)
+- **Exact pins.** Rejected: `~10.29`. CI diffs the build, so any unpinned resolution is a spurious failure waiting to happen, and the lockfile alone does not stop a `npm install` from moving it.
+- **TypeScript 5.9.** Rejected: TypeScript 7, the native port, which is new; nothing here needs it.
+- **The README gives the Preact pin's reason.** docs/10 Q20 states the pin but not why. The reason given is that the router, signals and preset are built against 10, and a major bump mid-build would turn every client ticket into a migration. It is labelled as recorded here, not quoted from docs/10.
+- **The bootstrap is a real `dto.Me` value in a `type="application/json"` block.** html/template treats that as a JS context and emits escaped JSON, so a display name of `</script><script>alert(1)</script>` round-trips as data, which the test checks. Rejected: `template.JS` of pre-marshalled bytes, which bypasses the escaper.
+- **The default page** is the title "ketju" and an anonymous viewer, until CCBYX (serve, site_name) and CA99R (the real /me) wire it.
+- **Reproducible builds.** Two builds from a clean `npm ci` were byte-identical, which is what the CI check relies on.
+
+### AC2: the manual check, done 2026-09-24
+- `ketju serve` has not landed (CCBYX), so the live Go server was a scratch `main` under `cmd/`, never committed and deleted afterwards. It served `web.New` with the real shell, `spa.Assets()` and a stub API.
+- With `npm run dev` on :5173, driven by headless Chromium through Playwright:
+  - The page rendered.
+  - `fetch('/api/v1/ping')` returned the Go server's JSON through the proxy.
+  - Editing `src/app.tsx` updated the heading in place. A `window` marker set before the edit survived, so it was HMR, not a reload, and Vite logged `hmr update /src/app.tsx`.
+  - The edit was reverted.
+
+### AC3: the browser half
+- The built client loaded from the Go server with the CSP enforcing. Both routes rendered, the CSS applied, and the console was clean.
+- A negative control (an injected inline script) was blocked and reported, so the check can see a violation.
+- This also closes TKT-01M29C8020's AC3, ticked there with a note.
+
+### Mutation
+8 mutants over the shell, assets and the inline check. One survivor weakened the inline check itself, invisible because the built shell has nothing for it to miss. It became `TestTheInlineCheckIsNarrow`, which pins the single exemption. All are killed.
+
 ## Comments
 
 **agent:claude-code/web** at 2026-09-16T20:52:03Z
@@ -117,3 +151,7 @@ The remaining half is the browser one: load the real client with the CSP
 enforcing (not report-only) and confirm the console is clean. Worth doing
 before the client grows, because retrofitting means finding every inline
 handler written in the meantime.
+
+## Summary
+
+web/client is a Vite 8 + Preact 10.29.8 (exact pins, documented) TypeScript project that builds into internal/web/spa/dist, which is committed and embedded. index.html is a Go template rendered per response with the CSP nonce, title, description and a bootstrap /me JSON block (web.Shell.SetPage). CI installs Node and fails if the committed build differs from a fresh one. The dev proxy with HMR and the built client under an enforcing CSP were both verified in headless Chromium.

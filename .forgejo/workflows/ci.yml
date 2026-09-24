@@ -83,6 +83,26 @@ jobs:
           git add -N internal/store/db
           git diff --exit-code -- internal/store/db
 
+      - name: Install Node
+        # TKT-01M29CCC02. The client build below needs Node and npm; Vite 8
+        # wants Node 20.19+ or 22.12+. A separate step rather than a longer
+        # apk line above, because docs/12 lets a run add steps to this job and
+        # not edit the ones it has.
+        run: |
+          apk add --no-cache nodejs npm
+          node --version
+          npm --version
+
+      - name: built client is current
+        # TKT-01M29CCC02. internal/web/spa/dist is committed, so that `go
+        # build` alone serves the client, and it must be exactly what
+        # web/client builds to. Rebuild it from the lockfile and fail on any
+        # difference, including a file the build would add or remove.
+        run: |
+          go generate ./internal/web/spa
+          git add -N internal/web/spa/dist
+          git diff --exit-code -- internal/web/spa/dist
+
       - name: go vet
         run: go vet ./...
 

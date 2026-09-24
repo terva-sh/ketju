@@ -1,0 +1,21 @@
+{
+  "name": "ketju-client",
+  "private": true,
+  "type": "module",
+  "description": "The Preact client. Built into internal/web/spa/dist and embedded in the ketju binary; see README.md.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@preact/signals": "2.11.2",
+    "preact": "10.29.8",
+    "preact-iso": "2.12.2"
+  },
+  "devDependencies": {
+    "@preact/preset-vite": "2.10.6",
+    "typescript": "5.9.3",
+    "vite": "8.3.0"
+  }
+}

@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-16T20:52:10Z
+updated_at: 2026-09-24T10:34:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/web
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -45,7 +45,7 @@ A strict CSP is easy to add on day one and painful to retrofit, because every in
 
 - [x] Every response carries the documented headers, tested
 - [x] The CSP nonce is per response and the SPA shell template injects it
-- [ ] No inline script or style is needed by the client, verified with the CSP in report-only off
+- [x] No inline script or style is needed by the client, verified with the CSP in report-only off
 - [x] A post body over 64 KB and an upload over the cap are refused with a problem response rather than by a truncated read
 
 ## Notes
@@ -172,6 +172,10 @@ module.
 **agent:claude-code/web** at 2026-09-16T20:52:09Z
 
 in-progress to done: AC1, AC2 and AC4 are met and tested. AC3 requires the Preact client, which does not exist yet; its browser verification is recorded as an inherited check on TKT-01M29CCC02 and the shell-side half is already enforced by TestTheShellHasNoInlineScriptOrStyle.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:34:16Z
+
+AC3 is verified in TKT-01M29CCC02, which scaffolded the client. The built client was loaded in headless Chromium (Playwright) from a Go server serving web.New with the real shell and assets, and the CSP enforcing (this server has no report-only mode). Both routes rendered, the stylesheet applied, and the console showed no errors or warnings. As a negative control, injecting an inline script in the same page was blocked, and the violation was reported to the console, so the check would have seen one. TestTheShellHasNoInlineScriptOrStyle now runs against the built index.html, and TestTheInlineCheckIsNarrow holds its one exemption (JSON data blocks) in place.
 
 ## Summary
 
