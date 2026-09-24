@@ -801,3 +801,65 @@ func TestHeaderOnlyLogIsUnfinished(t *testing.T) {
 		t.Errorf("not logged:\n%s", buf.String())
 	}
 }
+
+// A sweep that finds a thread's sizes equal must not clear a hold made after
+// its look, for bytes appended since (review 462). Stood in for directly:
+// catch-up looked when the log was `created` long, then an append grew it
+// and a failed projection held it, and only then does the settle run.
+func TestSettleKeepsAHoldNewerThanTheLook(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	grower, created := f.thread("Grower")
+	f.project(grower, created)
+	grown := f.post(grower, 5, 0)
+	f.w.hold(grower, created, grown)
+
+	f.w.settle(grower, created) // the look saw the old, equal size
+	if l := f.w.Lag(); l.Threads != 1 {
+		t.Errorf("lag = %+v: a hold newer than the look was cleared", l)
+	}
+
+	// With the log no longer than the look, the same settle clears it.
+	f.w.settle(grower, logSize(t, f.root, grower))
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag = %+v: a hold no newer than the look was kept", l)
+	}
+}
+
+// A gap held while the log had a torn first frame, which another open then
+// cut back to the bare header, is cleared when catch-up reports the thread
+// unfinished (review 462).
+func TestUnfinishedSettlesAHeldGap(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	id := threadid.ID(uint64(1_700_000_000_000)<<16 | 98)
+	th, err := f.cache.Create(id, 7, 1_700_000_000_000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.cache.Release(th)
+	c := f.restart()
+	tear(t, f.root, id)
+
+	reopen, _ := flaky(c)
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	if l := f.w.Lag(); l.Threads != 1 {
+		t.Fatalf("lag = %+v, want the torn thread held", l)
+	}
+	var calls atomic.Int64
+	if _, err := reopenWith(c, &calls)(t.Context(), id); err != nil { // another open cuts the tail
+		t.Fatal(err)
+	}
+	rep, err := f.w.CatchUp(t.Context(), reopen)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(rep.Unfinished, []threadid.ID{id}) {
+		t.Fatalf("report = %+v", rep)
+	}
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag = %+v: the held gap outlived the log becoming unfinished", l)
+	}
+}

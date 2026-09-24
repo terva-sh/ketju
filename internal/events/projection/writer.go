@@ -202,7 +202,6 @@ func (w *Writer) Retry(ctx context.Context) error {
 			switch {
 			case n < h.projected:
 				w.quarantine(id, n, h.projected)
-				w.settle(id)
 				continue
 			}
 			// The reopened length is the true one: it replaces the held
@@ -220,10 +219,32 @@ func (w *Writer) Retry(ctx context.Context) error {
 }
 
 // settle takes a thread out of the behind set without projecting it, for a
-// thread that turned out to have nothing to project.
-func (w *Writer) settle(id threadid.ID) {
+// thread a look at its log showed has nothing to project: its log was
+// observed bytes long and the projection already there.
+//
+// That look may be stale by now. An append since, whose projection failed,
+// holds the thread again with a newer target, and removing that would lose
+// the new bytes from Retry and Lag (review 462). A log only grows, apart
+// from a torn tail being cut, so the log is looked at again under the lock
+// that orders holds: if it is no longer than observed, whatever is held is
+// older than the look, a torn tail included, and is cleared; if it has
+// grown, the entry stays.
+func (w *Writer) settle(id threadid.ID, observed int64) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if _, ok := w.behind[id]; !ok {
+		return
+	}
+	if fi, err := os.Stat(id.LogPath(w.root)); err == nil && fi.Size() > observed {
+		return
+	}
+	w.drop(id)
+}
+
+// drop removes a thread from the behind set unconditionally, for one that is
+// quarantined: its log is shorter than its projection, which no later
+// append undoes. Called with mu held.
+func (w *Writer) drop(id threadid.ID) {
 	if _, ok := w.behind[id]; !ok {
 		return
 	}

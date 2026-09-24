@@ -117,7 +117,9 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 	corrupt := map[threadid.ID]bool{}
 	quarantine := func(id threadid.ID, logLength, at int64) {
 		corrupt[id] = true
-		w.settle(id)
+		w.mu.Lock()
+		w.drop(id)
+		w.mu.Unlock()
 		w.logCorrupt(id, logLength, at)
 	}
 
@@ -136,6 +138,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		if !known {
 			if size == threadlog.FileHeaderSize {
 				rep.Unfinished = append(rep.Unfinished, id)
+				w.settle(id, size) // a gap held while it still had a torn frame
 				w.log.Info("a thread log holds only its header: its creation never finished, "+
 					"and there is nothing to project", "thread", id)
 				continue
@@ -144,7 +147,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		}
 		switch {
 		case size == at:
-			w.settle(id) // a gap held earlier that has since closed
+			w.settle(id, size) // a gap held earlier that has since closed
 			continue
 		case size < at:
 			quarantine(id, size, at)
@@ -169,7 +172,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 			quarantine(id, length, at)
 			continue
 		case length == at:
-			w.settle(id) // the gap was a torn tail, and the open removed it
+			w.settle(id, length) // the gap was a torn tail, and the open removed it
 			continue
 		}
 		if err := w.project(ctx, id, length); err != nil {
@@ -220,6 +223,7 @@ func (w *Writer) quarantine(id threadid.ID, logLength, at int64) {
 		w.quarantined = map[threadid.ID]bool{}
 	}
 	w.quarantined[id] = true
+	w.drop(id)
 	w.mu.Unlock()
 	w.logCorrupt(id, logLength, at)
 }
