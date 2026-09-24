@@ -123,27 +123,35 @@ applications remain readable after the form changes.
 ### forums
 ```
 id, parent_id (nullable, one level of nesting max), slug, name, description,
-position, visibility ('public'|'members'|'restricted'), archived, created_at
+position, visibility ('public'|'members'|'restricted'), archived, created_at,
+updated_at
 ```
+The one-level rule is enforced by triggers, so every write path gets it
+(TKT-01M29BYYHG).
 
 ### groups, group_members
 ```
-groups: id, name, slug, description, is_system
-group_members: group_id, user_id, added_by, added_at
+groups: id, name, slug, description, is_system, created_at, updated_at
+group_members: group_id, user_id, source ('admin'|'idp'), added_by, added_at
 ```
-System groups: `everyone`, `members`, `moderators`, `admins`.
+System groups: `everyone`, `members`, `moderators`, `admins`, seeded by
+migration with fixed ids. Triggers keep them from being deleted or losing their
+slug or flag, and stop any other group becoming one. `source` records whether
+an admin added the membership or an IdP claim mapping did; an `idp` row names
+no adder.
 
 ### permissions
 ```
-forum_id (nullable = global), group_id, permission
+forum_id (nullable = global), group_id, permission, created_at
 permission ∈ {read, create_thread, reply, upload, moderate}
+UNIQUE (ifnull(forum_id, 0), group_id, permission)
 ```
 Small, explicit, phpBB-like. Evaluation: union of the user's groups'
 permissions for the forum, falling back to global rows.
 
 Membership of `everyone` is implicit for every viewer, signed in or not, and
 membership of `members` is implicit for every active user; neither is stored
-as rows. A fresh install seeds global rows granting `members` read,
+as rows, and a trigger refuses such a row. A fresh install seeds global rows granting `members` read,
 create_thread and reply, and granting `everyone` read, which applies only
 where a forum's `visibility` is `public`: a `members` forum ignores the
 `everyone` grant, and a `restricted` forum is readable only through explicit

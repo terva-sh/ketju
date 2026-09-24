@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BYYHGZY39T1F2NGJX8MED
 title: Add the forums, groups, and permissions schema
 type: task
-status: ready
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T07:22:22Z
+updated_at: 2026-09-24T07:43:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -42,10 +42,10 @@ Deliberately phpBB-shaped and small. A nullable forum_id means a global row, and
 
 ## Acceptance criteria
 
-- [ ] The four system groups are seeded by migration and cannot be deleted
-- [ ] Forum nesting deeper than one level is refused at write time
-- [ ] A group_members row records whether it came from an admin or from an IdP claim mapping
-- [ ] The permission set is exactly the five in docs/04, enforced rather than free text
+- [x] The four system groups are seeded by migration and cannot be deleted
+- [x] Forum nesting deeper than one level is refused at write time
+- [x] A group_members row records whether it came from an admin or from an IdP claim mapping
+- [x] The permission set is exactly the five in docs/04, enforced rather than free text
 
 ## Implementation plan
 
@@ -87,3 +87,26 @@ Consumed by C5Y2E (permission evaluation), TKT-01M29CKRF9 (IdP group mapping), T
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:22:22Z
 
 Claimed and released on 2026-09-24 without code. group_members.user_id and added_by reference users, which TKT-01M29BYYH7 creates, and BYYH7's plan declares real foreign keys (REFERENCES, NO ACTION). With foreign_keys=on, a group_members insert before users exists fails, and this plan also reuses BYYH7's TestNoCascadingDeletes. The dependency was missing from the store and is now recorded. BYYH7 goes first.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:43:33Z
+
+### Built, 2026-09-24, against main at e422e22 (after TKT-01M29BYYH7 merged)
+
+Migration `0003_forums_groups.sql` and `queries/forums_groups.sql`.
+
+- **Nesting is one level, enforced by triggers.** On insert, a parent that already has a parent is refused. On an update of parent_id, three cases are refused: the forum as its own parent, a parent that has a parent, and a forum that has children. A table CHECK `parent_id <> id` covers an explicit-id insert that names itself as parent.
+- **System groups.** They are seeded with fixed ids 1–4 (everyone, members, moderators, admins), before the triggers that refuse deleting one, changing its slug or is_system, promoting another group, or inserting a new system row. That makes "exactly four" an invariant, not a starting state. Display names can still change.
+- **group_members.source** is 'admin' or 'idp'. An idp row names no adder (CHECK). `AddIdPMembership` uses ON CONFLICT DO NOTHING, so an IdP mapping never overwrites a row an admin set. `DeleteIdPMemberships` plus re-adds is the login re-evaluation, and admin rows survive it. A trigger refuses rows for everyone and members, which are implicit (docs/04).
+- **Permissions.** CHECK over the five. UNIQUE on `(ifnull(forum_id, 0), group_id, permission)`, because a plain UNIQUE treats NULL global rows as distinct; a mutation showed it. Seeded: members read, create_thread, reply; everyone read, all global.
+- **Go vocabulary in internal/domain:** `Permission` with `AllPermissions`, the group slugs and `SystemGroups`, the visibility values and the membership sources. A test compares domain.AllPermissions with the CHECK list parsed from sqlite_schema.
+- **`PermissionRows(forum_id, group_ids)`** returns the forum's own grants and the global ones, for the given groups only. That is the query TKT-01M29C5Y2E evaluates.
+
+### Found: a sqlc parameter-numbering trap
+`RevokePermission` first mixed `sqlc.narg('forum_id')` with bare `?`. sqlc emitted `forum_id IS ?3 AND group_id = ? AND permission = ?`. SQLite numbers a bare `?` after `?3` as 4, so the arguments bound to the wrong placeholders and the delete silently matched nothing. TestPermissionRowsForAForum caught it. Every parameter in that query is now named, and **`TestQueriesDoNotMixParameterStyles`** fails any query in queries/*.sql that mixes the two styles. Later schema tickets should know this.
+
+### Mutations tried, all caught
+The insert depth trigger disabled; the update trigger ignoring children; system groups deletable; rows for the implicit groups allowed; a plain UNIQUE on nullable forum_id; a sixth permission in the CHECK; an IdP mapping overwriting an admin row; the everyone:read seed dropped. The first attempt at the insert-trigger mutation was itself faulty (it left the trigger in place under another name) and was redone.
+
+## Summary
+
+Migration 0003_forums_groups adds forums, groups, group_members and permissions. Forum nesting is one level, enforced by insert and update triggers. The four system groups are seeded with fixed ids, and triggers keep them from being deleted, re-slugged or unflagged, and stop any other group becoming one. group_members.source is 'admin' or 'idp': IdP re-evaluation replaces only idp rows and never overwrites an admin row, and rows for the implicit everyone and members groups are refused. Permissions are the closed five, unique across NULL global rows through an expression index, and seeded with members read, create_thread and reply and everyone read. internal/domain carries the permission, group, visibility and source vocabulary, tested against the schema. A guard test now refuses sqlc queries that mix named and bare parameters, after that silently broke RevokePermission. docs/04 and docs/05 are updated.

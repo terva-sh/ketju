@@ -10,6 +10,37 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
+type Forum struct {
+	ID          int64
+	ParentID    sql.NullInt64
+	Slug        string
+	Name        string
+	Description string
+	Position    int64
+	Visibility  string
+	Archived    int64
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
+type Group struct {
+	ID          int64
+	Name        string
+	Slug        string
+	Description string
+	IsSystem    int64
+	CreatedAt   int64
+	UpdatedAt   int64
+}
+
+type GroupMember struct {
+	GroupID int64
+	UserID  int64
+	Source  string
+	AddedBy sql.NullInt64
+	AddedAt int64
+}
+
 type Identity struct {
 	ID            int64
 	UserID        sql.NullInt64
@@ -29,6 +60,13 @@ type LocalCredential struct {
 	PasswordHash string
 	CreatedAt    int64
 	UpdatedAt    int64
+}
+
+type Permission struct {
+	ForumID    sql.NullInt64
+	GroupID    int64
+	Permission string
+	CreatedAt  int64
 }
 
 type SchemaMigration struct {

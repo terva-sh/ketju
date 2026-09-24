@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T07:21:49Z
+updated_at: 2026-09-24T07:36:38Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -186,3 +186,7 @@ Merged: TKT-01M29BSPE8 (Decide the pure-Go SQLite driver), PR #48, rebased onto 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:21:49Z
 
 Merged: TKT-01M29BW9Q1 (Build the database access layer and migration runner), PR #49, rebased onto main at 1c605e5f9a3f03edeee4206d68467597a137f363. Gate: CI run 126 succeeded, and its step log shows the new 'generated database code is current' step ran sqlc v1.31.1 with no diff, and internal/store/db passed under -race. The clean Terva review is run 72c6f25a on 1c605e5. Six medium findings over three rounds were all accepted and fixed: 368 (embed pattern, path escaping), 370 (dot and underscore files, blocked checkpoint), 372 (created parent directories, bad migration record). Every review ran; none failed to run. For the next tickets: internal/store/db exposes Open, Read, Write, Migrate, Close and ErrBusy, ErrSchemaNewer, ErrMigrations. Queries go in internal/store/db/queries/*.sql, and schema goes in migrations/NNNN_name.sql, renumbered on rebase if two branches collide. Run CGO_ENABLED=0 go generate ./internal/store/db and commit dbq/. sqlc parses triggers with RAISE, but not FTS5's whole-table MATCH. synchronous=FULL. The draft TKT-01M393S6P7 is a flaky threadlog test that can fail any PR's CI at 1–2%.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:36:38Z
+
+Merged: TKT-01M29BYYH7 (Add the users, identities, and sessions schema), PR #50, rebased onto main at e422e22113dafe542a645d09588bd3c52e5101f7. Gate: CI run 135 succeeded, and its step log shows internal/domain and internal/store/db passing under -race and the regen step clean. The clean Terva review is run 020e43ee on e422e22. Two medium findings were accepted: 374 (embedded NUL in a handle; reproduced and fixed) and 377 (BLOB handle; did not reproduce because substr() of a BLOB never matches the GLOB, so typeof = 'text' was added as hardening). Order change: TKT-01M29BYYHG was claimed first, but group_members references users, so BYYH7 went first and the missing dependency is now recorded. For the next tickets: migration 0002_identity exists, so the next migration is 0003. domain.ValidateHandle is in internal/domain, and sessions use sqltypes.SessionHash. Migration-runner tests use openUnmigrated; schema tests use openTest.

@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T07:43:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -106,3 +106,7 @@ Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with 
 **agent:claude/phase1-groom** at 2026-09-24T05:16:10Z
 
 This corrects the grooming note above. The TTL is 60 s, not 30 s. docs/02 (Read a thread page, step 3) and this ticket's description already said 60 s, and the 30 s in the rewritten criterion came from grooming, not from any decision. The criterion now matches the docs. The part of the earlier rewrite that still stands is the immediate invalidation on writes.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:43:34Z
+
+From TKT-01M29BYYHG (Add the forums, groups, and permissions schema), 2026-09-24: `dbq.PermissionRows(ctx, {ForumID, GroupIds})` returns the forum's own grants and the global rows (forum_id NULL) for the given group ids, forum rows first. The viewer's groups are the stored ones (`GroupsForUser`) plus the implicit ones, which have no rows: everyone (id 1, every viewer) and members (id 2, every active user). Find them by slug through domain.GroupEveryone and domain.GroupMembers. The everyone read grant applies only where forums.visibility = 'public' (docs/04), which evaluation must apply because the row itself does not say it. Admins pass without rows (docs/05). The vocabulary is domain.Permission and domain.AllPermissions.

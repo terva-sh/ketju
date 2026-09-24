@@ -209,7 +209,10 @@ case and for fast checks. Groups carry forum-level permissions (04). An
 admin is implicitly a member of every group. IdP group claims can be mapped
 onto local groups at login (`group_map`), which is how an organization can
 manage moderators from its directory; mapped memberships are re-evaluated on
-every login and marked `source = 'idp'` so manual memberships are not clobbered.
+every login and marked `source = 'idp'` so manual memberships, marked
+`source = 'admin'`, are not clobbered. Re-evaluation deletes the user's `idp`
+rows and re-adds what the claims say now, and an IdP mapping never overwrites a
+row an admin set.
 
 ## Agent accounts
 

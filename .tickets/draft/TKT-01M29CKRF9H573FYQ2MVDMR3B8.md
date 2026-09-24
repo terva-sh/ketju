@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-11T23:24:59Z
+updated_at: 2026-09-24T07:43:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-415af6aa
+  name: ""
 extensions: {}
 ---
 
@@ -46,3 +46,9 @@ Mapped memberships are marked with source `idp` so re-evaluation never clobbers 
 - [ ] A manually added membership survives a login that does not assert it
 - [ ] An unmapped claim value is ignored rather than creating a group
 - [ ] Group changes through mapping are recorded in audit_log
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:43:34Z
+
+From TKT-01M29BYYHG, 2026-09-24: the login re-evaluation is two queries in one db.Write: `DeleteIdPMemberships(userID)`, then `AddIdPMembership` for each mapped group. AddIdPMembership is ON CONFLICT DO NOTHING, so a group the user is already in because an admin put them there keeps source 'admin'. Rows for everyone and members are refused by a trigger, so do not map claims onto them.
