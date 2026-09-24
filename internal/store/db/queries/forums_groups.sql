@@ -72,3 +72,9 @@ SELECT forum_id, group_id, permission FROM permissions
 WHERE (forum_id = CAST(sqlc.arg('forum_id') AS INTEGER) OR forum_id IS NULL)
   AND group_id IN (sqlc.slice('group_ids'))
 ORDER BY forum_id IS NULL, group_id, permission;
+
+-- name: RemoveMembership :exec
+DELETE FROM group_members WHERE group_id = ? AND user_id = ?;
+
+-- name: SetForumVisibility :exec
+UPDATE forums SET visibility = ?, updated_at = ? WHERE id = ?;

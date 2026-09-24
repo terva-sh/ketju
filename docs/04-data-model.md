@@ -149,6 +149,21 @@ UNIQUE (ifnull(forum_id, 0), group_id, permission)
 Small, explicit, phpBB-like. Evaluation: union of the user's groups'
 permissions for the forum, falling back to global rows.
 
+The fallback is per group: a group with any row on the forum is governed by
+those rows alone, and a group with none there uses its global rows, whatever
+other groups have on the forum. A per-forum reading, where any row on a forum
+silences every global row, lost because granting one extra group on a forum
+would then quietly revoke the members default there. `role = 'moderator'`
+grants `moderate` on every forum the user can see and implies nothing about
+the `moderators` group, which grants per forum through rows like any other.
+A viewer whose status is not `active` is evaluated as anonymous, whatever
+their role. Evaluation lives in `internal/perm` (TKT-01M29C5Y2E), which also
+owns every write that can change a decision so that the 60 s cache (02) is
+invalidated when they commit; a check answers Allow, Deny (403), or Hidden
+(404). A `restricted` forum without `read`, and a forum that does not exist,
+are Hidden, so a forum's existence does not leak. What `archived` does to a
+forum's permissions is not decided; evaluation ignores it for now.
+
 Membership of `everyone` is implicit for every viewer, signed in or not, and
 membership of `members` is implicit for every active user; neither is stored
 as rows, and a trigger refuses such a row. A fresh install seeds global rows granting `members` read,

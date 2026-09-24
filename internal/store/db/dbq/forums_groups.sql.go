@@ -356,6 +356,20 @@ func (q *Queries) PermissionRows(ctx context.Context, arg PermissionRowsParams) 
 	return items, nil
 }
 
+const removeMembership = `-- name: RemoveMembership :exec
+DELETE FROM group_members WHERE group_id = ? AND user_id = ?
+`
+
+type RemoveMembershipParams struct {
+	GroupID int64
+	UserID  int64
+}
+
+func (q *Queries) RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error {
+	_, err := q.db.ExecContext(ctx, removeMembership, arg.GroupID, arg.UserID)
+	return err
+}
+
 const revokePermission = `-- name: RevokePermission :exec
 DELETE FROM permissions
 WHERE forum_id IS ?1
@@ -388,5 +402,20 @@ type SetForumParentParams struct {
 
 func (q *Queries) SetForumParent(ctx context.Context, arg SetForumParentParams) error {
 	_, err := q.db.ExecContext(ctx, setForumParent, arg.ParentID, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const setForumVisibility = `-- name: SetForumVisibility :exec
+UPDATE forums SET visibility = ?, updated_at = ? WHERE id = ?
+`
+
+type SetForumVisibilityParams struct {
+	Visibility string
+	UpdatedAt  int64
+	ID         int64
+}
+
+func (q *Queries) SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error {
+	_, err := q.db.ExecContext(ctx, setForumVisibility, arg.Visibility, arg.UpdatedAt, arg.ID)
 	return err
 }

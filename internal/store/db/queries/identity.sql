@@ -36,3 +36,6 @@ DELETE FROM sessions WHERE id_hash = ?;
 
 -- name: DeleteUserSessions :exec
 DELETE FROM sessions WHERE user_id = ?;
+
+-- name: SetUserRole :exec
+UPDATE users SET role = ?, updated_at = ? WHERE id = ?;

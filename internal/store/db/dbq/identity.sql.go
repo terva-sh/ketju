@@ -237,6 +237,21 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 	return i, err
 }
 
+const setUserRole = `-- name: SetUserRole :exec
+UPDATE users SET role = ?, updated_at = ? WHERE id = ?
+`
+
+type SetUserRoleParams struct {
+	Role      string
+	UpdatedAt int64
+	ID        int64
+}
+
+func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error {
+	_, err := q.db.ExecContext(ctx, setUserRole, arg.Role, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const touchSession = `-- name: TouchSession :exec
 UPDATE sessions SET last_used_at = ? WHERE id_hash = ?
 `

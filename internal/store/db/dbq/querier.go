@@ -48,10 +48,13 @@ type Querier interface {
 	// The rows permission evaluation (TKT-01M29C5Y2E) needs for one forum: the
 	// forum's own grants and the global ones, for the viewer's groups.
 	PermissionRows(ctx context.Context, arg PermissionRowsParams) ([]PermissionRowsRow, error)
+	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
 	// IS rather than =, so a null forum_id matches the global row. Every
 	// parameter is named: see TestQueriesDoNotMixParameterStyles.
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
+	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
+	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
 }
 

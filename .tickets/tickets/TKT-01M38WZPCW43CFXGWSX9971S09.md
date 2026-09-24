@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T07:36:38Z
+updated_at: 2026-09-24T07:57:27Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -190,3 +190,7 @@ Merged: TKT-01M29BW9Q1 (Build the database access layer and migration runner), P
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:36:38Z
 
 Merged: TKT-01M29BYYH7 (Add the users, identities, and sessions schema), PR #50, rebased onto main at e422e22113dafe542a645d09588bd3c52e5101f7. Gate: CI run 135 succeeded, and its step log shows internal/domain and internal/store/db passing under -race and the regen step clean. The clean Terva review is run 020e43ee on e422e22. Two medium findings were accepted: 374 (embedded NUL in a handle; reproduced and fixed) and 377 (BLOB handle; did not reproduce because substr() of a BLOB never matches the GLOB, so typeof = 'text' was added as hardening). Order change: TKT-01M29BYYHG was claimed first, but group_members references users, so BYYH7 went first and the missing dependency is now recorded. For the next tickets: migration 0002_identity exists, so the next migration is 0003. domain.ValidateHandle is in internal/domain, and sessions use sqltypes.SessionHash. Migration-runner tests use openUnmigrated; schema tests use openTest.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:57:27Z
+
+Merged: TKT-01M29BYYHG (Add the forums, groups, and permissions schema), PR #51, rebased onto main at 3340bc14e2471aad6e4774c9f7c6d6761ac59c4c. Gate: CI run 148 had all 16 steps succeed, internal/domain and internal/store/db passed under -race, and the regen step ran sqlc v1.31.1 with no diff. The clean Terva review is run 0f113922 on 3340bc1. Five medium findings over four rounds were all accepted and fixed: 378 (update into implicit groups; system group ids), 379 (forum id 0 colliding with the global-grant sentinel), 380 (an admin taking over an IdP membership), 381 (root forum ordering). Every review ran. For the next tickets: migration 0003 exists, so the next is 0004. Group ids 1–4 are everyone, members, moderators and admins. PermissionRows(forum, groups) is the evaluation query. TestQueriesDoNotMixParameterStyles refuses sqlc queries that mix sqlc.arg with a bare ?; name every parameter when using sqlc.arg.
