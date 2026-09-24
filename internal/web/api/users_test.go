@@ -120,6 +120,10 @@ func TestSuggestionLimit(t *testing.T) {
 		want  int
 	}{
 		{"prefix=u", 8}, {"prefix=u&limit=1", 1}, {"prefix=u&limit=20", 20}, {"prefix=u&limit=100", 20},
+		// Past 32 and 64 bits a positive integer is still capped, not
+		// refused (review 524).
+		{"prefix=u&limit=2147483648", 20}, {"prefix=u&limit=18446744073709551616", 20},
+		{"prefix=u&limit=" + strings.Repeat("9", 40), 20},
 	} {
 		if got := decode[dto.UserSuggestions](t, suggest(h, "carol", c.query)); len(got.Users) != c.want ||
 			got.Users[0].Handle != "u00" {
@@ -152,6 +156,10 @@ func TestSuggestionsNeedAMember(t *testing.T) {
 		{"carol", "prefix=al&limit=-1", problem.CodeBadRequest},
 		{"carol", "prefix=al&limit=", problem.CodeBadRequest},
 		{"carol", "prefix=al&limit=two", problem.CodeBadRequest},
+		{"carol", "prefix=al&limit=%2B3", problem.CodeBadRequest},
+		{"carol", "prefix=al&limit=000", problem.CodeBadRequest},
+		{"carol", "prefix=al&limit=3.0", problem.CodeBadRequest},
+		{"carol", "prefix=al&limit=" + strings.Repeat("9", 40) + "x", problem.CodeBadRequest},
 	} {
 		rec := suggest(h, c.who, c.query)
 		if got := problemCode(t, rec); got != string(c.want) {

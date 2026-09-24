@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:17:53Z
-updated_at: 2026-09-24T21:57:27Z
+updated_at: 2026-09-24T22:02:49Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -117,6 +117,10 @@ POST /render, from PR #74 / TKT-01M29CA9D4, had the same ordering: it parsed the
 - Non-members with malformed queries or bodies get 401/403 through `web.New`.
 - Service-level refusal tests.
 - Mutants: dropping either handler's early check, either service's own check, or any `Require` branch is killed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T22:02:49Z
+
+Review 524 (head 20d127f, Actions run 369) resolved review 522's finding. It raised one low finding: "Cap large positive limits instead of rejecting them". limit=2147483648 was 400, because the parse was 32-bit. **Accepted and fixed** even though low does not block, because the answer was plainly wrong. The limit is now checked as digits, with no sign and not all zeros, and then parsed as uint64. A value past uint64 comes back as the largest uint64 and is capped to 20 like any other. Tests cover 2^31, 2^64, 40 nines, '+3', '3.0', '000', and 40 nines followed by x.
 
 ## Summary
 
