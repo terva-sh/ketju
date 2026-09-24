@@ -20,6 +20,9 @@ dependencies:
   - TKT-01M29C0WF04HEBYMB9DXCB9WCB
   - TKT-01M29C5Y2EVNCBADSQYW12F01D
   - TKT-01M29BW9NWKJGM3ZQ2DJH8WPWH
+  - TKT-01M29BYYJ87H5ERS3RXC66XF44
+  - TKT-01M29C2WW5N8TR3V76VEB3TGK7
+  - TKT-01M29BYYHQ7PTYNYA3VBBD4PDB
 blocks_on: none
 references:
   - ref: design:api-thread-shape
@@ -27,12 +30,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T08:17:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -99,3 +102,7 @@ Settled during Phase 1 grooming (2026-09-24), and written into docs/07 in this t
 2. The permalink criterion uses ?ordinal=N, which resolves to that ordinal's page.
 3. The ETag also includes the viewer class (anonymous, member, moderator) and the viewer's read position. Otherwise a 304 could hand a moderator a member's cached page, or serve a stale divider.
 4. after_log_length does not report deletes and restores, because those change posts at or before that point. The SSE client refetches the page on a moderation event instead.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:17:43Z
+
+Released at claim (2026-09-24): the ticket was missing three dependencies, so it is not blocked. The thread header (slug, title, locked, pinned, tags, current forum) exists only in the threads projection, which is what docs/04 and this ticket's own plan read. The index carries no thread-level state, and nothing in threadlog folds those records. The projection is TKT-01M29BYYJ8 (tables) plus TKT-01M29C2WW5 (the writer that fills them). The viewer block reads read_positions and watches from TKT-01M29BYYHQ. All three are now recorded as dependencies, and docs/11 already routes the data track through the projection writer ahead of this ticket. Reading the header by scanning the log per request lost, because it would put a second fold of the thread records beside the projection writer's, and the two would drift. The run takes those three first.
