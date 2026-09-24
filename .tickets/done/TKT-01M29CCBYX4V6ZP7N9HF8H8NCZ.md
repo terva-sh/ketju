@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T17:54:35Z
+updated_at: 2026-09-24T18:14:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -130,6 +130,17 @@ Mutation check: 13 of 13 serve mutants killed. They drop or reorder:
 - KETJU_CONFIG and the bus drain;
 - the relative data_dir.
 Three survived the first run and each gained a test: cache.Close (the ErrClosed check), srv.Close (the drain test now requires the blocked request to be cut), and the quarantine wiring (TestServeQuarantinesACorruptThread). An earlier test-harness bug cost 20 s per test and was fixed; the serve tests take about 3 s under -race.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T18:14:01Z
+
+Answered review 470 on PR #69 (head aa18704).
+
+- **High, the projection runner.** Shutdown cancelled the runner but closed the thread cache and the database without waiting for it. The runner now has its own closer, "stop projection", which cancels it and waits for it to return, up to 5 s; past that it reports an error rather than hanging. The closer is pushed before the bus's, so the order at shutdown is: the bus delivers what is queued, then the runner stops, then the stores close. The first placement put the runner's closer after the bus's, which would have cancelled the bus's deliveries mid-drain; it was caught while reordering.
+- **Medium, listener errors.** A non-timeout error from srv.Shutdown, or an error from the srv.Close fallback, is now returned, joined with the closers' errors, and the closers still run. The Shutdown error path has no test. Nothing a test can arrange makes net/http's Shutdown fail except by deadline, so its mutant is listed as untestable, not as killed.
+
+Test: TestShutdownWaitsForTheProjectionRunner holds the runner back 200 ms as it returns and checks that the cache was not closed first. The step order in TestStartupOrderAndShutdown now includes "stop projection" after "close bus".
+
+Mutation check: 14 of 14 killed, including making the wait not wait and dropping the srv.Close error. CI run 316 on aa18704 passed.
 
 ## Summary
 

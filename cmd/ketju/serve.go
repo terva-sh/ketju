@@ -86,6 +86,10 @@ type serveOpts struct {
 	// threads is handed the thread cache once it is open, so a test can
 	// append through the same actors serve will flush.
 	threads func(*threadcache.Cache)
+
+	// runReturned is called as the projection runner returns, which is how
+	// a test holds it back to see that shutdown waits for it.
+	runReturned func()
 }
 
 func runServe(args []string) error {
@@ -263,6 +267,29 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	if err != nil {
 		return fail("catching up the projection", err)
 	}
+	// The runner's retries use the cache and the database, so shutdown waits
+	// for it to return before closing either (review 470). Its closer is
+	// pushed before the bus's, so it runs after: the bus delivers what is
+	// queued under the run context first, and only then is that cancelled.
+	ran := make(chan struct{})
+	go func() {
+		defer close(ran)
+		proj.Run(run)
+		if o.runReturned != nil {
+			o.runReturned()
+		}
+	}()
+	closers = append(closers, func() error {
+		step("stop projection")
+		stopRun()
+		select {
+		case <-ran:
+			return nil
+		case <-time.After(busDrain):
+			return fmt.Errorf("serve: the projection runner did not stop within %s; "+
+				"closing the store under it", busDrain)
+		}
+	})
 	if err := bus.Start(run); err != nil {
 		return fail("starting the event bus", err)
 	}
@@ -276,7 +303,6 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		stopRun()
 		return err
 	})
-	go proj.Run(run)
 
 	step("listener")
 	perms := perm.New(d)
@@ -332,14 +358,19 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	step("drain")
 	dctx, cancel := context.WithTimeout(context.Background(), drain)
 	defer cancel()
+	// A failure here is returned, joined with anything the closers report,
+	// and the closers still run: the actors flush whatever the listener did
+	// (review 470).
 	switch err := srv.Shutdown(dctx); {
 	case errors.Is(err, context.DeadlineExceeded):
 		// Requests still running past the drain are cut. The shutdown goes
 		// on: the actors still flush, which is what a restart needs.
 		log.Warn("requests still running after the drain; closing them", "drain", drain)
-		srv.Close()
+		if cerr := srv.Close(); cerr != nil {
+			return fail("closing the listener after the drain", cerr)
+		}
 	case err != nil:
-		log.Error("shutting the listener down", "err", err)
+		return fail("shutting the listener down", err)
 	default:
 		log.Info("requests drained")
 	}

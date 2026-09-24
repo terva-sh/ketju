@@ -250,7 +250,7 @@ func TestStartupOrderAndShutdown(t *testing.T) {
 		t.Fatalf("shutdown: %v\n%s", err, r.log)
 	}
 	want := []string{"config", "lock", "database", "stores", "subscribers", "catch-up", "listener",
-		"drain", "close bus", "close threads", "close database", "release lock"}
+		"drain", "close bus", "stop projection", "close threads", "close database", "release lock"}
 	if got := r.steps(); !slices.Equal(got, want) {
 		t.Errorf("steps = %v\nwant    %v", got, want)
 	}
@@ -635,5 +635,24 @@ func TestServeQuarantinesACorruptThread(t *testing.T) {
 	}
 	if code, body := get(t, "http://"+r.addr+"/api/v1/threads/"+good.String()); code != http.StatusOK {
 		t.Errorf("an unaffected thread = %d: %s", code, body)
+	}
+}
+
+// Shutdown waits for the projection runner to return before it closes the
+// thread cache and the database the runner's retries use (review 470). The
+// runner is held back a moment as it returns; nothing is closed under it.
+func TestShutdownWaitsForTheProjectionRunner(t *testing.T) {
+	path, _ := writeConfig(t, "")
+	var r *running
+	early := make(chan bool, 1)
+	r = start(t, path, serveOpts{runReturned: func() {
+		time.Sleep(200 * time.Millisecond)
+		early <- slices.Contains(r.steps(), "close threads")
+	}})
+	if err := r.shutdown(t); err != nil {
+		t.Fatalf("shutdown: %v\n%s", err, r.log)
+	}
+	if <-early {
+		t.Error("the thread cache was closed while the projection runner was still running")
 	}
 }
