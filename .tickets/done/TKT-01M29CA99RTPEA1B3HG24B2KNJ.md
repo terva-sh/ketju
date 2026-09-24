@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T12:00:12Z
+updated_at: 2026-09-24T12:19:02Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -43,7 +43,7 @@ That inlining is why the response has to be cheap and free of anything expensive
 
 ## Acceptance criteria
 
-- [ ] Returns the documented shape for an anonymous viewer, a member, a moderator, and a pre-user session
+- [x] Returns the documented shape for an anonymous viewer, a member, a moderator, and a pre-user session
 - [x] Counts come from projections rather than being computed from logs
 - [x] The handler issues at most 2 SQL queries per request, asserted by a test that counts them, so it can be inlined on every shell render
 
@@ -90,6 +90,13 @@ Revised at claim (2026-09-24), after reading the code as it stands: the session 
   - participation counts;
   - the page_size bounds;
   - the shell inlines a member's Me, escaped, with the nonce.
+
+### Settled in grooming (2026-09-24)
+
+Restored verbatim from the groomed plan. The claim-time `git ticket plan` replaced the whole Implementation plan section, and this sub-section went with it. The work above contradicted it until review 408 caught that; see the note answering that review.
+
+- A pre-user session gets `user: null` plus a separate `pre_user` object. A null user stays the only signed-out signal. Document it in docs/07 with a golden test.
+- The 2-query budget covers the handler. The session middleware's single lookup is outside it.
 
 ## Notes
 
@@ -140,6 +147,56 @@ Built and verified.
   The survivor, dropping `level = 'watch'` from the watching test, is equivalent: a muted thread is already excluded from every count. The filter stays for clarity.
 - The full CI set passes locally: gofmt, build, vet, sqlc stable, and `go test -race ./...`.
 
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:19:02Z
+
+Review 408 (1 high, 2 medium; all three addressed).
+
+### How the settled section was lost
+The groomed plan had a "Settled in grooming" sub-section inside the Implementation plan. The claim-time `git ticket plan` replaces that whole section, so it went with it. I planned and built against the ticket's older open item, which said the pre-user shape was undecided, not against the settlement. Both settled decisions are now back in the plan, verbatim.
+
+Lesson for the next claimant of a groomed ticket: read the plan section before running `git ticket plan`, and carry forward anything under "Settled".
+
+### (1) High: pre_user marker (fixed, per the settlement)
+- `dto.Me` gains `pre_user`: null for everyone but an applicant, and `{provider}` for a pre-user session. `user` stays null for them, so a null user is still the one signed-out signal.
+- The provider is the session's `oidc_provider_key`, now returned by `LookupSession`.
+- It is documented in docs/07's /me row. There is a new golden, `me.pre_user.json`, and the other three /me goldens gained `"pre_user": null`.
+- The client's `Me` type and `anonymous` value carry the field, and dist is rebuilt.
+- `TestMeShapes` asserts the pre-user shape end to end.
+- A suspended user still gets the anonymous shape.
+- AC1 is now ticked.
+
+### (2) Medium: MeCounts examined every thread (fixed and measured)
+- The ticket said to "measure at 10k threads before adding a counter table", and `BenchmarkMeCounts` now does. The dataset is 10,000 threads in 20 forums, about 100k posts, a heavy reader (2,000 read positions, around 300 posts, 50 watches, 20 mutes, a mark set) and a light reader (20 read positions, no mark).
+- The old query did per-row joins across every thread whoever asked: 9.9 ms for the heavy reader, 14.7 ms for the light one.
+- **The rewrite has one site-sized part:** a per-forum count of threads with a post after the mark, all of which are unread to someone who never opened them.
+- **Everything viewer-specific starts from the viewer's own rows** (read positions, watches, their posts) and subtracts from that count, restricted to threads after the mark. Cost therefore grows with what they have touched, not with the site.
+- **Result: 5.8 ms for the heavy reader and 4.2 ms for the light one.** This is SQLite under wazero (ncruces), at roughly 1.5 µs per row step; the query plans use an index at every join.
+- **What remains is not zero.** The site-wide count reads the threads table (2.2 ms at 10k). A covering index on `threads (forum_id, last_post_at, last_post_ordinal)` would make it index-only (0.8 ms measured without the ordinal test), and a per-user counter table would remove it entirely. Both are new schema, beyond this ticket, and I filed neither: at 4–6 ms on the page-load path this is not urgent, and the benchmark is here for whoever revisits it.
+- **Correctness:** `TestThreadRuleMatchesPostRule` now covers every count, not just the thread count, and threads now share forums. It runs 60 random datasets with read positions, marks, ties in time, zero-post threads, watches, mutes and authorship. Each forum's threads, participated and watching counts are compared with `UnreadCount` and the reader's own rows. Sharing forums matters: two mutants (dropping the after-mark filter, and treating zero-post threads as active) survived while every thread had a forum of its own, and both are killed now.
+
+### (3) Medium: budget exceeded on a cold perm cache (fixed within the settled budget)
+- Per the settlement, the budget is the handler's two statements, with the middleware's lookup outside it.
+- `perm.Evaluator.CanEach` evaluates every forum not yet in the viewer's cache in one statement, however many there are: `ForumAccessRows`, which returns each forum's visibility with every permission row a group of the viewer's holds there or globally. perm's rules are still applied in Go.
+- `evaluate` (one forum, used by Check) now goes through the same code, so the rules exist once.
+- The old one-forum evaluation is kept in the test file as `referenceEvaluate`. `TestCanEachAgreesWithCheck` holds the batch to it, and to Check, cold and warm, over 8 random worlds: forums of every visibility, global and local grants, group memberships, and anonymous, member, moderator, admin and inactive viewers.
+- `TestCanEachColdCostIsFixed` shows one statement for one forum or twenty, and none when warm. `TestCanEachDoesNotCacheMissing` checks that a forum which does not exist yet is not remembered as missing, as Check guarantees.
+- **The budget test, by statement name:**
+  - member /me cold: `LookupSession`, `MeCounts`, `ForumAccessRows`, so the handler runs 2;
+  - member /me warm, and the member shell: `LookupSession`, `MeCounts`;
+  - anonymous: nothing.
+- **Two things are not counted, and the test says so:**
+  - pool connection setup (`PRAGMA`);
+  - perm finding its implicit groups, once per process: the test warms that with another viewer first, so alice's first request is a truly cold per-viewer cache on a running server.
+- A due session touch adds the middleware's rate-limited `TouchSession`, and `TestMeBudgetWhenTouchIsDue` pins the sequence.
+- A `sqlc` pitfall hit on the way: a named argument placed after an expanded slice gets a number that points at the wrong value. The query puts `user_id` first and says why.
+
+### Mutation on this round
+All killed except those stated as equivalent:
+- **MeCounts (14):** the mark and ordinal tests, the subtraction, the mute exclusion, each branch of the touched union, the after-mark filter, the zero-post rule, the mark default, the perm filter, and pre_user on and off. Equivalent: `watched` from any watch level (a muted thread is never unread), and the `> 0` row filter (it changes which forums reach perm, not the counts).
+- **perm (13):** the members-forum exclusion of everyone, the local-over-global rule, restricted with no fallback, hidden, the members group and the user id, caching a missing forum, the per-permission answer, global rows, and the membership filter.
+
+The full CI set passes locally: gofmt, build, vet, sqlc stable, the client build and tests, `go test -race ./...`, and `git ticket check --strict`.
+
 ## Summary
 
-GET /api/v1/me returns the viewer's user, unread counts (threads, participated, watching), unread notifications and settings. It uses two statements for a member, the session lookup and one MeCounts query, filtered through perm's cache; anonymous uses none. api.ShellPage inlines the same value into the shell's bootstrap block. A pre-user or suspended session gets the anonymous shape, and AC1's pre-user clause stays open until TKT-01M29CKRG9 decides whether a marker is needed. A request whose session touch is due (at most once per 5 minutes) adds that rate-limited write. db.Options.Trace lets tests count statements.
+GET /api/v1/me returns the viewer's user, unread counts (threads, participated, watching), unread notifications and settings. An approval-mode applicant gets user null plus pre_user {provider}, as settled, with a golden and docs/07. The handler runs at most two statements, as settled: MeCounts, plus perm's one-statement batch (CanEach) when its cache is cold. The middleware's session lookup is outside that. MeCounts reads only a per-forum count across the site and otherwise the viewer's own rows: 4-6 ms at 10k threads, against 10-15 ms before. api.ShellPage inlines the same value into the shell. db.Options.Trace lets tests count statements.

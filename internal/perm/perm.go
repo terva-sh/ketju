@@ -40,7 +40,6 @@ package perm
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -178,6 +177,80 @@ func (e *Evaluator) Can(ctx context.Context, v domain.Viewer, forumID int64, p d
 	return d == Allow, err
 }
 
+// CanEach reports, for each forum, whether Check would Allow v to do p there.
+// Forums already in v's cache cost nothing; the rest are evaluated together,
+// in one statement however many there are, and cached as Check would cache
+// them. GET /me asks about every forum with unread threads on
+// every page load, and one evaluation per forum on a cold cache would make
+// its cost grow with the number of forums.
+func (e *Evaluator) CanEach(ctx context.Context, v domain.Viewer, forumIDs []int64, p domain.Permission) (map[int64]bool, error) {
+	if !v.Member() {
+		v = domain.Anonymous()
+	}
+	out := make(map[int64]bool, len(forumIDs))
+	if v.Role == domain.RoleAdmin {
+		for _, id := range forumIDs {
+			out[id] = true
+		}
+		return out, nil
+	}
+	key := cacheKey{session: v.SessionKey, user: v.UserID, role: v.Role, active: v.Active}
+	gen := e.gen.Load()
+	now := e.now()
+	var misses []int64
+	e.mu.Lock()
+	ent := e.entries[key]
+	if ent != nil && (ent.gen != gen || !now.Before(ent.expires)) {
+		delete(e.entries, key)
+		ent = nil
+	}
+	for _, id := range forumIDs {
+		if a, ok := ent.lookup(id); ok {
+			out[id] = !a.hidden && a.perms[p]
+		} else {
+			misses = append(misses, id)
+		}
+	}
+	e.mu.Unlock()
+	if len(misses) == 0 {
+		return out, nil
+	}
+
+	evaluated, err := e.evaluateMany(ctx, v, misses)
+	if err != nil {
+		return nil, err
+	}
+	for id, a := range evaluated {
+		out[id] = !a.hidden && a.perms[p]
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if gen != e.gen.Load() {
+		return out, nil // invalidated while evaluating: answer, but do not cache
+	}
+	ent = e.entries[key]
+	if ent == nil || ent.gen != gen || !now.Before(ent.expires) {
+		e.sweepLocked(now)
+		ent = &entry{gen: gen, expires: now.Add(TTL), forums: make(map[int64]access)}
+		e.entries[key] = ent
+	}
+	for id, a := range evaluated {
+		if !a.missing {
+			ent.forums[id] = a
+		}
+	}
+	return out, nil
+}
+
+func (ent *entry) lookup(forumID int64) (access, bool) {
+	if ent == nil {
+		return access{}, false
+	}
+	a, ok := ent.forums[forumID]
+	return a, ok
+}
+
 // ReadableForums lists the forums v may read, in ListForums order.
 func (e *Evaluator) ReadableForums(ctx context.Context, v domain.Viewer) ([]int64, error) {
 	var forums []dbq.Forum
@@ -271,77 +344,109 @@ func (e *Evaluator) sweepLocked(now time.Time) {
 
 // evaluate computes access from the database, with no cache.
 func (e *Evaluator) evaluate(ctx context.Context, v domain.Viewer, forumID int64) (access, error) {
+	m, err := e.evaluateMany(ctx, v, []int64{forumID})
+	return m[forumID], err
+}
+
+// evaluateMany evaluates several forums for v at once, in one statement
+// however many forums are asked about: ForumAccessRows returns each forum's
+// visibility with every permission row a group of v's holds there or
+// globally, and the rules below are applied to those rows. A forum that does
+// not exist comes back hidden and missing.
+//
+// evaluate is this for one forum, so the rules exist once.
+func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs []int64) (map[int64]access, error) {
 	if err := e.loadImplicit(ctx); err != nil {
-		return access{}, err
+		return nil, err
 	}
-	a := access{perms: make(map[domain.Permission]bool)}
-	err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
-		forum, err := q.GetForum(ctx, forumID)
-		if errors.Is(err, sql.ErrNoRows) {
-			a.hidden, a.missing = true, true
-			return nil
-		}
-		if err != nil {
-			return err
-		}
+	out := make(map[int64]access, len(forumIDs))
+	for _, id := range forumIDs {
+		out[id] = access{hidden: true, missing: true}
+	}
+	implicit := []int64{e.everyoneID}
+	var userID int64
+	if v.Member() {
+		implicit = append(implicit, e.membersID)
+		userID = v.UserID
+	}
+	var rows []dbq.ForumAccessRowsRow
+	if err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		rows, err = q.ForumAccessRows(ctx, dbq.ForumAccessRowsParams{ImplicitGroups: implicit, UserID: userID,
+			ForumIds: forumIDs})
+		return err
+	}); err != nil {
+		return nil, err
+	}
 
-		groups := []int64{e.everyoneID}
-		if v.Member() {
-			groups = append(groups, e.membersID)
-			stored, err := q.GroupsForUser(ctx, v.UserID)
-			if err != nil {
-				return err
-			}
-			for _, g := range stored {
-				groups = append(groups, g.GroupID)
-			}
+	type forum struct {
+		visibility string
+		// local[group] and global[group]: what each group of v's is granted
+		// in this forum, and site-wide.
+		local, global map[int64][]domain.Permission
+	}
+	forums := map[int64]*forum{}
+	var order []int64
+	for _, r := range rows {
+		f := forums[r.ForumID]
+		if f == nil {
+			f = &forum{visibility: r.Visibility, local: map[int64][]domain.Permission{}, global: map[int64][]domain.Permission{}}
+			forums[r.ForumID] = f
+			order = append(order, r.ForumID)
 		}
+		if !r.GroupID.Valid {
+			continue
+		}
+		if r.GrantForumID.Valid {
+			f.local[r.GroupID.Int64] = append(f.local[r.GroupID.Int64], domain.Permission(r.Permission.String))
+		} else {
+			f.global[r.GroupID.Int64] = append(f.global[r.GroupID.Int64], domain.Permission(r.Permission.String))
+		}
+	}
 
-		restricted := false
-		switch forum.Visibility {
+	for _, id := range order {
+		f := forums[id]
+		a := access{perms: make(map[domain.Permission]bool)}
+		restricted, noEveryone := false, false
+		switch f.visibility {
 		case domain.VisibilityPublic:
 		case domain.VisibilityMembers:
 			// The everyone grant does not reach a members forum, and an
 			// anonymous viewer has no other group.
-			groups = without(groups, e.everyoneID)
+			noEveryone = true
 		case domain.VisibilityRestricted:
 			restricted = true
 		default:
-			return fmt.Errorf("perm: forum %d has unknown visibility %q", forumID, forum.Visibility)
+			return nil, fmt.Errorf("perm: forum %d has unknown visibility %q", id, f.visibility)
 		}
-
-		if len(groups) > 0 {
-			rows, err := q.PermissionRows(ctx, dbq.PermissionRowsParams{ForumID: forumID, GroupIds: groups})
-			if err != nil {
-				return err
+		// Every group v is in that holds a row here or globally; a group with
+		// no rows grants nothing either way.
+		groups := map[int64]bool{}
+		for g := range f.local {
+			groups[g] = true
+		}
+		for g := range f.global {
+			groups[g] = true
+		}
+		for g := range groups {
+			if noEveryone && g == e.everyoneID {
+				continue
 			}
-			local := map[int64][]domain.Permission{}
-			global := map[int64][]domain.Permission{}
-			for _, r := range rows {
-				if r.ForumID.Valid {
-					local[r.GroupID] = append(local[r.GroupID], domain.Permission(r.Permission))
-				} else {
-					global[r.GroupID] = append(global[r.GroupID], domain.Permission(r.Permission))
-				}
+			granted, ok := f.local[g]
+			if !ok && !restricted {
+				granted = f.global[g]
 			}
-			for _, g := range groups {
-				granted, ok := local[g]
-				if !ok && !restricted {
-					granted = global[g]
-				}
-				for _, p := range granted {
-					a.perms[p] = true
-				}
+			for _, p := range granted {
+				a.perms[p] = true
 			}
 		}
-
 		if v.Member() && v.Role == domain.RoleModerator {
 			a.perms[domain.PermModerate] = true
 		}
 		a.hidden = restricted && !a.perms[domain.PermRead]
-		return nil
-	})
-	return a, err
+		out[id] = a
+	}
+	return out, nil
 }
 
 // loadImplicit finds the ids of the implicit groups by slug. The seed gives

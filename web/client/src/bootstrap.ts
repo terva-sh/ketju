@@ -12,6 +12,8 @@ export interface Author {
 
 export interface Me {
   user: Author | null;
+  // Set only for an approval-mode applicant, whose user is still null.
+  pre_user: { provider: string } | null;
   unread: { threads: number; participated: number; watching: number };
   notifications: number;
   settings: { timezone: string; locale: string; page_size: number };
@@ -19,6 +21,7 @@ export interface Me {
 
 export const anonymous: Me = {
   user: null,
+  pre_user: null,
   unread: { threads: 0, participated: 0, watching: 0 },
   notifications: 0,
   settings: { timezone: '', locale: '', page_size: 25 },

@@ -45,7 +45,13 @@ func (c *fakeClock) advance(d time.Duration) {
 
 func newFixture(t testing.TB) *fixture {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
+	return newFixtureWith(t, nil)
+}
+
+// newFixtureWith is newFixture with SQLite's statement trace going to trace.
+func newFixtureWith(t testing.TB, trace func(string)) *fixture {
+	t.Helper()
+	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db"), Trace: trace})
 	if err != nil {
 		t.Fatal(err)
 	}

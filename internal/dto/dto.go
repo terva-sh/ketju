@@ -332,8 +332,22 @@ type Settings struct {
 type Me struct {
 	// User is nil for an anonymous viewer. That is the whole of how a client
 	// learns it is signed out; there is no separate boolean to disagree with.
-	User          *Author      `json:"user"`
+	User *Author `json:"user"`
+	// PreUser is set only for an approval-mode applicant: signed in with an
+	// identity, with no user yet (docs/05). User stays nil for them, so a
+	// null user is still the one signed-out signal and a client that knows
+	// nothing of applicants treats them as signed out, which is what they
+	// are everywhere but the application flow (settled in grooming for
+	// TKT-01M29CA99R).
+	PreUser       *PreUser     `json:"pre_user"`
 	Unread        UnreadCounts `json:"unread"`
 	Notifications int          `json:"notifications"`
 	Settings      Settings     `json:"settings"`
+}
+
+// PreUser is what /me says about an applicant's session.
+type PreUser struct {
+	// Provider is the configured key of the identity provider they signed in
+	// with, so the status page can say which account the application is for.
+	Provider string `json:"provider"`
 }

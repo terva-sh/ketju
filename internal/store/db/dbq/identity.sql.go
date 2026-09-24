@@ -286,6 +286,7 @@ func (q *Queries) ListUserSessions(ctx context.Context, userID sql.NullInt64) ([
 
 const lookupSession = `-- name: LookupSession :one
 SELECT s.id_hash, s.user_id, s.identity_id, s.kind, s.created_at, s.expires_at, s.last_used_at,
+       s.oidc_provider_key,
        u.handle, u.display_name, u.avatar_blob, u.status, u.role, u.kind AS user_kind,
        u.timezone, u.locale, u.prefs_json, u.mark_all_read_at
 FROM sessions s
@@ -302,23 +303,24 @@ type LookupSessionParams struct {
 }
 
 type LookupSessionRow struct {
-	IDHash        sqltypes.SessionHash
-	UserID        sql.NullInt64
-	IdentityID    sql.NullInt64
-	Kind          string
-	CreatedAt     int64
-	ExpiresAt     int64
-	LastUsedAt    int64
-	Handle        sql.NullString
-	DisplayName   sql.NullString
-	AvatarBlob    sql.NullString
-	Status        sql.NullString
-	Role          sql.NullString
-	UserKind      sql.NullString
-	Timezone      sql.NullString
-	Locale        sql.NullString
-	PrefsJson     sql.NullString
-	MarkAllReadAt sql.NullInt64
+	IDHash          sqltypes.SessionHash
+	UserID          sql.NullInt64
+	IdentityID      sql.NullInt64
+	Kind            string
+	CreatedAt       int64
+	ExpiresAt       int64
+	LastUsedAt      int64
+	OidcProviderKey sql.NullString
+	Handle          sql.NullString
+	DisplayName     sql.NullString
+	AvatarBlob      sql.NullString
+	Status          sql.NullString
+	Role            sql.NullString
+	UserKind        sql.NullString
+	Timezone        sql.NullString
+	Locale          sql.NullString
+	PrefsJson       sql.NullString
+	MarkAllReadAt   sql.NullInt64
 }
 
 // LookupSession is the whole of session resolution in one statement: the
@@ -338,6 +340,7 @@ func (q *Queries) LookupSession(ctx context.Context, arg LookupSessionParams) (L
 		&i.CreatedAt,
 		&i.ExpiresAt,
 		&i.LastUsedAt,
+		&i.OidcProviderKey,
 		&i.Handle,
 		&i.DisplayName,
 		&i.AvatarBlob,

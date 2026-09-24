@@ -25,6 +25,8 @@ const (
 	tAnon      = "anon"
 	tMember    = "member"
 	tModerator = "moderator"
+	// tPreUser is an approval-mode applicant; only /me has a shape for one.
+	tPreUser = "pre_user"
 )
 
 // alice is an ordinary human member.
@@ -244,6 +246,14 @@ func me(class string) Me {
 			Notifications: 0,
 			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
 		}
+	case tPreUser:
+		return Me{
+			User:          nil,
+			PreUser:       &PreUser{Provider: "github"},
+			Unread:        UnreadCounts{},
+			Notifications: 0,
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+		}
 	case tModerator:
 		return Me{
 			User:          &bob,
@@ -356,6 +366,7 @@ var corpus = map[string]any{
 	"me." + tAnon:      me(tAnon),
 	"me." + tMember:    me(tMember),
 	"me." + tModerator: me(tModerator),
+	"me." + tPreUser:   me(tPreUser),
 
 	"post." + tMember:    singlePost(tMember),
 	"post." + tModerator: singlePost(tModerator),

@@ -129,6 +129,89 @@ func (q *Queries) DeleteIdPMemberships(ctx context.Context, userID int64) error 
 	return err
 }
 
+const forumAccessRows = `-- name: ForumAccessRows :many
+SELECT f.id AS forum_id, f.visibility, p.forum_id AS grant_forum_id, p.group_id, p.permission
+FROM forums AS f
+LEFT JOIN permissions AS p
+	ON (p.forum_id = f.id OR p.forum_id IS NULL)
+	AND (p.group_id IN (SELECT gm.group_id FROM group_members AS gm WHERE gm.user_id = ?1)
+	     OR p.group_id IN (/*SLICE:implicit_groups*/?))
+WHERE f.id IN (/*SLICE:forum_ids*/?)
+ORDER BY f.id, p.forum_id IS NULL, p.group_id, p.permission
+`
+
+type ForumAccessRowsParams struct {
+	UserID         int64
+	ImplicitGroups []int64
+	ForumIds       []int64
+}
+
+type ForumAccessRowsRow struct {
+	ForumID      int64
+	Visibility   string
+	GrantForumID sql.NullInt64
+	GroupID      sql.NullInt64
+	Permission   sql.NullString
+}
+
+// ForumAccessRows is everything perm needs to evaluate a set of forums for
+// one viewer, in one statement: each forum's visibility, with every
+// permission row, local to it or global, held by a group the viewer is in.
+// The viewer's groups are the implicit ones passed in (everyone, and members
+// for a member) and their stored memberships; user_id 0 has none. A forum
+// with no such rows still comes back once, with a null group. perm applies
+// the rules to these rows in Go, as it always has.
+//
+// user_id comes before both slices on purpose: sqlc numbers a named argument
+// (?1), and a number after an expanded slice would point at the wrong value.
+func (q *Queries) ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams) ([]ForumAccessRowsRow, error) {
+	query := forumAccessRows
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.UserID)
+	if len(arg.ImplicitGroups) > 0 {
+		for _, v := range arg.ImplicitGroups {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:implicit_groups*/?", strings.Repeat(",?", len(arg.ImplicitGroups))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:implicit_groups*/?", "NULL", 1)
+	}
+	if len(arg.ForumIds) > 0 {
+		for _, v := range arg.ForumIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:forum_ids*/?", strings.Repeat(",?", len(arg.ForumIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:forum_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ForumAccessRowsRow
+	for rows.Next() {
+		var i ForumAccessRowsRow
+		if err := rows.Scan(
+			&i.ForumID,
+			&i.Visibility,
+			&i.GrantForumID,
+			&i.GroupID,
+			&i.Permission,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getForum = `-- name: GetForum :one
 SELECT id, parent_id, slug, name, description, position, visibility, archived, created_at, updated_at FROM forums WHERE id = ?
 `

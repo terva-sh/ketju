@@ -36,20 +36,26 @@ func anonymousMe() dto.Me {
 
 // Me is GET /me for the request's viewer (docs/07).
 //
-// The shell inlines it on every page load, so it has a budget: the session
-// lookup the middleware already ran, which returned every user field shown
-// here, and one statement for the counts. Nothing opens a thread log; the
-// counts are projections. Which forums count is perm's decision, served from
-// its cache, so a warm request costs no more than those two statements.
+// The shell inlines it on every page load, so it has a budget, settled in
+// grooming: two statements for the handler, with the middleware's session
+// lookup, which already returned every user field shown here, outside it.
+// One statement is the counts, grouped by forum. The other is perm deciding
+// which of those forums the viewer may read, in one batch (CanEach), and only
+// when perm's cache does not already know. Nothing opens a thread log; the
+// counts are projections.
 //
-// A viewer who is not a member gets the anonymous shape. That covers a
-// pre-user session, which has no user to show (dto.Me: a nil user is the one
-// signed-out signal; whether approval mode needs a marker is TKT-01M29CKRG9's
-// question), and a suspended user, whose account is not theirs to read once
-// suspended.
+// An approval-mode applicant gets the anonymous shape with pre_user set: a
+// null user stays the one signed-out signal (settled in grooming). Anyone
+// else who is not a member, a suspended user above all, gets the anonymous
+// shape outright: their account is not theirs to read once suspended.
 func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	v := domain.ViewerFrom(ctx)
 	sess, ok := session.From(ctx)
+	if v.PreUser && ok && sess.Kind == session.KindPreUser {
+		me := anonymousMe()
+		me.PreUser = &dto.PreUser{Provider: sess.Provider}
+		return me, nil
+	}
 	if !v.Member() || !ok || sess.User == nil {
 		return anonymousMe(), nil
 	}
@@ -68,16 +74,22 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	}); err != nil {
 		return dto.Me{}, err
 	}
+	var forums []int64
 	for _, r := range rows {
-		me.Notifications = int(r.Notifications)
-		if !r.ForumID.Valid {
-			continue
+		if r.ForumID.Valid {
+			forums = append(forums, r.ForumID.Int64)
 		}
-		readable, err := s.Perm.Can(ctx, v, r.ForumID.Int64, domain.PermRead)
-		if err != nil {
+	}
+	readable := map[int64]bool{}
+	if len(forums) > 0 {
+		var err error
+		if readable, err = s.Perm.CanEach(ctx, v, forums, domain.PermRead); err != nil {
 			return dto.Me{}, err
 		}
-		if !readable {
+	}
+	for _, r := range rows {
+		me.Notifications = int(r.Notifications)
+		if !r.ForumID.Valid || !readable[r.ForumID.Int64] {
 			continue
 		}
 		me.Unread.Threads += int(r.Threads.Int64)

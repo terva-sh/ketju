@@ -27,10 +27,12 @@ func SignIn(t testing.TB, d *db.DB, userID int64, now time.Time) string {
 	return insert(t, d, dbq.CreateSessionParams{Kind: "user", UserID: sql.NullInt64{Int64: userID, Valid: true}}, now)
 }
 
-// PreUser creates a pre-user session bound to identityID.
+// PreUser creates a pre-user session bound to identityID, signed in through
+// the provider "github".
 func PreUser(t testing.TB, d *db.DB, identityID int64, now time.Time) string {
 	t.Helper()
-	return insert(t, d, dbq.CreateSessionParams{Kind: "pre_user", IdentityID: sql.NullInt64{Int64: identityID, Valid: true}}, now)
+	return insert(t, d, dbq.CreateSessionParams{Kind: "pre_user", IdentityID: sql.NullInt64{Int64: identityID, Valid: true},
+		OidcProviderKey: sql.NullString{String: "github", Valid: true}}, now)
 }
 
 func insert(t testing.TB, d *db.DB, p dbq.CreateSessionParams, now time.Time) string {

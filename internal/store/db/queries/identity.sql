@@ -36,6 +36,7 @@ SELECT * FROM sessions WHERE id_hash = ?;
 -- answering /me share this query.
 -- name: LookupSession :one
 SELECT s.id_hash, s.user_id, s.identity_id, s.kind, s.created_at, s.expires_at, s.last_used_at,
+       s.oidc_provider_key,
        u.handle, u.display_name, u.avatar_blob, u.status, u.role, u.kind AS user_kind,
        u.timezone, u.locale, u.prefs_json, u.mark_all_read_at
 FROM sessions s

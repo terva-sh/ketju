@@ -42,6 +42,10 @@ func (s *statements) trace(sql string) {
 	switch strings.ToUpper(strings.Fields(sql + " x")[0]) {
 	case "BEGIN", "COMMIT", "ROLLBACK", "END":
 		return
+	case "PRAGMA":
+		// Connection setup: the pool configures a connection the first time
+		// it opens one, whichever request happens to be using it.
+		return
 	}
 	s.ran = append(s.ran, strings.Join(strings.Fields(sql), " "))
 }
@@ -192,9 +196,9 @@ func decodeMe(t *testing.T, b []byte) dto.Me {
 
 var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25}}
 
-// TestMeShapes is AC1: the documented shape for an anonymous viewer, a member
-// and a moderator, from seeded data; a pre-user session and a suspended user
-// get the anonymous shape.
+// TestMeShapes is AC1: the documented shape for an anonymous viewer, a member,
+// a moderator and a pre-user session, from seeded data. A suspended user gets
+// the anonymous shape.
 func TestMeShapes(t *testing.T) {
 	w := newMeWorld(t)
 	for _, c := range []struct {
@@ -221,7 +225,8 @@ func TestMeShapes(t *testing.T) {
 			Settings:      dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
 		}},
 		{"suspended admin", sessiontest.SignIn(t, w.db, w.id["carol"], w.now), anonMe},
-		{"pre-user", sessiontest.PreUser(t, w.db, 1, w.now), anonMe},
+		{"pre-user", sessiontest.PreUser(t, w.db, 1, w.now), dto.Me{PreUser: &dto.PreUser{Provider: "github"},
+			Settings: anonMe.Settings}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			rec := w.get("/api/v1/me", c.token)
@@ -238,50 +243,79 @@ func TestMeShapes(t *testing.T) {
 	}
 }
 
-// TestMeBudget is AC3: with perm's cache warm, GET /me runs at most two
-// statements for a member, the session lookup and the counts, and none for
-// an anonymous viewer. The shell, which inlines /me, costs the same.
+// TestMeBudget is AC3, as settled in grooming: the handler runs at most two
+// statements, with the session middleware's one lookup outside that budget.
+// Cold, the two are the counts and perm's batch; warm, the counts alone. An
+// anonymous viewer costs nothing. The shell, which inlines /me, costs the
+// same.
 func TestMeBudget(t *testing.T) {
 	w := newMeWorld(t)
 	alice := sessiontest.SignIn(t, w.db, w.id["alice"], w.now)
-	w.get("/api/v1/me", alice) // warms perm's cache for alice's forums
-
+	// A server that has answered anyone has found perm's implicit groups,
+	// once per process. Alice's cache is still cold after this.
+	w.get("/api/v1/me", sessiontest.SignIn(t, w.db, w.id["bob"], w.now))
 	for _, c := range []struct {
 		name, path, token string
-		max               int
+		want              []string // statement names, in order
 	}{
-		{"member /me", "/api/v1/me", alice, 2},
-		{"member shell", "/", alice, 2},
-		{"anonymous /me", "/api/v1/me", "", 0},
-		{"anonymous shell", "/", "", 0},
+		{"member /me, cold", "/api/v1/me", alice, []string{"LookupSession", "MeCounts", "ForumAccessRows"}},
+		{"member /me, warm", "/api/v1/me", alice, []string{"LookupSession", "MeCounts"}},
+		{"member shell", "/", alice, []string{"LookupSession", "MeCounts"}},
+		{"anonymous /me", "/api/v1/me", "", nil},
+		{"anonymous shell", "/", "", nil},
 	} {
 		var rec *httptest.ResponseRecorder
 		ran := w.stmts.during(func() { rec = w.get(c.path, c.token) })
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s: %d", c.name, rec.Code)
 		}
-		if len(ran) > c.max {
-			t.Errorf("%s ran %d statements, budget %d:\n  %s", c.name, len(ran), c.max, strings.Join(ran, "\n  "))
+		var names []string
+		for _, s := range ran {
+			names = append(names, queryName(s))
 		}
-		t.Logf("%s: %d statements: %v", c.name, len(ran), ran)
-		if c.max == 2 && len(ran) != 2 {
-			t.Errorf("%s ran %d statements; the trace is not seeing them:\n  %s", c.name, len(ran), strings.Join(ran, "\n  "))
+		if strings.Join(names, " ") != strings.Join(c.want, " ") {
+			t.Errorf("%s ran %v, want %v:\n  %s", c.name, names, c.want, strings.Join(ran, "\n  "))
+		}
+		// The budget proper: everything after the middleware's lookup.
+		if handler := len(names) - count(names, "LookupSession"); handler > 2 {
+			t.Errorf("%s: the handler ran %d statements, budget 2", c.name, handler)
 		}
 	}
 }
 
+// queryName is the sqlc name at the head of a statement, or the statement.
+func queryName(stmt string) string {
+	if m := regexp.MustCompile(`^-- name: (\w+)`).FindStringSubmatch(stmt); m != nil {
+		return m[1]
+	}
+	return stmt
+}
+
+func count(xs []string, x string) int {
+	n := 0
+	for _, v := range xs {
+		if v == x {
+			n++
+		}
+	}
+	return n
+}
+
 // TestMeBudgetWhenTouchIsDue: once every five minutes a session's
 // last_used_at is due to slide (docs/05), and that request also writes it.
-// The write is the session store's, rate-limited there, and is pinned here so
-// the budget above cannot quietly grow a third read.
+// The write is the session middleware's, outside the handler's budget, and
+// is pinned here so the handler cannot quietly grow a third statement.
 func TestMeBudgetWhenTouchIsDue(t *testing.T) {
 	w := newMeWorld(t)
 	alice := sessiontest.SignIn(t, w.db, w.id["alice"], w.now)
 	w.get("/api/v1/me", alice)
 	w.now = w.now.Add(session.TouchInterval)
-	ran := w.stmts.during(func() { w.get("/api/v1/me", alice) })
-	if len(ran) != 3 || !strings.HasPrefix(ran[1], "-- TouchSession") && !strings.Contains(ran[1], "UPDATE sessions") {
-		t.Fatalf("with a touch due, %d statements:\n  %s", len(ran), strings.Join(ran, "\n  "))
+	var names []string
+	for _, s := range w.stmts.during(func() { w.get("/api/v1/me", alice) }) {
+		names = append(names, queryName(s))
+	}
+	if strings.Join(names, " ") != "LookupSession TouchSession MeCounts" {
+		t.Fatalf("with a touch due: %v", names)
 	}
 	if ran := w.stmts.during(func() { w.get("/api/v1/me", alice) }); len(ran) != 2 {
 		t.Fatalf("the request after the touch ran %d statements", len(ran))

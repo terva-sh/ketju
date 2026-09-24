@@ -57,6 +57,17 @@ type Querier interface {
 	DeleteThreadTags(ctx context.Context, threadID int64) error
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
 	DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64, error)
+	// ForumAccessRows is everything perm needs to evaluate a set of forums for
+	// one viewer, in one statement: each forum's visibility, with every
+	// permission row, local to it or global, held by a group the viewer is in.
+	// The viewer's groups are the implicit ones passed in (everyone, and members
+	// for a member) and their stored memberships; user_id 0 has none. A forum
+	// with no such rows still comes back once, with a null group. perm applies
+	// the rules to these rows in Go, as it always has.
+	//
+	// user_id comes before both slices on purpose: sqlc numbers a named argument
+	// (?1), and a number after an expanded slice would point at the wrong value.
+	ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams) ([]ForumAccessRowsRow, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
@@ -87,23 +98,28 @@ type Querier interface {
 	// The user fields are the ones GET /me needs, so resolving a request and
 	// answering /me share this query.
 	LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error)
-	// MeCounts is GET /me's second and last statement (the first is the session
-	// lookup): the viewer's unread notifications, and their unread threads by
-	// forum, so the service can drop the forums they cannot read from perm's
-	// cache without another query.
+	// MeCounts is GET /me's count statement: the viewer's unread notifications,
+	// and their unread threads by forum, so the service can drop the forums they
+	// cannot read in one batch from perm.
 	//
 	// A thread is unread when its newest post is: past the read position (0 with
 	// no row) and written after mark_all_read_at. That is UnreadCount's per-post
 	// rule (docs/04 "read_positions") applied to the post with the highest
-	// ordinal and the latest time, which is unread exactly when any post is, and
-	// it reads threads rather than scanning post_meta. A test holds the two
-	// rules together.
+	// ordinal and the latest time, which is unread exactly when any post is. A
+	// test holds the two rules together.
 	//
-	// participated is a thread the viewer has written in, found through
-	// post_meta's author index; watching is a thread-level watch. A thread the
-	// viewer muted counts nowhere. Forum-level watches are not in these counts
-	// yet: what the cross-forum lists contain is TKT-01M29CTY7K's to settle, and
-	// it should reuse this rule so the badges and the lists agree.
+	// participated is a thread the viewer has written in; watching is a
+	// thread-level watch. A thread the viewer muted counts nowhere. Forum-level
+	// watches are not in these counts yet: what the cross-forum lists contain is
+	// TKT-01M29CTY7K's to settle, and it should reuse this rule so the badges
+	// and the lists agree.
+	//
+	// The shape is for cost, because the shell runs this on every page load.
+	// Only one part reads the whole site: counting, per forum, the threads with
+	// a post after the mark, all of which are unread to someone who never opened
+	// them. Everything that depends on the viewer starts from the viewer's own
+	// rows (read positions, watches, posts) and subtracts from that count, so it
+	// grows with what they have touched rather than with the site.
 	//
 	// There is always at least one row: with no unread threads, forum_id is null.
 	MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error)

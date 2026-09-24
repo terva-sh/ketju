@@ -73,6 +73,26 @@ WHERE (forum_id = CAST(sqlc.arg('forum_id') AS INTEGER) OR forum_id IS NULL)
   AND group_id IN (sqlc.slice('group_ids'))
 ORDER BY forum_id IS NULL, group_id, permission;
 
+-- ForumAccessRows is everything perm needs to evaluate a set of forums for
+-- one viewer, in one statement: each forum's visibility, with every
+-- permission row, local to it or global, held by a group the viewer is in.
+-- The viewer's groups are the implicit ones passed in (everyone, and members
+-- for a member) and their stored memberships; user_id 0 has none. A forum
+-- with no such rows still comes back once, with a null group. perm applies
+-- the rules to these rows in Go, as it always has.
+--
+-- user_id comes before both slices on purpose: sqlc numbers a named argument
+-- (?1), and a number after an expanded slice would point at the wrong value.
+-- name: ForumAccessRows :many
+SELECT f.id AS forum_id, f.visibility, p.forum_id AS grant_forum_id, p.group_id, p.permission
+FROM forums AS f
+LEFT JOIN permissions AS p
+	ON (p.forum_id = f.id OR p.forum_id IS NULL)
+	AND (p.group_id IN (SELECT gm.group_id FROM group_members AS gm WHERE gm.user_id = sqlc.arg('user_id'))
+	     OR p.group_id IN (sqlc.slice('implicit_groups')))
+WHERE f.id IN (sqlc.slice('forum_ids'))
+ORDER BY f.id, p.forum_id IS NULL, p.group_id, p.permission;
+
 -- name: RemoveMembership :exec
 DELETE FROM group_members WHERE group_id = ? AND user_id = ?;
 

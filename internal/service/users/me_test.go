@@ -37,9 +37,12 @@ func TestMeReadsNoLogs(t *testing.T) {
 }
 
 // TestThreadRuleMatchesPostRule: MeCounts decides a thread is unread from its
-// newest post; UnreadCount (docs/04) counts unread posts one by one. Over
-// random threads, read positions and marks they agree on every thread. Each
-// thread is alone in its own forum, so MeCounts' rows are per thread.
+// newest post, and counts by subtracting from the site-wide count what the
+// reader's own rows rule out; UnreadCount (docs/04) counts unread posts one by
+// one. Over random threads, read positions, marks, watches, mutes and
+// authorship, MeCounts' three counts are what UnreadCount and those rows say,
+// summed per forum. Threads share a few forums, so a thread wrongly
+// subtracted from, or added to, another's count changes a total.
 func TestThreadRuleMatchesPostRule(t *testing.T) {
 	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	if err != nil {
@@ -49,45 +52,59 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 	if err := d.Migrate(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	for seed := range uint64(20) {
+	for seed := range uint64(60) {
 		rng := rand.New(rand.NewPCG(seed, 7))
 		var mark sql.NullInt64
 		if rng.IntN(2) == 0 {
 			mark = sql.NullInt64{Int64: 1000 + rng.Int64N(100), Valid: true}
 		}
 		threads := 1 + rng.IntN(12)
+		// What the reader did to each thread, for the reference below.
+		muted, watched, wrote := map[int64]bool{}, map[int64]bool{}, map[int64]bool{}
+		// Threads share forums, so a rule that subtracts one thread from
+		// another's count shows up in the forum's total.
+		forums := 1 + rng.IntN(3)
+		forumOf := map[int64]int64{}
 		if err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
 			ex := func(s string, args ...any) error {
 				_, err := tx.ExecContext(t.Context(), s, args...)
 				return err
 			}
-			for _, s := range []string{`DELETE FROM read_positions`, `DELETE FROM post_meta`, `DELETE FROM threads`,
-				`DELETE FROM forums`, `DELETE FROM users`} {
+			for _, s := range []string{`DELETE FROM read_positions`, `DELETE FROM watches`, `DELETE FROM post_meta`,
+				`DELETE FROM threads`, `DELETE FROM forums`, `DELETE FROM users`} {
 				if err := ex(s); err != nil {
 					return err
 				}
 			}
 			if err := ex(`INSERT INTO users (id, handle, display_name, mark_all_read_at, created_at, updated_at)
-				VALUES (1, 'reader', 'R', ?, 1, 1)`, mark); err != nil {
+				VALUES (1, 'reader', 'R', ?, 1, 1), (2, 'writer', 'W', NULL, 1, 1)`, mark); err != nil {
 				return err
 			}
-			for th := 1; th <= threads; th++ {
+			for f := 1; f <= forums; f++ {
 				if err := ex(`INSERT INTO forums (id, slug, name, visibility, created_at, updated_at)
-					VALUES (?, ?, 'F', 'public', 1, 1)`, th, fmt.Sprintf("f%d", th)); err != nil {
+					VALUES (?, ?, 'F', 'public', 1, 1)`, f, fmt.Sprintf("f%d", f)); err != nil {
 					return err
 				}
+			}
+			for th := 1; th <= threads; th++ {
+				forumOf[int64(th)] = int64(1 + rng.IntN(forums))
 				posts := rng.IntN(6)
 				at := int64(990 + rng.IntN(60))
 				for o := 1; o <= posts; o++ {
 					at += int64(rng.IntN(20)) // non-decreasing, ties included
+					author := 2
+					if rng.IntN(5) == 0 {
+						author = 1
+						wrote[int64(th)] = true
+					}
 					if err := ex(`INSERT INTO post_meta (thread_id, ordinal, author_id, created_at, log_offset)
-						VALUES (?, ?, 2, ?, 0)`, th, o, at); err != nil {
+						VALUES (?, ?, ?, ?, 0)`, th, o, author, at); err != nil {
 						return err
 					}
 				}
 				if err := ex(`INSERT INTO threads (id, forum_id, slug, title, author_id, created_at, post_count,
 					last_post_at, last_post_author_id, last_post_ordinal, log_length_projected)
-					VALUES (?, ?, 't', 'T', 2, 1, ?, ?, 2, ?, 0)`, th, th, posts, at, posts); err != nil {
+					VALUES (?, ?, 't', 'T', 2, 1, ?, ?, 2, ?, 0)`, th, forumOf[int64(th)], posts, at, posts); err != nil {
 					return err
 				}
 				if rng.IntN(3) > 0 {
@@ -95,6 +112,13 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 						VALUES (1, ?, ?, 1)`, th, rng.IntN(posts+2)); err != nil {
 						return err
 					}
+				}
+				if level := []string{"", "", "watch", "mute"}[rng.IntN(4)]; level != "" {
+					if err := ex(`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at)
+						VALUES (1, ?, ?, 1, 1)`, th, level); err != nil {
+						return err
+					}
+					muted[int64(th)], watched[int64(th)] = level == "mute", level == "watch"
 				}
 			}
 			return nil
@@ -120,16 +144,31 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		got := map[int64]bool{}
+		type counts struct{ threads, participated, watching int64 }
+		got := map[int64]counts{}
 		for _, r := range rows {
 			if r.ForumID.Valid {
-				got[r.ForumID.Int64] = r.Threads.Int64 == 1
+				got[r.ForumID.Int64] = counts{r.Threads.Int64, r.Participated.Int64, r.Watching.Int64}
 			}
 		}
+		b := func(x bool) int64 {
+			if x {
+				return 1
+			}
+			return 0
+		}
+		wantBy := map[int64]counts{}
 		for th := int64(1); th <= int64(threads); th++ {
-			if got[th] != want[th] {
-				t.Fatalf("seed %d, thread %d (mark %v): MeCounts says unread=%v, UnreadCount %v",
-					seed, th, mark, got[th], want[th])
+			unread := want[th] && !muted[th]
+			c := wantBy[forumOf[th]]
+			c.threads += b(unread)
+			c.participated += b(unread && wrote[th])
+			c.watching += b(unread && watched[th])
+			wantBy[forumOf[th]] = c
+		}
+		for f := int64(1); f <= int64(forums); f++ {
+			if got[f] != wantBy[f] {
+				t.Fatalf("seed %d, forum %d (mark %v): MeCounts %+v, want %+v", seed, f, mark, got[f], wantBy[f])
 			}
 		}
 	}
@@ -145,4 +184,104 @@ func TestPageSize(t *testing.T) {
 			t.Errorf("pageSize(%s) = %d, want %d", prefs, got, want)
 		}
 	}
+}
+
+// BenchmarkMeCounts measures MeCounts at the size the ticket names before a
+// per-user counter table is worth its cost: 10,000 threads over 20 forums,
+// about 100,000 posts, a heavy reader with 2,000 read positions, some 300
+// posts of their own, 50 watches and 20 mutes, and a light reader who has
+// opened 20 threads. Run it with:
+//
+//	go test ./internal/service/users -run '^$' -bench MeCounts -benchtime 200x
+func BenchmarkMeCounts(b *testing.B) {
+	d := seedBench(b)
+	for _, c := range []struct {
+		name string
+		user int64
+	}{{"heavy reader", 1}, {"light reader", 3}} {
+		b.Run(c.name, func(b *testing.B) {
+			for b.Loop() {
+				if err := d.Read(b.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+					_, err := q.MeCounts(b.Context(), c.user)
+					return err
+				}); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
+
+func seedBench(b *testing.B) *db.DB {
+	d, err := db.Open(b.Context(), db.Options{Path: filepath.Join(b.TempDir(), "ketju.db")})
+	if err != nil {
+		b.Fatal(err)
+	}
+	b.Cleanup(func() { d.Close() })
+	if err := d.Migrate(b.Context()); err != nil {
+		b.Fatal(err)
+	}
+	rng := rand.New(rand.NewPCG(1, 1))
+	const threads, forums = 10_000, 20
+	if err := d.Write(b.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		ex := func(s string, args ...any) error {
+			_, err := tx.ExecContext(b.Context(), s, args...)
+			return err
+		}
+		if err := ex(`INSERT INTO users (id, handle, display_name, mark_all_read_at, created_at, updated_at)
+			VALUES (1, 'reader', 'R', 500000, 1, 1), (2, 'writer', 'W', NULL, 1, 1),
+			       (3, 'lurker', 'L', NULL, 1, 1)`); err != nil {
+			return err
+		}
+		for f := 1; f <= forums; f++ {
+			if err := ex(`INSERT INTO forums (id, slug, name, visibility, created_at, updated_at)
+				VALUES (?, ?, 'F', 'public', 1, 1)`, f, fmt.Sprintf("f%d", f)); err != nil {
+				return err
+			}
+		}
+		for th := 1; th <= threads; th++ {
+			posts := 1 + rng.IntN(19)
+			at := int64(th * 100)
+			for o := 1; o <= posts; o++ {
+				author := 2
+				if rng.IntN(333) == 0 {
+					author = 1
+				}
+				if err := ex(`INSERT INTO post_meta (thread_id, ordinal, author_id, created_at, log_offset)
+					VALUES (?, ?, ?, ?, 0)`, th, o, author, at+int64(o)); err != nil {
+					return err
+				}
+			}
+			if err := ex(`INSERT INTO threads (id, forum_id, slug, title, author_id, created_at, post_count,
+				last_post_at, last_post_author_id, last_post_ordinal, log_length_projected)
+				VALUES (?, ?, 't', 'T', 2, 1, ?, ?, 2, ?, 0)`, th, 1+th%forums, posts, at+int64(posts), posts); err != nil {
+				return err
+			}
+			if th%500 == 7 { // the light reader has opened 20 threads
+				if err := ex(`INSERT INTO read_positions VALUES (3, ?, 1, 1)`, th); err != nil {
+					return err
+				}
+			}
+			switch {
+			case th%5 == 0:
+				if err := ex(`INSERT INTO read_positions VALUES (1, ?, ?, 1)`, th, rng.IntN(posts+1)); err != nil {
+					return err
+				}
+			case th%200 == 1:
+				if err := ex(`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at)
+					VALUES (1, ?, 'watch', 1, 1)`, th); err != nil {
+					return err
+				}
+			case th%500 == 3:
+				if err := ex(`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at)
+					VALUES (1, ?, 'mute', 1, 1)`, th); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}); err != nil {
+		b.Fatal(err)
+	}
+	return d
 }

@@ -99,6 +99,9 @@ type Session struct {
 	hash       sqltypes.SessionHash
 	Kind       Kind
 	IdentityID int64
+	// Provider is the identity provider the session signed in through, when
+	// it was an OIDC sign-in.
+	Provider   string
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 	LastUsedAt time.Time
@@ -179,7 +182,7 @@ func (s *Store) Lookup(ctx context.Context, token string) (Session, error) {
 	if err != nil {
 		return Session{}, fmt.Errorf("session: lookup: %w", err)
 	}
-	out := Session{hash: row.IDHash, Kind: Kind(row.Kind), IdentityID: row.IdentityID.Int64,
+	out := Session{hash: row.IDHash, Kind: Kind(row.Kind), IdentityID: row.IdentityID.Int64, Provider: row.OidcProviderKey.String,
 		CreatedAt: time.UnixMilli(row.CreatedAt), ExpiresAt: time.UnixMilli(row.ExpiresAt),
 		LastUsedAt: time.UnixMilli(row.LastUsedAt)}
 	if row.UserID.Valid {
