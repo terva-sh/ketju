@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:26:47Z
+updated_at: 2026-09-24T15:31:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -128,6 +128,10 @@ Answered review 436 (medium). On refusal, Acquire closed the contended descripto
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:26:47Z
 
 Answered review 440 (medium). readHolder accepted any valid JSON, so {} or null decoded into a holder with pid 0 and no host, and a refusal would have named that as the holder. A record must now carry a positive pid, a host, a purpose and a start time. Otherwise it is a read error naming what is missing, and the refusal says 'another process'. TestUnreadableRecordStillRefuses covers: not JSON, empty, {}, null, each field missing in turn, a negative pid, and a whole record that is named. Mutation check: 20 of 20 lock mutants killed, the 15 before plus one per field check and one on the missing-list test. CI run 281 on 3689e8f passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:31:11Z
+
+Answered review 441 (low). On a non-unix platform, openFile created ketju.lock before tryLock refused, and a missing directory gave an open error instead of the refusal. The non-unix openFile now returns the unsupported-platform error before touching anything. Checked with GOOS=windows go vet and GOOS=plan9 go build. No test runs there: CI is linux only. CI run 283 on a233731 passed.
 
 ## Summary
 
