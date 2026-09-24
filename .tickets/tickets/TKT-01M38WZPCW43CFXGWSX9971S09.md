@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T21:09:58Z
+updated_at: 2026-09-24T21:26:13Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -274,3 +274,7 @@ Merged PR #71 (TKT-01M29C7ZZR, Route every session creation through one status-c
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:09:58Z
 
 Merged PR #72 (TKT-01M29C7ZZ9, Implement the OIDC start and callback flow) as 8f1d368, after reviews 511, 512 and 513 were answered. All three were on the sign-in's replace-and-record sequence. Clean review on head 8f1d368, base 3ed6cf0. CI run 351's race step shows cmd/ketju, internal/auth/{oidc,oidctest,seal,session}, internal/service/identity and internal/web/auth passed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T21:26:13Z
+
+Merged PR #73 (TKT-01M29C2WWG, Return structured mentions, quotes, and reply_to from the render call) as 7043e2b, after review 516 (uint32 ordinals on the wire) and CI run 356 (the client contract types for the new goldens) were answered. Clean review on head 7043e2b, base 8f1d368. CI run 358's client step ran 529 tests, and its race step shows internal/dto, internal/render and internal/service/threads passed.
