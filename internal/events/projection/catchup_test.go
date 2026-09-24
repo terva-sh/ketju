@@ -398,9 +398,10 @@ func TestUnopenableGapIsReportedNotFatal(t *testing.T) {
 	c := f.restart()
 
 	var calls atomic.Int64
+	var readable atomic.Bool
 	inner := reopenWith(c, &calls)
 	rep, err := f.w.CatchUp(t.Context(), func(ctx context.Context, id threadid.ID) (int64, error) {
-		if id == bad {
+		if id == bad && !readable.Load() {
 			return 0, errors.New("mid-log damage")
 		}
 		return inner(ctx, id)
@@ -427,6 +428,13 @@ func TestUnopenableGapIsReportedNotFatal(t *testing.T) {
 	if l := f.w.Lag(); l.Threads != 1 || l.Bytes != size-threadlog.FileHeaderSize {
 		t.Errorf("lag = %+v, want the unopenable thread held with its whole gap", l)
 	}
+	if err := f.w.Retry(t.Context()); err == nil {
+		t.Error("a retry while the thread still cannot be opened succeeded")
+	}
+	if l := f.w.Lag(); l.Threads != 1 {
+		t.Errorf("lag after a failed retry = %+v, want the thread still held", l)
+	}
+	readable.Store(true)
 	if err := f.w.Retry(t.Context()); err != nil {
 		t.Fatalf("retry: %v", err)
 	}
@@ -582,5 +590,177 @@ func TestCatchUpTenThousandNoDrift(t *testing.T) {
 	}
 	if opens.Load() != 0 || reopens.Load() != 0 {
 		t.Errorf("opened %d logs and recovered %d threads with no drift anywhere", opens.Load(), reopens.Load())
+	}
+}
+
+// flaky is a Recover that fails until it is let through, standing in for an
+// open that fails once and then works.
+func flaky(c *threadcache.Cache) (Recover, *atomic.Bool) {
+	var ok atomic.Bool
+	var calls atomic.Int64
+	inner := reopenWith(c, &calls)
+	return func(ctx context.Context, id threadid.ID) (int64, error) {
+		if !ok.Load() {
+			return 0, errors.New("transient")
+		}
+		return inner(ctx, id)
+	}, &ok
+}
+
+func tear(t *testing.T, root string, id threadid.ID) {
+	t.Helper()
+	lf, err := os.OpenFile(id.LogPath(root), os.O_WRONLY|os.O_APPEND, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer lf.Close()
+	if _, err := lf.Write([]byte{200, 0, 0, 0, 1, 2, 3}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// A thread held because its open failed, whose log ends in a torn frame, is
+// retried to the length the open reports once it works, not to the file's
+// size with the torn bytes in it (review 453).
+func TestHeldTornTailRetriesToTheRecoveredLength(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	id, created := f.thread("Behind")
+	f.project(id, created)
+	end := f.post(id, 5, 0)
+	c := f.restart()
+	tear(t, f.root, id)
+
+	reopen, ok := flaky(c)
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	if l := f.w.Lag(); l.Threads != 1 {
+		t.Fatalf("lag = %+v, want the thread held", l)
+	}
+	ok.Store(true)
+	if err := f.w.Retry(t.Context()); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if got := f.projected()[id]; got != end {
+		t.Errorf("retried to %d, want the recovered length %d", got, end)
+	}
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag after the retry = %+v", l)
+	}
+}
+
+// A held gap that a later look shows was only a torn tail leaves the behind
+// set, whether a catch-up or a retry is the later look (review 453).
+func TestHeldGapThatWasATornTailIsSettled(t *testing.T) {
+	for _, later := range []string{"catch-up", "retry", "catch-up after another open"} {
+		t.Run(later, func(t *testing.T) {
+			f := newFixture(t)
+			f.logs()
+			id, end := f.thread("Current")
+			f.project(id, end)
+			c := f.restart()
+			tear(t, f.root, id)
+
+			reopen, ok := flaky(c)
+			if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+				t.Fatal(err)
+			}
+			if l := f.w.Lag(); l.Threads != 1 {
+				t.Fatalf("lag = %+v, want the thread held", l)
+			}
+			var err error
+			switch later {
+			case "catch-up":
+				ok.Store(true)
+				_, err = f.w.CatchUp(t.Context(), reopen)
+			case "retry":
+				ok.Store(true)
+				err = f.w.Retry(t.Context())
+			default:
+				// Something else opened the thread and cut the torn tail, so
+				// the next catch-up finds the sizes equal without opening it.
+				var calls atomic.Int64
+				if _, err := reopenWith(c, &calls)(t.Context(), id); err != nil {
+					t.Fatal(err)
+				}
+				_, err = f.w.CatchUp(t.Context(), reopen)
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if l := f.w.Lag(); l.Threads != 0 {
+				t.Errorf("lag = %+v after the %s found nothing to project", l, later)
+			}
+			if got := f.projected()[id]; got != end {
+				t.Errorf("projection moved to %d from %d", got, end)
+			}
+		})
+	}
+}
+
+// A held thread whose reopen shows its log shorter than its projection is
+// quarantined by the retry, not retried forever.
+func TestRetryQuarantinesACutLog(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	id, _ := f.thread("Cut")
+	kept := f.post(id, 5, 0)
+	end := f.post(id, 5, 0)
+	f.project(id, end)
+	c := f.restart()
+	tear(t, f.root, id)
+
+	reopen, ok := flaky(c)
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(id.LogPath(f.root), kept); err != nil {
+		t.Fatal(err)
+	}
+	os.Remove(id.IndexPath(f.root))
+	ok.Store(true)
+	f.w.Retry(t.Context())
+	if !f.w.Quarantined(id) {
+		t.Error("a retry that found the log shorter than its projection did not quarantine it")
+	}
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag = %+v; a quarantined thread is not behind", l)
+	}
+	if got := f.projected()[id]; got != end {
+		t.Errorf("projection moved to %d from %d", got, end)
+	}
+}
+
+// A held thread that a later catch-up finds cut below its projection is
+// quarantined and leaves the behind set.
+func TestCatchUpQuarantinesAHeldThread(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	id, _ := f.thread("Cut")
+	kept := f.post(id, 5, 0)
+	end := f.post(id, 5, 0)
+	f.project(id, end)
+	c := f.restart()
+	tear(t, f.root, id)
+
+	reopen, _ := flaky(c)
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	if l := f.w.Lag(); l.Threads != 1 {
+		t.Fatalf("lag = %+v, want the thread held", l)
+	}
+	if err := os.Truncate(id.LogPath(f.root), kept); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	if !f.w.Quarantined(id) {
+		t.Error("not quarantined")
+	}
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag = %+v; a quarantined thread is not behind", l)
 	}
 }

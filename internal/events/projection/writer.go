@@ -82,9 +82,11 @@ type Writer struct {
 	behind map[threadid.ID]*lag
 
 	// quarantined is the set the last CatchUp found corrupt, and last is
-	// its report.
+	// its report. reopen is the Recover that CatchUp was last given, which
+	// Retry opens held threads through.
 	quarantined map[threadid.ID]bool
 	last        *Report
+	reopen      Recover
 }
 
 // logFile is what the writer needs of an open log.
@@ -171,18 +173,64 @@ func (w *Writer) Deliver(ctx context.Context, b events.Batch) error {
 
 // Retry projects every thread that is behind. It returns an error joining
 // the failures, for Run's backoff; the threads stay behind either way.
+//
+// Once a catch-up has run, each thread is reopened through its Recover
+// first, and projected to the length that reports rather than to the target
+// it was held at: a log held because it could not be opened may end in a
+// torn frame, which the open truncates and projection refuses (review 453).
+// A thread the reopen shows has nothing left to project leaves the behind
+// set through project, which finds it already there; one it shows shorter
+// than its projection is quarantined.
 func (w *Writer) Retry(ctx context.Context) error {
 	w.mu.Lock()
-	targets := make(map[threadid.ID]int64, len(w.behind))
+	type held struct{ target, projected int64 }
+	targets := make(map[threadid.ID]held, len(w.behind))
 	for id, l := range w.behind {
-		targets[id] = l.target
+		targets[id] = held{l.target, l.projected}
 	}
+	reopen := w.reopen
 	w.mu.Unlock()
 	var errs []error
-	for id, target := range targets {
+	for id, h := range targets {
+		target := h.target
+		if reopen != nil {
+			n, err := reopen(ctx, id)
+			if err != nil {
+				errs = append(errs, fmt.Errorf("projection: reopening thread %s: %w", id, err))
+				continue
+			}
+			switch {
+			case n < h.projected:
+				w.quarantine(id, n, h.projected)
+				w.settle(id)
+				continue
+			}
+			// The reopened length is the true one: it replaces the held
+			// target, which may count torn bytes the open has removed.
+			target = n
+			w.mu.Lock()
+			if b := w.behind[id]; b != nil {
+				b.target = n
+			}
+			w.mu.Unlock()
+		}
 		errs = append(errs, w.project(ctx, id, target))
 	}
 	return errors.Join(errs...)
+}
+
+// settle takes a thread out of the behind set without projecting it, for a
+// thread that turned out to have nothing to project.
+func (w *Writer) settle(id threadid.ID) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	if _, ok := w.behind[id]; !ok {
+		return
+	}
+	delete(w.behind, id)
+	if len(w.behind) == 0 {
+		w.log.Info("projection caught up")
+	}
 }
 
 // retryFloor and retryCeiling bound Run's backoff. Variables so a test need

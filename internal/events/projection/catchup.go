@@ -102,13 +102,15 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		w.log.Warn("a file under threads/ is not a thread's log or index", "path", path)
 	}
 
+	w.mu.Lock()
+	w.reopen = reopen
+	w.mu.Unlock()
+
 	corrupt := map[threadid.ID]bool{}
 	quarantine := func(id threadid.ID, logLength, at int64) {
 		corrupt[id] = true
-		w.log.Error("a thread's log is shorter than its projection; it is quarantined and served as 503 "+
-			"until repaired. A crash cannot cause this, because the projection is written after the log, "+
-			"unless storage.fsync is \"never\", where a crash can lose log writes the database kept",
-			"thread", id, "log_length", logLength, "projected", at)
+		w.settle(id)
+		w.logCorrupt(id, logLength, at)
 	}
 
 	ids := make([]threadid.ID, 0, len(logs))
@@ -128,6 +130,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		}
 		switch {
 		case size == at:
+			w.settle(id) // a gap held earlier that has since closed
 			continue
 		case size < at:
 			quarantine(id, size, at)
@@ -152,7 +155,8 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 			quarantine(id, length, at)
 			continue
 		case length == at:
-			continue // the gap was a torn tail, and the open removed it
+			w.settle(id) // the gap was a torn tail, and the open removed it
+			continue
 		}
 		if err := w.project(ctx, id, length); err != nil {
 			rep.Failed = append(rep.Failed, id)
@@ -184,6 +188,26 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		"corrupt", len(rep.Corrupt), "failed", len(rep.Failed), "strays", len(rep.Strays),
 		"elapsed", rep.Elapsed)
 	return rep, nil
+}
+
+// logCorrupt is the error line for a log shorter than its projection.
+func (w *Writer) logCorrupt(id threadid.ID, logLength, at int64) {
+	w.log.Error("a thread's log is shorter than its projection; it is quarantined and served as 503 "+
+		"until repaired. A crash cannot cause this, because the projection is written after the log, "+
+		"unless storage.fsync is \"never\", where a crash can lose log writes the database kept",
+		"thread", id, "log_length", logLength, "projected", at)
+}
+
+// quarantine adds a thread to the quarantine outside a catch-up, for a retry
+// that finds the log shorter than its projection.
+func (w *Writer) quarantine(id threadid.ID, logLength, at int64) {
+	w.mu.Lock()
+	if w.quarantined == nil {
+		w.quarantined = map[threadid.ID]bool{}
+	}
+	w.quarantined[id] = true
+	w.mu.Unlock()
+	w.logCorrupt(id, logLength, at)
 }
 
 // Quarantined reports whether the last catch-up found thread id's log
