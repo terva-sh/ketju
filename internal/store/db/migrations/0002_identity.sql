@@ -8,7 +8,9 @@
 CREATE TABLE users (
 	id               INTEGER PRIMARY KEY,
 	-- 3 to 30 of a-z 0-9 _ -, starting with a letter or digit, stored
-	-- lowercased (docs/04). GLOB is case-sensitive, so the character class
+	-- lowercased (docs/04). It must be TEXT: a BLOB bound here is stored as
+	-- a BLOB, whose length counts every byte while GLOB stops at a NUL, and
+	-- which NOCASE does not fold. GLOB is case-sensitive, so the character class
 	-- also refuses uppercase. length() and GLOB both stop at a NUL, so the
 	-- byte length must equal the character length: that refuses an embedded
 	-- NUL and anything after it, and any multi-byte character. NOCASE on the
@@ -16,7 +18,8 @@ CREATE TABLE users (
 	-- the CHECK. domain.ValidateHandle is the same rule in Go, and a test
 	-- holds the two together.
 	handle           TEXT    NOT NULL COLLATE NOCASE UNIQUE
-		CHECK (length(handle) BETWEEN 3 AND 30
+		CHECK (typeof(handle) = 'text'
+		       AND length(handle) BETWEEN 3 AND 30
 		       AND length(CAST(handle AS BLOB)) = length(handle)
 		       AND handle NOT GLOB '*[^a-z0-9_-]*'
 		       AND substr(handle, 1, 1) GLOB '[a-z0-9]'),

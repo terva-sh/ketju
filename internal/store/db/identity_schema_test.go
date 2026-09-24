@@ -259,3 +259,27 @@ func TestNoCascadingDeletes(t *testing.T) {
 		t.Fatalf("deleting a user with a session: %v, want a FOREIGN KEY failure", err)
 	}
 }
+
+// TestHandleMustBeText: SQLite stores a BLOB bound to a TEXT column as a
+// BLOB, and a BLOB's length counts every byte while GLOB stops at a NUL. The
+// generated query binds a string, so this goes around it, as any hand-written
+// SQL could.
+//
+// Two clauses refuse a BLOB, and this test cannot tell them apart:
+// typeof(handle) = 'text', which says so on purpose, and the first-character
+// check, because substr() of a BLOB is a BLOB and never matches the GLOB. The
+// second is an accident of SQLite's semantics, which is why the first exists
+// (Terva review 377).
+func TestHandleMustBeText(t *testing.T) {
+	d, _ := openTest(t)
+	for _, h := range [][]byte{[]byte("abc\x00!"), []byte("drew")} {
+		err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+			_, err := tx.ExecContext(t.Context(),
+				`INSERT INTO users (handle, display_name, created_at, updated_at) VALUES (?, 'x', 1, 1)`, h)
+			return err
+		})
+		if err == nil {
+			t.Errorf("a BLOB handle %q was stored", h)
+		}
+	}
+}

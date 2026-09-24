@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T07:28:59Z
+updated_at: 2026-09-24T07:31:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -110,6 +110,10 @@ The flaky threadlog test (TKT-01M393S6P7) failed once more in a full local suite
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:28:59Z
 
 Terva review 374 (run b27164e9-fe07-4bad-9871-762fe3f855ca, Actions run 130), head cb1fc6e8cc511310c9dc4eaf956c7bddd5f88041, base 1c605e5f9a3f03edeee4206d68467597a137f363: one medium finding, 'Handle CHECK can accept text containing an embedded NUL'. **Accepted and fixed.** It reproduced: with 'abc\\x00!' and 'abc\\x00' added to domain.HandleCases, TestHandleRuleMatchesTheSchema failed because the schema accepted both, since length() and GLOB stop at a NUL. The CHECK now also requires length(CAST(handle AS BLOB)) = length(handle), which refuses an embedded NUL and any multi-byte character. Both cases are in the shared table permanently. A follow-up review of the new head is requested.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:31:34Z
+
+Terva review 377 (run 1cf28907-4ba0-4ef0-addf-a00673522c6c, Actions run 132), head af43769d8f4c90a82141e4b2d43a01b51580bbc8, base 1c605e5f9a3f03edeee4206d68467597a137f363. Finding 1 from review 374 is marked resolved. One new medium finding, 'Handle CHECK still accepts invalid BLOB values'. **Accepted as hardening; its failure scenario did not reproduce.** A raw insert of the BLOBs 'abc\\x00!' and 'drew' was already refused. A probe showed why: substr() of a BLOB returns a BLOB, which never matches GLOB '[a-z0-9]', so the first-character clause refuses every BLOB. That is an accident of SQLite's semantics, not a stated rule, so the CHECK now begins with typeof(handle) = 'text' and its comment says why. TestHandleMustBeText inserts BLOBs around the generated query, and its comment says it cannot tell the two refusing clauses apart. A follow-up review of the new head is requested.
 
 ## Summary
 
