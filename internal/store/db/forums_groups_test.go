@@ -74,6 +74,7 @@ func TestSystemGroupsSeededAndUndeletable(t *testing.T) {
 			"delete":      "DELETE FROM groups WHERE id = ?",
 			"rename slug": "UPDATE groups SET slug = slug || '-x' WHERE id = ?",
 			"clear flag":  "UPDATE groups SET is_system = 0 WHERE id = ?",
+			"change id":   "UPDATE groups SET id = id + 100 WHERE id = ?",
 		} {
 			err := try(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
 				_, err := tx.ExecContext(t.Context(), stmt, id)
@@ -256,6 +257,8 @@ func TestGroupMemberSource(t *testing.T) {
 		{"an idp row naming an adder", "INSERT INTO group_members (group_id, user_id, source, added_by, added_at) VALUES (?, ?, 'idp', ?, 1)", []any{editors, admin, admin}},
 		{"a row for everyone", "INSERT INTO group_members (group_id, user_id, source, added_at) VALUES (?, ?, 'admin', 1)", []any{groupID(t, d, domain.GroupEveryone), admin}},
 		{"a row for members", "INSERT INTO group_members (group_id, user_id, source, added_at) VALUES (?, ?, 'admin', 1)", []any{groupID(t, d, domain.GroupMembers), admin}},
+		{"moving a row into everyone", "UPDATE group_members SET group_id = ? WHERE user_id = ? AND group_id = ?", []any{groupID(t, d, domain.GroupEveryone), user, mods}},
+		{"moving a row into members", "UPDATE group_members SET group_id = ? WHERE user_id = ? AND group_id = ?", []any{groupID(t, d, domain.GroupMembers), user, mods}},
 	} {
 		if err := try(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
 			_, err := tx.ExecContext(t.Context(), c.stmt, c.args...)

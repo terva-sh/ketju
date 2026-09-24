@@ -60,7 +60,7 @@ INSERT INTO groups (id, name, slug, description, is_system, created_at, updated_
 	(4, 'Admins',     'admins',     'Administer the forum.',                     1, 0, 0);
 
 -- Exactly those four are system groups, for good: none is deleted, none loses
--- its flag or slug, and no other group gains the flag.
+-- its flag, slug or id, and no other group gains the flag.
 CREATE TRIGGER groups_system_no_delete
 BEFORE DELETE ON groups
 WHEN OLD.is_system = 1
@@ -69,11 +69,11 @@ BEGIN
 END;
 
 CREATE TRIGGER groups_system_no_change
-BEFORE UPDATE OF is_system, slug ON groups
+BEFORE UPDATE OF id, is_system, slug ON groups
 WHEN NEW.is_system IS NOT OLD.is_system
-  OR (OLD.is_system = 1 AND NEW.slug IS NOT OLD.slug)
+  OR (OLD.is_system = 1 AND (NEW.slug IS NOT OLD.slug OR NEW.id IS NOT OLD.id))
 BEGIN
-	SELECT RAISE(ABORT, 'system groups keep their slug and flag, and no group becomes one');
+	SELECT RAISE(ABORT, 'system groups keep their id, slug and flag, and no group becomes one');
 END;
 
 CREATE TRIGGER groups_system_no_insert
@@ -102,6 +102,13 @@ CREATE INDEX group_members_user ON group_members (user_id);
 -- a second, contradictory source of truth.
 CREATE TRIGGER group_members_not_implicit
 BEFORE INSERT ON group_members
+WHEN NEW.group_id IN (SELECT id FROM groups WHERE slug IN ('everyone', 'members'))
+BEGIN
+	SELECT RAISE(ABORT, 'membership of everyone and members is implicit, never stored');
+END;
+
+CREATE TRIGGER group_members_not_implicit_on_update
+BEFORE UPDATE OF group_id ON group_members
 WHEN NEW.group_id IN (SELECT id FROM groups WHERE slug IN ('everyone', 'members'))
 BEGIN
 	SELECT RAISE(ABORT, 'membership of everyone and members is implicit, never stored');

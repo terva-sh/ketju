@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T07:44:07Z
+updated_at: 2026-09-24T07:45:55Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -108,6 +108,10 @@ Migration `0003_forums_groups.sql` and `queries/forums_groups.sql`.
 
 ### Mutations tried, all caught
 The insert depth trigger disabled; the update trigger ignoring children; system groups deletable; rows for the implicit groups allowed; a plain UNIQUE on nullable forum_id; a sixth permission in the CHECK; an IdP mapping overwriting an admin row; the everyone:read seed dropped. The first attempt at the insert-trigger mutation was itself faulty (it left the trigger in place under another name) and was redone.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:45:55Z
+
+Terva review 378 (run c1d78912-d7a0-45ef-b0c2-423cdfaedc5c, Actions run 139), head d1506c315d0255a0b829a1192148c1571369fb1a, base e422e22113dafe542a645d09588bd3c52e5101f7: two medium findings, **both accepted and fixed**. (1) 'Block updates that move memberships into implicit groups': a new trigger, group_members_not_implicit_on_update, refuses UPDATE OF group_id into everyone or members. TestGroupMemberSource moves a row into each; with the trigger disabled, both moves are accepted. (2) 'Preserve the fixed IDs of seeded system groups': groups_system_no_change now also watches id and refuses changing a system group's id. TestSystemGroupsSeededAndUndeletable tries id + 100 on each; without the id clause, moderators and admins move. everyone and members were already held by the FK from the seeded permissions. A follow-up review of the new head is requested.
 
 ## Summary
 
