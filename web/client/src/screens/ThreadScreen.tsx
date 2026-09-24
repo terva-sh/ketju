@@ -1,79 +1,59 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
+import { peekGet } from '../api/client';
+import type { ThreadPage } from '../api/dto';
+import { isProblem } from '../api/problem';
+import { useResource } from '../api/resource';
+import { ErrorPanel } from '../components/ErrorPanel';
+import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
 import { NotFound } from './Placeholder';
-
-interface ThreadHead {
-  thread: { id: string; slug: string; title: string };
-}
 
 // ThreadScreen is the thread route until the thread page lands
 // (TKT-01M29CEE6V). What it does now is the router's part: ask for the page
 // the URL names, and when the thread's slug has changed, replace the URL with
-// the canonical one. The bare fetch is temporary; the fetch layer
-// (TKT-01M29CEE5H) takes it over.
+// the canonical one.
+//
+// useResource keys the answer on the request, so moving to another thread,
+// or another page of this one, never renders the last answer's title or 404,
+// not even for one render. The title shown while a page loads, or after it
+// fails, is the thread's own from the cache, which only ever holds this
+// thread's. A failure that is not a 404 says so, with a retry; it does not
+// leave an earlier 404 standing, which would call a thread that exists
+// missing.
 export function ThreadScreen() {
   const { params, path } = useRoute();
   const { route, url } = useLocation();
   const view = useThreadView();
-  // What the last answer said, and which thread it was about. It is read
-  // only when that is the thread on screen, so moving to another thread never
-  // renders the last one's title or 404, not even for the one render before
-  // its own request is made.
-  //
-  // A request that fails for any reason but 404 says so, keeping the title
-  // it had; it does not leave an earlier 404 standing, which would call a
-  // thread that exists missing. Retrying is the fetch layer's
-  // (TKT-01M29CEE5H).
-  const [answer, setAnswer] = useState<{ id: string; head?: ThreadHead; missing?: boolean; failed?: boolean } | null>(
-    null,
-  );
-  const current = answer?.id === params.id ? answer : null;
   const history = path.endsWith('/history');
 
-  useEffect(() => {
-    const q = new URLSearchParams();
-    if (view.hasPage) q.set('page', String(view.page));
-    if (view.lens) q.set('lens', view.lens);
-    // A permalink, or a post's history, asks for the page holding that post.
-    if (params.ordinal) q.set('ordinal', params.ordinal);
-    const s = q.toString();
-    const id = params.id;
-    let live = true;
-    const failed = () => {
-      if (live) setAnswer((a) => ({ id, head: a?.id === id ? a.head : undefined, failed: true }));
-    };
-    fetch(`/api/v1/threads/${encodeURIComponent(params.id)}${s ? '?' + s : ''}`, {
-      headers: { Accept: 'application/json' },
-    })
-      .then(async (r) => {
-        if (!live) return;
-        if (r.status === 404) return setAnswer({ id, missing: true });
-        if (!r.ok) return failed();
-        const body = (await r.json()) as ThreadHead;
-        if (!live) return;
-        setAnswer({ id, head: body });
-      })
-      .catch(failed);
-    return () => {
-      live = false;
-    };
-  }, [params.id, params.ordinal, view.page, view.hasPage, view.lens, history]);
+  const q: ThreadQuery = {
+    page: view.hasPage ? view.page : undefined,
+    lens: view.lens || undefined,
+    ordinal: params.ordinal,
+  };
+  const key = threadUrl(params.id, q);
+  const res = useResource(
+    key,
+    (signal) => loadThreadPage(params.id, q, signal),
+    () => peekGet<ThreadPage>(key),
+  );
+  const head = res.data?.thread ?? cachedThread(params.id)?.header;
 
   // The slug is checked whenever the address or the answer changes, not only
   // when a request comes back: moving to an old slug of the thread already on
   // screen asks for nothing new, and must still land on the canonical URL.
   useEffect(() => {
-    if (!current?.head) return;
-    const to = canonicalThreadUrl(location, current.head.thread);
+    if (!res.data) return;
+    const to = canonicalThreadUrl(location, res.data.thread);
     if (to) route(to, true);
-  }, [current, url]);
+  }, [res.data, url]);
 
-  if (current?.missing) return <NotFound />;
+  if (isProblem(res.error, 'not-found')) return <NotFound />;
   return (
     <main class="scaffold" data-screen={history ? 'post-history' : 'thread'}>
-      <h1>{current?.head?.thread.title ?? 'Thread'}</h1>
-      {current?.failed && <p role="alert">This thread could not be loaded.</p>}
+      <h1>{head?.title ?? 'Thread'}</h1>
+      {res.error && <ErrorPanel error={res.error} what="This thread" onRetry={res.retry} />}
       <p>
         {history ? `History of post ${params.ordinal}. ` : ''}
         Page {view.page}

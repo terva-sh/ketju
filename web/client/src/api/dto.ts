@@ -1,0 +1,166 @@
+// The API's response shapes, mirroring internal/dto (docs/07 "Where the
+// shapes live"). The Go structs and their goldens are the contract; these are
+// written by hand to match, and dto-contract.ts fails the type check when a
+// golden and a type here disagree in either direction. What each field means
+// is documented on the Go side and not repeated here.
+
+// Milliseconds since the Unix epoch.
+export type Millis = number;
+
+export interface Author {
+  handle: string;
+  display_name: string;
+  avatar: string;
+  role: string;
+  kind: string;
+}
+
+export interface Attachment {
+  hash: string;
+  size: number;
+  mime: string;
+  original_name: string;
+}
+
+export interface ForumRef {
+  slug: string;
+  name: string;
+}
+
+export interface Pinned {
+  scope: string;
+  until: Millis | null;
+}
+
+export interface Pagination {
+  number: number;
+  size: number;
+  total_pages: number;
+}
+
+export interface Lens {
+  kind: string;
+  value: string;
+  shown: number;
+  hidden: number;
+}
+
+export interface ThreadHeader {
+  id: string;
+  slug: string;
+  title: string;
+  forum: ForumRef;
+  post_count: number;
+  log_length: number;
+  locked: boolean;
+  pinned: Pinned | null;
+  tags: string[];
+  created_at: Millis;
+}
+
+export interface ThreadViewer {
+  last_read_ordinal: number;
+  watch: string;
+  can_reply: boolean;
+  can_moderate: boolean;
+}
+
+export interface Post {
+  ordinal: number;
+  revision: number;
+  author: Author;
+  created_at: Millis;
+  edited_at: Millis | null;
+  reply_to: number | null;
+  reply_to_suppressed: boolean;
+  reply_count: number;
+  html: string;
+  attachments: Attachment[];
+  deleted: boolean;
+  moved_to: string | null;
+  machine_authored: boolean;
+}
+
+export interface ThreadPage {
+  thread: ThreadHeader;
+  page: Pagination;
+  lens: Lens | null;
+  viewer: ThreadViewer;
+  posts: Post[];
+}
+
+export interface PostReplies {
+  ordinal: number;
+  posts: Post[];
+}
+
+export interface PostRevision {
+  revision: number;
+  actor: Author;
+  at: Millis;
+  reason: string;
+  source: string;
+}
+
+export interface PostHistory {
+  ordinal: number;
+  deleted: boolean;
+  revisions: PostRevision[];
+}
+
+export interface ThreadRow {
+  id: string;
+  slug: string;
+  title: string;
+  tags: string[];
+  author: Author;
+  reply_count: number;
+  last_post_author: Author;
+  last_post_at: Millis;
+  pinned: Pinned | null;
+  locked: boolean;
+  unread: number;
+  last_read_ordinal: number;
+}
+
+export interface ThreadList {
+  forum: ForumRef | null;
+  threads: ThreadRow[];
+  next_cursor: string;
+}
+
+export interface Forum {
+  slug: string;
+  name: string;
+  description: string;
+  visibility: string;
+  archived: boolean;
+  thread_count: number;
+  unread: number;
+  children: Forum[];
+}
+
+export interface ForumTree {
+  forums: Forum[];
+}
+
+export interface UnreadCounts {
+  threads: number;
+  participated: number;
+  watching: number;
+}
+
+export interface Settings {
+  timezone: string;
+  locale: string;
+  page_size: number;
+}
+
+export interface Me {
+  user: Author | null;
+  // Set only for an approval-mode applicant, whose user is still null.
+  pre_user: { provider: string } | null;
+  unread: UnreadCounts;
+  notifications: number;
+  settings: Settings;
+}

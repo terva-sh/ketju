@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CEE5HNKZW34DB1THVBCAX
 title: Build the fetch layer and signals state
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:preact-client
     path: docs/07-api-and-clients.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/cee5h-fetch-layer
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: fc7a709a7b0e668051111c4f651e0975c91827d3
-  session: null
-  claimed_at: 2026-09-24T12:42:15Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T12:44:26Z
+updated_at: 2026-09-24T12:53:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,10 +44,10 @@ Problem-details errors need one handling path here, mapping a stable type code t
 
 ## Acceptance criteria
 
-- [ ] Conditional requests send If-None-Match and a 304 serves the cached body
-- [ ] Per-thread client caches are keyed on log length and a new length replaces rather than merges
-- [ ] Problem-details responses map to messages in one place
-- [ ] A failed request has a retry path that does not leave a screen in a permanent spinner
+- [x] Conditional requests send If-None-Match and a 304 serves the cached body
+- [x] Per-thread client caches are keyed on log length and a new length replaces rather than merges
+- [x] Problem-details responses map to messages in one place
+- [x] A failed request has a retry path that does not leave a screen in a permanent spinner
 
 ## Implementation plan
 
@@ -126,3 +119,69 @@ docs/07 "Preact client" (State), "Error catalogue", "Thread response shape", "Wh
 ### Interactions
 - Carried from the pre-groom plan: this depends on CCC02 and CA99R (/me). Every screen ticket calls `useResource`.
 - The later SSE client, CTYA0, calls the thread endpoint with `after_log_length`. That answer is partial: only the new posts and edits. Storing it through `loadThreadPage` would replace a whole page with a fragment, so `loadThreadPage` refuses an `after_log_length` query. CTYA0 adds the merge that applies a fragment to the held page and advances `logLength`.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:53:34Z
+
+### What was built
+
+**`src/api/problem.ts`: the one table from code to words.**
+- It is typed as a `Record` over the code union, so leaving out a code fails to compile.
+- A body that is not problem+json maps from its status to the code the server would have sent.
+- A type the client does not know is not believed.
+- `network` is the client's own code, for a request that never reached the server.
+
+**`src/api/client.ts`: `apiGet` and `apiSend`.**
+- `apiGet` keeps an LRU of `{etag, body}` per URL, 100 entries, and a 304 counts as a use.
+- It sends If-None-Match when it holds a tag, and serves the held body on a 304.
+- A 304 with nothing held is an error.
+- A 200 without a tag drops what was held.
+- `apiSend` always sends JSON.
+
+**`src/api/resource.ts`: `useResource`.**
+- Answers are keyed.
+- It shows the held copy at once.
+- A superseded request is aborted and ignored, whether it succeeds or fails late.
+- An error keeps any data the key already had.
+- `retry` re-runs the request.
+
+**`src/state/threads.ts`: the thread cache.**
+- A signal of `id → {logLength, header, pages}`.
+- A new log length replaces the entry; it is never merged.
+- A 404, 410, 403 or 401 drops the thread.
+- Pages are filed under the page the server answered with, not the one requested.
+- `loadThreadPage` takes no `after_log_length`; merging a fragment is TKT-01M29CTYA0's job.
+
+**`src/state/viewer.ts`**: `viewer`, `notifications` (computed from the viewer), and `refreshViewer`.
+
+**`src/components/ErrorPanel.tsx`**: shows the table's words, any Retry-After, a sign-in prompt for `unauthenticated` only, and Retry.
+
+**`src/api/dto.ts` and `dto-contract.ts`**: TypeScript types mirroring internal/dto, checked against all 19 goldens in both directions by `tsc`.
+
+**ThreadScreen** now goes through `useResource` and `loadThreadPage`. All the TKT-01M29CEE52 guarantees still hold; its tests now use full-shaped bodies built from the member golden.
+
+### Decided at claim
+Retry-After is displayed and never acted on automatically. The rationale is in the plan and in the ErrorPanel comment.
+
+### Found while testing
+The first `useResource` ignored every AbortError. An abort it did not cause itself would have left `loading` true forever, which is exactly the permanent spinner AC4 forbids. Now only the hook's own abort is silent, and a test pins this.
+
+### Gap, not blocking
+The sign-in offer is a prompt, not a link. The client has no provider list to link to `/auth/{provider}/start`, and no ticket yet covers a sign-in screen. Whoever builds one should render it where ErrorPanel marks `data-sign-in`.
+
+### Verification
+- **The contract fails for real drift.** Eight deliberate drifts of dto.ts, run through `tsc` during development, were all caught:
+  - an extra key nested in Author;
+  - an extra key in a recursive Forum;
+  - an extra key in array elements (revisions, attachments);
+  - an extra top-level key;
+  - a field the golden lacks;
+  - a retyped field;
+  - a nullable narrowed to null.
+- **Mutation:** 39 mutants over client, problem, resource, threads, ThreadScreen, ErrorPanel and viewer were all killed. The one that survived at first, a late success from a superseded request, got its own test.
+- **Suite and build:** Vitest has 261 tests. `tsc --noEmit` is clean. The bundle is 37.5 kB raw, 14.4 kB gzipped, and holds no golden. The rebuilt dist is reproducible, and the Go web and spa tests pass.
+
+## Summary
+
+Landed the client fetch layer: problem.ts (one code-to-words table, typed exhaustive over the catalogue, status fallback, client-only network code), client.ts (apiGet with a 100-entry LRU of ETag/body, If-None-Match, 304 served from the held body; apiSend JSON), resource.ts (useResource: keyed answers, held copy shown at once, superseded requests aborted and ignored, retry), state/threads.ts (thread cache keyed on log_length, replaced on a new length, dropped on 404/410/403/401), state/viewer.ts (viewer, notifications, refreshViewer), ErrorPanel, and dto.ts + dto-contract.ts holding hand-written types to all 19 goldens both ways under tsc. ThreadScreen uses it. Retry-After is shown, not acted on. 39 mutants killed; 261 Vitest tests.

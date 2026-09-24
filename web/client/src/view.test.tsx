@@ -3,7 +3,7 @@ import { act } from 'preact/test-utils';
 import { LocationProvider } from 'preact-iso';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { canonicalThreadUrl, parsePage, useThreadView, type ThreadView } from './view';
-import { renderAt, route, screenOf, settle } from './testing';
+import { renderAt, route, screenOf, settle, threadJSON } from './testing';
 import { ThreadScreen } from './screens/ThreadScreen';
 
 afterEach(() => {
@@ -129,7 +129,7 @@ describe('a stale slug', () => {
     const asked: string[] = [];
     vi.stubGlobal('fetch', async (url: string) => {
       asked.push(url);
-      return new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'renamed', title: 'Renamed' } }), {
+      return new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'renamed', title: 'Renamed' }), {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       });
@@ -148,12 +148,12 @@ describe('a stale slug', () => {
 
   it('keeps the permalink ordinal', async () => {
     vi.stubGlobal('fetch', async () =>
-      new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' } }), { status: 200 }),
+      new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' }), { status: 200 }),
     );
     const asked: string[] = [];
     vi.stubGlobal('fetch', async (url: string) => {
       asked.push(url);
-      return new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' } }), {
+      return new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' }), {
         status: 200,
       });
     });
@@ -169,7 +169,7 @@ describe('a stale slug', () => {
     let calls = 0;
     vi.stubGlobal('fetch', async () => {
       calls++;
-      return new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' } }), {
+      return new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' }), {
         status: 200,
       });
     });
@@ -193,7 +193,7 @@ describe('a stale slug', () => {
     vi.stubGlobal('fetch', async (url: string) =>
       url.includes('01k4z3j0w8x2c')
         ? new Response('{}', { status: 404 })
-        : new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2d', slug: 'here', title: 'Here' } }), {
+        : new Response(threadJSON({ id: '01k4z3j0w8x2d', slug: 'here', title: 'Here' }), {
             status: 200,
           }),
     );
@@ -212,7 +212,7 @@ describe('a stale slug', () => {
     vi.stubGlobal('fetch', async () =>
       calls++ === 0
         ? new Response('{}', { status: 404 })
-        : new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'Back' } }), { status: 200 }),
+        : new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'Back' }), { status: 200 }),
     );
     const root = await renderAt('/t/01k4z3j0w8x2c/a');
     expect(screenOf(root)).toBe('not-found');
@@ -238,7 +238,7 @@ describe('a stale slug', () => {
   it('never renders the last thread for the next one, even once', async () => {
     vi.stubGlobal('fetch', async (url: string) =>
       url.includes('01k4z3j0w8x2c')
-        ? new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'First' } }), { status: 200 })
+        ? new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'First' }), { status: 200 })
         : new Promise<Response>(() => {}),
     );
     const root = await renderAt('/t/01k4z3j0w8x2c/a');
@@ -296,7 +296,7 @@ describe('a stale slug', () => {
     vi.stubGlobal('fetch', (url: string) => {
       if (calls++ === 0) return new Promise<Response>((_, reject) => (failFirst = () => reject(new TypeError('late'))));
       return Promise.resolve(
-        new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'Newer' } }), { status: 200 }),
+        new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'Newer' }), { status: 200 }),
       ).then((r) => (expect(url).toContain('page=2'), r));
     });
     const root = await renderAt('/t/01k4z3j0w8x2c/a');
@@ -313,7 +313,7 @@ describe('a stale slug', () => {
     let calls = 0;
     vi.stubGlobal('fetch', async () =>
       calls++ === 0
-        ? new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'Kept' } }), { status: 200 })
+        ? new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'Kept' }), { status: 200 })
         : new Response('{}', { status: 503 }),
     );
     const root = await renderAt('/t/01k4z3j0w8x2c/a');
@@ -327,7 +327,7 @@ describe('a stale slug', () => {
   it('does not show the last thread while the next loads', async () => {
     vi.stubGlobal('fetch', async (url: string) =>
       url.includes('01k4z3j0w8x2c')
-        ? new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'First' } }), { status: 200 })
+        ? new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'First' }), { status: 200 })
         : new Promise<Response>(() => {}),
     );
     const root = await renderAt('/t/01k4z3j0w8x2c/a');

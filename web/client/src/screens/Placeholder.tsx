@@ -1,4 +1,4 @@
-import { viewer } from '../state';
+import { viewer } from '../state/viewer';
 
 // Placeholder stands in for a screen phase 1 has not built yet, so every URL
 // in docs/07 already answers with the right screen's name rather than

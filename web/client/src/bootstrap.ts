@@ -1,23 +1,10 @@
+import type { Me } from './api/dto';
+
+export type { Me };
+
 // The viewer the server rendered into the page (docs/07 "Embedding"): the
 // shell carries /me as a JSON data block so the first paint needs no round
 // trip. It is never executed, which is why the CSP allows it.
-
-export interface Author {
-  handle: string;
-  display_name: string;
-  avatar: string;
-  role: string;
-  kind: string;
-}
-
-export interface Me {
-  user: Author | null;
-  // Set only for an approval-mode applicant, whose user is still null.
-  pre_user: { provider: string } | null;
-  unread: { threads: number; participated: number; watching: number };
-  notifications: number;
-  settings: { timezone: string; locale: string; page_size: number };
-}
 
 export const anonymous: Me = {
   user: null,

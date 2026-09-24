@@ -1,6 +1,10 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
+import { resetApiCache } from './api/client';
+import type { ThreadPage } from './api/dto';
 import { App } from './app';
+import { resetThreadCache } from './state/threads';
+import golden from '../../../internal/dto/testdata/golden/thread.member.json';
 
 let mounted: HTMLElement | null = null;
 
@@ -13,6 +17,8 @@ export async function renderAt(url: string): Promise<HTMLElement> {
     const prev = mounted;
     await act(async () => render(null, prev));
   }
+  resetApiCache();
+  resetThreadCache();
   history.replaceState(null, '', url);
   const root = document.createElement('div');
   mounted = root;
@@ -42,3 +48,12 @@ export async function route(url: string) {
     dispatchEvent(new PopStateEvent('popstate'));
   });
 }
+
+// threadPage is a full thread response, the member golden with the thread's
+// id, slug and title replaced, as a test's stubbed server answers.
+export function threadPage(thread: { id: string; slug: string; title: string }, over: Partial<ThreadPage> = {}): ThreadPage {
+  const g = structuredClone(golden) as ThreadPage;
+  return { ...g, ...over, thread: { ...g.thread, ...thread, ...over.thread } };
+}
+
+export const threadJSON = (thread: { id: string; slug: string; title: string }) => JSON.stringify(threadPage(thread));

@@ -25,13 +25,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-09-11T23:28:54Z
+updated_at: 2026-09-24T12:53:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-415af6aa
+  name: ""
 extensions: {}
 ---
 
@@ -47,3 +47,9 @@ Polling every 30 seconds is the fallback when SSE is unavailable, which covers p
 - [ ] A reader at the bottom receives posts inline with no pill
 - [ ] Polling takes over when the stream fails and stops when it recovers
 - [ ] The subscription closes on navigation away and does not leak connections
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T12:53:34Z
+
+From TKT-01M29CEE5H (fetch layer). `state/threads.ts`'s loadThreadPage refuses nothing at runtime, but it is only for full pages: storing an after_log_length answer through it would replace a page with a fragment, because a new log_length replaces the whole entry. Add a merge that applies the fragment to the held page (threadCache entry, pages keyed by pageKey) and advances logLength, and route SSE refetches through it. A delete/restore moves log_length with no post to account for it (docs/07); refetch the full page through loadThreadPage then.
