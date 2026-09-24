@@ -18,6 +18,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
@@ -176,6 +177,9 @@ func TestDomainErrorsMapToTheirCode(t *testing.T) {
 		{"a closed bus is retryable", events.ErrClosed, CodeUnavailable},
 		{"a deadline is retryable", context.DeadlineExceeded, CodeUnavailable},
 		{"a cancelled request is retryable", context.Canceled, CodeUnavailable},
+		{"a busy database is retryable", db.ErrBusy, CodeUnavailable},
+		{"a database newer than the binary is unavailable", db.ErrSchemaNewer, CodeUnavailable},
+		{"inconsistent migrations are a server fault", db.ErrMigrations, CodeInternal},
 		{"corruption is a server fault", threadlog.ErrChecksum, CodeInternal},
 		{"an unknown record type is a server fault", threadlog.ErrUnknownRecordType, CodeInternal},
 		{"an unmapped error is a server fault", errors.New("something new"), CodeInternal},

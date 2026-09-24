@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-11T23:27:36Z
+updated_at: 2026-09-24T07:08:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-415af6aa
+  name: ""
 extensions: {}
 ---
 
@@ -48,3 +48,9 @@ Indexing plain source rather than HTML keeps markdown syntax out of the results 
 - [ ] Deleted posts are removed from the index and do not appear in results
 - [ ] The index is built from plain source with markdown syntax stripped
 - [ ] Indexing lag is observable and never blocks an append
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:08:06Z
+
+From TKT-01M29BW9Q1 (Build the database access layer and migration runner), 2026-09-24: sqlc v1.31.1 cannot parse FTS5's whole-table form `WHERE search MATCH ?` (it fails with 'column does not exist'), nor the table-valued `FROM search(?)`. It does accept `WHERE search.source_plain MATCH ?` with `ORDER BY rank`. A query across every column either goes in internal/store/db/views/ as hand-written SQL, or names one column and puts an FTS5 column filter such as `{title source_plain}: term` inside the MATCH string. The parse smoke is internal/store/db/testdata/smoke/.

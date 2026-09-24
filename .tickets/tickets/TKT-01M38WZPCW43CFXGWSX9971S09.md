@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T06:36:48Z
+updated_at: 2026-09-24T06:59:01Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -178,3 +178,7 @@ How the run applies it:
 - A review that runs is still binding. A finding at medium or above blocks as before, and low findings are still fixed or answered.
 - "Consistently" means review runs failing on two run PRs in a row. The run then halts and a person looks at the review workflow. A single retry on the same head does not count as a second PR.
 - PR #47 merged by the user at ac05a3c on 2026-09-24, without a completed review, is outside this rule. A person merged it.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T06:59:01Z
+
+Merged: TKT-01M29BSPE8 (Decide the pure-Go SQLite driver), PR #48, rebased onto main at 9aa4cf1b7dac9d793968462dbc3a487a3ea9eda0. Gate: CI run 115 succeeded, and its step log shows the race tests and the new 'check the SQLite driver spike' step ran. The clean Terva review is run 5299b680 on 9aa4cf1. Two earlier findings were fixed: 364 (high, directory fsync must be a prerequisite) and 365 (medium, unbounded busy retries). For the next tickets: ncruces stands, and BSPE8's 2× halt rule was not met. TKT-01M29BW9Q1 now has an extra acceptance criterion, a data-directory fsync once the WAL exists, and its single write connection is required, not optional. The shared DSN keys are proven on both drivers. Reviews ran on all three heads; none failed to run.

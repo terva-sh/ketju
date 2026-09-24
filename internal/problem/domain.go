@@ -7,6 +7,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
@@ -48,6 +49,13 @@ var mapping = []struct {
 	{events.ErrClosed, CodeUnavailable},
 	{events.ErrDrainTimeout, CodeUnavailable},
 	{context.DeadlineExceeded, CodeUnavailable},
+	// The database lock outlasted busy_timeout: another process holds it,
+	// or a long read blocked a checkpoint. Retryable.
+	{db.ErrBusy, CodeUnavailable},
+	// A newer binary migrated this database. The server should refuse to
+	// start, so this reaching a handler means it did not; say so honestly
+	// rather than serve queries against a schema they were not written for.
+	{db.ErrSchemaNewer, CodeUnavailable},
 
 	// Corruption and programmer error. These are all CodeInternal on purpose.
 	// A checksum mismatch is a server fault, not something the reader did, and
@@ -68,6 +76,7 @@ var mapping = []struct {
 	{threadid.ErrTimestampRange, CodeInternal},
 	{events.ErrStarted, CodeInternal},
 	{events.ErrDuplicateName, CodeInternal},
+	{db.ErrMigrations, CodeInternal},
 }
 
 // coded is an error that names its own API code.

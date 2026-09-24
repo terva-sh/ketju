@@ -65,6 +65,24 @@ jobs:
         # package". When cmd/ketju lands this step covers it with no edit.
         run: go build ./...
 
+      - name: generated database code is current
+        # TKT-01M29BW9Q1. sqlc compiles internal/store/db/queries against the
+        # migrations into package dbq, and the committed output is what ships.
+        # Regenerate it and fail on any difference, including a file sqlc
+        # would add or remove, so a query or migration edited without
+        # regenerating cannot merge. The same run regenerates the parse smoke
+        # under testdata/smoke/, so a sqlc upgrade that stops parsing a
+        # construct the schema relies on fails here.
+        #
+        # CGO_ENABLED=0 on purpose: sqlc v1.31.1 parses through WebAssembly,
+        # and this proves it keeps doing so.
+        env:
+          CGO_ENABLED: "0"
+        run: |
+          go generate ./internal/store/db
+          git add -N internal/store/db
+          git diff --exit-code -- internal/store/db
+
       - name: go vet
         run: go vet ./...
 

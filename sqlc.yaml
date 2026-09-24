@@ -1,0 +1,24 @@
+# sqlc compiles the SQL in internal/store/db into typed database/sql code.
+# Run it with `go generate ./internal/store/db`; the generated code is
+# committed and CI fails if regenerating it changes anything.
+version: "2"
+sql:
+  # The real schema: migrations are the schema source, queries/ the queries.
+  - engine: sqlite
+    schema: internal/store/db/migrations
+    queries: internal/store/db/queries
+    gen:
+      go:
+        package: dbq
+        out: internal/store/db/dbq
+        emit_interface: true
+
+  # Parse smoke for the SQL constructs the schema tickets plan to use. It is
+  # generated under testdata/ so Go never builds it; it exists to fail.
+  - engine: sqlite
+    schema: internal/store/db/testdata/smoke/schema
+    queries: internal/store/db/testdata/smoke/queries
+    gen:
+      go:
+        package: smoke
+        out: internal/store/db/testdata/smoke/out

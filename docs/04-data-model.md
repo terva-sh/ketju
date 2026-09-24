@@ -9,7 +9,9 @@ Engine: **SQLite in WAL mode via `github.com/ncruces/go-sqlite3`** (pure
 Go, no cgo; see 01-research for the comparison and 10-open-questions for the
 modernc fallback). Full-text search uses **FTS5 in the same database file**.
 Connection pool capped at 4–8; writes use `BEGIN IMMEDIATE`; `busy_timeout`
-set explicitly. Writes go through a single connection, so in-process writers
+set explicitly, at 5 s; `synchronous=FULL`, because in WAL mode `NORMAL` can
+lose the latest commits on power loss and this file holds authoritative tables
+(about 0.6 ms a commit on a desktop NVMe, TKT-01M29BW9Q1). Writes go through a single connection, so in-process writers
 queue in Go rather than in SQLite's busy handler: the driver benchmark
 (TKT-01M29BSPE8, `spikes/sqlite-driver/`) saw ncruces commits starve for
 seconds with four or eight writer connections contending. The same benchmark
