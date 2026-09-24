@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"errors"
 	"io"
 	"log/slog"
 	"net/http"
@@ -38,14 +39,15 @@ func (l *logBuf) Write(p []byte) (int, error) { l.mu.Lock(); defer l.mu.Unlock()
 func (l *logBuf) String() string              { l.mu.Lock(); defer l.mu.Unlock(); return l.b.String() }
 
 type world struct {
-	t      *testing.T
-	db     *db.DB
-	store  *session.Store
-	idp    *oidctest.IdP
-	sealer *seal.Sealer
-	srv    http.Handler
-	log    *logBuf
-	now    time.Time
+	t       *testing.T
+	db      *db.DB
+	store   *session.Store
+	idp     *oidctest.IdP
+	sealer  *seal.Sealer
+	srv     http.Handler
+	handler *Handler
+	log     *logBuf
+	now     time.Time
 }
 
 // newWorld is a server with one provider, "fake", backed by the in-process
@@ -78,9 +80,9 @@ func newWorld(t *testing.T, configure ...func(*config.Provider)) *world {
 		t.Fatal(err)
 	}
 	w.sealer.Now = func() time.Time { return w.now }
-	h := New(&Handler{Providers: reg, Sealer: w.sealer, Sessions: w.store, HTTPClient: w.idp.Client(), Logger: log,
-		Login: &identity.Service{DB: d, Sessions: w.store, Logger: log}})
-	w.srv = web.New(web.Groups{Auth: h}, web.Options{Logger: log, SiteURL: site,
+	w.handler = &Handler{Providers: reg, Sealer: w.sealer, Sessions: w.store, HTTPClient: w.idp.Client(), Logger: log,
+		Login: &identity.Service{DB: d, Sessions: w.store, Logger: log}}
+	w.srv = web.New(web.Groups{Auth: New(w.handler)}, web.Options{Logger: log, SiteURL: site,
 		Session: session.Middleware(w.store, log), RateLimit: func(h http.Handler) http.Handler { return h }})
 	return w
 }
@@ -494,6 +496,43 @@ func TestSigningInEndsTheSessionItReplaces(t *testing.T) {
 	}
 	if _, err := w.store.Lookup(t.Context(), bob.Value); err == nil {
 		t.Error("the session the sign-in replaced still works")
+	}
+}
+
+// failingRevoke is the session store with revocation of one token broken.
+type failingRevoke struct {
+	*session.Store
+	token string
+}
+
+func (f failingRevoke) Revoke(ctx context.Context, token string) error {
+	if token == f.token {
+		return errors.New("disk full")
+	}
+	return f.Store.Revoke(ctx, token)
+}
+
+// A sign-in that cannot end the session it replaces does not complete, and
+// leaves no new session behind either (review 511).
+func TestASignInThatCannotEndTheOldSessionFails(t *testing.T) {
+	w := newWorld(t)
+	w.user("alice", "active", "user-1")
+	w.user("bob", "active", "bob-sub")
+	w.idp.Subject = "bob-sub"
+	bob := cookie(w.signIn(""), session.CookieName)
+	w.handler.Sessions = failingRevoke{w.store, bob.Value}
+
+	w.idp.Subject = "user-1"
+	flow, authURL := w.begin("")
+	resp := w.do("GET", w.back(authURL), flow, bob)
+	if resp.StatusCode != http.StatusInternalServerError || resp.Header.Get("Location") != "" {
+		t.Errorf("answered %d to %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if c := cookie(resp, session.CookieName); c != nil && c.Value != "" {
+		t.Error("a failed sign-in set a session cookie")
+	}
+	if n := w.sessions(); n != 1 {
+		t.Errorf("%d sessions, want only bob's, which could not be ended", n)
 	}
 }
 

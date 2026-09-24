@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T20:45:10Z
+updated_at: 2026-09-24T20:51:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -142,6 +142,10 @@ Decisions made without a new decision from the user, none of them changing what 
 **Criteria.** AC4 says "shown the reason". Grooming settled that the page is a generic "account unavailable" until the Phase 2 moderation columns exist. It is ticked on that settled reading: the page says the account cannot sign in, and why in detail is Phase 2's.
 
 The callback test covers pending users as well as suspended and deactivated, which is what draft TKT-01M3AFHGJD asks for.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:51:43Z
+
+Review 511 (head 3141449) raised one medium finding, accepted and fixed. A sign-in that could not revoke the session it replaced only logged the failure, and completed anyway. Now a failed revocation of the old session also revokes the session just issued, and the sign-in ends with the 500 'Sign-in failed' page, so the browser never holds a new session while its old one still works. Revoking the old session before Login was the alternative, and it lost: account linking (TKT-01M29CKRES) needs the signed-in session to survive the callback. Handler.Sessions is now a one-method interface, so TestASignInThatCannotEndTheOldSessionFails can break revocation of one token. Mutants over the new branch are killed (49 in all).
 
 ## Summary
 

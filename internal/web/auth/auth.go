@@ -59,6 +59,11 @@ type Login interface {
 	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta) (identity.Result, error)
 }
 
+// Sessions is the part of *session.Store the handlers use.
+type Sessions interface {
+	Revoke(ctx context.Context, token string) error
+}
+
 // Handler serves /auth/*.
 type Handler struct {
 	// Providers is nil when no provider is configured: every sign-in is then
@@ -66,7 +71,7 @@ type Handler struct {
 	Providers Providers
 	Sealer    *seal.Sealer
 	Login     Login
-	Sessions  *session.Store
+	Sessions  Sessions
 	// HTTPClient reaches the IdP's token endpoint; nil is the one the
 	// registry was built with.
 	HTTPClient *http.Client
@@ -181,10 +186,18 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	switch res.Outcome {
 	case identity.SignedIn:
 		// Whatever session this browser held before is over: a sign-in never
-		// keeps a session id it did not issue (fixation).
+		// keeps a session id it did not issue (fixation). If the old one
+		// cannot be ended, neither is the new one kept, and the sign-in
+		// fails: a browser must not come out of it holding one session
+		// while another it held still works (review 511).
 		if old, err := r.Cookie(session.CookieName); err == nil {
 			if err := h.Sessions.Revoke(ctx, old.Value); err != nil {
-				h.Logger.WarnContext(ctx, "revoking the session a sign-in replaced failed", "error", err)
+				h.Logger.ErrorContext(ctx, "revoking the session a sign-in replaced failed", "error", err)
+				if err := h.Sessions.Revoke(ctx, res.Token); err != nil {
+					h.Logger.ErrorContext(ctx, "revoking the session a failed sign-in issued failed", "error", err)
+				}
+				writePage(w, http.StatusInternalServerError, pageFailed)
+				return
 			}
 		}
 		http.SetCookie(w, session.Cookie(res.Token, res.Session.ExpiresAt))
