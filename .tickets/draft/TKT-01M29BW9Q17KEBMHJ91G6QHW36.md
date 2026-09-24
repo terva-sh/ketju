@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-16T18:40:07Z
+updated_at: 2026-09-24T05:08:51Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase1
+  id: agent:claude/phase1-groom
   name: ""
 extensions: {}
 ---
@@ -47,6 +47,27 @@ SQL stays driver-agnostic. That constraint is the mitigation for the ncruces pre
 - [ ] Concurrent writers hit BEGIN IMMEDIATE and serialize rather than failing with SQLITE_BUSY
 - [ ] Migrations run in order, are recorded, and are idempotent on a second start
 - [ ] A binary older than the recorded schema version refuses to start with a clear message
+- [ ] sqlc is configured with the migration directory as its schema source, its version is pinned, and generated code is committed
+- [ ] CI regenerates the sqlc output and fails when it differs from what is committed
+- [ ] A test or lint fails if a package outside the access layer imports a SQLite driver directly
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:08:51Z
+
+Decided with the user on 2026-09-24, during Phase 1 grooming: sqlc, with hand-written database/sql for the dynamic view queries. This answers the 2026-09-16 comment above, which set out the choice and verified that FTS5 parses and that the timestamp issue does not apply.
+
+How the split works:
+- sqlc generates typed database/sql code from .sql files and reads the migration directory as its schema.
+- Its output is committed, and CI regenerates it and fails on any diff.
+- Lens-filtered and cursor-paged view queries (docs/06) are hand-written database/sql beside the generated set. The rule is written into docs/04, so mixing the two is a decision rather than a discovery.
+- The migration runner stays hand-rolled, as this ticket already says.
+
+Two alternatives lost:
+- Hand-written database/sql throughout would leave driver-agnosticism to review.
+- sqlc for every query would force the lens queries into fixed variants.
+
+Criteria added below for the pieces the decision creates.
 
 ## Comments
 

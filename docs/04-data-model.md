@@ -11,6 +11,19 @@ modernc fallback). Full-text search uses **FTS5 in the same database file**.
 Connection pool capped at 4–8; writes use `BEGIN IMMEDIATE`; `busy_timeout`
 set explicitly. Backups: `VACUUM INTO` for a consistent snapshot.
 
+Access from Go: **sqlc**, generating typed `database/sql` code from `.sql`
+query files, with the migration directory as its schema source (decided
+2026-09-24, TKT-01M29BW9Q1). The rule "SQL stays driver-agnostic" is what
+makes modernc a drop-in fallback (09), and sqlc is its mechanism: it emits
+only `database/sql` calls, so the generator cannot produce a driver-specific
+query. Hand-written `database/sql` everywhere was the alternative. It lost
+because it leaves driver-agnosticism to whoever reviews each query. sqlc has
+a known weak spot, and there the split is a rule rather than a discovery: the
+lens-filtered and cursor-paged view queries (06) are dynamic in shape and are
+hand-written `database/sql` beside the generated set. Generated code is
+committed, and CI fails if regenerating it produces a diff. The migration
+runner stays ours; sqlc does not run migrations.
+
 ## Conventions
 
 - All ids are `INTEGER` 64-bit, time-sortable where the entity is created by
