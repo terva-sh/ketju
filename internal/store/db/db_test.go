@@ -264,3 +264,31 @@ func TestOpenPropagatesSyncFailure(t *testing.T) {
 		t.Fatal("Open succeeded although the directory sync failed")
 	}
 }
+
+// TestOpenTakesAnyPath: characters that mean something in a URI are part of
+// the filename, and the database lands exactly where Options.Path says.
+func TestOpenTakesAnyPath(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "odd ?dir#name%41")
+	path := filepath.Join(dir, "k?e#y%2F.db")
+	d, err := Open(t.Context(), Options{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{path, path + "-wal"} {
+		if _, err := os.Stat(f); err != nil {
+			t.Errorf("expected %q to exist: %v", f, err)
+		}
+	}
+	entries, _ := os.ReadDir(dir)
+	for _, e := range entries {
+		if n := e.Name(); n != filepath.Base(path) && n != filepath.Base(path)+"-wal" && n != filepath.Base(path)+"-shm" {
+			t.Errorf("unexpected file %q in %s: the path was misread", n, dir)
+		}
+	}
+}

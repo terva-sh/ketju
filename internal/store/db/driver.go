@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"errors"
+	"net/url"
 
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
@@ -20,7 +21,7 @@ import (
 // openPool opens a database/sql pool on path with the given DSN query, which
 // must start with "?". Every connection the pool opens gets FCNTL_PERSIST_WAL.
 func openPool(path, query string) (*sql.DB, error) {
-	return driver.Open("file:"+path+query, func(c *sqlite3.Conn) error {
+	return driver.Open(fileURI(path)+query, func(c *sqlite3.Conn) error {
 		// Keep the -wal file when the last connection closes. SQLite would
 		// otherwise delete it and create a fresh one on the next open, and
 		// ncruces skips the directory fsync that a fresh file needs
@@ -29,6 +30,13 @@ func openPool(path, query string) (*sql.DB, error) {
 		_, err := c.FileControl("main", sqlite3.FCNTL_PERSIST_WAL, true)
 		return err
 	})
+}
+
+// fileURI turns a filesystem path into a SQLite file: URI. The path is
+// percent-encoded, so a '?', '#' or '%' in it stays part of the filename
+// instead of starting the query string or a fragment.
+func fileURI(path string) string {
+	return (&url.URL{Scheme: "file", Path: path, OmitHost: true}).String()
 }
 
 // isBusy reports whether err is SQLITE_BUSY from the driver, whatever its

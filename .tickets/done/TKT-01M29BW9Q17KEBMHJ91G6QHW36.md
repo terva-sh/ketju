@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-24T07:08:44Z
+updated_at: 2026-09-24T07:10:51Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -116,6 +116,10 @@ From TKT-01M29BSPE8 (Decide the pure-Go SQLite driver), 2026-09-24: step 2's sin
 - busy never recognised: TestBusyIsWrapped
 - a driver imported in views/: TestOnlyDriverGoImportsADriver
 - a query added without regenerating: the CI regen-diff step, run locally, fails
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:10:51Z
+
+Terva review 368 (run 6f5ad681-8c55-4832-91db-8a58fbd799b3, Actions run 119), head 775d5907927df536692929a22f9c44fb391c1638, base 9aa4cf1b7dac9d793968462dbc3a487a3ea9eda0: two medium findings, **both accepted and fixed**. (1) 'Embed all migration-directory entries before checking for stray files': the embed is now `//go:embed migrations`, so a migration saved with the wrong extension reaches loadMigrations and is refused. TestEveryMigrationFileIsEmbedded compares disk with the embed, and TestStrayExtensionRefused covers a .sq file; with the old pattern and a stray file on disk, the first fails. (2) 'Escape the database path before constructing a file URI': openPool builds the URI with net/url through fileURI, so '?', '#' and '%' stay in the filename. TestOpenTakesAnyPath uses such a path. With the old concatenation it fails because '?' swallowed every pragma and the database opened in delete journal mode, not WAL. A follow-up review of the new head is requested.
 
 ## Comments
 
