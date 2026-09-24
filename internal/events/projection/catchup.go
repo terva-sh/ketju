@@ -37,9 +37,9 @@ type Report struct {
 	// Writer.Quarantined.
 	Corrupt []threadid.ID
 
-	// Failed are the threads with a gap that could not be closed. A thread
-	// whose projection failed is in the writer's behind set and Run retries
-	// it; one that could not be opened at all is only reported.
+	// Failed are the threads with a gap that could not be closed, whether
+	// the thread could not be opened or its projection failed. Each is in
+	// the writer's behind set, which Run retries and Lag reports.
 	Failed []threadid.ID
 
 	// Strays are files under threads/ that are not a thread's log or index
@@ -138,8 +138,12 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		// shorter than the file.
 		length, err := reopen(ctx, id)
 		if err != nil {
+			// Held for Run to retry, up to the size the walk saw, so the gap
+			// is neither forgotten nor served as if it were closed (review
+			// 448); Lag reports it until it is.
 			rep.Failed = append(rep.Failed, id)
-			w.log.Error("a thread with a projection gap could not be opened; it stays behind",
+			w.hold(id, at, size)
+			w.log.Error("a thread with a projection gap could not be opened; it is held for retry",
 				"thread", id, "log_size", size, "projected", at, "err", err)
 			continue
 		}
@@ -248,13 +252,15 @@ func (w *Writer) walk() (map[threadid.ID]int64, []string, error) {
 			}
 			for _, f := range files {
 				path := filepath.Join(pb, f.Name())
-				if filepath.Ext(f.Name()) == threadid.IndexExt && !f.IsDir() {
-					continue
-				}
 				id, err := threadid.FromLogPath(path)
-				// FromLogPath also refuses a file in a shard its id does not name.
-				if err != nil || f.IsDir() || filepath.Ext(path) != threadid.LogExt {
+				// FromLogPath refuses a name that is not an id and a file in a
+				// shard its id does not name, for an index as for a log
+				// (review 448). A valid index is not a log, and is skipped.
+				switch {
+				case err != nil || f.IsDir():
 					strays = append(strays, path)
+					continue
+				case filepath.Ext(path) == threadid.IndexExt:
 					continue
 				}
 				info, err := f.Info()

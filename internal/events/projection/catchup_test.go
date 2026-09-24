@@ -420,6 +420,22 @@ func TestUnopenableGapIsReportedNotFatal(t *testing.T) {
 	if !strings.Contains(buf.String(), "mid-log damage") {
 		t.Errorf("the failure was not logged with its cause:\n%s", buf.String())
 	}
+
+	// Held, not forgotten: Lag reports it, and Run's retry closes it once
+	// the log can be read (review 448).
+	size := logSize(t, f.root, bad)
+	if l := f.w.Lag(); l.Threads != 1 || l.Bytes != size-threadlog.FileHeaderSize {
+		t.Errorf("lag = %+v, want the unopenable thread held with its whole gap", l)
+	}
+	if err := f.w.Retry(t.Context()); err != nil {
+		t.Fatalf("retry: %v", err)
+	}
+	if got := f.projected()[bad]; got != size {
+		t.Errorf("after a retry the thread is projected to %d of %d", got, size)
+	}
+	if l := f.w.Lag(); l.Threads != 0 {
+		t.Errorf("lag after the retry = %+v", l)
+	}
 }
 
 // A thread whose projection fails once opened joins the behind set, so the
@@ -457,6 +473,8 @@ func TestCatchUpReportsStrays(t *testing.T) {
 	wrongShard := filepath.Join(id.Dir(f.root), other.Hex()+threadid.LogExt)
 	strays := []string{
 		filepath.Join(top, "README"),
+		filepath.Join(id.Dir(f.root), other.Hex()+threadid.IndexExt),
+		filepath.Join(id.Dir(f.root), "not-an-id"+threadid.IndexExt),
 		filepath.Join(top, id.Hex()[0:2], "stray"),
 		filepath.Join(id.Dir(f.root), "notes.txt"),
 		wrongShard,

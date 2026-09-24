@@ -214,6 +214,23 @@ func (w *Writer) Run(ctx context.Context) {
 	}
 }
 
+// hold puts a thread in the behind set without trying it, for a gap that
+// could not even be opened: Run retries it and Lag reports it.
+func (w *Writer) hold(id threadid.ID, projected, target int64) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	was := len(w.behind) > 0
+	b := w.behind[id]
+	if b == nil {
+		b = &lag{projected: projected}
+		w.behind[id] = b
+	}
+	b.target = max(b.target, target)
+	if !was {
+		w.log.Warn("projection is behind", "threads", len(w.behind))
+	}
+}
+
 // Lag reports the threads that are behind and by how many bytes.
 func (w *Writer) Lag() Lag {
 	w.mu.Lock()
