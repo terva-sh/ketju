@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9PB11V2AHE52C0F49JG
 title: Confirm the TLS, backup, and single-process posture
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-11T23:12:10Z
+updated_at: 2026-09-24T05:05:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -45,5 +45,15 @@ Single process: a lock file in the data directory refuses a second `serve`. Hori
 
 ## Acceptance criteria
 
-- [ ] All three are recorded in docs/02 with their reasoning
-- [ ] If single-process stays, the assumption is stated in the README rather than only in a design document
+- [x] All three are recorded in docs/02 with their reasoning
+- [x] If single-process stays, the assumption is stated in the README rather than only in a design document
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:05:12Z
+
+The lock file itself is TKT-01M29CCBZN. The backup command is TKT-01M29CXK35 in Phase 4.
+
+## Summary
+
+Decided with the user on 2026-09-24, on the documented leans. In v1 a reverse proxy terminates TLS, and built-in ACME comes later. ketju backup ships in Phase 4; until then the written procedure is rsync plus VACUUM INTO. There is one process per data directory, enforced by a lock file. Recorded in docs/02 (Shape of the deployment), with docs/10 Q22 to Q24 marked decided. The single-process assumption is stated in README.md.

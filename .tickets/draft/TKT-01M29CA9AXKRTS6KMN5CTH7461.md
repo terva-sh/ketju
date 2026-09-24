@@ -19,6 +19,7 @@ dependencies:
   - TKT-01M29C0WDJ9FETR8EFZ7ED5JYF
   - TKT-01M29C0WF04HEBYMB9DXCB9WCB
   - TKT-01M29C5Y2EVNCBADSQYW12F01D
+  - TKT-01M29BW9NWKJGM3ZQ2DJH8WPWH
 blocks_on: none
 references:
   - ref: design:api-thread-shape
@@ -26,13 +27,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-11T23:19:48Z
+updated_at: 2026-09-24T05:05:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 

@@ -18,6 +18,7 @@ origin: null
 dependencies:
   - TKT-01M29BYYH73ZBC9WTS7HN03PKJ
   - TKT-01M29BW9QFZ2C7Q24KN1JW5MFW
+  - TKT-01M29P9RS0YMM3465BSH7AGSNJ
 blocks_on: none
 references:
   - ref: design:identity-principles
@@ -25,13 +26,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-11T23:18:33Z
+updated_at: 2026-09-24T05:05:28Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 

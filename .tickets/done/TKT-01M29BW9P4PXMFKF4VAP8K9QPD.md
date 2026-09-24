@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BW9P4PXMFKF4VAP8K9QPD
 title: Confirm the landing position and phone navigation pattern
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:12:10Z
-updated_at: 2026-09-11T23:12:10Z
+updated_at: 2026-09-24T05:05:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -47,4 +47,14 @@ Composer on phones: a full-screen sheet, or inline at the bottom. The lean is th
 ## Acceptance criteria
 
 - [ ] All three are confirmed against the mockups on a real iOS device and a real Android device
-- [ ] Any change from the documented lean is written into docs/06 before the client work starts
+- [x] Any change from the documented lean is written into docs/06 before the client work starts
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:05:11Z
+
+This ticket is closed with criterion 1 unticked, deliberately. It needs a real phone and a real reader, which no agent has. The user accepted the leans as decisions instead of waiting on that confirmation. The confirmation itself moves to TKT-01M38WTKSQ, which waits on the Playwright gate. Criterion 2 is ticked: no decision changed from the documented lean, and docs/06 now marks all three as decided before any client work starts. Filed alongside: dependency links from this ticket to the shell TKT-01M29CEE4K, the sheet TKT-01M29CGBVN, and the thread page TKT-01M29CEE6V, which build on these three choices.
+
+## Summary
+
+Decided with the user on 2026-09-24, on the documented leans. A reader lands at the last-read position, phone navigation is a five-item bottom tab bar (Forums, Unread, New, Alerts, Me), and the phone composer is a full-screen sheet. The reasoning is in docs/06 (Landing on return; Mobile), and docs/10 Q14, Q25 and Q26 are marked decided. Criterion 1, confirmation on real iOS and Android devices, is not met and moves to TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices).

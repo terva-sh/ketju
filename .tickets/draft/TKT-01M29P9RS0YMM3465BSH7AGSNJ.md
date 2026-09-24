@@ -11,7 +11,7 @@ labels:
   - area:docs
   - effort:S
 assignees: []
-milestone: null
+milestone: phase-1
 parent: null
 origin: null
 dependencies: []
@@ -20,13 +20,13 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-12T02:14:17Z
-updated_at: 2026-09-12T02:14:17Z
+updated_at: 2026-09-24T05:05:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 
@@ -54,3 +54,9 @@ Items 1-21, then the Mobile section opens at 25-29, then Operations returns to 2
 
 The index entry's 4 reserved bytes were described both as committed to segment rollover and as generic slack; docs/03 and docs/09 now say they are spoken for. The frame's 2-byte Flags field was declared and never explained; docs/03 now has a Frame flags section.</description>
 <parameter name="acceptance_criteria">["The bootstrap admin config keys agree between the prose at docs/05:12 and the TOML example, and every key named in prose appears in an example", "Archiving authority is stated once and consistently across docs/03, docs/07, and docs/08", "Slow mode has a stated default interval in docs/08, like every other parameterised primitive there", "docs/10 item numbers ascend in file order"]
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:05:28Z
+
+Pulled into Phase 1 during grooming (2026-09-24). Two of the seven inconsistencies land on Phase 1 tickets: the bootstrap admin config key is spelled three ways, which TKT-01M29C800G (Bootstrap the first admin) must pick one of, and the slow-mode default is missing, which a criterion of TKT-01M29CA9B9 (Implement create thread and reply) depends on. Both now depend on this ticket, so each is settled in the docs before code reads them.

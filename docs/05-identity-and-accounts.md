@@ -90,6 +90,13 @@ fetch and nothing afterwards.
 4. Session cookie: `__Host-ketju_session`, `HttpOnly`, `Secure`, `SameSite=Lax`,
    value is the random session id; the server stores its hash.
 
+The pre-login state in step 1 stays in the cookie, sealed with authenticated
+encryption so it is both secret and tamper-evident, and it expires with the
+login attempt. An anonymous server-side session row was the alternative, and
+it lost: every abandoned login would cost a database write, and anyone could
+fill a table by requesting `/start` in a loop. (Decided 2026-09-24, 10 Q8,
+TKT-01M29BSPEF.)
+
 Email is never used to auto-link identities across providers. Two providers
 asserting the same email are two identities until the user links them while
 signed in. This closes the classic "attacker controls an IdP that asserts
@@ -157,6 +164,15 @@ Admins edit the form in a small UI that writes a new version; the old version
 stays for old applications.
 
 ## Sessions and CSRF
+
+The session store is hand-rolled, about 200 lines, rather than
+`alexedwards/scs/v2`. Three reasons. It gives exact control over how the id is
+hashed at rest. Revocation is immediate, because deleting a row is the whole
+operation. And it models a session with no user yet, the pre-user session
+approval mode needs (below). `scs` assumes a session belongs to a user, and a
+library that cannot express that is one we would fight. Its middleware
+ergonomics were the case for it, and the chain in `internal/web` already
+provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
 
 - Server-side sessions (table `sessions`), 30-day idle expiry, 90-day hard
   expiry, sliding `last_used_at` updated at most once per 5 minutes.

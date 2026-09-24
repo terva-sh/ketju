@@ -6,9 +6,19 @@ static Go binary with a Preact client: linear threads with non-tree
 (pure Go) for coordination only, OIDC-first identity with an approval mode.
 Humans and agents participate as members on equal terms.
 
-**Status: design only.** The on-disk format is implemented in
-`internal/store/threadlog`; nothing else is. Start with
+**Status: Phase 1, under way.** The thread log storage engine is done and its
+on-disk format is frozen at version 1. The HTTP server, the markdown pipeline,
+OIDC provider discovery, and the API's error and DTO contracts are in place.
+The database, sign-in, the API endpoints, and the Preact client are the work in
+progress; [docs/11-mvp-critical-path.md](docs/11-mvp-critical-path.md) says
+what remains and in what order. Start with
 [docs/00-overview.md](docs/00-overview.md).
+
+**One process per data directory.** Ketju runs as a single process. `serve`
+takes a lock file in the data directory, and a second `serve` against the same
+directory refuses to start. There is no horizontal scaling and none is
+planned; put a reverse proxy in front for TLS. The reasoning is in
+[docs/02-architecture.md](docs/02-architecture.md).
 
 ## The name, and where this lives
 

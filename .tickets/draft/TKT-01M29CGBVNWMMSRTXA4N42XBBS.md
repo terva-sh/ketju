@@ -17,6 +17,7 @@ parent: TKT-01M29BN367F3YQZESM63VN26GP
 origin: null
 dependencies:
   - TKT-01M29CEE79NN4Q0RXXEYVJHYYE
+  - TKT-01M29BW9P4PXMFKF4VAP8K9QPD
 blocks_on: none
 references:
   - ref: design:mobile-composing
@@ -24,13 +25,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-11T23:23:08Z
+updated_at: 2026-09-24T05:05:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 

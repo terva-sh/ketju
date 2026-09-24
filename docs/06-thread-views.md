@@ -25,7 +25,8 @@ human who does.
 
 ### Paged, not infinite
 
-- Fixed page size (default 25 posts, user setting 10–50), URL
+- Fixed page size (default 25 posts, user setting 10–50; the default is
+  decided, 10 Q13, because it is baked into every shared URL), URL
   `/t/{id}/{slug}?page=3` and permalink `/t/{id}/{slug}/{ordinal}` which
   resolves to the right page and anchors the post.
 - Pages give shareable positions, browser-native scroll restoration, and a
@@ -40,6 +41,11 @@ A signed-in user opening a thread they have visited lands on the page
 containing `last_read_ordinal + 1`, with a **"N new posts below"** divider
 drawn between read and unread posts. The divider is the single most valuable
 piece of UI in a linear forum and is present from the first milestone.
+
+Last read rather than first unread is decided (10 Q14, TKT-01M29BW9P4). The two
+land on the same page in practice, and the divider carries the difference. The
+confirmation with real readers on real phones is a Phase 1 human verification
+item, not a gate on building it.
 
 ### Read tracking
 
@@ -189,13 +195,17 @@ arrangement.
   the same counts as the desktop nav. Each screen has a 52 px top bar with
   a back control, a truncating context title (the forum name on a thread
   page), search, and a "more" menu holding the thread actions that live in
-  the desktop toolbar (watch, share link, moderator actions).
+  the desktop toolbar (watch, share link, moderator actions). The tab bar is
+  decided over a menu button (10 Q25), because a menu hides exactly the
+  "what's new" surfaces a forum exists for.
 - **Composing.** List screens have a floating "new thread" button above the
   tab bar. The thread page replaces the tab bar with a sticky reply bar
   showing the reply-to chip and the first line of any draft; tapping it
   opens the composer as a full-screen sheet with the same toolbar, preview
   tab, and server-rendered preview. Reply and quote from a post prefill
-  that sheet.
+  that sheet. The sheet is decided over an inline composer (10 Q26): under a
+  virtual keyboard an inline composer is cramped and hides the post being
+  answered, and the sheet has room to show it.
 - **Posts.** One column, 30 px avatars, author and time stacked, reply-to
   indicator at the right of the header. Footer actions are reply, quote,
   and the reply expander; link, flag, and history collapse under a "more"

@@ -18,6 +18,7 @@ dependencies:
   - TKT-01M29C0WD88M1C8EW4QQTX76NJ
   - TKT-01M29C2WWGF4ERSR2AM2QNEH8C
   - TKT-01M29C5Y2EVNCBADSQYW12F01D
+  - TKT-01M29P9RS0YMM3465BSH7AGSNJ
 blocks_on: none
 references:
   - ref: design:create-post-flow
@@ -25,13 +26,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-11T23:19:48Z
+updated_at: 2026-09-24T05:05:28Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 

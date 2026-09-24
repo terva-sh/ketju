@@ -220,7 +220,13 @@ work stays where it is.
 - **Stack:** Preact 10.x, `@preact/signals`, `preact-iso` router, Vite 8,
   TypeScript. No component library; a small hand-written CSS system with
   custom properties and light/dark themes. Target bundle: < 60 KB gzipped
-  for the thread view.
+  for the thread view. Hand-written CSS is decided over a utility framework
+  (10 Q21, TKT-01M29BW9NW), checked against that budget before adoption: it
+  adds no runtime or build dependency, so every byte of it is a byte we wrote,
+  and the mockups in `docs/mockups/` are already written that way.
+- **Page size:** 25 posts by default, 10–50 as a user setting (06). The
+  default is decided (10 Q13) and appears in shared URLs, so the API and the
+  client both treat it as a constant rather than a tunable.
 - **State:** signals for viewer, notifications, and per-thread caches keyed
   by `log_length`; SWR-style fetch wrapper that honors `ETag`.
 - **Routing:** the URL scheme above, one route per screen, lazy-loaded

@@ -17,6 +17,8 @@ origin: null
 dependencies:
   - TKT-01M29CCC02K8F14P0SKAYFMSE6
   - TKT-01M29CA9AXKRTS6KMN5CTH7461
+  - TKT-01M29BW9P4PXMFKF4VAP8K9QPD
+  - TKT-01M29BW9NWKJGM3ZQ2DJH8WPWH
 blocks_on: none
 references:
   - ref: design:canonical-view
@@ -26,13 +28,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-11T23:22:04Z
+updated_at: 2026-09-24T05:05:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude/phase1-groom
+  name: ""
 extensions: {}
 ---
 

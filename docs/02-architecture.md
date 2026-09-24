@@ -30,6 +30,22 @@ A reverse proxy (Caddy, nginx, Traefik) in front for TLS is the expected
 deployment; the binary can also terminate TLS itself with a configured
 certificate or ACME (later phase) for the "just run it" case.
 
+Three operator commitments are decided (10 Q22–Q24, TKT-01M29BW9PB, 2026-09-24):
+
+- **TLS.** v1 assumes the reverse proxy. "Just run it" may mean Caddy in
+  front, because Caddy is one line of configuration and ACME inside the
+  binary is a phase of work that buys a friend group nothing on day one.
+- **One process per data directory.** `serve` takes a lock file in `data/`
+  and a second `serve` against the same directory refuses to start. The
+  thread actors own their logs in memory and the embedded database has one
+  writer, so a second process would not scale anything; it would corrupt
+  it. Horizontal scaling is out of scope for the communities ketju is for.
+- **Backups.** `ketju backup` ships in Phase 4: it pauses the thread
+  actors, checkpoints the WAL, and snapshots consistently. Until then the
+  procedure is written down rather than built: stop the server, or copy
+  `data/threads/` and `data/blobs/` with `rsync` and take the database with
+  `VACUUM INTO`.
+
 ## Go module layout
 
 ```

@@ -40,14 +40,22 @@ Each item states the options, the current lean, and when it must be decided.
 
 ## Database
 
-6. **ncruces vs modernc.** Lean: ncruces for speed and Go tokenizers;
-   revisit if its 1.0 introduces churn. Decide at Phase 1 start.
-7. **Sessions: `scs/v2` vs hand-rolled.** Lean: hand-rolled (~200 lines,
-   exact control over hashing, revocation, and the pre-user session
-   variant). `scs` if we want its middleware ergonomics. Decide in Phase 1.
-8. **Where do OIDC `state`/`nonce`/PKCE live pre-login.** Encrypted
-   short-lived cookie (current design) vs an anonymous server-side session.
-   Lean: cookie; no DB write for an abandoned login. Decide in Phase 1.
+6. **ncruces vs modernc.** **Decided: ncruces**, for speed and for FTS5
+   tokenizers written in Go (2026-09-24). The decision is taken ahead of the
+   benchmark: TKT-01M29BSPE8 still measures both drivers on the projection
+   write path and confirms the FTS5 story. It reopens the question only if
+   ncruces is more than twice as slow there. Revisit if its 1.0 introduces
+   churn.
+7. **Sessions: `scs/v2` vs hand-rolled.** **Decided: hand-rolled**
+   (2026-09-24). It is about 200 lines. Hand-rolled gives exact control
+   over id hashing and immediate revocation, and it can model the pre-user
+   session that approval mode needs, which `scs` does not. The trade is
+   `scs`'s middleware ergonomics, which the existing chain in `internal/web`
+   already covers. Recorded in 05. (TKT-01M29BSPEF)
+8. **Where do OIDC `state`/`nonce`/PKCE live pre-login.** **Decided: an
+   encrypted, signed, short-lived cookie** (2026-09-24). An abandoned login
+   costs no database write, and an unauthenticated caller cannot fill a
+   table by starting logins. Recorded in 05. (TKT-01M29BSPEF)
 
 ## Identity and accounts
 
@@ -64,10 +72,14 @@ Each item states the options, the current lean, and when it must be decided.
 
 ## Views and product
 
-13. **Page size default 25 vs 20/30.** Cosmetic; pick during Phase 1 UI work.
-14. **Landing position: last read vs first unread.** Both are the same
-    page in practice; the divider handles the distinction. Discourse chose
-    last-read; we do the same. Confirm with users.
+13. **Page size default 25 vs 20/30.** **Decided: 25** (2026-09-24). It
+    is baked into shared URLs, so it is picked once. The user setting still
+    ranges from 10 to 50. Recorded in 06 and 07. (TKT-01M29BW9NW)
+14. **Landing position: last read vs first unread.** **Decided: last
+    read** (2026-09-24). Both land on the same page in practice, and the
+    divider handles the distinction. Discourse made the same choice. The
+    check on a real device with real readers is still open and belongs to
+    the Phase 1 human verification pass. (TKT-01M29BW9P4)
 15. **"Only OP" as a button vs discoverable through the author lens.**
     Lean: button on the thread header.
 16. **Digest lens scoring** once reply/quote counts exist:
@@ -87,19 +99,22 @@ Each item states the options, the current lean, and when it must be decided.
     the Phase 5 boundary with real usage data (how many members would
     benefit, how much of the SPA is actually interactive).
 20. **Preact 11** adoption timing. Pin 10.x through v1.0.
-21. **Component/CSS approach.** Hand-written CSS with custom properties
-    (lean) vs a utility framework. Decide at Phase 1 UI start.
+21. **Component/CSS approach.** **Decided: hand-written CSS with custom
+    properties** (2026-09-24). It adds no dependency to the 60 KB gzipped
+    budget. The mockups in `docs/mockups/` are already written this way.
+    Recorded in 07. (TKT-01M29BW9NW)
 
 ## Mobile
 
-25. **Bottom tab bar vs. a menu button.** Lean: tab bar with five items
-    (Forums, Unread, New, Alerts, Me) as mocked up. A hamburger hides the
-    "what's new" surfaces that are the point of a forum. Confirm with
-    users on a real device.
-26. **Composer as a full-screen sheet vs. inline at the bottom.** Lean:
-    sheet. Inline composers under a virtual keyboard are cramped and hide
-    the post being replied to; the sheet can show the quoted post above
-    the text area.
+25. **Bottom tab bar vs. a menu button.** **Decided: a tab bar with five
+    items** (Forums, Unread, New, Alerts, Me), as mocked up (2026-09-24). A
+    hamburger menu hides the "what's new" surfaces that are the point of a
+    forum. The real-device check is still open; see 14. (TKT-01M29BW9P4)
+26. **Composer as a full-screen sheet vs. inline at the bottom.**
+    **Decided: sheet** (2026-09-24). An inline composer under a virtual
+    keyboard is cramped and hides the post being replied to. The sheet can
+    show the quoted post above the text area. The real-device check is still
+    open; see 14. (TKT-01M29BW9P4)
 27. **Push notifications.** Web Push needs a VAPID key pair and a
     subscription table, and delivery differs by platform. Not in v1;
     the manifest and in-app Alerts tab come first. Decide after Phase 3.
@@ -111,14 +126,19 @@ Each item states the options, the current lean, and when it must be decided.
 
 ## Operations
 
-22. **TLS.** Reverse proxy assumed; built-in ACME later. Confirm.
-23. **Backup tooling.** Document `rsync` of `data/` plus `VACUUM INTO` for
-    the DB, or ship `ketju backup` that does both consistently (pause
-    thread actors, checkpoint WAL, snapshot). Lean: ship the command in
-    Phase 4.
-24. **Single-process assumption.** A lock file in `data/` refuses a second
-    `serve`. Horizontal scaling is out of scope by design; confirm that is
-    acceptable for the target communities.
+22. **TLS.** **Decided: a reverse proxy terminates TLS in v1**, and
+    built-in ACME comes in a later phase (2026-09-24). "Just run it" is
+    allowed to mean Caddy in front. Recorded in 02. (TKT-01M29BW9PB)
+23. **Backup tooling.** **Decided: ship `ketju backup` in Phase 4**
+    (2026-09-24). It pauses the thread actors, checkpoints the WAL, and
+    snapshots. Until then, a documented `rsync` of `data/` plus
+    `VACUUM INTO` for the database is the procedure. Recorded in 02.
+    (TKT-01M29BW9PB)
+24. **Single-process assumption.** **Decided: one process per data
+    directory**, enforced by a lock file in `data/` that refuses a second
+    `serve` (2026-09-24). Horizontal scaling is out of scope by design for
+    the communities ketju targets. Recorded in 02 and stated in the README.
+    (TKT-01M29BW9PB)
 
 ## Agents
 
