@@ -32,12 +32,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T05:24:25Z
+updated_at: 2026-09-24T06:36:48Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -164,3 +164,17 @@ The grooming PR is #47 (https://git.local.sothr.com/terva-sh/ketju/pulls/47). A 
 **agent:claude/phase1-groom** at 2026-09-24T05:24:25Z
 
 Terva review of PR #47: requested by workflow dispatch with request-id ready-review. The tea call returned an empty-JSON error, but the run was created: run 106 (https://git.local.sothr.com/terva-sh/ketju/actions/runs/106), reviewing base 39b54b2b6746b1f235540a6f910d7f93fd5fd351 and head 4c88d86e6537657cb77b69c5b6fcb26c2d5507c9. The Review PR step failed with context_limit and nothing was published: the diff, mostly ticket-store files, is larger than the reviewer takes. That is a runtime failure, not a clean review, so there is no model evidence for this PR. It does not block the merge, because a person merges this PR. docs/12 now tells the run how to treat context_limit on its own PRs. No retry was made, because the same diff would fail the same way.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T06:36:48Z
+
+Amendment to the merge gate, from the user on 2026-09-24, after PR #47 merged and the run started:
+
+> The reviews are nice to have and if they fail consistently we should stop and address but they don't need to block if they fail occasionally
+
+This changes one rule in docs/12, "The merge gate": "A review that fails to run is not a clean review, and the gate does not hold." It does not change the rest of that section, and docs/12 is left as written because a run PR may not edit it.
+
+How the run applies it:
+- A Terva review that fails to run, whether from infrastructure, a timeout, or context_limit, does not block a merge when everything else in the gate holds on the exact head. The PR description and this log say that the review did not run, and link the failed run.
+- A review that runs is still binding. A finding at medium or above blocks as before, and low findings are still fixed or answered.
+- "Consistently" means review runs failing on two run PRs in a row. The run then halts and a person looks at the review workflow. A single retry on the same head does not count as a second PR.
+- PR #47 merged by the user at ac05a3c on 2026-09-24, without a completed review, is outside this rule. A person merged it.
