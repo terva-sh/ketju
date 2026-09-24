@@ -9,9 +9,9 @@ Phase 1 from its groomed backlog to its exit gate. It repeats nothing that
 the authority the agent has, and the conditions under which it stops.
 
 The tracking ticket is `TKT-01M38WZPCW` (Drive Phase 1 to its exit gate
-autonomously). The authority this document grants is recorded there as well,
-because a ticket is where a person weighs an action with no undo, and this
-document can be edited by the agent it constrains.
+autonomously). The ticket also records the authority this document grants,
+because a ticket is where a person weighs an action with no undo, and the
+agent this document constrains can edit this document.
 
 ## What the run is for
 
@@ -26,16 +26,25 @@ the way there. Nothing outside the `phase-1` milestone is in scope.
 
 ## What was settled before the run started
 
-The decisions the backlog was waiting on were taken with the user on
-2026-09-24 and are recorded in [10-open-questions.md](10-open-questions.md)
-and the design documents it points to:
-ncruces for SQLite, reached through sqlc with hand-written SQL for the view
-queries ([04-data-model.md](04-data-model.md)), a hand-rolled session store,
-pre-login state in a sealed
-cookie, hand-written CSS, 25 posts per page, last-read landing, a five-item
-phone tab bar, a composer sheet, a reverse proxy for TLS, one process per data
-directory. **The run does not reopen them.** If the code proves one wrong, that
-is a stop condition, not a design change.
+The user took the decisions the backlog was waiting on during grooming on
+2026-09-24. [10-open-questions.md](10-open-questions.md) and the design
+document named beside each one record them:
+
+- ncruces for SQLite, reached through sqlc, with hand-written SQL for the view
+  queries (04);
+- a hand-rolled session store, with pre-login state in a sealed cookie (05);
+- ASCII handles, and a fresh install where members read and post (04);
+- quarantine, not refusal, for a thread found corrupt at startup (03);
+- an optional `mentions` key on `Edit` records, added without a format
+  version bump (03);
+- hand-written CSS, self-hosted fonts outside the size budget, and 25 posts
+  per page (07);
+- last-read landing, a five-item phone tab bar with Phase 3 placeholder
+  screens, and a composer sheet (06);
+- a reverse proxy for TLS, and one process per data directory (02).
+
+**The run does not reopen them.** If the code proves one wrong, that is a stop
+condition, not a design change.
 
 One decision is taken but not yet confirmed: the SQLite driver. The spike
 `TKT-01M29BSPE8` benchmarks both drivers because its criteria require it, and
@@ -60,8 +69,8 @@ another.
    always branch from the current tip, never from your previous branch.
 
 2. **Pick.** `git ticket ready` is the queue. Choose in this order:
-   1. the critical path, in this order: `BSPE8` → `W9Q1` → `BYYHG` →
-      `C5Y2E` → `CA9AX` → `CEE6V` → `CGBY1`;
+   1. the next ticket on the critical path, which runs `BSPE8`, `W9Q1`,
+      `BYYHG`, `C5Y2E`, `CA9AX`, `CEE6V`, `CGBY1`;
    2. then `urgent` over `high` over `normal`;
    3. then the earlier wave in the tracking ticket's plan;
    4. then the lower ID.
@@ -101,7 +110,7 @@ another.
    stopped you. If work remains, file a draft for it and link it. Then
    `git ticket summary`, `git ticket status ID done`, `git ticket release ID`.
 
-   The move to `done/` rides in the same pull request as the code, so the
+   The move to `done/` goes in the same pull request as the code, so the
    merge lands both together and no close-out PR is needed. If the PR is
    later refused for good, move the ticket back with a note.
 
@@ -265,8 +274,8 @@ The two lanes share only `internal/dto`. Each lane branches from the current
 - `git ticket check` passes.
 - Every ticket write is committed.
 - The tracking ticket has a note for each merge.
-- A handoff is written to `~/.local/state/agent-handoffs/ketju/`, naming the
-  ticket in hand, its branch and PR, and what state it is in.
+- A handoff in `~/.local/state/agent-handoffs/ketju/` names the ticket in
+  hand, its branch and PR, and what state it is in.
 
 When the gate closes:
 - Refresh the counts in [11-mvp-critical-path.md](11-mvp-critical-path.md)
