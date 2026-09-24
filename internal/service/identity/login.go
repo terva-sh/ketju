@@ -48,10 +48,16 @@ type Result struct {
 	Status string
 }
 
+// Sessions is the part of *session.Store a sign-in uses.
+type Sessions interface {
+	IssueUser(ctx context.Context, identityID int64, meta session.Meta) (string, session.Session, error)
+	Revoke(ctx context.Context, token string) error
+}
+
 // Service decides sign-ins.
 type Service struct {
 	DB       *db.DB
-	Sessions *session.Store
+	Sessions Sessions
 	// Logger takes what goes wrong after a sign-in has succeeded; nil means
 	// slog.Default.
 	Logger *slog.Logger
@@ -68,12 +74,20 @@ func (s *Service) now() time.Time {
 
 // Login decides what a verified identity gets. viewer is whoever the request
 // is already signed in as, which only matters for an identity nobody has.
+// replaces is the session token the browser already holds, if any.
+//
+// A sign-in that succeeds ends the session it replaces: it never keeps a
+// session id it did not issue (fixation). If that fails, the session just
+// issued is ended too and Login fails, so the browser never comes out
+// holding a new session while its old one still works (review 511). Only
+// then is the sign-in recorded on the identity, so the record is of
+// sign-ins that happened (review 512).
 //
 // Only session.IssueUser creates the session, and it checks the user's
 // status in the transaction that writes the row (TKT-01M29C7ZZR): Login does
 // not read the status itself, so there is no second check here to fall out
 // of step with the first.
-func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta) (Result, error) {
+func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (Result, error) {
 	var ident dbq.Identity
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
@@ -102,6 +116,14 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 		return Result{Outcome: Applicant}, nil
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: signing in: %w", err)
+	}
+	if replaces != "" {
+		if err := s.Sessions.Revoke(ctx, replaces); err != nil {
+			if err2 := s.Sessions.Revoke(ctx, token); err2 != nil {
+				err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
+			}
+			return Result{}, fmt.Errorf("identity: ending the session a sign-in replaces: %w", err)
+		}
 	}
 
 	now := s.now().UnixMilli()

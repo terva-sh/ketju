@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T20:51:43Z
+updated_at: 2026-09-24T20:57:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -146,6 +146,10 @@ The callback test covers pending users as well as suspended and deactivated, whi
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:51:43Z
 
 Review 511 (head 3141449) raised one medium finding, accepted and fixed. A sign-in that could not revoke the session it replaced only logged the failure, and completed anyway. Now a failed revocation of the old session also revokes the session just issued, and the sign-in ends with the 500 'Sign-in failed' page, so the browser never holds a new session while its old one still works. Revoking the old session before Login was the alternative, and it lost: account linking (TKT-01M29CKRES) needs the signed-in session to survive the callback. Handler.Sessions is now a one-method interface, so TestASignInThatCannotEndTheOldSessionFails can break revocation of one token. Mutants over the new branch are killed (49 in all).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T20:57:50Z
+
+Review 512 (head ad8173e) marked 511's finding resolved and raised one medium, accepted and fixed: the identity's last_login_at was written before the callback knew the sign-in would complete. The whole success sequence now lives in identity.Login(…, replaces): issue the session, end the one the browser held, and only then record the sign-in. If ending the old session fails, the new one is revoked and Login returns the error, and the handler answers 500 'Sign-in failed'. The handler keeps no partial states, and identity.Service.Sessions is now an interface of IssueUser and Revoke. TestASignInThatCannotEndTheOldSessionFails now also checks that the identity has no recorded login. This supersedes the review 511 note on where the revocation lives (it said the handler). All mutants are killed.
 
 ## Summary
 

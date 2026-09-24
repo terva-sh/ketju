@@ -512,15 +512,15 @@ func (f failingRevoke) Revoke(ctx context.Context, token string) error {
 	return f.Store.Revoke(ctx, token)
 }
 
-// A sign-in that cannot end the session it replaces does not complete, and
-// leaves no new session behind either (review 511).
+// A sign-in that cannot end the session it replaces does not complete,
+// leaves no new session behind, and is not recorded (reviews 511 and 512).
 func TestASignInThatCannotEndTheOldSessionFails(t *testing.T) {
 	w := newWorld(t)
 	w.user("alice", "active", "user-1")
 	w.user("bob", "active", "bob-sub")
 	w.idp.Subject = "bob-sub"
 	bob := cookie(w.signIn(""), session.CookieName)
-	w.handler.Sessions = failingRevoke{w.store, bob.Value}
+	w.handler.Login.(*identity.Service).Sessions = failingRevoke{w.store, bob.Value}
 
 	w.idp.Subject = "user-1"
 	flow, authURL := w.begin("")
@@ -533,6 +533,14 @@ func TestASignInThatCannotEndTheOldSessionFails(t *testing.T) {
 	}
 	if n := w.sessions(); n != 1 {
 		t.Errorf("%d sessions, want only bob's, which could not be ended", n)
+	}
+	// Nor is a sign-in that did not happen recorded (review 512).
+	var last sql.NullInt64
+	w.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), "SELECT last_login_at FROM identities WHERE subject = 'user-1'").Scan(&last)
+	})
+	if last.Valid {
+		t.Error("the failed sign-in was recorded on the identity")
 	}
 }
 

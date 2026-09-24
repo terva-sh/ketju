@@ -56,7 +56,7 @@ type Providers interface {
 
 // Login is the part of *identity.Service the callback uses.
 type Login interface {
-	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta) (identity.Result, error)
+	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (identity.Result, error)
 }
 
 // Sessions is the part of *session.Store the handlers use.
@@ -176,8 +176,13 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// The session this browser holds, if any, which a sign-in replaces.
+	var replaces string
+	if old, err := r.Cookie(session.CookieName); err == nil {
+		replaces = old.Value
+	}
 	res, err := h.Login.Login(ctx, id, domain.ViewerFrom(ctx), session.Meta{
-		IP: remoteIP(r), UserAgent: r.UserAgent(), Provider: key})
+		IP: remoteIP(r), UserAgent: r.UserAgent(), Provider: key}, replaces)
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "sign-in failed", "provider", key, "error", err)
 		writePage(w, http.StatusInternalServerError, pageFailed)
@@ -185,21 +190,6 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	}
 	switch res.Outcome {
 	case identity.SignedIn:
-		// Whatever session this browser held before is over: a sign-in never
-		// keeps a session id it did not issue (fixation). If the old one
-		// cannot be ended, neither is the new one kept, and the sign-in
-		// fails: a browser must not come out of it holding one session
-		// while another it held still works (review 511).
-		if old, err := r.Cookie(session.CookieName); err == nil {
-			if err := h.Sessions.Revoke(ctx, old.Value); err != nil {
-				h.Logger.ErrorContext(ctx, "revoking the session a sign-in replaced failed", "error", err)
-				if err := h.Sessions.Revoke(ctx, res.Token); err != nil {
-					h.Logger.ErrorContext(ctx, "revoking the session a failed sign-in issued failed", "error", err)
-				}
-				writePage(w, http.StatusInternalServerError, pageFailed)
-				return
-			}
-		}
 		http.SetCookie(w, session.Cookie(res.Token, res.Session.ExpiresAt))
 		w.Header().Set("Cache-Control", "no-store")
 		http.Redirect(w, r, f.ReturnTo, http.StatusSeeOther)
