@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:05:50Z
+updated_at: 2026-09-24T15:08:15Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -98,3 +98,7 @@ The default config path is unsettled (see BYYJG). So is whether `serve` must cre
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:05:49Z
 
 Claimed, read the code, and handed back before building. Its plan acquires the lock (TKT-01M29CCBZN, Add the single-process lock file) before anything touches data, and runs catch-up (TKT-01M29C5Y1S, Implement startup projection catch-up) before the listener. Neither exists yet, and projection.New refuses to build a Writer without the Sweep that catch-up supplies (review 389). Serving without the lock is the quiet two-writer corruption that ticket exists to refuse. Order taken instead: CCBZN, then C5Y1S, then this ticket, so serve wires real pieces rather than stand-ins. The declared dependencies are unchanged, because the two are integrations the plan names, not links the store records.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:08:15Z
+
+Carries two checks from TKT-01M29CCBZN (Add the single-process lock file), which left its AC1 and AC3 unticked because serve did not exist yet: (1) a second ketju serve against the same data directory exits non-zero and its stderr names the holding pid; (2) after SIGTERM and a clean exit, lock.Acquire on the directory succeeds. Serve takes lock.Acquire(dataDir, "serve") right after config load and before any MkdirAll inside it or db.Open, and releases it last. Acquire does not create the data directory; serve does that first if it creates one at all. A refusal is a *lock.HeldError; whether it gets its own exit code is serve's call (currently exitInternal).
