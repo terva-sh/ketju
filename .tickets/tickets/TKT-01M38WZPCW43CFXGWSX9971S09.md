@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T06:59:01Z
+updated_at: 2026-09-24T07:21:49Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -182,3 +182,7 @@ How the run applies it:
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T06:59:01Z
 
 Merged: TKT-01M29BSPE8 (Decide the pure-Go SQLite driver), PR #48, rebased onto main at 9aa4cf1b7dac9d793968462dbc3a487a3ea9eda0. Gate: CI run 115 succeeded, and its step log shows the race tests and the new 'check the SQLite driver spike' step ran. The clean Terva review is run 5299b680 on 9aa4cf1. Two earlier findings were fixed: 364 (high, directory fsync must be a prerequisite) and 365 (medium, unbounded busy retries). For the next tickets: ncruces stands, and BSPE8's 2× halt rule was not met. TKT-01M29BW9Q1 now has an extra acceptance criterion, a data-directory fsync once the WAL exists, and its single write connection is required, not optional. The shared DSN keys are proven on both drivers. Reviews ran on all three heads; none failed to run.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:21:49Z
+
+Merged: TKT-01M29BW9Q1 (Build the database access layer and migration runner), PR #49, rebased onto main at 1c605e5f9a3f03edeee4206d68467597a137f363. Gate: CI run 126 succeeded, and its step log shows the new 'generated database code is current' step ran sqlc v1.31.1 with no diff, and internal/store/db passed under -race. The clean Terva review is run 72c6f25a on 1c605e5. Six medium findings over three rounds were all accepted and fixed: 368 (embed pattern, path escaping), 370 (dot and underscore files, blocked checkpoint), 372 (created parent directories, bad migration record). Every review ran; none failed to run. For the next tickets: internal/store/db exposes Open, Read, Write, Migrate, Close and ErrBusy, ErrSchemaNewer, ErrMigrations. Queries go in internal/store/db/queries/*.sql, and schema goes in migrations/NNNN_name.sql, renumbered on rebase if two branches collide. Run CGO_ENABLED=0 go generate ./internal/store/db and commit dbq/. sqlc parses triggers with RAISE, but not FTS5's whole-table MATCH. synchronous=FULL. The draft TKT-01M393S6P7 is a flaky threadlog test that can fail any PR's CI at 1–2%.

@@ -16,6 +16,7 @@ parent: TKT-01M29BKBKV6HH8W0DN6QXQNZ0R
 origin: null
 dependencies:
   - TKT-01M29BW9Q17KEBMHJ91G6QHW36
+  - TKT-01M29BYYH73ZBC9WTS7HN03PKJ
 blocks_on: none
 references:
   - ref: design:data-model-perms
@@ -23,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T07:22:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -80,3 +81,9 @@ Consumed by C5Y2E (permission evaluation), TKT-01M29CKRF9 (IdP group mapping), T
 ### Settled in grooming (2026-09-24)
 
 - Default permissions (docs/04, decided 2026-09-24): `everyone` and `members` are implicit memberships, not rows. The seed migration grants members read, create_thread and reply globally, and grants everyone read, which applies only on public forums.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:22:22Z
+
+Claimed and released on 2026-09-24 without code. group_members.user_id and added_by reference users, which TKT-01M29BYYH7 creates, and BYYH7's plan declares real foreign keys (REFERENCES, NO ACTION). With foreign_keys=on, a group_members insert before users exists fails, and this plan also reuses BYYH7's TestNoCascadingDeletes. The dependency was missing from the store and is now recorded. BYYH7 goes first.

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BYYH73ZBC9WTS7HN03PKJ
 title: Add the users, identities, and sessions schema
 type: task
-status: ready
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -24,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T07:27:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -42,10 +42,10 @@ Two shapes here carry weight. `provider_key` refers to a config block rather tha
 
 ## Acceptance criteria
 
-- [ ] Handles are unique case-insensitively, proven by a test inserting two handles differing only in case
-- [ ] A session row with user_id NULL and identity_id set is valid, and one with both NULL is refused
-- [ ] Session ids are stored hashed and the plaintext value exists only in the cookie
-- [ ] No cascading delete exists on any of these tables
+- [x] Handles are unique case-insensitively, proven by a test inserting two handles differing only in case
+- [x] A session row with user_id NULL and identity_id set is valid, and one with both NULL is refused
+- [x] Session ids are stored hashed and the plaintext value exists only in the cookie
+- [x] No cascading delete exists on any of these tables
 
 ## Implementation plan
 
@@ -79,3 +79,32 @@ Defines the rows consumed by TKT-01M29C5Y3E (session store), TKT-01M29C8005 (reg
 
 - Handles: 3-30 characters from a-z, 0-9, _ and -; the first character is a letter or digit; stored lowercased (docs/04, decided 2026-09-24). Enforce it with a CHECK constraint and in identity.ValidateHandle.
 - `users.mark_all_read_at` belongs to this ticket. Add it to the docs/04 users column list.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:27:10Z
+
+### Built, 2026-09-24, against main at 1c605e5
+
+Migration `0002_identity.sql` adds `users`, `identities`, `local_credentials` and `sessions`. Queries are in `queries/identity.sql`.
+
+Changes from the pre-groom plan:
+- **The handle rule is in the schema and in Go.** The CHECK is length 3–30, `NOT GLOB '*[^a-z0-9_-]*'`, and a first character in `[a-z0-9]`. GLOB is case-sensitive, so the character class already refuses uppercase. A separate `handle = lower(handle)` clause was tried and removed: a mutation test showed it was redundant. The Go rule is **`domain.ValidateHandle`** in a new `internal/domain`, which docs/02 gives to pure types and rules. The grooming note said `identity.ValidateHandle`, but no identity package exists outside the future service layer; this is a package-boundary call. The shared table `domain.HandleCases` runs against both the Go rule and the CHECK (`TestHandleRuleMatchesTheSchema`), so they cannot drift.
+- **SessionHash lives in `internal/store/db/sqltypes`**, not in package `db`. The generated dbq imports it and db imports dbq, so `db.SessionHash` would be an import cycle. A sqlc override maps `sessions.id_hash` to it. It is a `[32]byte` with Value and Scan, so no generated session query accepts a string.
+- `identities.user_id` is nullable. An approval-mode applicant has an identity before an account, and a pre_user session points at that identity.
+- `sessions` has no `updated_at`, because `last_used_at` is its only mutable column; the schema comment says so. Indexes are on `sessions(user_id)` for "log out everywhere" and `sessions(expires_at)` for the sweeper.
+- docs/04 `users` now lists `mark_all_read_at` and `updated_at`.
+- The migration-runner tests now use `openUnmigrated`. They had silently assumed the embedded set was only 0001, and this ticket's 0002 exposed that.
+
+### Mutations tried
+- No COLLATE NOCASE: caught by TestHandleUniqueIgnoresCase.
+- A pre_user session that needs no identity: caught by TestSessionUserIdentityShape.
+- id_hash accepting 32 characters of text: caught by TestSessionIDColumnIsHashOnly.
+- ON DELETE CASCADE on sessions.user_id: caught by TestNoCascadingDeletes, both the schema scan and the enforced FOREIGN KEY failure.
+- No `handle = lower(handle)`: survived, and was an equivalent mutation (see above), so the clause was removed.
+
+The flaky threadlog test (TKT-01M393S6P7) failed once more in a full local suite run, in a package this change does not touch.
+
+## Summary
+
+Migration 0002_identity adds users, identities, local_credentials and sessions per docs/04, with CHECKs on every enum. The handle rule (3 to 30 of a-z 0-9 _ -, starting alphanumeric) is a CHECK plus a NOCASE UNIQUE index, and domain.ValidateHandle in Go; a shared table proves they agree. A session is 'user' with a user_id, or 'pre_user' with an identity_id and no user_id; both-NULL is refused. id_hash accepts only a 32-byte BLOB and is typed sqltypes.SessionHash in every generated query, so the plaintext id has nowhere to go. Every foreign key is NO ACTION, and TestNoCascadingDeletes scans every table, so it also guards later migrations. docs/04 lists mark_all_read_at and updated_at.

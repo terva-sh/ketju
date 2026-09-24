@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T07:27:10Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -86,3 +86,9 @@ Open: TKT-01M29BSPEX may skip this screen for auto_approve providers.
 - The handle rule is in docs/04. Reserve handles that collide with top-level routes: api, auth, admin, assets, blobs, events, healthz, me, new.
 - The verified claims travel from the callback to the handle submit in the sealed `__Host-ketju_reg` cookie.
 - Define the route and shape in docs/07 in this PR.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:27:10Z
+
+From TKT-01M29BYYH7, 2026-09-24: the handle rule is `domain.ValidateHandle` in `internal/domain`. It returns an error that wraps ErrInvalidHandle and says which part failed. It does not lowercase: normalise first, then validate what will be stored. The users CHECK enforces the same rule, and `domain.HandleCases` is the shared test table.

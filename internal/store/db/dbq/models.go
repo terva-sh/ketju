@@ -4,9 +4,68 @@
 
 package dbq
 
+import (
+	"database/sql"
+
+	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
+)
+
+type Identity struct {
+	ID            int64
+	UserID        sql.NullInt64
+	ProviderKey   string
+	Subject       string
+	Email         sql.NullString
+	EmailVerified int64
+	Issuer        string
+	LastLoginAt   sql.NullInt64
+	RawClaimsJson sql.NullString
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+type LocalCredential struct {
+	UserID       int64
+	PasswordHash string
+	CreatedAt    int64
+	UpdatedAt    int64
+}
+
 type SchemaMigration struct {
 	Version   int64
 	Name      string
 	Checksum  string
 	CreatedAt int64
+}
+
+type Session struct {
+	IDHash              sqltypes.SessionHash
+	UserID              sql.NullInt64
+	IdentityID          sql.NullInt64
+	Kind                string
+	CreatedAt           int64
+	ExpiresAt           int64
+	LastUsedAt          int64
+	Ip                  sql.NullString
+	UserAgent           sql.NullString
+	OidcProviderKey     sql.NullString
+	OidcRefreshTokenEnc []byte
+}
+
+type User struct {
+	ID            int64
+	Handle        string
+	DisplayName   string
+	AvatarBlob    sql.NullString
+	Status        string
+	Role          string
+	Kind          string
+	BioSource     string
+	Timezone      sql.NullString
+	Locale        sql.NullString
+	PrefsJson     string
+	MarkAllReadAt sql.NullInt64
+	CreatedAt     int64
+	UpdatedAt     int64
+	LastSeenAt    sql.NullInt64
 }

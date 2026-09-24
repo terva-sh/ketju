@@ -28,6 +28,19 @@ func openTest(t *testing.T) (*DB, string) {
 	return d, path
 }
 
+// openUnmigrated opens a fresh database without running the embedded
+// migrations, for tests that drive the runner with their own sets.
+func openUnmigrated(t *testing.T) (*DB, string) {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "db", "ketju.db")
+	d, err := Open(t.Context(), Options{Path: path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { d.Close() })
+	return d, path
+}
+
 // TestOpenSetsPragmas is AC1: WAL and an explicit busy_timeout, read back
 // from a live connection in each pool rather than trusted from the DSN.
 func TestOpenSetsPragmas(t *testing.T) {

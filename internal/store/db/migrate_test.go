@@ -68,7 +68,7 @@ func mustReadMigration(name string) string {
 // TestMigrateTwiceIsNoop is AC3: migrations run in order, are recorded, and a
 // second run changes nothing.
 func TestMigrateTwiceIsNoop(t *testing.T) {
-	d, path := openTest(t)
+	d, path := openUnmigrated(t)
 	if err := d.migrate(t.Context(), mapFS(twoMigrations), "m"); err != nil {
 		t.Fatal(err)
 	}
@@ -103,7 +103,7 @@ func TestMigrateTwiceIsNoop(t *testing.T) {
 // earlier one, which only works if they run in numeric order and not in
 // directory order.
 func TestMigrateAppliesInOrder(t *testing.T) {
-	d, _ := openTest(t)
+	d, _ := openUnmigrated(t)
 	files := map[string]string{
 		"0001_init.sql": mustReadMigration("0001_init.sql"),
 		"0010_c.sql":    "ALTER TABLE a ADD COLUMN c INTEGER;",
@@ -130,7 +130,7 @@ func TestMigrateRefusesBadSets(t *testing.T) {
 		{"empty", map[string]string{}, "no migrations found"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			d, _ := openTest(t)
+			d, _ := openUnmigrated(t)
 			fsys := mapFS(c.files)
 			if len(c.files) == 0 {
 				fsys = fstest.MapFS{"m": &fstest.MapFile{Mode: fs.ModeDir}}
@@ -149,7 +149,7 @@ func TestMigrateRefusesBadSets(t *testing.T) {
 // TestMigrateRefusesChecksumDrift: a migration edited after it ran is refused
 // rather than skipped, because the database no longer matches the file.
 func TestMigrateRefusesChecksumDrift(t *testing.T) {
-	d, _ := openTest(t)
+	d, _ := openUnmigrated(t)
 	if err := d.migrate(t.Context(), mapFS(twoMigrations), "m"); err != nil {
 		t.Fatal(err)
 	}
@@ -174,7 +174,7 @@ func TestMigrateRefusesChecksumDrift(t *testing.T) {
 // TestNewerSchemaRefused is AC4: a binary that knows fewer migrations than the
 // database has recorded refuses, and says which way round the mismatch is.
 func TestNewerSchemaRefused(t *testing.T) {
-	d, _ := openTest(t)
+	d, _ := openUnmigrated(t)
 	if err := d.migrate(t.Context(), mapFS(twoMigrations), "m"); err != nil {
 		t.Fatal(err)
 	}
@@ -193,7 +193,11 @@ func TestNewerSchemaRefused(t *testing.T) {
 // TestFailedMigrationLeavesNothing: a migration that fails partway is rolled
 // back whole and not recorded, so fixing it and rerunning starts clean.
 func TestFailedMigrationLeavesNothing(t *testing.T) {
-	d, _ := openTest(t)
+	d, _ := openUnmigrated(t)
+	init := map[string]string{"0001_init.sql": twoMigrations["0001_init.sql"]}
+	if err := d.migrate(t.Context(), mapFS(init), "m"); err != nil {
+		t.Fatal(err)
+	}
 	bad := map[string]string{
 		"0001_init.sql": twoMigrations["0001_init.sql"],
 		"0002_bad.sql":  "CREATE TABLE half (id INTEGER); CREATE TABLE half (id INTEGER);",
@@ -248,7 +252,7 @@ func TestEveryMigrationFileIsEmbedded(t *testing.T) {
 
 // TestStrayExtensionRefused: the case the whole-directory embed exists for.
 func TestStrayExtensionRefused(t *testing.T) {
-	d, _ := openTest(t)
+	d, _ := openUnmigrated(t)
 	for _, stray := range []string{"0002_thing.sq", "_0002_thing.sql", ".0002_thing.sql.swp"} {
 		files := map[string]string{"0001_init.sql": twoMigrations["0001_init.sql"], stray: "SELECT 1;"}
 		if err := d.migrate(t.Context(), mapFS(files), "m"); !errors.Is(err, ErrMigrations) {
@@ -273,7 +277,10 @@ func TestMigrateRefusesABadRecord(t *testing.T) {
 		{"a clean run past the embedded set", []int64{2, 3}, ErrSchemaNewer},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			d, _ := openTest(t) // records version 1
+			d, _ := openUnmigrated(t)
+			if err := d.migrate(t.Context(), mapFS(one), "m"); err != nil { // records version 1
+				t.Fatal(err)
+			}
 			err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
 				for _, v := range c.records {
 					if err := q.InsertMigration(t.Context(), dbq.InsertMigrationParams{Version: v, Name: "x", Checksum: "x"}); err != nil {

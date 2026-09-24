@@ -12,6 +12,12 @@ sql:
         package: dbq
         out: internal/store/db/dbq
         emit_interface: true
+        overrides:
+          # A session is addressed by the hash of its id, never the id.
+          - column: sessions.id_hash
+            go_type:
+              import: github.com/terva-sh/ketju/internal/store/db/sqltypes
+              type: SessionHash
 
   # Parse smoke for the SQL constructs the schema tickets plan to use. It is
   # generated under testdata/ so Go never builds it; it exists to fail.

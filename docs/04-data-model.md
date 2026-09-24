@@ -52,7 +52,8 @@ runner stays ours; sqlc does not run migrations.
 id, handle (unique, case-insensitive), display_name, avatar_blob,
 status ('active'|'pending'|'suspended'|'deactivated'),
 role ('member'|'moderator'|'admin'), kind ('human'|'agent'),
-bio_source, timezone, locale, prefs_json, created_at, last_seen_at
+bio_source, timezone, locale, prefs_json, mark_all_read_at (nullable),
+created_at, updated_at, last_seen_at
 ```
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.

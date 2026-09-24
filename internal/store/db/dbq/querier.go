@@ -6,11 +6,26 @@ package dbq
 
 import (
 	"context"
+	"database/sql"
+
+	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
 type Querier interface {
+	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (int64, error)
+	// Sessions are addressed only by the hash of their id. There is deliberately
+	// no query that takes the plaintext: hashing belongs to the session store.
+	CreateSession(ctx context.Context, arg CreateSessionParams) error
+	CreateUser(ctx context.Context, arg CreateUserParams) (int64, error)
+	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
+	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
+	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
+	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
+	GetUser(ctx context.Context, id int64) (User, error)
+	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
 	ListMigrations(ctx context.Context) ([]SchemaMigration, error)
+	TouchSession(ctx context.Context, arg TouchSessionParams) error
 }
 
 var _ Querier = (*Queries)(nil)

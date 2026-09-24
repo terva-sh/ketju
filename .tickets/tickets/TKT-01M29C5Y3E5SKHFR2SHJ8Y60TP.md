@@ -24,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-24T07:27:10Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -82,3 +82,9 @@ Reread docs/05 "Login flow" step 4 and "Sessions and CSRF", docs/04 "sessions", 
 ### Interactions
 Consumes the `sessions`/`users` schema from TKT-01M29BYYH7 and the db handle from TKT-01M29BW9Q1. Defines `session.Viewer`, which TKT-01M29C5Y2E (perm) and every API ticket consume. TKT-01M29C5Y2S (sweeper) deletes expired rows with the same expiry predicate, so export it as `session.ExpiredBefore(now)`.
 Open: the join on `users.status` is defense in depth beyond "suspending deletes sessions" in docs/05. It is free inside the one query, but the docs do not require it.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:27:10Z
+
+From TKT-01M29BYYH7 (Add the users, identities, and sessions schema), 2026-09-24: sessions.id_hash is typed `sqltypes.SessionHash` (`internal/store/db/sqltypes`, a [32]byte with Value and Scan) in every generated query. The queries are CreateSession, GetSession, TouchSession, DeleteSession and DeleteUserSessions. None takes a plaintext id, so hashing the cookie value into a SessionHash is this ticket's job, and it is the only place that conversion should exist. The schema CHECK refuses anything but a 32-byte BLOB.
