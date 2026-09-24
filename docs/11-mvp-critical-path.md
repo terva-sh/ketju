@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-15, after Phase 0 closed, against the store. They are written by hand, so
+Counts last read 2026-09-24, after Phase 1 was groomed, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-168 tickets: 12 epics and 156 children. Every ticket carries an `area:` label,
+174 tickets: 12 epics and 162 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -41,8 +41,8 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 73 in Phase 1, 33 in Phase 2, 20 in
-Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 3 carrying no
+Distribution by phase: 25 in Phase 0, 78 in Phase 1, 33 in Phase 2, 20 in
+Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 4 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-33 done, 0 ready, 135 draft.
+45 done, 59 ready, 70 draft.
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
 frozen at version 1 on 2026-09-15 (`TKT-01M29C5Y1E`). The twenty-fifth is the
@@ -68,7 +68,7 @@ ids and the sharded layout, the open-thread LRU cache, `ketju dump`,
 `ketju fsck`, CI, the frame fuzzer, property tests, crash tests, the benchmark,
 and the freeze.
 
-**Phase 1 is under way.** 8 of its 73 tickets are done.
+**Phase 1 is under way.** The first eight of its tickets to close were these.
 
 The first three were the markdown pipeline `TKT-01M29BW9Q8`, config loading
 `TKT-01M29BW9QF`, and the event bus `TKT-01M29C0WF9`. A fourth, `TKT-01M2JZB0`,
@@ -92,9 +92,33 @@ the commit messages:
 - `TKT-01M29C0WEQ` is done with its fourth criterion unticked. The autocomplete
   endpoint needs an HTTP layer and a users table, and neither exists yet.
 
-That leaves the ready queue empty again. Everything remaining is `draft`, and
-promotion is a person's decision, so the next section names what looks
-startable rather than starting it.
+Six more Phase 1 tickets closed on 2026-09-16 and 2026-09-19:
+- structured logging;
+- the HTTP server and router;
+- RFC 9457 problem details;
+- security headers and CSP nonces;
+- the CSRF posture and write rate limits;
+- the shared DTOs with their golden tests.
+
+Two workflow tickets outside any milestone installed targeted Terva reviews.
+
+**Phase 1 was groomed on 2026-09-24 for an autonomous run.** 18 of its 78
+tickets are done, 59 are `ready`, and one is a `human-only` draft. With the
+user, grooming did the following:
+- Took every decision the backlog was waiting on, and recorded each in docs/10
+  or in the design document it belongs to.
+- Closed four of the five decision spikes. The fifth, the SQLite driver, is
+  the run's first ticket, because its criteria need a benchmark.
+- Gave every open ticket an implementation plan.
+- Rewrote vague criteria into checkable ones.
+- Filed what no ticket owned: handle autocomplete, go.mod tidying, the
+  real-device check, and the run's tracking ticket.
+
+[12-autonomous-run.md](12-autonomous-run.md) is the procedure, and
+`TKT-01M38WZPCW` tracks the run. The five Phase 1 tickets added since the
+2026-09-15 count are those four new tickets and the doc-fixes ticket
+`TKT-01M29P9RS0`, which moved in from no milestone. Two tickets appeared
+outside Phase 1 over the same period, both workflow tickets with no milestone.
 
 ## The critical path
 
@@ -200,45 +224,16 @@ stranger.
 
 ## Starting
 
-Promotion is a decision for a person, and the backlog stays out of the ready
-queue until somebody makes it. `git ticket ready` is empty, so the next move is
-a promotion, and these are the drafts that look startable:
+The ready queue is the plan now. `git ticket ready` lists what can start, and
+the tracking ticket `TKT-01M38WZPCW` orders it in waves. The run starts with
+`TKT-01M29BSPE8`, the SQLite benchmark, because the whole data track waits on
+it. A second lane can start the client scaffold `TKT-01M29CCC02` alongside.
 
-The database half is where the work now stacks up, and it is blocked on two
-decisions rather than on any code:
+The open question this section used to raise about `TKT-01M29BW9Q1` is
+closed. Go reaches the tables through sqlc, and the view queries are
+hand-written beside it (04).
 
-- `TKT-01M29BSPE8` decide the pure-Go SQLite driver. docs/04 names
-  `ncruces/go-sqlite3` and docs/09 records `modernc` as the fallback, so this
-  is a confirmation rather than an investigation.
-- `TKT-01M29BW9Q1` build the access layer and the migration runner. It carries
-  an open question its description does not yet answer: **how Go reaches the
-  tables**. Nothing in docs/04, docs/09 or any `area:db` ticket names a tool,
-  so "SQL stays driver-agnostic" is currently a rule with no mechanism behind
-  it. A comment on that ticket records the sqlc option, what was verified about
-  it, and what it would cost. Eight schema tickets depend on the answer.
-
-Also startable, and independent of the database:
-
-- `TKT-01M29BW9QY` structured logging with slog. Small, everything shipped so
-  far logs through `slog.Default` already, and it is what `TKT-01M29C5Y3S`
-  (the HTTP server and router) depends on — so it is the one ticket standing
-  between here and the whole web half.
-- `TKT-01M29BSPEF` decide session implementation and pre-login state storage.
-  It depends on nothing, and together with the server it is what the OIDC flow
-  `TKT-01M29C7ZZ9` waits on; the provider registry that flow needs is done.
-- `TKT-01M29BW9N` decide the Phase 1 UI conventions. It gates the client work
-  and answers two questions in docs/10 rather than requiring any code.
-
-Of the six originally listed as having no dependencies, five are now done —
-the format decisions `TKT-01M29BSPD`, CI `TKT-01M29BW9QP`, thread ids
-`TKT-01M29BW9PJ`, config loading `TKT-01M29BW9QF`, and the markdown pipeline
-`TKT-01M29BW9Q8`.
-
-`git ticket ready` lists what is startable, and
-`git ticket deps ID --transitive` walks the chain for any ticket here.
-
-One caveat when reading this document against the store: the route described
-above is prose, not a query. The recorded `depends-on` graph has a longest
-chain of eight tickets, because most of the ordering argued for here was never
-written down as a dependency link. Trusting `git ticket deps` alone will
-understate what has to happen first.
+`git ticket deps ID --transitive` walks the chain for any ticket. Grooming
+added the dependency links that the route above had only argued for in prose,
+so the recorded graph now matches it. Its longest chain runs from the SQLite
+decision to the Playwright gate.
