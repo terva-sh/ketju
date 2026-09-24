@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T14:52:31Z
+updated_at: 2026-09-24T14:59:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -167,6 +167,10 @@ Alternatives considered:
 Tests: src/styles/theme-early.test.ts runs the script against theme.ts's key and values (stored light and dark apply; system, unknown and empty values leave <html> alone; storage that throws is survived). It also checks that the built shell carries it as a classic script ahead of the module and the stylesheet. Mutants killed: the dark branch dropped, the key renamed, the try/catch removed (3 of 3).
 
 Browser check (Chromium, vite dev): with a stored dark choice on a light system, and the reverse, data-theme was set while document.body did not exist yet, so before any paint. With nothing stored the system theme applies. go test ./internal/web/... passes, including the nonce and no-inline shell tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:59:57Z
+
+Answered review 427 (medium): the early-theme plugin skipped emitting its asset whenever this.meta.watchMode was true, which is also true for vite build --watch, and the HTML transform then threw. Emission is now keyed on the resolved command (build), not watch mode. Checked: npm run build and vite build --watch both emit assets/theme-early-*.js and reference it from the shell; the dev server still serves /src/theme-early.js (200, text/javascript); all 481 client tests pass. The built dist is unchanged byte for byte.
 
 ## Summary
 

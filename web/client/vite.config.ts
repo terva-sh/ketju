@@ -14,10 +14,17 @@ const goServer = 'http://localhost:8080';
 // hashed asset in a build, served from src in development.
 function earlyTheme(): Plugin {
   const source = 'src/theme-early.js';
+  // Only a build emits the asset: the dev server serves src as it is. A
+  // watched build is still a build (review 427), so this is keyed on the
+  // command, not on watch mode.
+  let building = false;
   return {
     name: 'ketju-early-theme',
+    configResolved(config) {
+      building = config.command === 'build';
+    },
     buildStart() {
-      if (this.meta.watchMode) return;
+      if (!building) return;
       this.emitFile({ type: 'asset', name: 'theme-early.js', source: readFileSync(source, 'utf8') });
     },
     transformIndexHtml(_html, ctx) {
