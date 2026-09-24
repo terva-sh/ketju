@@ -20,6 +20,13 @@ export function ThreadScreen() {
   const [missing, setMissing] = useState(false);
   const history = path.endsWith('/history');
 
+  // A new thread starts from nothing: the last one's title, or its 404, is
+  // not this one's.
+  useEffect(() => {
+    setHead(null);
+    setMissing(false);
+  }, [params.id]);
+
   useEffect(() => {
     const q = new URLSearchParams();
     if (view.hasPage) q.set('page', String(view.page));
@@ -36,6 +43,7 @@ export function ThreadScreen() {
         if (!r.ok) return;
         const body = (await r.json()) as ThreadHead;
         if (!live) return;
+        setMissing(false);
         setHead(body);
         const to = canonicalThreadUrl(location, body.thread);
         if (to) route(to, true);

@@ -18,21 +18,32 @@ export interface ThreadView {
 
 export function useThreadView(): ThreadView {
   const { path, query, route } = useLocation();
-  const page = Number.parseInt(query.page ?? '', 10);
+  const page = parsePage(query.page);
+  // Only the query changes: the path and any #post-N anchor stay.
   const go = (key: string, value: string) => {
     const q = new URLSearchParams(location.search);
     if (value === '') q.delete(key);
     else q.set(key, value);
     const s = q.toString();
-    route(s ? `${path}?${s}` : path);
+    route((s ? `${path}?${s}` : path) + location.hash);
   };
   return {
-    page: page > 0 ? page : 1,
-    hasPage: page > 0,
+    page: page ?? 1,
+    hasPage: page !== null,
     lens: query.lens ?? '',
     setPage: (p) => go('page', String(p)),
     setLens: (l) => go('lens', l),
   };
+}
+
+// parsePage accepts a page parameter only when the whole of it is a positive
+// integer. Anything else — 2junk, 0, -1, 1e3, a number too large to be
+// exact — is treated as no page at all, so the view a malformed link shows is
+// the same for everyone who opens it rather than a guess at a prefix.
+export function parsePage(raw: string | undefined): number | null {
+  if (raw === undefined || !/^[1-9][0-9]*$/.test(raw)) return null;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : null;
 }
 
 // canonicalThreadUrl is the URL a thread route should be at, given the

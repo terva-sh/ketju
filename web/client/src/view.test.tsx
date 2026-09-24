@@ -2,8 +2,8 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { LocationProvider } from 'preact-iso';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { canonicalThreadUrl, useThreadView, type ThreadView } from './view';
-import { renderAt, screenOf } from './testing';
+import { canonicalThreadUrl, parsePage, useThreadView, type ThreadView } from './view';
+import { renderAt, route, screenOf, settle } from './testing';
 
 afterEach(() => {
   vi.restoreAllMocks();
@@ -89,6 +89,36 @@ describe('useThreadView', () => {
     await mount(shared);
     expect([view.page, view.lens]).toEqual([4, '']);
   });
+
+  it('keeps the path and the anchor when the query changes', async () => {
+    await mount('/t/01k4z3j0w8x2c/a/42?lens=author:alice#post-42');
+    await act(() => view.setPage(2));
+    expect(location.pathname).toBe('/t/01k4z3j0w8x2c/a/42');
+    expect(location.hash).toBe('#post-42');
+    await act(() => view.setLens(''));
+    expect(location.pathname + location.search + location.hash).toBe('/t/01k4z3j0w8x2c/a/42?page=2#post-42');
+  });
+
+  it('treats a malformed page as none', async () => {
+    await mount('/t/01k4z3j0w8x2c/a?page=2junk');
+    expect([view.page, view.hasPage]).toEqual([1, false]);
+  });
+});
+
+describe('parsePage', () => {
+  it.each([
+    ['1', 1],
+    ['12', 12],
+    ['9007199254740991', 9007199254740991],
+  ])('accepts %s', (raw, want) => {
+    expect(parsePage(raw)).toBe(want);
+  });
+  it.each([undefined, '', '0', '-1', '01', '2junk', ' 2', '2 ', '1e3', '1.0', '0x10', '9007199254740993'])(
+    'refuses %s',
+    (raw) => {
+      expect(parsePage(raw)).toBeNull();
+    },
+  );
 });
 
 // AC3: a stale slug is replaced by the canonical one, in place, with the
@@ -127,5 +157,55 @@ describe('a stale slug', () => {
     vi.stubGlobal('fetch', async () => new Response('{}', { status: 404 }));
     const root = await renderAt('/t/01k4z3j0w8x2c/gone');
     expect(screenOf(root)).toBe('not-found');
+  });
+
+  // A 404 belongs to the thread that was missing. Moving to another thread,
+  // in the same document, shows that one.
+  it('recovers from a missing thread on navigating to one that exists', async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.includes('01k4z3j0w8x2c')
+        ? new Response('{}', { status: 404 })
+        : new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2d', slug: 'here', title: 'Here' } }), {
+            status: 200,
+          }),
+    );
+    const root = await renderAt('/t/01k4z3j0w8x2c/gone');
+    expect(screenOf(root)).toBe('not-found');
+    await route('/t/01k4z3j0w8x2d/here');
+    await settle(root);
+    expect(screenOf(root)).toBe('thread');
+    expect(root.textContent).toContain('Here');
+  });
+
+  // The same thread answering later: a 404 on one request, the page on the
+  // next.
+  it('recovers when the same thread answers after a 404', async () => {
+    let calls = 0;
+    vi.stubGlobal('fetch', async () =>
+      calls++ === 0
+        ? new Response('{}', { status: 404 })
+        : new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'Back' } }), { status: 200 }),
+    );
+    const root = await renderAt('/t/01k4z3j0w8x2c/a');
+    expect(screenOf(root)).toBe('not-found');
+    await route('/t/01k4z3j0w8x2c/a?page=2');
+    await settle(root);
+    expect(screenOf(root)).toBe('thread');
+    expect(root.textContent).toContain('Back');
+  });
+
+  // Nor does one thread's title stay up while the next one loads.
+  it('does not show the last thread while the next loads', async () => {
+    vi.stubGlobal('fetch', async (url: string) =>
+      url.includes('01k4z3j0w8x2c')
+        ? new Response(JSON.stringify({ thread: { id: '01k4z3j0w8x2c', slug: 'a', title: 'First' } }), { status: 200 })
+        : new Promise<Response>(() => {}),
+    );
+    const root = await renderAt('/t/01k4z3j0w8x2c/a');
+    expect(root.textContent).toContain('First');
+    await route('/t/01k4z3j0w8x2d/b');
+    await settle(root);
+    expect(screenOf(root)).toBe('thread');
+    expect(root.textContent).not.toContain('First');
   });
 });

@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T10:52:12Z
+updated_at: 2026-09-24T10:58:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -152,6 +152,14 @@ Built and verified.
 ### For CEE6V
 - The thread page must read its page and lens through `useThreadView` and call `canonicalThreadUrl` after its load. That keeps AC2 and AC3 true once `ThreadScreen` is replaced.
 - The permalink scroll and the landing page are still CEE6V's.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:58:29Z
+
+Review 400 (1 high, 2 medium; all fixed).
+(1) High: a thread's 404 persisted after navigating to another thread, because ThreadScreen never cleared 'missing'. A new thread id now resets the title and the 404, and a successful load clears the 404. Three new Vitest tests cover this: a 404, then navigating to another thread that exists; a 404, then a later success on the same thread; and one thread's title not showing while the next loads. Each clear, removed alone, is killed by its own test.
+(2) Medium: setPage and setLens dropped the #post-N anchor. They now keep the path and the hash and change only the query, and a test covers it.
+(3) Medium: parseInt read page=2junk as page 2. parsePage now accepts only a whole positive integer that is exactly representable. Anything else counts as no page, so a malformed link gives everyone the same view instead of a guess at a prefix. It is tested over 15 inputs.
+Mutants on the fixes, all killed: the hash, the regex, the safe-integer check, the page default, and each clear alone and both together. dist rebuilt; 67 Vitest tests.
 
 ## Summary
 

@@ -24,3 +24,12 @@ export async function settle(root: HTMLElement) {
 
 export const screenOf = (root: HTMLElement) =>
   root.querySelector('[data-screen]')?.getAttribute('data-screen') ?? null;
+
+// route navigates in the same document, as a link click does: preact-iso
+// follows pushState through its popstate listener.
+export async function route(url: string) {
+  await act(async () => {
+    history.pushState(null, '', url);
+    dispatchEvent(new PopStateEvent('popstate'));
+  });
+}
