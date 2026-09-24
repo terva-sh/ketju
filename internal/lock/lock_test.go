@@ -216,16 +216,42 @@ func TestHeldMessageSaysWhatToCheck(t *testing.T) {
 func TestUnreadableRecordStillRefuses(t *testing.T) {
 	dir := t.TempDir()
 	startHolder(t, dir)
-	if err := os.WriteFile(filepath.Join(dir, FileName), []byte("not json"), 0o644); err != nil {
+	full := `{"pid":7,"host":"h","purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`
+	for _, c := range []struct{ record, want string }{
+		{"not json", "does not hold a holder record"},
+		{"", "does not hold a holder record"},
+		{"{}", "no pid, host, purpose, started_at"},
+		{"null", "no pid, host, purpose, started_at"},
+		{`{"pid":7,"host":"h","purpose":"serve"}`, "no started_at"},
+		{`{"pid":7,"host":"h","started_at":"2026-09-24T09:30:00Z"}`, "no purpose"},
+		{`{"pid":7,"purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`, "no host"},
+		{`{"pid":-1,"host":"h","purpose":"serve","started_at":"2026-09-24T09:30:00Z"}`, "no pid"},
+	} {
+		if err := os.WriteFile(filepath.Join(dir, FileName), []byte(c.record), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		_, err := Acquire(dir, "serve")
+		var held *HeldError
+		if !errors.As(err, &held) {
+			t.Fatalf("record %q: got %v, want a *HeldError", c.record, err)
+		}
+		if held.Holder != nil || held.ReadErr == nil || !strings.Contains(held.ReadErr.Error(), c.want) {
+			t.Errorf("record %q: holder %+v, read error %v; want no holder and %q", c.record, held.Holder, held.ReadErr, c.want)
+		}
+		if !strings.Contains(err.Error(), "another process") {
+			t.Errorf("record %q: the refusal names a holder it could not read: %v", c.record, err)
+		}
+	}
+
+	// A whole record names the holder, so the cases above are refused for
+	// what they lack, not for something else.
+	if err := os.WriteFile(filepath.Join(dir, FileName), []byte(full), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Acquire(dir, "serve")
 	var held *HeldError
-	if !errors.As(err, &held) {
-		t.Fatalf("got %v, want a *HeldError", err)
-	}
-	if held.Holder != nil || held.ReadErr == nil {
-		t.Errorf("holder %+v, read error %v: want no holder and the reason", held.Holder, held.ReadErr)
+	if !errors.As(err, &held) || held.Holder == nil || held.Holder.PID != 7 {
+		t.Errorf("a whole record: got %v", err)
 	}
 }
 

@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:21:29Z
+updated_at: 2026-09-24T15:26:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -124,6 +124,10 @@ CI run 277 failed in internal/store/threadlog, TestQueuedAppendsShareOneFsync ("
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:21:29Z
 
 Answered review 436 (medium). On refusal, Acquire closed the contended descriptor and then re-read the holder record by path, so a holder that left in between could be replaced in the message by whoever came next. It now reads the record through the refused descriptor before closing it, bounded to 64 KiB. That narrows the window and never resolves the path again; it cannot close the window entirely, because a record read is not atomic with a lock test. No deterministic test tells the two apart, since the difference exists only inside that race; the existing refusal tests hold the behaviour, and a mutant that drops the holder, or bounds the read below a whole record, is killed (15 of 15 lock mutants killed). CI run 279 on d16e971 passed, with internal/lock in the race step.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:26:47Z
+
+Answered review 440 (medium). readHolder accepted any valid JSON, so {} or null decoded into a holder with pid 0 and no host, and a refusal would have named that as the holder. A record must now carry a positive pid, a host, a purpose and a start time. Otherwise it is a read error naming what is missing, and the refusal says 'another process'. TestUnreadableRecordStillRefuses covers: not JSON, empty, {}, null, each field missing in turn, a negative pid, and a whole record that is named. Mutation check: 20 of 20 lock mutants killed, the 15 before plus one per field check and one on the missing-list test. CI run 281 on 3689e8f passed.
 
 ## Summary
 

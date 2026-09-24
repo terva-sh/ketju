@@ -27,6 +27,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime/debug"
+	"strings"
 	"time"
 )
 
@@ -155,6 +156,25 @@ func readHolder(f *os.File) (*Holder, error) {
 	var h Holder
 	if err := json.Unmarshal(b, &h); err != nil {
 		return nil, fmt.Errorf("%s does not hold a holder record: %w", f.Name(), err)
+	}
+	// Valid JSON is not yet a record: {} or null decodes without error into
+	// a holder with pid 0 and no host, and a refusal naming that would
+	// claim to know who holds the lock when it does not (review 440).
+	var missing []string
+	if h.PID <= 0 {
+		missing = append(missing, "pid")
+	}
+	if h.Host == "" {
+		missing = append(missing, "host")
+	}
+	if h.Purpose == "" {
+		missing = append(missing, "purpose")
+	}
+	if h.StartedAt.IsZero() {
+		missing = append(missing, "started_at")
+	}
+	if len(missing) > 0 {
+		return nil, fmt.Errorf("%s holds an incomplete holder record (no %s)", f.Name(), strings.Join(missing, ", "))
 	}
 	return &h, nil
 }
