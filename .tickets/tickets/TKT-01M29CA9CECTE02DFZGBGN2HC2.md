@@ -24,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T09:06:42Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -84,3 +84,9 @@ Open: the `DELETE /read` semantics (to 0, or to a given ordinal) are undocumente
 - Implement only what the criteria name. Watch and flag endpoints overlap Phase 2 tickets TKT-01M29CRJ29 and TKT-01M29CP2PJ, so leave those to them.
 - DELETE on a watch falls back to the default level.
 - The draft for a new thread is keyed by forum (see BYYHQ).
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:06:42Z
+
+From TKT-01M29BYYHQ (viewer-state schema): the drafts table has no title column, because docs/04 lists none. A new-thread draft therefore autosaves the body but not the thread title. Decide here whether it needs one; adding it is a one-line migration. Read positions only move forward (UpsertReadPosition takes max). Unread counts use UnreadCount(user, thread), whose rule is in docs/04 read_positions.

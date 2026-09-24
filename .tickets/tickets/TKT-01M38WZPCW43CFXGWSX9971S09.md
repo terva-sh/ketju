@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T08:29:08Z
+updated_at: 2026-09-24T08:57:07Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -202,3 +202,7 @@ Merged TKT-01M29C5Y2E (permission evaluation) as PR #52 at ad7dbde. The first re
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:29:08Z
 
 Merged TKT-01M29BYYJ8 (projection tables) as PR #53 at a15a1aa, with a clean review at a15a1aa and CI run 160. AC3 (rebuild equality) is left unticked for TKT-01M29C5Y25. For later tickets: db.ProjectionTables, db.ClearProjections (reindex empties the tables, never drops them) and dbtest.DumpProjections. Before that, TKT-01M29CA9AX (thread page) turned out to need the threads projection (BYYJ8 and C2WW5) and the viewer-state schema (BYYHQ). Those are now recorded as dependencies, and CA9AX was released to ready. Next: TKT-01M29C2WW5, then BYYHQ, then CA9AX.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:57:07Z
+
+Merged TKT-01M29C2WW5 (projection writer) as PR #54 at 46b6a13, with a clean review at 46b6a13 and CI run 169. Two review rounds ran first, all findings accepted and fixed. Review 389: Delete must not move post_meta.log_offset, and Sweep became required. Review 390: a thread row must exist before a thread counts as projected, and the log header is now validated. For later tickets: projection.New(Options{DB, Root, Sweep}) returns an error if any is missing. Run(ctx) is the retry loop. ProjectThread(ctx, id, len) is idempotent catch-up. post_meta.log_offset means the current revision's record, and migration 0004's comment on it is wrong (docs/04 says so). Filed draft TKT-01M39973KG: docs/03 says reserved types are refused, while the reader skips them. Next: TKT-01M29BYYHQ, then TKT-01M29CA9AX.

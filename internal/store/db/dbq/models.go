@@ -10,6 +10,17 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
+type Draft struct {
+	ID        int64
+	UserID    int64
+	ThreadID  sql.NullInt64
+	ForumID   sql.NullInt64
+	Source    string
+	ReplyTo   sql.NullInt64
+	CreatedAt int64
+	UpdatedAt int64
+}
+
 type Forum struct {
 	ID          int64
 	ParentID    sql.NullInt64
@@ -68,6 +79,17 @@ type Mention struct {
 	MentionedUserID int64
 }
 
+type Notification struct {
+	ID       int64
+	UserID   int64
+	Kind     string
+	ThreadID sql.NullInt64
+	Ordinal  sql.NullInt64
+	ActorID  sql.NullInt64
+	At       int64
+	ReadAt   sql.NullInt64
+}
+
 type Permission struct {
 	ForumID    sql.NullInt64
 	GroupID    int64
@@ -92,6 +114,13 @@ type ProjectionState struct {
 	ThreadID  int64
 	LogLength int64
 	UpdatedAt int64
+}
+
+type ReadPosition struct {
+	UserID          int64
+	ThreadID        int64
+	LastReadOrdinal int64
+	LastReadAt      int64
 }
 
 type SchemaMigration struct {
@@ -154,4 +183,14 @@ type User struct {
 	CreatedAt     int64
 	UpdatedAt     int64
 	LastSeenAt    sql.NullInt64
+}
+
+type Watch struct {
+	ID        int64
+	UserID    int64
+	ThreadID  sql.NullInt64
+	ForumID   sql.NullInt64
+	Level     string
+	CreatedAt int64
+	UpdatedAt int64
 }

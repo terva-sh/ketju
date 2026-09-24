@@ -43,6 +43,7 @@ type Querier interface {
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
 	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
 	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)
+	GetReadPosition(ctx context.Context, arg GetReadPositionParams) (ReadPosition, error)
 	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
 	GetThread(ctx context.Context, id int64) (Thread, error)
 	GetUser(ctx context.Context, id int64) (User, error)
@@ -80,13 +81,24 @@ type Querier interface {
 	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
+	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
 	// Clears the pin only when its scope matches, so removing a forum pin does
 	// not silently remove a global one (docs/03). SQLite evaluates every SET
 	// expression against the row as it was, so both CASEs see the old scope.
 	UnpinThread(ctx context.Context, arg UnpinThreadParams) (int64, error)
+	// A thread's unread posts for one user: those past the user's read position
+	// (0 when they never opened the thread, so no row) and written after
+	// users.mark_all_read_at, which means "everything before this moment is read"
+	// (docs/04 "read_positions"). created_at is revision 1's, so an edit does not
+	// make an old post unread. Deleted posts count, as post_count counts them; a
+	// reader decides whether a tombstone is worth a badge.
+	UnreadCount(ctx context.Context, arg UnreadCountParams) (int64, error)
 	// A Post resets every column, for the same reason UpsertThread does.
 	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
+	// Reading never moves backwards: opening an older page of a thread must not
+	// mark the newer posts unread again.
+	UpsertReadPosition(ctx context.Context, arg UpsertReadPositionParams) error
 	// The projection writer's statements (TKT-01M29C2WW5). Every one sets an
 	// absolute value, never an increment, so replaying a range the database has
 	// already seen converges on the same rows.

@@ -196,15 +196,23 @@ new_application (moderators).
 ```
 user_id, thread_id (nullable), forum_id (nullable), level ('watch'|'mute')
 ```
+Exactly one of thread and forum, and at most one watch per user per thread
+and per user per forum.
 
 ### read_positions
 ```
 user_id, thread_id, last_read_ordinal, last_read_at
 ```
-One row per (user, thread) ever visited. Combined with `thread_projection
-.post_count` this yields unread counts without a per-post table. A user-level
+One row per (user, thread) ever visited. Combined with the thread's posts in
+`post_meta` this yields unread counts without a per-post table. A user-level
 `mark_all_read_at` timestamp handles "everything before this date is read"
 so we do not need rows for threads never opened.
+
+The rule, as the `UnreadCount` query applies it (TKT-01M29BYYHQ): a post is
+unread when its ordinal is past `last_read_ordinal` (0 with no row) and it was
+written after `mark_all_read_at`. A post written at the mark's exact
+millisecond counts as read. The time is revision 1's, so an edit does not make
+an old post unread, and a read position only moves forward.
 
 ### flags
 ```
@@ -217,9 +225,16 @@ Reports on posts; feeds the moderator queue (08).
 ```
 user_id, thread_id (nullable = new-thread draft, then forum_id), source,
 reply_to, updated_at
-PRIMARY KEY (user_id, thread_id)
+UNIQUE (user_id, thread_id) WHERE thread_id IS NOT NULL
+UNIQUE (user_id, forum_id) WHERE thread_id IS NULL
 ```
-Composer autosave, one per user per thread.
+Composer autosave, one per user per thread, and one new-thread draft per user
+per forum. A draft holds exactly one of thread and forum, and a `reply_to`
+only with a thread. The first version of this section declared
+`PRIMARY KEY (user_id, thread_id)`, but a nullable key column does not enforce
+uniqueness in SQLite and could not key a new-thread draft by forum, so the
+two partial indexes replace it (TKT-01M29BYYHQ). A new-thread draft has no
+title column yet; whether it needs one is TKT-01M29CA9CE's to decide.
 
 ### blobs
 ```
