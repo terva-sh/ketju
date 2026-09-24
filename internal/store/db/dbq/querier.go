@@ -19,6 +19,12 @@ type Querier interface {
 	// An IdP mapping never overrides a membership an admin set by hand: if the
 	// row exists already, whatever its source, it is left alone.
 	AddIdPMembership(ctx context.Context, arg AddIdPMembershipParams) error
+	ClearMentions(ctx context.Context) error
+	ClearPostMeta(ctx context.Context) error
+	ClearProjectionState(ctx context.Context) error
+	ClearThreadTags(ctx context.Context) error
+	// The statements ClearProjections runs, one per table in ProjectionTables.
+	ClearThreads(ctx context.Context) error
 	CreateForum(ctx context.Context, arg CreateForumParams) (int64, error)
 	CreateGroup(ctx context.Context, arg CreateGroupParams) (int64, error)
 	CreateIdentity(ctx context.Context, arg CreateIdentityParams) (int64, error)
@@ -34,7 +40,9 @@ type Querier interface {
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
 	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
+	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)
 	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
+	GetThread(ctx context.Context, id int64) (Thread, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
@@ -55,6 +63,7 @@ type Querier interface {
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
+	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	TouchSession(ctx context.Context, arg TouchSessionParams) error
 }
 

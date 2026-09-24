@@ -237,6 +237,16 @@ because they must be readable before the database exists.
 
 ## Projection tables (rebuildable)
 
+Projection tables carry no foreign keys, to `users` or to anything else, and
+their author and forum columns are plain integers. `ketju reindex` rebuilds
+them from the logs alone, into a database whose users may have come from an
+older backup or from none, and a row naming a user the database lacks is the
+reader's to render rather than a write to refuse (settled in Phase 1
+grooming). Reindex empties the tables and replays the logs into them; it does
+not drop them, because their DDL lives in the migration and nowhere else.
+`db.ProjectionTables` is the list, and a test holds it equal to the tables
+whose schema carries the PROJECTION marker (TKT-01M29BYYJ8).
+
 ### threads
 ```
 id, forum_id, slug, title, author_id, created_at,

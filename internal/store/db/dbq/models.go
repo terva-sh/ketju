@@ -62,11 +62,36 @@ type LocalCredential struct {
 	UpdatedAt    int64
 }
 
+type Mention struct {
+	ThreadID        int64
+	Ordinal         int64
+	MentionedUserID int64
+}
+
 type Permission struct {
 	ForumID    sql.NullInt64
 	GroupID    int64
 	Permission string
 	CreatedAt  int64
+}
+
+type PostMetum struct {
+	ThreadID        int64
+	Ordinal         int64
+	AuthorID        int64
+	CreatedAt       int64
+	CurrentRevision int64
+	EditedAt        sql.NullInt64
+	ReplyTo         sql.NullInt64
+	Deleted         int64
+	Moved           int64
+	LogOffset       int64
+}
+
+type ProjectionState struct {
+	ThreadID  int64
+	LogLength int64
+	UpdatedAt int64
 }
 
 type SchemaMigration struct {
@@ -88,6 +113,29 @@ type Session struct {
 	UserAgent           sql.NullString
 	OidcProviderKey     sql.NullString
 	OidcRefreshTokenEnc []byte
+}
+
+type Thread struct {
+	ID                 int64
+	ForumID            int64
+	Slug               string
+	Title              string
+	AuthorID           int64
+	CreatedAt          int64
+	PostCount          int64
+	LastPostAt         int64
+	LastPostAuthorID   int64
+	LastPostOrdinal    int64
+	Locked             int64
+	PinnedScope        sql.NullString
+	PinnedUntil        sql.NullInt64
+	Archived           int64
+	LogLengthProjected int64
+}
+
+type ThreadTag struct {
+	ThreadID int64
+	Tag      string
 }
 
 type User struct {

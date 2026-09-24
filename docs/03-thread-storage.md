@@ -473,8 +473,8 @@ Steps for a `Post`:
 6. Return `{ordinal, revision, log_length}` to the handler.
 
 The projection into the database (step 5) is asynchronous but ordered per
-thread and idempotent (keyed on `thread_id, log_offset`). A `projections`
-table records the log length each thread has been projected up to, so a crash
+thread and idempotent (keyed on `thread_id, log_offset`). A `projection_state`
+table (04) records the log length each thread has been projected up to, so a crash
 between log write and DB write is repaired on startup by replaying the gap.
 The log is the source of truth; the database catches up to it.
 
