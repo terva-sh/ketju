@@ -27,10 +27,12 @@ blocks_on: none
 references:
   - ref: design:autonomous-run
     path: docs/12-autonomous-run.md
+  - ref: pr:47
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T05:21:45Z
+updated_at: 2026-09-24T05:23:36Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -152,3 +154,9 @@ W0, with CCC02 and CCC0F.
 
 Each merged PR adds a note here giving the ticket, the PR number, the merge
 commit, and anything the next ticket needs.
+
+## Notes
+
+**agent:claude/phase1-groom** at 2026-09-24T05:23:36Z
+
+The grooming PR is #47 (https://git.local.sothr.com/terva-sh/ketju/pulls/47). A person merges it, because it is the PR that creates this run's merge authority and so falls outside it. The run starts once it lands on main.
