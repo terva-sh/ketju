@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T05:23:36Z
+updated_at: 2026-09-24T05:24:25Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -160,3 +160,7 @@ commit, and anything the next ticket needs.
 **agent:claude/phase1-groom** at 2026-09-24T05:23:36Z
 
 The grooming PR is #47 (https://git.local.sothr.com/terva-sh/ketju/pulls/47). A person merges it, because it is the PR that creates this run's merge authority and so falls outside it. The run starts once it lands on main.
+
+**agent:claude/phase1-groom** at 2026-09-24T05:24:25Z
+
+Terva review of PR #47: requested by workflow dispatch with request-id ready-review. The tea call returned an empty-JSON error, but the run was created: run 106 (https://git.local.sothr.com/terva-sh/ketju/actions/runs/106), reviewing base 39b54b2b6746b1f235540a6f910d7f93fd5fd351 and head 4c88d86e6537657cb77b69c5b6fcb26c2d5507c9. The Review PR step failed with context_limit and nothing was published: the diff, mostly ticket-store files, is larger than the reviewer takes. That is a runtime failure, not a clean review, so there is no model evidence for this PR. It does not block the merge, because a person merges this PR. docs/12 now tells the run how to treat context_limit on its own PRs. No retry was made, because the same diff would fail the same way.

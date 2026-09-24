@@ -153,6 +153,12 @@ hold **on the exact head SHA being merged**:
 A fix pushed after a review creates a new head, and the review does not carry
 over. Request a follow-up review of the new head before merging.
 
+A review that fails to run is not a clean review, and the gate does not hold.
+That includes the reviewer stopping with `context_limit` because the diff is
+too large, which is what happened to the grooming PR #47. A ticket PR that
+hits it is doing too much. Split it into smaller PRs, or block the ticket.
+Do not retry the same diff and hope.
+
 Merge server-side through the API with `{"Do":"rebase"}`, as earlier tickets
 did. A refusal comes back as a bare HTTP 405 with no JSON body. Retry once
 after a short wait, then read the PR state, because a 405 is sometimes
