@@ -118,7 +118,7 @@ Built and verified.
 - **Mute excludes; forum-level watches are not counted.** docs/06 names the surfaces without defining them. A thread mute is unambiguous. Forum watches, and exactly what each cross-forum list holds, belong to TKT-01M29CTY7K, which is noted to reuse this rule.
 - **A pre-user session and a suspended user get the anonymous shape.** `dto.Me` makes a nil user the only signed-out signal. A pre-user is not a member, and a suspended user's account is not theirs to read. Whether approval mode needs a marker is TKT-01M29CKRG9's question, which is noted there.
 
-### Acceptance criteria
+### Against the acceptance criteria
 - **AC1 is not ticked: its pre-user clause has no documented shape to return.**
   - Anonymous, member and moderator are tested: each response is decoded with `DisallowUnknownFields` and compared in full with the seeded data. That includes the counts across read, unread, muted, marked-read, watched, participated and unreadable-forum threads, and a display name containing `</script>`.
   - Pre-user and suspended admin both return the anonymous shape and are tested to.
