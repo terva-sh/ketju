@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: design:background-work
     path: docs/02-architecture.md
+  - ref: pr:69
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T17:18:09Z
+updated_at: 2026-09-24T17:54:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
