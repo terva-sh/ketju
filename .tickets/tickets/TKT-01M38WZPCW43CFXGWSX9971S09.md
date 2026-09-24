@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T09:47:41Z
+updated_at: 2026-09-24T10:12:34Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -214,3 +214,7 @@ Merged TKT-01M29BYYHQ (viewer-state schema) as PR #55 at 0e70101, with a clean r
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:47:41Z
 
 Merged PR #56, TKT-01M29CA9AX 'Implement the thread page endpoint', as aab5c59 (rebase). CI run 185 passed, and its step log shows go test -race ran over render, service/threads, threadlog and web/api. Terva: reviews 391 (1 high, 2 medium), 392 (1 medium) and 393 (3 medium) all ran and found real issues, each fixed; review 394 is clean at medium, with one low finding (empty numeric query parameters accepted), deferred to TKT-01M29CA9C2. These were not run failures, so the two-in-a-row halt rule does not apply.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T10:12:34Z
+
+Merged PR #57, TKT-01M29BYYJ0 'Add the flags, audit log, blobs, and settings schema', as 1afc4e8 (rebase). CI run 191 passed, and its step log shows go test -race ran over config, settings and store/db. Terva review 395 raised 1 high and 2 medium findings, all fixed. The clean run on 1afc4e8 is 4a7f9f79. The review ran each time, so none of these is a review-run failure.
