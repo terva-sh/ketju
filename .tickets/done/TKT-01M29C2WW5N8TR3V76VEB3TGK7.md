@@ -24,10 +24,12 @@ references:
     path: docs/03-thread-storage.md
   - ref: design:data-model-projections
     path: docs/04-data-model.md
+  - ref: pr:54
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:15:46Z
-updated_at: 2026-09-24T08:42:00Z
+updated_at: 2026-09-24T08:42:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
