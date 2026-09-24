@@ -260,6 +260,33 @@ func TestGroupMemberSource(t *testing.T) {
 		t.Fatalf("after re-evaluation: %v, want %v", got, want)
 	}
 
+	// The IdP put drew in readers; an admin now adds drew to readers by hand.
+	// The admin takes it over, so the next login cannot remove it.
+	write(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+		return q.AddAdminMembership(t.Context(), dbq.AddAdminMembershipParams{
+			GroupID: readers, UserID: user, AddedBy: sql.NullInt64{Int64: admin, Valid: true}, AddedAt: 3,
+		})
+	})
+	write(t, d, func(q *dbq.Queries, tx *sql.Tx) error { return q.DeleteIdPMemberships(t.Context(), user) })
+	if got := memberships(); got[readers] != domain.MembershipAdmin || got[mods] != domain.MembershipAdmin {
+		t.Fatalf("after an admin took over readers and the next login: %v, want readers and moderators both admin", got)
+	}
+	// Adding an existing admin membership again changes nothing and fails nothing.
+	write(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+		return q.AddAdminMembership(t.Context(), dbq.AddAdminMembershipParams{
+			GroupID: mods, UserID: user, AddedBy: sql.NullInt64{Int64: admin, Valid: true}, AddedAt: 9,
+		})
+	})
+	var addedAt int64
+	if err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), "SELECT added_at FROM group_members WHERE group_id = ? AND user_id = ?", mods, user).Scan(&addedAt)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if addedAt != 1 {
+		t.Errorf("re-adding an admin membership rewrote added_at to %d, want the original 1", addedAt)
+	}
+
 	for _, c := range []struct {
 		name string
 		stmt string

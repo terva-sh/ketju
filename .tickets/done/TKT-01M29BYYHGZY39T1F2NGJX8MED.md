@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T07:48:01Z
+updated_at: 2026-09-24T07:50:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -116,6 +116,10 @@ Terva review 378 (run c1d78912-d7a0-45ef-b0c2-423cdfaedc5c, Actions run 139), he
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:48:01Z
 
 Terva review 379 (run 874f23e7-9dad-4e67-8030-ec87f2856a7b, Actions run 141), head 47c911dbcee47c2b681bd835b0f518f90d08b322, base e422e22113dafe542a645d09588bd3c52e5101f7. Both findings from review 378 are marked resolved. One new medium finding, 'Do not conflate forum ID 0 with global grants'. **Accepted and fixed.** SQLite accepts an explicit id of 0 for an INTEGER PRIMARY KEY, and permissions_unique maps a NULL forum_id to 0. forums now has CHECK (id > 0). TestForumNestingDepth inserts ids 0 and -1; without the CHECK, id 0 is accepted. A follow-up review of the new head is requested.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:50:46Z
+
+Terva review 380 (run 90cd900c-b5d7-4f45-b76c-4ea1985fae1b, Actions run 143), head 160f9dde5e562b513d32670b5e99d9f4c2b2b967, base e422e22113dafe542a645d09588bd3c52e5101f7. The finding from review 379 is marked resolved. One new medium finding, 'Allow an admin to take ownership of an existing IdP membership'. **Accepted and fixed.** AddAdminMembership is now INSERT ... ON CONFLICT DO UPDATE SET source='admin', added_by, added_at WHERE group_members.source = 'idp'. An admin add promotes an IdP row, so the next login's re-evaluation keeps it, and it leaves an existing admin row with its original adder and time. AddIdPMembership still never overwrites an admin row. TestGroupMemberSource covers the takeover followed by a login, and the idempotent re-add. The old plain insert fails that test on the primary key; dropping the WHERE fails it on added_at. A follow-up review of the new head is requested.
 
 ## Summary
 

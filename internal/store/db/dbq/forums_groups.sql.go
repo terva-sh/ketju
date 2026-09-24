@@ -14,6 +14,9 @@ import (
 const addAdminMembership = `-- name: AddAdminMembership :exec
 INSERT INTO group_members (group_id, user_id, source, added_by, added_at)
 VALUES (?, ?, 'admin', ?, ?)
+ON CONFLICT (group_id, user_id) DO UPDATE
+SET source = 'admin', added_by = excluded.added_by, added_at = excluded.added_at
+WHERE group_members.source = 'idp'
 `
 
 type AddAdminMembershipParams struct {
@@ -23,6 +26,9 @@ type AddAdminMembershipParams struct {
 	AddedAt int64
 }
 
+// An admin adding a membership takes it over: a row an IdP mapping made
+// becomes 'admin', so the next login's re-evaluation no longer removes it.
+// A row that is already 'admin' keeps its original adder and time.
 func (q *Queries) AddAdminMembership(ctx context.Context, arg AddAdminMembershipParams) error {
 	_, err := q.db.ExecContext(ctx, addAdminMembership,
 		arg.GroupID,

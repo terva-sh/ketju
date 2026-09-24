@@ -12,6 +12,9 @@ import (
 )
 
 type Querier interface {
+	// An admin adding a membership takes it over: a row an IdP mapping made
+	// becomes 'admin', so the next login's re-evaluation no longer removes it.
+	// A row that is already 'admin' keeps its original adder and time.
 	AddAdminMembership(ctx context.Context, arg AddAdminMembershipParams) error
 	// An IdP mapping never overrides a membership an admin set by hand: if the
 	// row exists already, whatever its source, it is left alone.
