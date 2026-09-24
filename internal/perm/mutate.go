@@ -95,9 +95,12 @@ func (e *Evaluator) SetVisibility(ctx context.Context, forumID int64, visibility
 	})
 }
 
-// SetRole changes a user's role. The session middleware reads the role into
-// each request's Viewer, so a changed role also changes the cache key; the
-// invalidation is for the requests already holding the old Viewer.
+// SetRole changes a user's role. It applies from the user's next request,
+// whose Viewer the session middleware builds from the users row; a request
+// already holding the old Viewer finishes under the old role (see the package
+// comment). The role is part of the cache key, so the new Viewer never meets
+// a decision cached for the old one; the invalidation is for a Viewer built
+// by other means.
 func (e *Evaluator) SetRole(ctx context.Context, userID int64, role string) error {
 	return e.write(ctx, func(q *dbq.Queries, now int64) error {
 		return q.SetUserRole(ctx, dbq.SetUserRoleParams{Role: role, UpdatedAt: now, ID: userID})

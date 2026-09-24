@@ -27,7 +27,14 @@
 //
 // Decisions are cached per session for 60 seconds (docs/02). Every write that
 // could change a decision goes through this package's mutation methods, which
-// clear the cache when they commit.
+// invalidate the cache when they commit: the cache of every Evaluator over the
+// same database, not only the one that wrote.
+//
+// A Viewer is a snapshot taken when the request began, so a role or status
+// change applies from the viewer's next request, not to a request already
+// holding the old Viewer. That holds only while the session middleware reads
+// role and status from the users row on every request (TKT-01M29C5Y3E); a
+// Viewer cached across requests would carry an admin role past its removal.
 package perm
 
 import (
@@ -35,9 +42,11 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
+	"weak"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -77,9 +86,10 @@ type Evaluator struct {
 	db  *db.DB
 	now func() time.Time
 
-	// gen is bumped by Invalidate. An entry filled under an older
+	// gen is bumped by Invalidate, and shared by every Evaluator over the
+	// same database (generationFor). An entry filled under an older
 	// generation is stale, whatever its expiry.
-	gen atomic.Uint64
+	gen *atomic.Uint64
 
 	mu      sync.Mutex
 	entries map[cacheKey]*entry
@@ -94,7 +104,25 @@ type Evaluator struct {
 
 // New returns an Evaluator over d.
 func New(d *db.DB) *Evaluator {
-	return &Evaluator{db: d, now: time.Now, entries: make(map[cacheKey]*entry)}
+	return &Evaluator{db: d, now: time.Now, gen: generationFor(d), entries: make(map[cacheKey]*entry)}
+}
+
+// generations maps each open database to the generation counter its
+// Evaluators share, so a write through one Evaluator makes every other one's
+// entries stale. The key is weak and the entry is removed when the database
+// is collected, so tests that open many databases do not accumulate them.
+var generations sync.Map // weak.Pointer[db.DB] -> *atomic.Uint64
+
+func generationFor(d *db.DB) *atomic.Uint64 {
+	k := weak.Make(d)
+	if g, ok := generations.Load(k); ok {
+		return g.(*atomic.Uint64)
+	}
+	g, loaded := generations.LoadOrStore(k, new(atomic.Uint64))
+	if !loaded {
+		runtime.AddCleanup(d, func(k weak.Pointer[db.DB]) { generations.Delete(k) }, k)
+	}
+	return g.(*atomic.Uint64)
 }
 
 // cacheKey carries everything about the viewer that evaluation reads, so a
@@ -174,9 +202,10 @@ func (e *Evaluator) ReadableForums(ctx context.Context, v domain.Viewer) ([]int6
 	return out, nil
 }
 
-// Invalidate drops every cached decision. The mutation methods call it after
-// they commit; call it directly after any other write that changes groups,
-// memberships, permissions, forum visibility or roles.
+// Invalidate drops every cached decision, in this Evaluator and in every other
+// over the same database. The mutation methods call it after they commit;
+// call it directly after any other write that changes groups, memberships,
+// permissions, forum visibility or roles.
 func (e *Evaluator) Invalidate() {
 	e.gen.Add(1)
 	e.mu.Lock()
@@ -229,10 +258,12 @@ func (e *Evaluator) access(ctx context.Context, v domain.Viewer, forumID int64) 
 	return a, nil
 }
 
-// sweepLocked drops expired entries, so the cache holds only live sessions.
+// sweepLocked drops expired entries and those another Evaluator's write made
+// stale, so the cache holds only live sessions.
 func (e *Evaluator) sweepLocked(now time.Time) {
+	gen := e.gen.Load()
 	for k, ent := range e.entries {
-		if !now.Before(ent.expires) {
+		if ent.gen != gen || !now.Before(ent.expires) {
 			delete(e.entries, k)
 		}
 	}

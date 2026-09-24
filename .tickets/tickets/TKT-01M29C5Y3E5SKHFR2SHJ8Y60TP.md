@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-24T07:27:10Z
+updated_at: 2026-09-24T08:12:18Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -88,3 +88,7 @@ Open: the join on `users.status` is defense in depth beyond "suspending deletes 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:27:10Z
 
 From TKT-01M29BYYH7 (Add the users, identities, and sessions schema), 2026-09-24: sessions.id_hash is typed `sqltypes.SessionHash` (`internal/store/db/sqltypes`, a [32]byte with Value and Scan) in every generated query. The queries are CreateSession, GetSession, TouchSession, DeleteSession and DeleteUserSessions. None takes a plaintext id, so hashing the cookie value into a SessionHash is this ticket's job, and it is the only place that conversion should exist. The schema CHECK refuses anything but a 32-byte BLOB.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:12:18Z
+
+Requirement from TKT-01M29C5Y2E (permission evaluation), review 383: build domain.Viewer from the users row (role, and status == active) on every request, and never cache role or status in the session. internal/perm treats a Viewer as a per-request snapshot and short-circuits on Role == admin, so a Viewer that outlives a request would carry an admin role past its removal. SessionKey must be opaque, never the raw session id.

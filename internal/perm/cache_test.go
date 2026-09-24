@@ -1,11 +1,13 @@
 package perm
 
 import (
+	"database/sql"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
 
 // TestCacheExpiresAt60s is the TTL half of AC4. A write made behind the
@@ -297,5 +299,80 @@ func TestConcurrentChecksAndWrites(t *testing.T) {
 		if d := f.check(v, forum, domain.PermRead); d != Deny {
 			t.Errorf("viewer %d after the last revoke: got %v, want deny", v.UserID, d)
 		}
+	}
+}
+
+// TestWriteInvalidatesEveryEvaluator: two Evaluators over one database share
+// invalidation, so a revoke through one is seen by the other on its next
+// check rather than after the TTL (review 383, second finding).
+func TestWriteInvalidatesEveryEvaluator(t *testing.T) {
+	f := newFixture(t)
+	other := New(f.db)
+	other.now = f.clock.now
+	forum := f.forum(domain.VisibilityPublic)
+	f.grant(0, f.members, domain.PermRead)
+	member := f.viewer(domain.RoleMember)
+	if ok, err := other.Can(t.Context(), member, forum, domain.PermRead); !ok || err != nil {
+		t.Fatalf("before the revoke: got %v, %v; want allow", ok, err)
+	}
+	if err := f.ev.Revoke(t.Context(), 0, f.members, domain.PermRead); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := other.Check(t.Context(), member, forum, domain.PermRead); d != Deny || err != nil {
+		t.Fatalf("the other Evaluator after the revoke: got %v, %v; want deny", d, err)
+	}
+
+	// The other Evaluator's entries for sessions that have not come back are
+	// swept on its next fill, not left until the TTL.
+	idle := f.viewer(domain.RoleMember)
+	if err := f.ev.Grant(t.Context(), 0, f.members, domain.PermReply); err != nil {
+		t.Fatal(err)
+	}
+	other.Can(t.Context(), idle, forum, domain.PermRead)
+	if err := f.ev.Revoke(t.Context(), 0, f.members, domain.PermReply); err != nil {
+		t.Fatal(err)
+	}
+	other.Can(t.Context(), member, forum, domain.PermRead)
+	if n := cached(other); n != 1 {
+		t.Fatalf("the other Evaluator holds %d entries after a fill, want 1: stale ones were not swept", n)
+	}
+
+	// An Evaluator over a different database is not disturbed.
+	g := newFixture(t)
+	g.grant(0, g.members, domain.PermRead)
+	gForum, gMember := g.forum(domain.VisibilityPublic), g.viewer(domain.RoleMember)
+	g.check(gMember, gForum, domain.PermRead)
+	f.ev.Invalidate()
+	if cached(g.ev) != 1 {
+		t.Fatal("invalidating one database cleared another database's cache")
+	}
+}
+
+// TestRoleChangeAppliesToTheNextViewer states what SetRole can promise
+// (review 383, first finding): a Viewer built from the users row after the
+// change, as the session middleware builds one per request, has the new
+// role. A Viewer held from before keeps the old one; the package comment
+// says so and TKT-01M29C5Y3E carries the per-request requirement.
+func TestRoleChangeAppliesToTheNextViewer(t *testing.T) {
+	f := newFixture(t)
+	restricted := f.forum(domain.VisibilityRestricted)
+	admin := f.viewer(domain.RoleAdmin)
+	if d := f.check(admin, restricted, domain.PermRead); d != Allow {
+		t.Fatalf("admin before the change: got %v, want allow", d)
+	}
+	if err := f.ev.SetRole(t.Context(), admin.UserID, domain.RoleMember); err != nil {
+		t.Fatal(err)
+	}
+	var next domain.Viewer
+	err := f.db.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		u, err := q.GetUser(t.Context(), admin.UserID)
+		next = domain.Viewer{UserID: u.ID, Role: u.Role, Active: u.Status == "active", SessionKey: admin.SessionKey}
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := f.check(next, restricted, domain.PermRead); d != Hidden {
+		t.Fatalf("the next request's Viewer after the demotion: got %v, want hidden", d)
 	}
 }

@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-24T08:07:59Z
+updated_at: 2026-09-24T08:12:17Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -103,6 +103,28 @@ Implementation notes for the next reader.
   - The layering test was checked by adding a stray SetUserRole call in a scratch package; it failed as it should.
 - **Benchmark.** BenchmarkCheckCached runs at 56 ns/op with 0 allocs on this machine.
 - **Admin screens.** TKT-01M29CXK1X still has to say "applies within 60 s" for any change made outside perm. Every change made through perm applies at once.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T08:12:17Z
+
+Terva review 383 of head c2c4a6f (base 3340bc1): request ready-review-c2c4a6f, Actions run 152, run id 756efacb-27bc-451c-9b92-3951b56cf126. It raised two high findings, and both are accepted and fixed on the next head.
+
+### 1. Invalidation cannot revoke an admin role held in a Viewer (high, mutate.go:99)
+
+- **Accepted.** The SetRole comment claimed that invalidation covers requests already holding the old Viewer. It cannot: Check short-circuits on `v.Role`.
+- **Fix: narrow the guarantee.** A Viewer is a per-request snapshot, so a role or status change applies from the user's next request. The package comment, the SetRole comment and docs/04 now say this.
+- **What makes it hold.** The guarantee depends on the session middleware reading role and status from `users` on every request. That requirement is recorded on TKT-01M29C5Y3E.
+- **Test.** TestRoleChangeAppliesToTheNextViewer: a Viewer rebuilt from the users row after SetRole gets Hidden on a restricted forum.
+- **Alternative rejected.** Re-reading the role inside Check for every admin check would cost a DB read on the hot path. It would also still leave the rest of an in-flight request running under whatever it had already decided.
+
+### 2. A write leaves other Evaluator instances' caches stale (high, mutate.go:25)
+
+- **Accepted.** The generation counter is now shared by every Evaluator over the same `*db.DB`, through a package map keyed by a weak pointer with a runtime cleanup.
+  - A write through any Evaluator makes every other one's entries stale on the read path.
+  - The fill sweep drops stale entries as well as expired ones.
+- **Tests.** TestWriteInvalidatesEveryEvaluator checks three things: a revoke through one Evaluator is seen by another on its next check; stale entries for idle sessions are swept; and another database's cache is untouched.
+- **Mutants.** A per-instance counter is killed. A sweep that ignores the generation is killed; it failed to compile on the first attempt, so it was rerun.
+- **Alternative rejected.** Enforcing a single Evaluator would need a global or a registry anyway, and would turn a second `New` into a runtime error rather than a correct instance.
+- **Other processes.** Cross-process writers are out of scope, because the single-process lock (TKT-01M29CCBZN) keeps one server per data directory.
 
 ## Summary
 

@@ -161,7 +161,10 @@ their role. Evaluation lives in `internal/perm` (TKT-01M29C5Y2E), which also
 owns every write that can change a decision so that the 60 s cache (02) is
 invalidated when they commit; a check answers Allow, Deny (403), or Hidden
 (404). A `restricted` forum without `read`, and a forum that does not exist,
-are Hidden, so a forum's existence does not leak. What `archived` does to a
+are Hidden, so a forum's existence does not leak. A role or status change
+applies from the user's next request: the viewer is a snapshot taken when a
+request starts, so the session layer must read role and status from `users`
+on every request rather than caching them in the session. What `archived` does to a
 forum's permissions is not decided; evaluation ignores it for now.
 
 Membership of `everyone` is implicit for every viewer, signed in or not, and
