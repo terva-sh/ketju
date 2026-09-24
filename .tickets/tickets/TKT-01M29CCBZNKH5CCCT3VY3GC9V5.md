@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCBZNKH5CCCT3VY3GC9V5
 title: Add the single-process lock file
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:open-questions-ops
     path: docs/10-open-questions.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/ccbzn-lock
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 5ea9a36a46dc93f6c2ec5fca16a513014be86643
+  session: null
+  claimed_at: 2026-09-24T15:05:55Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-24T15:05:55Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---

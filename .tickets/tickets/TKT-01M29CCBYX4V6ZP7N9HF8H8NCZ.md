@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCBYX4V6ZP7N9HF8H8NCZ
 title: Implement ketju serve with graceful shutdown
 type: task
-status: in-progress
+status: ready
 status_reason: null
 priority: urgent
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:background-work
     path: docs/02-architecture.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/ccbyx-serve
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: 945d82e1da5341d0e826e18c37f2b740ba7a9eba
-  session: null
-  claimed_at: 2026-09-24T15:04:58Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T15:04:58Z
+updated_at: 2026-09-24T15:05:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -99,3 +92,9 @@ Integrates BW9Q1, CCBZN, C2WW5, C5Y1S, C5Y2S, and CCBZ8. The dependency TKT-01M2
 
 ### Open items
 The default config path is unsettled (see BYYJG). So is whether `serve` must create a missing `data_dir`: `validateDataDir` says "`ketju serve` creates it", and this plan does.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T15:05:49Z
+
+Claimed, read the code, and handed back before building. Its plan acquires the lock (TKT-01M29CCBZN, Add the single-process lock file) before anything touches data, and runs catch-up (TKT-01M29C5Y1S, Implement startup projection catch-up) before the listener. Neither exists yet, and projection.New refuses to build a Writer without the Sweep that catch-up supplies (review 389). Serving without the lock is the quiet two-writer corruption that ticket exists to refuse. Order taken instead: CCBZN, then C5Y1S, then this ticket, so serve wires real pieces rather than stand-ins. The declared dependencies are unchanged, because the two are integrations the plan names, not links the store records.
