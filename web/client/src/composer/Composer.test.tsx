@@ -396,6 +396,17 @@ describe('mention autocomplete', () => {
     expect(root.querySelector('[role=listbox]')).not.toBeNull();
   });
 
+  it("looks up @alice- as alice, and replaces the '-' too (review 555)", async () => {
+    const sent = serve(page(), people);
+    const root = await renderAt(path);
+    await type(root, 'hi @alice-');
+    await wait(mentionDelay + 20);
+    expect(sent.filter((s) => s.url.startsWith('/api/v1/users')).map((s) => s.url)).toEqual(['/api/v1/users?prefix=alice&limit=8']);
+    await key(root, 'ArrowDown');
+    await key(root, 'Enter');
+    expect(area(root).value).toBe('hi @alice ');
+  });
+
   it('asks nothing where the renderer would see no mention', async () => {
     const sent = serve(page(), people);
     const root = await renderAt(path);

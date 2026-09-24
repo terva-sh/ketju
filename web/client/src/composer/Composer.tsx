@@ -275,13 +275,13 @@ function useMentions(
   const [active, setActive] = useState(0);
   // The mention the author pressed Escape on stays closed until they type.
   const [dismissed, setDismissed] = useState<string | null>(null);
-  const key = at ? `${at.start}:${at.typed}` : null;
+  const key = at ? `${at.start}:${at.prefix}` : null;
 
   useEffect(() => {
     if (!at || key === null) return;
     const ctrl = new AbortController();
     const timer = setTimeout(() => {
-      const url = `/api/v1/users?prefix=${encodeURIComponent(at.typed)}&limit=${mentionLimit}`;
+      const url = `/api/v1/users?prefix=${encodeURIComponent(at.prefix)}&limit=${mentionLimit}`;
       apiGet<UserSuggestions>(url, { signal: ctrl.signal }).then(
         (r) => {
           if (ctrl.signal.aborted) return;
@@ -304,6 +304,8 @@ function useMentions(
     const a = area.current;
     if (!a) return;
     const next = a.selectionStart === a.selectionEnd ? mentionAt(a.value, a.selectionStart) : null;
+    // A new object only for a new mention, so an unchanged one asks nothing
+    // again; typed is compared too, since insertion replaces all of it.
     setAt((prev) => (prev && next && prev.start === next.start && prev.typed === next.typed ? prev : next));
   };
 

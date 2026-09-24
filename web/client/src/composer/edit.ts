@@ -29,9 +29,12 @@ export function applyEdit({ text, start, end }: Edit, kind: EditKind): Edit {
       }
       return put(`\`${sel}\``, 1, 1 + sel.length);
     case 'quote': {
-      // Whole lines: a quotation cannot start or end inside one.
+      // Whole lines: a quotation cannot start or end inside one. A
+      // selection that ends just after a line break ends on the line before
+      // it, not on the next, none of which was selected (review 555).
+      const last = end > start && text[end - 1] === '\n' ? end - 1 : end;
       const lineStart = text.lastIndexOf('\n', start - 1) + 1;
-      const next = text.indexOf('\n', end);
+      const next = text.indexOf('\n', last);
       const lineEnd = next === -1 ? text.length : next;
       const block = text.slice(lineStart, lineEnd);
       const quoted = block

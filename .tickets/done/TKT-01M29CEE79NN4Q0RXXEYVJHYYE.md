@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T23:17:42Z
+updated_at: 2026-09-24T23:31:31Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -184,6 +184,20 @@ Mutants: 41, all killed. They include a mutant that shows any held answer (`held
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T23:17:42Z
 
 Review 547 (head 5f294ad, Actions run 382) resolved both of review 543's findings. It raised one more medium finding: "Hide autocomplete results when the mention prefix changes". **Accepted and fixed.** The suggestions are now held with the mention key they answer, like the preview. The list opens only while that key is the current mention, so it closes the moment the prefix changes, and Enter cannot insert a handle offered for the old prefix. Tested by typing one more letter while the list is open: the list closes, Enter inserts nothing, and the new answer reopens it. The mutant that shows any held list is killed, along with all 42 others.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T23:31:31Z
+
+Review 555 (head 07a699c, Actions run 384) resolved review 547's finding. It raised two more medium findings, both accepted and fixed.
+
+**1. "Do not quote the line after a selection ending at its start".** The quote toolbar edit took a selection ending just after a newline to include the next line.
+- Fix: such a selection now ends on the line before.
+- Tests: `[one\n]two` and `[one\n\n]two`.
+
+**2. "Exclude a trailing hyphen from mention lookup".** The parser reads `@alice-` as `@alice`, but the lookup asked for `alice-`.
+- Fix: `mentionAt` now returns `prefix`, which is typed without trailing `-`, and that is what is looked up. `@al-` still offers `al-x`, since it starts with `al`. Insertion still replaces everything typed, so `@alice-` becomes `@alice `. A lone `@-` is no mention.
+- Tests: unit tests, and a screen test on the lookup URL and the insertion.
+
+Mutants: 46, all killed.
 
 ## Summary
 

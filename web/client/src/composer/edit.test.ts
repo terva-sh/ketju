@@ -26,6 +26,9 @@ describe('the toolbar edits', () => {
   it('quotes every line the selection touches', () => {
     expect(ed('one\nt[wo\n\nthr]ee\nfour', 'quote')).toBe('one\n[> two\n>\n> three]\nfour');
     expect(ed('a[]b', 'quote')).toBe('[> ab]');
+    // Ending just after a line break is ending on the line before it.
+    expect(ed('[one\n]two', 'quote')).toBe('[> one]\ntwo');
+    expect(ed('[one\n\n]two', 'quote')).toBe('[> one\n>]\ntwo');
   });
 
   it('writes a link with its address selected to type over', () => {

@@ -11,8 +11,11 @@ const maxHandle = 30;
 export interface MentionAt {
   // start is the index of the @.
   start: number;
-  // typed is what follows the @ up to the caret: the prefix to look up.
+  // typed is what follows the @ up to the caret, which insertion replaces.
   typed: string;
+  // prefix is typed as the parser would read it, without trailing '-', and
+  // is what is looked up (review 555): @alice- mentions alice.
+  prefix: string;
 }
 
 // mentionAt is the mention the caret is at the end of, or null.
@@ -20,9 +23,9 @@ export interface MentionAt {
 // Null when the @ follows a handle byte (the parser's rule for an e-mail
 // address, which is not a mention), when a handle byte follows the caret
 // (inserting a handle there would leave the rest of the word after it),
-// when nothing has been typed after the @ yet, when what is typed holds a
-// '.' (the parser reads a trailing one as punctuation, and no handle has
-// one), and when it is longer than any handle.
+// when nothing but '-' has been typed after the @ yet, when what is typed
+// holds a '.' (the parser reads a trailing one as punctuation, and no handle
+// has one), and when it is longer than any handle.
 export function mentionAt(text: string, caret: number): MentionAt | null {
   if (handleByte(text[caret])) return null;
   let i = caret;
@@ -31,8 +34,9 @@ export function mentionAt(text: string, caret: number): MentionAt | null {
   const start = i - 1;
   if (handleByte(text[start - 1])) return null;
   const typed = text.slice(i, caret);
-  if (typed === '' || typed.includes('.') || typed.length > maxHandle) return null;
-  return { start, typed };
+  const prefix = typed.replace(/-+$/, '');
+  if (prefix === '' || typed.includes('.') || prefix.length > maxHandle) return null;
+  return { start, typed, prefix };
 }
 
 // insertMention replaces the mention m, ending at caret, with the handle as
