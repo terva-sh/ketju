@@ -1,7 +1,7 @@
 ---
 schema: 3
 id: TKT-01M39WBN4QAMNRBXCGD85CDJF0
-title: Commit Playwright screenshots and the safe-area check against the mockups
+title: Commit Playwright screenshots and the safe-area check for the mockups
 type: task
 status: draft
 status_reason: null
@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-24T14:41:23Z
+updated_at: 2026-09-24T14:41:43Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
