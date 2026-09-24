@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T09:33:57Z
+updated_at: 2026-09-24T09:37:39Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -160,6 +160,10 @@ Review 391 (Terva, head 9332633): one high and two medium findings, all fixed.
   - A page-2 reply count in `TestAfterLogLength`.
   - 12 mutants over the fixes; all killed.
 - Not fixed here: a mention cached before its handle existed stays plain text. Filed as draft TKT-01M39C6XFM, "Rendered-post cache ignores later handle resolution for mentions".
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T09:37:39Z
+
+Review 392 (head 0fc5456): resolved 391's three findings, and raised one medium one: a failed mention lookup (any DB error) was drawn as an unresolved handle and cached under the post's revision. Fix: `handle` now tells ErrNoRows (ok=false, no error) apart from failure (error). `Service.handles` wraps it as the renderer's resolver and records the first failure, and `html` treats a render made through a failed lookup as an error, neither cached nor served. Rejected: serving the page with the mention unresolved but uncached. That hides an outage as wrong content. Tests: TestFailedLookupIsNotCached and TestHandleTellsMissingFromFailed; 3 mutants, all killed. Separately, TestQueuedAppendsShareOneFsync failed once in the full run. It is the flake in draft TKT-01M393S6P7, 'same message and cause', and fails 2/40 on origin/main against 1/40 here, so this change does not affect it.
 
 ## Summary
 

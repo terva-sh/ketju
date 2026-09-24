@@ -370,12 +370,13 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		posts = append(posts, p)
 	}
 
+	handles, lookupErr := s.handles(ctx)
 	rctx := render.Context{
 		Posts: render.ResolverFunc(func(o uint32) (bool, bool) {
 			tomb, err := th.Index.Tombstoned(o)
 			return err == nil, err == nil && tomb
 		}),
-		Handles: render.HandleFunc(func(h string) (int64, string, bool) { return s.handle(ctx, h) }),
+		Handles: handles,
 	}
 
 	for _, p := range posts {
@@ -405,7 +406,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		}
 		// A tombstone reaches here with its source only for a moderator.
 		if !p.Tombstone || moderator {
-			if d.HTML, err = s.html(id, p, rctx); err != nil {
+			if d.HTML, err = s.html(id, p, rctx, lookupErr); err != nil {
 				return nil, err
 			}
 		}
@@ -419,12 +420,19 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 // A cached rendering is reused only while every post it quotes is still in
 // the state it was rendered against: the key names this post's revision, and
 // a quote of a post deleted since must become a tombstone.
-func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context) (string, error) {
+//
+// failed reports a resolver failure during the render; a rendering made
+// through one is wrong in a way its key cannot express, so it is returned as
+// an error and not cached.
+func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, failed func() error) (string, error) {
 	k := render.Key{Thread: id, Ordinal: p.Ordinal, Revision: uint32(p.Revision)}
 	if html, quotes, ok := s.Render.GetQuoting(k); ok && quotesCurrent(quotes, rctx.Posts) {
 		return html, nil
 	}
 	r, err := render.RenderWith(p.Source, rctx)
+	if err == nil {
+		err = failed()
+	}
 	if err != nil {
 		return "", fmt.Errorf("threads: rendering %s#%d: %w", id, p.Ordinal, err)
 	}
@@ -461,16 +469,36 @@ func (s *Service) users(ctx context.Context, ids map[int64]bool) (map[int64]dto.
 	return out, err
 }
 
-// handle resolves a mention for the renderer.
-func (s *Service) handle(ctx context.Context, h string) (int64, string, bool) {
+// handles is the renderer's mention resolver, and a func reporting the first
+// lookup that failed. The renderer's resolvers cannot return an error, so a
+// failure is recorded here: a post rendered through one drew some mention as
+// unresolved when it may not be, and is neither cached nor served; the page
+// fails instead (review 392).
+func (s *Service) handles(ctx context.Context) (render.HandleResolver, func() error) {
+	var first error
+	return render.HandleFunc(func(h string) (int64, string, bool) {
+		id, canonical, ok, err := s.handle(ctx, h)
+		if err != nil && first == nil {
+			first = err
+		}
+		return id, canonical, ok
+	}), func() error { return first }
+}
+
+// handle resolves a mention for the renderer. No such handle is ok=false
+// with no error; anything else is an error, which is not the same answer.
+func (s *Service) handle(ctx context.Context, h string) (id int64, canonical string, ok bool, err error) {
 	var u dbq.User
-	err := s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
+	err = s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
 		var err error
 		u, err = dq.GetUserByHandle(ctx, h)
 		return err
 	})
-	if err != nil {
-		return 0, "", false
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return 0, "", false, nil
+	case err != nil:
+		return 0, "", false, fmt.Errorf("threads: resolving @%s: %w", h, err)
 	}
-	return u.ID, u.Handle, true
+	return u.ID, u.Handle, true, nil
 }
