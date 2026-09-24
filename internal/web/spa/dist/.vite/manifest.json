@@ -1,6 +1,6 @@
 {
   "index.html": {
-    "file": "assets/index-LoBdgxdv.js",
+    "file": "assets/index-DhKQIQif.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -12,7 +12,7 @@
     ]
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-BqFwXLuF.js",
+    "file": "assets/AdminRoot-DmASDynP.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,

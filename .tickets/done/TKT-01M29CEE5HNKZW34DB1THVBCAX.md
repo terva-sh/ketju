@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T13:12:16Z
+updated_at: 2026-09-24T13:18:02Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -238,6 +238,24 @@ Review 413 confirmed both findings from review 412 resolved. It raised one high 
 - the viewer taking only the newest refresh, and ignoring an aborted one.
 
 **Mutation:** all 8 mutants on the new guards are killed. There are 296 Vitest tests.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-24T13:18:02Z
+
+### Review 414, answered
+
+Review 414 confirmed both findings from review 413 resolved. It raised one high finding.
+
+**The finding:** a newer request's refusal made the cache forget the thread. An older overlapping request for the same thread could then succeed. Its answer was stored as a fresh entry, because with the entry gone there was no log length left to compare it against. Through a 304 on another URL, it could also be held again.
+
+**The fix:** `forgetThread` now counts, per thread, the refusals that made it forget the thread. `loadThreadPage` records that count when it starts. If a refusal happened while it was in flight, its answer is returned to its caller but not stored, and its URL's held body is dropped. The same drop already applied to a page refused for its shorter length.
+
+**Tests:** requests are answered by hand in reverse order, covering:
+- a 403, 401, 404 or 410 on the same page;
+- a refusal on another page;
+- a load started after the refusal, which is stored;
+- another thread's load, which is left alone.
+
+**Mutation:** all 3 mutants on the new guard are killed. There are 303 Vitest tests.
 
 ## Summary
 

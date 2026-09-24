@@ -98,6 +98,64 @@ describe('the thread cache', () => {
     expect(peekGet(threadUrl(id, { page: 1 }))).toBeDefined();
   });
 
+  // Review 414: a refusal that lands while an older request is in flight
+  // wins. The older answer, however late, is from before the refusal.
+  describe('a refusal overtaking an older request', () => {
+    function manual() {
+      const pending: ((r: Response) => void)[] = [];
+      vi.stubGlobal('fetch', () => new Promise<Response>((res) => pending.push(res)));
+      return pending;
+    }
+    const ok = (p: ThreadPage, tag: string) =>
+      new Response(JSON.stringify(p), { status: 200, headers: { ETag: tag } });
+
+    it.each([403, 401, 404, 410])('keeps a thread refused with %d out, for the same page', async (status) => {
+      const answer = manual();
+      const older = loadThreadPage(id, { page: 1 });
+      const newer = loadThreadPage(id, { page: 1 });
+      await Promise.resolve();
+      answer[1](new Response('{}', { status }));
+      await newer.catch(() => {});
+      answer[0](ok(page(1, 100), '"a"'));
+      await older;
+      expect(cachedThread(id)).toBeUndefined();
+      expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
+    });
+
+    it('keeps it out for another page, and its held body too', async () => {
+      const answer = manual();
+      const older = loadThreadPage(id, { page: 1 });
+      const newer = loadThreadPage(id, { page: 2 });
+      await Promise.resolve();
+      answer[1](new Response('{}', { status: 403 }));
+      await newer.catch(() => {});
+      answer[0](ok(page(1, 100), '"a"'));
+      await older;
+      expect(cachedThread(id)).toBeUndefined();
+      expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
+    });
+
+    it('stores a request started after the refusal', async () => {
+      serve(403, page(1, 100));
+      await loadThreadPage(id, { page: 1 }).catch(() => {});
+      await loadThreadPage(id, { page: 1 });
+      expect(cachedThread(id)!.logLength).toBe(100);
+    });
+
+    it("leaves other threads' loads alone", async () => {
+      const answer = manual();
+      const o = page(1, 5);
+      const other = loadThreadPage('other', { page: 1 });
+      const refused = loadThreadPage(id, { page: 1 });
+      await Promise.resolve();
+      answer[1](new Response('{}', { status: 403 }));
+      await refused.catch(() => {});
+      answer[0](ok({ ...o, thread: { ...o.thread, id: 'other' } }, '"o"'));
+      await other;
+      expect(cachedThread('other')!.logLength).toBe(5);
+    });
+  });
+
   // Review 411: the held GET bodies of the thread's other pages are as stale
   // as its cached pages once the length moves, and go with them.
   it('forgets the held bodies of other pages when the length moves', async () => {
