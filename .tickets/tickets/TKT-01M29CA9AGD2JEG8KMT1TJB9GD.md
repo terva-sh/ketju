@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CA9AGD2JEG8KMT1TJB9GD
 title: Implement the thread list endpoint
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:thread-lists
     path: docs/06-thread-views.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/ca9ag-thread-list
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: a4e8a912e72589b6dd7405dbcc83f81df833051f
+  session: null
+  claimed_at: 2026-09-25T02:35:27Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-25T02:35:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---

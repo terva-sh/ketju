@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T02:19:54Z
+updated_at: 2026-09-25T02:35:27Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -325,3 +325,7 @@ Merged PR #82 (TKT-01M29CGBY1, Add Playwright smoke tests at both viewports) as 
 - Review 2 was clean on head 8c1a452, base baa1ee7 (run 424).
 - CI run 425's Playwright step ran both projects on Alpine Chromium 152 and they passed. Its race step shows cmd/ketju and oidctest passed.
 The critical path in docs/11 is now complete. The maintainer chose to build CA9A5, CA9AG, CEE5Y and CEE6D before CGBXK, whose scan must cover the forum index and thread list. Next: TKT-01M29CA9A5.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T02:35:27Z
+
+Merged PR #83 (TKT-01M29CA9A5, Implement the forums endpoints) as a4e8a91. Review 1 was clean on head a4e8a91, base 8c1a452 (run 429). In CI run 430, step 12 shows service/forums, service/users, store/db and web/api passing; step 9 shows vitest 630 passing; the Playwright step shows 2 passing. Filed draft TKT-01M3B6A68B, Add per-forum post totals to the forum index. Next: TKT-01M29CA9AG.
