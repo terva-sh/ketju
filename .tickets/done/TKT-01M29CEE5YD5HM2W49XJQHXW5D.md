@@ -21,10 +21,12 @@ blocks_on: none
 references:
   - ref: design:mockups-front
     path: docs/mockups/Main.dc.html
+  - ref: pr:85
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-25T03:28:01Z
+updated_at: 2026-09-25T03:28:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,7 +47,7 @@ This is the first screen anybody sees, and in a small community it is also the o
 - [x] Unread counts render for a signed-in viewer and are absent rather than zeroed for an anonymous one
 - [x] A forum with no threads renders a usable empty state
 - [x] The floating new-thread control appears above the tab bar on phones
-- [ ] Playwright screenshots at 390 px and 1440 px are committed beside the tests and compared against the matching file in docs/mockups/; every visible divergence is listed in the pull request description
+- [x] Playwright screenshots at 390 px and 1440 px are committed beside the tests and compared against the matching file in docs/mockups/; every visible divergence is listed in the pull request description
 
 ## Implementation plan
 
