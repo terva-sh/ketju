@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T00:58:22Z
+updated_at: 2026-09-25T01:03:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -112,6 +112,10 @@ Built as planned. Decisions made while building, and why:
 - **Slugs use no new dependency.** A small Latin-1 and Latin Extended-A fold table stands in for x/text. A title with nothing foldable gets the slug "thread".
 
 Mutation run: 32 hand mutants across create.go, access.go, writer.go, problem.go, api/create.go and slug.go. All were killed. The one that survived the first pass was a mention dedupe that the renderer already does, and I removed that code.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:03:25Z
+
+Review 1 on PR #79 (head 610ab6f, run 402) raised one low finding. checkTitle trimmed before it looked for control characters, so "Topic\n" was stored as "Topic" instead of being refused, which contradicts docs/07. Fixed: control characters are now checked before trimming, and new tests cover a trailing newline and a leading tab. CI run 401 passed on 610ab6f; its step log shows 592 client tests and the Go race suite.
 
 ## Summary
 

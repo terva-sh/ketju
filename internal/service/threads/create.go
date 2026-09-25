@@ -245,17 +245,21 @@ func (s *Service) forumForThread(ctx context.Context, v domain.Viewer, slug stri
 }
 
 // checkTitle returns the title as it will be stored, trimmed, or why it is
-// refused: empty, over MaxTitle characters, or holding a control character,
-// which no title needs and a log would keep forever.
+// refused: holding a control character anywhere, which no title needs and a
+// log would keep forever, then empty or over MaxTitle characters once
+// trimmed. Control characters are looked for before trimming, so "Topic\n"
+// is refused as docs/07 says rather than quietly stored as "Topic" (review
+// on PR #79).
 func checkTitle(title string) (string, error) {
+	if strings.ContainsFunc(title, unicode.IsControl) {
+		return "", problem.Coded(problem.CodeValidationFailed, errors.New("threads: the title holds a control character"))
+	}
 	title = strings.TrimSpace(title)
 	switch {
 	case title == "":
 		return "", problem.Coded(problem.CodeValidationFailed, errors.New("threads: the title is empty"))
 	case utf8.RuneCountInString(title) > MaxTitle:
 		return "", problem.Coded(problem.CodeValidationFailed, fmt.Errorf("threads: the title is over %d characters", MaxTitle))
-	case strings.ContainsFunc(title, unicode.IsControl):
-		return "", problem.Coded(problem.CodeValidationFailed, errors.New("threads: the title holds a control character"))
 	}
 	return title, nil
 }

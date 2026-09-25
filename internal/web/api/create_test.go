@@ -373,6 +373,8 @@ func TestCreateThreadRefusals(t *testing.T) {
 		{"an empty title", "carol", "general", `{"title":"  ","source":"s"}`, "validation-failed"},
 		{"a long title", "carol", "general", `{"title":"` + strings.Repeat("é", threads.MaxTitle+1) + `","source":"s"}`, "validation-failed"},
 		{"a control character", "carol", "general", `{"title":"a\u0007b","source":"s"}`, "validation-failed"},
+		{"a trailing newline", "carol", "general", `{"title":"Topic\n","source":"s"}`, "validation-failed"},
+		{"a leading tab", "carol", "general", `{"title":"\tTopic","source":"s"}`, "validation-failed"},
 		{"a tag", "carol", "general", `{"title":"t","source":"s","tags":["meta"]}`, "validation-failed"},
 		{"an empty source", "carol", "general", `{"title":"t","source":""}`, "validation-failed"},
 		{"a source over the limit", "carol", "general", `{"title":"t","source":"` + strings.Repeat("a", render.MaxSource+1) + `"}`, "payload-too-large"},
