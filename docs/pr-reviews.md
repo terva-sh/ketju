@@ -43,14 +43,20 @@ context, not a persistent agent conversation.
 ## Results and operation
 
 Clean full reviews update one maintained summary. Findings and explicit follow-up
-answers remain visible reviews. Read low-severity findings even if the workflow
-passes. A medium-or-higher finding fails the configured gate while review execution
-may have succeeded. Runtime or publication failure is not a clean review.
+answers remain visible reviews. Read low-severity findings even when the status passes. The `terva-review/code`
+status is the gate: `failure` means findings at medium or higher. The Actions
+job succeeds whenever the review published, so a red job means the review did
+not run or did not publish, and an `error` status on the head names the code
+when the head was known. Runtime or publication failure is not a clean review.
 
 The summary retains at most 32 clean results / 240 KiB of checkpoint data; capacity
 failure preserves history and does not pass the gate. Do not remove hidden markers.
 Main and follow-up contexts are `terva-review/code` and `terva-follow-up/code`.
-Statuses name an exact head; later commits do not inherit an earlier review.
+Statuses name an exact head, and later commits do not inherit an earlier review,
+except by a carry. After commits that touch only `.tickets/`, dispatch the
+workflow with `carry` set to `true`: it copies the last review's result to the
+head without a model run, or refuses and names the path that needs a real
+review.
 
 Record the reviewed head/base, request/run/review links and finding dispositions
 in the ticket (or the rollout ticket linked from the installation PR when this
@@ -61,13 +67,14 @@ explore the full checkout. Keep normal CI as the deterministic validation gate.
 
 ## Trusted configuration
 
-The workflow fetches only reviewer commit
-`7090fc19699fda481d9138f0dcf73f80ee8cab06` into `.terva-review-action`; no consumer
-PR code is executed with review credentials. Terva 0.138.2 Linux amd64 is checked
-against its pinned SHA-256. The checkout helper is pinned to mirror commit
-`d23441a48e516b6c34aea4fa41551a30e30af803` (v6.1.0). The runner requires Node >=24
-and verifies it. System packages/image tags remain provisioning dependencies.
-`BOT_TOKEN` supplies private reviewer checkout and publication permissions;
+The workflow runs the reviewer image
+`container.local.sothr.com/terva-sh/terva-action-code-review`, release v0.3.0,
+pinned by digest
+`sha256:35199d57112ea0048fe713a49c6087094c5bcbbeaa74d53d6dca89d9a8ba9cd7`. The
+image carries the action's source, prompt templates, locked dependencies and a
+checksum-pinned Terva 0.138.2. The job checks out nothing and installs nothing,
+so no code from this repository or its PRs runs with review credentials.
+`BOT_TOKEN` supplies publication permissions;
 `CPA_API_KEY` supplies inference authentication. Only secret references belong in
 source. Existing organization secrets must be available to this repository.
 
@@ -79,13 +86,11 @@ for them; the workflow reads the terva-sh organization Actions variables
 `missing_thinking`). The organization's current choice is recorded in
 [the action's installation guide](https://git.local.sothr.com/terva-sh/terva-action-code-review/src/branch/main/docs/installation.md#organization-settings),
 and each review reports the model and thinking level it ran with. Variables
-carry settings only: the reviewer SHA and the Terva version and checksum stay
-pinned in this workflow, because they name executable code. Profile `code`,
+carry settings only: the image digest stays pinned in this workflow, because it names executable code. Profile `code`,
 publication policy and fail severity are trusted workflow inputs. The `summary` policy
 keeps feedback quiet. To select `always`, change the trusted workflow through
 a PR; dispatch exposes only the PR number and request ID. A fresh request ID
-does not change publication policy. Review pin/runtime changes through a PR, test them on the action's
-fixture, and keep all publishers for this PR under the same concurrency group.
+does not change publication policy. Review pin/runtime changes through a PR, dispatch the PR's review from its own branch, and keep all publishers for this PR under the same concurrency group.
 Do not revoke shared credentials or change required-check settings as part of
 routine troubleshooting. Ask only for safe error codes, never full private logs.
 
