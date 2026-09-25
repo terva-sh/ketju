@@ -66,6 +66,25 @@ npm test
 
 runs Vitest under happy-dom. CI runs it after rebuilding the client.
 
+```sh
+npx playwright test
+```
+
+runs the smoke suite in `e2e/` (TKT-01M29CGBY1). It signs in, reads a
+thread, replies, and checks the unread divider in a real browser, at 390 px and
+1440 px. The server is `ketju e2e`, which is `ketju serve` built with
+`-tags e2e`. That build seeds a fresh data directory, starts the fake OpenID
+provider on loopback, and signs in through the provider's own page. The config
+builds and starts it; it needs Go and port 8787 (`KETJU_E2E_PORT`). The
+server's log is `serve.log` beside the run's data, in a directory under
+`$TMPDIR`.
+
+Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to run a Chromium already on the machine;
+CI does, with Alpine's. Without it, Playwright's own is used, from
+`npx playwright install chromium`. The suite serves the embedded client, so
+rebuild `internal/web/spa/dist` first (`go generate ./internal/web/spa`) when
+the client has changed.
+
 ## Versions
 
 Every dependency is pinned to an exact version, and `package-lock.json` is

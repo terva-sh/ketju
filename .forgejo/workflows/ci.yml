@@ -110,6 +110,23 @@ jobs:
         # lockfile, so this installs nothing.
         run: npm --prefix web/client test
 
+      - name: Playwright smoke at 390 px and 1440 px
+        # TKT-01M29CGBY1. Sign in, read, reply and the unread divider, end to
+        # end in a real browser against ketju serve built with the e2e tag
+        # (cmd/ketju/e2e.go): a seeded data directory and the fake OpenID
+        # provider on loopback, so nothing leaves the container. Both widths
+        # run, and a failure at either fails this step.
+        #
+        # Chromium from apk, not Playwright's download: its builds need glibc
+        # and this image is musl, and the curated registry carries no Debian
+        # Go image to switch to (docs/12 "Changing CI"). The runner drives
+        # whichever Chromium PLAYWRIGHT_CHROMIUM_EXECUTABLE names.
+        run: |
+          apk add --no-cache chromium
+          chromium --version
+          cd web/client
+          PLAYWRIGHT_CHROMIUM_EXECUTABLE=/usr/bin/chromium npx playwright test
+
       - name: go vet
         run: go vet ./...
 

@@ -9,7 +9,11 @@
 // each way a token can be wrong. Like that one it really signs, so a relying
 // party that skipped verification would fail against it.
 //
-// It is for tests, and nothing but a test may import it.
+// It is for tests, and nothing but a test may import it, with one exception:
+// the e2e build of ketju serve (cmd/ketju/e2e.go, build tag e2e), which the
+// Playwright smoke suite signs in through (TKT-01M29CGBY1). That build is
+// never released. For it, Users puts a sign-in page in front of the
+// approval, so a browser can choose who signs in.
 package oidctest
 
 import (
@@ -20,9 +24,12 @@ import (
 	"crypto/x509"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -60,6 +67,11 @@ type IdP struct {
 	// from another login, replayed.
 	Nonce string
 
+	// Users, when set, are the subjects a browser may sign in as: the
+	// authorization endpoint answers with a page linking each, and the one
+	// followed is the token's sub. Unset, it approves at once as Subject.
+	Users []string
+
 	srv *httptest.Server
 	key *rsa.PrivateKey
 
@@ -70,15 +82,26 @@ type IdP struct {
 }
 
 type grant struct {
-	nonce, challenge, redirect string
+	nonce, challenge, redirect, subject string
 }
 
 // New starts an IdP for the test's lifetime.
 func New(t testing.TB) *IdP {
 	t.Helper()
-	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	f, err := Start()
 	if err != nil {
 		t.Fatal(err)
+	}
+	t.Cleanup(f.Close)
+	return f
+}
+
+// Start starts an IdP on loopback, for a caller that is not a test: the e2e
+// build of ketju serve. Close stops it.
+func Start() (*IdP, error) {
+	key, err := rsa.GenerateKey(rand.Reader, 2048)
+	if err != nil {
+		return nil, err
 	}
 	f := &IdP{key: key, grants: map[string]grant{}}
 	mux := http.NewServeMux()
@@ -97,11 +120,10 @@ func New(t testing.TB) *IdP {
 			{Key: &f.key.PublicKey, KeyID: "k1", Algorithm: "RS256", Use: "sig"}}})
 	})
 	mux.HandleFunc("GET /authorize", f.authorize)
-	mux.HandleFunc("POST /token", func(w http.ResponseWriter, r *http.Request) { f.token(t, w, r) })
+	mux.HandleFunc("POST /token", f.token)
 	f.srv = httptest.NewTLSServer(mux)
 	f.URL = f.srv.URL
-	t.Cleanup(f.srv.Close)
-	return f
+	return f, nil
 }
 
 // Close stops the IdP now, rather than when the test ends: an issuer that
@@ -147,7 +169,8 @@ func (f *IdP) Authorize(t testing.TB, authURL string) string {
 	return resp.Header.Get("Location")
 }
 
-// authorize approves at once: this IdP's user is whoever Subject says.
+// authorize approves: at once as Subject, or, with Users set, as the user
+// the browser chose on the sign-in page it answers first.
 func (f *IdP) authorize(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	if q.Get("client_id") != ClientID || q.Get("response_type") != "code" ||
@@ -155,9 +178,17 @@ func (f *IdP) authorize(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad authorization request", http.StatusBadRequest)
 		return
 	}
+	subject := f.Subject
+	if len(f.Users) > 0 {
+		subject = q.Get("login_as")
+		if !slices.Contains(f.Users, subject) {
+			f.signInPage(w, q)
+			return
+		}
+	}
 	code := random()
 	f.mu.Lock()
-	f.grants[code] = grant{nonce: q.Get("nonce"), challenge: q.Get("code_challenge"), redirect: q.Get("redirect_uri")}
+	f.grants[code] = grant{nonce: q.Get("nonce"), challenge: q.Get("code_challenge"), redirect: q.Get("redirect_uri"), subject: subject}
 	f.mu.Unlock()
 	back, err := url.Parse(q.Get("redirect_uri"))
 	if err != nil {
@@ -171,9 +202,25 @@ func (f *IdP) authorize(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, back.String(), http.StatusFound)
 }
 
+// signInPage is the IdP's login screen: one link per user, each the
+// authorization request again with login_as set.
+func (f *IdP) signInPage(w http.ResponseWriter, q url.Values) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	fmt.Fprint(w, "<!doctype html><title>Fake IdP</title><h1>Sign in as</h1><ul>")
+	for _, u := range f.Users {
+		v := url.Values{}
+		for k, vs := range q {
+			v[k] = vs
+		}
+		v.Set("login_as", u)
+		fmt.Fprintf(w, `<li><a href="/authorize?%s">%s</a></li>`, html.EscapeString(v.Encode()), html.EscapeString(u))
+	}
+	fmt.Fprint(w, "</ul>")
+}
+
 // token exchanges a code once, for the client that holds the PKCE verifier
 // the authorization request committed to.
-func (f *IdP) token(t testing.TB, w http.ResponseWriter, r *http.Request) {
+func (f *IdP) token(w http.ResponseWriter, r *http.Request) {
 	id, secret, _ := r.BasicAuth()
 	if err := r.ParseForm(); err != nil || id != ClientID || secret != ClientSecret {
 		oauthError(w, http.StatusUnauthorized, "invalid_client")
@@ -196,13 +243,25 @@ func (f *IdP) token(t testing.TB, w http.ResponseWriter, r *http.Request) {
 	f.mu.Lock()
 	f.tokens++
 	f.mu.Unlock()
-	writeJSON(w, map[string]any{"access_token": "at", "token_type": "Bearer", "id_token": f.Mint(t, nonce)})
+	tok, err := f.mint(g.subject, nonce)
+	if err != nil {
+		oauthError(w, http.StatusInternalServerError, "server_error")
+		return
+	}
+	writeJSON(w, map[string]any{"access_token": "at", "token_type": "Bearer", "id_token": tok})
 }
 
 // Mint is an ID token for Subject carrying nonce, signed by this IdP.
 func (f *IdP) Mint(t testing.TB, nonce string) string {
 	t.Helper()
-	sub := f.Subject
+	tok, err := f.mint(f.Subject, nonce)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
+}
+
+func (f *IdP) mint(sub, nonce string) (string, error) {
 	if sub == "" {
 		sub = "user-1"
 	}
@@ -224,17 +283,13 @@ func (f *IdP) Mint(t testing.TB, nonce string) string {
 	signer, err := jose.NewSigner(jose.SigningKey{Algorithm: jose.RS256, Key: f.key},
 		(&jose.SignerOptions{}).WithType("JWT").WithHeader("kid", "k1"))
 	if err != nil {
-		t.Fatal(err)
+		return "", err
 	}
 	obj, err := signer.Sign(payload)
 	if err != nil {
-		t.Fatal(err)
+		return "", err
 	}
-	raw, err := obj.CompactSerialize()
-	if err != nil {
-		t.Fatal(err)
-	}
-	return raw
+	return obj.CompactSerialize()
 }
 
 func random() string {

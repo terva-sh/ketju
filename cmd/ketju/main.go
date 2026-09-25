@@ -23,6 +23,10 @@ commands:
 Run ketju <command> -h for a command's flags.
 `
 
+// buildCommands are commands only some builds have: the e2e build adds its
+// Playwright server here (e2e.go). A release build has none.
+var buildCommands = map[string]func(args []string) error{}
+
 func main() {
 	if len(os.Args) < 2 {
 		fmt.Fprint(os.Stderr, usage)
@@ -41,8 +45,12 @@ func main() {
 		fmt.Print(usage)
 		return
 	default:
-		fmt.Fprintf(os.Stderr, "ketju: unknown command %q\n\n%s", os.Args[1], usage)
-		os.Exit(2)
+		run, ok := buildCommands[os.Args[1]]
+		if !ok {
+			fmt.Fprintf(os.Stderr, "ketju: unknown command %q\n\n%s", os.Args[1], usage)
+			os.Exit(2)
+		}
+		err = run(os.Args[2:])
 	}
 
 	if err != nil {
