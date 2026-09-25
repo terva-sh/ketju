@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T04:28:58Z
+updated_at: 2026-09-25T05:26:20Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -358,3 +358,7 @@ Next: TKT-01M29CEE6D.
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T04:28:58Z
 
 PR #87 (TKT-01M29CEE6D, Build the thread list screen) merged at 601c687 after a clean review of review-only PR #88 (head afa5a08, run #463) and green CI run 461 (vitest 686, Playwright 16/16, go test). Review 1 raised one medium finding, scroll lost on a quick Back, which was fixed; the notes are on the ticket. #88 is closed unmerged. Next: TKT-01M29CGBXK.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T05:26:20Z
+
+PR #89 (TKT-01M29CGBXK, Run the accessibility pass on the client) merged at 7bb0394. The review of review-only PR #90 was clean on head 7766a2b (run #472), after round 1 raised two medium findings that were fixed (run #469); CI run for 7bb0394 was green, with vitest 761, Playwright 33 passed and 5 width-specific skips, and go test. #90 is closed unmerged. The PR also fixed the thread list's scroll restore after a quick back then forward (TKT-01M29CEE6D's code). axe's nested-interactive on the renderer's quote summary is set aside in the scan and left to a person in draft TKT-01M3BFSBPJ. With TKT-01M29CGBY1 and TKT-01M29CGBXK both done, the exit gate is closed. This branch refreshes docs/11's counts, and the run stops here per docs/12.

@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-174 tickets: 12 epics and 162 children. Every ticket carries an `area:` label,
+191 tickets: 12 epics and 179 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -41,8 +41,8 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 78 in Phase 1, 33 in Phase 2, 20 in
-Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 4 carrying no
+Distribution by phase: 25 in Phase 0, 82 in Phase 1, 33 in Phase 2, 20 in
+Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 17 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,8 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-45 done, 59 ready, 70 draft.
+83 done, 22 ready, 85 draft, 1 archived (counted 2026-09-25 with
+`git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
 frozen at version 1 on 2026-09-15 (`TKT-01M29C5Y1E`). The twenty-fifth is the
@@ -120,6 +121,22 @@ user, grooming did the following:
 `TKT-01M29P9RS0`, which moved in from no milestone. Two tickets appeared
 outside Phase 1 over the same period, both workflow tickets with no milestone.
 
+**The run reached the Phase 1 exit gate on 2026-09-25.** The Playwright smoke
+tests `TKT-01M29CGBY1` and the accessibility pass `TKT-01M29CGBXK` are both
+done. Phase 1 now carries 82 tickets:
+- 56 done;
+- 22 ready: the six Phase 1 epics, which close on their children, the
+  tracking ticket, and 15 tasks and chores the gate did not need;
+- 4 drafts: the real-device check `TKT-01M38WTKSQ`, which is `human-only`,
+  and three the run filed.
+
+The four tickets added since grooming are `TKT-01M3ART992` (posting from the
+composer), done, and those three drafts. The run also filed thirteen
+follow-ups with no milestone: twelve are drafts and one has since been
+archived. Closing the epics and the tracking ticket, running the real-device
+checks, and deciding what happens to the 15 remaining tickets belong to a
+person (docs/12).
+
 ## The critical path
 
 Twenty tickets sit on the longest dependency chain from nothing to the MVP.
@@ -179,7 +196,8 @@ page with the unread divider, `TKT-01M29CEE79` composer, and `TKT-01M29CGBV`
 the mobile sheet and sticky reply bar.
 
 The second gate is `TKT-01M29CGBY1`, Playwright at 390 px and 1440 px, with
-`TKT-01M29CCBYX` serve and graceful shutdown beside it.
+`TKT-01M29CCBYX` serve and graceful shutdown beside it. It closed on
+2026-09-25 together with the accessibility pass `TKT-01M29CGBXK`.
 
 ## Two things worth arguing about before starting
 
