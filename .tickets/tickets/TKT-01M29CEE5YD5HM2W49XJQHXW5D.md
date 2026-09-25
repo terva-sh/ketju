@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CEE5YD5HM2W49XJQHXW5D
 title: Build the forum index screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:mockups-front
     path: docs/mockups/Main.dc.html
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/cee5y-forum-index
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: a60f29e96f3ef3ed3e3eaedd2665909783dea23c
+  session: null
+  claimed_at: 2026-09-25T03:18:14Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-25T03:18:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
