@@ -17,11 +17,13 @@ dependencies:
   - TKT-01M29CA9B9CEVWZ6A3CH3DZRMF
   - TKT-01M29CEE79NN4Q0RXXEYVJHYYE
 blocks_on: none
-references: []
+references:
+  - ref: pr:81
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T22:33:12Z
-updated_at: 2026-09-25T01:38:35Z
+updated_at: 2026-09-25T01:38:54Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
