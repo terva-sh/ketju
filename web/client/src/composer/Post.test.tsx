@@ -172,6 +172,15 @@ describe('while a post is in flight', () => {
     expect(area(root).value).toBe('my reply');
     expect(root.querySelector('.composer .reply-chip')?.getAttribute('data-reply-chip')).toBe('2');
     expect(document.activeElement).toBe(area(root)); // still brought up
+    // Nor can the toolbar or a stray input event change the text.
+    const tools = [...root.querySelectorAll<HTMLButtonElement>('.composer [data-edit]')];
+    expect(tools.length).toBeGreaterThan(0);
+    expect(tools.every((b) => b.disabled)).toBe(true);
+    area(root).setSelectionRange(0, 2);
+    for (const b of tools) await act(() => void b.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    area(root).value = 'changed';
+    await act(() => void area(root).dispatchEvent(new Event('input', { bubbles: true })));
+    expect(composerFor(thread.id).source.value).toBe('my reply');
     await act(() => release());
     await settle();
     await settle();

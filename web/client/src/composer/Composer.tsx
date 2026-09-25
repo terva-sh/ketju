@@ -94,6 +94,11 @@ export function Composer({
     c.caret.value = p.end;
   });
 
+  // Nothing changes the source while a post is in flight: a successful post
+  // clears what it sent, so an edit made meanwhile would be lost (reviews on
+  // PR #81). The textarea is read-only and ignores input then, the toolbar
+  // is off, and the mention list, which closes when the textarea loses
+  // focus to Post, cannot be open.
   const edit = (kind: EditKind) => {
     const a = area.current;
     if (!a) return;
@@ -141,7 +146,7 @@ export function Composer({
       {tab === 'write' && (
         <div class="composer-tools" role="toolbar" aria-label="Formatting">
           {tools.map(([kind, icon, label]) => (
-            <button key={kind} type="button" aria-label={label} title={label} data-edit={kind} onClick={() => edit(kind)}>
+            <button key={kind} type="button" aria-label={label} title={label} data-edit={kind} disabled={posting} onClick={() => edit(kind)}>
               <Icon name={icon} />
             </button>
           ))}
@@ -160,6 +165,7 @@ export function Composer({
           aria-controls={open ? listId : undefined}
           aria-activedescendant={open ? `${listId}-${mention.active}` : undefined}
           onInput={(e) => {
+            if (c.posting.value) return;
             c.source.value = e.currentTarget.value;
             c.caret.value = e.currentTarget.selectionStart;
             mention.check();

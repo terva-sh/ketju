@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T22:33:12Z
-updated_at: 2026-09-25T01:44:10Z
+updated_at: 2026-09-25T01:49:49Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -100,6 +100,10 @@ Promoted by the maintainer on 2026-09-25, when asked how to proceed at CGBY1: do
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:44:10Z
 
 Review 1 on PR #81 (head 57d5a4f, run 413) raised one medium finding: while a post was in flight, Reply, Quote, the thread's Reply and the chip's × could still change the composer, and a successful post then cleared the new choice. I fixed it by freezing the composer while a post is in flight. quotePost, replyToPost and replyToThread still bring the composer up but change nothing, and the chip's × is disabled, joining the read-only textarea and the disabled Discard. The alternative, clearing only what was sent, was rejected: a quote inserted mid-flight would leave the posted text behind with it, inviting a duplicate post. A new test covers this, and removing any one of the four guards fails it. CI run 414 passed on 57d5a4f.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:49:49Z
+
+Review 2 on PR #81 (head a56372b, run 415) said review 591's finding was still present, now through the formatting toolbar: its buttons could still change the source while a post was in flight. I fixed it by disabling the toolbar buttons while posting, and by having the textarea's input handler ignore input then, on top of readOnly. The in-flight test now also clicks every toolbar button and fires an input event while posting, and checks the source is unchanged. Mutants removing either guard are killed. A guard inside edit() and one inside the mention choose() were dropped as unreachable: disabled buttons do not fire, and the mention list closes on blur before Post is pressed. CI run 416 passed on a56372b.
 
 ## Summary
 
