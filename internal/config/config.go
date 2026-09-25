@@ -8,7 +8,7 @@
 // the listen address, the data directory, the site URL, the fsync policy,
 // cache sizes, bootstrap admins, and the OIDC providers. Everything an admin
 // changes while the server is running — the site name, the registration mode,
-// slow-mode defaults — belongs in the settings table (docs/04), where a change
+// slow mode — belongs in the settings table (docs/04), where a change
 // takes effect without a restart and leaves an audit row.
 //
 // Putting a key in the wrong half is the mistake this package exists to

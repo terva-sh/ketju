@@ -104,6 +104,22 @@ Each item states the options, the current lean, and when it must be decided.
     budget. The mockups in `docs/mockups/` are already written this way.
     Recorded in 07. (TKT-01M29BW9NW)
 
+## Operations
+
+22. **TLS.** **Decided: a reverse proxy terminates TLS in v1**, and
+    built-in ACME comes in a later phase (2026-09-24). "Just run it" is
+    allowed to mean Caddy in front. Recorded in 02. (TKT-01M29BW9PB)
+23. **Backup tooling.** **Decided: ship `ketju backup` in Phase 4**
+    (2026-09-24). It pauses the thread actors, checkpoints the WAL, and
+    snapshots. Until then, a documented `rsync` of `data/` plus
+    `VACUUM INTO` for the database is the procedure. Recorded in 02.
+    (TKT-01M29BW9PB)
+24. **Single-process assumption.** **Decided: one process per data
+    directory**, enforced by a lock file in `data/` that refuses a second
+    `serve` (2026-09-24). Horizontal scaling is out of scope by design for
+    the communities ketju targets. Recorded in 02 and stated in the README.
+    (TKT-01M29BW9PB)
+
 ## Mobile
 
 25. **Bottom tab bar vs. a menu button.** **Decided: a tab bar with five
@@ -123,22 +139,6 @@ Each item states the options, the current lean, and when it must be decided.
     v1; revisit with push.
 29. **Native apps.** Out of scope. The installable web app is the mobile
     story; revisit only if push or share-sheet integration demands it.
-
-## Operations
-
-22. **TLS.** **Decided: a reverse proxy terminates TLS in v1**, and
-    built-in ACME comes in a later phase (2026-09-24). "Just run it" is
-    allowed to mean Caddy in front. Recorded in 02. (TKT-01M29BW9PB)
-23. **Backup tooling.** **Decided: ship `ketju backup` in Phase 4**
-    (2026-09-24). It pauses the thread actors, checkpoints the WAL, and
-    snapshots. Until then, a documented `rsync` of `data/` plus
-    `VACUUM INTO` for the database is the procedure. Recorded in 02.
-    (TKT-01M29BW9PB)
-24. **Single-process assumption.** **Decided: one process per data
-    directory**, enforced by a lock file in `data/` that refuses a second
-    `serve` (2026-09-24). Horizontal scaling is out of scope by design for
-    the communities ketju targets. Recorded in 02 and stated in the README.
-    (TKT-01M29BW9PB)
 
 ## Agents
 

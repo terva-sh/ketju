@@ -88,7 +88,7 @@ var movedKeys = map[string]string{
 	"registration.mode":                  "registration mode is a runtime setting: it lives in the settings table and is changed in the admin UI",
 	"registration.allow_local_passwords": "local passwords are a runtime setting: they live in the settings table and are changed in the admin UI",
 	"site_name":                          "the site name is a runtime setting: it lives in the settings table and is changed in the admin UI",
-	"slow_mode":                          "slow-mode defaults are a runtime setting: they live in the settings table and are changed per forum in the admin UI",
+	"slow_mode":                          "slow mode is a runtime setting: it is off by default and a moderator sets it per thread (docs/08), in the settings table rather than this file",
 }
 
 // decodeError turns a TOML decoding failure into something that names a key.

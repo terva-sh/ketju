@@ -15,7 +15,8 @@ with the content.
 | Pin / unpin (forum or global, optional expiry) | moderator | `ThreadPinned`/`ThreadUnpinned` | yes |
 | Rename / retag / move thread | moderator (author may rename own thread within window) | thread events | yes |
 | Split posts into a new thread / merge | moderator | `PostsSplitOut`/`PostsMergedIn` | by reverse operation |
-| Slow mode on a thread (min seconds between posts per user) | moderator | `settings` per thread in DB, not log | yes |
+| Archive thread | admin | `ThreadArchived` | no: there is no unarchive record in v1 (03) |
+| Slow mode on a thread (min seconds between posts per user; off by default) | moderator | `settings` per thread in DB, not log | yes |
 | Suspend / unsuspend user | moderator | `audit_log`, `users.status` | yes |
 | Approve / deny application | moderator | `applications`, `audit_log` | deny → re-apply |
 | Anonymize user | admin | `audit_log` | no |

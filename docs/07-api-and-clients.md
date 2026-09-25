@@ -111,10 +111,15 @@ member, so the error goes to the log and the client gets the fixed title.
 ### Moderation and admin (`/api/v1/admin/*`, role-gated)
 
 Queue (flags + applications), application approve/deny, thread
-lock/pin/move/rename/tag/archive, split/merge, user suspend/anonymize,
-forum CRUD and ordering, group and permission editing, form versions,
-settings, audit log query, `reindex` and `fsck` triggers with progress via
-SSE.
+lock/pin/move/rename/tag, split/merge, user suspend/anonymize, thread
+archive, forum CRUD and ordering, group and permission editing, form
+versions, settings, audit log query, `reindex` and `fsck` triggers with
+progress via SSE.
+
+Each route is gated on the role docs/08's "Primitives" table names for its
+action, which is the one place authority is stated. Archiving a thread is
+admin-only there; locking, pinning, moving, renaming, retagging, splitting
+and merging are moderator actions.
 
 ### Thread response shape (abridged)
 

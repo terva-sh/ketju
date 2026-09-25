@@ -282,7 +282,7 @@ uses the name, never the literal.
 | 16 | `ThreadTagged` | tags[] (full replacement) | thread_tags |
 | 20 | `PostsSplitOut` | ordinals[], target_thread_id | ordinals marked moved; new thread's log gets `Post` records with `origin` |
 | 21 | `PostsMergedIn` | source_thread_id, ordinals[] | mirror of the above |
-| 30 | `ThreadArchived` | reason | thread read-only, index may be dropped from memory permanently |
+| 30 | `ThreadArchived` | reason | thread read-only for everyone, moderators included; index may be dropped from memory permanently. An admin action (08) |
 
 `Edit.mentions` was added after the version 1 freeze, on 2026-09-24. It is an
 optional key in the CBOR body map, which is the kind of change the freeze

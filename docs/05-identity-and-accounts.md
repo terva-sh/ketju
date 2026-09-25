@@ -11,9 +11,10 @@
 - Registration policy is a site setting with three modes:
   `open`, `approval`, `invite` (invite is a later phase; approval is v1).
 - Admin bootstrap never requires a password: the first user to complete
-  login via a provider listed in `bootstrap.admin_subjects` (or matching
-  `bootstrap.admin_email`) becomes admin. Alternatively `ketju admin
-  promote <handle>` from the CLI.
+  login with an identity listed in `bootstrap.admin_subjects` (each written
+  `"provider_key:subject"`, since a bare subject is ambiguous once there are
+  two providers) or with an email listed in `bootstrap.admin_emails` becomes
+  admin. Alternatively `ketju admin promote <handle>` from the CLI.
 
 ## Provider configuration
 
@@ -42,11 +43,12 @@ name = "Club SSO"
 issuer = "https://auth.club.example"
 client_id = "ketju"
 client_secret_file = "/run/secrets/authelia"
-claims.groups = "groups"      # optional: map an IdP groups claim …
+groups_claim = "groups"       # optional: map an IdP groups claim …
 group_map = { "forum-mods" = "moderators" }   # … onto local groups on each login
 
 [bootstrap]
 admin_emails = ["me@example.org"]
+admin_subjects = ["authelia:8f2c61d4-5b7e-4f0a-9c3e-2d1b0a9e8f7c"]
 ```
 
 Providers are an allowlist by construction: only configured issuers are ever
