@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBY16MK20W1QATC5N7WE
 title: Add Playwright smoke tests at both viewports
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: urgent
 due_on: null
@@ -25,10 +25,17 @@ blocks_on: none
 references:
   - ref: design:testing
     path: docs/02-architecture.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/cgby1-playwright
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: baa1ee716e9729c74e58eeca1d29391466d0a36f
+  session: null
+  claimed_at: 2026-09-25T01:55:24Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-24T22:33:27Z
+updated_at: 2026-09-25T01:55:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

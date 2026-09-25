@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T01:27:43Z
+updated_at: 2026-09-25T01:55:24Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -313,3 +313,7 @@ Merged PR #79 (TKT-01M29CA9B9, Implement create thread and reply) as 456908e. Re
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:27:43Z
 
 Merged PR #80 (TKT-01M29CGBVN, Build the mobile composer sheet and sticky reply bar) as 0d7af01. The first review was clean on head 0d7af01, base 456908e (run 408); the regenerated bundle did not hit the context limit this time. CI run 409's client step ran 612 tests, including the 16 in ComposerSheet.test.tsx, and its race step shows internal/web/spa passed. The maintainer promoted draft TKT-01M3ART992 (Post a reply from the composer) to be done before CGBY1, whose reply step needs it.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:55:24Z
+
+Merged PR #81 (TKT-01M3ART992, Post a reply from the composer) as baa1ee7. Reviews 1 (57d5a4f, run 413) and 2 (a56372b, run 415) each raised a medium finding: edits made while a post was in flight were lost on success. The first came through reply, quote and the chip, the second through the formatting toolbar. Both were fixed. Review 3 was clean on head baa1ee7, base 0d7af01 (run 417). CI run 418's client step ran 630 tests, including the 18 in Post.test.tsx, and its race step shows internal/web/api passed. Next: TKT-01M29CGBY1 (the Playwright gate).
