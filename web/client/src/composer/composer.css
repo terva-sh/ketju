@@ -175,8 +175,8 @@
   cursor: pointer;
 }
 
-/* The phone: every control is a full touch target (docs/06 "Mobile"). The
-   composer sheet that replaces this there is TKT-01M29CGBVN's. */
+/* The phone: every control is a full touch target (docs/06 "Mobile"). There
+   the composer is drawn in the sheet below, never inline. */
 @media (max-width: 719.98px) {
   .composer-head {
     padding: 8px 12px;
@@ -199,4 +199,170 @@
   .composer-preview {
     padding: 12px;
   }
+}
+
+/* The phone's reply bar and composer sheet (TKT-01M29CGBVN), after the
+   mockup's mobile_thread bar.
+
+   The bar is fixed to the foot of the screen, --replybar-h tall plus the
+   home indicator's inset, and the thread page is padded by exactly that, so
+   the last post and the pager scroll clear of it rather than under it. Its
+   rule is a shadow rather than a border so the height is the token and
+   nothing else. */
+.shell {
+  --replybar-h: 64px;
+}
+.shell .replybar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 10;
+  box-sizing: content-box;
+  height: var(--replybar-h);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-left: calc(12px + env(safe-area-inset-left, 0px));
+  padding-right: calc(12px + env(safe-area-inset-right, 0px));
+  background: var(--surface);
+  box-shadow: 0 -1px 0 var(--rule);
+}
+.shell.phone.has-replybar .thread-page {
+  padding-bottom: calc(var(--replybar-h) + env(safe-area-inset-bottom, 0px));
+}
+.replybar .reply-chip {
+  flex: none;
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+.replybar-open {
+  flex: 1 1 auto;
+  min-width: 0;
+  height: var(--target);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 1px solid var(--rule2);
+  border-radius: 22px;
+  background: var(--bg);
+  color: var(--muted);
+  font: inherit;
+  font-size: 14px;
+  text-align: left;
+  cursor: pointer;
+}
+.replybar-open.draft {
+  color: var(--ink2);
+}
+.replybar-text {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The sheet covers the screen, or the part of it the keyboard leaves: its
+   top and height follow the visual viewport (ComposerSheet), and the
+   composer inside is a column whose last row is the toolbar, so the toolbar
+   sits on the keyboard's top edge. */
+.composer-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: var(--vv-top, 0px);
+  height: 100vh;
+  height: var(--vv-height, 100dvh);
+  z-index: 20;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  background: var(--surface);
+  padding-left: env(safe-area-inset-left, 0px);
+  padding-right: env(safe-area-inset-right, 0px);
+}
+.sheet-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: env(safe-area-inset-top, 0px) 8px 0;
+  border-bottom: 1px solid var(--rule);
+}
+.sheet-head h2 {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+}
+.sheet-close {
+  width: var(--target);
+  height: var(--target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  cursor: pointer;
+}
+.sheet-context {
+  flex: 0 1 auto;
+  max-height: 30%;
+  overflow: auto;
+  margin: 0;
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--rule);
+  background: var(--bg);
+  color: var(--ink2);
+  font-size: 14px;
+}
+.sheet-context figcaption {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-family: var(--font-mono);
+  font-size: 11.5px;
+  color: var(--accent);
+}
+.composer.in-sheet {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+.composer.in-sheet .composer-head h2 {
+  /* The sheet's own head says Reply. */
+  display: none;
+}
+.composer.in-sheet .composer-body,
+.composer.in-sheet .composer-preview {
+  order: 2;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+.composer.in-sheet .composer-body:not([hidden]) {
+  display: flex;
+  flex-direction: column;
+}
+.composer.in-sheet .composer-body textarea {
+  flex: 1 1 auto;
+  min-height: 0;
+  resize: none;
+}
+.composer.in-sheet .composer-preview {
+  overflow: auto;
+}
+.composer.in-sheet .mention-list {
+  /* Above the toolbar, not below the textarea, which fills the sheet. */
+  top: auto;
+  bottom: 4px;
+}
+.composer.in-sheet .composer-tools {
+  order: 3;
+  border-top: 1px solid var(--rule);
+  border-bottom: 0;
+}
+.composer.in-sheet .composer-foot {
+  display: none;
 }

@@ -7,6 +7,7 @@ import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Composer } from '../composer/Composer';
+import { ComposerSheet } from '../composer/ComposerSheet';
 import { Pager } from '../components/thread/Pager';
 import { permalink, Post, type PostActions, type ThreadRef } from '../components/thread/Post';
 import { PostPopover } from '../components/thread/PostPopover';
@@ -16,7 +17,7 @@ import '../components/thread/thread.css';
 import { Toolbar } from '../shell/Toolbar';
 import { threadActions } from '../shell/threadActions';
 import { isPhone } from '../state/layout';
-import { quotePost, replyToPost } from '../state/composer';
+import { composerFor, quotePost, replyToPost } from '../state/composer';
 import { useShellContext } from '../state/shell';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
@@ -90,8 +91,10 @@ export function ThreadScreen() {
             title: forum?.name ?? 'Thread',
             back: forum ? { href: `/f/${encodeURIComponent(forum.slug)}`, label: forum.name } : undefined,
             actions,
+            // On a phone the reply bar opens this thread's composer.
+            reply: canReply ? params.id : undefined,
           },
-    [missing, forum?.slug, forum?.name, actions],
+    [missing, forum?.slug, forum?.name, actions, canReply, params.id],
   );
   useShellContext(ctx, [ctx]);
 
@@ -156,7 +159,11 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   const actions: PostActions | undefined = canReply
     ? { quote: (o, text) => quotePost(thread.id, o, text), reply: (o) => replyToPost(thread.id, o) }
     : undefined;
-  const authorOf = (o: number) => page.posts.find((p) => p.ordinal === o)?.author.handle;
+  const postOf = (o: number) => page.posts.find((p) => p.ordinal === o);
+  const authorOf = (o: number) => postOf(o)?.author.handle;
+  // On a phone the composer is a sheet the reply bar opens (Shell), and
+  // the inline one is not drawn.
+  const sheetOpen = composerFor(thread.id).open.value;
 
   // One handler for every link to another post in this list: a reply-to
   // indicator, or a quote's source link in a body (internal/render/quote.go).
@@ -193,7 +200,12 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
         ))}
       </section>
       {pager}
-      {canReply && <Composer thread={thread.id} authorOf={authorOf} />}
+      {canReply &&
+        (isPhone.value ? (
+          sheetOpen && <ComposerSheet thread={thread.id} authorOf={authorOf} postOf={postOf} />
+        ) : (
+          <Composer thread={thread.id} authorOf={authorOf} />
+        ))}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
     </>
   );

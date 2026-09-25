@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBVNWMMSRTXA4N42XBBS
 title: Build the mobile composer sheet and sticky reply bar
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:mobile-composing
     path: docs/06-thread-views.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/cgbvn-mobile-sheet
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: 456908e28450d0687137d75e12a092d826170d5d
-  session: null
-  claimed_at: 2026-09-25T01:09:15Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-25T01:10:52Z
+updated_at: 2026-09-25T01:19:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,10 +45,10 @@ The post list needs bottom padding equal to the bar height, or the reply bar cov
 
 ## Acceptance criteria
 
-- [ ] The post list has bottom padding equal to the reply bar height so the last post is never covered
-- [ ] Reply and quote from a post open the sheet prefilled
-- [ ] A draft in progress shows in the reply bar and survives closing the sheet
-- [ ] The toolbar stays above the on-screen keyboard in Playwright's emulated phone viewport, positioned from the visualViewport API; real iOS and Android verification is in TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices)
+- [x] The post list has bottom padding equal to the reply bar height so the last post is never covered
+- [x] Reply and quote from a post open the sheet prefilled
+- [x] A draft in progress shows in the reply bar and survives closing the sheet
+- [x] The toolbar stays above the on-screen keyboard in Playwright's emulated phone viewport, positioned from the visualViewport API; real iOS and Android verification is in TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices)
 
 ## Implementation plan
 
@@ -98,3 +91,34 @@ Revised at claim (2026-09-25), after reading the client as it stands.
 **agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
 
 Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. The real-device keyboard check moved to TKT-01M38WTKSQ. What stays here is what an agent can verify: the emulated phone viewport and positioning driven by visualViewport.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:19:19Z
+
+Built as planned. Evidence per criterion, and the decisions made:
+
+**Verification**
+- **Vitest** (`src/composer/ComposerSheet.test.tsx`, 16 tests, 612 total):
+  - the bar replaces the tab bar only where can_reply is set and not on history;
+  - the desktop is unchanged;
+  - the sheet opens from the bar, from a post's Reply (chip plus the answered post), from a post's Quote (quotation, caret after it) and from the more menu's Reply, with focus in the textarea each time;
+  - closing keeps the draft and chip, the bar shows the first non-blank line, and reopening restores them;
+  - Escape closes, but not when the mention list already handled it;
+  - Tab wraps both ways;
+  - a fake `visualViewport` resize moves `--vv-top` and `--vv-height`, and closing stops following.
+- **19 hand mutants**, all killed.
+- **Local Playwright** (playwright-core, headless Chromium, 390×844, isMobile, touch, light and dark, against vite with the API routed):
+  - AC1: the thread page's padding-bottom is 64px, equal to the bar's height. At the bottom of the page the last post ends at 779.5 and the bar starts at 780. The tab bar is absent.
+  - AC2 and AC3: tapping Reply on #11 opens the sheet with chip #11. After typing and then Close, the bar shows "One thing to add before we lock this in." and #11.
+  - AC4: an init script wraps `visualViewport` so the script can shrink it the way a keyboard does. With 340px taken the sheet is 0–504 and the toolbar 451–504. With the viewport also scrolled 40px (as iOS does) the sheet is 40–584 and the toolbar 531–584. In every case the toolbar's bottom equals the visual viewport's bottom. No console errors.
+  - The script is `~/.cache/ketju-gotmp/pw/mobile-sheet.mjs`, outside the repository. CGBY1 should carry an equivalent check into the committed suite. Real devices are TKT-01M38WTKSQ.
+
+**Decisions**
+- **No post button.** The mockup's pen "Post reply" button is left out, because posting from the client is draft TKT-01M3ART992 and a button that can only fail is worse than none. The pill opens the sheet instead.
+- **Fixed bar plus padding, not sticky.** The criterion asks for padding equal to the bar, and a fixed bar with that padding holds when the page is shorter than the screen as well.
+- **Sheet placement via custom properties.** The sheet is placed through `--vv-top` and `--vv-height`, set through the CSSOM, because the CSP forbids style attributes (breakpoints.test.ts enforces this).
+- **Focus return.** The opener is read at render, because the composer's layout effect moves focus first. Safari does not focus a clicked button, so when the opener is the body, focus returns to the bar.
+- **Not done.** Browser back does not close the sheet, because it would need a history entry shared with the router. That is noted for CGBXK.
+
+## Summary
+
+On a phone, a thread the reader may reply to has a reply bar (ReplyBar) in place of the tab bar. It shows the reply chip and the draft's first line, and the thread page is padded by its height. Tapping it, or a post's Reply or Quote, or the more menu's Reply, opens ComposerSheet: a full-screen modal dialog holding the same Composer, with the post being answered above it. The sheet traps focus, closes on Escape, and returns focus when it closes. It is sized to the visual viewport with the toolbar last, so the toolbar sits on the keyboard. Closing keeps the draft. Verified with Vitest, 19 mutants, and a local Playwright run at 390x844.

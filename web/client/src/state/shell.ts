@@ -18,6 +18,10 @@ export interface ShellContext {
   title: string;
   back?: { href: string; label: string };
   actions: ShellAction[];
+  // reply is the thread whose composer the phone's reply bar opens, set by
+  // a thread page whose reader may reply there. The reply bar takes the tab
+  // bar's place while it is set (docs/06 "Mobile", TKT-01M29CGBVN).
+  reply?: string;
 }
 
 export const shellContext = signal<ShellContext | null>(null);

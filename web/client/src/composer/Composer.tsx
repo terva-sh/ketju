@@ -32,7 +32,19 @@ const mentionLimit = 8;
 // TKT-01M29CA9B9's, and a Post button that could only fail is worse than
 // none. Nor is saving the draft, which is TKT-01M29CA9CE's; the source
 // lasts the session.
-export function Composer({ thread, authorOf }: { thread: string; authorOf: (ordinal: number) => string | undefined }) {
+//
+// In the phone's sheet (ComposerSheet, sheet set) it is the same composer
+// laid out as a column that fills the sheet, toolbar last, and it takes
+// focus when it opens, since the sheet opens because someone asked to write.
+export function Composer({
+  thread,
+  authorOf,
+  sheet = false,
+}: {
+  thread: string;
+  authorOf: (ordinal: number) => string | undefined;
+  sheet?: boolean;
+}) {
   const c = composerFor(thread);
   const source = c.source.value;
   const replyTo = c.replyTo.value;
@@ -42,7 +54,7 @@ export function Composer({ thread, authorOf }: { thread: string; authorOf: (ordi
   // The selection to put back once the textarea shows the text an edit
   // made, and whether to focus it: set by an edit, a summons or a chosen
   // mention, applied after the render that carries the new value.
-  const pending = useRef<Pending | null>(null);
+  const pending = useRef<Pending | null>(sheet ? { start: c.caret.value, end: c.caret.value, focus: true } : null);
   const preview = usePreview(thread, source, replyTo);
   const mention = useMentions(area, c, pending);
 
@@ -89,7 +101,7 @@ export function Composer({ thread, authorOf }: { thread: string; authorOf: (ordi
   const listId = `mentions-${thread}`;
   const open = mention.open;
   return (
-    <section class="composer" ref={root} aria-label="Reply" data-composer={thread}>
+    <section class={sheet ? 'composer in-sheet' : 'composer'} ref={root} aria-label="Reply" data-composer={thread}>
       <header class="composer-head">
         <h2>Reply</h2>
         {replyTo !== null && (
