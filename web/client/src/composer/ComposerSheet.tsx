@@ -1,6 +1,7 @@
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { CreatedPost, Post } from '../api/dto';
 import { Icon } from '../components/Icon';
+import { trapTab } from '../components/focus';
 import { composerFor } from '../state/composer';
 import { Composer, PostButton } from './Composer';
 
@@ -95,26 +96,6 @@ export function ComposerSheet({
   );
 }
 
-// trapTab keeps Tab and Shift+Tab inside the dialog, as aria-modal promises:
-// from the last control Tab goes to the first, and from the first Shift+Tab
-// goes to the last.
-function trapTab(e: KeyboardEvent, root: HTMLElement | null) {
-  if (!root) return;
-  const all = [...root.querySelectorAll<HTMLElement>(focusable)].filter((el) => !el.closest('[hidden]'));
-  if (all.length === 0) return;
-  const first = all[0];
-  const last = all[all.length - 1];
-  const at = document.activeElement;
-  if (e.shiftKey && (at === first || !root.contains(at))) {
-    e.preventDefault();
-    last.focus();
-  } else if (!e.shiftKey && (at === last || !root.contains(at))) {
-    e.preventDefault();
-    first.focus();
-  }
-}
-
-const focusable = 'button:not([disabled]), textarea:not([disabled]), input:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])';
 
 // useVisualViewport keeps the sheet on the visual viewport: it sets
 // --vv-top and --vv-height on the element, which composer.css places the

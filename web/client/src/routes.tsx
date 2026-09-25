@@ -1,7 +1,8 @@
 import type { AnyComponent } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { lazy, useLocation } from 'preact-iso';
-import { ForumIndex, NotFound, Placeholder } from './screens/Placeholder';
+import { ForumIndex } from './screens/ForumIndex';
+import { NotFound, Placeholder } from './screens/Placeholder';
 import { ThreadScreen } from './screens/ThreadScreen';
 
 // The admin screens are their own chunk, fetched the first time an /admin

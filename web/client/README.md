@@ -79,6 +79,17 @@ builds and starts it; it needs Go and port 8787 (`KETJU_E2E_PORT`). The
 server's log is `serve.log` beside the run's data, in a directory under
 `$TMPDIR`.
 
+A `setup` project (`e2e/session.setup.ts`) signs the seeded readers in
+once and saves their sessions (`stateFile` in `e2e/session.ts`), and both
+widths depend on it. A spec that needs a signed-in reader, but is not testing
+sign-in, starts from a saved session. That keeps the suite under the
+`/auth/*` rate limit (docs/08), which allows a burst of ten requests.
+
+`e2e/forum-index.spec.ts` also writes the screenshots committed in
+`e2e/screenshots/` when run with `KETJU_SCREENSHOTS=1`. They are compared by
+eye against `docs/mockups/` (TKT-01M29CEE5Y). Without the variable, as in CI,
+nothing is written.
+
 Set `PLAYWRIGHT_CHROMIUM_EXECUTABLE` to run a Chromium already on the machine;
 CI does, with Alpine's. Without it, Playwright's own is used, from
 `npx playwright install chromium`. The suite serves the embedded client, so

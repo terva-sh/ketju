@@ -1,4 +1,5 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test } from '@playwright/test';
+import { signIn, stateFile } from './session';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -12,18 +13,6 @@ interface Seed {
   posts: number;
 }
 const seed: Seed = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
-
-// signIn goes through the real flow: /auth/fake/start, the fake provider's
-// sign-in page, and the callback that sets the session. The client has no
-// sign-in screen yet, so the flow starts at the server's own start URL.
-async function signIn(page: Page, who: string) {
-  await page.goto('/auth/fake/start');
-  await page.getByRole('link', { name: who, exact: true }).click();
-  await page.waitForURL((u) => u.pathname === '/');
-  await expect
-    .poll(async () => ((await (await page.request.get('/api/v1/me')).json()) as { user?: { handle: string } }).user?.handle)
-    .toBe(who);
-}
 
 test('sign in, read a thread, reply, and see the unread divider', async ({ browser, page, isMobile, baseURL }, info) => {
   await test.step('sign in', () => signIn(page, 'alice'));
@@ -59,9 +48,11 @@ test('sign in, read a thread, reply, and see the unread divider', async ({ brows
       isMobile,
       hasTouch: isMobile,
       ignoreHTTPSErrors: true,
+      // Signed in once by the setup project: the sign-in flow is alice's
+      // step above, and /auth/* allows only a burst of ten (docs/08).
+      storageState: stateFile('carol'),
     });
     const carol = await ctx.newPage();
-    await signIn(carol, 'carol');
     await carol.goto(seed.thread);
     const divider = carol.locator('#unread');
     await expect(divider).toBeVisible();

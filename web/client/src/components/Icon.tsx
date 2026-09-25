@@ -27,6 +27,8 @@ const paths = {
   link: (
     <path d="M6.5 9.5 9.5 6.5M7 4.5l1-1a2.5 2.5 0 0 1 3.5 3.5l-1 1M9 11.5l-1 1a2.5 2.5 0 0 1-3.5-3.5l1-1" />
   ),
+  lock: <><rect x="3.5" y="7" width="9" height="7" rx="1" /><path d="M5.5 7V5a2.5 2.5 0 0 1 5 0v2" /></>,
+  pen: <><path d="m3 13 .8-3.2L10.6 3l2.4 2.4-6.8 6.8z" /><path d="m9.5 4.2 2.3 2.3" /></>,
 };
 
 export type IconName = keyof typeof paths;

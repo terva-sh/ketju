@@ -1,0 +1,370 @@
+/* The forum index, after docs/mockups/generate.py front() (desktop) and
+   mobile_front() (phone). One markup: the rows are a four-column grid from
+   720 px up, and stacked cards below it. */
+
+.forum-index {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 36px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.forum-index-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.forum-index-head h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+.forum-index-summary {
+  margin: 4px 0 0;
+  color: var(--ink2);
+  font-size: 15px;
+}
+.new-thread {
+  height: 36px;
+  padding: 0 14px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.forum-index-empty {
+  margin: 0;
+  color: var(--ink2);
+}
+
+/* Column headings and rows share one grid. Without an unread column (a
+   signed-out reader) the grid has three. */
+.forum-cols,
+.forum-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 150px 300px;
+  gap: 24px;
+  align-items: center;
+}
+.forum-cols.signed-in,
+.forum-row.signed-in {
+  grid-template-columns: minmax(0, 1fr) 150px 110px 300px;
+}
+.forum-cols {
+  padding: 0 20px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.forum-cols .col-activity {
+  text-align: right;
+}
+.forum-cols .col-unread {
+  text-align: center;
+}
+
+.forum-group {
+  display: flex;
+  flex-direction: column;
+}
+.forum-group-label {
+  margin: 0;
+  padding: 0 0 8px 4px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.forum-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.forum-row {
+  padding: 14px 20px;
+}
+.forum-row + .forum-row {
+  border-top: 1px solid var(--rule);
+}
+
+.forum-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.forum-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.forum-name {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+}
+.forum-name:hover {
+  color: var(--accent);
+}
+.forum-lock {
+  display: inline-flex;
+  color: var(--muted);
+}
+.forum-archived {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--rule2);
+  border-radius: 3px;
+  padding: 0 5px;
+}
+.forum-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.forum-activity {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--ink2);
+  text-align: right;
+}
+
+.forum-unread {
+  display: flex;
+  justify-content: center;
+}
+.unread-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--unread-soft);
+  color: var(--unread);
+  border: 1px solid var(--unread);
+  padding: 1px 8px;
+  border-radius: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.unread-none {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.forum-last {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  font-size: 13px;
+}
+.forum-last-title {
+  color: var(--ink);
+  text-decoration: none;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.forum-last-title:hover {
+  color: var(--accent);
+}
+.forum-last-meta,
+.forum-none {
+  color: var(--muted);
+}
+
+/* The floating new-thread button and the picker are the phone's and
+   everyone's respectively; the button is hidden from 720 px up, where the
+   header's button does its work. */
+.fab {
+  display: none;
+}
+
+.picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  background: rgba(15, 22, 34, 0.4);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 16px 16px;
+}
+.forum-picker {
+  width: min(420px, 100%);
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 8px 12px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.picker-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.picker-close {
+  width: var(--target);
+  height: var(--target);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  background: none;
+  color: var(--ink2);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.picker-list,
+.picker-list ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.picker-list ul {
+  padding-left: 16px;
+}
+.picker-list a,
+.picker-heading {
+  display: flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 16px;
+  color: var(--ink);
+  text-decoration: none;
+}
+.picker-heading {
+  color: var(--muted);
+}
+.picker-list a:hover,
+.picker-list a:focus-visible {
+  background: var(--surface2);
+}
+
+/* Phone: stacked cards, full-bleed groups, no column headings. The unread
+   badge moves beside the name; the last post is one line, title then time;
+   nothing marks a forum with nothing unread. */
+@media (max-width: 719.98px) {
+  .forum-index {
+    padding: 18px 0 calc(56px + 32px);
+    gap: 20px;
+  }
+  .forum-index-head {
+    padding: 0 16px;
+  }
+  .forum-index-head h1 {
+    font-size: 26px;
+    line-height: 1.15;
+  }
+  .forum-index-summary {
+    margin-top: 2px;
+    font-size: 14px;
+  }
+  .new-thread,
+  .forum-cols,
+  .forum-activity,
+  .unread-none,
+  .forum-last-by {
+    display: none;
+  }
+  .forum-group-label {
+    padding: 0 16px 8px;
+  }
+  .forum-rows {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .forum-row,
+  .forum-row.signed-in {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'main unread'
+      'last last';
+    gap: 4px 8px;
+    align-items: start;
+    padding: 12px 16px;
+    min-height: var(--target);
+  }
+  .forum-main {
+    grid-area: main;
+  }
+  .forum-unread {
+    grid-area: unread;
+    padding-top: 2px;
+  }
+  .forum-last {
+    grid-area: last;
+    flex-direction: row;
+    gap: 6px;
+    color: var(--ink2);
+  }
+  .forum-last-title {
+    color: var(--ink2);
+    min-width: 0;
+  }
+  .forum-last-meta {
+    white-space: nowrap;
+  }
+  .forum-last-meta::before {
+    content: '· ';
+  }
+  .forum-index-empty {
+    padding: 0 16px;
+  }
+
+  .fab {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: fixed;
+    z-index: 20;
+    right: calc(16px + env(safe-area-inset-right, 0px));
+    /* Above the tab bar (56 px and the home indicator's inset, shell.css),
+       as the mockup's bottom: 72px is. */
+    bottom: calc(56px + 16px + env(safe-area-inset-bottom, 0px));
+    width: 56px;
+    height: 56px;
+    border: 0;
+    border-radius: 50%;
+    background: var(--accent);
+    color: var(--accent-ink);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.18);
+    cursor: pointer;
+  }
+}

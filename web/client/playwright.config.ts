@@ -44,9 +44,16 @@ export default defineConfig({
       ? { executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE }
       : {},
   },
+  // setup signs the seeded readers in once (e2e/session.setup.ts); both
+  // widths depend on it.
   projects: [
-    { name: 'phone', use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } },
-    { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
+    { name: 'setup', testMatch: /session\.setup\.ts$/ },
+    {
+      name: 'phone',
+      use: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
+      dependencies: ['setup'],
+    },
+    { name: 'desktop', use: { viewport: { width: 1440, height: 900 } }, dependencies: ['setup'] },
   ],
   webServer: {
     command: `go build -tags e2e -o ${sh(bin)} ../../cmd/ketju && ${sh(bin)} e2e -dir ${sh(run)} -port ${port}`,

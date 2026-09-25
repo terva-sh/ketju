@@ -107,10 +107,36 @@ func runE2E(args []string) error {
 	})
 }
 
+// seedForums is the forum tree the fixture adds around seedForum, shaped
+// like the mockup's front page (docs/mockups Main.dc.html) so the forum
+// index's screenshots have something to compare: roots with children, a
+// members-only forum, a restricted one alice cannot see, and an empty one.
+var seedForums = []struct {
+	slug, name, description, visibility, parent string
+	position                                    int64
+}{
+	{"introductions", "Introductions", "Say hello when you join; one thread per person", domain.VisibilityPublic, seedForum, 0},
+	{"events", "Meetups and events", "Planning, RSVPs, and the photos afterwards", domain.VisibilityPublic, seedForum, 1},
+	{"projects", "Projects", "Things we are building together", domain.VisibilityPublic, "", 1},
+	{"garden", "The garden build", "Raised beds, irrigation, and who is watering this week", domain.VisibilityMembers, "projects", 0},
+	{"reading", "Reading group", "One book a month, spoilers behind the cut", domain.VisibilityPublic, "projects", 1},
+	{"site-feedback", "Site feedback", "Bugs, requests, and how the forum itself should work", domain.VisibilityPublic, "", 2},
+	{"moderators", "Moderators", "Visible to the moderators group", domain.VisibilityRestricted, "", 3},
+}
+
+// seedSideThreads are the short threads beside the main one, so the index has
+// last posts to show; reading and site-feedback stay empty.
+var seedSideThreads = []struct{ forum, title, slug string }{
+	{"introductions", "Hi from the far side of the river", "hi-from-the-far-side-of-the-river"},
+	{"events", "October bonfire: date poll closes Friday", "october-bonfire-date-poll-closes-friday"},
+	{"garden", "Drip line pressure is dropping at the far bed", "drip-line-pressure-is-dropping-at-the-far-bed"},
+}
+
 // seed writes the fixture: two members with identities at the fake
-// provider, a public forum, and one thread of seedPosts posts, all read by
-// carol. serve projects the thread when it starts, as it would any log it
-// finds. It answers the thread's id.
+// provider, the forum tree, one thread of seedPosts posts in seedForum, all
+// read by carol, and a few short threads elsewhere. serve projects the
+// threads when it starts, as it would any log it finds. It answers the main
+// thread's id.
 func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	for _, sub := range []string{threadid.ThreadsDir, "db"} {
 		if err := os.MkdirAll(filepath.Join(data, sub), 0o750); err != nil {
@@ -128,7 +154,7 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 
 	now := time.Now().UnixMilli()
 	users := map[string]int64{}
-	var forum int64
+	forums := map[string]int64{}
 	if err := d.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		for _, u := range seedUsers {
 			id, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: u.handle, DisplayName: u.name,
@@ -142,51 +168,76 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 				return err
 			}
 		}
-		var err error
-		forum, err = q.CreateForum(ctx, dbq.CreateForumParams{Slug: seedForum, Name: "General",
-			Visibility: domain.VisibilityPublic, CreatedAt: now, UpdatedAt: now})
-		return err
-	}); err != nil {
-		return 0, err
-	}
-
-	id, err := threadid.NewGenerator().New()
-	if err != nil {
-		return 0, err
-	}
-	cache, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever})
-	if err != nil {
-		return 0, err
-	}
-	start := now - seedPosts*60_000
-	th, err := cache.Create(id, uint64(forum), start)
-	if err != nil {
-		cache.Close()
-		return 0, err
-	}
-	appendAll := func() error {
-		defer cache.Release(th)
-		if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadCreated, Author: uint64(users["carol"]),
-			TimeMS: start, Body: &threadlog.ThreadCreatedBody{Title: seedTitle, Slug: seedSlug,
-				ForumID: uint64(forum), Tags: []string{}}}); err != nil {
+		id, err := q.CreateForum(ctx, dbq.CreateForumParams{Slug: seedForum, Name: "General",
+			Description: "Anything that does not fit elsewhere", Visibility: domain.VisibilityPublic,
+			CreatedAt: now, UpdatedAt: now})
+		if err != nil {
 			return err
 		}
-		for i := 1; i <= seedPosts; i++ {
-			author := seedUsers[i%2].handle
-			if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: uint64(users[author]),
-				TimeMS: start + int64(i)*60_000, Body: &threadlog.PostBody{
-					Source: fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)}}); err != nil {
+		forums[seedForum] = id
+		for _, f := range seedForums {
+			var parent sql.NullInt64
+			if f.parent != "" {
+				parent = sql.NullInt64{Int64: forums[f.parent], Valid: true}
+			}
+			if forums[f.slug], err = q.CreateForum(ctx, dbq.CreateForumParams{ParentID: parent, Slug: f.slug,
+				Name: f.name, Description: f.description, Position: f.position, Visibility: f.visibility,
+				CreatedAt: now, UpdatedAt: now}); err != nil {
 				return err
 			}
 		}
 		return nil
-	}
-	if err := errors.Join(appendAll(), cache.Close()); err != nil {
+	}); err != nil {
 		return 0, err
 	}
 
-	return id, d.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		return q.UpsertReadPosition(ctx, dbq.UpsertReadPositionParams{UserID: users["carol"], ThreadID: int64(id),
+	cache, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever})
+	if err != nil {
+		return 0, err
+	}
+	ids := threadid.NewGenerator()
+	// thread appends a thread of n posts to forum, a minute apart and ending
+	// at end, alternating between the two users.
+	thread := func(forum int64, title, slug string, n int, end int64) (threadid.ID, error) {
+		id, err := ids.New()
+		if err != nil {
+			return 0, err
+		}
+		start := end - int64(n)*60_000
+		th, err := cache.Create(id, uint64(forum), start)
+		if err != nil {
+			return 0, err
+		}
+		defer cache.Release(th)
+		if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadCreated, Author: uint64(users["carol"]),
+			TimeMS: start, Body: &threadlog.ThreadCreatedBody{Title: title, Slug: slug,
+				ForumID: uint64(forum), Tags: []string{}}}); err != nil {
+			return 0, err
+		}
+		for i := 1; i <= n; i++ {
+			author := seedUsers[i%2].handle
+			if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: uint64(users[author]),
+				TimeMS: start + int64(i)*60_000, Body: &threadlog.PostBody{
+					Source: fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)}}); err != nil {
+				return 0, err
+			}
+		}
+		return id, nil
+	}
+	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now)
+	for i, t := range seedSideThreads {
+		if err != nil {
+			break
+		}
+		// Older than the main thread, a few hours apart.
+		_, err = thread(forums[t.forum], t.title, t.slug, 2+i, now-int64(i+1)*3*3600_000)
+	}
+	if err := errors.Join(err, cache.Close()); err != nil {
+		return 0, err
+	}
+
+	return main, d.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		return q.UpsertReadPosition(ctx, dbq.UpsertReadPositionParams{UserID: users["carol"], ThreadID: int64(main),
 			LastReadOrdinal: seedPosts, LastReadAt: now})
 	})
 }

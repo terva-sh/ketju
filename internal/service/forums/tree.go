@@ -80,6 +80,9 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 		ids := make([]int64, 0, len(listed))
 		for _, f := range listed {
 			ids = append(ids, f.row.ID)
+			for _, c := range f.children {
+				ids = append(ids, c.ID)
+			}
 		}
 		if last, err = q.ForumLastPosts(ctx, ids); err != nil {
 			return err

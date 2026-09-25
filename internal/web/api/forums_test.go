@@ -241,6 +241,10 @@ func TestForumTreeCounts(t *testing.T) {
 			t.Errorf("%s: thread_count %d unread %d, want %d and %d", slug, f.ThreadCount, f.Unread, want[0], want[1])
 		}
 	}
+	// A child's last post is its own, as a root's is.
+	if lp := byslug["g-b"].LastPost; lp == nil || lp.Thread.ID != child.String() {
+		t.Errorf("g-b's last post: %+v", lp)
+	}
 	if byslug["alpha"].LastPost != nil {
 		t.Errorf("alpha has no threads but a last post: %+v", byslug["alpha"].LastPost)
 	}
