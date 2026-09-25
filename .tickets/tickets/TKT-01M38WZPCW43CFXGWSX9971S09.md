@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T01:55:24Z
+updated_at: 2026-09-25T02:19:54Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -317,3 +317,11 @@ Merged PR #80 (TKT-01M29CGBVN, Build the mobile composer sheet and sticky reply 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:55:24Z
 
 Merged PR #81 (TKT-01M3ART992, Post a reply from the composer) as baa1ee7. Reviews 1 (57d5a4f, run 413) and 2 (a56372b, run 415) each raised a medium finding: edits made while a post was in flight were lost on success. The first came through reply, quote and the chip, the second through the formatting toolbar. Both were fixed. Review 3 was clean on head baa1ee7, base 0d7af01 (run 417). CI run 418's client step ran 630 tests, including the 18 in Post.test.tsx, and its race step shows internal/web/api passed. Next: TKT-01M29CGBY1 (the Playwright gate).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T02:19:54Z
+
+Merged PR #82 (TKT-01M29CGBY1, Add Playwright smoke tests at both viewports) as 8c1a452.
+- Review 1 (d96aae8, run 422) raised two findings. High: the oidctest import guard could admit a non-e2e file. Medium: the webServer command did not quote its paths. Both were fixed.
+- Review 2 was clean on head 8c1a452, base baa1ee7 (run 424).
+- CI run 425's Playwright step ran both projects on Alpine Chromium 152 and they passed. Its race step shows cmd/ketju and oidctest passed.
+The critical path in docs/11 is now complete. The maintainer chose to build CA9A5, CA9AG, CEE5Y and CEE6D before CGBXK, whose scan must cover the forum index and thread list. Next: TKT-01M29CA9A5.

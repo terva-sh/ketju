@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-24T05:21:21Z
+updated_at: 2026-09-25T02:19:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
@@ -79,3 +79,9 @@ docs/07 "Accessibility"; docs/06 "Mobile" (Targets and gestures); the mockups' `
 ### Interactions
 Depends on CEE4K and CEE6V. It also touches CEE5Y, CEE6D, CGBVN (sheet focus trap), CGBW6 (`aria-expanded`) and CGBX4 (focus visibility). CGBY1 runs these specs in the same Playwright job.
 Open in docs: which axe rule set counts as "passes"; WCAG 2.1 AA is assumed.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T02:19:54Z
+
+2026-09-25: AC5 scans the forum index and thread list, which do not exist yet. They need TKT-01M29CA9A5, TKT-01M29CA9AG, TKT-01M29CEE5Y and TKT-01M29CEE6D, none of which is a recorded dependency. The maintainer chose to build those four before this ticket.

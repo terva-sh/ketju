@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CA9A5PGMCFDSVWQAHT87G
 title: Implement the forums endpoints
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:api-resources
     path: docs/07-api-and-clients.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/ca9a5-forums
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 8c1a452d94d796913f2837af4994e4efed2230f3
+  session: null
+  claimed_at: 2026-09-25T02:19:54Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-25T02:19:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
