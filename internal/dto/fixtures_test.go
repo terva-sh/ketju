@@ -193,7 +193,7 @@ func threadList(class string) ThreadList {
 	return ThreadList{
 		Forum:      &ForumRef{Slug: "general", Name: "General"},
 		Threads:    rows,
-		NextCursor: "YXwxNzU3NDAwMDAwMDAwfDI",
+		NextCursor: "YXwxfDE3NTc0MDAwMDAwMDB8NDU3NDE0MDA0MDg1NDExMDIxMHw0NTc0MTQwMDQwODU0MTEwMjA5",
 	}
 }
 

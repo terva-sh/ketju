@@ -109,7 +109,9 @@ func TestPlansSeek(t *testing.T) {
 			cases[fmt.Sprintf("list sort %d cursor %t", s, a != nil)] = planCase{q, args, false}
 		}
 	}
-	q, args := pinnedSQL(1, 1, 1)
+	q, args := threadListSQL(ListParams{ForumID: 1, UserID: 1, After: after, Pinned: []int64{3, 4}, Limit: 26})
+	cases["list after pins"] = planCase{q, args, false}
+	q, args = pinnedSQL(1, 1, 1)
 	cases["pinned"] = planCase{q, args, true}
 
 	scan := regexp.MustCompile(`^SCAN (\S+)`)

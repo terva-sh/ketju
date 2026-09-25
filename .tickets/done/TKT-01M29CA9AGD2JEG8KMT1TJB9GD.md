@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T02:46:20Z
+updated_at: 2026-09-25T02:54:00Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -137,6 +137,21 @@ Revised at claim (2026-09-25), after reading the code.
   - Equivalent: two CASE shortcuts (`<=` versus `<` on the read position and on the mark), and the cursor's explicit sort-tag check, which the canonical re-encode also enforces.
   - All others were killed.
 - `go test -race ./...` passes. No client change, so dist is unchanged.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T02:54:00Z
+
+### Review 1 on PR #84 (head a876f4c, run 434): two medium findings, both fixed
+
+1. **Fabricated or cross-forum cursors were accepted**, contradicting the claim that a cursor the server did not issue is refused.
+   - Fix: the cursor now carries the forum id, and `decodeCursor` checks it against the requested forum, so a cursor from another forum is `bad-request`.
+   - The claim is narrowed, in docs/07 and the code comments: a cursor is a position, not a credential.
+   - Signing (HMAC) was considered and rejected: it needs a server key and its management, and hides nothing a reader cannot already read. A hand-written, well-formed cursor is honoured, and a test says so.
+2. **A pin expiring between pages could appear twice.** The same was true of a pin removed between pages.
+   - Fix: the first page's cursor carries the ids of this forum's threads it showed as pins. Later pages exclude exactly those ids and no longer apply the time-based pin filter.
+   - So a pin that expires or is removed is not repeated, and a thread pinned after page 1 stays in its natural place instead of being skipped.
+   - Evidence: `TestThreadListPinsChangeBetweenPages` expires one pin, removes one, and adds one between pages, with no repeats and no skip. A plan case covers a later page with pins (index seek, no sort).
+- The cursor format is now `sort|forum|at|id|pins`, and the dto fixture's example is regenerated from the real encoder (`TestCursorRoundTrip`).
+- Mutants on the fix: 6, all killed. The zero-pin check needed a new case.
 
 ## Summary
 

@@ -11,6 +11,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
 )
 
 // Sort is a thread list's order.
@@ -99,7 +100,7 @@ func selectRows(index string) string {
 // passed sorts, and is shown, as no pin. Its one parameter is now.
 const activePin = `(t.pinned_scope IS NOT NULL AND (t.pinned_until IS NULL OR t.pinned_until > ?))`
 
-// ListParams selects one page of a forum's unpinned threads.
+// ListParams selects one page of a forum's threads below its pins.
 type ListParams struct {
 	ForumID int64
 	// UserID is the viewer, 0 for an anonymous one, whose read state is then
@@ -108,13 +109,21 @@ type ListParams struct {
 	Sort   Sort
 	// After is the cursor: the page starts after it. Nil is the first page.
 	After *Key
-	// Now decides which pins have expired, in Unix milliseconds.
-	Now   int64
-	Limit int
+	// Now decides, on the first page, which pins have expired, in Unix
+	// milliseconds.
+	Now int64
+	// Pinned, on a later page, is the threads the first page showed as
+	// pins, which the cursor carries. They are left out whatever has
+	// happened to their pins since, so a pin that expired or was removed
+	// between pages is not shown twice.
+	Pinned []int64
+	Limit  int
 }
 
-// ThreadList is a page of p.ForumID's threads with a post that are not
-// pinned now, in p.Sort's order after p.After.
+// ThreadList is a page of p.ForumID's threads with a post, below its pins,
+// in p.Sort's order after p.After. The first page leaves out the threads
+// pinned now; a later page leaves out p.Pinned, the first page's pins, and
+// nothing else.
 //
 // The cursor is a keyset on (sort column, id), compared as a row value, so
 // SQLite seeks in threads_forum_activity or threads_forum_created (both end
@@ -132,11 +141,20 @@ func threadListSQL(p ListParams) (string, []any) {
 		col, index = "t.created_at", "threads_forum_created"
 	}
 	q := selectRows(index) + `
-WHERE t.forum_id = ? AND t.last_post_ordinal > 0 AND NOT ` + activePin
-	args := []any{p.UserID, p.UserID, p.ForumID, p.Now}
-	if p.After != nil {
+WHERE t.forum_id = ? AND t.last_post_ordinal > 0`
+	args := []any{p.UserID, p.UserID, p.ForumID}
+	if p.After == nil {
+		q += ` AND NOT ` + activePin
+		args = append(args, p.Now)
+	} else {
 		q += ` AND (` + col + `, t.id) < (?, ?)`
 		args = append(args, p.After.At, p.After.ID)
+		if len(p.Pinned) > 0 {
+			q += ` AND t.id NOT IN (?` + strings.Repeat(`, ?`, len(p.Pinned)-1) + `)`
+			for _, id := range p.Pinned {
+				args = append(args, id)
+			}
+		}
 	}
 	q += fmt.Sprintf(` ORDER BY %s DESC, t.id DESC LIMIT ?`, col)
 	args = append(args, p.Limit)

@@ -33,7 +33,9 @@ type ListQuery struct {
 // read, then this forum's own (settled in grooming: global pins sort first in
 // every forum). A pin whose pinned_until has passed is no pin, and its thread
 // sorts with the rest. The rest is keyset-paged by last_post_at, or by
-// created_at for ?sort=created, newest first.
+// created_at for ?sort=created, newest first. The pins are fixed when the
+// first page is served: its cursor carries them, and later pages leave out
+// exactly those threads, so a pin that ends between pages is not shown twice.
 //
 // Everything comes from projections (internal/store/db/views): no thread log
 // is opened, and the service needs no thread cache to answer.
@@ -42,13 +44,20 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	if err != nil {
 		return dto.ThreadList{}, err
 	}
-	after, err := decodeCursor(sort, q.Cursor)
-	if err != nil {
-		return dto.ThreadList{}, err
-	}
+	// The forum first, so a forum hidden from v is not-found whatever the
+	// cursor says, and the cursor is checked against the forum it names.
 	forum, err := s.readForum(ctx, v, slug)
 	if err != nil {
 		return dto.ThreadList{}, err
+	}
+	cur, err := decodeCursor(sort, forum.ID, q.Cursor)
+	if err != nil {
+		return dto.ThreadList{}, err
+	}
+	var after *views.Key
+	var shown []int64 // this forum's threads the first page showed as pins
+	if cur != nil {
+		after, shown = &cur.Key, cur.Pinned
 	}
 	now := s.now().UnixMilli()
 
@@ -61,7 +70,7 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 			}
 		}
 		rows, err = views.ThreadList(ctx, tx, views.ListParams{ForumID: forum.ID, UserID: v.UserID, Sort: sort,
-			After: after, Now: now, Limit: ListPageSize + 1})
+			After: after, Now: now, Pinned: shown, Limit: ListPageSize + 1})
 		return err
 	}); err != nil {
 		return dto.ThreadList{}, err
@@ -69,10 +78,17 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	if pinned, err = s.readablePins(ctx, v, forum.ID, pinned); err != nil {
 		return dto.ThreadList{}, err
 	}
+	if after == nil {
+		for _, p := range pinned {
+			if p.ForumID == forum.ID {
+				shown = append(shown, p.ID)
+			}
+		}
+	}
 	next := ""
 	if len(rows) > ListPageSize {
 		rows = rows[:ListPageSize]
-		next = encodeCursor(sort, rows[len(rows)-1].Key(sort))
+		next = cursor{Sort: sort, Forum: forum.ID, Key: rows[len(rows)-1].Key(sort), Pinned: shown}.encode()
 	}
 
 	all := append(pinned, rows...)

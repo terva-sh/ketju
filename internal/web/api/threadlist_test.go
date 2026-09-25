@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -286,24 +287,33 @@ func TestThreadListAccess(t *testing.T) {
 	}
 }
 
-// TestThreadListBadRequests: a cursor this server did not issue for this
-// sort, and an unknown sort, are the client's mistake.
+// TestThreadListBadRequests: a cursor that is malformed, or was made for
+// another forum or the other sort, and an unknown sort, are the client's
+// mistake (review on PR #84: a cursor from one forum must not be replayed
+// against another).
 func TestThreadListBadRequests(t *testing.T) {
 	w := newForumWorld(t)
 	for i := range 27 {
-		id := w.threadIn("general", uint64(i+1), "Thread")
-		w.post(id, "alice", "p", 0)
+		for j, forum := range []string{"general", "zeta"} {
+			id := w.threadIn(forum, uint64(1000*j+i+1), "Thread")
+			w.post(id, "alice", "p", 0)
+		}
 	}
 	good := w.threadList("alice", "general", "", "").NextCursor
 	created := w.threadList("alice", "general", "", "created").NextCursor
+	zeta := w.threadList("alice", "zeta", "", "").NextCursor
+	g := strconv.FormatInt(w.ids["general"], 10)
 	enc := func(s string) string { return base64.RawURLEncoding.EncodeToString([]byte(s)) }
 	for name, c := range map[string]struct{ cursor, sort string }{
 		"not base64":                  {"!!!", ""},
 		"padded":                      {good + "=", ""},
-		"two fields":                  {enc("a|1757500000000"), ""},
-		"a letter for a number":       {enc("a|x|1"), ""},
-		"a sign":                      {enc("a|+1757500000000|1"), ""},
-		"a zero id":                   {enc("a|1757500000000|0"), ""},
+		"four fields":                 {enc("a|" + g + "|1757500000000|1"), ""},
+		"a letter for a number":       {enc("a|" + g + "|x|1|"), ""},
+		"a sign":                      {enc("a|" + g + "|+1757500000000|1|"), ""},
+		"a zero id":                   {enc("a|" + g + "|1757500000000|0|"), ""},
+		"a bad pin list":              {enc("a|" + g + "|1757500000000|1|2,,3"), ""},
+		"a zero pin":                  {enc("a|" + g + "|1757500000000|1|0"), ""},
+		"another forum's cursor":      {zeta, ""},
 		"the other sort's cursor":     {created, ""},
 		"this sort's cursor, crossed": {good, "created"},
 		"an unknown sort":             {"", "newest"},
@@ -312,6 +322,56 @@ func TestThreadListBadRequests(t *testing.T) {
 		if code := problemCode(t, rec); rec.Code != http.StatusBadRequest || code != "bad-request" {
 			t.Errorf("%s: %d %s", name, rec.Code, rec.Body)
 		}
+	}
+	// A cursor written by hand in the right form is a position, not a
+	// credential: it is honoured.
+	if rec := w.get(w.viewer("alice"), listPath("general", enc("a|"+g+"|1757500000000|1|"), "")); rec.Code != http.StatusOK {
+		t.Errorf("a well-formed cursor: %d %s", rec.Code, rec.Body)
+	}
+}
+
+// TestThreadListPinsChangeBetweenPages: the first page's pins are fixed by
+// its cursor. A pin that expires, or is removed, before the next page is not
+// shown again lower down; a thread pinned after the first page stays where
+// its activity puts it (review on PR #84).
+func TestThreadListPinsChangeBetweenPages(t *testing.T) {
+	w := newForumWorld(t)
+	var all []threadid.ID
+	for i := range 40 {
+		id := w.threadIn("general", uint64(i+1), "Thread")
+		w.post(id, "alice", "p", 0)
+		all = append(all, id)
+	}
+	// The oldest threads, which sort onto page 2 once unpinned.
+	w.pin(all[0], "forum", w.clock+100_000_000)
+	w.pin(all[1], "forum", 0)
+	page1 := w.threadList("alice", "general", "", "")
+	if got := rowIDs(page1)[:2]; !slices.Equal(got, strs(all[1], all[0])) && !slices.Equal(got, strs(all[0], all[1])) {
+		t.Fatalf("page 1 does not open with the pins: %v", rowIDs(page1))
+	}
+	// Between pages: one pin expires, one is removed, and a thread on
+	// page 2 is pinned.
+	w.clock += 200_000_000
+	w.append(all[1], threadlog.Append{Type: threadlog.TypeThreadUnpinned, Author: uint64(w.users["bob"]),
+		Body: &threadlog.ThreadUnpinnedBody{Scope: "forum"}})
+	w.pin(all[2], "forum", 0)
+
+	seen := map[string]bool{}
+	for _, id := range rowIDs(page1) {
+		seen[id] = true
+	}
+	for c := page1.NextCursor; c != ""; {
+		page := w.threadList("alice", "general", c, "")
+		for _, id := range rowIDs(page) {
+			if seen[id] {
+				t.Errorf("%s again on a later page", id)
+			}
+			seen[id] = true
+		}
+		c = page.NextCursor
+	}
+	if !seen[all[2].String()] {
+		t.Errorf("the thread pinned between pages was skipped")
 	}
 }
 
