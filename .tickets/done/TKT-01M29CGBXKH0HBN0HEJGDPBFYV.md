@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-25T05:06:02Z
+updated_at: 2026-09-25T05:18:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -174,6 +174,26 @@ Looping the whole suite exposed a flake on "back from a thread", about 1 run in 
   - the popover's `isControl` against `inside` alone;
   - the restore's `pending` check.
 
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T05:18:35Z
+
+Review 1 on #90 (head eb669b3, run #469) had two medium findings. Both were valid, and both are fixed.
+
+1. **The target check skipped quote links.** It skipped all of `.post-body`, including a quote's `a.quote-source`, which is interface, not prose.
+   - The check now counts a quote's `<summary>` (the collapse toggle) and its source link.
+   - The seed's main thread has post 2 quoting post 1, so page 1 has one; the targets and a11y specs load `?page=1`.
+   - On the phone the summary is a full 44 px row, and the source link gets the `.hit` target through a selector in base.css, since the markup is server-rendered.
+   - Reverting either fix makes the check fail.
+2. **`history.scrollRestoration` was forced to `auto` on leaving a list.** The list now restores the mode it found when it mounted. The Vitest covers both starting modes.
+
+### A new finding, and a scoped exception
+Scanning a page with a quote made axe report `nested-interactive` (serious) on a quote's `<summary>`, which holds the source link.
+- **Why I did not change it.** The markup is internal/render/quote.go's, chosen so a quote collapses without script for the non-JS client. Changing it changes the post HTML every client gets, and the rendered HTML already cached. That is a design decision, so I filed draft TKT-01M3BFSBPJ (Stop nesting the quote source link inside its summary) with the options.
+- **The exception.** The scan sets aside that one rule, only on a quote's summary holding a `quote-source`, and says so in the spec. Every other rule still runs on those nodes.
+- **AC5 stays ticked.** The pre-groom plan allowed a documented disabled rule ("Fix or document any rule disabled"). The exception is named in the PR and in the handoff; if a maintainer reads AC5 as allowing no exception, it should be unticked.
+
+### Verification
+vitest 761 pass; Playwright 33 pass and 5 skipped; 8 full runs green.
+
 ## Summary
 
-The client passes axe's WCAG 2.1 A and AA scan on the forum index, the thread list and the thread page, at both widths and in both themes, including with the picker and the sheet open. Two contrast fixes. On the phone, every control's target is at least 44 px, checked by pressing where it should be; a .hit class pads the targets of inline links, badges and post actions. Focus moves to each new screen's heading, and a guard keeps it from being lost with a removed element. There is a skip link, the popover returns focus, and reduced motion stops every transition and animation. A source scan fails any swipe handler that has no button. It also fixes the thread list's restore after a quick back then forward.
+The client passes axe's WCAG 2.1 A and AA scan on the forum index, the thread list and the thread page, at both widths and in both themes, including with the picker and the sheet open. The one exception is nested-interactive on a quote's server-rendered summary, which is scoped, documented, and left for a person in TKT-01M3BFSBPJ. Two contrast fixes. On the phone, every control's target, quote headers included, is at least 44 px, checked by pressing where it should be; a .hit class pads the targets of inline links, badges and post actions. Focus moves to each new screen's heading, and a guard keeps it from being lost with a removed element. There is a skip link, the popover returns focus, and reduced motion stops every transition and animation. A source scan fails any swipe handler that has no button. It also fixes the thread list's restore after a quick back then forward.

@@ -8,7 +8,8 @@ import { stateFile } from './session';
 // side. An inline link inside text (an author's name, an ordinal, a tag)
 // keeps its visual size and is measured by its hit area, which a .hit class
 // pads out. Text inside a post's body is the author's prose, not the
-// interface, and is not measured.
+// interface, and is not measured; a quote's header there is the interface
+// (internal/render quote.go), and is.
 
 const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
 
@@ -27,7 +28,7 @@ function small(page: Page) {
     const root = document.querySelector('[role=dialog], .composer-sheet') ?? document;
     const out: string[] = [];
     for (const el of root.querySelectorAll<HTMLElement>(controls)) {
-      if (el.closest('.post-body')) continue;
+      if (el.closest('.post-body') && !el.matches('details.quote > summary, details.quote > summary .quote-source')) continue;
       if (el.getClientRects().length === 0 || getComputedStyle(el).visibility === 'hidden') continue;
       // A skip link is off screen until it is focused.
       if (el.classList.contains('skip-link')) continue;
@@ -77,8 +78,9 @@ test('the thread list', async ({ browser }, info) => {
 
 test('the thread page, and its composer sheet', async ({ browser }, info) => {
   const { ctx, page } = await signedIn(browser, info);
-  await page.goto(seed.thread);
-  await expect(page.locator('article.post').first()).toBeVisible();
+  // Page 1, where post 2 quotes post 1 (cmd/ketju e2e.go).
+  await page.goto(`${seed.thread}?page=1`);
+  await expect(page.locator('#post-2 details.quote summary .quote-source')).toBeVisible();
   expect(await small(page)).toEqual([]);
   await page.locator('.replybar-open').click();
   await expect(page.locator('.composer-sheet')).toBeVisible();

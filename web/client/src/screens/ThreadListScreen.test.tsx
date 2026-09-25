@@ -244,13 +244,18 @@ describe('scroll memory', () => {
     expect(savedScroll()).toBe(900);
   });
 
-  it('turns the browser\'s own restoration off while mounted', async () => {
-    history.scrollRestoration = 'auto';
-    const root = await listAt('/f/general', memberList, memberMe);
-    expect(history.scrollRestoration).toBe('manual');
-    await route('/');
-    await settle(root);
-    expect(history.scrollRestoration).toBe('auto');
+  it('turns the browser\'s own restoration off while mounted, and puts back what it found', async () => {
+    for (const was of ['auto', 'manual'] as const) {
+      history.scrollRestoration = was;
+      const root = await listAt('/f/general', memberList, memberMe);
+      expect(history.scrollRestoration).toBe('manual');
+      await route('/f/general?cursor=next');
+      await settle(root);
+      expect(history.scrollRestoration).toBe('manual');
+      await route('/');
+      await settle(root);
+      expect(history.scrollRestoration).toBe(was);
+    }
   });
 
   it('saves when the page is hidden', async () => {

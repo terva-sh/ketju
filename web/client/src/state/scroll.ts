@@ -25,7 +25,8 @@ import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 //
 // The browser's own restoration is off for every entry a list shows
 // (history.scrollRestoration is kept per entry), since it can land after
-// this one's and move the reader again; it is back on when the list goes.
+// this one's and move the reader again; when the list goes, the mode it
+// found when it came is put back (review on PR #90).
 //
 // Each time a key is shown, and once its data is on screen (ready), the
 // saved position is restored; an entry with none, a page just pushed,
@@ -37,12 +38,12 @@ export function useScrollMemory(key: string, ready: boolean) {
   // restored.
   const shown = useRef<string | null>(null);
   const pending = useRef(false);
-  useEffect(
-    () => () => {
-      history.scrollRestoration = 'auto';
-    },
-    [],
-  );
+  useEffect(() => {
+    const was = history.scrollRestoration;
+    return () => {
+      history.scrollRestoration = was;
+    };
+  }, []);
   useEffect(() => {
     history.scrollRestoration = 'manual';
     let timer: ReturnType<typeof setTimeout> | undefined;

@@ -324,6 +324,13 @@
   .pager-narrow {
     display: flex;
   }
+  /* A quote's header is a control, the toggle, holding another, the
+     source link (base.css): the header is a full target's height. */
+  .post-body details.quote > summary {
+    box-sizing: border-box;
+    min-height: var(--target);
+    padding-block: 10px;
+  }
   /* The actions' targets (.hit) reach 44 px across, so they need the room
      between them: the narrowest, "link", reaches 11.5 px past each side. */
   .post-footer {

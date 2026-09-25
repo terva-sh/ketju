@@ -64,11 +64,15 @@ a {
    leaves the layout alone. Nothing it sits in may clip it (overflow:
    hidden), and neighbours need the space between them for it, which
    e2e/targets.spec.ts checks by pressing where the target should be. */
+/* A quote's source link is in server-rendered HTML (internal/render
+   quote.go) and cannot take the class, so it is named here. */
 @media (max-width: 719.98px) {
-  .hit {
+  .hit,
+  .post-body .quote-source {
     position: relative;
   }
-  .hit::after {
+  .hit::after,
+  .post-body .quote-source::after {
     content: '';
     position: absolute;
     top: min(0px, calc(50% - var(--target) / 2));

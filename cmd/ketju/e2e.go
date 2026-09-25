@@ -219,8 +219,9 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	ids := threadid.NewGenerator()
 	// thread appends a thread of n posts to forum, a minute apart and ending
 	// at end, alternating between the two users, with the tags given, and
-	// pinned in its forum if pinned is true.
-	thread := func(forum int64, title, slug string, n int, end int64, tags []string, pinned bool) (threadid.ID, error) {
+	// pinned in its forum if pinned is true. body, if not nil, writes post
+	// i's source instead of the default.
+	thread := func(forum int64, title, slug string, n int, end int64, tags []string, pinned bool, body func(i int) string) (threadid.ID, error) {
 		id, err := ids.New()
 		if err != nil {
 			return 0, err
@@ -244,39 +245,50 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 		}
 		for i := 1; i <= n; i++ {
 			author := seedUsers[i%2].handle
+			source := fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)
+			if body != nil {
+				source = body(i)
+			}
 			if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: uint64(users[author]),
-				TimeMS: start + int64(i)*60_000, Body: &threadlog.PostBody{
-					Source: fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)}}); err != nil {
+				TimeMS: start + int64(i)*60_000, Body: &threadlog.PostBody{Source: source}}); err != nil {
 				return 0, err
 			}
 		}
 		return id, nil
 	}
-	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now, []string{}, false)
+	// The main thread's second post quotes the first, so its first page has
+	// a quote's header, a link and a toggle, for the accessibility checks.
+	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now, []string{}, false, func(i int) string {
+		src := fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)
+		if i == 2 {
+			return "> [quote=#1]\n> Seeded post 1.\n\n" + src
+		}
+		return src
+	})
 	for i, t := range seedSideThreads {
 		if err != nil {
 			break
 		}
 		// Older than the main thread, a few hours apart.
-		_, err = thread(forums[t.forum], t.title, t.slug, 2+i, now-int64(i+1)*3*3600_000, []string{}, false)
+		_, err = thread(forums[t.forum], t.title, t.slug, 2+i, now-int64(i+1)*3*3600_000, []string{}, false, nil)
 	}
 	// The thread list's, older than everything above, so the index's last
 	// posts are unchanged.
 	day := int64(24 * 3600_000)
 	var badge threadid.ID
 	if err == nil {
-		_, err = thread(forums[seedForum], seedPinnedTitle, "house-rules", 1, now-30*day, []string{"meta"}, true)
+		_, err = thread(forums[seedForum], seedPinnedTitle, "house-rules", 1, now-30*day, []string{"meta"}, true, nil)
 	}
 	if err == nil {
 		badge, err = thread(forums[seedForum], seedBadgeTitle, "minutes-from-the-september-meeting",
-			seedPosts, now-2*day, []string{"meeting"}, false)
+			seedPosts, now-2*day, []string{"meeting"}, false, nil)
 	}
 	if err == nil {
-		_, err = thread(forums[seedForum], seedLongTitle, "comparing-rain-barrels", 3, now-3*day, seedLongTags, false)
+		_, err = thread(forums[seedForum], seedLongTitle, "comparing-rain-barrels", 3, now-3*day, seedLongTags, false, nil)
 	}
 	for i := 0; i < seedChatterThreads && err == nil; i++ {
 		_, err = thread(forums[seedChatter], fmt.Sprintf("Chatter thread %02d", i+1), fmt.Sprintf("chatter-%02d", i+1),
-			1, now-int64(i+1)*3600_000, []string{}, false)
+			1, now-int64(i+1)*3600_000, []string{}, false, nil)
 	}
 	if err := errors.Join(err, cache.Close()); err != nil {
 		return 0, err
