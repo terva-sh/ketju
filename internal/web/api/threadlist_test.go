@@ -18,6 +18,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/views"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
@@ -313,6 +314,7 @@ func TestThreadListBadRequests(t *testing.T) {
 		"a zero id":                   {enc("a|" + g + "|1757500000000|0|"), ""},
 		"a bad pin list":              {enc("a|" + g + "|1757500000000|1|2,,3"), ""},
 		"a zero pin":                  {enc("a|" + g + "|1757500000000|1|0"), ""},
+		"too many pins":               {enc("a|" + g + "|1757500000000|1|" + strings.Repeat("7,", views.MaxPinned) + "7"), ""},
 		"another forum's cursor":      {zeta, ""},
 		"the other sort's cursor":     {created, ""},
 		"this sort's cursor, crossed": {good, "created"},
@@ -390,5 +392,46 @@ func TestThreadListOpensNoLog(t *testing.T) {
 	f := &forumWorld{world: &c, ids: w.ids}
 	if l := f.threadList("alice", "general", "", ""); len(l.Threads) != 1 || l.Threads[0].Pinned == nil {
 		t.Errorf("%+v", l)
+	}
+}
+
+// TestThreadListPinCap: a forum with more pins than views.MaxPinned shows
+// that many at the top of its first page, and the rest where their activity
+// puts them, each thread once across every page; no cursor outgrows the cap
+// (review on PR #84).
+func TestThreadListPinCap(t *testing.T) {
+	w := newForumWorld(t)
+	for i := range views.MaxPinned + 10 {
+		id := w.threadIn("general", uint64(i+1), "Pinned")
+		w.post(id, "alice", "p", 0)
+		w.pin(id, "forum", 0)
+	}
+	page1 := w.threadList("alice", "general", "", "")
+	pins := 0
+	for _, r := range page1.Threads {
+		if r.Pinned != nil {
+			pins++
+		}
+	}
+	if pins != views.MaxPinned {
+		t.Errorf("page 1 shows %d pins, want %d", pins, views.MaxPinned)
+	}
+	seen := map[string]bool{}
+	total := 0
+	for l := page1; ; {
+		for _, id := range rowIDs(l) {
+			if seen[id] {
+				t.Errorf("%s twice", id)
+			}
+			seen[id] = true
+			total++
+		}
+		if l.NextCursor == "" {
+			break
+		}
+		l = w.threadList("alice", "general", l.NextCursor, "")
+	}
+	if total != views.MaxPinned+10 {
+		t.Errorf("%d threads across the pages, want %d", total, views.MaxPinned+10)
 	}
 }

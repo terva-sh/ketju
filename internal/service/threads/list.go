@@ -34,8 +34,10 @@ type ListQuery struct {
 // every forum). A pin whose pinned_until has passed is no pin, and its thread
 // sorts with the rest. The rest is keyset-paged by last_post_at, or by
 // created_at for ?sort=created, newest first. The pins are fixed when the
-// first page is served: its cursor carries them, and later pages leave out
-// exactly those threads, so a pin that ends between pages is not shown twice.
+// first page is served: every page leaves out exactly the forum's threads
+// that page showed as pins, which its cursor carries, so a pin that ends
+// between pages is not shown twice. At most views.MaxPinned head the page;
+// any past that sort with the rest.
 //
 // Everything comes from projections (internal/store/db/views): no thread log
 // is opened, and the service needs no thread cache to answer.
@@ -68,22 +70,20 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 			if pinned, err = views.PinnedThreads(ctx, tx, forum.ID, v.UserID, now); err != nil {
 				return err
 			}
+			for _, p := range pinned {
+				if p.ForumID == forum.ID {
+					shown = append(shown, p.ID)
+				}
+			}
 		}
 		rows, err = views.ThreadList(ctx, tx, views.ListParams{ForumID: forum.ID, UserID: v.UserID, Sort: sort,
-			After: after, Now: now, Pinned: shown, Limit: ListPageSize + 1})
+			After: after, Pinned: shown, Limit: ListPageSize + 1})
 		return err
 	}); err != nil {
 		return dto.ThreadList{}, err
 	}
 	if pinned, err = s.readablePins(ctx, v, forum.ID, pinned); err != nil {
 		return dto.ThreadList{}, err
-	}
-	if after == nil {
-		for _, p := range pinned {
-			if p.ForumID == forum.ID {
-				shown = append(shown, p.ID)
-			}
-		}
 	}
 	next := ""
 	if len(rows) > ListPageSize {

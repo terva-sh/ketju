@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T02:54:00Z
+updated_at: 2026-09-25T03:01:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -67,8 +67,10 @@ Revised at claim (2026-09-25), after reading the code.
    - A pin whose `pinned_until` has passed counts as unpinned: it sorts with the rest and carries `pinned: null`.
    - The rest is keyset-paged on `(last_post_at, id)` descending, or `(created_at, id)` for `?sort=created`. It excludes this forum's actively pinned threads.
    - Pins do not count toward the page size of 25 (settled).
-3. **Cursor.** The cursor is base64url of `sort|key|id`.
-   - A cursor that does not decode, has the wrong shape, or was made for the other sort is `bad-request`, as is an unknown `sort`.
+3. **Cursor.** The cursor is base64url of `sort|forum|key|id|pins` (revised after the review on PR #84).
+   - A cursor is a position, not a credential. It is not signed, and a well-formed one written by hand is honoured.
+   - A cursor that is malformed, or was made for another forum or the other sort, is `bad-request`, as is an unknown `sort`.
+   - `pins` is the forum's threads that the first page showed as pins; later pages leave exactly those out. The pin block is capped at 50, so the cursor is bounded, and the ids reach SQL as one JSON parameter.
    - `next_cursor` is empty at the end; the query fetches 26 rows to know.
    - A bumped thread moves above the cursor. Rows are never duplicated, and no row that stays below the cursor is skipped (settled).
 4. **Unread badge**, in SQL. It is the per-post rule of docs/04 (`UnreadCount`) for each row:
@@ -92,7 +94,7 @@ Revised at claim (2026-09-25), after reading the code.
   - Table cases: no row with the mark before and after the last post, a row behind, a row at the end, a mark in the middle of a thread.
   - A random test holds the badge equal to `UnreadCount` for every row.
 - AC4: the service has no thread cache (nil `Threads`), so opening a log would panic. `views` does not import threadlog or threadcache.
-- Tamper: an edited cursor, a cursor for the other sort, and an unknown sort are each `bad-request`.
+- Malformed input: a malformed cursor, a cursor for another forum or the other sort, one over the pin cap, and an unknown sort are each `bad-request`. A hand-written, well-formed cursor is honoured.
 
 ### Settled in grooming (2026-09-24)
 
@@ -152,6 +154,21 @@ Revised at claim (2026-09-25), after reading the code.
    - Evidence: `TestThreadListPinsChangeBetweenPages` expires one pin, removes one, and adds one between pages, with no repeats and no skip. A plan case covers a later page with pins (index seek, no sort).
 - The cursor format is now `sort|forum|at|id|pins`, and the dto fixture's example is regenerated from the real encoder (`TestCursorRoundTrip`).
 - Mutants on the fix: 6, all killed. The zero-pin check needed a new case.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T03:01:29Z
+
+### Review 2 on PR #84 (head 010b64a, run 436): finding 2 of review 1 resolved; two medium findings
+
+1. **Edited cursors are accepted.** This is intended, and the claim is now narrowed wherever it was still broader.
+   - The ticket's plan still said "an edited cursor ... is bad-request". It now says a cursor is a position, not a credential.
+   - docs/07, the PR body and the code comments were already narrowed after review 1.
+   - Signing remains rejected: it needs a server key, and hides nothing a reader could not read.
+2. **Unbounded pin ids reached SQL as one parameter each.** Fixed:
+   - The ids are one JSON parameter, through `json_each`.
+   - `views.MaxPinned` (50) caps the pin block, and `decodeCursor` refuses a cursor carrying more.
+   - Every page, the first included, now leaves out exactly the forum's threads shown as pins. Before, the first page left out every active pin, so pins past the cap would have vanished from the first page. The list query no longer takes a time.
+   - Evidence: `TestThreadListPinCap` (60 pins: 50 at the top, all 60 once across the pages), the "too many pins" bad-request case, and a plan case for a later page with pins (the index seek stays; json_each scans only the parameter).
+   - Mutants: 5, all killed.
 
 ## Summary
 

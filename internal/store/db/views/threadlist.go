@@ -10,8 +10,8 @@ package views
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
-	"strings"
 )
 
 // Sort is a thread list's order.
@@ -97,7 +97,8 @@ func selectRows(index string) string {
 }
 
 // activePin is true of a thread pinned now: a pin whose pinned_until has
-// passed sorts, and is shown, as no pin. Its one parameter is now.
+// passed is no pin, and its thread sorts with the rest. Its one parameter is
+// now.
 const activePin = `(t.pinned_scope IS NOT NULL AND (t.pinned_until IS NULL OR t.pinned_until > ?))`
 
 // ListParams selects one page of a forum's threads below its pins.
@@ -109,21 +110,17 @@ type ListParams struct {
 	Sort   Sort
 	// After is the cursor: the page starts after it. Nil is the first page.
 	After *Key
-	// Now decides, on the first page, which pins have expired, in Unix
-	// milliseconds.
-	Now int64
-	// Pinned, on a later page, is the threads the first page showed as
-	// pins, which the cursor carries. They are left out whatever has
-	// happened to their pins since, so a pin that expired or was removed
-	// between pages is not shown twice.
+	// Pinned is the forum's threads its first page shows as pins, from
+	// PinnedThreads, which every page leaves out and a later page's cursor
+	// carries. Leaving out exactly these, whatever has happened to their
+	// pins since, is what keeps a pin that expires or is removed between
+	// pages from being shown twice (review on PR #84).
 	Pinned []int64
 	Limit  int
 }
 
-// ThreadList is a page of p.ForumID's threads with a post, below its pins,
-// in p.Sort's order after p.After. The first page leaves out the threads
-// pinned now; a later page leaves out p.Pinned, the first page's pins, and
-// nothing else.
+// ThreadList is a page of p.ForumID's threads with a post, less p.Pinned, in
+// p.Sort's order after p.After.
 //
 // The cursor is a keyset on (sort column, id), compared as a row value, so
 // SQLite seeks in threads_forum_activity or threads_forum_created (both end
@@ -143,28 +140,37 @@ func threadListSQL(p ListParams) (string, []any) {
 	q := selectRows(index) + `
 WHERE t.forum_id = ? AND t.last_post_ordinal > 0`
 	args := []any{p.UserID, p.UserID, p.ForumID}
-	if p.After == nil {
-		q += ` AND NOT ` + activePin
-		args = append(args, p.Now)
-	} else {
+	if p.After != nil {
 		q += ` AND (` + col + `, t.id) < (?, ?)`
 		args = append(args, p.After.At, p.After.ID)
-		if len(p.Pinned) > 0 {
-			q += ` AND t.id NOT IN (?` + strings.Repeat(`, ?`, len(p.Pinned)-1) + `)`
-			for _, id := range p.Pinned {
-				args = append(args, id)
-			}
+	}
+	if len(p.Pinned) > 0 {
+		// One parameter however many pins, so no cursor can reach SQLite's
+		// limit on bound parameters (review on PR #84).
+		ids, err := json.Marshal(p.Pinned)
+		if err != nil {
+			panic(err) // []int64 always marshals
 		}
+		q += ` AND t.id NOT IN (SELECT value FROM json_each(?))`
+		args = append(args, string(ids))
 	}
 	q += fmt.Sprintf(` ORDER BY %s DESC, t.id DESC LIMIT ?`, col)
 	args = append(args, p.Limit)
 	return q, args
 }
 
+// MaxPinned bounds the pins that head a list: PinnedThreads returns at most
+// this many, and a list's cursor carries at most this many. A community pins
+// a handful; the bound is there so neither a page nor a cursor grows without
+// limit if one pins everything (review on PR #84). Pins past it sort with the
+// rest, as unpinned threads do.
+const MaxPinned = 50
+
 // PinnedThreads is what heads the first page of forumID's list: global pins
 // from every forum, then forumID's own forum pins, each newest activity
-// first. The caller drops the global pins from forums the viewer may not
-// read; there are few pins, and perm answers for all their forums at once.
+// first, at most MaxPinned. The caller drops the global pins from forums the
+// viewer may not read; there are few pins, and perm answers for all their
+// forums at once.
 func PinnedThreads(ctx context.Context, tx *sql.Tx, forumID, userID, now int64) ([]ThreadRow, error) {
 	q, args := pinnedSQL(forumID, userID, now)
 	return scanRows(ctx, tx, q, args...)
@@ -174,8 +180,9 @@ func pinnedSQL(forumID, userID, now int64) (string, []any) {
 	q := selectRows("threads_pinned") + `
 WHERE t.last_post_ordinal > 0 AND ` + activePin + `
   AND (t.pinned_scope = 'global' OR (t.pinned_scope = 'forum' AND t.forum_id = ?))
-ORDER BY t.pinned_scope = 'global' DESC, t.last_post_at DESC, t.id DESC`
-	return q, []any{userID, userID, now, forumID}
+ORDER BY t.pinned_scope = 'global' DESC, t.last_post_at DESC, t.id DESC
+LIMIT ?`
+	return q, []any{userID, userID, now, forumID, MaxPinned}
 }
 
 func scanRows(ctx context.Context, tx *sql.Tx, q string, args ...any) ([]ThreadRow, error) {

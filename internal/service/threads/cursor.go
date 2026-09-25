@@ -72,6 +72,10 @@ func decodeCursor(s views.Sort, forum int64, text string) (*cursor, error) {
 			}
 			c.Pinned = append(c.Pinned, n)
 		}
+		// No page shows more pins than this, so no cursor carries more.
+		if len(c.Pinned) > views.MaxPinned {
+			return nil, errBadCursor
+		}
 	}
 	// Only the canonical spelling for this sort and forum: that refuses
 	// the other sort's tag, another forum's id, and "+5" or "05" for 5.

@@ -105,7 +105,7 @@ func TestPlansSeek(t *testing.T) {
 	cases := map[string]planCase{}
 	for _, s := range []Sort{ByActivity, ByCreated} {
 		for _, a := range []*Key{nil, after} {
-			q, args := threadListSQL(ListParams{ForumID: 1, UserID: 1, Sort: s, After: a, Now: 1, Limit: 26})
+			q, args := threadListSQL(ListParams{ForumID: 1, UserID: 1, Sort: s, After: a, Limit: 26})
 			cases[fmt.Sprintf("list sort %d cursor %t", s, a != nil)] = planCase{q, args, false}
 		}
 	}
@@ -137,7 +137,9 @@ func TestPlansSeek(t *testing.T) {
 				t.Fatal(err)
 			}
 			for _, p := range plan {
-				if m := scan.FindStringSubmatch(p); m != nil {
+				// json_each is the pin list, one parameter of at most
+				// MaxPinned ids, not a table.
+				if m := scan.FindStringSubmatch(p); m != nil && m[1] != "json_each" {
 					t.Errorf("scans %s", m[1])
 				}
 				if !c.sorts && strings.Contains(p, "TEMP B-TREE") {
@@ -190,7 +192,7 @@ func TestUnreadMatchesUnreadCount(t *testing.T) {
 		}
 		exec(t, d, stmts...)
 
-		rows := list(t, d, ListParams{ForumID: 1, UserID: 1, Now: 1, Limit: 100})
+		rows := list(t, d, ListParams{ForumID: 1, UserID: 1, Limit: 100})
 		if len(rows) != n {
 			t.Fatalf("seed %d: %d rows, want %d", seed, len(rows), n)
 		}
@@ -235,7 +237,7 @@ func TestKeysetSurvivesBumps(t *testing.T) {
 			seen := map[int64]bool{}
 			var after *Key
 			for page := 0; ; page++ {
-				rows := list(t, d, ListParams{ForumID: 1, Sort: s, After: after, Now: 1, Limit: 7})
+				rows := list(t, d, ListParams{ForumID: 1, Sort: s, After: after, Limit: 7})
 				for _, r := range rows {
 					if seen[r.ID] {
 						t.Fatalf("sort %d seed %d: thread %d again on page %d", s, seed, r.ID, page)
@@ -280,9 +282,10 @@ func TestKeysetSurvivesBumps(t *testing.T) {
 	}
 }
 
-// TestPins is AC1 at the query: pins leave the paged list while they last
-// and return to it when they expire; PinnedThreads has global pins from
-// every forum first, then this forum's own, and no other forum's forum pin.
+// TestPins is AC1 at the query: PinnedThreads has global pins from every
+// forum first, then this forum's own, and no other forum's forum pin; a pin
+// that has expired is not among them, and the list, leaving out the pins
+// shown, then has it where its activity puts it.
 func TestPins(t *testing.T) {
 	d := open(t)
 	insertThreads(t, d,
@@ -295,7 +298,7 @@ func TestPins(t *testing.T) {
 		thread{id: 7, forum: 1, created: 7, lastAt: 70, ordinal: 0, scope: "forum"}, // no post yet
 		thread{id: 8, forum: 1, created: 8, lastAt: 80, ordinal: 0},                 // no post yet
 	)
-	pinned := func(now int64) []int64 {
+	pinned := func(now int64) ([]int64, []int64) {
 		var rows []ThreadRow
 		if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
 			var err error
@@ -304,7 +307,13 @@ func TestPins(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		return ids(rows)
+		var own []int64
+		for _, r := range rows {
+			if r.ForumID == 1 {
+				own = append(own, r.ID)
+			}
+		}
+		return ids(rows), own
 	}
 	for _, c := range []struct {
 		now          int64
@@ -314,10 +323,11 @@ func TestPins(t *testing.T) {
 		// At pinned_until the pin has ended: until is exclusive.
 		{now: 500, pins: []int64{4, 2}, others: []int64{3, 1, 6}},
 	} {
-		if got := pinned(c.now); !slices.Equal(got, c.pins) {
+		got, own := pinned(c.now)
+		if !slices.Equal(got, c.pins) {
 			t.Errorf("now %d: pinned %v, want %v", c.now, got, c.pins)
 		}
-		if got := ids(list(t, d, ListParams{ForumID: 1, Now: c.now, Limit: 25})); !slices.Equal(got, c.others) {
+		if got := ids(list(t, d, ListParams{ForumID: 1, Pinned: own, Limit: 25})); !slices.Equal(got, c.others) {
 			t.Errorf("now %d: list %v, want %v", c.now, got, c.others)
 		}
 	}
@@ -373,7 +383,7 @@ func TestKeysetUnderConcurrentBumps(t *testing.T) {
 		seen := map[int64]bool{}
 		var after *Key
 		for {
-			rows := list(t, d, ListParams{ForumID: 1, After: after, Now: 1, Limit: 9})
+			rows := list(t, d, ListParams{ForumID: 1, After: after, Limit: 9})
 			for _, r := range rows {
 				if seen[r.ID] {
 					t.Fatalf("round %d: thread %d twice", round, r.ID)
