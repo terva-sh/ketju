@@ -23,10 +23,12 @@ blocks_on: none
 references:
   - ref: design:create-post-flow
     path: docs/02-architecture.md
+  - ref: pr:79
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T00:57:59Z
+updated_at: 2026-09-25T00:58:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
