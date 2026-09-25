@@ -19,6 +19,9 @@ const port = Number(process.env.KETJU_E2E_PORT ?? 8787);
 const run = (process.env.KETJU_E2E_DIR ??= join(mkdtempSync(join(tmpdir(), 'ketju-e2e-')), 'run'));
 const bin = join(dirname(run), 'ketju-e2e');
 const baseURL = `http://localhost:${port}`;
+// sh quotes a word for the shell webServer.command runs in: a path from the
+// environment may hold spaces or anything else (review on PR #82).
+const sh = (s: string) => `'${s.replaceAll("'", `'\\''`)}'`;
 
 export default defineConfig({
   testDir: 'e2e',
@@ -46,7 +49,7 @@ export default defineConfig({
     { name: 'desktop', use: { viewport: { width: 1440, height: 900 } } },
   ],
   webServer: {
-    command: `go build -tags e2e -o ${bin} ../../cmd/ketju && ${bin} e2e -dir ${run} -port ${port}`,
+    command: `go build -tags e2e -o ${sh(bin)} ../../cmd/ketju && ${sh(bin)} e2e -dir ${sh(run)} -port ${port}`,
     url: `${baseURL}/api/v1/me`,
     timeout: 180_000,
     reuseExistingServer: false,

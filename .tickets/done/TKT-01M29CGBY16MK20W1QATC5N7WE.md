@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-25T02:07:33Z
+updated_at: 2026-09-25T02:12:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -120,6 +120,13 @@ The "reply" step needs the composer to post. That is draft TKT-01M3ART992NAPPBS8
 - **Seed ids.** The seed's thread id is random, and the suite reads it from `seed.json`.
 - **One worker.** Both projects share one server, so each asserts only what its own run caused, or what holds however many replies there are.
 - **`@playwright/test` 1.63.0** is pinned exact, as every client dependency is.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T02:12:44Z
+
+Review 1 on PR #82 (head d96aae8, run 422) raised two findings. Both are fixed.
+- High: the oidctest import guard judged a //go:build line by setting every other tag true, so e2e || (linux && !darwin) passed although a Linux build without e2e includes it. The guard now tries every assignment of the line's other tags with e2e false, and a line naming more than 16 tags fails. TestE2EOnly gains two disjunctions with negation, both of which the old check wrongly passed, and two lines that are truly e2e-only.
+- Medium: playwright.config.ts put its paths into webServer.command unquoted. They are now single-quoted for the shell. The suite passed with KETJU_E2E_DIR under a directory named "q <time> it's; $HOME".
+CI run 423 passed on d96aae8.
 
 ## Summary
 
