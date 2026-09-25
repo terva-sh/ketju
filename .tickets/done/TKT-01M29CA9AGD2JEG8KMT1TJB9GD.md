@@ -21,10 +21,12 @@ blocks_on: none
 references:
   - ref: design:thread-lists
     path: docs/06-thread-views.md
+  - ref: pr:84
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T02:46:05Z
+updated_at: 2026-09-25T02:46:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
