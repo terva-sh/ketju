@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/render"
@@ -108,6 +109,33 @@ func Coded(c Code, err error) error {
 		return nil
 	}
 	return coded{code: c, err: err}
+}
+
+// retryAfter is a coded error that also says when trying again can succeed.
+type retryAfter struct {
+	coded
+	after time.Duration
+}
+
+func (r retryAfter) Unwrap() error { return r.coded }
+
+// RetryAfter tags an error with its code and with how long the client should
+// wait before trying again, which WriteError sends as Retry-After. Slow mode
+// uses it: the wait is the rule's, not a guess.
+func RetryAfter(c Code, after time.Duration, err error) error {
+	if err == nil {
+		return nil
+	}
+	return retryAfter{coded: coded{code: c, err: err}, after: after}
+}
+
+// RetryAfterOf returns the wait an error carries, and whether it carries one.
+func RetryAfterOf(err error) (time.Duration, bool) {
+	var r retryAfter
+	if errors.As(err, &r) {
+		return r.after, true
+	}
+	return 0, false
 }
 
 // FromError returns the code for an error.

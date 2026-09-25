@@ -100,7 +100,7 @@ func (s *Service) renderSource(ctx context.Context, th *threadcache.Thread, sour
 		err = handles.err
 	}
 	if err != nil {
-		return render.Result{}, fmt.Errorf("threads: rendering a preview: %w", err)
+		return render.Result{}, fmt.Errorf("threads: rendering a post: %w", err)
 	}
 	return r, nil
 }

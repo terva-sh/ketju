@@ -397,3 +397,25 @@ type QuoteRef struct {
 type UserSuggestions struct {
 	Users []Author `json:"users"`
 }
+
+// CreatedPost is the response to POST /threads/{id}/posts (docs/07): the post
+// as a later read serves it, so the client can insert it at once, and where
+// the append left the log (docs/03 "Write path", step 6). The post was
+// durable before this was written.
+//
+// Ordinal and Revision are uint32 and LogLength int64, the log's own types,
+// for the reason RenderResult gives.
+type CreatedPost struct {
+	Post      Post   `json:"post"`
+	Ordinal   uint32 `json:"ordinal"`
+	Revision  uint32 `json:"revision"`
+	LogLength int64  `json:"log_length"`
+}
+
+// CreatedThread is the response to POST /forums/{slug}/threads (docs/07): the
+// new thread's header and its first post, each as a later read of the thread
+// page serves it.
+type CreatedThread struct {
+	Thread ThreadHeader `json:"thread"`
+	Post   CreatedPost  `json:"post"`
+}

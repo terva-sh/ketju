@@ -27,6 +27,7 @@ import (
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/identity"
+	"github.com/terva-sh/ketju/internal/service/posts"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -355,6 +356,12 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	threadSvc := &threads.Service{
 		DB: d, Perm: perms, Threads: cache, Render: render.NewCacheMB(cfg.Storage.RenderedCacheMB),
 		Quarantined: proj.Quarantined,
+		Writer:      &posts.Writer{Publish: bus.Publish},
+		IDs:         threadid.NewGenerator(),
+		Project: func(ctx context.Context, id threadid.ID, logLength int64) error {
+			_, err := proj.ProjectThread(ctx, id, logLength)
+			return err
+		},
 	}
 	tmpl, err := spa.Shell()
 	if err != nil {

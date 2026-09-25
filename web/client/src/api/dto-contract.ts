@@ -13,6 +13,8 @@
 // fails until it is.
 
 import type {
+  CreatedPost,
+  CreatedThread,
   ForumTree,
   Me,
   Post,
@@ -24,6 +26,8 @@ import type {
   UserSuggestions,
 } from './dto';
 
+import createdPostMember from '../../../../internal/dto/testdata/golden/created-post.member.json';
+import createdThreadMember from '../../../../internal/dto/testdata/golden/created-thread.member.json';
 import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.json';
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
 import historyMember from '../../../../internal/dto/testdata/golden/history.member.json';
@@ -73,6 +77,8 @@ function matches<T>() {
 }
 
 export const contract = [
+  matches<CreatedPost>()(createdPostMember),
+  matches<CreatedThread>()(createdThreadMember),
   matches<ForumTree>()(forumsAnon),
   matches<ForumTree>()(forumsMember),
   matches<PostHistory>()(historyMember),

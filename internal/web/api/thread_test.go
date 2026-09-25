@@ -13,13 +13,17 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
+	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/events/projection"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/posts"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -43,9 +47,38 @@ type world struct {
 	users   map[string]int64
 	forum   int64
 	clock   int64
+
+	// root is the threads directory, and published is every event the
+	// service's Writer published, for the write tests.
+	root   string
+	events *published
+}
+
+// published is every event a world's Writer published.
+type published struct {
+	mu  sync.Mutex
+	all []events.Event
+}
+
+func (p *published) add(ev events.Event) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.all = append(p.all, ev)
+}
+
+func (p *published) list() []events.Event {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return append([]events.Event(nil), p.all...)
 }
 
 func newWorld(t *testing.T) *world {
+	t.Helper()
+	return newWorldSync(t, threadlog.SyncNever)
+}
+
+// newWorldSync is newWorld with the thread logs synced under policy.
+func newWorldSync(t *testing.T, policy threadlog.SyncPolicy) *world {
 	t.Helper()
 	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
 	if err != nil {
@@ -56,7 +89,7 @@ func newWorld(t *testing.T) *world {
 		t.Fatal(err)
 	}
 	root := filepath.Join(t.TempDir(), "threads")
-	c, err := threadcache.New(root, threadcache.Options{Sync: threadlog.SyncNever})
+	c, err := threadcache.New(root, threadcache.Options{Sync: policy})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +100,8 @@ func newWorld(t *testing.T) *world {
 	}
 	svc := &threads.Service{DB: d, Perm: perm.New(d), Threads: c, Render: render.NewCache(1 << 20)}
 	w := &world{t: t, db: d, cache: c, proj: p, svc: svc, handler: New(Deps{Threads: svc, Users: &users.Service{DB: d, Perm: perm.New(d)}}),
-		users: map[string]int64{}, clock: 1_757_500_000_000}
+		users: map[string]int64{}, clock: 1_757_500_000_000, root: root, events: &published{}}
+	w.writes(svc)
 
 	for _, u := range []struct{ handle, name, role, kind string }{
 		{"alice", "Alice Nakamura", domain.RoleMember, "human"},
@@ -89,6 +123,19 @@ func newWorld(t *testing.T) *world {
 		return err
 	})
 	return w
+}
+
+// writes gives svc what the write endpoints need, as serve.go does: a
+// Writer whose events w records, thread ids, synchronous projection, and w's
+// clock.
+func (w *world) writes(svc *threads.Service) {
+	svc.Writer = &posts.Writer{Publish: w.events.add}
+	svc.IDs = threadid.NewGenerator()
+	svc.Project = func(ctx context.Context, id threadid.ID, n int64) error {
+		_, err := w.proj.ProjectThread(ctx, id, n)
+		return err
+	}
+	svc.Now = func() time.Time { return time.UnixMilli(w.clock) }
 }
 
 func (w *world) write(fn func(q *dbq.Queries) error) {
@@ -435,7 +482,9 @@ func TestAfterLogLength(t *testing.T) {
 // never claims a length its index did not cover (run under -race).
 func TestAfterLogLengthUnderConcurrentAppends(t *testing.T) {
 	w := newWorld(t)
-	id, start := w.thread(1, "Busy")
+	id, _ := w.thread(1, "Busy")
+	// A thread with no posts is not-found (access), so it has one to start.
+	start := w.post(id, "alice", "first", 0)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
@@ -518,6 +567,7 @@ func TestAccess(t *testing.T) {
 // permissions behind the cache's back sees the change.
 func newHandlerFor(w *world) *world {
 	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20)}
+	w.writes(svc)
 	c := *w
 	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}})
 	return &c

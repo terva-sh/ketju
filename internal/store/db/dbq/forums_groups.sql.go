@@ -236,6 +236,28 @@ func (q *Queries) GetForum(ctx context.Context, id int64) (Forum, error) {
 	return i, err
 }
 
+const getForumBySlug = `-- name: GetForumBySlug :one
+SELECT id, parent_id, slug, name, description, position, visibility, archived, created_at, updated_at FROM forums WHERE slug = ?
+`
+
+func (q *Queries) GetForumBySlug(ctx context.Context, slug string) (Forum, error) {
+	row := q.db.QueryRowContext(ctx, getForumBySlug, slug)
+	var i Forum
+	err := row.Scan(
+		&i.ID,
+		&i.ParentID,
+		&i.Slug,
+		&i.Name,
+		&i.Description,
+		&i.Position,
+		&i.Visibility,
+		&i.Archived,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const getGroupBySlug = `-- name: GetGroupBySlug :one
 SELECT id, name, slug, description, is_system, created_at, updated_at FROM groups WHERE slug = ?
 `

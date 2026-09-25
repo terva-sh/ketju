@@ -6,6 +6,9 @@ RETURNING id;
 -- name: GetForum :one
 SELECT * FROM forums WHERE id = ?;
 
+-- name: GetForumBySlug :one
+SELECT * FROM forums WHERE slug = ?;
+
 -- Roots in position order, each followed by its children in position order.
 -- A child sorts by its root's position and id, then after the root itself.
 -- name: ListForums :many

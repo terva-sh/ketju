@@ -73,6 +73,7 @@ type Querier interface {
 	ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams) ([]ForumAccessRowsRow, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
+	GetForumBySlug(ctx context.Context, slug string) (Forum, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
 	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
 	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)

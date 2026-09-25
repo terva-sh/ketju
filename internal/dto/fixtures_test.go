@@ -379,10 +379,12 @@ var corpus = map[string]any{
 
 	"thread-locked." + tMember: lockedThread(),
 
-	"render." + tMember:       renderReply(),
-	"render-plain." + tMember: renderPlain(),
-	"users." + tMember:        userSuggestions(),
-	"unread." + tMember:       crossForumList(),
+	"render." + tMember:         renderReply(),
+	"render-plain." + tMember:   renderPlain(),
+	"users." + tMember:          userSuggestions(),
+	"created-post." + tMember:   createdPost(),
+	"created-thread." + tMember: createdThread(),
+	"unread." + tMember:         crossForumList(),
 }
 
 // renderReply is POST /render for a reply that quotes post 61, whose quoted
@@ -416,4 +418,28 @@ func userSuggestions() UserSuggestions {
 		{Handle: "al-scribe", DisplayName: "Scribe", Avatar: "", Role: "member", Kind: "agent"},
 		{Handle: "alice", DisplayName: "Alice Nakamura", Avatar: "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1", Role: "member", Kind: "human"},
 	}}
+}
+
+// createdPost is POST /threads/{id}/posts for a member's reply to post 61:
+// the post as a later read serves it, with where the append left the log.
+func createdPost() CreatedPost {
+	p := threadPage(tMember).Posts[1]
+	p.Author, p.MachineAuthored = alice, false
+	return CreatedPost{Post: p, Ordinal: 62, Revision: 1, LogLength: 483920}
+}
+
+// createdThread is POST /forums/general/threads: a new thread with no tags,
+// unpinned, whose first post is the only one.
+func createdThread() CreatedThread {
+	p := threadPage(tMember).Posts[1]
+	p.Ordinal, p.ReplyTo, p.ReplyToSuppressed = 1, nil, false
+	p.Author, p.MachineAuthored, p.CreatedAt = alice, false, 1757500000000
+	return CreatedThread{
+		Thread: ThreadHeader{
+			ID: "3yymw47g00001", Slug: "why-we-left-slack", Title: "Why we left Slack",
+			Forum: ForumRef{Slug: "general", Name: "General"}, PostCount: 1, LogLength: 312,
+			Tags: []string{}, CreatedAt: 1757500000000,
+		},
+		Post: CreatedPost{Post: p, Ordinal: 1, Revision: 1, LogLength: 312},
+	}
 }

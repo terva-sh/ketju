@@ -16,12 +16,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/posts"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -54,6 +56,17 @@ type Service struct {
 	// keeps serving (docs/03 "Durability and recovery"). Nil quarantines
 	// nothing.
 	Quarantined func(threadid.ID) bool
+
+	// Writer appends and publishes every post and thread a request writes.
+	Writer *posts.Writer
+	// IDs names new threads.
+	IDs *threadid.Generator
+	// Project projects a thread up to a log length before CreateThread
+	// answers (projection.Writer.ProjectThread). Nil leaves it to the bus.
+	Project func(ctx context.Context, id threadid.ID, logLength int64) error
+	// Now is the clock posts are stamped with and slow mode measures by. Nil
+	// is time.Now.
+	Now func() time.Time
 
 	// trace, when set, is told which path Replies answered from. Tests use it
 	// to prove both paths ran.

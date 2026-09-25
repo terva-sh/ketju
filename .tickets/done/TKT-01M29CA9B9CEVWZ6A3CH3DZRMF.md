@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CA9B9CEVWZ6A3CH3DZRMF
 title: Implement create thread and reply
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: urgent
 due_on: null
@@ -23,17 +23,10 @@ blocks_on: none
 references:
   - ref: design:create-post-flow
     path: docs/02-architecture.md
-claim:
-  actor: agent:claude-code/phase1-run-415af6aa
-  branch: run/ca9b9-create-reply
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
-  commit: 2ee6b9a7852a87ec279928c965180ed106c3aeb9
-  session: null
-  claimed_at: 2026-09-25T00:40:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T00:45:13Z
+updated_at: 2026-09-25T00:57:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,10 +44,10 @@ Rendering happens before the append and the HTML is discarded. That is deliberat
 
 ## Acceptance criteria
 
-- [ ] A post is durable before the response returns, and the response carries ordinal, revision, and log length
-- [ ] A locked thread, a missing permission, and an active slow mode each refuse the write with their own problem code
-- [ ] Source that fails to render is refused before anything is appended
-- [ ] The rendered post in the response is identical to what a later read returns
+- [x] A post is durable before the response returns, and the response carries ordinal, revision, and log length
+- [x] A locked thread, a missing permission, and an active slow mode each refuse the write with their own problem code
+- [x] Source that fails to render is refused before anything is appended
+- [x] The rendered post in the response is identical to what a later read returns
 
 ## Implementation plan
 
@@ -100,3 +93,24 @@ Revised at claim (2026-09-25), after reading the code as it stands.
 - Title is at most 200 characters. The slug is an ASCII fold of the title, at most 60 characters.
 - ThreadCreated and the first Post are two appends. A crash between them leaves a thread with no posts. Projection and listing hide such threads; do not invent a new record type.
 - Slow mode: honour the setting, which is off by default (TKT-01M29P9RS0). Storing it per thread is Phase 2.
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T00:57:59Z
+
+Built as planned. Decisions made while building, and why:
+
+- **Creating a thread projects synchronously.** `access` answers not-found for a thread with no projection row, and the bus projects asynchronously. So without this, a client opening the thread it just created could get a 404. The alternative was to build the header from the values just written, but that would be a second assembly that could drift from GET. `Service.Project` calls `projection.Writer.ProjectThread`, which is safe to call concurrently with the bus. The bus delivers the same events too, and projection is idempotent, so the bus is the retry if this fails.
+- **Both responses come from the read path.** A reply's response is `Service.Post`. A new thread's response is `View`'s header and first post. That makes AC4 true by construction, and the tests compare against a cold render cache.
+- **A thread with post_count 0 is not-found in `access`.** This is the "hide such threads" rule settled in grooming. `TestAfterLogLengthUnderConcurrentAppends` read a thread that never had a projected post, so it now gets a first post.
+- **Tags are refused.** No rules exist for them, and a log keeps whatever it is given. I filed draft TKT-01M3B12ZZ4 (Define thread tag rules so new threads can carry tags).
+- **Attachments are refused.** Nothing can upload one yet.
+- **Retry-After travels as an error.** `problem.RetryAfter` wraps the coded error, and `WriteError` sets the header. The wait is rounded up to whole seconds, so retrying when told to is never early.
+- **Checks run before the actor.** Lock and slow mode are read before the append, not inside the actor, so a reply racing a lock can still land. docs/08 asks no more than that.
+- **Slugs use no new dependency.** A small Latin-1 and Latin Extended-A fold table stands in for x/text. A title with nothing foldable gets the slug "thread".
+
+Mutation run: 32 hand mutants across create.go, access.go, writer.go, problem.go, api/create.go and slug.go. All were killed. The one that survived the first pass was a mention dedupe that the renderer already does, and I removed that code.
+
+## Summary
+
+Added POST /api/v1/threads/{id}/posts and POST /api/v1/forums/{slug}/threads. They share one append seam, internal/service/posts.Writer, which appends through the actor and then publishes. Refusals: locked or archived is conflict, a missing permission is forbidden, and slow mode is rate-limited with Retry-After. Every refusal comes before the append. Both responses are built by the read path, and a new thread is projected before its response. DTOs: CreatedPost and CreatedThread, with goldens and TS contracts. docs/07 is updated.

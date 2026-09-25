@@ -45,6 +45,12 @@ func (s *Service) access(ctx context.Context, v domain.Viewer, id threadid.ID) (
 	if err != nil {
 		return a, err
 	}
+	if a.row.PostCount == 0 {
+		// ThreadCreated with no first post: a crash between the two
+		// appends, or a CreateThread still between them. Nothing to show
+		// (settled in grooming for TKT-01M29CA9B9).
+		return a, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s has no posts", id))
+	}
 
 	switch d, err := s.Perm.Check(ctx, v, a.row.ForumID, domain.PermRead); {
 	case err != nil:

@@ -9,6 +9,13 @@ const (
 	RoleAdmin     = "admin"
 )
 
+// User kinds (docs/04 "users"). An agent's records carry the machine-authored
+// frame flag (docs/03).
+const (
+	KindHuman = "human"
+	KindAgent = "agent"
+)
+
 // Viewer is whoever is making a request, as the session middleware resolved
 // it (TKT-01M29C5Y3E). The zero value is an anonymous viewer.
 type Viewer struct {

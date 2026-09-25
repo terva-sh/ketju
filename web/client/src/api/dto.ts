@@ -177,6 +177,22 @@ export interface RenderResult {
   reply_to: number | null;
 }
 
+// CreatedPost is POST /threads/{id}/posts: the post as a later read serves
+// it, and where the append left the log (internal/dto CreatedPost).
+export interface CreatedPost {
+  post: Post;
+  ordinal: number;
+  revision: number;
+  log_length: number;
+}
+
+// CreatedThread is POST /forums/{slug}/threads: the new thread's header and
+// its first post (internal/dto CreatedThread).
+export interface CreatedThread {
+  thread: ThreadHeader;
+  post: CreatedPost;
+}
+
 // UserSuggestions is GET /users?prefix=, the composer's mention autocomplete
 // (internal/dto UserSuggestions). Every handle is one the renderer resolves.
 export interface UserSuggestions {

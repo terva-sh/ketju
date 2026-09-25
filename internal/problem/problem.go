@@ -250,5 +250,9 @@ func WriteError(ctx context.Context, w http.ResponseWriter, r *http.Request, log
 			"error", err,
 		)
 	}
+	if after, ok := RetryAfterOf(err); ok {
+		WriteRetryAfter(w, r, c, after)
+		return
+	}
 	Write(w, r, c)
 }
