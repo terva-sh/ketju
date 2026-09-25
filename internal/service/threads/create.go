@@ -12,7 +12,6 @@ import (
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
-	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/member"
@@ -211,25 +210,9 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 // cannot read is unauthenticated or forbidden. Then v needs create_thread,
 // and the forum must not be archived.
 func (s *Service) forumForThread(ctx context.Context, v domain.Viewer, slug string) (dbq.Forum, error) {
-	var forum dbq.Forum
-	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		var err error
-		forum, err = q.GetForumBySlug(ctx, slug)
-		return err
-	})
-	if errors.Is(err, sql.ErrNoRows) {
-		return forum, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: no forum %q", slug))
-	}
+	forum, err := s.readForum(ctx, v, slug)
 	if err != nil {
 		return forum, err
-	}
-	switch d, err := s.Perm.Check(ctx, v, forum.ID, domain.PermRead); {
-	case err != nil:
-		return forum, err
-	case d == perm.Hidden:
-		return forum, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: forum %q is hidden from this viewer", slug))
-	case d == perm.Deny:
-		return forum, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: forum %q is not readable by this viewer", slug))
 	}
 	can, err := s.Perm.Can(ctx, v, forum.ID, domain.PermCreateThread)
 	if err != nil {

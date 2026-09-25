@@ -8,6 +8,7 @@ package dbq
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const clearForumThreadCounts = `-- name: ClearForumThreadCounts :exec
@@ -413,6 +414,44 @@ func (q *Queries) SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) 
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const tagsForThreads = `-- name: TagsForThreads :many
+SELECT thread_id, tag FROM thread_tags WHERE thread_id IN (/*SLICE:thread_ids*/?) ORDER BY thread_id, tag
+`
+
+// The tags of a page of threads, for a thread list.
+func (q *Queries) TagsForThreads(ctx context.Context, threadIds []int64) ([]ThreadTag, error) {
+	query := tagsForThreads
+	var queryParams []interface{}
+	if len(threadIds) > 0 {
+		for _, v := range threadIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:thread_ids*/?", strings.Repeat(",?", len(threadIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:thread_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ThreadTag
+	for rows.Next() {
+		var i ThreadTag
+		if err := rows.Scan(&i.ThreadID, &i.Tag); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const threadTags = `-- name: ThreadTags :many

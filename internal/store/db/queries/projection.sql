@@ -120,3 +120,7 @@ ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_
 -- only once the projection has reached the length it serves.
 -- name: RepliesTo :many
 SELECT ordinal FROM post_meta WHERE thread_id = ? AND reply_to = ? ORDER BY ordinal;
+
+-- The tags of a page of threads, for a thread list.
+-- name: TagsForThreads :many
+SELECT thread_id, tag FROM thread_tags WHERE thread_id IN (sqlc.slice('thread_ids')) ORDER BY thread_id, tag;

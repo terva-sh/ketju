@@ -193,6 +193,8 @@ type Querier interface {
 	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) (int64, error)
 	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
+	// The tags of a page of threads, for a thread list.
+	TagsForThreads(ctx context.Context, threadIds []int64) ([]ThreadTag, error)
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
 	// TouchSession slides last_used_at only when the stored value is due, so the

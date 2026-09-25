@@ -54,6 +54,7 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}/history", h.history)
 	mux.HandleFunc("POST /api/v1/render", h.render)
 	mux.HandleFunc("POST /api/v1/threads/{id}/posts", h.reply)
+	mux.HandleFunc("GET /api/v1/forums/{slug}/threads", h.threadList)
 	mux.HandleFunc("POST /api/v1/forums/{slug}/threads", h.createThread)
 	mux.HandleFunc("GET /api/v1/users", h.usersByPrefix)
 	mux.Handle("/api/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
