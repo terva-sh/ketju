@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T00:40:33Z
+updated_at: 2026-09-25T01:09:15Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -305,3 +305,7 @@ Next pick: TKT-01M29P9RS0, although it is low. It is the only blocker of TKT-01M
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T00:40:33Z
 
 Merged PR #78 (TKT-01M29P9RS0, Fix seven document inconsistencies found by the design survey) as 2ee6b9a. The first review was clean, on head 2ee6b9a, base 256fad1. CI run 397's client step ran 20 test files, and its race step shows internal/config passed. This unblocks TKT-01M29CA9B9 (create and reply), which is next.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:09:15Z
+
+Merged PR #79 (TKT-01M29CA9B9, Implement create thread and reply) as 456908e. Review 1 (head 610ab6f, run 402) raised one low finding, that control characters at a title's edge were trimmed away instead of refused. I fixed it in 456908e. Review 2 was clean on head 456908e, base 2ee6b9a (run 403). CI run 404's client step ran 592 tests, and its race step shows internal/web/api passed. I filed draft TKT-01M3B12ZZ4 (Define thread tag rules so new threads can carry tags). This also makes draft TKT-01M3ART992 (Post a reply from the composer) startable if a person promotes it. Next: TKT-01M29CGBVN (mobile composer sheet).
