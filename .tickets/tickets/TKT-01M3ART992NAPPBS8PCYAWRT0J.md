@@ -3,13 +3,14 @@ schema: 3
 id: TKT-01M3ART992NAPPBS8PCYAWRT0J
 title: Post a reply from the composer
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
-labels: []
+labels:
+  - area:client
 assignees: []
-milestone: null
+milestone: phase-1
 parent: null
 origin: null
 dependencies:
@@ -17,10 +18,17 @@ dependencies:
   - TKT-01M29CEE79NN4Q0RXXEYVJHYYE
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/art992-post-reply
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 0d7af01ec8d35c7afada536490f6407055e1f9f9
+  session: null
+  claimed_at: 2026-09-25T01:27:57Z
+  expires_at: null
 archive: null
 created_at: 2026-09-24T22:33:12Z
-updated_at: 2026-09-24T22:33:56Z
+updated_at: 2026-09-25T01:27:57Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -50,3 +58,9 @@ TKT-01M29CGBY1's "reply" step needs this.
 - [ ] The posted post's HTML equals the last preview of the same source (TKT-01M29CEE79's AC1, end to end)
 - [ ] A refused post keeps the source and says why
 - [ ] A double click posts once
+
+## Notes
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:27:57Z
+
+Promoted by the maintainer on 2026-09-25, when asked how to proceed at CGBY1: do this first, then CGBY1 with a full reply step. Put in milestone phase-1 because it gates CGBY1.

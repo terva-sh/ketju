@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T01:09:15Z
+updated_at: 2026-09-25T01:27:43Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -309,3 +309,7 @@ Merged PR #78 (TKT-01M29P9RS0, Fix seven document inconsistencies found by the d
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:09:15Z
 
 Merged PR #79 (TKT-01M29CA9B9, Implement create thread and reply) as 456908e. Review 1 (head 610ab6f, run 402) raised one low finding, that control characters at a title's edge were trimmed away instead of refused. I fixed it in 456908e. Review 2 was clean on head 456908e, base 2ee6b9a (run 403). CI run 404's client step ran 592 tests, and its race step shows internal/web/api passed. I filed draft TKT-01M3B12ZZ4 (Define thread tag rules so new threads can carry tags). This also makes draft TKT-01M3ART992 (Post a reply from the composer) startable if a person promotes it. Next: TKT-01M29CGBVN (mobile composer sheet).
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:27:43Z
+
+Merged PR #80 (TKT-01M29CGBVN, Build the mobile composer sheet and sticky reply bar) as 0d7af01. The first review was clean on head 0d7af01, base 456908e (run 408); the regenerated bundle did not hit the context limit this time. CI run 409's client step ran 612 tests, including the 16 in ComposerSheet.test.tsx, and its race step shows internal/web/spa passed. The maintainer promoted draft TKT-01M3ART992 (Post a reply from the composer) to be done before CGBY1, whose reply step needs it.
