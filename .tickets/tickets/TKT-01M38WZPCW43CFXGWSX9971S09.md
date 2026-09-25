@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T03:18:14Z
+updated_at: 2026-09-25T03:49:59Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -339,3 +339,18 @@ Merged PR #84 (TKT-01M29CA9AG, Implement the thread list endpoint) as a60f29e. I
 - All were fixed. Review 4 was clean on head a60f29e, base a4e8a91 (run 440).
 - In CI run 441, step 12 shows service/threads, store/db/views and web/api passing; vitest passes 630; the Playwright step passes 2.
 Next: TKT-01M29CEE5Y.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T03:49:59Z
+
+Merged PR #85 (TKT-01M29CEE5Y, Build the forum index screen) as 0d1d3a9.
+
+- #85's own review failed with context_limit (run 445): 260 KB diff, 190 KB of it dist.
+- The source was reviewed instead in review-only PR #86, which is #85 minus dist.
+  - Review 1 (4d7b98d, run 448): two medium findings (picker focus with nothing to pick; tablet columns). Both fixed.
+  - Review 2: clean on head a0d3abd, base a60f29e (run 452).
+- #86 and #85's head 0d1d3a9 differ only in dist and ticket notes.
+- #85's CI run 451: vitest 654, Playwright 8 (including the new tablet check), Go passing.
+- #86 closed unmerged. This stopgap is not yet approved by a person; it is recorded on TKT-01M3AZGKBP.
+- The PR also fixed forums.Tree leaving child forums' last_post null (from #83).
+
+Next: TKT-01M29CEE6D.

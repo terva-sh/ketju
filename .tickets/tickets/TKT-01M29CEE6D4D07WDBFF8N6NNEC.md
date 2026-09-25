@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CEE6D4D07WDBFF8N6NNEC
 title: Build the thread list screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:thread-lists
     path: docs/06-thread-views.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/cee6d-thread-list
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 0d1d3a9d15da69df485b5ee92084366900e5dbae
+  session: null
+  claimed_at: 2026-09-25T03:49:59Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-25T03:49:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---
