@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T00:30:14Z
+updated_at: 2026-09-25T00:40:33Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -301,3 +301,7 @@ Merged PR #77 (TKT-01M29CEE79, Build the composer with server-rendered preview) 
 - AC1 is unticked until posting exists. Drafts filed: TKT-01M3ART992 (Post a reply from the composer) and a draft on keeping client PRs reviewable.
 
 Next pick: TKT-01M29P9RS0, although it is low. It is the only blocker of TKT-01M29CA9B9 (create and reply, urgent, on docs/11's critical path), and CGBY1's reply step needs CA9B9. CGBY1 itself is unblocked now, but its reply step cannot pass until posting exists.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T00:40:33Z
+
+Merged PR #78 (TKT-01M29P9RS0, Fix seven document inconsistencies found by the design survey) as 2ee6b9a. The first review was clean, on head 2ee6b9a, base 256fad1. CI run 397's client step ran 20 test files, and its race step shows internal/config passed. This unblocks TKT-01M29CA9B9 (create and reply), which is next.
