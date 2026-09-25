@@ -1,0 +1,131 @@
+/* A thread list's rows (ThreadRow.tsx). There is no thread-list mockup;
+   the rows follow the forum index's (mockup front()): one bordered surface,
+   ruled between rows, the same type scale and the same badge. */
+
+.thread-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.thread-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 14px 20px;
+}
+.thread-row + .thread-row {
+  border-top: 1px solid var(--rule);
+}
+/* Pinned rows are set apart by the tint and by the visible "Pinned" label
+   beside the title, so the difference is not carried by colour alone. */
+.thread-row.row-pinned {
+  background: var(--surface2);
+}
+
+.thread-row-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.thread-row-title {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.thread-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
+  text-decoration: none;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  /* Two lines at most: a long title ends in an ellipsis rather than
+     pushing the row's counts out of view. */
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  overflow: hidden;
+}
+.thread-title:hover {
+  color: var(--accent);
+}
+.thread-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+  align-self: center;
+}
+.thread-flag.pinned {
+  color: var(--accent);
+  font-family: var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  font-size: 11px;
+}
+
+.thread-tags {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.thread-tags li {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--ink2);
+  background: var(--surface2);
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+  padding: 0 6px;
+  overflow-wrap: anywhere;
+}
+.row-pinned .thread-tags li {
+  background: var(--surface);
+}
+
+.thread-row-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.thread-row-meta .tnum,
+.thread-row-meta time {
+  font-variant-numeric: tabular-nums;
+}
+
+.thread-unread {
+  flex: none;
+  margin-top: 2px;
+}
+
+@media (max-width: 719.98px) {
+  .thread-rows {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .thread-row {
+    padding: 12px 16px;
+    gap: 10px;
+  }
+  .thread-row-meta {
+    gap: 2px 10px;
+  }
+}

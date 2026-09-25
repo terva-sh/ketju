@@ -1,0 +1,14 @@
+/* The unread badge, "N new", on the forum index and the thread lists
+   (mockup front() and mobile_front()). It is a link, to the unread posts. */
+.unread-badge {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 500;
+  background: var(--unread-soft);
+  color: var(--unread);
+  border: 1px solid var(--unread);
+  padding: 1px 8px;
+  border-radius: 10px;
+  text-decoration: none;
+  white-space: nowrap;
+}

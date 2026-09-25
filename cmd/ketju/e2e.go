@@ -122,6 +122,7 @@ var seedForums = []struct {
 	{"reading", "Reading group", "One book a month, spoilers behind the cut", domain.VisibilityPublic, "projects", 1},
 	{"site-feedback", "Site feedback", "Bugs, requests, and how the forum itself should work", domain.VisibilityPublic, "", 2},
 	{"moderators", "Moderators", "Visible to the moderators group", domain.VisibilityRestricted, "", 3},
+	{seedChatter, "Chatter", "Off-topic, one line at a time", domain.VisibilityPublic, "", 4},
 }
 
 // seedSideThreads are the short threads beside the main one, so the index has
@@ -132,9 +133,29 @@ var seedSideThreads = []struct{ forum, title, slug string }{
 	{"garden", "Drip line pressure is dropping at the far bed", "drip-line-pressure-is-dropping-at-the-far-bed"},
 }
 
+// The thread list's seed (TKT-01M29CEE6D), in seedForum beside the main
+// thread: a pinned thread; a thread alice has read to seedBadgeRead, whose
+// badge is a permalink, and which nothing else in the suite reads; and a
+// thread with a 150-character title and six tags, for the 390 px rows.
+// seedChatter holds seedChatterThreads one-post threads, so its list pages.
+const (
+	seedPinnedTitle    = "House rules: read these before your first post"
+	seedBadgeTitle     = "Minutes from the September meeting"
+	seedBadgeRead      = 30
+	seedChatter        = "chatter"
+	seedChatterThreads = 60
+)
+
+var (
+	seedLongTitle = "Comparing every rain barrel, diverter, first-flush filter and overflow fitting we " +
+		"tried on the shed roof over two summers, with photos, notes, budgets"
+	seedLongTags = []string{"garden", "water", "hardware", "long-read", "photos", "budgets"}
+)
+
 // seed writes the fixture: two members with identities at the fake
 // provider, the forum tree, one thread of seedPosts posts in seedForum, all
-// read by carol, and a few short threads elsewhere. serve projects the
+// read by carol, a few short threads elsewhere, and the thread list's
+// threads (seedPinnedTitle and the rest). serve projects the
 // threads when it starts, as it would any log it finds. It answers the main
 // thread's id.
 func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
@@ -197,8 +218,9 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	}
 	ids := threadid.NewGenerator()
 	// thread appends a thread of n posts to forum, a minute apart and ending
-	// at end, alternating between the two users.
-	thread := func(forum int64, title, slug string, n int, end int64) (threadid.ID, error) {
+	// at end, alternating between the two users, with the tags given, and
+	// pinned in its forum if pinned is true.
+	thread := func(forum int64, title, slug string, n int, end int64, tags []string, pinned bool) (threadid.ID, error) {
 		id, err := ids.New()
 		if err != nil {
 			return 0, err
@@ -211,8 +233,14 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 		defer cache.Release(th)
 		if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadCreated, Author: uint64(users["carol"]),
 			TimeMS: start, Body: &threadlog.ThreadCreatedBody{Title: title, Slug: slug,
-				ForumID: uint64(forum), Tags: []string{}}}); err != nil {
+				ForumID: uint64(forum), Tags: tags}}); err != nil {
 			return 0, err
+		}
+		if pinned {
+			if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadPinned, Author: uint64(users["carol"]),
+				TimeMS: start, Body: &threadlog.ThreadPinnedBody{Scope: "forum"}}); err != nil {
+				return 0, err
+			}
 		}
 		for i := 1; i <= n; i++ {
 			author := seedUsers[i%2].handle
@@ -224,20 +252,42 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 		}
 		return id, nil
 	}
-	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now)
+	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now, []string{}, false)
 	for i, t := range seedSideThreads {
 		if err != nil {
 			break
 		}
 		// Older than the main thread, a few hours apart.
-		_, err = thread(forums[t.forum], t.title, t.slug, 2+i, now-int64(i+1)*3*3600_000)
+		_, err = thread(forums[t.forum], t.title, t.slug, 2+i, now-int64(i+1)*3*3600_000, []string{}, false)
+	}
+	// The thread list's, older than everything above, so the index's last
+	// posts are unchanged.
+	day := int64(24 * 3600_000)
+	var badge threadid.ID
+	if err == nil {
+		_, err = thread(forums[seedForum], seedPinnedTitle, "house-rules", 1, now-30*day, []string{"meta"}, true)
+	}
+	if err == nil {
+		badge, err = thread(forums[seedForum], seedBadgeTitle, "minutes-from-the-september-meeting",
+			seedPosts, now-2*day, []string{"meeting"}, false)
+	}
+	if err == nil {
+		_, err = thread(forums[seedForum], seedLongTitle, "comparing-rain-barrels", 3, now-3*day, seedLongTags, false)
+	}
+	for i := 0; i < seedChatterThreads && err == nil; i++ {
+		_, err = thread(forums[seedChatter], fmt.Sprintf("Chatter thread %02d", i+1), fmt.Sprintf("chatter-%02d", i+1),
+			1, now-int64(i+1)*3600_000, []string{}, false)
 	}
 	if err := errors.Join(err, cache.Close()); err != nil {
 		return 0, err
 	}
 
 	return main, d.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		return q.UpsertReadPosition(ctx, dbq.UpsertReadPositionParams{UserID: users["carol"], ThreadID: int64(main),
-			LastReadOrdinal: seedPosts, LastReadAt: now})
+		if err := q.UpsertReadPosition(ctx, dbq.UpsertReadPositionParams{UserID: users["carol"], ThreadID: int64(main),
+			LastReadOrdinal: seedPosts, LastReadAt: now}); err != nil {
+			return err
+		}
+		return q.UpsertReadPosition(ctx, dbq.UpsertReadPositionParams{UserID: users["alice"], ThreadID: int64(badge),
+			LastReadOrdinal: seedBadgeRead, LastReadAt: now})
 	})
 }

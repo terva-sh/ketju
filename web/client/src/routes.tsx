@@ -2,6 +2,7 @@ import type { AnyComponent } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { lazy, useLocation } from 'preact-iso';
 import { ForumIndex } from './screens/ForumIndex';
+import { ThreadListScreen } from './screens/ThreadListScreen';
 import { NotFound, Placeholder } from './screens/Placeholder';
 import { ThreadScreen } from './screens/ThreadScreen';
 
@@ -108,7 +109,7 @@ export function Fallback() {
 // view.ts.
 export const routes: RouteEntry[] = [
   { path: '/', screen: 'forum-index', component: ForumIndex },
-  { path: '/f/:forum', screen: 'thread-list', component: placeholder('thread-list', 'Threads') },
+  { path: '/f/:forum', screen: 'thread-list', component: ThreadListScreen },
   { path: '/f/:forum/new', screen: 'new-thread', component: placeholder('new-thread', 'New thread') },
   { path: '/t/:id/:slug', screen: 'thread', component: ThreadScreen },
   { path: '/t/:id/:slug/:ordinal', screen: 'thread', component: ThreadScreen },

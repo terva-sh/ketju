@@ -1,0 +1,100 @@
+/* A forum's thread list. There is no mockup for it (settled in grooming for
+   TKT-01M29CEE6D); it follows the forum index's page (forums.css): the same
+   column width, heading and controls. The rows are components/threadrow.css. */
+
+.thread-list {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.thread-list-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.thread-list-up {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.thread-list-up:hover {
+  color: var(--accent);
+}
+.thread-list-head h1 {
+  margin: 2px 0 0;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.thread-list-head .new-thread {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  text-decoration: none;
+}
+
+.thread-list-sort,
+.thread-list-pages {
+  display: flex;
+  gap: 16px;
+  font-size: 14px;
+}
+.thread-list-sort a,
+.thread-list-pages a {
+  color: var(--ink2);
+  text-decoration: none;
+  min-height: var(--target);
+  display: inline-flex;
+  align-items: center;
+}
+.thread-list-sort a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.thread-list-pages {
+  justify-content: space-between;
+}
+.thread-list-pages a[rel='next'] {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 500;
+}
+
+.thread-list-empty {
+  margin: 0;
+  color: var(--ink2);
+}
+
+@media (max-width: 719.98px) {
+  .thread-list {
+    padding: 16px 0 32px;
+    gap: 12px;
+  }
+  .thread-list-head,
+  .thread-list-sort,
+  .thread-list-pages,
+  .thread-list-empty {
+    padding: 0 16px;
+  }
+  .thread-list-up {
+    display: none;
+  }
+  .thread-list-head h1 {
+    font-size: 24px;
+  }
+  /* forums.css hides the index's header button on phones, where the index
+     has its floating one; here the header's is the only one. */
+  .thread-list-head .new-thread {
+    display: inline-flex;
+  }
+}

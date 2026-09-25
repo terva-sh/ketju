@@ -7,6 +7,7 @@ import { Icon } from '../components/Icon';
 import { PostTime } from '../components/thread/PostTime';
 import { viewer } from '../state/viewer';
 import { ForumPicker, pickable } from './ForumPicker';
+import '../components/unread.css';
 import './forums.css';
 
 export const forumsUrl = '/api/v1/forums';
