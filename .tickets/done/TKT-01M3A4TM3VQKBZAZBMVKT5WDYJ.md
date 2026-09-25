@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3A4TM3VQKBZAZBMVKT5WDYJ
 title: Run Terva reviews from the v0.3.0 reviewer image
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/multi-model-20260923
-  branch: ci/review-v0.3.0
-  worktree: /tmp/mm/audit/clones/ketju
-  commit: 60f582f65b71f67c438479286445aeb6869a0996
-  session: null
-  claimed_at: 2026-09-24T16:43:51Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-24T16:43:51Z
-updated_at: 2026-09-24T16:47:54Z
+updated_at: 2026-09-25T20:21:36Z
 created_by:
   id: agent:claude-code/multi-model-20260923
   name: ""
@@ -51,3 +44,7 @@ Move .forgejo/workflows/terva-review.yml from the terva-action-code-review compo
 **agent:claude-code/multi-model-20260923** at 2026-09-24T16:47:54Z
 
 PR #68. Review request review-v0.3.0 dispatched from branch ci/review-v0.3.0, so the v0.3.0 image reviewed its own installation: run f1abfb61-5692-4af9-b78e-4c273f9eccf9 on head c413158ed5d4eba72c7876303183def22573ffe7 base 60f582f65b71f67c438479286445aeb6869a0996, terva-review/code success, no findings at the threshold. This note's commit is carried over with --input carry=true.
+
+## Summary
+
+Merged in PR #68 as c62e6f77. The Terva review runs the terva-action-code-review v0.3.0 image by digest, reviewed from its own branch and carried over its ticket commit.
