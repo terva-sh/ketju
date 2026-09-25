@@ -1,4 +1,6 @@
 import { signal, type Signal } from '@preact/signals';
+import { apiSend } from '../api/client';
+import type { CreatedPost } from '../api/dto';
 import { insertBlock, quoteMarkdown } from '../composer/quote';
 import { isPhone } from './layout';
 import { viewer } from './viewer';
@@ -22,6 +24,10 @@ export interface Composer {
   // Every summons on a phone opens it; closing it keeps source and replyTo,
   // which the reply bar then shows. Desktop ignores it.
   open: Signal<boolean>;
+  // posting is true while a post of this composer is in flight, and
+  // failure is why the last one was refused, until the next attempt.
+  posting: Signal<boolean>;
+  failure: Signal<unknown>;
 }
 
 const composers = new Map<string, Composer>();
@@ -40,7 +46,8 @@ export function composerFor(thread: string): Composer {
   }
   let c = composers.get(thread);
   if (!c) {
-    c = { source: signal(''), replyTo: signal(null), caret: signal(0), summoned: signal(0), open: signal(false) };
+    c = { source: signal(''), replyTo: signal(null), caret: signal(0), summoned: signal(0), open: signal(false),
+      posting: signal(false), failure: signal(null) };
     composers.set(thread, c);
   }
   return c;
@@ -76,6 +83,53 @@ export function replyToThread(thread: string) {
   const c = composerFor(thread);
   c.replyTo.value = null;
   summon(c);
+}
+
+// postReply posts thread's composer (POST /threads/{id}/posts, docs/07) and
+// answers the created post, or null when nothing was posted.
+//
+// One post at a time: while one is in flight another asks for nothing, so a
+// double click posts once. The textarea is read-only meanwhile (Composer),
+// so what was sent is what is cleared. A refusal keeps the source and the
+// chip and records why, for the composer to say.
+//
+// It lives here rather than in the component because the sheet may close,
+// and the composer unmount, while the post is in flight; the answer still
+// has to clear the composer it came from.
+export async function postReply(thread: string): Promise<CreatedPost | null> {
+  const c = composerFor(thread);
+  const source = c.source.value;
+  if (c.posting.value || !source.trim()) return null;
+  const replyTo = c.replyTo.value;
+  c.posting.value = true;
+  c.failure.value = null;
+  try {
+    const res = await apiSend<CreatedPost>(
+      'POST',
+      `/api/v1/threads/${encodeURIComponent(thread)}/posts`,
+      replyTo === null ? { source } : { source, reply_to: replyTo },
+    );
+    c.source.value = '';
+    c.replyTo.value = null;
+    c.caret.value = 0;
+    c.open.value = false;
+    return res;
+  } catch (err) {
+    c.failure.value = err;
+    return null;
+  } finally {
+    c.posting.value = false;
+  }
+}
+
+// discardReply empties thread's composer: the text, the chip and any
+// refusal.
+export function discardReply(thread: string) {
+  const c = composerFor(thread);
+  c.source.value = '';
+  c.replyTo.value = null;
+  c.caret.value = 0;
+  c.failure.value = null;
 }
 
 // resetComposers forgets every composer, for tests.

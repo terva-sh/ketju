@@ -498,3 +498,44 @@ func TestWriteServiceRefusals(t *testing.T) {
 		t.Errorf("%d thread logs, want the seeded one", logs)
 	}
 }
+
+// TestPostedMatchesItsPreview is TKT-01M3ART992's AC2, end to end at the
+// API: for each source, the composer's last preview (POST /render with the
+// thread and reply_to) and the post that source becomes, as the create
+// response and a later read serve it, carry the same HTML.
+func TestPostedMatchesItsPreview(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	for _, c := range []struct {
+		src     string
+		replyTo *uint32
+	}{
+		{"Plain *emphasis* and `code`.", nil},
+		{"> [quote=#1]\n> smaller half\n\n> [quote=#3]\n> gone\n\n> [quote=#99]\n> nowhere\n\nAgreed, @Alice, not @nobody.", ptrU32(1)},
+		{"- one\n- two\n\n[a link](https://example.com)", ptrU32(4)},
+	} {
+		req := map[string]any{"source": c.src, "thread_id": id.String()}
+		post := map[string]any{"source": c.src}
+		if c.replyTo != nil {
+			req["reply_to"], post["reply_to"] = *c.replyTo, *c.replyTo
+		}
+		rec := preview(w.chain(), "carol", renderJSON(t, req))
+		if rec.Code != http.StatusOK {
+			t.Fatalf("preview %q: %d %s", c.src, rec.Code, rec.Body)
+		}
+		var pv dto.RenderResult
+		if err := json.Unmarshal(rec.Body.Bytes(), &pv); err != nil {
+			t.Fatal(err)
+		}
+		res := created[dto.CreatedPost](t, send(w.chain(), "carol", http.MethodPost, postsPath(id), renderJSON(t, post)))
+		if res.Post.HTML != pv.HTML {
+			t.Errorf("%q: posted\n%s\npreviewed\n%s", c.src, res.Post.HTML, pv.HTML)
+		}
+		later := decode[dto.Post](t, newHandlerFor(w).get(w.viewer("carol"), fmt.Sprintf("%s/%d", postsPath(id), res.Ordinal)))
+		if later.HTML != pv.HTML {
+			t.Errorf("%q: read back differs from the preview", c.src)
+		}
+	}
+}
+
+func ptrU32(n uint32) *uint32 { return &n }

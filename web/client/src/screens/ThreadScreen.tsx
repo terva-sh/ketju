@@ -2,7 +2,7 @@ import { Fragment } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { peekGet } from '../api/client';
-import type { ThreadPage } from '../api/dto';
+import type { CreatedPost, ThreadPage } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
@@ -164,6 +164,13 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   // On a phone the composer is a sheet the reply bar opens (Shell), and
   // the inline one is not drawn.
   const sheetOpen = composerFor(thread.id).open.value;
+  // A posted reply is shown where it landed: its permalink, which asks for
+  // the page holding it at the log length the post made, and scrolls to it.
+  // Nothing moves a reader who has left the thread while it was posting.
+  const { route } = useLocation();
+  const posted = (res: CreatedPost) => {
+    if (location.pathname.startsWith(`/t/${encodeURIComponent(thread.id)}/`)) route(permalink(thread, res.ordinal));
+  };
 
   // One handler for every link to another post in this list: a reply-to
   // indicator, or a quote's source link in a body (internal/render/quote.go).
@@ -202,9 +209,9 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
       {pager}
       {canReply &&
         (isPhone.value ? (
-          sheetOpen && <ComposerSheet thread={thread.id} authorOf={authorOf} postOf={postOf} />
+          sheetOpen && <ComposerSheet thread={thread.id} authorOf={authorOf} postOf={postOf} onPosted={posted} />
         ) : (
-          <Composer thread={thread.id} authorOf={authorOf} />
+          <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} />
         ))}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
     </>

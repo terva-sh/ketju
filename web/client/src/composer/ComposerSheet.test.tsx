@@ -196,7 +196,7 @@ describe('closing the sheet', () => {
     const root = await renderAt(path);
     await click(root.querySelector('.replybar-open'));
     const close = root.querySelector<HTMLElement>('.sheet-close')!;
-    const buttons = [...sheet(root)!.querySelectorAll<HTMLElement>('button, textarea')].filter((el) => !el.closest('[hidden]'));
+    const buttons = [...sheet(root)!.querySelectorAll<HTMLElement>('button:not([disabled]), textarea')].filter((el) => !el.closest('[hidden]'));
     const last = buttons.at(-1)!;
     last.focus();
     await press(last, 'Tab');

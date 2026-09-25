@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { apiGet, apiSend } from '../api/client';
-import type { Author, RenderResult, UserSuggestions } from '../api/dto';
-import { isAbort, problemMessage } from '../api/problem';
+import type { Author, CreatedPost, RenderResult, UserSuggestions } from '../api/dto';
+import { asProblem, isAbort, problemMessage } from '../api/problem';
 import { Icon, type IconName } from '../components/Icon';
-import { composerFor, type Composer as ComposerState } from '../state/composer';
+import { composerFor, discardReply, postReply, type Composer as ComposerState } from '../state/composer';
 import { applyEdit, type EditKind } from './edit';
 import { insertMention, mentionAt, type MentionAt } from './mention';
 import './composer.css';
@@ -28,10 +28,10 @@ const mentionLimit = 8;
 // no markdown parser ships to the client, so there is nothing here that
 // could render the source differently from the post it becomes.
 //
-// Posting is not here yet: POST /threads/{id}/posts and its answer are
-// TKT-01M29CA9B9's, and a Post button that could only fail is worse than
-// none. Nor is saving the draft, which is TKT-01M29CA9CE's; the source
-// lasts the session.
+// Post reply sends the source (postReply) and, once it is posted, hands the
+// answer to onPosted, which shows the new post; a refusal is said above the
+// text, which stays. Saving the draft is TKT-01M29CA9CE's; the source lasts
+// the session.
 //
 // In the phone's sheet (ComposerSheet, sheet set) it is the same composer
 // laid out as a column that fills the sheet, toolbar last, and it takes
@@ -39,14 +39,18 @@ const mentionLimit = 8;
 export function Composer({
   thread,
   authorOf,
+  onPosted,
   sheet = false,
 }: {
   thread: string;
   authorOf: (ordinal: number) => string | undefined;
+  onPosted: (res: CreatedPost) => void;
   sheet?: boolean;
 }) {
   const c = composerFor(thread);
   const source = c.source.value;
+  const posting = c.posting.value;
+  const failure = c.failure.value;
   const replyTo = c.replyTo.value;
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const root = useRef<HTMLElement>(null);
@@ -129,6 +133,11 @@ export function Composer({
           ))}
         </div>
       </header>
+      {failure !== null && (
+        <p class="post-failure" role="alert">
+          {postFailure(failure)}
+        </p>
+      )}
       {tab === 'write' && (
         <div class="composer-tools" role="toolbar" aria-label="Formatting">
           {tools.map(([kind, icon, label]) => (
@@ -144,6 +153,7 @@ export function Composer({
           aria-label="Reply text"
           placeholder="Write a reply. Markdown works."
           value={source}
+          readOnly={posting}
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={open}
@@ -210,9 +220,56 @@ export function Composer({
       </div>
       <footer class="composer-foot">
         <span>Markdown supported</span>
+        <button type="button" class="discard" disabled={posting || (!source && replyTo === null)} onClick={() => discardReply(thread)}>
+          Discard
+        </button>
+        <PostButton thread={thread} onPosted={onPosted} />
       </footer>
     </section>
   );
+}
+
+// PostButton posts thread's composer. It is off while there is nothing to
+// post and while a post is in flight, and postReply refuses a second post
+// then too, so a double click posts once.
+export function PostButton({ thread, onPosted, label = 'Post reply' }: { thread: string; onPosted: (res: CreatedPost) => void; label?: string }) {
+  const c = composerFor(thread);
+  const posting = c.posting.value;
+  return (
+    <button
+      type="button"
+      class="post-reply"
+      data-post-reply
+      disabled={posting || !c.source.value.trim()}
+      aria-busy={posting}
+      onClick={() => void postReply(thread).then((res) => res && onPosted(res))}
+    >
+      {posting ? 'Posting…' : label}
+    </button>
+  );
+}
+
+// postFailure says why a post was refused, in the words of posting rather
+// than the generic ones (api/problem): the refusals POST /threads/{id}/posts
+// names in docs/07.
+export function postFailure(err: unknown): string {
+  const p = asProblem(err);
+  switch (p.type) {
+    case 'conflict':
+      return 'This thread is locked or archived, so your reply was not posted.';
+    case 'forbidden':
+      return 'You may not reply in this thread.';
+    case 'rate-limited':
+      return p.retryAfter
+        ? `This thread is in slow mode. You can post again in ${p.retryAfter} second${p.retryAfter === 1 ? '' : 's'}.`
+        : 'You are posting too quickly. Wait a moment and try again.';
+    case 'validation-failed':
+      return 'The reply was not accepted: it may be empty, or answer a post that is not in this thread.';
+    case 'payload-too-large':
+      return 'The reply is longer than the limit allows.';
+    default:
+      return problemMessage(err).text;
+  }
 }
 
 interface Pending {

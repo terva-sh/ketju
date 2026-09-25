@@ -7,9 +7,9 @@ import { composerFor } from '../state/composer';
 // bar's place (Shell), and the thread page is padded by its height so it
 // never covers the last post (composer.css).
 //
-// The mockup's round "Post reply" button is not here yet: posting from the
-// composer is TKT-01M3ART992's, and a post button that can only fail is
-// worse than none.
+// The mockup's round "Post reply" button is not here: posting is in the
+// sheet's head (TKT-01M3ART992), where a refusal has the composer to be
+// shown in; from the bar it would have nowhere to go.
 export function ReplyBar({ thread }: { thread: string }) {
   const c = composerFor(thread);
   const replyTo = c.replyTo.value;

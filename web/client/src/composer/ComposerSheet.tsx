@@ -1,8 +1,8 @@
 import { useLayoutEffect, useRef } from 'preact/hooks';
-import type { Post } from '../api/dto';
+import type { CreatedPost, Post } from '../api/dto';
 import { Icon } from '../components/Icon';
 import { composerFor } from '../state/composer';
-import { Composer } from './Composer';
+import { Composer, PostButton } from './Composer';
 
 // ComposerSheet is the phone's composer (docs/06 "Mobile", TKT-01M29CGBVN):
 // the same Composer, full screen, as a modal dialog over the thread, with
@@ -17,15 +17,19 @@ import { Composer } from './Composer';
 // than under it. Where visualViewport is missing the sheet is 100dvh.
 //
 // Closing keeps the text and the reply chip: the reply bar shows them, and
-// opening the sheet again carries on where it was left.
+// opening the sheet again carries on where it was left. Post is in the
+// sheet's head, where the footer's Post reply would be under the keyboard;
+// a posted reply closes the sheet (postReply).
 export function ComposerSheet({
   thread,
   authorOf,
   postOf,
+  onPosted,
 }: {
   thread: string;
   authorOf: (ordinal: number) => string | undefined;
   postOf: (ordinal: number) => Post | undefined;
+  onPosted: (res: CreatedPost) => void;
 }) {
   const c = composerFor(thread);
   const root = useRef<HTMLDivElement>(null);
@@ -76,6 +80,7 @@ export function ComposerSheet({
           <Icon name="back" size={18} />
         </button>
         <h2 id="composer-sheet-title">Reply</h2>
+        <PostButton thread={thread} onPosted={onPosted} label="Post" />
       </header>
       {answered && answered.html && (
         <figure class="sheet-context" data-answering={answered.ordinal}>
@@ -85,7 +90,7 @@ export function ComposerSheet({
           <div class="post-body" dangerouslySetInnerHTML={{ __html: answered.html }} />
         </figure>
       )}
-      <Composer thread={thread} authorOf={authorOf} sheet />
+      <Composer thread={thread} authorOf={authorOf} onPosted={onPosted} sheet />
     </div>
   );
 }
