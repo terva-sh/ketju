@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T22:33:12Z
-updated_at: 2026-09-25T01:38:54Z
+updated_at: 2026-09-25T01:44:10Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -96,6 +96,10 @@ Promoted by the maintainer on 2026-09-25, when asked how to proceed at CGBY1: do
 - **Local Playwright** (vite with the API routed, 1440 and 390): the first attempt got a 409. The message showed and the text stayed. The second attempt posted and routed to /3, where the post showed and the composer (or the bar) was empty.
 
 **Decision:** the reply bar's pen button is still left out. On the bar a refusal would have nowhere to show; the sheet's Post has the composer to show it in.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T01:44:10Z
+
+Review 1 on PR #81 (head 57d5a4f, run 413) raised one medium finding: while a post was in flight, Reply, Quote, the thread's Reply and the chip's × could still change the composer, and a successful post then cleared the new choice. I fixed it by freezing the composer while a post is in flight. quotePost, replyToPost and replyToThread still bring the composer up but change nothing, and the chip's × is disabled, joining the read-only textarea and the disabled Discard. The alternative, clearing only what was sent, was rejected: a quote inserted mid-flight would leave the posted text behind with it, inviting a duplicate post. A new test covers this, and removing any one of the four guards fails it. CI run 414 passed on 57d5a4f.
 
 ## Summary
 

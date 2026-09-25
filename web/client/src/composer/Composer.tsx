@@ -112,7 +112,7 @@ export function Composer({
           <span class="reply-chip" data-reply-chip={replyTo}>
             <Icon name="reply" size={12} />#{replyTo}
             {authorOf(replyTo) && <span class="who">{authorOf(replyTo)}</span>}
-            <button type="button" aria-label={`Stop replying to #${replyTo}`} onClick={() => (c.replyTo.value = null)}>
+            <button type="button" aria-label={`Stop replying to #${replyTo}`} disabled={posting} onClick={() => (c.replyTo.value = null)}>
               ×
             </button>
           </span>

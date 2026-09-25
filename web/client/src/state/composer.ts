@@ -55,6 +55,12 @@ export function composerFor(thread: string): Composer {
 
 // summon brings c up: into view at the foot of the thread, or on a phone in
 // the composer sheet.
+//
+// While a post is in flight the composer is frozen: quote and reply still
+// bring it up, showing what is being posted, but change nothing, because a
+// successful post clears what it sent and must not clear a quote or a chip
+// chosen after it was sent (review on PR #81). The textarea is read-only
+// and the chip's × is off for the same reason (Composer).
 function summon(c: Composer) {
   c.summoned.value++;
   if (isPhone.value) c.open.value = true;
@@ -64,16 +70,18 @@ function summon(c: Composer) {
 // composer up with the caret after it.
 export function quotePost(thread: string, ordinal: number, text: string) {
   const c = composerFor(thread);
-  const next = insertBlock(c.source.value, c.caret.value, quoteMarkdown(ordinal, text));
-  c.source.value = next.source;
-  c.caret.value = next.caret;
+  if (!c.posting.value) {
+    const next = insertBlock(c.source.value, c.caret.value, quoteMarkdown(ordinal, text));
+    c.source.value = next.source;
+    c.caret.value = next.caret;
+  }
   summon(c);
 }
 
 // replyToPost makes the reply answer post ordinal and brings the composer up.
 export function replyToPost(thread: string, ordinal: number) {
   const c = composerFor(thread);
-  c.replyTo.value = ordinal;
+  if (!c.posting.value) c.replyTo.value = ordinal;
   summon(c);
 }
 
@@ -81,7 +89,7 @@ export function replyToPost(thread: string, ordinal: number) {
 // reply_to.
 export function replyToThread(thread: string) {
   const c = composerFor(thread);
-  c.replyTo.value = null;
+  if (!c.posting.value) c.replyTo.value = null;
   summon(c);
 }
 

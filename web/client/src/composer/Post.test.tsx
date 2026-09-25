@@ -154,6 +154,34 @@ describe('a double click', () => {
   });
 });
 
+// Review on PR #81: nothing chosen while a post is in flight is lost when
+// it succeeds, because nothing can be chosen then.
+describe('while a post is in flight', () => {
+  it('quote, reply and the chip change nothing, so the success clears only what was sent', async () => {
+    let release!: () => void;
+    const s = serve(() => new Promise<Response>((r) => (release = () => r(new Response(JSON.stringify(s.ok()), { status: 201 })))));
+    const root = await renderAt(path);
+    await click(root.querySelector('#post-2 [data-post-action=reply]'));
+    await type(root, 'my reply');
+    await click(postButton(root));
+    const chipX = root.querySelector<HTMLButtonElement>('.composer .reply-chip button')!;
+    expect(chipX.disabled).toBe(true);
+    await click(root.querySelector('#post-1 [data-post-action=reply]'));
+    await click(root.querySelector('#post-1 [data-post-action=quote]'));
+    await click(root.querySelector('[data-shell=toolbar] [data-action=reply]'));
+    expect(area(root).value).toBe('my reply');
+    expect(root.querySelector('.composer .reply-chip')?.getAttribute('data-reply-chip')).toBe('2');
+    expect(document.activeElement).toBe(area(root)); // still brought up
+    await act(() => release());
+    await settle();
+    await settle();
+    expect(s.posts()).toHaveLength(1);
+    // Once it is posted the composer is live again.
+    await click(root.querySelector('#post-1 [data-post-action=reply]'));
+    expect(root.querySelector('.composer .reply-chip')?.getAttribute('data-reply-chip')).toBe('1');
+  });
+});
+
 // AC3.
 describe('a refused post', () => {
   it.each([
