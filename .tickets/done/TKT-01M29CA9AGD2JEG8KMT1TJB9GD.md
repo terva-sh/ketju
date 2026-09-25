@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T03:01:29Z
+updated_at: 2026-09-25T03:07:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -169,6 +169,16 @@ Revised at claim (2026-09-25), after reading the code.
    - Every page, the first included, now leaves out exactly the forum's threads shown as pins. Before, the first page left out every active pin, so pins past the cap would have vanished from the first page. The list query no longer takes a time.
    - Evidence: `TestThreadListPinCap` (60 pins: 50 at the top, all 60 once across the pages), the "too many pins" bad-request case, and a plan case for a later page with pins (the index seek stays; json_each scans only the parameter).
    - Mutants: 5, all killed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T03:07:49Z
+
+### Review 3 on PR #84 (head f2e1f83, run 438): both findings of review 2 resolved; one medium finding, fixed
+
+**The pin cap was applied before the access filter.** The SQL `LIMIT` cut global pins across every forum, and unreadable ones were dropped only afterwards. Hidden-forum pins could therefore crowd out readable pins, and push this forum's own pins down into the rows.
+
+- Fix: `PinnedThreads` has no limit. It reads only pinned rows through the partial index, and only moderators create those.
+- `List` then filters foreign global pins by `CanEach` and keeps the first `views.MaxPinned`. The rows are read after, in a second read, leaving out exactly the pins shown, so a pin changing between the two reads cannot duplicate a thread.
+- Evidence: `TestThreadListPinCapAfterAccess` has 55 hidden global pins, all newer than alice's two visible pins. alice gets exactly those two, both badged. carol, who may read the hidden forum, hits the cap. Putting the SQL `LIMIT` back as a mutant fails the test, and so does removing the Go cap.
 
 ## Summary
 

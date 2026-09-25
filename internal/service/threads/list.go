@@ -36,8 +36,8 @@ type ListQuery struct {
 // created_at for ?sort=created, newest first. The pins are fixed when the
 // first page is served: every page leaves out exactly the forum's threads
 // that page showed as pins, which its cursor carries, so a pin that ends
-// between pages is not shown twice. At most views.MaxPinned head the page;
-// any past that sort with the rest.
+// between pages is not shown twice. At most views.MaxPinned that v may see
+// head the page; any past that sort with the rest.
 //
 // Everything comes from projections (internal/store/db/views): no thread log
 // is opened, and the service needs no thread cache to answer.
@@ -63,26 +63,36 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	}
 	now := s.now().UnixMilli()
 
+	// The pins first, then the rows that leave them out, in two reads: the
+	// pins are cut to what v may see and to views.MaxPinned between them, in
+	// that order, so a hidden forum's pins never take a visible pin's place.
+	// Leaving out exactly the pins shown keeps the two reads from disagreeing
+	// if a pin changes between them.
 	var pinned, rows []views.ThreadRow
-	if err := s.DB.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
-		var err error
-		if after == nil {
-			if pinned, err = views.PinnedThreads(ctx, tx, forum.ID, v.UserID, now); err != nil {
-				return err
-			}
-			for _, p := range pinned {
-				if p.ForumID == forum.ID {
-					shown = append(shown, p.ID)
-				}
+	if after == nil {
+		if err := s.DB.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+			var err error
+			pinned, err = views.PinnedThreads(ctx, tx, forum.ID, v.UserID, now)
+			return err
+		}); err != nil {
+			return dto.ThreadList{}, err
+		}
+		if pinned, err = s.readablePins(ctx, v, forum.ID, pinned); err != nil {
+			return dto.ThreadList{}, err
+		}
+		pinned = pinned[:min(len(pinned), views.MaxPinned)]
+		for _, p := range pinned {
+			if p.ForumID == forum.ID {
+				shown = append(shown, p.ID)
 			}
 		}
+	}
+	if err := s.DB.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+		var err error
 		rows, err = views.ThreadList(ctx, tx, views.ListParams{ForumID: forum.ID, UserID: v.UserID, Sort: sort,
 			After: after, Pinned: shown, Limit: ListPageSize + 1})
 		return err
 	}); err != nil {
-		return dto.ThreadList{}, err
-	}
-	if pinned, err = s.readablePins(ctx, v, forum.ID, pinned); err != nil {
 		return dto.ThreadList{}, err
 	}
 	next := ""

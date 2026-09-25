@@ -159,18 +159,20 @@ WHERE t.forum_id = ? AND t.last_post_ordinal > 0`
 	return q, args
 }
 
-// MaxPinned bounds the pins that head a list: PinnedThreads returns at most
-// this many, and a list's cursor carries at most this many. A community pins
-// a handful; the bound is there so neither a page nor a cursor grows without
-// limit if one pins everything (review on PR #84). Pins past it sort with the
-// rest, as unpinned threads do.
+// MaxPinned bounds the pins that head a list, and so the pins a list's
+// cursor carries. A community pins a handful; the bound is there so neither
+// a page nor a cursor grows without limit if one pins everything (review on
+// PR #84). The caller applies it after dropping the pins the viewer may not
+// see, so pins from a hidden forum never take a visible pin's place (review
+// 3 on PR #84); pins past it sort with the rest, as unpinned threads do.
 const MaxPinned = 50
 
-// PinnedThreads is what heads the first page of forumID's list: global pins
+// PinnedThreads is every pin that could head forumID's list: global pins
 // from every forum, then forumID's own forum pins, each newest activity
-// first, at most MaxPinned. The caller drops the global pins from forums the
-// viewer may not read; there are few pins, and perm answers for all their
-// forums at once.
+// first. It reads only pinned rows (threads_pinned), which moderators alone
+// create. The caller drops the global pins from forums the viewer may not
+// read, perm answering for all their forums at once, then keeps the first
+// MaxPinned.
 func PinnedThreads(ctx context.Context, tx *sql.Tx, forumID, userID, now int64) ([]ThreadRow, error) {
 	q, args := pinnedSQL(forumID, userID, now)
 	return scanRows(ctx, tx, q, args...)
@@ -180,9 +182,8 @@ func pinnedSQL(forumID, userID, now int64) (string, []any) {
 	q := selectRows("threads_pinned") + `
 WHERE t.last_post_ordinal > 0 AND ` + activePin + `
   AND (t.pinned_scope = 'global' OR (t.pinned_scope = 'forum' AND t.forum_id = ?))
-ORDER BY t.pinned_scope = 'global' DESC, t.last_post_at DESC, t.id DESC
-LIMIT ?`
-	return q, []any{userID, userID, now, forumID, MaxPinned}
+ORDER BY t.pinned_scope = 'global' DESC, t.last_post_at DESC, t.id DESC`
+	return q, []any{userID, userID, now, forumID}
 }
 
 func scanRows(ctx context.Context, tx *sql.Tx, q string, args ...any) ([]ThreadRow, error) {

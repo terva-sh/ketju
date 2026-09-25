@@ -435,3 +435,43 @@ func TestThreadListPinCap(t *testing.T) {
 		t.Errorf("%d threads across the pages, want %d", total, views.MaxPinned+10)
 	}
 }
+
+// TestThreadListPinCapAfterAccess: pins the viewer may not see do not count
+// toward the cap. More global pins than views.MaxPinned in a forum hidden
+// from alice, all newer than the pins she may see, leave her pin block as it
+// would be without them (review 3 on PR #84).
+func TestThreadListPinCapAfterAccess(t *testing.T) {
+	w := newForumWorld(t)
+	visibleGlobal := w.threadIn("zeta", 1, "Visible global")
+	w.post(visibleGlobal, "alice", "p", 0)
+	w.pin(visibleGlobal, "global", 0)
+	own := w.threadIn("general", 2, "Own pin")
+	w.post(own, "alice", "p", 0)
+	w.pin(own, "forum", 0)
+	for i := range views.MaxPinned + 5 {
+		id := w.threadIn("mods", uint64(100+i), "Hidden global")
+		w.post(id, "bob", "p", 0)
+		w.pin(id, "global", 0)
+	}
+	l := w.threadList("alice", "general", "", "")
+	if got, want := rowIDs(l), strs(visibleGlobal, own); !slices.Equal(got, want) {
+		t.Fatalf("alice's page: %v, want %v", got, want)
+	}
+	for _, r := range l.Threads {
+		if r.Pinned == nil {
+			t.Errorf("%s is not shown as pinned", r.Title)
+		}
+	}
+	// carol may read mods: the cap is hers to hit, and her own forum's pin
+	// is the one that falls to the rows, unbadged.
+	l = w.threadList("carol", "general", "", "")
+	pins := 0
+	for _, r := range l.Threads {
+		if r.Pinned != nil {
+			pins++
+		}
+	}
+	if pins != views.MaxPinned {
+		t.Errorf("carol sees %d pins, want %d", pins, views.MaxPinned)
+	}
+}
