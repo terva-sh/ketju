@@ -4,7 +4,7 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-pH7MDHgf.js",
+    "file": "assets/index-D_a2U_gc.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -12,7 +12,7 @@
       "src/screens/admin/AdminRoot.tsx"
     ],
     "css": [
-      "assets/index-DZrJphxV.css"
+      "assets/index-DSWOVSWP.css"
     ],
     "assets": [
       "assets/ibm-plex-sans-latin-400-normal-CDDApCn2.woff2",
@@ -63,7 +63,7 @@
     "src": "src/assets/fonts/newsreader-latin-600-normal.woff2"
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-h7vNRBl5.js",
+    "file": "assets/AdminRoot-PpxpqAdb.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,

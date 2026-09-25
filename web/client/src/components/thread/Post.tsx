@@ -47,7 +47,7 @@ export function Post({
       <Avatar author={post.author} />
       <div class="post-main">
         <header class="post-header">
-          <a class="ordinal" href={permalink(thread, post.ordinal)}>
+          <a class="ordinal hit" href={permalink(thread, post.ordinal)}>
             #{post.ordinal}
           </a>
           <span class="author">{post.author.display_name || post.author.handle}</span>
@@ -75,6 +75,7 @@ export function Post({
             <>
               <button
                 type="button"
+                class="hit"
                 data-post-action="quote"
                 onMouseDown={(e) => {
                   selected.current = selectionIn(bodyOf(e.currentTarget));
@@ -87,13 +88,17 @@ export function Post({
               >
                 quote
               </button>
-              <button type="button" data-post-action="reply" onClick={() => actions.reply(post.ordinal)}>
+              <button type="button" class="hit" data-post-action="reply" onClick={() => actions.reply(post.ordinal)}>
                 reply
               </button>
             </>
           )}
-          <a href={permalink(thread, post.ordinal)}>link</a>
-          <a href={`${permalink(thread, post.ordinal)}/history`}>history</a>
+          <a class="hit" href={permalink(thread, post.ordinal)}>
+            link
+          </a>
+          <a class="hit" href={`${permalink(thread, post.ordinal)}/history`}>
+            history
+          </a>
         </footer>
       </div>
     </article>
@@ -117,7 +122,7 @@ const bodyOf = (el: Element) => el.closest('.post')!.querySelector('.post-body')
 export function ReplyTo({ post }: { post: PostDTO }) {
   if (post.reply_to === null || post.reply_to_suppressed) return null;
   return (
-    <a class="reply-to" href={`#post-${post.reply_to}`} data-reply-to={post.reply_to}>
+    <a class="reply-to hit" href={`#post-${post.reply_to}`} data-reply-to={post.reply_to}>
       ↩ #{post.reply_to}
     </a>
   );

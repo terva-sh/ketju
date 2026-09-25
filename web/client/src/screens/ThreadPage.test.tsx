@@ -115,6 +115,29 @@ describe('following a link to another post', () => {
     expect(at(root, '[role=dialog]')).toBeNull();
   });
 
+  // TKT-01M29CGBXK: closing the popover puts focus back on the link that
+  // opened it, when focus was still in the popover.
+  it('returns focus to the link that opened the popover', async () => {
+    serve(page([post(26), post(27, { reply_to: 4 })], { number: 2 }), { 4: post(4) });
+    const root = await renderAt(`/t/${id}/why-we-left-slack?page=2`);
+    const link = at(root, '#post-27 .reply-to') as HTMLElement;
+    link.focus();
+    await act(async () => link.click());
+    await settle(root);
+    const dialog = at(root, '[role=dialog]')!;
+    expect(document.activeElement).toBe(dialog);
+    await act(async () => (dialog.querySelector('button.close') as HTMLElement).click());
+    expect(document.activeElement).toBe(link);
+
+    // Focus that has moved on elsewhere is left where it is.
+    await act(async () => link.click());
+    await settle(root);
+    const other = at(root, '#post-26 a.ordinal') as HTMLElement;
+    other.focus();
+    await act(async () => (at(root, '[role=dialog] button.close') as HTMLElement).click());
+    expect(document.activeElement).toBe(other);
+  });
+
   it('treats a quote link in a body the same way', async () => {
     serve(
       page([post(1), post(2, { html: '<details class="quote" open><summary><a href="#post-1" class="quote-source">Post #1</a></summary></details>' })]),

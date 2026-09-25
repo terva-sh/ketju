@@ -3,6 +3,7 @@ import { apiGet } from '../../api/client';
 import type { Post as PostDTO } from '../../api/dto';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../ErrorPanel';
+import { isControl } from '../focus';
 import { Avatar } from './Avatar';
 import { permalink, type ThreadRef } from './Post';
 import { PostTime } from './PostTime';
@@ -17,18 +18,28 @@ export function PostPopover({ thread, ordinal, onClose }: { thread: ThreadRef; o
   const res = useResource(url, (signal) => apiGet<PostDTO>(url, { signal }));
   const box = useRef<HTMLDivElement>(null);
 
+  // Focus goes into the popover, and back on close to what opened it, the
+  // reply-to or quote link, when focus was still inside (TKT-01M29CGBXK).
+  // Safari does not focus a link on click, so that may be the body, and the
+  // page's focus guard then takes it (components/focus.ts).
   useEffect(() => {
+    const opener = document.activeElement;
     box.current?.focus();
     const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     addEventListener('keydown', key);
-    return () => removeEventListener('keydown', key);
+    const root = box.current;
+    return () => {
+      removeEventListener('keydown', key);
+      const inside = !document.activeElement || document.activeElement === document.body || root?.contains(document.activeElement);
+      if (inside && isControl(opener)) opener.focus({ preventScroll: true });
+    };
   }, []);
 
   const post = res.data;
   return (
     <div class="post-popover" role="dialog" aria-label={`Post #${ordinal}`} tabIndex={-1} ref={box}>
       <div class="popover-bar">
-        <a class="go-to" href={permalink(thread, ordinal)}>
+        <a class="go-to hit" href={permalink(thread, ordinal)}>
           Go to #{ordinal}
         </a>
         <button type="button" class="close" onClick={onClose} aria-label="Close">

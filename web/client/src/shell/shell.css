@@ -13,6 +13,30 @@
   min-width: 0;
 }
 
+.skip-link {
+  position: absolute;
+  left: 8px;
+  top: -200px;
+  z-index: 100;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 16px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--accent);
+  box-shadow: var(--shadow);
+  font-weight: 600;
+}
+.skip-link:focus {
+  top: calc(8px + env(safe-area-inset-top, 0px));
+}
+/* The heading focus is moved to (components/focus.ts) is not a control, and
+   is not ringed like one. */
+main h1[tabindex='-1']:focus {
+  outline: none;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -182,6 +206,8 @@
   display: block;
   font-weight: 500;
   font-size: 20px;
+  /* A standalone control: the full 44 px (docs/06 "Targets and gestures"). */
+  line-height: var(--target);
 }
 .tb-button,
 .tb-spacer {

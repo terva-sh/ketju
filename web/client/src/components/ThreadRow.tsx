@@ -43,8 +43,8 @@ export function ThreadRow({ thread: t, signedIn }: { thread: Row; signedIn: bool
               <span class="visually-hidden">Locked</span>
             </span>
           )}
-          <a class="thread-title" href={threadHref(t)}>
-            {t.title}
+          <a class="thread-title hit" href={threadHref(t)}>
+            <span>{t.title}</span>
           </a>
         </div>
         {t.tags.length > 0 && (
@@ -65,7 +65,7 @@ export function ThreadRow({ thread: t, signedIn }: { thread: Row; signedIn: bool
         </div>
       </div>
       {signedIn && t.unread > 0 && (
-        <a class="unread-badge thread-unread" href={unreadHref(t)} data-unread={t.unread}>
+        <a class="unread-badge thread-unread hit" href={unreadHref(t)} data-unread={t.unread}>
           {t.unread} new
         </a>
       )}

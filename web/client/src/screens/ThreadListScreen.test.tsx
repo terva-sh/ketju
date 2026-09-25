@@ -262,6 +262,24 @@ describe('scroll memory', () => {
     expect(history.state).toEqual({ entry: id, scrollY: 250 });
   });
 
+  // Back, then forward again before the page between has loaded: the page
+  // come back to is restored, though it was restored when first shown.
+  it('restores a list each time it is shown, not once', async () => {
+    viewer.value = structuredClone(memberMe) as Me;
+    vi.stubGlobal('fetch', (url: string) =>
+      String(url).includes('cursor=') ? new Promise<Response>(() => {}) : Promise.resolve(new Response(JSON.stringify(memberList))),
+    );
+    const to = vi.spyOn(window, 'scrollTo').mockImplementation(() => {});
+    const root = await renderAt('/f/general');
+    expect(to).toHaveBeenCalledTimes(1);
+    await route('/f/general?cursor=stuck');
+    await settle(root);
+    expect(to).toHaveBeenCalledTimes(1);
+    await route('/f/general');
+    await settle(root);
+    expect(to).toHaveBeenCalledTimes(2);
+  });
+
   it('waits for the list before restoring, and records nothing until then', async () => {
     const at: [number, number][] = [];
     vi.spyOn(window, 'scrollTo').mockImplementation((_x, y) => void at.push([document.querySelectorAll('[data-thread]').length, y as number]));

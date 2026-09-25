@@ -96,5 +96,6 @@
      has its floating one; here the header's is the only one. */
   .thread-list-head .new-thread {
     display: inline-flex;
+    height: var(--target);
   }
 }

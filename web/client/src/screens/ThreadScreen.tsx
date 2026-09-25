@@ -104,7 +104,7 @@ export function ThreadScreen() {
     <main class="thread-page" data-screen={history ? 'post-history' : 'thread'}>
       <header class="thread-head">
         {head && (
-          <a class="forum" href={`/f/${encodeURIComponent(head.forum.slug)}`}>
+          <a class="forum hit" href={`/f/${encodeURIComponent(head.forum.slug)}`}>
             {head.forum.name}
           </a>
         )}

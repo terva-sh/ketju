@@ -23,26 +23,31 @@ import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 // pagehide. A write per scroll event would be simplest, but Safari
 // throttles replaceState.
 //
-// While a list is mounted the browser's own restoration is off
-// (history.scrollRestoration), since it can land after this one's and move
-// the reader again; it is put back when the list goes.
+// The browser's own restoration is off for every entry a list shows
+// (history.scrollRestoration is kept per entry), since it can land after
+// this one's and move the reader again; it is back on when the list goes.
 //
-// When the entry is shown and ready is true (its data is on screen), the
-// saved position is restored once per key; an entry with none, a page just
-// pushed, starts at the top.
+// Each time a key is shown, and once its data is on screen (ready), the
+// saved position is restored; an entry with none, a page just pushed,
+// starts at the top. That is each showing, not once per key: a reader who
+// goes back and then forward again before the page between has loaded
+// comes back to a key that still needs its position (TKT-01M29CGBXK).
 export function useScrollMemory(key: string, ready: boolean) {
-  const restored = useRef<string | null>(null);
+  // shown is the key on screen; pending, that its position is still to be
+  // restored.
+  const shown = useRef<string | null>(null);
+  const pending = useRef(false);
+  useEffect(
+    () => () => {
+      history.scrollRestoration = 'auto';
+    },
+    [],
+  );
   useEffect(() => {
-    const was = history.scrollRestoration;
     history.scrollRestoration = 'manual';
-    return () => {
-      history.scrollRestoration = was;
-    };
-  }, []);
-  useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     const mine = entryId();
-    const live = () => restored.current === key && entryId() === mine;
+    const live = () => shown.current === key && !pending.current && entryId() === mine;
     const later = () => {
       if (!live()) return;
       positions.set(mine, Math.round(scrollY));
@@ -67,8 +72,12 @@ export function useScrollMemory(key: string, ready: boolean) {
   }, [key]);
 
   useLayoutEffect(() => {
-    if (!ready || restored.current === key) return;
-    restored.current = key;
+    if (shown.current !== key) {
+      shown.current = key;
+      pending.current = true;
+    }
+    if (!ready || !pending.current) return;
+    pending.current = false;
     scrollTo(0, savedScroll() ?? 0);
   }, [key, ready]);
 }

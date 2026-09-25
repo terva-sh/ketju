@@ -63,7 +63,11 @@ export function Pager({
 
 function PageStep({ to, href, label, text }: { to: number | null; href: (n: number) => string; label: string; text: string }) {
   return to === null ? (
-    <span class="step disabled" aria-hidden="true">
+    // An inactive step holds the place, so the pager does not shift between
+    // pages. It is hidden from assistive technology and marked disabled,
+    // which is what exempts its faded text from the contrast minimum (WCAG
+    // 1.4.3, inactive components).
+    <span class="step disabled" aria-hidden="true" aria-disabled="true">
       {text}
     </span>
   ) : (

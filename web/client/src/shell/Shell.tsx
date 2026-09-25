@@ -1,5 +1,6 @@
 import type { ComponentChildren } from 'preact';
 import { ReplyBar } from '../composer/ReplyBar';
+import { focusMainHeading } from '../components/focus';
 import { isPhone } from '../state/layout';
 import { shellContext } from '../state/shell';
 import { PhoneTopBar } from './PhoneTopBar';
@@ -23,8 +24,20 @@ export function Shell({ children }: { children: ComponentChildren }) {
   const cls = `shell ${phone ? 'phone' : 'desktop'}${reply ? ' has-replybar' : ''}`;
   return (
     <div class={cls} data-layout={phone ? 'phone' : 'desktop'}>
+      {/* First in the page, and on screen only when focused. It moves focus
+          rather than following the hash, so the address stays as it was. */}
+      <a
+        class="skip-link"
+        href="#main"
+        onClick={(e) => {
+          e.preventDefault();
+          focusMainHeading();
+        }}
+      >
+        Skip to content
+      </a>
       {phone ? <PhoneTopBar /> : <TopBar />}
-      <div class="shell-content">
+      <div class="shell-content" id="main">
         {children}
       </div>
       {phone && (reply ? <ReplyBar thread={reply} /> : <TabBar />)}

@@ -55,3 +55,38 @@ a {
   padding-left: env(safe-area-inset-left, 0px);
   padding-right: env(safe-area-inset-right, 0px);
 }
+
+/* Touch targets (docs/06 "Targets and gestures"; TKT-01M29CGBXK). On the
+   phone every control is at least 44 px on its shorter side. A control that
+   is drawn smaller, an inline link in text, a badge, a post's footer
+   actions, takes .hit: a transparent ::after, which is part of the element
+   for hit testing, extends the target to 44 px each way about its centre and
+   leaves the layout alone. Nothing it sits in may clip it (overflow:
+   hidden), and neighbours need the space between them for it, which
+   e2e/targets.spec.ts checks by pressing where the target should be. */
+@media (max-width: 719.98px) {
+  .hit {
+    position: relative;
+  }
+  .hit::after {
+    content: '';
+    position: absolute;
+    top: min(0px, calc(50% - var(--target) / 2));
+    bottom: min(0px, calc(50% - var(--target) / 2));
+    left: min(0px, calc(50% - var(--target) / 2));
+    right: min(0px, calc(50% - var(--target) / 2));
+  }
+}
+
+/* Reduced motion (docs/07 "Accessibility"). Nothing animates yet; this is
+   the rule anything that does will have to live with. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

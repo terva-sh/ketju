@@ -185,9 +185,14 @@
   min-width: 0;
   font-size: 13px;
 }
+/* The ellipsis is the span's, so the link's hit area (.hit) is not clipped. */
 .forum-last-title {
   color: var(--ink);
   text-decoration: none;
+  min-width: 0;
+}
+.forum-last-title span {
+  display: block;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

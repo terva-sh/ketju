@@ -138,7 +138,7 @@ function ForumRow({ forum: f, signedIn }: { forum: Forum; signedIn: boolean }) {
     <li class={`forum-row${signedIn ? ' signed-in' : ''}`} data-forum={f.slug}>
       <div class="forum-main">
         <div class="forum-title">
-          <a class="forum-name" href={href}>
+          <a class="forum-name hit" href={href}>
             {f.name}
           </a>
           {privacy[f.visibility] && (
@@ -157,7 +157,7 @@ function ForumRow({ forum: f, signedIn }: { forum: Forum; signedIn: boolean }) {
       {signedIn && (
         <div class="forum-unread">
           {f.unread > 0 ? (
-            <a class="unread-badge" href={href} data-unread={f.unread}>
+            <a class="unread-badge hit" href={href} data-unread={f.unread}>
               {f.unread} new
             </a>
           ) : (
@@ -170,8 +170,11 @@ function ForumRow({ forum: f, signedIn }: { forum: Forum; signedIn: boolean }) {
       <div class="forum-last">
         {last ? (
           <>
-            <a class="forum-last-title" href={`/t/${encodeURIComponent(last.thread.id)}/${encodeURIComponent(last.thread.slug)}`}>
-              {last.thread.title}
+            <a
+              class="forum-last-title hit"
+              href={`/t/${encodeURIComponent(last.thread.id)}/${encodeURIComponent(last.thread.slug)}`}
+            >
+              <span>{last.thread.title}</span>
             </a>
             <span class="forum-last-meta">
               <span class="forum-last-by">{last.author.handle} · </span>
@@ -184,7 +187,9 @@ function ForumRow({ forum: f, signedIn }: { forum: Forum; signedIn: boolean }) {
             {signedIn && !f.archived && (
               <>
                 {' '}
-                <a href={`${href}/new`}>Start one</a>
+                <a class="hit" href={`${href}/new`}>
+                  Start one
+                </a>
               </>
             )}
           </span>

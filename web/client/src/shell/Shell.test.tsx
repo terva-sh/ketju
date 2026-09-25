@@ -114,6 +114,33 @@ describe('the navigation shell', () => {
   });
 });
 
+// TKT-01M29CGBXK: the skip link, and focus on a new screen.
+describe('focus', () => {
+  it('offers a skip link first, which moves focus to the heading and leaves the address', async () => {
+    const root = await renderAt('/unread');
+    const first = root.querySelector('a, button')!;
+    expect(first.classList.contains('skip-link')).toBe(true);
+    expect(first.textContent).toBe('Skip to content');
+    expect(root.querySelector('#main')?.contains(root.querySelector('main'))).toBe(true);
+    const before = location.href;
+    await act(async () => (first as HTMLElement).click());
+    expect(document.activeElement).toBe(root.querySelector('main h1'));
+    expect(location.href).toBe(before);
+    await setPhone(true);
+    expect(root.querySelector('a, button')?.classList.contains('skip-link')).toBe(true);
+  });
+
+  it('moves focus to the new screen’s heading when the path changes', async () => {
+    const root = await renderAt('/unread');
+    const link = root.querySelector<HTMLElement>('[data-nav="new"]')!;
+    link.focus();
+    await act(async () => link.click());
+    expect(screenOf(root)).toBe('new');
+    expect(document.activeElement).toBe(root.querySelector('main h1'));
+    expect(document.activeElement?.textContent).toBe(root.querySelector('[data-screen="new"] h1')?.textContent);
+  });
+});
+
 describe('the phone top bar', () => {
   it("titles a screen with its name, and the index with the wordmark", async () => {
     const root = await renderAt('/unread');

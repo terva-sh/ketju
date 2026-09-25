@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { CreatedPost, Post } from '../api/dto';
 import { Icon } from '../components/Icon';
-import { trapTab } from '../components/focus';
+import { isControl, trapTab } from '../components/focus';
 import { composerFor } from '../state/composer';
 import { Composer, PostButton } from './Composer';
 
@@ -11,6 +11,11 @@ import { Composer, PostButton } from './Composer';
 // composer the desktop has because on a phone the keyboard takes half the
 // screen, and the sheet can keep the post being answered and the toolbar in
 // what is left (docs/09, "Mobile composer fights the on-screen keyboard").
+//
+// It has no gestures: no swipe down to dismiss. Its close button and Escape
+// do that, and a swipe added later may only ever be a second way to do what
+// a button already does (docs/06 "Targets and gestures"; src/a11y.test.ts
+// fails on a gesture handler that is not listed with its button).
 //
 // It is sized to the visual viewport, which is the part of the layout
 // viewport the on-screen keyboard leaves visible, and the formatting toolbar
@@ -51,8 +56,9 @@ export function ComposerSheet({
     return () => {
       html.style.overflow = overflow;
       // Safari does not focus a button on click, so the opener may be the
-      // body; the reply bar is then the way back.
-      if (opener?.isConnected && opener !== document.body) opener.focus();
+      // body, or the heading a route change focused; the reply bar is then
+      // the way back.
+      if (isControl(opener)) opener.focus();
       else document.querySelector<HTMLElement>('.replybar-open')?.focus();
     };
   }, []);

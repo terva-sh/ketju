@@ -47,8 +47,11 @@
   text-decoration: none;
   min-width: 0;
   overflow-wrap: anywhere;
-  /* Two lines at most: a long title ends in an ellipsis rather than
-     pushing the row's counts out of view. */
+}
+/* Two lines at most: a long title ends in an ellipsis rather than pushing
+   the row's counts out of view. The clamp is the span's, so the link's hit
+   area (.hit) is not clipped. */
+.thread-title span {
   display: -webkit-box;
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
@@ -95,6 +98,10 @@
 }
 .row-pinned .thread-tags li {
   background: var(--surface);
+}
+/* --muted on the tint is under 4.5:1 in the light theme. */
+.row-pinned .thread-row-meta {
+  color: var(--ink2);
 }
 
 .thread-row-meta {

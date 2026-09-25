@@ -1,5 +1,7 @@
 import { Component, type ComponentChildren } from 'preact';
+import { useEffect, useMemo } from 'preact/hooks';
 import { LocationProvider, Router, Route, useLocation } from 'preact-iso';
+import { guardFocus, routeFocuser } from './components/focus';
 import { clientScope, Fallback, routes } from './routes';
 import { NotFound } from './screens/Placeholder';
 import { Shell } from './shell/Shell';
@@ -14,10 +16,14 @@ export function App() {
 
 function Routes() {
   const { url } = useLocation();
+  // Focus follows the reader to each new screen, and is never lost with a
+  // removed element (TKT-01M29CGBXK).
+  const onRouteChange = useMemo(() => routeFocuser(location.pathname), []);
+  useEffect(() => guardFocus(), []);
   return (
     <Shell>
       <UndecodableAddress url={url}>
-        <Router>
+        <Router onRouteChange={onRouteChange}>
           {routes.map((r) => (
             <Route key={r.path} path={r.path} component={r.component} />
           ))}

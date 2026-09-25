@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-25T04:22:16Z
+updated_at: 2026-09-25T05:05:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -127,6 +127,10 @@ Review 1 on #88 (head 9bc8885, run #460) had one medium finding: a scroll follow
 - Vitest now has 21 tests on the screen, including: the scroll-then-leave case, events in the gap, nothing recorded before the restore, pagehide, and the scrollRestoration toggle.
 - 13 more mutants, all killed.
 - Playwright gained a step for the reviewer's case: scroll, Back at once, Forward, and the position is the latest one. Eight consecutive full runs passed, 16/16 each.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T05:05:33Z
+
+Correction found during TKT-01M29CGBXK (Run the accessibility pass on the client): the scroll memory restored each key only once. Back, then forward before the page in between had loaded, left the page returned to at 0, a flake of about 1 in 10 full runs. It now restores on each showing, and sets history.scrollRestoration to manual for every entry a list shows, since the mode is kept per entry. This supersedes my earlier note's claim that the mutant 'restored.current === key → false' was equivalent. The fix and its test are in CGBXK's PR.
 
 ## Summary
 
