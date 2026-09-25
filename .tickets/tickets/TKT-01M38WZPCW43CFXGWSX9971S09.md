@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T03:49:59Z
+updated_at: 2026-09-25T04:28:58Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -354,3 +354,7 @@ Merged PR #85 (TKT-01M29CEE5Y, Build the forum index screen) as 0d1d3a9.
 - The PR also fixed forums.Tree leaving child forums' last_post null (from #83).
 
 Next: TKT-01M29CEE6D.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T04:28:58Z
+
+PR #87 (TKT-01M29CEE6D, Build the thread list screen) merged at 601c687 after a clean review of review-only PR #88 (head afa5a08, run #463) and green CI run 461 (vitest 686, Playwright 16/16, go test). Review 1 raised one medium finding, scroll lost on a quick Back, which was fixed; the notes are on the ticket. #88 is closed unmerged. Next: TKT-01M29CGBXK.

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBXKH0HBN0HEJGDPBFYV
 title: Run the accessibility pass on the client
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -22,10 +22,17 @@ blocks_on: none
 references:
   - ref: design:mobile-targets
     path: docs/06-thread-views.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/cgbxk-a11y
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 601c687cc9fdfc03133b7f8eefe53d770ea884d3
+  session: null
+  claimed_at: 2026-09-25T04:28:58Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-25T02:19:54Z
+updated_at: 2026-09-25T04:28:58Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
