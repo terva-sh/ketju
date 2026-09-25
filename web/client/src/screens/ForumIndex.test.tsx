@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ForumTree, Me } from '../api/dto';
 import { viewer } from '../state/viewer';
 import { renderAt, screenOf, settle } from '../testing';
+import { render } from 'preact';
 import { groups } from './ForumIndex';
+import { ForumPicker } from './ForumPicker';
 import anonMe from '../../../../internal/dto/testdata/golden/me.anon.json';
 import memberMe from '../../../../internal/dto/testdata/golden/me.member.json';
 import anonTree from '../../../../internal/dto/testdata/golden/forums.anon.json';
@@ -151,6 +153,17 @@ describe('the forum picker', () => {
     expect(root.querySelector('.new-thread')).not.toBeNull();
   });
 
+  it('is not offered when every forum is archived', async () => {
+    const tree = structuredClone(memberTree) as ForumTree;
+    for (const f of tree.forums) {
+      f.archived = true;
+      for (const c of f.children) c.archived = true;
+    }
+    const root = await index(tree, memberMe);
+    expect(root.querySelector('[data-fab]')).toBeNull();
+    expect(root.querySelector('.new-thread')).toBeNull();
+  });
+
   it('lists the open forums, closes on Escape, and returns focus', async () => {
     const root = await index(memberTree, memberMe);
     const fab = root.querySelector<HTMLButtonElement>('[data-fab]')!;
@@ -168,6 +181,25 @@ describe('the forum picker', () => {
     });
     expect(root.querySelector('[role=dialog]')).toBeNull();
     expect(document.activeElement).toBe(fab);
+  });
+
+  it('takes focus with nothing to offer, so Escape still closes it', async () => {
+    const tree = structuredClone(memberTree) as ForumTree;
+    for (const f of tree.forums) f.archived = true;
+    tree.forums[0].children = [];
+    const host = document.createElement('div');
+    document.body.append(host);
+    let closed = 0;
+    await act(async () => render(<ForumPicker forums={tree.forums} onClose={() => closed++} />, host));
+    const dialog = host.querySelector<HTMLElement>('[role=dialog]')!;
+    expect(dialog.querySelector('a')).toBeNull();
+    expect(document.activeElement).toBe(dialog.querySelector('button'));
+    await act(async () => {
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(closed).toBe(1);
+    await act(async () => render(null, host));
+    host.remove();
   });
 
   it('keeps Tab inside', async () => {

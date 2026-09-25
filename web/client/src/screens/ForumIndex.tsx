@@ -6,7 +6,7 @@ import { ErrorPanel } from '../components/ErrorPanel';
 import { Icon } from '../components/Icon';
 import { PostTime } from '../components/thread/PostTime';
 import { viewer } from '../state/viewer';
-import { ForumPicker } from './ForumPicker';
+import { ForumPicker, pickable } from './ForumPicker';
 import './forums.css';
 
 export const forumsUrl = '/api/v1/forums';
@@ -40,6 +40,9 @@ export function ForumIndex() {
     setPicking(true);
   };
   const forums = res.data?.forums;
+  // The new-thread controls need somewhere to start a thread: with every
+  // forum archived, or none, there is nothing to pick.
+  const canStart = signedIn && !!forums && pickable(forums).length > 0;
 
   return (
     <main class="forum-index" data-screen="forum-index">
@@ -48,7 +51,7 @@ export function ForumIndex() {
           <h1>Forums</h1>
           {signedIn && <p class="forum-index-summary">{summary(me.unread.threads)}</p>}
         </div>
-        {signedIn && forums && forums.length > 0 && (
+        {canStart && (
           <button type="button" class="new-thread" onClick={pick} aria-haspopup="dialog">
             New thread
           </button>
@@ -80,7 +83,7 @@ export function ForumIndex() {
           ))}
         </>
       )}
-      {signedIn && forums && forums.length > 0 && (
+      {canStart && (
         <button type="button" class="fab" aria-label="New thread" aria-haspopup="dialog" onClick={pick} data-fab>
           <Icon name="pen" size={22} />
         </button>

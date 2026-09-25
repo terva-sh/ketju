@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-25T03:40:46Z
+updated_at: 2026-09-25T03:45:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -142,6 +142,18 @@ Committed screenshots: `web/client/e2e/screenshots/forum-index-{desktop,phone}-{
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T03:40:46Z
 
 Review of PR #85 failed with context_limit (run 445): the diff is 260 KB, 190 KB of it dist; see TKT-01M3AZGKBP. The source is reviewed instead in review-only PR #86 (branch review/cee5y-source: #85 plus one commit restoring dist to main, 70 KB). #85 merges only if #86's review is clean and #85's CI is green. #86 is closed unmerged afterwards.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T03:45:23Z
+
+### Review 1, on source-only PR #86 (head 4d7b98d, run 448): two medium findings, both fixed
+
+1. **The picker could trap focus outside itself.** With every forum archived it had no links, so focus stayed behind the modal and Escape never reached it.
+   - Fix: "New thread" and the FAB are offered only when `pickable(forums)` is not empty.
+   - The picker also focuses its close button when it has no forum to offer.
+   - Tests: all-archived shows neither control; a picker rendered with nothing to offer focuses Close and closes on Escape. Both mutants are killed.
+2. **At 720 to 1100 px the fixed desktop columns crushed the forum names.**
+   - Fix: a tablet range with narrower fixed columns (88 px, 72 px and 180 px, 16 px gaps). They stay fixed so the headings and rows align.
+   - Test: Playwright at 720 px checks the name column is at least 200 px and nothing overflows. Removing the tablet block fails it (name width under 200).
 
 ## Summary
 

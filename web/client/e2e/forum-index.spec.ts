@@ -51,6 +51,17 @@ test('a member sees counts, empty forums, and a new-thread button clear of the t
     await page.setViewportSize(vp);
   }
 
+  // At the tablet breakpoint the name column keeps most of the row (review
+  // on PR #86): the fixed columns do not crush it.
+  if (!isMobile) {
+    const vp = page.viewportSize()!;
+    await page.setViewportSize({ width: 720, height: vp.height });
+    const name = (await page.locator('[data-forum="general"] .forum-main').boundingBox())!;
+    expect(name.width).toBeGreaterThanOrEqual(200);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(720);
+    await page.setViewportSize(vp);
+  }
+
   const fab = page.locator('[data-fab]');
   if (isMobile) {
     // AC3: above the tab bar, and inside the viewport.

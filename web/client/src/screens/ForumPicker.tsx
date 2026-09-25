@@ -15,8 +15,12 @@ import { trapTab } from '../components/focus';
 // server's to say when they post (create_thread); the tree does not carry it.
 export function ForumPicker({ forums, onClose }: { forums: Forum[]; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null);
+  // Focus goes inside the dialog, on the first forum or, with none to
+  // offer, the close button, so Escape and Tab always reach the dialog's
+  // handler (review on PR #86).
   useEffect(() => {
-    root.current?.querySelector<HTMLElement>('a[href]')?.focus();
+    const el = root.current;
+    (el?.querySelector<HTMLElement>('a[href]') ?? el?.querySelector<HTMLElement>('button'))?.focus();
   }, []);
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === 'Escape' && !e.defaultPrevented) {
@@ -24,11 +28,7 @@ export function ForumPicker({ forums, onClose }: { forums: Forum[]; onClose: () 
       onClose();
     } else if (e.key === 'Tab') trapTab(e, root.current);
   };
-  // A forum is offered unless archived. An archived root with open
-  // children stays as their heading, not as a place to post.
-  const choices = forums
-    .map((f) => ({ f, children: f.children.filter((c) => !c.archived) }))
-    .filter(({ f, children }) => !f.archived || children.length > 0);
+  const choices = pickable(forums);
   return (
     <div class="picker-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
       <div
@@ -72,4 +72,13 @@ function Choice({ forum, onClose }: { forum: Forum; onClose: () => void }) {
       {forum.name}
     </a>
   );
+}
+
+// pickable is what the picker offers: every forum that is not archived. An
+// archived root with open children stays as their heading, not as a place
+// to post. The index offers the picker only when this has a forum in it.
+export function pickable(forums: Forum[]) {
+  return forums
+    .map((f) => ({ f, children: f.children.filter((c) => !c.archived) }))
+    .filter(({ f, children }) => !f.archived || children.length > 0);
 }
