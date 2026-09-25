@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29P9RS0YMM3465BSH7AGSNJ
 title: Fix seven document inconsistencies found by the design survey
 type: chore
-status: ready
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-415af6aa
+  branch: run/p9rs0-doc-fixes
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-415af6aa
+  commit: 256fad170c431240260bffb31d7aea177fdc956e
+  session: null
+  claimed_at: 2026-09-25T00:30:27Z
+  expires_at: null
 archive: null
 created_at: 2026-09-12T02:14:17Z
-updated_at: 2026-09-24T05:21:21Z
+updated_at: 2026-09-25T00:30:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-415af6aa
   name: ""
 extensions: {}
 ---

@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-24T22:07:14Z
+updated_at: 2026-09-25T00:30:14Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -289,3 +289,15 @@ Merged PR #75 (TKT-01M38XJJKM, Serve handle autocomplete for mentions) as df5f2e
 - Review 522, medium: check membership before parsing. This also fixed POST /render from #74, through the new shared internal/service/member.
 - Review 524, low: cap oversized limits instead of refusing them.
 The clean review is on head df5f2ed, base 6627c55. CI run 372's client step ran 16 test files, and its race step shows internal/service/users and internal/web/api passed. Draft TKT-01M3ANX1NF (Handles ending in '-' can never be mentioned) was filed.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T00:30:14Z
+
+Merged PR #77 (TKT-01M29CEE79, Build the composer with server-rendered preview) as 256fad1. It replaced #76, which was closed unmerged after six review rounds.
+- Reviews 537, 541, 543, 547 and 555 on #76 raised eight medium findings in all, each fixed with tests.
+- Round 6 failed with context_limit (run 386). The maintainer chose a fresh PR with one review.
+- Review 557 on #77 raised one medium and one low, both fixed.
+- The re-review then failed with context_limit on the diff alone (run 392, about 260 KB with the regenerated bundle). The maintainer chose to merge with the fix for 557 unreviewed.
+- CI run 393's client step ran 20 test files, and its race step shows internal/web/... passed.
+- AC1 is unticked until posting exists. Drafts filed: TKT-01M3ART992 (Post a reply from the composer) and a draft on keeping client PRs reviewable.
+
+Next pick: TKT-01M29P9RS0, although it is low. It is the only blocker of TKT-01M29CA9B9 (create and reply, urgent, on docs/11's critical path), and CGBY1's reply step needs CA9B9. CGBY1 itself is unblocked now, but its reply step cannot pass until posting exists.
