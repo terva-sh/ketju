@@ -33,7 +33,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-25T00:40:33Z
+updated_at: 2026-09-25T00:45:13Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -58,36 +58,42 @@ Rendering happens before the append and the HTML is discarded. That is deliberat
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
-
-Depends on TKT-01M29P9RS0, which states the slow-mode default in docs/08. Plan against that text.
+Revised at claim (2026-09-25), after reading the code as it stands.
 
 ### Approach
-1. `service/posts.Writer` becomes the one seam for every thread append. It wraps `Actor.Append`, then `events.Bus.Publish(events.Event{Thread, Ordinal, LogLength})`, then returns `threadlog.Result`. TKT-01M29CA9BP and later moderation writes reuse it, and nothing else publishes.
-2. `POST /api/v1/threads/{id}/posts {source, reply_to?, attachments?}`, in order:
-   - Require `viewer.Member()` (401 anon, 403 pre_user). `Can(reply)` → `forbidden`; `not-found` when `read` is missing.
-   - Thread archived (`threadcache.Thread.Archived()`) → `conflict`. Locked and the viewer is not a moderator (docs/08) → `conflict`.
-   - Slow mode active and the viewer is not a moderator → `rate-limited` with `Retry-After` set to the remaining wait. The viewer's last post time in this thread comes from the in-memory index (`Index.ByAuthor` → last entry `CreatedMS`), and the interval from TKT-01M29CRJ50's storage.
-3. Render-validate with `render.RenderWith(source, ctx)`, using the same resolvers as the read path. It must return reply_to validation from TKT-01M29C2WWG. A render error or an invalid reply_to → `validation-failed`. `render.ErrTooLarge` already maps to `payload-too-large`. Empty source → `validation-failed`. Nothing is appended before this point.
-4. Append `threadlog.PostBody{Source, ReplyTo, Mentions: user ids from the result, Attachments}` with `FrameFlagMachineAuthored` when `viewer.User.Kind=="agent"`. Then `render.Cache.Put(Key{thread, ordinal, 1, render.Version}, html)`. Build the response post with the shared assembler from TKT-01M29CA9AX, so the create response and a later read produce identical HTML.
-5. `POST /api/v1/forums/{slug}/threads {title, source, tags}`: `Can(create_thread)`, validate the title, `threadid.Generator.New()`, `threadcache.Cache.Create(id, forumID, now)`, append `ThreadCreatedBody{Title, Slug, ForumID, Tags}`, then the first Post through steps 2–4.
-6. Response DTOs, new in internal/dto with goldens: `CreatedPost{post dto.Post, ordinal, revision, log_length}` and `CreatedThread{thread dto.ThreadHeader, post CreatedPost}`. Add the shapes to docs/07 in the same PR, because internal/dto only pins documented shapes.
-
-### Files
-internal/service/posts/{writer.go,create.go}, internal/service/threads/create.go, internal/web/api/posts_create.go, internal/dto/dto.go (+fixtures and goldens).
+1. `internal/service/posts.Writer` is the one seam for thread appends. It holds `Publish func(events.Event)`. `Append(th, a)` calls `th.Actor.Append(a)`, publishes `{Thread, Ordinal, LogLength}`, and returns the `threadlog.Result`. TKT-01M29CA9BP reuses it. `threads.Service` gains `Writer *posts.Writer`, `IDs *threadid.Generator`, `Project func(ctx, id, logLength) error`, and `Now func() time.Time`.
+2. `threads.Service.Reply(ctx, v, id, req)` backs `POST /api/v1/threads/{id}/posts {source, reply_to?, attachments?}`, in this order:
+   - Require a member (member.Require).
+   - Call `access`. Missing read gives not-found, unauthenticated or forbidden, as for every thread endpoint.
+   - `!canReply` gives `forbidden`.
+   - Under `Threads.With`:
+     - An archived thread gives `conflict`, including for a moderator.
+     - `row.Locked` gives `conflict` unless the viewer is a moderator (docs/08 "Locking semantics").
+     - Slow mode is `settings.SlowModeDefaultSeconds`, off by default, and a moderator bypasses it. The viewer's newest post is found with `Index.ByAuthor`, then `Entry.CreatedMS`. If it is too recent, the answer is `rate-limited` with `Retry-After` set to the remaining wait. The error type is `problem.RetryAfter`, and `WriteError` writes the header.
+     - Render with `renderSource(th, source, replyTo)`, the same function preview uses. Empty or whitespace-only source gives validation-failed. An invalid reply_to gives validation-failed (existing mapping). Too large gives payload-too-large.
+     - Non-empty attachments give validation-failed until blobs exist (no blob upload is built yet).
+     - Append a Post through the Writer with `PostBody{Source, ReplyTo, Mentions}`. `FrameFlagMachineAuthored` is set when the users row has kind `agent`.
+   - The response is built by `s.Post(ctx, v, id, ordinal, "")`. That is the same assembly as a later read, which gives AC4.
+3. `threads.Service.CreateThread(ctx, v, forumSlug, req)` backs `POST /api/v1/forums/{slug}/threads {title, source, tags}`:
+   - A member is required.
+   - Look the forum up with the new query `GetForumBySlug`. No such forum gives not-found, and so does Perm Hidden. Read denied gives forbidden. `Can(create_thread)` false gives forbidden. An archived forum gives conflict.
+   - Validate the title: trim it, then it must be 1–200 characters with no control characters.
+   - Tags must be empty. No tag rules are documented, and whatever a log holds it holds forever, so any tag is refused as validation-failed until a ticket defines them. A draft will be filed.
+   - Render-validate the source with no thread (nothing to quote yet). reply_to is not accepted.
+   - Then `IDs.New()`, `Threads.Create(id, forum, now)`, and append ThreadCreated `{Title, Slug: Slug(title), ForumID}`, then the Post, both through the Writer.
+   - Then call `Project(ctx, id, logLength)` synchronously, so the thread row exists before the response and the client can open the thread at once. The bus delivers the same events too, and projection is idempotent, so a failed synchronous projection is retried there. Here it is returned as an error.
+   - The response is `View(ctx, v, id, Query{})`'s header and first post, which is the same assembly as a later read.
+4. `access` treats `post_count == 0` as not-found. That covers the crash between the two appends ("Projection and listing hide such threads").
+5. `Slug(title)` folds Latin letters with diacritics to ASCII through a small table, then lowercases. Runs of anything else become '-'. It is trimmed, cut to 60 bytes on a separator where possible, and the empty result is "thread". No x/text dependency is added.
+6. DTOs with goldens: `CreatedPost{post, ordinal, revision, log_length}` and `CreatedThread{thread, post: CreatedPost}`. They also go in the TS types and the client dto-contract, and in docs/07.
 
 ### Tests
-- AC1: with fsync `always`, the handler returns; then close the threadcache, reopen from disk with a fresh Cache, and `Reader.One(ordinal)` returns the post. Response fields equal the `threadlog.Result`.
-- AC2: three handler tests assert `conflict`, `forbidden`, and `rate-limited` plus `Retry-After`. The slow-mode test uses a fake clock, and a moderator bypasses both lock and slow mode.
-- AC3: invalid reply_to and a render failure. After each, `Index.Len()` and the log size on disk are unchanged.
-- AC4: create, then GET the thread page; the post's `html` is byte-equal. Run once with a cold render cache so a re-render is compared, not just the cached value. Also a `-race` test with 50 concurrent replies checks for dense ordinals and one event per append.
-
-### Design
-Reread docs/02 "Create a post", docs/03 "Write path" steps 1–6, docs/08 "Locking semantics" and slow mode, and docs/07 "Resources" and "Error catalogue".
-
-### Interactions
-Consumes TKT-01M29C0WD8 (actor), TKT-01M29C2WWG (structured render), TKT-01M29C5Y2E, TKT-01M29C2WW5 (subscriber to the events published here), and TKT-01M29CRJ50 (slow-mode storage, which is not a recorded dependency). Defines `posts.Writer` for TKT-01M29CA9BP.
-Open: slow mode has no storage defined in docs/04; `settings` is global key-value. Also open: `locked` is read from the async `threads` projection, so a reply racing a lock can land. Also open: the title limit and slug derivation are undocumented. Also open: ThreadCreated plus the first Post are two appends; a crash between them leaves a thread with no posts.
+- AC1: with SyncAlways, reply and create both return. A fresh threadcache over the same root then reads the post back. ordinal, revision and log_length equal the index's.
+- AC2: a locked thread gives conflict, and a moderator's reply passes. A member without reply gives forbidden. Slow mode gives rate-limited with Retry-After, a moderator bypasses it, and the setting at 0 lets the post through.
+- AC3: bad reply_to, empty source, oversized source, and a render-time handle-lookup failure each leave the log size and the Index.Len unchanged.
+- AC4: the response post equals GET /threads/{id}/posts/{n} and the thread page's post, with a cold render cache.
+- A race test: 50 concurrent replies give dense ordinals and one event per append.
+- Create thread: title limits, tags refused, the slug, and a thread with no posts being not-found.
 
 ### Settled in grooming (2026-09-24)
 
