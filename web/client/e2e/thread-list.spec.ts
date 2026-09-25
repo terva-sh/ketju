@@ -118,4 +118,18 @@ test('back from a thread returns to the page and the place in the list', async (
   await page.goBack();
   await expect(page).not.toHaveURL(/cursor=/);
   await expect.poll(async () => Math.abs((await scrolled()) - onFirst)).toBeLessThanOrEqual(10);
+
+  // Back pressed straight after scrolling, inside the save's debounce
+  // (review on PR #88): forward again finds the latest position.
+  await page.goForward();
+  await expect(page).toHaveURL(url);
+  await expect.poll(async () => Math.abs((await scrolled()) - onSecond)).toBeLessThanOrEqual(10);
+  await page.mouse.wheel(0, 300);
+  await expect.poll(scrolled).toBeGreaterThan(onSecond + 150);
+  const late = await scrolled();
+  await page.goBack();
+  await expect(page).not.toHaveURL(/cursor=/);
+  await page.goForward();
+  await expect(page).toHaveURL(url);
+  await expect.poll(async () => Math.abs((await scrolled()) - late)).toBeLessThanOrEqual(10);
 });

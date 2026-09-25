@@ -41,6 +41,9 @@ async function listAt(url: string, list: unknown, me: unknown) {
   return root;
 }
 
+// mounted is the id the list tagged its history entry with.
+const mounted = () => (history.state as { entry: string }).entry;
+
 const row = (root: HTMLElement, id: string) => root.querySelector<HTMLElement>(`[data-thread="${id}"]`)!;
 
 // AC1: the badge and the title are two controls going to two places.
@@ -170,7 +173,7 @@ describe('scroll memory', () => {
     history.replaceState({ other: 1 }, '');
     vi.spyOn(window, 'scrollY', 'get').mockReturnValue(812.4);
     rememberScroll();
-    expect(history.state).toEqual({ other: 1, scrollY: 812 });
+    expect(history.state).toMatchObject({ other: 1, scrollY: 812, entry: expect.any(String) });
     expect(savedScroll()).toBe(812);
     history.replaceState({ scrollY: 'x' }, '');
     expect(savedScroll()).toBeNull();
@@ -188,30 +191,93 @@ describe('scroll memory', () => {
     const root = await listAt('/f/general', memberList, memberMe);
     vi.useFakeTimers();
     try {
-      history.replaceState(null, '');
+      const a = mounted();
+      history.replaceState({ entry: a }, '');
       vi.spyOn(window, 'scrollY', 'get').mockReturnValue(300);
       dispatchEvent(new Event('scroll'));
       vi.advanceTimersByTime(50);
-      expect(history.state).toBeNull();
+      expect(history.state).toEqual({ entry: a });
       vi.advanceTimersByTime(60);
-      expect(history.state).toEqual({ scrollY: 300 });
+      expect(history.state).toEqual({ entry: a, scrollY: 300 });
     } finally {
       vi.useRealTimers();
     }
     expect(root).toBeTruthy();
   });
 
-  it('waits for the list before restoring', async () => {
-    const at: number[] = [];
-    vi.spyOn(window, 'scrollTo').mockImplementation(() => void at.push(document.querySelectorAll('[data-thread]').length));
+  // Review on PR #88: Back pressed within the debounce of a scroll. The
+  // entry has changed before anything can write, so the position is found
+  // by the left entry's id, and the pending write lands nowhere.
+  it('keeps a position scrolled to just before leaving the entry', async () => {
+    const root = await listAt('/f/general', memberList, memberMe);
+    vi.useFakeTimers();
+    try {
+      const left = mounted();
+      history.replaceState({ entry: left, scrollY: 10 }, '');
+      const y = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(700);
+      dispatchEvent(new Event('scroll'));
+      history.replaceState({ entry: 'next' }, '');
+      vi.advanceTimersByTime(200);
+      expect(history.state).toEqual({ entry: 'next' });
+      // The browser restoring the next entry's position while this list is
+      // still on screen: neither entry takes it.
+      y.mockReturnValue(0);
+      dispatchEvent(new Event('scroll'));
+      dispatchEvent(new Event('click'));
+      vi.advanceTimersByTime(200);
+      expect(history.state).toEqual({ entry: 'next' });
+      history.replaceState({ entry: left, scrollY: 10 }, '');
+      expect(savedScroll()).toBe(700);
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(root).toBeTruthy();
+  });
+
+  it('lets a direct save replace what a scroll recorded', async () => {
+    await listAt('/f/general', memberList, memberMe);
+    history.replaceState({ entry: mounted() }, '');
+    const y = vi.spyOn(window, 'scrollY', 'get').mockReturnValue(700);
+    dispatchEvent(new Event('scroll'));
+    y.mockReturnValue(900);
+    rememberScroll();
+    expect(savedScroll()).toBe(900);
+  });
+
+  it('turns the browser\'s own restoration off while mounted', async () => {
+    history.scrollRestoration = 'auto';
+    const root = await listAt('/f/general', memberList, memberMe);
+    expect(history.scrollRestoration).toBe('manual');
+    await route('/');
+    await settle(root);
+    expect(history.scrollRestoration).toBe('auto');
+  });
+
+  it('saves when the page is hidden', async () => {
+    await listAt('/f/general', memberList, memberMe);
+    const id = mounted();
+    history.replaceState({ entry: id }, '');
+    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(250);
+    dispatchEvent(new Event('pagehide'));
+    expect(history.state).toEqual({ entry: id, scrollY: 250 });
+  });
+
+  it('waits for the list before restoring, and records nothing until then', async () => {
+    const at: [number, number][] = [];
+    vi.spyOn(window, 'scrollTo').mockImplementation((_x, y) => void at.push([document.querySelectorAll('[data-thread]').length, y as number]));
     viewer.value = structuredClone(memberMe) as Me;
     let answer!: () => void;
     vi.stubGlobal('fetch', () => new Promise<Response>((r) => (answer = () => r(new Response(JSON.stringify(memberList))))));
     const root = await renderAt('/f/general');
     expect(at).toEqual([]);
+    // The browser's restoration, while the data is loading.
+    history.replaceState({ entry: mounted(), scrollY: 640 }, '');
+    vi.spyOn(window, 'scrollY', 'get').mockReturnValue(5);
+    dispatchEvent(new Event('scroll'));
+    dispatchEvent(new Event('click'));
     await act(async () => answer());
     await settle(root);
-    expect(at).toEqual([2]);
+    expect(at).toEqual([[2, 640]]);
   });
 
   it('restores a saved position, and starts a new page at the top', async () => {

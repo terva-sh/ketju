@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-25T04:01:08Z
+updated_at: 2026-09-25T04:22:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -112,6 +112,21 @@ Built. Where it went and where it moved off the plan:
 - 34 hand mutants. All are killed except `restored.current === key` → `false`, which is equivalent: it differs only if a list's data goes from present to absent and back under the same key, and useResource keeps data while it revalidates.
 - Playwright: 16 pass at both widths, 8 of them the new spec's (4 tests × 2 widths).
 - The seed changes the forum index's screenshots: Chatter is added and General shows 4 threads. They were regenerated. There is no thread-list mockup (settled in grooming); the PR compares the screenshots with docs/06 "Thread list views" and the index's rows.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T04:22:16Z
+
+Review 1 on #88 (head 9bc8885, run #460) had one medium finding: a scroll followed by Back within the 100 ms debounce was lost. It was valid, and is fixed. The suggested fix, flushing in the effect's cleanup, would not work: by the time cleanup runs after a Back, `history.state` already names the next entry, so the position would be written into the wrong one.
+
+### What changed in `state/scroll.ts`
+- **Entry ids.** Each history entry gets an id in `history.state`. Every scroll event records the position synchronously, in memory, against the id of the entry the list was rendered for. `savedScroll` prefers that map, then `history.state.scrollY` for a reload.
+- **Persisting.** The debounced write, the click-capture write and a new `pagehide` write persist the position to `history.state`, but only while the entry is still the list's own.
+- **Ignored scrolls.** Scroll events while `history.state` names another entry are ignored, and so are scroll events before the list has restored. Both are the browser's own restoration, and one of them had overwritten page 1's position with 0 in the Playwright trace.
+- **Browser restoration off.** `history.scrollRestoration` is `manual` while a list is mounted, and the previous value is put back on unmount. Chromium's traversal restoration could otherwise land after the list's own and move the reader: this was the one flake left on the phone, forward after an immediate back.
+
+### Tests
+- Vitest now has 21 tests on the screen, including: the scroll-then-leave case, events in the gap, nothing recorded before the restore, pagehide, and the scrollRestoration toggle.
+- 13 more mutants, all killed.
+- Playwright gained a step for the reviewer's case: scroll, Back at once, Forward, and the position is the latest one. Eight consecutive full runs passed, 16/16 each.
 
 ## Summary
 
