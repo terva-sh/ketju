@@ -106,3 +106,21 @@ DELETE FROM group_members WHERE group_id = ? AND user_id = ?;
 
 -- name: SetForumVisibility :exec
 UPDATE forums SET visibility = ?, updated_at = ? WHERE id = ?;
+
+-- ForumThreadCounts is each forum's threads with a post (migration 0007's
+-- table, kept by triggers). A forum with none has no row.
+-- name: ForumThreadCounts :many
+SELECT forum_id, threads FROM forum_thread_counts;
+
+-- ForumLastPosts is each listed forum's most recently active thread, for the
+-- forum index's last-post column: one seek per forum on
+-- threads_forum_activity rather than a scan. A forum with no thread that has
+-- a post has no row.
+-- name: ForumLastPosts :many
+SELECT f.id AS forum_id, t.id AS thread_id, t.slug, t.title, t.last_post_at, t.last_post_author_id
+FROM forums AS f
+JOIN threads AS t ON t.id = (
+	SELECT t2.id FROM threads AS t2 INDEXED BY threads_forum_activity
+	WHERE t2.forum_id = f.id AND t2.last_post_ordinal > 0
+	ORDER BY t2.last_post_at DESC, t2.id DESC LIMIT 1)
+WHERE f.id IN (sqlc.slice('forum_ids'));

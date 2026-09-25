@@ -71,6 +71,24 @@ type Querier interface {
 	// argument (?1), and a number after an expanded slice would point at the
 	// wrong value.
 	ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams) ([]ForumAccessRowsRow, error)
+	// ForumLastPosts is each listed forum's most recently active thread, for the
+	// forum index's last-post column: one seek per forum on
+	// threads_forum_activity rather than a scan. A forum with no thread that has
+	// a post has no row.
+	ForumLastPosts(ctx context.Context, forumIds []int64) ([]ForumLastPostsRow, error)
+	// ForumThreadCounts is each forum's threads with a post (migration 0007's
+	// table, kept by triggers). A forum with none has no row.
+	ForumThreadCounts(ctx context.Context) ([]ForumThreadCount, error)
+	// ForumUnread is the forum index's unread column (GET /forums,
+	// TKT-01M29CA9A5): per forum, the viewer's threads with an unread post. It
+	// is MeCounts's threads count with participation and notifications left
+	// out, by the same rule and in the same shape, so the index and the /me
+	// badge agree; a test holds the two together. It reads threads,
+	// forum_thread_counts, users, read_positions and watches, and no per-post
+	// row: read state is a position per thread (docs/04 "read_positions").
+	//
+	// Only forums with an unread thread have a row.
+	ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetForumBySlug(ctx context.Context, slug string) (Forum, error)

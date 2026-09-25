@@ -198,41 +198,65 @@ func threadList(class string) ThreadList {
 }
 
 // forumTree exercises the one level of nesting docs/04 allows, a leaf with no
-// children, and an archived forum.
+// children, an archived forum, and a forum with no threads, whose last post is
+// null. An anonymous viewer is shown public forums only (TKT-01M29CA9A5), so
+// the members-only child is the member's alone.
 func forumTree(class string) ForumTree {
-	t := ForumTree{Forums: []Forum{
-		{
-			Slug:        "general",
-			Name:        "General",
-			Description: "Anything that does not fit elsewhere",
+	general := Forum{
+		Slug:        "general",
+		Name:        "General",
+		Description: "Anything that does not fit elsewhere",
+		Visibility:  "public",
+		Archived:    false,
+		ThreadCount: 418,
+		LastPost: &ForumLastPost{
+			Thread: ThreadLink{ID: "3yymw47g00001", Slug: "naming-the-monthly-threads",
+				Title: "Naming the monthly threads"},
+			Author: alice,
+			At:     1757500400000,
+		},
+		Children: []Forum{{
+			Slug:        "general-events",
+			Name:        "Events",
+			Description: "Meetups and calls",
 			Visibility:  "public",
 			Archived:    false,
-			ThreadCount: 418,
-			Children: []Forum{{
-				Slug:        "general-offtopic",
-				Name:        "Off topic",
-				Description: "",
-				Visibility:  "members",
-				Archived:    false,
-				ThreadCount: 96,
-				Children:    []Forum{},
-			}},
-		},
-		{
-			Slug:        "archive-2024",
-			Name:        "Archive 2024",
-			Description: "Read only",
-			Visibility:  "public",
-			Archived:    true,
-			ThreadCount: 1204,
 			Children:    []Forum{},
-		},
-	}}
-	if class != tAnon {
-		t.Forums[0].Unread = 7
-		t.Forums[0].Children[0].Unread = 2
+		}},
 	}
-	return t
+	archive := Forum{
+		Slug:        "archive-2024",
+		Name:        "Archive 2024",
+		Description: "Read only",
+		Visibility:  "public",
+		Archived:    true,
+		ThreadCount: 1204,
+		LastPost: &ForumLastPost{
+			Thread: ThreadLink{ID: "3yymw47g00007", Slug: "year-end-wrap-up", Title: "Year-end wrap-up"},
+			Author: bob,
+			At:     1735600000000,
+		},
+		Children: []Forum{},
+	}
+	if class != tAnon {
+		general.Unread = 7
+		general.Children = append(general.Children, Forum{
+			Slug:        "general-offtopic",
+			Name:        "Off topic",
+			Description: "",
+			Visibility:  "members",
+			Archived:    false,
+			ThreadCount: 96,
+			Unread:      2,
+			LastPost: &ForumLastPost{
+				Thread: ThreadLink{ID: "3yymw47g00009", Slug: "what-are-you-reading", Title: "What are you reading?"},
+				Author: bob,
+				At:     1757490000000,
+			},
+			Children: []Forum{},
+		})
+	}
+	return ForumTree{Forums: []Forum{general, archive}}
 }
 
 // me is the viewer. The anonymous case is the one that matters most: a null

@@ -110,3 +110,43 @@ SELECT (SELECT count(*) FROM notifications
        f.forum_id, f.threads, f.participated, f.watching
 FROM (SELECT 1) AS one
 LEFT JOIN by_forum AS f ON 1;
+
+-- ForumUnread is the forum index's unread column (GET /forums,
+-- TKT-01M29CA9A5): per forum, the viewer's threads with an unread post. It
+-- is MeCounts's threads count with participation and notifications left
+-- out, by the same rule and in the same shape, so the index and the /me
+-- badge agree; a test holds the two together. It reads threads,
+-- forum_thread_counts, users, read_positions and watches, and no per-post
+-- row: read state is a position per thread (docs/04 "read_positions").
+--
+-- Only forums with an unread thread have a row.
+-- name: ForumUnread :many
+WITH me AS (
+	SELECT coalesce(mark_all_read_at, -1) AS mark FROM users AS u WHERE u.id = sqlc.arg(user_id)
+),
+active AS (
+	SELECT c.forum_id,
+	       CASE WHEN me.mark < 0 THEN c.threads
+	            ELSE (SELECT count(*) FROM threads AS t INDEXED BY threads_forum_active
+	                  WHERE t.forum_id = c.forum_id AND t.last_post_at > me.mark AND t.last_post_ordinal > 0)
+	       END AS threads
+	FROM forum_thread_counts AS c, me
+),
+touched AS (
+	SELECT thread_id FROM read_positions WHERE user_id = sqlc.arg(user_id)
+	UNION SELECT thread_id FROM watches WHERE user_id = sqlc.arg(user_id) AND thread_id IS NOT NULL
+),
+not_unread AS (
+	SELECT t.forum_id, count(*) AS threads
+	FROM touched
+	JOIN threads AS t ON t.id = touched.thread_id
+	CROSS JOIN me
+	LEFT JOIN read_positions AS rp ON rp.user_id = sqlc.arg(user_id) AND rp.thread_id = t.id
+	LEFT JOIN watches AS w ON w.user_id = sqlc.arg(user_id) AND w.thread_id = t.id
+	WHERE t.last_post_at > me.mark AND t.last_post_ordinal > 0
+	  AND NOT (t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0) AND coalesce(w.level, '') <> 'mute')
+	GROUP BY t.forum_id
+)
+SELECT a.forum_id, CAST(a.threads - coalesce(n.threads, 0) AS INTEGER) AS threads
+FROM active AS a LEFT JOIN not_unread AS n ON n.forum_id = a.forum_id
+WHERE a.threads - coalesce(n.threads, 0) > 0;

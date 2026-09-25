@@ -8,15 +8,31 @@
       "archived": false,
       "thread_count": 418,
       "unread": 0,
+      "last_post": {
+        "thread": {
+          "id": "3yymw47g00001",
+          "slug": "naming-the-monthly-threads",
+          "title": "Naming the monthly threads"
+        },
+        "author": {
+          "handle": "alice",
+          "display_name": "Alice Nakamura",
+          "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+          "role": "member",
+          "kind": "human"
+        },
+        "at": 1757500400000
+      },
       "children": [
         {
-          "slug": "general-offtopic",
-          "name": "Off topic",
-          "description": "",
-          "visibility": "members",
+          "slug": "general-events",
+          "name": "Events",
+          "description": "Meetups and calls",
+          "visibility": "public",
           "archived": false,
-          "thread_count": 96,
+          "thread_count": 0,
           "unread": 0,
+          "last_post": null,
           "children": []
         }
       ]
@@ -29,6 +45,21 @@
       "archived": true,
       "thread_count": 1204,
       "unread": 0,
+      "last_post": {
+        "thread": {
+          "id": "3yymw47g00007",
+          "slug": "year-end-wrap-up",
+          "title": "Year-end wrap-up"
+        },
+        "author": {
+          "handle": "bob",
+          "display_name": "Bob Iyer",
+          "avatar": "",
+          "role": "moderator",
+          "kind": "human"
+        },
+        "at": 1735600000000
+      },
       "children": []
     }
   ]

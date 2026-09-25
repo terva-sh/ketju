@@ -10,6 +10,75 @@ import (
 	"database/sql"
 )
 
+const forumUnread = `-- name: ForumUnread :many
+WITH me AS (
+	SELECT coalesce(mark_all_read_at, -1) AS mark FROM users AS u WHERE u.id = ?1
+),
+active AS (
+	SELECT c.forum_id,
+	       CASE WHEN me.mark < 0 THEN c.threads
+	            ELSE (SELECT count(*) FROM threads AS t INDEXED BY threads_forum_active
+	                  WHERE t.forum_id = c.forum_id AND t.last_post_at > me.mark AND t.last_post_ordinal > 0)
+	       END AS threads
+	FROM forum_thread_counts AS c, me
+),
+touched AS (
+	SELECT thread_id FROM read_positions WHERE user_id = ?1
+	UNION SELECT thread_id FROM watches WHERE user_id = ?1 AND thread_id IS NOT NULL
+),
+not_unread AS (
+	SELECT t.forum_id, count(*) AS threads
+	FROM touched
+	JOIN threads AS t ON t.id = touched.thread_id
+	CROSS JOIN me
+	LEFT JOIN read_positions AS rp ON rp.user_id = ?1 AND rp.thread_id = t.id
+	LEFT JOIN watches AS w ON w.user_id = ?1 AND w.thread_id = t.id
+	WHERE t.last_post_at > me.mark AND t.last_post_ordinal > 0
+	  AND NOT (t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0) AND coalesce(w.level, '') <> 'mute')
+	GROUP BY t.forum_id
+)
+SELECT a.forum_id, CAST(a.threads - coalesce(n.threads, 0) AS INTEGER) AS threads
+FROM active AS a LEFT JOIN not_unread AS n ON n.forum_id = a.forum_id
+WHERE a.threads - coalesce(n.threads, 0) > 0
+`
+
+type ForumUnreadRow struct {
+	ForumID int64
+	Threads int64
+}
+
+// ForumUnread is the forum index's unread column (GET /forums,
+// TKT-01M29CA9A5): per forum, the viewer's threads with an unread post. It
+// is MeCounts's threads count with participation and notifications left
+// out, by the same rule and in the same shape, so the index and the /me
+// badge agree; a test holds the two together. It reads threads,
+// forum_thread_counts, users, read_positions and watches, and no per-post
+// row: read state is a position per thread (docs/04 "read_positions").
+//
+// Only forums with an unread thread have a row.
+func (q *Queries) ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error) {
+	rows, err := q.db.QueryContext(ctx, forumUnread, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ForumUnreadRow
+	for rows.Next() {
+		var i ForumUnreadRow
+		if err := rows.Scan(&i.ForumID, &i.Threads); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getReadPosition = `-- name: GetReadPosition :one
 SELECT user_id, thread_id, last_read_ordinal, last_read_at FROM read_positions WHERE user_id = ? AND thread_id = ?
 `

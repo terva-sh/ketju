@@ -289,14 +289,36 @@ type Forum struct {
 	Visibility string `json:"visibility"`
 	Archived   bool   `json:"archived"`
 
+	// ThreadCount is the forum's threads with a post, not including
+	// children's.
 	ThreadCount int `json:"thread_count"`
-	// Unread is this forum's own count, not including children, so a client
-	// can show both a branch total and a leaf count without double counting.
+	// Unread is this forum's own count of threads with an unread post, not
+	// including children, so a client can show both a branch total and a
+	// leaf count without double counting.
 	Unread int `json:"unread"`
+	// LastPost is the forum's most recently active thread, the index's
+	// "last post" column; nil when the forum has no threads.
+	LastPost *ForumLastPost `json:"last_post"`
 
 	// Children is at most one level deep (docs/04), and is an empty array
 	// rather than null for a leaf.
 	Children []Forum `json:"children"`
+}
+
+// ForumLastPost is a forum's latest activity: which thread, who posted, and
+// when.
+type ForumLastPost struct {
+	Thread ThreadLink `json:"thread"`
+	Author Author     `json:"author"`
+	At     Millis     `json:"at"`
+}
+
+// ThreadLink names a thread from inside another response, with what a link to
+// it needs.
+type ThreadLink struct {
+	ID    string `json:"id"`
+	Slug  string `json:"slug"`
+	Title string `json:"title"`
 }
 
 // ForumTree is the response to GET /forums.

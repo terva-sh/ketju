@@ -137,7 +137,20 @@ export interface Forum {
   archived: boolean;
   thread_count: number;
   unread: number;
+  last_post: ForumLastPost | null;
   children: Forum[];
+}
+
+export interface ForumLastPost {
+  thread: ThreadLink;
+  author: Author;
+  at: Millis;
+}
+
+export interface ThreadLink {
+  id: string;
+  slug: string;
+  title: string;
 }
 
 export interface ForumTree {

@@ -26,6 +26,7 @@ import (
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/posts"
 	"github.com/terva-sh/ketju/internal/service/threads"
@@ -353,6 +354,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	step("listener")
 	perms := perm.New(d)
 	userSvc := &users.Service{DB: d, Perm: perms}
+	forumSvc := &forums.Service{DB: d, Perm: perms, Logger: log}
 	threadSvc := &threads.Service{
 		DB: d, Perm: perms, Threads: cache, Render: render.NewCacheMB(cfg.Storage.RenderedCacheMB),
 		Quarantined: proj.Quarantined,
@@ -373,7 +375,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 	shell.SetPage(api.ShellPage(userSvc))
 	var root http.Handler = web.New(web.Groups{
-		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Logger: log}),
+		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Logger: log}),
 		Auth:   auth.New(authh),
 		Assets: spa.Assets(),
 		SPA:    shell,

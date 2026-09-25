@@ -15,6 +15,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -24,6 +25,7 @@ import (
 type Deps struct {
 	Threads *threads.Service
 	Users   *users.Service
+	Forums  *forums.Service
 	Logger  *slog.Logger
 }
 
@@ -34,17 +36,18 @@ type Deps struct {
 // the first request to a route that needs it: a server wired without one is
 // a build mistake, and it should not start.
 func New(d Deps) http.Handler {
-	if d.Threads == nil || d.Users == nil {
-		panic(fmt.Sprintf("api.New: Threads and Users are required (Threads set: %t, Users set: %t)",
-			d.Threads != nil, d.Users != nil))
+	if d.Threads == nil || d.Users == nil || d.Forums == nil {
+		panic(fmt.Sprintf("api.New: Threads, Users and Forums are required (Threads set: %t, Users set: %t, Forums set: %t)",
+			d.Threads != nil, d.Users != nil, d.Forums != nil))
 	}
 	log := d.Logger
 	if log == nil {
 		log = slog.Default()
 	}
-	h := &handlers{threads: d.Threads, users: d.Users, log: log}
+	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, log: log}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/me", h.me)
+	mux.HandleFunc("GET /api/v1/forums", h.forumTree)
 	mux.HandleFunc("GET /api/v1/threads/{id}", h.thread)
 	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}", h.post)
 	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}/replies", h.replies)
@@ -62,6 +65,7 @@ func New(d Deps) http.Handler {
 type handlers struct {
 	threads *threads.Service
 	users   *users.Service
+	forums  *forums.Service
 	log     *slog.Logger
 }
 

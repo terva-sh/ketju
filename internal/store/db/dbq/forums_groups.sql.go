@@ -214,6 +214,98 @@ func (q *Queries) ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams
 	return items, nil
 }
 
+const forumLastPosts = `-- name: ForumLastPosts :many
+SELECT f.id AS forum_id, t.id AS thread_id, t.slug, t.title, t.last_post_at, t.last_post_author_id
+FROM forums AS f
+JOIN threads AS t ON t.id = (
+	SELECT t2.id FROM threads AS t2 INDEXED BY threads_forum_activity
+	WHERE t2.forum_id = f.id AND t2.last_post_ordinal > 0
+	ORDER BY t2.last_post_at DESC, t2.id DESC LIMIT 1)
+WHERE f.id IN (/*SLICE:forum_ids*/?)
+`
+
+type ForumLastPostsRow struct {
+	ForumID          int64
+	ThreadID         int64
+	Slug             string
+	Title            string
+	LastPostAt       int64
+	LastPostAuthorID int64
+}
+
+// ForumLastPosts is each listed forum's most recently active thread, for the
+// forum index's last-post column: one seek per forum on
+// threads_forum_activity rather than a scan. A forum with no thread that has
+// a post has no row.
+func (q *Queries) ForumLastPosts(ctx context.Context, forumIds []int64) ([]ForumLastPostsRow, error) {
+	query := forumLastPosts
+	var queryParams []interface{}
+	if len(forumIds) > 0 {
+		for _, v := range forumIds {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:forum_ids*/?", strings.Repeat(",?", len(forumIds))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:forum_ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ForumLastPostsRow
+	for rows.Next() {
+		var i ForumLastPostsRow
+		if err := rows.Scan(
+			&i.ForumID,
+			&i.ThreadID,
+			&i.Slug,
+			&i.Title,
+			&i.LastPostAt,
+			&i.LastPostAuthorID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const forumThreadCounts = `-- name: ForumThreadCounts :many
+SELECT forum_id, threads FROM forum_thread_counts
+`
+
+// ForumThreadCounts is each forum's threads with a post (migration 0007's
+// table, kept by triggers). A forum with none has no row.
+func (q *Queries) ForumThreadCounts(ctx context.Context) ([]ForumThreadCount, error) {
+	rows, err := q.db.QueryContext(ctx, forumThreadCounts)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ForumThreadCount
+	for rows.Next() {
+		var i ForumThreadCount
+		if err := rows.Scan(&i.ForumID, &i.Threads); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getForum = `-- name: GetForum :one
 SELECT id, parent_id, slug, name, description, position, visibility, archived, created_at, updated_at FROM forums WHERE id = ?
 `

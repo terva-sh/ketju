@@ -43,6 +43,9 @@ func TestMeReadsNoLogs(t *testing.T) {
 // authorship, MeCounts' three counts are what UnreadCount and those rows say,
 // summed per forum. Threads share a few forums, so a thread wrongly
 // subtracted from, or added to, another's count changes a total.
+//
+// ForumUnread, the forum index's column (TKT-01M29CA9A5), is held to the same
+// threads count here, so the index and the /me badge cannot disagree.
 func TestThreadRuleMatchesPostRule(t *testing.T) {
 	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	if err != nil {
@@ -127,10 +130,14 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 		}
 
 		var rows []dbq.MeCountsRow
+		var index []dbq.ForumUnreadRow
 		want := map[int64]bool{}
 		if err := d.Read(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
 			var err error
 			if rows, err = q.MeCounts(t.Context(), 1); err != nil {
+				return err
+			}
+			if index, err = q.ForumUnread(t.Context(), 1); err != nil {
 				return err
 			}
 			for th := 1; th <= threads; th++ {
@@ -166,9 +173,19 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 			c.watching += b(unread && watched[th])
 			wantBy[forumOf[th]] = c
 		}
+		gotIndex := map[int64]int64{}
+		for _, r := range index {
+			if r.Threads <= 0 {
+				t.Fatalf("seed %d: ForumUnread has a row for forum %d with %d threads", seed, r.ForumID, r.Threads)
+			}
+			gotIndex[r.ForumID] = r.Threads
+		}
 		for f := int64(1); f <= int64(forums); f++ {
 			if got[f] != wantBy[f] {
 				t.Fatalf("seed %d, forum %d (mark %v): MeCounts %+v, want %+v", seed, f, mark, got[f], wantBy[f])
+			}
+			if gotIndex[f] != wantBy[f].threads {
+				t.Fatalf("seed %d, forum %d (mark %v): ForumUnread %d, want %d", seed, f, mark, gotIndex[f], wantBy[f].threads)
 			}
 		}
 	}
