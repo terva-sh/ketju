@@ -1,5 +1,6 @@
 import { signal, type Signal } from '@preact/signals';
 import { insertBlock, quoteMarkdown } from '../composer/quote';
+import { viewer } from './viewer';
 
 // The composer's state, one per thread (docs/06 "Composer"). It is here
 // rather than in the component because the post actions write to it (quote,
@@ -20,7 +21,18 @@ export interface Composer {
 
 const composers = new Map<string, Composer>();
 
+// owner is whose composers these are. A different viewer, signed in in the
+// same tab, starts with none: what one person wrote is not shown to the next
+// (review 557). Signing in and out load a page today, which empties this
+// anyway; this holds without relying on that.
+let owner: string | null = null;
+
 export function composerFor(thread: string): Composer {
+  const who = viewer.value.user?.handle ?? '';
+  if (who !== owner) {
+    composers.clear();
+    owner = who;
+  }
   let c = composers.get(thread);
   if (!c) {
     c = { source: signal(''), replyTo: signal(null), caret: signal(0), summoned: signal(0) };
@@ -57,4 +69,5 @@ export function replyToThread(thread: string) {
 // resetComposers forgets every composer, for tests.
 export function resetComposers() {
   composers.clear();
+  owner = null;
 }

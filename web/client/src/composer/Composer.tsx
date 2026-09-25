@@ -304,6 +304,10 @@ function useMentions(
     const a = area.current;
     if (!a) return;
     const next = a.selectionStart === a.selectionEnd ? mentionAt(a.value, a.selectionStart) : null;
+    // Escape closes the list for the mention it was pressed on; typing on
+    // to another mention, even one that comes back to the same letters,
+    // lets it open again (review 557).
+    if ((next ? `${next.start}:${next.prefix}` : null) !== key) setDismissed(null);
     // A new object only for a new mention, so an unchanged one asks nothing
     // again; typed is compared too, since insertion replaces all of it.
     setAt((prev) => (prev && next && prev.start === next.start && prev.typed === next.typed ? prev : next));

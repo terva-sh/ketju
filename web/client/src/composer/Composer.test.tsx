@@ -1,7 +1,8 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Post, RenderResult, ThreadPage, UserSuggestions } from '../api/dto';
-import { resetComposers } from '../state/composer';
+import { composerFor, resetComposers } from '../state/composer';
+import { viewer } from '../state/viewer';
 import { renderAt, threadPage } from '../testing';
 import { mentionDelay, previewDelay } from './Composer';
 
@@ -367,6 +368,22 @@ describe('mention autocomplete', () => {
     expect(root.querySelector('[role=listbox]')).toBeNull();
   });
 
+  it('opens again after Escape once the mention changes, even back to the same letters (review 557)', async () => {
+    serve(page(), people);
+    const root = await renderAt(path);
+    await type(root, '@al');
+    await wait(mentionDelay + 20);
+    await key(root, 'Escape');
+    expect(root.querySelector('[role=listbox]')).toBeNull();
+    const a = area(root);
+    a.value = '@a';
+    a.setSelectionRange(2, 2);
+    await act(() => void a.dispatchEvent(new Event('input', { bubbles: true })));
+    await type(root, 'l');
+    await wait(mentionDelay + 20);
+    expect(root.querySelector('[role=listbox]')).not.toBeNull();
+  });
+
   it('can be picked with the pointer, and closed with Escape', async () => {
     serve(page(), people);
     const root = await renderAt(path);
@@ -425,6 +442,30 @@ describe('mention autocomplete', () => {
     await key(root, 'Shift');
     await wait(mentionDelay + 20);
     expect(sent.filter((s) => s.url.startsWith('/api/v1/users'))).toHaveLength(0);
+  });
+});
+
+describe('whose composer it is', () => {
+  it("does not show one reader's unsent reply to the next who signs in (review 557)", async () => {
+    serve(page());
+    const me = viewer.value;
+    const as = (handle: string) => ({ ...me, user: { ...me.user!, handle } });
+    viewer.value = as('mara');
+    try {
+      const root = await renderAt(path);
+      await type(root, 'private words');
+      await click(root.querySelector('#post-2 [data-post-action=reply]'));
+      expect(composerFor(thread.id).source.value).toBe('private words');
+
+      await act(() => void (viewer.value = as('drew')));
+      expect(area(root).value).toBe('');
+      expect(root.querySelector('.reply-chip')).toBeNull();
+      // Not kept aside for the first reader either: gone from memory.
+      await act(() => void (viewer.value = as('mara')));
+      expect(area(root).value).toBe('');
+    } finally {
+      viewer.value = me;
+    }
   });
 });
 

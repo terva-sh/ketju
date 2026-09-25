@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-24T23:59:46Z
+updated_at: 2026-09-25T00:15:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -204,6 +204,24 @@ Mutants: 46, all killed.
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T23:59:46Z
 
 Review round six on #76, head c872487 (Actions run 386), did not run: context_limit. The PR diff is about 254 KB, including the regenerated client bundle, and the five earlier rounds' bodies are in the discussion the reviewer reads. The maintainer chose to replace #76 with a fresh PR from the same branch and review it once. The merge rule is the one they set for #71: merge if it is clean or raises only further edge cases of the same kind, filing those as a follow-up draft. #76 is closed unmerged, with a pointer; #77 replaces it.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T00:15:06Z
+
+Review 557 on #77 (head d45d2e7, base df5f2ed, Actions run 390) was the fresh full review.
+
+### Medium: "Scope in-memory drafts to the signed-in user"
+This is not the same kind of finding as the earlier UI edge cases: it is one person's unsent words shown to another. So under the maintainer's #71 rule it is fixed, not deferred.
+
+In the app as it stands it is not reachable. Signing in and out both load a page (the OIDC redirects and `/auth/logout`), which empties module state. Nothing guaranteed that, though.
+- Fix: `composerFor` remembers whose composers it holds. When the viewer's handle changes, it forgets them all, the previous person's included.
+- Test: mara types and replies; switching the viewer to drew shows an empty composer with no chip, and switching back to mara shows nothing either.
+
+### Low: "Clear an autocomplete dismissal when the mention changes"
+Fixed, because it is two lines. A dismissal now lasts only for the mention Escape was pressed on, so deleting a letter and retyping it reopens the list.
+- Test: that sequence.
+
+### Mutants
+47, all killed. They include dropping the clear and dropping the dismissal reset.
 
 ## Summary
 
