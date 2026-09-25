@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-09-25T03:28:22Z
+updated_at: 2026-09-25T03:40:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -138,6 +138,10 @@ Committed screenshots: `web/client/e2e/screenshots/forum-index-{desktop,phone}-{
 
 **Deliberate layout choice**
 10. **Phone cards.** A card's name, unread badge, last-thread title and "Start one" are separate links. The mockup makes the whole card one link, but nested links are invalid, and the last post has its own destination.
+
+**agent:claude-code/phase1-run-415af6aa** at 2026-09-25T03:40:46Z
+
+Review of PR #85 failed with context_limit (run 445): the diff is 260 KB, 190 KB of it dist; see TKT-01M3AZGKBP. The source is reviewed instead in review-only PR #86 (branch review/cee5y-source: #85 plus one commit restoring dist to main, 70 KB). #85 merges only if #86's review is clean and #85's CI is green. #86 is closed unmerged afterwards.
 
 ## Summary
 
