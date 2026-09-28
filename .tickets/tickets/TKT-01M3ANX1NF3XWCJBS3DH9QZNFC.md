@@ -14,11 +14,13 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:129
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T21:42:17Z
-updated_at: 2026-09-28T19:19:43Z
+updated_at: 2026-09-28T19:19:58Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
