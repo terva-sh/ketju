@@ -431,28 +431,43 @@ func TestNoThreadsDirectoryHoldsThePass(t *testing.T) {
 }
 
 // TestAvatarAndDraftGuards: a blob a user's avatar or a draft names is kept,
-// though nothing writes either reference yet.
+// though nothing writes either reference yet, and in either case, as the
+// log scan matches it (review 1157).
 func TestAvatarAndDraftGuards(t *testing.T) {
 	w := newGCWorld(t)
 	w.now = t0.Add(30 * 24 * time.Hour)
 	avatar := w.upload("avatar", t0)
 	drafted := w.upload("drafted", t0)
+	upperAvatar := w.upload("upper avatar", t0)
+	upperDraft := w.upload("upper draft", t0)
 	w.write(func(q *dbq.Queries, tx *sql.Tx) error {
-		uid, err := q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "alice", DisplayName: "Alice",
-			Status: "active", Role: "member", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
-		if err != nil {
-			return err
+		for i, name := range []string{avatar, "sha256:" + strings.ToUpper(upperAvatar)} {
+			uid, err := q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: fmt.Sprintf("user%d", i),
+				DisplayName: "U", Status: "active", Role: "member", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+			if err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(t.Context(), "UPDATE users SET avatar_blob = ? WHERE id = ?", name, uid); err != nil {
+				return err
+			}
 		}
-		if _, err := tx.ExecContext(t.Context(), "UPDATE users SET avatar_blob = ? WHERE id = ?", avatar, uid); err != nil {
-			return err
+		for i, src := range []string{"half-written ![](/blobs/" + drafted + ")", "pasted " + strings.ToUpper(upperDraft)} {
+			if _, err := tx.ExecContext(t.Context(), `INSERT INTO drafts (user_id, thread_id, source, created_at, updated_at)
+				VALUES (1, ?, ?, 1, 1)`, i+1, src); err != nil {
+				return err
+			}
 		}
-		_, err = tx.ExecContext(t.Context(), `INSERT INTO drafts (user_id, thread_id, source, created_at, updated_at)
-			VALUES (?, 1, ?, 1, 1)`, uid, "half-written ![](/blobs/"+drafted+")")
-		return err
+		return nil
 	})
 	res := w.mustRun()
-	if !w.kept(avatar) || !w.kept(drafted) || res.Removed != 0 || attr(res, "kept_changed") != int64(2) {
-		t.Fatalf("avatar kept=%v, draft kept=%v, removed %d", w.kept(avatar), w.kept(drafted), res.Removed)
+	for name, h := range map[string]string{"avatar": avatar, "draft": drafted,
+		"upper-case avatar": upperAvatar, "upper-case draft": upperDraft} {
+		if !w.kept(h) {
+			t.Errorf("%s: collected a blob it names", name)
+		}
+	}
+	if res.Removed != 0 || attr(res, "kept_changed") != int64(4) {
+		t.Fatalf("removed %d, kept_changed %v; want 0 and 4", res.Removed, attr(res, "kept_changed"))
 	}
 }
 

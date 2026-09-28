@@ -87,10 +87,12 @@ SELECT EXISTS (SELECT 1 FROM blobs WHERE hash = ?);
 -- A reference added after the candidates were read therefore wins. The
 -- avatar and draft conditions are guards: nothing writes either reference
 -- yet, and the delete should not be what finds out that something now does.
+-- Both compare in lower case, as the log scan does, because the hash is
+-- stored lower case and free text may name it in either (review 1157).
 -- name: DeleteCollectableBlob :execrows
 DELETE FROM blobs
 WHERE blobs.hash = sqlc.arg('hash')
   AND blobs.refcount = 0
   AND blobs.unreferenced_since <= CAST(sqlc.arg('cutoff') AS INTEGER)
-  AND NOT EXISTS (SELECT 1 FROM users WHERE instr(users.avatar_blob, blobs.hash) > 0)
-  AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(drafts.source, blobs.hash) > 0);
+  AND NOT EXISTS (SELECT 1 FROM users WHERE instr(lower(users.avatar_blob), blobs.hash) > 0)
+  AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(lower(drafts.source), blobs.hash) > 0);

@@ -69,6 +69,8 @@ type Querier interface {
 	// A reference added after the candidates were read therefore wins. The
 	// avatar and draft conditions are guards: nothing writes either reference
 	// yet, and the delete should not be what finds out that something now does.
+	// Both compare in lower case, as the log scan does, because the hash is
+	// stored lower case and free text may name it in either (review 1157).
 	DeleteCollectableBlob(ctx context.Context, arg DeleteCollectableBlobParams) (int64, error)
 	// Login re-evaluation clears the IdP-sourced rows and re-adds what the claims
 	// say now, in one transaction. Admin rows are not touched.
