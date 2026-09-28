@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T14:21:54Z
+updated_at: 2026-09-28T14:28:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -134,6 +134,10 @@ Mutations rerun against the reworked code: 23 in all. 22 are caught, and "count 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T14:21:54Z
 
 CI run 656 on efa1444 failed at 'client tests': web/client's contract test requires every golden in internal/dto/testdata/golden to be imported by web/client/src/api/dto-contract.ts and held to a type there. Added Profile, UserPosts and UserPost to web/client/src/api/dto.ts and the six goldens to the contract. Type-only, so go generate ./internal/web/spa leaves dist unchanged; tsc, 875 client tests and the budget pass locally. Profile.status is string | null, as Author.role is string, because a JSON import widens its literals.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T14:28:34Z
+
+Clean Terva reviews after 1162: run f396b172-3073-47d2-af19-425f2e2d847d (Actions run #657) on head efa14444aae5e9b57c5d4d2477c43db376e4660a, base 03a0ea63f76ea95c39e90f34f90bff41bfddc867, marked all three 1162 findings resolved; run 093e0b29-1ff9-4c94-9550-c13c5e16f2f7 on head f6c9d0cac068258d5b87981725cc9ee04a547561, base 50da12475294a46dcbbd9c1231fca6440d1b1708, clean with no findings. CI run 660 on f6c9d0c passed with every step, go test (race) and client tests included. This note is carried to the next head as a ticket-only commit.
 
 ## Summary
 
