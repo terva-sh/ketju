@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T06:04:58Z
+updated_at: 2026-09-28T06:17:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -123,6 +123,17 @@ Each finding was fixed by changing the behaviour in 176e154. None was answered b
 - **medium: `u` and `n` worked for signed-out readers, who have no control for them.** Both now do nothing for a reader who is not signed in.
 
 Each fix has a Vitest case, and each case fails with its fix reverted (mutations listed in the commit body).
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T06:17:50Z
+
+Review 1130 (run e01cc29f-ab19-48a0-8e3a-3429145cdfcb, Actions run #521, request ready-review-c5221bc) reviewed head c5221bc7d209b19857a762d36b02cb5aec2d5f74 against base 09e8f86284570641a934543b559880e02645d0a2. It marked all four of review 1129's findings resolved and raised two new medium findings.
+
+Both were fixed by changing the behaviour in 9078481. Neither was answered by argument.
+
+- **A failed move left its focus target for an unrelated page.** The pending target now names the address it was routed to, and only a thread body mounted at that address takes it.
+- **g swallowed Tab.** While g collects a number, only digits, Backspace and Enter are prevented. Any other key ends g and keeps its default.
+
+Each fix has a Vitest case that fails with the fix reverted.
 
 ## Summary
 
