@@ -405,6 +405,39 @@ func TestProbeStopIsBounded(t *testing.T) {
 	}
 }
 
+// The first probe runs inside Start's goroutine, so a stuck one holds neither
+// startup, which waits for it within a bound, nor shutdown, whose stop is
+// already registered (review 1155). Until it finishes, healthz says failing.
+func TestFirstProbeIsBounded(t *testing.T) {
+	f := newFixture(t)
+	f.probe = NewDirProbe(f.dir, nil)
+	release := make(chan struct{})
+	f.probe.probe = func(string) error { <-release; return nil }
+
+	stop := f.probe.Start(50 * time.Millisecond)
+	start := time.Now()
+	if f.probe.WaitFirst(50 * time.Millisecond) {
+		t.Fatal("WaitFirst reported a stuck first probe as finished")
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("WaitFirst took %v", took)
+	}
+	if rec := do(f.server(), http.MethodGet, "/healthz", false); rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("with the first probe stuck, /healthz = %d: %s", rec.Code, rec.Body)
+	}
+	if err := stop(); err == nil {
+		t.Error("stopping with the first probe stuck reported nothing")
+	}
+
+	close(release)
+	if !f.probe.WaitFirst(5 * time.Second) {
+		t.Fatal("the first probe did not finish once released")
+	}
+	if rec := do(f.server(), http.MethodGet, "/healthz", false); rec.Code != http.StatusOK {
+		t.Errorf("after the first probe finished, /healthz = %d: %s", rec.Code, rec.Body)
+	}
+}
+
 // --- AC2: no authentication, no version or configuration --------------------
 
 func TestHealthzLeaksNothing(t *testing.T) {

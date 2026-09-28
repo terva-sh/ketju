@@ -48,7 +48,9 @@ type DirProbe struct {
 	now   func() time.Time
 	probe func(path string) error
 
-	last atomic.Pointer[result]
+	last  atomic.Pointer[result]
+	first chan struct{} // closed once the first Probe has finished
+	once  sync.Once
 
 	mu     sync.Mutex // serialises Probe, so transitions are logged once
 	failed bool       // the last probe's outcome, for transition logging
@@ -66,7 +68,7 @@ func NewDirProbe(dir string, log *slog.Logger) *DirProbe {
 		log = slog.Default()
 	}
 	return &DirProbe{dir: dir, path: filepath.Join(dir, ProbePrefix+rand.Text()), log: log,
-		interval: Interval, now: time.Now, probe: writeProbe}
+		interval: Interval, now: time.Now, probe: writeProbe, first: make(chan struct{})}
 }
 
 // RemoveStale removes probe files left in dir by a process that died partway
@@ -102,12 +104,28 @@ func (p *DirProbe) Probe() {
 		p.log.Info("health: the data directory is writable again")
 	}
 	p.failed = err != nil
+	p.once.Do(func() { close(p.first) })
 }
 
-// Run probes every interval until ctx is cancelled. It does not probe on
-// entry; call Probe first when the first answer matters, as serve does
-// before it opens the listener.
+// WaitFirst waits until the first probe has finished, or for wait, whichever
+// is sooner, and reports whether the probe finished. Serve calls it before
+// the listener opens so the first poll has an answer, without letting a
+// probe stuck on the disk hold startup: past wait, startup goes on and
+// healthz reports the directory as failing until a probe completes.
+func (p *DirProbe) WaitFirst(wait time.Duration) bool {
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-p.first:
+		return true
+	case <-t.C:
+		return false
+	}
+}
+
+// Run probes on entry and then every interval until ctx is cancelled.
 func (p *DirProbe) Run(ctx context.Context) {
+	p.Probe()
 	t := time.NewTicker(p.interval)
 	defer t.Stop()
 	for {
@@ -121,6 +139,8 @@ func (p *DirProbe) Run(ctx context.Context) {
 }
 
 // Start runs Run in a goroutine and returns the function that stops it.
+// Every probe, the first included, runs in that goroutine, so none of them
+// is outside the bound Stop places on waiting (review 1155).
 //
 // Stop cancels the loop and waits for it, but for no longer than wait. A
 // probe blocked in a write or an fsync does not see a cancelled context, and

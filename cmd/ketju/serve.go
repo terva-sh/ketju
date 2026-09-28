@@ -383,13 +383,15 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 	shell.SetPage(api.ShellPage(userSvc))
 
-	// The data-directory probe runs once now, so the first poll after the
-	// listener opens has an answer, and then in the background: healthz
-	// reads its cached result and never touches the disk itself. Shutdown
-	// stops it before the lock is released, but waits for it no longer than
-	// busDrain: a probe stuck in an fsync cannot be interrupted, and waiting
-	// on it would hold the lock for as long as the disk is stuck (review
-	// 1152). Past the bound shutdown goes on and reports it. Each process
+	// The data-directory probe runs in the background, the first probe
+	// included: healthz reads its cached result and never touches the disk
+	// itself. Startup waits up to busDrain for the first result, so the first
+	// poll after the listener opens has an answer. Shutdown stops the loop
+	// before the lock is released, but waits for it no longer than busDrain.
+	// A probe stuck in an fsync cannot be interrupted, and an unbounded wait
+	// at either end would hold the lock for as long as the disk is stuck
+	// (reviews 1152 and 1155). Past a bound serve goes on, and healthz
+	// reports the directory as failing until a probe completes. Each process
 	// probes a file of its own, so one still in flight after its lock is
 	// released cannot touch this one's (review 1153); what such a process,
 	// or one that crashed mid-probe, left behind is cleared here, under the
@@ -398,12 +400,15 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		log.Warn("could not remove a stale health probe file", "err", err)
 	}
 	probe := health.NewDirProbe(cfg.DataDir, log)
-	probe.Probe()
 	stopProbe := probe.Start(busDrain)
 	closers = append(closers, func() error {
 		step("stop health probe")
 		return stopProbe()
 	})
+	if !probe.WaitFirst(busDrain) {
+		log.Warn("the first health probe did not finish; healthz reports the data directory as failing until one does",
+			"waited", busDrain)
+	}
 
 	var root http.Handler = web.New(web.Groups{
 		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Logger: log}),

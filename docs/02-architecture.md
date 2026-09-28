@@ -192,9 +192,10 @@ written into `config.toml`.
   disk I/O. The data-directory probe creates, writes, fsyncs and removes
   `data/.healthz-probe-<random>` in the background every 10 s; a result older
   than two intervals counts as failing, so a probe hung on a stuck disk does
-  not read as healthy. Shutdown waits at most 5 s for a probe in flight,
-  because a stuck fsync cannot be interrupted and the lock must still be
-  released. The random suffix gives each process its own file, so a probe
+  not read as healthy. Every probe, the first included, runs in the
+  background. Startup waits at most 5 s for the first probe's result, and
+  shutdown waits at most 5 s for a probe in flight. A stuck fsync cannot be
+  interrupted, and the lock must still be released. The random suffix gives each process its own file, so a probe
   left running past that wait cannot touch the next owner's, and `serve`
   removes leftover probe files under the lock before it starts. The route skips rate limiting, session resolution and CSRF, so
   a poll carrying a session cookie still costs one statement.
