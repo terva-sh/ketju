@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-28T05:24:00Z
+updated_at: 2026-09-28T05:28:08Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -94,6 +94,10 @@ Handed on:
 - TKT-01M29CRJ5J (moderator any-post, phase-2) must decide whether an author may restore a post a moderator deleted. In this build only authors delete, so every Delete is the author's own; the index does not record who deleted.
 - Nothing sets `EntryHiddenByMod` yet. The index clears it on every Restore (settled in grooming), and `authorize` keeps an author off a hidden post, so only a moderator path can restore one.
 - The service lives in `internal/service/threads/mutate.go` beside Reply, not in a `posts` service as the pre-groom plan said.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:28:08Z
+
+Review 1119 (run 72772705-131c-4ffb-b68e-36a6fb2d7fa5, Actions run #495) on PR #95, head a1a6b4affd81688cf1e1771c19603a47b11f34c3, base ee54c04ca6fe3a71a154c8af8d78048d770d8a97. It found two medium issues, both accepted and fixed in 2506946. finding-1: the answer mixed the append's log length and revision with a later read of the post. The post, revision and log length now come from one index snapshot taken after the append (TestWriteAnswerIsOneSnapshot). finding-2: the optional reason body was read whole with io.ReadAll. It is now streamed through a 4 KiB cap, and anything past it is payload-too-large (TestReasonBodyIsBounded). A fresh review of the new head has been requested.
 
 ## Summary
 
