@@ -26,6 +26,10 @@ type Querier interface {
 	// triggers in migration 0006 refuse it, and TestAuditLogAppendOnly refuses a
 	// query here that tries.
 	AppendAudit(ctx context.Context, arg AppendAuditParams) (int64, error)
+	// Whether audit_log already records this action on this target. Bootstrap
+	// promotion reads it as its idempotency marker (TKT-01M29C800G), through the
+	// audit_log_target index.
+	AuditExists(ctx context.Context, arg AuditExistsParams) (bool, error)
 	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
 	// The one lookup the serve path may use: a quarantined blob is not found.
 	BlobForServing(ctx context.Context, hash string) (Blob, error)

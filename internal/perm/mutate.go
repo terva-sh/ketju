@@ -3,6 +3,9 @@ package perm
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
+	"errors"
+	"strconv"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -105,4 +108,75 @@ func (e *Evaluator) SetRole(ctx context.Context, userID int64, role string) erro
 	return e.write(ctx, func(q *dbq.Queries, now int64) error {
 		return q.SetUserRole(ctx, dbq.SetUserRoleParams{Role: role, UpdatedAt: now, ID: userID})
 	})
+}
+
+// ActionPromoted is the audit_log action Promote writes. Bootstrap reads it
+// back as the mark that a user has been made admin before.
+const ActionPromoted = "user.promoted"
+
+// ErrNoUser is Promote's answer for a user id that names nobody.
+var ErrNoUser = errors.New("perm: no such user")
+
+// Promotion is how a user comes to be made admin, for the audit row.
+type Promotion struct {
+	// Actor is who promoted them: 0 for the configuration or the command
+	// line, which are nobody's account.
+	Actor int64
+	// Details go into the audit row's details_json, beside "role".
+	Details map[string]string
+	// Once leaves alone a user audit_log already records as promoted,
+	// whatever their role is now. Bootstrap sets it, so that an admin who
+	// was demoted since is not made admin again at their next sign-in
+	// (TKT-01M29C800G).
+	Once bool
+}
+
+// Promote makes userID an admin and records it in audit_log, in one
+// transaction, then clears the cache. It reports whether it changed
+// anything: a user who is already an admin, or with Once one promoted
+// before, is left alone and nothing is recorded.
+func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (bool, error) {
+	details := map[string]string{}
+	for k, v := range p.Details {
+		details[k] = v
+	}
+	details["role"] = domain.RoleAdmin
+	dj, err := json.Marshal(details)
+	if err != nil {
+		return false, err
+	}
+	target := strconv.FormatInt(userID, 10)
+	promoted := false
+	err = e.write(ctx, func(q *dbq.Queries, now int64) error {
+		u, err := q.GetUser(ctx, userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNoUser
+		}
+		if err != nil {
+			return err
+		}
+		if u.Role == domain.RoleAdmin {
+			return nil
+		}
+		if p.Once {
+			seen, err := q.AuditExists(ctx, dbq.AuditExistsParams{TargetType: "user", TargetID: target, Action: ActionPromoted})
+			if err != nil || seen {
+				return err
+			}
+		}
+		if err := q.SetUserRole(ctx, dbq.SetUserRoleParams{Role: domain.RoleAdmin, UpdatedAt: now, ID: userID}); err != nil {
+			return err
+		}
+		if _, err := q.AppendAudit(ctx, dbq.AppendAuditParams{At: now,
+			ActorID: sql.NullInt64{Int64: p.Actor, Valid: p.Actor != 0}, Action: ActionPromoted,
+			TargetType: "user", TargetID: target, DetailsJson: string(dj)}); err != nil {
+			return err
+		}
+		promoted = true
+		return nil
+	})
+	if err != nil {
+		return false, err
+	}
+	return promoted, nil
 }

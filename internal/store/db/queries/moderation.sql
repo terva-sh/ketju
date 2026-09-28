@@ -28,6 +28,14 @@ INSERT INTO audit_log (at, actor_id, action, target_type, target_id, details_jso
 VALUES (?, ?, ?, ?, ?, ?, ?)
 RETURNING id;
 
+-- Whether audit_log already records this action on this target. Bootstrap
+-- promotion reads it as its idempotency marker (TKT-01M29C800G), through the
+-- audit_log_target index.
+-- name: AuditExists :one
+SELECT EXISTS (
+	SELECT 1 FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ?
+);
+
 -- name: AuditLogBefore :many
 SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?;
 

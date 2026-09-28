@@ -58,6 +58,28 @@ func (q *Queries) AppendAudit(ctx context.Context, arg AppendAuditParams) (int64
 	return id, err
 }
 
+const auditExists = `-- name: AuditExists :one
+SELECT EXISTS (
+	SELECT 1 FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ?
+)
+`
+
+type AuditExistsParams struct {
+	TargetType string
+	TargetID   string
+	Action     string
+}
+
+// Whether audit_log already records this action on this target. Bootstrap
+// promotion reads it as its idempotency marker (TKT-01M29C800G), through the
+// audit_log_target index.
+func (q *Queries) AuditExists(ctx context.Context, arg AuditExistsParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, auditExists, arg.TargetType, arg.TargetID, arg.Action)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const auditLogBefore = `-- name: AuditLogBefore :many
 SELECT id, at, actor_id, "action", target_type, target_id, details_json, ip FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?
 `

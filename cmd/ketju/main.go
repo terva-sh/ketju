@@ -19,6 +19,7 @@ commands:
   serve  run the server
   dump   print a thread log as JSON lines, one object per record
   fsck   walk every log, verify every checksum, rebuild every index
+  admin  administer members from the command line (admin promote)
 
 Run ketju <command> -h for a command's flags.
 `
@@ -41,6 +42,8 @@ func main() {
 		err = runDump(os.Args[2:])
 	case "fsck":
 		err = runFsck(os.Args[2:])
+	case "admin":
+		err = runAdmin(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return

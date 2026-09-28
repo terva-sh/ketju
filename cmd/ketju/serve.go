@@ -334,8 +334,11 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		return fail("loading the cookie key", err)
 	}
 	sessions := &session.Store{DB: d}
+	// One evaluator for the process: sign-in promotes through it (bootstrap),
+	// and its cache is the one every request reads.
+	perms := perm.New(d)
 	authh := &auth.Handler{Sealer: sealer, Sessions: sessions, HTTPClient: o.idpClient, Logger: log,
-		Login: &identity.Service{DB: d, Sessions: sessions, Logger: log}}
+		Login: &identity.Service{DB: d, Sessions: sessions, Logger: log, Bootstrap: cfg.Bootstrap, Perm: perms}}
 	if len(cfg.OIDC.Providers) > 0 {
 		reg, err := oidc.New(ctx, cfg, oidc.Options{Logger: log, HTTPClient: o.idpClient})
 		if err != nil {
@@ -352,7 +355,6 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 
 	step("listener")
-	perms := perm.New(d)
 	userSvc := &users.Service{DB: d, Perm: perms}
 	forumSvc := &forums.Service{DB: d, Perm: perms, Logger: log}
 	threadSvc := &threads.Service{

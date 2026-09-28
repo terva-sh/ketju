@@ -15,6 +15,17 @@
   `"provider_key:subject"`, since a bare subject is ambiguous once there are
   two providers) or with an email listed in `bootstrap.admin_emails` becomes
   admin. Alternatively `ketju admin promote <handle>` from the CLI.
+  - An email matches only when the provider asserts `email_verified = true`,
+    compared on the whole address without regard to case. An unverified
+    address never matches, and the sign-in logs a warning saying so.
+  - "First login" means any sign-in where the identity matches and the user
+    is not already an admin, so a member who existed before the config named
+    them is promoted at their next sign-in. The promotion is written to
+    `audit_log` as `user.promoted`, and that row makes it happen once: a
+    bootstrap admin who is later demoted stays demoted at later sign-ins.
+  - `ketju admin promote [--root DIR] <handle>` needs only the data
+    directory, as `ketju fsck` does. It writes the same audit row with no
+    actor, and may run while `serve` does.
 
 ## Provider configuration
 
@@ -47,7 +58,7 @@ groups_claim = "groups"       # optional: map an IdP groups claim …
 group_map = { "forum-mods" = "moderators" }   # … onto local groups on each login
 
 [bootstrap]
-admin_emails = ["me@example.org"]
+admin_emails = ["me@example.org"]    # only when the provider asserts email_verified
 admin_subjects = ["authelia:8f2c61d4-5b7e-4f0a-9c3e-2d1b0a9e8f7c"]
 ```
 

@@ -13,7 +13,9 @@ import (
 
 	"github.com/terva-sh/ketju/internal/auth/oidc"
 	"github.com/terva-sh/ketju/internal/auth/session"
+	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
@@ -66,6 +68,18 @@ type Service struct {
 	Logger *slog.Logger
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
+	// Bootstrap names the identities made admin at sign-in (docs/05
+	// "Principles"). Perm makes the change; it may be nil only when
+	// Bootstrap names nobody.
+	Bootstrap config.Bootstrap
+	Perm      *perm.Evaluator
+}
+
+func (s *Service) logger() *slog.Logger {
+	if s.Logger != nil {
+		return s.Logger
+	}
+	return slog.Default()
 }
 
 func (s *Service) now() time.Time {
@@ -120,18 +134,30 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: signing in: %w", err)
 	}
+	// abandon ends the session just issued when the sign-in fails after it.
+	// The request may be what failed: cancelled mid-sign-in. So the session
+	// is ended on a context of its own, bounded, and a cancelled request
+	// cannot leave it behind (review 513).
+	abandon := func(err error) error {
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		defer cancel()
+		if err2 := s.Sessions.Revoke(cctx, token); err2 != nil {
+			err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
+		}
+		return err
+	}
 	if replaces != "" {
 		if err := s.Sessions.Revoke(ctx, replaces); err != nil {
-			// The request may be what failed: cancelled mid-sign-in. The
-			// session just issued is ended on a context of its own, bounded,
-			// so a cancelled request cannot leave it behind (review 513).
-			cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-			defer cancel()
-			if err2 := s.Sessions.Revoke(cctx, token); err2 != nil {
-				err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
-			}
-			return Result{}, fmt.Errorf("identity: ending the session a sign-in replaces: %w", err)
+			return Result{}, fmt.Errorf("identity: ending the session a sign-in replaces: %w", abandon(err))
 		}
+	}
+	// Bootstrap runs once the user is known to be active and signed in, so
+	// a suspended account the configuration names is not made admin. A
+	// failure fails the sign-in: signed in as a member, the operator would
+	// have only a log line to say why they are not an admin, and signing in
+	// again retries it.
+	if _, err := s.ApplyBootstrap(ctx, ident.UserID.Int64, id); err != nil {
+		return Result{}, abandon(err)
 	}
 
 	now := s.now().UnixMilli()
@@ -150,11 +176,7 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 		// The session exists and is valid; failing the sign-in now would
 		// leave a row nobody holds the cookie for. The record is
 		// bookkeeping, so it is logged and the sign-in stands.
-		log := s.Logger
-		if log == nil {
-			log = slog.Default()
-		}
-		log.WarnContext(ctx, "recording a sign-in failed", "provider", id.Provider, "identity", ident.ID, "error", err)
+		s.logger().WarnContext(ctx, "recording a sign-in failed", "provider", id.Provider, "identity", ident.ID, "error", err)
 	}
 	return Result{Outcome: SignedIn, Token: token, Session: sess}, nil
 }

@@ -10,6 +10,10 @@ const (
 	exitUsage    = 2
 	exitDrift    = 3 // logs are sound but something derived from them is behind
 	exitInternal = 4
+
+	// exitNotFound shares corruption's code: admin, which uses it, finds no
+	// corruption, and fsck, which finds corruption, names nothing.
+	exitNotFound = 1
 )
 
 // errUsage is a mistake in how the command was invoked.
@@ -35,6 +39,7 @@ func exitCodeFor(err error) int {
 	var u errUsage
 	var c errCorrupt
 	var d errDrift
+	var n errNotFound
 	switch {
 	case err == nil:
 		return exitOK
@@ -44,6 +49,8 @@ func exitCodeFor(err error) int {
 		return exitCorrupt
 	case errors.As(err, &d):
 		return exitDrift
+	case errors.As(err, &n):
+		return exitNotFound
 	default:
 		return exitInternal
 	}

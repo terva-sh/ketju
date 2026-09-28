@@ -148,7 +148,11 @@ type Limits struct {
 // Bootstrap names the accounts that become admin on first login, so that a
 // new installation has a way in that does not involve a password.
 type Bootstrap struct {
-	// AdminEmails match against a verified email claim.
+	// AdminEmails match against the email claim, compared without regard to
+	// case, and only when the provider also asserts email_verified = true.
+	// An address the provider has not verified is whatever someone typed
+	// into it, so it never matches; the sign-in logs a warning instead. Use
+	// AdminSubjects with a provider that does not send email_verified.
 	AdminEmails []string `toml:"admin_emails"`
 
 	// AdminSubjects are "provider_key:sub" pairs, which is the precise form:
