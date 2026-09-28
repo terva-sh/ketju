@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T06:32:33Z
+updated_at: 2026-09-28T06:36:02Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -142,6 +142,14 @@ Review 1136 (run e523b773-2273-4baa-a65b-7cc777662a25, request ready-review-1db3
 - **A timed g could still move a reader who had gone into the composer.** Fixed by changing the behaviour in aa72963: g ends when focus moves anywhere. A Vitest case fails without the fix.
 
 Before re-requesting review, the branch was merged with main at 29566a7 in a detached checkout. The merge was clean, the regenerated dist was unchanged, and tsc and Vitest passed. main's new commits touch only type declarations in the client.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T06:36:02Z
+
+Review 1140 (run 3be407ba-610c-429c-9a64-be221cf9cfc1, request ready-review-cfaaead) reviewed head cfaaeadc50e559df45ce5ea43194313370acf9be against base 29566a7aeb298d420cee5eab9cf164623b9111ae. It marked review 1136's finding resolved and raised one new medium finding.
+
+- **Backspace in g left the previous digit's timer running.** Fixed by changing the behaviour in f37a7eb: Backspace restarts the pause. A Vitest case fails without the fix.
+
+This is the fourth review round with findings (1129, 1130, 1136, 1140). Per the run brief, if the next review is not clean the PR stays open and is reported rather than taken to a sixth round.
 
 ## Summary
 
