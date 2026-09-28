@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T15:22:53Z
-updated_at: 2026-09-28T17:48:13Z
+updated_at: 2026-09-28T17:56:32Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -145,6 +145,27 @@ Criteria, with evidence:
 6. **Ticked.**
    - No secret value is in any commit or ticket. The client secret lives only in a 0600 file the maintainer wrote.
    - The client_id and the provider pk are identifiers, not secrets.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T17:56:32Z
+
+This note supersedes the **Upgrade** step list in the deployment-record note above. Review 1202 found that it never created the build directory. It also kept the rollback binary in /tmp, which does not survive a reboot. The corrected steps, from a checkout of main at a named commit:
+
+1. `export GOROOT=$(go env GOROOT)`.
+2. `install -d -m 0700 /tmp/ketju-build`.
+3. `go build -trimpath -o /tmp/ketju-build/ketju ./cmd/ketju`.
+4. `/tmp/ketju-build/ketju config check --config ~/.config/ketju/config.toml`.
+5. Keep the running binary for rollback, outside /tmp: `cp ~/.local/bin/ketju ~/.local/bin/ketju.prev`.
+6. `install -m 0755 /tmp/ketju-build/ketju ~/.local/bin/ketju`.
+7. `systemctl --user restart ketju.service`.
+8. Curl `/healthz`.
+
+To roll back:
+1. `install -m 0755 ~/.local/bin/ketju.prev ~/.local/bin/ketju`.
+2. Restart the service.
+
+Roll back only if no new migration ran.
+
+The c40b414 deploy on 2026-09-28 kept its rollback binary at /tmp/ketju-build/ketju.prev. It has been copied to `~/.local/bin/ketju.prev`.
 
 ## Summary
 
