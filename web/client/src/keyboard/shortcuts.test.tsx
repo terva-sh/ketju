@@ -268,6 +268,22 @@ describe('the shortcuts on a thread page', () => {
     expect(focused()).not.toBe('post-12');
   });
 
+  it('Backspace in g restarts the pause', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'g', '1', '2');
+    await act(async () => void vi.advanceTimersByTime(1400));
+    await type(root, 'Backspace');
+    expect(hint.value).toBe('Go to #1');
+    // The pause the 2 started has run out; the one Backspace started has not.
+    await act(async () => void vi.advanceTimersByTime(300));
+    expect(focused()).not.toBe('post-1');
+    expect(hint.value).toBe('Go to #1');
+    await act(async () => void vi.advanceTimersByTime(1300));
+    expect(focused()).toBe('post-1');
+  });
+
   it('g ends when focus moves, so a pause cannot take a reader from the composer', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     const urls = serve();

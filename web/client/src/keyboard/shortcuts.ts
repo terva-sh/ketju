@@ -280,9 +280,12 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
           clearTimeout(timer);
           timer = setTimeout(commit, gotoPause);
         } else if (e.key === 'Backspace') {
+          // An edit restarts the pause, as a digit does (review 1140).
           e.preventDefault();
           digits = digits.slice(0, -1);
           hint.value = `Go to #${digits}`;
+          clearTimeout(timer);
+          timer = setTimeout(commit, gotoPause);
         } else if (e.key === 'Enter') {
           e.preventDefault();
           commit();
