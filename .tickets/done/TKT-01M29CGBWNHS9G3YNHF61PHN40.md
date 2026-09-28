@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T07:25:23Z
+updated_at: 2026-09-28T07:36:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -109,6 +109,10 @@ Review 1144 (request ready-review-bf3c8e3, Actions run 553; head bf3c8e37477f424
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:25:23Z
 
 Review 1147 (request ready-review-81b350d, Actions run 560; head 81b350d50bcd38cbd5ee0828e80f9142905c1e32, base 3d7c3a5c2dfd5acf2db12fef199a871d5c998e38) read 1144's two findings as resolved and failed the gate with one new medium finding: a page answered before a mark-unread could raise the floor back. Accepted and fixed in the commit after it, by changing the behaviour: a thread marked from this page no longer takes a page's reported position as known, and the mark forgets every held page of the thread. A fresh review of the new head follows (round 4).
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:36:06Z
+
+Review 1148 (request ready-review-36ba74f, Actions run 566; head 36ba74f2f7c097634a343fa7a18fa7ffd84e5147, base 9b76d9d5f140591c506e9b80a7f09ac358da8d98) read 1147's finding as resolved and failed the gate with two new medium findings, both in markUnread, which no control calls yet. Both were accepted and fixed in the commit after it, by changing the behaviour: reads made from a markUnread call on are kept and judged against the DELETE's answer; and a page's reported position is ignored only when its request started before the latest mark answered (ThreadScreen loads through readTracker's asking). This is the fifth review round; per the run brief, a non-clean result stops here for a person.
 
 ## Summary
 
