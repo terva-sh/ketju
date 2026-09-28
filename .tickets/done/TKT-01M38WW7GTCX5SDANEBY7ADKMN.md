@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:05:41Z
-updated_at: 2026-09-28T07:55:06Z
+updated_at: 2026-09-28T08:05:34Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -60,6 +60,10 @@ Revised at claim (2026-09-28) against origin/main c066d91. 1. go.mod: go mod tid
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:54:44Z
 
 AC1 was already met on main when this ticket was claimed. 209a68a (TKT-01M29BW9Q1) ran go mod tidy, which put go-oidc and go-jose in the direct block. Checked on c066d91 with go1.27.1: go mod tidy leaves go.mod and go.sum unchanged, and both modules are in the first require block. This PR does not touch go.mod or go.sum. Also run locally: gofmt, go build/vet, go test -race ./..., the sqlc regeneration diff (CGO_ENABLED=0 go generate ./internal/store/db, no diff), and the SQLite driver spike's vet, test and one-iteration benchmark. All pass.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:05:34Z
+
+Terva review of PR #104 was clean with no findings. Run d0abe2a5-0bf8-4a80-851c-72c88ec2afc9 (Actions run 583, request ready-review-5925e53), head 5925e53436b223675b6085445dd9b6c30349e7e6, base c066d918a5cd1110d992729876d98f23aee77c85. CI run 582 passed on that head, every step green. This note is a ticket-only commit, so its result is carried.
 
 ## Summary
 
