@@ -389,7 +389,14 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	// stops it before the lock is released, but waits for it no longer than
 	// busDrain: a probe stuck in an fsync cannot be interrupted, and waiting
 	// on it would hold the lock for as long as the disk is stuck (review
-	// 1152). Past the bound shutdown goes on and reports it.
+	// 1152). Past the bound shutdown goes on and reports it. Each process
+	// probes a file of its own, so one still in flight after its lock is
+	// released cannot touch this one's (review 1153); what such a process,
+	// or one that crashed mid-probe, left behind is cleared here, under the
+	// lock and before the first probe.
+	if err := health.RemoveStale(cfg.DataDir); err != nil {
+		log.Warn("could not remove a stale health probe file", "err", err)
+	}
 	probe := health.NewDirProbe(cfg.DataDir, log)
 	probe.Probe()
 	stopProbe := probe.Start(busDrain)

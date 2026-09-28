@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T08:33:27Z
+updated_at: 2026-09-28T08:43:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -103,6 +103,10 @@ How each criterion was met, and the gaps settled here (docs/12 "Gaps the design 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:33:27Z
 
 Terva review 1152 (run e4ccb5e1-2885-484c-95ce-e2d86423d80b, Actions run #600) on head 4c632289942b1bafb1ed253eb91f2b7d9e1d0650, base 056e35786d1d3ab907452a609829e6c004b70f02: one high finding, 'A stuck directory probe can block shutdown indefinitely'. Accepted and fixed in behaviour. Shutdown no longer waits on the probe goroutine unbounded: DirProbe.Start returns a stop that cancels the loop and waits at most busDrain (5 s), then reports the stuck probe and lets shutdown go on to release the lock, the same shape as the projection runner's closer. Serve logs it as the new step 'stop health probe'. TestProbeStopIsBounded holds a probe blocked in its write and checks that stop returns with the error within the bound.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:43:03Z
+
+Terva review 1153 (run 156c6285-dcfa-44e0-9624-657f60d7b057, Actions run #605) on head ff8e86382bea44a027b2527782a6e38f2f2ae667, base de904cb55ab88426e91eb9c84c66c9a49bbb6ee1. It marked 1152's finding resolved and raised one medium: 'A timed-out probe can keep running after the data-directory lock is released'. Accepted and fixed in behaviour. Each DirProbe now probes a file of its own, data/.healthz-probe-<random> (ProbePrefix plus crypto/rand.Text, fixed for the probe's life), so an old process's in-flight probe cannot remove the next owner's file and the new probe cannot touch the old one's. serve calls health.RemoveStale under the lock, before its first probe, to clear files left by a crashed or timed-out process. TestProbesDoNotShareAFile keeps an old process's file in place across a new probe and then clears it with RemoveStale. The mutation that makes the name fixed fails it. docs/02 is updated.
 
 ## Summary
 

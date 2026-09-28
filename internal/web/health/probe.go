@@ -2,6 +2,7 @@ package health
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -16,12 +17,17 @@ import (
 // every 10 s, with healthz reading the cached result).
 const Interval = 10 * time.Second
 
-// ProbeFile is the file the probe creates and removes in the data directory.
-const ProbeFile = ".healthz-probe"
+// ProbePrefix starts the name of the file a probe creates and removes in the
+// data directory. The rest of the name is random and fixed for the life of a
+// DirProbe, so each process probes a file of its own (review 1153): a probe
+// from a process whose shutdown gave up waiting on it can still be inside a
+// write after the lock has passed to the next process, and a shared name
+// would let the two remove each other's file.
+const ProbePrefix = ".healthz-probe-"
 
 // DirProbe checks that a data directory is writable, off the request path.
 //
-// A probe creates ProbeFile, writes to it, fsyncs it and removes it: the
+// A probe creates its file, writes to it, fsyncs it and removes it: the
 // failures that leave the process listening but useless are a read-only
 // remount, a full disk and a lost permission, and each of them fails one of
 // those steps. The result is kept in an atomic, so a request reads it without
@@ -32,6 +38,7 @@ const ProbeFile = ".healthz-probe"
 // long as it hung, which is the one failure a health check exists to report.
 type DirProbe struct {
 	dir      string
+	path     string // dir/ProbePrefix+random: this probe's own file
 	log      *slog.Logger
 	interval time.Duration
 
@@ -39,7 +46,7 @@ type DirProbe struct {
 	// injected fault for a directory that cannot be made unwritable (a test
 	// run as root).
 	now   func() time.Time
-	probe func(dir string) error
+	probe func(path string) error
 
 	last atomic.Pointer[result]
 
@@ -58,14 +65,35 @@ func NewDirProbe(dir string, log *slog.Logger) *DirProbe {
 	if log == nil {
 		log = slog.Default()
 	}
-	return &DirProbe{dir: dir, log: log, interval: Interval, now: time.Now, probe: writeProbe}
+	return &DirProbe{dir: dir, path: filepath.Join(dir, ProbePrefix+rand.Text()), log: log,
+		interval: Interval, now: time.Now, probe: writeProbe}
+}
+
+// RemoveStale removes probe files left in dir by a process that died partway
+// through a probe, or whose shutdown stopped waiting on one. Call it only
+// while holding the data-directory lock and before starting a probe, as serve
+// does: no other process is probing then, and a process that gave up its
+// lock with a probe still in flight loses nothing by the removal but the
+// last step of a probe whose answer nobody reads.
+func RemoveStale(dir string) error {
+	matches, err := filepath.Glob(filepath.Join(dir, ProbePrefix+"*"))
+	if err != nil {
+		return err
+	}
+	var errs []error
+	for _, m := range matches {
+		if err := os.Remove(m); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
 }
 
 // Probe runs one check now and records its result.
 func (p *DirProbe) Probe() {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	err := p.probe(p.dir)
+	err := p.probe(p.path)
 	p.last.Store(&result{ok: err == nil, at: p.now()})
 	switch {
 	case err != nil && !p.failed:
@@ -126,10 +154,8 @@ func (p *DirProbe) OK() bool {
 	return r != nil && r.ok && p.now().Sub(r.at) <= 2*p.interval
 }
 
-// writeProbe is the check itself: create, write, fsync, close, remove. A
-// leftover file from a probe that died partway is truncated, not refused.
-func writeProbe(dir string) error {
-	path := filepath.Join(dir, ProbeFile)
+// writeProbe is the check itself: create, write, fsync, close, remove.
+func writeProbe(path string) error {
 	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return err

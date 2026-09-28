@@ -240,11 +240,11 @@ func TestHealthzBeforeFirstProbe(t *testing.T) {
 func TestHealthzLogsTransitionsOnce(t *testing.T) {
 	f := newFixture(t)
 	var fail atomic.Bool
-	f.probe.probe = func(dir string) error {
+	f.probe.probe = func(path string) error {
 		if fail.Load() {
 			return errors.New("injected: no space left on device")
 		}
-		return writeProbe(dir)
+		return writeProbe(path)
 	}
 	fail.Store(true)
 	for range 3 {
@@ -275,21 +275,71 @@ func TestHealthzLogsTransitionsOnce(t *testing.T) {
 	}
 }
 
-// The probe leaves nothing behind, and a file left by a probe that died
-// partway does not make the next one fail.
+// The probe leaves nothing behind.
 func TestProbeCleansUp(t *testing.T) {
 	f := newFixture(t)
-	path := filepath.Join(f.dir, ProbeFile)
-	if err := os.WriteFile(path, []byte("left over by a crash"), 0o600); err != nil {
-		t.Fatal(err)
-	}
 	f.probe.Probe()
 	if !f.probe.OK() {
-		t.Error("a leftover probe file made the probe fail")
+		t.Fatal("the probe failed on a writable directory")
 	}
-	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
-		t.Errorf("the probe file is still there: %v", err)
+	if left := probeFiles(t, f.dir); len(left) != 0 {
+		t.Errorf("the probe left %q", left)
 	}
+}
+
+// Each probe has a file of its own, so a probe still in flight in a process
+// that has given up the lock cannot remove the next owner's file, or the
+// other way round (review 1153). The old process's file is left alone by the
+// new probe, and RemoveStale, which serve runs under the lock before it
+// starts probing, clears what an old process left.
+func TestProbesDoNotShareAFile(t *testing.T) {
+	dir := t.TempDir()
+	old, cur := NewDirProbe(dir, nil), NewDirProbe(dir, nil)
+	if old.path == cur.path {
+		t.Fatalf("two probes share %s", old.path)
+	}
+	for _, p := range []string{old.path, cur.path} {
+		if filepath.Dir(p) != dir || !strings.HasPrefix(filepath.Base(p), ProbePrefix) {
+			t.Errorf("probe file %s is not %s* in the data directory", p, ProbePrefix)
+		}
+	}
+
+	// The old process is inside its write: its file exists.
+	if err := os.WriteFile(old.path, []byte("in flight"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cur.Probe()
+	if !cur.OK() {
+		t.Error("the new probe failed beside an old one in flight")
+	}
+	if got := probeFiles(t, dir); len(got) != 1 || got[0] != filepath.Base(old.path) {
+		t.Errorf("after the new probe, probe files = %q, want only the old process's", got)
+	}
+
+	if err := RemoveStale(dir); err != nil {
+		t.Fatal(err)
+	}
+	if got := probeFiles(t, dir); len(got) != 0 {
+		t.Errorf("RemoveStale left %q", got)
+	}
+	if err := RemoveStale(dir); err != nil {
+		t.Errorf("RemoveStale with nothing to remove: %v", err)
+	}
+}
+
+func probeFiles(t *testing.T, dir string) []string {
+	t.Helper()
+	es, err := os.ReadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out []string
+	for _, e := range es {
+		if strings.HasPrefix(e.Name(), ProbePrefix) {
+			out = append(out, e.Name())
+		}
+	}
+	return out
 }
 
 func TestProbeRunStopsWithItsContext(t *testing.T) {
@@ -361,7 +411,7 @@ func TestHealthzLeaksNothing(t *testing.T) {
 	for _, broken := range []bool{false, true} {
 		f := newFixture(t)
 		if broken {
-			f.probe.probe = func(dir string) error { return errors.New("open " + dir + ": permission denied") }
+			f.probe.probe = func(path string) error { return errors.New("open " + path + ": permission denied") }
 			f.probe.Probe()
 			f.db.Close()
 		}
