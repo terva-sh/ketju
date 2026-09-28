@@ -144,6 +144,11 @@ The callback seals the verified claims (provider, issuer, subject, email,
 `__Host-ketju_reg` cookie, with the same key and attributes as the login
 cookie and a purpose of its own, and redirects to `GET /auth/register`. The
 cookie lasts fifteen minutes, so an abandoned registration writes nothing.
+A browser drops a cookie over 4 KB. So if the sealed value is over 3800
+bytes, the registration sheds claims until it fits: first the name and
+`preferred_username`, so the display name becomes the handle and the field
+starts empty; then the `return_to`, which becomes `/`. If the claims the
+account needs still do not fit, the sign-in fails at the callback.
 The screen is served by the server, as the other sign-in pages are, so that
 signing up does not depend on the client loading. `POST /auth/register` takes
 the form field `handle` and, in one transaction, checks that the identity has

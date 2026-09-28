@@ -283,3 +283,54 @@ func TestRegistrationAppliesTheBootstrap(t *testing.T) {
 		t.Errorf("role %s, %d promotions; want admin, 1", role, n)
 	}
 }
+
+// Claims too large for a cookie shed what the registration can do without,
+// so the browser keeps the cookie: the name and preferred_username first,
+// then the return_to (review 1146).
+func TestLargeClaimsStillFitTheCookie(t *testing.T) {
+	w := newWorld(t)
+	w.open()
+	w.idp.Claims = map[string]any{"name": strings.Repeat("N", 5000), "preferred_username": strings.Repeat("u", 5000)}
+	reg := w.registering("/t/abc/" + strings.Repeat("r", 5000))
+	if len(reg.Value) > MaxRegistrationCookie {
+		t.Fatalf("the registration cookie is %d bytes", len(reg.Value))
+	}
+	if b := body(w.do("GET", RegisterPath, reg)); !strings.Contains(b, `name="handle" type="text" value=""`) {
+		t.Errorf("the prefill survived shedding preferred_username:\n%s", b)
+	}
+	resp := w.submit("carol", reg)
+	if h := signedInAs(t, w, resp); h != "carol" {
+		t.Fatalf("signed in as %s", h)
+	}
+	if loc := resp.Header.Get("Location"); loc != "/" {
+		t.Errorf("went to %q, want / once the return_to was shed", loc)
+	}
+	s, _ := w.store.Lookup(t.Context(), cookie(resp, session.CookieName).Value)
+	if s.User.DisplayName != "carol" {
+		t.Errorf("display name %q, want the handle", s.User.DisplayName)
+	}
+}
+
+// A long name alone is shed while the return_to is kept.
+func TestALongNameKeepsTheReturnTo(t *testing.T) {
+	w := newWorld(t)
+	w.open()
+	w.idp.Claims = map[string]any{"name": strings.Repeat("N", 5000)}
+	resp := w.submit("carol", w.registering("/t/abc/a-thread"))
+	if loc := resp.Header.Get("Location"); loc != "/t/abc/a-thread" {
+		t.Errorf("went to %q", loc)
+	}
+}
+
+// Claims the account needs that are still too large are refused at the
+// callback, not sent to a browser that would drop them.
+func TestClaimsThatCannotFitAreRefused(t *testing.T) {
+	w := newWorld(t)
+	w.open()
+	w.idp.Claims = map[string]any{"email": strings.Repeat("e", 5000) + "@example.org"}
+	resp := w.signIn("")
+	w.refused(resp, http.StatusBadRequest, "Sign-in failed")
+	if c := cookie(resp, RegistrationCookie); c != nil && c.Value != "" {
+		t.Error("an oversized registration cookie was set")
+	}
+}

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -49,7 +50,13 @@ func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, id *
 		writePage(w, http.StatusNotImplemented, pageRegistration)
 		return
 	}
-	sealed, err := h.Sealer.Seal(registrationPurpose, pending{Claims: identity.ClaimsOf(id), ReturnTo: returnTo})
+	sealed, err := h.sealRegistration(pending{Claims: identity.ClaimsOf(id), ReturnTo: returnTo})
+	if errors.Is(err, errRegistrationTooBig) {
+		h.Logger.WarnContext(ctx, "registration refused: the provider's claims do not fit in a cookie",
+			"provider", id.Provider, "error", err)
+		writePage(w, http.StatusBadRequest, pageFailed)
+		return
+	}
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "sealing a registration failed", "error", err)
 		writePage(w, http.StatusInternalServerError, pageFailed)
@@ -59,6 +66,39 @@ func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, id *
 		MaxAge: int(RegistrationTTL / time.Second), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, RegisterPath, http.StatusSeeOther)
+}
+
+// MaxRegistrationCookie bounds the sealed registration, in bytes. Browsers
+// keep a cookie of up to 4096 bytes counting its name and attributes, and
+// silently drop a larger one, which would leave the handle screen with no
+// registration to continue (review 1146). This leaves room for both.
+const MaxRegistrationCookie = 3800
+
+var errRegistrationTooBig = errors.New("the sealed registration is larger than a cookie may be")
+
+// sealRegistration seals p for the registration cookie, shedding what the
+// registration can do without until it fits: first the name and
+// preferred_username, which only supply the display name and the prefill
+// (the display name falls back to the handle), then the return_to, which
+// falls back to "/". What is left is what the account needs: the
+// provider, issuer, subject and email. The IdP bounds those, and if they
+// still do not fit the registration is refused rather than sent to a
+// browser that would drop it.
+func (h *Handler) sealRegistration(p pending) (string, error) {
+	shed := []func(*pending){
+		func(p *pending) { p.Claims.Name, p.Claims.PreferredUsername = "", "" },
+		func(p *pending) { p.ReturnTo = "/" },
+	}
+	for i := 0; ; i++ {
+		sealed, err := h.Sealer.Seal(registrationPurpose, p)
+		if err != nil || len(sealed) <= MaxRegistrationCookie {
+			return sealed, err
+		}
+		if i == len(shed) {
+			return "", fmt.Errorf("%w: %d bytes", errRegistrationTooBig, len(sealed))
+		}
+		shed[i](&p)
+	}
 }
 
 // pendingFrom opens the registration cookie. When it cannot, it has

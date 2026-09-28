@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-28T07:15:43Z
+updated_at: 2026-09-28T07:18:39Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -102,6 +102,10 @@ Bootstrap: Register calls ApplyBootstrap for the new user straight after the com
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:15:43Z
 
 Review 1145 (run fc532a90-d988-4da4-b339-c195c733f6d5, Actions run #556, head 82bf6f0aaecad356e64e154b36ca157c6c8b5e5a, base 3d7c3a5c2dfd5acf2db12fef199a871d5c998e38) found one medium issue: registration.mode was read before the account transaction, so an admin closing registration in between would be missed. Accepted and fixed by changing the flagged behaviour. settings gains Key.In, which reads a setting inside a transaction the caller holds. Register now reads registration.mode inside the IssueUserWith create function, in the transaction that writes the account, and the earlier read is gone. TestRegistrationClosedJustBeforeTheWrite closes registration between Register's start and its transaction and gets ErrRegistrationClosed with nothing written. Moving the check back out makes that test fail.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:18:39Z
+
+Review 1146 (run 18ebac77-b8b0-4b51-bb03-faa637ed0c0d, Actions run #558, head ff6ce5d0c832e9b562f96a3061703996f0b7ddda, base 3d7c3a5c2dfd5acf2db12fef199a871d5c998e38) marked review 1145's finding resolved and found one new medium issue: unbounded IdP claims sealed into the registration cookie could exceed the size a browser keeps, so a valid sign-in would reach /auth/register with no registration. Accepted and fixed by changing the flagged behaviour. sealRegistration keeps the sealed value within MaxRegistrationCookie (3800 bytes). While it is too big, it sheds in order: name and preferred_username (the display name falls back to the handle, the prefill starts empty), then return_to (becomes /). If what the account needs still does not fit, the callback refuses with the sign-in-failed page rather than setting a cookie the browser would drop. No display-name length rule was invented. The bound and the order are in docs/05. Tests: TestLargeClaimsStillFitTheCookie, TestALongNameKeepsTheReturnTo and TestClaimsThatCannotFitAreRefused. Both mutations are caught: the bound lifted, and return_to shed first.
 
 ## Summary
 
