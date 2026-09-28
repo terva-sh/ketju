@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3MAS0BQ3NGQZBPVZHZ9PYKG
 title: Move TestHealthzP99's latency bound out of the race run
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/0bq-healthz-p99-no-race
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1c6f82128bb092be
-  commit: 2b1c6205fe1ea763bc9e1fc01edd5c2086fdddc1
-  session: null
-  claimed_at: 2026-09-28T16:09:05Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T15:40:14Z
-updated_at: 2026-09-28T16:09:16Z
+updated_at: 2026-09-28T16:11:35Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -50,8 +43,8 @@ Under `-race`, keep a check that /healthz still answers with one query per reque
 
 ## Acceptance criteria
 
-- [ ] The p99 bound is asserted only without the race detector, in a CI step that runs
-- [ ] go test -race no longer measures healthz latency
+- [x] The p99 bound is asserted only without the race detector, in a CI step that runs
+- [x] go test -race no longer measures healthz latency
 
 ## Implementation plan
 
@@ -78,3 +71,7 @@ Follow the precedent of internal/events/projection/catchup_bound_test.go.
 4. Verify locally: `go test -race ./internal/web/health/ -run P99 -v`
    reports no test to run; `go test ./internal/web/health/ -run
    '^TestHealthzP99$' -v` runs it; the widened CI command runs both.
+
+## Summary
+
+TestHealthzP99 and measureP99 moved to internal/web/health/p99_test.go behind //go:build !race; the 5 ms bound and best-of-three are unchanged. go test -race ./... no longer compiles the latency assertion; TestHealthzOneStatementPerRequest and BenchmarkHealthz stay in health_test.go, so the race run still holds one statement per request. CI's existing no-race step 'projection catch-up bound over ten thousand threads (no -race)' now also runs ./internal/web/health/ with -run '^(TestCatchUpTenThousandUnderBound|TestHealthzP99)$' -count=1 -v, so the measured p99 is in that step's log.
