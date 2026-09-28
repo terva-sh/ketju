@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3K5CEV00F4RVT937Y1WE615
 title: Run Terva reviews from the v0.5.0 reviewer image
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude/t3code-45332409
-  branch: ci/review-v0.5.0
-  worktree: /home/sothr/.local/state/agent-rollout/terva-review-v0.5.0/ketju
-  commit: ba749bb7301a6ec1ec75dc28edcda4343b284eb6
-  session: null
-  claimed_at: 2026-09-28T04:46:46Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T04:46:46Z
-updated_at: 2026-09-28T04:46:46Z
+updated_at: 2026-09-28T04:49:30Z
 created_by:
   id: agent:claude/t3code-45332409
   name: ""
@@ -54,5 +47,15 @@ Part of terva-action-code-review TKT-01M3K5B2YX ('Move the consumers to the v0.5
 
 ## Acceptance criteria
 
-- [ ] The review workflow runs the v0.5.0 image by digest and reads TERVA_REVIEW_FALLBACKS
-- [ ] A review of this change from its branch is recorded
+- [x] The review workflow runs the v0.5.0 image by digest and reads TERVA_REVIEW_FALLBACKS
+- [x] A review of this change from its branch is recorded
+
+## Notes
+
+**agent:claude/t3code-45332409** at 2026-09-28T04:49:30Z
+
+PR #93 (https://git.local.sothr.com/terva-sh/ketju/pulls/93), head 8a21238. Terva review from the PR's own branch, so the v0.5.0 image reviewed its own installation: request review-v0.5.0, run dc452653-bfa6-4caf-ac22-ddef89b5e488, terva-review/code success with no findings. Merge authorized by the maintainer on 2026-09-28.
+
+## Summary
+
+The Terva review runs terva-action-code-review v0.5.0 (sha256:64a7ba59, commit f3a857b) and reads TERVA_REVIEW_FALLBACKS, shipped in #93. Its branch review was clean.
