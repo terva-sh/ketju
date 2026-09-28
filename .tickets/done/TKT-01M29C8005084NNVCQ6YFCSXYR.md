@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-28T07:13:40Z
+updated_at: 2026-09-28T07:15:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -98,6 +98,10 @@ Gaps settled while building, each written into the doc named:
 Structural change: `session.IssueUserWith` is a new exported door beside IssueUser. It runs the caller's writes in the session's transaction, then IssueUser's own status check on what they wrote. IssueUser now calls it, and chokepoint_test's insertCallers names it in IssueUser's place. This is what makes AC4 hold. The alternative was two transactions with a compensating delete, and it lost: users are never deleted (docs/04), and a crash between the two would leave a user with no way in.
 
 Bootstrap: Register calls ApplyBootstrap for the new user straight after the commit, through the same `settle` step Login now shares. If the promotion fails, the new session is ended and registration fails. The account stands, and the next sign-in retries the promotion, as for Login.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:15:43Z
+
+Review 1145 (run fc532a90-d988-4da4-b339-c195c733f6d5, Actions run #556, head 82bf6f0aaecad356e64e154b36ca157c6c8b5e5a, base 3d7c3a5c2dfd5acf2db12fef199a871d5c998e38) found one medium issue: registration.mode was read before the account transaction, so an admin closing registration in between would be missed. Accepted and fixed by changing the flagged behaviour. settings gains Key.In, which reads a setting inside a transaction the caller holds. Register now reads registration.mode inside the IssueUserWith create function, in the transaction that writes the account, and the earlier read is gone. TestRegistrationClosedJustBeforeTheWrite closes registration between Register's start and its transaction and gets ErrRegistrationClosed with nothing written. Moving the check back out makes that test fail.
 
 ## Summary
 

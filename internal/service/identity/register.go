@@ -69,7 +69,8 @@ func (s *Service) RegistrationOpen(ctx context.Context) (bool, error) {
 // wrapping domain.ErrInvalidHandle or ErrHandleReserved. Then the user, the
 // identity and the session are written in one transaction, or nothing is:
 // session.IssueUserWith runs the writes in the transaction that inserts the
-// session. Whether the handle is free is decided there, not before, so of
+// session. Whether registration is open, and whether the handle is free,
+// are decided there, not before, so of
 // two people submitting "alice" and "Alice" in the same second one gets the
 // account and the other ErrHandleTaken. The write connection serializes the
 // two, and the users table's NOCASE unique index stands behind the read.
@@ -83,13 +84,6 @@ func (s *Service) Register(ctx context.Context, c Claims, handle string, meta se
 	if err != nil {
 		return Result{}, err
 	}
-	open, err := s.RegistrationOpen(ctx)
-	if err != nil {
-		return Result{}, err
-	}
-	if !open {
-		return Result{}, ErrRegistrationClosed
-	}
 	display := strings.TrimSpace(c.Name)
 	if display == "" {
 		display = h
@@ -97,6 +91,15 @@ func (s *Service) Register(ctx context.Context, c Claims, handle string, meta se
 	now := s.now().UnixMilli()
 	var userID int64
 	token, sess, err := s.Sessions.IssueUserWith(ctx, meta, func(ctx context.Context, q *dbq.Queries) (int64, error) {
+		// Read here, in the transaction that writes the account, so an
+		// admin who closes registration while someone is choosing a handle
+		// cannot be missed between a check and the insert (review 1145).
+		switch mode, err := settings.RegistrationMode.In(ctx, q); {
+		case err != nil:
+			return 0, fmt.Errorf("reading registration.mode: %w", err)
+		case mode != "open":
+			return 0, ErrRegistrationClosed
+		}
 		switch _, err := q.GetIdentityBySubject(ctx, dbq.GetIdentityBySubjectParams{ProviderKey: c.Provider, Subject: c.Subject}); {
 		case err == nil:
 			return 0, ErrAlreadyRegistered
@@ -139,7 +142,7 @@ func (s *Service) Register(ctx context.Context, c Claims, handle string, meta se
 			UpdatedAt: now, ID: identityID})
 	})
 	switch {
-	case errors.Is(err, ErrHandleTaken), errors.Is(err, ErrAlreadyRegistered):
+	case errors.Is(err, ErrHandleTaken), errors.Is(err, ErrAlreadyRegistered), errors.Is(err, ErrRegistrationClosed):
 		return Result{}, err
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: registering: %w", err)

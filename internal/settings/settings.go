@@ -116,12 +116,21 @@ var ErrInvalidValue = errors.New("settings: invalid value")
 // table was written around Set, and quietly substituting the default would
 // hide that.
 func (k Key[T]) Get(ctx context.Context, d *db.DB) (T, error) {
-	var row dbq.Setting
+	var v T
 	err := d.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
 		var err error
-		row, err = q.GetSetting(ctx, k.Name)
+		v, err = k.In(ctx, q)
 		return err
 	})
+	return v, err
+}
+
+// In is Get inside a transaction the caller holds, for a write that must
+// see the setting as it is when the write commits: registration reads
+// registration.mode in the transaction that creates the account, so an
+// admin closing it cannot be missed in between (TKT-01M29C8005).
+func (k Key[T]) In(ctx context.Context, q *dbq.Queries) (T, error) {
+	row, err := q.GetSetting(ctx, k.Name)
 	if errors.Is(err, sql.ErrNoRows) {
 		return k.Default, nil
 	}

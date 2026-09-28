@@ -1,6 +1,7 @@
 package identity
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -293,5 +294,32 @@ func TestRegisterEndsTheSessionItReplaces(t *testing.T) {
 	}
 	if _, err := (&session.Store{DB: d}).Lookup(t.Context(), old.Token); err == nil {
 		t.Error("the session the registration replaced still works")
+	}
+}
+
+// closing is a session store on which an admin closes registration between
+// Register's start and its transaction: the interleaving review 1145 names.
+type closing struct {
+	*session.Store
+	t *testing.T
+}
+
+func (c closing) IssueUserWith(ctx context.Context, meta session.Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error) {
+	if err := settings.Set(ctx, c.DB, settings.RegistrationMode.Name, json.RawMessage(`"approval"`), 0, time.Now()); err != nil {
+		c.t.Fatal(err)
+	}
+	return c.Store.IssueUserWith(ctx, meta, create)
+}
+
+// Registration closed after Register began, but before its transaction, is
+// still closed: the mode is read in the transaction that writes the account.
+func TestRegistrationClosedJustBeforeTheWrite(t *testing.T) {
+	s, d := registry(t)
+	s.Sessions = closing{Store: &session.Store{DB: d}, t: t}
+	if _, err := s.Register(t.Context(), claims("sub-1"), "alice", session.Meta{}, ""); !errors.Is(err, ErrRegistrationClosed) {
+		t.Fatalf("Register = %v, want ErrRegistrationClosed", err)
+	}
+	if u, i, n := count(t, d); u+i+n != 0 {
+		t.Errorf("a closed registration wrote %d users, %d identities, %d sessions", u, i, n)
 	}
 }
