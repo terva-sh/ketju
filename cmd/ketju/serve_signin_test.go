@@ -72,7 +72,8 @@ func TestServeSignsInThroughAProvider(t *testing.T) {
 	}
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
-	// Nobody has this identity yet, and registration is TKT-01M29C8005's:
+	// Nobody has this identity yet, and registration.mode defaults to
+	// approval, whose applicant path has not landed (TKT-01M29CKRG9):
 	// reaching that page is the whole flow working.
 	if resp.StatusCode != http.StatusNotImplemented || !strings.Contains(string(b), "Registration is not open yet") {
 		t.Errorf("callback answered %d:\n%s", resp.StatusCode, b)

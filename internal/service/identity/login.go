@@ -56,6 +56,7 @@ const cleanupTimeout = 5 * time.Second
 // Sessions is the part of *session.Store a sign-in uses.
 type Sessions interface {
 	IssueUser(ctx context.Context, identityID int64, meta session.Meta) (string, session.Session, error)
+	IssueUserWith(ctx context.Context, meta session.Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error)
 	Revoke(ctx context.Context, token string) error
 }
 
@@ -134,30 +135,8 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: signing in: %w", err)
 	}
-	// abandon ends the session just issued when the sign-in fails after it.
-	// The request may be what failed: cancelled mid-sign-in. So the session
-	// is ended on a context of its own, bounded, and a cancelled request
-	// cannot leave it behind (review 513).
-	abandon := func(err error) error {
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-		defer cancel()
-		if err2 := s.Sessions.Revoke(cctx, token); err2 != nil {
-			err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
-		}
-		return err
-	}
-	if replaces != "" {
-		if err := s.Sessions.Revoke(ctx, replaces); err != nil {
-			return Result{}, fmt.Errorf("identity: ending the session a sign-in replaces: %w", abandon(err))
-		}
-	}
-	// Bootstrap runs once the user is known to be active and signed in, so
-	// a suspended account the configuration names is not made admin. A
-	// failure fails the sign-in: signed in as a member, the operator would
-	// have only a log line to say why they are not an admin, and signing in
-	// again retries it.
-	if _, err := s.ApplyBootstrap(ctx, ident.UserID.Int64, id); err != nil {
-		return Result{}, abandon(err)
+	if err := s.settle(ctx, token, ident.UserID.Int64, id, replaces); err != nil {
+		return Result{}, err
 	}
 
 	now := s.now().UnixMilli()
@@ -179,4 +158,38 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 		s.logger().WarnContext(ctx, "recording a sign-in failed", "provider", id.Provider, "identity", ident.ID, "error", err)
 	}
 	return Result{Outcome: SignedIn, Token: token, Session: sess}, nil
+}
+
+// settle is what a sign-in or a registration does once it has issued token
+// to userID: end the session it replaces, then apply the bootstrap
+// configuration. If either fails, the session just issued is ended too and
+// settle fails, so the browser never comes out holding a new session while
+// its old one still works (review 511).
+func (s *Service) settle(ctx context.Context, token string, userID int64, id *oidc.Identity, replaces string) error {
+	// abandon ends the session just issued. The request may be what failed:
+	// cancelled mid-sign-in. So the session is ended on a context of its
+	// own, bounded, and a cancelled request cannot leave it behind
+	// (review 513).
+	abandon := func(err error) error {
+		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+		defer cancel()
+		if err2 := s.Sessions.Revoke(cctx, token); err2 != nil {
+			err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
+		}
+		return err
+	}
+	if replaces != "" {
+		if err := s.Sessions.Revoke(ctx, replaces); err != nil {
+			return fmt.Errorf("identity: ending the session a sign-in replaces: %w", abandon(err))
+		}
+	}
+	// Bootstrap runs once the user is known to be active and signed in, so
+	// a suspended account the configuration names is not made admin. A
+	// failure fails the sign-in: signed in as a member, the operator would
+	// have only a log line to say why they are not an admin, and signing in
+	// again retries it.
+	if _, err := s.ApplyBootstrap(ctx, userID, id); err != nil {
+		return abandon(err)
+	}
+	return nil
 }

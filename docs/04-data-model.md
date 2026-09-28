@@ -66,6 +66,15 @@ confusables check lost: they buy non-Latin `@mentions` at the cost of
 homoglyph spoofing, which a handle in a URL and a mention must never allow.
 (Decided 2026-09-24 in Phase 1 grooming.)
 
+Registration also refuses reserved handles: those that collide with top-level
+routes (`admin`, `api`, `assets`, `auth`, `blobs`, `events`, `healthz`, `me`,
+`new`), and anything starting with `deleted-user`, the handle an anonymized
+account is given (05). A handle is lowercased before either check, so the
+comparison ignores case; only ASCII letters are lowercased, so a character
+such as the Kelvin sign is refused rather than read as a `k`. The reserved
+list is registration's rule, not the column's, and the CHECK does not carry
+it. (TKT-01M29C8005.)
+
 `kind` is orthogonal to `role`. An agent account can be a member, a moderator,
 or an admin, because whether to trust an agent with moderation is an operator's
 judgement and not a rule in the software. Keeping the two columns separate is

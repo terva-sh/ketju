@@ -54,9 +54,12 @@ type Providers interface {
 	Lookup(key string) (*oidc.Provider, bool)
 }
 
-// Login is the part of *identity.Service the callback uses.
+// Login is the part of *identity.Service the callback and the registration
+// screen use.
 type Login interface {
 	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (identity.Result, error)
+	RegistrationOpen(ctx context.Context) (bool, error)
+	Register(ctx context.Context, c identity.Claims, handle string, meta session.Meta, replaces string) (identity.Result, error)
 }
 
 // Sessions is the part of *session.Store the handlers use.
@@ -86,6 +89,9 @@ func New(h *Handler) http.Handler {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /auth/{provider}/start", h.start)
 	mux.HandleFunc("GET /auth/{provider}/callback", h.callback)
+	// The handle screen of open registration (register.go).
+	mux.HandleFunc("GET /auth/register", h.registerForm)
+	mux.HandleFunc("POST /auth/register", h.register)
 	// POST, so a page elsewhere cannot sign a reader out with an image tag;
 	// the CSRF check in front of every write (internal/web) holds it to
 	// this site.
@@ -197,7 +203,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		h.Logger.InfoContext(ctx, "sign-in refused: the account is not active", "provider", key, "status", res.Status)
 		writePage(w, http.StatusForbidden, pageUnavailable)
 	case identity.Register:
-		writePage(w, http.StatusNotImplemented, pageRegistration)
+		h.beginRegistration(w, r, id, f.ReturnTo)
 	case identity.Link:
 		writePage(w, http.StatusNotImplemented, pageLinking)
 	case identity.Applicant:

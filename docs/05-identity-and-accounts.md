@@ -139,6 +139,26 @@ Show a one-field "choose a handle" screen (prefilled from `preferred_username`
 or the email local part, checked for uniqueness), create user with
 `status = active`, create identity, create session.
 
+The callback seals the verified claims (provider, issuer, subject, email,
+`email_verified`, name, `preferred_username`) and the `return_to` into the
+`__Host-ketju_reg` cookie, with the same key and attributes as the login
+cookie and a purpose of its own, and redirects to `GET /auth/register`. The
+cookie lasts fifteen minutes, so an abandoned registration writes nothing.
+The screen is served by the server, as the other sign-in pages are, so that
+signing up does not depend on the client loading. `POST /auth/register` takes
+the form field `handle` and, in one transaction, checks that the identity has
+no account and nobody has the handle in any case, then writes the user, the
+identity and the session. Two people submitting one handle at once get one
+account and one "that handle is taken". A config-named admin is promoted
+straight after, as at a sign-in. The cookie is cleared on success. An
+invalid, reserved or taken handle shows the form again with the reason.
+(TKT-01M29C8005.)
+
+The prefill lowercases ASCII letters, turns each run of other characters into
+one `_`, cuts to 30, and trims a leading or trailing `_` or `-`; if what is
+left is not a handle registration would accept, the field starts empty. It is
+a suggestion and reserves nothing.
+
 ### `mode = "approval"`
 1. Create the identity row with `user_id = NULL` and a **pending** user is
    *not* created yet. Instead the visitor is placed in a "pre-user" session

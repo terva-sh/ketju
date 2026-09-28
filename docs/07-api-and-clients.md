@@ -34,7 +34,22 @@
 /apply  /apply/status
 /admin  /admin/queue  /admin/applications  /admin/forums  /admin/users  /admin/forms  /admin/settings
 /auth/{provider}/start  /auth/{provider}/callback  /auth/logout (POST)
+/auth/register (GET, POST)
 ```
+
+`/auth/*` is the server's in both clients: plain HTML pages and redirects,
+not JSON. `/auth/register` is open registration's handle screen (05
+"Registration path"). `GET` shows one field, `handle`, prefilled, and needs
+the `__Host-ketju_reg` cookie the callback sets; without it, or after its
+fifteen minutes, the page says to sign in again (400). `POST` takes the form
+field `handle` as `application/x-www-form-urlencoded`, held to this site by
+the cross-origin check (see "CSRF posture"). Success sets the session cookie, clears
+the registration cookie and answers 303 to the sign-in's `return_to`. An
+invalid or reserved handle is 422 and a taken one 409, each with the form
+shown again and the reason beside the field. An identity registered in the
+meantime is 409, registration closed in the meantime is 403, and a browser
+that signed in as a member in the meantime is 409: a member adds an identity
+by linking it, never by registering a second account.
 
 `{id}` is the base32 thread id; `{slug}` is advisory — a stale slug
 redirects to the current one.

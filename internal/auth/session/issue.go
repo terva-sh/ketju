@@ -15,7 +15,8 @@ import (
 // a session without checking approval, and a pending applicant walked in.
 // The defense is structural rather than careful review:
 //
-//   - IssueUser and IssuePreUser are the only exported ways to create a
+//   - IssueUser (with IssueUserWith, the same check after writing the
+//     identity) and IssuePreUser are the only exported ways to create a
 //     session, and both go through insert, the only caller of the generated
 //     CreateSession. chokepoint_test.go fails the build on a second caller,
 //     on a hand-written INSERT INTO sessions, and on a query that could turn
@@ -67,7 +68,22 @@ var (
 // ErrNoUser, or a *NotActiveError for any status but active — pending,
 // suspended and deactivated alike — and then writes nothing.
 func (s *Store) IssueUser(ctx context.Context, identityID int64, meta Meta) (string, Session, error) {
+	return s.IssueUserWith(ctx, meta, func(context.Context, *dbq.Queries) (int64, error) { return identityID, nil })
+}
+
+// IssueUserWith is IssueUser for an identity that create writes, in the
+// transaction that inserts the session. Registration uses it, so the user,
+// the identity and the session commit together or not at all
+// (TKT-01M29C8005). create returns the identity's id; an error from it is
+// returned as it is and writes nothing. The identity then goes through
+// exactly IssueUser's checks, which read what create wrote: a caller can
+// write rows, but cannot decide who is let in.
+func (s *Store) IssueUserWith(ctx context.Context, meta Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, Session, error) {
 	return s.insert(ctx, func(q *dbq.Queries) (newSession, error) {
+		identityID, err := create(ctx, q)
+		if err != nil {
+			return newSession{}, err
+		}
 		h, err := holder(ctx, q, identityID)
 		if err != nil {
 			return newSession{}, err

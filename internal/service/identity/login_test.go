@@ -25,6 +25,10 @@ func (c *cancelling) IssueUser(context.Context, int64, session.Meta) (string, se
 	return "new", session.Session{Kind: session.KindUser}, nil
 }
 
+func (c *cancelling) IssueUserWith(context.Context, session.Meta, func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error) {
+	return "", session.Session{}, errors.New("not used")
+}
+
 func (c *cancelling) Revoke(ctx context.Context, token string) error {
 	if token == "old" {
 		c.cancel()

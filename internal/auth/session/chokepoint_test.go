@@ -40,7 +40,7 @@ const theQuery = "internal/store/db/queries/identity.sql"
 // CreateSession caller (review 499).
 var insertCallers = []string{
 	"internal/auth/session/issue.go:IssuePreUser",
-	"internal/auth/session/issue.go:IssueUser",
+	"internal/auth/session/issue.go:IssueUserWith",
 }
 
 // table matches the sessions table however SQLite lets it be spelled:

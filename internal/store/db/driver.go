@@ -55,3 +55,10 @@ func fileURI(path string) string {
 func isBusy(err error) bool {
 	return errors.Is(err, sqlite3.BUSY)
 }
+
+// IsUniqueViolation reports whether err is SQLite refusing a write that would
+// break a UNIQUE constraint or index. Registration maps it to "that handle is
+// taken" when two people submit the same handle at once (TKT-01M29C8005).
+func IsUniqueViolation(err error) bool {
+	return errors.Is(err, sqlite3.CONSTRAINT_UNIQUE)
+}
