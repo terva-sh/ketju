@@ -20,6 +20,7 @@ const adminUsage = `usage: ketju admin <subcommand> [flags]
 
 subcommands:
   promote  make a member an admin
+  setting  read or change a runtime setting, such as registration.mode
 `
 
 const promoteUsage = `usage: ketju admin promote [--root DIR] <handle>
@@ -52,6 +53,8 @@ func admin(ctx context.Context, out, errOut io.Writer, args []string) error {
 	switch args[0] {
 	case "promote":
 		return adminPromote(ctx, out, errOut, args[1:])
+	case "setting":
+		return adminSetting(ctx, out, errOut, args[1:])
 	case "-h", "--help", "help":
 		fmt.Fprint(out, adminUsage)
 		return nil
@@ -59,6 +62,40 @@ func admin(ctx context.Context, out, errOut io.Writer, args []string) error {
 		fmt.Fprint(errOut, adminUsage)
 		return errUsage{fmt.Errorf("unknown admin subcommand %q", args[0])}
 	}
+}
+
+func adminDBPath(root string) string { return filepath.Join(root, "db", "ketju.db") }
+
+// needDatabase refuses a data directory with no database. Opening one
+// creates it, and a mistyped --root would then leave an empty forum behind
+// and report on it. The file has to be there already.
+func needDatabase(cmd, root string) error {
+	dbPath := adminDBPath(root)
+	if _, err := os.Stat(dbPath); err != nil {
+		if errors.Is(err, fs.ErrNotExist) {
+			return fmt.Errorf("%s: %s has no database at %s; is --root the data directory?", cmd, root, dbPath)
+		}
+		return fmt.Errorf("%s: %w", cmd, err)
+	}
+	return nil
+}
+
+// openDatabase opens the data directory's database. A command that writes
+// migrates it first, as serve does, which is a no-op on a database serve
+// has already brought up to date; one that only reads leaves it as it is.
+func openDatabase(ctx context.Context, cmd, root string, migrate bool) (*db.DB, error) {
+	dbPath := adminDBPath(root)
+	d, err := db.Open(ctx, db.Options{Path: dbPath})
+	if err != nil {
+		return nil, fmt.Errorf("%s: opening %s: %w", cmd, dbPath, err)
+	}
+	if migrate {
+		if err := d.Migrate(ctx); err != nil {
+			d.Close()
+			return nil, fmt.Errorf("%s: migrating %s: %w", cmd, dbPath, err)
+		}
+	}
+	return d, nil
 }
 
 // errNotFound is a name the command was given that names nothing. It exits
@@ -85,26 +122,14 @@ func adminPromote(ctx context.Context, out, errOut io.Writer, args []string) err
 	}
 	handle := fs_.Arg(0)
 
-	// Opening a database creates it, and a mistyped --root would then leave
-	// an empty forum behind and report a handle nobody has. The file has to
-	// be there already.
-	dbPath := filepath.Join(*root, "db", "ketju.db")
-	if _, err := os.Stat(dbPath); err != nil {
-		if errors.Is(err, fs.ErrNotExist) {
-			return fmt.Errorf("admin promote: %s has no database at %s; is --root the data directory?", *root, dbPath)
-		}
-		return fmt.Errorf("admin promote: %w", err)
+	if err := needDatabase("admin promote", *root); err != nil {
+		return err
 	}
-	d, err := db.Open(ctx, db.Options{Path: dbPath})
+	d, err := openDatabase(ctx, "admin promote", *root, true)
 	if err != nil {
-		return fmt.Errorf("admin promote: opening %s: %w", dbPath, err)
+		return err
 	}
 	defer d.Close()
-	// Migrating is what serve does first, and is a no-op on a database it
-	// has already brought up to date.
-	if err := d.Migrate(ctx); err != nil {
-		return fmt.Errorf("admin promote: migrating %s: %w", dbPath, err)
-	}
 
 	var u dbq.User
 	err = d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {

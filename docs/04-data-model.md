@@ -280,7 +280,9 @@ The key list is closed. `internal/settings` defines each key with its type
 and default, and `settings.Set` refuses an unknown key or an ill-typed value
 before anything is stored, writing an audit row (`setting.changed`, with the
 old and new values) in the same transaction. A key with no row reads as its
-default, so a fresh database needs no seed rows. The table itself only
+default, so a fresh database needs no seed rows. `ketju admin setting`
+reads and sets them from the command line through the same registry (05).
+The table itself only
 insists that `value_json` is valid JSON. The list below is checked against
 the code by `TestKeysDocumented`:
 

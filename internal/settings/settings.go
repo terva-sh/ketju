@@ -22,6 +22,8 @@ import (
 	"fmt"
 	"io"
 	"slices"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -33,34 +35,66 @@ type Key[T any] struct {
 	Name    string
 	Default T
 	Doc     string
-	valid   func(T) error
+	valid   *rule[T]
+
+	// allowed says in words what the key takes, for an error message.
+	allowed string
 }
+
+// rule is a key's validation beyond its type, with the words that say what
+// it allows.
+type rule[T any] struct {
+	check   func(T) error
+	allowed string
+}
+
+// The kinds of value a key can hold. The kind decides how [FromText] reads
+// a value typed on a command line.
+const (
+	KindText    = "text"
+	KindInteger = "integer"
+	KindBoolean = "boolean"
+)
 
 // spec is a key with its type erased, for Set and the listing.
 type spec struct {
 	name    string
 	doc     string
+	kind    string
+	allowed string
 	decode  func([]byte) (any, error)
 	encoded string // the default as JSON
 }
 
 var registry = map[string]spec{}
 
-func define[T any](name string, def T, doc string, valid func(T) error) Key[T] {
+func define[T any](name string, def T, doc string, valid *rule[T]) Key[T] {
 	if _, dup := registry[name]; dup {
 		panic("settings: " + name + " defined twice")
 	}
+	var kind, allowed string
+	switch any(def).(type) {
+	case string:
+		kind, allowed = KindText, "text"
+	case int:
+		kind, allowed = KindInteger, "a whole number"
+	case bool:
+		kind, allowed = KindBoolean, "true or false"
+	default:
+		panic(fmt.Sprintf("settings: %s has a type (%T) FromText cannot read", name, def))
+	}
 	if valid != nil {
-		if err := valid(def); err != nil {
+		if err := valid.check(def); err != nil {
 			panic(fmt.Sprintf("settings: the default of %s is invalid: %v", name, err))
 		}
+		allowed = valid.allowed
 	}
-	k := Key[T]{Name: name, Default: def, Doc: doc, valid: valid}
+	k := Key[T]{Name: name, Default: def, Doc: doc, valid: valid, allowed: allowed}
 	b, err := json.Marshal(def)
 	if err != nil {
 		panic(err)
 	}
-	registry[name] = spec{name: name, doc: doc, encoded: string(b),
+	registry[name] = spec{name: name, doc: doc, kind: kind, allowed: allowed, encoded: string(b),
 		decode: func(b []byte) (any, error) { return k.decode(b) }}
 	return k
 }
@@ -144,27 +178,35 @@ func (k Key[T]) In(ctx context.Context, q *dbq.Queries) (T, error) {
 	return v, nil
 }
 
-// decode reads exactly one JSON value of type T and validates it.
+// decode reads exactly one JSON value of type T and validates it. Its
+// errors end by saying what the key takes, since whoever reads one is about
+// to type the value again.
 func (k Key[T]) decode(b []byte) (T, error) {
 	var v T
 	b = bytes.TrimSpace(b)
+	invalid := func(why string) error {
+		return fmt.Errorf("%w: %s: %s; it takes %s", ErrInvalidValue, k.Name, why, k.allowed)
+	}
 	// null would decode into any T as its zero value, which is a value
 	// nobody typed.
 	if bytes.Equal(b, []byte("null")) {
-		return v, fmt.Errorf("%w: %s may not be null", ErrInvalidValue, k.Name)
+		return v, invalid("may not be null")
+	}
+	if len(b) == 0 {
+		return v, invalid("no value")
 	}
 	dec := json.NewDecoder(bytes.NewReader(b))
 	if err := dec.Decode(&v); err != nil {
-		return v, fmt.Errorf("%w: %s: %v", ErrInvalidValue, k.Name, err)
+		return v, invalid(err.Error())
 	}
 	// Exactly one value: anything after it, a second value or a stray
 	// bracket, is refused rather than dropped (dec.More would pass "5}").
 	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
-		return v, fmt.Errorf("%w: %s: input continues after the value", ErrInvalidValue, k.Name)
+		return v, invalid("input continues after the value")
 	}
 	if k.valid != nil {
-		if err := k.valid(v); err != nil {
-			return v, fmt.Errorf("%w: %s: %v", ErrInvalidValue, k.Name, err)
+		if err := k.valid.check(v); err != nil {
+			return v, invalid(err.Error())
 		}
 	}
 	return v, nil
@@ -174,9 +216,28 @@ func (k Key[T]) decode(b []byte) (T, error) {
 // appends an audit row naming the actor and the old and new values, in one
 // transaction. actor is 0 for the system.
 func Set(ctx context.Context, d *db.DB, name string, value json.RawMessage, actor int64, now time.Time) error {
+	return SetBy(ctx, d, name, value, Change{Actor: actor, At: now})
+}
+
+// Change is who changed a setting and when, for the audit row.
+type Change struct {
+	// Actor is the member who made the change: 0 for the command line or
+	// the system, which are nobody's account.
+	Actor int64
+
+	// Details go into the audit row's details_json beside "from" and "to",
+	// which they cannot replace. `ketju admin setting set` records
+	// "via": "cli", as `ketju admin promote` does.
+	Details map[string]string
+
+	At time.Time
+}
+
+// SetBy is Set with more to say in the audit row.
+func SetBy(ctx context.Context, d *db.DB, name string, value json.RawMessage, c Change) error {
 	s, ok := registry[name]
 	if !ok {
-		return fmt.Errorf("%w: %q", ErrUnknownKey, name)
+		return unknown(name)
 	}
 	v, err := s.decode(value)
 	if err != nil {
@@ -188,7 +249,8 @@ func Set(ctx context.Context, d *db.DB, name string, value json.RawMessage, acto
 	if err != nil {
 		return err
 	}
-	by := sql.NullInt64{Int64: actor, Valid: actor != 0}
+	by := sql.NullInt64{Int64: c.Actor, Valid: c.Actor != 0}
+	at := c.At.UnixMilli()
 	return d.Write(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
 		from := s.encoded
 		switch old, err := q.GetSetting(ctx, name); {
@@ -198,63 +260,199 @@ func Set(ctx context.Context, d *db.DB, name string, value json.RawMessage, acto
 			return err
 		}
 		if err := q.PutSetting(ctx, dbq.PutSettingParams{Key: name, ValueJson: string(canonical),
-			UpdatedAt: now.UnixMilli(), UpdatedBy: by}); err != nil {
+			UpdatedAt: at, UpdatedBy: by}); err != nil {
 			return err
 		}
-		details, err := json.Marshal(struct {
-			From json.RawMessage `json:"from"`
-			To   json.RawMessage `json:"to"`
-		}{json.RawMessage(from), canonical})
+		fields := make(map[string]any, len(c.Details)+2)
+		for k, v := range c.Details {
+			fields[k] = v
+		}
+		fields["from"], fields["to"] = json.RawMessage(from), json.RawMessage(canonical)
+		details, err := json.Marshal(fields)
 		if err != nil {
 			return err
 		}
-		_, err = q.AppendAudit(ctx, dbq.AppendAuditParams{At: now.UnixMilli(), ActorID: by,
+		_, err = q.AppendAudit(ctx, dbq.AppendAuditParams{At: at, ActorID: by,
 			Action: "setting.changed", TargetType: "setting", TargetID: name, DetailsJson: string(details)})
 		return err
 	})
 }
 
-// Setting describes one key for a listing: `ketju config check`, the admin
-// screen, the docs test.
+// unknown is ErrUnknownKey for name, listing the keys there are.
+func unknown(name string) error {
+	names := make([]string, 0, len(registry))
+	for n := range registry {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	return fmt.Errorf("%w: %q; the keys are %s", ErrUnknownKey, name, strings.Join(names, ", "))
+}
+
+// FromText turns a value typed on a command line into the key's JSON. A
+// text key takes the words as they are, with no quotes: open, or My forum.
+// An integer or boolean key takes JSON, which for those is how the value is
+// written anyway: 30, true. The result is not yet validated; Set does that.
+func FromText(name, value string) (json.RawMessage, error) {
+	s, ok := registry[name]
+	if !ok {
+		return nil, unknown(name)
+	}
+	if s.kind == KindText {
+		return json.Marshal(value)
+	}
+	return json.RawMessage(value), nil
+}
+
+// Setting describes one key for a listing: `ketju config check`, `ketju
+// admin setting list`, the admin screen, the docs test.
 type Setting struct {
 	Name    string
 	Doc     string
 	Default string // JSON
+
+	// Kind is KindText, KindInteger or KindBoolean.
+	Kind string
+
+	// Allowed says in words what the key takes: one of "open", "approval";
+	// a whole number, 0 or more.
+	Allowed string
+}
+
+func (s spec) setting() Setting {
+	return Setting{Name: s.name, Doc: s.doc, Default: s.encoded, Kind: s.kind, Allowed: s.allowed}
+}
+
+// Describe is the key named, or ErrUnknownKey listing the keys there are.
+func Describe(name string) (Setting, error) {
+	s, ok := registry[name]
+	if !ok {
+		return Setting{}, unknown(name)
+	}
+	return s.setting(), nil
 }
 
 // All lists every key, sorted by name.
 func All() []Setting {
 	out := make([]Setting, 0, len(registry))
 	for _, s := range registry {
-		out = append(out, Setting{Name: s.name, Doc: s.doc, Default: s.encoded})
+		out = append(out, s.setting())
 	}
 	slices.SortFunc(out, func(a, b Setting) int { return cmp.Compare(a.Name, b.Name) })
 	return out
 }
 
-func text(minLen, maxLen int) func(string) error {
-	return func(s string) error {
-		if n := len([]rune(s)); n < minLen || n > maxLen {
-			return fmt.Errorf("%d characters, want %d to %d", n, minLen, maxLen)
-		}
-		return nil
-	}
+// Value is a setting as the database has it.
+type Value struct {
+	Setting
+
+	// JSON is the value in canonical form: the stored value, or the default
+	// when there is no row.
+	JSON string
+
+	// IsDefault is whether the value is the default, with or without a row
+	// that says so.
+	IsDefault bool
 }
 
-func oneOf(allowed ...string) func(string) error {
-	return func(s string) error {
-		if !slices.Contains(allowed, s) {
-			return fmt.Errorf("%q is not one of %q", s, allowed)
+// Text is the value as FromText reads it: a text key's string without its
+// quotes, and any other key's JSON.
+func (v Value) Text() string {
+	if v.Kind == KindText {
+		var s string
+		if err := json.Unmarshal([]byte(v.JSON), &s); err == nil {
+			return s
 		}
-		return nil
 	}
+	return v.JSON
 }
 
-func atLeast(least int) func(int) error {
-	return func(n int) error {
-		if n < least {
-			return fmt.Errorf("%d is below %d", n, least)
+// Lookup reads one setting by name, for a caller that has a name rather
+// than a Key. A stored value that no longer decodes is an error, as it is
+// for Key.Get.
+func Lookup(ctx context.Context, d *db.DB, name string) (Value, error) {
+	s, ok := registry[name]
+	if !ok {
+		return Value{}, unknown(name)
+	}
+	var v Value
+	err := d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		v, err = s.current(ctx, q)
+		return err
+	})
+	return v, err
+}
+
+// Current reads every setting, sorted by name, in one transaction.
+func Current(ctx context.Context, d *db.DB) ([]Value, error) {
+	all := All()
+	var out []Value
+	err := d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		out = make([]Value, 0, len(all))
+		for _, st := range all {
+			v, err := registry[st.Name].current(ctx, q)
+			if err != nil {
+				return err
+			}
+			out = append(out, v)
 		}
 		return nil
+	})
+	return out, err
+}
+
+func (s spec) current(ctx context.Context, q *dbq.Queries) (Value, error) {
+	v := Value{Setting: s.setting(), JSON: s.encoded, IsDefault: true}
+	row, err := q.GetSetting(ctx, s.name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return v, nil
 	}
+	if err != nil {
+		return v, err
+	}
+	decoded, err := s.decode([]byte(row.ValueJson))
+	if err != nil {
+		return v, fmt.Errorf("settings: the stored %s: %w", s.name, err)
+	}
+	canonical, err := json.Marshal(decoded)
+	if err != nil {
+		return v, err
+	}
+	v.JSON = string(canonical)
+	v.IsDefault = v.JSON == s.encoded
+	return v, nil
+}
+
+func text(minLen, maxLen int) *rule[string] {
+	return &rule[string]{allowed: fmt.Sprintf("text of %d to %d characters", minLen, maxLen),
+		check: func(s string) error {
+			if n := len([]rune(s)); n < minLen || n > maxLen {
+				return fmt.Errorf("%d characters", n)
+			}
+			return nil
+		}}
+}
+
+func oneOf(allowed ...string) *rule[string] {
+	quoted := make([]string, len(allowed))
+	for i, a := range allowed {
+		quoted[i] = strconv.Quote(a)
+	}
+	return &rule[string]{allowed: "one of " + strings.Join(quoted, ", "),
+		check: func(s string) error {
+			if !slices.Contains(allowed, s) {
+				return fmt.Errorf("%q is not one of them", s)
+			}
+			return nil
+		}}
+}
+
+func atLeast(least int) *rule[int] {
+	return &rule[int]{allowed: fmt.Sprintf("a whole number, %d or more", least),
+		check: func(n int) error {
+			if n < least {
+				return fmt.Errorf("%d is below %d", n, least)
+			}
+			return nil
+		}}
 }

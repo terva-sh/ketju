@@ -20,6 +20,35 @@ directory refuses to start. There is no horizontal scaling and none is
 planned; put a reverse proxy in front for TLS. The reasoning is in
 [docs/02-architecture.md](docs/02-architecture.md).
 
+## First run
+
+A fresh install admits nobody. Registration defaults to `approval`, and this
+version has no approval queue yet, so a new visitor who signs in is told that
+registration is not open. That includes the first admin: `bootstrap.admin_emails`
+and `bootstrap.admin_subjects` apply only to someone who can register. Open
+registration once, from the command line:
+
+1. Write `config.toml` with `data_dir`, `site_url`, at least one
+   `[[oidc.providers]]` entry, and your own address in
+   `bootstrap.admin_emails`. Check it with `ketju config check`.
+2. Start `ketju serve` once, so that it creates the data directory and its
+   database, and then stop it.
+3. Open registration:
+
+   ```sh
+   ketju admin setting set --root DATA_DIR registration.mode open
+   ```
+
+   It refuses while `serve` runs. `ketju admin setting list --root DATA_DIR`
+   shows every setting, its value, and what it takes.
+4. Start `ketju serve` again and sign in. You register, choose a handle, and
+   become the admin. If your provider does not assert a verified email,
+   use `ketju admin promote --root DATA_DIR HANDLE` instead.
+5. To close registration after your members have joined, stop `serve` and
+   run `ketju admin setting set --root DATA_DIR registration.mode approval`.
+
+`ketju admin setting -h` says how each kind of value is written.
+
 ## Recovering a lost or damaged database
 
 The thread logs under `threads/` hold every thread and post. The database

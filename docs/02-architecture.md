@@ -111,7 +111,10 @@ cache sizes) plus the `settings` table for things admins change at runtime.
 The split is the rule: **config.toml holds what must be readable before the
 database exists; everything an admin changes at runtime lives in
 `settings`.** A key written into the wrong half is refused at startup with
-the other half named, rather than quietly accepted.
+the other half named, rather than quietly accepted. Before the admin screen
+exists, an operator changes a setting on a stopped instance with
+`ketju admin setting set KEY VALUE`, and reads them with `get KEY` and
+`list` (05 "Provider configuration").
 
 Environment variable overrides `KETJU_*` for container deployments, listed
 explicitly rather than derived from field names, so that renaming a Go

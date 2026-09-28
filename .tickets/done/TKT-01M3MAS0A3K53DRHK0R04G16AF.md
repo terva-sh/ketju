@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3MAS0A3K53DRHK0R04G16AF
 title: Add ketju admin setting so a fresh install can open registration
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/mas0a3-admin-setting
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5ac3c4893ae84631
-  commit: 2b1c6205fe1ea763bc9e1fc01edd5c2086fdddc1
-  session: null
-  claimed_at: 2026-09-28T16:10:28Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T15:40:14Z
-updated_at: 2026-09-28T16:10:45Z
+updated_at: 2026-09-28T16:18:15Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -53,11 +46,11 @@ A fresh Phase 1 install cannot register anyone. `registration.mode` defaults to 
 
 ## Acceptance criteria
 
-- [ ] ketju admin setting set registration.mode open opens registration on a stopped instance, and serve then admits a new member
-- [ ] Every value is validated through the settings registry; an unknown key or bad value exits 1 naming the allowed values
-- [ ] It refuses while serve holds the data-directory lock and follows admin promote's exit codes
-- [ ] Each change writes an audit row in the same transaction
-- [ ] README's first-run steps name the command
+- [x] ketju admin setting set registration.mode open opens registration on a stopped instance, and serve then admits a new member
+- [x] Every value is validated through the settings registry; an unknown key or bad value exits 1 naming the allowed values
+- [x] It refuses while serve holds the data-directory lock and follows admin promote's exit codes
+- [x] Each change writes an audit row in the same transaction
+- [x] README's first-run steps name the command
 
 ## Implementation plan
 
@@ -83,3 +76,23 @@ Read on 2026-09-28 against main 2b1c620.
 
 ### Docs
 README gains "First run" steps naming the command; docs/05 (registration policy paragraph) and docs/02 Configuration name it; docs/04 settings section mentions the CLI.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T16:18:12Z
+
+Decisions taken while building, and what lost:
+
+- **How VALUE is read.** By the key's kind, which `define` now records: a text key takes the words as typed (`open`, `'My forum'`), an integer or boolean key takes JSON (`30`, `true`). Considered: JSON for every key, which makes the one command the ticket exists for `registration.mode '"open"'` and fails on the shell's quoting; and guessing the type from the word, which would store `true` as a boolean for a text key. A JSON-quoted `"open"` for a text key is refused, naming what the key takes. Said in `ketju admin setting -h` and in docs/05.
+- **The writer.** `settings.Set` already validated through the registry and wrote the row and the audit row in one transaction. Added `settings.SetBy` with a `Change{Actor, Details, At}` so the CLI records `"via": "cli"` with no actor, as `admin promote` does; `Set` calls it, so no caller changed. Details sit beside `from`/`to` and cannot replace them. `TestWritesGoThroughSet` is unchanged and still holds: the CLI never calls `PutSetting`.
+- **Naming the allowed values.** Each validator now carries its own description (`one of "open", "approval"`, `a whole number, 1 or more`, `true or false`, `text of 1 to 100 characters`), and every ErrInvalidValue ends `; it takes ...`. ErrUnknownKey lists every key. Considered: printing the key's doc string on failure, which for integers says nothing about the lower bound.
+- **The lock.** `admin promote` takes no lock (settled as safe beside serve), but this ticket's criterion asks set to refuse while serve holds the directory, so set takes `lock.Acquire(root, "admin setting")` before opening the database, as reindex does, and exits 4 on refusal. get and list only read: they take no lock and do not migrate, so they may run beside serve and report what it sees.
+- **Exit codes.** Unknown key is errNotFound (1); a value the key refuses is a new errInvalidValue (1); usage 2; no database, a held lock, or a database failure 4. `needDatabase`/`openDatabase` were factored out of promote so the three commands refuse a mistyped --root the same way.
+- **Output.** set prints `key = JSON` as stored; get prints the value in the form set takes (so it round-trips); list prints `key = JSON  # default` or `# set; the default is D`, then `kind: allowed`, then the doc string. A row that sets a key back to its default counts as the default.
+- **End to end.** `TestAdminSettingOpensRegistration` runs the binary (KETJU_AS_MAIN) through README's first-run steps: serve once, get says approval, set refuses beside serve (exit 4), stop, set invite (exit 1), set open (exit 0), start serve, a new identity reaches the handle screen, registers as `newcomer`, and gets a session cookie; the users row exists after shutdown.
+
+Mutations tried: set without the lock (caught by TestAdminSettingWhileServeHoldsTheDirectory and the e2e); set that reports success but writes approval (caught by the e2e: the callback answers 501 instead of the handle screen).
+
+## Summary
+
+ketju admin setting set|get|list [--root DIR] reads and changes runtime settings through the registry. set validates by key kind (text as typed, integer and boolean as JSON), refuses while serve holds the data directory, and writes the row and a setting.changed audit row (no actor, via cli) in one transaction via the new settings.SetBy. Unknown key and bad value exit 1 naming the keys or what the key takes. README gains First run steps; docs/02, 04 and 05 name the command. The default stays approval.

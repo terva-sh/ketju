@@ -15,6 +15,10 @@ const (
 	// corruption, and fsck, which finds corruption, names nothing.
 	exitNotFound = 1
 
+	// exitInvalidValue is admin setting's "the key does not take that
+	// value", beside its "no setting has that key", which is exitNotFound.
+	exitInvalidValue = 1
+
 	// exitInvalidConfig is config check's "the file has problems", the
 	// same code the other commands give a failure in what they examined.
 	exitInvalidConfig = 1
@@ -45,6 +49,7 @@ func exitCodeFor(err error) int {
 	var d errDrift
 	var n errNotFound
 	var cf errConfig
+	var iv errInvalidValue
 	switch {
 	case err == nil:
 		return exitOK
@@ -56,6 +61,8 @@ func exitCodeFor(err error) int {
 		return exitDrift
 	case errors.As(err, &n):
 		return exitNotFound
+	case errors.As(err, &iv):
+		return exitInvalidValue
 	case errors.As(err, &cf):
 		return exitInvalidConfig
 	default:

@@ -22,7 +22,7 @@ commands:
   dump     print a thread log as JSON lines, one object per record
   fsck     walk every log, verify every checksum, rebuild every index
   reindex  rebuild the database's projection tables from the thread logs
-  admin    administer members from the command line (admin promote)
+  admin    administer members and settings from the command line
   config   check the config file and print the effective configuration
 
 Run ketju <command> -h for a command's flags.

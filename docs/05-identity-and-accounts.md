@@ -34,7 +34,16 @@
 Registration policy is **not** in this file. `mode` and
 `allow_local_passwords` are things an admin changes while the server is
 running, so they live in the `settings` table (04) and are changed in the
-admin UI. Writing them into `config.toml` is refused at startup, with a
+admin UI. Until that screen exists (Phase 2), and on a fresh install where
+nobody can register to reach it, the operator changes them on a stopped
+instance with `ketju admin setting set [--root DIR] KEY VALUE`, which
+validates the value through the settings registry and writes the same
+`setting.changed` audit row, with no actor and `"via": "cli"`. It refuses
+while `serve` holds the data directory. `get KEY` and `list` read the
+settings, and may run beside `serve`. A fresh install opens registration
+with `ketju admin setting set registration.mode open`; the default stays
+`approval`, so a public install is closed until an operator opens it
+(TKT-01M3MAS0A3). Writing them into `config.toml` is refused at startup, with a
 message naming the settings table, because a runtime setting that also
 exists in a file works right up to the day an admin changes it in the UI
 and the next restart silently puts it back.

@@ -238,3 +238,154 @@ func TestGetFailureIsNotTheDefault(t *testing.T) {
 		t.Fatal("a closed database read as the default")
 	}
 }
+
+// TestFromText: a text key takes the words as typed; an integer or boolean
+// key takes JSON. What FromText lets through, Set still validates.
+func TestFromText(t *testing.T) {
+	for _, c := range []struct {
+		key, text string
+		want      string // the JSON stored, or "" when Set refuses it
+		err       error  // FromText's own error
+	}{
+		{"registration.mode", "open", `"open"`, nil},
+		{"registration.mode", `"open"`, "", nil}, // the quotes are part of the text
+		{"registration.mode", "invite", "", nil},
+		{"site_name", "My forum", `"My forum"`, nil},
+		{"site_name", `a "quoted" name`, `"a \"quoted\" name"`, nil},
+		{"site_name", "", "", nil},
+		{"flags.auto_hide_threshold", "5", `5`, nil},
+		{"flags.auto_hide_threshold", " 5 ", `5`, nil},
+		{"flags.auto_hide_threshold", "five", "", nil},
+		{"flags.auto_hide_threshold", "", "", nil},
+		{"public_edit_history", "false", `false`, nil},
+		{"public_edit_history", "no", "", nil},
+		{"public_edit_history", `"true"`, "", nil},
+		{"registration.modes", "open", "", ErrUnknownKey},
+	} {
+		raw, err := FromText(c.key, c.text)
+		if !errors.Is(err, c.err) {
+			t.Errorf("FromText(%q, %q) = %v, want %v", c.key, c.text, err, c.err)
+			continue
+		}
+		if err != nil {
+			continue
+		}
+		d := openDB(t)
+		err = Set(t.Context(), d, c.key, raw, 0, now)
+		if c.want == "" {
+			if !errors.Is(err, ErrInvalidValue) {
+				t.Errorf("%s = %q: Set = %v, want an invalid value", c.key, c.text, err)
+			}
+			continue
+		}
+		if err != nil {
+			t.Errorf("%s = %q: %v", c.key, c.text, err)
+			continue
+		}
+		if v, err := Lookup(t.Context(), d, c.key); err != nil || v.JSON != c.want {
+			t.Errorf("%s = %q stored %s (%v), want %s", c.key, c.text, v.JSON, err, c.want)
+		}
+	}
+}
+
+// TestRefusalsSayWhatIsAllowed: an operator refused at the command line is
+// told the keys there are, or what the key takes.
+func TestRefusalsSayWhatIsAllowed(t *testing.T) {
+	d := openDB(t)
+	for _, c := range []struct {
+		key, value, want string
+	}{
+		{"registration.mode", `"invite"`, `it takes one of "open", "approval"`},
+		{"flags.auto_hide_threshold", `0`, "it takes a whole number, 1 or more"},
+		{"slow_mode.default_seconds", `"x"`, "it takes a whole number, 0 or more"},
+		{"public_edit_history", `yes`, "it takes true or false"},
+		{"site_name", `""`, "it takes text of 1 to 100 characters"},
+		{"site_nam", `"x"`, "the keys are flags.auto_hide_threshold, posts.delete_window_seconds"},
+	} {
+		err := Set(t.Context(), d, c.key, json.RawMessage(c.value), 0, now)
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Errorf("Set(%s, %s) = %v, want it to say %q", c.key, c.value, err, c.want)
+		}
+	}
+}
+
+// TestSetByDetails: the details go into the audit row beside from and to,
+// and cannot replace them.
+func TestSetByDetails(t *testing.T) {
+	d := openDB(t)
+	if err := SetBy(t.Context(), d, "registration.mode", json.RawMessage(`"open"`),
+		Change{Details: map[string]string{"via": "cli", "to": "forged"}, At: now}); err != nil {
+		t.Fatal(err)
+	}
+	var actor sql.NullInt64
+	var details string
+	var at int64
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), `SELECT actor_id, details_json, at FROM audit_log
+			WHERE action = 'setting.changed' AND target_id = 'registration.mode'`).Scan(&actor, &details, &at)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if actor.Valid || details != `{"from":"approval","to":"open","via":"cli"}` || at != now.UnixMilli() {
+		t.Errorf("audit row: actor %v, details %s, at %d", actor, details, at)
+	}
+}
+
+// TestCurrent: every key, in name order, with its value and whether it is
+// the default; a row that sets a key back to its default counts as the
+// default.
+func TestCurrent(t *testing.T) {
+	d := openDB(t)
+	for _, kv := range [][2]string{
+		{"registration.mode", `"open"`},
+		{"flags.auto_hide_threshold", `5`},
+		{"flags.auto_hide_threshold", `3`},
+	} {
+		if err := Set(t.Context(), d, kv[0], json.RawMessage(kv[1]), 0, now); err != nil {
+			t.Fatal(err)
+		}
+	}
+	vs, err := Current(t.Context(), d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(vs) != len(registry) {
+		t.Fatalf("%d values for %d keys", len(vs), len(registry))
+	}
+	got := map[string]Value{}
+	for i, v := range vs {
+		if i > 0 && vs[i-1].Name >= v.Name {
+			t.Errorf("%s before %s", vs[i-1].Name, v.Name)
+		}
+		got[v.Name] = v
+	}
+	if v := got["registration.mode"]; v.JSON != `"open"` || v.IsDefault || v.Text() != "open" || v.Default != `"approval"` {
+		t.Errorf("registration.mode: %+v, text %q", v, v.Text())
+	}
+	if v := got["flags.auto_hide_threshold"]; v.JSON != `3` || !v.IsDefault || v.Text() != "3" {
+		t.Errorf("flags.auto_hide_threshold: %+v", v)
+	}
+	if v := got["site_name"]; v.JSON != `"Ketju"` || !v.IsDefault || v.Text() != "Ketju" || v.Kind != KindText {
+		t.Errorf("site_name: %+v", v)
+	}
+	if v := got["public_edit_history"]; v.Kind != KindBoolean || v.Allowed != "true or false" {
+		t.Errorf("public_edit_history: %+v", v)
+	}
+
+	if _, err := Lookup(t.Context(), d, "nope"); !errors.Is(err, ErrUnknownKey) {
+		t.Errorf("Lookup(nope) = %v", err)
+	}
+
+	// A row written around Set is an error naming the key, not the default.
+	if err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		return q.PutSetting(t.Context(), dbq.PutSettingParams{Key: "site_name", ValueJson: `7`, UpdatedAt: 1})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Current(t.Context(), d); !errors.Is(err, ErrInvalidValue) || !strings.Contains(err.Error(), "site_name") {
+		t.Errorf("Current over a bad row = %v", err)
+	}
+	if _, err := Lookup(t.Context(), d, "site_name"); !errors.Is(err, ErrInvalidValue) {
+		t.Errorf("Lookup over a bad row = %v", err)
+	}
+}
