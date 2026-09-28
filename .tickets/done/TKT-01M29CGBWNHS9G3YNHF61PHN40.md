@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T06:59:20Z
+updated_at: 2026-09-28T07:06:13Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -97,6 +97,10 @@ Decisions taken while building, with the alternatives:
 
 Criterion 3 is verified in Playwright's 390 px phone emulation; real devices stay with TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices).
 Playwright does not report a request sent as the page unloads, so the page-hide e2e test reads the stored position; the unit tests assert keepalive and the PUT on pagehide and on visibilitychange.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:06:13Z
+
+Review 1143 (request ready-review-c4bc551, Actions run 550; head c4bc55130002c7b0faa4d9d7773c70aa544899af, base 9d7b0dca08083d4ecc937ad53ac7d8068956801a) failed the gate with one high and two medium findings. All three were accepted and fixed in ac90671, by changing the behaviour flagged: markUnread now holds the thread before it waits and drains every PUT (high); a post's geometry is measured again when its second is up, so a tall post that slipped below the line between observer thresholds is not counted (medium); the batch timer keeps running while a position is waiting, so a navigation PUT that failed after the last thread page closed is retried (medium). A fresh review of the new head follows.
 
 ## Summary
 
