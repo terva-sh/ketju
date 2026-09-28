@@ -21,7 +21,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T19:51:07Z
-updated_at: 2026-09-28T19:08:04Z
+updated_at: 2026-09-28T19:20:05Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -87,6 +87,10 @@ No bypass found. Every route that can end in a session refused each status other
 
 ### Seen, not changed
 `/auth/signin` treats any session that has a user id as signed in, active or not, and redirects straight back (`UserID != 0`, signin.go). If a suspended, deactivated or pending user still holds a session, the client offers them "Sign in", and the login page then bounces them back without issuing anything. It is not a bypass. docs/05 says suspending deletes sessions, so the case should not arise once suspension exists. No draft filed.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T19:20:05Z
+
+Review 1231 (run 33745816-825b-4b87-a052-b68fe362270b, Actions run 746, head 21118faa112afab7ff85e4de50065511b0c4fd1b, base 86e1e2e64ba90ed0e667fa0c411fffc8ef47ec65) was clean at the gate, with one low finding: TestTheLoginPageIssuesNoSession had no valid session belonging to a user who has since become inactive. Fixed. The table now includes a session for pat, who signed in while active and was then set to pending without the session being revoked, and the test afterwards checks that pat is not a member. The next head gets a fresh review.
 
 ## Summary
 

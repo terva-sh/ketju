@@ -240,10 +240,20 @@ func TestTheLoginPageIssuesNoSession(t *testing.T) {
 	w.withAPI()
 	w.user("alice", "active", "user-1")
 	alice := cookie(w.signIn(""), session.CookieName)
+	// pat signed in while active and is pending now, with the session left
+	// behind (review 1231).
+	pat := w.user("pat", "active", "user-2")
+	w.idp.Subject = "user-2"
+	patSession := cookie(w.signIn(""), session.CookieName)
+	w.setStatus(pat, "pending")
 	n := w.sessions()
+	if n != 2 {
+		t.Fatalf("%d sessions to begin with, want alice's and pat's", n)
+	}
 	for name, cookies := range map[string][]*http.Cookie{
 		"anonymous":        nil,
 		"a member":         {alice},
+		"a pending user's": {patSession},
 		"a stale cookie":   {{Name: session.CookieName, Value: "not-a-session"}},
 		"a flow in flight": {cookie(w.do("GET", "/auth/fake/start"), FlowCookie)},
 	} {
@@ -257,4 +267,5 @@ func TestTheLoginPageIssuesNoSession(t *testing.T) {
 			}
 		}
 	}
+	w.notAMember(patSession)
 }
