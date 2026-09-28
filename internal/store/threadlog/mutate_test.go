@@ -254,6 +254,10 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 		{"restore behind a delete", restore, stage(TypeDelete), true},
 		{"restore behind a delete and a restore", restore, stage(TypeDelete, TypeRestore), false},
 		{"edit behind another post's delete", edit, []staged{{header: FrameHeader{Type: TypeDelete, Ordinal: 2}}}, true},
+		// A staged Edit sets the edited flag, as Apply will (review 1123).
+		{"requiring edited, behind an edit", Append{Type: TypeDelete, Ordinal: 1, Require: EntryEdited}, stage(TypeEdit), true},
+		{"requiring edited, nothing ahead", Append{Type: TypeDelete, Ordinal: 1, Require: EntryEdited}, nil, false},
+		{"refusing edited, behind an edit", Append{Type: TypeDelete, Ordinal: 1, Refuse: EntryEdited}, stage(TypeEdit), false},
 	} {
 		err := a.checkState(c.req, c.ahead)
 		if (err == nil) != c.ok {
@@ -261,6 +265,38 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 		}
 		if err != nil && !errors.Is(err, ErrPostState) {
 			t.Errorf("%s: err %v, want ErrPostState", c.name, err)
+		}
+	}
+}
+
+// TestPostFlagEffectIsWhatApplyDoes holds the precondition fold to Apply:
+// for every catalogued type that names an existing post, the flags Apply
+// leaves on the entry are the flags postFlagEffect says, from every starting
+// state. A flag change added to Apply and not to the table fails here, which
+// is how a staged Edit's edited flag went missing (review 1123 on PR #95).
+func TestPostFlagEffectIsWhatApplyDoes(t *testing.T) {
+	for ty := range catalogue {
+		if ty == TypePost {
+			continue // creates an entry rather than changing one
+		}
+		body, _ := NewBody(ty)
+		raw, err := EncodeBody(EncodingCBOR, body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for start := range EntryFlagsKnown + 1 {
+			if start&^EntryFlagsKnown != 0 {
+				continue
+			}
+			ix := &Index{entries: []IndexEntry{{Revision: 1, Flags: start}}}
+			h := FrameHeader{Type: ty, Encoding: EncodingCBOR, Ordinal: 1, Revision: 2}
+			if err := ix.Apply(h, raw, 0, 0); err != nil {
+				t.Fatalf("%s from %#x: %v", ty, start, err)
+			}
+			set, clear := postFlagEffect(ty)
+			if got, want := ix.entries[0].Flags, (start|set)&^clear; got != want {
+				t.Errorf("%s from %#x: Apply left %#x, postFlagEffect says %#x", ty, start, got, want)
+			}
 		}
 	}
 }

@@ -107,14 +107,18 @@ func (ix *Index) applyEdit(h FrameHeader, b *EditBody, offset uint64, frameSize 
 		e.ReplyTo = b.ReplyTo
 	}
 	e.Revision = revisionOf(h)
-	e.Flags |= EntryEdited
+	set, clear := postFlagEffect(h.Type)
+	e.Flags = (e.Flags | set) &^ clear
 	return nil
 }
 
 // postFlagEffect is what a record of type t does to its post's flags: the
 // bits it sets and the bits it clears. Apply folds records through it, and so
 // does the actor when it checks an append's preconditions against records
-// still in its batch, so the two cannot disagree about a post's state.
+// still in its batch, so the two cannot disagree about a post's state. Every
+// flag change a record makes to an existing entry goes through here, the
+// Edit's edited flag included (review 1123 on PR #95), and
+// TestPostFlagEffectIsWhatApplyDoes holds Apply to it for every type.
 //
 // A Restore clears hidden-by-mod as well as deleted (docs/08: a moderator's
 // Restore clears it; settled in grooming for TKT-01M29CA9BP). The index
@@ -123,6 +127,8 @@ func (ix *Index) applyEdit(h FrameHeader, b *EditBody, offset uint64, frameSize 
 // says.
 func postFlagEffect(t RecordType) (set, clear EntryFlags) {
 	switch t {
+	case TypeEdit:
+		return EntryEdited, 0
 	case TypeDelete:
 		return EntryDeleted, 0
 	case TypeRestore:
