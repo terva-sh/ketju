@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T07:41:54Z
+updated_at: 2026-09-28T07:44:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -117,6 +117,10 @@ Review 1148 (request ready-review-36ba74f, Actions run 566; head 36ba74f2f7c0976
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:41:54Z
 
 Review 1149 (request ready-review-dd761e9, Actions run 568; head dd761e95ee631b5e07583cbd230e3eedbef3798d, base 9b76d9d5f140591c506e9b80a7f09ac358da8d98) read 1148's two findings as resolved and failed the gate with one new medium finding: when a mark-unread's DELETE fails, the reads kept aside while it was out are queued against the unchanged higher floor and dropped, so a retried mark that then succeeds never sends them. The finding looks right and is not fixed: this was the fifth review round, and the run brief stops a PR there for a person. The fix would be to hand the kept reads to the next mark of the thread when the DELETE fails, instead of queueing them. CI is green on this head (run 567). The PR is open and not merged. Every finding so far is in markUnread, which no control calls yet. A person may choose to fix this last one here, or to take markUnread out of this PR and give it to whichever ticket adds the mark-unread control.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:44:49Z
+
+markUnread is out of this ticket, by the orchestrator's decision after review 1149: none of the four criteria covers mark-unread, and no control calls it. It was removed from the branch together with what served only it: the DELETE path, the hold and kept reads, the mark queue, asking, and forgetHeldPages. The implementation, with review 1149's open finding, is at dd761e95ee631b5e07583cbd230e3eedbef3798d. Filed TKT-01M3KFFFJR (Add the mark-unread control to the thread page) as a draft carrying the server contract, the flush-before-DELETE rule, 1149's finding and a pointer to that commit. This supersedes the plan's step 6 and the part of the claim-time note that argued for keeping markUnread here. One fresh review of the new head follows.
 
 ## Summary
 
