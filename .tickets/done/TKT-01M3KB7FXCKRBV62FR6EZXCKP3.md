@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3KB7FXCKRBV62FR6EZXCKP3
 title: Stop recovered databases reusing member ids that old posts name
 type: spike
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/kb7fxc-reindex-id-floor
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a8a966ba62d2cc42e
-  commit: 9b960cf722ef87cf9aa1ba28375bd2f6aee88639
-  session: null
-  claimed_at: 2026-09-28T19:39:49Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T06:28:54Z
-updated_at: 2026-09-28T19:44:32Z
+updated_at: 2026-09-28T19:57:51Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -55,12 +48,12 @@ Each changes what members see and who a post is attributed to, so it is a produc
 
 ## Acceptance criteria
 
-- [ ] ketju reindex raises the next member id above the largest member id any thread log names (author, mention, and the actor of edit, delete and moderation records)
-- [ ] A migration makes users.id AUTOINCREMENT, keeping every row, id and foreign key (PRAGMA foreign_key_check is empty)
-- [ ] Members created after a reindex get ids above every logged id; a reindex over a database not behind the logs changes nothing
-- [ ] A post whose author id the database lacks renders as a deleted member (deleted-user-<id>), never reattributed
-- [ ] README 'Recovering a lost or damaged database' and docs/04 say what now happens, replacing 'unsupported'
-- [ ] The e2e seed still works and the log format is unchanged
+- [x] ketju reindex raises the next member id above the largest member id any thread log names (author, mention, and the actor of edit, delete and moderation records)
+- [x] A migration makes users.id AUTOINCREMENT, keeping every row, id and foreign key (PRAGMA foreign_key_check is empty)
+- [x] Members created after a reindex get ids above every logged id; a reindex over a database not behind the logs changes nothing
+- [x] A post whose author id the database lacks renders as a deleted member (deleted-user-<id>), never reattributed
+- [x] README 'Recovering a lost or damaged database' and docs/04 say what now happens, replacing 'unsupported'
+- [x] The e2e seed still works and the log format is unchanged
 
 ## Implementation plan
 
@@ -100,3 +93,18 @@ A post whose author id the database lacks renders as a deleted member, as the an
 To make the floor persist, a migration may switch `users.id` to AUTOINCREMENT and set `sqlite_sequence`. Reindex then only ever raises it. A reindex over a database that is not behind the logs changes nothing.
 
 Name the new behaviour in README "Recovering a lost or damaged database" and docs/04. Replace the "unsupported" wording there with what now happens.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T19:57:42Z
+
+### Build notes
+
+- **Why the runner changed.** A probe showed that SQLite's table rebuild cannot run inside a transaction with foreign keys on. Even under `PRAGMA defer_foreign_keys = ON`, the implicit delete that `DROP TABLE users` performs leaves a deferred violation, and the commit fails. `PRAGMA foreign_keys` is a no-op inside a transaction. So `DB.migrate` now pins the write connection, turns foreign keys off before BEGIN, runs `PRAGMA foreign_key_check` before COMMIT when it applied anything, and turns foreign keys back on. If the restore fails, the connection is discarded. This is SQLite's documented procedure. Doing it once in the runner is less surgery than special-casing one migration.
+- **Rejected alternatives for the floor:** a placeholder row kept at the floor would show a fake member. A floor setting plus explicit ids in `CreateUser` would be bypassed by every raw insert, and no trigger can assign an INTEGER PRIMARY KEY. Editing the schema with `writable_schema` is unsupported surgery.
+- **How the ids are found.** Reindex reads each log a second time, before projecting it. It collects every whole frame's actor and the mentions in Post and Edit bodies. It does not hook the projection, because a thread that fails to project, or a reserved record the projection skips, still names ids. A damaged frame's bytes are not trusted. An id above the int64 range cannot be a member id and is left out. The floor is raised thread by thread in its own small write, so a partial run followed by serve's catch-up cannot hand out a logged id.
+- **Rendering.** `member.Missing(id)` returns `{handle: deleted-user-<id>, role: member, kind: human}`, the shape an anonymized account's author block has (profile_test). The thread page, thread list and forum index use it where they drew an empty handle before. The user profile endpoints look accounts up by handle, so they never meet a missing id. A `deleted-user-<id>` profile link for a missing id answers not-found.
+- **Verification.** Mutations are listed in the code commit's body. Each one was caught. `TestHandleRuleMatchesTheSchema` passes after rebasing onto 9c415ec (PR #130), and 0010's handle CHECK is byte-identical to 0002's. To check the e2e seed, the `-tags e2e` binary was built and `ketju e2e` was run. It seeded, served `/healthz` ok, and `/api/v1/forums` drew the seeded authors as real members. Chromium is not installed here, so Playwright itself runs in CI's step.
+- **Left for a person:** a member who joined after the backup registers again under a new id, and nothing links them to their old posts. Filed as draft TKT-01M3MSFX3S (Let a restored member reclaim posts under an id the database lacks).
+
+## Summary
+
+Built to the maintainer's decision. Migration 0010 makes users.id AUTOINCREMENT. The migration runner now runs with foreign keys off and checks them before commit. ketju reindex raises sqlite_sequence above every member id any log names, as actor, author or mention, and never lowers it. It reports the change as max_member_id, member_id_floor and member_id_floor_was. An author the database lacks renders as deleted-user-<id>. README and docs/04 describe the recovery behaviour. Follow-up draft: TKT-01M3MSFX3S.
