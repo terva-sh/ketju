@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T08:38:03Z
+updated_at: 2026-09-28T08:48:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -104,3 +104,7 @@ Facts found while reading, for whoever picks this up:
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:37:37Z
 
 in-progress to blocked: Who may see a profile (anonymous viewers, non-active accounts) and what post count counts are undecided; see TKT-01M3KJJNDC
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:48:46Z
+
+Terva review 1154 (run be15eb74-0959-4884-8c1d-bb0ae24d29a1, Actions run #609), head a042bd20e46a35494737820affa50347640f1421, base de904cb55ab88426e91eb9c84c66c9a49bbb6ee1: one low finding, 'Transition note records the wrong previous status'. Answered, not changed. The PR's net diff shows ready to blocked, but on the branch the ticket went ready, claimed, in-progress, blocked, released, each as a separate git ticket write in commit f7a0081. git ticket generated the in-progress-to-blocked note from the status the ticket actually had at that moment. The claim was set and then released inside the same commit, which is why base and head both read claim: null. The history is accurate.
