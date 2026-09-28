@@ -512,6 +512,28 @@ describe('markUnread', () => {
     stop();
   });
 
+  // Review 1147: a page answered before the mark reports the old position,
+  // and must not raise the floor back over what the mark made unread.
+  it('does not take a page position from before the mark, and forgets the held pages', async () => {
+    const paged = '/api/v1/threads/t1?page=2';
+    answer = (s) =>
+      s.method === 'GET'
+        ? new Response('{"n":1}', { status: 200, headers: { ETag: '"x"' } })
+        : stored(s.method === 'DELETE' ? 2 : s.body!.ordinal!);
+    await apiGet(paged);
+    const first = trackPosts('t1', list(10), 9);
+    first();
+    await markUnread('t1', 2);
+    expect(peekGet(paged)).toBeUndefined();
+    // The held page said 9; the server says 2.
+    const stop = trackPosts('t1', list(10), 9);
+    io().show(post(6), 200);
+    vi.advanceTimersByTime(dwellMs);
+    await flush();
+    expect(puts().map((s) => s.body)).toEqual([{ ordinal: 6 }]);
+    stop();
+  });
+
   it('sends no body to mark the whole thread unread', async () => {
     answer = () => stored(0);
     await markUnread('t1');

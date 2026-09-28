@@ -130,6 +130,13 @@ export function forgetLandings(id: string) {
   });
 }
 
+// forgetHeldPages drops the held bodies of every request for id's pages: a
+// read position lowered by a mark-unread makes every page's
+// viewer.last_read_ordinal stale, not only the landing's.
+export function forgetHeldPages(id: string) {
+  forgetGets((u) => isThreadUrl(u, id));
+}
+
 // isThreadUrl is a request for one of id's pages, or anything under it.
 function isThreadUrl(url: string, id: string): boolean {
   const base = threadUrl(id, {});

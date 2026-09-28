@@ -1,7 +1,7 @@
 import { apiSend } from '../api/client';
 import type { ReadPosition } from '../api/dto';
 import { ProblemError } from '../api/problem';
-import { forgetLandings } from './threads';
+import { forgetHeldPages, forgetLandings } from './threads';
 
 // The read-tracking beacon (docs/06 "Read tracking"): a post counts as read
 // once it has been on screen for a second, and the highest such ordinal is
@@ -44,6 +44,13 @@ const inFlight = new Map<string, Set<Promise<void>>>();
 const held = new Map<string, number>();
 // marks is the newest markUnread per thread, which the next one waits for.
 const marks = new Map<string, Promise<unknown>>();
+// marked is the threads marked unread from this page. A page's position is
+// not taken as known for them any more: one answered before the DELETE, held
+// or still in flight, reports the position the mark lowered, and taking it
+// would raise the floor back over posts the mark made unread. PUT answers
+// still count, and a PUT the floor would have spared changes nothing on the
+// server.
+const marked = new Set<string>();
 
 export const readUrl = (id: string) => `/api/v1/threads/${encodeURIComponent(id)}/read`;
 
@@ -124,6 +131,7 @@ export function flush(): Promise<void> {
 // would then set the position last.
 export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> {
   held.set(id, (held.get(id) ?? 0) + 1);
+  marked.add(id);
   const before = marks.get(id);
   const run = (async () => {
     try {
@@ -136,7 +144,8 @@ export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> 
       pending.delete(id);
       const r = await apiSend<ReadPosition>('DELETE', readUrl(id), ordinal === undefined ? undefined : { ordinal });
       floor.set(id, r.last_read_ordinal);
-      forgetLandings(id);
+      // Every held page of the thread reports the old position now.
+      forgetHeldPages(id);
       return r;
     } finally {
       const n = held.get(id)! - 1;
@@ -216,7 +225,7 @@ let listening = false;
 // It answers the function that stops tracking, which flushes: the thread
 // body unmounts on every navigation away from its page.
 export function trackPosts(id: string, list: Element, stored: number): () => void {
-  known(id, stored);
+  if (!marked.has(id)) known(id, stored);
   const timers = new Map<Element, ReturnType<typeof setTimeout>>();
   // near is the posts the observer has in the viewport at all.
   const near = new Set<Element>();
@@ -292,4 +301,5 @@ export function resetReadTracker() {
   inFlight.clear();
   held.clear();
   marks.clear();
+  marked.clear();
 }
