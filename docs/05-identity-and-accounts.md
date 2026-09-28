@@ -328,3 +328,11 @@ sessions. The states, the reasons, and the audit trail are otherwise the same.
   edited (they are in logs); a `users.anonymized` flag suppresses attribution
   at render time. GDPR erasure of body text uses the offline redaction tool
   from 03.
+
+Whose profile is served (`GET /users/{handle}`, 07) follows from the
+states above. A pending account has not joined, so its profile and history
+are `not-found` except to moderators and admins. A suspended or deactivated
+account's posts are kept with the handle shown, so its profile and history
+are served to members as any other account's are; its status is shown only
+to moderators and admins. Decided by the maintainer on 2026-09-28
+(TKT-01M3KJJNDC).

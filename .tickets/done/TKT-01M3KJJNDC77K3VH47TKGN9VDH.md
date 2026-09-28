@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3KJJNDC77K3VH47TKGN9VDH
 title: Decide who may see a user profile and what its post count counts
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T08:37:20Z
-updated_at: 2026-09-28T08:37:20Z
+updated_at: 2026-09-28T13:52:47Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -74,7 +74,24 @@ The answers are written into docs/07 beside the `/users/{handle}` row (and docs/
 
 ## Acceptance criteria
 
-- [ ] Anonymous access to /users/{handle} and /users/{handle}/posts is decided and written into docs/07
-- [ ] What the profile's post count counts is decided and written into docs/07
-- [ ] Whether a pending, suspended or deactivated account's profile is served, and to whom, is decided and written into docs/05 or docs/07
-- [ ] TKT-01M29CCBYG's settled items carry the answers
+- [x] Anonymous access to /users/{handle} and /users/{handle}/posts is decided and written into docs/07
+- [x] What the profile's post count counts is decided and written into docs/07
+- [x] Whether a pending, suspended or deactivated account's profile is served, and to whom, is decided and written into docs/05 or docs/07
+- [x] TKT-01M29CCBYG's settled items carry the answers
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T13:51:51Z
+
+Maintainer's decision, 2026-09-28, answering the four questions in the description:
+
+- Q1 anonymous access: "Members only". A member session is required for GET /users/{handle} and /users/{handle}/posts, as for GET /users?prefix=: anonymous → unauthenticated, pre-user → forbidden.
+- Q2 post count: "Visible, non-deleted posts": non-deleted posts in forums this viewer can read, exactly what their history view lists. It varies by viewer and leaks nothing about restricted forums.
+- Q3 non-active accounts: "Hide pending; serve the rest". Pending accounts are not-found except to moderators and admins. Suspended and deactivated profiles are served, since docs/05 keeps their posts with the handle shown; their status is shown only to moderators and admins.
+- Smaller point: "Yes, marked deleted". An author sees their own deleted posts, marked as deleted, in their own history (PR #95 lets only the author restore a post). Other members do not; moderators and admins follow the ticket's existing criterion.
+
+The decision is the promotion of this spike from draft. Recorded in docs/07 (the /users/{handle} row) and docs/05 (Account lifecycle), and carried into TKT-01M29CCBYG's settled items.
+
+## Summary
+
+Decided by the maintainer on 2026-09-28 (note carries their words). Profiles and histories are members-only; the post count is the viewer's visible, non-deleted posts; pending accounts are not-found except to moderators and admins, suspended and deactivated are served with status shown only to moderators and admins; an author sees their own deleted posts marked deleted. Written into docs/07 (/users/{handle} row) and docs/05 (Account lifecycle), and into TKT-01M29CCBYG's settled items, which is back in ready.

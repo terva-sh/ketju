@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M29CCBYGNF7T7R9MFNHW5X60
 title: Implement the user profile endpoints
 type: task
-status: blocked
-status_reason: Who may see a profile (anonymous viewers, non-active accounts) and what post count counts are undecided; see TKT-01M3KJJNDC
+status: ready
+status_reason: null
 priority: normal
 due_on: null
 labels:
@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T08:48:46Z
+updated_at: 2026-09-28T13:52:48Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -82,6 +82,13 @@ Open: the profile field set is undocumented.
 
 - Profile fields: handle, display name, avatar, bio, joined date, post count. 'Moderators' means the site role.
 - Add `users.anonymized` to docs/04 if the ticket needs it.
+
+### Settled in grooming (maintainer's decision, 2026-09-28, TKT-01M3KJJNDC)
+
+- Anonymous access, "Members only": a member session is required for GET /users/{handle} and /users/{handle}/posts, as for GET /users?prefix=: anonymous → unauthenticated, pre-user → forbidden.
+- Post count, "Visible, non-deleted posts": non-deleted posts in forums this viewer can read, exactly what their history view lists. It varies by viewer and leaks nothing about restricted forums.
+- Non-active accounts, "Hide pending; serve the rest": pending accounts are not-found except to moderators and admins. Suspended and deactivated profiles are served, since docs/05 keeps their posts with the handle shown; their status is shown only to moderators and admins.
+- Author's own deleted posts, "Yes, marked deleted": an author sees their own deleted posts, marked as deleted, in their own history (PR #95 lets only the author restore a post). Other members do not; moderators and admins follow criterion 3.
 
 ## Notes
 
