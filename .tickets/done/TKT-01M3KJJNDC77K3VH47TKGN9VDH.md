@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T08:37:20Z
-updated_at: 2026-09-28T13:53:17Z
+updated_at: 2026-09-28T13:55:49Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -93,6 +93,10 @@ Maintainer's decision, 2026-09-28, answering the four questions in the descripti
 - Smaller point: "Yes, marked deleted". An author sees their own deleted posts, marked as deleted, in their own history (PR #95 lets only the author restore a post). Other members do not; moderators and admins follow the ticket's existing criterion.
 
 The decision is the promotion of this spike from draft. Recorded in docs/07 (the /users/{handle} row) and docs/05 (Account lifecycle), and carried into TKT-01M29CCBYG's settled items.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T13:55:49Z
+
+Terva review 1161 (run c05bc969-c31c-4c80-8ed1-481516640c8e, Actions run #641), head abdf6fe5ca2fdbaa9c42fd6809d1b13be64adff0, base 4ea1a5ddf3017b12b741c60475a564f868d31b40: one medium finding, 'Post count cannot equal the documented history length'. Fixed, not argued: the maintainer's answer names the count 'Visible, non-deleted posts', so docs/07 now says a deleted post never counts, even for a viewer whose history shows it, and that the count equals a member's history and is less than an author's, moderator's or admin's by the deleted posts shown. TKT-01M29CCBYG's settled items carry the same clarification beside the maintainer's words, which are left as they were.
 
 ## Summary
 

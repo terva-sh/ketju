@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T13:52:48Z
+updated_at: 2026-09-28T13:55:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -87,6 +87,7 @@ Open: the profile field set is undocumented.
 
 - Anonymous access, "Members only": a member session is required for GET /users/{handle} and /users/{handle}/posts, as for GET /users?prefix=: anonymous → unauthenticated, pre-user → forbidden.
 - Post count, "Visible, non-deleted posts": non-deleted posts in forums this viewer can read, exactly what their history view lists. It varies by viewer and leaks nothing about restricted forums.
+- Read with the next item (review 1161 on PR #112): a deleted post never counts, for any viewer. The count equals what a member's history lists; an author's, moderator's or admin's history also shows deleted posts, marked deleted, which the count leaves out.
 - Non-active accounts, "Hide pending; serve the rest": pending accounts are not-found except to moderators and admins. Suspended and deactivated profiles are served, since docs/05 keeps their posts with the handle shown; their status is shown only to moderators and admins.
 - Author's own deleted posts, "Yes, marked deleted": an author sees their own deleted posts, marked as deleted, in their own history (PR #95 lets only the author restore a post). Other members do not; moderators and admins follow criterion 3.
 
