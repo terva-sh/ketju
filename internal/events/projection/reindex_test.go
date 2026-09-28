@@ -175,8 +175,8 @@ func TestReindexWalkFailureChangesNothing(t *testing.T) {
 	if _, err := os.ReadDir(shard); err == nil {
 		t.Skip("running as a user that can read an unreadable directory")
 	}
-	if _, err := f.w.Reindex(t.Context(), nil); err == nil {
-		t.Fatal("reindex succeeded over a directory it could not read")
+	if rep, err := f.w.Reindex(t.Context(), nil); err == nil || rep.Cleared {
+		t.Fatalf("reindex over a directory it could not read: cleared %v, err %v", rep.Cleared, err)
 	}
 	if got := f.dump(); got != want {
 		t.Fatalf("a failed walk changed the projection:\n%s\n---\n%s", want, got)
@@ -268,7 +268,7 @@ func TestReindexSeparatesLogFaultsFromTheDatabase(t *testing.T) {
 
 	f.exec(`CREATE TRIGGER disk_full BEFORE INSERT ON post_meta BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
 	rep, err = f.w.Reindex(t.Context(), nil)
-	if err == nil || IsLogFault(err) || !strings.Contains(err.Error(), "disk full") {
+	if err == nil || IsLogFault(err) || !strings.Contains(err.Error(), "disk full") || !rep.Cleared {
 		t.Fatalf("got %v, want the database's error, not a log fault", err)
 	}
 	for _, fl := range rep.Failed {

@@ -58,6 +58,11 @@ type ReindexReport struct {
 	// at the path its id names.
 	Strays []string
 
+	// Cleared is whether the projection tables were emptied. A run that
+	// failed with it false changed nothing; with it true, the tables hold
+	// only the threads finished before the failure.
+	Cleared bool
+
 	Elapsed time.Duration
 }
 
@@ -105,6 +110,7 @@ func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (R
 	}); err != nil {
 		return rep, fmt.Errorf("projection: reindex: emptying the projection tables: %w", err)
 	}
+	rep.Cleared = true
 	// Nothing this writer held is true of the emptied tables.
 	w.mu.Lock()
 	clear(w.behind)

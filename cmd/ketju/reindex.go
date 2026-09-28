@@ -186,7 +186,10 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 		}
 	}
 	rep, err := w.Reindex(ctx, progress)
-	if err != nil {
+	switch {
+	case err != nil && !rep.Cleared:
+		return fmt.Errorf("reindex: %w; the database was not changed", err)
+	case err != nil:
 		return fmt.Errorf("reindex: %w; the projection tables are partly rebuilt: run reindex again "+
 			"(or start serve, whose catch-up finishes the job)", err)
 	}

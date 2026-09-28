@@ -492,6 +492,30 @@ func TestReindexExitCodes(t *testing.T) {
 			t.Errorf("the sound thread was not projected beside the damaged one:\n%s", got)
 		}
 	})
+	t.Run("unreadable", func(t *testing.T) {
+		// A walk that fails comes before the tables are emptied, and the
+		// message says nothing changed rather than that they are half
+		// rebuilt (review 1142).
+		data, ids := populate(t, 2)
+		before, _ := dumpAt(t, data)
+		shard := ids[0].Dir(data)
+		if err := os.Chmod(shard, 0); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { os.Chmod(shard, 0o755) })
+		if _, err := os.ReadDir(shard); err == nil {
+			t.Skip("running as a user that can read an unreadable directory")
+		}
+		_, _, err := reindexRun(t, reindexOpts{}, "--root", data)
+		if exitCodeFor(err) != exitInternal || !strings.Contains(err.Error(), "the database was not changed") ||
+			strings.Contains(err.Error(), "partly rebuilt") {
+			t.Fatalf("exit %d (%v), want %d saying nothing changed", exitCodeFor(err), err, exitInternal)
+		}
+		os.Chmod(shard, 0o755)
+		if after, _ := dumpAt(t, data); after != before {
+			t.Errorf("a reindex whose walk failed changed the projection")
+		}
+	})
 	t.Run("database", func(t *testing.T) {
 		// A write the database refuses is not the log's fault, so it is not
 		// exit 1 and fsck will not explain it (review 1137).
@@ -501,7 +525,7 @@ func TestReindexExitCodes(t *testing.T) {
 		d.Close()
 		_, _, err := reindexRun(t, reindexOpts{}, "--root", data)
 		if exitCodeFor(err) != exitInternal || !strings.Contains(err.Error(), "disk full") ||
-			!strings.Contains(err.Error(), "run reindex again") {
+			!strings.Contains(err.Error(), "partly rebuilt") {
 			t.Fatalf("exit %d (%v), want %d naming the database's error", exitCodeFor(err), err, exitInternal)
 		}
 	})
