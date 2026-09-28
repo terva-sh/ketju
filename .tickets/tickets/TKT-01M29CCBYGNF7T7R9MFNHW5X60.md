@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M29CCBYGNF7T7R9MFNHW5X60
 title: Implement the user profile endpoints
 type: task
-status: ready
-status_reason: null
+status: blocked
+status_reason: Who may see a profile (anonymous viewers, non-active accounts) and what post count counts are undecided; see TKT-01M3KJJNDC
 priority: normal
 due_on: null
 labels:
@@ -16,6 +16,7 @@ parent: TKT-01M29BKBMCNDSYHYF9WXAPDNRN
 origin: null
 dependencies:
   - TKT-01M29C801M9WBEAVCCC6AXNZ4Z
+  - TKT-01M3KJJNDC77K3VH47TKGN9VDH
 blocks_on: none
 references:
   - ref: design:account-lifecycle
@@ -23,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-28T08:37:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -79,3 +80,25 @@ Open: the profile field set is undocumented.
 
 - Profile fields: handle, display name, avatar, bio, joined date, post count. 'Moderators' means the site role.
 - Add `users.anonymized` to docs/04 if the ticket needs it.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:37:32Z
+
+Blocked at planning, before any code, on who-can-see-what questions the design leaves open. TKT-01M3KJJNDC (Decide who may see a user profile and what its post count counts) lists them with options. In short:
+
+1. docs/07 names no session requirement for `/users/{handle}` or its `/posts`. The sibling `GET /users?prefix=` is members-only. Serving a profile to an anonymous viewer shows bio, joined date and post count, and confirms that a handle exists, which public threads do not already show.
+2. "Post count" does not say whether it counts all of the user's posts (activity in restricted forums shows through) or only the posts this viewer may see, and does not say whether deleted posts count.
+3. Nothing says whether a pending, suspended or deactivated account's profile is served, or to whom.
+
+docs/12 "Gaps the design leaves open" puts each of these with a person. The run brief says the same for a field whose visibility to a class of viewer is not stated.
+
+Facts found while reading, for whoever picks this up:
+- `users.anonymized` does not exist in the schema, and anonymize is TKT-01M29CKRFS, a Phase 2 draft. Registration reserves the `deleted-user` prefix (docs/04, identity.CheckHandle), so only anonymization can produce that handle, and a profile can recognize an anonymized account from its handle without a migration. The anonymized profile should also withhold `bio_source`: docs/05 does not say anonymize clears it, and criterion 2 requires "no prior identity".
+- The endpoints are read-only, and profile editing is not in this ticket, so this work does not affect the response cache. `threads.authorsDigest` hashes the whole `dto.Author` (handle, display name, avatar, role, kind), so a later edit or anonymization is already reflected on a cached thread page. Bio does not appear on thread pages.
+- "Moderators" means the site role (settled). docs/04 gives `role = 'moderator'` `moderate` on every forum it can see, and an admin passes every check, so the site role and the per-forum check agree for those two roles.
+- `post_meta` has `INDEX (author_id, created_at)`. The history query is keyset on `(created_at, thread_id, ordinal)` descending, joined to `threads.forum_id` and filtered to the viewer's readable forums (internal/perm).
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:37:37Z
+
+in-progress to blocked: Who may see a profile (anonymous viewers, non-active accounts) and what post count counts are undecided; see TKT-01M3KJJNDC
