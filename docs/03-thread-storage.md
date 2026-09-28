@@ -323,6 +323,12 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   content that was legally required to be removed.
 - **What the reader shows.** A redacted post renders as a tombstone saying it
   was removed; its edit history lists the revisions with no content.
+- **Copies from split and merge.** A split or merge copies a post into
+  another thread's log as a new `Post` with an `origin` (below), so the same
+  text lives in two logs. The command follows `origin` in both directions,
+  from a copy back to its source and from a source to every copy, and redacts
+  each one the same way, rewriting each log it touches. A redaction that
+  cleared only one of them would leave the text readable through the other.
 - **Quotes elsewhere.** Quotes of the post in other posts are other people's
   posts. The command lists them for the operator, who redacts them separately
   if the takedown covers them. It never edits them silently.

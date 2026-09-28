@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-28T21:50:43Z
+updated_at: 2026-09-28T22:01:03Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -96,3 +96,7 @@ Maintainer, 2026-09-28: grooming PRs for this ticket may be merged on the docs/1
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:50:43Z
 
 Terva review 1259 (Actions run for request ready-review-88ce15f) on PR #133, head 88ce15f, base 5d0fa1a: one medium finding, 'Correct the handle-policy ticket's redirect summary'. Fixed: the TKT-01M29BSPEN summary now says 302 with no-store.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:01:03Z
+
+Terva review 1265 (Actions run #777) on PR #133, head 8444533, base 5d0fa1a: previous finding resolved. One high finding, 'Redact post copies created by split or merge'. Fixed, not argued: docs/03 hard redaction now follows origin links both ways and redacts every copy.
