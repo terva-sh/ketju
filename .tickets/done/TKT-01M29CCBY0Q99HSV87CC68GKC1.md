@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T07:38:47Z
+updated_at: 2026-09-28T07:45:56Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -94,6 +94,10 @@ Mutations tried against the tests, each caught:
 - PageSize dropped: TestETagCoversPageSize fails.
 
 Local runs: gofmt, go build, go vet, go test -race ./... all pass; Playwright (KETJU_E2E_PORT=8793) 45 passed, 9 skipped.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:45:56Z
+
+Review 1150 (run 90f54952-ffbd-44ae-921a-afc1ee2885c3, Actions run 571) of head 3ed907edecf95a9f54f645bcbe4bba7617ddece2 on base 9b76d9d5f140591c506e9b80a7f09ac358da8d98: terva-review/code success, one low finding. The concurrency test's wait for reader progress could hang if every reader stopped. Fixed: the wait now gives up when the test has failed or after a 30 s deadline, and a deadline with no failure fails the test. No medium or higher findings. CI run 570 passed on that head.
 
 ## Summary
 

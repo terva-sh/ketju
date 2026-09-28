@@ -9,6 +9,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
@@ -299,15 +300,25 @@ func TestResponseCacheUnderConcurrency(t *testing.T) {
 	}
 	// Post 3 stays deleted throughout; every append moves the key under the
 	// readers' feet. Between appends the readers get a few rounds, so some
-	// requests are hits and some race an append.
+	// requests are hits and some race an append. A reader that fails stops,
+	// so the wait gives up when the test has failed or a deadline passes
+	// rather than hanging on progress that will not come (review 1150).
+	deadline := time.Now().Add(30 * time.Second)
+appends:
 	for i := range 20 {
 		for start := served.Load(); served.Load() < start+12; {
+			if t.Failed() || time.Now().After(deadline) {
+				break appends
+			}
 			runtime.Gosched()
 		}
 		w.post(id, "alice", fmt.Sprintf("post %d", i), 0)
 	}
 	close(done)
 	wg.Wait()
+	if !t.Failed() && time.Now().After(deadline) {
+		t.Fatal("the readers stopped making progress")
+	}
 	if s := w.svc.Responses.Stats(); s.Hits == 0 {
 		t.Fatalf("stats %+v: the readers never hit the cache", s)
 	}
