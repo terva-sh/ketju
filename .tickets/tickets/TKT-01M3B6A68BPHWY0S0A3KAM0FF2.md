@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3B6A68BPHWY0S0A3KAM0FF2
 title: Add per-forum post totals to the forum index
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: low
 due_on: null
@@ -20,12 +20,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-25T02:29:04Z
-updated_at: 2026-09-25T02:29:04Z
+updated_at: 2026-09-28T05:02:26Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---

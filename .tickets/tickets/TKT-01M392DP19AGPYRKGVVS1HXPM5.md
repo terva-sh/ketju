@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M392DP19AGPYRKGVVS1HXPM5
 title: Report the ncruces directory-fsync bug and drop ketju's workaround
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T06:42:36Z
-updated_at: 2026-09-24T06:53:50Z
+updated_at: 2026-09-28T05:02:26Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---

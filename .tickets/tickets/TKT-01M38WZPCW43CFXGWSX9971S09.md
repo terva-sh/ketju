@@ -32,12 +32,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-25T05:26:20Z
+updated_at: 2026-09-28T05:02:26Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -362,3 +362,22 @@ PR #87 (TKT-01M29CEE6D, Build the thread list screen) merged at 601c687 after a 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-25T05:26:20Z
 
 PR #89 (TKT-01M29CGBXK, Run the accessibility pass on the client) merged at 7bb0394. The review of review-only PR #90 was clean on head 7766a2b (run #472), after round 1 raised two medium findings that were fixed (run #469); CI run for 7bb0394 was green, with vitest 761, Playwright 33 passed and 5 width-specific skips, and go test. #90 is closed unmerged. The PR also fixed the thread list's scroll restore after a quick back then forward (TKT-01M29CEE6D's code). axe's nested-interactive on the renderer's quote summary is set aside in the scan and left to a person in draft TKT-01M3BFSBPJ. With TKT-01M29CGBY1 and TKT-01M29CGBXK both done, the exit gate is closed. This branch refreshes docs/11's counts, and the run stops here per docs/12.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:02:26Z
+
+### Continuation after the gate: authority re-granted on 2026-09-28
+
+The first run stopped at the exit gate, as docs/12 prescribes. On 2026-09-28 the user asked to "move to complete phase 1 autonomously". When asked, they chose these options:
+
+- **Merge:** "Merge on the docs/12 gate". The continuation has the same standing authority as the first run, with the same exclusions. It may merge its own PR only when, on the exact head, CI `ci / Build and Test (pull_request)` succeeds, `terva-review/code` succeeds, every low finding is fixed or answered, and nothing is out of scope. No change to `AGENTS.md` or docs/12 is covered.
+- **Scope:** "Queue plus 3 phase-1 drafts". This covers the remaining `ready` phase-1 tasks and chores, plus three phase-1 drafts, which this commit promotes at the user's direction:
+  - TKT-01M3B12ZZ4, thread tag rules;
+  - TKT-01M3B6A68B, per-forum post totals;
+  - TKT-01M392DP19, reporting the ncruces directory-fsync bug.
+  TKT-01M38WTKSQ, the real-device check, stays `human-only`.
+- **Epics:** "Close them too". When the queue is empty, the run closes each phase-1 epic whose children are all done. This ticket stays open until TKT-01M38WTKSQ is done, because it depends on that check.
+- **Open PRs:** "Merge #93 on green, close #42". #93, the v0.5.0 reviewer image, was already merged by a maintainer as 2d08fe3 before the run reached it. #42 was closed unmerged as superseded.
+
+Everything else in docs/12 applies to the continuation unchanged: the loop, the stop and halt conditions, the "Changing CI" limits, and "Never". Its "Status" line and "Stop" at the gate are read as superseded by this note for the continuation only.
+
+The review-size workaround (twin PRs) should no longer be needed now that v0.5.0 accepts 1 MiB. If a client PR still hits `context_limit`, the ticket is split or blocked, as docs/12 says.
