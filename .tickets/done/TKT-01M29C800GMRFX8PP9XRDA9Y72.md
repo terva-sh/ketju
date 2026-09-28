@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C800GMRFX8PP9XRDA9Y72
 title: Bootstrap the first admin from config and by CLI
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -23,17 +23,10 @@ blocks_on: none
 references:
   - ref: design:identity-principles
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/c800g-bootstrap-admin
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-accbfc12563040fba
-  commit: 0233673650a9a633cfab3419554002d601c4bb7f
-  session: null
-  claimed_at: 2026-09-28T05:38:42Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-28T05:39:04Z
+updated_at: 2026-09-28T05:45:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,10 +44,10 @@ Admin bootstrap never requires a password, which is what lets the whole system s
 
 ## Acceptance criteria
 
-- [ ] A bootstrap match promotes to admin on first login and is recorded in audit_log
-- [ ] An email match is honored only when the provider asserts email_verified
-- [ ] `ketju admin promote` works against a stopped instance with the data directory only
-- [ ] Bootstrap promotion is idempotent and does not demote or re-promote on later logins
+- [x] A bootstrap match promotes to admin on first login and is recorded in audit_log
+- [x] An email match is honored only when the provider asserts email_verified
+- [x] `ketju admin promote` works against a stopped instance with the data directory only
+- [x] Bootstrap promotion is idempotent and does not demote or re-promote on later logins
 
 ## Implementation plan
 
@@ -80,3 +73,22 @@ The design fixes both operator-facing shapes: docs/05 "Principles" names `bootst
 
 - 'First login' means any login where the identity matches the config and the user is not already an admin. Promotion is idempotent and audited.
 - `ketju admin promote` may run while serve does, because WAL and busy_timeout serialise the writes.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:45:10Z
+
+Decisions taken while building (internals only, per docs/12 "Gaps the design leaves open"; written into docs/05 in the same PR):
+
+- The idempotency marker is any `audit_log` row with `action='user.promoted'`, `target_type='user'`, `target_id=<id>`, whether the bootstrap or the CLI wrote it. The settled item says "any login where the identity matches and the user is not already an admin"; AC4 says a later login must not re-promote. Reading both, a user is promoted at a matching sign-in unless they are admin now or were ever promoted before. Considered: a marker only for bootstrap rows (lost: a CLI-promoted admin who was demoted would be re-promoted by the config), and no marker, role check only (lost: undoes every demotion at the next sign-in, which AC4 forbids).
+- The role write goes through a new `perm.Evaluator.Promote`, because TestMutationsGoThroughPerm refuses `SetUserRole` outside internal/perm, and it has to share a transaction with the audit row and the marker read.
+- Bootstrap runs after `IssueUser` succeeds, so only an active user who actually signed in is promoted. Considered: before issuing (lost: would promote a suspended account the config names). A failed promotion fails the sign-in and ends the session it issued. Considered: log and continue (lost: the operator is signed in as a member and has only a log line to explain it).
+- `ketju admin promote` takes `--root DIR`, the flag and default `ketju fsck` already use, which is what "the data directory only" in AC3 asks for. It refuses a directory with no `db/ketju.db` rather than creating an empty database there, runs migrations as serve does, takes no lock (settled item), and exits 1 for an unknown handle, 2 for usage, 4 for a missing database or a failed write.
+
+For TKT-01M29C8005 (open-mode registration): registration does not exist yet, so today a brand-new identity cannot finish its first sign-in at all. Registration must call `(*identity.Service).ApplyBootstrap(ctx, newUserID, id)` once it has created the user, or a configured bootstrap admin who registers is left a member until their second sign-in. AC1 is ticked because every sign-in that reaches a user today applies it; the registration path is that ticket's to wire.
+
+Verification: `go test -race ./...` passes locally (two go/build-based layering tests need GOROOT set in this sandbox, and pass with it). Six mutations were tried and each was caught; the commit body lists them.
+
+## Summary
+
+A sign-in matching bootstrap.admin_subjects, or bootstrap.admin_emails with email_verified asserted, makes the user admin once, recorded as user.promoted in audit_log (identity.ApplyBootstrap, perm.Evaluator.Promote). ketju admin promote [--root DIR] <handle> does the same from the data directory alone. A demoted bootstrap admin stays demoted. Registration (TKT-01M29C8005) must call ApplyBootstrap for the user it creates. docs/05 records the email_verified rule, the marker, and the CLI flag.
