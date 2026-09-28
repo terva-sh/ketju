@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-28T22:09:30Z
+updated_at: 2026-09-28T22:18:20Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -104,3 +104,7 @@ Terva review 1265 (Actions run #777) on PR #133, head 8444533, base 5d0fa1a: pre
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:09:30Z
 
 Terva review 1271 on PR #133, head d40f8a7, base 5d0fa1a: previous finding resolved. One high finding, 'Make redaction recoverable across all logs containing a post'. Fixed, not argued: docs/03 adds a fsynced redaction journal that blocks serve and is resumed by rerunning the command.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:18:20Z
+
+Terva review 1275 on PR #133, head 449cfac, reported the journal as absent, though it was in the diff at docs/03:334. It was treated as a misread and the review run once more (request ready-review-449cfac-r2). The re-run, review 1278, found the journal but raised two new findings. High, 'Make the redaction journal's directory entry durable before swapping logs', and medium, 'Specify how resumption avoids appending another Redacted record'. Both fixed, not argued.

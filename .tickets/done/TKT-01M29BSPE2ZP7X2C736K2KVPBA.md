@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-28T22:09:30Z
+updated_at: 2026-09-28T22:18:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -61,6 +61,10 @@ Addition to the decision, from Terva review 1265 on PR #133: the redaction also 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:09:30Z
 
 Addition from Terva review 1271 on PR #133: a redaction spanning several logs (the copies) is made recoverable by a journal that is fsynced before any log is touched. serve refuses to start while it exists. Rerunning the command resumes from it, because clearing is idempotent. It is deleted only after every swap and the audit row. docs/03 'Hard redaction' says so; TKT-01M29CXJZ9 must build it.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:18:20Z
+
+Addition from Terva review 1278 on PR #133: the journal's directory entry is made durable by a directory fsync before any log is touched. When the command resumes, it skips a log that already carries the Redacted record for the ordinal, so a rerun never appends a second marker. docs/03 says both.
 
 ## Summary
 

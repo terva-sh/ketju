@@ -331,11 +331,13 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   cleared only one of them would leave the text readable through the other.
 - **Several logs, one redaction.** Each log's swap is atomic, but a redaction
   that spans several logs is not. So before touching any log, the command
-  writes a redaction journal to the data directory and fsyncs it. The journal
-  lists every (thread, ordinal) to clear. While a journal exists, `ketju serve`
-  refuses to start. Running the command again finishes the job from the
-  journal. Clearing a post is idempotent, so a log that was already swapped is
-  simply rewritten to the same bytes. The journal is deleted only after every
+  writes a redaction journal to the data directory, fsyncs the journal, and
+  then fsyncs the directory, so the journal's directory entry survives a
+  power cut as well as its contents. The journal lists every (thread,
+  ordinal) to clear. While a journal exists, `ketju serve` refuses to start.
+  Running the command again finishes the job from the journal. A log that
+  already ends in the `Redacted` record for that ordinal was swapped
+  successfully: resuming skips it and never appends a second marker. The journal is deleted only after every
   log is swapped and the audit row is written, so an interruption never lets
   a half-redacted data directory be served.
 - **Quotes elsewhere.** Quotes of the post in other posts are other people's
