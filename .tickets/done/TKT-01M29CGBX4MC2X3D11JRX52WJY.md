@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBX4MC2X3D11JRX52WJY
 title: Add the desktop keyboard shortcuts
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:canonical-view
     path: docs/06-thread-views.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/cgbx4-keyboard-shortcuts
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad2d70c0d1d9be0ad
-  commit: 05a624537bdb1cc5863c39485ef9dbf45eda748f
-  session: null
-  claimed_at: 2026-09-28T05:43:30Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T05:45:24Z
+updated_at: 2026-09-28T05:53:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,10 +41,10 @@ Shortcuts are absent on the phone layout by design rather than by omission. Noth
 
 ## Acceptance criteria
 
-- [ ] Every documented shortcut works and none fires while focus is in the composer
-- [ ] Each shortcut has an equivalent visible control
-- [ ] A discoverable help overlay lists them
-- [ ] Shortcuts are inert on the phone layout
+- [x] Every documented shortcut works and none fires while focus is in the composer
+- [x] Each shortcut has an equivalent visible control
+- [x] A discoverable help overlay lists them
+- [x] Shortcuts are inert on the phone layout
 
 ## Implementation plan
 
@@ -96,3 +89,26 @@ Revised at claim (2026-09-28), from the code on main at 05a6245.
 ### Settled in grooming (2026-09-24)
 
 - 'Next unread thread' follows the forum's thread-list order.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:53:28Z
+
+Gaps settled during the build (docs/12 "Gaps the design leaves open"):
+
+- **Wrap for `n`.** Grooming settled that "next" follows the forum's thread-list order. Under latest-activity order, threads with new posts rise above the one being read. So when no unread thread is below the current one, `n` wraps to the first unread thread above it. This is recorded in docs/06 "Paged, not infinite" in the same PR.
+- **How far `n` reads.** It reads at most 5 pages of the list, following `next_cursor`. The bound has no product meaning. It stops early once it holds an unread thread below the current one.
+- **Where `n` lands.** It opens the thread where the list's unread badge goes (`unreadHref`): the permalink after the read position, or with no position, the thread's own address.
+- **`u` with no read position** goes to the thread's own address, where the server lands the reader. It does not assume post 1, for the same reason `unreadHref` does not.
+- **`/` was not added.** It is not in the ticket's set.
+- **Where the controls live.**
+  - The visible controls for `g`, `n` and `?` are in a new thread foot below the bottom pager (`keyboard/ThreadFoot.tsx`).
+  - "Keyboard shortcuts" is not drawn on the phone, because there are no shortcuts there to list.
+  - "First unread" (`u`) is a thread action, so it is in the desktop toolbar and the phone's more menu. It is offered to a signed-in reader with unread posts.
+- **Posts take `tabindex="-1"`,** so `j`/`k`/`g`/`u` can focus them. A focused post gets a ring under `:focus-visible` only.
+
+Tests: 41 Vitest cases in `src/keyboard/shortcuts.test.tsx`, and `e2e/shortcuts.spec.ts` at both widths. The e2e run used port 8794: 45 passed, 9 skipped by project. The spec reads alice's position in "Minutes from the September meeting" (#30) without marking it read. When read tracking lands, that spec and thread-list.spec.ts both need that position to hold.
+
+## Summary
+
+The thread page takes j, k, g then a number then Enter, u, n and ? on the desktop layout (web/client/src/keyboard/). None fires in a field, the composer or a dialog, with Ctrl, Meta or Alt held, or on the phone layout. Each shortcut has a visible control on both layouts: Go to post, Next unread thread and Keyboard shortcuts (desktop only) in a new thread foot, First unread in the thread's actions, and the posts and pager for j and k. n follows the forum's list order and wraps to the first unread thread above; docs/06 records this. Vitest covers the rules and each key. e2e/shortcuts.spec.ts covers 1440 px and 390 px.
