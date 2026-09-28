@@ -61,8 +61,8 @@ jobs:
         run: test -z "$(gofmt -l . | tee /dev/stderr)"
 
       - name: build
-        # There is no cmd/ yet, so "build the binary" is today "compile every
-        # package". When cmd/ketju lands this step covers it with no edit.
+        # Compiles every package, the binary in cmd/ketju included, so a new
+        # command or package is covered here with no edit to this step.
         run: go build ./...
 
       - name: generated database code is current
