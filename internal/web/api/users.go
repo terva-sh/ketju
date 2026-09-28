@@ -60,11 +60,11 @@ func (h *handlers) usersByPrefix(w http.ResponseWriter, r *http.Request) {
 }
 
 // userProfile is GET /api/v1/users/{handle} (docs/07). Who may see which
-// account, and what its post count counts, are the users service's to decide
+// account, and what its post count counts, are the threads service's to decide
 // (Profile). The answer depends on the viewer and on accounts that change,
 // so no cache keeps it.
 func (h *handlers) userProfile(w http.ResponseWriter, r *http.Request) {
-	res, err := h.users.Profile(r.Context(), domain.ViewerFrom(r.Context()), r.PathValue("handle"))
+	res, err := h.threads.Profile(r.Context(), domain.ViewerFrom(r.Context()), r.PathValue("handle"))
 	if err != nil {
 		h.fail(w, r, err)
 		return

@@ -331,24 +331,109 @@ func TestMemberPagesAreFull(t *testing.T) {
 	}
 }
 
+// unprojected appends a record to a thread's log without projecting it: the
+// moment between an append and the projection catching up, held open.
+func (w *world) unprojected(id threadid.ID, a threadlog.Append) {
+	w.t.Helper()
+	if a.TimeMS == 0 {
+		a.TimeMS = w.clock + 1
+	}
+	if err := w.cache.With(id, func(th *threadcache.Thread) error {
+		_, err := th.Actor.Append(a)
+		return err
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+}
+
+// count is class's post count for alice.
+func (w *profileWorld) count(class string) int {
+	w.t.Helper()
+	return decode[dto.Profile](w.t, w.get(w.as(class), "/api/v1/users/alice")).PostCount
+}
+
 // TestHistoryTrustsTheLogOverTheProjection: a post deleted in the log that
-// post_meta has not heard of yet is still kept from a member, and shown to
-// its author marked deleted.
+// post_meta has not heard of yet is kept from a member and shown to its
+// author marked deleted, and the count agrees with the history: it counts
+// that thread from its index, since its projection trails its log.
 func TestHistoryTrustsTheLogOverTheProjection(t *testing.T) {
 	w := newProfileWorld(t)
 	at := w.posts["lounge"]
-	if err := w.cache.With(at.thread, func(th *threadcache.Thread) error {
-		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["alice"]),
-			Ordinal: uint32(at.ordinal), Body: &threadlog.DeleteBody{}, TimeMS: w.clock + 1})
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
+	w.unprojected(at.thread, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["alice"]),
+		Ordinal: uint32(at.ordinal), Body: &threadlog.DeleteBody{}})
 	if got, want := w.history("member"), []string{"general"}; !slices.Equal(got, want) {
 		t.Errorf("member sees %v, want %v", got, want)
 	}
 	if got, want := w.history("author"), []string{"gone(deleted)", "lounge(deleted)", "general"}; !slices.Equal(got, want) {
 		t.Errorf("author sees %v, want %v", got, want)
+	}
+	for _, class := range []string{"member", "author", "moderator"} {
+		if got := w.count(class); got != 1 {
+			t.Errorf("%s: post count %d, want 1", class, got)
+		}
+	}
+}
+
+// TestRestoreBeforeTheProjection is the other direction (review 1162): a
+// post restored in the log while post_meta still says deleted is on a
+// member's history, and counted.
+func TestRestoreBeforeTheProjection(t *testing.T) {
+	w := newProfileWorld(t)
+	at := w.posts["gone"]
+	w.unprojected(at.thread, threadlog.Append{Type: threadlog.TypeRestore, Author: uint64(w.users["alice"]),
+		Ordinal: uint32(at.ordinal), Body: &threadlog.RestoreBody{}})
+	want := []string{"gone", "lounge", "general"}
+	if got := w.history("member"); !slices.Equal(got, want) {
+		t.Errorf("member sees %v, want %v", got, want)
+	}
+	if got := w.count("member"); got != len(want) {
+		t.Errorf("member: post count %d, want %d", got, len(want))
+	}
+}
+
+// TestPagesFillPastHiddenPosts (review 1162): a page is filled from further
+// posts when the log hides some the projection offered, and a history that
+// ends has no cursor. With a page of one and lounge deleted in the log only,
+// a member's first page is general, the last. With a page of two, the page
+// that reaches the end has no cursor, though a deleted post came first.
+func TestPagesFillPastHiddenPosts(t *testing.T) {
+	w := newProfileWorld(t)
+	w.svc.UserPostsPage = 2
+	h := decode[dto.UserPosts](t, w.get(w.as("member"), "/api/v1/users/alice/posts"))
+	if len(h.Posts) != 2 || h.NextCursor != "" {
+		t.Errorf("page of two: %d posts, cursor %q", len(h.Posts), h.NextCursor)
+	}
+
+	w.svc.UserPostsPage = 1
+	at := w.posts["lounge"]
+	w.unprojected(at.thread, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["alice"]),
+		Ordinal: uint32(at.ordinal), Body: &threadlog.DeleteBody{}})
+	h = decode[dto.UserPosts](t, w.get(w.as("member"), "/api/v1/users/alice/posts"))
+	if len(h.Posts) != 1 || h.Posts[0].Thread.Slug != "general-chat" || h.NextCursor != "" {
+		t.Errorf("first page of one: %+v", h)
+	}
+}
+
+// TestCountTakesTheProjectionWhenCaughtUp holds the premise of the count's
+// fast path: once a thread is projected, its log's size on disk is exactly
+// how far the projection says it has got, so a caught-up thread is counted
+// from post_meta and not opened.
+func TestCountTakesTheProjectionWhenCaughtUp(t *testing.T) {
+	w := newProfileWorld(t)
+	for name, at := range w.posts {
+		size, err := w.cache.LogSize(at.thread)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var row dbq.Thread
+		w.write(func(q *dbq.Queries) error {
+			var err error
+			row, err = q.GetThread(t.Context(), int64(at.thread))
+			return err
+		})
+		if size != row.LogLengthProjected {
+			t.Errorf("%s: log is %d bytes, projected to %d", name, size, row.LogLengthProjected)
+		}
 	}
 }
 

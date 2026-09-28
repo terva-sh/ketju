@@ -146,6 +146,21 @@ func (c *Cache) Stats() (opens, evictions int) {
 	return c.opened, c.evicted
 }
 
+// LogSize is the byte length of id's log on disk, without opening the
+// thread. A caller compares it with how far a projection has got
+// (threads.log_length_projected) to learn whether the projection has seen
+// the whole log, for the price of a stat rather than an index load. A write
+// in progress can make it longer than any length an append has reported,
+// which reads as behind: the caller then asks the index, which is never
+// wrong, only slower.
+func (c *Cache) LogSize(id threadid.ID) (int64, error) {
+	fi, err := os.Stat(id.LogPath(c.root))
+	if err != nil {
+		return 0, fmt.Errorf("threadcache: sizing %s: %w", id, err)
+	}
+	return fi.Size(), nil
+}
+
 // Create makes a new thread's files and returns it acquired.
 //
 // The file header is written and fsynced before the thread is handed back, so

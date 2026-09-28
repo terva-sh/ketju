@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T14:09:40Z
+updated_at: 2026-09-28T14:18:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -56,11 +56,11 @@ An anonymized user is the case to get right. Their posts remain, their attributi
 Revised at claim (2026-09-28), from the code on main at a784672.
 
 ### Approach
-1. `GET /api/v1/users/{handle}` → `dto.Profile{user, bio_html, joined_at, post_count, status}` from `users.Service.Profile`. `GET /api/v1/users/{handle}/posts?cursor=` → `dto.UserPosts{posts: [{thread, forum, post}], next_cursor}` from `threads.Service.UserPosts`, which owns the post assembler and the thread cache. Both shapes pinned in docs/07's `/users/{handle}` row and in goldens.
+1. `GET /api/v1/users/{handle}` → `dto.Profile{user, bio_html, joined_at, post_count, status}` from `threads.Service.Profile` (moved from the users service after review 1162: the count is the history's and needs the thread cache). `GET /api/v1/users/{handle}/posts?cursor=` → `dto.UserPosts{posts: [{thread, forum, post}], next_cursor}` from `threads.Service.UserPosts`, which owns the post assembler and the thread cache. Both shapes pinned in docs/07's `/users/{handle}` row and in goldens.
 2. Who is served which account is one rule both services call, `member.Account`: `member.Require` first (anonymous unauthenticated, pre-user forbidden, before anything is looked up), then `GetUserByHandle` (NOCASE), then `domain.Viewer.MaySeeAccount`, which hides a pending account from everyone but staff (`domain.Viewer.Staff`: active moderator or admin, the site role). Unknown and hidden pending are the same not-found.
 3. Anonymized: no `users.anonymized` column (anonymize is Phase 2, TKT-01M29CKRFS), so `domain.Anonymized` reads the reserved `deleted-user` prefix, which registration refuses to anyone else; identity's reserved prefix now names the same constant. `member.Author` blanks display name and avatar for one and the profile withholds the bio, so a row caught halfway cannot bring any of them back. docs/04 is not changed: the ticket does not need the column.
-4. Readable forums: `perm.ReadableForums`, changed to ask `CanEach` once rather than `Can` per forum. Hand-written view queries in `views/userposts.go` bind the set as one json_each parameter: `UserPosts` (keyset page) and `UserPostCount` (non-deleted, non-moved), both `INDEXED BY post_meta_author`, joined to threads and forums.
-5. History: rows from post_meta (with deleted rows only for staff or the author), grouped by thread, each thread opened once; the index entry then decides (`historyShows`), so a Delete post_meta has not heard of is still kept from a member. Rendered by the thread page's assembler, `moderator` = staff, so staff see a deleted post's body and its author sees the tombstone their thread page shows them. Hidden-by-mod is a deleted post here, as on the thread page. Moved posts are left out. Quarantined threads are skipped.
+4. Readable forums: `perm.ReadableForums`, changed to ask `CanEach` once rather than `Can` per forum. Hand-written view queries in `views/userposts.go` bind the set as one json_each parameter, both `INDEXED BY post_meta_author`: `UserPosts` (a keyset batch of candidates, deleted or not) and `UserThreadPosts` (per thread: projected length, non-deleted count, ordinals).
+5. The log's index, not post_meta, says whether a post is deleted (review 1162). History: candidates from post_meta, grouped by thread, each thread opened once, `historyShows` on the index entry; further batches are read until the page holds a page and one more or the history ends, and the cursor is the last post shown. Rendered by the thread page's assembler, `moderator` = staff, so staff see a deleted post's body and its author sees the tombstone their thread page shows them. Hidden-by-mod is a deleted post here, as on the thread page. Moved posts are left out. Quarantined threads are skipped. Count: for each thread, `threadcache.LogSize` (a stat) against `log_length_projected`; a caught-up thread counts post_meta's non-deleted rows, a trailing one is counted from its index over the same candidates, and a quarantined one counts nothing; so the count is exactly a member's history.
 6. Cursor: base64url of `at|thread|ordinal`, canonical spelling only, no account in it (no response exposes a user id). Page size 25; `Service.UserPostsPage` lets tests page by two.
 7. Both answers `no-store`; neither uses the response cache, so its authors digest is untouched.
 
@@ -120,6 +120,16 @@ Built to the maintainer's 2026-09-28 decision. Evidence and choices:
 Choices settled here as internals, written into docs/07: the history cursor names no account, since no response exposes a user id; both answers are no-store; a bio's quote links nowhere; a moved post is left out; a quarantined thread's posts are skipped rather than failing the whole history. One visibility question came up and was answered from existing rules rather than decided: a post hidden by a moderator is treated as deleted in the history, as the thread page and dto.Post.Deleted already treat it (docs/08: hiding is a Delete variant). Nothing sets that flag in this build.
 
 Mutations tried against the new tests (20), each reverted: pending served to all, pending hidden from staff, status shown to all, member not required, count including deleted, count ignoring forums, history ignoring forums, no index filter, author not recognised, staff without bodies, author given bodies, no anonymized scrub, anonymized bio shown, inclusive cursor, cursor ignoring ties, non-canonical cursor accepted, bio quotes linked, ReadableForums ignoring perm: all caught. "Members' query includes deleted rows" survived at first (the index filter masks it) and is now caught by TestMemberPagesAreFull. "ORDER BY created_at only" survives: under INDEXED BY post_meta_author the index already carries (thread_id, ordinal), so the order is the same and no test can tell.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T14:18:24Z
+
+Terva review 1162 (run 3dc9bae0-5d30-4c2f-b591-155d0fd295d7, Actions run #651), head a7ec5581c31f5d11a1a8141d74644fff86cf7f05, base 03a0ea63f76ea95c39e90f34f90bff41bfddc867: three medium findings. All three were fixed by changing the flagged behaviour. None was answered by argument.
+
+1. "Restored posts can be excluded before the log is checked". Fixed: the history query no longer filters on post_meta.deleted for anyone. Every candidate's index entry decides. TestRestoreBeforeTheProjection restores a post in the log without projecting it, and a member sees and counts it.
+2. "Profile count can disagree with the visible history". Fixed: the count uses the same candidates and the same source as the history. For each thread, a stat of the log is compared with threads.log_length_projected. A caught-up thread counts post_meta's non-deleted rows. A trailing thread is counted from its index, and a quarantined thread counts nothing, as the history shows nothing from it. The count moved to threads.Service.Profile because it needs the thread cache. TestHistoryTrustsTheLogOverTheProjection and TestRestoreBeforeTheProjection now check the count in both directions. TestCountTakesTheProjectionWhenCaughtUp holds the fast path's premise that a projected thread's log size equals log_length_projected.
+3. "Filtering after pagination can return an empty page". Fixed: further batches are read until the page holds a full page and one more post, or the history ends. The cursor is the last post shown, so a page is short only at the end, and a history that ends has no cursor. TestPagesFillPastHiddenPosts runs the reviewer's example: a page of one whose first candidate is deleted in the log only.
+
+Mutations rerun against the reworked code: 23 in all. 22 are caught, and "count trusts a stale projection" is now caught too. "Count every thread from its index" survives: it changes only the cost, not the answer, and the premise test guards the fast path.
 
 ## Summary
 
