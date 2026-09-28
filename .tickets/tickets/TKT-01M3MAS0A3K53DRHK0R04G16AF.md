@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3MAS0A3K53DRHK0R04G16AF
 title: Add ketju admin setting so a fresh install can open registration
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -17,10 +17,17 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: run/mas0a3-admin-setting
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5ac3c4893ae84631
+  commit: 2b1c6205fe1ea763bc9e1fc01edd5c2086fdddc1
+  session: null
+  claimed_at: 2026-09-28T16:10:28Z
+  expires_at: null
 archive: null
 created_at: 2026-09-28T15:40:14Z
-updated_at: 2026-09-28T15:40:24Z
+updated_at: 2026-09-28T16:10:45Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -51,3 +58,28 @@ A fresh Phase 1 install cannot register anyone. `registration.mode` defaults to 
 - [ ] It refuses while serve holds the data-directory lock and follows admin promote's exit codes
 - [ ] Each change writes an audit row in the same transaction
 - [ ] README's first-run steps name the command
+
+## Implementation plan
+
+Read on 2026-09-28 against main 2b1c620.
+
+### What is already there
+- `settings.Set(ctx, d, name, json.RawMessage, actor, now)` already validates by the registry and writes the row and a `setting.changed` audit row in one transaction. `TestWritesGoThroughSet` already forbids `PutSetting` outside internal/settings. So the writer exists; what is missing is a way to record `"via": "cli"` in the audit row, a way to turn a command-line word into the key's JSON, and an untyped read for `get` and `list`.
+- `ketju admin promote` does not take the data-directory lock (it is settled as safe beside serve). The ticket's criterion asks `setting set` to refuse while serve holds it, so `set` takes `lock.Acquire(root, "admin setting")` as reindex does; exit 4 on refusal, as reindex's.
+
+### internal/settings
+- `SetBy(ctx, d, name, value, Change{Actor, Details, At})`; `Set` becomes a call to it. Details go into the audit row beside `from` and `to`, as perm.Promotion's do beside `role`.
+- `FromText(name, text) (json.RawMessage, error)`: a text key takes the word as the string itself (no quotes needed); an integer or boolean key takes it as JSON (`30`, `true`). ErrUnknownKey for an unknown name. Validation still happens in Set.
+- Each key gets an `Allowed` description (`one of "open", "approval"`; `a whole number, 0 or more`; `true or false`; `text of 1 to 100 characters`), carried by the validators, and ErrInvalidValue messages end with it so the CLI names the allowed values. `Setting` gains `Kind` and `Allowed`.
+- `Lookup(ctx, d, name)` and `Current(ctx, d)` return `Value{Setting, JSON, IsDefault}` read in one transaction; a stored value that no longer decodes is an error naming the key, as `Key.Get` is. IsDefault compares the canonical value with the default.
+
+### cmd/ketju/admin.go
+- `ketju admin setting set|get|list [--root DIR]`. Same "has no database" refusal as promote; set also takes the lock. Unknown key and invalid value are exit 1 (errNotFound for the unknown key, a new errInvalid for the value; both map to 1) naming the known keys or the allowed values. get prints the value in the form set takes; list prints `key = JSON  # default|set, default D` and the doc on the next line. get/list read without the lock (read-only, safe beside serve) and without migrating.
+
+### Tests
+- unit tests in internal/settings for FromText, SetBy details, Lookup/Current, the Allowed strings.
+- cmd/ketju table tests for set/get/list and their refusals, including the lock held.
+- End to end: the binary (KETJU_AS_MAIN) runs `ketju admin setting set --root DATA registration.mode open` on a stopped instance; serve then starts on that directory and a new identity completes the callback and POST /auth/register, and a users row exists.
+
+### Docs
+README gains "First run" steps naming the command; docs/05 (registration policy paragraph) and docs/02 Configuration name it; docs/04 settings section mentions the CLI.
