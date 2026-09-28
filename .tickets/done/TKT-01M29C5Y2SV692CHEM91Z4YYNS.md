@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C5Y2SV692CHEM91Z4YYNS
 title: Add the session sweeper and blob garbage collector
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:background-work
     path: docs/02-architecture.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/c5y2s-sweeper-gc
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a31bdf7fea30584cf
-  commit: 89c7cb2b7bef955b25428f7976a3fc47e90971f5
-  session: null
-  claimed_at: 2026-09-28T09:00:08Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-28T09:00:28Z
+updated_at: 2026-09-28T09:08:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,10 +43,10 @@ The seven-day delay is the safety margin. A blob dropping to zero refcount durin
 
 ## Acceptance criteria
 
-- [ ] Expired sessions are deleted hourly and an in-flight request holding one is not affected mid-request
-- [ ] A blob at refcount zero is deleted only after seven days, and a refcount returning above zero cancels that
-- [ ] Both jobs log what they removed, with counts
-- [ ] Both jobs survive a failure without stopping the scheduler
+- [x] Expired sessions are deleted hourly and an in-flight request holding one is not affected mid-request
+- [x] A blob at refcount zero is deleted only after seven days, and a refcount returning above zero cancels that
+- [x] Both jobs log what they removed, with counts
+- [x] Both jobs survive a failure without stopping the scheduler
 
 ## Implementation plan
 
@@ -85,3 +78,21 @@ Revised at claim (2026-09-28) from the code on main at 89c7cb2.
 ### Settled in grooming (2026-09-24)
 
 - Blob GC needs `blobs.unreferenced_since`. Add it in BYYJ0 and in docs/04. Blobs arrive in Phase 3, so GC runs over an empty table until then; test it with fixture rows.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:08:25Z
+
+Gaps settled at claim, written into docs/03 "Blob garbage collection" in the same PR (docs/12 "Gaps the design leaves open": internals only, the checks only ever keep more):
+
+- Soft-deleted posts keep their blobs. This is read from the design, not chosen: docs/03 says a Delete leaves the Post bytes intact and Restore clears the flag, the blobs table counts "the posts referring to it", and Edit has no attachments field. So no design path lowers a refcount except the offline hard deletion. Drafts have no attachment column. As a guard against refcount drift, the GC also refuses to delete any blob whose hash appears in any log record body (hex, either case), or that an avatar or a draft source names.
+- Alternatives considered for the log check: (a) trust refcount alone, as the pre-groom plan did. It lost because the refcount maintainer does not exist yet (TKT-01M29CXK0, Phase 3), and that draft's AC ("same bytes uploaded twice ... two refcounts") already reads refcount differently from docs/04. (b) Decode Post bodies and match attachments[] exactly. It lost because the attachment element shape is "the least settled thing" in records.go, so a raw hex search is shape-independent. (c) Also search for the raw 32-byte form. It lost because that is an O(n) map lookup per byte, and the frozen format stores attachments as strings.
+- Ordering contract for CXK0: AddBlobRef before the Post append, and refuse the attach when it changes no row. The upload writes the file and row inside one db.Write. Thumbnail naming is left to CXK0.
+- A quarantined thread (projection LastCatchUp().Corrupt), an unreadable log, an unknown body encoding or a missing threads/ holds the whole pass, which logs the reason at error. A permanently quarantined thread therefore stops blob GC until an operator repairs it. That is deliberate.
+- Pass bound: 10,000 candidates, oldest first; the rest wait a day.
+- The first run of each job is jittered within [0, min(interval, 1 min)) after start.
+- No CLI form was added; the ticket does not ask for one.
+
+## Summary
+
+New internal/jobs: a Scheduler (per-job goroutine, jittered first run, recover, bounded Stop) plus two jobs that serve starts after catch-up and stops before the stores close. The hourly session sweep is session.Store.Sweep, the exact complement of LookupSession's liveness test on the store's clock. The daily blob GC deletes a blob only when all of these hold: its refcount has been zero for 7 days (re-checked in the deleting statement), no avatar or draft names it, and no thread log record mentions its hash. An unreadable log, an unknown encoding or a quarantined thread holds the pass. Row delete and unlink share one db.Write. internal/store/blob has the path helper. docs/03 'Blob garbage collection' records the checks and the attach/upload ordering contract for TKT-01M29CXK0.
