@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T14:03:44Z
-updated_at: 2026-09-28T18:34:07Z
+updated_at: 2026-09-28T18:40:07Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -108,6 +108,17 @@ So no concurrent second loader exists yet.
 
 ### Residual, for TKT-01M29CTYA0 (live updates)
 Once a second caller exists, there is a gap this ticket's criteria do not cover. A refusal applied by caller X forgets the cache, but caller Y's `useResource` still holds the page it resolved earlier in component state. The live-update client should re-read the cache, or observe refusals, when it lands.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T18:40:07Z
+
+### CI run 728 on head 3fb6537 (base 55e876a): one e2e timeout outside this change
+- **What failed:** only `[phone] e2e/a11y.spec.ts:69 the forum index passes the scan in both themes`. The axe `analyze()` call passed its 30 s test timeout. It was the first test after session setup. The other 52 tests passed, including the phone thread-page scan and the desktop forum-index scan. Every step before Playwright was green: the built client is current, the budget holds, and the client tests pass.
+- **Why I judge it unrelated:**
+  - the forum index does not call `loadThreadPage` or read the thread cache;
+  - the same suite passed locally on port 8794 (53 passed, 9 skipped);
+  - run 724, the other lane's PR #124, was running on the runner at the same time, so the cold first scan was competing for CPU.
+- **Terva review:** clean on 3fb6537 (issuecomment-17204).
+- **Next step:** re-trigger CI with this `.tickets/`-only commit and carry the review. If the same test fails again, it is not load and I will look into it.
 
 ## Summary
 
