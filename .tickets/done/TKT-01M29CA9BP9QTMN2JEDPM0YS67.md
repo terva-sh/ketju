@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-28T05:28:08Z
+updated_at: 2026-09-28T05:30:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -98,6 +98,10 @@ Handed on:
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:28:08Z
 
 Review 1119 (run 72772705-131c-4ffb-b68e-36a6fb2d7fa5, Actions run #495) on PR #95, head a1a6b4affd81688cf1e1771c19603a47b11f34c3, base ee54c04ca6fe3a71a154c8af8d78048d770d8a97. It found two medium issues, both accepted and fixed in 2506946. finding-1: the answer mixed the append's log length and revision with a later read of the post. The post, revision and log length now come from one index snapshot taken after the append (TestWriteAnswerIsOneSnapshot). finding-2: the optional reason body was read whole with io.ReadAll. It is now streamed through a 4 KiB cap, and anything past it is payload-too-large (TestReasonBodyIsBounded). A fresh review of the new head has been requested.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:30:38Z
+
+Review 1123 (run 10499142-913c-4fdc-a52a-7ffd1e1973e0, Actions run #500) on PR #95, head 9efc4b9d6e1e4778c3d85c0bc83ecbec36cf67d8, base ee54c04ca6fe3a71a154c8af8d78048d770d8a97. It marked both findings from review 1119 resolved and raised one new medium finding, accepted and fixed. finding-1: the batch fold left out the Edit's edited flag. postFlagEffect now covers the Edit and applyEdit goes through it; TestPostFlagEffectIsWhatApplyDoes holds Apply to the table for every type and every flag state.
 
 ## Summary
 
