@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3BFSBPJY0DA4RYA7ASXJKKX
 title: Stop nesting the quote source link inside its summary
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/bsfsbpj-quote-source
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad1dcefc06369a80b
-  commit: 20ee94750486a1e22762fa5240f8bd213df24cdc
-  session: null
-  claimed_at: 2026-09-28T18:52:47Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-25T05:14:39Z
-updated_at: 2026-09-28T18:54:26Z
+updated_at: 2026-09-28T19:02:55Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -101,3 +94,19 @@ Rendered HTML lives only in memory: internal/render Cache (key carries `Version`
 - The source link moves into the blockquote as its first line.
 
 This removes the `nested-interactive` exception from web/client/e2e/a11y.spec.ts. Bump the renderer version, so cached posts re-render with the new shape. Update the client's quote handling (`a.quote-source` in ThreadScreen's `follow`), its tests, and the render goldens.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T19:02:49Z
+
+### Built, and what re-rendering touches
+
+Markup as the plan says. Two internal choices, settled here (docs/12 "Gaps"): the attribution paragraph takes the class `quote-attribution`, allowed by the sanitizer on `<p>` by exact match beside `quote-deleted`; and on the phone layout it takes a 16 px top margin. Without the margin the link's 44 px target (base.css `::after`, 13.5 px above its line) covers the summary's bottom edge. targets.spec.ts did not catch that, because it presses the summary at its centre and the summary is wider than the link, so the thread-page test now presses the summary's edge directly above the link. Setting the margin to 0 fails that check.
+
+Sanitizer: the goldens show `class="quote-attribution"` and `class="quote-source"` surviving bluemonday; policy_test covers `quote-attribution x` and an arbitrary class being dropped.
+
+Cache and disk: rendered HTML is held only in memory, in the render.Cache (key has `Version`, TKT-01M29C0WF0) and in respcache (key has `Renderer: render.Version`). The thread ETag also carries `render.Version` (internal/service/threads/view.go). Version 3 -> 4 retires all three when the new binary starts, and clients revalidate against the new ETag. Logs store source (docs/03), the projection stores quote ordinals from `Result.Quotes`, not HTML, and no migration has an HTML column. No migration, no `ketju reindex`, no log format change.
+
+Checks run locally: gofmt, go build, go vet, go test -race ./..., tsc --noEmit, Vitest 920 passed, Playwright 53 passed / 9 skipped (port 8794), budget 38171 B of 60000 B.
+
+## Summary
+
+A quote renders as <details class="quote" open> with a plain-text <summary> ("Quote from #N") and the source link as the blockquote's first line, <p class="quote-attribution"><a class="quote-source">. Renderer Version 3 -> 4, which retires the in-memory render and response caches and the ETags; nothing on disk holds HTML, so no migration or reindex. The axe scan passes with no exceptions, and targets.spec.ts now checks the header's edge above the link.
