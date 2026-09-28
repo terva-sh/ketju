@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-28, when the continuation run emptied the Phase 1 queue, against the store. They are written by hand, so
+Counts last read 2026-09-28, after the hardening, Phase 2 grooming and dogfooding tickets were filed, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-198 tickets: 12 epics and 186 children. Every ticket carries an `area:` label,
+201 tickets: 12 epics and 189 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -41,8 +41,8 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 82 in Phase 1, 33 in Phase 2, 20 in
-Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 22 carrying no
+Distribution by phase: 25 in Phase 0, 83 in Phase 1, 34 in Phase 2, 20 in
+Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 23 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-102 done, 7 ready, 2 blocked, 86 draft, 1 archived (counted 2026-09-28 with
+102 done, 7 ready, 2 blocked, 89 draft, 1 archived (counted 2026-09-28 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -162,6 +162,16 @@ The continuation also filed three drafts with no milestone:
 
 The six epics stay open by the user's choice. Each still parents drafts in
 Phases 2 to 4, so none has every child done.
+
+**Next, as filed on 2026-09-28.** Three drafts set out what comes after the
+run:
+- `TKT-01M3M9S7S2` deploys a local dogfooding instance. It is Phase 1, which
+  now carries 83 tickets, and the real-device check `TKT-01M38WTKSQ` depends
+  on it, because a phone needs a served build to reach.
+- `TKT-01M3M9R6JT` is a hardening sweep of seven Phase 1 follow-ups before
+  Phase 2 opens registration to strangers. It has no milestone.
+- `TKT-01M3M9RR26` grooms Phase 2 for an autonomous run, as Phase 1 was
+  groomed. It is Phase 2, which now carries 34 tickets.
 
 ## The critical path
 
