@@ -1,6 +1,6 @@
 # Deployment example for the terva-sh Forgejo instance. See docs/pr-reviews.md.
 #
-# The reviewer is the terva-action-code-review image, v0.3.0, pinned by digest.
+# The reviewer is the terva-action-code-review image, v0.5.0, pinned by digest.
 # It carries the action's source, prompt templates, locked dependencies and a
 # checksum-pinned Terva, so this job checks out nothing and installs nothing:
 # the job holding BOT_TOKEN and CPA_API_KEY runs no code from this repository
@@ -36,10 +36,10 @@ jobs:
     runs-on: docker
     container:
       # Pinned by digest, because a tag can be re-pushed and an executable pin
-      # must not move. `podman pull <image>:v0.3.0` prints this digest; the
+      # must not move. `podman pull <image>:v0.5.0` prints this digest; the
       # action's docs/installation.md#adopting-a-new-pin says what each
       # release changes.
-      image: container.local.sothr.com/terva-sh/terva-action-code-review@sha256:35199d57112ea0048fe713a49c6087094c5bcbbeaa74d53d6dca89d9a8ba9cd7
+      image: container.local.sothr.com/terva-sh/terva-action-code-review@sha256:64a7ba59ca8a0932e2b4d4cf8e50a2231f46fa6eaefa046acbef84f2a2886252
       # The runner prepares its workspace inside the job container, and the
       # image's own user is unprivileged.
       options: --user root
@@ -60,6 +60,10 @@ jobs:
           REVIEW_BASE_URL: ${{ vars.TERVA_REVIEW_BASE_URL }}
           REVIEW_MODEL: ${{ vars.TERVA_REVIEW_MODEL }}
           REVIEW_THINKING: ${{ vars.TERVA_REVIEW_THINKING }}
+          # Tried in order when the model is unavailable or the endpoint is
+          # down. Empty means none. A named reviewer that sets its own model
+          # gets none of these.
+          REVIEW_FALLBACKS: ${{ vars.TERVA_REVIEW_FALLBACKS }}
           REVIEW_PROFILE: code
           REVIEW_PUBLICATION_POLICY: summary
           REVIEW_FAIL_SEVERITY: medium
