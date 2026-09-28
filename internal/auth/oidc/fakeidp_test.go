@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -66,6 +67,16 @@ type fakeIdP struct {
 
 func newFakeIdP(t *testing.T) *fakeIdP {
 	t.Helper()
+	return newFakeIdPAt(t, "")
+}
+
+// newFakeIdPAt serves the IdP under a path, and makes its issuer the server's
+// origin followed by that path exactly as given, so that an issuer ending in a
+// slash can be a slash-ended issuer all the way through: in the configured
+// value, in the discovery document and in the iss claim. That is how Authentik
+// serves each application, at https://host/application/o/<slug>/.
+func newFakeIdPAt(t *testing.T, path string) *fakeIdP {
+	t.Helper()
 	key, err := rsa.GenerateKey(rand.Reader, 2048)
 	if err != nil {
 		t.Fatalf("keygen: %v", err)
@@ -86,9 +97,9 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"issuer":                                iss,
-			"authorization_endpoint":                f.issuer + "/authorize",
-			"token_endpoint":                        f.issuer + "/token",
-			"jwks_uri":                              f.issuer + "/jwks",
+			"authorization_endpoint":                f.base() + "/authorize",
+			"token_endpoint":                        f.base() + "/token",
+			"jwks_uri":                              f.base() + "/jwks",
 			"id_token_signing_alg_values_supported": f.algs(),
 		})
 	})
@@ -118,11 +129,21 @@ func newFakeIdP(t *testing.T) *fakeIdP {
 		})
 	})
 
-	f.srv = httptest.NewTLSServer(mux)
-	f.issuer = f.srv.URL
+	var h http.Handler = mux
+	if prefix := strings.TrimSuffix(path, "/"); prefix != "" {
+		mounted := http.NewServeMux()
+		mounted.Handle(prefix+"/", http.StripPrefix(prefix, mux))
+		h = mounted
+	}
+	f.srv = httptest.NewTLSServer(h)
+	f.issuer = f.srv.URL + path
 	t.Cleanup(f.srv.Close)
 	return f
 }
+
+// base is the issuer without a trailing slash, which is what the endpoints hang
+// off. go-oidc builds the discovery URL the same way.
+func (f *fakeIdP) base() string { return strings.TrimSuffix(f.issuer, "/") }
 
 func (f *fakeIdP) kid() string {
 	if f.keyID == "" {

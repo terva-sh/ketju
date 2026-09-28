@@ -8,6 +8,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -403,6 +404,107 @@ func TestTheIssuerMismatchEscapeHatchIsPerProviderAndOffByDefault(t *testing.T) 
 	dis := r.Disabled()
 	if len(dis) != 1 || dis[0].Key != "strict" {
 		t.Errorf("Disabled = %+v, want one entry for strict", dis)
+	}
+}
+
+// --- An issuer is used exactly as written (TKT-01M3MAS08R) ------------------
+
+// TestAnIssuerEndingInASlashWorksEndToEnd is the Authentik shape: the
+// per-application issuer ends in a slash, and so do the discovery document's
+// issuer and every token's iss claim. Configured exactly as the provider names
+// it, the provider discovers and a login verifies. Nothing between config and
+// go-oidc may trim the slash, or discovery would refuse the document.
+func TestAnIssuerEndingInASlashWorksEndToEnd(t *testing.T) {
+	f := newFakeIdPAt(t, "/application/o/ketju/")
+	if !strings.HasSuffix(f.issuer, "/application/o/ketju/") {
+		t.Fatalf("fixture issuer = %q; the test needs one ending in a slash", f.issuer)
+	}
+	f.claims = map[string]any{"nonce": "n1"}
+
+	r := newRegistry(t, Options{Logger: discard()}, f)
+	p, ok := r.Lookup("p0")
+	if !ok {
+		t.Fatalf("the slash-ended issuer was not discovered; disabled: %+v", r.Disabled())
+	}
+	if n := f.discoveryHits.Load(); n != 1 {
+		t.Errorf("discovery fetched %d times, want 1", n)
+	}
+
+	id, err := p.Exchange(context.Background(), clientFor(f), "code", "n1", "the-verifier")
+	if err != nil {
+		t.Fatalf("Exchange: %v", err)
+	}
+	if id.Issuer != f.issuer {
+		t.Errorf("Issuer = %q, want %q exactly", id.Issuer, f.issuer)
+	}
+}
+
+// TestAnIssuerThatDiffersFromDiscoveryFailsAtStartupNamingBoth covers a wrong
+// guess about the slash, in either direction. The provider is refused at
+// discovery, before anyone tries to log in, and the startup log names the
+// configured and the discovered issuer, because telling "…/ketju" from
+// "…/ketju/" is the whole of the operator's fix.
+func TestAnIssuerThatDiffersFromDiscoveryFailsAtStartupNamingBoth(t *testing.T) {
+	cases := []struct {
+		name string
+		path string
+		out  func(configured string) string
+	}{
+		{"configured with a slash, discovered without", "/application/o/ketju/",
+			func(c string) string { return strings.TrimSuffix(c, "/") }},
+		{"configured without a slash, discovered with", "/application/o/ketju",
+			func(c string) string { return c + "/" }},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			f := newFakeIdPAt(t, tc.path)
+			configured := f.issuer
+			discovered := tc.out(configured)
+			f.issuerOut = discovered
+
+			var buf safeBuf
+			r, err := New(context.Background(), testConfig(f.providerConfig("authentik")),
+				Options{Logger: slog.New(slog.NewJSONHandler(&buf, nil)), HTTPClient: clientFor(f)})
+			if err == nil {
+				_ = r.Close()
+				t.Fatal("a provider whose discovery document names a different issuer was accepted")
+			}
+			if f.discoveryHits.Load() != 1 {
+				t.Errorf("discovery fetched %d times, want 1", f.discoveryHits.Load())
+			}
+
+			// Decode the log line rather than grepping the raw output: one value
+			// is a prefix of the other, and the handler escapes the quotes that
+			// tell them apart.
+			type logLine struct {
+				Msg      string `json:"msg"`
+				Provider string `json:"provider"`
+				Err      string `json:"err"`
+			}
+			var line logLine
+			found := false
+			for _, raw := range strings.Split(strings.TrimSpace(buf.String()), "\n") {
+				var l logLine
+				if err := json.Unmarshal([]byte(raw), &l); err != nil {
+					t.Fatalf("log line %q: %v", raw, err)
+				}
+				if l.Msg == "oidc provider disabled: discovery failed" {
+					line, found = l, true
+					break
+				}
+			}
+			if !found {
+				t.Fatalf("no discovery failure was logged:\n%s", buf.String())
+			}
+			if line.Provider != "authentik" {
+				t.Errorf("the failure names provider %q, want authentik", line.Provider)
+			}
+			for _, want := range []string{fmt.Sprintf("%q", configured), fmt.Sprintf("%q", discovered)} {
+				if !strings.Contains(line.Err, want) {
+					t.Errorf("the failure does not name %s:\n%s", want, line.Err)
+				}
+			}
+		})
 	}
 }
 

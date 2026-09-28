@@ -221,9 +221,12 @@ func validateIssuer(key, issuer string, p *problemList) {
 	if u.Host == "" {
 		p.addf(key+".issuer", "%q has no host", issuer)
 	}
-	if strings.HasSuffix(u.Path, "/") {
-		p.addf(key+".issuer", "%q ends in a slash; the issuer must match the iss claim exactly, and providers do not send a trailing slash", issuer)
-	}
+	// A trailing slash is not judged here. Some providers send one (Authentik's
+	// per-application issuer is https://host/application/o/<slug>/) and most do
+	// not, so either form can be the right one. The issuer is used exactly as
+	// written: discovery compares it with the document's issuer byte for byte,
+	// and the verifier compares the iss claim, so a wrong guess about the slash
+	// disables the provider at startup with both values in the error.
 	if u.RawQuery != "" || u.Fragment != "" {
 		p.addf(key+".issuer", "%q must be a bare issuer URL, with no query or fragment", issuer)
 	}

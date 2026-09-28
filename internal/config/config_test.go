@@ -235,8 +235,8 @@ func TestProviderProblemsAreRefusedByName(t *testing.T) {
 			"oidc.providers.g.issuer",
 		},
 		{
-			"issuer with a trailing slash",
-			base + "\n[[oidc.providers]]\nkey = \"g\"\nname = \"G\"\nissuer = \"https://idp.example/oidc/\"\nclient_id = \"c\"\nclient_secret = \"s\"",
+			"issuer with a query",
+			base + "\n[[oidc.providers]]\nkey = \"g\"\nname = \"G\"\nissuer = \"https://idp.example/oidc?tenant=1\"\nclient_id = \"c\"\nclient_secret = \"s\"",
 			"oidc.providers.g.issuer",
 		},
 		{
@@ -271,6 +271,39 @@ func TestProviderProblemsAreRefusedByName(t *testing.T) {
 			e := loadErr(t, write(t, tc.body), env(nil))
 			if !hasKey(e, tc.key) {
 				t.Errorf("problems %v do not name %q\n%v", e.Keys(), tc.key, e)
+			}
+		})
+	}
+}
+
+// TestAnIssuerIsKeptExactlyAsWritten: whether an issuer ends in a slash is the
+// provider's choice, not ours. Authentik's per-application issuer ends in one
+// and Google's does not, and discovery compares the configured issuer with the
+// document's byte for byte. So config accepts both forms and changes neither;
+// trimming or adding a slash here would turn a working provider into one that
+// fails discovery.
+func TestAnIssuerIsKeptExactlyAsWritten(t *testing.T) {
+	t.Parallel()
+
+	for _, issuer := range []string{
+		"https://authentik.example/application/o/ketju/",
+		"https://idp.example/",
+		"https://accounts.google.com",
+		"https://idp.example/oidc",
+	} {
+		t.Run(issuer, func(t *testing.T) {
+			t.Parallel()
+			body := minimal + "\nsite_url = \"https://x.example\"\n" + `
+[[oidc.providers]]
+key = "g"
+name = "G"
+issuer = "` + issuer + `"
+client_id = "c"
+client_secret = "s"
+`
+			c := mustLoad(t, write(t, body), env(nil))
+			if got := c.OIDC.Providers[0].Issuer; got != issuer {
+				t.Errorf("issuer = %q, want %q exactly", got, issuer)
 			}
 		})
 	}
