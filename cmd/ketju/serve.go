@@ -385,15 +385,18 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 
 	// The data-directory probe runs once now, so the first poll after the
 	// listener opens has an answer, and then in the background: healthz
-	// reads its cached result and never touches the disk itself. It stops
-	// before the lock is released, so it never writes into a data directory
-	// another process may hold.
+	// reads its cached result and never touches the disk itself. Shutdown
+	// stops it before the lock is released, but waits for it no longer than
+	// busDrain: a probe stuck in an fsync cannot be interrupted, and waiting
+	// on it would hold the lock for as long as the disk is stuck (review
+	// 1152). Past the bound shutdown goes on and reports it.
 	probe := health.NewDirProbe(cfg.DataDir, log)
 	probe.Probe()
-	probeCtx, stopProbe := context.WithCancel(context.Background())
-	probed := make(chan struct{})
-	go func() { defer close(probed); probe.Run(probeCtx) }()
-	closers = append(closers, func() error { stopProbe(); <-probed; return nil })
+	stopProbe := probe.Start(busDrain)
+	closers = append(closers, func() error {
+		step("stop health probe")
+		return stopProbe()
+	})
 
 	var root http.Handler = web.New(web.Groups{
 		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Logger: log}),

@@ -3,6 +3,7 @@ package health
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -87,6 +88,34 @@ func (p *DirProbe) Run(ctx context.Context) {
 			return
 		case <-t.C:
 			p.Probe()
+		}
+	}
+}
+
+// Start runs Run in a goroutine and returns the function that stops it.
+//
+// Stop cancels the loop and waits for it, but for no longer than wait. A
+// probe blocked in a write or an fsync does not see a cancelled context, and
+// a stuck disk is exactly when that happens; an unbounded wait would hang
+// shutdown and never release the data-directory lock. Past wait, Stop
+// returns an error saying so and leaves the probe to finish on its own.
+func (p *DirProbe) Start(wait time.Duration) (stop func() error) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		p.Run(ctx)
+	}()
+	return func() error {
+		cancel()
+		t := time.NewTimer(wait)
+		defer t.Stop()
+		select {
+		case <-done:
+			return nil
+		case <-t.C:
+			return fmt.Errorf("health: the data-directory probe did not stop within %s; "+
+				"a write or fsync in %s is stuck", wait, p.dir)
 		}
 	}
 }

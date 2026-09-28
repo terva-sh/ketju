@@ -315,6 +315,46 @@ func TestProbeRunStopsWithItsContext(t *testing.T) {
 	}
 }
 
+// Stop returns promptly for a loop that is idle, and within its bound for one
+// stuck in a probe that will not see the cancellation (review 1152): shutdown
+// must not wait on a stuck disk to release the lock.
+func TestProbeStopIsBounded(t *testing.T) {
+	f := newFixture(t)
+	f.probe.interval = time.Millisecond
+	f.probe.probe = func(string) error { return nil }
+	stop := f.probe.Start(5 * time.Second)
+	time.Sleep(5 * time.Millisecond)
+	if err := stop(); err != nil {
+		t.Errorf("stopping an idle probe: %v", err)
+	}
+
+	f = newFixture(t)
+	f.probe.interval = time.Millisecond
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	f.probe.probe = func(string) error {
+		once.Do(func() { close(entered) })
+		<-release
+		return nil
+	}
+	defer close(release)
+	stop = f.probe.Start(50 * time.Millisecond)
+	select {
+	case <-entered:
+	case <-time.After(5 * time.Second):
+		t.Fatal("the probe never ran")
+	}
+	start := time.Now()
+	err := stop()
+	if err == nil || !strings.Contains(err.Error(), "did not stop") {
+		t.Errorf("stopping a stuck probe = %v, want the bound reported", err)
+	}
+	if took := time.Since(start); took > 2*time.Second {
+		t.Errorf("stopping a stuck probe took %v", took)
+	}
+}
+
 // --- AC2: no authentication, no version or configuration --------------------
 
 func TestHealthzLeaksNothing(t *testing.T) {

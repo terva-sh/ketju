@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T08:25:49Z
+updated_at: 2026-09-28T08:33:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -99,6 +99,10 @@ How each criterion was met, and the gaps settled here (docs/12 "Gaps the design 
 - `/healthz` skips rate limiting, session resolution and CSRF in the chain (it keeps logging, recovery, security headers and the body limit). Otherwise a poll carrying a session cookie costs a lookup and a touch, which is a write, and breaks criterion 3. GET/HEAD-only, it is nothing the limiter or CSRF acts on.
 - The ping deadline is 1 s, and the probe file is `data/.healthz-probe`: internal defaults nobody configures.
 - Left as it is: `/healthz` still writes an info request-log line per poll. Whether to log it at debug is the logging middleware's decision and was not needed for any criterion.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:33:27Z
+
+Terva review 1152 (run e4ccb5e1-2885-484c-95ce-e2d86423d80b, Actions run #600) on head 4c632289942b1bafb1ed253eb91f2b7d9e1d0650, base 056e35786d1d3ab907452a609829e6c004b70f02: one high finding, 'A stuck directory probe can block shutdown indefinitely'. Accepted and fixed in behaviour. Shutdown no longer waits on the probe goroutine unbounded: DirProbe.Start returns a stop that cancels the loop and waits at most busDrain (5 s), then reports the stuck probe and lets shutdown go on to release the lock, the same shape as the projection runner's closer. Serve logs it as the new step 'stop health probe'. TestProbeStopIsBounded holds a probe blocked in its write and checks that stop returns with the error within the bound.
 
 ## Summary
 
