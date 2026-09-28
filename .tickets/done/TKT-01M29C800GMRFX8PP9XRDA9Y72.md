@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-28T05:49:20Z
+updated_at: 2026-09-28T15:01:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -97,6 +97,10 @@ Review 1128 (run 511, head 58470fa9e437d226f0f8a017a9eb6bfba61dd81f, base 05a624
 
 - medium, "Record the once-only state for an already-admin bootstrap match" (internal/perm/mutate.go): accepted and fixed. With Once set, a user who is already admin and has no `user.promoted` row now gets one, with `"already": "admin"` in its details, and keeps the role. TestPromoteOnceRecordsAnExistingAdmin covers match, demote, and match again. docs/05 says so.
 - high, "CLI promotion cannot invalidate the running server's permission cache" (cmd/ketju/admin.go): the premise is true, since another process's cache cannot be cleared. The consequence does not follow. Session resolution builds each request's Viewer from the users row (LookupSession). The role is part of the cache key, and `Check`/`CanEach` return for an active admin before the cache is read. A promoted user's next request therefore never meets an entry cached under the member role. TestPromoteFromAnotherProcess shows it: a server evaluator on its own handle, with its own generation counter and a cached deny, allows the member's next request after a second handle promotes them. A comment in admin.go and the Promote doc comment record the reasoning. Requesting a fresh review of the new head rather than a disposition.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:09Z
+
+Maintainer acceptance, 2026-09-28: the maintainer accepted the disposition of review 1128's high finding ("CLI promotion cannot invalidate the running server's permission cache", answered by argument and TestPromoteFromAnotherProcess), saying "PR #97 looks good to me". The re-review had marked it resolved and the PR merged before this acceptance. Since then the run's brief stops any PR whose medium-or-higher finding is answered by argument, even when a re-review clears it.
 
 ## Summary
 

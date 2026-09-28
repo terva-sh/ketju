@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-25T02:29:04Z
-updated_at: 2026-09-28T14:42:24Z
+updated_at: 2026-09-28T15:01:09Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -94,6 +94,10 @@ Disposition: declined, maintainer acceptance pending. It is recorded on PR #115 
 The facts are right: the phone rule hides `.forum-activity`, so phones do not show the total. That is the phone design. docs/mockups/MobileFront{Light,Dark}.dc.html show neither a thread total nor a post total, and the same rule already hides the thread total on main. Showing totals on phones would change what a member sees against the mockup, which is a product decision for a person (docs/12 "Gaps the design leaves open").
 
 Under the run brief (trap 9) this is a medium finding answered by argument, so the PR stays open and unmerged for a maintainer. If a maintainer wants totals on phones, the fix is CSS only: un-hide `.forum-activity` in the phone rule and place it in the card grid.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:09Z
+
+Maintainer acceptance, 2026-09-28: the maintainer accepted the disposition of review 1164 finding-1 (medium, "Show post totals on mobile forum rows"), choosing "Accept, merge as is". Phones keep hiding `.forum-activity`, as the MobileFront mockups show. PR #115 merged at 7bc6d5a on the maintainer's authorization, with `terva-review/code` at failure on reviewed head 0d80e4c and CI green (run 669) on merged head 785d2b6. PR comment 16755 records the same.
 
 ## Summary
 

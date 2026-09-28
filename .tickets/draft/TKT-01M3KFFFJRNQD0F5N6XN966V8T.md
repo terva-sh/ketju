@@ -19,7 +19,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-28T07:43:10Z
+updated_at: 2026-09-28T15:01:09Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -49,3 +49,9 @@ The thread page has no way to mark a thread, or the posts after a given post, un
 ### Design
 
 docs/06 "Read tracking", docs/07 "Read position".
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:09Z
+
+This note supersedes the pointer to dd761e9 for the removed markUnread implementation. PR #101 was rebase-merged, which rewrote that commit, so dd761e9 is not in main's history and will not stay reachable. The same code is on main at 74c4e8f ("record review 1148's fixes"): `git diff dd761e9 74c4e8f -- web/client/src` is empty. Use `git show 74c4e8f:web/client/src/state/readTracker.ts`.

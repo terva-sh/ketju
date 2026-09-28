@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T05:07:34Z
-updated_at: 2026-09-28T05:02:26Z
+updated_at: 2026-09-28T15:01:53Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
@@ -381,3 +381,135 @@ The first run stopped at the exit gate, as docs/12 prescribes. On 2026-09-28 the
 Everything else in docs/12 applies to the continuation unchanged: the loop, the stop and halt conditions, the "Changing CI" limits, and "Never". Its "Status" line and "Stop" at the gate are read as superseded by this note for the continuation only.
 
 The review-size workaround (twin PRs) should no longer be needed now that v0.5.0 accepts 1 MiB. If a client PR still hits `context_limit`, the ticket is split or blocked, as docs/12 says.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CA9BP merged via PR #95 at 0233673 (3 review rounds, clean run 7cc9d774, CI #504). Edit, delete and restore endpoints landed; the actor now enforces post state (`Append.Require/Refuse`, `ErrPostState` → `conflict`); edits keep `reply_to` in the index and the projection; Restore clears hidden-by-mod; `authorize()` in `internal/service/threads` is the seam for CKRHS and CRJ5J.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29C800G merged via PR #97 as 09e8f86; config and CLI admin bootstrap (identity.ApplyBootstrap, perm.Evaluator.Promote, `ketju admin promote --root`); review 1128 medium fixed; its high finding (CLI cannot clear a running server's permission cache) was answered by argument plus TestPromoteFromAnotherProcess and the re-review resolved it — maintainer accepted 2026-09-28 ("PR #97 looks good to me"); C8005 must call ApplyBootstrap.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CA9CE merged via PR #99 at 29566a7 (review run 527 clean, CI 526): read position (PUT forward-only, DELETE the only way down) and reply drafts at /api/v1/drafts/{thread_id}; contracts and form-post table in docs/07; watch/flags stay with CRJ29/CP2PJ as settled; new-thread drafts filed as TKT-01M3K9XBJA (draft, product decision).
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29C5Y25 reindex merged as PR #100 (3d7c3a5) after four review rounds, all fixed in code: `ketju reindex` rebuilds projections under the directory lock, `projection.IsLogFault` separates log faults from DB failures, the README recovery procedure runs as a test; draft TKT-01M3KB7FXC filed for member-id reuse after a restore (product/security decision).
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29C8005 open registration merged via PR #102 at 9b76d9d (reviews 1145 and 1146 mediums fixed in code, clean run 3cce2bba, CI #561). Handle screen is server-rendered at /auth/register (a person may confirm server-rendered vs client screen); new session.IssueUserWith and settings Key.In; Register calls ApplyBootstrap; approval mode and auto_approve unchanged.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CCBY0 (response cache keyed on viewer class) merged as PR #103 at c066d91 (low finding in review 1150 fixed; re-review run 577 clean; CI 576): `internal/service/respcache` caches a thread page's posts per viewer class, keyed also on page size, both log lengths and an authors digest (in place of the settled users-generation counter; reasons in the plan), with no invalidation; AC3 (hit-ratio metric) unticked, waits on TKT-01M29CEE7S.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M38WW7GT (Tidy go.mod and the stale CI comment) merged as PR #104 at 8705352: comment-only fix to the ci.yml build step (orchestrator-allowed); go.mod was already tidy after 209a68a so go.mod/go.sum unchanged; clean review d0abe2a5 on 5925e53, carried to 8705352; CI 589 green.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29BYYJG (Ship ketju config check) merged as PR #106 at de904cb. `ketju config check` exits 0/1/2/4, prints each key with its source layer, and redacts secrets by type. Review 1151's high (go-toml error text could quote a client_secret) and medium were fixed in code; re-review run 9d25f744 clean. Error/warning split recorded in docs/02 "Configuration". CKRE9 must drop the `auto_approve` warning.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CCBYG blocked on undecided profile visibility (anonymous access, post count, non-active accounts); decision draft TKT-01M3KJJNDC filed; PR #108 merged at 89c7cb2 (ticket store only). Maintainer decided all four on 2026-09-28 (members only; visible non-deleted count; hide pending, serve the rest with status to mods/admins; author sees own deleted posts marked). Agent now recording and implementing.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CGBW6 (inline reply expander) merged via PR #96 as 05a6245; review 1121 medium (attachments) fixed, follow-up review of 6ebb392 clean; docs/06 settles the page-edge suppression and the "nothing moves" reading (AC1 ticked on it; a person may confirm); e2e seed now carries reply_to on the main thread.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CGBX4 (desktop keyboard shortcuts) merged as PR #98 at 9d7b0dc after five review rounds (1129, 1130, 1136, 1140, then clean at 7f5a91b; all findings fixed in code). New `web/client/src/keyboard/`; posts are focusable; `n`'s order and wrap are in docs/06; the e2e spec relies on alice's #30 position in the Minutes thread.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CGBWN merged via PR #101 at e070d97 (six review rounds, all mediums fixed in code; round 6 clean in run 574, CI run 573). At round 5 the orchestrator split `markUnread` out as out of scope (no criterion needed it, nothing called it); draft TKT-01M3KFFFJR carries it with review 1149's finding, and its code is on main at 74c4e8f. e2e specs now set seeded read positions per test.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:50Z
+
+TKT-01M29CGBYH (bundle budget in CI) merged as PR #105 at 056e357 (reviewed b71a058/c066d91 clean, carried to bc37327; CI 591). Thread view measures 37901 B of 60000 B gzipped (63.2%). Budget in web/client/budget.json, checked by `npm run build` and the new CI step "client bundle budget" in Build and Test; fonts and the admin chunk excluded.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:51Z
+
+TKT-01M29CCBZ8 healthz: PR #107 merged as 21fa204 (5 rounds, all fixed in code; clean run f69ecb4e on 55f1ba0, CI #618); /healthz 503 on database/data-dir failure, 200 degraded on quarantine, one query per request (`count(*) FROM sqlite_schema`), background probe with bounded start and stop; contract in docs/02 Observability.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:51Z
+
+TKT-01M29C5Y2S merged via PR #110 at 4ea1a5d (5 rounds: 3 high + 4 medium, all fixed in code; clean run 603a6f6d, CI #632); #109 closed unmerged after a conflict with #107, branch run/c5y2s-sweeper-gc left on remote. Adds `internal/jobs` (hourly session sweep, daily log-verified blob GC) and `internal/store/blob`; docs/03 states the ordering rules for TKT-01M29CXK0; blob GC pauses entirely while any thread is quarantined.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:51Z
+
+TKT-01M3B12ZZ4 blocked via PR #111 (merge 03a0ea6): tag rules undecided; filed TKT-01M3M4KVNW. Maintainer 2026-09-28: "Defer to Phase 4" (docs/09 puts thread tags in Phase 4); create keeps refusing tags.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:00:51Z
+
+TKT-01M392DP19 PR #114 merged 50da124 (reviewed 50da124/03a0ea6, CI #653, Terva #654 clean). Upstream bug still present in v0.35.6 and main 6eeb006; workaround stays; TestNcrucesDirSyncWorkaroundIsPinned fails on any unchecked ncruces version. Blocked until a person posts the upstream report (text in a ticket note) and a fixed release exists.
+
+(Continuation run, logged by the orchestrator in a batch; see the 2026-09-28 authority note.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:09Z
+
+TKT-01M3KJJNDC merged via PR #112 (a784672): the maintainer's profile visibility decisions are written into docs/07 and docs/05. Review 1161 raised a medium finding (the post count does not equal the history for viewers who can see deleted posts); it was fixed by rewording, so a deleted post never counts for any viewer. The re-review (run d56f2c4b) was clean.
+
+TKT-01M29CCBYG merged via PR #113 (09b94ca): profiles and post histories are members-only. The thread log index decides whether a post is deleted, and the count matches the history. Review 1162's three mediums (trusting post_meta's lagging deleted flag) were fixed in code; the re-review (run f396b172) was clean. `member.Account` holds the account-visibility rule.
+
+TKT-01M3B6A68B merged via PR #115 (7bc6d5a) ON THE MAINTAINER'S DIRECT AUTHORIZATION, not the docs/12 gate. Review 1164 finding-1 (medium: post totals are hidden on phones) was declined by the agent, because the MobileFront mockups show no totals. On 2026-09-28 the maintainer chose "Accept, merge as is". `terva-review/code` stays at failure on the reviewed head 0d80e4c; CI run 669 passed on the merged head 785d2b6 over base 09b94ca (PR comment 16755). Migration 0009 adds threads.live_post_count and forum_thread_counts.live_posts; GET /forums serves post_count as non-deleted, non-moved posts.
+
+(Continuation run, logged by the orchestrator in a batch.)
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:53Z
+
+### Continuation run: queue empty on 2026-09-28
+
+Every ready phase-1 task and chore is done, apart from the ones listed below. Twenty ticket PRs merged: #95-#108 and #110-#115, with #109 closed unmerged and redone as #110. Each merged on the docs/12 gate, except:
+- #115, merged on the maintainer's direct authorization;
+- #97, whose high-finding disposition the maintainer accepted after the merge.
+
+What is left, and whose it is:
+- **The six phase-1 epics stay open, by the maintainer's choice on 2026-09-28** ("Leave all open, report"). Each still parents drafts in Phases 2-4. This ticket stays open until TKT-01M38WTKSQ is done.
+- TKT-01M38WTKSQ (the real-device check) is human-only.
+- TKT-01M392DP19 (the ncruces directory-fsync report) is blocked. A person posts the upstream report, whose text is in its notes, and the workaround stays until a fixed release exists.
+- Choices the run made that a person may want to confirm:
+  - CGBW6 AC1's reading of "nothing moves", in docs/06.
+  - The handle screen is server-rendered at /auth/register (C8005).
+  - The response cache key uses both log lengths, and an authors digest in place of the settled users-generation counter (CCBY0; the reasons are in its plan).
+  - Blob GC pauses entirely while any thread is quarantined (C5Y2S).
+- Drafts filed for a person: TKT-01M3K9XBJA, TKT-01M3KB7FXC, TKT-01M3KFFFJR. The tag rules (TKT-01M3M4KVNW) moved to Phase 4.
+- The branch run/c5y2s-sweeper-gc is left on the remote. Its PR, #109, closed unmerged.

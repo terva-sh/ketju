@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T08:24:39Z
+updated_at: 2026-09-28T15:01:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -47,7 +47,7 @@ extensions: {}
 
 - [x] Every table in this migration is marked as a projection in a comment naming `ketju reindex` as its recovery path
 - [x] post_meta rows stay tiny, with the indexes from docs/04 on (author_id, created_at) and (thread_id, reply_to)
-- [ ] Dropping every table in this migration and rebuilding from logs produces identical rows, tested end to end
+- [x] Dropping every table in this migration and rebuilding from logs produces identical rows, tested end to end
 
 ## Implementation plan
 
@@ -90,6 +90,10 @@ What landed here is the half the criterion depends on: `dbtest.DumpProjections`,
 - updated_at dumped;
 - dump order reversed;
 - strings formatted unquoted.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:09Z
+
+AC3 is ticked on the strength of TestReindexEqualsIncremental (cmd/ketju/reindex_test.go, PR #100, TKT-01M29C5Y25). The test populates 12 threads and dumps the projection rows written incrementally. It then loses them in three ways: every projection table emptied (ClearProjections), rows made stale, and the database file with its -wal and -shm removed outright. After each, it runs the real `ketju reindex --json` end to end and requires the rebuilt rows to equal the incremental dump. The third case, deleting the database file, is stronger than dropping every table. The test runs in CI's go test (race) step.
 
 ## Summary
 

@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-24, after Phase 1 was groomed, against the store. They are written by hand, so
+Counts last read 2026-09-28, when the continuation run emptied the Phase 1 queue, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-191 tickets: 12 epics and 179 children. Every ticket carries an `area:` label,
+198 tickets: 12 epics and 186 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -42,7 +42,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 82 in Phase 1, 33 in Phase 2, 20 in
-Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 17 carrying no
+Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 22 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-83 done, 22 ready, 85 draft, 1 archived (counted 2026-09-25 with
+102 done, 7 ready, 2 blocked, 86 draft, 1 archived (counted 2026-09-28 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -136,6 +136,32 @@ follow-ups with no milestone: twelve are drafts and one has since been
 archived. Closing the epics and the tracking ticket, running the real-device
 checks, and deciding what happens to the 15 remaining tickets belong to a
 person (docs/12).
+
+**A continuation run emptied the Phase 1 queue on 2026-09-28.** The user
+re-granted the docs/12 merge authority to finish Phase 1, recorded on
+`TKT-01M38WZPCW` (PR #94). Three drafts were promoted into the queue at the same
+time. Phase 1 still carries 82 tickets:
+- 73 done;
+- 7 ready: the six Phase 1 epics and the tracking ticket;
+- 1 blocked: the ncruces directory-fsync report `TKT-01M392DP19`. A person has
+  to post the upstream report, and the workaround stays until a fixed release
+  exists;
+- 1 draft: the real-device check `TKT-01M38WTKSQ`, which is `human-only`.
+
+Four tickets changed milestone during the continuation:
+- The profile-visibility decision `TKT-01M3KJJNDC` was filed into Phase 1 and
+  closed.
+- Thread tags on create, `TKT-01M3B12ZZ4`, and its decision draft
+  `TKT-01M3M4KVNW` moved to Phase 4, where docs/09 lists thread tags. The user
+  chose to defer them.
+
+The continuation also filed three drafts with no milestone:
+- `TKT-01M3K9XBJA`, new-thread draft autosave;
+- `TKT-01M3KB7FXC`, member ids reused after a database restore;
+- `TKT-01M3KFFFJR`, the mark-unread control split out of the read beacon.
+
+The six epics stay open by the user's choice. Each still parents drafts in
+Phases 2 to 4, so none has every child done.
 
 ## The critical path
 

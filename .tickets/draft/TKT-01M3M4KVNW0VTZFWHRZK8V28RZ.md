@@ -12,7 +12,7 @@ labels:
   - effort:S
   - decision
 assignees: []
-milestone: phase-1
+milestone: phase-4
 parent: null
 origin: null
 dependencies: []
@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T13:52:34Z
-updated_at: 2026-09-28T13:52:34Z
+updated_at: 2026-09-28T15:01:16Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -96,3 +96,9 @@ The answers are written into docs/04 (beside `thread_tags`) or docs/08, and into
 - [ ] Whether tags are free text or a per-forum vocabulary, and who may set them on create, is decided and written into docs
 - [ ] docs/07's POST /forums/{slug}/threads row states the rules
 - [ ] TKT-01M3B12ZZ4's settled items carry the answers
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:16Z
+
+Maintainer decision, 2026-09-28: tags on create are deferred to Phase 4 ("Defer to Phase 4"). docs/09 lists thread tags under Phase 4 beside retag and tag filtering. Until then the create endpoint keeps refusing a non-empty `tags`. This ticket and TKT-01M3M4KVNW (Decide what a thread tag may be and who may set one) move to the phase-4 milestone. The rule questions in TKT-01M3M4KVNW stay open, to be decided with the rest of the tag feature.

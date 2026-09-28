@@ -10,7 +10,7 @@ due_on: null
 labels:
   - area:api
 assignees: []
-milestone: phase-1
+milestone: phase-4
 parent: null
 origin: null
 dependencies:
@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-25T00:57:46Z
-updated_at: 2026-09-28T13:59:38Z
+updated_at: 2026-09-28T15:01:16Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -74,3 +74,7 @@ in-progress to blocked: Tag syntax, limits, vocabulary, who may set tags, and wh
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T13:59:38Z
 
 Review 1160 (run 73cddc78-67db-4814-8410-7b61c6a0a61d, Actions run #639) on PR #111, head 4ce6afe596943324c1de166366158ede7085cd88, base 4ea1a5ddf3017b12b741c60475a564f868d31b40: one low finding, 'Correct the recorded status transition'. Declined: the note is accurate. The ticket went ready to in-progress (claim, then status, both in commit eabb9a1) and then in-progress to blocked, and git ticket wrote the transition note itself. The diff shows only the net change from ready to blocked because both transitions land in the same PR. The note is left as written.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:16Z
+
+Maintainer decision, 2026-09-28: tags on create are deferred to Phase 4 ("Defer to Phase 4"). docs/09 lists thread tags under Phase 4 beside retag and tag filtering. Until then the create endpoint keeps refusing a non-empty `tags`. This ticket and TKT-01M3M4KVNW (Decide what a thread tag may be and who may set one) move to the phase-4 milestone. The rule questions in TKT-01M3M4KVNW stay open, to be decided with the rest of the tag feature.
