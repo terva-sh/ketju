@@ -103,10 +103,25 @@ func (s *Scheduler) Start(ctx context.Context) error {
 	return nil
 }
 
+// Done is closed once every job has returned after Stop, or at once if the
+// scheduler never started. A caller whose Stop timed out reads it before
+// closing anything a job still running could be using.
+func (s *Scheduler) Done() <-chan struct{} {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.done == nil {
+		c := make(chan struct{})
+		close(c)
+		return c
+	}
+	return s.done
+}
+
 // Stop cancels every job and waits up to wait for the running ones to
 // return. A job still running past it is reported and left to finish on
-// its own; Stop does not wait longer, because a caller that is shutting
-// down has a database to close.
+// its own, with its context cancelled so every database call it makes
+// fails; Stop does not wait longer, because a job stuck in the kernel
+// would hold shutdown with it. See Done.
 func (s *Scheduler) Stop(wait time.Duration) error {
 	s.mu.Lock()
 	cancel, done := s.cancel, s.done

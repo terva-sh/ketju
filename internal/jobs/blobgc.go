@@ -36,6 +36,12 @@ const (
 // logs once per page. It is a variable so a test can make pages small.
 var blobPage int64 = 10_000
 
+// maxCollect bounds how many blobs one pass deletes, and so how many hashes
+// it holds in memory between its two phases. Kept candidates do not count
+// against it, so they cannot starve later ones; what is left over is the
+// next pass's, a day later.
+var maxCollect int64 = 100_000
+
 // trashSuffix names a blob file the collector has moved aside in the
 // transaction that deletes its row. The move is undone if that transaction
 // does not commit, and finished once it has; a pass that finds one left
@@ -84,8 +90,10 @@ type BlobGC struct {
 	// thread the projection has quarantined, and the pass deletes nothing.
 	Hold func() string
 
-	// afterScan runs between each page's log scan and its deletes. Tests use
-	// it to commit a reference at the worst moment.
+	// scanned runs after each page's log scan, and afterScan between the
+	// last scan and the first delete. Tests use them to damage a log, or
+	// commit a reference, at the worst moment.
+	scanned   func()
 	afterScan func()
 
 	// rename is os.Rename; tests replace it to fail the restore.
@@ -113,6 +121,11 @@ func (g *BlobGC) Job() Job {
 
 // Run is one pass. Its Result counts the blobs removed, and its attributes
 // say how many candidates there were and why the rest were kept.
+//
+// It works in two phases. The first reads every candidate, a page at a
+// time, and scans the logs for each page; the second deletes. Nothing is
+// deleted until every scan has succeeded, so a log that cannot be read
+// holds the whole pass, whichever page found it (review 1158).
 func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 	cutoff := g.now().Add(-BlobGrace).UnixMilli()
 	restored, err := g.recoverTrash(ctx)
@@ -127,7 +140,7 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 
 	var (
 		candidates, inLog, removed, changed, failed int64
-		errs                                        []error
+		collectable                                 []string
 		afterSince                                  int64 = math.MinInt64
 		afterHash                                   string
 	)
@@ -139,7 +152,9 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 		}
 		return Result{Removed: removed, Attrs: attrs}
 	}
-	for {
+
+	// Phase one: find what may go. No deletes.
+	for int64(len(collectable)) < maxCollect {
 		var page []dbq.BlobGCCandidatesRow
 		if err := g.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 			var err error
@@ -147,10 +162,10 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 				AfterSince: afterSince, AfterHash: afterHash, Max: blobPage})
 			return err
 		}); err != nil {
-			return result(), errors.Join(append(errs, fmt.Errorf("blob gc: reading candidates: %w", err))...)
+			return result(), fmt.Errorf("blob gc: reading candidates: %w", err)
 		}
 		if len(page) == 0 {
-			return result(), errors.Join(errs...)
+			break
 		}
 		candidates += int64(len(page))
 		last := page[len(page)-1]
@@ -162,37 +177,46 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 		}
 		found, err := referencedInLogs(ctx, g.Root, want)
 		if err != nil {
-			return result(), errors.Join(append(errs,
-				fmt.Errorf("%w: the thread logs could not all be read, so nothing more was deleted: %w", ErrHeld, err))...)
+			return result(), fmt.Errorf("%w: the thread logs could not all be read, so nothing was deleted: %w", ErrHeld, err)
 		}
 		inLog += int64(len(found))
-		if g.afterScan != nil {
-			g.afterScan()
+		if g.scanned != nil {
+			g.scanned()
 		}
 		for _, c := range page {
-			if found[c.Hash] {
-				continue
-			}
-			if err := ctx.Err(); err != nil {
-				return result(), errors.Join(append(errs, err)...)
-			}
-			gone, err := g.collect(ctx, c.Hash, cutoff)
-			switch {
-			case gone:
-				removed++
-			case err == nil:
-				changed++
-			default:
-				failed++
-			}
-			if err != nil {
-				errs = append(errs, err)
+			if !found[c.Hash] {
+				collectable = append(collectable, c.Hash)
 			}
 		}
 		if int64(len(page)) < blobPage {
-			return result(), errors.Join(errs...)
+			break
 		}
 	}
+	if g.afterScan != nil {
+		g.afterScan()
+	}
+
+	// Phase two: delete, each blob re-checked as it goes.
+	var errs []error
+	for _, h := range collectable {
+		if err := ctx.Err(); err != nil {
+			errs = append(errs, err)
+			break
+		}
+		gone, err := g.collect(ctx, h, cutoff)
+		switch {
+		case gone:
+			removed++
+		case err == nil:
+			changed++
+		default:
+			failed++
+		}
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return result(), errors.Join(errs...)
 }
 
 // collect deletes one blob's row, if it is still collectable, and moves its
@@ -291,11 +315,16 @@ func (g *BlobGC) recoverTrash(ctx context.Context) (int64, error) {
 // an error: the caller cannot then know what the logs reference.
 func referencedInLogs(ctx context.Context, root string, want map[string]bool) (map[string]bool, error) {
 	dir := filepath.Join(root, threadid.ThreadsDir)
-	if _, err := os.Stat(dir); err != nil {
+	st, err := os.Stat(dir)
+	if err != nil {
 		return nil, err
 	}
+	if !st.IsDir() {
+		// WalkDir would visit the one file and report nothing found.
+		return nil, fmt.Errorf("%s is not a directory", dir)
+	}
 	found := map[string]bool{}
-	err := filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+	err = filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -305,7 +334,7 @@ func referencedInLogs(ctx context.Context, root string, want map[string]bool) (m
 		if d.IsDir() || filepath.Ext(p) != threadid.LogExt {
 			return nil
 		}
-		return scanLog(p, want, found)
+		return scanLog(ctx, p, want, found)
 	})
 	if err != nil {
 		return nil, err
@@ -313,8 +342,10 @@ func referencedInLogs(ctx context.Context, root string, want map[string]bool) (m
 	return found, nil
 }
 
-// scanLog adds to found every hash in want that one log mentions.
-func scanLog(path string, want, found map[string]bool) error {
+// scanLog adds to found every hash in want that one log mentions. It checks
+// ctx at every frame, so a job asked to stop returns within the scheduler's
+// bound even in the middle of a long log.
+func scanLog(ctx context.Context, path string, want, found map[string]bool) error {
 	f, err := os.Open(path)
 	if err != nil {
 		return err
@@ -327,6 +358,9 @@ func scanLog(path string, want, found map[string]bool) error {
 	var bad error
 	err = threadlog.ScanFrames(f, st.Size(), func(r threadlog.ScanRecord) bool {
 		switch {
+		case ctx.Err() != nil:
+			bad = ctx.Err()
+			return false
 		case r.Err != nil:
 			bad = fmt.Errorf("%s: the frame at %d: %w", path, r.Offset, r.Err)
 			return false

@@ -672,8 +672,12 @@ when all of these hold at the moment of the delete:
   revisions. The logs are the source of truth and the refcount is bookkeeping
   about them, so a count that has drifted cannot free a blob a post names.
 
-A pass deletes nothing if any log cannot be read to its end, if a body is in
-an encoding it cannot search, or while a thread is quarantined, because a
+A pass works in two phases. It reads the candidates a page at a time, in the
+order they reached zero, and scans the logs for each page. Only when every
+page has been scanned does it delete. Blobs the logs keep therefore cannot stop
+a pass from reaching later candidates. A pass deletes nothing if any log cannot
+be read to its end, if a body is in an encoding it cannot search, if `threads/`
+is missing or is not a directory, or while a thread is quarantined, because a
 missing or short log may name blobs no file on disk does. It logs why, at
 error. With no candidates it reads no logs.
 
@@ -687,8 +691,6 @@ rename that fails rolls the row back. If the transaction does not commit, the
 rename is undone, and once it commits the renamed file is removed. Each pass
 first settles any `<hash>.gc` left by a crash or a failed undo. The pass puts
 the file back while the row exists and removes it once the row is gone.
-Candidates are read a page at a time in the order they reached zero, so
-blobs the logs keep cannot stop a pass from reaching later candidates.
 
 That sets two rules for the upload and attach paths (TKT-01M29CXK0):
 

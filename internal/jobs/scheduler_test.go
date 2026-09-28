@@ -141,10 +141,29 @@ func TestStopIsBounded(t *testing.T) {
 		<-release
 		return Result{}, nil
 	}})
-	defer close(release)
 	<-started
 	if err := s.Stop(20 * time.Millisecond); err == nil {
 		t.Fatal("Stop returned nil with a job still running")
+	}
+	// Done says the job is still out, and then that it has returned.
+	select {
+	case <-s.Done():
+		t.Fatal("Done closed with a job still running")
+	default:
+	}
+	close(release)
+	select {
+	case <-s.Done():
+	case <-time.After(5 * time.Second):
+		t.Fatal("Done did not close once the job returned")
+	}
+}
+
+func TestDoneBeforeStartIsClosed(t *testing.T) {
+	select {
+	case <-New(nil).Done():
+	default:
+		t.Fatal("Done of a scheduler never started is not closed")
 	}
 }
 

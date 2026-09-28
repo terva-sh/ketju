@@ -430,6 +430,54 @@ func TestNoThreadsDirectoryHoldsThePass(t *testing.T) {
 	}
 }
 
+// TestThreadsAsAFileHoldsThePass is review 1158's first finding: a threads
+// that is a file, not a directory, walks as one entry and would report no
+// references at all.
+func TestThreadsAsAFileHoldsThePass(t *testing.T) {
+	w := newGCWorld(t)
+	w.now = t0.Add(30 * 24 * time.Hour)
+	h := w.upload("orphan", t0)
+	dir := filepath.Join(w.root, threadid.ThreadsDir)
+	if err := os.Remove(dir); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dir, []byte("not a directory"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := w.run(); !errors.Is(err, ErrHeld) || !w.kept(h) {
+		t.Fatalf("Run = %v, kept=%v; want held and kept", err, w.kept(h))
+	}
+}
+
+// TestALaterPageThatCannotBeScannedDeletesNothing is review 1158's second
+// finding: every page is scanned before anything is deleted, so a log that
+// becomes unreadable while a later page is scanned holds the whole pass,
+// including the pages already scanned.
+func TestALaterPageThatCannotBeScannedDeletesNothing(t *testing.T) {
+	defer func(n int64) { blobPage = n }(blobPage)
+	blobPage = 1
+	w := newGCWorld(t)
+	w.now = t0.Add(30 * 24 * time.Hour)
+	first := w.upload("first", t0)
+	second := w.upload("second", t0.Add(time.Hour))
+	p := w.thread("", created, post())
+	pages := 0
+	w.gc.scanned = func() {
+		if pages++; pages == 1 {
+			b, _ := os.ReadFile(p)
+			if err := os.WriteFile(p, b[:len(b)-3], 0o640); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if _, err := w.run(); !errors.Is(err, ErrHeld) {
+		t.Fatalf("Run = %v, want held", err)
+	}
+	if !w.kept(first) || !w.kept(second) {
+		t.Fatal("a held pass deleted a blob from a page it had already scanned")
+	}
+}
+
 // TestAvatarAndDraftGuards: a blob a user's avatar or a draft names is kept,
 // though nothing writes either reference yet, and in either case, as the
 // log scan matches it (review 1157).

@@ -20,6 +20,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/jobs"
 	"github.com/terva-sh/ketju/internal/lock"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -673,6 +674,30 @@ func TestShutdownWaitsForTheProjectionRunner(t *testing.T) {
 	}
 	if <-early {
 		t.Error("the thread cache was closed while the projection runner was still running")
+	}
+}
+
+// A background job that outlasts its bounded stop keeps the database open:
+// shutdown reports it and leaves the database for the WAL replay at the
+// next start rather than closing it under the job (review 1158).
+func TestShutdownLeavesTheDatabaseToAJobStillRunning(t *testing.T) {
+	path, _ := writeConfig(t, "")
+	started, release := make(chan struct{}), make(chan struct{})
+	var once sync.Once
+	stuck := jobs.Job{Name: "stuck", Every: time.Millisecond, Run: func(context.Context) (jobs.Result, error) {
+		once.Do(func() { close(started) })
+		<-release
+		return jobs.Result{}, nil
+	}}
+	r := start(t, path, serveOpts{job: &stuck, jobsWait: 50 * time.Millisecond})
+	defer close(release)
+	<-started
+	err := r.shutdown(t)
+	if err == nil || !strings.Contains(err.Error(), "database is left open") {
+		t.Fatalf("shutdown = %v, want the database left open for the running job\n%s", err, r.log)
+	}
+	if steps := r.steps(); !slices.Contains(steps, "stop jobs") || !slices.Contains(steps, "release lock") {
+		t.Errorf("steps = %v; the rest of shutdown should still run", steps)
 	}
 }
 

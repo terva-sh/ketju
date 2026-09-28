@@ -106,6 +106,12 @@ type serveOpts struct {
 	// idpClient reaches the identity providers; nil is http.DefaultClient. A
 	// test passes one that trusts its in-process IdP.
 	idpClient *http.Client
+
+	// job, when set, runs beside the background jobs, and jobsWait
+	// overrides how long shutdown waits for them (busDrain). A test uses
+	// them to hold a job past the wait.
+	job      *jobs.Job
+	jobsWait time.Duration
 }
 
 func runServe(args []string) error {
@@ -227,8 +233,21 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	if err != nil {
 		return fail("opening the database "+dbPath, err)
 	}
+	// jobsDone is the background jobs' Done, once they start. A job that
+	// outlasts its bounded stop still holds the database, so it is left
+	// open rather than closed under the job: nothing is lost, because
+	// SQLite replays the WAL at the next open (review 1158).
+	var jobsDone <-chan struct{}
 	closers = append(closers, func() error {
 		step("close database")
+		if jobsDone != nil {
+			select {
+			case <-jobsDone:
+			default:
+				return errors.New("serve: a background job is still running, so the database is left open " +
+					"rather than closed under it; SQLite replays its WAL at the next start")
+			}
+		}
 		return d.Close()
 	})
 	if err := d.Migrate(ctx); err != nil {
@@ -372,13 +391,22 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		}
 		return ""
 	}}
-	sched := jobs.New(log, jobs.SessionSweep(sessions), gc.Job())
+	background := []jobs.Job{jobs.SessionSweep(sessions), gc.Job()}
+	if o.job != nil {
+		background = append(background, *o.job)
+	}
+	jobsWait := busDrain
+	if o.jobsWait > 0 {
+		jobsWait = o.jobsWait
+	}
+	sched := jobs.New(log, background...)
 	if err := sched.Start(run); err != nil {
 		return fail("starting the background jobs", err)
 	}
+	jobsDone = sched.Done()
 	closers = append(closers, func() error {
 		step("stop jobs")
-		return sched.Stop(busDrain)
+		return sched.Stop(jobsWait)
 	})
 
 	step("listener")
