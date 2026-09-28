@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-28T09:15:28Z
+updated_at: 2026-09-28T09:18:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -102,6 +102,14 @@ PR #109 (branch run/c5y2s-sweeper-gc) was closed unmerged: healthz (PR #107) mer
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:15:28Z
 
 Review 1156 (run e7f5c1c8-7f24-47f1-838b-f6feb8822091, Actions run #625) on head 084c52bcec142bbe871e940ff0be14da5891bd22, base 21fa204c8f10ca65a4c2cc1601581ad34e7fdbcf: two findings, both accepted and fixed in code in c583b46. (1) high, blobgc.go:173: unlinking inside the transaction before commit could leave a row without bytes. Fixed: rename to <hash>.gc in the transaction, undo on a failed commit, remove after commit, and each pass settles leftovers. Tests: TestACommitThatFailsPutsTheBytesBack, TestAnInterruptedRemovalIsSettled. (2) medium, blobgc.go:110: a fixed oldest-10,000 window could starve later candidates. Fixed: keyset paging over (unreferenced_since, hash) until exhausted. Test: TestKeptCandidatesDoNotStarveLaterOnes. This supersedes the 'Pass bound: 10,000 candidates' line of the earlier gaps note.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:18:00Z
+
+Review 1157 (run ea46019e-cff0-4b8a-bca8-ae0d4582bf4c, Actions run #627) on head 9e143311e5c61397888f1d0355ec0db4c614ae43, base 21fa204c8f10ca65a4c2cc1601581ad34e7fdbcf. It marks both review 1156 findings resolved and raises one new medium finding (moderation.sql:96): the draft guard used case-sensitive instr, so an upper-case hash in a draft did not keep the blob. Accepted and fixed in code in c05f5c6: both the avatar and draft guards now compare with lower(), and the test covers upper-case references in both.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:18:04Z
+
+Correction to the previous note: the review 1157 fix is commit e0a8f90, not c05f5c6.
 
 ## Summary
 
