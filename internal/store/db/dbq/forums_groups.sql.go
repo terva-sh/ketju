@@ -278,11 +278,12 @@ func (q *Queries) ForumLastPosts(ctx context.Context, forumIds []int64) ([]Forum
 }
 
 const forumThreadCounts = `-- name: ForumThreadCounts :many
-SELECT forum_id, threads FROM forum_thread_counts
+SELECT forum_id, threads, live_posts FROM forum_thread_counts
 `
 
-// ForumThreadCounts is each forum's threads with a post (migration 0007's
-// table, kept by triggers). A forum with none has no row.
+// ForumThreadCounts is each forum's threads with a post and their posts that
+// are neither deleted nor moved (migrations 0007 and 0009, kept by triggers).
+// A forum with no thread that has a post has no row.
 func (q *Queries) ForumThreadCounts(ctx context.Context) ([]ForumThreadCount, error) {
 	rows, err := q.db.QueryContext(ctx, forumThreadCounts)
 	if err != nil {
@@ -292,7 +293,7 @@ func (q *Queries) ForumThreadCounts(ctx context.Context) ([]ForumThreadCount, er
 	var items []ForumThreadCount
 	for rows.Next() {
 		var i ForumThreadCount
-		if err := rows.Scan(&i.ForumID, &i.Threads); err != nil {
+		if err := rows.Scan(&i.ForumID, &i.Threads, &i.LivePosts); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

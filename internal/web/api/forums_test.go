@@ -226,6 +226,15 @@ func TestForumTreeCounts(t *testing.T) {
 	post(child, "bob")
 	last := w.threadIn("zeta", 9, "Latest anywhere")
 	lastAt := post(last, "carol")
+	// general holds eight posts. A deleted one is not in its total (docs/07,
+	// as a profile's post count leaves deleted posts out), and a restored
+	// one is back in it: one of each leaves seven.
+	w.append(behind, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["carol"]), Ordinal: 2,
+		Body: &threadlog.DeleteBody{}})
+	w.append(old, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["bob"]), Ordinal: 1,
+		Body: &threadlog.DeleteBody{}})
+	w.append(old, threadlog.Append{Type: threadlog.TypeRestore, Author: uint64(w.users["bob"]), Ordinal: 1,
+		Body: &threadlog.RestoreBody{}})
 
 	tree, _ := w.tree("alice")
 	byslug := map[string]dto.Forum{}
@@ -235,10 +244,11 @@ func TestForumTreeCounts(t *testing.T) {
 			byslug[c.Slug] = c
 		}
 	}
-	for slug, want := range map[string][2]int{"general": {6, 2}, "g-b": {1, 1}, "zeta": {1, 1}, "alpha": {0, 0}} {
+	for slug, want := range map[string][3]int{"general": {6, 2, 7}, "g-b": {1, 1, 1}, "zeta": {1, 1, 1}, "alpha": {0, 0, 0}} {
 		f := byslug[slug]
-		if f.ThreadCount != want[0] || f.Unread != want[1] {
-			t.Errorf("%s: thread_count %d unread %d, want %d and %d", slug, f.ThreadCount, f.Unread, want[0], want[1])
+		if f.ThreadCount != want[0] || f.Unread != want[1] || f.PostCount != want[2] {
+			t.Errorf("%s: thread_count %d unread %d post_count %d, want %d, %d and %d", slug,
+				f.ThreadCount, f.Unread, f.PostCount, want[0], want[1], want[2])
 		}
 	}
 	// A child's last post is its own, as a root's is.

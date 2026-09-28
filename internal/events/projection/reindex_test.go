@@ -43,7 +43,8 @@ func TestReindexRebuildsFromEmptyAndStale(t *testing.T) {
 			f.exec(`UPDATE post_meta SET deleted = 1 - deleted, reply_to = 77`)
 			f.exec(`INSERT INTO thread_tags (thread_id, tag) VALUES (1, 'orphan')`)
 			f.exec(`INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (1, 999, 0)`)
-			f.exec(`UPDATE forum_thread_counts SET threads = threads + 5`)
+			f.exec(`UPDATE forum_thread_counts SET threads = threads + 5, live_posts = live_posts + 7`)
+			f.exec(`UPDATE threads SET live_post_count = live_post_count + 3`)
 		}},
 		{"empty", f.clear},
 	} {

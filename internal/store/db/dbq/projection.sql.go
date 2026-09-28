@@ -101,7 +101,7 @@ func (q *Queries) GetProjectionState(ctx context.Context, threadID int64) (Proje
 }
 
 const getThread = `-- name: GetThread :one
-SELECT id, forum_id, slug, title, author_id, created_at, post_count, last_post_at, last_post_author_id, last_post_ordinal, locked, pinned_scope, pinned_until, archived, log_length_projected FROM threads WHERE id = ?
+SELECT id, forum_id, slug, title, author_id, created_at, post_count, last_post_at, last_post_author_id, last_post_ordinal, locked, pinned_scope, pinned_until, archived, log_length_projected, live_post_count FROM threads WHERE id = ?
 `
 
 func (q *Queries) GetThread(ctx context.Context, id int64) (Thread, error) {
@@ -123,6 +123,7 @@ func (q *Queries) GetThread(ctx context.Context, id int64) (Thread, error) {
 		&i.PinnedUntil,
 		&i.Archived,
 		&i.LogLengthProjected,
+		&i.LivePostCount,
 	)
 	return i, err
 }

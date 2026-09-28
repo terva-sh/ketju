@@ -321,8 +321,16 @@ whose schema carries the PROJECTION marker (TKT-01M29BYYJ8).
 id, forum_id, slug, title, author_id, created_at,
 post_count, last_post_at, last_post_author_id, last_post_ordinal,
 locked, pinned_scope, pinned_until, archived,
-log_length_projected      -- how far into the log this row reflects
+log_length_projected,     -- how far into the log this row reflects
+live_post_count           -- post_meta rows neither deleted nor moved
 ```
+
+`post_count` is the latest ordinal, so it counts deleted and moved posts.
+`live_post_count` counts the thread's `post_meta` rows with `deleted = 0`
+and `moved = 0`, and triggers on `post_meta` keep it (migration 0009,
+TKT-01M3B6A68B). A thread row inserted after its `post_meta` rows counts
+them, so the column is a count of `post_meta` whatever order the rows arrive
+in, and the projection writer never sets it.
 
 `INDEX (forum_id, last_post_at, last_post_ordinal)` answers, per forum, the
 threads with a post after a moment by a seek rather than a scan: GET /me's
@@ -332,6 +340,7 @@ TKT-01M29CA99R).
 ### forum_thread_counts
 ```
 forum_id (pk), threads     -- threads in the forum with at least one post
+live_posts                 -- live_post_count summed over those threads
 ```
 GET /me's unread count for a reader who has never used "mark all read" is
 every thread with a post, per forum, and the shell asks on every page load.
@@ -340,6 +349,12 @@ maintain it rather than the projection writer, so every path that changes
 `threads`, reindex's clear included, keeps it right; a forum with no such
 thread has no row. Reindex also clears it by name, so a count that had
 drifted does not survive one.
+
+`live_posts` is GET /forums's post total (migration 0009). It moves with
+its thread: the same triggers take a thread's `live_post_count` out of the
+forum it leaves and into the one it joins, and follow every change to it.
+It is not named `posts` because that word names a per-post table to the
+test that keeps the forum index's queries from scanning one.
 
 ### thread_tags
 ```

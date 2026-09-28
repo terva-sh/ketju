@@ -351,7 +351,12 @@ func (f *fixture) agreesWithIndex(id threadid.ID) {
 		deleted                                    bool
 	}
 	var rows []row
+	var live int64
 	err := f.db.Read(f.t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		if err := tx.QueryRowContext(f.t.Context(), `SELECT live_post_count FROM threads WHERE id = ?`,
+			int64(id)).Scan(&live); err != nil {
+			return err
+		}
 		rs, err := tx.QueryContext(f.t.Context(), `SELECT ordinal, author_id, created_at, current_revision,
 			log_offset, reply_to, deleted FROM post_meta WHERE thread_id = ? ORDER BY ordinal`, int64(id))
 		if err != nil {
@@ -374,6 +379,9 @@ func (f *fixture) agreesWithIndex(id threadid.ID) {
 		if th.Index.Len() != len(rows) {
 			f.t.Errorf("the index holds %d posts and post_meta %d", th.Index.Len(), len(rows))
 		}
+		// The forum index's post total sums this column, and counts the
+		// posts a reader sees as themselves (TKT-01M3B6A68B).
+		var visible int64
 		for _, r := range rows {
 			e, err := th.Index.Entry(uint32(r.ordinal))
 			if err != nil {
@@ -386,6 +394,12 @@ func (f *fixture) agreesWithIndex(id threadid.ID) {
 			if r != want {
 				f.t.Errorf("ordinal %d: post_meta %+v, index %+v", r.ordinal, r, want)
 			}
+			if e.Flags.Visible() {
+				visible++
+			}
+		}
+		if live != visible {
+			f.t.Errorf("threads.live_post_count is %d and the index shows %d posts", live, visible)
 		}
 		return nil
 	})

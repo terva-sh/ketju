@@ -111,8 +111,9 @@ type Querier interface {
 	// threads_forum_activity rather than a scan. A forum with no thread that has
 	// a post has no row.
 	ForumLastPosts(ctx context.Context, forumIds []int64) ([]ForumLastPostsRow, error)
-	// ForumThreadCounts is each forum's threads with a post (migration 0007's
-	// table, kept by triggers). A forum with none has no row.
+	// ForumThreadCounts is each forum's threads with a post and their posts that
+	// are neither deleted nor moved (migrations 0007 and 0009, kept by triggers).
+	// A forum with no thread that has a post has no row.
 	ForumThreadCounts(ctx context.Context) ([]ForumThreadCount, error)
 	// ForumUnread is the forum index's unread column (GET /forums,
 	// TKT-01M29CA9A5): per forum, the viewer's threads with an unread post. It

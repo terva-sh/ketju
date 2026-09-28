@@ -209,6 +209,7 @@ func forumTree(class string) ForumTree {
 		Visibility:  "public",
 		Archived:    false,
 		ThreadCount: 418,
+		PostCount:   9637,
 		LastPost: &ForumLastPost{
 			Thread: ThreadLink{ID: "3yymw47g00001", Slug: "naming-the-monthly-threads",
 				Title: "Naming the monthly threads"},
@@ -231,6 +232,7 @@ func forumTree(class string) ForumTree {
 		Visibility:  "public",
 		Archived:    true,
 		ThreadCount: 1204,
+		PostCount:   31980,
 		LastPost: &ForumLastPost{
 			Thread: ThreadLink{ID: "3yymw47g00007", Slug: "year-end-wrap-up", Title: "Year-end wrap-up"},
 			Author: bob,
@@ -247,6 +249,7 @@ func forumTree(class string) ForumTree {
 			Visibility:  "members",
 			Archived:    false,
 			ThreadCount: 96,
+			PostCount:   1130,
 			Unread:      2,
 			LastPost: &ForumLastPost{
 				Thread: ThreadLink{ID: "3yymw47g00009", Slug: "what-are-you-reading", Title: "What are you reading?"},

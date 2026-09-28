@@ -106,6 +106,16 @@ describe('rows', () => {
     expect(rowOf(root, 'archive-2024')!.querySelector('.forum-archived')).not.toBeNull();
   });
 
+  it('show each forum its thread and post totals, as the mockup does', async () => {
+    const tree = structuredClone(memberTree) as ForumTree;
+    tree.forums[1].thread_count = 1;
+    tree.forums[1].post_count = 1;
+    const root = await index(tree, memberMe);
+    expect(rowOf(root, 'general')!.querySelector('.forum-activity')?.textContent).toBe('418 threads9637 posts');
+    expect(rowOf(root, 'general-events')!.querySelector('.forum-posts')?.textContent).toBe('0 posts');
+    expect(rowOf(root, 'archive-2024')!.querySelector('.forum-activity')?.textContent).toBe('1 thread1 post');
+  });
+
   it('keep the server order: a root with children is a labelled group, itself first', () => {
     const got = groups(memberTree.forums as ForumTree['forums']).map((g) => [g.label ?? '', g.rows.map((f) => f.slug)]);
     expect(got).toEqual([

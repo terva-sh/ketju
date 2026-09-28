@@ -136,6 +136,7 @@ export interface Forum {
   visibility: string;
   archived: boolean;
   thread_count: number;
+  post_count: number;
   unread: number;
   last_post: ForumLastPost | null;
   children: Forum[];

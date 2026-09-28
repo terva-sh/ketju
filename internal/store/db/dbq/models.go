@@ -72,8 +72,9 @@ type Forum struct {
 }
 
 type ForumThreadCount struct {
-	ForumID int64
-	Threads int64
+	ForumID   int64
+	Threads   int64
+	LivePosts int64
 }
 
 type Group struct {
@@ -209,6 +210,7 @@ type Thread struct {
 	PinnedUntil        sql.NullInt64
 	Archived           int64
 	LogLengthProjected int64
+	LivePostCount      int64
 }
 
 type ThreadTag struct {

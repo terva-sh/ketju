@@ -152,7 +152,12 @@ function ForumRow({ forum: f, signedIn }: { forum: Forum; signedIn: boolean }) {
         {f.description && <p class="forum-desc">{f.description}</p>}
       </div>
       <div class="forum-activity">
-        {f.thread_count} thread{f.thread_count === 1 ? '' : 's'}
+        <span>
+          {f.thread_count} thread{f.thread_count === 1 ? '' : 's'}
+        </span>
+        <span class="forum-posts" data-posts={f.post_count}>
+          {f.post_count} post{f.post_count === 1 ? '' : 's'}
+        </span>
       </div>
       {signedIn && (
         <div class="forum-unread">

@@ -292,6 +292,10 @@ type Forum struct {
 	// ThreadCount is the forum's threads with a post, not including
 	// children's.
 	ThreadCount int `json:"thread_count"`
+	// PostCount is the posts in those threads that are neither deleted nor
+	// moved, the rule a profile's post count follows (docs/07), not
+	// including children's.
+	PostCount int `json:"post_count"`
 	// Unread is this forum's own count of threads with an unread post, not
 	// including children, so a client can show both a branch total and a
 	// leaf count without double counting.

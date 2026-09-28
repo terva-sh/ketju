@@ -22,8 +22,8 @@ type Service struct {
 }
 
 // Tree is GET /forums (docs/07): the forums v may read, roots in position
-// order with their children under them, each with its thread count, v's
-// unread count and its latest activity.
+// order with their children under them, each with its thread and post
+// counts, v's unread count and its latest activity.
 //
 // A forum v cannot read is absent, not flagged: in a small community a list
 // of forum names is itself information (TKT-01M29CA9A5). Its children go
@@ -33,7 +33,8 @@ type Service struct {
 //
 // The statements are fixed, however many forums there are: the forum rows,
 // one perm batch (none when perm's cache already knows), then in one read
-// the thread counts, v's unread counts, the last posts and their authors.
+// the thread and post counts, v's unread counts, the last posts and their
+// authors.
 func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, error) {
 	var rows []dbq.Forum
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
@@ -99,9 +100,10 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 		return dto.ForumTree{}, err
 	}
 
-	threads := map[int64]int{}
+	threads, posts := map[int64]int{}, map[int64]int{}
 	for _, c := range counts {
 		threads[c.ForumID] = int(c.Threads)
+		posts[c.ForumID] = int(c.LivePosts)
 	}
 	unreadBy := map[int64]int{}
 	for _, u := range unread {
@@ -132,6 +134,7 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 			Visibility:  f.Visibility,
 			Archived:    f.Archived != 0,
 			ThreadCount: threads[f.ID],
+			PostCount:   posts[f.ID],
 			Unread:      unreadBy[f.ID],
 			LastPost:    lastBy[f.ID],
 			Children:    []dto.Forum{},
