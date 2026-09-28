@@ -946,3 +946,161 @@ func TestCatchUpWaitsForRetry(t *testing.T) {
 		t.Error("a catch-up ran to completion inside a retry")
 	}
 }
+
+// interruptAt is a Recover that cancels the sweep from inside the open of
+// thread at, as a live sweep's context ends when the bus stops, after
+// running during; every other thread opens through inner.
+func interruptAt(inner Recover, at threadid.ID, cancel context.CancelFunc, during func()) Recover {
+	return func(ctx context.Context, id threadid.ID) (int64, error) {
+		if id != at {
+			return inner(ctx, id)
+		}
+		if during != nil {
+			during()
+		}
+		cancel()
+		return 0, ctx.Err()
+	}
+}
+
+// A live sweep interrupted after it has found a held thread corrupt returns
+// with that thread quarantined, not dropped from the behind set and left
+// out of the quarantine too, which would serve a projection longer than its
+// log (review 468). The quarantine is also visible to another goroutine
+// while the sweep is still running, as /healthz and the blob collector read
+// it.
+func TestInterruptedSweepKeepsTheQuarantine(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	cut, _ := f.thread("Cut")
+	kept := f.post(cut, 5, 0)
+	end := f.post(cut, 5, 0)
+	f.project(cut, end)
+	gap, created := f.thread("Gap")
+	f.project(gap, created)
+	f.post(gap, 5, 0)
+	after, afterEnd := f.thread("After")
+	f.project(after, afterEnd)
+	if !(cut < gap && gap < after) {
+		t.Fatal("the setup relies on the scan meeting cut, gap and after in that order")
+	}
+	c := f.restart()
+	tear(t, f.root, cut)
+
+	// The first sweep cannot open anything, so both gaps are held.
+	reopen, ok := flaky(c)
+	if _, err := f.w.CatchUp(t.Context(), reopen); err != nil {
+		t.Fatal(err)
+	}
+	if l := f.w.Lag(); l.Threads != 2 {
+		t.Fatalf("lag = %+v, want cut and gap held", l)
+	}
+	ok.Store(true)
+	if err := os.Truncate(cut.LogPath(f.root), kept); err != nil {
+		t.Fatal(err)
+	}
+
+	// The second is cancelled inside gap's open, after cut was found short
+	// and before after is reached. From another goroutine, mid-sweep, the
+	// quarantine already names cut.
+	var seen, count atomic.Int64
+	during := func() {
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			if f.w.Quarantined(cut) {
+				seen.Store(1)
+			}
+			count.Store(int64(f.w.QuarantinedCount()))
+		}()
+		<-done
+	}
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	_, err := f.w.CatchUp(ctx, interruptAt(reopen, gap, cancel, during))
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("an interrupted sweep returned %v", err)
+	}
+	if seen.Load() != 1 || count.Load() != 1 {
+		t.Errorf("mid-sweep: Quarantined(cut) %t, QuarantinedCount %d; want true, 1", seen.Load() == 1, count.Load())
+	}
+
+	if !f.w.Quarantined(cut) {
+		t.Error("an interrupted sweep returned with the corrupt thread it found not quarantined")
+	}
+	if n := f.w.QuarantinedCount(); n != 1 {
+		t.Errorf("QuarantinedCount = %d, want 1", n)
+	}
+	f.w.mu.Lock()
+	_, cutHeld := f.w.behind[cut]
+	_, gapHeld := f.w.behind[gap]
+	f.w.mu.Unlock()
+	if cutHeld || !gapHeld {
+		t.Errorf("behind: cut %t, gap %t; want only gap, whose open was interrupted", cutHeld, gapHeld)
+	}
+	if l := f.w.Lag(); l.Threads != 1 {
+		t.Errorf("lag = %+v; a quarantined thread is not behind", l)
+	}
+	if got := f.projected()[cut]; got != end {
+		t.Errorf("projection moved to %d from %d", got, end)
+	}
+}
+
+// Only a sweep that finishes may replace the quarantine. One interrupted
+// after passing a repaired thread leaves it quarantined, because it has not
+// looked at every thread; the next that finishes lets it out.
+func TestInterruptedSweepDoesNotReleaseTheQuarantine(t *testing.T) {
+	f := newFixture(t)
+	f.logs()
+	fixed, _ := f.thread("Fixed")
+	kept := f.post(fixed, 5, 0)
+	end := f.post(fixed, 5, 0)
+	f.project(fixed, end)
+	gap, created := f.thread("Gap")
+	f.project(gap, created)
+	f.post(gap, 5, 0)
+	after, afterEnd := f.thread("After")
+	f.project(after, afterEnd)
+	if !(fixed < gap && gap < after) {
+		t.Fatal("the setup relies on the scan meeting fixed, gap and after in that order")
+	}
+	c := f.restart()
+	if err := os.Truncate(fixed.LogPath(f.root), kept); err != nil {
+		t.Fatal(err)
+	}
+
+	var calls atomic.Int64
+	inner := reopenWith(c, &calls)
+	// Found corrupt by a sweep interrupted at gap: quarantined.
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	if _, err := f.w.CatchUp(ctx, interruptAt(inner, gap, cancel, nil)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("an interrupted sweep returned %v", err)
+	}
+	if !f.w.Quarantined(fixed) {
+		t.Fatal("not quarantined")
+	}
+
+	// An operator repairs it: the projection is brought back to the log.
+	f.exec(`UPDATE projection_state SET log_length = ? WHERE thread_id = ?`, kept, int64(fixed))
+
+	// A sweep interrupted after passing it lets nothing out.
+	ctx2, cancel2 := context.WithCancel(t.Context())
+	defer cancel2()
+	if _, err := f.w.CatchUp(ctx2, interruptAt(inner, gap, cancel2, nil)); !errors.Is(err, context.Canceled) {
+		t.Fatalf("an interrupted sweep returned %v", err)
+	}
+	if !f.w.Quarantined(fixed) {
+		t.Error("an interrupted sweep released a thread from quarantine")
+	}
+
+	// A sweep that finishes does.
+	rep, err := f.w.CatchUp(t.Context(), inner)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Corrupt) != 0 || f.w.Quarantined(fixed) || f.w.QuarantinedCount() != 0 {
+		t.Errorf("after a complete sweep: corrupt %v, Quarantined(fixed) %t, count %d",
+			rep.Corrupt, f.w.Quarantined(fixed), f.w.QuarantinedCount())
+	}
+}

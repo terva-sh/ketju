@@ -88,8 +88,9 @@ type Writer struct {
 	mu     sync.Mutex
 	behind map[threadid.ID]*lag
 
-	// quarantined is the set the last CatchUp found corrupt, and last is
-	// its report. reopen is the Recover that CatchUp was last given, which
+	// quarantined is the set the last complete CatchUp found corrupt, with
+	// every thread a sweep or Retry has found corrupt since, and last is the
+	// last complete CatchUp's report. reopen is the Recover that CatchUp was last given, which
 	// Retry opens held threads through.
 	quarantined map[threadid.ID]bool
 	last        *Report

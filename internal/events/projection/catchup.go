@@ -73,8 +73,10 @@ type Report struct {
 // A log shorter than its projection cannot come from a crash, because the
 // projection is written after the log, so it is corruption. It is logged at
 // error level and quarantined, and the rest keep serving; nothing about it
-// is rewritten. A catch-up replaces the quarantine with what it found, so a
-// thread an operator repaired leaves it at the next.
+// is rewritten. Each is quarantined as soon as it is found, so a sweep that
+// stops partway leaves it quarantined. A catch-up that finishes replaces the
+// quarantine with what it found, so a thread an operator repaired leaves it
+// at the next complete one; an interrupted one lets nothing out.
 //
 // Each thread's gap is closed in its own transaction. A process that dies
 // partway leaves every finished thread consistent and every other one still
@@ -117,10 +119,19 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 	w.reopen = reopen
 	w.mu.Unlock()
 
+	// Each thread found corrupt is published to the quarantine as it is
+	// found, in the same critical section that drops it from the behind set,
+	// so a reader never sees it in neither. A sweep interrupted after this
+	// point returns with the thread still quarantined, not served from a
+	// projection longer than its log (review 468).
 	corrupt := map[threadid.ID]bool{}
 	quarantine := func(id threadid.ID, logLength, at int64) {
 		corrupt[id] = true
 		w.mu.Lock()
+		if w.quarantined == nil {
+			w.quarantined = map[threadid.ID]bool{}
+		}
+		w.quarantined[id] = true
 		w.drop(id)
 		w.mu.Unlock()
 		w.logCorrupt(id, logLength, at)
@@ -198,6 +209,10 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 	}
 	slices.Sort(rep.Corrupt)
 	rep.Elapsed = time.Since(start)
+	// Only a scan that looked at every thread may replace the quarantine,
+	// which is how a repaired thread leaves it. An interrupted one returned
+	// above and left the set as the last complete scan and this one's finds
+	// made it.
 	w.mu.Lock()
 	w.quarantined = corrupt
 	w.last = &rep
@@ -231,8 +246,8 @@ func (w *Writer) quarantine(id threadid.ID, logLength, at int64) {
 	w.logCorrupt(id, logLength, at)
 }
 
-// Quarantined reports whether the last catch-up found thread id's log
-// shorter than its projection. Such a thread is served as 503 until an
+// Quarantined reports whether thread id's log was found shorter than its
+// projection by the last complete catch-up, or by any sweep or retry since. Such a thread is served as 503 until an
 // operator repairs it (docs/03).
 func (w *Writer) Quarantined(id threadid.ID) bool {
 	w.mu.Lock()
