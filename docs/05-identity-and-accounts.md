@@ -22,7 +22,9 @@
     is not already an admin, so a member who existed before the config named
     them is promoted at their next sign-in. The promotion is written to
     `audit_log` as `user.promoted`, and that row makes it happen once: a
-    bootstrap admin who is later demoted stays demoted at later sign-ins.
+    bootstrap admin who is later demoted stays demoted at later sign-ins. A
+    matching user who is already an admin with no such row gets one, marked
+    `"already": "admin"`, for the same reason.
   - `ketju admin promote [--root DIR] <handle>` needs only the data
     directory, as `ketju fsck` does. It writes the same audit row with no
     actor, and may run while `serve` does.

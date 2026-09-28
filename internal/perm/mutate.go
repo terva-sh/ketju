@@ -127,14 +127,23 @@ type Promotion struct {
 	// Once leaves alone a user audit_log already records as promoted,
 	// whatever their role is now. Bootstrap sets it, so that an admin who
 	// was demoted since is not made admin again at their next sign-in
-	// (TKT-01M29C800G).
+	// (TKT-01M29C800G). A user already an admin with no promotion on
+	// record gets one, with "already": "admin" in its details, and keeps
+	// their role, so the same holds for them.
 	Once bool
 }
 
 // Promote makes userID an admin and records it in audit_log, in one
-// transaction, then clears the cache. It reports whether it changed
-// anything: a user who is already an admin, or with Once one promoted
-// before, is left alone and nothing is recorded.
+// transaction, then clears the cache. It reports whether it changed the
+// role: a user who is already an admin, or with Once one promoted before,
+// keeps their role, and without Once nothing is recorded for them.
+//
+// Clearing the cache reaches only evaluators in this process. That is
+// enough for a promotion made elsewhere, such as by ketju admin promote
+// beside a running server: a Viewer is built from the users row on every
+// request, the role is part of the cache key, and an admin passes every
+// check before the cache is read, so the promoted user's next request
+// meets no stale entry (TestPromoteFromAnotherProcess).
 func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (bool, error) {
 	details := map[string]string{}
 	for k, v := range p.Details {
@@ -155,21 +164,37 @@ func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (boo
 		if err != nil {
 			return err
 		}
-		if u.Role == domain.RoleAdmin {
-			return nil
+		audit := func(details []byte) error {
+			_, err := q.AppendAudit(ctx, dbq.AppendAuditParams{At: now,
+				ActorID: sql.NullInt64{Int64: p.Actor, Valid: p.Actor != 0}, Action: ActionPromoted,
+				TargetType: "user", TargetID: target, DetailsJson: string(details)})
+			return err
 		}
 		if p.Once {
 			seen, err := q.AuditExists(ctx, dbq.AuditExistsParams{TargetType: "user", TargetID: target, Action: ActionPromoted})
 			if err != nil || seen {
 				return err
 			}
+			// Already an admin with no promotion on record (created as
+			// one): the role is left alone, but the promotion this would
+			// have been is recorded, so that once demoted they are not
+			// made admin again (review 1128).
+			if u.Role == domain.RoleAdmin {
+				details["already"] = domain.RoleAdmin
+				dj, err := json.Marshal(details)
+				if err != nil {
+					return err
+				}
+				return audit(dj)
+			}
+		}
+		if u.Role == domain.RoleAdmin {
+			return nil
 		}
 		if err := q.SetUserRole(ctx, dbq.SetUserRoleParams{Role: domain.RoleAdmin, UpdatedAt: now, ID: userID}); err != nil {
 			return err
 		}
-		if _, err := q.AppendAudit(ctx, dbq.AppendAuditParams{At: now,
-			ActorID: sql.NullInt64{Int64: p.Actor, Valid: p.Actor != 0}, Action: ActionPromoted,
-			TargetType: "user", TargetID: target, DetailsJson: string(dj)}); err != nil {
+		if err := audit(dj); err != nil {
 			return err
 		}
 		promoted = true

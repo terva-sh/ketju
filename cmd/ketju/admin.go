@@ -120,6 +120,10 @@ func adminPromote(ctx context.Context, out, errOut io.Writer, args []string) err
 		return fmt.Errorf("admin promote: looking up %q: %w", handle, err)
 	}
 
+	// This evaluator's cache is not a running server's, and clearing it
+	// cannot reach one. It does not have to: the server builds each request's
+	// Viewer from the users row, and an admin passes before its cache is
+	// read (perm.Evaluator.Promote, TestPromoteFromAnotherProcess).
 	promoted, err := perm.New(d).Promote(ctx, u.ID, perm.Promotion{Details: map[string]string{"via": "cli"}})
 	if err != nil {
 		return fmt.Errorf("admin promote: %w", err)

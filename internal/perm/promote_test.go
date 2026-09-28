@@ -8,8 +8,71 @@ import (
 	"testing"
 
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
+
+// Review 1128: an admin with no promotion on record whom bootstrap matches
+// gets the record, so once demoted they stay demoted at the next match.
+func TestPromoteOnceRecordsAnExistingAdmin(t *testing.T) {
+	f := newFixture(t)
+	v := f.viewer(domain.RoleAdmin)
+	once := Promotion{Once: true, Details: map[string]string{"via": "bootstrap"}}
+	if got, err := f.ev.Promote(t.Context(), v.UserID, once); err != nil || got {
+		t.Fatalf("Promote = %v, %v; want no change", got, err)
+	}
+	rows := f.promotions(v.UserID)
+	if len(rows) != 1 || rows[0].details["already"] != domain.RoleAdmin || rows[0].details["via"] != "bootstrap" {
+		t.Fatalf("audit rows %+v, want one marked already admin", rows)
+	}
+	if err := f.ev.SetRole(t.Context(), v.UserID, domain.RoleMember); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := f.ev.Promote(t.Context(), v.UserID, once); err != nil || got {
+		t.Fatalf("after the demotion, Promote = %v, %v; want no change", got, err)
+	}
+	if r := f.role(v.UserID); r != domain.RoleMember {
+		t.Errorf("role %s after the demotion and a second match, want member", r)
+	}
+	if n := len(f.promotions(v.UserID)); n != 1 {
+		t.Errorf("%d audit rows, want 1", n)
+	}
+}
+
+// Review 1128: a promotion made by another process, as ketju admin promote
+// beside a running server is, cannot clear the server's cache, and need
+// not. The server's evaluator here sits on its own database handle and so
+// its own generation counter, as a separate process would, and holds a
+// cached decision for the member. The member's next request builds its
+// Viewer from the users row, as the session middleware does, and gets the
+// admin answer.
+func TestPromoteFromAnotherProcess(t *testing.T) {
+	f := newFixture(t)
+	forum := f.forum(domain.VisibilityPublic)
+	v := f.viewer(domain.RoleMember)
+	if d := f.check(v, forum, domain.PermModerate); d != Deny {
+		t.Fatalf("before: %v", d)
+	}
+
+	other, err := db.Open(t.Context(), db.Options{Path: f.path})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer other.Close()
+	gen := f.ev.gen.Load()
+	if _, err := New(other).Promote(t.Context(), v.UserID, Promotion{}); err != nil {
+		t.Fatal(err)
+	}
+	if f.ev.gen.Load() != gen {
+		t.Fatal("the other handle shares the server's generation; this test no longer models another process")
+	}
+
+	next := v
+	next.Role = f.role(v.UserID)
+	if d := f.check(next, forum, domain.PermModerate); d != Allow {
+		t.Errorf("the promoted member's next request: %v, want allow", d)
+	}
+}
 
 type auditRow struct {
 	actor   sql.NullInt64
@@ -76,7 +139,7 @@ func TestPromote(t *testing.T) {
 		{name: "member, once", role: domain.RoleMember, once: true, want: true, rows: 1, after: domain.RoleAdmin},
 		{name: "moderator", role: domain.RoleModerator, want: true, rows: 1, after: domain.RoleAdmin},
 		{name: "already admin", role: domain.RoleAdmin, want: false, rows: 0, after: domain.RoleAdmin},
-		{name: "already admin, once", role: domain.RoleAdmin, once: true, want: false, rows: 0, after: domain.RoleAdmin},
+		{name: "already admin, once", role: domain.RoleAdmin, once: true, want: false, rows: 1, after: domain.RoleAdmin},
 		{name: "demoted, once", role: domain.RoleMember, demoted: true, once: true, want: false, rows: 1, after: domain.RoleMember},
 		{name: "demoted, by hand", role: domain.RoleMember, demoted: true, want: true, rows: 2, after: domain.RoleAdmin},
 	}

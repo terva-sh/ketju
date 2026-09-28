@@ -19,6 +19,7 @@ import (
 type fixture struct {
 	t     testing.TB
 	db    *db.DB
+	path  string // the database file, for a second handle on it
 	ev    *Evaluator
 	clock *fakeClock
 	n     int
@@ -51,7 +52,8 @@ func newFixture(t testing.TB) *fixture {
 // newFixtureWith is newFixture with SQLite's statement trace going to trace.
 func newFixtureWith(t testing.TB, trace func(string)) *fixture {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db"), Trace: trace})
+	path := filepath.Join(t.TempDir(), "db", "ketju.db")
+	d, err := db.Open(t.Context(), db.Options{Path: path, Trace: trace})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -59,7 +61,7 @@ func newFixtureWith(t testing.TB, trace func(string)) *fixture {
 	if err := d.Migrate(t.Context()); err != nil {
 		t.Fatal(err)
 	}
-	f := &fixture{t: t, db: d, clock: &fakeClock{t: time.UnixMilli(1_790_000_000_000)}}
+	f := &fixture{t: t, db: d, path: path, clock: &fakeClock{t: time.UnixMilli(1_790_000_000_000)}}
 	f.exec("DELETE FROM permissions")
 	f.ev = New(d)
 	f.ev.now = f.clock.now
