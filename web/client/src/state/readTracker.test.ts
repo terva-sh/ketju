@@ -158,22 +158,48 @@ describe('what counts as read', () => {
     stop();
   });
 
-  // Review 1143: a tall post can fall below the half-screen line between two
-  // of the observer's thresholds, with no report.
+  // Reviews 1143 and 1144: a tall post can cross the half-screen line
+  // between two of the observer's thresholds, with no report.
+  const tall = innerHeight * 4;
+  const over = innerHeight / 2 + 20;
+  const under = innerHeight / 2 - 20;
+  const scrolled = () => dispatchEvent(new Event('scroll'));
+
   it('does not count a tall post that left the line without the observer saying so', async () => {
     const stop = trackPosts('t1', list(10), 0);
-    io().show(post(4), innerHeight / 2 + 20, innerHeight * 4);
+    io().show(post(4), over, tall);
     vi.advanceTimersByTime(dwellMs / 2);
-    place(post(4), innerHeight / 2 - 20, innerHeight * 4);
+    // Moved by the layout, not a scroll: measured when the second is up.
+    place(post(4), under, tall);
     vi.advanceTimersByTime(dwellMs / 2);
     await flush();
     expect(puts()).toEqual([]);
-    // Back over the line, still unreported: a full second more counts it.
-    place(post(4), innerHeight / 2 + 20, innerHeight * 4);
+    // Scrolled back over the line: a full second from then counts it.
+    place(post(4), over, tall);
+    scrolled();
     vi.advanceTimersByTime(dwellMs - 1);
     await flush();
     expect(puts()).toEqual([]);
     vi.advanceTimersByTime(1);
+    await flush();
+    expect(puts().map((s) => s.body)).toEqual([{ ordinal: 4 }]);
+    stop();
+  });
+
+  it('starts the second over when a tall post dips below the line and back', async () => {
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(4), over, tall);
+    vi.advanceTimersByTime(300);
+    place(post(4), under, tall);
+    scrolled();
+    vi.advanceTimersByTime(100);
+    place(post(4), over, tall);
+    scrolled();
+    // A second from the start, but not an unbroken one.
+    vi.advanceTimersByTime(dwellMs - 400);
+    await flush();
+    expect(puts()).toEqual([]);
+    vi.advanceTimersByTime(400);
     await flush();
     expect(puts().map((s) => s.body)).toEqual([{ ordinal: 4 }]);
     stop();
@@ -456,10 +482,11 @@ describe('markUnread', () => {
     stop();
   });
 
-  it('waits for a PUT an overlapping markUnread sent before its own DELETE', async () => {
+  // Review 1144: two marks of one thread run in call order, so the later
+  // one's DELETE is the one that lands last.
+  it('runs overlapping marks one at a time, in call order', async () => {
     const releases: (() => void)[] = [];
-    answer = (s) =>
-      new Promise((r) => releases.push(() => r(stored(s.method === 'DELETE' ? 2 : s.body!.ordinal!))));
+    answer = (s) => new Promise((r) => releases.push(() => r(stored(s.body!.ordinal!))));
     const stop = trackPosts('t1', list(10), 0);
     io().show(post(4), 200);
     vi.advanceTimersByTime(dwellMs);
@@ -469,20 +496,19 @@ describe('markUnread', () => {
     vi.advanceTimersByTime(dwellMs);
     const second = markUnread('t1', 3);
     await drain();
-    expect(sent.map((s) => [s.method, s.body])).toEqual([
-      ['PUT', { ordinal: 4 }],
-      ['PUT', { ordinal: 7 }],
-    ]);
-    // The first PUT answers; the second is still out, so no DELETE yet.
+    expect(sent.map((s) => [s.method, s.body])).toEqual([['PUT', { ordinal: 4 }]]);
     releases.shift()!();
     await drain();
-    expect(sent).toHaveLength(2);
+    // The first DELETE is out; the second waits for its answer.
+    expect(sent.slice(1).map((s) => [s.method, s.body])).toEqual([['DELETE', { ordinal: 2 }]]);
     releases.shift()!();
+    expect(await first).toEqual({ last_read_ordinal: 2 });
     await drain();
-    expect(sent.slice(2).map((s) => s.method)).toEqual(['DELETE', 'DELETE']);
+    expect(sent.slice(2).map((s) => [s.method, s.body])).toEqual([['DELETE', { ordinal: 3 }]]);
     releases.shift()!();
-    releases.shift()!();
-    await Promise.all([first, second]);
+    expect(await second).toEqual({ last_read_ordinal: 3 });
+    // Post 7 was read before either mark went out: what they undo.
+    expect(sent).toHaveLength(3);
     stop();
   });
 

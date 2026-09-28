@@ -42,6 +42,8 @@ const inFlight = new Map<string, Set<Promise<void>>>();
 // until it answers (docs/07 "Mark-unread then a late beacon"). It counts
 // them, since two can overlap.
 const held = new Map<string, number>();
+// marks is the newest markUnread per thread, which the next one waits for.
+const marks = new Map<string, Promise<unknown>>();
 
 export const readUrl = (id: string) => `/api/v1/threads/${encodeURIComponent(id)}/read`;
 
@@ -113,29 +115,42 @@ export function flush(): Promise<void> {
 // ordinal unread, or the whole thread with none, and answers the position
 // stored after it. A beacon sent before the DELETE and landing after it
 // would move the position forward again (docs/07). So the thread is held
-// first, and nothing more is sent for it until the DELETE has answered; then
-// its pending position goes out, and every PUT for it is waited for, until
-// none is left, before the DELETE is sent.
-export async function markUnread(id: string, ordinal?: number): Promise<ReadPosition> {
+// from the call, and nothing more is beaconed for it until the DELETE has
+// answered; then its pending position goes out, and every PUT for it is
+// waited for, before the DELETE is sent.
+//
+// Marks of one thread run one at a time, in call order: two DELETEs in
+// flight together could land in either order, and the one called first
+// would then set the position last.
+export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> {
   held.set(id, (held.get(id) ?? 0) + 1);
-  try {
-    await send(id, true);
-    // Held, so only another markUnread's flush can start a PUT meanwhile;
-    // wait until there are none.
-    for (let out = inFlight.get(id); out?.size; out = inFlight.get(id)) await Promise.all(out);
-    // A read from before the mark, a PUT that failed and was put back
-    // included, is what the mark undoes.
-    pending.delete(id);
-    const r = await apiSend<ReadPosition>('DELETE', readUrl(id), ordinal === undefined ? undefined : { ordinal });
-    floor.set(id, r.last_read_ordinal);
-    if ((pending.get(id) ?? 0) <= r.last_read_ordinal) pending.delete(id);
-    forgetLandings(id);
-    return r;
-  } finally {
-    const n = held.get(id)! - 1;
-    if (n > 0) held.set(id, n);
-    else held.delete(id);
-  }
+  const before = marks.get(id);
+  const run = (async () => {
+    try {
+      if (before) await before.catch(() => undefined);
+      // Held, so no PUT for the thread starts after this one: it waits for
+      // every PUT there will be before the DELETE.
+      await send(id, true);
+      // A read from before the mark, a PUT that failed and was put back
+      // included, is what the mark undoes.
+      pending.delete(id);
+      const r = await apiSend<ReadPosition>('DELETE', readUrl(id), ordinal === undefined ? undefined : { ordinal });
+      floor.set(id, r.last_read_ordinal);
+      forgetLandings(id);
+      return r;
+    } finally {
+      const n = held.get(id)! - 1;
+      if (n > 0) held.set(id, n);
+      else held.delete(id);
+    }
+  })();
+  marks.set(id, run);
+  void run
+    .catch(() => undefined)
+    .finally(() => {
+      if (marks.get(id) === run) marks.delete(id);
+    });
+  return run;
 }
 
 // A post is on screen when at least half of it is in the viewport, or it
@@ -144,8 +159,10 @@ export async function markUnread(id: string, ordinal?: number): Promise<ReadPosi
 //
 // The observer reports a post crossing one of its thresholds, and for a tall
 // post the half-viewport line falls between them: it can drop below the line
-// without a report. So the observer only says when to start and stop the
-// second, and the post's geometry is measured again when the second is up.
+// and come back without a report. So the observer says which posts are near,
+// and the line is measured for those on every scroll and resize, which is
+// how a post moves, and again when its second is up, in case the page's
+// layout moved it instead. The second has to be unbroken.
 const thresholds = Array.from({ length: 21 }, (_, i) => i / 20);
 
 function onScreen(e: IntersectionObserverEntry): boolean {
@@ -201,7 +218,8 @@ let listening = false;
 export function trackPosts(id: string, list: Element, stored: number): () => void {
   known(id, stored);
   const timers = new Map<Element, ReturnType<typeof setTimeout>>();
-  const showing = new Set<Element>();
+  // near is the posts the observer has in the viewport at all.
+  const near = new Set<Element>();
   const start = (el: Element) => {
     if (timers.has(el) || document.visibilityState === 'hidden') return;
     timers.set(
@@ -209,9 +227,6 @@ export function trackPosts(id: string, list: Element, stored: number): () => voi
       setTimeout(() => {
         timers.delete(el);
         if (onScreenNow(el)) read(id, Number(el.getAttribute('data-ordinal')));
-        // Below the line without the observer saying so: not read, and the
-        // second starts over while the observer still has it on screen.
-        else if (showing.has(el)) start(el);
       }, dwellMs),
     );
   };
@@ -222,13 +237,10 @@ export function trackPosts(id: string, list: Element, stored: number): () => voi
   const io = new IntersectionObserver(
     (entries) => {
       for (const e of entries) {
-        if (onScreen(e)) {
-          showing.add(e.target);
-          start(e.target);
-        } else {
-          showing.delete(e.target);
-          stop(e.target);
-        }
+        if (e.isIntersecting) near.add(e.target);
+        else near.delete(e.target);
+        if (onScreen(e)) start(e.target);
+        else stop(e.target);
       }
     },
     { threshold: thresholds },
@@ -236,11 +248,19 @@ export function trackPosts(id: string, list: Element, stored: number): () => voi
   for (const el of list.children) {
     if (el.id.startsWith('post-') && el.hasAttribute('data-ordinal')) io.observe(el);
   }
+  const measure = () => {
+    for (const el of near) {
+      if (onScreenNow(el)) start(el);
+      else stop(el);
+    }
+  };
+  addEventListener('scroll', measure, { passive: true });
+  addEventListener('resize', measure, { passive: true });
   // A hidden page is not being read: the dwell stops, and starts over for
   // what is still on screen when it is shown again.
   const visibility = () => {
     if (document.visibilityState === 'hidden') for (const el of [...timers.keys()]) stop(el);
-    else for (const el of showing) start(el);
+    else measure();
   };
   document.addEventListener('visibilitychange', visibility);
   tracked++;
@@ -255,6 +275,8 @@ export function trackPosts(id: string, list: Element, stored: number): () => voi
     io.disconnect();
     for (const el of [...timers.keys()]) stop(el);
     document.removeEventListener('visibilitychange', visibility);
+    removeEventListener('scroll', measure);
+    removeEventListener('resize', measure);
     tracked--;
     void flush();
   };
@@ -269,4 +291,5 @@ export function resetReadTracker() {
   pending.clear();
   inFlight.clear();
   held.clear();
+  marks.clear();
 }
