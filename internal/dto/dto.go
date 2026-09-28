@@ -425,6 +425,11 @@ type UserSuggestions struct {
 // the append left the log (docs/03 "Write path", step 6). The post was
 // durable before this was written.
 //
+// PATCH, DELETE and POST …/restore on a post answer with it too
+// (TKT-01M29CA9BP): the post as it now reads, a tombstone after a delete, and
+// Revision is the post's current revision, which a delete or restore does
+// not move.
+//
 // Ordinal and Revision are uint32 and LogLength int64, the log's own types,
 // for the reason RenderResult gives.
 type CreatedPost struct {

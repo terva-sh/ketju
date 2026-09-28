@@ -172,6 +172,7 @@ func TestDomainErrorsMapToTheirCode(t *testing.T) {
 		{"a missing ordinal is a missing object", threadlog.ErrNoSuchOrdinal, CodeNotFound},
 		{"a malformed id is the client's mistake", threadid.ErrMalformed, CodeBadRequest},
 		{"posting to a closed thread conflicts with its state", threadlog.ErrActorClosed, CodeConflict},
+		{"editing a deleted post conflicts with its state", fmt.Errorf("x: %w", threadlog.ErrPostState), CodeConflict},
 		{"a source over the limit is too large", render.ErrTooLarge, CodePayloadTooLarge},
 		{"a reply to a post not in the thread is invalid", fmt.Errorf("threads: %w", render.ErrInvalidReplyTo), CodeValidationFailed},
 		{"a closed cache is retryable", threadcache.ErrClosed, CodeUnavailable},

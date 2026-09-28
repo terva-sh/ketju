@@ -96,9 +96,12 @@ ON CONFLICT (thread_id, ordinal) DO UPDATE SET
 	current_revision = excluded.current_revision, edited_at = NULL, reply_to = excluded.reply_to,
 	deleted = 0, moved = 0, log_offset = excluded.log_offset;
 
+-- A null reply_to keeps the row's: an Edit without one keeps the post's
+-- reply link, as the index entry does (TKT-01M29CA9BP).
 -- name: SetPostRevision :execrows
-UPDATE post_meta SET current_revision = ?, edited_at = ?, reply_to = ?, log_offset = ?
-WHERE thread_id = ? AND ordinal = ?;
+UPDATE post_meta SET current_revision = sqlc.arg(current_revision), edited_at = sqlc.arg(edited_at),
+	reply_to = coalesce(sqlc.narg(reply_to), reply_to), log_offset = sqlc.arg(log_offset)
+WHERE thread_id = sqlc.arg(thread_id) AND ordinal = sqlc.arg(ordinal);
 
 -- log_offset is the current revision's record, as the index entry's Offset
 -- is, so a Delete or Restore (which is not a revision) leaves it alone.

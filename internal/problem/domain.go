@@ -43,6 +43,9 @@ var mapping = []struct {
 
 	// Client asked for something the object's state refuses.
 	{threadlog.ErrActorClosed, CodeConflict},
+	// An edit of a deleted post, a delete of one already gone, a restore of
+	// one that is not deleted: the actor refused the record (TKT-01M29CA9BP).
+	{threadlog.ErrPostState, CodeConflict},
 
 	// Client sent too much. render.ErrTooLarge is the post source over
 	// render.MaxSource, which docs/07 puts at 64 KB.

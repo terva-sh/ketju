@@ -211,6 +211,37 @@ source}]}`.
 - History walks the whole log (revisions are not chained in the format), so
   it is for a person opening it, not for a page.
 
+#### Edit, delete and restore (TKT-01M29CA9BP)
+
+`PATCH /threads/{id}/posts/{ordinal}` takes `{source, reason?}` and appends an
+`Edit`; `DELETE` takes an optional `{reason}` body (none at all is fine) and
+appends a `Delete`; `POST …/restore` takes the same optional body and appends a
+`Restore`. Each answers 200 with `internal/dto` `CreatedPost`, the shape a
+reply answers with: the post as `GET /threads/{id}/posts/{ordinal}` now serves
+it to this viewer (a tombstone after a delete), its current revision, and the
+log length after the append. `no-store`, and charged to the write limiter.
+
+- A member session is required (anonymous `unauthenticated`, pre-user
+  `forbidden`), and access to the thread is the thread page's.
+- Only the post's author may act for now; anyone else, a moderator included,
+  is `forbidden`. The author windows (TKT-01M29CKRHS) and a moderator's reach
+  over every post (TKT-01M29CRJ5J) extend one `authorize` function in
+  `internal/service/threads`. A post hidden by a moderator is `forbidden` to
+  its author. An edit also needs `reply` in the forum; a delete or restore of
+  one's own post does not.
+- An archived thread is `conflict` for all three. A locked thread is
+  `conflict` for a member's edit only, since a lock refuses posts and edits
+  (08).
+- The source is checked and rendered as a reply's is, against the thread and
+  the post's own `reply_to`, which an edit keeps. The `Edit` records that
+  `reply_to` and the mentions the render found.
+- An edit or a delete of a post that is deleted, hidden or moved, and a
+  restore of one that is not deleted, is `conflict` and appends nothing. The
+  thread's actor checks this against the post's flags as they stand when the
+  record is written, so a delete racing an edit cannot be undone by it.
+  Deleting twice is `conflict` rather than a quiet success, so the log keeps
+  no records that change nothing.
+
 ### Where the shapes live
 
 `internal/dto` holds the structs, and `internal/dto/testdata/golden` holds one

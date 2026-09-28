@@ -1,0 +1,26 @@
+{
+  "post": {
+    "ordinal": 4,
+    "revision": 2,
+    "author": {
+      "handle": "carol",
+      "display_name": "Carol Ruiz",
+      "avatar": "",
+      "role": "member",
+      "kind": "human"
+    },
+    "created_at": 1757500700000,
+    "edited_at": 1757500800000,
+    "reply_to": 1,
+    "reply_to_suppressed": false,
+    "reply_count": 0,
+    "html": "\u003cp\u003eAgreed with \u003ca href=\"/u/bob\" class=\"mention\" rel=\"nofollow\"\u003e@bob\u003c/a\u003e, on reflection.\u003c/p\u003e\n",
+    "attachments": [],
+    "deleted": false,
+    "moved_to": null,
+    "machine_authored": false
+  },
+  "ordinal": 4,
+  "revision": 2,
+  "log_length": 837
+}

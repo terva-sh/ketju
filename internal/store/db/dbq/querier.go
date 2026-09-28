@@ -183,6 +183,8 @@ type Querier interface {
 	// log_offset is the current revision's record, as the index entry's Offset
 	// is, so a Delete or Restore (which is not a revision) leaves it alone.
 	SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error)
+	// A null reply_to keeps the row's: an Edit without one keeps the post's
+	// reply link, as the index entry does (TKT-01M29CA9BP).
 	SetPostRevision(ctx context.Context, arg SetPostRevisionParams) (int64, error)
 	SetProjectionState(ctx context.Context, arg SetProjectionStateParams) error
 	SetThreadArchived(ctx context.Context, id int64) (int64, error)

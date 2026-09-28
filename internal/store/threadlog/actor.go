@@ -75,6 +75,15 @@ type Append struct {
 
 	// TimeMS is the record's timestamp. Zero means now.
 	TimeMS int64
+
+	// Require and Refuse are preconditions on the post Ordinal names: every
+	// bit in Require must be set on its entry and none in Refuse, or the
+	// append fails with [ErrPostState] and writes nothing. The actor checks
+	// them against the flags as they stand after every earlier record,
+	// including ones queued ahead in the same batch, which is what lets an
+	// Edit refuse a deleted post without a Delete slipping in between a
+	// caller's check and the write (TKT-01M29CA9BP). Zero checks nothing.
+	Require, Refuse EntryFlags
 }
 
 // Result is what an append returns once the record is durable.
@@ -86,6 +95,11 @@ type Result struct {
 
 // ErrActorClosed means the thread was closed before or during an append.
 var ErrActorClosed = errors.New("threadlog: thread is closed")
+
+// ErrPostState means an append's Require or Refuse precondition failed: the
+// post is not in the state the record needs, such as an Edit of a deleted
+// post. Nothing was written.
+var ErrPostState = errors.New("threadlog: the post is not in a state this record applies to")
 
 type request struct {
 	a     Append
@@ -443,11 +457,43 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 		}
 	}
 
+	if req.Require != 0 || req.Refuse != 0 {
+		if err := a.checkState(req, staging); err != nil {
+			return h, nil, err
+		}
+	}
+
 	body, err := EncodeBody(h.Encoding, req.Body)
 	if err != nil {
 		return h, nil, err
 	}
 	return h, body, nil
+}
+
+// checkState holds req to its Require and Refuse preconditions. The flags are
+// the index's, then every record staged ahead of req in this batch folded in
+// order through [postFlagEffect], the table Apply uses, so the check sees the
+// post exactly as it will stand when req is applied.
+func (a *Actor) checkState(req Append, staging []staged) error {
+	if req.Ordinal == 0 {
+		return fmt.Errorf("%w: a precondition needs an ordinal", ErrMalformed)
+	}
+	e, err := a.ix.Entry(req.Ordinal)
+	if err != nil {
+		return err
+	}
+	flags := e.Flags
+	for _, s := range staging {
+		if s.header.Ordinal == req.Ordinal {
+			set, clear := postFlagEffect(s.header.Type)
+			flags = (flags | set) &^ clear
+		}
+	}
+	if !flags.Has(req.Require) || flags&req.Refuse != 0 {
+		return fmt.Errorf("%w: %s of post %d needs flags %#x set and %#x clear, and it has %#x",
+			ErrPostState, req.Type, req.Ordinal, uint16(req.Require), uint16(req.Refuse), uint16(flags))
+	}
+	return nil
 }
 
 // writeEntry writes one index entry, without fsync.

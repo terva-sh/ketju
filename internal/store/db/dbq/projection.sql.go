@@ -246,8 +246,9 @@ func (q *Queries) SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) 
 }
 
 const setPostRevision = `-- name: SetPostRevision :execrows
-UPDATE post_meta SET current_revision = ?, edited_at = ?, reply_to = ?, log_offset = ?
-WHERE thread_id = ? AND ordinal = ?
+UPDATE post_meta SET current_revision = ?1, edited_at = ?2,
+	reply_to = coalesce(?3, reply_to), log_offset = ?4
+WHERE thread_id = ?5 AND ordinal = ?6
 `
 
 type SetPostRevisionParams struct {
@@ -259,6 +260,8 @@ type SetPostRevisionParams struct {
 	Ordinal         int64
 }
 
+// A null reply_to keeps the row's: an Edit without one keeps the post's
+// reply link, as the index entry does (TKT-01M29CA9BP).
 func (q *Queries) SetPostRevision(ctx context.Context, arg SetPostRevisionParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setPostRevision,
 		arg.CurrentRevision,

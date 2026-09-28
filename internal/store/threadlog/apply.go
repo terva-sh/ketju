@@ -42,10 +42,9 @@ func (ix *Index) Apply(h FrameHeader, body []byte, offset uint64, frameSize int)
 		return ix.applyPost(h, b, offset, frameSize)
 	case *EditBody:
 		return ix.applyEdit(h, b, offset, frameSize)
-	case *DeleteBody:
-		return ix.setFlags(h.Ordinal, EntryDeleted, 0)
-	case *RestoreBody:
-		return ix.setFlags(h.Ordinal, 0, EntryDeleted)
+	case *DeleteBody, *RestoreBody:
+		set, clear := postFlagEffect(h.Type)
+		return ix.setFlags(h.Ordinal, set, clear)
 	default:
 		// ThreadCreated and the thread events. No per-post effect.
 		return nil
@@ -100,10 +99,36 @@ func (ix *Index) applyEdit(h FrameHeader, b *EditBody, offset uint64, frameSize 
 
 	e.Offset = offset
 	e.FrameLength = uint32(frameSize)
-	e.ReplyTo = b.ReplyTo
+	// An Edit that carries no reply_to keeps the post's (settled in grooming
+	// for TKT-01M29CA9BP): zero is how an absent key decodes, and reading it
+	// as "now replies to nothing" would drop the link from every edit written
+	// without one.
+	if b.ReplyTo != 0 {
+		e.ReplyTo = b.ReplyTo
+	}
 	e.Revision = revisionOf(h)
 	e.Flags |= EntryEdited
 	return nil
+}
+
+// postFlagEffect is what a record of type t does to its post's flags: the
+// bits it sets and the bits it clears. Apply folds records through it, and so
+// does the actor when it checks an append's preconditions against records
+// still in its batch, so the two cannot disagree about a post's state.
+//
+// A Restore clears hidden-by-mod as well as deleted (docs/08: a moderator's
+// Restore clears it; settled in grooming for TKT-01M29CA9BP). The index
+// cannot judge who wrote a record, so the rule that only a moderator may
+// restore a hidden post is the service's, and the index applies what the log
+// says.
+func postFlagEffect(t RecordType) (set, clear EntryFlags) {
+	switch t {
+	case TypeDelete:
+		return EntryDeleted, 0
+	case TypeRestore:
+		return 0, EntryDeleted | EntryHiddenByMod
+	}
+	return 0, 0
 }
 
 // setFlags turns bits on and off in one entry.
