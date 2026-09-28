@@ -211,3 +211,20 @@ export interface CreatedThread {
 export interface UserSuggestions {
   users: Author[];
 }
+
+// ReadPosition is PUT and DELETE /threads/{id}/read: the viewer's position as
+// stored after the request, which a PUT never lowers and a DELETE never
+// raises, so it can differ from the ordinal sent (internal/dto ReadPosition).
+export interface ReadPosition {
+  last_read_ordinal: number;
+}
+
+// Draft is GET and PUT /drafts/{thread_id}: the viewer's one reply draft for
+// the thread. GET answers 204 with no body when there is none
+// (internal/dto Draft).
+export interface Draft {
+  thread_id: string;
+  source: string;
+  reply_to: number | null;
+  updated_at: Millis;
+}

@@ -15,11 +15,13 @@
 import type {
   CreatedPost,
   CreatedThread,
+  Draft,
   ForumTree,
   Me,
   Post,
   PostHistory,
   PostReplies,
+  ReadPosition,
   RenderResult,
   ThreadList,
   ThreadPage,
@@ -28,6 +30,8 @@ import type {
 
 import createdPostMember from '../../../../internal/dto/testdata/golden/created-post.member.json';
 import createdThreadMember from '../../../../internal/dto/testdata/golden/created-thread.member.json';
+import draftMember from '../../../../internal/dto/testdata/golden/draft.member.json';
+import draftPlainMember from '../../../../internal/dto/testdata/golden/draft-plain.member.json';
 import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.json';
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
 import historyMember from '../../../../internal/dto/testdata/golden/history.member.json';
@@ -38,6 +42,7 @@ import meModerator from '../../../../internal/dto/testdata/golden/me.moderator.j
 import mePreUser from '../../../../internal/dto/testdata/golden/me.pre_user.json';
 import postMember from '../../../../internal/dto/testdata/golden/post.member.json';
 import postModerator from '../../../../internal/dto/testdata/golden/post.moderator.json';
+import readMember from '../../../../internal/dto/testdata/golden/read.member.json';
 import renderMember from '../../../../internal/dto/testdata/golden/render.member.json';
 import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
 import repliesMember from '../../../../internal/dto/testdata/golden/replies.member.json';
@@ -79,6 +84,8 @@ function matches<T>() {
 export const contract = [
   matches<CreatedPost>()(createdPostMember),
   matches<CreatedThread>()(createdThreadMember),
+  matches<Draft>()(draftMember),
+  matches<Draft>()(draftPlainMember),
   matches<ForumTree>()(forumsAnon),
   matches<ForumTree>()(forumsMember),
   matches<PostHistory>()(historyMember),
@@ -91,6 +98,7 @@ export const contract = [
   matches<Post>()(postModerator),
   matches<PostReplies>()(repliesMember),
   matches<PostReplies>()(repliesModerator),
+  matches<ReadPosition>()(readMember),
   matches<RenderResult>()(renderMember),
   matches<RenderResult>()(renderPlainMember),
   matches<ThreadPage>()(threadAnon),
