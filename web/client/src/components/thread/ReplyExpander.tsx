@@ -3,7 +3,7 @@ import type { Post as PostDTO, PostReplies } from '../../api/dto';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../ErrorPanel';
 import { Avatar } from './Avatar';
-import { permalink, type ThreadRef } from './Post';
+import { Attachments, permalink, type ThreadRef } from './Post';
 import { PostTime } from './PostTime';
 import { RoleBadge } from './RoleBadge';
 
@@ -80,6 +80,7 @@ export function Replies({ thread, ordinal }: { thread: ThreadRef; ordinal: numbe
                 {p.deleted && <span class="deleted-mark">deleted</span>}
               </header>
               <div class="post-body" dangerouslySetInnerHTML={{ __html: p.html }} />
+              <Attachments post={p} />
             </div>
           </article>
         ),

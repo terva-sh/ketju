@@ -63,18 +63,7 @@ export function Post({
           <ReplyTo post={post} />
         </header>
         <div class="post-body" dangerouslySetInnerHTML={{ __html: post.html }} />
-        {post.attachments.length > 0 && (
-          <ul class="attachments">
-            {post.attachments.map((a) => (
-              <li key={a.hash}>
-                <a href={`/blobs/${encodeURIComponent(a.hash)}`} download={a.original_name}>
-                  {a.original_name}
-                </a>{' '}
-                <span class="size">{formatSize(a.size)}</span>
-              </li>
-            ))}
-          </ul>
-        )}
+        <Attachments post={post} />
         <footer class="post-footer">
           {expander && <ReplyToggle post={post} open={open} onToggle={toggle} />}
           {actions && (
@@ -154,6 +143,24 @@ export function ReplyTo({ post }: { post: PostDTO }) {
     <a class="reply-to hit" href={`#post-${post.reply_to}`} data-reply-to={post.reply_to}>
       ↩ #{post.reply_to}
     </a>
+  );
+}
+
+// Attachments lists a post's files, each a link to its blob. The reply
+// expander's copies show them too.
+export function Attachments({ post }: { post: PostDTO }) {
+  if (post.attachments.length === 0) return null;
+  return (
+    <ul class="attachments">
+      {post.attachments.map((a) => (
+        <li key={a.hash}>
+          <a href={`/blobs/${encodeURIComponent(a.hash)}`} download={a.original_name}>
+            {a.original_name}
+          </a>{' '}
+          <span class="size">{formatSize(a.size)}</span>
+        </li>
+      ))}
+    </ul>
   );
 }
 

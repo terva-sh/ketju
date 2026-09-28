@@ -141,6 +141,16 @@ describe('the reply expander', () => {
     expect(document.activeElement === t || document.activeElement === document.body).toBe(true);
   });
 
+  it('shows a reply’s attachments, linked to their blobs', async () => {
+    const file = { hash: 'abc123', original_name: 'plan.pdf', mime: 'application/pdf', size: 2048 };
+    serve(page([post(1, { reply_count: 1 })]), { 1: [post(7, { reply_to: 1, html: '', attachments: [file] })] });
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    await click(root, toggle(root, 1)!);
+    const link = root.querySelector('.replies [data-reply="7"] .attachments a')!;
+    expect(link.getAttribute('href')).toBe('/blobs/abc123');
+    expect(link.textContent).toBe('plan.pdf');
+  });
+
   it('shows a deleted reply as a tombstone', async () => {
     serve(page([post(1, { reply_count: 2 })]), {
       1: [post(4, { reply_to: 1 }), post(9, { deleted: true, html: '', reply_to: null })],
