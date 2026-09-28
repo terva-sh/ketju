@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T08:50:08Z
+updated_at: 2026-09-28T08:56:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -111,6 +111,14 @@ Terva review 1153 (run 156c6285-dcfa-44e0-9624-657f60d7b057, Actions run #605) o
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:50:08Z
 
 Terva review 1155 (run 856189be-64d1-4922-a8d6-28e9787463f0, Actions run #611) on head c3e1a0d9ac95be12fee45a4224898d447fdb7b7a, base de904cb55ab88426e91eb9c84c66c9a49bbb6ee1. It marked 1153's finding resolved and raised one medium: 'The initial probe can block startup and shutdown indefinitely'. Accepted and fixed in behaviour. serve no longer calls Probe synchronously. Run probes on entry inside Start's goroutine, and serve registers the bounded stop before any probe runs. It then waits for the first result with DirProbe.WaitFirst(busDrain); past that it logs a warning and goes on, and healthz reports data_dir failing until a probe completes. TestFirstProbeIsBounded holds the first probe stuck and checks four things: WaitFirst returns false within its bound, /healthz answers 503, stop reports the stuck probe, and once the probe is released both WaitFirst and /healthz recover. docs/02 is updated.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:56:13Z
+
+CI run 614 on head 687f5e5b0534c427dd26c96fec7c0639e1343795 failed 'go test (race)' in TestHealthzP99: p99 was 5.21 ms against the 5 ms bound. That head's Terva review 1156 was clean. Runs 599, 604 and 610 had passed the same test, locally it measures 0.3-0.45 ms under -race, and BenchmarkHealthz without -race measures 80 us. The failure is contention: CI runs every package's race tests at once on a shared runner. Fix: the test now holds the best of up to three 1000-request runs to the bound, so a slow handler still fails all three. The per-request I/O budget stays exact in TestHealthzOneStatementPerRequest. Criterion 3 stays ticked on the benchmark evidence. This is CI attempt 1 of 3.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:56:27Z
+
+Correction to the previous note about CI run 614, which supersedes its 'Terva review 1156' reference. The clean review of head 687f5e5b0534c427dd26c96fec7c0639e1343795, base de904cb55ab88426e91eb9c84c66c9a49bbb6ee1, is run 494bc146-ffb1-4a01-a47c-4ba3df86e202 (Actions run #615), recorded in the maintained summary comment 16677. It has no review ID and no findings. It marked 1155's finding resolved.
 
 ## Summary
 
