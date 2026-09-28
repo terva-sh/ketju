@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T05:54:07Z
+updated_at: 2026-09-28T06:04:58Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -110,6 +110,19 @@ Gaps settled during the build (docs/12 "Gaps the design leaves open"):
 - **Posts take `tabindex="-1"`,** so `j`/`k`/`g`/`u` can focus them. A focused post gets a ring under `:focus-visible` only.
 
 Tests: 41 Vitest cases in `src/keyboard/shortcuts.test.tsx`, and `e2e/shortcuts.spec.ts` at both widths. The e2e run used port 8794: 45 passed, 9 skipped by project. The spec reads alice's position in "Minutes from the September meeting" (#30) without marking it read. When read tracking lands, that spec and thread-list.spec.ts both need that position to hold.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T06:04:58Z
+
+Review 1129 (run e48225be-9e0e-4eb1-b987-31f801fb5963, Actions run #519, request ready-review-dcf77fe-b2) reviewed head dcf77fedf7c3f7d16fbe930ba43edb1236032815 against base 09e8f86284570641a934543b559880e02645d0a2. It raised one high and three medium findings. An earlier request, ready-review-dcf77fe (run aa18d536-b424-45a5-a067-691a1c49ab0c), was superseded when main moved under the PR and produced no result.
+
+Each finding was fixed by changing the behaviour in 176e154. None was answered by argument.
+
+- **high: `n` focused the first post on the page, not the unread ordinal.** It now carries the badge's target: `last_read_ordinal + 1`, or with no position, the first unread post on the page the server lands on. `u`'s landing uses the same rule.
+- **medium: the five-page bound could wrap early or report no unread thread.** The bound is removed, and `n` reads the list to its end before wrapping. This supersedes the "How far `n` reads" item in the previous note. A repeated cursor ends the read.
+- **medium: an in-flight search could route a reader who had left.** The search is aborted when the thread body unmounts, and its result is dropped once aborted.
+- **medium: `u` and `n` worked for signed-out readers, who have no control for them.** Both now do nothing for a reader who is not signed in.
+
+Each fix has a Vitest case, and each case fails with its fix reverted (mutations listed in the commit body).
 
 ## Summary
 
