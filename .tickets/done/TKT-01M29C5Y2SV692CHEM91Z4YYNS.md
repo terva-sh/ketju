@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-28T09:18:04Z
+updated_at: 2026-09-28T09:23:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -110,6 +110,10 @@ Review 1157 (run ea46019e-cff0-4b8a-bca8-ae0d4582bf4c, Actions run #627) on head
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:18:04Z
 
 Correction to the previous note: the review 1157 fix is commit e0a8f90, not c05f5c6.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:23:01Z
+
+Review 1158 (run for request ready-review-3feb393) on head 3feb3936ca79b55f1f5f59fe9bf004c905afb867, base 21fa204c8f10ca65a4c2cc1601581ad34e7fdbcf. It marks the review 1157 finding resolved and raises three new findings, all accepted and fixed in code in 12f0f2e. (1) high, blobgc.go:302: a threads/ that is a regular file walked as empty. Fixed: the pass holds unless threads/ is a directory. (2) medium, blobgc.go:165: deletions from earlier pages happened before later pages were scanned. Fixed: two phases, scan every page and then delete, capped at 100,000 collectable a pass. (3) medium, scheduler.go:103: the database was closed under a job that outlasts the bounded Stop. Fixed: Scheduler.Done, and serve leaves the database open (WAL replayed at the next start) while a job is still out; the scan checks cancellation at every frame. This is the third review round on PR #110.
 
 ## Summary
 
