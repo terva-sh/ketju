@@ -56,7 +56,7 @@ import (
 
 // Version identifies this pipeline's output. Read the rule above before
 // changing it, and read it again before deciding not to.
-const Version = 3
+const Version = 4
 
 // MaxSource is the largest source Render will accept.
 //

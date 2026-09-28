@@ -502,10 +502,10 @@ func renderReply() RenderResult {
 	return RenderResult{
 		// What internal/render produces for
 		// "> [quote=#61]\n> the quoted words\n\n> [quote=#62]\n> gone\n\nAgreed, @alice."
-		HTML: "<details class=\"quote\" open=\"\">\n<summary><a href=\"#post-61\" class=\"quote-source\" rel=\"nofollow\">Post #61</a></summary>\n" +
-			"<blockquote>\n<p>the quoted words</p>\n</blockquote>\n</details>\n" +
-			"<details class=\"quote\" open=\"\">\n<summary><a href=\"#post-62\" class=\"quote-source\" rel=\"nofollow\">Post #62</a></summary>\n" +
-			"<blockquote>\n<p class=\"quote-deleted\">This post was deleted.</p>\n</blockquote>\n</details>\n" +
+		HTML: "<details class=\"quote\" open=\"\">\n<summary>Quote from #61</summary>\n" +
+			"<blockquote>\n<p class=\"quote-attribution\"><a href=\"#post-61\" class=\"quote-source\" rel=\"nofollow\">Post #61</a></p>\n<p>the quoted words</p>\n</blockquote>\n</details>\n" +
+			"<details class=\"quote\" open=\"\">\n<summary>Quote from #62</summary>\n" +
+			"<blockquote>\n<p class=\"quote-attribution\"><a href=\"#post-62\" class=\"quote-source\" rel=\"nofollow\">Post #62</a></p>\n<p class=\"quote-deleted\">This post was deleted.</p>\n</blockquote>\n</details>\n" +
 			"<p>Agreed, <a href=\"/u/alice\" class=\"mention\" rel=\"nofollow\">@alice</a>.</p>\n",
 		Mentions: []MentionRef{{Handle: "alice"}},
 		Quotes:   []QuoteRef{{Ordinal: 61}, {Ordinal: 62, Deleted: true}},

@@ -308,9 +308,14 @@ func (r *quoteRenderer) renderQuote(
 	// non-JS client (docs/07) has to be able to collapse a quote too. It is open
 	// by default: a quote the reader must click to see is a quote that may as
 	// well not be there.
-	_, _ = w.WriteString("<details class=\"quote\" open>\n<summary>")
-	fmt.Fprintf(w, "<a href=\"#post-%d\" class=\"quote-source\">Post #%d</a>", q.Ordinal, q.Ordinal)
-	_, _ = w.WriteString("</summary>\n<blockquote>\n")
+	//
+	// The summary is plain text and the source link is the blockquote's first
+	// line (TKT-01M3BFSBPJ). A <summary> is itself a control, the toggle, and a
+	// link inside it is a control inside a control: assistive technology
+	// announces the summary as a button and may never reach the link as one
+	// (axe nested-interactive, WCAG 4.1.2).
+	fmt.Fprintf(w, "<details class=\"quote\" open>\n<summary>Quote from #%d</summary>\n<blockquote>\n", q.Ordinal)
+	fmt.Fprintf(w, "<p class=\"quote-attribution\"><a href=\"#post-%d\" class=\"quote-source\">Post #%d</a></p>\n", q.Ordinal, q.Ordinal)
 
 	if q.State == quoteTombstone {
 		_, _ = w.WriteString("<p class=\"quote-deleted\">This post was deleted.</p>\n")

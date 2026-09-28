@@ -8,8 +8,8 @@ import { stateFile } from './session';
 // side. An inline link inside text (an author's name, an ordinal, a tag)
 // keeps its visual size and is measured by its hit area, which a .hit class
 // pads out. Text inside a post's body is the author's prose, not the
-// interface, and is not measured; a quote's header there is the interface
-// (internal/render quote.go), and is.
+// interface, and is not measured; a quote's header and its source link there
+// are the interface (internal/render quote.go), and are.
 
 const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
 
@@ -28,7 +28,7 @@ function small(page: Page) {
     const root = document.querySelector('[role=dialog], .composer-sheet') ?? document;
     const out: string[] = [];
     for (const el of root.querySelectorAll<HTMLElement>(controls)) {
-      if (el.closest('.post-body') && !el.matches('details.quote > summary, details.quote > summary .quote-source')) continue;
+      if (el.closest('.post-body') && !el.matches('details.quote > summary, details.quote .quote-source')) continue;
       if (el.getClientRects().length === 0 || getComputedStyle(el).visibility === 'hidden') continue;
       // A skip link is off screen until it is focused.
       if (el.classList.contains('skip-link')) continue;
@@ -80,8 +80,20 @@ test('the thread page, and its composer sheet', async ({ browser }, info) => {
   const { ctx, page } = await signedIn(browser, info);
   // Page 1, where post 2 quotes post 1 (cmd/ketju e2e.go).
   await page.goto(`${seed.thread}?page=1`);
-  await expect(page.locator('#post-2 details.quote summary .quote-source')).toBeVisible();
+  await expect(page.locator('#post-2 details.quote > summary')).toHaveText('Quote from #1');
+  await expect(page.locator('#post-2 details.quote .quote-source')).toBeVisible();
   expect(await small(page)).toEqual([]);
+  // The header is wider than the source link below it, so pressing at the
+  // header's centre does not show the link's target reaching up into it.
+  // Press the header's bottom edge right above the link (TKT-01M3BFSBPJ).
+  const header = await page.evaluate(() => {
+    const s = document.querySelector('#post-2 details.quote > summary')!;
+    const a = document.querySelector('#post-2 details.quote .quote-source')!;
+    s.scrollIntoView({ block: 'center' });
+    const t = document.elementFromPoint(a.getBoundingClientRect().left + 4, s.getBoundingClientRect().bottom - 1);
+    return t === s || !!(t && s.contains(t));
+  });
+  expect(header, 'the quote header’s target is its own above the source link').toBe(true);
   // The reply expander, open (TKT-01M29CGBW6): its toggle and the links in
   // the replies it shows (cmd/ketju e2e.go seedReplies).
   await page.locator('#post-1 button.reply-expander').click();

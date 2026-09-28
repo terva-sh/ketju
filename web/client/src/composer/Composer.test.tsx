@@ -29,8 +29,8 @@ function page(over: { canReply?: boolean } = {}): ThreadPage {
       post(1, '<p>The bill was the smaller half of it.</p>', 'mara'),
       post(
         2,
-        '<details class="quote" open=""><summary><a href="#post-1" class="quote-source" rel="nofollow">Post #1</a></summary>' +
-          '<blockquote>\n<p>smaller half</p>\n</blockquote>\n</details>\n<p>Agreed.</p>\n<p>And another thing.</p>',
+        '<details class="quote" open=""><summary>Quote from #1</summary>' +
+          '<blockquote>\n<p class="quote-attribution"><a href="#post-1" class="quote-source" rel="nofollow">Post #1</a></p>\n<p>smaller half</p>\n</blockquote>\n</details>\n<p>Agreed.</p>\n<p>And another thing.</p>',
         'drew',
       ),
       post(3, '<p>third</p>', 'ines'),

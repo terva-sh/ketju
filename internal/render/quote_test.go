@@ -53,6 +53,39 @@ func TestAQuoteLinksToTheOrdinalAndCollapses(t *testing.T) {
 	assertSafe(t, src, got.HTML)
 }
 
+// TestTheSummaryHoldsNoLink: a <summary> is the toggle, a control, and a link
+// inside it is a control inside a control, which assistive technology may never
+// reach as a link (axe nested-interactive, TKT-01M3BFSBPJ). The summary is text
+// and the link is the blockquote's first line, in the linked case and the
+// tombstone alike.
+func TestTheSummaryHoldsNoLink(t *testing.T) {
+	cases := []struct {
+		name string
+		ctx  Context
+	}{
+		{"linked", Context{Posts: resolver([]uint32{37})}},
+		{"tombstone", Context{Posts: resolver(nil, 37)}},
+		{"preview", Context{}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got, err := RenderWith("> [quote=#37]\n> the words\n", c.ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			const head = "<details class=\"quote\" open=\"\">\n<summary>Quote from #37</summary>\n<blockquote>\n" +
+				"<p class=\"quote-attribution\"><a href=\"#post-37\" class=\"quote-source\" rel=\"nofollow\">Post #37</a></p>\n"
+			if !strings.HasPrefix(got.HTML, head) {
+				t.Errorf("the quote does not open with a text summary and the link as its first line:\n%s", got.HTML)
+			}
+			summary := got.HTML[strings.Index(got.HTML, "<summary>"):strings.Index(got.HTML, "</summary>")]
+			if strings.Contains(summary, "<a") {
+				t.Errorf("the summary holds a link: %s", summary)
+			}
+		})
+	}
+}
+
 func TestTheAttributionLineDoesNotSurviveIntoTheText(t *testing.T) {
 	got, err := RenderWith("> [quote=#37]\n> body\n", Context{Posts: resolver([]uint32{37})})
 	if err != nil {

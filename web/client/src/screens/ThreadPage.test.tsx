@@ -140,7 +140,14 @@ describe('following a link to another post', () => {
 
   it('treats a quote link in a body the same way', async () => {
     serve(
-      page([post(1), post(2, { html: '<details class="quote" open><summary><a href="#post-1" class="quote-source">Post #1</a></summary></details>' })]),
+      page([
+        post(1),
+        post(2, {
+          html:
+            '<details class="quote" open><summary>Quote from #1</summary>' +
+            '<blockquote><p class="quote-attribution"><a href="#post-1" class="quote-source">Post #1</a></p></blockquote></details>',
+        }),
+      ]),
     );
     const root = await renderAt(`/t/${id}/s?page=1`);
     scrolled = [];

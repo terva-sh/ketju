@@ -194,9 +194,11 @@ func TestDetailsCannotCarryAnythingElse(t *testing.T) {
 		`<details id="main">x</details>`,
 		`<details style="position:fixed">x</details>`,
 		`<summary class="x">s</summary>`,
+		`<p class="quote-attribution x">p</p>`,
+		`<p class="x">p</p>`,
 	} {
 		got := sanitize(h)
-		for _, bad := range []string{"onclick", "style=", "id=", `class="anything"`, `class="x"`, "ontoggle"} {
+		for _, bad := range []string{"onclick", "style=", "id=", `class="anything"`, `class="x"`, `class="quote-attribution x"`, "ontoggle"} {
 			if strings.Contains(got, bad) {
 				t.Errorf("sanitize(%q) kept %q: %q", h, bad, got)
 			}

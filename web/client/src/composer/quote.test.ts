@@ -59,8 +59,8 @@ describe('the text of a post', () => {
 
   it('is its blocks, without the quotations it holds', () => {
     const el = body(
-      '<details class="quote" open=""><summary><a href="#post-3" class="quote-source">Post #3</a></summary>' +
-        '<blockquote><p>their words</p></blockquote></details>\n' +
+      '<details class="quote" open=""><summary>Quote from #3</summary>' +
+        '<blockquote><p class="quote-attribution"><a href="#post-3" class="quote-source">Post #3</a></p><p>their words</p></blockquote></details>\n' +
         '<p>My <em>first</em> point.</p>\n<ul><li>one</li><li>two</li></ul>\n<pre><code>x := 1\n</code></pre>',
     );
     expect(bodyText(el)).toBe('My first point.\n\none\ntwo\n\nx := 1');
@@ -81,8 +81,8 @@ describe('the text of a post', () => {
 
   it('leaves out a quotation wherever it sits, and leaves the body as it was', () => {
     const quote = (n: number, words: string) =>
-      `<details class="quote" open=""><summary><a href="#post-${n}" class="quote-source">Post #${n}</a></summary>` +
-      `<blockquote><p>${words}</p></blockquote></details>`;
+      `<details class="quote" open=""><summary>Quote from #${n}</summary>` +
+      `<blockquote><p class="quote-attribution"><a href="#post-${n}" class="quote-source">Post #${n}</a></p><p>${words}</p></blockquote></details>`;
     const el = body(`<ul><li>${quote(3, 'their words')}mine</li><li>also mine</li></ul><div>${quote(4, 'more of theirs')}<p>and mine</p></div>`);
     expect(bodyText(el)).toBe('mine\nalso mine\n\nand mine');
     expect(el.querySelectorAll('details.quote')).toHaveLength(2);

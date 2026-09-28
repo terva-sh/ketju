@@ -138,7 +138,9 @@ the full thread at the same ordinal, so nobody gets lost in a filter.
 - **Quote**: selecting text in a post and clicking "quote" inserts a
   `> ` block whose **first line** is the attribution `[quote=#37]`, which the
   renderer turns into a collapsible `<details>` linked to post 37; the server
-  records the quote as a backlink. Keeping the attribution inside the
+  records the quote as a backlink. The `<summary>` is plain text ("Quote from
+  #37") and the link to post 37 is the quotation's first line, because a link
+  inside the summary is a control inside a control (TKT-01M3BFSBPJ). Keeping the attribution inside the
   blockquote means a renderer that does not know the syntax still shows a
   quotation. Quoting a deleted post renders a tombstone rather than the copied
   text — the copy lives in the quoting post's own source, so dropping it at

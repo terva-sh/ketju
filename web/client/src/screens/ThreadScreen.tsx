@@ -195,7 +195,8 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   };
 
   // One handler for every link to another post in this list: a reply-to
-  // indicator, or a quote's source link in a body (internal/render/quote.go).
+  // indicator, or a quote's source link in a body, the first line of the
+  // quotation rather than its summary (internal/render/quote.go).
   // A post on this page is scrolled to and the address stays as it is; one
   // that is not opens in a popover (docs/06 "Post anatomy").
   const follow = (e: MouseEvent) => {

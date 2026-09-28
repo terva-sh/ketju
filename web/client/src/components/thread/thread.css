@@ -135,6 +135,12 @@
 .post-body details.quote blockquote {
   margin: 4px 0;
 }
+/* The quotation's first line is the link to its source; the summary above
+   is the toggle and plain text (internal/render quote.go). */
+.post-body details.quote .quote-attribution {
+  margin: 0 0 4px;
+  font-size: 13px;
+}
 .attachments {
   margin: 4px 0 0;
   padding: 0;
@@ -403,12 +409,17 @@
   .pager-narrow {
     display: flex;
   }
-  /* A quote's header is a control, the toggle, holding another, the
-     source link (base.css): the header is a full target's height. */
+  /* A quote's header is a control, the toggle: it is a full target's
+     height. The source link below it (base.css) reaches 22 px about its
+     centre, 13.5 px above its line, so the line keeps clear of the header
+     (e2e/targets.spec.ts presses the header's edge above the link). */
   .post-body details.quote > summary {
     box-sizing: border-box;
     min-height: var(--target);
     padding-block: 10px;
+  }
+  .post-body details.quote .quote-attribution {
+    margin-top: 16px;
   }
   /* The actions' targets (.hit) reach 44 px across, so they need the room
      between them: the narrowest, "link", reaches 11.5 px past each side. */

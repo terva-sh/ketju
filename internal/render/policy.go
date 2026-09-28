@@ -77,7 +77,7 @@ var policy = sync.OnceValue(func() *bluemonday.Policy {
 	// markup a stylesheet keys on cannot be minted by a post.
 	p.AllowElements("details", "summary")
 	p.AllowAttrs("class").Matching(quoteClass).OnElements("details")
-	p.AllowAttrs("class").Matching(quoteDeletedClass).OnElements("p")
+	p.AllowAttrs("class").Matching(quoteParagraphClass).OnElements("p")
 	p.AllowAttrs("open").Matching(emptyValue).OnElements("details")
 
 	// Footnotes: the section wrapper, the reference anchors, and the ids the
@@ -115,6 +115,8 @@ var (
 
 	tableAlign = regexp.MustCompile(`^(left|center|right)$`)
 
-	quoteClass        = regexp.MustCompile(`^quote$`)
-	quoteDeletedClass = regexp.MustCompile(`^quote-deleted$`)
+	quoteClass = regexp.MustCompile(`^quote$`)
+	// The two paragraphs a quote writes inside its blockquote: the attribution
+	// line holding the source link, and a deleted post's tombstone.
+	quoteParagraphClass = regexp.MustCompile(`^(quote-attribution|quote-deleted)$`)
 )

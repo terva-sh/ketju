@@ -11,7 +11,9 @@ import { stateFile } from './session';
 // picker open, and the page with its composer sheet (phone) or a post's
 // replies (desktop) open. The rules are axe's WCAG 2.1 A and AA sets; docs
 // leave the rule set open, and 2.1 AA is what the ticket assumed. A pass is
-// zero violations, with one exception, set aside below and nowhere else.
+// zero violations, with no exceptions. (A quote's source link once sat inside
+// the <summary> that collapses it, which nested-interactive reported; it is
+// now the quotation's first line, TKT-01M3BFSBPJ.)
 
 const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
 
@@ -31,7 +33,7 @@ const screens: { name: string; path: string; ready: string; open?: (page: Page, 
     name: 'thread page',
     // Page 1, where post 2 quotes post 1 (cmd/ketju e2e.go).
     path: `${seed.thread}?page=1`,
-    ready: '#post-2 details.quote summary',
+    ready: '#post-2 details.quote .quote-source',
     open: async (page, phone) => {
       // The desktop scans the reply expander open (TKT-01M29CGBW6); the
       // phone, its composer sheet, which would cover it.
@@ -47,22 +49,10 @@ const screens: { name: string; path: string; ready: string; open?: (page: Page, 
   },
 ];
 
-// The one exception: a quote's header nests its source link inside the
-// <summary> that collapses it (internal/render quote.go), which axe's
-// nested-interactive rule reports. The markup is the renderer's, chosen so a
-// quote collapses without script for the non-JS client, and changing it is
-// a design decision for a person: TKT-01M3BFSBPJ (Stop nesting the quote
-// source link inside its summary). Only that rule, and only on a quote's
-// summary, is set aside; every other rule still runs on it.
-const quoteHeader = (n: { target: unknown[] }) => /details\.quote > summary$|^summary$/.test(String(n.target.at(-1)));
-
 async function scan(page: Page) {
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
-  const kept = violations
-    .map((v) => (v.id === 'nested-interactive' ? { ...v, nodes: v.nodes.filter((n) => !quoteHeader(n) || !n.html.includes('quote-source')) } : v))
-    .filter((v) => v.nodes.length > 0);
   // Say which rule and where, rather than a count.
-  return kept.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`);
+  return violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`);
 }
 
 for (const s of screens) {
