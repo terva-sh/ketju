@@ -268,6 +268,22 @@ describe('the shortcuts on a thread page', () => {
     expect(focused()).not.toBe('post-12');
   });
 
+  it('g ends when focus moves, so a pause cannot take a reader from the composer', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const urls = serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'g', '1', '2');
+    const area = root.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+    await act(async () => area.focus());
+    expect(hint.value).toBe('');
+    const asked = urls.length;
+    await act(async () => void vi.advanceTimersByTime(1600));
+    await settle(root);
+    expect(document.activeElement).toBe(area);
+    expect(urls.length).toBe(asked);
+    expect(location.pathname + location.search).toBe(`/t/${id}/${slug}?page=1`);
+  });
+
   it('g to a post the thread does not have says so and asks nothing', async () => {
     const urls = serve();
     const root = await renderAt(`/t/${id}/${slug}?page=1`);

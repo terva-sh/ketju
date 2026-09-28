@@ -253,6 +253,13 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
       hint.value = '';
       if (d) goToOrdinal(Number(d), live.current.page, live.current.route);
     };
+    // Focus moving anywhere, by pointer or by Tab, ends g: the number was
+    // typed for the page as it was (review 1136).
+    const onFocus = () => {
+      if (digits === null) return;
+      endGoto();
+      hint.value = '';
+    };
 
     const onKey = (e: KeyboardEvent) => {
       if (isPhone.value || helpOpen.value || ignored(e)) {
@@ -330,8 +337,10 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
       }
     };
     document.addEventListener('keydown', onKey);
+    document.addEventListener('focusin', onFocus);
     return () => {
       document.removeEventListener('keydown', onKey);
+      document.removeEventListener('focusin', onFocus);
       clearTimeout(timer);
       if (digits !== null) hint.value = '';
     };
