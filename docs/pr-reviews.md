@@ -68,9 +68,9 @@ explore the full checkout. Keep normal CI as the deterministic validation gate.
 ## Trusted configuration
 
 The workflow runs the reviewer image
-`container.local.sothr.com/terva-sh/terva-action-code-review`, release v0.3.0,
+`container.local.sothr.com/terva-sh/terva-action-code-review`, release v0.5.0,
 pinned by digest
-`sha256:35199d57112ea0048fe713a49c6087094c5bcbbeaa74d53d6dca89d9a8ba9cd7`. The
+`sha256:64a7ba59ca8a0932e2b4d4cf8e50a2231f46fa6eaefa046acbef84f2a2886252`. The
 image carries the action's source, prompt templates, locked dependencies and a
 checksum-pinned Terva 0.138.2. The job checks out nothing and installs nothing,
 so no code from this repository or its PRs runs with review credentials.
