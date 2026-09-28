@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T07:06:13Z
+updated_at: 2026-09-28T07:16:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -101,6 +101,10 @@ Playwright does not report a request sent as the page unloads, so the page-hide 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:06:13Z
 
 Review 1143 (request ready-review-c4bc551, Actions run 550; head c4bc55130002c7b0faa4d9d7773c70aa544899af, base 9d7b0dca08083d4ecc937ad53ac7d8068956801a) failed the gate with one high and two medium findings. All three were accepted and fixed in ac90671, by changing the behaviour flagged: markUnread now holds the thread before it waits and drains every PUT (high); a post's geometry is measured again when its second is up, so a tall post that slipped below the line between observer thresholds is not counted (medium); the batch timer keeps running while a position is waiting, so a navigation PUT that failed after the last thread page closed is retried (medium). A fresh review of the new head follows.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:16:03Z
+
+Review 1144 (request ready-review-bf3c8e3, Actions run 553; head bf3c8e37477f424888a576808d613717770edca4, base 3d7c3a5c2dfd5acf2db12fef199a871d5c998e38) read 1143's three findings as resolved and failed the gate with two new medium findings. Both were accepted and fixed in the commit after it, by changing the behaviour: the half-screen line is measured on every scroll and resize for the posts the observer has in view, so a tall post's second must be unbroken; and overlapping markUnread calls for one thread now run one at a time in call order. A fresh review of the new head follows.
 
 ## Summary
 
