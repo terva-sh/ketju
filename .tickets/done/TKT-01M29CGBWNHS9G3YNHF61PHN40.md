@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T07:16:03Z
+updated_at: 2026-09-28T07:25:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -105,6 +105,10 @@ Review 1143 (request ready-review-c4bc551, Actions run 550; head c4bc55130002c7b
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:16:03Z
 
 Review 1144 (request ready-review-bf3c8e3, Actions run 553; head bf3c8e37477f424888a576808d613717770edca4, base 3d7c3a5c2dfd5acf2db12fef199a871d5c998e38) read 1143's three findings as resolved and failed the gate with two new medium findings. Both were accepted and fixed in the commit after it, by changing the behaviour: the half-screen line is measured on every scroll and resize for the posts the observer has in view, so a tall post's second must be unbroken; and overlapping markUnread calls for one thread now run one at a time in call order. A fresh review of the new head follows.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:25:23Z
+
+Review 1147 (request ready-review-81b350d, Actions run 560; head 81b350d50bcd38cbd5ee0828e80f9142905c1e32, base 3d7c3a5c2dfd5acf2db12fef199a871d5c998e38) read 1144's two findings as resolved and failed the gate with one new medium finding: a page answered before a mark-unread could raise the floor back. Accepted and fixed in the commit after it, by changing the behaviour: a thread marked from this page no longer takes a page's reported position as known, and the mark forgets every held page of the thread. A fresh review of the new head follows (round 4).
 
 ## Summary
 
