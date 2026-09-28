@@ -16,11 +16,13 @@ parent: TKT-01M29BN36Q9D32WQGYPFS336J0
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:104
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T05:05:41Z
-updated_at: 2026-09-28T07:54:49Z
+updated_at: 2026-09-28T07:55:06Z
 created_by:
   id: agent:claude/phase1-groom
   name: ""
