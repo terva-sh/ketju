@@ -1,7 +1,7 @@
 import { signal } from '@preact/signals';
-import { apiGet, forgetGets, forgetHeld } from '../api/client';
+import { apiGet, forgetGets, forgetHeld, peekGet } from '../api/client';
 import type { ThreadHeader, ThreadPage } from '../api/dto';
-import { revokesAccess } from '../api/problem';
+import { ProblemError, revokesAccess } from '../api/problem';
 
 // The per-thread cache (docs/07 "State"), keyed on log length.
 //
@@ -56,15 +56,32 @@ export function pageKey(page: Pick<ThreadPage, 'page' | 'lens'>): string {
 // withdrawn), leaves the cache, with every held page of it, so what they
 // could once read is not shown.
 //
+// It resolves only with a page the cache holds, because its caller shows
+// whatever it resolves with (review 420). A page the cache refuses is not
+// returned:
+//   - one whose request started before a refusal that still stands rejects
+//     with that refusal, so its caller shows the access error, not content
+//     from before access was withdrawn;
+//   - one older than the entry, by its shorter log length, or from before a
+//     refusal that a newer stored page has since superseded, is replaced by
+//     the entry's page under the same key, or failing that is asked for once
+//     more.
+//
 // An answer to a request that was aborted, because the screen moved on, is
 // returned but changes nothing, success or refusal: whatever superseded it
-// may already be newer.
+// may already be newer, and its caller has stopped listening.
 //
 // It takes no after_log_length. That answer holds only what is new on the
 // page, and storing it here would replace a page with a fragment; applying a
 // fragment to the page it extends is the live-update client's
 // (TKT-01M29CTYA0).
-export async function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortSignal): Promise<ThreadPage> {
+export function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortSignal): Promise<ThreadPage> {
+  return load(id, q, signal, true);
+}
+
+// load is loadThreadPage; again says whether a refused page may be asked for
+// once more.
+async function load(id: string, q: ThreadQuery, signal: AbortSignal | undefined, again: boolean): Promise<ThreadPage> {
   const url = threadUrl(id, q);
   const n = ++loads;
   let page: ThreadPage;
@@ -75,7 +92,7 @@ export async function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortS
     // refusal included: it changes nothing. Nor does a refusal older than a
     // page already stored from a request that started after it.
     if (revokesAccess(err) && !signal?.aborted && n > (stored.get(id) ?? 0)) {
-      refused.set(id, n);
+      refused.set(id, { n, err });
       forgetThread(id);
     }
     throw err;
@@ -87,12 +104,36 @@ export async function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortS
   // page older than the entry. Neither is kept under its URL either, or it
   // would be shown at once on a return there; but only it is dropped, not a
   // newer answer another request has held there since.
-  if (n < (refused.get(id) ?? 0) || !storeThreadPage(id, page, url)) {
+  const r = refused.get(id);
+  if (r && n < r.n) {
     forgetHeld(url, page);
-    return page;
+    // The refusal stands until a request started after it stores a page.
+    if (r.n > (stored.get(id) ?? 0)) throw r.err;
+    return instead(id, q, page, signal, again);
+  }
+  if (!storeThreadPage(id, page, url)) {
+    forgetHeld(url, page);
+    return instead(id, q, page, signal, again);
   }
   stored.set(id, Math.max(stored.get(id) ?? 0, n));
   return page;
+}
+
+// instead answers for a page the cache refused as older than what it holds:
+// with the page it holds under the same key, which is newer, or else with the
+// answer to one more request. A page refused a second time is not chased
+// further; it is a conflict the reader can retry.
+function instead(
+  id: string,
+  q: ThreadQuery,
+  old: ThreadPage,
+  signal: AbortSignal | undefined,
+  again: boolean,
+): Promise<ThreadPage> {
+  const current = threadCache.value.get(id)?.pages.get(pageKey(old));
+  if (current) return Promise.resolve(current);
+  if (again) return load(id, q, signal, false);
+  return Promise.reject(new ProblemError('conflict', 0));
 }
 
 // storeThreadPage files page under id, fetched from url, and reports whether
@@ -107,7 +148,10 @@ export function storeThreadPage(id: string, page: ThreadPage, url?: string): boo
   const next = new Map(threadCache.value);
   next.set(id, { logLength, header: page.thread, pages });
   threadCache.value = next;
-  if (prev && !same) forgetGets((u) => u !== url && isThreadUrl(u, id));
+  // Only this page is left held, and only if it is what url holds. An older
+  // request's answer is not held when a newer one to the same URL has
+  // finished, so url can still hold that newer answer at the old length.
+  if (prev && !same) forgetGets((u) => isThreadUrl(u, id) && !(u === url && peekGet(u) === page));
   return true;
 }
 
@@ -137,13 +181,14 @@ function isThreadUrl(url: string, id: string): boolean {
 }
 
 // Loads are numbered in the order they start. Per thread, refused is the
-// newest load whose refusal was applied and stored the newest whose page was,
+// newest load whose refusal was applied, with that refusal, and stored the
+// newest whose page was,
 // so each outcome is applied only if no newer one of the other kind already
 // was: overlapping loads can finish in any order, and the later-started one's
 // answer is the truer. Pages at one length still accumulate whatever their
 // order; the length rule above orders those.
 let loads = 0;
-const refused = new Map<string, number>();
+const refused = new Map<string, { n: number; err: unknown }>();
 const stored = new Map<string, number>();
 
 function forgetThread(id: string) {
