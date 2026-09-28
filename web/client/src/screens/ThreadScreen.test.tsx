@@ -191,6 +191,7 @@ describe('read tracking on the thread screen', () => {
     // The golden page holds posts 61 to 63, and the reader has read to 60.
     expect(io.observed.map((el) => el.id)).toEqual(['post-61', 'post-62', 'post-63']);
     vi.useFakeTimers();
+    io.observed[1].getBoundingClientRect = () => ({ top: 100, bottom: 300, height: 200 }) as DOMRect;
     io.callback(
       [
         {

@@ -69,10 +69,11 @@ function retryable(err: unknown): boolean {
 }
 
 // send puts the thread's pending position on the wire, if it has one and is
-// not held, and answers when every PUT outstanding for it has settled.
-function send(id: string): Promise<void> {
+// not held (unless force, which is markUnread's own flush), and answers when
+// every PUT outstanding for it when it was called has settled.
+function send(id: string, force = false): Promise<void> {
   const ordinal = pending.get(id);
-  if (ordinal !== undefined && !held.has(id)) {
+  if (ordinal !== undefined && (force || !held.has(id))) {
     pending.delete(id);
     const before = floor.get(id) ?? 0;
     floor.set(id, ordinal);
@@ -89,6 +90,7 @@ function send(id: string): Promise<void> {
         if (!retryable(err) || floor.get(id) !== ordinal) return;
         floor.set(id, before);
         read(id, ordinal);
+        batching();
       },
     );
     const set = inFlight.get(id) ?? new Set();
@@ -104,22 +106,26 @@ function send(id: string): Promise<void> {
 
 // flush sends every thread's pending position now.
 export function flush(): Promise<void> {
-  return Promise.all([...pending.keys()].map(send)).then(() => undefined);
+  return Promise.all([...pending.keys()].map((id) => send(id))).then(() => undefined);
 }
 
 // markUnread sends DELETE /threads/{id}/read, making every post after
 // ordinal unread, or the whole thread with none, and answers the position
 // stored after it. A beacon sent before the DELETE and landing after it
-// would move the position forward again (docs/07), so the thread's pending
-// position goes out first and every PUT for it is waited for, and nothing
-// more is sent for it until the DELETE has answered.
+// would move the position forward again (docs/07). So the thread is held
+// first, and nothing more is sent for it until the DELETE has answered; then
+// its pending position goes out, and every PUT for it is waited for, until
+// none is left, before the DELETE is sent.
 export async function markUnread(id: string, ordinal?: number): Promise<ReadPosition> {
-  await send(id);
   held.set(id, (held.get(id) ?? 0) + 1);
-  // A read from before the mark, a PUT that failed and was put back
-  // included, is what the mark undoes.
-  pending.delete(id);
   try {
+    await send(id, true);
+    // Held, so only another markUnread's flush can start a PUT meanwhile;
+    // wait until there are none.
+    for (let out = inFlight.get(id); out?.size; out = inFlight.get(id)) await Promise.all(out);
+    // A read from before the mark, a PUT that failed and was put back
+    // included, is what the mark undoes.
+    pending.delete(id);
     const r = await apiSend<ReadPosition>('DELETE', readUrl(id), ordinal === undefined ? undefined : { ordinal });
     floor.set(id, r.last_read_ordinal);
     if ((pending.get(id) ?? 0) <= r.last_read_ordinal) pending.delete(id);
@@ -134,8 +140,12 @@ export async function markUnread(id: string, ordinal?: number): Promise<ReadPosi
 
 // A post is on screen when at least half of it is in the viewport, or it
 // fills at least half the viewport: a post taller than two screens is never
-// half visible, and is still being read. The thresholds are fine enough that
-// the observer reports crossing either line.
+// half visible, and is still being read.
+//
+// The observer reports a post crossing one of its thresholds, and for a tall
+// post the half-viewport line falls between them: it can drop below the line
+// without a report. So the observer only says when to start and stop the
+// second, and the post's geometry is measured again when the second is up.
 const thresholds = Array.from({ length: 21 }, (_, i) => i / 20);
 
 function onScreen(e: IntersectionObserverEntry): boolean {
@@ -144,9 +154,30 @@ function onScreen(e: IntersectionObserverEntry): boolean {
   return e.intersectionRect.height >= 0.5 * Math.min(e.boundingClientRect.height, view);
 }
 
-// tracked counts the lists being tracked, which is when the batch timer runs.
+function onScreenNow(el: Element): boolean {
+  const r = el.getBoundingClientRect();
+  const shown = Math.min(r.bottom, innerHeight) - Math.max(r.top, 0);
+  return shown > 0 && shown >= 0.5 * Math.min(r.height, innerHeight);
+}
+
+// tracked counts the lists being tracked. The batch timer runs while one is,
+// and after, while a position is still waiting to go out: one whose PUT
+// failed as the reader left the thread is retried from wherever they went.
 let tracked = 0;
 let batch: ReturnType<typeof setInterval> | undefined;
+
+function batching() {
+  if (batch === undefined) batch = setInterval(tick, batchMs);
+}
+
+function tick() {
+  void flush().then(() => {
+    if (tracked === 0 && pending.size === 0 && inFlight.size === 0) {
+      clearInterval(batch);
+      batch = undefined;
+    }
+  });
+}
 
 // leaving flushes when the page is hidden or goes away: a hidden page may
 // never be shown again, and on a phone hiding is often the last event a page
@@ -156,6 +187,7 @@ function leaving() {
   if (document.visibilityState === 'hidden') void flush();
 }
 const hidden = () => void flush();
+let listening = false;
 
 // trackPosts tracks what the viewer reads of one page of thread id: the
 // canonical posts and tombstones that are the direct children of list,
@@ -176,7 +208,10 @@ export function trackPosts(id: string, list: Element, stored: number): () => voi
       el,
       setTimeout(() => {
         timers.delete(el);
-        read(id, Number(el.getAttribute('data-ordinal')));
+        if (onScreenNow(el)) read(id, Number(el.getAttribute('data-ordinal')));
+        // Below the line without the observer saying so: not read, and the
+        // second starts over while the observer still has it on screen.
+        else if (showing.has(el)) start(el);
       }, dwellMs),
     );
   };
@@ -208,8 +243,11 @@ export function trackPosts(id: string, list: Element, stored: number): () => voi
     else for (const el of showing) start(el);
   };
   document.addEventListener('visibilitychange', visibility);
-  if (tracked++ === 0) {
-    batch = setInterval(() => void flush(), batchMs);
+  tracked++;
+  batching();
+  if (!listening) {
+    // For the life of the page: they only send what is pending.
+    listening = true;
     document.addEventListener('visibilitychange', leaving);
     addEventListener('pagehide', hidden);
   }
@@ -217,17 +255,16 @@ export function trackPosts(id: string, list: Element, stored: number): () => voi
     io.disconnect();
     for (const el of [...timers.keys()]) stop(el);
     document.removeEventListener('visibilitychange', visibility);
-    if (--tracked === 0) {
-      clearInterval(batch);
-      document.removeEventListener('visibilitychange', leaving);
-      removeEventListener('pagehide', hidden);
-    }
+    tracked--;
     void flush();
   };
 }
 
 // resetReadTracker forgets every position, for tests.
 export function resetReadTracker() {
+  clearInterval(batch);
+  batch = undefined;
+  tracked = 0;
   floor.clear();
   pending.clear();
   inFlight.clear();

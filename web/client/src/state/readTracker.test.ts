@@ -22,19 +22,27 @@ class FakeObserver {
   disconnect() {
     this.observed.clear();
   }
-  // show reports el as visible over shown px of its height px, in a
-  // viewport view px tall.
-  show(el: Element, shown: number, height = 200, view = 800) {
+  // show puts el at the foot of the viewport with shown px of its height px
+  // in view, and reports it.
+  show(el: Element, shown: number, height = 200) {
+    place(el, shown, height);
     const entry = {
       target: el,
       isIntersecting: shown > 0,
       intersectionRatio: shown / height,
       intersectionRect: { height: shown },
       boundingClientRect: { height },
-      rootBounds: { height: view },
+      rootBounds: { height: innerHeight },
     } as unknown as IntersectionObserverEntry;
     this.callback([entry], this as unknown as IntersectionObserver);
   }
+}
+
+// place moves el to the foot of the viewport with shown px of it in view,
+// without the observer reporting it: a move between two thresholds.
+function place(el: Element, shown: number, height = 200) {
+  const top = innerHeight - shown;
+  el.getBoundingClientRect = () => ({ top, bottom: top + height, height }) as DOMRect;
 }
 
 interface Sent {
@@ -143,8 +151,29 @@ describe('what counts as read', () => {
   it('counts a post half on screen, and one taller than two screens that fills half of it', async () => {
     const stop = trackPosts('t1', list(10), 0);
     io().show(post(2), 99, 200); // under half: not on screen
-    io().show(post(4), 400, 3000, 800); // an eighth of it, but half the screen
+    io().show(post(4), innerHeight / 2, innerHeight * 4); // an eighth of it, but half the screen
     vi.advanceTimersByTime(dwellMs);
+    await flush();
+    expect(puts().map((s) => s.body)).toEqual([{ ordinal: 4 }]);
+    stop();
+  });
+
+  // Review 1143: a tall post can fall below the half-screen line between two
+  // of the observer's thresholds, with no report.
+  it('does not count a tall post that left the line without the observer saying so', async () => {
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(4), innerHeight / 2 + 20, innerHeight * 4);
+    vi.advanceTimersByTime(dwellMs / 2);
+    place(post(4), innerHeight / 2 - 20, innerHeight * 4);
+    vi.advanceTimersByTime(dwellMs / 2);
+    await flush();
+    expect(puts()).toEqual([]);
+    // Back over the line, still unreported: a full second more counts it.
+    place(post(4), innerHeight / 2 + 20, innerHeight * 4);
+    vi.advanceTimersByTime(dwellMs - 1);
+    await flush();
+    expect(puts()).toEqual([]);
+    vi.advanceTimersByTime(1);
     await flush();
     expect(puts().map((s) => s.body)).toEqual([{ ordinal: 4 }]);
     stop();
@@ -292,9 +321,32 @@ describe('flushing', () => {
     stop();
     await drain();
     expect(puts()).toEqual([{ url: readUrl('t1'), method: 'PUT', keepalive: true, body: { ordinal: 7 } }]);
-    // And stops: the batch timer is gone.
+    // And stops: with nothing left to send, the batch timer goes.
     await vi.advanceTimersByTimeAsync(batchMs * 2);
     expect(puts()).toHaveLength(1);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
+  // Review 1143: the navigation's PUT fails once the reader has left every
+  // thread, and is still sent.
+  it('retries a lost position after the last page stops being tracked', async () => {
+    let fail = true;
+    answer = (s) => {
+      if (fail) throw new TypeError('network down');
+      return stored(s.body!.ordinal!);
+    };
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(5), 200);
+    vi.advanceTimersByTime(dwellMs);
+    stop();
+    await drain();
+    expect(puts()).toHaveLength(1);
+    fail = false;
+    await vi.advanceTimersByTimeAsync(batchMs);
+    expect(puts().map((s) => s.body)).toEqual([{ ordinal: 5 }, { ordinal: 5 }]);
+    await vi.advanceTimersByTimeAsync(batchMs * 2);
+    expect(puts()).toHaveLength(2);
+    expect(vi.getTimerCount()).toBe(0);
   });
 
   it('flushes on pagehide', async () => {
@@ -369,6 +421,68 @@ describe('markUnread', () => {
       ['PUT', { ordinal: 8 }],
     ]);
     releases.shift()!();
+    stop();
+  });
+
+  // Review 1143: the thread is held from the call, not from when the PUTs
+  // already out have answered, so none starts while markUnread waits.
+  it('starts no PUT while it waits for one already out', async () => {
+    const releases: (() => void)[] = [];
+    answer = (s) =>
+      new Promise((r) => releases.push(() => r(stored(s.method === 'DELETE' ? 2 : s.body!.ordinal!))));
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(4), 200);
+    vi.advanceTimersByTime(dwellMs);
+    void flush();
+    await drain();
+    expect(sent.map((s) => [s.method, s.body])).toEqual([['PUT', { ordinal: 4 }]]);
+    const marked = markUnread('t1', 2);
+    io().show(post(7), 200);
+    vi.advanceTimersByTime(dwellMs);
+    void flush();
+    await drain();
+    expect(sent).toHaveLength(1);
+    releases.shift()!();
+    await drain();
+    // Read before the DELETE went out: what the mark undoes.
+    expect(sent.map((s) => [s.method, s.body])).toEqual([
+      ['PUT', { ordinal: 4 }],
+      ['DELETE', { ordinal: 2 }],
+    ]);
+    releases.shift()!();
+    expect(await marked).toEqual({ last_read_ordinal: 2 });
+    await flush();
+    expect(sent).toHaveLength(2);
+    stop();
+  });
+
+  it('waits for a PUT an overlapping markUnread sent before its own DELETE', async () => {
+    const releases: (() => void)[] = [];
+    answer = (s) =>
+      new Promise((r) => releases.push(() => r(stored(s.method === 'DELETE' ? 2 : s.body!.ordinal!))));
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(4), 200);
+    vi.advanceTimersByTime(dwellMs);
+    const first = markUnread('t1', 2);
+    await drain();
+    io().show(post(7), 200);
+    vi.advanceTimersByTime(dwellMs);
+    const second = markUnread('t1', 3);
+    await drain();
+    expect(sent.map((s) => [s.method, s.body])).toEqual([
+      ['PUT', { ordinal: 4 }],
+      ['PUT', { ordinal: 7 }],
+    ]);
+    // The first PUT answers; the second is still out, so no DELETE yet.
+    releases.shift()!();
+    await drain();
+    expect(sent).toHaveLength(2);
+    releases.shift()!();
+    await drain();
+    expect(sent.slice(2).map((s) => s.method)).toEqual(['DELETE', 'DELETE']);
+    releases.shift()!();
+    releases.shift()!();
+    await Promise.all([first, second]);
     stop();
   });
 
