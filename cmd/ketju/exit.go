@@ -14,6 +14,10 @@ const (
 	// exitNotFound shares corruption's code: admin, which uses it, finds no
 	// corruption, and fsck, which finds corruption, names nothing.
 	exitNotFound = 1
+
+	// exitInvalidConfig is config check's "the file has problems", the
+	// same code the other commands give a failure in what they examined.
+	exitInvalidConfig = 1
 )
 
 // errUsage is a mistake in how the command was invoked.
@@ -40,6 +44,7 @@ func exitCodeFor(err error) int {
 	var c errCorrupt
 	var d errDrift
 	var n errNotFound
+	var cf errConfig
 	switch {
 	case err == nil:
 		return exitOK
@@ -51,6 +56,8 @@ func exitCodeFor(err error) int {
 		return exitDrift
 	case errors.As(err, &n):
 		return exitNotFound
+	case errors.As(err, &cf):
+		return exitInvalidConfig
 	default:
 		return exitInternal
 	}

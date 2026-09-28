@@ -126,7 +126,34 @@ the key, the value and the reason; an invalid value never becomes a zero
 value. Every problem in the file is reported in one pass.
 
 `ketju config check` validates and prints the effective config with
-secrets redacted.
+secrets redacted. It loads the file exactly as `serve` does, from
+`--config`, else `$KETJU_CONFIG`, else `./config.toml`, and prints every
+key with its value and the layer it came from: `file`, `env`, `env-file`,
+`secret-file` (a provider's `client_secret_file`) or `default`. A secret is
+redacted by its type rather than by its key's name, so a secret added under
+a name nobody expected is redacted as well. The check also lists the
+`KETJU_*` variables the build reads and the runtime settings, which it
+names but never reads from the file. It exits 0 when the config is valid,
+1 when it has problems, each named by its key, 2 for usage, and 4 when the
+file is missing or unreadable, as the other commands do.
+
+A problem stops `serve` and fails the check. A warning does neither: `serve`
+logs it at startup and the check prints it. A configuration is a warning
+rather than an error when it is legal, has a use, and costs something the
+operator should choose knowingly:
+
+- `storage.fsync = "never"` loses acknowledged posts on a crash, and is
+  right for an import or a test run;
+- `insecure_skip_issuer_check` exists for one provider family (09) and is a
+  hole anywhere else;
+- `auto_approve` has no effect until approval-mode registration exists, so
+  it does not open registration;
+- a `client_secret_file` that is group or world writable, because
+  bind-mounted and projected secrets land with modes an application does not
+  control.
+
+Everything the loader refuses is an error, including a runtime setting
+written into `config.toml`.
 
 ## Observability
 

@@ -1,0 +1,60 @@
+# $DIR/config.toml is valid
+#
+# key = value  # where the value came from
+
+listen = "0.0.0.0:9000"                                          # file
+data_dir = "/srv/ketju"                                          # file
+site_url = "https://forum.example.org"                           # env-file KETJU_SITE_URL_FILE
+cookie_key_file = ""                                             # default
+storage.fsync = "always"                                         # file
+storage.open_threads = 512                                       # default
+storage.rendered_cache_mb = 256                                  # default
+storage.response_cache_mb = 64                                   # default
+log.level = "debug"                                              # env KETJU_LOG_LEVEL
+log.format = "auto"                                              # default
+bootstrap.admin_emails = []                                      # default
+bootstrap.admin_subjects = ["club:8f2c61d4"]                     # file
+oidc.providers.club.key = "club"                                 # file
+oidc.providers.club.name = "Club SSO"                            # file
+oidc.providers.club.issuer = "https://auth.club.example"         # file
+oidc.providers.club.client_id = "ketju"                          # file
+oidc.providers.club.client_secret = "[redacted]"                 # secret-file $DIR/club-secret
+oidc.providers.club.client_secret_file = "club-secret"           # file
+oidc.providers.club.scopes = ["openid", "email", "profile"]      # default
+oidc.providers.club.allowed_email_domains = []                   # default
+oidc.providers.club.auto_approve = false                         # default
+oidc.providers.club.groups_claim = "groups"                      # file
+oidc.providers.club.group_map = { "forum-mods" = "moderators" }  # file
+oidc.providers.club.insecure_skip_issuer_check = false           # default
+limits.attachment_mb = 10                                        # default
+
+# environment variables this build reads; * is set here.
+# Each can instead be given as NAME_FILE, naming a file that holds the value.
+#   KETJU_LISTEN                     listen
+#   KETJU_DATA_DIR                   data_dir
+#   KETJU_COOKIE_KEY_FILE            cookie_key_file
+# * KETJU_SITE_URL                   site_url
+# * KETJU_LOG_LEVEL                  log.level
+#   KETJU_LOG_FORMAT                 log.format
+#   KETJU_STORAGE_FSYNC              storage.fsync
+#   KETJU_STORAGE_OPEN_THREADS       storage.open_threads
+#   KETJU_STORAGE_RENDERED_CACHE_MB  storage.rendered_cache_mb
+#   KETJU_STORAGE_RESPONSE_CACHE_MB  storage.response_cache_mb
+#   KETJU_LIMITS_ATTACHMENT_MB       limits.attachment_mb
+#   KETJU_BOOTSTRAP_ADMIN_EMAILS     bootstrap.admin_emails
+#   KETJU_BOOTSTRAP_ADMIN_SUBJECTS   bootstrap.admin_subjects
+#   KETJU_OIDC_CLUB_ISSUER           oidc.providers.club.issuer
+#   KETJU_OIDC_CLUB_CLIENT_ID        oidc.providers.club.client_id
+#   KETJU_OIDC_CLUB_CLIENT_SECRET    oidc.providers.club.client_secret
+
+# runtime settings: stored in the database and changed in the admin UI,
+# never read from this file. Shown with the value a new forum starts with.
+#   flags.auto_hide_threshold = 3               # Open flags on a post that hide it pending review.
+#   posts.delete_window_seconds = 900           # How long after posting an author may delete a post.
+#   posts.edit_window_seconds = 86400           # How long after posting an author may edit a post.
+#   posts.grace_edit_seconds = 300              # Edits within this many seconds of posting are shown as the original revision.
+#   public_edit_history = true                  # Whether members, not only moderators, may read a post's revisions.
+#   registration.allow_local_passwords = false  # Whether accounts may sign in with a local password as well as a provider.
+#   registration.mode = "approval"              # How a new visitor becomes a member: "open" or "approval".
+#   site_name = "Ketju"                         # The site's name, shown in the header and page titles.
+#   slow_mode.default_seconds = 0               # Minimum seconds between one member's posts in a thread; 0 is off.

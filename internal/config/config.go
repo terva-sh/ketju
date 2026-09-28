@@ -89,6 +89,9 @@ type Config struct {
 	Bootstrap Bootstrap `toml:"bootstrap"`
 	OIDC      OIDC      `toml:"oidc"`
 	Limits    Limits    `toml:"limits"`
+
+	// sources records where each key's value came from; see Source.
+	sources map[string]Source
 }
 
 // Log configures the structured logger.
@@ -232,7 +235,7 @@ func Load(path string, getenv func(string) string) (*Config, []string, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		if errors.Is(err, fs.ErrNotExist) {
-			return nil, nil, fmt.Errorf("config: %s does not exist", path)
+			return nil, nil, fmt.Errorf("config: %s does not exist: %w", path, fs.ErrNotExist)
 		}
 		return nil, nil, fmt.Errorf("config: reading %s: %w", path, err)
 	}
@@ -241,7 +244,7 @@ func Load(path string, getenv func(string) string) (*Config, []string, error) {
 	dec := toml.NewDecoder(strings.NewReader(string(b)))
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(cfg); err != nil {
-		return nil, nil, decodeError(path, err)
+		return nil, nil, decodeError(path, b, err)
 	}
 
 	// Which keys the file actually mentions, as dotted paths. Decoding alone
@@ -253,6 +256,7 @@ func Load(path string, getenv func(string) string) (*Config, []string, error) {
 	var raw map[string]any
 	if err := toml.Unmarshal(b, &raw); err == nil {
 		flatten("", raw, present)
+		recordFileSources(cfg, raw)
 	}
 
 	problems := &problemList{file: path}
@@ -278,6 +282,7 @@ func Load(path string, getenv func(string) string) (*Config, []string, error) {
 
 	warnings := resolveSecrets(cfg, filepath.Dir(path), problems)
 	validate(cfg, problems)
+	warnings = append(warnings, warn(cfg)...)
 
 	if err := problems.err(); err != nil {
 		return nil, warnings, err
@@ -415,6 +420,7 @@ func resolveSecrets(c *Config, dir string, p *problemList) []string {
 			continue
 		}
 		pr.ClientSecret = s
+		c.setSource(key+".client_secret", Source{Layer: LayerSecretFile, From: path})
 		if w := secretFileWarning(path); w != "" {
 			warnings = append(warnings, w)
 		}

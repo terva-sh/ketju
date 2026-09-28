@@ -4,7 +4,8 @@
 // dump and fsck came first, in Phase 0, because they are what you reach for
 // when the storage is the thing that is wrong, and wanting them for the first
 // time during an incident is too late to write them. serve is the server, and
-// reindex rebuilds what the database derives from the logs.
+// reindex rebuilds what the database derives from the logs. config check is
+// what an operator runs before a restart.
 package main
 
 import (
@@ -22,6 +23,7 @@ commands:
   fsck     walk every log, verify every checksum, rebuild every index
   reindex  rebuild the database's projection tables from the thread logs
   admin    administer members from the command line (admin promote)
+  config   check the config file and print the effective configuration
 
 Run ketju <command> -h for a command's flags.
 `
@@ -48,6 +50,8 @@ func main() {
 		err = runAdmin(os.Args[2:])
 	case "reindex":
 		err = runReindex(os.Args[2:])
+	case "config":
+		err = runConfig(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return

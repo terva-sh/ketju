@@ -123,12 +123,13 @@ func (c *Config) Overrides() []Override {
 // still fills a key neither source set.
 func applyEnv(c *Config, getenv func(string) string, present map[string]bool, p *problemList) {
 	for _, o := range overrides {
-		v, ok := lookup(getenv, o.Env, p)
+		v, src, ok := lookup(getenv, o.Env, p)
 		if !ok {
 			continue
 		}
 		o.apply(c, v, p)
 		present[o.Key] = true
+		c.setSource(o.Key, src)
 	}
 
 	for i := range c.OIDC.Providers {
@@ -140,11 +141,18 @@ func applyEnv(c *Config, getenv func(string) string, present map[string]bool, p 
 		}
 		for _, po := range providerOverrides {
 			name := providerEnv(pr.Key, po.Suffix)
-			v, ok := lookup(getenv, name, p)
+			v, src, ok := lookup(getenv, name, p)
 			if !ok {
 				continue
 			}
 			po.apply(pr, v)
+			prefix := "oidc.providers." + pr.Key + "."
+			c.setSource(prefix+po.Key, src)
+			if po.Key == "client_secret" {
+				// The override emptied client_secret_file too, so the
+				// variable is why it is empty.
+				c.setSource(prefix+"client_secret_file", src)
+			}
 		}
 	}
 }
@@ -154,7 +162,7 @@ func applyEnv(c *Config, getenv func(string) string, present map[string]bool, p 
 // Setting both is an error rather than a precedence rule. Precedence here
 // would mean a deployment that sets both gets one of them silently, and the
 // one it gets is the one nobody checked.
-func lookup(getenv func(string) string, name string, p *problemList) (string, bool) {
+func lookup(getenv func(string) string, name string, p *problemList) (string, Source, bool) {
 	fileVar := name + FileSuffix
 	direct := getenv(name)
 	path := getenv(fileVar)
@@ -167,23 +175,23 @@ func lookup(getenv func(string) string, name string, p *problemList) (string, bo
 	switch {
 	case hasDirect && hasFile:
 		p.addf(name, "%s and %s are both set; give the value in one place so that there is no question which one is live", name, fileVar)
-		return "", false
+		return "", Source{}, false
 	case hasFile:
 		b, err := os.ReadFile(path)
 		if err != nil {
 			p.addf(fileVar, "cannot read %s: %v", path, redactPathError(err))
-			return "", false
+			return "", Source{}, false
 		}
 		v := strings.TrimRight(string(b), "\r\n")
 		if v == "" {
 			p.addf(fileVar, "%s is empty", path)
-			return "", false
+			return "", Source{}, false
 		}
-		return v, true
+		return v, Source{Layer: LayerEnvFile, From: fileVar}, true
 	case hasDirect:
-		return direct, true
+		return direct, Source{Layer: LayerEnv, From: name}, true
 	default:
-		return "", false
+		return "", Source{}, false
 	}
 }
 

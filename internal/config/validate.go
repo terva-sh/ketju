@@ -243,6 +243,37 @@ func validateBootstrap(b Bootstrap, p *problemList) {
 	}
 }
 
+// warn reports what is legal but costs something an operator should choose
+// knowingly. A warning does not stop the server and does not fail
+// `ketju config check`; serve logs each one at startup, and the check prints
+// them. docs/02 "Configuration" lists which configurations are warnings and
+// why each is not an error.
+//
+// Each warning opens with the key, as a problem does, so that the line an
+// operator pastes says which setting it is about.
+func warn(c *Config) []string {
+	var out []string
+	if c.Storage.Fsync == "never" {
+		out = append(out, `storage.fsync: "never" acknowledges a post before it reaches the disk, so a crash or power loss loses posts members were told were saved; use it for imports and tests, not for a forum people write in`)
+	}
+	for i, pr := range c.OIDC.Providers {
+		key := fmt.Sprintf("oidc.providers[%d]", i)
+		if pr.Key != "" {
+			key = "oidc.providers." + pr.Key
+		}
+		if pr.InsecureSkipIssuerCheck {
+			out = append(out, key+".insecure_skip_issuer_check: on, so this provider's ID tokens are accepted without checking who issued them; it exists for the one provider family whose issuer differs from its discovery URL (docs/09), and is otherwise a hole")
+		}
+		if pr.AutoApprove {
+			// Approval-mode registration is TKT-01M29CKRE9's, and until it
+			// lands auto_approve changes nothing (internal/service/identity
+			// RegistrationOpen). That ticket removes this warning.
+			out = append(out, key+`.auto_approve: on, but this version has no approval queue for it to bypass, so it has no effect; someone new from this provider can register only while registration.mode is "open"`)
+		}
+	}
+	return out
+}
+
 func isHostname(h string) bool {
 	if h == "" || len(h) > 253 {
 		return false
