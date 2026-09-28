@@ -18,9 +18,8 @@ import '../components/thread/thread.css';
 import { Toolbar } from '../shell/Toolbar';
 import { threadActions } from '../shell/threadActions';
 import { ThreadFoot } from '../keyboard/ThreadFoot';
-import { firstUnread, useThreadShortcuts } from '../keyboard/shortcuts';
+import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
-import { viewer } from '../state/viewer';
 import { composerFor, quotePost, replyToPost } from '../state/composer';
 import { useShellContext } from '../state/shell';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
@@ -89,7 +88,7 @@ export function ThreadScreen() {
   // read, on the thread body, where there are posts to go to.
   const lastRead = res.data?.viewer.last_read_ordinal ?? 0;
   const postCount = res.data?.thread.post_count ?? 0;
-  const unread = !history && !!res.data && !!viewer.value.user && lastRead < postCount;
+  const unread = !history && !!res.data && tracksUnread() && lastRead < postCount;
   const actions = useMemo(
     () =>
       known

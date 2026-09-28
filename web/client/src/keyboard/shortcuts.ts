@@ -6,6 +6,7 @@ import { pageHref } from '../components/thread/Pager';
 import { permalink, type ThreadRef } from '../components/thread/Post';
 import { unreadHref } from '../components/ThreadRow';
 import { isPhone } from '../state/layout';
+import { viewer } from '../state/viewer';
 
 // The desktop keyboard shortcuts on a thread page (docs/06 "Paged, not
 // infinite"): j and k between posts, g and a number to an ordinal, u to the
@@ -73,9 +74,11 @@ export function step(tops: number[], current: number, dir: 1 | -1): number {
 }
 
 // A move to another page leaves a post to focus once it has rendered, since
-// the thread body is a new one for each page. It is the ordinal, or the
-// first or last post of the page.
-let pending: number | 'first' | 'last' | null = null;
+// the thread body is a new one for each page: an ordinal; the first or last
+// post of the page; or on a landing, where the server chose the page, the
+// first unread post on it.
+type Pending = number | 'first' | 'last' | 'landing';
+let pending: Pending | null = null;
 
 // focusPost moves focus to a post and puts it at the top of the screen.
 export function focusPost(el: HTMLElement) {
@@ -120,7 +123,7 @@ export function firstUnread(thread: ThreadRef, lastRead: number, postCount: numb
     if (first) focusPost(first);
     return;
   }
-  pending = 'first';
+  pending = 'landing';
   route(landing);
 }
 
@@ -135,49 +138,67 @@ export function nextUnread(rows: Pick<ThreadRow, 'id' | 'unread'>[], current: st
   return rows.findIndex((r, i) => i < at && r.unread > 0);
 }
 
-// maxListPages bounds how far n reads down a forum's list: the thread it
-// wants is almost always on the first page, and a forum of thousands of
-// threads should not cost as many requests.
-export const maxListPages = 5;
-
 // findNextUnread reads the forum's list, a page at a time, until it holds
-// an unread thread after the current one or runs out, and answers the row
-// nextUnread picks, or null.
-export async function findNextUnread(forum: string, current: string): Promise<ThreadRow | null> {
+// an unread thread after the current one or the list ends, and answers the
+// row nextUnread picks, or null. It reads to the end rather than stopping
+// at a bound: only the whole list can say that nothing below is unread, and
+// so that wrapping to one above is right (review 1129). A cursor answered
+// twice ends it, rather than looping.
+export async function findNextUnread(forum: string, current: string, signal?: AbortSignal): Promise<ThreadRow | null> {
   const rows: ThreadRow[] = [];
+  const seen = new Set<string>();
   let cursor = '';
-  for (let n = 0; n < maxListPages; n++) {
+  for (;;) {
     const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
-    const list = await apiGet<ThreadList>(`/api/v1/forums/${encodeURIComponent(forum)}/threads${q}`);
+    const list = await apiGet<ThreadList>(`/api/v1/forums/${encodeURIComponent(forum)}/threads${q}`, { signal });
     rows.push(...list.threads);
     const at = rows.findIndex((r) => r.id === current);
     if (at >= 0 && rows.some((r, i) => i > at && r.unread > 0)) break;
+    seen.add(cursor);
     cursor = list.next_cursor;
-    if (!cursor) break;
+    if (!cursor || seen.has(cursor)) break;
   }
   const i = nextUnread(rows, current);
   return i < 0 ? null : rows[i];
 }
 
+// The search n started, which leaving the thread page abandons, so a reader
+// who has moved on is not taken somewhere when it finishes (review 1129). A
+// second n starts it again.
+let search: AbortController | null = null;
+
 // openNextUnread opens the next unread thread in the forum where its unread
-// badge would (unreadHref), or says there is none.
-let seeking = false;
+// badge would (unreadHref), or says there is none. It lands on the post the
+// badge names: the one after the read position, or with none, the first
+// unread post on the page the server lands the reader on.
 export async function openNextUnread(page: ThreadPage, route: (url: string) => void) {
-  if (seeking) return;
-  seeking = true;
+  search?.abort();
+  const mine = new AbortController();
+  search = mine;
   hint.value = '';
   try {
-    const row = await findNextUnread(page.thread.forum.slug, page.thread.id);
+    const row = await findNextUnread(page.thread.forum.slug, page.thread.id, mine.signal);
+    if (mine.signal.aborted) return;
     if (row) {
-      pending = 'first';
+      pending = row.last_read_ordinal > 0 ? row.last_read_ordinal + 1 : 'landing';
       route(unreadHref(row));
     } else hint.value = `No other unread threads in ${page.thread.forum.name}.`;
   } catch {
-    hint.value = 'Could not load this forum’s threads.';
+    if (!mine.signal.aborted) hint.value = 'Could not load this forum’s threads.';
   } finally {
-    seeking = false;
+    if (search === mine) search = null;
   }
 }
+
+// abandonSearch stops a search n started, when its thread page goes.
+function abandonSearch() {
+  search?.abort();
+  search = null;
+}
+
+// tracksUnread is whether the reader has read positions to go by: they are
+// signed in. u and n, and the controls that do the same, are theirs only.
+export const tracksUnread = () => !!viewer.value.user;
 
 // gotoPause is how long g waits after the last digit before going.
 export const gotoPause = 1500;
@@ -192,14 +213,25 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
     hint.value = '';
     const p = pending;
     pending = null;
-    if (p === null || isPhone.value) return;
-    const all = posts();
-    const el = p === 'first' ? all[0] : p === 'last' ? all[all.length - 1] : document.getElementById(`post-${p}`);
-    if (el?.matches(postSelector)) {
-      el.focus({ preventScroll: true });
-      // A permalink's and a landing's scroll are the arrival's (ThreadScreen).
-      if (typeof p !== 'number' && !location.hash) el.scrollIntoView?.({ block: 'start' });
+    if (p !== null && !isPhone.value) {
+      const all = posts();
+      const lastRead = live.current.page.viewer.last_read_ordinal;
+      const el =
+        p === 'first'
+          ? all[0]
+          : p === 'last'
+            ? all[all.length - 1]
+            : p === 'landing'
+              ? (all.find((e) => Number(e.dataset.ordinal) > lastRead) ?? all[0])
+              : document.getElementById(`post-${p}`);
+      if (el?.matches(postSelector)) {
+        el.focus({ preventScroll: true });
+        // A permalink's and a landing's scroll are the arrival's
+        // (ThreadScreen); a page's is this.
+        if ((p === 'first' || p === 'last') && !location.hash) el.scrollIntoView?.({ block: 'start' });
+      }
     }
+    return abandonSearch;
   }, []);
 
   useEffect(() => {
@@ -273,10 +305,12 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
           }, gotoPause * 2);
           return;
         case 'u':
+          if (!tracksUnread()) return;
           e.preventDefault();
           firstUnread(page.thread, page.viewer.last_read_ordinal, page.thread.post_count, route);
           return;
         case 'n':
+          if (!tracksUnread()) return;
           e.preventDefault();
           void openNextUnread(page, route);
           return;

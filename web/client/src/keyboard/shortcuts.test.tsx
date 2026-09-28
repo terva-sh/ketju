@@ -6,7 +6,7 @@ import threadsGolden from '../../../../internal/dto/testdata/golden/threads.memb
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 import { isPhone } from '../state/layout';
 import { viewer } from '../state/viewer';
-import { renderAt, settle } from '../testing';
+import { renderAt, route, settle } from '../testing';
 import { helpOpen, hint, ignored, nextUnread, shortcuts, step } from './shortcuts';
 
 // The desktop keyboard shortcuts (TKT-01M29CGBX4; docs/06 "Paged, not
@@ -22,13 +22,14 @@ function post(ordinal: number): Post {
   return { ...base.posts[0], ordinal, reply_to: null, reply_to_suppressed: false, reply_count: 0, deleted: false, html: `<p>body of ${ordinal}</p>` };
 }
 
-// page n of a 15-post thread, five posts a page.
-function page(n: number, lastRead = 0): ThreadPage {
+// page n of a 15-post thread, five posts a page: this test's thread, or
+// another in the forum, whose slug is s-{its id}.
+function page(n: number, lastRead = 0, tid = id): ThreadPage {
   const first = (n - 1) * 5 + 1;
   return {
     ...base,
     lens: null,
-    thread: { ...base.thread, id, slug, post_count: 15 },
+    thread: { ...base.thread, id: tid, slug: tid === id ? slug : `s-${tid}`, post_count: 15 },
     page: { number: n, size: 5, total_pages: 3 },
     viewer: { ...base.viewer, last_read_ordinal: lastRead },
     posts: [0, 1, 2, 3, 4].map((i) => post(first + i)),
@@ -44,22 +45,27 @@ const row = (rid: string, unread: number, lastRead = 0): ThreadRow => ({
 });
 
 // serve answers a thread page by its ?page= or permalink ordinal, and the
-// forum's list from lists, a page per cursor; it records every URL.
-function serve(lastRead = 0, lists: ThreadList[] = []) {
+// forum's list from lists, a page per cursor, once held says it may; it
+// records every URL.
+function serve(lastRead = 0, lists: ThreadList[] = [], held: Promise<void> = Promise.resolve()) {
   const urls: string[] = [];
   vi.stubGlobal('fetch', async (url: string) => {
     urls.push(url);
     const u = new URL(url, 'http://x');
     if (u.pathname.startsWith('/api/v1/forums/')) {
+      await held;
       const i = Number(u.searchParams.get('cursor') ?? 0);
       return new Response(JSON.stringify(lists[i]), { status: 200 });
     }
+    const tid = decodeURIComponent(u.pathname.split('/')[4]);
     const ordinal = Number(u.searchParams.get('ordinal') ?? 0);
     const n = ordinal ? Math.ceil(ordinal / 5) : Number(u.searchParams.get('page') ?? 1);
-    return new Response(JSON.stringify(page(n, lastRead)), { status: 200 });
+    return new Response(JSON.stringify(page(n, tid === id ? lastRead : 0, tid)), { status: 200 });
   });
   return urls;
 }
+
+const list = (threads: ThreadRow[], next = ''): ThreadList => ({ forum: { slug: 'general', name: 'General' }, threads, next_cursor: next });
 
 // Each post's top is where it would be on a page scrolled to the top: 72
 // px, the reading line, for the first, and 200 px apart.
@@ -273,6 +279,47 @@ describe('the shortcuts on a thread page', () => {
     expect(urls).toContain('/api/v1/forums/general/threads');
     expect(urls).toContain('/api/v1/forums/general/threads?cursor=1');
     expect(location.pathname).toBe('/t/ddd/s-ddd/10');
+    // On the post the badge names, not the first on its page (review 1129).
+    await settle(root);
+    expect(focused()).toBe('post-10');
+  });
+
+  it('n reads the whole list before wrapping to a thread above', async () => {
+    // Unread above on the first page, and below only on the seventh.
+    const lists = [list([row('aaa', 3), row(id, 0)], '1')];
+    for (let i = 1; i < 6; i++) lists.push(list([row(`p${i}`, 0)], String(i + 1)));
+    lists.push(list([row('zzz', 2, 4)]));
+    serve(0, lists);
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'n');
+    await settle(root);
+    expect(location.pathname).toBe('/t/zzz/s-zzz/5');
+  });
+
+  it('n abandons its search when the reader leaves the thread', async () => {
+    let release = () => {};
+    const held = new Promise<void>((r) => (release = r));
+    serve(0, [list([row(id, 0), row('bbb', 2)])], held);
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'n');
+    await route('/');
+    await settle(root);
+    await act(async () => release());
+    await settle(root);
+    expect(location.pathname).toBe('/');
+    expect(hint.value).toBe('');
+  });
+
+  it('u and n do nothing for a reader who is not signed in, who has no controls for them', async () => {
+    viewer.value = { ...viewer.value, user: null } as Me;
+    const urls = serve(2, [list([row(id, 0), row('bbb', 2)])]);
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    const asked = urls.length;
+    await type(root, 'u', 'n');
+    expect(urls.length).toBe(asked);
+    expect(document.activeElement?.id).not.toBe('post-3');
+    expect(location.pathname).toBe(`/t/${id}/${slug}`);
+    expect(hint.value).toBe('');
   });
 
   it('n with no other unread thread says so', async () => {
@@ -382,6 +429,10 @@ describe('the visible controls', () => {
     await act(async () => root.querySelector<HTMLButtonElement>('.next-unread')!.click());
     await settle(root);
     expect(location.pathname).toBe('/t/bbb/s-bbb');
+    // With no read position the server chose the page: the first unread
+    // post on it, here the first.
+    await settle(root);
+    expect(focused()).toBe('post-1');
   });
 
   it('Keyboard shortcuts opens the list', async () => {

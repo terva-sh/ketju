@@ -1,9 +1,8 @@
 import { useEffect, useState } from 'preact/hooks';
 import type { ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
-import { viewer } from '../state/viewer';
 import { HelpOverlay } from './HelpOverlay';
-import { goToOrdinal, helpOpen, hint, openNextUnread } from './shortcuts';
+import { goToOrdinal, helpOpen, hint, openNextUnread, tracksUnread } from './shortcuts';
 import './keyboard.css';
 
 // ThreadFoot is below a thread page's posts: the visible controls the
@@ -15,7 +14,7 @@ import './keyboard.css';
 // shortcuts and these controls report through.
 export function ThreadFoot({ page, route }: { page: ThreadPage; route: (url: string) => void }) {
   const [ordinal, setOrdinal] = useState('');
-  const signedIn = !!viewer.value.user;
+  const signedIn = tracksUnread();
   const phone = isPhone.value;
   useEffect(
     () => () => {
