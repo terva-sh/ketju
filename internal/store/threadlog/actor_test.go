@@ -199,11 +199,19 @@ func TestConcurrentAppendsProduceGaplessOrdinals(t *testing.T) {
 // and an earlier version of this test did exactly that and failed roughly two
 // runs in five once the suite had enough other work in it to lose the race.
 // testing/synctest supplies the missing primitive: Wait returns when every
-// other goroutine in the bubble is durably blocked, which here is precisely
-// the state the batch is supposed to collapse — one goroutine inside the gated
-// Sync and sixteen parked on the actor's unbuffered channel. Reaching that
-// state on purpose is also what lets the fsync count be asserted exactly
-// rather than bounded.
+// other goroutine in the bubble is durably blocked.
+//
+// One Wait is not enough. The version after that one spawned all seventeen
+// appends and waited once, and it still failed about one run in fifty: the
+// sixteen could reach the actor's channel before the actor had reached Sync
+// for the first record, and its drain then took all seventeen into one commit.
+// That is correct group commit, but it is not the state this test is about. So
+// the test reaches that state in two steps. The first append goes alone, and
+// the first Wait returns only once the actor is blocked on the gate inside
+// Sync with a batch of one. The sixteen go next, and the second Wait returns
+// only once each is parked on the actor's unbuffered channel. Reaching that
+// state on purpose is what lets the fsync count be asserted exactly rather
+// than bounded.
 func TestQueuedAppendsShareOneFsync(t *testing.T) {
 	const queued = 16
 
@@ -216,9 +224,11 @@ func TestQueuedAppendsShareOneFsync(t *testing.T) {
 
 		var wg sync.WaitGroup
 
-		// One append to occupy the actor; it blocks inside the gated Sync.
+		// One append to occupy the actor. Wait until the actor is blocked on
+		// the gate inside Sync, so that commit holds this record and no other.
 		wg.Add(1)
 		go func() { defer wg.Done(); a.Append(post("first")) }() //nolint:errcheck
+		synctest.Wait()
 
 		// The rest pile up behind it, each parked in a send on the actor's
 		// unbuffered channel, which is where the drain will find them.
@@ -226,8 +236,8 @@ func TestQueuedAppendsShareOneFsync(t *testing.T) {
 			wg.Add(1)
 			go func() { defer wg.Done(); a.Append(post(fmt.Sprintf("queued %d", i))) }() //nolint:errcheck
 		}
-
 		synctest.Wait()
+
 		close(gate)
 		wg.Wait()
 		if err := a.Close(); err != nil {
