@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3KB7FXCKRBV62FR6EZXCKP3
 title: Stop recovered databases reusing member ids that old posts name
 type: spike
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T06:28:54Z
-updated_at: 2026-09-28T06:28:54Z
+updated_at: 2026-09-28T18:06:56Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -45,3 +45,17 @@ Found while shipping `ketju reindex` (TKT-01M29C5Y25, Ship ketju reindex for pro
 - Keep member ids out of reuse by construction: allocate them like thread ids (time-based), which is a schema change.
 
 Each changes what members see and who a post is attributed to, so it is a product and security decision for a person.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T18:06:55Z
+
+### Maintainer decision, 2026-09-28: "Reindex bumps the id sequence"
+
+`ketju reindex` raises the next member id above the largest member id any thread log names: as author, mention or actor, including edit, delete and moderation records. A member who joins afterwards therefore never takes an id an old post already names.
+
+A post whose author id the database lacks renders as a deleted member, as the anonymized placeholder does. It is never reattributed.
+
+To make the floor persist, a migration may switch `users.id` to AUTOINCREMENT and set `sqlite_sequence`. Reindex then only ever raises it. A reindex over a database that is not behind the logs changes nothing.
+
+Name the new behaviour in README "Recovering a lost or damaged database" and docs/04. Replace the "unsupported" wording there with what now happens.

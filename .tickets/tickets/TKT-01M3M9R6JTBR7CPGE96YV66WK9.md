@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3M9R6JTBR7CPGE96YV66WK9
 title: Run the pre-Phase-2 hardening sweep of Phase 1 follow-ups
 type: chore
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -27,7 +27,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T15:22:19Z
-updated_at: 2026-09-28T15:22:37Z
+updated_at: 2026-09-28T18:06:56Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -75,3 +75,18 @@ None of the linked tickets is promoted yet; each is `draft`. A person promotes t
 - [ ] The two decision tickets (TKT-01M3BFSBPJ, TKT-01M3KB7FXC) carry a person's recorded decision before implementation
 - [ ] TKT-01M3AZGKBP is archived or kept, with the reason in a note
 - [ ] Main's CI is green after the last merge
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T18:06:54Z
+
+### Authority for the sweep, granted 2026-09-28
+
+When asked, the maintainer chose "Merge on the docs/12 gate". The sweep has the same standing merge authority and exclusions as the Phase 1 runs, applied to this ticket's dependencies and nothing else. A PR merges only when all of these hold on its exact head:
+- CI `ci / Build and Test (pull_request)` is success;
+- `terva-review/code` is success;
+- every low finding is fixed or answered.
+
+A medium-or-higher finding answered by argument, not by changing the code, stops for the maintainer, even if a re-review clears it. The rest of docs/12 applies as written: "Changing CI", "Gaps the design leaves open", "When a ticket cannot proceed" and "Never". No change to AGENTS.md or docs/12 is covered. The orchestrator redeploys the dogfood instance after the sweep.
+
+Also decided, in the maintainer's words: "Promote all 7, archive AZGKBP". The seven dependencies and this ticket move to ready. TKT-01M3AZGKBP is archived, not removed, because it carries notes.

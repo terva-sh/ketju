@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3ANX1NF3XWCJBS3DH9QZNFC
 title: Handles ending in '-' can never be mentioned
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -18,12 +18,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T21:42:17Z
-updated_at: 2026-09-24T21:42:17Z
+updated_at: 2026-09-28T18:06:55Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---

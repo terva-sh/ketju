@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3AZGKBPRQH3M272DPY61CMY
 title: "Keep client PRs reviewable: exclude the built bundle from review"
 type: chore
-status: draft
+status: archived
 status_reason: null
 priority: high
 due_on: null
@@ -16,14 +16,17 @@ dependencies: []
 blocks_on: none
 references: []
 claim: null
-archive: null
+archive:
+  archived_at: 2026-09-28T18:06:56Z
+  from_status: draft
+  reason: null
 created_at: 2026-09-25T00:30:14Z
-updated_at: 2026-09-25T03:40:46Z
+updated_at: 2026-09-28T18:06:56Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -55,3 +58,7 @@ Workaround used, pending a person's decision here:
 - #85 merges only if #86's review is clean, and #85's CI, which proves dist matches the source, is green.
 
 This keeps a real review of every source line, but the clean review is for a different head than the one merged. That makes it a stopgap, not a fix: the options above still need choosing.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T18:06:56Z
+
+Archived 2026-09-28 at the maintainer's direction ("Promote all 7, archive AZGKBP", recorded on TKT-01M3M9R6JT). It is obsolete: the v0.5.0 reviewer (PR #93) sends up to 1 MiB. Every client PR since, #96 through #121, each regenerating the built bundle, was reviewed directly, and none hit context_limit. Archived, not removed, because it carries notes.

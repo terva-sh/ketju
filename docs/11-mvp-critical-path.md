@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-28, after the dogfood instance was deployed and its ticket closed, against the store. They are written by hand, so
+Counts last read 2026-09-28, when the hardening sweep started, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-107 done, 7 ready, 2 blocked, 88 draft, 1 archived (counted 2026-09-28 with
+107 done, 15 ready, 2 blocked, 79 draft, 2 archived (counted 2026-09-28 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -170,7 +170,9 @@ the run. Two are drafts; the third, the dogfooding deployment, was promoted to
   https://ketju.brokkr.local.sothr.com. It is done, with its phone criterion
   left to the real-device check `TKT-01M38WTKSQ`, which depends on it.
 - `TKT-01M3M9R6JT` is a hardening sweep of seven Phase 1 follow-ups before
-  Phase 2 opens registration to strangers. It has no milestone.
+  Phase 2 opens registration to strangers. It has no milestone. On
+  2026-09-28 the maintainer promoted it and its seven dependencies, granted
+  it the docs/12 merge gate, and archived the obsolete `TKT-01M3AZGKBP`.
 - `TKT-01M3M9RR26` grooms Phase 2 for an autonomous run, as Phase 1 was
   groomed. It is Phase 2, which now carries 34 tickets.
 

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3A8V7XCHBCPEH6HYHPVYM66
 title: Publish quarantine before an interrupted live sweep returns
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -18,12 +18,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T17:54:06Z
-updated_at: 2026-09-24T17:54:06Z
+updated_at: 2026-09-28T18:06:55Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---

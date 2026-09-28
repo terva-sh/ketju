@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M393S6P7NK3PVXM76TVHJ16M
 title: Order the group-commit fsync test so its first append is in flight
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T07:06:22Z
-updated_at: 2026-09-24T15:14:09Z
+updated_at: 2026-09-28T18:06:55Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
