@@ -21,7 +21,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T19:51:07Z
-updated_at: 2026-09-28T19:20:05Z
+updated_at: 2026-09-28T19:31:55Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -91,6 +91,10 @@ No bypass found. Every route that can end in a session refused each status other
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T19:20:05Z
 
 Review 1231 (run 33745816-825b-4b87-a052-b68fe362270b, Actions run 746, head 21118faa112afab7ff85e4de50065511b0c4fd1b, base 86e1e2e64ba90ed0e667fa0c411fffc8ef47ec65) was clean at the gate, with one low finding: TestTheLoginPageIssuesNoSession had no valid session belonging to a user who has since become inactive. Fixed. The table now includes a session for pat, who signed in while active and was then set to pending without the session being revoked, and the test afterwards checks that pat is not a member. The next head gets a fresh review.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T19:31:55Z
+
+CI run 751 on head d2fbb3680bf88a719087dbc2d862c96c83480c24 failed one Playwright test: [desktop] e2e/a11y.spec.ts, 'the thread page passes the scan in both themes'. It hit the 30 s test timeout while waiting to click '#post-1 button.reply-expander'. The other 52 tests passed. This PR touches no client code, only one Go test file and the ticket store. The same spec passed in run 745 on head 21118fa, and in main's push run 747 on 4302ad1, which is the PR's current base. This commit touches only the ticket store. It reruns CI, and its review is carried from head d2fbb36 (clean review run 11f27ea0-f6c3-4a62-bc20-ce4a6e9a28b0).
 
 ## Summary
 
