@@ -564,6 +564,16 @@ frame-ancestors 'none'; form-action 'self'; img-src 'self' data:;
 script-src 'self' 'nonce-…'; style-src 'self' 'nonce-…'; connect-src 'self'
 ```
 
+`img-src 'self' data:` also means a post cannot show a remote image. Decided
+2026-09-28 (TKT-01M2K1JKS7): that stays, and the renderer turns a markdown
+image with a remote source into a plain link to its URL, so nothing renders
+broken and no viewer's address reaches the image's host (TKT-01M3N24RM0, Render
+remote markdown images as links rather than broken images). Attachments are how a
+post shows an image. Relaxing `img-src` to `https:` lost because it would
+loosen the policy for every page and send every reader's address to any host a
+poster names. A server-side proxy lost for now because it is an SSRF surface
+that needs hardening of its own; it can be revisited later.
+
 `default-src 'self'` is the no-third-party-origins rule: everything the client
 needs is served from this binary. `script-src` and `style-src` carry the nonce
 and never `'unsafe-inline'` — that keyword would make the nonce decorative,

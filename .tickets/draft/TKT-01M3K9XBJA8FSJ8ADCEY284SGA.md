@@ -9,7 +9,7 @@ priority: normal
 due_on: null
 labels: []
 assignees: []
-milestone: null
+milestone: phase-2
 parent: TKT-01M29BKBMCNDSYHYF9WXAPDNRN
 origin: null
 dependencies: []
@@ -18,7 +18,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T06:05:54Z
-updated_at: 2026-09-28T06:05:54Z
+updated_at: 2026-09-28T22:29:24Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -44,3 +44,9 @@ The form-post table in docs/07 "Form posts for viewer state" needs a row for wha
 - [ ] A decision on saving the thread title is recorded in docs/04 drafts
 - [ ] A new-thread draft can be saved, read and deleted per user and forum through the API
 - [ ] docs/07's form-post table has a row for the new route
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:23Z
+
+Maintainer decision, 2026-09-28: a new-thread draft saves the title. Add a nullable title column to drafts (null for reply drafts) in this ticket's migration. docs/04 'drafts' now shows the column and says this ticket adds it. Moved into phase-2 during grooming. Carry this into the plan's Settled section.

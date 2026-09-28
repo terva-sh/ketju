@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M39WZY8C6ZK5CNZCH4CPXHT1
 title: Build the post history screen
 type: task
-status: draft
+status: archived
 status_reason: null
 priority: normal
 due_on: null
@@ -18,14 +18,17 @@ dependencies: []
 blocks_on: none
 references: []
 claim: null
-archive: null
+archive:
+  archived_at: 2026-09-28T22:29:01Z
+  from_status: draft
+  reason: null
 created_at: 2026-09-24T14:26:57Z
-updated_at: 2026-09-24T14:26:57Z
+updated_at: 2026-09-28T22:29:01Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -48,3 +51,9 @@ Build the screen: list the revisions with actor, time and reason, and show a wor
 - [ ] The history route lists a post's revisions with actor, time and reason
 - [ ] Any two revisions can be compared as a word-level diff of their sources
 - [ ] Refusals (unauthenticated, forbidden) and a deleted post's withheld history render through ErrorPanel or a stated notice
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:01Z
+
+Archived 2026-09-28 as a duplicate of TKT-01M29CP2Q3 (Build the post history view with word-level diffs), by the maintainer's decision during Phase 2 grooming. Its route, endpoint shape, refusals and placeholder detail were folded into CP2Q3's description and criteria.

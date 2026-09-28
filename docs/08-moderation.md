@@ -22,6 +22,16 @@ with the content.
 | Anonymize user | admin | `audit_log` | no |
 | Hard-redact post body | admin, CLI only | `audit_log` + rewritten log | no |
 
+**Restoring a moderator's delete.** Decided 2026-09-28 (TKT-01M29CRJ5J): when
+a moderator deletes someone else's post, the post is `hidden-by-mod` rather than
+`deleted`, and only a moderator may restore it. The author still sees the post,
+marked as removed by a moderator. The author's restore, edit and delete are
+`forbidden` (07 "Edit, delete and restore"). The alternatives lost for these
+reasons. Letting the author restore makes a moderator's delete a suggestion.
+A restore request would need a flow of its own, and the moderator queue and
+the flag trail already give an author someone to ask. A post an author deleted
+themselves is still theirs to restore within the window.
+
 Author edit/delete window: default 24 h for edits, 15 min for delete, both
 site settings. After the window, edits leave the visible "edited" marker and
 full history; the first N minutes (default 5) of edits are collapsed into the
@@ -111,6 +121,16 @@ with ≥ N open flags (default 3, setting) is auto-hidden pending review
 (`hidden-by-mod` flag in the index entry set via a `Delete` variant with
 `auto=true`; a moderator's `Restore` clears it). Reporters see "thanks,
 a moderator will look" and nothing else.
+
+Decided 2026-09-28 (TKT-01M29CP2PJ). N defaults to 3 and is a site setting.
+While a post is auto-hidden, its author and moderators still see it, marked
+"hidden pending review". Everyone else sees a tombstone in its place, so the
+ordinal and reply links hold. Because the hide is `hidden-by-mod`, the author
+cannot restore it; only a moderator's review clears it. Hiding it from the
+author as well lost, because that tells them they were reported, and the
+reporter-acknowledgement rule exists so that nobody learns that. Queue-only,
+with no auto-hide, lost because spam would stay up until a moderator is
+awake.
 
 ## Post history
 

@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-11T23:27:36Z
+updated_at: 2026-09-28T22:29:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-438e26c1
+  name: ""
 extensions: {}
 ---
 
@@ -45,3 +45,9 @@ A moderator edit of somebody else's words is the most invasive routine action in
 - [ ] The post shows an edited marker attributing the edit to a moderator
 - [ ] Moderator actions bypass the author windows
 - [ ] Every moderator edit and delete is in audit_log as well as the thread log
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:23Z
+
+Maintainer decision, 2026-09-28: only a moderator may restore a post a moderator deleted. A moderator's delete of someone else's post sets hidden-by-mod, not deleted, so the existing authorize guard in internal/service/threads/mutate.go already refuses the author's restore, edit and delete as forbidden. The author still sees the post, marked as removed by a moderator. Author-may-restore lost because it makes a moderator's delete a suggestion. Restore-by-request lost because it needs its own flow. Written into docs/08 'Restoring a moderator's delete'. Carry this into the plan's Settled section.

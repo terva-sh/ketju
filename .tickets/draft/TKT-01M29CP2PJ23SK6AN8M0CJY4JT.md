@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-11T23:26:15Z
+updated_at: 2026-09-28T22:29:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-438e26c1
+  name: ""
 extensions: {}
 ---
 
@@ -46,3 +46,9 @@ Reporters see "thanks, a moderator will look" and nothing else. Telling a report
 - [ ] A moderator Restore clears the auto-hide and the flags stay for the record
 - [ ] A reporter sees only the acknowledgement, whatever the outcome
 - [ ] A member cannot flag the same post twice to inflate the count
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:23Z
+
+Maintainer decision, 2026-09-28: the threshold defaults to 3 and is a site setting. While a post is auto-hidden, its author and moderators see it marked 'hidden pending review', and everyone else sees a tombstone. The auto-hide is hidden-by-mod, so the author cannot restore it; only a moderator can. Hiding it from the author too lost because it tells them they were reported. Queue-only lost because spam would stay up. Written into docs/08 'Flags'. Carry this into the plan's Settled section.

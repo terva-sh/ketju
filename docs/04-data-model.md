@@ -204,8 +204,17 @@ invalidated when they commit; a check answers Allow, Deny (403), or Hidden
 are Hidden, so a forum's existence does not leak. A role or status change
 applies from the user's next request: the viewer is a snapshot taken when a
 request starts, so the session layer must read role and status from `users`
-on every request rather than caching them in the session. What `archived` does to a
-forum's permissions is not decided; evaluation ignores it for now.
+on every request rather than caching them in the session. An `archived` forum is
+read-only. Decided 2026-09-28 (TKT-01M39788AT): `read` is unchanged, so the
+forum stays visible to whoever could see it before. `create_thread`, `reply`
+and `upload` are denied to everyone except admins, moderators included. That
+matches an archived thread (03 `ThreadArchived`), except that an admin may
+still post. The alternatives lost for these reasons. Hiding the forum from
+non-moderators makes archiving a delete in disguise. A listing-only flag would
+leave "archived" meaning nothing a member can rely on. The evaluation change,
+and the admin exemption at `POST /forums/{slug}/threads` (07, which answers
+`conflict` to everyone today), are TKT-01M3N24RHD (Make archived forums read-only in permission
+evaluation).
 
 Membership of `everyone` is implicit for every viewer, signed in or not, and
 membership of `members` is implicit for every active user; neither is stored
@@ -269,8 +278,8 @@ a note. An open flag has no resolver, and a closed one names who and when.
 
 ### drafts
 ```
-user_id, thread_id (nullable = new-thread draft, then forum_id), source,
-reply_to, updated_at
+user_id, thread_id (nullable = new-thread draft, then forum_id), title
+(nullable, new-thread drafts only), source, reply_to, updated_at
 UNIQUE (user_id, thread_id) WHERE thread_id IS NOT NULL
 UNIQUE (user_id, forum_id) WHERE thread_id IS NULL
 ```
@@ -280,9 +289,11 @@ only with a thread. The first version of this section declared
 `PRIMARY KEY (user_id, thread_id)`, but a nullable key column does not enforce
 uniqueness in SQLite and could not key a new-thread draft by forum, so the
 two partial indexes replace it (TKT-01M29BYYHQ). The API serves reply drafts
-only (07 "Drafts"). A new-thread draft has no title column yet and no route;
-whether it saves the title is a product decision, left to TKT-01M3K9XBJA
-(Autosave new-thread drafts, and decide whether the title is saved).
+only (07 "Drafts"). A new-thread draft saves its title as well as its body. Decided 2026-09-28
+(TKT-01M3K9XBJA, Autosave new-thread drafts, and decide whether the title is
+saved): a draft restored on another device should come back whole. The
+`title` column is added by that ticket's migration, and a reply draft leaves
+it null. That ticket also adds the route.
 
 ### blobs
 ```
