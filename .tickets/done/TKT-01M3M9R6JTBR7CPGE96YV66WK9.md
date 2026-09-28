@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3M9R6JTBR7CPGE96YV66WK9
 title: Run the pre-Phase-2 hardening sweep of Phase 1 follow-ups
 type: chore
-status: ready
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -27,7 +27,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T15:22:19Z
-updated_at: 2026-09-28T18:06:56Z
+updated_at: 2026-09-28T20:19:02Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -71,10 +71,10 @@ None of the linked tickets is promoted yet; each is `draft`. A person promotes t
 
 ## Acceptance criteria
 
-- [ ] Every in-scope ticket is done, or blocked with a reason and a filed follow-up
-- [ ] The two decision tickets (TKT-01M3BFSBPJ, TKT-01M3KB7FXC) carry a person's recorded decision before implementation
-- [ ] TKT-01M3AZGKBP is archived or kept, with the reason in a note
-- [ ] Main's CI is green after the last merge
+- [x] Every in-scope ticket is done, or blocked with a reason and a filed follow-up
+- [x] The two decision tickets (TKT-01M3BFSBPJ, TKT-01M3KB7FXC) carry a person's recorded decision before implementation
+- [x] TKT-01M3AZGKBP is archived or kept, with the reason in a note
+- [x] Main's CI is green after the last merge
 
 ## Notes
 
@@ -90,3 +90,48 @@ When asked, the maintainer chose "Merge on the docs/12 gate". The sweep has the 
 A medium-or-higher finding answered by argument, not by changing the code, stops for the maintainer, even if a re-review clears it. The rest of docs/12 applies as written: "Changing CI", "Gaps the design leaves open", "When a ticket cannot proceed" and "Never". No change to AGENTS.md or docs/12 is covered. The orchestrator redeploys the dogfood instance after the sweep.
 
 Also decided, in the maintainer's words: "Promote all 7, archive AZGKBP". The seven dependencies and this ticket move to ready. TKT-01M3AZGKBP is archived, not removed, because it carries notes.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T20:18:51Z
+
+### Sweep log, 2026-09-28 (one entry per merge, written by the orchestrator in a batch, because two lanes ran at once)
+
+- **PR #123** (55e876a): set up the sweep. It records the grant, the decisions on BFSBPJ and KB7FXC, promotes the seven tickets, and archives TKT-01M3AZGKBP.
+- **TKT-01M393S6P7, PR #124** (7927806).
+  - Test-only change: the group-commit fsync test waits for the first append to reach Sync, using `synctest.Wait`, before queuing the other 16.
+  - Under `-race -cpu 1,2,12` it now fails 0 of 600 runs, down from 12 of 600. This was the flake behind main's red push runs 492, 606, 635 and 712.
+  - Review #725 clean, CI #724.
+- **TKT-01M39VNEC1, PR #125** (20ee947).
+  - A refused thread page now either rejects or is replaced by the cached page; it is never returned to the caller.
+  - An ordering table of 36 cases found and fixed an older bug: a stale held copy of a page stayed in `storeThreadPage`.
+  - Review ab44506a clean, carried; CI 731. Run 728 was a phone a11y timeout while another run held the runner.
+- **TKT-01M3A8V7XC, PR #126** (86e1e2e).
+  - CatchUp now publishes each quarantine as it is found, and replaces the whole set only when a scan completes.
+  - This fixes review 468's deferred high. Before, an interrupted sweep could hide a corrupt thread from /healthz and from blob GC, and GC could then delete blobs that only the short log named.
+  - Review 14e11e60 clean, CI 735.
+- **TKT-01M3BFSBPJ, PR #127** (4302ad1).
+  - The quote summary is plain text, and the source link is the first line of the blockquote. The renderer version is now 4.
+  - The axe nested-interactive exception is removed.
+  - No migration or reindex is needed: HTML is held only in memory caches.
+  - The phone attribution line has a margin, and a new edge-press targets check covers it.
+  - Review 0c63d1c6 clean, CI 741.
+- **TKT-01M3AFHGJD, PR #128** (2f09845).
+  - Test-only change. End-to-end tests pin docs/09's approval-bypass risk across the callback, /auth/register, /auth/signin, and sessions that outlive a status change. **No bypass was found.**
+  - Review 1231's low finding was fixed. The re-review was clean and carried. CI 755; run 751 was a Playwright timeout.
+- **TKT-01M3ANX1NF, PR #129** (9b960cf, blocked for a decision), then **PR #130** (9c415ec).
+  - The maintainer's decision: "Forbid for new handles".
+  - `ValidateHandle`, `CheckHandle` and /auth/register refuse a trailing '-'.
+  - The database constraint is unchanged and no migration was needed; `HandleCases.Grandfathered` covers existing handles.
+  - Review 7bcd74bb clean, CI 760.
+- **TKT-01M3KB7FXC, PR #131** (e36fd8c).
+  - Migration 0010 makes `users.id` AUTOINCREMENT, and the migration runner now runs with foreign keys off and runs `foreign_key_check` before commit.
+  - Reindex raises the member-id floor above every id the logs name, and a missing author renders as `deleted-user-<id>`.
+  - Draft TKT-01M3MSFX3S filed (reclaiming posts under a lost id).
+  - Review #766 clean, CI #765.
+
+Main's push CI was green after the last merge, on e36fd8c. Red push runs caused by cancellation were ignored: Forgejo writes a cancelled run as failure, marked "Has been cancelled".
+
+The dogfood instance was redeployed at e36fd8c. The data directory was backed up first to `~/.local/state/ketju/backups/2026-09-28-before-e36fd8c`. Migration 0010 applied: users is AUTOINCREMENT, the sequence is at 1, `foreign_key_check` is empty, /healthz is ok, and /auth/signin still redirects to Authentik.
+
+## Summary
+
+The sweep is complete. All seven Phase 1 follow-ups merged under the docs/12 gate on 2026-09-28, in PRs #124-#131. No approval bypass was found. The maintainer decided the two open questions (quote markup; the member-id floor), and a third that arose (new handles may not end in '-'). TKT-01M3AZGKBP is archived. Main is green at e36fd8c, and the dogfood instance runs it after a pre-migration backup. Filed: TKT-01M3MSFX3S (reclaiming posts under a lost member id) and a draft for Playwright timeouts under runner contention.

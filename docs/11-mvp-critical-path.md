@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-28, when the hardening sweep started, against the store. They are written by hand, so
+Counts last read 2026-09-28, when the hardening sweep closed, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-205 tickets: 12 epics and 193 children. Every ticket carries an `area:` label,
+207 tickets: 12 epics and 195 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -42,7 +42,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 87 in Phase 1, 34 in Phase 2, 20 in
-Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 23 carrying no
+Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 25 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-107 done, 15 ready, 2 blocked, 79 draft, 2 archived (counted 2026-09-28 with
+115 done, 7 ready, 2 blocked, 81 draft, 2 archived (counted 2026-09-28 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -169,10 +169,14 @@ the run. Two are drafts; the third, the dogfooding deployment, was promoted to
 - `TKT-01M3M9S7S2` deployed a local dogfooding instance, now live at
   https://ketju.brokkr.local.sothr.com. It is done, with its phone criterion
   left to the real-device check `TKT-01M38WTKSQ`, which depends on it.
-- `TKT-01M3M9R6JT` is a hardening sweep of seven Phase 1 follow-ups before
-  Phase 2 opens registration to strangers. It has no milestone. On
-  2026-09-28 the maintainer promoted it and its seven dependencies, granted
-  it the docs/12 merge gate, and archived the obsolete `TKT-01M3AZGKBP`.
+- `TKT-01M3M9R6JT` ran a hardening sweep of seven Phase 1 follow-ups before
+  Phase 2 opens registration to strangers. It closed the same day. All seven
+  merged under the docs/12 gate the maintainer granted it (PRs #124–#131).
+  The tests found no approval bypass. The maintainer settled three questions
+  along the way: the quote markup, the member-id floor after a restore, and
+  new handles no longer ending in `-`. The sweep filed two drafts with no
+  milestone: `TKT-01M3MSFX3S`, reclaiming posts under a lost member id, and
+  `TKT-01M3MTQG5A`, Playwright timeouts under runner contention.
 - `TKT-01M3M9RR26` grooms Phase 2 for an autonomous run, as Phase 1 was
   groomed. It is Phase 2, which now carries 34 tickets.
 
