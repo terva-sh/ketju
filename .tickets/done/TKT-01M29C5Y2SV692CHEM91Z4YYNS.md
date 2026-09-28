@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-28T09:10:43Z
+updated_at: 2026-09-28T09:15:28Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -98,6 +98,10 @@ Gaps settled at claim, written into docs/03 "Blob garbage collection" in the sam
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:10:43Z
 
 PR #109 (branch run/c5y2s-sweeper-gc) was closed unmerged: healthz (PR #107) merged while it was open and conflicted on serve_test's step list. The run does not force-push, so the rebased head went to run/c5y2s-sweeper-gc-v2 as PR #110. After the rebase the collector's hold reads projection.Writer.QuarantinedCount, which healthz added.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:15:28Z
+
+Review 1156 (run e7f5c1c8-7f24-47f1-838b-f6feb8822091, Actions run #625) on head 084c52bcec142bbe871e940ff0be14da5891bd22, base 21fa204c8f10ca65a4c2cc1601581ad34e7fdbcf: two findings, both accepted and fixed in code in c583b46. (1) high, blobgc.go:173: unlinking inside the transaction before commit could leave a row without bytes. Fixed: rename to <hash>.gc in the transaction, undo on a failed commit, remove after commit, and each pass settles leftovers. Tests: TestACommitThatFailsPutsTheBytesBack, TestAnInterruptedRemovalIsSettled. (2) medium, blobgc.go:110: a fixed oldest-10,000 window could starve later candidates. Fixed: keyset paging over (unreferenced_since, hash) until exhausted. Test: TestKeptCandidatesDoNotStarveLaterOnes. This supersedes the 'Pass bound: 10,000 candidates' line of the earlier gaps note.
 
 ## Summary
 
