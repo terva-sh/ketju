@@ -148,12 +148,12 @@ time. Phase 1 still carries 82 tickets:
   exists;
 - 1 draft: the real-device check `TKT-01M38WTKSQ`, which is `human-only`.
 
-Four tickets changed milestone during the continuation:
-- The profile-visibility decision `TKT-01M3KJJNDC` was filed into Phase 1 and
-  closed.
-- Thread tags on create, `TKT-01M3B12ZZ4`, and its decision draft
-  `TKT-01M3M4KVNW` moved to Phase 4, where docs/09 lists thread tags. The user
-  chose to defer them.
+Phase 1 still has 82 tickets because two came in and two went out:
+- In: the profile-visibility decision `TKT-01M3KJJNDC` and the tag-rules
+  decision `TKT-01M3M4KVNW`, both filed into Phase 1 during the continuation.
+  `TKT-01M3KJJNDC` is done.
+- Out: thread tags on create, `TKT-01M3B12ZZ4`, and `TKT-01M3M4KVNW` both moved
+  to Phase 4, where docs/09 lists thread tags. The user chose to defer them.
 
 The continuation also filed three drafts with no milestone:
 - `TKT-01M3K9XBJA`, new-thread draft autosave;
