@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-28T22:29:23Z
+updated_at: 2026-09-28T22:39:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,3 +52,7 @@ Reporters see "thanks, a moderator will look" and nothing else. Telling a report
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:23Z
 
 Maintainer decision, 2026-09-28: the threshold defaults to 3 and is a site setting. While a post is auto-hidden, its author and moderators see it marked 'hidden pending review', and everyone else sees a tombstone. The auto-hide is hidden-by-mod, so the author cannot restore it; only a moderator can. Hiding it from the author too lost because it tells them they were reported. Queue-only lost because spam would stay up. Written into docs/08 'Flags'. Carry this into the plan's Settled section.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:39:20Z
+
+Supersedes the rationale in the 2026-09-28 decision note, not the decision. Showing the author 'hidden pending review' does tell them flags put the post under review, and that is intended. What stays confidential is who flagged it and how many did. Hiding the post from the author too lost because a tombstone tells them the same thing. docs/08 is corrected to match. From Terva review 1280 on PR #134.

@@ -126,9 +126,11 @@ Decided 2026-09-28 (TKT-01M29CP2PJ). N defaults to 3 and is a site setting.
 While a post is auto-hidden, its author and moderators still see it, marked
 "hidden pending review". Everyone else sees a tombstone in its place, so the
 ordinal and reply links hold. Because the hide is `hidden-by-mod`, the author
-cannot restore it; only a moderator's review clears it. Hiding it from the
-author as well lost, because that tells them they were reported, and the
-reporter-acknowledgement rule exists so that nobody learns that. Queue-only,
+cannot restore it; only a moderator's review clears it. The marker does tell
+the author that flags put their post under review, and that is intended. What
+stays confidential is who flagged it and how many did, which only moderators
+see. Hiding the post from its author as well lost, because a tombstone on
+their own post tells them the same thing and hides what is being reviewed. Queue-only,
 with no auto-hide, lost because spam would stay up until a moderator is
 awake.
 

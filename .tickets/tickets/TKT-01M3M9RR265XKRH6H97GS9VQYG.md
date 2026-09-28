@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-28T22:29:24Z
+updated_at: 2026-09-28T22:39:20Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -112,3 +112,7 @@ Terva review 1275 on PR #133, head 449cfac, reported the journal as absent, thou
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:24Z
 
 Grooming decisions, batch 2, maintainer 2026-09-28. CRJ5J: only moderators restore a moderator's delete. CP2PJ: auto-hide at 3 (a setting), visible to author and moderators. 39788AT: archived forum is read-only except for admins; spike closed; TKT-01M3N24RHD filed. 2K1JKS7: refuse remote images cleanly (the CSP already blocks them); spike closed; TKT-01M3N24RM0 filed. K9XBJA: the new-thread draft saves the title. 39WZY8C folded into CP2Q3 and archived. Moved into phase-2: KFFFJR, K9XBJA, A054TR, 973KG, MTQG5A, WBN4Q. MSFX3S stays unscheduled. 973KG still needs a decision: whether docs/03 or the code is right about the reserved split/merge types.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:39:20Z
+
+Terva review 1280 on PR #134, head d7c1473, base 02db608, had three findings, all fixed rather than argued. Medium, 'Do not mark the renderer-version criterion complete before the build': TKT-01M2K1JKS7's criteria 2 (not applicable) and 3 (moved to TKT-01M3N24RM0) are unticked, with a note. Low, 'Clarify that a remote-image link can contact its host': docs/07 now says viewing sends nothing, while following the link does. Medium, 'Reconcile the author-visible label with the flag-confidentiality rationale': the docs/08 rationale is corrected, since the author learning of the review is intended and who flagged stays confidential, and a superseding note is on CP2PJ.

@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-15T17:24:31Z
-updated_at: 2026-09-28T22:29:11Z
+updated_at: 2026-09-28T22:39:08Z
 created_by:
   id: agent:claude-code/render
   name: ""
@@ -49,14 +49,18 @@ If the answer is proxy or refuse, `internal/render` bumps its version constant, 
 ## Acceptance criteria
 
 - [x] A decision is recorded with the reason the other two lost
-- [x] If images stay remote, the trade is documented where an admin will see it
-- [x] If they do not, the renderer version is bumped in the same change
+- [ ] If images stay remote, the trade is documented where an admin will see it
+- [ ] If they do not, the renderer version is bumped in the same change
 
 ## Notes
 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:11Z
 
 Maintainer decision, 2026-09-28: refuse remote images cleanly. Grooming found the CSP (img-src 'self' data:, internal/web/security.go) already stops the browser loading remote images, so today they render broken. The maintainer first chose 'leave them' without knowing that, then chose, once told, to keep the CSP and have the renderer emit a link. Relaxing img-src lost because it loosens the policy everywhere and leaks readers' addresses. A proxy lost for now because it is an SSRF surface. Written into docs/07 'Security headers'. TKT-01M3N24RM0 (Render remote markdown images as links rather than broken images) builds it.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:39:08Z
+
+Corrects the closing: criteria 2 and 3 were ticked in error and are now unticked. Criterion 2 does not apply, because remote images do not stay. Criterion 3, the renderer version bump, is not done: no renderer code changes in the grooming PR, and it moves to TKT-01M3N24RM0 (Render remote markdown images as links rather than broken images), whose third criterion carries it. From Terva review 1280 on PR #134.
 
 ## Summary
 
