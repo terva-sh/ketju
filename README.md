@@ -55,9 +55,10 @@ arrives, take backups as
    every log.
 3. Start `ketju serve`, and delete `db.damaged` once the forum is working.
 
-If reindex exits 1, a thread's log is damaged. Every other thread is
-projected, and `ketju fsck` names the damage. `ketju reindex -h` lists the
-other exit codes.
+If reindex exits 1, a thread's log cannot be projected: it is damaged, or its
+records contradict each other. Every other thread is projected. The report
+names each failed thread and the reason, and `ketju fsck` details any damage.
+`ketju reindex -h` lists the other exit codes.
 
 What the database held after the backup was taken is lost: members who
 joined since, sessions, read positions, and permission changes. The posts of a

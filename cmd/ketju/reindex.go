@@ -44,7 +44,8 @@ report goes to stdout.
 exit codes:
   0  every thread projected (a torn final write is left out and reported)
   1  a thread's log is damaged, or its records contradict each other; the
-     other threads are projected, and ketju fsck names the damage
+     other threads are projected, and the report names each failed thread
+     and why (ketju fsck details any damage)
   2  usage, or DIR has no threads directory
   4  the data directory is in use, or the database or a log could not be
      read or written; the run stops there
@@ -92,7 +93,7 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 	fs_ := flag.NewFlagSet("reindex", flag.ContinueOnError)
 	fs_.SetOutput(errOut)
 	root := fs_.String("root", ".", "data directory")
-	fs_.Bool("projections", true, "rebuild the projection tables (the default)")
+	projections := fs_.Bool("projections", true, "rebuild the projection tables (the default)")
 	search := fs_.Bool("search", false, "rebuild the search index (not yet built)")
 	asJSON := fs_.Bool("json", false, "print the report as JSON instead of text")
 	fs_.Usage = func() {
@@ -109,6 +110,11 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 	if *search {
 		return errUsage{errors.New("reindex --search: there is no search index to rebuild yet; " +
 			"it arrives with full-text search (TKT-01M29CRJ3B)")}
+	}
+	if !*projections {
+		// With search not yet built, the projections are all there is to do;
+		// rebuilding them anyway would do what the caller turned off.
+		return errUsage{errors.New("reindex --projections=false leaves nothing to rebuild")}
 	}
 	every := o.every
 	if every <= 0 {
@@ -219,7 +225,8 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 	}
 
 	if len(rep.Failed) > 0 {
-		return errCorrupt{fmt.Errorf("%d of %d thread(s) have a log that cannot be projected; run ketju fsck to see why",
+		return errCorrupt{fmt.Errorf("%d of %d thread(s) have a log that cannot be projected; "+
+			"the report names each and why, and ketju fsck details any damage",
 			len(rep.Failed), rep.Threads)}
 	}
 	return nil

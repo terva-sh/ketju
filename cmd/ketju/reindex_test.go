@@ -451,6 +451,7 @@ func TestReindexExitCodes(t *testing.T) {
 		data, _ := populate(t, 1)
 		for _, args := range [][]string{
 			{"--root", data, "--search"},
+			{"--root", data, "--projections=false"},
 			{"--root", data, "extra"},
 			{"--root", data, "--no-such-flag"},
 		} {
