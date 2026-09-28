@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T05:26:36Z
+updated_at: 2026-09-28T05:28:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -92,6 +92,10 @@ Other choices:
 - Replies go through `apiGet` and `useResource`, keyed on the URL, like PostPopover. `threadCache` is not extended. `storeThreadPage` already drops every held URL under the thread when the log grows.
 - Tombstone posts, which are the canonical deleted rows, get no expander, because they have no footer. The moderator's tombstone variants belong to TKT-01M29CKRJ.
 - The e2e seed now puts `reply_to` on main-thread posts 4, 6, 8, 26, 30 and 55. The a11y scan (desktop) and the target check (phone) now run with #1's replies open. Both found a problem, and both are fixed in this PR.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:28:34Z
+
+Terva review 1121 (run 8321bc87, Actions #498) on head 1cc61f1, base ee54c04: one medium finding, finding-1, which said expanded replies omit attachments. Accepted and fixed in 20dd7ba: a shared Attachments component now renders in the reply copies too, and a Vitest case covers it. There were no low findings. A follow-up review has been requested on the new head.
 
 ## Summary
 
