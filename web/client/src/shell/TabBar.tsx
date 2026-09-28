@@ -6,10 +6,10 @@ import { current, tabs } from './nav';
 // TabBar is the phone's bottom navigation (mockup mtabbar()): five tabs,
 // each a full-height target, clear of the home indicator (base.css).
 export function TabBar() {
-  const { path } = useLocation();
+  const { path, url } = useLocation();
   return (
     <nav class="tabbar" aria-label="Sections" data-shell="tabbar">
-      {tabs.value.map((t) => (
+      {tabs(url).map((t) => (
         <a key={t.id} href={t.href} data-nav={t.id} aria-current={current(t.href, path) ? 'page' : undefined}>
           <span class="tab-icon">
             <Icon name={t.icon} size={20} />

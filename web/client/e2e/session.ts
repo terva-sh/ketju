@@ -2,8 +2,10 @@ import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import { dirname, join } from 'node:path';
 
 // signIn goes through the real flow: /auth/fake/start, the fake provider's
-// sign-in page, and the callback that sets the session. The client has no
-// sign-in screen yet, so the flow starts at the server's own start URL.
+// sign-in page, and the callback that sets the session. It starts at the
+// provider's start rather than at the client's Sign in and the login page
+// (sign-in.spec.ts covers those), because the login page would spend one
+// more of the burst /auth/* allows (docs/08).
 export async function signIn(page: Page, who: string) {
   await page.goto('/auth/fake/start');
   await page.getByRole('link', { name: who, exact: true }).click();

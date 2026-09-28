@@ -1,5 +1,5 @@
-// Package auth is /auth/*: the OIDC sign-in's start and callback, and
-// sign-out (docs/05 "Login flow", TKT-01M29C7ZZ9).
+// Package auth is /auth/*: the login page, the OIDC sign-in's start and
+// callback, and sign-out (docs/05 "Login flow", TKT-01M29C7ZZ9).
 //
 // Everything a sign-in needs between start and callback -- which provider,
 // the state, the nonce, the PKCE verifier, where to go afterwards -- rides
@@ -52,6 +52,9 @@ type Flow struct {
 // Providers is the part of *oidc.Registry the handlers use.
 type Providers interface {
 	Lookup(key string) (*oidc.Provider, bool)
+	// Enabled is the working providers in config order, which the login
+	// page lists.
+	Enabled() []*oidc.Provider
 }
 
 // Login is the part of *identity.Service the callback and the registration
@@ -87,6 +90,8 @@ func New(h *Handler) http.Handler {
 		h.Logger = slog.Default()
 	}
 	mux := http.NewServeMux()
+	// The login page: the client's "Sign in" (signin.go).
+	mux.HandleFunc("GET /auth/signin", h.signIn)
 	mux.HandleFunc("GET /auth/{provider}/start", h.start)
 	mux.HandleFunc("GET /auth/{provider}/callback", h.callback)
 	// The handle screen of open registration (register.go).

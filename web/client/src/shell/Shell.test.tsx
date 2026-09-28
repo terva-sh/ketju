@@ -79,15 +79,27 @@ describe('the navigation shell', () => {
     expect(badgesOf(root)).toMatchObject({ unread: '99+', alerts: null });
   });
 
-  it('sends a signed-out reader to settings, with no badges', async () => {
+  // TKT-01M3MFS6KM: Sign in is the server's login page, which comes back
+  // to where the reader was, query and all, at both widths.
+  it('sends a signed-out reader to sign in, with no badges', async () => {
     viewer.value = structuredClone(anon) as Me;
-    const root = await renderAt('/');
+    const root = await renderAt('/unread?x=1&y=a b');
+    const back = '/auth/signin?return_to=' + encodeURIComponent('/unread?x=1&y=a%20b');
     const me = root.querySelector<HTMLAnchorElement>('[data-nav=me]')!;
-    expect(me.getAttribute('href')).toBe('/settings');
+    expect(me.getAttribute('href')).toBe(back);
     expect(me.textContent).toBe('Sign in');
     expect(root.querySelectorAll('[data-badge]')).toHaveLength(0);
     await setPhone(true);
-    expect(root.querySelector('[data-nav=me]')!.getAttribute('href')).toBe('/settings');
+    expect(root.querySelector('[data-nav=me]')!.getAttribute('href')).toBe(back);
+  });
+
+  it('points Sign in back at the page the reader moved to', async () => {
+    viewer.value = structuredClone(anon) as Me;
+    const root = await renderAt('/');
+    await setPhone(true);
+    await act(() => void root.querySelector<HTMLAnchorElement>('[data-nav=new]')!.click());
+    expect(location.pathname).toBe('/new');
+    expect(root.querySelector('[data-nav=me]')!.getAttribute('href')).toBe('/auth/signin?return_to=%2Fnew');
   });
 
   it('routes each tab to its screen', async () => {

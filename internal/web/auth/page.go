@@ -125,3 +125,44 @@ func writeRegisterPage(w http.ResponseWriter, status int, d registerData) {
 	w.WriteHeader(status)
 	_ = registerTmpl.Execute(w, d)
 }
+
+// pageSignInUnavailable is the login page with nothing to offer: no
+// provider is configured, or none is enabled. (Startup refuses a registry
+// whose every provider failed discovery, and a working provider is never
+// disabled later, so the second is a guard.) That is how the forum stands,
+// not a failure of this request, so it is a 200.
+var pageSignInUnavailable = pageData{"Sign-in is not available", "This forum has no way to sign in at the moment.",
+	"/", "Go to the forum"}
+
+// signInTmpl is the login page when there is a choice: one link per
+// provider, in config order, each to that provider's start (signin.go).
+var signInTmpl = template.Must(template.New("signin").Parse(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Sign in · Ketju</title>
+</head>
+<body>
+<main>
+<h1>Sign in</h1>
+<p>Choose how to sign in.</p>
+<ul>
+{{range .}}<li><a href="{{.Start}}">Sign in with {{.Name}}</a></li>
+{{end}}</ul>
+<p><a href="/">Go to the forum</a></p>
+</main>
+</body>
+</html>
+`))
+
+type signInChoice struct {
+	Name, Start string
+}
+
+func writeSignInPage(w http.ResponseWriter, choices []signInChoice) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_ = signInTmpl.Execute(w, choices)
+}

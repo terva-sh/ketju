@@ -83,6 +83,15 @@ its own rather than needing a restart. If *every* provider fails, startup does
 abort: a forum nobody can sign in to should say so rather than serve an empty
 login page.
 
+The login page is `GET /auth/signin?return_to=…` (07 "URL scheme"), and it
+is where the client's "Sign in" goes. It lists the providers that are
+configured and not disabled, each by its `name`, and skips straight to a
+provider's start when that provider is the only one. With none configured it
+says, as a page rather than an error, that sign-in is not available. It carries `return_to` on to
+start, validated the same way, and sends a reader who is already signed in
+straight back to it. (Decided 2026-09-28, TKT-01M3MFS6KM: a server page,
+skipped when there is one provider.)
+
 An issuer must be `https`, with no per-provider escape hatch. Discovery over
 plaintext is unauthenticated, so whoever can rewrite the response chooses the
 key set, and every signature check afterwards passes against keys they minted.

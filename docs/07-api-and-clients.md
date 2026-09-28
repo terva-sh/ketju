@@ -33,12 +33,22 @@
 /settings  /settings/sessions  /settings/identities
 /apply  /apply/status
 /admin  /admin/queue  /admin/applications  /admin/forums  /admin/users  /admin/forms  /admin/settings
+/auth/signin?return_to=…           login page
 /auth/{provider}/start  /auth/{provider}/callback  /auth/logout (POST)
 /auth/register (GET, POST)
 ```
 
 `/auth/*` is the server's in both clients: plain HTML pages and redirects,
-not JSON. `/auth/register` is open registration's handle screen (05
+not JSON. `/auth/signin` is the login page, where a signed-out reader's
+"Sign in" goes, with the address they were at as `return_to` (05 "Login
+flow"). It lists each enabled provider by its `name`, linking to
+`/auth/{key}/start` with the same `return_to`. With exactly one enabled
+provider it answers 302 straight to that provider's start, and with none it
+answers 200 with a page saying sign-in is not available. A reader already
+signed in gets 302 to `return_to`. `return_to` is validated as start
+validates it, and anything but a path on this site becomes `/`. The client's
+link to it is a full page load, since `/auth/*` is outside the client's
+routes. `/auth/register` is open registration's handle screen (05
 "Registration path"). `GET` shows one field, `handle`, prefilled, and needs
 the `__Host-ketju_reg` cookie the callback sets; without it, or after its
 fifteen minutes, the page says to sign in again (400). `POST` takes the form

@@ -8,7 +8,7 @@ import { alerts, current, links, meHref } from './nav';
 // the sections, then search, alerts, the moderation queue for those who
 // have one, and the reader.
 export function TopBar() {
-  const { path } = useLocation();
+  const { path, url } = useLocation();
   const me = viewer.value;
   const role = me.user?.role;
   return (
@@ -44,7 +44,7 @@ export function TopBar() {
             <Icon name="inbox" />
           </a>
         )}
-        <a class="who" href={meHref.value} data-nav="me">
+        <a class="who" href={meHref(url)} data-nav="me">
           {me.user ? me.user.handle : 'Sign in'}
         </a>
       </div>

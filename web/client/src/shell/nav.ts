@@ -12,22 +12,26 @@ export interface NavItem {
   badge?: number;
 }
 
-// me is where the Me tab and the top bar's user go: the reader's profile,
-// or settings, where a signed-out reader signs in.
-const me = computed(() => {
+// meHref is where the Me tab and the top bar's user go from url, the
+// address the reader is at: their profile, or, signed out, the server's
+// login page, which comes back to url once they have signed in
+// (TKT-01M3MFS6KM). /auth/* is outside clientScope (routes.tsx), so the
+// link is a full page load and reaches the server.
+export function meHref(url: string): string {
   const u = viewer.value.user;
-  return u ? `/u/${encodeURIComponent(u.handle)}` : '/settings';
-});
+  return u ? `/u/${encodeURIComponent(u.handle)}` : `/auth/signin?return_to=${encodeURIComponent(url)}`;
+}
 
-// tabs are the phone's five (docs/06 "Mobile", mockup mtabbar()). Alerts
-// routes to /notifications (decided at claim for TKT-01M29CEE4K).
-export const tabs = computed<NavItem[]>(() => [
+// tabs are the phone's five (docs/06 "Mobile", mockup mtabbar()), from
+// url, the address the reader is at. Alerts routes to /notifications
+// (decided at claim for TKT-01M29CEE4K).
+export const tabs = (url: string): NavItem[] => [
   { id: 'forums', label: 'Forums', href: '/', icon: 'home' },
   { id: 'unread', label: 'Unread', href: '/unread', icon: 'list', badge: badges.value.unread },
   { id: 'new', label: 'New', href: '/new', icon: 'clock' },
   { id: 'alerts', label: 'Alerts', href: '/notifications', icon: 'bell', badge: badges.value.alerts },
-  { id: 'me', label: 'Me', href: me.value, icon: 'user' },
-]);
+  { id: 'me', label: 'Me', href: meHref(url), icon: 'user' },
+];
 
 // links are the desktop top bar's (mockup nav()).
 export const links = computed<Omit<NavItem, 'icon'>[]>(() => [
@@ -38,8 +42,7 @@ export const links = computed<Omit<NavItem, 'icon'>[]>(() => [
   { id: 'watching', label: 'Watching', href: '/watching' },
 ]);
 
-export const alerts = computed(() => tabs.value.find((t) => t.id === 'alerts')!);
-export const meHref = me;
+export const alerts = computed(() => tabs('/').find((t) => t.id === 'alerts')!);
 
 // current says whether href is the section the reader is in: / only for
 // itself, anything else for itself and what is under it.
