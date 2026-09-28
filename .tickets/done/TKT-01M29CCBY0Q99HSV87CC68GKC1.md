@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:api-thread-shape
     path: docs/07-api-and-clients.md
+  - ref: pr:103
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T07:38:14Z
+updated_at: 2026-09-28T07:38:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
