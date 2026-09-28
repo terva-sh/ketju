@@ -15,11 +15,13 @@ origin: null
 dependencies:
   - TKT-01M29C7ZZ9KFSNZ8WC8YP1HAYV
 blocks_on: none
-references: []
+references:
+  - ref: pr:128
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T19:51:07Z
-updated_at: 2026-09-28T19:07:35Z
+updated_at: 2026-09-28T19:08:04Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
