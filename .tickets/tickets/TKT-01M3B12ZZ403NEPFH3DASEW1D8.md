@@ -16,11 +16,13 @@ origin: null
 dependencies:
   - TKT-01M3M4KVNW0VTZFWHRZK8V28RZ
 blocks_on: none
-references: []
+references:
+  - ref: pr:111
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-25T00:57:46Z
-updated_at: 2026-09-28T13:52:50Z
+updated_at: 2026-09-28T13:53:08Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
