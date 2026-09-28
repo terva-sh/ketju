@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCBZ8DV7086HBMN12F1HP
 title: Add the healthz endpoint
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:observability
     path: docs/02-architecture.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: run/cczb8-healthz
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af9304538f7e7714e
+  commit: 056e35786d1d3ab907452a609829e6c004b70f02
+  session: null
+  claimed_at: 2026-09-28T08:18:40Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-28T08:19:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -47,30 +54,28 @@ A health check that returns 200 whenever the HTTP server is up tells a superviso
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
-
-Decided: healthz does no disk I/O beyond one `SELECT 1`, with p99 under 5 ms. Lag goes to healthz. There is a tension with docs/02 "Observability" and with this ticket, which both say the check covers whether "the data directory is writable". The plan below resolves it by moving the write probe off the request path. Confirm at claim.
+Revised at claim (2026-09-28) against main 056e357.
 
 ### Approach
-1. New package `internal/web/health` with `health.Handler(Options{DB Pinger, Dir *DirProbe, Lag func() projection.Lag, Timeout})`. It answers GET and HEAD only.
-2. Per request: `db.PingContext` with `SELECT 1` on the read pool, under a short context deadline. The deadline value is open; 250 ms is a candidate. Then read the last `DirProbe` result from an atomic. Then read `Lag()`. No other I/O.
-3. `DirProbe` is a background goroutine started by serve. Every N seconds it creates, writes, fsyncs, and removes `data/.healthz-probe`, then stores `{ok, checkedAt}` atomically. It covers `threads/`, `blobs/`, and `db/` by probing the data root; checking each subdirectory is open. A probe result older than 3×N counts as failed, so a hung probe does not read as healthy. N is unstated in any doc; 10 s is a candidate.
-4. Response: 200 when both checks pass, and 503 otherwise. The body is `{"status":"ok"|"unavailable","checks":{"db":bool,"data_dir":bool},"projection_lag_bytes":int,"projection_lag_threads":int}`, with `Cache-Control: no-store`. No version, no paths, no error text, and no config. Failure details go to the log at warn, once per transition. Lag does not change the status code. Whether a lag threshold should turn healthz to 503 is open, and no doc gives one.
-5. Mounting: `internal/web/server.go`'s mux has no `/healthz`, so the catch-all would serve the SPA shell. Add `Groups.Health http.Handler` and register `mux.Handle("/healthz", group(g.Health))` as an exact pattern. The handler sits inside the chain, so it gets security headers and panic recovery. It needs no session, and GET is not rate limited (`limiterFor`). A poll every few seconds writes an info request line each time. Whether to log `/healthz` at debug is an open item for the logging middleware.
+1. `db.DB.Ping(ctx)` in `internal/store/db`: one statement on the read pool, no BEGIN/COMMIT. The statement is `SELECT count(*) FROM sqlite_schema`, not a bare `SELECT 1`: a bare constant is answered without opening a read transaction on the file, so it passes for a database whose file is unreadable. It is still the one SELECT the criterion allows, and a trace test counts it.
+2. `projection.Writer.QuarantinedCount()`: how many threads are quarantined, read under the writer's mutex. Only the count leaves the package; healthz reports whether it is zero.
+3. New package `internal/web/health`:
+   - `DirProbe`: `Probe()` creates `data/.healthz-probe`, writes, fsyncs, closes and removes it, and stores `{ok, checkedAt}`. `Run(ctx)` probes every 10 s. A result older than two intervals counts as failed, so a probe hung on a stuck disk does not read as healthy. Transitions log at warn (failing, with the error) and info (recovered), once each.
+   - `Handler(Options{DB, Dir, Quarantined, Logger, Timeout})`: GET and HEAD only; any other method is 405 with `Allow: GET, HEAD`. Per request: one `Ping` under a 1 s deadline, then an atomic read of the probe, then the quarantine count. No other I/O.
+   - Body: `{"status":"ok"|"degraded"|"unavailable","checks":{"database":"ok"|"failing","data_dir":"ok"|"failing","threads":"ok"|"quarantined"}}`, `Cache-Control: no-store`. 503 when the database or data directory check fails; 200 otherwise, including `degraded`. No version, path, error text, count, thread id, lag, or configuration.
+4. `internal/web/server.go`: `Groups.Health`, mounted as the exact pattern `/healthz` ahead of the SPA catch-all. The chain gives `/healthz` logging, panic recovery, security headers and the body limit, and skips rate limiting, session resolution and CSRF: a supervisor or a browser carrying a session cookie would otherwise cost a session lookup and a touch (a write) per poll, breaking the one-SELECT budget. None of the three applies to a GET/HEAD-only unauthenticated endpoint.
+5. `cmd/ketju/serve.go`: build the probe, run one probe before the listener opens so the first poll is accurate, run the loop under the run context, and stop and wait for it on shutdown before the lock is released.
+6. docs/02 "Observability": record the body, the status codes, the probe interval and staleness bound, and the degraded rule.
 
-### Files and packages
-New: `internal/web/health/{health.go,probe.go,health_test.go}`. Touched: `internal/web/server.go` (the Groups field and route) and `server_test.go`. Reuses `problem`-style fixed bodies, `db.DB` (a Ping method, added here if BW9Q1 did not add one), and `projection.Writer.Lag` from C2WW5. Serve (CCBYX) wires it.
+### Gaps settled here (internals only)
+- Degraded (quarantined threads) answers 200, not 503. docs/03 keeps every other thread serving because one bad file must not take the forum down; a 503 would make a supervisor or load balancer do exactly that, and a restart cannot repair a quarantine.
+- Projection lag is not reported. docs/02 puts it on `/metrics`, behind an admin token; healthz is unauthenticated and the design does not say lag may be public.
+- The staleness bound (two intervals) and the 1 s ping deadline are defaults nobody configures.
 
 ### Tests
-- AC1: `TestHealthzFailsWhenDBUnqueryable` closes the DB and expects 503. `TestHealthzFailsWhenDirNotWritable` uses a probe over a directory chmod 0500; skip when running as root, and use an injected fault as the fallback. `TestHealthzStaleProbeFails` uses a fake clock. All return 200 when healthy.
-- AC2: `TestHealthzDoesNoDiskIO` counts through an injected FS hook and asserts zero file operations per request. `BenchmarkHealthz` plus a test that runs 1000 requests through `httptest` and asserts p99 < 5 ms. Under CI `-race` that may be noisy; give it a generous guard, record the named-machine number in the commit body, and move the assertion to a non-race step if it flakes.
-- AC3: `TestHealthzLeaksNothing` sends no cookie and no auth and expects 200. A golden test of the body, with `-update`, asserts the exact key set, and that no header or body contains the version, `data_dir`, or listen address.
-
-### Design
-docs/02-architecture.md "Observability" and "Background work". The `internal/web/server.go` package doc and the `Groups` comments. The `internal/logging` request-log rules.
-
-### Interactions
-Consumes `db.DB` (BW9Q1) and `projection.Writer.Lag` (C2WW5), and optionally the last catch-up `Report` (C5Y1S). Serve (CCBYX) starts the `DirProbe` and passes `Groups.Health`. The metrics endpoint (TKT-01M29CEE7S) reports lag in more detail.
+- AC1: DB closed -> 503 `database: failing`; directory chmod 0500 -> 503 `data_dir: failing` (skipped as root, with an injected-fault case that always runs); stale probe via a fake clock -> 503; quarantine -> 200 `degraded`; healthy -> 200.
+- AC2: no cookie, no auth -> 200; golden bodies (`-update`) for each state; no header or body carries the data dir, the listen address, a version, or error text; `/healthz` is routed ahead of the SPA; non-GET is 405.
+- AC3: through `web.New` with the real session middleware and a session cookie, a trace on the DB counts exactly one statement per request; `TestHealthzP99` runs 1000 requests through the chain and asserts p99 < 5 ms; `BenchmarkHealthz` reports p99. Serve test: `/healthz` answers 200 on a running server.
 
 ### Settled in grooming (2026-09-24)
 
