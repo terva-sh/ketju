@@ -25,6 +25,7 @@ import (
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/posts"
+	"github.com/terva-sh/ketju/internal/service/respcache"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -99,7 +100,10 @@ func newWorldSync(t *testing.T, policy threadlog.SyncPolicy) *world {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := &threads.Service{DB: d, Perm: perm.New(d), Threads: c, Render: render.NewCache(1 << 20)}
+	// The response cache is on in every world, so every thread page test
+	// also runs through it: a second request for a page is a hit.
+	svc := &threads.Service{DB: d, Perm: perm.New(d), Threads: c, Render: render.NewCache(1 << 20),
+		Responses: respcache.New(1 << 20)}
 	w := &world{t: t, db: d, cache: c, proj: p, svc: svc, handler: New(Deps{Threads: svc, Users: &users.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}}),
 		users: map[string]int64{}, clock: 1_757_500_000_000, root: root, events: &published{}}
 	w.writes(svc)
@@ -567,9 +571,11 @@ func TestAccess(t *testing.T) {
 // newHandlerFor returns w with a fresh Evaluator, so a test that changes
 // permissions behind the cache's back sees the change.
 func newHandlerFor(w *world) *world {
-	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20)}
+	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20),
+		Responses: respcache.New(1 << 20)}
 	w.writes(svc)
 	c := *w
+	c.svc = svc
 	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}})
 	return &c
 }

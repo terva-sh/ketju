@@ -204,6 +204,37 @@ see tombstone contents).
   what the endpoint actually serves for one seeded thread, regenerated with
   `go test ./internal/web/api -update`.
 
+#### The response cache (TKT-01M29CCBY0)
+
+`internal/service/respcache` holds a page's posts as serialized JSON, bounded
+by `storage.response_cache_mb` and evicted least-recently-used first. The key
+above is the design's; the implementation settles four internals:
+
+- **Only the posts are cached.** The header and pagination come from the
+  projection row, the forum and the tags, which the request reads anyway for
+  its access check, so a forum rename is never pinned. The viewer block is
+  built for each request and is never stored.
+- **The key adds** the page size (per user, docs/06), the projection's log
+  length beside the index's (settled in grooming), and a digest of the
+  page's authors' rows as this request read them. The digest does the job
+  grooming gave a users-generation counter, and also sees a rename, a role
+  change or an anonymization written by another process, such as
+  `ketju admin promote`.
+- **Viewer class** is the one the access check computes: `moderator` when
+  the viewer may moderate the thread's forum (an admin may), `member` for an
+  active member, `anon` otherwise, a suspended account included. A role
+  change is seen on the next request, because the session reads the role
+  from the users row every time.
+- **What the key cannot name** is kept beside the entry and checked on every
+  hit, as the render cache does: the handles the posts' mentions resolved
+  and the state of the posts they quote. A user registering a mentioned
+  handle is seen at once. A failed check is a miss, and the fresh page
+  replaces the entry.
+
+There is no invalidation and the package exports no way to forget an entry.
+A request with `after_log_length` bypasses the cache. `Stats` reports the
+hit ratio for the metrics endpoint (TKT-01M29CEE7S).
+
 #### The post endpoints (TKT-01M29CA9C2)
 
 `GET /threads/{id}/posts/{ordinal}` is a bare `Post`, the same assembly the

@@ -24,6 +24,7 @@ import (
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/posts"
+	"github.com/terva-sh/ketju/internal/service/respcache"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -49,6 +50,9 @@ type Service struct {
 	Perm    *perm.Evaluator
 	Threads *threadcache.Cache
 	Render  *render.Cache
+	// Responses caches a thread page's posts per viewer class (docs/07). Nil
+	// caches nothing.
+	Responses *respcache.Cache
 
 	// Quarantined reports a thread whose log startup catch-up found shorter
 	// than its projection (projection.Writer.Quarantined). Every endpoint
@@ -202,7 +206,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
-		if res.Body.Posts, err = s.posts(ctx, th, id, snap, authors, q, class == ClassModerator); err != nil {
+		if res.Body.Posts, err = s.pagePosts(ctx, th, id, snap, authors, q, size, row.LogLengthProjected, class); err != nil {
 			return err
 		}
 		return res.finish(id, snap.logLength, ifNoneMatch)
@@ -351,7 +355,16 @@ func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n in
 // revisions the snapshot names rather than whatever the index holds by now.
 func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
 	users map[int64]dto.Author, q Query, moderator bool) ([]dto.Post, error) {
+	out, _, err := s.postsDeps(ctx, th, id, snap, users, q, moderator)
+	return out, err
+}
+
+// postsDeps is posts, also returning what the HTML was drawn against: every
+// post's quotes and handle lookups, for the response cache to check on a hit.
+func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
+	users map[int64]dto.Author, q Query, moderator bool) ([]dto.Post, render.Deps, error) {
 	out := []dto.Post{}
+	var deps render.Deps
 	entries := snap.entries
 	// One read per run of consecutive ordinals: the page is a single run, and
 	// a post's replies are usually several.
@@ -363,7 +376,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		}
 		run, err := th.Reader.ReadEntries(snap.ordinals[i], entries[i:j])
 		if err != nil {
-			return nil, err
+			return nil, deps, err
 		}
 		read = append(read, run...)
 		i = j
@@ -381,7 +394,7 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		if p.Tombstone && moderator {
 			var err error
 			if p, err = th.Reader.HiddenEntry(p.Ordinal, entries[i]); err != nil {
-				return nil, err
+				return nil, deps, err
 			}
 		}
 		posts = append(posts, p)
@@ -417,14 +430,19 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 		}
 		// A tombstone reaches here with its source only for a moderator.
 		if !p.Tombstone || moderator {
-			var err error
-			if d.HTML, err = s.html(id, p, rctx, handles); err != nil {
-				return nil, err
+			var (
+				used render.Deps
+				err  error
+			)
+			if d.HTML, used, err = s.htmlDeps(id, p, rctx, handles); err != nil {
+				return nil, deps, err
 			}
+			deps.Quotes = append(deps.Quotes, used.Quotes...)
+			deps.Handles = append(deps.Handles, used.Handles...)
 		}
 		out = append(out, d)
 	}
-	return out, nil
+	return out, deps, nil
 }
 
 // html renders one post through the render cache.
@@ -439,12 +457,18 @@ func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid
 // mention would be drawn as unresolved when it may not be, and that is
 // neither cached nor served (review 392).
 func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, handles *handleMemo) (string, error) {
+	html, _, err := s.htmlDeps(id, p, rctx, handles)
+	return html, err
+}
+
+// htmlDeps is html, also returning what the rendering was drawn against.
+func (s *Service) htmlDeps(id threadid.ID, p threadlog.Post, rctx render.Context, handles *handleMemo) (string, render.Deps, error) {
 	k := render.Key{Thread: id, Ordinal: p.Ordinal, Revision: uint32(p.Revision)}
 	if html, deps, ok := s.Render.GetDeps(k); ok && quotesCurrent(deps.Quotes, rctx.Posts) && handles.current(deps.Handles) {
 		if handles.err != nil {
-			return "", fmt.Errorf("threads: checking %s#%d: %w", id, p.Ordinal, handles.err)
+			return "", render.Deps{}, fmt.Errorf("threads: checking %s#%d: %w", id, p.Ordinal, handles.err)
 		}
-		return html, nil
+		return html, deps, nil
 	}
 	var used []render.HandleLookup
 	rctx.Handles = render.HandleFunc(func(h string) (int64, string, bool) {
@@ -457,10 +481,11 @@ func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, ha
 		err = handles.err
 	}
 	if err != nil {
-		return "", fmt.Errorf("threads: rendering %s#%d: %w", id, p.Ordinal, err)
+		return "", render.Deps{}, fmt.Errorf("threads: rendering %s#%d: %w", id, p.Ordinal, err)
 	}
-	s.Render.PutDeps(k, r.HTML, render.Deps{Quotes: r.Quotes, Handles: used})
-	return r.HTML, nil
+	deps := render.Deps{Quotes: r.Quotes, Handles: used}
+	s.Render.PutDeps(k, r.HTML, deps)
+	return r.HTML, deps, nil
 }
 
 // postResolver answers the renderer's quote lookups from th's index: a post

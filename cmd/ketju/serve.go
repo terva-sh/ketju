@@ -29,6 +29,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/posts"
+	"github.com/terva-sh/ketju/internal/service/respcache"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -359,6 +360,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	forumSvc := &forums.Service{DB: d, Perm: perms, Logger: log}
 	threadSvc := &threads.Service{
 		DB: d, Perm: perms, Threads: cache, Render: render.NewCacheMB(cfg.Storage.RenderedCacheMB),
+		Responses:   respcache.NewMB(cfg.Storage.ResponseCacheMB),
 		Quarantined: proj.Quarantined,
 		Writer:      &posts.Writer{Publish: bus.Publish},
 		IDs:         threadid.NewGenerator(),
