@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BYYJGYDT6KK729749ED25
 title: Ship ketju config check
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:config
     path: docs/02-architecture.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: run/9byyjg-config-check
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a9af5fdbf004464e7
+  commit: 8705352101b409fe353e0b6309991e8c6c5e1242
+  session: null
+  claimed_at: 2026-09-28T08:14:39Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-24T05:21:19Z
+updated_at: 2026-09-28T08:14:42Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
