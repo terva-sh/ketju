@@ -17,11 +17,13 @@ parent: TKT-01M29BKBKP8C66GXXQK4HPEZ35
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:124
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T07:06:22Z
-updated_at: 2026-09-28T18:27:39Z
+updated_at: 2026-09-28T18:28:18Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
