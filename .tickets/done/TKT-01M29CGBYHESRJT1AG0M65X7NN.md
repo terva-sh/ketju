@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBYHESRJT1AG0M65X7NN
 title: Enforce the client bundle budget in CI
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,12 @@ blocks_on: none
 references:
   - ref: design:preact-client
     path: docs/07-api-and-clients.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/cgbyh-bundle-budget
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a97a23d9c8d034ffc
-  commit: e070d97b2a396d041cee090aa083f5a282fe62ae
-  session: null
-  claimed_at: 2026-09-28T07:52:50Z
-  expires_at: null
+  - ref: pr:105
+    path: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T07:57:12Z
+updated_at: 2026-09-28T08:04:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,7 +46,7 @@ A budget nobody measures is a preference. This is cheap to add while the number 
 ## Acceptance criteria
 
 - [x] CI fails when the thread view bundle exceeds 60 KB gzipped
-- [ ] The measured size is reported on every build so a trend is visible
+- [x] The measured size is reported on every build so a trend is visible
 - [x] Raising the budget requires editing a committed number rather than a flag
 
 ## Implementation plan
@@ -102,3 +97,11 @@ Left out: the pre-groom plan's markdown-parser dependency guard (step 6). It is 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:57:12Z
 
 Correction to the previous note's last line (Title: Return structured mentions, quotes, and reply_to from the render call): TKT-01M29C2WWG is already done, so the markdown-parser guard has no open home. It is not filed as a draft: no open criterion asks for it, and the bundle budget itself would catch a parser large enough to matter.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:04:12Z
+
+AC2 evidence, CI run 585 (PR #105, head 7bbc47a) step log. Step 'built client is current' (npm run build) and step 'client bundle budget' each print: '394 B assets/theme-early-DbsvcKdk.js / 30997 B assets/index-DW5jTwpN.js / 6510 B assets/index-BSGVfO99.css / thread-view bundle: 37901 B gzip / 60000 B budget (63.2%)'. Step 'client tests' ran scripts/bundle.test.mjs (7 tests). The CI figure is 59 B under the local one (37960 B): Alpine's Node links a different zlib, so level-9 output differs by a few bytes between machines. The number that gates is CI's.
+
+## Summary
+
+The thread view's gzipped JavaScript and CSS are measured on every client build and gated in CI against web/client/budget.json (60000 B, docs/07's 60 KB read strictly; fonts and the lazy admin chunk excluded). scripts/bundle.mjs measures, scripts/budget.mjs reports and exits 1 over budget with no flag or env override; npm run build ends with it and CI runs it as the 'client bundle budget' step. At merge time: 37901 B in CI (63.2%), about 22 KB of headroom. PR #105.
