@@ -59,9 +59,22 @@ type Querier interface {
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
 	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
+	DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error)
 	DeleteThreadTags(ctx context.Context, threadID int64) error
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
 	DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64, error)
+	// LowerReadPosition is mark-unread (DELETE /threads/{id}/read), the only
+	// statement that moves a position back. It never moves one forward: marking
+	// posts unread must not mark others read. It updates a row, so the caller
+	// runs EnsureReadPosition first in the same write transaction: with no row
+	// the position is 0, and the row EnsureReadPosition writes says so. A row
+	// is written rather than deleted, so marking a thread unread and then reading
+	// it forward starts from a stored position.
+	//
+	// Two statements rather than one upsert, because sqlc does not bind a
+	// parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1); the single write
+	// connection's BEGIN IMMEDIATE keeps the pair atomic against every writer.
+	EnsureReadPosition(ctx context.Context, arg EnsureReadPositionParams) error
 	// ForumAccessRows is everything perm needs to evaluate a set of forums for
 	// one viewer, in one statement: each forum's visibility, with every
 	// permission row, local to it or global, held by a group the viewer is in,
@@ -103,6 +116,9 @@ type Querier interface {
 	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
 	GetThread(ctx context.Context, id int64) (Thread, error)
+	// A reply draft: one per user per thread (drafts_thread). New-thread drafts,
+	// keyed by forum, have no endpoint yet.
+	GetThreadDraft(ctx context.Context, arg GetThreadDraftParams) (Draft, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
@@ -132,6 +148,7 @@ type Querier interface {
 	// The user fields are the ones GET /me needs, so resolving a request and
 	// answering /me share this query.
 	LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error)
+	LowerReadPosition(ctx context.Context, arg LowerReadPositionParams) (int64, error)
 	// MeCounts is GET /me's count statement: the viewer's unread notifications,
 	// and their unread threads by forum, so the service can drop the forums they
 	// cannot read in one batch from perm.
@@ -223,7 +240,10 @@ type Querier interface {
 	// A Post resets every column, for the same reason UpsertThread does.
 	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
 	// Reading never moves backwards: opening an older page of a thread must not
-	// mark the newer posts unread again.
+	// mark the newer posts unread again, and a beacon that arrives late, out of
+	// order or from a second device must not either (PUT /threads/{id}/read,
+	// TKT-01M29CA9CE). The rule lives in the statement rather than in a read
+	// followed by a write, so two beacons racing each other cannot interleave.
 	UpsertReadPosition(ctx context.Context, arg UpsertReadPositionParams) error
 	// The projection writer's statements (TKT-01M29C2WW5). Every one sets an
 	// absolute value, never an increment, so replaying a range the database has
@@ -231,6 +251,10 @@ type Querier interface {
 	// A ThreadCreated resets the whole row: replayed from the start of the log,
 	// it must undo whatever later records did before they are applied again.
 	UpsertThread(ctx context.Context, arg UpsertThreadParams) error
+	// PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
+	// source and reply target, keeping its created_at. The conflict target names
+	// the partial index's predicate, which SQLite requires to match it.
+	UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftParams) (Draft, error)
 	// Mention autocomplete (GET /api/v1/users?prefix=). lo is the prefix as
 	// typed and hi is lo with '{' appended, which sorts after every handle
 	// character. Both compare under the column's NOCASE collation, which folds

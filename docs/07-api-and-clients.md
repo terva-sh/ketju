@@ -61,11 +61,11 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /threads/{id}/posts/{ordinal}/history` | revisions, each with actor, time, reason and source; the client diffs them |
 | `PATCH /threads/{id}/posts/{ordinal}` | edit `{source, reason?}` |
 | `DELETE /threads/{id}/posts/{ordinal}` | soft delete; `POST …/restore` to undo |
-| `PUT  /threads/{id}/read` | `{ordinal}` advance read position; `DELETE` marks unread |
+| `PUT  /threads/{id}/read` | `{ordinal}` advance read position; `DELETE` marks unread. Both answer 200 `internal/dto` `ReadPosition`; see "Read position" below |
 | `POST /threads/{id}/watch` `{level}` | watch/mute |
 | `POST /threads/{id}/flags` | `{ordinal, reason, note}` |
 | `POST /render` | `{source, thread_id?, reply_to?}` → `{html, mentions: [{handle}], quotes: [{ordinal, deleted}], reply_to}` (composer preview; the create path records the same facts from the same render, `internal/dto` `RenderResult`). A member session is required (anonymous `unauthenticated`, pre-user `forbidden`). With `thread_id` the viewer must be able to read the thread, quotes resolve against it and `reply_to` is checked (`validation-failed` when no such post; a deleted post is accepted); without it quotes render optimistically and `reply_to` is `bad-request`. Charged to the per-address write limiter; the body limit is the post limit |
-| `GET  /drafts/{thread_id}` `PUT` `DELETE` | composer drafts |
+| `GET  /drafts/{thread_id}` `PUT` `DELETE` | composer drafts, one per user per thread → `internal/dto` `Draft`; see "Drafts" below |
 | `GET  /unread` `/new` `/participated` `/watching` | cross-forum thread lists |
 | `GET  /search?q=&forum=&author=&after=&before=` | FTS5 results with snippets |
 | `GET  /notifications` `POST /notifications/read` | |
@@ -245,6 +245,69 @@ charged to the write limiter. The optional reason body is read to at most
   Deleting twice is `conflict` rather than a quiet success, so the log keeps
   no records that change nothing.
 
+#### Read position (TKT-01M29CA9CE)
+
+`PUT /threads/{id}/read` takes `{ordinal}`: the viewer has read up to and
+including that post. `DELETE /threads/{id}/read` takes an optional
+`{ordinal}` body (none at all is fine): every post after that ordinal is
+unread, or the whole thread with no body. Both answer 200 with `internal/dto`
+`ReadPosition`, `{last_read_ordinal}`, which is the position as stored after
+the request and not always the ordinal sent. It is the same integer as the
+thread page's `viewer.last_read_ordinal`. `no-store`, and charged to the
+write limiter.
+
+- **A `PUT` never moves the position back.** The server keeps the larger of
+  the stored position and the one sent, in one statement, so a beacon that
+  arrives late, out of order, or from a second device leaves a higher
+  position where it is, and the answer says so. A client needs no ordering
+  of its own for correctness. It should still not send a position below one
+  it has already had answered, because that request does nothing.
+- **An ordinal past the thread's last post** is read as the last post. An
+  ordinal of 0 or below, or a missing one, is `bad-request`.
+- **A `DELETE` is the only way the position goes down, and it never goes
+  up.** Marking unread after a post the viewer has not reached changes
+  nothing. With no stored position it writes one at 0.
+- **Mark-unread then a late beacon.** A beacon sent before a `DELETE` and
+  arriving after it moves the position forward again, since the server
+  cannot tell it from a new read. A client flushes its pending beacon before
+  it sends a `DELETE`, and sends nothing for that thread until the `DELETE`
+  has answered.
+- **`mark_all_read_at` still applies.** A post written before the viewer's
+  mark counts as read whatever the position says (04 `read_positions`), so a
+  `DELETE` cannot make such a post unread.
+- A member session is required (anonymous and inactive `unauthenticated`,
+  pre-user `forbidden`), and access to the thread is the thread page's: a
+  thread the viewer may not see is `not-found`. Reading is all it needs; a
+  member without `reply` keeps a position.
+
+#### Drafts (TKT-01M29CA9CE)
+
+`/drafts/{thread_id}` is the composer's autosave for a reply, one per user
+per thread (04 `drafts`), kept on the server so it follows the user to
+another device.
+
+- `GET` answers 200 `internal/dto` `Draft` `{thread_id, source, reply_to,
+  updated_at}`, or 204 with no body when the viewer has no draft for the
+  thread. Having no draft is the usual state rather than an error, and
+  `not-found` stays reserved for a thread the viewer cannot see.
+- `PUT` takes `{source, reply_to?}` and answers 200 with the draft as stored.
+  It replaces the viewer's one draft for the thread, whichever device sent
+  it, and `updated_at` is the server's time of the save. `source` is required
+  but may be empty, because a draft that holds only a reply target is still
+  the composer's state; the body limit, which is the post limit, bounds it.
+  `reply_to` must name a post the thread has (`validation-failed`
+  otherwise); a deleted post is accepted, as a reply accepts it. Saving needs
+  `reply` in the forum (`forbidden` otherwise), since a draft is a reply
+  being written.
+- `DELETE` answers 204 whether or not there was a draft, so a client that
+  deletes after posting, or retries, needs no special case.
+- A member session and access to the thread are required, as for the read
+  position. All three are `no-store`; `PUT` and `DELETE` are charged to the
+  write limiter.
+- The new-thread draft, which docs/04 keys by forum, has no route yet. That
+  is TKT-01M3K9XBJA (Autosave new-thread drafts, and decide whether the
+  title is saved).
+
 ### Where the shapes live
 
 `internal/dto` holds the structs, and `internal/dto/testdata/golden` holds one
@@ -392,6 +455,34 @@ mutations. Constraints imposed now so that it stays cheap:
 Content negotiation on the same routes (`Accept` header) was considered and
 rejected: mutation semantics differ (redirect vs JSON) and caching gets
 murky. Separate handler packages over one service is clearer.
+
+### Form posts for viewer state
+
+An HTML form sends only `GET` and `POST`, as `application/x-www-form-urlencoded`,
+so each viewer-state route has a form shape for the HTML client. Each form
+post calls the same `internal/service/threads` method as its JSON route, with
+the same rules and refusals, and answers with a `303 See Other` back to the
+page it came from and a flash message instead of a body. A refusal is the
+same problem code rendered as a page. The routes live under the HTML
+client's `/t/{id}` paths; `{slug}` is advisory there as everywhere. A test in
+`internal/web/api` checks that every viewer-state route it serves has a row
+here.
+
+| JSON route | HTML client | Fields | Service call |
+|------------|-------------|--------|--------------|
+| `PUT /api/v1/threads/{id}/read` | the thread page itself: `GET /t/{id}/{slug}?page=N` marks the highest ordinal it renders (06), and `&mark_read=M` marks `M` instead | `mark_read` (query) | `MarkRead`: forward only, clamped to the last post |
+| `DELETE /api/v1/threads/{id}/read` | `POST /t/{id}/unread` | `ordinal` (optional; empty is the whole thread) | `MarkUnread` |
+| `GET /api/v1/drafts/{thread_id}` | none: the thread page fills its composer from the draft | | `Draft` |
+| `PUT /api/v1/drafts/{thread_id}` | `POST /t/{id}/draft`, the composer's "Save draft" button (`formaction` on the reply form) | `source`, `reply_to` (optional) | `SaveDraft` |
+| `DELETE /api/v1/drafts/{thread_id}` | `POST /t/{id}/draft/delete` | none | `DeleteDraft` |
+| `POST /api/v1/threads/{id}/watch` | `POST /t/{id}/watch` | `level` | owned by TKT-01M29CRJ29, which builds the route |
+| `POST /api/v1/threads/{id}/flags` | `POST /t/{id}/posts/{ordinal}/flag` | `reason`, `note` | owned by TKT-01M29CP2PJ, which builds the route |
+
+The read mark on a page `GET` is the one place a safe method writes. It is
+safe to repeat, because the position only moves forward, and it is what
+docs/06 asks of a client that cannot send a beacon. A prefetch that loads a
+thread page marks it read as well, which is the cost of marking on page load.
+`mark_read` never lowers a position; only `POST /t/{id}/unread` does.
 
 ## Security headers and limits
 

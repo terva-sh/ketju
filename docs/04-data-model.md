@@ -239,8 +239,10 @@ per forum. A draft holds exactly one of thread and forum, and a `reply_to`
 only with a thread. The first version of this section declared
 `PRIMARY KEY (user_id, thread_id)`, but a nullable key column does not enforce
 uniqueness in SQLite and could not key a new-thread draft by forum, so the
-two partial indexes replace it (TKT-01M29BYYHQ). A new-thread draft has no
-title column yet; whether it needs one is TKT-01M29CA9CE's to decide.
+two partial indexes replace it (TKT-01M29BYYHQ). The API serves reply drafts
+only (07 "Drafts"). A new-thread draft has no title column yet and no route;
+whether it saves the title is a product decision, left to TKT-01M3K9XBJA
+(Autosave new-thread drafts, and decide whether the title is saved).
 
 ### blobs
 ```

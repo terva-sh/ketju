@@ -2,13 +2,39 @@
 SELECT * FROM read_positions WHERE user_id = ? AND thread_id = ?;
 
 -- Reading never moves backwards: opening an older page of a thread must not
--- mark the newer posts unread again.
+-- mark the newer posts unread again, and a beacon that arrives late, out of
+-- order or from a second device must not either (PUT /threads/{id}/read,
+-- TKT-01M29CA9CE). The rule lives in the statement rather than in a read
+-- followed by a write, so two beacons racing each other cannot interleave.
 -- name: UpsertReadPosition :exec
 INSERT INTO read_positions (user_id, thread_id, last_read_ordinal, last_read_at)
 VALUES (?, ?, ?, ?)
 ON CONFLICT (user_id, thread_id) DO UPDATE SET
 	last_read_ordinal = max(last_read_ordinal, excluded.last_read_ordinal),
 	last_read_at = excluded.last_read_at;
+
+-- LowerReadPosition is mark-unread (DELETE /threads/{id}/read), the only
+-- statement that moves a position back. It never moves one forward: marking
+-- posts unread must not mark others read. It updates a row, so the caller
+-- runs EnsureReadPosition first in the same write transaction: with no row
+-- the position is 0, and the row EnsureReadPosition writes says so. A row
+-- is written rather than deleted, so marking a thread unread and then reading
+-- it forward starts from a stored position.
+--
+-- Two statements rather than one upsert, because sqlc does not bind a
+-- parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1); the single write
+-- connection's BEGIN IMMEDIATE keeps the pair atomic against every writer.
+-- name: EnsureReadPosition :exec
+INSERT INTO read_positions (user_id, thread_id, last_read_ordinal, last_read_at)
+VALUES (?, ?, 0, ?)
+ON CONFLICT (user_id, thread_id) DO NOTHING;
+
+-- name: LowerReadPosition :one
+UPDATE read_positions
+SET last_read_ordinal = CASE WHEN last_read_ordinal > @ordinal THEN @ordinal ELSE last_read_ordinal END,
+    last_read_at = @last_read_at
+WHERE user_id = @user_id AND thread_id = @thread_id
+RETURNING last_read_ordinal;
 
 -- name: ThreadWatchLevel :one
 SELECT level FROM watches WHERE user_id = ? AND thread_id = ?;
@@ -150,3 +176,23 @@ not_unread AS (
 SELECT a.forum_id, CAST(a.threads - coalesce(n.threads, 0) AS INTEGER) AS threads
 FROM active AS a LEFT JOIN not_unread AS n ON n.forum_id = a.forum_id
 WHERE a.threads - coalesce(n.threads, 0) > 0;
+
+-- A reply draft: one per user per thread (drafts_thread). New-thread drafts,
+-- keyed by forum, have no endpoint yet.
+-- name: GetThreadDraft :one
+SELECT * FROM drafts WHERE user_id = ? AND thread_id = ?;
+
+-- PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
+-- source and reply target, keeping its created_at. The conflict target names
+-- the partial index's predicate, which SQLite requires to match it.
+-- name: UpsertThreadDraft :one
+INSERT INTO drafts (user_id, thread_id, source, reply_to, created_at, updated_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(source), sqlc.arg(reply_to), sqlc.arg(now), sqlc.arg(now))
+ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
+	source = excluded.source,
+	reply_to = excluded.reply_to,
+	updated_at = excluded.updated_at
+RETURNING *;
+
+-- name: DeleteThreadDraft :execrows
+DELETE FROM drafts WHERE user_id = ? AND thread_id = ?;

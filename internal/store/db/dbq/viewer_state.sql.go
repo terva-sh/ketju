@@ -10,6 +10,51 @@ import (
 	"database/sql"
 )
 
+const deleteThreadDraft = `-- name: DeleteThreadDraft :execrows
+DELETE FROM drafts WHERE user_id = ? AND thread_id = ?
+`
+
+type DeleteThreadDraftParams struct {
+	UserID   int64
+	ThreadID sql.NullInt64
+}
+
+func (q *Queries) DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteThreadDraft, arg.UserID, arg.ThreadID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const ensureReadPosition = `-- name: EnsureReadPosition :exec
+INSERT INTO read_positions (user_id, thread_id, last_read_ordinal, last_read_at)
+VALUES (?, ?, 0, ?)
+ON CONFLICT (user_id, thread_id) DO NOTHING
+`
+
+type EnsureReadPositionParams struct {
+	UserID     int64
+	ThreadID   int64
+	LastReadAt int64
+}
+
+// LowerReadPosition is mark-unread (DELETE /threads/{id}/read), the only
+// statement that moves a position back. It never moves one forward: marking
+// posts unread must not mark others read. It updates a row, so the caller
+// runs EnsureReadPosition first in the same write transaction: with no row
+// the position is 0, and the row EnsureReadPosition writes says so. A row
+// is written rather than deleted, so marking a thread unread and then reading
+// it forward starts from a stored position.
+//
+// Two statements rather than one upsert, because sqlc does not bind a
+// parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1); the single write
+// connection's BEGIN IMMEDIATE keeps the pair atomic against every writer.
+func (q *Queries) EnsureReadPosition(ctx context.Context, arg EnsureReadPositionParams) error {
+	_, err := q.db.ExecContext(ctx, ensureReadPosition, arg.UserID, arg.ThreadID, arg.LastReadAt)
+	return err
+}
+
 const forumUnread = `-- name: ForumUnread :many
 WITH me AS (
 	SELECT coalesce(mark_all_read_at, -1) AS mark FROM users AS u WHERE u.id = ?1
@@ -98,6 +143,60 @@ func (q *Queries) GetReadPosition(ctx context.Context, arg GetReadPositionParams
 		&i.LastReadAt,
 	)
 	return i, err
+}
+
+const getThreadDraft = `-- name: GetThreadDraft :one
+SELECT id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at FROM drafts WHERE user_id = ? AND thread_id = ?
+`
+
+type GetThreadDraftParams struct {
+	UserID   int64
+	ThreadID sql.NullInt64
+}
+
+// A reply draft: one per user per thread (drafts_thread). New-thread drafts,
+// keyed by forum, have no endpoint yet.
+func (q *Queries) GetThreadDraft(ctx context.Context, arg GetThreadDraftParams) (Draft, error) {
+	row := q.db.QueryRowContext(ctx, getThreadDraft, arg.UserID, arg.ThreadID)
+	var i Draft
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ThreadID,
+		&i.ForumID,
+		&i.Source,
+		&i.ReplyTo,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
+const lowerReadPosition = `-- name: LowerReadPosition :one
+UPDATE read_positions
+SET last_read_ordinal = CASE WHEN last_read_ordinal > ?1 THEN ?1 ELSE last_read_ordinal END,
+    last_read_at = ?2
+WHERE user_id = ?3 AND thread_id = ?4
+RETURNING last_read_ordinal
+`
+
+type LowerReadPositionParams struct {
+	Ordinal    int64
+	LastReadAt int64
+	UserID     int64
+	ThreadID   int64
+}
+
+func (q *Queries) LowerReadPosition(ctx context.Context, arg LowerReadPositionParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, lowerReadPosition,
+		arg.Ordinal,
+		arg.LastReadAt,
+		arg.UserID,
+		arg.ThreadID,
+	)
+	var last_read_ordinal int64
+	err := row.Scan(&last_read_ordinal)
+	return last_read_ordinal, err
 }
 
 const meCounts = `-- name: MeCounts :many
@@ -281,7 +380,10 @@ type UpsertReadPositionParams struct {
 }
 
 // Reading never moves backwards: opening an older page of a thread must not
-// mark the newer posts unread again.
+// mark the newer posts unread again, and a beacon that arrives late, out of
+// order or from a second device must not either (PUT /threads/{id}/read,
+// TKT-01M29CA9CE). The rule lives in the statement rather than in a read
+// followed by a write, so two beacons racing each other cannot interleave.
 func (q *Queries) UpsertReadPosition(ctx context.Context, arg UpsertReadPositionParams) error {
 	_, err := q.db.ExecContext(ctx, upsertReadPosition,
 		arg.UserID,
@@ -290,4 +392,47 @@ func (q *Queries) UpsertReadPosition(ctx context.Context, arg UpsertReadPosition
 		arg.LastReadAt,
 	)
 	return err
+}
+
+const upsertThreadDraft = `-- name: UpsertThreadDraft :one
+INSERT INTO drafts (user_id, thread_id, source, reply_to, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?5)
+ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
+	source = excluded.source,
+	reply_to = excluded.reply_to,
+	updated_at = excluded.updated_at
+RETURNING id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at
+`
+
+type UpsertThreadDraftParams struct {
+	UserID   int64
+	ThreadID sql.NullInt64
+	Source   string
+	ReplyTo  sql.NullInt64
+	Now      int64
+}
+
+// PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
+// source and reply target, keeping its created_at. The conflict target names
+// the partial index's predicate, which SQLite requires to match it.
+func (q *Queries) UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftParams) (Draft, error) {
+	row := q.db.QueryRowContext(ctx, upsertThreadDraft,
+		arg.UserID,
+		arg.ThreadID,
+		arg.Source,
+		arg.ReplyTo,
+		arg.Now,
+	)
+	var i Draft
+	err := row.Scan(
+		&i.ID,
+		&i.UserID,
+		&i.ThreadID,
+		&i.ForumID,
+		&i.Source,
+		&i.ReplyTo,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
 }

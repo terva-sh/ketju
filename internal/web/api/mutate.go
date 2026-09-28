@@ -102,36 +102,43 @@ const maxReasonBody = 4 << 10
 
 // optionalReason reads a {reason} body, or none at all: a DELETE usually has
 // no body, and a client should not have to send "{}" to get one.
-//
-// It streams rather than buffering the body first, and stops at
-// maxReasonBody, so a large or endless body costs no more than that
-// (review 1119 on PR #95). Leading whitespace is skipped to tell an empty
-// body from a JSON one; decodeStrict then reads the rest.
 func optionalReason(body io.Reader) (reasonRequest, error) {
 	var in reasonRequest
-	lr := &io.LimitedReader{R: body, N: maxReasonBody + 1}
+	err := optionalJSON(body, maxReasonBody, &in)
+	return in, err
+}
+
+// optionalJSON reads one JSON object into v, or leaves v alone when the body
+// is empty or only whitespace.
+//
+// It streams rather than buffering the body first, and stops at max bytes,
+// so a large or endless body costs no more than that (review 1119 on PR
+// #95). Leading whitespace is skipped to tell an empty body from a JSON one;
+// decodeStrict then reads the rest.
+func optionalJSON(body io.Reader, max int64, v any) error {
+	lr := &io.LimitedReader{R: body, N: max + 1}
 	br := bufio.NewReader(lr)
 	for {
 		c, err := br.ReadByte()
 		if errors.Is(err, io.EOF) {
 			if lr.N <= 0 {
-				return in, problem.Coded(problem.CodePayloadTooLarge, errors.New("api: the reason body is too large"))
+				return problem.Coded(problem.CodePayloadTooLarge, errors.New("api: the request body is too large"))
 			}
-			return in, nil
+			return nil
 		}
 		if err != nil {
-			return in, problem.Coded(problem.CodeBadRequest, fmt.Errorf("api: the request body: %w", err))
+			return problem.Coded(problem.CodeBadRequest, fmt.Errorf("api: the request body: %w", err))
 		}
 		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
 			break
 		}
 	}
 	if err := br.UnreadByte(); err != nil {
-		return in, err
+		return err
 	}
-	err := decodeStrict(br, &in)
+	err := decodeStrict(br, v)
 	if lr.N <= 0 {
-		return in, problem.Coded(problem.CodePayloadTooLarge, errors.New("api: the reason body is too large"))
+		return problem.Coded(problem.CodePayloadTooLarge, errors.New("api: the request body is too large"))
 	}
-	return in, err
+	return err
 }

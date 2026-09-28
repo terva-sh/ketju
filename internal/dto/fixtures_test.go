@@ -409,6 +409,22 @@ var corpus = map[string]any{
 	"created-post." + tMember:   createdPost(),
 	"created-thread." + tMember: createdThread(),
 	"unread." + tMember:         crossForumList(),
+	"read." + tMember:           ReadPosition{LastReadOrdinal: 62},
+	"draft." + tMember:          draftReply(),
+	"draft-plain." + tMember:    draftPlain(),
+}
+
+// draftReply is GET /drafts/{thread_id} for a reply to post 61, half
+// written; draftPlain is one that replies to the thread as a whole.
+func draftReply() Draft {
+	reply := uint32(61)
+	return Draft{ThreadID: "3yymw47g00001", Source: "The bill was the smaller half, but",
+		ReplyTo: &reply, UpdatedAt: 1757500300000}
+}
+
+func draftPlain() Draft {
+	return Draft{ThreadID: "3yymw47g00001", Source: "Agreed, and",
+		ReplyTo: nil, UpdatedAt: 1757500310000}
 }
 
 // renderReply is POST /render for a reply that quotes post 61, whose quoted

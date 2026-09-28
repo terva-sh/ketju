@@ -446,3 +446,29 @@ type CreatedThread struct {
 	Thread ThreadHeader `json:"thread"`
 	Post   CreatedPost  `json:"post"`
 }
+
+// ReadPosition is the answer to PUT and DELETE /threads/{id}/read (docs/07,
+// TKT-01M29CA9CE): the viewer's read position in the thread as it stands
+// after the request, which is not always the ordinal asked for. A PUT never
+// moves it back, so a late or out-of-order beacon answers with the higher
+// position already stored; a DELETE never moves it forward.
+//
+// LastReadOrdinal is the thread page's viewer.last_read_ordinal, the same
+// integer: every post after it is unread, and 0 means none has been read.
+type ReadPosition struct {
+	LastReadOrdinal int `json:"last_read_ordinal"`
+}
+
+// Draft is a reply the viewer has started and not posted: GET and PUT
+// /drafts/{thread_id} (docs/07, TKT-01M29CA9CE). One per user per thread,
+// kept on the server so it follows the user to another device.
+//
+// ThreadID is the thread's base32 id, as in ThreadHeader. ReplyTo is the
+// ordinal the reply chip names, or null when the draft replies to the
+// thread as a whole. UpdatedAt is when the server last stored it.
+type Draft struct {
+	ThreadID  string  `json:"thread_id"`
+	Source    string  `json:"source"`
+	ReplyTo   *uint32 `json:"reply_to"`
+	UpdatedAt Millis  `json:"updated_at"`
+}
