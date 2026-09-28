@@ -3,6 +3,7 @@ package config
 import (
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -97,9 +98,8 @@ var movedKeys = map[string]string{
 // decodeError turns a TOML decoding failure into something that names a key.
 //
 // go-toml reports unknown fields as a StrictMissingError carrying one entry
-// per offending key, and type mismatches as a DecodeError with a source
-// excerpt. Both are better than what a caller would print by default, and
-// neither is useful unless it is unwrapped.
+// per offending key, and syntax errors and type mismatches as a DecodeError
+// with a position. Neither is useful unless it is unwrapped.
 func decodeError(file string, src []byte, err error) error {
 	p := &problemList{file: file}
 
@@ -120,24 +120,82 @@ func decodeError(file string, src []byte, err error) error {
 		return p.err()
 	}
 
+	// go-toml's own message is never passed on. It can quote the file -- a
+	// character of an invalid escape, the text of a number that did not
+	// parse -- and the file can hold a client_secret, on the very line that
+	// failed. So the message is built here from the key, the position and
+	// the type the key expects, none of which is the file's content, and a
+	// secret on a broken line cannot reach a log or `ketju config check`.
 	var dec *toml.DecodeError
 	if errors.As(err, &dec) {
-		key := strings.Join(dec.Key(), ".")
 		row, col := dec.Position()
-		if key == "" {
-			// A syntax error carries no key, but the line it is on usually
-			// names one, and "the key" is what the operator is looking for.
-			key = keyAtLine(src, row)
+		if key := strings.Join(dec.Key(), "."); key != "" {
+			if want := expects(key); want != "" {
+				p.addf(key, "the value is not %s (line %d, column %d)", want, row, col)
+			} else {
+				p.addf(key, "the value is not one this key accepts (line %d, column %d)", row, col)
+			}
+			return p.err()
 		}
-		p.addf(key, "%s (line %d, column %d)", dec.Error(), row, col)
+		// A syntax error carries no key, but the line it is on usually
+		// names one, and "the key" is what the operator is looking for.
+		p.addf(keyAtLine(src, row), "not valid TOML at line %d, column %d", row, col)
 		return p.err()
 	}
 
 	// Anything else go-toml reports is still the file's fault rather than a
 	// failure to read it, so it is a problem like the others, and
-	// `ketju config check` exits with the same code for it.
-	p.add("(file)", err.Error())
+	// `ketju config check` exits with the same code for it. Its text is left
+	// out for the reason above.
+	p.add("(file)", "not valid TOML, or not in the shape this version reads")
 	return p.err()
+}
+
+// expects names the kind of value key takes, found by following its toml
+// tags through Config. A segment naming no field -- an index, or a
+// provider's key -- is skipped, which is how an array of tables is entered.
+func expects(key string) string {
+	t := reflect.TypeFor[Config]()
+	for _, seg := range strings.Split(key, ".") {
+		for t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Struct {
+			t = t.Elem()
+		}
+		if t.Kind() != reflect.Struct {
+			return ""
+		}
+		f, ok := fieldByTag(t, seg)
+		if !ok {
+			continue
+		}
+		t = f.Type
+	}
+	switch {
+	case t == reflect.TypeFor[Secret](), t.Kind() == reflect.String:
+		return "a string"
+	case t.Kind() == reflect.Int:
+		return "a whole number"
+	case t.Kind() == reflect.Bool:
+		return "true or false"
+	case t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.String:
+		return "a list of strings"
+	case t.Kind() == reflect.Map:
+		return "a table of strings"
+	case t.Kind() == reflect.Slice && t.Elem().Kind() == reflect.Struct:
+		return "an array of tables"
+	case t.Kind() == reflect.Struct:
+		return "a table"
+	}
+	return ""
+}
+
+func fieldByTag(t reflect.Type, name string) (reflect.StructField, bool) {
+	for i := 0; i < t.NumField(); i++ {
+		tag, _, _ := strings.Cut(t.Field(i).Tag.Get("toml"), ",")
+		if tag == name {
+			return t.Field(i), true
+		}
+	}
+	return reflect.StructField{}, false
 }
 
 // keyAtLine names the key written on line row (1-based) of src, under the

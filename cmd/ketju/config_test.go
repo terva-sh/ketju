@@ -133,9 +133,25 @@ func TestConfigCheckExitCodes(t *testing.T) {
 		}
 	}
 
-	// The config path comes from KETJU_CONFIG when --config is absent.
-	if _, _, err := runCheck(map[string]string{"KETJU_CONFIG": valid}); err != nil {
+	// The config path comes from KETJU_CONFIG when --config is absent, and
+	// the report says so, and lists the variable as set.
+	out, _, err = runCheck(map[string]string{"KETJU_CONFIG": valid})
+	if err != nil {
 		t.Errorf("KETJU_CONFIG: %v", err)
+	}
+	for _, want := range []string{"# the path was chosen by KETJU_CONFIG\n", "# * KETJU_CONFIG "} {
+		if !strings.Contains(out, want) {
+			t.Errorf("KETJU_CONFIG: the report lacks %q:\n%s", want, out)
+		}
+	}
+	out, _, _ = runCheck(map[string]string{"KETJU_CONFIG": valid}, "--json")
+	rep = checkReport{}
+	if err := json.Unmarshal([]byte(out), &rep); err != nil {
+		t.Fatal(err)
+	}
+	if rep.ChosenBy != "KETJU_CONFIG" || len(rep.Overrides) == 0 ||
+		rep.Overrides[0] != (checkOverride{Env: "KETJU_CONFIG", Key: "(the config file's path)", Set: true}) {
+		t.Errorf("--json with KETJU_CONFIG: chosen_by %q, overrides %+v", rep.ChosenBy, rep.Overrides)
 	}
 }
 
@@ -310,6 +326,9 @@ func TestConfigCheckNeverPrintsSecret(t *testing.T) {
 		{name: "inline, invalid", body: head + "listen = \"nope\"\n" + provider("a", `client_secret = "`+sentinel+`"`)},
 		{name: "file, invalid", body: head + "listen = \"nope\"\n" + provider("a", `client_secret_file = "s"`),
 			files: map[string]string{"s": sentinel + "\n"}},
+		// A line the parser stops at: its message is not passed on, because
+		// it can quote the line (TestABrokenLineDoesNotQuoteItsSecret).
+		{name: "broken line", body: head + provider("a", `client_secret = "`+sentinel+`\q"`)},
 		{name: "both set", body: head + provider("a", `client_secret = "`+sentinel+`"`+"\n"+`client_secret_file = "s"`),
 			files: map[string]string{"s": sentinel + "\n"}},
 	}

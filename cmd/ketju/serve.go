@@ -128,14 +128,17 @@ func signalContext() (context.Context, context.CancelFunc) {
 	return signal.NotifyContext(context.Background(), syscall.SIGTERM, syscall.SIGINT)
 }
 
+// configEnv names the variable that chooses the config file.
+const configEnv = "KETJU_CONFIG"
+
 // configPath is --config, else KETJU_CONFIG, else ./config.toml (settled in
 // grooming for TKT-01M29BYYJG).
 func configPath(flagValue string, getenv func(string) string) string {
 	switch {
 	case flagValue != "":
 		return flagValue
-	case getenv("KETJU_CONFIG") != "":
-		return getenv("KETJU_CONFIG")
+	case getenv(configEnv) != "":
+		return getenv(configEnv)
 	default:
 		return "config.toml"
 	}

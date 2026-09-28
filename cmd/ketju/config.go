@@ -85,6 +85,7 @@ func configMain(out, errOut io.Writer, args []string, getenv func(string) string
 // the config's own types, so a secret goes through Secret.MarshalJSON.
 type checkReport struct {
 	File      string          `json:"file"`
+	ChosenBy  string          `json:"chosen_by"`
 	Valid     bool            `json:"valid"`
 	Error     string          `json:"error,omitempty"`
 	Problems  []checkProblem  `json:"problems,omitempty"`
@@ -136,11 +137,18 @@ func configCheck(out, errOut io.Writer, args []string, getenv func(string) strin
 	}
 
 	path := configPath(*pathFlag, getenv)
+	chosenBy := "the default"
+	switch {
+	case *pathFlag != "":
+		chosenBy = "--config"
+	case getenv(configEnv) != "":
+		chosenBy = configEnv
+	}
 	if abs, err := filepath.Abs(path); err == nil {
 		path = abs
 	}
 	cfg, warnings, err := config.Load(path, getenv)
-	rep := checkReport{File: path, Valid: err == nil, Warnings: warnings}
+	rep := checkReport{File: path, ChosenBy: chosenBy, Valid: err == nil, Warnings: warnings}
 	if rep.Warnings == nil {
 		rep.Warnings = []string{}
 	}
@@ -161,6 +169,10 @@ func configCheck(out, errOut io.Writer, args []string, getenv func(string) strin
 			rep.Keys = append(rep.Keys, checkKey{Key: e.Key, Value: e.Value,
 				Source: string(e.Source.Layer), From: e.Source.From})
 		}
+		// KETJU_CONFIG is read before any of the others, to find the file
+		// they amend; it has no _FILE companion.
+		rep.Overrides = append(rep.Overrides, checkOverride{Env: configEnv,
+			Key: "(the config file's path)", Set: getenv(configEnv) != ""})
 		for _, o := range cfg.Overrides() {
 			rep.Overrides = append(rep.Overrides, checkOverride{Env: o.Env, Key: o.Key,
 				Set: getenv(o.Env) != "" || getenv(o.Env+config.FileSuffix) != ""})
@@ -195,6 +207,7 @@ func configCheck(out, errOut io.Writer, args []string, getenv func(string) strin
 func printCheck(out io.Writer, rep checkReport) error {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# %s is valid\n", rep.File)
+	fmt.Fprintf(&b, "# the path was chosen by %s\n", rep.ChosenBy)
 	if n := len(rep.Warnings); n > 0 {
 		fmt.Fprintf(&b, "# with %d warning%s, listed below\n", n, plural(n))
 	}
@@ -220,7 +233,7 @@ func printCheck(out io.Writer, rep checkReport) error {
 	}
 
 	b.WriteString("\n# environment variables this build reads; * is set here.\n")
-	fmt.Fprintf(&b, "# Each can instead be given as NAME%s, naming a file that holds the value.\n", config.FileSuffix)
+	fmt.Fprintf(&b, "# Each but %s can instead be given as NAME%s, naming a file that holds the value.\n", configEnv, config.FileSuffix)
 	tw = tabwriter.NewWriter(&b, 0, 0, 2, ' ', 0)
 	for _, o := range rep.Overrides {
 		mark := " "

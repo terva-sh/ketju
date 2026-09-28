@@ -1,4 +1,5 @@
 # $DIR/config.toml is valid
+# the path was chosen by --config
 #
 # key = value  # where the value came from
 
@@ -29,7 +30,8 @@ oidc.providers.club.insecure_skip_issuer_check = false           # default
 limits.attachment_mb = 10                                        # default
 
 # environment variables this build reads; * is set here.
-# Each can instead be given as NAME_FILE, naming a file that holds the value.
+# Each but KETJU_CONFIG can instead be given as NAME_FILE, naming a file that holds the value.
+#   KETJU_CONFIG                     (the config file's path)
 #   KETJU_LISTEN                     listen
 #   KETJU_DATA_DIR                   data_dir
 #   KETJU_COOKIE_KEY_FILE            cookie_key_file

@@ -290,3 +290,59 @@ func TestASyntaxErrorNamesTheKeyOnItsLine(t *testing.T) {
 		}
 	}
 }
+
+// TestABrokenLineDoesNotQuoteItsSecret: a client_secret on the line the
+// parser stops at does not reach the problem text. go-toml's messages can
+// quote the file (an invalid escape's character, a number's text), so none
+// of them is passed on; the message is the key, the position, and the type
+// the key expects.
+func TestABrokenLineDoesNotQuoteItsSecret(t *testing.T) {
+	t.Parallel()
+
+	const secret = "ketju-sentinel-7f3a"
+	head := minimal + "site_url = \"https://forum.example.org\"\n[[oidc.providers]]\nkey = \"a\"\nname = \"A\"\nissuer = \"https://a.example\"\nclient_id = \"c\"\n"
+	for _, line := range []string{
+		`client_secret = "` + secret + `\q"`,
+		`client_secret = "` + secret,
+		`client_secret = '` + secret + "\x01'",
+		`client_secret = ` + secret,
+		`client_secret = 7e3a` + secret,
+		`client_secret = 12345` + secret,
+		`client_secret = [ "` + secret + `" ]`,
+		`client_secret = { v = "` + secret + `" }`,
+		`client_secret = "ok" "` + secret + `"`,
+	} {
+		_, _, err := Load(write(t, head+line+"\n"), env(nil))
+		if err == nil {
+			t.Errorf("%q loaded", line)
+			continue
+		}
+		msg := err.Error()
+		for _, bad := range []string{secret, "U+", "toml:", "'q'", "7e3a"} {
+			if strings.Contains(msg, bad) {
+				t.Errorf("%q: the problem quotes the file (%q):\n%s", line, bad, msg)
+			}
+		}
+		// An inline table where a string belongs is reported as the unknown
+		// key inside it, which names the key and not the value.
+		if !strings.Contains(msg, "line 9") && !strings.Contains(msg, "unknown key") {
+			t.Errorf("%q: the problem does not give the line:\n%s", line, msg)
+		}
+	}
+}
+
+// A type mismatch names what the key expects rather than quoting the value.
+func TestATypeMismatchSaysWhatTheKeyExpects(t *testing.T) {
+	t.Parallel()
+
+	for body, want := range map[string]string{
+		minimal + "[storage]\nopen_threads = \"many\"\n":  "storage.open_threads: the value is not a whole number",
+		minimal + "listen = 8080\n":                       "listen: the value is not a string",
+		minimal + "[bootstrap]\nadmin_emails = \"a@b\"\n": "bootstrap.admin_emails: the value is not a list of strings",
+	} {
+		_, _, err := Load(write(t, body), env(nil))
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("%q: got %v, want %q", body, err, want)
+		}
+	}
+}

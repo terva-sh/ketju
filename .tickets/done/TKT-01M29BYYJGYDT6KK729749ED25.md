@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-28T08:23:10Z
+updated_at: 2026-09-28T08:27:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -85,6 +85,13 @@ Gaps settled under docs/12 "Gaps the design leaves open", written into docs/02 "
 - Output format: one `key = value  # source` line per key in struct order, rather than a {key: {value, source}} map in JSON; --json emits a list so the order survives.
 
 Mutations tried against the tests, each caught: printing Secret.Value() in formatValue (4 tests fail, including the static one); dropping the env source record (TestConfigCheckShowsLayers, TestSourcesNameEachLayer); dropping warn() from Load (TestConfigCheckExitCodes, TestWarningsNameTheirKeyAndDoNotFail); mapping errConfig to 4 (TestConfigCheckFailsNamingKey, TestConfigCheckAsTheBinary).
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:27:40Z
+
+Review 1151 (run c7e91803-b2be-4368-89c8-de17141919bf, Actions run #597, request ready-review-409b0d0) on head 409b0d0ebe3f903270a2d637deb89b5f5c1801f8, base 056e35786d1d3ab907452a609829e6c004b70f02. terva-review/code: failure. Both findings fixed by changing the behaviour. Neither is answered by argument.
+
+- finding-1 (high), "Redact secret-bearing source lines from parse errors": accepted. go-toml's DecodeError message can quote the file. An invalid escape inside a client_secret put its character into the problem as `U+0071 'q'`. decodeError no longer passes any go-toml text on. A syntax error is now reported as the key on its line plus "not valid TOML at line L, column C". A type mismatch says what the key expects ("the value is not a whole number"), which `expects` works out from Config's toml tags. The fallback error is a fixed sentence. TestABrokenLineDoesNotQuoteItsSecret feeds nine malformed client_secret lines that carry the sentinel. It fails against the old code, where `'q'`, `U+` and `toml:` all reached the message. cmd/ketju's sentinel test gained a broken-line case.
+- finding-2 (medium), "Include KETJU_CONFIG in the reported environment variables": accepted. The report now names what chose the path (--config, KETJU_CONFIG, or the default) and lists KETJU_CONFIG first among the variables, marked when set. JSON carries it as `chosen_by` and as the first override. The golden file is updated, and TestConfigCheckExitCodes asserts both the text and the JSON.
 
 ## Summary
 
