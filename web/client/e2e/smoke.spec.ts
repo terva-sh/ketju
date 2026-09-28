@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { signIn, stateFile } from './session';
+import { setReadPosition, signIn, stateFile } from './session';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -52,6 +52,10 @@ test('sign in, read a thread, reply, and see the unread divider', async ({ brows
       // step above, and /auth/* allows only a burst of ten (docs/08).
       storageState: stateFile('carol'),
     });
+    // carol has read the seed, as seeded. Opening the thread moves her
+    // position (TKT-01M29CGBWN), so it is put back first rather than
+    // trusted to be where the other width's run left it.
+    await setReadPosition(ctx.request, seed.thread, seed.posts);
     const carol = await ctx.newPage();
     await carol.goto(seed.thread);
     const divider = carol.locator('#unread');

@@ -1,6 +1,10 @@
 import { act } from 'preact/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import type { Me } from '../api/dto';
+import { dwellMs, resetReadTracker } from '../state/readTracker';
+import { viewer } from '../state/viewer';
 import { renderAt, route, screenOf, settle, threadJSON } from '../testing';
+import member from '../../../../internal/dto/testdata/golden/me.member.json';
 
 const problem = (type: string, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify({ type, title: 't', status }), {
@@ -139,5 +143,71 @@ describe('the thread screen', () => {
     await route('/t/01k4z3j0w8x2c/a');
     await settle(root);
     expect(root.textContent).not.toContain('Secret');
+  });
+});
+
+// TKT-01M29CGBWN: the thread page tracks what a signed-in reader reads of
+// it, and a move away sends it.
+describe('read tracking on the thread screen', () => {
+  const saved = viewer.value;
+  afterEach(() => {
+    viewer.value = saved;
+    resetReadTracker();
+  });
+
+  it('sends the position read when the reader navigates away, and tracks nothing for a visitor', async () => {
+    const observers: { observed: Element[]; callback: IntersectionObserverCallback }[] = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observed: Element[] = [];
+        constructor(readonly callback: IntersectionObserverCallback) {
+          observers.push(this);
+        }
+        observe(el: Element) {
+          this.observed.push(el);
+        }
+        disconnect() {}
+      },
+    );
+    const puts: { url: string; keepalive?: boolean; body: unknown }[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      if (init.method === 'PUT') {
+        puts.push({ url, keepalive: init.keepalive, body: JSON.parse(String(init.body)) });
+        return new Response('{"last_read_ordinal":62}', { status: 200 });
+      }
+      if (String(url).startsWith('/api/v1/threads/'))
+        return new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'Read' }), { status: 200 });
+      return new Promise<Response>(() => {});
+    });
+
+    viewer.value = { ...structuredClone(member), user: null } as Me;
+    await renderAt('/t/01k4z3j0w8x2c/a');
+    expect(observers).toHaveLength(0);
+
+    viewer.value = structuredClone(member) as Me;
+    await renderAt('/t/01k4z3j0w8x2c/a');
+    const io = observers.at(-1)!;
+    // The golden page holds posts 61 to 63, and the reader has read to 60.
+    expect(io.observed.map((el) => el.id)).toEqual(['post-61', 'post-62', 'post-63']);
+    vi.useFakeTimers();
+    io.callback(
+      [
+        {
+          target: io.observed[1],
+          isIntersecting: true,
+          intersectionRect: { height: 200 },
+          boundingClientRect: { height: 200 },
+          rootBounds: { height: 800 },
+        } as unknown as IntersectionObserverEntry,
+      ],
+      io as unknown as IntersectionObserver,
+    );
+    vi.advanceTimersByTime(dwellMs);
+    vi.useRealTimers();
+    expect(puts).toEqual([]);
+    await route('/f/general');
+    await act(() => new Promise((r) => setTimeout(r, 5)));
+    expect(puts).toEqual([{ url: '/api/v1/threads/01k4z3j0w8x2c/read', keepalive: true, body: { ordinal: 62 } }]);
   });
 });

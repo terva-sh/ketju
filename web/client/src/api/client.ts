@@ -91,11 +91,13 @@ export function forgetHeld(url: string, body: unknown) {
 // apiSend sends body as JSON, the only type the API accepts on a mutating
 // request (docs/07 CSRF rule 1), and returns the JSON answer, or undefined
 // for 204. An aborted request rejects with the abort, as apiGet's does.
+// keepalive lets the request outlive the page that sent it, as the read
+// beacon's must when the page is going away (state/readTracker.ts).
 export async function apiSend<T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   body?: unknown,
-  init: { signal?: AbortSignal } = {},
+  init: { signal?: AbortSignal; keepalive?: boolean } = {},
 ): Promise<T> {
   let payload: string | undefined;
   try {
@@ -110,6 +112,7 @@ export async function apiSend<T>(
     headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
     body: payload,
     signal: init.signal,
+    ...(init.keepalive ? { keepalive: true } : {}),
   });
   if (!r.ok) throw await toProblem(r);
   if (r.status === 204) return undefined as T;

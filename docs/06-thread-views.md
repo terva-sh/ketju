@@ -57,8 +57,10 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
 
 - The client sends a beacon `PUT /api/threads/{id}/read {ordinal}` when a post
   has been on screen for ≥ 1 s, batched every 30 s and on navigation/unload
-  (`navigator.sendBeacon`). The server only ever moves the position forward
-  unless the user explicitly marks a thread unread.
+  (`fetch` with `keepalive`, not `navigator.sendBeacon`, which can only POST;
+  TKT-01M29CGBWN). "On screen" is at least half the post in the viewport, or
+  half the viewport filled by a post taller than that. The server only ever
+  moves the position forward unless the user explicitly marks a thread unread.
 - A non-JS client cannot beacon; it marks the highest ordinal *rendered* on a
   page as read when that page is served. Coarser but consistent — the same
   integer, same semantics.

@@ -21,7 +21,9 @@ import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
 import { composerFor, quotePost, replyToPost } from '../state/composer';
+import { trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
+import { viewer } from '../state/viewer';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
 import { NotFound } from './Placeholder';
@@ -186,6 +188,8 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   // Nothing moves a reader who has left the thread while it was posting.
   const { route } = useLocation();
   useThreadShortcuts(page, lens, route);
+  const list = useRef<HTMLElement>(null);
+  useReadTracking(thread.id, list, page, lastRead);
   const posted = (res: CreatedPost) => {
     if (location.pathname.startsWith(`/t/${encodeURIComponent(thread.id)}/`)) route(permalink(thread, res.ordinal));
   };
@@ -212,7 +216,7 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   return (
     <>
       {pager}
-      <section class="posts" onClick={follow}>
+      <section class="posts" ref={list} onClick={follow}>
         {page.posts.map((p, i) => (
           <Fragment key={p.ordinal}>
             {p.ordinal === divider && <UnreadDivider unread={page.thread.post_count - lastRead} lastRead={lastRead} />}
@@ -241,6 +245,19 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
     </>
   );
+}
+
+// useReadTracking sends what a signed-in reader reads of this page as their
+// read position (state/readTracker.ts). The body is keyed on the request, so
+// it unmounts on every navigation away from this page, and stopping flushes.
+// The divider stays where the page drew it: what is read while the page is
+// open moves it on the next visit, not under the reader.
+function useReadTracking(id: string, list: { current: HTMLElement | null }, page: ThreadPage, lastRead: number) {
+  const signedIn = !!viewer.value.user;
+  useEffect(() => {
+    if (!signedIn || !list.current) return;
+    return trackPosts(id, list.current, lastRead);
+  }, [id, page, signedIn]);
 }
 
 // useArrival scrolls once per request key, when its page first arrives:

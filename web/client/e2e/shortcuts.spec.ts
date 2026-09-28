@@ -1,13 +1,14 @@
 import { expect, test, type Browser, type Page, type TestInfo } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { stateFile } from './session';
+import { setReadPosition, stateFile } from './session';
 
 // The desktop keyboard shortcuts (TKT-01M29CGBX4), run once per project in
 // playwright.config.ts against the e2e seed (cmd/ketju e2e.go): j, k, g, u,
-// n and ? at 1440 px, and none of them at 390 px. Reading a thread here
-// marks nothing read, so alice's read position in "Minutes from the
-// September meeting" stays at #30 for thread-list.spec.ts.
+// n and ? at 1440 px, and none of them at 390 px. Reading a thread moves
+// the reader's position (TKT-01M29CGBWN), so the test that needs alice's
+// position in "Minutes from the September meeting" at #30, as seeded, puts
+// it there first.
 
 const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
 
@@ -96,6 +97,7 @@ test.describe('at 1440 px', () => {
   test('u goes to the first unread post, and n to the next unread thread', async ({ browser }, info) => {
     const { ctx, page } = await asAlice(browser, info);
     const at = await minutes(page);
+    await setReadPosition(ctx.request, at, 30);
     await page.goto(at);
     await expect(page.locator('#post-1')).toBeVisible();
     await page.keyboard.press('u');

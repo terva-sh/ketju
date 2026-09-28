@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { mkdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { stateFile } from './session';
+import { setReadPosition, stateFile } from './session';
 
 // The thread list (TKT-01M29CEE6D), run once per project in
 // playwright.config.ts against the e2e seed (cmd/ketju e2e.go): general
@@ -22,12 +22,15 @@ test('the badge lands on the first unread post and the title on page 1', async (
   const page = await ctx.newPage();
   await page.goto('/f/general');
   const minutes = row(page, 'Minutes from the September meeting');
+  // Reading there moves alice on (TKT-01M29CGBWN), in this test or any
+  // other, so her position goes back to the seeded #30 first and the list
+  // is loaded again.
+  await setReadPosition(ctx.request, (await minutes.locator('.thread-title').getAttribute('href'))!, 30);
+  await page.reload();
   const badge = minutes.locator('[data-unread]');
   await expect(badge).toBeVisible();
-  // Seeded at 30, so the first project's run lands on 31; reading there
-  // moves alice on, and the second's lands on whatever is first unread now.
   const first = Number(/\/(\d+)$/.exec((await badge.getAttribute('href'))!)![1]);
-  expect(first).toBeGreaterThanOrEqual(31);
+  expect(first).toBe(31);
   await badge.click();
   const post = page.locator(`#post-${first}`);
   await expect(post).toBeInViewport();

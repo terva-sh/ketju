@@ -115,6 +115,21 @@ export function cachedThread(id: string): ThreadEntry | undefined {
   return threadCache.value.get(id);
 }
 
+// forgetLandings drops the held bodies of id's landing requests: those that
+// name neither a page nor a post, so the server chooses the page from the
+// viewer's read position (docs/06 "Landing on return"). Once that position
+// has moved, a held landing page is the wrong page, and showing it while it
+// revalidates would place the reader there. A request naming its page is
+// the same page whatever the position, and keeps its held body.
+export function forgetLandings(id: string) {
+  const base = threadUrl(id, {});
+  forgetGets((u) => {
+    if (u !== base && !u.startsWith(base + '?')) return false;
+    const q = new URLSearchParams(u.slice(base.length + 1));
+    return !q.has('page') && !q.has('ordinal');
+  });
+}
+
 // isThreadUrl is a request for one of id's pages, or anything under it.
 function isThreadUrl(url: string, id: string): boolean {
   const base = threadUrl(id, {});
