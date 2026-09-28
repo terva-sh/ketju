@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBWNHS9G3YNHF61PHN40
 title: Implement the read-tracking beacon
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:read-tracking
     path: docs/06-thread-views.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/cgbwn-read-beacon
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a7e792866ff0ef41c
-  commit: 9d7b0dca08083d4ecc937ad53ac7d8068956801a
-  session: null
-  claimed_at: 2026-09-28T06:42:52Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T06:47:55Z
+updated_at: 2026-09-28T06:58:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,10 +42,10 @@ The one-second dwell is what stops a fast scroll to the bottom from marking an e
 
 ## Acceptance criteria
 
-- [ ] A post scrolled past faster than a second is not marked read
-- [ ] Batching never sends a position behind one already sent in the same session
-- [ ] The behavior is identical on the phone layout
-- [ ] Positions flush on navigation and on page hide through fetch with keepalive, and a test covers both
+- [x] A post scrolled past faster than a second is not marked read
+- [x] Batching never sends a position behind one already sent in the same session
+- [x] The behavior is identical on the phone layout
+- [x] Positions flush on navigation and on page hide through fetch with keepalive, and a test covers both
 
 ## Implementation plan
 
@@ -88,3 +81,21 @@ docs/06 "Read tracking" and "Mobile"; docs/07 "Read position" and "CSRF posture"
 **agent:claude/phase1-groom** at 2026-09-24T05:17:38Z
 
 Criterion rewritten during Phase 1 grooming (2026-09-24). It moves to the end of the list. sendBeacon can only POST, while docs/07 specifies PUT /threads/{id}/read and the API accepts only JSON on mutating routes. fetch with keepalive does the same job without adding a second route.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T06:58:49Z
+
+Decisions taken while building, with the alternatives:
+
+- "Session" for criterion 2 is the page's life. The floor per thread is the highest position sent, answered, or reported by the page (viewer.last_read_ordinal), kept in memory. The pre-groom plan kept it in sessionStorage as well; that lost, because after a reload the page reports the stored position anyway, and a stored floor would outlive a mark-unread made on another device and silently stop the beacon there.
+- Flush on navigation runs from the thread body's unmount rather than the router's onRouteChange. The body is keyed on the request, so it unmounts on every move away from its page (another page of the thread included), and the tracker's cleanup is in one place with the observer it owns.
+- On screen: at least half the post in the viewport, or half the viewport filled by the post (a post taller than two screens is never half visible). No rootMargin for the phone bars: the rule is the same number at every width, which is criterion 3, and the list's bottom padding already keeps the last post clear of the reply bar (docs/06 "Mobile"). Written into docs/06 "Read tracking" in this PR.
+- Every view of the thread is tracked, lenses included; docs/06 gives the non-JS client the same rule (highest ordinal rendered), with no lens exception.
+- markUnread is in the tracker although no control calls it yet: docs/07 makes flushing before a DELETE the client's job, and the tracker is the only place that knows what is pending and in flight.
+- e2e isolation: a spec that asserts on a seeded position sets it through the API at its start (DELETE then PUT), instead of each beacon-affected spec avoiding the thread. That keeps the seed as it is and holds whatever a future spec reads. The thread-list badge assertion is now exact (31) rather than at least 31.
+
+Criterion 3 is verified in Playwright's 390 px phone emulation; real devices stay with TKT-01M38WTKSQ (Verify the Phase 1 client on real iOS and Android devices).
+Playwright does not report a request sent as the page unloads, so the page-hide e2e test reads the stored position; the unit tests assert keepalive and the PUT on pagehide and on visibilitychange.
+
+## Summary
+
+The beacon is in web/client/src/state/readTracker.ts, wired from ThreadScreen's thread body: one second on screen counts, the highest ordinal goes out by PUT with fetch keepalive every 30 s, on navigation and on page hide, and nothing at or below a position already sent or known goes out. markUnread holds the flush-before-DELETE rule for a future control. e2e specs that depend on seeded positions now set them per test; read-tracking.spec.ts covers the beacon at 390 and 1440 px.
