@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CA9BP9QTMN2JEDPM0YS67
 title: Implement edit, soft delete, and restore
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:storage-records
     path: docs/03-thread-storage.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/ca9bp-edit-delete-restore
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aed655cc0dc9d6719
-  commit: ee54c04ca6fe3a71a154c8af8d78048d770d8a97
-  session: null
-  claimed_at: 2026-09-28T05:12:39Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-28T05:14:59Z
+updated_at: 2026-09-28T05:23:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,10 +44,10 @@ The author window rules land in the moderation epic. What this ticket owns is th
 
 ## Acceptance criteria
 
-- [ ] An edit appends a record, increments the revision, and repoints the index entry at the new revision
-- [ ] A delete leaves the original Post bytes intact and sets the deleted flag in the index
-- [ ] A restore clears the flag and the post returns at its current revision
-- [ ] Editing a deleted post is refused rather than silently reviving it
+- [x] An edit appends a record, increments the revision, and repoints the index entry at the new revision
+- [x] A delete leaves the original Post bytes intact and sets the deleted flag in the index
+- [x] A restore clears the flag and the post returns at its current revision
+- [x] Editing a deleted post is refused rather than silently reviving it
 
 ## Implementation plan
 
@@ -83,3 +76,23 @@ Revised at claim (2026-09-28) from the code on main at ee54c04. The reply path (
 - Restore by a moderator also clears hidden-by-mod (docs/08).
 - An Edit that omits reply_to keeps the previous value. Fix the index code, which currently clears it.
 - Edits carry optional `mentions` (docs/03, decided 2026-09-24).
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:23:19Z
+
+Gaps settled here (internals and API detail, per docs/12 "Gaps the design leaves open"; written into docs/07 "Edit, delete and restore"):
+
+- Deleting a deleted post, or restoring a visible one, is `conflict` and appends nothing, rather than an idempotent 200. The log keeps no records that change nothing, and it is the same rule that refuses an edit of a deleted post. Alternative considered: an idempotent 200 with no append, which lost because it needs the actor to answer "skipped" as a result, a second code path for a case only a double click reaches.
+- The three answers reuse `dto.CreatedPost` rather than a new DTO: the shape is identical and the client inserts every write's answer the same way. Golden: `internal/web/api/testdata/golden/edit.member.json`.
+- The state check is an `Append.Require/Refuse` flag precondition in the actor, not a service-side read. A service-side check lost because a Delete can land between the read and the append.
+- Edit requires `reply` in the forum; delete and restore of one's own post do not. A lock refuses a member's edit only, reading docs/08 "Locked threads accept no posts or edits from members" literally.
+
+Handed on:
+- TKT-01M29CRJ5J (moderator any-post, phase-2) must decide whether an author may restore a post a moderator deleted. In this build only authors delete, so every Delete is the author's own; the index does not record who deleted.
+- Nothing sets `EntryHiddenByMod` yet. The index clears it on every Restore (settled in grooming), and `authorize` keeps an author off a hidden post, so only a moderator path can restore one.
+- The service lives in `internal/service/threads/mutate.go` beside Reply, not in a `posts` service as the pre-groom plan said.
+
+## Summary
+
+PATCH, DELETE and POST .../restore on a post append Edit, Delete and Restore through posts.Writer and answer 200 with dto.CreatedPost. The thread actor enforces post state through Append.Require/Refuse flag preconditions (threadlog.ErrPostState, mapped to conflict), and those checks see records staged earlier in the same batch, so an edit cannot revive a deleted post. An Edit with no reply_to keeps the post's link in the index and in post_meta. A Restore clears hidden-by-mod. For now only the author may act, through one authorize() seam that CKRHS and CRJ5J extend. docs/07 records the endpoints.
