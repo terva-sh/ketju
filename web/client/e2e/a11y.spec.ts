@@ -8,10 +8,10 @@ import { stateFile } from './session';
 // project in playwright.config.ts, so at 390 px and 1440 px: the forum
 // index, a thread list and a thread page, signed in so every control is
 // drawn, in the light theme and the dark; the index again with the forum
-// picker open, and the page with its composer sheet (phone) open. The rules
-// are axe's WCAG 2.1 A and AA sets; docs leave the rule set open, and 2.1 AA
-// is what the ticket assumed. A pass is zero violations, with one exception,
-// set aside below and nowhere else.
+// picker open, and the page with its composer sheet (phone) or a post's
+// replies (desktop) open. The rules are axe's WCAG 2.1 A and AA sets; docs
+// leave the rule set open, and 2.1 AA is what the ticket assumed. A pass is
+// zero violations, with one exception, set aside below and nowhere else.
 
 const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
 
@@ -33,7 +33,13 @@ const screens: { name: string; path: string; ready: string; open?: (page: Page, 
     path: `${seed.thread}?page=1`,
     ready: '#post-2 details.quote summary',
     open: async (page, phone) => {
-      if (!phone) return null;
+      // The desktop scans the reply expander open (TKT-01M29CGBW6); the
+      // phone, its composer sheet, which would cover it.
+      if (!phone) {
+        await page.locator('#post-1 button.reply-expander').click();
+        await expect(page.locator('#replies-1 .post--recessed').first()).toBeVisible();
+        return '#1’s replies open';
+      }
       await page.locator('.replybar-open').click();
       await expect(page.locator('.composer-sheet')).toBeVisible();
       return 'the composer sheet';

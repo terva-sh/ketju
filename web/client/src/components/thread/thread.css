@@ -148,6 +148,75 @@
   text-decoration: none;
 }
 
+/* The reply expander (docs/06 "Post anatomy"): the footer's lead control,
+   in the accent as the mockup draws it, and the replies it opens, recessed
+   below the footer on a sunken surface. The replies are read-only copies;
+   they sit inside the post, so no canonical post moves in the order. */
+.reply-expander {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+.reply-expander .chevron {
+  flex-shrink: 0;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.replies {
+  margin-top: 8px;
+  background: var(--surface2);
+  border-left: 3px solid var(--rule2);
+  border-radius: var(--radius);
+}
+.replies > .loading,
+.replies > .error-panel {
+  margin: 0;
+  padding: 10px 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.post--recessed {
+  padding: 10px 14px;
+  gap: 10px;
+  font-size: 14px;
+}
+.post--recessed:last-child {
+  border-bottom: 0;
+}
+.post--recessed .avatar {
+  width: 24px;
+  height: 24px;
+  font-size: 11px;
+}
+.post--recessed .post-body {
+  font-size: 14px;
+  line-height: 1.5;
+}
+.post--recessed .post-header .author {
+  font-size: 13px;
+}
+.post--recessed.tombstone {
+  padding: 10px 14px;
+  gap: 10px;
+}
+/* The muted grey is under 4.5:1 on the sunken surface, so what it would
+   draw there takes the second ink. */
+.post--recessed .post-header .ordinal,
+.post--recessed .edited,
+.post--recessed.tombstone {
+  color: var(--ink2);
+}
+
 .avatar {
   width: 36px;
   height: 36px;
@@ -335,6 +404,16 @@
      between them: the narrowest, "link", reaches 11.5 px past each side. */
   .post-footer {
     gap: 24px;
+  }
+  /* The toggle's target reaches 12.5 px below it, and the first reply's
+     ordinal's reaches 22 px above that ordinal's centre: the margin and
+     padding keep the two apart. */
+  .replies {
+    margin-top: 16px;
+    margin-left: -42px;
+  }
+  .post--recessed {
+    padding: 14px 12px 10px;
   }
   .unread-divider {
     padding: 6px 16px;

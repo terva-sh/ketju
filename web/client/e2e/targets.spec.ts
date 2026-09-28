@@ -82,6 +82,11 @@ test('the thread page, and its composer sheet', async ({ browser }, info) => {
   await page.goto(`${seed.thread}?page=1`);
   await expect(page.locator('#post-2 details.quote summary .quote-source')).toBeVisible();
   expect(await small(page)).toEqual([]);
+  // The reply expander, open (TKT-01M29CGBW6): its toggle and the links in
+  // the replies it shows (cmd/ketju e2e.go seedReplies).
+  await page.locator('#post-1 button.reply-expander').click();
+  await expect(page.locator('#replies-1 .post--recessed').first()).toBeVisible();
+  expect(await small(page), 'with #1’s replies open').toEqual([]);
   await page.locator('.replybar-open').click();
   await expect(page.locator('.composer-sheet')).toBeVisible();
   expect(await small(page), 'with the sheet open').toEqual([]);

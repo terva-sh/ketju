@@ -89,7 +89,18 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   posts were written (07).
 - "3 replies ▾" expands the replying posts **inline, in place, read-only,
   visually recessed**, and collapses again. Ordering within the expansion is
-  ordinal order. Nothing about the canonical page moves.
+  ordinal order. Nothing about the canonical page moves: no canonical post
+  changes place in the order, gains an indent, or is replaced, and the
+  expanded post and everything above it hold still on screen. The expansion
+  sits inside the post, below its footer, so the posts after it move down by
+  its height while it is open and return when it closes, as anything inline
+  does. The replies are copies: they carry no anchor, no actions and no
+  reply-to indicator, and each one's ordinal links to its permalink.
+- The expander is **suppressed when the post's only reply is the post
+  directly below it** on the page, the same rule that suppresses that
+  reply's `↩` indicator. When the only reply is the first post of the next
+  page, the reader cannot see it below, so the expander stays
+  (TKT-01M29CGBW6).
 - Clicking `↩ #37` scrolls to #37 if it is on the page, otherwise shows it in
   a popover with a "go to" link. Same widget for quote links.
 

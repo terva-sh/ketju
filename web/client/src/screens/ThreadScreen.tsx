@@ -11,6 +11,7 @@ import { ComposerSheet } from '../composer/ComposerSheet';
 import { Pager } from '../components/thread/Pager';
 import { permalink, Post, type PostActions, type ThreadRef } from '../components/thread/Post';
 import { PostPopover } from '../components/thread/PostPopover';
+import { expanderShown } from '../components/thread/ReplyExpander';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
 import '../components/thread/thread.css';
@@ -195,13 +196,19 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
     <>
       {pager}
       <section class="posts" onClick={follow}>
-        {page.posts.map((p) => (
+        {page.posts.map((p, i) => (
           <Fragment key={p.ordinal}>
             {p.ordinal === divider && <UnreadDivider unread={page.thread.post_count - lastRead} lastRead={lastRead} />}
             {p.deleted && !p.html ? (
               <Tombstone ordinal={p.ordinal} unread={lastRead > 0 && p.ordinal > lastRead} />
             ) : (
-              <Post post={p} thread={thread} unread={lastRead > 0 && p.ordinal > lastRead} actions={actions} />
+              <Post
+                post={p}
+                thread={thread}
+                unread={lastRead > 0 && p.ordinal > lastRead}
+                actions={actions}
+                expander={expanderShown(p, page.posts[i + 1])}
+              />
             )}
           </Fragment>
         ))}

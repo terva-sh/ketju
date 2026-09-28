@@ -107,6 +107,12 @@ func runE2E(args []string) error {
 	})
 }
 
+// seedReplies is which post each of the main thread's replies answers, for
+// the reply expander (TKT-01M29CGBW6), at 25 posts a page: #3's only reply
+// is #4, directly below, so it offers none; #5 has two on its own page; #25's
+// only reply opens page 2; and #1's two are on pages 2 and 3.
+var seedReplies = map[int]uint32{4: 3, 6: 5, 8: 5, 26: 25, 30: 1, 55: 1}
+
 // seedForums is the forum tree the fixture adds around seedForum, shaped
 // like the mockup's front page (docs/mockups Main.dc.html) so the forum
 // index's screenshots have something to compare: roots with children, a
@@ -220,8 +226,8 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	// thread appends a thread of n posts to forum, a minute apart and ending
 	// at end, alternating between the two users, with the tags given, and
 	// pinned in its forum if pinned is true. body, if not nil, writes post
-	// i's source instead of the default.
-	thread := func(forum int64, title, slug string, n int, end int64, tags []string, pinned bool, body func(i int) string) (threadid.ID, error) {
+	// i instead of the default.
+	thread := func(forum int64, title, slug string, n int, end int64, tags []string, pinned bool, body func(i int) threadlog.PostBody) (threadid.ID, error) {
 		id, err := ids.New()
 		if err != nil {
 			return 0, err
@@ -245,12 +251,12 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 		}
 		for i := 1; i <= n; i++ {
 			author := seedUsers[i%2].handle
-			source := fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)
+			post := threadlog.PostBody{Source: fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)}
 			if body != nil {
-				source = body(i)
+				post = body(i)
 			}
 			if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: uint64(users[author]),
-				TimeMS: start + int64(i)*60_000, Body: &threadlog.PostBody{Source: source}}); err != nil {
+				TimeMS: start + int64(i)*60_000, Body: &post}); err != nil {
 				return 0, err
 			}
 		}
@@ -258,12 +264,13 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	}
 	// The main thread's second post quotes the first, so its first page has
 	// a quote's header, a link and a toggle, for the accessibility checks.
-	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now, []string{}, false, func(i int) string {
+	// Some of its posts answer others (seedReplies), for the reply expander.
+	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now, []string{}, false, func(i int) threadlog.PostBody {
 		src := fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)
 		if i == 2 {
-			return "> [quote=#1]\n> Seeded post 1.\n\n" + src
+			src = "> [quote=#1]\n> Seeded post 1.\n\n" + src
 		}
-		return src
+		return threadlog.PostBody{Source: src, ReplyTo: seedReplies[i]}
 	})
 	for i, t := range seedSideThreads {
 		if err != nil {

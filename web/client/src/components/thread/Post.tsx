@@ -1,8 +1,9 @@
-import { useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Post as PostDTO } from '../../api/dto';
 import { bodyText, selectionIn } from '../../composer/quote';
 import { Avatar } from './Avatar';
 import { PostTime } from './PostTime';
+import { Replies, ReplyToggle } from './ReplyExpander';
 import { RoleBadge } from './RoleBadge';
 
 export interface ThreadRef {
@@ -21,23 +22,27 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 //
 // The footer carries only what works today. Quote and reply are there when
 // the page offers them, which is when the reader may reply and a composer is
-// on the page to take them (TKT-01M29CEE79); flag and the reply expander
-// arrive with their own tickets (TKT-01M29CA9CE, TKT-01M29CGBW6) rather than
-// as buttons that do nothing.
+// on the page to take them (TKT-01M29CEE79); flag arrives with its own
+// ticket (TKT-01M29CA9CE) rather than as a button that does nothing. The
+// reply expander leads the footer when the page offers it (expanderShown).
 export function Post({
   post,
   thread,
   unread,
   actions,
+  expander = false,
 }: {
   post: PostDTO;
   thread: ThreadRef;
   unread: boolean;
   actions?: PostActions;
+  expander?: boolean;
 }) {
   // What was selected in this post when the pointer went down on quote:
   // a click can clear a selection before its handler runs.
   const selected = useRef<string | null>(null);
+  const [open, setOpen] = useState(false);
+  const toggle = useHeldStill(() => setOpen((o) => !o));
   return (
     <article
       class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' deleted' : '')}
@@ -71,6 +76,7 @@ export function Post({
           </ul>
         )}
         <footer class="post-footer">
+          {expander && <ReplyToggle post={post} open={open} onToggle={toggle} />}
           {actions && (
             <>
               <button
@@ -100,6 +106,7 @@ export function Post({
             history
           </a>
         </footer>
+        {expander && open && <Replies thread={thread} ordinal={post.ordinal} />}
       </div>
     </article>
   );
@@ -110,6 +117,28 @@ export function Post({
 export interface PostActions {
   quote: (ordinal: number, text: string) => void;
   reply: (ordinal: number) => void;
+}
+
+// useHeldStill wraps change, a toggle's handler, so the toggle keeps its
+// place on screen across the render the change causes. The replies open and
+// close below the toggle, so the post and everything above it stay where
+// they are however the browser anchors its scroll (docs/06: nothing about
+// the canonical page moves); only what is below moves, by the height of the
+// replies, and comes back when they close.
+function useHeldStill(change: () => void): (e: Event) => void {
+  const held = useRef<{ el: Element; top: number } | null>(null);
+  useLayoutEffect(() => {
+    const h = held.current;
+    if (!h) return;
+    held.current = null;
+    const moved = h.el.getBoundingClientRect().top - h.top;
+    if (moved) scrollBy(0, moved);
+  });
+  return (e: Event) => {
+    const el = e.currentTarget as Element;
+    held.current = { el, top: el.getBoundingClientRect().top };
+    change();
+  };
 }
 
 // bodyOf is the body of the post a footer control is in.
