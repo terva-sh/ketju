@@ -210,7 +210,7 @@ All in-process goroutines, no external queue:
 | Search indexer | event bus | batched |
 | Notification generator | event bus | |
 | Session sweeper | hourly | delete expired |
-| Blob GC | daily | refcount 0 and older than 7 days |
+| Blob GC | daily | refcount 0 for 7 days and named in no thread log (03 "Blob garbage collection") |
 | Index flush | on idle / shutdown | write index headers |
 | Discovery refresh | on JWKS verify failure / 24 h | per provider |
 

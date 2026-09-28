@@ -656,6 +656,45 @@ the database tracks reference counts for garbage collection and holds the
 scan/quarantine status. Images get server-side thumbnails cached next to the
 blob. Blobs are served with immutable cache headers from a hash-addressed URL.
 
+### Blob garbage collection
+
+A daily job, `internal/jobs.BlobGC`, deletes blobs nothing refers to
+(TKT-01M29C5Y2S). What it deletes has no other copy, so it deletes a blob only
+when all of these hold at the moment of the delete:
+
+- its `refcount` is zero and has been for seven days (`unreferenced_since`,
+  04), checked again in the statement that deletes the row, so a reference
+  committed after the pass read its candidates wins;
+- no user's `avatar_blob` and no draft's source names its hash;
+- its hash, as sixty-four hex digits in either case, appears in no record body
+  of any log under `threads/`. That includes soft-deleted posts, whose `Post`
+  record a `Restore` brings back with its attachments, and superseded
+  revisions. The logs are the source of truth and the refcount is bookkeeping
+  about them, so a count that has drifted cannot free a blob a post names.
+
+A pass deletes nothing if any log cannot be read to its end, if a body is in
+an encoding it cannot search, or while a thread is quarantined, because a
+missing or short log may name blobs no file on disk does. It logs why, at
+error. With no candidates it reads no logs.
+
+A soft delete therefore never releases a blob, and an edit cannot drop one,
+because `Edit` has no attachments field. Only the offline hard deletion
+described under "Record types" removes a reference from a log.
+
+The row delete and the file removal run in one `db.Write`, and a removal that
+fails rolls the row back. That sets two rules for the upload and attach paths
+(TKT-01M29CXK0):
+
+- An attach raises the refcount with `AddBlobRef` in the database before the
+  `Post` is appended. If `AddBlobRef` changes no row, the blob has been
+  collected, and the attach is refused.
+- An upload writes the blob's file and inserts or refreshes its row inside one
+  `db.Write`, so an upload of bytes the collector is deleting at that moment is
+  ordered before or after the collection, never interleaved with it.
+
+Thumbnails are not named yet. The collector removes only the blob's own file,
+and whoever defines the thumbnail name removes thumbnails the same way.
+
 ## Alternatives considered
 
 - **Posts as individual files.** Simple but millions of tiny files stress

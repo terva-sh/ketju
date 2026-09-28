@@ -84,6 +84,15 @@ DELETE FROM sessions WHERE id_hash = ?;
 -- name: DeleteUserSessions :exec
 DELETE FROM sessions WHERE user_id = ?;
 
+-- SweepSessions deletes every session LookupSession would refuse: the exact
+-- complement of its liveness test. internal/auth/session binds both cutoffs
+-- from session.ExpiredBefore, so the sweeper deletes nothing a lookup at the
+-- same moment would still accept (TKT-01M29C5Y2S).
+-- name: SweepSessions :execrows
+DELETE FROM sessions
+WHERE expires_at <= sqlc.arg(expires_after)
+   OR last_used_at <= sqlc.arg(last_used_after);
+
 -- name: SetUserRole :exec
 UPDATE users SET role = ?, updated_at = ? WHERE id = ?;
 

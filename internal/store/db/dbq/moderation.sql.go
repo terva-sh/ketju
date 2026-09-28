@@ -143,6 +143,44 @@ func (q *Queries) BlobForServing(ctx context.Context, hash string) (Blob, error)
 	return i, err
 }
 
+const blobGCCandidates = `-- name: BlobGCCandidates :many
+SELECT hash FROM blobs
+WHERE refcount = 0 AND unreferenced_since <= CAST(?1 AS INTEGER)
+ORDER BY unreferenced_since, hash
+LIMIT ?2
+`
+
+type BlobGCCandidatesParams struct {
+	Cutoff int64
+	Max    int64
+}
+
+// Blob GC's candidates: blobs that have sat at zero references since before
+// cutoff, oldest first (TKT-01M29C5Y2S). A candidate is only a candidate:
+// DeleteCollectableBlob checks every condition again as it deletes.
+func (q *Queries) BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]string, error) {
+	rows, err := q.db.QueryContext(ctx, blobGCCandidates, arg.Cutoff, arg.Max)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var hash string
+		if err := rows.Scan(&hash); err != nil {
+			return nil, err
+		}
+		items = append(items, hash)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const closeFlag = `-- name: CloseFlag :execrows
 UPDATE flags SET status = ?, resolved_by = ?, resolved_at = ?, resolution_note = ?
 WHERE id = ? AND status = 'open'
@@ -228,6 +266,34 @@ func (q *Queries) CreateFlag(ctx context.Context, arg CreateFlagParams) (int64, 
 	var id int64
 	err := row.Scan(&id)
 	return id, err
+}
+
+const deleteCollectableBlob = `-- name: DeleteCollectableBlob :execrows
+DELETE FROM blobs
+WHERE blobs.hash = ?1
+  AND blobs.refcount = 0
+  AND blobs.unreferenced_since <= CAST(?2 AS INTEGER)
+  AND NOT EXISTS (SELECT 1 FROM users WHERE instr(users.avatar_blob, blobs.hash) > 0)
+  AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(drafts.source, blobs.hash) > 0)
+`
+
+type DeleteCollectableBlobParams struct {
+	Hash   string
+	Cutoff int64
+}
+
+// DeleteCollectableBlob deletes one blob row only if it is still
+// collectable at the moment of the delete: still at zero references, still
+// at zero since before cutoff, and named by no user's avatar and no draft.
+// A reference added after the candidates were read therefore wins. The
+// avatar and draft conditions are guards: nothing writes either reference
+// yet, and the delete should not be what finds out that something now does.
+func (q *Queries) DeleteCollectableBlob(ctx context.Context, arg DeleteCollectableBlobParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteCollectableBlob, arg.Hash, arg.Cutoff)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const dropBlobRef = `-- name: DropBlobRef :execrows

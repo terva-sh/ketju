@@ -239,6 +239,35 @@ func (s *Store) RevokeUser(ctx context.Context, userID int64) error {
 	})
 }
 
+// SweepInterval is how often serve runs Sweep (docs/02 "Background work").
+const SweepInterval = time.Hour
+
+// Sweep deletes every session that has expired by either rule, and returns
+// how many it deleted. It binds the cutoff from ExpiredBefore on the store's
+// own clock, as Lookup does, so it deletes exactly what a lookup at the same
+// moment would refuse and never a session that is still live
+// (TKT-01M29C5Y2S).
+//
+// A request that resolved its session before the sweep is not affected: the
+// session is in its context, and nothing reads the row again. A Touch that
+// follows finds no row and writes nothing, which is what it would do for an
+// expired row anyway. Pre-login state is a sealed cookie, not a row, so the
+// sweep never sees it; a pre_user session is a row and expires by the same
+// rules as any other.
+func (s *Store) Sweep(ctx context.Context) (int64, error) {
+	c := ExpiredBefore(s.now())
+	var n int64
+	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		n, err = q.SweepSessions(ctx, dbq.SweepSessionsParams{ExpiresAfter: c.ExpiresAt, LastUsedAfter: c.LastUsedAt})
+		return err
+	})
+	if err != nil {
+		return 0, fmt.Errorf("session: sweep: %w", err)
+	}
+	return n, nil
+}
+
 // Info is one of a user's sessions as the session list shows it. Key names
 // the row for a later "sign out this device" and is not the cookie value.
 type Info struct {

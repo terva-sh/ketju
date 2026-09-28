@@ -62,3 +62,26 @@ UPDATE blobs SET refcount = refcount + 1, unreferenced_since = NULL WHERE hash =
 UPDATE blobs SET refcount = refcount - 1,
 	unreferenced_since = CASE WHEN refcount - 1 = 0 THEN CAST(sqlc.arg('at') AS INTEGER) ELSE NULL END
 WHERE hash = sqlc.arg('hash');
+
+-- Blob GC's candidates: blobs that have sat at zero references since before
+-- cutoff, oldest first (TKT-01M29C5Y2S). A candidate is only a candidate:
+-- DeleteCollectableBlob checks every condition again as it deletes.
+-- name: BlobGCCandidates :many
+SELECT hash FROM blobs
+WHERE refcount = 0 AND unreferenced_since <= CAST(sqlc.arg('cutoff') AS INTEGER)
+ORDER BY unreferenced_since, hash
+LIMIT sqlc.arg('max');
+
+-- DeleteCollectableBlob deletes one blob row only if it is still
+-- collectable at the moment of the delete: still at zero references, still
+-- at zero since before cutoff, and named by no user's avatar and no draft.
+-- A reference added after the candidates were read therefore wins. The
+-- avatar and draft conditions are guards: nothing writes either reference
+-- yet, and the delete should not be what finds out that something now does.
+-- name: DeleteCollectableBlob :execrows
+DELETE FROM blobs
+WHERE blobs.hash = sqlc.arg('hash')
+  AND blobs.refcount = 0
+  AND blobs.unreferenced_since <= CAST(sqlc.arg('cutoff') AS INTEGER)
+  AND NOT EXISTS (SELECT 1 FROM users WHERE instr(users.avatar_blob, blobs.hash) > 0)
+  AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(drafts.source, blobs.hash) > 0);

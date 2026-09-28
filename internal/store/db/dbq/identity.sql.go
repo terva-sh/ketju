@@ -422,6 +422,29 @@ func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error 
 	return err
 }
 
+const sweepSessions = `-- name: SweepSessions :execrows
+DELETE FROM sessions
+WHERE expires_at <= ?1
+   OR last_used_at <= ?2
+`
+
+type SweepSessionsParams struct {
+	ExpiresAfter  int64
+	LastUsedAfter int64
+}
+
+// SweepSessions deletes every session LookupSession would refuse: the exact
+// complement of its liveness test. internal/auth/session binds both cutoffs
+// from session.ExpiredBefore, so the sweeper deletes nothing a lookup at the
+// same moment would still accept (TKT-01M29C5Y2S).
+func (q *Queries) SweepSessions(ctx context.Context, arg SweepSessionsParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, sweepSessions, arg.ExpiresAfter, arg.LastUsedAfter)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const touchSession = `-- name: TouchSession :execrows
 UPDATE sessions SET last_used_at = ?1
 WHERE id_hash = ?2

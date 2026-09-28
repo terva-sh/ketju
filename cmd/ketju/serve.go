@@ -22,6 +22,7 @@ import (
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/events/projection"
+	"github.com/terva-sh/ketju/internal/jobs"
 	"github.com/terva-sh/ketju/internal/lock"
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/perm"
@@ -358,6 +359,27 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	} else {
 		log.Warn("no identity providers are configured, so nobody can sign in")
 	}
+
+	// The periodic jobs (docs/02 "Background work"). They start after
+	// catch-up, so the collector's quarantine check reads a finished
+	// report, and stop before the stores close under them. The collector
+	// holds while any thread is quarantined: a thread whose log is missing
+	// or short may name blobs no log on disk does.
+	step("jobs")
+	gc := &jobs.BlobGC{DB: d, Root: cfg.DataDir, Hold: func() string {
+		if r, ok := proj.LastCatchUp(); ok && len(r.Corrupt) > 0 {
+			return fmt.Sprintf("%d thread(s) are quarantined", len(r.Corrupt))
+		}
+		return ""
+	}}
+	sched := jobs.New(log, jobs.SessionSweep(sessions), gc.Job())
+	if err := sched.Start(run); err != nil {
+		return fail("starting the background jobs", err)
+	}
+	closers = append(closers, func() error {
+		step("stop jobs")
+		return sched.Stop(busDrain)
+	})
 
 	step("listener")
 	userSvc := &users.Service{DB: d, Perm: perms}

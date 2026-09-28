@@ -33,6 +33,10 @@ type Querier interface {
 	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
 	// The one lookup the serve path may use: a quarantined blob is not found.
 	BlobForServing(ctx context.Context, hash string) (Blob, error)
+	// Blob GC's candidates: blobs that have sat at zero references since before
+	// cutoff, oldest first (TKT-01M29C5Y2S). A candidate is only a candidate:
+	// DeleteCollectableBlob checks every condition again as it deletes.
+	BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]string, error)
 	ClearForumThreadCounts(ctx context.Context) error
 	ClearMentions(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
@@ -54,6 +58,13 @@ type Querier interface {
 	// no query that takes the plaintext: hashing belongs to the session store.
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (int64, error)
+	// DeleteCollectableBlob deletes one blob row only if it is still
+	// collectable at the moment of the delete: still at zero references, still
+	// at zero since before cutoff, and named by no user's avatar and no draft.
+	// A reference added after the candidates were read therefore wins. The
+	// avatar and draft conditions are guards: nothing writes either reference
+	// yet, and the delete should not be what finds out that something now does.
+	DeleteCollectableBlob(ctx context.Context, arg DeleteCollectableBlobParams) (int64, error)
 	// Login re-evaluation clears the IdP-sourced rows and re-adds what the claims
 	// say now, in one transaction. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
@@ -216,6 +227,11 @@ type Querier interface {
 	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) (int64, error)
 	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
+	// SweepSessions deletes every session LookupSession would refuse: the exact
+	// complement of its liveness test. internal/auth/session binds both cutoffs
+	// from session.ExpiredBefore, so the sweeper deletes nothing a lookup at the
+	// same moment would still accept (TKT-01M29C5Y2S).
+	SweepSessions(ctx context.Context, arg SweepSessionsParams) (int64, error)
 	// The tags of a page of threads, for a thread list.
 	TagsForThreads(ctx context.Context, threadIds []int64) ([]ThreadTag, error)
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
