@@ -3,7 +3,8 @@
 //
 // dump and fsck came first, in Phase 0, because they are what you reach for
 // when the storage is the thing that is wrong, and wanting them for the first
-// time during an incident is too late to write them. serve is the server.
+// time during an incident is too late to write them. serve is the server, and
+// reindex rebuilds what the database derives from the logs.
 package main
 
 import (
@@ -16,10 +17,11 @@ const usage = `ketju — a message board
 usage: ketju <command> [flags]
 
 commands:
-  serve  run the server
-  dump   print a thread log as JSON lines, one object per record
-  fsck   walk every log, verify every checksum, rebuild every index
-  admin  administer members from the command line (admin promote)
+  serve    run the server
+  dump     print a thread log as JSON lines, one object per record
+  fsck     walk every log, verify every checksum, rebuild every index
+  reindex  rebuild the database's projection tables from the thread logs
+  admin    administer members from the command line (admin promote)
 
 Run ketju <command> -h for a command's flags.
 `
@@ -44,6 +46,8 @@ func main() {
 		err = runFsck(os.Args[2:])
 	case "admin":
 		err = runAdmin(os.Args[2:])
+	case "reindex":
+		err = runReindex(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return

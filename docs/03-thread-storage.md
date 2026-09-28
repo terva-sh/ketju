@@ -543,7 +543,17 @@ version was bumped first.
 - `ketju reindex [--search] [--projections]` rebuilds database projections
   and/or the search index from logs. This is the designated recovery path for
   a lost or corrupted database: users and permissions must be restored from a
-  DB backup, but content never is.
+  DB backup, but content never is. `--projections` is the default. Reindex
+  takes the data-directory lock, so it refuses to run beside `serve` and
+  `serve` cannot start under it. It walks `threads/` first, then empties every
+  projection table in one transaction and replays each log from its first
+  frame, one transaction per thread; a run that stops partway is finished by
+  another reindex or by `serve`'s catch-up. It only reads the logs. A torn
+  final frame is projected around, to the last whole frame, and left for
+  `serve` to cut at its next open; a thread with damage before its last frame
+  gets no rows, is reported, and makes the exit status 1. `--search` arrives
+  with full-text search in Phase 2 (TKT-01M29C5Y25). The README's recovery
+  procedure is built on it and run as a test.
 - `ketju dump <thread-id>` prints a log as JSON lines for inspection.
 - Startup projection catch-up (04, `projection_state`) closes any gap between
   a log and its projection before the listener accepts requests. A log

@@ -31,7 +31,14 @@ import (
 // The helper process: this test binary run again as `ketju serve`, for the
 // tests that need a real signal and a real second process. It mounts
 // /test/slow, which answers after 300 ms, and prints the address once ready.
+//
+// With KETJU_AS_MAIN set it is the binary itself, main and all, for a test
+// that runs commands as an operator types them (TestREADMERecoveryProcedure).
 func TestMain(m *testing.M) {
+	if os.Getenv("KETJU_AS_MAIN") != "" {
+		main()
+		os.Exit(0)
+	}
 	if path := os.Getenv("KETJU_SERVE_HELPER"); path != "" {
 		os.Exit(serveHelper(path))
 	}

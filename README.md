@@ -20,6 +20,53 @@ directory refuses to start. There is no horizontal scaling and none is
 planned; put a reverse proxy in front for TLS. The reasoning is in
 [docs/02-architecture.md](docs/02-architecture.md).
 
+## Recovering a lost or damaged database
+
+The thread logs under `threads/` hold every thread and post. The database
+holds two kinds of data. Members, sign-ins, groups, permissions, read
+positions and settings exist only in the database. Its projection tables are
+derived from the logs. So recovery takes the members from a database backup
+and the content from the logs, never from the backup. Until `ketju backup`
+arrives, take backups as
+[docs/02-architecture.md](docs/02-architecture.md) describes: `rsync` the
+`threads/` and `blobs/` directories, and snapshot the database with
+`VACUUM INTO`.
+
+1. Stop `ketju serve`. Reindex refuses to run while the server holds the data
+   directory.
+2. Set `KETJU_DATA` to the data directory and `KETJU_BACKUP` to the latest
+   database backup. Then run:
+
+   ```sh
+   cd "$KETJU_DATA"
+   mv db db.damaged
+   mkdir db
+   cp "$KETJU_BACKUP" db/ketju.db
+   ketju reindex --root .
+   ketju fsck --root .
+   ```
+
+   `mv` moves the damaged database out of the way together with its `-wal`
+   and `-shm` files, which must not be paired with the backup. If `db/` is
+   gone entirely, leave out the `mv` line. `ketju reindex` empties the
+   restored database's projection tables, which are as old as the backup, and
+   rebuilds them from the logs, so posts written after the backup come back.
+   It reports its progress on stderr while it runs. `ketju fsck` then checks
+   every log.
+3. Start `ketju serve`, and delete `db.damaged` once the forum is working.
+
+If reindex exits 1, a thread's log is damaged. Every other thread is
+projected, and `ketju fsck` names the damage. `ketju reindex -h` lists the
+other exit codes.
+
+What the database held after the backup was taken is lost: members who
+joined since, sessions, read positions, and permission changes. The posts of a
+member who joined since come back naming a member id the restored database
+does not have, and the database can give that id to the next member who
+joins. Without any backup, reindex still restores every thread, but the
+database has no members, and reindex warns about this. Neither case has a
+supported recovery yet.
+
 ## The name, and where this lives
 
 *Ketju* is Finnish for "chain", and it is the ordinary Finnish word for a forum
