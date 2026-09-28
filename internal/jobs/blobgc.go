@@ -311,10 +311,18 @@ func (g *BlobGC) recoverTrash(ctx context.Context) (int64, error) {
 // referencedInLogs reports which of want appear in any record of any thread
 // log under root. Every file named *.log under threads/ is read, whatever
 // shard it sits in, so a log someone moved still counts. Any frame that
-// cannot be read, or any body in an encoding this build cannot search, is
-// an error: the caller cannot then know what the logs reference.
+// cannot be read, any body in an encoding this build cannot search, and any
+// entry the walk cannot see into is an error: the caller cannot then know
+// what the logs reference.
 func referencedInLogs(ctx context.Context, root string, want map[string]bool) (map[string]bool, error) {
-	dir := filepath.Join(root, threadid.ThreadsDir)
+	// WalkDir follows no symlinks, the root included, and would report a
+	// linked threads/ or shard as holding nothing. The root is resolved
+	// first, since an operator may put threads/ on another disk; a link
+	// anywhere below it holds the pass instead (review 1159).
+	dir, err := filepath.EvalSymlinks(filepath.Join(root, threadid.ThreadsDir))
+	if err != nil {
+		return nil, err
+	}
 	st, err := os.Stat(dir)
 	if err != nil {
 		return nil, err
@@ -331,7 +339,14 @@ func referencedInLogs(ctx context.Context, root string, want map[string]bool) (m
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if d.IsDir() || filepath.Ext(p) != threadid.LogExt {
+		switch t := d.Type(); {
+		case t.IsDir():
+			return nil
+		case !t.IsRegular():
+			// A symlink, or anything else the walk cannot see into, may
+			// hide a log.
+			return fmt.Errorf("%s is not a regular file or directory (%s), so the walk cannot see past it", p, t)
+		case filepath.Ext(p) != threadid.LogExt:
 			return nil
 		}
 		return scanLog(ctx, p, want, found)

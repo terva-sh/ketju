@@ -677,8 +677,10 @@ order they reached zero, and scans the logs for each page. Only when every
 page has been scanned does it delete. Blobs the logs keep therefore cannot stop
 a pass from reaching later candidates. A pass deletes nothing if any log cannot
 be read to its end, if a body is in an encoding it cannot search, if `threads/`
-is missing or is not a directory, or while a thread is quarantined, because a
-missing or short log may name blobs no file on disk does. It logs why, at
+is missing or is not a directory, if the walk meets a symlink below `threads/`
+(`threads/` itself may be one, and is followed), or while a thread is
+quarantined, because a missing or short log may name blobs no file on disk
+does. It logs why, at
 error. With no candidates it reads no logs.
 
 A soft delete therefore never releases a blob, and an edit cannot drop one,

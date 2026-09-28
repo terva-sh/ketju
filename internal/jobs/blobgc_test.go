@@ -449,6 +449,52 @@ func TestThreadsAsAFileHoldsThePass(t *testing.T) {
 	}
 }
 
+// TestSymlinksAreFollowedOrHeld is review 1159's finding. A threads/ that
+// is a link to the real directory is scanned through the link, so its logs
+// still keep their blobs. A link below it, which the walk does not follow,
+// holds the pass.
+func TestSymlinksAreFollowedOrHeld(t *testing.T) {
+	t.Run("threads/ is a link", func(t *testing.T) {
+		w := newGCWorld(t)
+		w.now = t0.Add(30 * 24 * time.Hour)
+		named := w.upload("named", t0)
+		loose := w.upload("loose", t0)
+		w.thread("", created, post(named))
+		dir := filepath.Join(w.root, threadid.ThreadsDir)
+		elsewhere := filepath.Join(t.TempDir(), "threads-on-another-disk")
+		if err := os.Rename(dir, elsewhere); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(elsewhere, dir); err != nil {
+			t.Fatal(err)
+		}
+		res := w.mustRun()
+		if !w.kept(named) {
+			t.Fatal("a blob a log behind the link names was collected")
+		}
+		if w.kept(loose) || res.Removed != 1 {
+			t.Fatalf("removed %d; the unnamed blob should still go", res.Removed)
+		}
+	})
+	t.Run("a shard below it is a link", func(t *testing.T) {
+		w := newGCWorld(t)
+		w.now = t0.Add(30 * 24 * time.Hour)
+		named := w.upload("named", t0)
+		p := w.thread("", created, post(named))
+		shard := filepath.Dir(p)
+		elsewhere := filepath.Join(t.TempDir(), "shard")
+		if err := os.Rename(shard, elsewhere); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Symlink(elsewhere, shard); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.run(); !errors.Is(err, ErrHeld) || !w.kept(named) {
+			t.Fatalf("Run = %v, kept=%v; want held and kept", err, w.kept(named))
+		}
+	})
+}
+
 // TestALaterPageThatCannotBeScannedDeletesNothing is review 1158's second
 // finding: every page is scanned before anything is deleted, so a log that
 // becomes unreadable while a later page is scanned holds the whole pass,
