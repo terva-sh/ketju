@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCBZ8DV7086HBMN12F1HP
 title: Add the healthz endpoint
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:observability
     path: docs/02-architecture.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/cczb8-healthz
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af9304538f7e7714e
-  commit: 056e35786d1d3ab907452a609829e6c004b70f02
-  session: null
-  claimed_at: 2026-09-28T08:18:40Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T08:19:26Z
+updated_at: 2026-09-28T08:25:21Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,9 +41,9 @@ A health check that returns 200 whenever the HTTP server is up tells a superviso
 
 ## Acceptance criteria
 
-- [ ] Returns non-200 when the database cannot be queried or the data directory is not writable
-- [ ] The endpoint requires no authentication and leaks no version or configuration detail
-- [ ] Each request costs at most one SELECT 1 plus a data-directory writability probe cached for no more than 10 s, and a benchmark shows p99 under 5 ms
+- [x] Returns non-200 when the database cannot be queried or the data directory is not writable
+- [x] The endpoint requires no authentication and leaks no version or configuration detail
+- [x] Each request costs at most one SELECT 1 plus a data-directory writability probe cached for no more than 10 s, and a benchmark shows p99 under 5 ms
 
 ## Implementation plan
 
@@ -88,3 +81,23 @@ Revised at claim (2026-09-28) against main 056e357.
 **agent:claude/phase1-groom** at 2026-09-24T05:06:25Z
 
 Acceptance criteria rewritten during Phase 1 grooming (2026-09-24), agreed with the user as part of preparing the autonomous run. Rewritten criteria move to the end of the list, so their numbers changed. 'Cheap enough to poll every few seconds' became concrete: one SELECT 1, a data-directory writability probe cached for at most 10 s (the first criterion still requires detecting an unwritable directory), and p99 under 5 ms.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:25:13Z
+
+How each criterion was met, and the gaps settled here (docs/12 "Gaps the design leaves open"; all recorded in docs/02 "Observability" in the same PR).
+
+### Criterion 3 and its wording
+- The one statement per request is `SELECT count(*) FROM sqlite_schema`, not a literal `SELECT 1`. A bare constant opens no read transaction on the file: with the database's first page zeroed, `SELECT 1` still answers and the schema read fails (`TestPingReadsTheFile` holds both). It is still one SELECT, on the read pool, with no BEGIN/COMMIT. `TestHealthzOneStatementPerRequest` counts statements through SQLite's own trace across 50 requests, half of them carrying a well-formed session cookie, and finds exactly 50.
+- "Cached for no more than 10 s" is read as the grooming decision states it: the probe refreshes every 10 s and healthz reads the cached result. A result older than two intervals counts as failing, so a probe hung on a stuck disk turns healthz to 503 rather than leaving the last good answer up. Expiring at exactly 10 s would flap to failing before every refresh, since a probe's fsync takes time.
+- p99: BenchmarkHealthz on brokkr (Ryzen 9 5950X) through the full chain, no -race: 80-83 us. TestHealthzP99 asserts < 5 ms over 1000 requests in CI's -race run; locally 0.29 ms.
+
+### Gaps settled
+- Degraded (quarantined threads) answers 200. docs/03 keeps the rest of the forum serving so one bad file cannot take it down; a 503 would do exactly that through a load balancer, and a restart cannot repair a quarantine.
+- Projection lag is not in the body, although the pre-groom plan put it there. docs/02 puts lag on `/metrics` behind an admin token, and the design does not say it may be public. The quarantine is reported as a word, not a count or ids, for the same reason.
+- `/healthz` skips rate limiting, session resolution and CSRF in the chain (it keeps logging, recovery, security headers and the body limit). Otherwise a poll carrying a session cookie costs a lookup and a touch, which is a write, and breaks criterion 3. GET/HEAD-only, it is nothing the limiter or CSRF acts on.
+- The ping deadline is 1 s, and the probe file is `data/.healthz-probe`: internal defaults nobody configures.
+- Left as it is: `/healthz` still writes an info request-log line per poll. Whether to log it at debug is the logging middleware's decision and was not needed for any criterion.
+
+## Summary
+
+/healthz landed in internal/web/health and is mounted by serve at exactly /healthz. It answers 503 {status: unavailable} when the database cannot be queried (one read of sqlite_schema per request) or the cached data-directory probe (create, write, fsync, remove every 10 s in the background; stale after 20 s) failed, and 200 {status: degraded} when threads are quarantined. The body is a status and one word per check, with no version, path, error text, count or configuration. The route skips rate limiting, session resolution and CSRF so every poll costs one statement. p99 80 us locally without -race. docs/02 Observability records the contract.
