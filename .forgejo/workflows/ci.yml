@@ -198,8 +198,14 @@ jobs:
         # not listen until it has. The test is built without -race, which
         # says nothing about speed, so it runs here rather than in the step
         # above; -v puts the measured time in this step's log.
+        #
+        # TKT-01M3MAS0BQ. /healthz's p99 under 5 ms over 1000 requests runs
+        # here too, for the same reason: under -race on a loaded runner it
+        # measured the runner, not the handler. -run applies per package, so
+        # each package runs only its own bound test.
         run: |
-          go test ./internal/events/projection/ -run '^TestCatchUpTenThousandUnderBound$' -count=1 -v
+          go test ./internal/events/projection/ ./internal/web/health/ \
+            -run '^(TestCatchUpTenThousandUnderBound|TestHealthzP99)$' -count=1 -v
 
       - name: storage benchmarks still run (not a measurement)
         # TKT-01M29C2WV6. One iteration of each benchmark at a toy size, to
