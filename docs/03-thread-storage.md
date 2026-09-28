@@ -681,9 +681,16 @@ A soft delete therefore never releases a blob, and an edit cannot drop one,
 because `Edit` has no attachments field. Only the offline hard deletion
 described under "Record types" removes a reference from a log.
 
-The row delete and the file removal run in one `db.Write`, and a removal that
-fails rolls the row back. That sets two rules for the upload and attach paths
-(TKT-01M29CXK0):
+The bytes are never gone while the row remains. Inside one `db.Write`, the
+collector deletes the row and renames the file to `<hash>.gc` beside it. A
+rename that fails rolls the row back. If the transaction does not commit, the
+rename is undone, and once it commits the renamed file is removed. Each pass
+first settles any `<hash>.gc` left by a crash or a failed undo. The pass puts
+the file back while the row exists and removes it once the row is gone.
+Candidates are read a page at a time in the order they reached zero, so
+blobs the logs keep cannot stop a pass from reaching later candidates.
+
+That sets two rules for the upload and attach paths (TKT-01M29CXK0):
 
 - An attach raises the refcount with `AddBlobRef` in the database before the
   `Post` is appended. If `AddBlobRef` changes no row, the blob has been

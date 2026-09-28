@@ -64,13 +64,22 @@ UPDATE blobs SET refcount = refcount - 1,
 WHERE hash = sqlc.arg('hash');
 
 -- Blob GC's candidates: blobs that have sat at zero references since before
--- cutoff, oldest first (TKT-01M29C5Y2S). A candidate is only a candidate:
+-- cutoff, oldest first, one page at a time after the keyset (after_since,
+-- after_hash), so a pass reaches every candidate however many earlier ones
+-- it keeps (TKT-01M29C5Y2S, review 1156). A candidate is only a candidate:
 -- DeleteCollectableBlob checks every condition again as it deletes.
 -- name: BlobGCCandidates :many
-SELECT hash FROM blobs
+SELECT hash, CAST(unreferenced_since AS INTEGER) AS unreferenced_since FROM blobs
 WHERE refcount = 0 AND unreferenced_since <= CAST(sqlc.arg('cutoff') AS INTEGER)
+  AND (unreferenced_since > CAST(sqlc.arg('after_since') AS INTEGER)
+       OR (unreferenced_since = CAST(sqlc.arg('after_since') AS INTEGER) AND hash > CAST(sqlc.arg('after_hash') AS TEXT)))
 ORDER BY unreferenced_since, hash
 LIMIT sqlc.arg('max');
+
+-- Whether a blob has a row, for the collector's recovery of a removal that
+-- a failed commit or a crash interrupted.
+-- name: BlobExists :one
+SELECT EXISTS (SELECT 1 FROM blobs WHERE hash = ?);
 
 -- DeleteCollectableBlob deletes one blob row only if it is still
 -- collectable at the moment of the delete: still at zero references, still

@@ -31,12 +31,17 @@ type Querier interface {
 	// audit_log_target index.
 	AuditExists(ctx context.Context, arg AuditExistsParams) (bool, error)
 	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
+	// Whether a blob has a row, for the collector's recovery of a removal that
+	// a failed commit or a crash interrupted.
+	BlobExists(ctx context.Context, hash string) (bool, error)
 	// The one lookup the serve path may use: a quarantined blob is not found.
 	BlobForServing(ctx context.Context, hash string) (Blob, error)
 	// Blob GC's candidates: blobs that have sat at zero references since before
-	// cutoff, oldest first (TKT-01M29C5Y2S). A candidate is only a candidate:
+	// cutoff, oldest first, one page at a time after the keyset (after_since,
+	// after_hash), so a pass reaches every candidate however many earlier ones
+	// it keeps (TKT-01M29C5Y2S, review 1156). A candidate is only a candidate:
 	// DeleteCollectableBlob checks every condition again as it deletes.
-	BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]string, error)
+	BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]BlobGCCandidatesRow, error)
 	ClearForumThreadCounts(ctx context.Context) error
 	ClearMentions(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error

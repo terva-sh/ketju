@@ -121,6 +121,19 @@ func (q *Queries) AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) 
 	return items, nil
 }
 
+const blobExists = `-- name: BlobExists :one
+SELECT EXISTS (SELECT 1 FROM blobs WHERE hash = ?)
+`
+
+// Whether a blob has a row, for the collector's recovery of a removal that
+// a failed commit or a crash interrupted.
+func (q *Queries) BlobExists(ctx context.Context, hash string) (bool, error) {
+	row := q.db.QueryRowContext(ctx, blobExists, hash)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const blobForServing = `-- name: BlobForServing :one
 SELECT hash, size, mime, original_name, uploaded_by, uploaded_at, refcount, status, unreferenced_since FROM blobs WHERE hash = ? AND status = 'ok'
 `
@@ -144,33 +157,49 @@ func (q *Queries) BlobForServing(ctx context.Context, hash string) (Blob, error)
 }
 
 const blobGCCandidates = `-- name: BlobGCCandidates :many
-SELECT hash FROM blobs
+SELECT hash, CAST(unreferenced_since AS INTEGER) AS unreferenced_since FROM blobs
 WHERE refcount = 0 AND unreferenced_since <= CAST(?1 AS INTEGER)
+  AND (unreferenced_since > CAST(?2 AS INTEGER)
+       OR (unreferenced_since = CAST(?2 AS INTEGER) AND hash > CAST(?3 AS TEXT)))
 ORDER BY unreferenced_since, hash
-LIMIT ?2
+LIMIT ?4
 `
 
 type BlobGCCandidatesParams struct {
-	Cutoff int64
-	Max    int64
+	Cutoff     int64
+	AfterSince int64
+	AfterHash  string
+	Max        int64
+}
+
+type BlobGCCandidatesRow struct {
+	Hash              string
+	UnreferencedSince int64
 }
 
 // Blob GC's candidates: blobs that have sat at zero references since before
-// cutoff, oldest first (TKT-01M29C5Y2S). A candidate is only a candidate:
+// cutoff, oldest first, one page at a time after the keyset (after_since,
+// after_hash), so a pass reaches every candidate however many earlier ones
+// it keeps (TKT-01M29C5Y2S, review 1156). A candidate is only a candidate:
 // DeleteCollectableBlob checks every condition again as it deletes.
-func (q *Queries) BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]string, error) {
-	rows, err := q.db.QueryContext(ctx, blobGCCandidates, arg.Cutoff, arg.Max)
+func (q *Queries) BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]BlobGCCandidatesRow, error) {
+	rows, err := q.db.QueryContext(ctx, blobGCCandidates,
+		arg.Cutoff,
+		arg.AfterSince,
+		arg.AfterHash,
+		arg.Max,
+	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []string
+	var items []BlobGCCandidatesRow
 	for rows.Next() {
-		var hash string
-		if err := rows.Scan(&hash); err != nil {
+		var i BlobGCCandidatesRow
+		if err := rows.Scan(&i.Hash, &i.UnreferencedSince); err != nil {
 			return nil, err
 		}
-		items = append(items, hash)
+		items = append(items, i)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

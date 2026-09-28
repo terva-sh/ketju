@@ -6,8 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io/fs"
+	"math"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/store/blob"
@@ -29,18 +31,27 @@ const (
 	BlobGrace      = 7 * 24 * time.Hour
 )
 
-// maxBlobCandidates bounds one pass. Whatever is left is collected by the
-// next one, a day later; nothing is lost by the wait.
-const maxBlobCandidates = 10_000
+// blobPage is how many candidates a pass takes at a time. Each page costs
+// one read of every thread log, so a pass over many candidates reads the
+// logs once per page. It is a variable so a test can make pages small.
+var blobPage int64 = 10_000
+
+// trashSuffix names a blob file the collector has moved aside in the
+// transaction that deletes its row. The move is undone if that transaction
+// does not commit, and finished once it has; a pass that finds one left
+// over, after a crash or a failed restore, settles it by whether the row is
+// still there (recoverTrash). No upload writes a name with this suffix.
+const trashSuffix = ".gc"
 
 // ErrHeld means a blob GC pass deleted nothing because it could not be sure
 // what the thread logs reference. It is reported as a failure, so an
 // operator sees it, and the next pass tries again.
 var ErrHeld = errors.New("blob gc held")
 
-// BlobGC deletes blobs nothing refers to (docs/03 "Attachments"). It is
-// deliberately conservative, because what it deletes has no other copy.
-// A blob is deleted only when, at the moment of the delete,
+// BlobGC deletes blobs nothing refers to (docs/03 "Blob garbage
+// collection"). It is deliberately conservative, because what it deletes
+// has no other copy. A blob is deleted only when, at the moment of the
+// delete,
 //
 //   - its refcount is zero and has been since before the grace period, and
 //     no user's avatar and no draft names it (DeleteCollectableBlob checks
@@ -54,9 +65,11 @@ var ErrHeld = errors.New("blob gc held")
 // A pass that cannot read every log cleanly deletes nothing, and neither
 // does one run while Hold names a reason.
 //
-// The row delete and the file removal happen inside one write transaction,
-// so they are serialised with every other database writer; the upload path
-// is expected to write a blob's file and row the same way (docs/03).
+// The bytes are never gone while the row remains. The row delete and a
+// rename of the file to a trash name happen inside one write transaction,
+// so they are serialised with every other database writer, the upload path
+// included (docs/03). The rename is undone if the transaction does not
+// commit, and the trash file removed once it has.
 type BlobGC struct {
 	DB *db.DB
 
@@ -71,9 +84,12 @@ type BlobGC struct {
 	// thread the projection has quarantined, and the pass deletes nothing.
 	Hold func() string
 
-	// afterScan runs between the log scan and the deletes. Tests use it to
-	// commit a reference at the worst moment.
+	// afterScan runs between each page's log scan and its deletes. Tests use
+	// it to commit a reference at the worst moment.
 	afterScan func()
+
+	// rename is os.Rename; tests replace it to fail the restore.
+	rename func(from, to string) error
 }
 
 func (g *BlobGC) now() time.Time {
@@ -81,6 +97,13 @@ func (g *BlobGC) now() time.Time {
 		return g.Now()
 	}
 	return time.Now()
+}
+
+func (g *BlobGC) mv(from, to string) error {
+	if g.rename != nil {
+		return g.rename(from, to)
+	}
+	return os.Rename(from, to)
 }
 
 // Job is the collector as a scheduler job, run daily.
@@ -92,90 +115,173 @@ func (g *BlobGC) Job() Job {
 // say how many candidates there were and why the rest were kept.
 func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 	cutoff := g.now().Add(-BlobGrace).UnixMilli()
+	restored, err := g.recoverTrash(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("blob gc: settling an interrupted removal: %w", err)
+	}
 	if g.Hold != nil {
 		if reason := g.Hold(); reason != "" {
 			return Result{}, fmt.Errorf("%w: %s; nothing was deleted", ErrHeld, reason)
 		}
 	}
 
-	var candidates []string
-	if err := g.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		var err error
-		candidates, err = q.BlobGCCandidates(ctx, dbq.BlobGCCandidatesParams{Cutoff: cutoff, Max: maxBlobCandidates})
-		return err
-	}); err != nil {
-		return Result{}, fmt.Errorf("blob gc: reading candidates: %w", err)
-	}
-	if len(candidates) == 0 {
-		return Result{Attrs: []any{"candidates", 0}}, nil
-	}
-
-	want := make(map[string]bool, len(candidates))
-	for _, h := range candidates {
-		want[h] = true
-	}
-	inLogs, err := referencedInLogs(ctx, g.Root, want)
-	if err != nil {
-		return Result{Attrs: []any{"candidates", len(candidates)}},
-			fmt.Errorf("%w: the thread logs could not all be read, so nothing was deleted: %w", ErrHeld, err)
-	}
-	if g.afterScan != nil {
-		g.afterScan()
-	}
-
 	var (
-		removed, changed, failed int64
-		errs                     []error
+		candidates, inLog, removed, changed, failed int64
+		errs                                        []error
+		afterSince                                  int64 = math.MinInt64
+		afterHash                                   string
 	)
-	for _, h := range candidates {
-		if inLogs[h] {
-			continue
+	result := func() Result {
+		attrs := []any{"candidates", candidates, "kept_referenced_in_log", inLog, "kept_changed", changed,
+			"failed", failed}
+		if restored > 0 {
+			attrs = append(attrs, "restored", restored)
 		}
-		if err := ctx.Err(); err != nil {
-			errs = append(errs, err)
-			break
+		return Result{Removed: removed, Attrs: attrs}
+	}
+	for {
+		var page []dbq.BlobGCCandidatesRow
+		if err := g.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			var err error
+			page, err = q.BlobGCCandidates(ctx, dbq.BlobGCCandidatesParams{Cutoff: cutoff,
+				AfterSince: afterSince, AfterHash: afterHash, Max: blobPage})
+			return err
+		}); err != nil {
+			return result(), errors.Join(append(errs, fmt.Errorf("blob gc: reading candidates: %w", err))...)
 		}
-		gone, err := g.collect(ctx, h, cutoff)
-		switch {
-		case err != nil:
-			failed++
-			errs = append(errs, err)
-		case gone:
-			removed++
-		default:
-			changed++
+		if len(page) == 0 {
+			return result(), errors.Join(errs...)
+		}
+		candidates += int64(len(page))
+		last := page[len(page)-1]
+		afterSince, afterHash = last.UnreferencedSince, last.Hash
+
+		want := make(map[string]bool, len(page))
+		for _, c := range page {
+			want[c.Hash] = true
+		}
+		found, err := referencedInLogs(ctx, g.Root, want)
+		if err != nil {
+			return result(), errors.Join(append(errs,
+				fmt.Errorf("%w: the thread logs could not all be read, so nothing more was deleted: %w", ErrHeld, err))...)
+		}
+		inLog += int64(len(found))
+		if g.afterScan != nil {
+			g.afterScan()
+		}
+		for _, c := range page {
+			if found[c.Hash] {
+				continue
+			}
+			if err := ctx.Err(); err != nil {
+				return result(), errors.Join(append(errs, err)...)
+			}
+			gone, err := g.collect(ctx, c.Hash, cutoff)
+			switch {
+			case gone:
+				removed++
+			case err == nil:
+				changed++
+			default:
+				failed++
+			}
+			if err != nil {
+				errs = append(errs, err)
+			}
+		}
+		if int64(len(page)) < blobPage {
+			return result(), errors.Join(errs...)
 		}
 	}
-	return Result{Removed: removed, Attrs: []any{"candidates", len(candidates),
-		"kept_referenced_in_log", len(inLogs), "kept_changed", changed, "failed", failed}}, errors.Join(errs...)
 }
 
-// collect deletes one blob's row, if it is still collectable, and its file,
-// in one write transaction. A file that cannot be removed rolls the row
-// back, so a row never outlives its file by the collector's hand. A missing
-// file is not an error: it is what a pass whose commit failed after the
-// removal leaves for the next one.
-func (g *BlobGC) collect(ctx context.Context, hash string, cutoff int64) (bool, error) {
+// collect deletes one blob's row, if it is still collectable, and moves its
+// file aside, in one write transaction; then removes the moved file. A file
+// that cannot be moved rolls the row back. A transaction that does not
+// commit has the move undone, so the row never outlives the bytes. gone
+// reports that the row was deleted; err can still be set then, when only
+// the trash file could not be removed, which the next pass finishes.
+func (g *BlobGC) collect(ctx context.Context, hash string, cutoff int64) (gone bool, err error) {
 	path, err := blob.Path(g.Root, hash)
 	if err != nil {
 		return false, fmt.Errorf("blob gc: %q: %w", hash, err)
 	}
-	var gone bool
+	trash := path + trashSuffix
+	var deleted, moved bool
 	err = g.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		n, err := q.DeleteCollectableBlob(ctx, dbq.DeleteCollectableBlobParams{Hash: hash, Cutoff: cutoff})
 		if err != nil || n == 0 {
 			return err
 		}
-		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		switch err := g.mv(path, trash); {
+		case err == nil:
+			moved = true
+		case !errors.Is(err, fs.ErrNotExist):
 			return err
 		}
-		gone = true
+		deleted = true
 		return nil
 	})
 	if err != nil {
+		if moved {
+			// The row is still there, so the bytes go back. Content
+			// addressing makes this safe even if an upload of the same bytes
+			// has since written the file: the two are identical.
+			if rerr := g.mv(trash, path); rerr != nil {
+				err = errors.Join(err, fmt.Errorf("restoring the file (the next pass restores it): %w", rerr))
+			}
+		}
 		return false, fmt.Errorf("blob gc: %s: %w", hash, err)
 	}
-	return gone, nil
+	if moved {
+		if err := os.Remove(trash); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return deleted, fmt.Errorf("blob gc: %s: removing the moved file (the next pass removes it): %w", hash, err)
+		}
+	}
+	return deleted, nil
+}
+
+// recoverTrash settles every file a previous pass moved aside and did not
+// finish with: a crash between the move and the commit, a restore that
+// failed, or a removal that failed. If the row is still there the bytes go
+// back; if it is gone, so does the file. Each is decided inside a write
+// transaction, so no upload interleaves with it. It returns how many it
+// restored.
+func (g *BlobGC) recoverTrash(ctx context.Context) (int64, error) {
+	pattern := filepath.Join(g.Root, blob.Dir, blob.Algorithm, "*", "*"+trashSuffix)
+	trash, err := filepath.Glob(pattern)
+	if err != nil {
+		return 0, err
+	}
+	var restored int64
+	for _, t := range trash {
+		hash := strings.TrimSuffix(filepath.Base(t), trashSuffix)
+		path, err := blob.Path(g.Root, hash)
+		if err != nil || path+trashSuffix != t {
+			continue // not a name the collector writes; leave it for a person
+		}
+		err = g.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			exists, err := q.BlobExists(ctx, hash)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return os.Remove(t)
+			}
+			if _, err := os.Stat(path); err == nil {
+				return os.Remove(t) // an upload has put identical bytes back
+			}
+			if err := g.mv(t, path); err != nil {
+				return err
+			}
+			restored++
+			return nil
+		})
+		if err != nil {
+			return restored, fmt.Errorf("%s: %w", t, err)
+		}
+	}
+	return restored, nil
 }
 
 // referencedInLogs reports which of want appear in any record of any thread

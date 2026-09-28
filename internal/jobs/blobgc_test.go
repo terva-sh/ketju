@@ -1,6 +1,7 @@
 package jobs
 
 import (
+	"context"
 	"crypto/sha256"
 	"database/sql"
 	"encoding/hex"
@@ -212,7 +213,7 @@ func TestBlobGCSevenDayWindow(t *testing.T) {
 	fresh := w.upload("fresh", w.now)
 
 	res := w.mustRun()
-	if res.Removed != 1 || attr(res, "candidates") != 1 {
+	if res.Removed != 1 || attr(res, "candidates") != int64(1) {
 		t.Fatalf("removed %d of %v candidates, want 1 of 1", res.Removed, attr(res, "candidates"))
 	}
 	for name, c := range map[string]struct {
@@ -358,7 +359,7 @@ func TestLogReferencesKeepABlob(t *testing.T) {
 	if w.kept(loose) {
 		t.Error("a blob no log names was kept")
 	}
-	if res.Removed != 1 || attr(res, "kept_referenced_in_log") != 5 {
+	if res.Removed != 1 || attr(res, "kept_referenced_in_log") != int64(5) {
 		t.Fatalf("removed %d, kept_referenced_in_log %v; want 1 and 5", res.Removed, attr(res, "kept_referenced_in_log"))
 	}
 }
@@ -515,8 +516,118 @@ func TestNoCandidatesReadsNoLogs(t *testing.T) {
 		t.Fatal(err)
 	}
 	res := w.mustRun()
-	if res.Removed != 0 || attr(res, "candidates") != 0 {
+	if res.Removed != 0 || attr(res, "candidates") != int64(0) {
 		t.Fatalf("an empty pass = %+v", res)
+	}
+}
+
+// TestACommitThatFailsPutsTheBytesBack is review 1156's first finding: the
+// file is moved aside, not removed, inside the transaction, so a
+// transaction that then fails to commit leaves row and bytes together.
+// Cancelling the context after the move makes the commit fail.
+func TestACommitThatFailsPutsTheBytesBack(t *testing.T) {
+	w := newGCWorld(t)
+	w.now = t0.Add(30 * 24 * time.Hour)
+	h := w.upload("unlucky", t0)
+	ctx, cancel := context.WithCancel(t.Context())
+	defer cancel()
+	w.gc.rename = func(from, to string) error {
+		err := os.Rename(from, to)
+		if strings.HasSuffix(to, trashSuffix) {
+			cancel()
+		}
+		return err
+	}
+	res, err := w.gc.Run(ctx)
+	if err == nil || res.Removed != 0 {
+		t.Fatalf("Run = %v, removed %d; want the failed commit reported and nothing removed", err, res.Removed)
+	}
+	if !w.kept(h) {
+		t.Fatal("the row survived the failed commit but its bytes did not")
+	}
+	p, _ := blob.Path(w.root, h)
+	if _, err := os.Stat(p + trashSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the trash file is still there: %v", err)
+	}
+}
+
+// TestAnInterruptedRemovalIsSettled: a trash file left by a crash between
+// the move and the commit, or by a restore that failed, is put back while
+// its row exists; one whose row is gone is removed. Either way the next pass
+// settles it before it collects anything.
+func TestAnInterruptedRemovalIsSettled(t *testing.T) {
+	w := newGCWorld(t)
+	w.now = t0.Add(30 * 24 * time.Hour)
+	// The restore after a failed commit fails too.
+	h := w.upload("twice unlucky", t0)
+	ctx, cancel := context.WithCancel(t.Context())
+	w.gc.rename = func(from, to string) error {
+		if strings.HasSuffix(from, trashSuffix) {
+			return errors.New("injected: the restore fails")
+		}
+		err := os.Rename(from, to)
+		cancel()
+		return err
+	}
+	if _, err := w.gc.Run(ctx); err == nil || !strings.Contains(err.Error(), "the next pass restores it") {
+		t.Fatalf("Run = %v, want the failed restore reported", err)
+	}
+	cancel()
+	if row, file := w.state(h); !row || file {
+		t.Fatalf("setup: row=%v file=%v, want the row with its bytes in the trash", row, file)
+	}
+
+	// And a trash file whose row a committed pass deleted before crashing.
+	orphan := w.upload("orphan", t0)
+	p, _ := blob.Path(w.root, orphan)
+	if err := os.Rename(p, p+trashSuffix); err != nil {
+		t.Fatal(err)
+	}
+	w.write(func(_ *dbq.Queries, tx *sql.Tx) error {
+		_, err := tx.ExecContext(t.Context(), "DELETE FROM blobs WHERE hash = ?", orphan)
+		return err
+	})
+
+	// The next pass, while held, still settles both, and collects nothing.
+	w.gc.rename = nil
+	w.gc.Hold = func() string { return "held" }
+	if _, err := w.run(); !errors.Is(err, ErrHeld) {
+		t.Fatalf("Run = %v, want held", err)
+	}
+	if row, file := w.state(h); !row || !file {
+		t.Fatalf("row=%v file=%v, want the bytes restored beside their row", row, file)
+	}
+	if _, err := os.Stat(p + trashSuffix); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the orphan's trash file is still there: %v", err)
+	}
+}
+
+// TestKeptCandidatesDoNotStarveLaterOnes is review 1156's second finding:
+// candidates the logs keep, however many, do not stop a pass reaching a
+// later one it can collect.
+func TestKeptCandidatesDoNotStarveLaterOnes(t *testing.T) {
+	defer func(n int64) { blobPage = n }(blobPage)
+	blobPage = 2
+	w := newGCWorld(t)
+	w.now = t0.Add(30 * 24 * time.Hour)
+	var named []string
+	for i := range 5 {
+		named = append(named, w.upload(fmt.Sprintf("named %d", i), t0))
+	}
+	w.thread("", created, post(named...))
+	late := w.upload("late", t0.Add(24*time.Hour))
+
+	res := w.mustRun()
+	if res.Removed != 1 || w.kept(late) {
+		t.Fatalf("removed %d; the later collectable blob was not reached", res.Removed)
+	}
+	if attr(res, "candidates") != int64(6) || attr(res, "kept_referenced_in_log") != int64(5) {
+		t.Fatalf("candidates %v, kept in log %v; want 6 and 5", attr(res, "candidates"), attr(res, "kept_referenced_in_log"))
+	}
+	for _, h := range named {
+		if !w.kept(h) {
+			t.Fatal("a blob the log names was collected")
+		}
 	}
 }
 
