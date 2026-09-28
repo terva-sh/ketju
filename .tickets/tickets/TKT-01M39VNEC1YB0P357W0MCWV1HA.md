@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M39VNEC1YB0P357W0MCWV1HA
 title: Stop returning a thread page the cache refused to its caller
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,10 +17,17 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: run/vnec1-refused-page
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af0c01df76a66354b
+  commit: 55e876a471ab74f8a5740d1b6e6d92037e5c07e9
+  session: null
+  claimed_at: 2026-09-28T18:24:51Z
+  expires_at: null
 archive: null
 created_at: 2026-09-24T14:03:44Z
-updated_at: 2026-09-28T18:06:55Z
+updated_at: 2026-09-28T18:26:31Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -56,3 +63,29 @@ Add tests in `threads.test.ts` that settle the loads by hand in both orders. The
 - [ ] A load overtaken by a newer applied refusal rejects with that refusal rather than resolving with its page
 - [ ] A load rejected for a shorter log length never resolves with that page
 - [ ] Tests settle overlapping loads by hand in every order of success and refusal
+
+## Implementation plan
+
+### Callers today (read 2026-09-28 at 55e876a)
+- `loadThreadPage` still has one caller, ThreadScreen, through `useResource`. It aborts a superseded request before starting the next one, and a retry does the same.
+- ReplyExpander (PR #96) and PostPopover `apiGet` `/threads/{id}/posts/...` themselves. They never call `loadThreadPage` or store into the cache. Their held bodies fall under `isThreadUrl`, so a refusal forgets them.
+- Read tracking (PR #101) calls only `forgetLandings`, which drops held landing bodies. It loads nothing. No `forgetHeldPages` function exists.
+- The keyboard shortcuts (PR #98) only `route()`, and that remounts ThreadScreen's resource with the abort.
+- So nothing loads a second page of one thread concurrently yet. The fix is still needed before TKT-01M29CTYA0 (live updates) adds a second caller.
+
+### Approach (web/client/src/state/threads.ts)
+1. Keep the applied refusal's error beside its load number (`refused: Map<id, {n, err}>`).
+2. A successful load older than the applied refusal drops its held body (unchanged). Then:
+   - while the refusal still stands (no load newer than it has stored a page since), it rejects with that refusal, a ProblemError, so `useResource` clears the data and shows the access error;
+   - if a newer load has stored a page since, the refusal is superseded and the page is only stale: take step 3.
+3. A page that `storeThreadPage` refuses for its shorter length, or a stale page as in step 2, never resolves as itself:
+   - it resolves with the entry's current page under the same `pageKey` when one is cached (same page and lens, at the longer length);
+   - otherwise it refetches the same URL once, as a new load, with the same signal;
+   - if the refetch is refused again, it rejects with `ProblemError('conflict')`, which the screen shows with a retry.
+4. An aborted load still resolves with its page and changes nothing (unchanged; `useResource` ignores it).
+
+### Tests (threads.test.ts)
+Two loads, older A and newer B, settled by hand. Table-driven over every pair of outcomes: success at 100, success at 120, 403. Each pair runs in both settle orders, for different pages and for the same page. Each row states what each promise gives and what the cache holds afterwards. There are also separate cases for:
+- a superseded refusal;
+- the refetch being refused again;
+- a refusal during the refetch.
