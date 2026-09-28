@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T07:36:06Z
+updated_at: 2026-09-28T07:41:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -113,6 +113,10 @@ Review 1147 (request ready-review-81b350d, Actions run 560; head 81b350d50bcd38c
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:36:06Z
 
 Review 1148 (request ready-review-36ba74f, Actions run 566; head 36ba74f2f7c097634a343fa7a18fa7ffd84e5147, base 9b76d9d5f140591c506e9b80a7f09ac358da8d98) read 1147's finding as resolved and failed the gate with two new medium findings, both in markUnread, which no control calls yet. Both were accepted and fixed in the commit after it, by changing the behaviour: reads made from a markUnread call on are kept and judged against the DELETE's answer; and a page's reported position is ignored only when its request started before the latest mark answered (ThreadScreen loads through readTracker's asking). This is the fifth review round; per the run brief, a non-clean result stops here for a person.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T07:41:54Z
+
+Review 1149 (request ready-review-dd761e9, Actions run 568; head dd761e95ee631b5e07583cbd230e3eedbef3798d, base 9b76d9d5f140591c506e9b80a7f09ac358da8d98) read 1148's two findings as resolved and failed the gate with one new medium finding: when a mark-unread's DELETE fails, the reads kept aside while it was out are queued against the unchanged higher floor and dropped, so a retried mark that then succeeds never sends them. The finding looks right and is not fixed: this was the fifth review round, and the run brief stops a PR there for a person. The fix would be to hand the kept reads to the next mark of the thread when the DELETE fails, instead of queueing them. CI is green on this head (run 567). The PR is open and not merged. Every finding so far is in markUnread, which no control calls yet. A person may choose to fix this last one here, or to take markUnread out of this PR and give it to whichever ticket adds the mark-unread control.
 
 ## Summary
 
