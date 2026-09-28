@@ -77,8 +77,17 @@ export function step(tops: number[], current: number, dir: 1 | -1): number {
 // the thread body is a new one for each page: an ordinal; the first or last
 // post of the page; or on a landing, where the server chose the page, the
 // first unread post on it.
-type Pending = number | 'first' | 'last' | 'landing';
-let pending: Pending | null = null;
+// It names the address it is for, and only a thread body mounted at that
+// address takes it: a move that fails leaves it for no other page (review
+// 1130).
+type Target = number | 'first' | 'last' | 'landing';
+let pending: { target: Target; url: string } | null = null;
+
+// moveTo routes to url, leaving target to focus when it has rendered.
+function moveTo(url: string, target: Target, route: (url: string) => void) {
+  pending = { target, url };
+  route(url);
+}
 
 // focusPost moves focus to a post and puts it at the top of the screen.
 export function focusPost(el: HTMLElement) {
@@ -96,8 +105,7 @@ export function goToOrdinal(n: number, page: ThreadPage, route: (url: string) =>
   hint.value = '';
   const here = document.getElementById(`post-${n}`);
   if (here?.matches(postSelector)) return focusPost(here);
-  pending = n;
-  route(permalink(page.thread, n));
+  moveTo(permalink(page.thread, n), n, route);
 }
 
 // firstUnread goes to the first post the reader has not read: the post
@@ -112,8 +120,7 @@ export function firstUnread(thread: ThreadRef, lastRead: number, postCount: numb
   if (lastRead > 0) {
     const here = document.getElementById(`post-${lastRead + 1}`);
     if (here?.matches(postSelector)) return focusPost(here);
-    pending = lastRead + 1;
-    route(permalink(thread, lastRead + 1));
+    moveTo(permalink(thread, lastRead + 1), lastRead + 1, route);
     return;
   }
   const landing = `/t/${encodeURIComponent(thread.id)}/${encodeURIComponent(thread.slug)}`;
@@ -123,8 +130,7 @@ export function firstUnread(thread: ThreadRef, lastRead: number, postCount: numb
     if (first) focusPost(first);
     return;
   }
-  pending = 'landing';
-  route(landing);
+  moveTo(landing, 'landing', route);
 }
 
 // nextUnread picks the thread n goes to from a forum's rows in list order:
@@ -180,8 +186,7 @@ export async function openNextUnread(page: ThreadPage, route: (url: string) => v
     const row = await findNextUnread(page.thread.forum.slug, page.thread.id, mine.signal);
     if (mine.signal.aborted) return;
     if (row) {
-      pending = row.last_read_ordinal > 0 ? row.last_read_ordinal + 1 : 'landing';
-      route(unreadHref(row));
+      moveTo(unreadHref(row), row.last_read_ordinal > 0 ? row.last_read_ordinal + 1 : 'landing', route);
     } else hint.value = `No other unread threads in ${page.thread.forum.name}.`;
   } catch {
     if (!mine.signal.aborted) hint.value = 'Could not load this forum’s threads.';
@@ -211,7 +216,7 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
 
   useEffect(() => {
     hint.value = '';
-    const p = pending;
+    const p = pending && pending.url === location.pathname + location.search ? pending.target : null;
     pending = null;
     if (p !== null && !isPhone.value) {
       const all = posts();
@@ -259,17 +264,22 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
       }
       const { page, lens, route } = live.current;
       if (digits !== null) {
-        e.preventDefault();
+        // Only the keys g takes are kept from the page. Any other ends it
+        // and does what it would have: Tab still moves focus (review 1130).
         if (/^[0-9]$/.test(e.key) && digits.length < 9) {
+          e.preventDefault();
           digits += e.key;
           hint.value = `Go to #${digits}`;
           clearTimeout(timer);
           timer = setTimeout(commit, gotoPause);
         } else if (e.key === 'Backspace') {
+          e.preventDefault();
           digits = digits.slice(0, -1);
           hint.value = `Go to #${digits}`;
-        } else if (e.key === 'Enter') commit();
-        else {
+        } else if (e.key === 'Enter') {
+          e.preventDefault();
+          commit();
+        } else {
           endGoto();
           hint.value = '';
         }
@@ -289,8 +299,7 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
           if (i >= 0 && i < all.length) return focusPost(all[i]);
           const to = i < 0 ? page.page.number - 1 : page.page.number + 1;
           if (to < 1 || to > page.page.total_pages) return;
-          pending = i < 0 ? 'last' : 'first';
-          route(pageHref(page.thread, to, lens));
+          moveTo(pageHref(page.thread, to, lens), i < 0 ? 'last' : 'first', route);
           return;
         }
         case 'g':

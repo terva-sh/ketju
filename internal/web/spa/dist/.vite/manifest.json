@@ -4,7 +4,7 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-DNhf5itk.js",
+    "file": "assets/index-BifgfZJi.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -63,7 +63,7 @@
     "src": "src/assets/fonts/newsreader-latin-600-normal.woff2"
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-oR4BNqDp.js",
+    "file": "assets/AdminRoot-B3uQEWX_.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,

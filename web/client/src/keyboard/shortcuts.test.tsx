@@ -234,6 +234,40 @@ describe('the shortcuts on a thread page', () => {
     expect(focused()).toBe('post-4');
   });
 
+  it('g leaves Tab to move focus, and ends', async () => {
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'g', '3');
+    const tab = new KeyboardEvent('keydown', { key: 'Tab', bubbles: true, cancelable: true });
+    await act(async () => void document.body.dispatchEvent(tab));
+    expect(tab.defaultPrevented).toBe(false);
+    expect(hint.value).toBe('');
+    await type(root, 'Enter');
+    expect(focused()).not.toBe('post-3');
+  });
+
+  it('a move whose page fails to load focuses nothing on the page the reader goes to next', async () => {
+    const urls = serve();
+    const ok = (globalThis.fetch as (u: string) => Promise<Response>).bind(globalThis);
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url.includes('ordinal=12')) {
+        urls.push(url);
+        return new Response('{"type":"about:blank","title":"boom","status":500}', { status: 500 });
+      }
+      return ok(url);
+    });
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'g', '1', '2', 'Enter');
+    await settle(root);
+    expect(location.pathname).toBe(`/t/${id}/${slug}/12`);
+    expect(root.querySelector('#post-12')).toBeNull();
+    // Page 3 holds #12, but it is not where g went.
+    await route(`/t/${id}/${slug}?page=3`);
+    await settle(root);
+    expect(root.querySelector('#post-12')).not.toBeNull();
+    expect(focused()).not.toBe('post-12');
+  });
+
   it('g to a post the thread does not have says so and asks nothing', async () => {
     const urls = serve();
     const root = await renderAt(`/t/${id}/${slug}?page=1`);
