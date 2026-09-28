@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-28T05:45:46Z
+updated_at: 2026-09-28T05:49:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -90,6 +90,13 @@ Decisions taken while building (internals only, per docs/12 "Gaps the design lea
 For TKT-01M29C8005 (open-mode registration): registration does not exist yet, so today a brand-new identity cannot finish its first sign-in at all. Registration must call `(*identity.Service).ApplyBootstrap(ctx, newUserID, id)` once it has created the user, or a configured bootstrap admin who registers is left a member until their second sign-in. AC1 is ticked because every sign-in that reaches a user today applies it; the registration path is that ticket's to wire.
 
 Verification: `go test -race ./...` passes locally (two go/build-based layering tests need GOROOT set in this sandbox, and pass with it). Six mutations were tried and each was caught; the commit body lists them.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:49:20Z
+
+Review 1128 (run 511, head 58470fa9e437d226f0f8a017a9eb6bfba61dd81f, base 05a624537bdb1cc5863c39485ef9dbf45eda748f), gate failure. Both findings are answered in commit 03dbd6d:
+
+- medium, "Record the once-only state for an already-admin bootstrap match" (internal/perm/mutate.go): accepted and fixed. With Once set, a user who is already admin and has no `user.promoted` row now gets one, with `"already": "admin"` in its details, and keeps the role. TestPromoteOnceRecordsAnExistingAdmin covers match, demote, and match again. docs/05 says so.
+- high, "CLI promotion cannot invalidate the running server's permission cache" (cmd/ketju/admin.go): the premise is true, since another process's cache cannot be cleared. The consequence does not follow. Session resolution builds each request's Viewer from the users row (LookupSession). The role is part of the cache key, and `Check`/`CanEach` return for an active admin before the cache is read. A promoted user's next request therefore never meets an entry cached under the member role. TestPromoteFromAnotherProcess shows it: a server evaluator on its own handle, with its own generation counter and a cached deny, allows the member's next request after a second handle promotes them. A comment in admin.go and the Promote doc comment record the reasoning. Requesting a fresh review of the new head rather than a disposition.
 
 ## Summary
 
