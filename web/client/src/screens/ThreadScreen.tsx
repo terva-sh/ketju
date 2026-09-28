@@ -21,7 +21,7 @@ import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
 import { composerFor, quotePost, replyToPost } from '../state/composer';
-import { asking, trackPosts } from '../state/readTracker';
+import { trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
@@ -58,7 +58,7 @@ export function ThreadScreen() {
   const key = threadUrl(params.id, q);
   const res = useResource(
     key,
-    (signal) => asking(() => loadThreadPage(params.id, q, signal)),
+    (signal) => loadThreadPage(params.id, q, signal),
     () => peekGet<ThreadPage>(key),
   );
   const head = res.data?.thread ?? cachedThread(params.id)?.header;
@@ -256,7 +256,7 @@ function useReadTracking(id: string, list: { current: HTMLElement | null }, page
   const signedIn = !!viewer.value.user;
   useEffect(() => {
     if (!signedIn || !list.current) return;
-    return trackPosts(id, list.current, lastRead, page);
+    return trackPosts(id, list.current, lastRead);
   }, [id, page, signedIn]);
 }
 
