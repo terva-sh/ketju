@@ -283,6 +283,7 @@ uses the name, never the literal.
 | 20 | `PostsSplitOut` | ordinals[], target_thread_id | ordinals marked moved; new thread's log gets `Post` records with `origin` |
 | 21 | `PostsMergedIn` | source_thread_id, ordinals[] | mirror of the above |
 | 30 | `ThreadArchived` | reason | thread read-only for everyone, moderators included; index may be dropped from memory permanently. An admin action (08) |
+| 0x80 | `Redacted` | ordinal, revisions[] cleared, reason | post shown as a removed tombstone; history lists revisions with no content. **Critical.** Written only by the offline redaction command ("Hard redaction" above). Claimed 2026-09-28 (TKT-01M29BSPE2); the catalogue entry lands with the tool (TKT-01M29CXJZ9), and until then a build refuses a log containing it |
 
 `Edit.mentions` was added after the version 1 freeze, on 2026-09-24. It is an
 optional key in the CBOR body map, which is the kind of change the freeze
@@ -295,10 +296,36 @@ an edited-in mention would silently never notify. Re-rendering during
 projection lost because it would tie the projection to the renderer version.
 
 Deletion is soft. A `Delete` record leaves the original `Post` bytes intact;
-the reader consults the index flags and returns a tombstone. Hard deletion
-(legal takedown) is handled by a separate offline command that rewrites the
-log with the body zeroed and appends an `Edit` with a redaction marker; this is
-the one operation that is not append-only and is logged in the audit table.
+the reader consults the index flags and returns a tombstone.
+
+#### Hard redaction
+
+Hard deletion (legal takedown) is the one operation that is not append-only.
+Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
+
+- **The command runs offline**, with serve stopped and the data-directory lock
+  held. It writes a new log beside the old one and swaps it in by rename. It
+  never edits a log in place, so a power cut leaves either the old log or the
+  new one, never half of each.
+- **What is removed.** Every frame that carries the post's text: its `Post` and
+  every `Edit` revision. Each frame keeps its record type, ordinal, revision,
+  timestamp and actor, but its body is replaced by the empty body of that
+  type: no source and no mentions. Every frame is re-checksummed, so
+  "a CRC failure means corruption" stays true without exception. Attachment
+  blobs referenced only by that post are deleted. A blob another post still
+  references stays.
+- **The marker.** A `Redacted` record is appended, naming the ordinal, the
+  revisions cleared, the reason, and the operator. It takes a number from the
+  **critical** range (`0x80`–`0xFF`), claimed by the procedure below, so an
+  older build that does not know it refuses the log rather than rendering
+  content that was legally required to be removed.
+- **What the reader shows.** A redacted post renders as a tombstone saying it
+  was removed; its edit history lists the revisions with no content.
+- **Quotes elsewhere.** Quotes of the post in other posts are other people's
+  posts. The command lists them for the operator, who redacts them separately
+  if the takedown covers them. It never edits them silently.
+- **Audit.** The action is written to `audit_log`, and the index and
+  projections for the thread are rebuilt.
 
 **Split and merge are the hardest events.** The chosen model: posts are copied
 into the target thread's log as new `Post` records with an `origin
@@ -354,8 +381,9 @@ skipping those leaves posts rendering as text instead of as pointers, which is
 stale and duplicated rather than disclosed, so advisory is the correct class for
 them.
 
-The first critical type is already foreseeable: docs/10 item 4 leans toward a
-`Redacted` record for hard redaction, needed before Phase 2. An older build that
+The first critical type is already foreseeable: docs/10 item 4 chose a
+`Redacted` record for hard redaction (see "Hard redaction" above), needed
+before Phase 2. An older build that
 skipped one would render content that was legally required to be removed, so it
 gets a `0x80`-range number.
 

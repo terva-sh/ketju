@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BSPENYP54KS604DRKH874
 title: Decide the handle change policy
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-11T23:10:45Z
+updated_at: 2026-09-28T21:32:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-438e26c1
+  name: ""
 extensions: {}
 ---
 
@@ -43,5 +43,15 @@ Decide before the user settings screens are built, because "change handle" is ei
 
 ## Acceptance criteria
 
-- [ ] The policy is recorded in docs/05, including the cooldown and reservation periods if any
-- [ ] The decision names what happens to a URL of the form /u/{old-handle} after a change
+- [x] The policy is recorded in docs/05, including the cooldown and reservation periods if any
+- [x] The decision names what happens to a URL of the form /u/{old-handle} after a change
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:32:45Z
+
+Maintainer decision, 2026-09-28, in Phase 2 grooming (TKT-01M3M9RR26): "Allowed: 30-day cooldown". Written into docs/05 "Changing a handle" and docs/10 item 9. It also settles the grandfathered handles ending in '-' from TKT-01M3ANX1NF: an admin renames them without the cooldown.
+
+## Summary
+
+Members may change their handle once per 30 days. The old handle is reserved for 90 days, and /u/{old} and GET /users/{old} answer a 301 to the new handle during that time, then not-found. Admins may rename anyone without the cooldown. Every change is audited, and anonymized accounts cannot be renamed. History is unaffected, because mentions and posts name the member by user id.

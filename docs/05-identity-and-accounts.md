@@ -209,6 +209,34 @@ a suggestion and reserves nothing.
 Providers with `auto_approve = true` (e.g. the organization's own SSO) skip
 steps 2–5 and behave as `open` for that provider only.
 
+For those providers the handle screen is skipped too (decided 2026-09-28,
+docs/10 item 10). The `preferred_username` claim is normalized as the prefill
+is. If the result is a valid handle, not reserved, and free in any case, it
+becomes the handle, and the account is created at the callback. Otherwise
+the normal "choose a handle" screen appears, prefilled with the normalized
+name when it has one, above a line saying why it could not be used: missing,
+not a valid handle, reserved, or taken. A handle released by a rename stays
+reserved for 90 days (below), so it does not count as free.
+
+## Changing a handle
+
+Decided 2026-09-28 (docs/10 item 9, TKT-01M29BSPEN):
+
+- **Members.** A member may change their own handle once every 30 days. The
+  new handle passes the same checks as at registration: valid, not reserved,
+  free in any case.
+- **The old handle.** It is reserved for 90 days, so nobody can take it to
+  impersonate. During that time `/u/{old}` and `GET /users/{old}` answer a
+  301 to the new handle. Afterwards the old handle answers `not-found` and is
+  free again.
+- **History.** Mentions, posts and quotes name the member by user id, so
+  nothing in history changes; posts show the current handle.
+- **Admins** may rename any member without the cooldown, for example to fix
+  a grandfathered handle ending in `-` (TKT-01M3ANX1NF). The old handle is
+  reserved and redirected just the same.
+- **Audit.** Every change is audited, with the old and new handle.
+- **Anonymized accounts** (`deleted-user-<id>`) cannot be renamed.
+
 ### Forms
 
 A minimal declarative form system, used first for registration and reusable

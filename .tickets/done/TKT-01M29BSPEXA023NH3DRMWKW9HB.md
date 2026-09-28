@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29BSPEXA023NH3DRMWKW9HB
 title: Decide whether auto_approve providers skip handle selection
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,13 +23,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-11T23:10:45Z
+updated_at: 2026-09-28T21:32:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase1-run-438e26c1
+  name: ""
 extensions: {}
 ---
 
@@ -43,5 +43,15 @@ Question 11 rides along because it is the same screen's audience: public forums 
 
 ## Acceptance criteria
 
-- [ ] Both decisions are recorded in docs/05 and docs/10 is updated
-- [ ] If handle selection is skipped, the collision fallback screen is specified
+- [x] Both decisions are recorded in docs/05 and docs/10 is updated
+- [x] If handle selection is skipped, the collision fallback screen is specified
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:32:46Z
+
+Maintainer decision, 2026-09-28, in Phase 2 grooming (TKT-01M3M9RR26): "Yes, with fallback; guests as stated". Written into docs/05, under the approval-mode registration path, and docs/10 items 10 and 11.
+
+## Summary
+
+An auto_approve provider takes the normalized preferred_username as the handle when it is valid, not reserved and free. Otherwise the normal handle screen appears, prefilled, with the reason it could not be used. Guests are confirmed: public forums are readable anonymously, there is no anonymous posting, and profiles stay members-only.

@@ -28,13 +28,15 @@ Each item states the options, the current lean, and when it must be decided.
    which is not target storage. TKT-01M29C2WV6 owns verification on real
    hardware, and the p99 target in 09 is not confirmed until it runs there.
    (TKT-01M29BSPD)
-4. **Hard redaction tool semantics.** Zero the body in place (breaks CRC of
-   that frame → reader treats as redacted) vs rewrite the log with a
-   `Redacted` record type. Lean: rewrite with a new type, keep CRCs valid.
-   Decide before Phase 2 (needed for GDPR-style requests). If it is a new type,
-   it takes a number from the **critical** range (`0x80`–`0xFF`, see 03): a
-   build that skipped a redaction would render content that was legally
-   required to be removed. Settled in TKT-01M29PARE1.
+4. **Hard redaction tool semantics.** **Decided 2026-09-28: rewrite the log
+   with a `Redacted` record**, from the critical range (`0x80`–`0xFF`), so
+   every CRC stays valid and a checksum failure keeps meaning corruption. An
+   older build meeting it refuses the log rather than showing removed
+   content. One redaction removes the post's original and every revision's
+   source, its mentions, and any attachment only it references. Quotes of it
+   in other posts are listed for the operator, never silently edited. The
+   shape is in 03, "Hard redaction". Zeroing in place lost because it makes a
+   bad CRC sometimes normal, and corruption then hides. (TKT-01M29BSPE2.)
 5. **Reactions.** Not in v1. If added: DB table, per-post counts shown in
    the footer, never used for ordering. Decide after real usage.
 
@@ -59,13 +61,21 @@ Each item states the options, the current lean, and when it must be decided.
 
 ## Identity and accounts
 
-9. **Handle change policy.** Never, once, or with redirects. Lean: allowed
-   with a 30-day cooldown and old handles reserved for 90 days;
-   `@mentions` are stored by user id so history stays correct.
+9. **Handle change policy.** **Decided 2026-09-28: allowed, once per 30
+   days.** The old handle is reserved for 90 days, and `/u/{old}` answers a
+   301 to the new profile until then. Admins may rename anyone without the
+   cooldown, which is how the grandfathered handles ending in `-`
+   (TKT-01M3ANX1NF) get fixed. `@mentions` are stored by user id, so history
+   stays correct. Never and once-only lost as friction with no gain, because
+   history does not depend on the handle. (TKT-01M29BSPEN; the rules are in 05.)
 10. **Should `auto_approve` providers also skip handle selection** using
-    `preferred_username`? Lean: yes, with a conflict fallback screen.
-11. **Guests.** Public forums readable anonymously (`visibility = public`)
-    is in; anonymous posting is out. Confirm.
+    `preferred_username`? **Decided 2026-09-28: yes, with a fallback.** A
+    valid, free `preferred_username` becomes the handle without a screen;
+    otherwise the normal handle screen appears, prefilled, with the reason.
+    (TKT-01M29BSPEX; 05.)
+11. **Guests.** **Confirmed 2026-09-28:** public forums are readable
+    anonymously (`visibility = public`), and anonymous posting is out.
+    Profiles stay members-only (TKT-01M3KJJNDC). (TKT-01M29BSPEX.)
 12. **Email.** No SMTP requirement in v1. Notifications are in-app only.
     Email digest is a later phase and needs a decision on the mail
     library and templates.

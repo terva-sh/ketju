@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3M9RR265XKRH6H97GS9VQYG
 title: Groom Phase 2 for an autonomous run
 type: chore
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -20,10 +20,17 @@ dependencies:
   - TKT-01M29BSPEXA023NH3DRMWKW9HB
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: groom/phase2-decision-spikes
+  worktree: /home/sothr/.t3/worktrees/ketju/t3code-438e26c1
+  commit: 5d0fa1a51b491c476bc977f392e0b847fb6a412a
+  session: null
+  claimed_at: 2026-09-28T21:32:46Z
+  expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-28T15:22:53Z
+updated_at: 2026-09-28T21:32:47Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -70,8 +77,14 @@ The handoff for this grooming is in `~/.local/state/agent-handoffs/ketju/`, outs
 
 ## Acceptance criteria
 
-- [ ] The three Phase 2 decision spikes are decided and recorded in docs/10 or their design documents
+- [x] The three Phase 2 decision spikes are decided and recorded in docs/10 or their design documents
 - [ ] Every open Phase 2 ticket has an implementation plan with a Settled in grooming section and checkable criteria
 - [ ] Every session-creating or role-changing ticket names the test that proves a pending or suspended user cannot reach member endpoints
 - [ ] A run procedure and a tracking ticket with the user's merge authority exist, or the user chose not to run Phase 2 autonomously
 - [ ] docs/11 is refreshed with the groomed counts
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:32:46Z
+
+Grooming started 2026-09-28 at the maintainer's direction ("Let's start phase 2 grooming"). The three decision spikes were decided first, and are closed in the first grooming PR: BSPE2 redaction, BSPEN handle changes, BSPEX auto_approve handles and guests. The decisions are in docs/03, 05 and 10.
