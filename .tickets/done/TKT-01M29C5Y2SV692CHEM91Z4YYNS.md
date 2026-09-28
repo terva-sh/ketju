@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: design:background-work
     path: docs/02-architecture.md
+  - ref: pr:110
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-28T09:08:47Z
+updated_at: 2026-09-28T09:10:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -92,6 +94,10 @@ Gaps settled at claim, written into docs/03 "Blob garbage collection" in the sam
 - Pass bound: 10,000 candidates, oldest first; the rest wait a day.
 - The first run of each job is jittered within [0, min(interval, 1 min)) after start.
 - No CLI form was added; the ticket does not ask for one.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:10:43Z
+
+PR #109 (branch run/c5y2s-sweeper-gc) was closed unmerged: healthz (PR #107) merged while it was open and conflicted on serve_test's step list. The run does not force-push, so the rebased head went to run/c5y2s-sweeper-gc-v2 as PR #110. After the rebase the collector's hold reads projection.Writer.QuarantinedCount, which healthz added.
 
 ## Summary
 
