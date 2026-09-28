@@ -65,6 +65,8 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/forums/{slug}/threads", h.threadList)
 	mux.HandleFunc("POST /api/v1/forums/{slug}/threads", h.createThread)
 	mux.HandleFunc("GET /api/v1/users", h.usersByPrefix)
+	mux.HandleFunc("GET /api/v1/users/{handle}", h.userProfile)
+	mux.HandleFunc("GET /api/v1/users/{handle}/posts", h.userPosts)
 	mux.Handle("/api/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.CodeNotFound)
 	}))

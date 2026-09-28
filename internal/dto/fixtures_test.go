@@ -412,6 +412,71 @@ var corpus = map[string]any{
 	"read." + tMember:           ReadPosition{LastReadOrdinal: 62},
 	"draft." + tMember:          draftReply(),
 	"draft-plain." + tMember:    draftPlain(),
+
+	"profile." + tMember:            profile(tMember),
+	"profile." + tModerator:         profile(tModerator),
+	"profile-anonymized." + tMember: anonymizedProfile(),
+
+	"user-posts." + tMember:     userPosts(tMember),
+	"user-posts." + tModerator:  userPosts(tModerator),
+	"user-posts-own." + tMember: userPostsOwn(),
+}
+
+// profile is GET /users/alice. The two classes differ where docs/07 says:
+// a moderator is shown the account's status, and counts the post in the
+// staff forum a member cannot read.
+func profile(class string) Profile {
+	p := Profile{User: alice, BioHTML: "<p>Runs the <em>book club</em>.</p>\n",
+		JoinedAt: 1757000000000, PostCount: 41}
+	if class == tModerator {
+		p.PostCount = 42
+		p.Status = ptr("active")
+	}
+	return p
+}
+
+// anonymizedProfile is GET /users/deleted-user-7: the placeholder handle and
+// nothing that named the person, with no bio.
+func anonymizedProfile() Profile {
+	return Profile{User: Author{Handle: "deleted-user-7", Role: "member", Kind: "human"},
+		JoinedAt: 1757000000000, PostCount: 12}
+}
+
+// userPosts is GET /users/alice/posts: two posts in two forums, newest
+// first, and a deleted one between them that a member does not see and a
+// moderator sees with its body.
+func userPosts(class string) UserPosts {
+	newer := threadPage(tMember).Posts[1]
+	newer.Author, newer.MachineAuthored = alice, false
+	older := newer
+	older.Ordinal, older.ReplyTo, older.ReplyToSuppressed, older.CreatedAt = 4, nil, false, 1757400000000
+	older.HTML = "<p>Welcome, everyone.</p>\n"
+	out := UserPosts{Posts: []UserPost{
+		{Thread: ThreadLink{ID: "3yymw47g00001", Slug: "why-we-left-slack", Title: "Why we left Slack"},
+			Forum: ForumRef{Slug: "general", Name: "General"}, Post: newer},
+	}, NextCursor: "MTc1NzQwMDAwMDAwMHwxMjM0NXw0"}
+	if class == tModerator {
+		gone := older
+		gone.Ordinal, gone.CreatedAt, gone.Deleted = 9, 1757450000000, true
+		gone.HTML = "<p>the text a moderator still needs to read</p>"
+		out.Posts = append(out.Posts, UserPost{
+			Thread: ThreadLink{ID: "3yymw47g00002", Slug: "book-club", Title: "Book club"},
+			Forum:  ForumRef{Slug: "social", Name: "Social"}, Post: gone})
+	}
+	out.Posts = append(out.Posts, UserPost{
+		Thread: ThreadLink{ID: "3yymw47g00003", Slug: "introductions", Title: "Introductions"},
+		Forum:  ForumRef{Slug: "social", Name: "Social"}, Post: older})
+	return out
+}
+
+// userPostsOwn is alice's own history: her deleted post is there, marked
+// deleted, with no body, as her thread page shows it to her; and it is the
+// last page, so there is no cursor.
+func userPostsOwn() UserPosts {
+	out := userPosts(tModerator)
+	out.Posts[1].Post.HTML = ""
+	out.NextCursor = ""
+	return out
 }
 
 // draftReply is GET /drafts/{thread_id} for a reply to post 61, half

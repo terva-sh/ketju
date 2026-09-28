@@ -244,7 +244,9 @@ func (ent *entry) lookup(forumID int64) (access, bool) {
 	return a, ok
 }
 
-// ReadableForums lists the forums v may read, in ListForums order.
+// ReadableForums lists the forums v may read, in ListForums order. It asks
+// about them all at once (CanEach), so a profile or post history, which
+// needs the whole set, costs one evaluation however many forums there are.
 func (e *Evaluator) ReadableForums(ctx context.Context, v domain.Viewer) ([]int64, error) {
 	var forums []dbq.Forum
 	err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
@@ -255,14 +257,18 @@ func (e *Evaluator) ReadableForums(ctx context.Context, v domain.Viewer) ([]int6
 	if err != nil {
 		return nil, err
 	}
-	var out []int64
-	for _, f := range forums {
-		ok, err := e.Can(ctx, v, f.ID, domain.PermRead)
-		if err != nil {
-			return nil, err
-		}
-		if ok {
-			out = append(out, f.ID)
+	ids := make([]int64, len(forums))
+	for i, f := range forums {
+		ids[i] = f.ID
+	}
+	readable, err := e.CanEach(ctx, v, ids, domain.PermRead)
+	if err != nil {
+		return nil, err
+	}
+	out := []int64{}
+	for _, id := range ids {
+		if readable[id] {
+			out = append(out, id)
 		}
 	}
 	return out, nil

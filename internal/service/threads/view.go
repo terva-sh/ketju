@@ -72,6 +72,10 @@ type Service struct {
 	// is time.Now.
 	Now func() time.Time
 
+	// UserPostsPage is the posts on one page of a user's history; zero is
+	// UserPostsPageSize. Tests set it to page through a few posts.
+	UserPostsPage int
+
 	// trace, when set, is told which path Replies answered from. Tests use it
 	// to prove both paths ran.
 	trace func(path string)

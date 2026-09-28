@@ -472,3 +472,38 @@ type Draft struct {
 	ReplyTo   *uint32 `json:"reply_to"`
 	UpdatedAt Millis  `json:"updated_at"`
 }
+
+// Profile is GET /users/{handle} (docs/07): an account as the viewer may see
+// it. A member session is required.
+type Profile struct {
+	// User is the author block a post draws. For an anonymized account it
+	// is the placeholder handle with no display name or avatar.
+	User Author `json:"user"`
+	// BioHTML is the bio rendered by internal/render, empty when there is
+	// none and for an anonymized account.
+	BioHTML  string `json:"bio_html"`
+	JoinedAt Millis `json:"joined_at"`
+	// PostCount is the account's posts that are neither deleted nor moved,
+	// in forums this viewer may read. It varies by viewer, and a deleted
+	// post never counts, even for a viewer whose history shows it.
+	PostCount int `json:"post_count"`
+	// Status is active, pending, suspended or deactivated, and is shown to
+	// moderators and admins only: null for everyone else.
+	Status *string `json:"status"`
+}
+
+// UserPosts is GET /users/{handle}/posts (docs/07): a page of an account's
+// posts across the forums the viewer may read, newest first.
+type UserPosts struct {
+	Posts []UserPost `json:"posts"`
+	// NextCursor is empty at the end of the history.
+	NextCursor string `json:"next_cursor"`
+}
+
+// UserPost is one post in a history: the post as its thread page renders it
+// for this viewer, and where it is.
+type UserPost struct {
+	Thread ThreadLink `json:"thread"`
+	Forum  ForumRef   `json:"forum"`
+	Post   Post       `json:"post"`
+}

@@ -22,8 +22,9 @@ var reservedHandles = []string{"admin", "api", "assets", "auth", "blobs", "event
 
 // reservedPrefix is the handle an anonymized account is given,
 // deleted-user-<id> (docs/05 "Account lifecycle"). Anything that starts with
-// it could pass for one.
-const reservedPrefix = "deleted-user"
+// it could pass for one, and a profile reads the prefix as the sign of an
+// anonymized account (domain.Anonymized).
+const reservedPrefix = domain.AnonymizedHandlePrefix
 
 // NormalizeHandle is a handle as typed, made into the form it is stored in:
 // surrounding space trimmed and ASCII letters lowercased. Nothing else is

@@ -1,0 +1,69 @@
+{
+  "posts": [
+    {
+      "thread": {
+        "id": "3yymw47g00001",
+        "slug": "why-we-left-slack",
+        "title": "Why we left Slack"
+      },
+      "forum": {
+        "slug": "general",
+        "name": "General"
+      },
+      "post": {
+        "ordinal": 62,
+        "revision": 1,
+        "author": {
+          "handle": "alice",
+          "display_name": "Alice Nakamura",
+          "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+          "role": "member",
+          "kind": "human"
+        },
+        "created_at": 1757500300000,
+        "edited_at": null,
+        "reply_to": 61,
+        "reply_to_suppressed": true,
+        "reply_count": 0,
+        "html": "<p>Summarising the thread so far.</p>",
+        "attachments": [],
+        "deleted": false,
+        "moved_to": null,
+        "machine_authored": false
+      }
+    },
+    {
+      "thread": {
+        "id": "3yymw47g00003",
+        "slug": "introductions",
+        "title": "Introductions"
+      },
+      "forum": {
+        "slug": "social",
+        "name": "Social"
+      },
+      "post": {
+        "ordinal": 4,
+        "revision": 1,
+        "author": {
+          "handle": "alice",
+          "display_name": "Alice Nakamura",
+          "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+          "role": "member",
+          "kind": "human"
+        },
+        "created_at": 1757400000000,
+        "edited_at": null,
+        "reply_to": null,
+        "reply_to_suppressed": false,
+        "reply_count": 0,
+        "html": "<p>Welcome, everyone.</p>\n",
+        "attachments": [],
+        "deleted": false,
+        "moved_to": null,
+        "machine_authored": false
+      }
+    }
+  ],
+  "next_cursor": "MTc1NzQwMDAwMDAwMHwxMjM0NXw0"
+}

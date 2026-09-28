@@ -58,3 +58,32 @@ func (h *handlers) usersByPrefix(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, res)
 }
+
+// userProfile is GET /api/v1/users/{handle} (docs/07). Who may see which
+// account, and what its post count counts, are the users service's to decide
+// (Profile). The answer depends on the viewer and on accounts that change,
+// so no cache keeps it.
+func (h *handlers) userProfile(w http.ResponseWriter, r *http.Request) {
+	res, err := h.users.Profile(r.Context(), domain.ViewerFrom(r.Context()), r.PathValue("handle"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
+}
+
+// userPosts is GET /api/v1/users/{handle}/posts?cursor= (docs/07), one page
+// of the account's post history (threads.Service.UserPosts). The service
+// admits the viewer before it reads the cursor, so a stranger's malformed
+// cursor is refused as a stranger's.
+func (h *handlers) userPosts(w http.ResponseWriter, r *http.Request) {
+	res, err := h.threads.UserPosts(r.Context(), domain.ViewerFrom(r.Context()), r.PathValue("handle"),
+		r.URL.Query().Get("cursor"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
+}
