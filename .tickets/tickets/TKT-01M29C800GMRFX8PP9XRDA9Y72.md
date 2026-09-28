@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29C800GMRFX8PP9XRDA9Y72
 title: Bootstrap the first admin from config and by CLI
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -23,15 +23,22 @@ blocks_on: none
 references:
   - ref: design:identity-principles
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: run/c800g-bootstrap-admin
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-accbfc12563040fba
+  commit: 0233673650a9a633cfab3419554002d601c4bb7f
+  session: null
+  claimed_at: 2026-09-28T05:38:42Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:18:33Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-28T05:39:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -51,34 +58,23 @@ Admin bootstrap never requires a password, which is what lets the whole system s
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+Revised at claim (2026-09-28) against main at 0233673.
 
-Depends on TKT-01M29P9RS0 landing first. It makes docs/05 agree on the key spelling, and plans are written against the fixed text: `bootstrap.admin_subjects` ("provider_key:sub") and `bootstrap.admin_emails` (plural). internal/config already parses and validates both spellings (config.go `Bootstrap`, validate.go `validateBootstrap`), so no config change is expected.
+The design fixes both operator-facing shapes: docs/05 "Principles" names `bootstrap.admin_subjects` ("provider_key:subject") and `bootstrap.admin_emails`, and `ketju admin promote <handle>`. internal/config already parses and validates both keys. No new config key is added. The CLI takes `--root DIR` for the data directory, the flag `ketju fsck` already uses, so "the data directory only" (AC3) needs no config file.
 
 ### Approach
-1. `identity.BootstrapMatch(cfg config.Bootstrap, id *oidc.Identity) (reason string, ok bool)` is pure:
-   - A subject matches when `provider_key+":"+sub` is in AdminSubjects.
-   - An email matches only when `id.EmailVerified` is true and the address is in AdminEmails, compared case-insensitively on the whole address.
-2. `identity.ApplyBootstrap(ctx, tx, userID, match)` runs in the login/registration transaction (TKT-01M29C7ZZ9, TKT-01M29C8005). If no `audit_log` row with `action='bootstrap.promote'` exists for this user, it sets `role='admin'` and writes that audit row with details `{via: subject|email, provider}`. The audit row is the idempotency marker, so a later demotion is not undone at the next login.
-3. `ketju admin promote <handle>` in cmd/ketju: load config, open the database under DataDir, look the user up by handle case-insensitively with the sqlc query `UserByHandle`, set the role with `SetUserRole`, and write audit_log with an actor of NULL/CLI. The command needs no running server and no network.
-4. Document `email_verified` in the config reference: extend the doc comment on `Bootstrap.AdminEmails` and the TOML example in docs/05.
-
-### Files
-New: internal/service/identity/bootstrap.go, cmd/ketju/admin.go (+ a `case "admin"` in main.go). Reuses `config.Bootstrap`, `oidc.Identity.EmailVerified`, and the audit_log schema from TKT-01M29BYYJ0.
+1. `identity.BootstrapMatch(cfg config.Bootstrap, id *oidc.Identity) (Match, bool)` is pure. A subject matches when `provider+":"+sub` is in AdminSubjects. An email matches only when `id.EmailVerified` is true and the address equals an AdminEmails entry, compared case-insensitively on the whole address. A subject match wins over an email match. An address that is listed but unverified is reported separately so the login can log a warning naming why nothing happened.
+2. `perm.Evaluator.Promote(ctx, userID, Promotion)` makes a user admin and appends one `audit_log` row (`action='user.promoted'`, `target_type='user'`, `target_id=<id>`, details JSON with `role`, `via`, and for bootstrap `match` and `provider`) in one write transaction, then invalidates the permission cache. The role write must live in internal/perm: TestMutationsGoThroughPerm refuses a `SetUserRole` call anywhere else. It does nothing for a user who is already admin. With `Once` set (bootstrap), it also does nothing when any `user.promoted` row for the user exists. That row is the idempotency marker, so a later demotion is not undone at the next login (AC4). A new sqlc query `AuditExists(action, target_type, target_id)` reads it through the `audit_log_target` index.
+3. `identity.Service` gains `Bootstrap config.Bootstrap` and `Perm *perm.Evaluator`. `Login` applies the bootstrap after the session is issued and the replaced session ended, so only an active user who actually signed in is promoted. A failed promotion fails the sign-in and ends the session it issued, as a failed revoke does, so the operator retries instead of being signed in as a member with the failure buried in a log. serve.go wires `cfg.Bootstrap` and the evaluator.
+4. `ketju admin promote [--root DIR] <handle>` in cmd/ketju/admin.go. It refuses a directory with no `db/ketju.db` rather than creating one, opens the database, migrates it as serve would, finds the user by handle (the column is NOCASE), and calls `perm.Promote` with no actor (actor_id NULL) and `via=cli`. An already-admin user is reported and left alone, exit 0. An unknown handle exits 1 with a message. It takes no lock, per the settled item below.
+5. Registration (TKT-01M29C8005) is not built yet, so a brand-new identity cannot finish a first login today. The bootstrap hook is an exported function that registration must call once it creates the user. The note on this ticket says so.
+6. Document `email_verified` on `Bootstrap.AdminEmails` and in the docs/05 TOML example.
 
 ### Tests
-- AC1: fake IdP login with a subject match; the test asserts role=admin and one audit row.
-- AC2: `BootstrapMatch` table covers verified email → match, unverified → no match, and subject → match whatever the email state. The same cases run once end to end with the fake IdP.
-- AC3: a CLI test in the style of cmd/ketju/dump_test.go. Build a data directory, stop nothing because nothing runs, invoke promote, and reopen the database to check.
-- AC4: log in twice and find one audit row. Demote manually, log in again, and the role stays member.
-
-### Design
-Reread docs/05 "Principles" (bootstrap bullet) and "Provider configuration", and docs/08 on the audit_log.
-
-### Interactions
-Consumes TKT-01M29BYYH7 (users), TKT-01M29BYYJ0 (audit_log), TKT-01M29BW9QF (config, done), and the login transaction from TKT-01M29C7ZZ9/TKT-01M29C8005. The role write invalidates the TKT-01M29C5Y2E permission cache: use the documented "invalidate on any group or permission write" hook.
-Open: "first login" is ambiguous when the config names a user who already exists. The audit marker promotes them at their next login.
-Open: whether `admin promote` must refuse while `serve` holds the data-directory lock (TKT-01M29CCBZN).
+- AC1/AC4 end to end in internal/web/auth with the fake IdP: a subject match signs in as admin with one audit row; a second sign-in writes no second row; a demoted user stays member at the next sign-in; a non-matching user stays member.
+- AC2: a `BootstrapMatch` table (verified email, unverified email, case-folded email, subject regardless of email state, wrong provider prefix, empty config), plus one end-to-end sign-in with an unverified listed email that stays member.
+- AC3: cmd/ketju/admin_test.go builds a data directory, promotes by handle in a different case, reopens the database and checks role and audit row; also unknown handle, a directory with no database (nothing created), already admin, and usage errors.
+- perm: Promote table for once/not-once, already admin, prior marker, and cache invalidation.
 
 ### Settled in grooming (2026-09-24)
 
