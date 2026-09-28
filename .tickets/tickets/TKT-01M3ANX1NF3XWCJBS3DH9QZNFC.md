@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M3ANX1NF3XWCJBS3DH9QZNFC
 title: Handles ending in '-' can never be mentioned
 type: bug
-status: blocked
-status_reason: "Needs a maintainer decision: forbid a trailing '-' in handles (docs/04 rule, CHECK migration, policy for existing handles) or make the mention parser accept it (renderer version bump, existing posts can render differently). docs/04 and the mention syntax disagree and no document says which wins; see the decision note."
+status: in-progress
+status_reason: null
 priority: normal
 due_on: null
 labels: []
@@ -17,10 +17,17 @@ blocks_on: none
 references:
   - ref: pr:129
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: run/anx1nf-forbid-trailing-dash
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a39c3b093c0ff03a3
+  commit: 9b960cf722ef87cf9aa1ba28375bd2f6aee88639
+  session: null
+  claimed_at: 2026-09-28T19:41:52Z
+  expires_at: null
 archive: null
 created_at: 2026-09-24T21:42:17Z
-updated_at: 2026-09-28T19:19:58Z
+updated_at: 2026-09-28T19:42:04Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -46,6 +53,26 @@ TKT-01M38XJJKM (Serve handle autocomplete for mentions) works around this by lea
 - Make the parser keep a trailing `-` when the handle with it resolves. That makes parsing depend on resolution, and changes what existing posts render (Version bump).
 
 This is a format and product decision, so it is filed as a draft.
+
+## Implementation plan
+
+### Settled in grooming
+- Maintainer decision, 2026-09-28, in the maintainer's words: "Forbid for new handles".
+- Registration and handle validation refuse a trailing '-' from now on: `CheckHandle`, `ValidateHandle`, the /auth/register form's error, and the registration prefill, which already trims one.
+- docs/04's handle grammar says so.
+- Existing handles stay valid. No database constraint change and no migration. Renaming them waits for TKT-01M29BSPEN (Decide the handle change policy).
+- The mention parser and the renderer stay as they are, with no renderer version bump.
+- The autocomplete workaround (`UsersByHandlePrefix` leaving out handles that end in '-') stays, and docs/07 says why.
+
+### Approach
+1. `domain.ValidateHandle` refuses a handle whose last character is '-', with its own message. Its comment then describes the rule for a new handle, not every stored one.
+2. The shared table `domain.HandleCases` gains a `Grandfathered` field. It marks a handle that the users CHECK still stores but a new handle may not be. `TestHandleRuleMatchesTheSchema` expects the CHECK to accept `Valid || Grandfathered`, so the two rules may differ only in the rows that say so. New rows cover `bob-`, `a--`, `a---...` (dashes only after the first character, 3 and 30 long), and `a-b`/`bob_` staying valid.
+3. `TestCheckHandle` adds table rows for a trailing '-' after normalizing (`Bob-`, ` bob- `).
+4. /auth/register: `handleRule` in internal/web/auth/page.go says a handle may not end in '-'. A register test shows that `bob-` gets the form again with the reason and no account is created.
+5. `identity.suggest`'s comment is updated: the trim is now the rule.
+6. docs/04 grammar, docs/07 `GET /users` note, and the `mention.go` comment that says the rule is not written down anywhere.
+
+The migrations, reindex, and the mention parser are left alone.
 
 ## Notes
 
@@ -79,3 +106,16 @@ The maintainer picks (a), (b1) or (b2), and for (a) says what happens to an exis
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T19:19:42Z
 
 in-progress to blocked: Needs a maintainer decision: forbid a trailing '-' in handles (docs/04 rule, CHECK migration, policy for existing handles) or make the mention parser accept it (renderer version bump, existing posts can render differently). docs/04 and the mention syntax disagree and no document says which wins; see the decision note.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T19:41:51Z
+
+Maintainer decision, 2026-09-28, relayed by the sweep's orchestrator, in the maintainer's words: "Forbid for new handles".
+
+This is option (a) from the decision note, limited to new handles:
+- Registration and handle validation refuse a trailing '-' from now on: `identity.CheckHandle`, `domain.ValidateHandle`, the /auth/register form's error, and the registration prefill, which already trims one.
+- docs/04's handle grammar says so.
+- Existing handles stay valid. There is no database constraint change and no migration, so a database holding such a handle keeps working. Renaming them waits for the handle change policy, TKT-01M29BSPEN (Decide the handle change policy).
+- The mention parser and the renderer stay as they are, so the renderer version is not bumped.
+- The autocomplete workaround (`UsersByHandlePrefix` leaving out handles that end in '-') stays, because such handles can still exist. docs/07 says so.
+
+This unblocks the ticket.
