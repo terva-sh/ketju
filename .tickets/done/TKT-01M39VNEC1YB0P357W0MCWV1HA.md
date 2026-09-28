@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M39VNEC1YB0P357W0MCWV1HA
 title: Stop returning a thread page the cache refused to its caller
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/vnec1-refused-page
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af0c01df76a66354b
-  commit: 55e876a471ab74f8a5740d1b6e6d92037e5c07e9
-  session: null
-  claimed_at: 2026-09-28T18:24:51Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-24T14:03:44Z
-updated_at: 2026-09-28T18:26:31Z
+updated_at: 2026-09-28T18:33:41Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -60,9 +53,9 @@ Add tests in `threads.test.ts` that settle the loads by hand in both orders. The
 
 ## Acceptance criteria
 
-- [ ] A load overtaken by a newer applied refusal rejects with that refusal rather than resolving with its page
-- [ ] A load rejected for a shorter log length never resolves with that page
-- [ ] Tests settle overlapping loads by hand in every order of success and refusal
+- [x] A load overtaken by a newer applied refusal rejects with that refusal rather than resolving with its page
+- [x] A load rejected for a shorter log length never resolves with that page
+- [x] Tests settle overlapping loads by hand in every order of success and refusal
 
 ## Implementation plan
 
@@ -89,3 +82,31 @@ Two loads, older A and newer B, settled by hand. Table-driven over every pair of
 - a superseded refusal;
 - the refetch being refused again;
 - a refusal during the refetch.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T18:33:29Z
+
+### Decisions taken while building (2026-09-28)
+- **Shorter length:** of the options the ticket gives, I took "the cached page under the same key, else refetch once, else a retryable error".
+  - The cached page is the same page and lens at the longer length, so it is the right thing to show.
+  - A refetch is invisible to the reader. An immediate error would have shown "Something changed..." for a harmless race.
+  - The refetch is bounded to one asking. A second refusal rejects with `ProblemError('conflict', 0)`, which ErrorPanel shows with a retry.
+  - This settles only internals: what the reader sees is the right page or an existing error message.
+- **Superseded refusal:** an older page landing after a refusal rejects with that refusal only while it still stands. Once a request started after the refusal has stored a page, the refusal no longer stands, and the older page is handled like a shorter-length one, not reported as a refusal that has already lifted. The ticket did not name this case. I settled it because the alternative would show an access error beside a page the viewer can see.
+- **Extra fix in `storeThreadPage`:** the ordering table found a held-body gap in the one-page ordering "A 120, B 100, B lands first". The newer request's shorter body stayed held under the URL after the older answer moved the cache to 120, because the length-move forget exempted the stored URL and `apiGet` holds only the newest request's answer. That URL is now kept only when it holds this very page. This is the same class as reviews 412 and 417.
+
+### Callers (checked at 55e876a)
+`loadThreadPage` has one caller, ThreadScreen, which aborts before it reloads. The other code the task named does not load thread pages:
+- ReplyExpander (PR #96) and PostPopover `apiGet` their own `/posts/...` URLs;
+- readTracker (PR #101) only calls `forgetLandings`, and no `forgetHeldPages` exists;
+- the shortcuts (PR #98) only route.
+
+So no concurrent second loader exists yet.
+
+### Residual, for TKT-01M29CTYA0 (live updates)
+Once a second caller exists, there is a gap this ticket's criteria do not cover. A refusal applied by caller X forgets the cache, but caller Y's `useResource` still holds the page it resolved earlier in component state. The live-update client should re-read the cache, or observe refusals, when it lands.
+
+## Summary
+
+loadThreadPage now resolves only with a page the cache holds. A load overtaken by a refusal that still stands rejects with that ProblemError. A page refused for its shorter length, or from before a superseded refusal, resolves with the cached page under the same key, or else is asked for once more, and a second refusal rejects with a retryable conflict. The ordering table found a held-body gap in storeThreadPage, fixed in the same change. threads.test.ts settles two loads by hand for every pair of {100, 120, 403} in both orders, on two pages and on one; 8 mutations tried, all caught.
