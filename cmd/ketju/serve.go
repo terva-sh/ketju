@@ -361,14 +361,14 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 
 	// The periodic jobs (docs/02 "Background work"). They start after
-	// catch-up, so the collector's quarantine check reads a finished
-	// report, and stop before the stores close under them. The collector
+	// catch-up, so the collector's quarantine check reads what catch-up
+	// found, and stop before the stores close under them. The collector
 	// holds while any thread is quarantined: a thread whose log is missing
 	// or short may name blobs no log on disk does.
 	step("jobs")
 	gc := &jobs.BlobGC{DB: d, Root: cfg.DataDir, Hold: func() string {
-		if r, ok := proj.LastCatchUp(); ok && len(r.Corrupt) > 0 {
-			return fmt.Sprintf("%d thread(s) are quarantined", len(r.Corrupt))
+		if n := proj.QuarantinedCount(); n > 0 {
+			return fmt.Sprintf("%d thread(s) are quarantined", n)
 		}
 		return ""
 	}}
