@@ -550,8 +550,10 @@ version was bumped first.
   frame, one transaction per thread; a run that stops partway is finished by
   another reindex or by `serve`'s catch-up. It only reads the logs. A torn
   final frame is projected around, to the last whole frame, and left for
-  `serve` to cut at its next open; a thread with damage before its last frame
-  gets no rows, is reported, and makes the exit status 1. `--search` arrives
+  `serve` to cut at its next open. A thread whose log is damaged before its
+  last frame, or whose records contradict each other, gets no rows, is
+  reported, and makes the exit status 1; the run goes on. A failure that is
+  not the log's, such as a database write, stops the run. `--search` arrives
   with full-text search in Phase 2 (TKT-01M29C5Y25). The README's recovery
   procedure is built on it and run as a test.
 - `ketju dump <thread-id>` prints a log as JSON lines for inspection.

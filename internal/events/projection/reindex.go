@@ -38,9 +38,9 @@ type ReindexReport struct {
 	Bytes     int64
 
 	// Torn are threads whose log ends in a torn final frame, an interrupted
-	// write. Each was projected to the end of its last whole frame; serve
-	// cuts the torn bytes off when it next opens the thread, and its
-	// catch-up then finds no gap.
+	// write. Each was projected to the end of its last whole frame, and is
+	// counted in Projected if it has one; serve cuts the torn bytes off when
+	// it next opens the thread, and its catch-up then finds no gap.
 	Torn []threadid.ID
 
 	// Unfinished are logs holding only their file header, a creation that
@@ -48,9 +48,10 @@ type ReindexReport struct {
 	// the same way.
 	Unfinished []threadid.ID
 
-	// Failed are threads that could not be projected: damage before the last
-	// frame, a header naming another thread, or a database error. They have
-	// no projection rows.
+	// Failed are threads whose log cannot be projected: damage before the
+	// last frame, a header that is damaged or names another thread, or
+	// records that contradict each other (IsLogFault). They have no
+	// projection rows. A failure that is not the log's stops the run instead.
 	Failed []ReindexFailure
 
 	// Strays are files under threads/ that are not a thread's log or index
@@ -76,8 +77,10 @@ type ReindexReport struct {
 // every finished thread projected and the rest with no projection_state row,
 // which the next reindex, or serve's catch-up, replays from the start.
 //
-// The error is for a run that could not go on: the walk, the clear, or a
-// cancelled context. What it found wrong with one thread is in the report.
+// The error is for a run that could not go on: the walk, the clear, a
+// cancelled context, or a thread that failed for a reason other than its
+// log, such as a database write or a log that could not be read. What the
+// run found wrong with a log is in the report, and the run goes on past it.
 func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (ReindexReport, error) {
 	start := time.Now()
 	var rep ReindexReport
@@ -122,17 +125,23 @@ func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (R
 			return rep, err
 		}
 		size := logs[id]
-		switch n, torn, err := w.reindexThread(ctx, id, size); {
+		n, torn, err := w.reindexThread(ctx, id, size)
+		switch {
+		case err != nil && !IsLogFault(err):
+			rep.Elapsed = time.Since(start)
+			return rep, fmt.Errorf("projection: reindex: %w", err)
 		case err != nil:
 			rep.Failed = append(rep.Failed, ReindexFailure{Thread: id, Err: err})
+		case torn:
+			// Before the header-only case: a log whose creation frame was
+			// torn is a torn write, and serve has bytes to cut.
+			rep.Torn = append(rep.Torn, id)
 		case n == threadlog.FileHeaderSize:
 			rep.Unfinished = append(rep.Unfinished, id)
-		default:
+		}
+		if err == nil && n > threadlog.FileHeaderSize {
 			rep.Projected++
 			rep.Bytes += n - threadlog.FileHeaderSize
-			if torn {
-				rep.Torn = append(rep.Torn, id)
-			}
 		}
 		p.Done++
 		p.Bytes += size
@@ -144,19 +153,22 @@ func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (R
 
 // reindexThread projects one log of size bytes into emptied tables, and
 // returns the length it projected to and whether a torn tail was left out.
+// An error the log explains is a logFault (IsLogFault).
 func (w *Writer) reindexThread(ctx context.Context, id threadid.ID, size int64) (int64, bool, error) {
 	switch {
 	case size < threadlog.FileHeaderSize:
 		// ProjectThread would see a target below its start and do nothing.
-		return 0, false, fmt.Errorf("%w: %d bytes", threadlog.ErrLogTooShort, size)
+		return 0, false, logFault{fmt.Errorf("%w: %d bytes", threadlog.ErrLogTooShort, size)}
 	case size == threadlog.FileHeaderSize:
-		return size, false, nil
+		// Nothing to project, but the header is still checked: a damaged
+		// one, or one naming another thread, is not an unfinished creation.
+		return size, false, w.checkLogHeader(id)
 	}
 	_, err := w.ProjectThread(ctx, id, size)
 	if err == nil {
 		return size, false, nil
 	}
-	if ctx.Err() != nil {
+	if ctx.Err() != nil || !IsLogFault(err) {
 		return 0, false, err
 	}
 
@@ -172,9 +184,22 @@ func (w *Writer) reindexThread(ctx context.Context, id threadid.ID, size int64) 
 		return valid, true, nil // the torn frame was the thread's creation
 	}
 	if _, perr := w.ProjectThread(ctx, id, valid); perr != nil {
+		if !IsLogFault(perr) {
+			return 0, false, perr // the database's, and the run stops
+		}
 		return 0, false, errors.Join(err, perr)
 	}
 	return valid, true, nil
+}
+
+// checkLogHeader reads and checks the file header of thread id's log.
+func (w *Writer) checkLogHeader(id threadid.ID) error {
+	f, err := w.open(id.LogPath(w.root))
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	return checkHeader(f, id)
 }
 
 // validPrefix is the length of the log up to the end of its last whole

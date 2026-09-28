@@ -491,6 +491,19 @@ func TestReindexExitCodes(t *testing.T) {
 			t.Errorf("the sound thread was not projected beside the damaged one:\n%s", got)
 		}
 	})
+	t.Run("database", func(t *testing.T) {
+		// A write the database refuses is not the log's fault, so it is not
+		// exit 1 and fsck will not explain it (review 1137).
+		data, _ := populate(t, 2)
+		d := openDB(t, data)
+		execDB(t, d, `CREATE TRIGGER disk_full BEFORE INSERT ON post_meta BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+		d.Close()
+		_, _, err := reindexRun(t, reindexOpts{}, "--root", data)
+		if exitCodeFor(err) != exitInternal || !strings.Contains(err.Error(), "disk full") ||
+			!strings.Contains(err.Error(), "run reindex again") {
+			t.Fatalf("exit %d (%v), want %d naming the database's error", exitCodeFor(err), err, exitInternal)
+		}
+	})
 }
 
 // readmeRecovery is the shell block of the README's recovery section.

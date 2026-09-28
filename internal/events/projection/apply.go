@@ -83,7 +83,7 @@ func applyThreadCreated(ctx context.Context, q *dbq.Queries, f frame) error {
 func applyPost(ctx context.Context, q *dbq.Queries, f frame) error {
 	b := f.body.(*threadlog.PostBody)
 	if f.h.Ordinal == 0 {
-		return fmt.Errorf("a Post at offset %d carries ordinal 0", f.offset)
+		return logFault{fmt.Errorf("a Post at offset %d carries ordinal 0", f.offset)}
 	}
 	if err := q.UpsertPostMeta(ctx, dbq.UpsertPostMetaParams{
 		ThreadID:        int64(f.thread),
@@ -224,8 +224,10 @@ func one(n int64, err error) func(frame, string) error {
 			return err
 		}
 		if n != 1 {
-			return fmt.Errorf("%s at offset %d (ordinal %d) names a %s the projection does not have",
-				f.h.Type, f.offset, f.h.Ordinal, what)
+			// The log's fault when the rows are its own projection from the
+			// start, as in a reindex; a lost row's, when they are not.
+			return logFault{fmt.Errorf("%s at offset %d (ordinal %d) names a %s the projection does not have",
+				f.h.Type, f.offset, f.h.Ordinal, what)}
 		}
 		return nil
 	}

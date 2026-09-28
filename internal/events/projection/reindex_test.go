@@ -182,3 +182,98 @@ func TestReindexWalkFailureChangesNothing(t *testing.T) {
 		t.Fatalf("a failed walk changed the projection:\n%s\n---\n%s", want, got)
 	}
 }
+
+// TestReindexHeaderOnlyAndTornCreation (review 1137, findings 2 and 3): a
+// log of exactly its file header is unfinished only when that header is
+// sound and names the thread; and a log whose creation frame was torn is a
+// torn write, not an unfinished one, with nothing projected.
+func TestReindexHeaderOnlyAndTornCreation(t *testing.T) {
+	f := newFixture(t)
+	header := func(n uint64, names threadid.ID) threadid.ID {
+		id := threadid.ID(uint64(1_700_000_000_000)<<16 | n)
+		if names == 0 {
+			names = id
+		}
+		if err := os.MkdirAll(id.Dir(f.root), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		b := threadlog.NewFileHeader(uint64(names), 1, 7).AppendTo(nil)
+		if err := os.WriteFile(id.LogPath(f.root), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	unfinished := header(1, 0)
+	damaged := header(2, 0)
+	b, err := os.ReadFile(damaged.LogPath(f.root))
+	if err != nil {
+		t.Fatal(err)
+	}
+	b[0] ^= 0xff // the magic
+	if err := os.WriteFile(damaged.LogPath(f.root), b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	other := header(3, unfinished)
+	tornCreation := header(4, 0)
+	tear(t, f.root, tornCreation)
+
+	rep, err := f.w.Reindex(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !slices.Equal(rep.Unfinished, []threadid.ID{unfinished}) {
+		t.Errorf("unfinished = %v, want only %s", rep.Unfinished, unfinished)
+	}
+	if !slices.Equal(rep.Torn, []threadid.ID{tornCreation}) {
+		t.Errorf("torn = %v, want only %s", rep.Torn, tornCreation)
+	}
+	if rep.Projected != 0 || rep.Bytes != 0 {
+		t.Errorf("projected %d threads, %d bytes, from logs with no whole record", rep.Projected, rep.Bytes)
+	}
+	failed := map[threadid.ID]error{}
+	for _, fl := range rep.Failed {
+		failed[fl.Thread] = fl.Err
+	}
+	if len(failed) != 2 || failed[damaged] == nil || failed[other] == nil {
+		t.Fatalf("failed = %v, want the damaged header and the one naming another thread", rep.Failed)
+	}
+	if !strings.Contains(failed[other].Error(), "names thread "+unfinished.String()) {
+		t.Errorf("the misplaced log's failure does not say whose it is: %v", failed[other])
+	}
+	if d := f.dump(); !strings.Contains(d, "projection_state: 0 rows") {
+		t.Errorf("rows for logs with nothing to project:\n%s", d)
+	}
+}
+
+// TestReindexSeparatesLogFaultsFromTheDatabase (review 1137, finding 1): a
+// log whose records contradict each other is a per-thread failure the run
+// goes past, like damage; a database write that fails is not the log's
+// fault, and stops the run with an error rather than reporting the thread
+// as broken.
+func TestReindexSeparatesLogFaultsFromTheDatabase(t *testing.T) {
+	f := newFixture(t)
+	created := rec{threadlog.TypeThreadCreated, &threadlog.ThreadCreatedBody{Title: "T", Slug: "t", ForumID: 7}}
+	// An Edit of a post the log never wrote: sound bytes, and no projection.
+	contradicts, _ := rawLog(t, f, created, rec{threadlog.TypeEdit, &threadlog.EditBody{Source: "x"}})
+	sound, _ := rawLog(t, f, created, rec{threadlog.TypePost, &threadlog.PostBody{Source: "x"}})
+
+	rep, err := f.w.Reindex(t.Context(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rep.Failed) != 1 || rep.Failed[0].Thread != contradicts || !IsLogFault(rep.Failed[0].Err) ||
+		rep.Projected != 1 {
+		t.Fatalf("report = %+v", rep)
+	}
+
+	f.exec(`CREATE TRIGGER disk_full BEFORE INSERT ON post_meta BEGIN SELECT RAISE(ABORT, 'disk full'); END`)
+	rep, err = f.w.Reindex(t.Context(), nil)
+	if err == nil || IsLogFault(err) || !strings.Contains(err.Error(), "disk full") {
+		t.Fatalf("got %v, want the database's error, not a log fault", err)
+	}
+	for _, fl := range rep.Failed {
+		if fl.Thread == sound {
+			t.Errorf("the sound thread was reported as a broken log: %v", fl.Err)
+		}
+	}
+}

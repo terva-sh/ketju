@@ -43,9 +43,11 @@ report goes to stdout.
 
 exit codes:
   0  every thread projected (a torn final write is left out and reported)
-  1  a thread's log could not be projected: run ketju fsck to see why
+  1  a thread's log is damaged, or its records contradict each other; the
+     other threads are projected, and ketju fsck names the damage
   2  usage, or DIR has no threads directory
-  4  the data directory is in use, or the database could not be written
+  4  the data directory is in use, or the database or a log could not be
+     read or written; the run stops there
 
 `
 
@@ -217,7 +219,7 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 	}
 
 	if len(rep.Failed) > 0 {
-		return errCorrupt{fmt.Errorf("%d of %d thread(s) could not be projected; run ketju fsck to see why",
+		return errCorrupt{fmt.Errorf("%d of %d thread(s) have a log that cannot be projected; run ketju fsck to see why",
 			len(rep.Failed), rep.Threads)}
 	}
 	return nil
@@ -225,8 +227,8 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 
 func writeReindexText(w io.Writer, s reindexSummary, elapsed time.Duration) {
 	for _, id := range s.Torn {
-		fmt.Fprintf(w, "TORN     %s  its last write was interrupted; projected to its last whole record, "+
-			"and serve cuts the rest off when it opens the thread\n", id)
+		fmt.Fprintf(w, "TORN     %s  its last write was interrupted and is left out; "+
+			"serve cuts it off when it opens the thread\n", id)
 	}
 	for _, id := range s.Unfinished {
 		fmt.Fprintf(w, "EMPTY    %s  holds only its file header: its creation never finished\n", id)

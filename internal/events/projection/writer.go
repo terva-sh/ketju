@@ -397,7 +397,7 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 			return err
 		}
 		if fi.Size() < upTo {
-			return fmt.Errorf("the log is %d bytes, shorter than the %d an event reported", fi.Size(), upTo)
+			return logFault{fmt.Errorf("the log is %d bytes, shorter than the %d an event reported", fi.Size(), upTo)}
 		}
 		if err := checkHeader(f, id); err != nil {
 			return err
@@ -416,7 +416,7 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 		if n, err := q.SetThreadProjected(ctx, dbq.SetThreadProjectedParams{LogLengthProjected: upTo, ID: int64(id)}); err != nil {
 			return err
 		} else if n != 1 {
-			return fmt.Errorf("the log up to %d never created the thread", upTo)
+			return logFault{fmt.Errorf("the log up to %d never created the thread", upTo)}
 		}
 		return q.SetProjectionState(ctx, dbq.SetProjectionStateParams{
 			ThreadID: int64(id), LogLength: upTo, UpdatedAt: w.now().UnixMilli(),
@@ -435,17 +435,21 @@ func (w *Writer) ProjectThread(ctx context.Context, id threadid.ID, upTo int64) 
 func checkHeader(r io.ReaderAt, id threadid.ID) error {
 	b := make([]byte, threadlog.FileHeaderSize)
 	if _, err := r.ReadAt(b, 0); err != nil {
-		return fmt.Errorf("reading the file header: %w", err)
+		err = fmt.Errorf("reading the file header: %w", err)
+		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+			return logFault{err} // a file cut inside its header
+		}
+		return err
 	}
 	h, err := threadlog.ParseFileHeader(b)
 	if err != nil {
-		return err
+		return logFault{err}
 	}
 	if err := h.CheckVersion(); err != nil {
-		return err
+		return logFault{err}
 	}
 	if h.ThreadID != uint64(id) {
-		return fmt.Errorf("the log at this thread's path names thread %s", threadid.ID(h.ThreadID))
+		return logFault{fmt.Errorf("the log at this thread's path names thread %s", threadid.ID(h.ThreadID))}
 	}
 	return nil
 }
@@ -456,28 +460,50 @@ func (w *Writer) apply(ctx context.Context, q *dbq.Queries, id threadid.ID, rec 
 		// Damage is never skipped: projecting past a frame that fails its
 		// checksum would project whatever the log says after it as if the
 		// damaged record had not happened.
-		return fmt.Errorf("frame at offset %d: %w", rec.Offset, rec.Err)
+		return logFault{fmt.Errorf("frame at offset %d: %w", rec.Offset, rec.Err)}
 	}
 	body, err := threadlog.DecodeBody(rec.Header.Type, rec.Header.Encoding, rec.Body)
 	if err != nil {
 		if threadlog.SkipUnknown(err) {
 			return nil // advisory, or reserved: stepped over as the index does
 		}
-		return fmt.Errorf("frame at offset %d: %w", rec.Offset, err)
+		return logFault{fmt.Errorf("frame at offset %d: %w", rec.Offset, err)}
 	}
 	d, ok := decisions[rec.Header.Type]
 	if !ok || d.apply == nil {
 		// A body type with no decision is a catalogue entry nobody wrote a
 		// projection for. TestEveryRecordTypeHasADecision should have caught
 		// it; refusing here keeps it from being skipped quietly in production.
-		return fmt.Errorf("frame at offset %d: %s has no projection", rec.Offset, rec.Header.Type)
+		return logFault{fmt.Errorf("frame at offset %d: %s has no projection", rec.Offset, rec.Header.Type)}
 	}
 	f := frame{thread: id, offset: rec.Offset, end: rec.Offset + int64(rec.Size), h: rec.Header, body: body}
 	if err := d.apply(ctx, q, f); err != nil {
-		return fmt.Errorf("projecting %s at offset %d: %w", rec.Header.Type, rec.Offset, err)
+		err = fmt.Errorf("projecting %s at offset %d: %w", rec.Header.Type, rec.Offset, err)
+		if IsLogFault(err) {
+			return logFault{err}
+		}
+		return err
 	}
 	if w.applied != nil {
 		w.applied(id, rec.Offset)
 	}
 	return nil
+}
+
+// logFault marks a projection failure the log itself explains: damage, a
+// header naming another thread, or records that contradict each other, such
+// as an Edit of a post the log never wrote. Its message is the wrapped
+// error's, unchanged.
+type logFault struct{ err error }
+
+func (e logFault) Error() string { return e.err.Error() }
+func (e logFault) Unwrap() error { return e.err }
+
+// IsLogFault reports whether a ProjectThread failure is the log's own: its
+// bytes or its records. Any other failure is the database's or the
+// filesystem's, and projecting the same log again may well succeed. Reindex
+// reports the first kind per thread and stops on the second.
+func IsLogFault(err error) bool {
+	var f logFault
+	return errors.As(err, &f)
 }
