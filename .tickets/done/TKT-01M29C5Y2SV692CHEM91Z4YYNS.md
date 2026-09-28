@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:17:26Z
-updated_at: 2026-09-28T09:23:01Z
+updated_at: 2026-09-28T09:26:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -114,6 +114,10 @@ Correction to the previous note: the review 1157 fix is commit e0a8f90, not c05f
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:23:01Z
 
 Review 1158 (run for request ready-review-3feb393) on head 3feb3936ca79b55f1f5f59fe9bf004c905afb867, base 21fa204c8f10ca65a4c2cc1601581ad34e7fdbcf. It marks the review 1157 finding resolved and raises three new findings, all accepted and fixed in code in 12f0f2e. (1) high, blobgc.go:302: a threads/ that is a regular file walked as empty. Fixed: the pass holds unless threads/ is a directory. (2) medium, blobgc.go:165: deletions from earlier pages happened before later pages were scanned. Fixed: two phases, scan every page and then delete, capped at 100,000 collectable a pass. (3) medium, scheduler.go:103: the database was closed under a job that outlasts the bounded Stop. Fixed: Scheduler.Done, and serve leaves the database open (WAL replayed at the next start) while a job is still out; the scan checks cancellation at every frame. This is the third review round on PR #110.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T09:26:38Z
+
+Review 1159 (run 413ac0d3-06d1-466f-8b64-51bd258518f8, Actions run #631) on head 5a3c9ad8ad1c2daf4dd86bb1362eb270c43a24ab, base 21fa204c8f10ca65a4c2cc1601581ad34e7fdbcf. It marks all three review 1158 findings resolved and raises one new high finding (blobgc.go:302): a symlinked threads/ passed the directory check but walked as empty. Accepted and fixed in code in aea2059: the root is resolved with EvalSymlinks, and any symlink or non-regular entry below it holds the pass. Test: TestSymlinksAreFollowedOrHeld. The next review is round five on PR #110, the brief's limit: if it finds anything at medium or above, the PR stays open for a person.
 
 ## Summary
 
