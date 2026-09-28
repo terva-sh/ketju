@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3MFS6KM13JGSDBXGQEZW7QA
 title: Give a signed-out reader a way to sign in
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: worktree-agent-a5a75045ac34e43c2
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5a75045ac34e43c2
-  commit: 547c589cf8314e0b5efa42fc6d5db5d66946f018
-  session: null
-  claimed_at: 2026-09-28T17:07:49Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T17:07:43Z
-updated_at: 2026-09-28T17:08:19Z
+updated_at: 2026-09-28T17:21:39Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -46,14 +39,14 @@ extensions: {}
 
 ## Acceptance criteria
 
-- [ ] GET /auth/signin lists each enabled provider by name, linking to /auth/{key}/start with return_to carried
-- [ ] With exactly one usable provider, /auth/signin answers 302 to that provider's start
-- [ ] With no usable provider, /auth/signin shows a plain 'sign-in is not available' page, not an error
-- [ ] A signed-in reader is redirected to return_to, or /
-- [ ] return_to is validated with SafeReturnPath; a hostile return_to never leaves the site
-- [ ] The client's Sign in (top bar and phone Me tab) is a full navigation to /auth/signin?return_to=<current path>; signed-in behaviour is unchanged
+- [x] GET /auth/signin lists each enabled provider by name, linking to /auth/{key}/start with return_to carried
+- [x] With exactly one usable provider, /auth/signin answers 302 to that provider's start
+- [x] With no usable provider, /auth/signin shows a plain 'sign-in is not available' page, not an error
+- [x] A signed-in reader is redirected to return_to, or /
+- [x] return_to is validated with SafeReturnPath; a hostile return_to never leaves the site
+- [x] The client's Sign in (top bar and phone Me tab) is a full navigation to /auth/signin?return_to=<current path>; signed-in behaviour is unchanged
 - [ ] A Playwright check clicks Sign in while signed out, reaches /auth/signin and lands at the fake provider's start
-- [ ] docs/07's route list and docs/05 name /auth/signin
+- [x] docs/07's route list and docs/05 name /auth/signin
 
 ## Implementation plan
 
@@ -80,3 +73,23 @@ extensions: {}
 
 - docs/07 URL scheme block gains `/auth/signin`, and the paragraph after it describes it.
 - docs/05 gains a sentence beside "the login page only shows configured providers".
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T17:21:29Z
+
+Criterion 7 is left unticked. e2e/sign-in.spec.ts clicks Sign in while signed out, at 390 px and 1440 px. It checks that the browser loads /auth/signin?return_to=<the page> as a full navigation, and that the server answers 302 to /auth/fake/start with the same return_to. It reads that answer with route.fetch and stops the browser there, so the browser never actually loads the fake provider's start.
+
+Why it stops there:
+- /auth/* allows a burst of ten requests per address, refilling one every 6 s (docs/08, internal/web/ratelimit.go). The setup project spends four and the smoke spec two per width.
+- A version that followed the whole flow (login page, start, callback: three per width) passed the full suite but hit 429 at the fake provider in a filtered run (`npx playwright test sign-in smoke`), so it depended on how long the earlier specs took.
+- Following only to the start would cost two per width, which is still over the burst in a filtered run.
+- page.route cannot answer the start in the browser instead, because it never sees a request that a redirect made.
+
+What covers the rest: the setup project's sign-in exercises start → provider → callback, and TestTheLoginPageSkipsToTheOnlyProvider follows return_to from /auth/signin through the callback. To tick criterion 7 as written, raise the e2e build's auth burst (cmd/ketju/e2e.go), or accept the server's 302 as landing.
+
+Settled here: "signed in" means `ViewerFrom(ctx).UserID != 0`, so a suspended user's live session is sent back rather than shown the providers. A pre-user (approval-mode applicant) session has UserID 0 and sees the page. None usable only happens with none configured in practice: startup aborts when every provider fails discovery, and Refresh never disables a working provider. The empty-Enabled branch is a guard, tested with a stub.
+
+## Summary
+
+GET /auth/signin (internal/web/auth/signin.go) is the login page. It validates return_to with SafeReturnPath and sends a signed-in reader back to it. With the enabled providers it shows a plain 200 'Sign-in is not available' for none, redirects 302 to /auth/{key}/start?return_to=... for one, and lists them by name for several. The client's signed-out Sign in (TopBar, phone Me tab) is a full navigation to /auth/signin?return_to=<path and query>; nav.ts meHref and tabs take the current URL. dist is regenerated (38031 B of 60000). Go tests cover the one, several and no-provider cases, the signed-in redirect and hostile return_to. e2e/sign-in.spec.ts checks the client-to-login-page navigation and the server's 302 to the fake start at both widths. Criterion 7 is unticked: the browser is stopped before it loads the start (see note). docs/05 and docs/07 describe the route.
