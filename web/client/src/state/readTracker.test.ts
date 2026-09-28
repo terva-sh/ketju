@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, peekGet, resetApiCache } from '../api/client';
-import { batchMs, dwellMs, flush, markUnread, readUrl, resetReadTracker, trackPosts } from './readTracker';
+import { asking, batchMs, dwellMs, flush, markUnread, readUrl, resetReadTracker, trackPosts } from './readTracker';
 
 // The read-tracking beacon (TKT-01M29CGBWN) against a stubbed
 // IntersectionObserver, a stubbed fetch and fake timers.
@@ -470,20 +470,67 @@ describe('markUnread', () => {
     expect(sent).toHaveLength(1);
     releases.shift()!();
     await drain();
-    // Read before the DELETE went out: what the mark undoes.
     expect(sent.map((s) => [s.method, s.body])).toEqual([
       ['PUT', { ordinal: 4 }],
       ['DELETE', { ordinal: 2 }],
     ]);
     releases.shift()!();
     expect(await marked).toEqual({ last_read_ordinal: 2 });
+    // Read after the call: sent after the DELETE.
+    void flush();
+    await drain();
+    expect(sent.slice(2).map((s) => [s.method, s.body])).toEqual([['PUT', { ordinal: 7 }]]);
+    releases.shift()!();
+    stop();
+  });
+
+  // Review 1148: a post read while the DELETE is out is at or below the
+  // floor the DELETE is about to lower, and is kept until it answers.
+  it('keeps what is read while the DELETE is out, and judges it by the answer', async () => {
+    let release!: () => void;
+    answer = (s) =>
+      s.method === 'DELETE' ? new Promise((r) => (release = () => r(stored(2)))) : stored(s.body!.ordinal!);
+    const stop = trackPosts('t1', list(10), 9);
+    const marked = markUnread('t1', 2);
+    await drain();
+    expect(sent.map((s) => s.method)).toEqual(['DELETE']);
+    io().show(post(5), 200);
+    vi.advanceTimersByTime(dwellMs);
     await flush();
-    expect(sent).toHaveLength(2);
+    expect(sent).toHaveLength(1);
+    release();
+    await marked;
+    await flush();
+    expect(sent.map((s) => [s.method, s.body])).toEqual([
+      ['DELETE', { ordinal: 2 }],
+      ['PUT', { ordinal: 5 }],
+    ]);
+    stop();
+  });
+
+  it('does not send after the DELETE a PUT from before the call that failed', async () => {
+    let fail!: () => void;
+    answer = (s) =>
+      s.method === 'PUT' ? new Promise((_, reject) => (fail = () => reject(new TypeError('network down')))) : stored(2);
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(6), 200);
+    vi.advanceTimersByTime(dwellMs);
+    void flush();
+    await drain();
+    const marked = markUnread('t1', 2);
+    fail();
+    await marked;
+    await flush();
+    expect(sent.map((s) => [s.method, s.body])).toEqual([
+      ['PUT', { ordinal: 6 }],
+      ['DELETE', { ordinal: 2 }],
+    ]);
     stop();
   });
 
   // Review 1144: two marks of one thread run in call order, so the later
-  // one's DELETE is the one that lands last.
+  // one's DELETE is the one that lands last; what is read between the two
+  // calls goes out between the two DELETEs.
   it('runs overlapping marks one at a time, in call order', async () => {
     const releases: (() => void)[] = [];
     answer = (s) => new Promise((r) => releases.push(() => r(stored(s.body!.ordinal!))));
@@ -504,33 +551,43 @@ describe('markUnread', () => {
     releases.shift()!();
     expect(await first).toEqual({ last_read_ordinal: 2 });
     await drain();
-    expect(sent.slice(2).map((s) => [s.method, s.body])).toEqual([['DELETE', { ordinal: 3 }]]);
+    expect(sent.slice(2).map((s) => [s.method, s.body])).toEqual([['PUT', { ordinal: 7 }]]);
+    releases.shift()!();
+    await drain();
+    expect(sent.slice(3).map((s) => [s.method, s.body])).toEqual([['DELETE', { ordinal: 3 }]]);
     releases.shift()!();
     expect(await second).toEqual({ last_read_ordinal: 3 });
-    // Post 7 was read before either mark went out: what they undo.
-    expect(sent).toHaveLength(3);
+    expect(sent).toHaveLength(4);
     stop();
   });
 
-  // Review 1147: a page answered before the mark reports the old position,
-  // and must not raise the floor back over what the mark made unread.
-  it('does not take a page position from before the mark, and forgets the held pages', async () => {
+  // Reviews 1147 and 1148: a page asked for before the mark answered
+  // reports the old position, and must not raise the floor back over what
+  // the mark made unread; one asked for after it is taken as known.
+  it('takes a page position only from a page asked for after the mark', async () => {
     const paged = '/api/v1/threads/t1?page=2';
     answer = (s) =>
       s.method === 'GET'
         ? new Response('{"n":1}', { status: 200, headers: { ETag: '"x"' } })
         : stored(s.method === 'DELETE' ? 2 : s.body!.ordinal!);
-    await apiGet(paged);
-    const first = trackPosts('t1', list(10), 9);
-    first();
+    const old = await asking(() => apiGet<object>(paged));
+    trackPosts('t1', list(10), 9, old)();
     await markUnread('t1', 2);
     expect(peekGet(paged)).toBeUndefined();
-    // The held page said 9; the server says 2.
-    const stop = trackPosts('t1', list(10), 9);
+    // The old page said 9; the server says 2.
+    let stop = trackPosts('t1', list(10), 9, old);
     io().show(post(6), 200);
     vi.advanceTimersByTime(dwellMs);
     await flush();
     expect(puts().map((s) => s.body)).toEqual([{ ordinal: 6 }]);
+    stop();
+    // A fresh page says 9, from another tab's reading: believed.
+    const fresh = await asking(() => apiGet<object>(paged));
+    stop = trackPosts('t1', list(10), 9, fresh);
+    io().show(post(8), 200);
+    vi.advanceTimersByTime(dwellMs);
+    await flush();
+    expect(puts()).toHaveLength(1);
     stop();
   });
 

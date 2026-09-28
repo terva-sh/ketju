@@ -38,19 +38,32 @@ const pending = new Map<string, number>();
 // inFlight is every PUT outstanding for a thread, so markUnread can wait for
 // them before its DELETE.
 const inFlight = new Map<string, Set<Promise<void>>>();
-// held is the threads with a DELETE outstanding: nothing is sent for them
-// until it answers (docs/07 "Mark-unread then a late beacon"). It counts
-// them, since two can overlap.
+// held counts the markUnread calls for a thread that have not finished:
+// nothing is beaconed for it until they have (docs/07 "Mark-unread then a
+// late beacon").
 const held = new Map<string, number>();
 // marks is the newest markUnread per thread, which the next one waits for.
 const marks = new Map<string, Promise<unknown>>();
-// marked is the threads marked unread from this page. A page's position is
-// not taken as known for them any more: one answered before the DELETE, held
-// or still in flight, reports the position the mark lowered, and taking it
-// would raise the floor back over posts the mark made unread. PUT answers
-// still count, and a PUT the floor would have spared changes nothing on the
-// server.
-const marked = new Set<string>();
+// after is the newest markUnread's record of what was read since it was
+// called. It cannot be judged against the floor until that mark's DELETE has
+// answered, because the DELETE may lower it.
+const after = new Map<string, { max: number }>();
+// markedAt is when, on clock, each thread's newest mark-unread answered. A
+// page whose request started before then reports the position the mark
+// lowered, and is not taken as known.
+const markedAt = new Map<string, number>();
+let clock = 0;
+const askedAt = new WeakMap<object, number>();
+
+// asking runs load, the request for a thread page, and notes when it
+// started, so trackPosts can tell a page from before a mark-unread from one
+// after it.
+export async function asking<T extends object>(load: () => Promise<T>): Promise<T> {
+  const at = ++clock;
+  const page = await load();
+  askedAt.set(page, Math.max(askedAt.get(page) ?? 0, at));
+  return page;
+}
 
 export const readUrl = (id: string) => `/api/v1/threads/${encodeURIComponent(id)}/read`;
 
@@ -62,9 +75,16 @@ function known(id: string, stored: number) {
   if ((pending.get(id) ?? 0) <= (floor.get(id) ?? 0)) pending.delete(id);
 }
 
-// read records that a post has been on screen for the dwell.
+// read records that a post has been on screen for the dwell. While a mark is
+// in progress it is kept for after the mark.
 function read(id: string, ordinal: number) {
   if (!Number.isSafeInteger(ordinal) || ordinal < 1) return;
+  const since = after.get(id);
+  if (since) since.max = Math.max(since.max, ordinal);
+  else queue(id, ordinal);
+}
+
+function queue(id: string, ordinal: number) {
   if (ordinal <= (floor.get(id) ?? 0) || ordinal <= (pending.get(id) ?? 0)) return;
   pending.set(id, ordinal);
 }
@@ -95,10 +115,11 @@ function send(id: string, force = false): Promise<void> {
       (err) => {
         // Not stored. Put it back for the next flush, unless a later
         // position has gone out since, which covers this one; the retry is
-        // the same ordinal, never a lower one.
+        // the same ordinal, never a lower one. It was read when it was, so
+        // it goes back as pending even while a mark is in progress.
         if (!retryable(err) || floor.get(id) !== ordinal) return;
         floor.set(id, before);
-        read(id, ordinal);
+        queue(id, ordinal);
         batching();
       },
     );
@@ -121,17 +142,20 @@ export function flush(): Promise<void> {
 // markUnread sends DELETE /threads/{id}/read, making every post after
 // ordinal unread, or the whole thread with none, and answers the position
 // stored after it. A beacon sent before the DELETE and landing after it
-// would move the position forward again (docs/07). So the thread is held
-// from the call, and nothing more is beaconed for it until the DELETE has
-// answered; then its pending position goes out, and every PUT for it is
-// waited for, before the DELETE is sent.
+// would move the position forward again (docs/07). So from the call nothing
+// more is beaconed for the thread; what was read before the call goes out
+// and every PUT for it is waited for before the DELETE is sent; and what is
+// read from the call on waits for the DELETE's answer, and is then judged
+// against the position it left.
 //
 // Marks of one thread run one at a time, in call order: two DELETEs in
 // flight together could land in either order, and the one called first
-// would then set the position last.
+// would then set the position last. What is read between two calls goes out
+// between their DELETEs.
 export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> {
   held.set(id, (held.get(id) ?? 0) + 1);
-  marked.add(id);
+  const since = { max: 0 };
+  after.set(id, since);
   const before = marks.get(id);
   const run = (async () => {
     try {
@@ -139,15 +163,18 @@ export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> 
       // Held, so no PUT for the thread starts after this one: it waits for
       // every PUT there will be before the DELETE.
       await send(id, true);
-      // A read from before the mark, a PUT that failed and was put back
-      // included, is what the mark undoes.
+      // A read put back by a failed PUT is from before the call: what the
+      // mark undoes.
       pending.delete(id);
       const r = await apiSend<ReadPosition>('DELETE', readUrl(id), ordinal === undefined ? undefined : { ordinal });
       floor.set(id, r.last_read_ordinal);
+      markedAt.set(id, ++clock);
       // Every held page of the thread reports the old position now.
       forgetHeldPages(id);
       return r;
     } finally {
+      if (after.get(id) === since) after.delete(id);
+      if (since.max > 0) queue(id, since.max);
       const n = held.get(id)! - 1;
       if (n > 0) held.set(id, n);
       else held.delete(id);
@@ -220,12 +247,14 @@ let listening = false;
 // whose ids are post-N and which carry data-ordinal. A reply expander's
 // copies sit inside a post and carry no ordinal, so reading one is not
 // reading the post it copies (TKT-01M29CGBW6). stored is the viewer's
-// position as the page reported it.
+// position as page reported it; once the thread has been marked unread from
+// here it is taken as known only if page came through asking after the mark.
 //
 // It answers the function that stops tracking, which flushes: the thread
 // body unmounts on every navigation away from its page.
-export function trackPosts(id: string, list: Element, stored: number): () => void {
-  if (!marked.has(id)) known(id, stored);
+export function trackPosts(id: string, list: Element, stored: number, page?: object): () => void {
+  const at = markedAt.get(id);
+  if (at === undefined || (page !== undefined && (askedAt.get(page) ?? 0) > at)) known(id, stored);
   const timers = new Map<Element, ReturnType<typeof setTimeout>>();
   // near is the posts the observer has in the viewport at all.
   const near = new Set<Element>();
@@ -301,5 +330,6 @@ export function resetReadTracker() {
   inFlight.clear();
   held.clear();
   marks.clear();
-  marked.clear();
+  after.clear();
+  markedAt.clear();
 }
