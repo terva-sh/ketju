@@ -163,8 +163,9 @@ The continuation also filed three drafts with no milestone:
 The six epics stay open by the user's choice. Each still parents drafts in
 Phases 2 to 4, so none has every child done.
 
-**Next, as filed on 2026-09-28.** Three drafts set out what comes after the
-run:
+**Next, as filed on 2026-09-28.** Three tickets set out what comes after
+the run. Two are drafts; the third, the dogfooding deployment, was promoted to
+`ready` when the deployment started:
 - `TKT-01M3M9S7S2` deploys a local dogfooding instance. It is Phase 1 and
   `ready`, and the real-device check `TKT-01M38WTKSQ` depends on it, because a
   phone needs a served build to reach.
