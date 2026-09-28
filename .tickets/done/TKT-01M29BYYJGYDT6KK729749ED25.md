@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:config
     path: docs/02-architecture.md
+  - ref: pr:106
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:13:37Z
-updated_at: 2026-09-28T08:22:40Z
+updated_at: 2026-09-28T08:23:10Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
