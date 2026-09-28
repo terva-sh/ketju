@@ -27,6 +27,22 @@ Nothing in the client may use an inline script, an inline style or an `on*`
 attribute. The policy blocks them, and `internal/web`'s
 `TestTheShellHasNoInlineScriptOrStyle` checks the built shell.
 
+## Size budget
+
+The thread view's JavaScript and CSS must stay under 60 KB gzipped (docs/07).
+`npm run build` ends by measuring the build, and `npm run budget` measures it
+again on its own. It prints each file's gzipped size and the total, and fails
+when the total is over the budget. CI runs it as its own step.
+
+What counts: the scripts and stylesheets the built shell loads, every chunk
+they import statically, every lazy chunk except the admin screens, and the CSS
+of each. Fonts do not count, and neither does the admin bundle
+(`scripts/bundle.mjs`).
+
+The budget is `threadViewGzipBytes` in `budget.json`: 60000 bytes, the
+stricter reading of 60 KB. No flag or environment variable overrides it. To
+raise it, edit that file, and say why in the pull request.
+
 ## Developing
 
 Run the Go server on `:8080`, then:

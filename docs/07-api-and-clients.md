@@ -432,7 +432,10 @@ work stays where it is.
 - **Stack:** Preact 10.x, `@preact/signals`, `preact-iso` router, Vite 8,
   TypeScript. No component library; a small hand-written CSS system with
   custom properties and light/dark themes. Target bundle: < 60 KB gzipped
-  for the thread view. Hand-written CSS is decided over a utility framework
+  for the thread view. CI enforces it, reading 60 KB as 60000 bytes and
+  counting everything the reader loads except fonts and the lazy admin
+  chunk; the number is committed in `web/client/budget.json`
+  (TKT-01M29CGBYH). Hand-written CSS is decided over a utility framework
   (10 Q21, TKT-01M29BW9NW), checked against that budget before adoption: it
   adds no runtime or build dependency, so every byte of it is a byte we wrote,
   and the mockups in `docs/mockups/` are already written that way.

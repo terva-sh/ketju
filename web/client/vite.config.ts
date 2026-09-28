@@ -59,7 +59,7 @@ export default defineConfig({
   },
   test: {
     environment: 'happy-dom',
-    include: ['src/**/*.test.{ts,tsx}'],
+    include: ['src/**/*.test.{ts,tsx}', 'scripts/**/*.test.mjs'],
     // Without this Vitest hands every stylesheet over empty, even as ?raw,
     // and the tests that read the CSS system's sources would pass on nothing.
     css: true,

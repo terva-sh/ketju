@@ -5,7 +5,8 @@
   "description": "The Preact client. Built into internal/web/spa/dist and embedded in the ketju binary; see README.md.",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && node scripts/budget.mjs",
+    "budget": "node scripts/budget.mjs",
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },

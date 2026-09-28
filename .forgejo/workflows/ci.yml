@@ -103,6 +103,15 @@ jobs:
           git add -N internal/web/spa/dist
           git diff --exit-code -- internal/web/spa/dist
 
+      - name: client bundle budget
+        # TKT-01M29CGBYH. The thread view's JavaScript and CSS, gzipped, must
+        # stay within docs/07's 60 KB; fonts do not count. The number lives in
+        # web/client/budget.json and nowhere else, so raising it is a reviewed
+        # edit. `npm run build` already ran this inside the step above; it runs
+        # again here so the size is on its own line of every build's log, and
+        # so a failure names the budget rather than the build.
+        run: npm --prefix web/client run budget
+
       - name: client tests
         # TKT-01M29CEE52. Vitest under happy-dom: the route table against
         # docs/07's URL scheme, the view living in the URL, and the stale-slug
