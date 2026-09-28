@@ -21,10 +21,12 @@ blocks_on: none
 references:
   - ref: design:storage-records
     path: docs/03-thread-storage.md
+  - ref: pr:95
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-28T05:23:34Z
+updated_at: 2026-09-28T05:24:00Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
