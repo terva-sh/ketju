@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"database/sql"
+	"database/sql/driver"
 	"embed"
 	"encoding/hex"
 	"errors"
@@ -68,46 +69,103 @@ func (d *DB) migrate(ctx context.Context, fsys fs.FS, dir string) error {
 
 	// Checked and applied under the write connection, so nothing else in
 	// this process can migrate between the check and the apply.
-	return d.Write(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
-		have, err := recordedMigrations(ctx, q, tx)
-		if err != nil {
-			return err
+	//
+	// Foreign keys are off while migrations run, as SQLite's documentation
+	// prescribes for a schema change: rebuilding a table that others
+	// reference (0010) drops it, and with foreign keys on the drop deletes
+	// every referencing row's parent and fails, deferred or not. The pragma
+	// is a no-op inside a transaction, so it is set on the pinned connection
+	// before BEGIN, and foreign_key_check stands in for it before COMMIT.
+	conn, err := d.write.Conn(ctx)
+	if err != nil {
+		return wrap(err)
+	}
+	defer conn.Close()
+	if _, err := conn.ExecContext(ctx, "PRAGMA foreign_keys = OFF"); err != nil {
+		return fmt.Errorf("db: turning foreign keys off to migrate: %w", wrap(err))
+	}
+	defer func() {
+		// Without cancellation: a cancelled migration must still hand the
+		// pool back a connection that enforces foreign keys. If it cannot,
+		// the connection is thrown away, and its replacement opens with
+		// foreign_keys(on) from the DSN.
+		if _, err := conn.ExecContext(context.WithoutCancel(ctx), "PRAGMA foreign_keys = ON"); err != nil {
+			_ = conn.Raw(func(any) error { return driver.ErrBadConn })
 		}
-		// The record must be exactly 1..n before anything is compared or
-		// indexed: a gap, a zero, or a duplicate means the table was edited
-		// by hand or by something that is not this runner.
-		for i, h := range have {
-			if h.Version != int64(i+1) {
-				return fmt.Errorf("%w: schema_migrations records version %d where %d was expected",
-					ErrMigrations, h.Version, i+1)
-			}
+	}()
+
+	tx, err := conn.BeginTx(ctx, nil)
+	if err != nil {
+		return wrap(err)
+	}
+	defer tx.Rollback()
+	if err := applyMigrations(ctx, dbq.New(tx), tx, want); err != nil {
+		return wrap(err)
+	}
+	return wrap(tx.Commit())
+}
+
+// applyMigrations checks what the database recorded against want and runs
+// what it lacks, in tx, which runs with foreign keys off.
+func applyMigrations(ctx context.Context, q *dbq.Queries, tx *sql.Tx, want []migration) error {
+	have, err := recordedMigrations(ctx, q, tx)
+	if err != nil {
+		return err
+	}
+	// The record must be exactly 1..n before anything is compared or
+	// indexed: a gap, a zero, or a duplicate means the table was edited
+	// by hand or by something that is not this runner.
+	for i, h := range have {
+		if h.Version != int64(i+1) {
+			return fmt.Errorf("%w: schema_migrations records version %d where %d was expected",
+				ErrMigrations, h.Version, i+1)
 		}
-		if len(have) > len(want) {
-			return fmt.Errorf("%w: the database is at schema version %d and this binary knows up to %d, "+
-				"so this binary is older than the database", ErrSchemaNewer, len(have), len(want))
+	}
+	if len(have) > len(want) {
+		return fmt.Errorf("%w: the database is at schema version %d and this binary knows up to %d, "+
+			"so this binary is older than the database", ErrSchemaNewer, len(have), len(want))
+	}
+	for i, h := range have {
+		w := want[i]
+		if h.Name != w.name || h.Checksum != w.checksum {
+			return fmt.Errorf("%w: recorded migration %04d_%s does not match the embedded %04d_%s "+
+				"(a migration was edited or renumbered after it ran)", ErrMigrations, h.Version, h.Name, w.version, w.name)
 		}
-		for i, h := range have {
-			w := want[i]
-			if h.Name != w.name || h.Checksum != w.checksum {
-				return fmt.Errorf("%w: recorded migration %04d_%s does not match the embedded %04d_%s "+
-					"(a migration was edited or renumbered after it ran)", ErrMigrations, h.Version, h.Name, w.version, w.name)
-			}
+	}
+	for _, m := range want[len(have):] {
+		if _, err := tx.ExecContext(ctx, m.sql); err != nil {
+			return fmt.Errorf("db: applying migration %04d_%s: %w", m.version, m.name, err)
 		}
-		for _, m := range want[len(have):] {
-			if _, err := tx.ExecContext(ctx, m.sql); err != nil {
-				return fmt.Errorf("db: applying migration %04d_%s: %w", m.version, m.name, err)
-			}
-			if err := q.InsertMigration(ctx, dbq.InsertMigrationParams{
-				Version:   m.version,
-				Name:      m.name,
-				Checksum:  m.checksum,
-				CreatedAt: time.Now().UnixMilli(),
-			}); err != nil {
-				return fmt.Errorf("db: recording migration %04d_%s: %w", m.version, m.name, err)
-			}
+		if err := q.InsertMigration(ctx, dbq.InsertMigrationParams{
+			Version:   m.version,
+			Name:      m.name,
+			Checksum:  m.checksum,
+			CreatedAt: time.Now().UnixMilli(),
+		}); err != nil {
+			return fmt.Errorf("db: recording migration %04d_%s: %w", m.version, m.name, err)
 		}
+	}
+	if len(want) > len(have) {
+		return foreignKeyCheck(ctx, tx)
+	}
+	return nil
+}
+
+// foreignKeyCheck fails if any row names a parent that does not exist: what
+// foreign keys would have refused, had they been on while migrations ran.
+func foreignKeyCheck(ctx context.Context, tx *sql.Tx) error {
+	var table, parent string
+	var rowid sql.NullInt64
+	var fkid int64
+	err := tx.QueryRowContext(ctx, `PRAGMA foreign_key_check`).Scan(&table, &rowid, &parent, &fkid)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
 		return nil
-	})
+	case err != nil:
+		return fmt.Errorf("db: checking foreign keys after migrating: %w", err)
+	}
+	return fmt.Errorf("%w: after migrating, row %d of %s names a %s row that does not exist",
+		ErrMigrations, rowid.Int64, table, parent)
 }
 
 // recordedMigrations lists what the database has applied, or nothing if it

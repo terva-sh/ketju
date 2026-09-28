@@ -323,3 +323,27 @@ func TestRegistrationClosedJustBeforeTheWrite(t *testing.T) {
 		t.Errorf("a closed registration wrote %d users, %d identities, %d sessions", u, i, n)
 	}
 }
+
+// TKT-01M3KB7FXC: a member who registers after ketju reindex raised the
+// member id floor gets an id above it, never the id of an old post's author
+// the database lacks.
+func TestRegisterTakesAnIDAboveTheFloor(t *testing.T) {
+	s, d := registry(t)
+	if err := d.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		_, _, err := db.RaiseMemberIDFloor(t.Context(), tx, 50)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	res, err := s.Register(t.Context(), claims("sub-1"), "alice", session.Meta{Provider: "fake"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := (&session.Store{DB: d}).Lookup(t.Context(), res.Token)
+	if err != nil || sess.User == nil {
+		t.Fatalf("the token names no user session: %v", err)
+	}
+	if sess.User.ID != 51 {
+		t.Errorf("the new member's id is %d, want 51, above the floor", sess.User.ID)
+	}
+}

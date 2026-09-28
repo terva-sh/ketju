@@ -36,6 +36,11 @@ The database is created if it is missing. Only the projection tables are
 emptied and rewritten; members, sessions, read positions and settings are
 left as they are. The logs are only read.
 
+Reindex also raises the next member id above the largest member id the logs
+name, so a member who joins later never takes the id of an old post's author.
+A post whose author the database lacks shows as a deleted member. Over a
+database that is not behind the logs, this changes nothing.
+
 Not safe beside a running server, so it refuses to start while ketju serve
 holds the data directory, and holds it itself until it finishes, so serve
 cannot start midway. Progress goes to stderr, at most every 2 seconds; the
@@ -76,6 +81,15 @@ type reindexSummary struct {
 	// Members is how many members the database has. Zero with threads to
 	// show means the database came back without its backup.
 	Members int64 `json:"members"`
+
+	// MaxMemberID is the largest member id the logs name, as author,
+	// mention or the actor of any record. MemberIDFloor is the id every new
+	// member is given one above, and MemberIDFloorWas what it was before
+	// this run: reindex raised it when the database was behind the logs, so
+	// no new member takes an id an old post names.
+	MaxMemberID      int64 `json:"max_member_id"`
+	MemberIDFloor    int64 `json:"member_id_floor"`
+	MemberIDFloorWas int64 `json:"member_id_floor_was"`
 }
 
 type reindexFailed struct {
@@ -205,6 +219,7 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 		Threads: rep.Threads, Projected: rep.Projected, Bytes: rep.Bytes,
 		Torn: ids(rep.Torn), Unfinished: ids(rep.Unfinished), Failed: []reindexFailed{},
 		Strays: rep.Strays, ElapsedMS: rep.Elapsed.Milliseconds(), Members: members,
+		MaxMemberID: rep.MaxMemberID, MemberIDFloor: rep.FloorAfter, MemberIDFloorWas: rep.FloorBefore,
 	}
 	if sum.Strays == nil {
 		sum.Strays = []string{}
@@ -222,9 +237,10 @@ func reindexMain(ctx context.Context, out, errOut io.Writer, args []string, o re
 		writeReindexText(out, sum, rep.Elapsed)
 	}
 	if members == 0 && rep.Projected > 0 {
-		fmt.Fprintf(errOut, "reindex: WARNING: the database has no members. The posts name member ids "+
-			"that new sign-ups would be given. Restore the database from a backup and run reindex again "+
-			"before starting ketju serve.\n")
+		fmt.Fprintf(errOut, "reindex: WARNING: the database has no members, so every post shows as "+
+			"written by a deleted member. New members are given ids above every id the posts name, and "+
+			"no post is attributed to them. To bring the members back, restore the database from a "+
+			"backup and run reindex again before starting ketju serve.\n")
 	}
 
 	if len(rep.Failed) > 0 {
@@ -253,6 +269,14 @@ func writeReindexText(w io.Writer, s reindexSummary, elapsed time.Duration) {
 		s.Projected, s.Threads, bytesText(s.Bytes), elapsed.Round(time.Millisecond))
 	if len(s.Failed) > 0 {
 		fmt.Fprintf(w, "%d thread(s) FAILED and have no projection\n", len(s.Failed))
+	}
+	if s.MemberIDFloor > s.MemberIDFloorWas {
+		fmt.Fprintf(w, "member ids: the logs name ids up to %d and the database had handed out up to %d; "+
+			"new members now get ids above %d, and a post by an id the database lacks shows as a deleted member\n",
+			s.MaxMemberID, s.MemberIDFloorWas, s.MemberIDFloor)
+	} else {
+		fmt.Fprintf(w, "member ids: the logs name ids up to %d; new members get ids above %d, unchanged\n",
+			s.MaxMemberID, s.MemberIDFloor)
 	}
 }
 

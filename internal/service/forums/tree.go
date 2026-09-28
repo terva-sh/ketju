@@ -9,6 +9,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
+	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -110,12 +111,15 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 		unreadBy[u.ForumID] = int(u.Threads)
 	}
 	// An author the database does not have (a projection rebuilt against an
-	// older users table, docs/04) is drawn with an empty handle, as on the
+	// older users table, docs/04) is drawn as a deleted member, as on the
 	// thread page.
 	authors := map[int64]dto.Author{}
 	for _, u := range users {
 		authors[u.ID] = dto.Author{Handle: u.Handle, DisplayName: u.DisplayName,
 			Avatar: u.AvatarBlob.String, Role: u.Role, Kind: u.Kind}
+	}
+	for _, l := range last {
+		member.FillMissing(authors, l.LastPostAuthorID)
 	}
 	lastBy := map[int64]*dto.ForumLastPost{}
 	for _, l := range last {

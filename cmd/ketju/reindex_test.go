@@ -343,6 +343,205 @@ func TestReindexEqualsIncremental(t *testing.T) {
 	}
 }
 
+// newMember creates a member as registration does, and returns its id.
+func newMember(t *testing.T, d *db.DB, handle string) int64 {
+	t.Helper()
+	var id int64
+	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		id, err = q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: handle, DisplayName: handle,
+			Status: "active", Role: "member", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return id
+}
+
+// logThread writes one thread's records straight to its log under data,
+// projecting nothing, and returns its id.
+func logThread(t *testing.T, data string, seq uint64, records ...threadlog.Append) threadid.ID {
+	t.Helper()
+	cache, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cache.Close()
+	clock := int64(1_700_000_000_000)
+	id := threadid.ID(uint64(clock)<<16 | seq)
+	th, err := cache.Create(id, 1, clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cache.Release(th)
+	for _, a := range records {
+		clock += 1000
+		a.TimeMS = clock
+		if err := cache.With(id, func(th *threadcache.Thread) error {
+			_, err := th.Actor.Append(a)
+			return err
+		}); err != nil {
+			t.Fatalf("appending %s: %v", a.Type, err)
+		}
+	}
+	return id
+}
+
+// TestReindexRaisesMemberIDFloor is TKT-01M3KB7FXC: the logs name a member
+// id the database lacks and has never handed out, as after a restore from a
+// backup older than the logs. Each case names it in one place only: as an
+// author, a mention, or the actor of an edit, a delete or a moderation
+// record. Reindex raises the next member id above it, so a member created
+// afterwards does not take it; a second reindex changes nothing; and a
+// database already ahead of the logs is not lowered.
+func TestReindexRaisesMemberIDFloor(t *testing.T) {
+	const alice, lost = 3, 90
+	created := func(by uint64) threadlog.Append {
+		return threadlog.Append{Type: threadlog.TypeThreadCreated, Author: by,
+			Body: &threadlog.ThreadCreatedBody{Title: "T", Slug: "t", ForumID: 1}}
+	}
+	post := threadlog.Append{Type: threadlog.TypePost, Author: alice, Body: &threadlog.PostBody{Source: "first"}}
+	mentions := []uint64{lost}
+	for _, c := range []struct {
+		name    string
+		records []threadlog.Append
+	}{
+		{"thread starter", []threadlog.Append{created(lost), post}},
+		{"post author", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypePost, Author: lost, Body: &threadlog.PostBody{Source: "a reply"}}}},
+		{"post mention", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypePost, Author: alice, Body: &threadlog.PostBody{Source: "cc", Mentions: mentions}}}},
+		{"edit actor", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypeEdit, Author: lost, Ordinal: 1, Body: &threadlog.EditBody{Source: "edited"}}}},
+		{"edit mention", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypeEdit, Author: alice, Ordinal: 1, Body: &threadlog.EditBody{Source: "cc", Mentions: &mentions}}}},
+		{"delete actor", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypeDelete, Author: lost, Ordinal: 1, Body: &threadlog.DeleteBody{}}}},
+		{"restore actor", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypeDelete, Author: alice, Ordinal: 1, Body: &threadlog.DeleteBody{}},
+			{Type: threadlog.TypeRestore, Author: lost, Ordinal: 1, Body: &threadlog.RestoreBody{}}}},
+		{"lock actor", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypeThreadLocked, Author: lost, Body: &threadlog.ThreadLockedBody{}}}},
+		{"move actor", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypeThreadMoved, Author: lost, Body: &threadlog.ThreadMovedBody{ForumID: 2}}}},
+		{"archive actor", []threadlog.Append{created(alice), post,
+			{Type: threadlog.TypeThreadArchived, Author: lost, Body: &threadlog.ThreadArchivedBody{}}}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			data := filepath.Join(t.TempDir(), "data")
+			logThread(t, data, 1, created(alice), post)
+			logThread(t, data, 2, c.records...)
+			d := openDB(t, data)
+			execDB(t, d, `INSERT INTO users (id, handle, display_name, created_at, updated_at) VALUES (?, 'alice', 'Alice', 1, 1)`, alice)
+			d.Close()
+
+			sum := reindexJSON(t, data)
+			if sum.MaxMemberID != lost || sum.MemberIDFloorWas != alice || sum.MemberIDFloor != lost {
+				t.Fatalf("max_member_id %d, floor %d from %d; want %d, %d from %d",
+					sum.MaxMemberID, sum.MemberIDFloor, sum.MemberIDFloorWas, lost, lost, alice)
+			}
+			d = openDB(t, data)
+			if id := newMember(t, d, "newcomer"); id != lost+1 {
+				t.Errorf("the next member got id %d, want %d, above every id the logs name", id, lost+1)
+			}
+			d.Close()
+
+			// Now the database is ahead of the logs: nothing changes.
+			out, _, err := reindexRun(t, reindexOpts{}, "--root", data)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if want := fmt.Sprintf("new members get ids above %d, unchanged", lost+1); !strings.Contains(out, want) {
+				t.Errorf("a second reindex did not leave the floor alone; want %q in:\n%s", want, out)
+			}
+		})
+	}
+
+	t.Run("a database ahead of the logs", func(t *testing.T) {
+		data := filepath.Join(t.TempDir(), "data")
+		logThread(t, data, 1, created(alice), post,
+			threadlog.Append{Type: threadlog.TypePost, Author: lost, Body: &threadlog.PostBody{Source: "a reply"}})
+		d := openDB(t, data)
+		execDB(t, d, `INSERT INTO users (id, handle, display_name, created_at, updated_at) VALUES (200, 'zed', 'Zed', 1, 1)`)
+		d.Close()
+		sum := reindexJSON(t, data)
+		if sum.MaxMemberID != lost || sum.MemberIDFloorWas != 200 || sum.MemberIDFloor != 200 {
+			t.Fatalf("max_member_id %d, floor %d from %d; want %d, 200 from 200",
+				sum.MaxMemberID, sum.MemberIDFloor, sum.MemberIDFloorWas, lost)
+		}
+	})
+
+	// A damaged log is not projected, but the ids its whole frames name are
+	// still named: a repaired log would bring them back.
+	t.Run("a thread that cannot be projected", func(t *testing.T) {
+		data := filepath.Join(t.TempDir(), "data")
+		id := logThread(t, data, 1, created(alice), post,
+			threadlog.Append{Type: threadlog.TypePost, Author: lost, Body: &threadlog.PostBody{Source: "a reply"}})
+		b, err := os.ReadFile(id.LogPath(data))
+		if err != nil {
+			t.Fatal(err)
+		}
+		b[threadlog.FileHeaderSize+40] ^= 0xff // inside the first frame
+		if err := os.WriteFile(id.LogPath(data), b, 0o644); err != nil {
+			t.Fatal(err)
+		}
+		out, errOut, err := reindexRun(t, reindexOpts{}, "--root", data, "--json")
+		if exitCodeFor(err) != exitCorrupt {
+			t.Fatalf("exit %d (%v), want %d for a damaged log:\n%s", exitCodeFor(err), err, exitCorrupt, out)
+		}
+		var sum reindexSummary
+		if err := json.Unmarshal([]byte(out), &sum); err != nil {
+			t.Fatalf("not JSON: %v\n%s\n%s", err, out, errOut)
+		}
+		if len(sum.Failed) != 1 || sum.MaxMemberID != lost || sum.MemberIDFloor != lost {
+			t.Fatalf("failed %d, max_member_id %d, floor %d; want 1, %d, %d",
+				len(sum.Failed), sum.MaxMemberID, sum.MemberIDFloor, lost, lost)
+		}
+	})
+
+	t.Run("no database", func(t *testing.T) {
+		data := filepath.Join(t.TempDir(), "data")
+		logThread(t, data, 1, created(alice), post,
+			threadlog.Append{Type: threadlog.TypePost, Author: lost, Body: &threadlog.PostBody{Source: "a reply"}})
+		out, errOut, err := reindexRun(t, reindexOpts{}, "--root", data, "--json")
+		if err != nil {
+			t.Fatalf("reindex: %v\n%s", err, errOut)
+		}
+		var sum reindexSummary
+		if err := json.Unmarshal([]byte(out), &sum); err != nil {
+			t.Fatal(err)
+		}
+		if sum.Members != 0 || sum.MemberIDFloorWas != 0 || sum.MemberIDFloor != lost {
+			t.Fatalf("members %d, floor %d from %d; want 0, %d from 0", sum.Members, sum.MemberIDFloor, sum.MemberIDFloorWas, lost)
+		}
+		if !strings.Contains(errOut, "no members") || !strings.Contains(errOut, "deleted member") {
+			t.Errorf("no warning that every post shows as a deleted member:\n%s", errOut)
+		}
+		d := openDB(t, data)
+		defer d.Close()
+		if id := newMember(t, d, "alice"); id != lost+1 {
+			t.Errorf("the first member to sign up again got id %d, want %d", id, lost+1)
+		}
+	})
+}
+
+// reindexJSON runs reindex --json over data and decodes its report.
+func reindexJSON(t *testing.T, data string) reindexSummary {
+	t.Helper()
+	out, errOut, err := reindexRun(t, reindexOpts{}, "--root", data, "--json")
+	if err != nil {
+		t.Fatalf("reindex: %v\n%s", err, errOut)
+	}
+	var sum reindexSummary
+	if err := json.Unmarshal([]byte(out), &sum); err != nil {
+		t.Fatalf("not JSON: %v\n%s", err, out)
+	}
+	if sum.Projected != sum.Threads || len(sum.Failed) != 0 {
+		t.Fatalf("summary = %+v", sum)
+	}
+	return sum
+}
+
 // fakeClock is a clock that moves on a second each time it is read.
 func fakeClock() func() time.Time {
 	now := time.Unix(1_800_000_000, 0)
@@ -633,10 +832,19 @@ func TestREADMERecoveryProcedure(t *testing.T) {
 	if members != backedUp {
 		t.Errorf("members = %q, want the backup's %q", members, backedUp)
 	}
+	if !strings.Contains(string(out), "new members now get ids above 4") {
+		t.Errorf("reindex did not report raising the member id floor over bob's id:\n%s", out)
+	}
 
 	// What serve does next: its catch-up finds every thread projected.
 	d = openDB(t, data)
 	defer d.Close()
+
+	// bob joined after the backup, so the restored database lacks id 4, which
+	// his posts name. The next member to join is not given it.
+	if id := newMember(t, d, "dave"); id != 5 {
+		t.Errorf("the first member after recovery got id %d, want 5, above bob's", id)
+	}
 	cache, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever})
 	if err != nil {
 		t.Fatal(err)

@@ -56,3 +56,23 @@ func Author(u dbq.User) dto.Author {
 	}
 	return a
 }
+
+// Missing is how a post, thread or last post draws an author id the database
+// does not have: a database restored from a backup older than the logs, or
+// recovered without one (docs/04 "Projection tables"). It is a deleted
+// member, drawn as an anonymized account is, and never anyone else: ketju
+// reindex keeps new members' ids above every id the logs name, so the id is
+// nobody's (TKT-01M3KB7FXC).
+func Missing(id int64) dto.Author {
+	return dto.Author{Handle: domain.DeletedMemberHandle(id), Role: domain.RoleMember, Kind: domain.KindHuman}
+}
+
+// FillMissing fills in Missing for every id in ids that authors lacks, so a
+// caller that looked the ids up draws each one as somebody.
+func FillMissing(authors map[int64]dto.Author, ids ...int64) {
+	for _, id := range ids {
+		if _, ok := authors[id]; !ok {
+			authors[id] = Missing(id)
+		}
+	}
+}

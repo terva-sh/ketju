@@ -61,6 +61,23 @@ created_at, updated_at, last_seen_at
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.
 
+**Member ids are never reused.** Thread logs name members by `id`, as the
+author and actor of every record and in a post's mentions, so an id handed to
+a second member would give them the first member's posts. `id` is
+`INTEGER PRIMARY KEY AUTOINCREMENT` (migration 0010): the next member gets an
+id above SQLite's high-water mark in `sqlite_sequence`, not above whatever
+`max(id)` happens to be. A database restored from a backup older than the
+logs lacks the members who joined since, and their ids. `ketju reindex`
+raises the mark above the largest member id any log names, as author,
+mention, or the actor of any record, edits, deletes and moderation included
+(`db.RaiseMemberIDFloor`). It only ever raises it, so a reindex over a
+database that is not behind the logs changes nothing. A post whose author
+the database lacks renders as a deleted member (see "Projection tables").
+The migration rebuilds `users` with foreign keys off, as SQLite's
+documentation prescribes, and the runner checks `PRAGMA foreign_key_check`
+before it commits any migration. (Maintainer decision, 2026-09-28,
+TKT-01M3KB7FXC.)
+
 A handle is 3 to 30 characters from `a-z`, `0-9`, `_` and `-`, starts with a
 letter or digit, does not end in `-`, and is stored lowercased. That makes `COLLATE NOCASE`
 exactly right, because it folds ASCII and a handle holds nothing else. Display
@@ -324,7 +341,11 @@ their author and forum columns are plain integers. `ketju reindex` rebuilds
 them from the logs alone, into a database whose users may have come from an
 older backup or from none, and a row naming a user the database lacks is the
 reader's to render rather than a write to refuse (settled in Phase 1
-grooming). Reindex empties the tables and replays the logs into them; it does
+grooming). The reader draws such an author as a deleted member, with the
+placeholder handle `deleted-user-<id>` an anonymized account has and no
+display name or avatar, and never as anyone else. Reindex keeps that true:
+see "Member ids are never reused" under `users`. (Maintainer decision,
+2026-09-28, TKT-01M3KB7FXC.) Reindex empties the tables and replays the logs into them; it does
 not drop them, because their DDL lives in the migrations and nowhere else.
 `db.ProjectionTables` is the list, and a test holds it equal to the tables
 whose schema carries the PROJECTION marker (TKT-01M29BYYJ8).

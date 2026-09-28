@@ -92,10 +92,22 @@ names each failed thread and the reason, and `ketju fsck` details any damage.
 What the database held after the backup was taken is lost: members who
 joined since, sessions, read positions, and permission changes. The posts of a
 member who joined since come back naming a member id the restored database
-does not have, and the database can give that id to the next member who
-joins. Without any backup, reindex still restores every thread, but the
-database has no members, and reindex warns about this. Neither case has a
-supported recovery yet.
+does not have. Those posts show as written by a deleted member, as an
+anonymized account's do (`deleted-user-<id>`), and are never attributed to
+anyone else. Reindex raises the next member id above the largest member id
+any log names, as author, mention, or the actor of an edit, a delete or a
+moderation record. So a member who joins later never takes the id of an old
+post's author. The report ends with a `member ids:` line saying whether
+reindex raised the next id and to what. Over a database that is not behind
+the logs, reindex leaves the next id as it is. A member who joined since the
+backup and signs in again gets a new account with a new id. Their old posts
+still show as a deleted member, and nothing yet links the new account to
+them.
+
+Without any backup, reindex still restores every thread, but the database has
+no members, and reindex warns about this. Every post shows as written by a
+deleted member. Members who sign up again get new ids above every id the logs
+name.
 
 ## The name, and where this lives
 

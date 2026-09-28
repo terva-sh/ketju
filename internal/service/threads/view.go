@@ -23,6 +23,7 @@ import (
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/service/posts"
 	"github.com/terva-sh/ketju/internal/service/respcache"
 	"github.com/terva-sh/ketju/internal/store/db"
@@ -514,7 +515,7 @@ func quotesCurrent(quotes []render.Quote, posts render.PostResolver) bool {
 
 // users loads the page's authors in one query. An author the database does
 // not have (a projection rebuilt against an older users table, docs/04) is
-// drawn with an empty handle rather than failing the page.
+// drawn as a deleted member (member.Missing) rather than failing the page.
 func (s *Service) users(ctx context.Context, ids map[int64]bool) (map[int64]dto.Author, error) {
 	list := make([]int64, 0, len(ids))
 	for id := range ids {
@@ -529,7 +530,11 @@ func (s *Service) users(ctx context.Context, ids map[int64]bool) (map[int64]dto.
 		}
 		return err
 	})
-	return out, err
+	if err != nil {
+		return nil, err
+	}
+	member.FillMissing(out, list...)
+	return out, nil
 }
 
 // handleMemo resolves mentions for one request: each handle once however

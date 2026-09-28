@@ -10,6 +10,7 @@ import (
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/db/views"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -167,8 +168,8 @@ func (s *Service) readablePins(ctx context.Context, v domain.Viewer, forumID int
 }
 
 // listDetails loads a page's tags and the authors and last posters, one
-// statement each. An author the database does not have is drawn with an
-// empty handle, as on the thread page.
+// statement each. An author the database does not have is drawn as a
+// deleted member, as on the thread page.
 func (s *Service) listDetails(ctx context.Context, rows []views.ThreadRow) (map[int64][]string, map[int64]dto.Author, error) {
 	tags := map[int64][]string{}
 	authors := map[int64]dto.Author{}
@@ -196,7 +197,11 @@ func (s *Service) listDetails(ctx context.Context, rows []views.ThreadRow) (map[
 		}
 		return err
 	})
-	return tags, authors, err
+	if err != nil {
+		return nil, nil, err
+	}
+	member.FillMissing(authors, people...)
+	return tags, authors, nil
 }
 
 // readForum finds the forum slug names and admits v to read it, as access

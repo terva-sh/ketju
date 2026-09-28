@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	"math"
 	"slices"
 	"time"
 
@@ -63,6 +65,19 @@ type ReindexReport struct {
 	// only the threads finished before the failure.
 	Cleared bool
 
+	// MaxMemberID is the largest member id the logs name: the actor of any
+	// whole record, which is the author of a thread or post and whoever
+	// edited, deleted, restored, moved, locked, pinned, tagged or archived,
+	// and any id a post or edit mentions. It counts every log the run got
+	// to, failed ones included, since their ids are still named.
+	MaxMemberID int64
+
+	// FloorBefore and FloorAfter are the member id floor (db.MemberIDFloor)
+	// when the run began and when it stopped. Reindex raises it to
+	// MaxMemberID when the database is behind the logs, so no new member is
+	// given an id an old record names; equal, the run changed nothing there.
+	FloorBefore, FloorAfter int64
+
 	Elapsed time.Duration
 }
 
@@ -73,6 +88,12 @@ type ReindexReport struct {
 // each log from its first frame to its end, one transaction per thread, in
 // id order. progress, if not nil, is called once before the first thread and
 // once after each.
+//
+// Before projecting each thread it raises the member id floor above every
+// member id that thread's log names (ReindexReport.MaxMemberID), so a
+// database restored from a backup older than the logs never gives a new
+// member the id of one it lacks, and a run that stops partway has already
+// covered every thread it projected. The floor is only ever raised.
 //
 // It writes only the database. Logs are opened read-only, as everywhere in
 // this package, so a torn tail is projected around rather than cut.
@@ -105,7 +126,12 @@ func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (R
 	}
 	slices.Sort(ids)
 
-	if err := w.db.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+	if err := w.db.Write(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		if rep.FloorBefore, err = db.MemberIDFloor(ctx, tx); err != nil {
+			return err
+		}
+		rep.FloorAfter = rep.FloorBefore
 		return db.ClearProjections(ctx, q)
 	}); err != nil {
 		return rep, fmt.Errorf("projection: reindex: emptying the projection tables: %w", err)
@@ -131,6 +157,10 @@ func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (R
 			return rep, err
 		}
 		size := logs[id]
+		if err := w.raiseMemberFloor(ctx, id, size, &rep); err != nil {
+			rep.Elapsed = time.Since(start)
+			return rep, fmt.Errorf("projection: reindex: %w", err)
+		}
 		n, torn, err := w.reindexThread(ctx, id, size)
 		switch {
 		case err != nil && !IsLogFault(err):
@@ -222,4 +252,88 @@ func (w *Writer) validPrefix(id threadid.ID, size int64) (int64, bool) {
 		return 0, false
 	}
 	return rec.LogLength, true
+}
+
+// raiseMemberFloor raises the member id floor above every member id thread
+// id's log names, up to size bytes, and records both in rep. It writes only
+// when the log names an id above the floor, so over a database that is not
+// behind the logs it changes nothing.
+func (w *Writer) raiseMemberFloor(ctx context.Context, id threadid.ID, size int64, rep *ReindexReport) error {
+	named, err := w.namedMembers(id, size)
+	if err != nil {
+		return fmt.Errorf("thread %s: reading the member ids its log names: %w", id, err)
+	}
+	rep.MaxMemberID = max(rep.MaxMemberID, named)
+	if named <= rep.FloorAfter {
+		return nil
+	}
+	return w.db.Write(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+		_, after, err := db.RaiseMemberIDFloor(ctx, tx, named)
+		if err == nil {
+			rep.FloorAfter = after
+		}
+		return err
+	})
+}
+
+// namedMembers is the largest member id the whole frames of thread id's log
+// name, up to size bytes: every record's actor, and the mentions of a post or
+// an edit. A damaged frame's bytes are not trusted, so it names nobody; the
+// frames around it still do. An actor or mention above the int64 range
+// cannot be a member id, which users.id holds, and is left out.
+//
+// Only a failure to read the log is an error. What is wrong with its bytes is
+// the projection's to report, which it does when it projects the thread.
+func (w *Writer) namedMembers(id threadid.ID, size int64) (int64, error) {
+	if size <= threadlog.FileHeaderSize {
+		return 0, nil
+	}
+	f, err := w.open(id.LogPath(w.root))
+	if err != nil {
+		return 0, err
+	}
+	defer f.Close()
+
+	var top uint64
+	see := func(u uint64) {
+		if u <= math.MaxInt64 {
+			top = max(top, u)
+		}
+	}
+	var readErr error
+	err = threadlog.ScanFramesFrom(f, threadlog.FileHeaderSize, size, func(rec threadlog.ScanRecord) bool {
+		if rec.Err != nil {
+			if rec.Fatal && !errors.Is(rec.Err, threadlog.ErrMalformed) && !errors.Is(rec.Err, threadlog.ErrShortBuffer) &&
+				!errors.Is(rec.Err, io.EOF) && !errors.Is(rec.Err, io.ErrUnexpectedEOF) {
+				readErr = rec.Err
+				return false
+			}
+			return true
+		}
+		see(rec.Header.Actor)
+		switch rec.Header.Type {
+		case threadlog.TypePost, threadlog.TypeEdit:
+			body, err := threadlog.DecodeBody(rec.Header.Type, rec.Header.Encoding, rec.Body)
+			if err != nil {
+				return true // the projection reports it
+			}
+			var mentions []uint64
+			switch b := body.(type) {
+			case *threadlog.PostBody:
+				mentions = b.Mentions
+			case *threadlog.EditBody:
+				if b.Mentions != nil {
+					mentions = *b.Mentions
+				}
+			}
+			for _, u := range mentions {
+				see(u)
+			}
+		}
+		return true
+	})
+	if err = errors.Join(err, readErr); err != nil {
+		return 0, err
+	}
+	return int64(top), nil
 }

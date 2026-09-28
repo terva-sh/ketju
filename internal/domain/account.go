@@ -1,6 +1,9 @@
 package domain
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
 
 // Account statuses (docs/04 "users", docs/05 "Account lifecycle").
 const (
@@ -22,6 +25,13 @@ const AnonymizedHandlePrefix = "deleted-user"
 // is lowercase ASCII, so the comparison needs no folding.
 func Anonymized(handle string) bool {
 	return strings.HasPrefix(handle, AnonymizedHandlePrefix)
+}
+
+// DeletedMemberHandle is the placeholder handle for member id:
+// deleted-user-<id>, what an anonymized account is renamed to, and what a
+// post whose author the database lacks is drawn with (TKT-01M3KB7FXC).
+func DeletedMemberHandle(id int64) string {
+	return AnonymizedHandlePrefix + "-" + strconv.FormatInt(id, 10)
 }
 
 // Staff reports whether v is an active moderator or admin: the site roles
