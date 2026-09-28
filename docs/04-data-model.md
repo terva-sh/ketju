@@ -62,12 +62,23 @@ created_at, updated_at, last_seen_at
 their identity when providers change.
 
 A handle is 3 to 30 characters from `a-z`, `0-9`, `_` and `-`, starts with a
-letter or digit, and is stored lowercased. That makes `COLLATE NOCASE`
+letter or digit, does not end in `-`, and is stored lowercased. That makes `COLLATE NOCASE`
 exactly right, because it folds ASCII and a handle holds nothing else. Display
 names stay free-form Unicode. Unicode handles with NFKC folding and a
 confusables check lost: they buy non-Latin `@mentions` at the cost of
 homoglyph spoofing, which a handle in a URL and a mention must never allow.
 (Decided 2026-09-24 in Phase 1 grooming.)
+
+The mention syntax reads a trailing `-` as punctuation, so `@bob-` mentions
+`bob`, and a handle ending in `-` could never be mentioned. Registration
+therefore refuses one. The rule applies to new handles only. A handle given
+out before it stays valid, and the CHECK still accepts one, so no migration
+is needed and a database that holds one keeps working. Such a handle still
+cannot be mentioned, and renaming it waits for the handle change policy
+(TKT-01M29BSPEN). Forbidding the dash lost to changing the mention syntax,
+because reading `@bob-` as `bob-` would change what existing posts and
+ordinary prose such as "@bob- see above" mention. (Decided 2026-09-28,
+TKT-01M3ANX1NF.)
 
 Registration also refuses reserved handles: those that collide with top-level
 routes (`admin`, `api`, `assets`, `auth`, `blobs`, `events`, `healthz`, `me`,

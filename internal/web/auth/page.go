@@ -84,7 +84,7 @@ func writePage(w http.ResponseWriter, status int, p pageData) {
 }
 
 // handleRule is the handle rule in words, from domain.ValidateHandle.
-const handleRule = "Use 3 to 30 characters: letters, digits, _ and -, starting with a letter or digit."
+const handleRule = "Use 3 to 30 characters: letters, digits, _ and -, starting with a letter or digit and not ending in -."
 
 // registerTmpl is the handle screen: one field, prefilled, and the rule
 // beside it (docs/05 "mode = open"). An error, when there is one, is tied to

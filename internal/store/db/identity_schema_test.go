@@ -103,10 +103,13 @@ func TestHandleRuleMatchesTheSchema(t *testing.T) {
 			})
 			return err
 		})
-		if (err == nil) != c.Valid {
-			t.Errorf("schema accepted=%v for %q, want %v (%s): %v", err == nil, c.Handle, c.Valid, c.Why, err)
+		// A grandfathered handle is refused to a new account but stored,
+		// because an account may already hold it.
+		want := c.Valid || c.Grandfathered
+		if (err == nil) != want {
+			t.Errorf("schema accepted=%v for %q, want %v (%s): %v", err == nil, c.Handle, want, c.Why, err)
 		}
-		if c.Valid && err != nil && !strings.Contains(err.Error(), "CHECK") {
+		if want && err != nil && !strings.Contains(err.Error(), "CHECK") {
 			t.Errorf("%q refused for a reason other than the CHECK: %v", c.Handle, err)
 		}
 	}

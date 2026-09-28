@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3ANX1NF3XWCJBS3DH9QZNFC
 title: Handles ending in '-' can never be mentioned
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ blocks_on: none
 references:
   - ref: pr:129
     path: null
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/anx1nf-forbid-trailing-dash
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a39c3b093c0ff03a3
-  commit: 9b960cf722ef87cf9aa1ba28375bd2f6aee88639
-  session: null
-  claimed_at: 2026-09-28T19:41:52Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-24T21:42:17Z
-updated_at: 2026-09-28T19:42:04Z
+updated_at: 2026-09-28T19:44:47Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -119,3 +112,7 @@ This is option (a) from the decision note, limited to new handles:
 - The autocomplete workaround (`UsersByHandlePrefix` leaving out handles that end in '-') stays, because such handles can still exist. docs/07 says so.
 
 This unblocks the ticket.
+
+## Summary
+
+Built to the maintainer's 2026-09-28 decision, "Forbid for new handles". domain.ValidateHandle, and so identity.CheckHandle and the /auth/register form, refuse a new handle ending in '-', and the form's rule text says so. The users CHECK is unchanged and there is no migration, so an existing handle ending in '-' stays valid and stored. The shared HandleCases table marks such rows Grandfathered, and TestHandleRuleMatchesTheSchema expects the CHECK to accept them. Tests cover the grammar, including handles that are only dashes after the first character at 3, 30 and 31 characters. The renderer, the mention parser and the autocomplete filter are unchanged, with no version bump. docs/04 records the rule and the decision, and docs/07 says why the filter stays. Renaming existing trailing-dash handles waits for TKT-01M29BSPEN.

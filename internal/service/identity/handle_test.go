@@ -31,6 +31,14 @@ func TestCheckHandle(t *testing.T) {
 		{in: "al ice", err: domain.ErrInvalidHandle},
 		{in: "al.ice", err: domain.ErrInvalidHandle},
 		{in: "alicé", err: domain.ErrInvalidHandle},
+		// A trailing '-' is refused to a new handle (TKT-01M3ANX1NF), after
+		// normalizing, so neither case nor surrounding space gets one past.
+		{in: "bob-", err: domain.ErrInvalidHandle},
+		{in: "Bob-", err: domain.ErrInvalidHandle},
+		{in: "  bob-  ", err: domain.ErrInvalidHandle},
+		{in: "a--", err: domain.ErrInvalidHandle},
+		{in: "a-" + strings.Repeat("-", 28), err: domain.ErrInvalidHandle},
+		{in: "b-_", want: "b-_"},
 		// The Kelvin sign folds to "k" under strings.ToLower; here it is
 		// refused as the non-ASCII character it is.
 		{in: "Kate", err: domain.ErrInvalidHandle},
@@ -96,7 +104,7 @@ func TestPrefill(t *testing.T) {
 		{"the email's local part next", "", "drew.short@example.org", "drew_short"},
 		{"a preferred_username that makes no handle", "?!", "sam@example.org", "sam"},
 		{"a run of dropped characters is one _", "J. R. R.", "", "j_r_r"},
-		{"a trailing - is trimmed, since it cannot be mentioned", "bob-", "", "bob"},
+		{"a trailing - is trimmed, since registration refuses it", "bob-", "", "bob"},
 		{"a leading _ is trimmed", "__bob", "", "bob"},
 		{"non-ASCII letters are dropped, not folded", "Jösé", "", "j_s"},
 		{"too long is cut", strings.Repeat("ab", 20), "", strings.Repeat("ab", 15)},

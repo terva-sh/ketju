@@ -115,6 +115,8 @@ func TestTheHandleScreenRefuses(t *testing.T) {
 		says   string
 	}{
 		{"x", http.StatusUnprocessableEntity, "That handle is not allowed."},
+		// A trailing '-' is refused for a new handle (TKT-01M3ANX1NF).
+		{"bob-", http.StatusUnprocessableEntity, "That handle is not allowed."},
 		{"Admin", http.StatusUnprocessableEntity, "That handle is reserved."},
 		{"ALICE", http.StatusConflict, "That handle is taken."},
 	}

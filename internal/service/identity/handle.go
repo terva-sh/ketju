@@ -74,8 +74,8 @@ func Prefill(preferredUsername, email string) string {
 // suggest makes s into a handle: ASCII letters lowercased, every run of
 // characters a handle cannot hold turned into one '_', and what a handle
 // may not start with trimmed. A trailing '_' or '-' is trimmed too: '-'
-// because a handle ending in one cannot be mentioned (TKT-01M3ANX1NF), and
-// '_' because it is only ever left over from a character that was dropped.
+// because a new handle may not end in one (TKT-01M3ANX1NF), and '_' because
+// it is only ever left over from a character that was dropped.
 func suggest(s string) string {
 	var b strings.Builder
 	dropped := false

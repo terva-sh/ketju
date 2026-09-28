@@ -90,9 +90,11 @@ func (n *mentionNode) Dump(source []byte) *ast.NodeDump {
 // of some accounts silently never resolving, which nobody would report as a bug
 // because it looks like the person simply was not mentioned.
 //
-// The authoritative handle rule is not written down anywhere yet -- docs/04
-// says only "unique, case-insensitive" -- and belongs with the users schema
-// (TKT-01M29BYYH7) and the handle change policy (TKT-01M29BSPEN).
+// The authoritative handle rule is domain.ValidateHandle (docs/04 "users").
+// A new handle may not end in '-', because the loop below reads a trailing
+// '-' as punctuation. A handle given out before that rule may still end in
+// one and cannot be mentioned; renaming it waits for the handle change policy
+// (TKT-01M29BSPEN).
 type mentionParser struct{}
 
 func (mentionParser) Trigger() []byte { return []byte{'@'} }
