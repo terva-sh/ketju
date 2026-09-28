@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-28T22:01:03Z
+updated_at: 2026-09-28T22:09:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -57,6 +57,10 @@ Maintainer decision, 2026-09-28, in Phase 2 grooming (TKT-01M3M9RR26). The forma
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:01:03Z
 
 Addition to the decision, from Terva review 1265 on PR #133: the redaction also follows split/merge 'origin' links in both directions and redacts every copy of the post in other threads' logs, rewriting each log it touches. Otherwise the text stays readable through the copy. docs/03 'Hard redaction' says so; TKT-01M29CXJZ9 must build it.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:09:30Z
+
+Addition from Terva review 1271 on PR #133: a redaction spanning several logs (the copies) is made recoverable by a journal that is fsynced before any log is touched. serve refuses to start while it exists. Rerunning the command resumes from it, because clearing is idempotent. It is deleted only after every swap and the audit row. docs/03 'Hard redaction' says so; TKT-01M29CXJZ9 must build it.
 
 ## Summary
 
