@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-28T21:42:54Z
+updated_at: 2026-09-28T21:50:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -58,4 +58,4 @@ Supersedes the decision note's '301': the redirect from /u/{old} and GET /users/
 
 ## Summary
 
-Members may change their handle once per 30 days. The old handle is reserved for 90 days, and /u/{old} and GET /users/{old} answer a 301 to the new handle during that time, then not-found. Admins may rename anyone without the cooldown. Every change is audited, and anonymized accounts cannot be renamed. History is unaffected, because mentions and posts name the member by user id.
+Members may change their handle once per 30 days. The old handle is reserved for 90 days. During that time /u/{old} and GET /users/{old} answer a temporary 302 to the new handle with Cache-Control: no-store, never a cacheable 301, because the handle becomes reusable. After that they answer not-found. Admins may rename anyone without the cooldown. Every change is audited, and anonymized accounts cannot be renamed. History is unaffected, because mentions and posts name the member by user id. Written into docs/05 'Changing a handle' and docs/10 item 9.

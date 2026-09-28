@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-28T21:42:54Z
+updated_at: 2026-09-28T21:50:43Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -92,3 +92,7 @@ Grooming started 2026-09-28 at the maintainer's direction ("Let's start phase 2 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:42:54Z
 
 Maintainer, 2026-09-28: grooming PRs for this ticket may be merged on the docs/12 gate (the required CI is success on the exact head, terva-review/code is success, every finding is fixed or answered). A medium-or-higher finding answered by argument still goes to the maintainer before merging. Terva review 1255 (Actions run #774) on PR #133, head 14fbb6a, base 5d0fa1a, had two findings, both fixed rather than argued. High, 'Do not permanently redirect a handle that can be reassigned': docs/05 and docs/10 now say a temporary 302 with no-store. Medium, 'Specify durable writes before claiming power-cut safety': the docs/03 hard-redaction swap now fsyncs the new log, renames it, then fsyncs the directory.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:50:43Z
+
+Terva review 1259 (Actions run for request ready-review-88ce15f) on PR #133, head 88ce15f, base 5d0fa1a: one medium finding, 'Correct the handle-policy ticket's redirect summary'. Fixed: the TKT-01M29BSPEN summary now says 302 with no-store.
