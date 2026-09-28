@@ -20,7 +20,10 @@ creating the WAL file, so a power loss could take the WAL, and the committed
 transactions in it, with it. The opener therefore fsyncs the data directory
 itself once the WAL exists and before the first authoritative write, and no
 authoritative write may happen without that step (TKT-01M29BW9Q1; the upstream
-report and eventual removal are TKT-01M392DP19). Backups: `VACUUM INTO` for a
+report and eventual removal are TKT-01M392DP19). Upstream had no fix as of
+v0.35.6 on 2026-09-28, and a test fails on any ncruces version nobody has
+checked for the bug, so an upgrade cannot quietly change what the workaround
+relies on. Backups: `VACUUM INTO` for a
 consistent snapshot.
 
 Access from Go: **sqlc**, generating typed `database/sql` code from `.sql`
