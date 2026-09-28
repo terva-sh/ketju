@@ -20,6 +20,9 @@ import (
 // docs/07 puts it there: a client pins a version by pinning a URL.
 const APIPrefix = "/api/v1/"
 
+// HealthPath is the health check's one path (docs/02 "Observability").
+const HealthPath = "/healthz"
+
 // Groups are the handler groups the router mounts, one per URL prefix in
 // docs/02.
 //
@@ -45,6 +48,10 @@ type Groups struct {
 
 	// Assets serves /assets/* -- the built client, from an embed.FS.
 	Assets http.Handler
+
+	// Health serves exactly /healthz (internal/web/health). It runs outside
+	// rate limiting, session resolution and CSRF: see HealthPath.
+	Health http.Handler
 
 	// SPA serves the application shell for every path that is not one of the
 	// above. See the catch-all rule in New.
@@ -105,6 +112,9 @@ func New(g Groups, opts Options) http.Handler {
 	mux.Handle("/blobs/", group(g.Blobs))
 	mux.Handle("/events", group(g.Events))
 	mux.Handle("/assets/", group(g.Assets))
+	// Exact, not a subtree: /healthz/anything is an application route and
+	// gets the shell like any other.
+	mux.Handle(HealthPath, group(g.Health))
 
 	// The bare "/api" and "/api/v1", registered exactly so that ServeMux does
 	// not answer them with its implicit redirect to the subtree.
@@ -209,6 +219,14 @@ func group(h http.Handler) http.Handler {
 //     bound to one, and it must not run before the rate limiter, or a flood of
 //     tokenless requests would be answered by the more expensive check.
 //
+// HealthPath leaves the chain after 4 and goes straight to the router. Its
+// budget is one database statement per request (TKT-01M29CCBZ8), and a poll
+// carrying a session cookie -- a browser, or a supervisor's copied curl --
+// would otherwise cost a session lookup and a touch, which is a write. None of
+// 5-7 has anything to do there: the endpoint needs no viewer, answers only GET
+// and HEAD, which neither the limiter nor CSRF acts on, and says nothing that
+// depends on who asked.
+//
 // The nil middleware are no-ops, so the order holds as each one lands rather
 // than being rediscovered.
 func chain(h http.Handler, log *slog.Logger, opts Options) http.Handler {
@@ -221,14 +239,28 @@ func chain(h http.Handler, log *slog.Logger, opts Options) http.Handler {
 		rateLimit = RateLimit(nil)
 	}
 
-	h = csrf(h)                    // 7
-	h = wrap(opts.Session, h)      // 6
-	h = rateLimit(h)               // 5
+	router := h
+	h = csrf(h)               // 7
+	h = wrap(opts.Session, h) // 6
+	h = rateLimit(h)          // 5
+	h = bypass(HealthPath, router, h)
 	h = limitBody(opts.Limits)(h)  // 4
 	h = securityHeaders(h)         // 3
 	h = recoverPanics(log)(h)      // 2
 	h = logging.Middleware(log)(h) // 1 outermost
 	return h
+}
+
+// bypass sends requests for exactly path to direct, and everything else to
+// rest.
+func bypass(path string, direct, rest http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == path {
+			direct.ServeHTTP(w, r)
+			return
+		}
+		rest.ServeHTTP(w, r)
+	})
 }
 
 func wrap(mw func(http.Handler) http.Handler, h http.Handler) http.Handler {

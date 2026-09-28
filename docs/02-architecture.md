@@ -177,6 +177,23 @@ written into `config.toml`.
   address): request latency, cache hit ratios, thread store fsync latency,
   projection lag (log length − projected length, summed).
 - `/healthz` checks the DB opens and the data directory is writable.
+  (TKT-01M29CCBZ8.) It is unauthenticated, answers GET and HEAD only, and
+  says only this:
+  `{"status":"ok"|"degraded"|"unavailable","checks":{"database":"ok"|"failing","data_dir":"ok"|"failing","threads":"ok"|"quarantined"}}`,
+  with `Cache-Control: no-store`. No version, path, error text, count, thread
+  id or configuration value is in a response; the detail goes to the log,
+  once per transition. `unavailable` is 503 and means the database or the
+  data directory check failed. `degraded` is 200 and means threads are
+  quarantined (03): a 503 would have a supervisor or a load balancer take the
+  whole forum down over one bad file, which quarantine exists to prevent, and
+  a restart cannot repair it. Projection lag stays on `/metrics`.
+  Each request costs one statement on the read pool (it reads `sqlite_schema`,
+  since a bare `SELECT 1` passes for a file that can no longer be read) and no
+  disk I/O. The data-directory probe creates, writes, fsyncs and removes
+  `data/.healthz-probe` in the background every 10 s; a result older than two
+  intervals counts as failing, so a probe hung on a stuck disk does not read
+  as healthy. The route skips rate limiting, session resolution and CSRF, so
+  a poll carrying a session cookie still costs one statement.
 
 ## Background work
 

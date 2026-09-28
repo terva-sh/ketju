@@ -216,6 +216,19 @@ func (d *DB) Read(ctx context.Context, fn func(q *dbq.Queries, tx *sql.Tx) error
 	return wrap(tx.Commit())
 }
 
+// Ping runs one statement on the read pool and reports whether the database
+// answered it, for the health check (docs/02 "Observability").
+//
+// The statement reads sqlite_schema rather than being a bare SELECT 1. A
+// constant is answered without opening a read transaction on the file, so it
+// passes for a database whose file can no longer be read; reading the schema
+// table cannot. It is one statement with no BEGIN or COMMIT around it, which
+// is the whole of healthz's database budget.
+func (d *DB) Ping(ctx context.Context) error {
+	var n int
+	return wrap(d.read.QueryRowContext(ctx, "SELECT count(*) FROM sqlite_schema").Scan(&n))
+}
+
 // Write runs fn in a write transaction on the single write connection. The
 // transaction starts with BEGIN IMMEDIATE and commits if fn returns nil.
 func (d *DB) Write(ctx context.Context, fn func(q *dbq.Queries, tx *sql.Tx) error) error {

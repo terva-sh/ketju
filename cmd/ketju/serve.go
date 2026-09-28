@@ -39,6 +39,7 @@ import (
 	"github.com/terva-sh/ketju/internal/web"
 	"github.com/terva-sh/ketju/internal/web/api"
 	"github.com/terva-sh/ketju/internal/web/auth"
+	"github.com/terva-sh/ketju/internal/web/health"
 	"github.com/terva-sh/ketju/internal/web/spa"
 )
 
@@ -381,11 +382,27 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		return fail("parsing the client shell", err)
 	}
 	shell.SetPage(api.ShellPage(userSvc))
+
+	// The data-directory probe runs once now, so the first poll after the
+	// listener opens has an answer, and then in the background: healthz
+	// reads its cached result and never touches the disk itself. It stops
+	// before the lock is released, so it never writes into a data directory
+	// another process may hold.
+	probe := health.NewDirProbe(cfg.DataDir, log)
+	probe.Probe()
+	probeCtx, stopProbe := context.WithCancel(context.Background())
+	probed := make(chan struct{})
+	go func() { defer close(probed); probe.Run(probeCtx) }()
+	closers = append(closers, func() error { stopProbe(); <-probed; return nil })
+
 	var root http.Handler = web.New(web.Groups{
 		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Logger: log}),
 		Auth:   auth.New(authh),
 		Assets: spa.Assets(),
-		SPA:    shell,
+		Health: health.Handler(health.Options{
+			DB: d, Dir: probe, Quarantined: proj.QuarantinedCount, Logger: log,
+		}),
+		SPA: shell,
 	}, web.Options{
 		Logger:  log,
 		Limits:  web.Limits{Upload: int64(cfg.Limits.AttachmentMB) << 20},

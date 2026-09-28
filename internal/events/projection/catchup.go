@@ -240,6 +240,15 @@ func (w *Writer) Quarantined(id threadid.ID) bool {
 	return w.quarantined[id]
 }
 
+// QuarantinedCount is how many threads are quarantined, for the health
+// check. Only the count leaves the package: which threads they are is for the
+// log and `ketju fsck`, not for an unauthenticated endpoint.
+func (w *Writer) QuarantinedCount() int {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return len(w.quarantined)
+}
+
 // LastCatchUp is the report of the last catch-up that finished, for the
 // health and metrics endpoints; false before the first.
 func (w *Writer) LastCatchUp() (Report, bool) {

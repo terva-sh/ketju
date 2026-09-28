@@ -253,6 +253,11 @@ func TestStartupOrderAndShutdown(t *testing.T) {
 	if code, body := get(t, "http://"+r.addr+"/"); code != http.StatusOK || !strings.Contains(body, "<html") {
 		t.Errorf("GET / = %d, want the shell", code)
 	}
+	// The probe has run before the listener opened, so the first poll has
+	// an answer (TKT-01M29CCBZ8).
+	if code, body := get(t, "http://"+r.addr+"/healthz"); code != http.StatusOK || !strings.Contains(body, `"status":"ok"`) {
+		t.Errorf("GET /healthz = %d: %s", code, body)
+	}
 	if err := r.shutdown(t); err != nil {
 		t.Fatalf("shutdown: %v\n%s", err, r.log)
 	}
@@ -642,6 +647,12 @@ func TestServeQuarantinesACorruptThread(t *testing.T) {
 	}
 	if code, body := get(t, "http://"+r.addr+"/api/v1/threads/"+good.String()); code != http.StatusOK {
 		t.Errorf("an unaffected thread = %d: %s", code, body)
+	}
+	// healthz reports the quarantine as degraded, and still answers 200: one
+	// bad file must not take the forum down through a load balancer either.
+	if code, body := get(t, "http://"+r.addr+"/healthz"); code != http.StatusOK ||
+		!strings.Contains(body, `"status":"degraded"`) || strings.Contains(body, bad.String()) {
+		t.Errorf("GET /healthz with a quarantined thread = %d: %s", code, body)
 	}
 }
 
