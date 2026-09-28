@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-25T02:29:04Z
-updated_at: 2026-09-28T14:34:13Z
+updated_at: 2026-09-28T14:42:24Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -84,6 +84,16 @@ Reindex: both columns are trigger-derived from post_meta and threads, so `ketju 
 Mutations tried, each caught: the update trigger ignoring live_post_count changes; the insert trigger skipping its recount from post_meta; the post_meta update counting moved posts; the backfill counting deleted posts; the delete trigger leaving posts behind; the tree reporting thread count as post count.
 
 Catch-up over 10,000 threads: 35 ms locally, against the 2 s bound. Thread-view bundle after the client change: 38,008 B gzip of 60,000 B.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T14:42:24Z
+
+Terva review 1164 (run d61522c1-5f72-4474-9a97-6209637bf673, request ready-review-0d80e4c, Actions run #666) of head 0d80e4c5f8874ca2f0c5445c69e92fe13ea4bd18, base 50da12475294a46dcbbd9c1231fca6440d1b1708 reported one medium finding, finding-1, "Show post totals on mobile forum rows", so `terva-review/code` is failure. CI run #665 on the same head passed.
+
+Disposition: declined, maintainer acceptance pending. It is recorded on PR #115 as https://git.local.sothr.com/terva-sh/ketju/pulls/115#issuecomment-16742.
+
+The facts are right: the phone rule hides `.forum-activity`, so phones do not show the total. That is the phone design. docs/mockups/MobileFront{Light,Dark}.dc.html show neither a thread total nor a post total, and the same rule already hides the thread total on main. Showing totals on phones would change what a member sees against the mockup, which is a product decision for a person (docs/12 "Gaps the design leaves open").
+
+Under the run brief (trap 9) this is a medium finding answered by argument, so the PR stays open and unmerged for a maintainer. If a maintainer wants totals on phones, the fix is CSS only: un-hide `.forum-activity` in the phone rule and place it in the card grid.
 
 ## Summary
 
