@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T17:07:43Z
-updated_at: 2026-09-28T17:22:06Z
+updated_at: 2026-09-28T17:29:03Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -91,6 +91,15 @@ Why it stops there:
 What covers the rest: the setup project's sign-in exercises start → provider → callback, and TestTheLoginPageSkipsToTheOnlyProvider follows return_to from /auth/signin through the callback. To tick criterion 7 as written, raise the e2e build's auth burst (cmd/ketju/e2e.go), or accept the server's 302 as landing.
 
 Settled here: "signed in" means `ViewerFrom(ctx).UserID != 0`, so a suspended user's live session is sent back rather than shown the providers. A pre-user (approval-mode applicant) session has UserID 0 and sees the page. None usable only happens with none configured in practice: startup aborts when every provider fails discovery, and Refresh never disables a working provider. The empty-Enabled branch is a guard, tested with a stub.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T17:29:03Z
+
+Review and CI for PR #121 (https://git.local.sothr.com/terva-sh/ketju/pulls/121), head 139216d44c3394afec7ac037d22ce082bc35c31a, base 547c589cf8314e0b5efa42fc6d5db5d66946f018:
+
+- Terva review: request ready-review-139216d, run 64ddf628-44e1-41dd-9da8-c86848bb9e49, Actions run #708. The review is clean: terva-review/code is success and no findings were published at any severity. The summary names the known limit, criterion 7, where the Playwright check verifies the redirect to the provider's start but does not load it.
+- CI: ci / Build and Test (pull_request) is success, Actions run #707. The step log shows e2e/sign-in.spec.ts passing at phone and desktop (53 passed, 9 skipped) and internal/web/auth passing under go test -race.
+
+This note is a ticket-only commit after the review, so the review is carried to the new head (docs/pr-reviews.md). The maintainer merges this PR. The run brief's merge authority was withheld for this ticket.
 
 ## Summary
 
