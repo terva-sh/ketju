@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3M9S7S2KE0BN8XC282MVBP9
 title: Deploy a local dogfooding instance of ketju on this machine
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -14,13 +14,15 @@ assignees: []
 milestone: phase-1
 parent: null
 origin: null
-dependencies: []
+dependencies:
+  - TKT-01M3MAS08RJDT1RRJZVA6TB423
+  - TKT-01M3MAS0A3K53DRHK0R04G16AF
 blocks_on: none
 references: []
 claim: null
 archive: null
 created_at: 2026-09-28T15:22:53Z
-updated_at: 2026-09-28T15:22:53Z
+updated_at: 2026-09-28T15:40:24Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -61,3 +63,9 @@ The hostnames, ports, service manager, reverse proxy, TLS setup, data locations 
 - [ ] /healthz is monitored or at least documented as the check to run
 - [ ] The deploy, upgrade, and interim backup steps are written down where the other local deployments keep theirs
 - [ ] No secret value is committed or written into a ticket
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:40:24Z
+
+Promoted 2026-09-28 at the maintainer's direction, to deploy now at https://ketju.brokkr.local.sothr.com. Pattern chosen by the maintainer: a user unit like git-ticket-canvas. Authentik provider pk 32 'Provider for Brokkr Ketju' and application 'brokkr-ketju' were created through the credbroker. Redirect https://ketju.brokkr.local.sothr.com/auth/authentik/callback, grant_types [authorization_code], flows, signing key and scope mappings copied from lampi's provider 31. The maintainer creates the 'Brokkr Ketju User' group and writes the client secret file. The first admin comes from bootstrap.admin_emails. Deploying found two blocking bugs: the issuer trailing slash (TKT-01M3MAS08R) and no way to open registration (TKT-01M3MAS0A3).
