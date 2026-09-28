@@ -212,6 +212,36 @@ export interface UserSuggestions {
   users: Author[];
 }
 
+// Profile is GET /users/{handle}: an account as this viewer may see it
+// (internal/dto Profile). A member session is required. post_count is the
+// account's non-deleted posts in forums this viewer may read, and status is
+// null except to moderators and admins, who are shown active, pending,
+// suspended or deactivated. An anonymized account has its placeholder
+// handle and empty display name, avatar and bio.
+export interface Profile {
+  user: Author;
+  bio_html: string;
+  joined_at: Millis;
+  post_count: number;
+  status: string | null;
+}
+
+// UserPosts is GET /users/{handle}/posts?cursor=: a page of the account's
+// posts, newest first, across the forums this viewer may read
+// (internal/dto UserPosts). next_cursor is empty at the end.
+export interface UserPosts {
+  posts: UserPost[];
+  next_cursor: string;
+}
+
+// UserPost is one post in a history, as its thread page renders it for this
+// viewer, and where it is (internal/dto UserPost).
+export interface UserPost {
+  thread: ThreadLink;
+  forum: ForumRef;
+  post: Post;
+}
+
 // ReadPosition is PUT and DELETE /threads/{id}/read: the viewer's position as
 // stored after the request, which a PUT never lowers and a DELETE never
 // raises, so it can differ from the ordinal sent (internal/dto ReadPosition).

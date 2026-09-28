@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-28T14:18:24Z
+updated_at: 2026-09-28T14:21:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -130,6 +130,10 @@ Terva review 1162 (run 3dc9bae0-5d30-4c2f-b591-155d0fd295d7, Actions run #651), 
 3. "Filtering after pagination can return an empty page". Fixed: further batches are read until the page holds a full page and one more post, or the history ends. The cursor is the last post shown, so a page is short only at the end, and a history that ends has no cursor. TestPagesFillPastHiddenPosts runs the reviewer's example: a page of one whose first candidate is deleted in the log only.
 
 Mutations rerun against the reworked code: 23 in all. 22 are caught, and "count trusts a stale projection" is now caught too. "Count every thread from its index" survives: it changes only the cost, not the answer, and the premise test guards the fast path.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T14:21:54Z
+
+CI run 656 on efa1444 failed at 'client tests': web/client's contract test requires every golden in internal/dto/testdata/golden to be imported by web/client/src/api/dto-contract.ts and held to a type there. Added Profile, UserPosts and UserPost to web/client/src/api/dto.ts and the six goldens to the contract. Type-only, so go generate ./internal/web/spa leaves dist unchanged; tsc, 875 client tests and the budget pass locally. Profile.status is string | null, as Author.role is string, because a JSON import widens its literals.
 
 ## Summary
 

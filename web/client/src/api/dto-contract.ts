@@ -21,10 +21,12 @@ import type {
   Post,
   PostHistory,
   PostReplies,
+  Profile,
   ReadPosition,
   RenderResult,
   ThreadList,
   ThreadPage,
+  UserPosts,
   UserSuggestions,
 } from './dto';
 
@@ -42,6 +44,9 @@ import meModerator from '../../../../internal/dto/testdata/golden/me.moderator.j
 import mePreUser from '../../../../internal/dto/testdata/golden/me.pre_user.json';
 import postMember from '../../../../internal/dto/testdata/golden/post.member.json';
 import postModerator from '../../../../internal/dto/testdata/golden/post.moderator.json';
+import profileMember from '../../../../internal/dto/testdata/golden/profile.member.json';
+import profileModerator from '../../../../internal/dto/testdata/golden/profile.moderator.json';
+import profileAnonymizedMember from '../../../../internal/dto/testdata/golden/profile-anonymized.member.json';
 import readMember from '../../../../internal/dto/testdata/golden/read.member.json';
 import renderMember from '../../../../internal/dto/testdata/golden/render.member.json';
 import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
@@ -54,6 +59,9 @@ import threadModerator from '../../../../internal/dto/testdata/golden/thread.mod
 import threadsAnon from '../../../../internal/dto/testdata/golden/threads.anon.json';
 import threadsMember from '../../../../internal/dto/testdata/golden/threads.member.json';
 import unreadMember from '../../../../internal/dto/testdata/golden/unread.member.json';
+import userPostsMember from '../../../../internal/dto/testdata/golden/user-posts.member.json';
+import userPostsModerator from '../../../../internal/dto/testdata/golden/user-posts.moderator.json';
+import userPostsOwnMember from '../../../../internal/dto/testdata/golden/user-posts-own.member.json';
 import usersMember from '../../../../internal/dto/testdata/golden/users.member.json';
 
 // NoExtraKeys is true when every key of U, at every depth, is a key of T.
@@ -98,6 +106,9 @@ export const contract = [
   matches<Post>()(postModerator),
   matches<PostReplies>()(repliesMember),
   matches<PostReplies>()(repliesModerator),
+  matches<Profile>()(profileMember),
+  matches<Profile>()(profileModerator),
+  matches<Profile>()(profileAnonymizedMember),
   matches<ReadPosition>()(readMember),
   matches<RenderResult>()(renderMember),
   matches<RenderResult>()(renderPlainMember),
@@ -108,5 +119,8 @@ export const contract = [
   matches<ThreadList>()(threadsAnon),
   matches<ThreadList>()(threadsMember),
   matches<ThreadList>()(unreadMember),
+  matches<UserPosts>()(userPostsMember),
+  matches<UserPosts>()(userPostsModerator),
+  matches<UserPosts>()(userPostsOwnMember),
   matches<UserSuggestions>()(usersMember),
 ];
