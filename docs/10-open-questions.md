@@ -63,7 +63,8 @@ Each item states the options, the current lean, and when it must be decided.
 
 9. **Handle change policy.** **Decided 2026-09-28: allowed, once per 30
    days.** The old handle is reserved for 90 days, and `/u/{old}` answers a
-   301 to the new profile until then. Admins may rename anyone without the
+   temporary 302 to the new profile until then, never a cacheable 301,
+   because the handle is reusable afterwards. Admins may rename anyone without the
    cooldown, which is how the grandfathered handles ending in `-`
    (TKT-01M3ANX1NF) get fixed. `@mentions` are stored by user id, so history
    stays correct. Never and once-only lost as friction with no gain, because

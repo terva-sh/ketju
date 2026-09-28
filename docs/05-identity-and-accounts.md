@@ -227,8 +227,10 @@ Decided 2026-09-28 (docs/10 item 9, TKT-01M29BSPEN):
   free in any case.
 - **The old handle.** It is reserved for 90 days, so nobody can take it to
   impersonate. During that time `/u/{old}` and `GET /users/{old}` answer a
-  301 to the new handle. Afterwards the old handle answers `not-found` and is
-  free again.
+  302 to the new handle, with `Cache-Control: no-store`. The redirect is
+  temporary on purpose: a cached 301 would keep sending visitors to the former
+  owner after the handle is free and belongs to someone else. Afterwards the
+  old handle answers `not-found` and is free again.
 - **History.** Mentions, posts and quotes name the member by user id, so
   nothing in history changes; posts show the current handle.
 - **Admins** may rename any member without the cooldown, for example to fix

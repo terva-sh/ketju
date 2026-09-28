@@ -304,9 +304,11 @@ Hard deletion (legal takedown) is the one operation that is not append-only.
 Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
 
 - **The command runs offline**, with serve stopped and the data-directory lock
-  held. It writes a new log beside the old one and swaps it in by rename. It
-  never edits a log in place, so a power cut leaves either the old log or the
-  new one, never half of each.
+  held. It writes a new log beside the old one, fsyncs it, renames it over
+  the old one, and then fsyncs the directory. It never edits a log in place.
+  Because of the two fsyncs, a power cut leaves either the old log or the
+  complete new one, never half of each. The rename is atomic but not durable
+  on its own.
 - **What is removed.** Every frame that carries the post's text: its `Post` and
   every `Edit` revision. Each frame keeps its record type, ordinal, revision,
   timestamp and actor, but its body is replaced by the empty body of that

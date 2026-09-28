@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-28T21:32:47Z
+updated_at: 2026-09-28T21:42:54Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -88,3 +88,7 @@ The handoff for this grooming is in `~/.local/state/agent-handoffs/ketju/`, outs
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:32:46Z
 
 Grooming started 2026-09-28 at the maintainer's direction ("Let's start phase 2 grooming"). The three decision spikes were decided first, and are closed in the first grooming PR: BSPE2 redaction, BSPEN handle changes, BSPEX auto_approve handles and guests. The decisions are in docs/03, 05 and 10.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:42:54Z
+
+Maintainer, 2026-09-28: grooming PRs for this ticket may be merged on the docs/12 gate (the required CI is success on the exact head, terva-review/code is success, every finding is fixed or answered). A medium-or-higher finding answered by argument still goes to the maintainer before merging. Terva review 1255 (Actions run #774) on PR #133, head 14fbb6a, base 5d0fa1a, had two findings, both fixed rather than argued. High, 'Do not permanently redirect a handle that can be reassigned': docs/05 and docs/10 now say a temporary 302 with no-store. Medium, 'Specify durable writes before claiming power-cut safety': the docs/03 hard-redaction swap now fsyncs the new log, renames it, then fsyncs the directory.

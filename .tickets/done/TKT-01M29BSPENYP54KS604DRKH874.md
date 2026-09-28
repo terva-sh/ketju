@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:10:45Z
-updated_at: 2026-09-28T21:32:46Z
+updated_at: 2026-09-28T21:42:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,6 +51,10 @@ Decide before the user settings screens are built, because "change handle" is ei
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:32:45Z
 
 Maintainer decision, 2026-09-28, in Phase 2 grooming (TKT-01M3M9RR26): "Allowed: 30-day cooldown". Written into docs/05 "Changing a handle" and docs/10 item 9. It also settles the grandfathered handles ending in '-' from TKT-01M3ANX1NF: an admin renames them without the cooldown.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T21:42:54Z
+
+Supersedes the decision note's '301': the redirect from /u/{old} and GET /users/{old} during the 90-day reservation is a temporary 302 with Cache-Control: no-store. A cached 301 would keep sending visitors to the former owner after the handle is free and belongs to someone else. Changed on PR #133 after Terva review 1255 (high); docs/05 and docs/10 item 9 now say 302.
 
 ## Summary
 
