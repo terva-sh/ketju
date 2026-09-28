@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-28, after the hardening, Phase 2 grooming, dogfooding and deployment-bug tickets were filed, against the store. They are written by hand, so
+Counts last read 2026-09-28, after the dogfood instance was deployed and its ticket closed, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-204 tickets: 12 epics and 192 children. Every ticket carries an `area:` label,
+205 tickets: 12 epics and 193 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -41,7 +41,7 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 86 in Phase 1, 34 in Phase 2, 20 in
+Distribution by phase: 25 in Phase 0, 87 in Phase 1, 34 in Phase 2, 20 in
 Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 23 carrying no
 milestone.
 
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-102 done, 11 ready, 2 blocked, 88 draft, 1 archived (counted 2026-09-28 with
+107 done, 7 ready, 2 blocked, 88 draft, 1 archived (counted 2026-09-28 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -166,21 +166,28 @@ Phases 2 to 4, so none has every child done.
 **Next, as filed on 2026-09-28.** Three tickets set out what comes after
 the run. Two are drafts; the third, the dogfooding deployment, was promoted to
 `ready` when the deployment started:
-- `TKT-01M3M9S7S2` deploys a local dogfooding instance. It is Phase 1 and
-  `ready`, and the real-device check `TKT-01M38WTKSQ` depends on it, because a
-  phone needs a served build to reach.
+- `TKT-01M3M9S7S2` deployed a local dogfooding instance, now live at
+  https://ketju.brokkr.local.sothr.com. It is done, with its phone criterion
+  left to the real-device check `TKT-01M38WTKSQ`, which depends on it.
 - `TKT-01M3M9R6JT` is a hardening sweep of seven Phase 1 follow-ups before
   Phase 2 opens registration to strangers. It has no milestone.
 - `TKT-01M3M9RR26` grooms Phase 2 for an autonomous run, as Phase 1 was
   groomed. It is Phase 2, which now carries 34 tickets.
 
-Starting that deployment found two Phase 1 bugs that block it, plus a flaky
-test. All three are `ready`, which brings Phase 1 to 86 tickets:
-- `TKT-01M3MAS08R`: an issuer ending in a slash is refused, and Authentik's
-  issuer ends in one.
-- `TKT-01M3MAS0A3`: a fresh install cannot open registration, so nobody can
-  join. The maintainer chose a `ketju admin setting` command as the fix.
-- `TKT-01M3MAS0BQ`: `TestHealthzP99` measures the runner under `-race`.
+The deployment found four Phase 1 bugs, all fixed the same day, which brings
+Phase 1 to 87 tickets:
+- `TKT-01M3MAS08R`: an issuer ending in a slash was refused, and Authentik's
+  issuer ends in one (PR #119).
+- `TKT-01M3MAS0A3`: a fresh install could not open registration. The
+  maintainer chose a `ketju admin setting` command as the fix (PR #120).
+- `TKT-01M3MAS0BQ`: `TestHealthzP99` measured the runner under `-race`
+  (PR #118).
+- `TKT-01M3MFS6KM`: a signed-out reader had no way to sign in. The client
+  linked to the unbuilt settings screen; `/auth/signin` now goes straight to a
+  lone provider (PR #121).
+
+Phase 1 now stands at 78 done, 7 ready (the six epics and the tracking
+ticket), 1 blocked (the ncruces report) and 1 draft (the real-device check).
 
 ## The critical path
 
