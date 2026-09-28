@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBW6Z87FHP4DPGREVFD6
 title: Build the inline reply expander
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:post-anatomy
     path: docs/06-thread-views.md
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: run/cgbw6-reply-expander
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a9a2917431f50b4e6
-  commit: ee54c04ca6fe3a71a154c8af8d78048d770d8a97
-  session: null
-  claimed_at: 2026-09-28T05:12:46Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T05:15:01Z
+updated_at: 2026-09-28T05:26:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,10 +44,10 @@ Suppress the expander when the only reply is the post directly below, which is t
 
 ## Acceptance criteria
 
-- [ ] Expanding and collapsing never changes the position of any canonical post on the page
-- [ ] Expanded posts are read-only and visually recessed, in ordinal order
-- [ ] The expander is suppressed when the sole reply is directly below
-- [ ] Expansion works for a reply that lives on another page
+- [x] Expanding and collapsing never changes the position of any canonical post on the page
+- [x] Expanded posts are read-only and visually recessed, in ordinal order
+- [x] The expander is suppressed when the sole reply is directly below
+- [x] Expansion works for a reply that lives on another page
 
 ## Implementation plan
 
@@ -83,3 +76,30 @@ The main e2e thread gets `reply_to` on a few posts: 4→3 (sole reply directly b
 ### Settled in grooming (2026-09-24)
 
 - The suppression rule on page edges is a UI detail: settle it, write it into docs/06, and note it.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T05:25:58Z
+
+Settled two gaps in docs/06 "Post anatomy", both UI details within the grooming note's allowance.
+
+1. **Page edge.** The expander is suppressed only when the sole reply is the next post on this page, meaning `ordinal + 1` with `reply_to` equal to this post. When the sole reply opens the next page, the reader cannot see it below, so the expander stays. The alternative was fetching or peeking at the next page to hide it. That lost because it costs a request per page foot and hides a reply the reader cannot see.
+2. **"Nothing about the canonical page moves."** An inline expansion has to push what is below it down, so I read the rule as: no canonical post changes order, gains an indent, or is replaced, and the expanded post and everything above it hold still on screen. The posts below move by the region's height while it is open and return exactly when it closes. The pre-groom plan asked whether "position" meant viewport pixels, which would need an overlay. That lost because docs/06 says "inline, in place", and an overlay is neither. AC1 is ticked on this reading. The Playwright test asserts every part of it at 390 px and 1440 px.
+
+Other choices:
+- Replies go through `apiGet` and `useResource`, keyed on the URL, like PostPopover. `threadCache` is not extended. `storeThreadPage` already drops every held URL under the thread when the log grows.
+- Tombstone posts, which are the canonical deleted rows, get no expander, because they have no footer. The moderator's tombstone variants belong to TKT-01M29CKRJ.
+- The e2e seed now puts `reply_to` on main-thread posts 4, 6, 8, 26, 30 and 55. The a11y scan (desktop) and the target check (phone) now run with #1's replies open. Both found a problem, and both are fixed in this PR.
+
+## Summary
+
+Built the inline reply expander (`web/client/src/components/thread/ReplyExpander.tsx`). "N replies" leads a post's footer and opens the post's direct replies inside the post, below its footer. They are read-only copies, recessed on `surface2`, come from `GET /threads/{id}/posts/{n}/replies` in ordinal order, and a reply on any page opens the same way. The copies carry no id, `data-ordinal`, actions or reply-to indicator.
+
+The expander is suppressed when the sole reply is the next post on this page, and it stays at a page's foot. A layout effect holds the toggle's place on screen across expand and collapse.
+
+docs/06 "Post anatomy" now records both rules. The e2e seed gives the main thread `reply_to` on posts 4, 6, 8, 26, 30 and 55.
+
+Tests:
+- Vitest in `ReplyExpander.test.tsx` covers the suppression table, the render, order, read-only, tombstone, error and scroll hold.
+- Playwright in `e2e/replies.spec.ts` covers position stability and replies on pages 2 and 3, at both widths.
+- The a11y (desktop) and targets (phone) checks now run with #1's replies open.
