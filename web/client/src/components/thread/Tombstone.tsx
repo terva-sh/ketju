@@ -3,7 +3,7 @@
 // (docs/06; the moved and moderator variants are TKT-01M29CKRJ's).
 export function Tombstone({ ordinal, unread }: { ordinal: number; unread: boolean }) {
   return (
-    <div class={'post tombstone' + (unread ? ' unread' : '')} id={`post-${ordinal}`} data-ordinal={ordinal}>
+    <div class={'post tombstone' + (unread ? ' unread' : '')} id={`post-${ordinal}`} data-ordinal={ordinal} tabIndex={-1}>
       <span class="avatar avatar-empty" aria-hidden="true" />
       <span class="ordinal">#{ordinal}</span>
       <span class="tombstone-text">Post removed.</span>

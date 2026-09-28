@@ -1,0 +1,162 @@
+/* The keyboard shortcuts' visible controls, their status line and their
+   list (TKT-01M29CGBX4; keyboard/ThreadFoot.tsx, HelpOverlay.tsx). */
+
+.thread-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 16px 0;
+  font-size: 13px;
+}
+.goto-post {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.goto-post label {
+  color: var(--ink2);
+}
+.goto-post input {
+  width: 6em;
+  height: 32px;
+  padding: 0 8px;
+  box-sizing: border-box;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.thread-foot button {
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+
+/* The status line sits over the foot of the screen while it has something
+   to say, where the reader is looking, and is kept in the page when empty,
+   so a screen reader already knows the region when it speaks. */
+.shortcut-hint {
+  position: fixed;
+  left: 50%;
+  bottom: 24px;
+  transform: translateX(-50%);
+  margin: 0;
+  padding: 8px 14px;
+  font-size: 13px;
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-radius: var(--radius);
+  z-index: 20;
+  pointer-events: none;
+}
+.shortcut-hint:not(.shown) {
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+
+.help-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 16px 16px;
+  background: rgba(15, 22, 34, 0.35);
+}
+.help-overlay {
+  width: min(640px, 100%);
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.help-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 12px 12px 12px 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.help-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.help-close {
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.help-list {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13.5px;
+}
+.help-list th,
+.help-list td {
+  padding: 8px 16px;
+  text-align: left;
+  vertical-align: top;
+  border-bottom: 1px solid var(--rule);
+}
+.help-list th {
+  font-weight: 600;
+  color: var(--ink2);
+}
+.help-list td:first-child {
+  white-space: nowrap;
+}
+.help-list kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  padding: 1px 6px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  text-align: center;
+  background: var(--surface2);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.help-note {
+  margin: 0;
+  padding: 12px 16px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Phone (docs/06 "Mobile"): the foot's controls are full targets. There
+   are no shortcuts here, so no list and no button for it. */
+@media (max-width: 719.98px) {
+  .thread-foot {
+    padding: 0 16px;
+  }
+  .goto-post input,
+  .thread-foot button {
+    height: var(--target);
+    min-width: var(--target);
+  }
+  .shortcut-hint {
+    bottom: calc(80px + env(safe-area-inset-bottom, 0px));
+  }
+}

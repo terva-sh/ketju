@@ -195,9 +195,10 @@ describe('thread actions', () => {
   it('puts every toolbar action in the phone more menu', async () => {
     vi.stubGlobal('fetch', async () => new Response(threadJSON(thread), { status: 200 }));
     const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
-    // The member golden may reply, so Reply leads the list.
-    const want = threadActions(thread, { canReply: true }).map((a) => a.id);
-    expect(want).toEqual(['reply', 'copy-link']);
+    // The member golden may reply, so Reply leads the list, and has posts
+    // its reader has not read, so First unread is offered.
+    const want = threadActions(thread, { canReply: true, firstUnread: () => {} }).map((a) => a.id);
+    expect(want).toEqual(['reply', 'first-unread', 'copy-link']);
     const toolbar = [...root.querySelectorAll<HTMLElement>('[data-shell=toolbar] [data-action]')].map((b) => b.dataset.action);
     expect(toolbar).toEqual(want);
     expect(root.querySelector('[aria-label=More]')).toBeNull();

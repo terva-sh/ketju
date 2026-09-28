@@ -15,9 +15,14 @@ export interface ThreadActionTarget {
 // Reply is offered when the reader may reply, which the thread page says
 // (viewer.can_reply). It brings up the composer at the foot of the thread as
 // a reply to the thread, with no reply_to (docs/06 "Composer").
-export function threadActions(t: ThreadActionTarget, opts: { canReply?: boolean } = {}): ShellAction[] {
+//
+// First unread is offered when the page has a first unread post to go to,
+// which the thread page works out and hands over as firstUnread. It is the
+// visible control for the u shortcut (keyboard/shortcuts.ts).
+export function threadActions(t: ThreadActionTarget, opts: { canReply?: boolean; firstUnread?: () => void } = {}): ShellAction[] {
   return [
     ...(opts.canReply ? [{ id: 'reply', label: 'Reply', run: () => replyToThread(t.id) }] : []),
+    ...(opts.firstUnread ? [{ id: 'first-unread', label: 'First unread', run: opts.firstUnread }] : []),
     {
       id: 'copy-link',
       label: 'Copy link',

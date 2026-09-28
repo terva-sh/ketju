@@ -48,6 +48,7 @@ export function Post({
       class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' deleted' : '')}
       id={`post-${post.ordinal}`}
       data-ordinal={post.ordinal}
+      tabIndex={-1}
     >
       <Avatar author={post.author} />
       <div class="post-main">

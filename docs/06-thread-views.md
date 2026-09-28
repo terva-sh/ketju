@@ -33,7 +33,11 @@ human who does.
   stopping cue. A Discourse-style timeline scrubber is a later enhancement on
   top of pages, not a replacement.
 - Keyboard: `j`/`k` post navigation, `g` then a number to jump to an ordinal,
-  `u` to jump to first unread, `n` to next unread thread in the forum.
+  `u` to jump to first unread, `n` to next unread thread in the forum, `?`
+  for the list. "Next" follows the forum's thread-list order: the first
+  unread thread below this one, or when there is none below, the first
+  above it. Each shortcut has a visible control that does the same, below
+  the posts or in the thread's actions.
 
 ### Landing on return
 

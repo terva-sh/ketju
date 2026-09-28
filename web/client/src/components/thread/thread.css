@@ -47,6 +47,16 @@
 .post:last-child {
   border-bottom: 0;
 }
+/* The post j, k, g and u moved to (keyboard/shortcuts.ts) is ringed, inside
+   its edge so the list's border does not clip it. A post clicked into takes
+   focus too, but the browser does not ring a pointer's focus. */
+.posts > .post:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.posts > .post:focus:not(:focus-visible) {
+  outline: none;
+}
 .post.unread {
   border-left: 3px solid var(--unread);
   padding-left: 21px;

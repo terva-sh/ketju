@@ -17,7 +17,10 @@ import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider
 import '../components/thread/thread.css';
 import { Toolbar } from '../shell/Toolbar';
 import { threadActions } from '../shell/threadActions';
+import { ThreadFoot } from '../keyboard/ThreadFoot';
+import { firstUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
+import { viewer } from '../state/viewer';
 import { composerFor, quotePost, replyToPost } from '../state/composer';
 import { useShellContext } from '../state/shell';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
@@ -82,7 +85,21 @@ export function ThreadScreen() {
   // offered only where there is one: not on the post history route, which
   // shows no body (review 543).
   const canReply = !history && (res.data?.viewer.can_reply ?? false);
-  const actions = useMemo(() => (known ? threadActions(known, { canReply }) : []), [known?.id, known?.slug, canReply]);
+  // First unread is offered to a signed-in reader with posts they have not
+  // read, on the thread body, where there are posts to go to.
+  const lastRead = res.data?.viewer.last_read_ordinal ?? 0;
+  const postCount = res.data?.thread.post_count ?? 0;
+  const unread = !history && !!res.data && !!viewer.value.user && lastRead < postCount;
+  const actions = useMemo(
+    () =>
+      known
+        ? threadActions(known, {
+            canReply,
+            firstUnread: unread ? () => firstUnread(known, lastRead, postCount, route) : undefined,
+          })
+        : [],
+    [known?.id, known?.slug, canReply, unread, lastRead, postCount],
+  );
   const forum = head?.forum;
   const ctx = useMemo(
     () =>
@@ -169,6 +186,7 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   // the page holding it at the log length the post made, and scrolls to it.
   // Nothing moves a reader who has left the thread while it was posting.
   const { route } = useLocation();
+  useThreadShortcuts(page, lens, route);
   const posted = (res: CreatedPost) => {
     if (location.pathname.startsWith(`/t/${encodeURIComponent(thread.id)}/`)) route(permalink(thread, res.ordinal));
   };
@@ -214,6 +232,7 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
         ))}
       </section>
       {pager}
+      <ThreadFoot page={page} route={route} />
       {canReply &&
         (isPhone.value ? (
           sheetOpen && <ComposerSheet thread={thread.id} authorOf={authorOf} postOf={postOf} onPosted={posted} />
