@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T08:04:22Z
+updated_at: 2026-09-28T08:10:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -101,6 +101,10 @@ Correction to the previous note's last line (Title: Return structured mentions, 
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:04:12Z
 
 AC2 evidence, CI run 585 (PR #105, head 7bbc47a) step log. Step 'built client is current' (npm run build) and step 'client bundle budget' each print: '394 B assets/theme-early-DbsvcKdk.js / 30997 B assets/index-DW5jTwpN.js / 6510 B assets/index-BSGVfO99.css / thread-view bundle: 37901 B gzip / 60000 B budget (63.2%)'. Step 'client tests' ran scripts/bundle.test.mjs (7 tests). The CI figure is 59 B under the local one (37960 B): Alpine's Node links a different zlib, so level-9 output differs by a few bytes between machines. The number that gates is CI's.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T08:10:40Z
+
+Terva review: clean full review, run 9994b7d1-05bd-4a63-b723-d4bf6fb2a142 (request ready-review-b71a058, Actions run #587, id 13755), head b71a05868c731b8d356d5ddd087c6ecd8c450f59, base c066d918a5cd1110d992729876d98f23aee77c85; terva-review/code success, no findings at any severity. CI on that head: run 586, every step success, 'client bundle budget' among them. This note is a ticket-only commit, carried rather than re-reviewed.
 
 ## Summary
 
