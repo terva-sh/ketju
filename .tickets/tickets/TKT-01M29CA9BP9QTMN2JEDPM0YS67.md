@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CA9BP9QTMN2JEDPM0YS67
 title: Implement edit, soft delete, and restore
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:storage-records
     path: docs/03-thread-storage.md
-claim: null
+claim:
+  actor: agent:claude-code/phase1-run-438e26c1
+  branch: run/ca9bp-edit-delete-restore
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aed655cc0dc9d6719
+  commit: ee54c04ca6fe3a71a154c8af8d78048d770d8a97
+  session: null
+  claimed_at: 2026-09-28T05:12:39Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:19:48Z
-updated_at: 2026-09-24T05:21:20Z
+updated_at: 2026-09-28T05:14:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude/phase1-groom
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -51,33 +58,25 @@ The author window rules land in the moderation epic. What this ticket owns is th
 
 ## Implementation plan
 
-Pre-groom plan (2026-09-24). Revise at claim, after reading the code as it stands then.
+Revised at claim (2026-09-28) from the code on main at ee54c04. The reply path (TKT-01M29CA9B9) landed in `internal/service/threads`, not in a `posts` service, so these writes go beside it.
 
 ### Approach
-1. Add three routes in internal/web/api/posts_mutate.go: `PATCH /api/v1/threads/{id}/posts/{ordinal}` with `{source, reason?}`, `DELETE …` with an optional `{reason}`, and `POST …/restore`. All require `viewer.Member()`.
-2. Authorization, minimal by design: the author of the post (`IndexEntry.Author == viewer.User.ID`) may act. The windows and grace edits are TKT-01M29CKRHS, and moderator any-post is TKT-01M29CRJ5J. Leave one `posts.authorize(viewer, entry, action)` function as the seam both extend. On a locked thread, a member's edit is `conflict` (docs/08).
-3. Edit: render-validate first, exactly as TKT-01M29CA9B9 does, then append `EditBody{Source, Reason, ReplyTo: current entry's ReplyTo}`. `Index.applyEdit` sets `ReplyTo` from the body, so leaving it zero would silently drop the post's reply link. Append through `posts.Writer`, which publishes the event.
-4. Refuse an edit to a deleted post inside the actor, not only in the service, so a Delete racing the Edit cannot slip between check and append. Add a precondition to `threadlog.Append` (for example `RequireVisible bool`) checked in `Actor.frameFor` against the live entry flags, returning a new `threadlog.ErrPostDeleted`. Map that error to `conflict` in internal/problem/domain.go.
-5. Delete: append `DeleteBody{Reason}`, and the index sets `EntryDeleted` (apply.go). Restore: append `RestoreBody{Reason}`, and the index clears it. Invalidate nothing. The render cache key carries the revision, and a tombstone is decided from flags at read time.
-6. Response: the post as it now reads for this viewer, from the shared assembler (TKT-01M29CA9AX), plus `log_length`. Add a DTO and golden; the shape is not in docs/07 today.
+1. Routes in `internal/web/api/mutate.go`: `PATCH /api/v1/threads/{id}/posts/{ordinal}` with `{source, reason?}`, `DELETE …` with an optional `{reason}` body, and `POST …/restore` with an optional `{reason}` body. Each asks `MayWrite` first, as reply does, and answers 200 with `dto.CreatedPost` (`{post, ordinal, revision, log_length}`), the post as a later read serves it to this viewer: the new revision after an edit, the tombstone after a delete. Reusing `CreatedPost` rather than a new DTO: the shape is identical, and one type means the client inserts every write's answer the same way. `no-store`, as reply.
+2. Service in `internal/service/threads/mutate.go`: `Edit`, `Delete`, `Restore`, all through one `authorize(a access, entry, action)` seam that TKT-01M29CKRHS (windows) and TKT-01M29CRJ5J (moderator any-post) extend. Here: only the post's author (`IndexEntry.Author == viewer.UserID`) may act; anyone else is `forbidden`. A post hidden by a moderator is not the author's to touch (`forbidden`), since docs/08 says only a moderator's Restore clears it. Edit also needs `reply` in the forum, as posting does. Archived is `conflict` for all three; a lock is `conflict` for a member's edit only (docs/08 "Locked threads accept no posts or edits from members").
+3. Edit: `checkPost`, then render the new source against the thread and the post's current `reply_to`, exactly as reply does; append `EditBody{Source, Reason, ReplyTo: entry.ReplyTo, Mentions: &rendered mentions}` through `posts.Writer`. Writing `reply_to` explicitly as well as fixing the index keeps an older build, which clears on zero, reading the same thing.
+4. State preconditions checked inside the actor, so a racing Delete cannot slip between the service's check and the append: `threadlog.Append.Refuse EntryFlags` / `Require EntryFlags`, checked in `Actor.frameFor` against the entry's flags as the index holds them plus every earlier record staged in the same batch. A failed check is `threadlog.ErrPostState`, mapped to `conflict` in `internal/problem/domain.go`. Edit refuses deleted, moved and hidden; Delete refuses deleted, moved and hidden; Restore requires deleted and refuses moved.
+5. Index: `applyEdit` keeps `ReplyTo` when the body's is zero (settled). Restore clears `EntryDeleted|EntryHiddenByMod` (settled: a moderator's Restore clears hidden-by-mod; the index cannot see the actor's role, and step 2 keeps any non-moderator from restoring a hidden post). The staged-flag walk in step 4 uses the same `postFlagEffect` table as `Apply`, so the two cannot disagree.
+6. Projection: `SetPostRevision` keeps `reply_to` when the Edit carries none (`coalesce(sqlc.narg(reply_to), reply_to)`), mirroring the index; regenerate dbq.
+7. Docs: docs/07 gains a paragraph for the three endpoints (codes, bodies, the idempotency answer below).
 
-### Files
-internal/service/posts/{edit.go,delete.go,authorize.go}, internal/web/api/posts_mutate.go, internal/store/threadlog/{actor.go,errors} (precondition + sentinel), internal/problem/domain.go (mapping), internal/dto (+golden).
+### Gaps settled here (internals / API detail, recorded in docs/07)
+- Deleting a deleted post, or restoring a visible one, is `conflict` and appends nothing: the log keeps no no-op records, and the rule is the same one that refuses an edit to a deleted post.
+- Responses reuse `dto.CreatedPost`.
 
 ### Tests
-- AC1: edit; then `Index.Entry(ord)` has `Revision==2`, `Offset` equal to the new frame's offset from `ScanFrames`, and `EntryEdited` set; `Reader.One` returns the new source, and the reply_to is preserved.
-- AC2: delete; then `ScanFrames` still finds the original `TypePost` frame with the same bytes and CRC, `EntryDeleted` is set, and `Reader.One` is a tombstone.
-- AC3: restore; the flag is cleared and the post reads at its current revision (edit, delete, restore → revision 2 content).
-- AC4: an edit after delete is `conflict`, and the log size is unchanged. A `-race` test fires Delete and Edit concurrently 1000 times; no Edit frame ever follows a Delete for that ordinal without an intervening Restore.
-
-### Design
-Reread docs/03 "Record types" (Edit/Delete/Restore rows) and "Write path", docs/08 "Primitives", "Locking semantics", and "Tombstones", and docs/07 "Resources".
-
-### Interactions
-Consumes `posts.Writer` from TKT-01M29CA9B9, TKT-01M29C2WWG (render validation), and TKT-01M29C0WD8 (actor). The projection writer (TKT-01M29C2WW5) consumes the events. TKT-01M29CKRHS, TKT-01M29CRJ5J, and TKT-01M29CP2PJ extend `posts.authorize`.
-Open: `EditBody` has no Mentions field, so an edit's mentions cannot reach the projection or notifier without re-parsing. That is at odds with TKT-01M29C2WWG AC4.
-Open: `RestoreBody` clears only `EntryDeleted`, while docs/08 says a moderator's Restore also clears hidden-by-mod.
-Open: whether deleting a deleted post, or restoring a visible one, is idempotent or a `conflict`.
+- threadlog: AC1 edit repoints Offset/FrameLength/Revision, sets Edited, keeps ReplyTo when the body's is zero; replay equals incremental. AC2 delete leaves the Post frame's bytes and CRC intact under `ScanFrames`, sets Deleted. AC3 edit→delete→restore reads revision 2. AC4 precondition table incl. same-batch staging; a `-race` test fires Delete and Edit concurrently 1000 times and asserts no Edit frame follows a Delete for that ordinal without an intervening Restore.
+- API: each route's happy path read back through GET, refusals (not author, locked, archived, deleted, already-deleted, not-deleted, anonymous, pre-user) leave the log unchanged; a golden of the edit response.
+- projection: an Edit without reply_to keeps post_meta.reply_to.
 
 ### Settled in grooming (2026-09-24)
 
