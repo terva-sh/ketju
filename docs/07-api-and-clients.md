@@ -218,8 +218,11 @@ source}]}`.
 appends a `Delete`; `POST …/restore` takes the same optional body and appends a
 `Restore`. Each answers 200 with `internal/dto` `CreatedPost`, the shape a
 reply answers with: the post as `GET /threads/{id}/posts/{ordinal}` now serves
-it to this viewer (a tombstone after a delete), its current revision, and the
-log length after the append. `no-store`, and charged to the write limiter.
+it to this viewer (a tombstone after a delete), its revision, and a log
+length, all three from one snapshot of the index taken after the append, so
+they describe the same log, one at least as new as the write. `no-store`, and
+charged to the write limiter. The optional reason body is read to at most
+4 KiB; past that it is `payload-too-large`.
 
 - A member session is required (anonymous `unauthenticated`, pre-user
   `forbidden`), and access to the thread is the thread page's.

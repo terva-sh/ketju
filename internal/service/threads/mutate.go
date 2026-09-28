@@ -89,7 +89,6 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 		return out, err
 	}
 
-	var res threadlog.Result
 	err = s.Threads.With(id, func(th *threadcache.Thread) error {
 		e, err := th.Index.Entry(ordinal)
 		if err != nil {
@@ -113,7 +112,7 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 			return err
 		}
 		pb := postBody(req.Source, r)
-		res, err = s.Writer.Append(th, threadlog.Append{
+		if _, err := s.Writer.Append(th, threadlog.Append{
 			Type: threadlog.TypeEdit, Flags: flags, Author: uint64(v.UserID), Ordinal: ordinal,
 			Body: &threadlog.EditBody{
 				Source: req.Source, Reason: req.Reason,
@@ -125,13 +124,13 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 			},
 			TimeMS: s.now().UnixMilli(),
 			Refuse: gone,
-		})
+		}); err != nil {
+			return err
+		}
+		out, err = s.readBack(ctx, th, id, ordinal, a)
 		return err
 	})
-	if err != nil {
-		return out, err
-	}
-	return s.readBack(ctx, v, id, ordinal, res, res.Revision)
+	return out, err
 }
 
 // Delete is DELETE /threads/{id}/posts/{ordinal} (docs/07): a Delete record,
@@ -176,8 +175,6 @@ func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.I
 		return out, err
 	}
 
-	var res threadlog.Result
-	var revision uint32
 	err = s.Threads.With(id, func(th *threadcache.Thread) error {
 		e, err := th.Index.Entry(ordinal)
 		if err != nil {
@@ -190,29 +187,34 @@ func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.I
 			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
 		}
 		rec.Flags, rec.Author, rec.Ordinal, rec.TimeMS = flags, uint64(v.UserID), ordinal, s.now().UnixMilli()
-		if res, err = s.Writer.Append(th, rec); err != nil {
+		if _, err := s.Writer.Append(th, rec); err != nil {
 			return err
 		}
-		// A Delete or Restore is not a revision, so the frame's revision
-		// says nothing about the post's; the index does.
-		if e, err = th.Index.Entry(ordinal); err != nil {
-			return err
-		}
-		revision = uint32(e.Revision)
-		return nil
+		out, err = s.readBack(ctx, th, id, ordinal, a)
+		return err
 	})
-	if err != nil {
-		return out, err
-	}
-	return s.readBack(ctx, v, id, ordinal, res, revision)
+	return out, err
 }
 
-// readBack answers a write with the post as v would now read it, the way
-// Reply does.
-func (s *Service) readBack(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, res threadlog.Result, revision uint32) (dto.CreatedPost, error) {
-	p, err := s.Post(ctx, v, id, ordinal, "")
+// readBack answers a write with the post as the viewer now reads it, from
+// one snapshot of the index taken after the append returned (review 1119 on
+// PR #95). The post, its revision and the log length all come from that one
+// snapshot, so they describe the same log. It is at least as new as the
+// append, and a write to the same post that lands in between shows in the
+// answer rather than being mixed into it: a Delete or Restore is not a
+// revision, so the frame the append wrote could not supply the post's
+// revision anyway.
+func (s *Service) readBack(ctx context.Context, th *threadcache.Thread, id threadid.ID, ordinal uint32, a access) (dto.CreatedPost, error) {
+	snap, err := s.stable(th, func(ix *threadlog.Index, logLength int64) ([]uint32, error) {
+		return []uint32{ordinal}, nil
+	})
+	if err != nil {
+		return dto.CreatedPost{}, err
+	}
+	posts, err := s.assemble(ctx, th, id, snap, a)
 	if err != nil {
 		return dto.CreatedPost{}, fmt.Errorf("threads: reading back post %d of %s: %w", ordinal, id, err)
 	}
-	return dto.CreatedPost{Post: p.Body, Ordinal: ordinal, Revision: revision, LogLength: res.LogLength}, nil
+	p := posts[0]
+	return dto.CreatedPost{Post: p, Ordinal: ordinal, Revision: uint32(p.Revision), LogLength: snap.logLength}, nil
 }

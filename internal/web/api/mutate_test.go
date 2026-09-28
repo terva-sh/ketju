@@ -9,6 +9,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
 
 	"github.com/terva-sh/ketju/internal/domain"
@@ -294,6 +296,131 @@ func TestChangePostRefusals(t *testing.T) {
 			{"bob", http.MethodPost, postPathN(id, 3) + "/restore", "", "conflict"},
 		})
 	})
+}
+
+// TestReasonBodyIsBounded: the optional {reason} body is read up to
+// maxReasonBody and no further. Whitespace alone is no body, a body at the
+// bound is read, and one past it is payload-too-large and writes nothing
+// (review 1119 on PR #95).
+func TestReasonBodyIsBounded(t *testing.T) {
+	for _, c := range []struct {
+		name, body string
+		want       int
+	}{
+		{"whitespace only", " \n\t ", http.StatusOK},
+		{"at the bound", `{"reason":"` + strings.Repeat("r", maxReasonBody-len(`{"reason":""}`)) + `"}`, http.StatusOK},
+		{"past the bound", `{"reason":"` + strings.Repeat("r", maxReasonBody) + `"}`, http.StatusRequestEntityTooLarge},
+		{"past the bound in whitespace", strings.Repeat(" ", maxReasonBody+1), http.StatusRequestEntityTooLarge},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			w := newWorld(t)
+			id, _ := w.seed()
+			before := w.logState(id)
+			rec := send(w.chain(), "carol", http.MethodDelete, postPathN(id, 4), c.body)
+			if rec.Code != c.want {
+				t.Fatalf("%d %s, want %d", rec.Code, rec.Body, c.want)
+			}
+			if c.want != http.StatusOK && w.logState(id) != before {
+				t.Error("a refused body changed the log")
+			}
+		})
+	}
+}
+
+// TestWriteAnswerIsOneSnapshot: under concurrent edits and deletes of one
+// post, every answer's post, revision and log length describe the same
+// log: the revision is the post's, and the post read at the answer's log
+// length is the post in the answer (review 1119 on PR #95).
+func TestWriteAnswerIsOneSnapshot(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	carol := w.viewer("carol")
+	type answer struct {
+		res  dto.CreatedPost
+		code int
+	}
+	const rounds = 40
+	answers := make(chan answer, 3*rounds)
+	var wg sync.WaitGroup
+	// Straight to the handler, past the chain's write limiter, whose burst
+	// this many writes from one address would exhaust.
+	fire := func(method, path, body string) {
+		defer wg.Done()
+		r := httptest.NewRequest(method, path, strings.NewReader(body))
+		r = r.WithContext(domain.WithViewer(r.Context(), carol))
+		rec := httptest.NewRecorder()
+		w.handler.ServeHTTP(rec, r)
+		if rec.Code != http.StatusOK {
+			answers <- answer{code: rec.Code}
+			return
+		}
+		var res dto.CreatedPost
+		if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil {
+			t.Error(err)
+		}
+		answers <- answer{res: res, code: rec.Code}
+	}
+	for i := range rounds {
+		wg.Add(3)
+		go fire(http.MethodPatch, postPathN(id, 4), fmt.Sprintf(`{"source":"edit %d"}`, i))
+		go fire(http.MethodDelete, postPathN(id, 4), "")
+		go fire(http.MethodPost, postPathN(id, 4)+"/restore", "")
+	}
+	wg.Wait()
+	close(answers)
+
+	// Replay the log to learn the post's revision and deleted state at every
+	// length an answer could name.
+	type state struct {
+		revision uint32
+		deleted  bool
+	}
+	at := map[int64]state{}
+	var st state
+	if err := w.cache.With(id, func(th *threadcache.Thread) error {
+		f, err := os.ReadFile(id.LogPath(w.root))
+		if err != nil {
+			return err
+		}
+		return threadlog.ScanFrames(bytes.NewReader(f), int64(len(f)), func(r threadlog.ScanRecord) bool {
+			if r.Header.Ordinal == 4 {
+				switch r.Header.Type {
+				case threadlog.TypePost, threadlog.TypeEdit:
+					st.revision = r.Header.Revision
+				case threadlog.TypeDelete:
+					st.deleted = true
+				case threadlog.TypeRestore:
+					st.deleted = false
+				}
+			}
+			at[r.Offset+int64(r.Size)] = st
+			return true
+		})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	var ok int
+	for a := range answers {
+		if a.code != http.StatusOK {
+			if a.code != http.StatusConflict {
+				t.Errorf("status %d, want 200 or 409", a.code)
+			}
+			continue
+		}
+		ok++
+		want, found := at[a.res.LogLength]
+		if !found {
+			t.Errorf("answer names log length %d, which ends no record", a.res.LogLength)
+			continue
+		}
+		if a.res.Revision != want.revision || uint32(a.res.Post.Revision) != want.revision || a.res.Post.Deleted != want.deleted {
+			t.Errorf("answer %+v (post revision %d, deleted %v) at log length %d, where the log has revision %d, deleted %v",
+				a.res.Revision, a.res.Post.Revision, a.res.Post.Deleted, a.res.LogLength, want.revision, want.deleted)
+		}
+	}
+	if ok == 0 {
+		t.Fatal("no write succeeded; the race was not exercised")
+	}
 }
 
 // decodePost decodes a 200 single-post answer.

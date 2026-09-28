@@ -1,9 +1,10 @@
 package api
 
 import (
-	"bytes"
+	"bufio"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 
@@ -95,16 +96,42 @@ func (h *handlers) setDeleted(w http.ResponseWriter, r *http.Request,
 	writeJSON(w, http.StatusOK, res)
 }
 
+// maxReasonBody bounds an optional {reason} body, well under the chain's
+// post-sized limit: a reason is a line, and nothing here needs more.
+const maxReasonBody = 4 << 10
+
 // optionalReason reads a {reason} body, or none at all: a DELETE usually has
 // no body, and a client should not have to send "{}" to get one.
+//
+// It streams rather than buffering the body first, and stops at
+// maxReasonBody, so a large or endless body costs no more than that
+// (review 1119 on PR #95). Leading whitespace is skipped to tell an empty
+// body from a JSON one; decodeStrict then reads the rest.
 func optionalReason(body io.Reader) (reasonRequest, error) {
 	var in reasonRequest
-	b, err := io.ReadAll(body)
-	if err != nil {
-		return in, problem.Coded(problem.CodeBadRequest, err)
+	lr := &io.LimitedReader{R: body, N: maxReasonBody + 1}
+	br := bufio.NewReader(lr)
+	for {
+		c, err := br.ReadByte()
+		if errors.Is(err, io.EOF) {
+			if lr.N <= 0 {
+				return in, problem.Coded(problem.CodePayloadTooLarge, errors.New("api: the reason body is too large"))
+			}
+			return in, nil
+		}
+		if err != nil {
+			return in, problem.Coded(problem.CodeBadRequest, fmt.Errorf("api: the request body: %w", err))
+		}
+		if c != ' ' && c != '\t' && c != '\n' && c != '\r' {
+			break
+		}
 	}
-	if len(bytes.TrimSpace(b)) == 0 {
-		return in, nil
+	if err := br.UnreadByte(); err != nil {
+		return in, err
 	}
-	return in, decodeStrict(bytes.NewReader(b), &in)
+	err := decodeStrict(br, &in)
+	if lr.N <= 0 {
+		return in, problem.Coded(problem.CodePayloadTooLarge, errors.New("api: the reason body is too large"))
+	}
+	return in, err
 }
