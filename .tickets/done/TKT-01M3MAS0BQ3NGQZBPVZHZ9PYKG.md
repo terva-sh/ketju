@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T15:40:14Z
-updated_at: 2026-09-28T16:12:08Z
+updated_at: 2026-09-28T16:29:25Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -73,6 +73,12 @@ Follow the precedent of internal/events/projection/catchup_bound_test.go.
 4. Verify locally: `go test -race ./internal/web/health/ -run P99 -v`
    reports no test to run; `go test ./internal/web/health/ -run
    '^TestHealthzP99$' -v` runs it; the widened CI command runs both.
+
+## Notes
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T16:29:25Z
+
+PR #118. Terva review clean, no findings: run ec1f18c2-5d88-4dac-9573-3de4e928f22e, request ready-review-aeae065, Actions run #689, head aeae0650c89c9b9f7567d4f5f0bfb8750633776d, base 2b1c6205fe1ea763bc9e1fc01edd5c2086fdddc1. CI run #688 on that head: 'ci / Build and Test (pull_request)' success. The step 'projection catch-up bound over ten thousand threads (no -race)' log shows '=== RUN TestHealthzP99', 'attempt 1: p99 over 1000 requests: 2.722536ms', '--- PASS', beside TestCatchUpTenThousandUnderBound (65.9ms). The 'go test (race)' step took 5m51s and passed; TestHealthzP99 is not compiled there. docs/11 still lists this ticket as ready among the three dogfood bugs; left to the orchestrator because the other two lanes touch the same lines. Not merged: the maintainer lands this PR.
 
 ## Summary
 
