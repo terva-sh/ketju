@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-28T06:17:50Z
+updated_at: 2026-09-28T06:32:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -134,6 +134,14 @@ Both were fixed by changing the behaviour in 9078481. Neither was answered by ar
 - **g swallowed Tab.** While g collects a number, only digits, Backspace and Enter are prevented. Any other key ends g and keeps its default.
 
 Each fix has a Vitest case that fails with the fix reverted.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T06:32:33Z
+
+Review 1136 (run e523b773-2273-4baa-a65b-7cc777662a25, request ready-review-1db3274-b2) reviewed head 1db3274348f36cf3fc5e548715f17bb4fbe49a82 against base 29566a7aeb298d420cee5eab9cf164623b9111ae. It marked both of review 1130's findings resolved and raised one new medium finding. An earlier request for the same head, ready-review-1db3274 (run 218668f6-39c5-4f7c-b4ad-b34bd9d1099e), was superseded when main moved and produced no result.
+
+- **A timed g could still move a reader who had gone into the composer.** Fixed by changing the behaviour in aa72963: g ends when focus moves anywhere. A Vitest case fails without the fix.
+
+Before re-requesting review, the branch was merged with main at 29566a7 in a detached checkout. The merge was clean, the regenerated dist was unchanged, and tsc and Vitest passed. main's new commits touch only type declarations in the client.
 
 ## Summary
 
