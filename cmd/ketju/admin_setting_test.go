@@ -168,6 +168,37 @@ func TestAdminSettingRefuses(t *testing.T) {
 	}
 }
 
+// A stored row the key no longer takes was written around ketju, not typed
+// by the operator: get and list exit 4, not 1, and set replaces it
+// (review 1188).
+func TestAdminSettingDamagedRow(t *testing.T) {
+	root := dataDir(t, nil)
+	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(root, "db", "ketju.db")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		return q.PutSetting(t.Context(), dbq.PutSettingParams{Key: "registration.mode", ValueJson: `"invite"`, UpdatedAt: 1})
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for _, args := range [][]string{{"get", "--root", root, "registration.mode"}, {"list", "--root", root}} {
+		_, _, err := runSetting(t, args...)
+		if exitCodeFor(err) != exitInternal || !strings.Contains(err.Error(), "set the key again") {
+			t.Errorf("%v over a damaged row = %v (exit %d), want exit %d", args, err, exitCodeFor(err), exitInternal)
+		}
+	}
+	if _, _, err := runSetting(t, "set", "--root", root, "registration.mode", "open"); err != nil {
+		t.Fatal(err)
+	}
+	if out, _, err := runSetting(t, "get", "--root", root, "registration.mode"); err != nil || out != "open\n" {
+		t.Errorf("get after repair = %q, %v", out, err)
+	}
+}
+
 // While serve holds the data directory, set refuses and changes nothing;
 // get and list, which only read, still answer.
 func TestAdminSettingWhileServeHoldsTheDirectory(t *testing.T) {

@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T15:40:14Z
-updated_at: 2026-09-28T16:19:18Z
+updated_at: 2026-09-28T16:21:56Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -94,6 +94,10 @@ Decisions taken while building, and what lost:
 - **End to end.** `TestAdminSettingOpensRegistration` runs the binary (KETJU_AS_MAIN) through README's first-run steps: serve once, get says approval, set refuses beside serve (exit 4), stop, set invite (exit 1), set open (exit 0), start serve, a new identity reaches the handle screen, registers as `newcomer`, and gets a session cookie; the users row exists after shutdown.
 
 Mutations tried: set without the lock (caught by TestAdminSettingWhileServeHoldsTheDirectory and the e2e); set that reports success but writes approval (caught by the e2e: the callback answers 501 instead of the handle screen).
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-28T16:21:56Z
+
+Review 1188 (run 0e3b76b8, Actions run 697) on head 7ad9a95, base 2b1c620: medium, 'Report invalid stored settings as database failures, not CLI value errors'. Accepted and fixed: get and list (and set's read-back) now send Lookup/Current errors through storedFailure, which exits 4 and says to set the key again; exit 1 stays for an unknown key or a proposed value the registry refuses. TestAdminSettingDamagedRow writes an invalid registration.mode row around Set and checks get and list exit 4, and that set then replaces the row. Help text's exit code 4 line updated.
 
 ## Summary
 

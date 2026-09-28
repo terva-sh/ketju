@@ -48,7 +48,8 @@ exit codes:
   1  no setting has that key, or the key does not take that value
   2  usage
   4  the data directory is in use (set only), has no database, or the
-     database could not be read or written
+     database could not be read or written, including a stored value the
+     key no longer takes (set the key again to replace it)
 
 `
 
@@ -107,8 +108,10 @@ func adminSetting(ctx context.Context, out, errOut io.Writer, args []string) err
 	}
 }
 
-// refusal gives a settings error its exit code: 1 for a key or value the
-// registry refuses, 4 for anything else.
+// refusal gives an error about what the operator typed its exit code: 1
+// for a key or value the registry refuses, 4 for anything else. It is for
+// the key and the proposed value only; an error reading what is stored
+// goes through storedFailure.
 func refusal(cmd string, err error) error {
 	err = fmt.Errorf("%s: %w", cmd, err)
 	switch {
@@ -118,6 +121,18 @@ func refusal(cmd string, err error) error {
 		return errInvalidValue{err}
 	}
 	return err
+}
+
+// storedFailure is an error reading the settings back. A stored row that
+// no longer decodes carries ErrInvalidValue, but the operator typed
+// neither the key nor that value, so it exits 4 as a database failure
+// rather than 1 (review 1188), and says how to repair it.
+func storedFailure(cmd string, err error) error {
+	if errors.Is(err, settings.ErrInvalidValue) {
+		return fmt.Errorf("%s: %w; the database holds a value the key does not take, "+
+			"written around ketju: set the key again to replace it", cmd, err)
+	}
+	return fmt.Errorf("%s: %w", cmd, err)
 }
 
 func settingSet(ctx context.Context, out io.Writer, cmd, root, key, text string) error {
@@ -152,7 +167,7 @@ func settingSet(ctx context.Context, out io.Writer, cmd, root, key, text string)
 	}
 	v, err := settings.Lookup(ctx, d, key)
 	if err != nil {
-		return refusal(cmd, err)
+		return storedFailure(cmd, err)
 	}
 	fmt.Fprintf(out, "%s = %s\n", v.Name, v.JSON)
 	return nil
@@ -174,7 +189,7 @@ func settingGet(ctx context.Context, out io.Writer, cmd, root, key string) error
 	defer d.Close()
 	v, err := settings.Lookup(ctx, d, key)
 	if err != nil {
-		return refusal(cmd, err)
+		return storedFailure(cmd, err)
 	}
 	fmt.Fprintln(out, v.Text())
 	return nil
@@ -191,7 +206,7 @@ func settingList(ctx context.Context, out io.Writer, cmd, root string) error {
 	defer d.Close()
 	vs, err := settings.Current(ctx, d)
 	if err != nil {
-		return refusal(cmd, err)
+		return storedFailure(cmd, err)
 	}
 	var b strings.Builder
 	for i, v := range vs {
