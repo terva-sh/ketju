@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRJ9DTBAC2BSBYAT9CQC
 title: Render tombstones for deleted and moved posts
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -24,17 +24,10 @@ references:
     path: docs/08-moderation.md
   - ref: pr:170
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-krj9
-  branch: run/krj9-tombstones
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a4943b3fa9b65334c
-  commit: 1dd6ed90c253e04f8906a966943dde764b48e0c6
-  session: null
-  claimed_at: 2026-09-29T22:20:45Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T22:37:44Z
+updated_at: 2026-09-29T22:55:39Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,11 +45,11 @@ Replies to a deleted post keep their reply_to link. A tombstone is a gap in cont
 
 ## Acceptance criteria
 
-- [ ] Replies to a removed post keep reply_to, and GET …/replies of the removed post and the client's expander under its tombstone still list them
+- [x] Replies to a removed post keep reply_to, and GET …/replies of the removed post and the client's expander under its tombstone still list them
 - [x] For an author-deleted and a moderator-hidden post, anonymous viewers and other members get no html and no revisions from the page, the single post, replies, user posts and history; a moderator gets the html in each
 - [x] The author of a hidden-by-mod post gets its html with removal moderator on the page, the single post, their user posts and its history; their own self-deleted post stays a tombstone without html
 - [x] A page holding the viewer's own hidden post is cached under class author:<id>, and no other member's answer carries its html in either request order (TestResponseCacheSeparatesTheHiddenPostsAuthor)
-- [ ] The client renders 'Post removed by author' and 'Post removed by a moderator', shows a removed post's body to those served it on a distinct background, and renders a pointer to /t/{moved_to} when moved_to is set (component test; the server fills moved_to in TKT-01M29CYSAM)
+- [x] The client renders 'Post removed by author' and 'Post removed by a moderator', shows a removed post's body to those served it on a distinct background, and renders a pointer to /t/{moved_to} when moved_to is set (component test; the server fills moved_to in TKT-01M29CYSAM)
 - [x] A removed post keeps its ordinal: ?ordinal=N serves the page holding it, and a member receives that post with removal set and no html
 - [x] Removing one post changes nothing for visible posts: members and anonymous viewers still get their html, and their history follows public_edit_history as before (TestVisiblePostsUnchanged)
 - [x] The author of a hidden-by-mod post reads its history even with public_edit_history off, and only for that post while it is hidden (TestHiddenPostsAuthorReadsHistoryWithSettingOff)
@@ -119,3 +112,7 @@ Settled while building, internals only:
 - `dto.ts` types `removal` as `string | null`, not a union, because the client's contract test imports the Go goldens as JSON and TypeScript widens their strings.
 - With public_edit_history off, a member asking for an ordinal past the end is still `forbidden`, as before, and not `not-found`. The admission check now runs after the entry is read, so this case is kept explicitly.
 - The internal/dto fixture's #63 became a moderator removal with no moved_to, and a new #64 is the moved post, so no fixture claims to be both removed and moved. The client test that counts the golden page's posts now expects post-64.
+
+## Summary
+
+Landed in two PRs. The server half is PR #170, rebase-merged at 2826208, with the code at b6618fe. It adds dto.Post.removal ("author", "moderator", "review" or null). threads.revealRemoved is the one rule for who gets a removed post body and revisions: a moderator, and the author while a moderator removal holds it. The page, the single post, replies, user posts and history all use it. History admits the author of a hidden post to that post history with public_edit_history off. pageClass keys a page holding the viewer own hidden post under the cache class author:<id>. docs/07 gains a "Removed posts" section. The client half is the second PR. components/thread/removal.tsx holds the wording ("Post removed by author", "Post removed by a moderator", "Post hidden pending review") and the moved pointer to /t/{moved_to}. The tombstone keeps its ordinal, anchor and reply indicator, and offers the reply expander. A removed post served with its body is drawn with class removed on the sunken surface and labelled by who removed it, on the page, in the expander and in the popover. For TKT-01M29CP2PJ: dto.RemovalReview and its wording exist, and nothing sets them yet. revealRemoved already serves the author any removal that is not their own, so an auto-hidden post needs only removal() to read the new flag.
