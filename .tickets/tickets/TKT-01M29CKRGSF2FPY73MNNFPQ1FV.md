@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRGSF2FPY73MNNFPQ1FV
 title: Implement thread lock, unlock, pin, and unpin
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ckrgs
+  branch: run/ckrgs-lock-pin
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a7296d3b7170ebe02
+  commit: 855ca5d40bb5ff7aa92f17e6d50bf70484b996ca
+  session: null
+  claimed_at: 2026-09-29T21:04:00Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:18:23Z
+updated_at: 2026-09-29T21:04:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-ckrgs
   name: ""
 extensions: {}
 ---
@@ -53,7 +60,7 @@ Locking is not archiving. A locked thread accepts no posts or edits from members
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a.
+Revised 2026-09-29 against main at 855ca5d, at claim. The groomed plan (against 7af2c5a) stands with the changes listed under "Revised at claim"; the Settled items below are carried verbatim.
 
 ### Settled in grooming
 
@@ -63,6 +70,14 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - **Pin expiry needs no job.** A pin whose `pinned_until` has passed is no pin (docs/07 thread list row; `views.activePin` in `internal/store/db/views/threadlist.go` already compares against now). The projection row keeps the expired values until the next pin record.
 - **Every action is a thread-log record and an `audit_log` row** (docs/08 opening paragraph; epic TKT-01M29BN36J).
 - **Response cache.** Every one of these records is an append, so it moves the log length, and the log length is in `respcache.Key`. No new viewer class is needed (docs/07 "The response cache").
+
+### Revised at claim
+
+- **Missing actor rows.** `audit_log.actor_id` references `users (id)` and foreign keys are on, while the projection tables have no such reference: a log can name a member the database lacks (a database restored from a backup older than the logs, which reindex's member id floor exists for). `auditFor` writes such an actor as NULL and keeps the log's id in `details_json` as `"log_actor"`, so an audited record can never wedge a thread's projection on a foreign key.
+- **Delete `auto` and `by_moderator`** are not keys `DeleteBody` has yet (TKT-01M29CRJ5J and TKT-01M29CP2PJ add them). Until they exist, a `Delete` is audited when its actor is not the post's author, the same rule as `Edit` and `Restore`, which is what a moderator's delete of someone else's post is.
+- **Client (step 6)** moves to a draft, filed and linked from here: the client lane holds `internal/web/spa/dist` during this run (docs/13 "Running two lanes"), so this PR changes no client code or dist.
+- **No migration.** The `audit_log_target` index already serves `AuditExistsForRecord`; two small reads are added, `PostAuthor` and `UserExists`.
+- The header answer is built by one helper, `threadHeader`, from the projection row re-read after the synchronous projection, the forum, the tags and one index snapshot, rather than by drawing a whole page.
 
 ### Approach
 
