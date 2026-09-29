@@ -22,7 +22,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-29T14:59:00Z
+updated_at: 2026-09-29T15:11:15Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -58,6 +58,7 @@ No ticket builds the screen. Found while planning TKT-01M3K9XBJA.
 - [ ] The dist is regenerated with go generate ./internal/web/spa and committed
 - [ ] An archived forum's notice never disables Post before the API has answered, so an admin can start a thread in an archived forum from the screen (NewThreadScreen.test.tsx)
 - [ ] forbidden, conflict, validation-failed, payload-too-large and rate-limited are said in words and keep the typed text; a draft-save forbidden or conflict only turns autosave off and never disables Post, and only the create route's own forbidden or conflict disables it, so an admin whose draft saves are refused in an archived forum can still post (NewThreadScreen.test.tsx)
+- [ ] The forum draft's autosave is disarmed until its GET answers, so an empty form never deletes a forum draft before it loads (state/newThread.test.ts)
 
 ## Implementation plan
 
@@ -90,7 +91,7 @@ Engineering decisions taken here, with the alternative that lost:
 ### Approach
 
 1. `composer/ComposerBody.tsx`: move the tabs, toolbar, textarea, mention list and preview panel out of `Composer.tsx`. Props: `state` (`source`, `caret`, `summoned`, `posting`), `thread?`, `replyTo?`, `label` ("Reply text" or "Thread text"), `sheet`. `usePreview` sends `thread_id` and `reply_to` only when a thread is given. The mention list's id comes from a `useId`-style counter rather than the thread id. `Composer.tsx` uses it, and its tests pass unchanged.
-2. `state/newThread.ts`: `newThreadFor(forum)` with `title`, `source`, `caret`, `summoned`, `posting`, `failure`, and the same owner rule as `composerFor`. It starts `watch({kind: 'new', forum}, () => ({title, source}))`. `loadNewThreadDraft(forum)` fills an empty form from `apiGetOptional<ForumDraft>`. `createThread(forum)`: one at a time, `POST /api/v1/forums/{slug}/threads` with `{title, source}`, then `drop` the draft, clear the state, and answer the `CreatedThread`.
+2. `state/newThread.ts`: `newThreadFor(forum)` with `title`, `source`, `caret`, `summoned`, `posting`, `failure`, and the same owner rule as `composerFor`. It starts `watch({kind: 'new', forum}, () => ({title, source}))`. `loadNewThreadDraft(forum)` fills an empty form from `apiGetOptional<ForumDraft>`, then arms the key. The key is created disarmed, as TKT-01M3NS1931 settles, so an empty form never sends `DELETE` for a forum draft before it has loaded, and a failed load never deletes one. `createThread(forum)`: one at a time, `POST /api/v1/forums/{slug}/threads` with `{title, source}`, then `drop` the draft, clear the state, and answer the `CreatedThread`.
 3. `screens/NewThreadScreen.tsx` for `/f/:forum/new`:
    - A signed-out reader gets the sign-in prompt the other screens use; a pre-user is sent away by TKT-01M29CKRG9's gate.
    - The forum's name from `peekGet('/api/v1/forums')`, or from the thread list's `forum`; `not-found` from the draft load shows "No such forum".
@@ -106,7 +107,7 @@ Engineering decisions taken here, with the alternative that lost:
 ### Tests
 
 - `composer/ComposerBody.test.tsx`: the preview sends `thread_id` only when given. `Composer.test.tsx` and `ComposerSheet.test.tsx` pass unchanged.
-- `state/newThread.test.ts`: a loaded draft fills an empty form with title and body and not a typed one; `createThread` posts once on a double click, drops the draft, and clears the form; a refusal keeps the text.
+- `state/newThread.test.ts`: a loaded draft fills an empty form with title and body and not a typed one; a load slower than the debounce sends no `DELETE` before it answers; `createThread` posts once on a double click, drops the draft, and clears the form; a refusal keeps the text.
 - `screens/NewThreadScreen.test.tsx`: Post is off with a blank title or body; each refusal's words; an archived forum held in `/forums` shows its notice before typing and leaves Post enabled, for a member and for an admin; an admin's Post in an archived forum is sent and its 201 routes to the thread; a `conflict` from the create route disables Post for a member; a `forbidden` or `conflict` draft save turns autosave off, shows "Draft not saved", and leaves Post enabled; an admin whose draft saves answer `conflict` in an archived forum still posts, and the 201 routes to the thread; success routes to the thread; the title input and the textarea are labelled.
 - `shell/Shell.test.tsx`: `composing` hides the tab bar at 390 px.
 - `e2e/new-thread.spec.ts` at 390 px and 1440 px: alice opens `/f/general/new` from the thread list, types a title and body, waits for "Draft saved"; a second context from `stateFile('alice')` finds both; posting lands on `/t/{id}/{slug}` with post 1 shown, and `GET /api/v1/forums/general/draft` is 204. Axe reports no violations on the screen, and the page has no horizontal scroll. The spec deletes the draft before it starts.

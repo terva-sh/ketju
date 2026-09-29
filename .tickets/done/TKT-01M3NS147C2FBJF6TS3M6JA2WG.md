@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:35Z
-updated_at: 2026-09-29T14:47:28Z
+updated_at: 2026-09-29T15:11:41Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -113,6 +113,20 @@ Where it is recorded:
 - TKT-01M29CKRH9 (Implement thread rename and move) carries the audit rule under "Settled in grooming", and its audit criterion now requires `{thread, log_offset}` with no title text. It had not been claimed.
 - The search index is still TKT-01M3NS122F's to clear once it exists.
 
+**agent:claude-code/phase2-groom** at 2026-09-29T15:11:41Z
+
+This note supersedes the decision note above where the two differ, and states where the decision came from. Terva review 1376 (PR #143, head d2e5269) asked for this.
+
+**Provenance.** The maintainer's acceptance, dated 2026-09-29, reached this ticket through the orchestrating session of the Phase 2 grooming run (TKT-01M3M9RR26). That session relayed the choice as: option A; "Title removed" through an appended rename, with an optional `--title`; old slugs keep redirecting by id; marker M1; audit option (a). The options note above it is the recommendation the maintainer accepted. The description of PR #143 was written before the decision and still says the spike is undecided. That description is stale, and this ticket is the record.
+
+**One refinement made after the decision, not by the maintainer.** Every `Redacted` marker also carries a `journal` field, the ULID of the journal that wrote it. Terva review 1375 (head 17f3b02) found that a title may be redacted more than once. A resumed run that recognised its marker by reason and operator could skip a log it never rewrote. The field is added to M1's body. It changes nothing the maintainer chose: the type, the critical class, `ordinal: 0` and the `title` field all stand. If the maintainer objects, the alternative is a per-run nonce in the journal compared against the replacement rename's actor and timestamp, which is weaker.
+
+The decision now reads the same in four places:
+- this note;
+- the summary;
+- docs/03 "Hard redaction", in the "Titles" bullet;
+- TKT-01M29CXJZ9's "Settled in grooming".
+
 ## Summary
 
-Decided 2026-09-29 by the maintainer, on grooming's recommendation: ketju redact accepts a thread title, blanking title and slug in ThreadCreated (keeping forum_id and tags) and every ThreadRenamed, padded so the log never shrinks; the thread then shows 'Title removed' through an appended rename, or the operator's --title; old slugs keep redirecting by id; the marker is Redacted 0x80 with ordinal 0 and a title field; rename audit rows record only the thread and log offset. Recorded in docs/03 'Hard redaction' and folded into TKT-01M29CXJZ9's plan and criteria before it was claimed; TKT-01M29CKRH9's plan and audit criterion carry the no-title-text rule.
+Decided 2026-09-29 by the maintainer, relayed through the grooming run's orchestrating session, accepting grooming's recommendation. ketju redact accepts a thread title: it blanks title and slug in ThreadCreated (keeping forum_id and tags) and in every ThreadRenamed, padded so the log never shrinks. The thread then shows 'Title removed' through an appended rename, or the operator's --title. Old slugs keep redirecting by id. The marker is Redacted 0x80 with ordinal 0 and a title field (M1). Rename audit rows record only the thread and log offset. One refinement made after the decision in review 1375, not by the maintainer: every Redacted marker also carries its journal's ULID, so a resumed run finds its own marker when a title is redacted twice. The same text is in docs/03 'Hard redaction' (the Titles bullet), in TKT-01M29CXJZ9's plan and criteria, and in TKT-01M29CKRH9's audit rule.

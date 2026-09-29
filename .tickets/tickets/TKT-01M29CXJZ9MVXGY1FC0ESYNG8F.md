@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T14:58:54Z
+updated_at: 2026-09-29T15:11:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -85,7 +85,7 @@ Maintainer decision of 2026-09-29 on TKT-01M3NS147C (Decide how a thread title i
 - **`ketju redact` accepts a thread title.** It blanks `title` and `slug` in the `ThreadCreated` frame and in every `ThreadRenamed` frame before the marker, keeping `ThreadCreated`'s `forum_id` and `tags`. Each frame is padded to its original length and re-checksummed as post frames are, so the log never shrinks.
 - **The thread then shows "Title removed"**, through a `ThreadRenamed` the command appends after the marker, or the title the operator gives with `--title`. Every surface reads the projection's title as it does after any rename, so no reader, projection or client needs a special case.
 - **Old slugs keep redirecting by id.** Nothing stores them. A stale slug redirects to the replacement's slug as it would after any rename (docs/07).
-- **The marker is `Redacted` (0x80) with `ordinal: 0` and `title: true`**: every title frame before it was blanked. There is one critical type for posts and titles, and it lands here, so no build knows `Redacted` without the field.
+- **The marker is `Redacted` (0x80) with `ordinal: 0` and `title: true`**: every title frame before it was blanked. There is one critical type for posts and titles, and it lands here, so no build knows `Redacted` without the field. *Refinement, not part of the maintainer's words:* every `Redacted` marker also carries a `journal` field, the ULID of the journal that wrote it. Terva review 1375 showed that a title may be redacted twice, and resume needs to tell one run's marker from another's. This adds a field to M1 and changes nothing the maintainer chose. It is recorded in a superseding note on TKT-01M3NS147C and in docs/03.
 - **Audit rows never carry title text.** TKT-01M29CKRH9's `thread.renamed` rows record `{thread, log_offset}` only, so a redaction leaves no copy of a title in the append-only `audit_log`. This command's own row for a title carries no title either.
 
 Engineering choices for the title target, taken in this revision:

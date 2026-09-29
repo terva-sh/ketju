@@ -372,7 +372,9 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   blanks `title` and `slug` in `ThreadCreated`, keeping
   `forum_id` and `tags`, and in every `ThreadRenamed`, each padded so the log
   never shrinks. It appends `Redacted` with `ordinal` 0 and `title` set, then a
-  `ThreadRenamed` to "Title removed" or the operator's `--title`. Old slugs
+  `ThreadRenamed` to "Title removed" or the operator's `--title`. Every
+  `Redacted` record also names the journal that wrote it, because a title can
+  be redacted more than once and a resumed run must find its own marker. Old slugs
   keep redirecting by id. Rename audit rows record only the thread and log
   offset, so no copy of the title survives in the append-only `audit_log`.
 

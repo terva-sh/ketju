@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-29T14:45:01Z
+updated_at: 2026-09-29T15:11:15Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -52,6 +52,7 @@ No ticket covers the client half. Found while planning TKT-01M3K9XBJA (Autosave 
 - [ ] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
 - [ ] A forbidden or conflict answer turns autosave off for that thread (state/drafts.test.ts)
 - [ ] On pagehide the save starts inside the handler when no request for that draft is in flight; with one in flight no second request starts, and the snapshot kept in localStorage is sent on the next load when it is newer than the server draft (state/drafts.test.ts)
+- [ ] Autosave for a draft is disarmed until its GET answers, so a load slower than the debounce never deletes the server draft; an empty composer sends DELETE only when the server is known to hold a non-empty draft, and a failed load never deletes (state/drafts.test.ts)
 
 ## Implementation plan
 
@@ -83,7 +84,8 @@ Engineering decisions taken here, with the alternative that lost:
 
   What is lost is bounded: the last edit made while a save was in flight reaches another device only after this browser next opens the thread. Lost: waiting on the chain in `pagehide`, the flaw the review found; aborting the in-flight request and sending the final one, since an abort does not unsend a body the server may still apply after the newer one; and a client revision the server compares, which changes the drafts API (TKT-01M29CA9CE, done) and its schema for a window of about 1.5 s.
 - **A loaded draft never overwrites what the reader typed.** It fills the composer only if the source is empty, no reply target is set, and no post is in flight. Otherwise the local text wins and is saved over the server copy on its next save.
-- **Empty means delete.** When the source is blank and there is no reply target, the save is a `DELETE`.
+- **Empty means delete, but only a draft the server is known to hold.** When the source is blank and there is no reply target, the save is a `DELETE`, but only when the last server state this tab knows of is non-empty: a draft that was loaded or saved non-empty. An untouched composer, or one whose server state is unknown, sends nothing when it is empty.
+- **Autosave is disarmed until the draft has loaded** (Terva review 1376, PR #143, head d2e5269: a load slower than the debounce let the initial empty composer `DELETE` the draft it was about to show). `watch` creates a key disarmed. While a key is disarmed, changes schedule nothing, and `pagehide` sends nothing for it. The load arms it when the `GET` answers 200 or 204, after filling the composer, and records what it found as the known server state. If the member typed in the meantime, arming schedules one save of what they typed; the local text wins, as settled above. If the load fails, the key is armed with the server state unknown. A non-empty save may then go out, since `PUT` replaces the whole draft with what the member wrote, but an empty composer sends no `DELETE` until a later load or save makes the state known. Lost: delaying the first save by a fixed time, which a slow network still beats; and skipping the load when the composer is non-empty, which leaves the server state unknown.
 - **The draft is loaded by the thread page, not by the composer**, when `viewer.can_reply` is true, once per thread per session. The reply bar then shows it on a phone before the sheet ever opens. Lost: putting the draft into the thread response's viewer block, which would save a request but change the thread endpoint's contract and its goldens.
 - **`apiGetOptional<T>(url, init): Promise<T | null>`** in `api/client.ts` answers `null` for 204 and holds nothing, since drafts are `no-store`. It lives in `client.ts` so `one-path.test.ts` still finds every request there.
 
@@ -99,8 +101,8 @@ Engineering decisions taken here, with the alternative that lost:
    - Refusals: `forbidden`, `conflict` (a locked or archived thread), `not-found` and `unauthenticated` turn autosave off for the key; `rate-limited` waits for `Retry-After`; anything else is `failed` and the next change retries.
    - `resetDrafts()` for tests. An owner change in `composerFor` calls it, so one person's pending save never goes out under the next person's session.
 3. `state/composer.ts`:
-   - `composerFor` starts `watch({kind: 'reply', thread}, () => ({source, reply_to}))` for each new composer.
-   - `loadReplyDraft(thread)`: `apiGetOptional<Draft>`, then fills `source` and `replyTo` under the rule above and records the loaded snapshot as saved, so loading does not save it back.
+   - `composerFor` starts `watch({kind: 'reply', thread}, () => ({source, reply_to}))`, disarmed, for each new composer. A thread the reader cannot reply in is never loaded, so its key is never armed and never saves.
+   - `loadReplyDraft(thread)`: `apiGetOptional<Draft>`, then fills `source` and `replyTo` under the rule above and records the loaded snapshot as saved and as the known server state, then arms the key (`arm(key, known)`), so loading does not save it back.
    - `postReply` calls `drop` on success, before it clears the fields. `discardReply` calls `drop`.
    - Update the header comment that says drafts last the session.
 4. `screens/ThreadScreen.tsx`: an effect on the thread id and `canReply` calls `loadReplyDraft` once per thread per session.
@@ -113,6 +115,11 @@ Engineering decisions taken here, with the alternative that lost:
 - `state/drafts.test.ts`, with fake timers and a fetch mock:
   - `saves once after typing stops`: ten changes inside the delay send one `PUT`.
   - `sends nothing unchanged`.
+  - `an empty composer never deletes before its draft loads`: the `GET` answers after 3000 ms. No request is sent before it answers, and the loaded draft then fills the composer and is still on the server.
+  - `typing before the load finishes is saved once, after it`.
+  - `a failed load never deletes`: after a failed `GET`, an empty composer sends nothing, and a non-empty one sends a `PUT`.
+  - `an untouched empty composer sends nothing`: after a 204 load, no `DELETE` follows.
+  - `a disarmed key sends nothing on pagehide`.
   - `clearing deletes`.
   - `a post deletes and cancels the pending save`: a change, then a successful `postReply` before the delay ends, sends one `DELETE` and no `PUT`.
   - `requests keep their order`: a slow `PUT` then a `DELETE` reach the server in that order.
