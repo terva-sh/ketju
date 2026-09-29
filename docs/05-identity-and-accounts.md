@@ -331,7 +331,10 @@ catalogue") when it breaks any of these rules:
 - `markdown` is a notice's body, at most 10000 characters. It and
   `intro_markdown` are rendered through `internal/render` like a post.
 
-Answers are strings trimmed of surrounding space. An answer for a key the
+Answers are strings trimmed of surrounding space. Control characters are
+checked before the trim, so a one-line answer with a line break at either
+end is refused rather than trimmed. A `null` is no answer, except for a
+`markdown_notice`, which is sent nothing at all. An answer for a key the
 form has no field for is `bad-request`, because the client drew its inputs
 from the schema. A `locked` field ignores whatever was submitted and stores
 the claim. When the IdP sent no such claim it stores an empty value and is

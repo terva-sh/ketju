@@ -55,6 +55,9 @@ func TestEveryTypeValidatesFromTheTable(t *testing.T) {
 		{"text over the cap", `{"key":"a","type":"text","label":"L"}`, `"` + strings.Repeat("x", 201) + `"`, nil, CodeTooLong},
 		{"text with a newline", `{"key":"a","type":"text","label":"L"}`, `"a\nb"`, nil, CodeInvalidText},
 		{"text with a control character", `{"key":"a","type":"text","label":"L"}`, `"a\u0007b"`, nil, CodeInvalidText},
+		{"text with a leading line break", `{"key":"a","type":"text","label":"L"}`, `"\nhello"`, nil, CodeInvalidText},
+		{"text with a trailing line break", `{"key":"a","type":"text","label":"L"}`, `"hello\r\n"`, nil, CodeInvalidText},
+		{"text with a trailing tab", `{"key":"a","type":"text","label":"L"}`, `"hello\t"`, nil, CodeInvalidText},
 		{"text as a number", `{"key":"a","type":"text","label":"L"}`, `5`, nil, CodeWrongType},
 		{"text required and blank", `{"key":"a","type":"text","label":"L","required":true}`, `"   "`, nil, CodeRequired},
 
@@ -62,6 +65,7 @@ func TestEveryTypeValidatesFromTheTable(t *testing.T) {
 		{"email with a name", `{"key":"a","type":"email","label":"L"}`, `"Ada <ada@example.org>"`, nil, CodeInvalidEmail},
 		{"email with no domain", `{"key":"a","type":"email","label":"L"}`, `"ada"`, nil, CodeInvalidEmail},
 		{"email over its max", `{"key":"a","type":"email","label":"L","max":5}`, `"ada@example.org"`, nil, CodeTooLong},
+		{"email with a trailing line break", `{"key":"a","type":"email","label":"L"}`, `"ada@example.org\n"`, nil, CodeInvalidText},
 		{"email as a bool", `{"key":"a","type":"email","label":"L"}`, `true`, nil, CodeWrongType},
 		{"email required and absent", `{"key":"a","type":"email","label":"L","required":true}`, ``, nil, CodeRequired},
 
@@ -69,6 +73,8 @@ func TestEveryTypeValidatesFromTheTable(t *testing.T) {
 		{"textarea over its max", `{"key":"a","type":"textarea","label":"L","max":4}`, `"abcde"`, nil, CodeTooLong},
 		{"textarea over the cap", `{"key":"a","type":"textarea","label":"L"}`, `"` + strings.Repeat("x", 5001) + `"`, nil, CodeTooLong},
 		{"textarea with a control character", `{"key":"a","type":"textarea","label":"L"}`, `"a\u001bb"`, nil, CodeInvalidText},
+		{"textarea with a trailing control character", `{"key":"a","type":"textarea","label":"L"}`, `"ab\u000b"`, nil, CodeInvalidText},
+		{"textarea with a lone carriage return", `{"key":"a","type":"textarea","label":"L"}`, `"ab\r"`, nil, CodeInvalidText},
 		{"textarea as an array", `{"key":"a","type":"textarea","label":"L"}`, `["a"]`, nil, CodeWrongType},
 
 		{"checkbox ticked", `{"key":"a","type":"checkbox","label":"L","required":true}`, `true`, true, ""},
@@ -91,6 +97,7 @@ func TestEveryTypeValidatesFromTheTable(t *testing.T) {
 
 		{"notice takes no answer", `{"key":"a","type":"markdown_notice","markdown":"**hi**"}`, ``, nil, ""},
 		{"notice refuses a value", `{"key":"a","type":"markdown_notice","markdown":"**hi**"}`, `"x"`, nil, CodeNotAllowed},
+		{"notice refuses a null", `{"key":"a","type":"markdown_notice","markdown":"**hi**"}`, `null`, nil, CodeNotAllowed},
 	}
 	seen := map[string]bool{}
 	for _, c := range cases {

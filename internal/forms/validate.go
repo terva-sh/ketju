@@ -70,10 +70,14 @@ var types = map[string]fieldType{
 			if json.Unmarshal(raw, &v) != nil {
 				return nil, false, CodeWrongType
 			}
-			v = strings.TrimSpace(strings.ReplaceAll(v, "\r\n", "\n"))
-			switch {
-			case hasControl(v, "\n\t"):
+			v = strings.ReplaceAll(v, "\r\n", "\n")
+			// Checked before trimming, so a stray control character at
+			// either end is refused rather than trimmed away.
+			if hasControl(v, "\n\t") {
 				return nil, false, CodeInvalidText
+			}
+			v = strings.TrimSpace(v)
+			switch {
 			case utf8.RuneCountInString(v) > max:
 				return nil, false, CodeTooLong
 			}
@@ -176,12 +180,15 @@ func line(max int, raw json.RawMessage, present bool, more func(string) string) 
 	if json.Unmarshal(raw, &v) != nil {
 		return nil, false, CodeWrongType
 	}
+	// Checked before trimming: a line break at either end is still a
+	// second line, and trimming would hide it (review 1400).
+	if hasControl(v, "") {
+		return nil, false, CodeInvalidText
+	}
 	v = strings.TrimSpace(v)
 	switch {
 	case v == "":
 		return "", true, ""
-	case hasControl(v, ""):
-		return nil, false, CodeInvalidText
 	case utf8.RuneCountInString(v) > max:
 		return nil, false, CodeTooLong
 	}
@@ -232,8 +239,11 @@ func Validate(s Schema, answers map[string]json.RawMessage, claims map[string]st
 			out[f.Key] = strings.TrimSpace(claims[f.FromClaim])
 			continue
 		}
-		raw, present := answers[f.Key]
-		present = present && !isNull(raw)
+		raw, sent := answers[f.Key]
+		// A null is no answer, except to a type that takes none: a notice
+		// is sent nothing at all, and a null sent for it is refused
+		// (review 1400).
+		present := sent && (t.display || !isNull(raw))
 		v, empty, code := t.answer(f, Limit(f), raw, present)
 		switch {
 		case code != "":
