@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T22:42:24Z
+updated_at: 2026-09-29T22:54:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -124,6 +124,14 @@ Terva review 1490 (PR #168, head ed68932d6d712c224fced4afd8f8afe78fbe6086, base 
 **agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:42:24Z
 
 Terva review 1494 (PR #168, head f7a28cb0af73a5d11047ded8c1f6d702f6bbf995, base 1dd6ed90c253e04f8906a966943dde764b48e0c6, run 1063): clean at medium and above; its verdicts on review 1490's findings are all 'resolved'. One low, 'Phone width frame exceeds 390 px', is fixed: .fe-phone is border-box. e2e/admin-forms.spec.ts measures the frame at 390 px or less, and fails at 424 px with the old sizing.
+
+**agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:54:13Z
+
+Terva review 1496 (PR #168, head 4b0880bc66194300de16487729f54b74cf613004, base afb4851b9f3e7fecee3991353eaa75513c35dfcc, run 1072): one medium, 'Concurrent viewport tests can conflict and fail to restore the form'. Its premise does not hold today: playwright.config.ts sets workers: 1 and fullyParallel: false, so the phone and desktop runs never overlap, and the other shared-server specs rely on the same thing. The reviewer saw only the diff. Answered in code rather than argued: in 5e8f1d0-and-after, admin-forms.spec.ts checks both settings before it touches the form, and fails there if either changes (verified with --workers=2). Review 1496 marked 1494's width finding 'resolved'.
+
+**agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:54:20Z
+
+Correction to the review 1496 note above: the guard landed in commit 8f7d2f9 on the PR branch, not '5e8f1d0', which names no commit. Everything else in that note stands.
 
 ## Summary
 
