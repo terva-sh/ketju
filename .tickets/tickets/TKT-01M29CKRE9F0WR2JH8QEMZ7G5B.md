@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRE9F0WR2JH8QEMZ7G5B
 title: Support multiple providers with domain gates and auto-approve
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:identity-providers
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ckre9
+  branch: run/ckre9-multi-provider
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae5086623333f99f6
+  commit: fe5cdcb7fbda81cadab35546674c9b2a26e732d2
+  session: null
+  claimed_at: 2026-09-29T21:51:00Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:18:11Z
+updated_at: 2026-09-29T21:52:00Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-ckre9
   name: ""
 extensions: {}
 ---
@@ -54,7 +61,7 @@ A domain gate only means something when the provider asserts `email_verified`. T
 
 ## Implementation plan
 
-Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a.
+Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a. Revised at claim, 2026-09-29, against main at fe5cdcb.
 
 ### Settled in grooming
 
@@ -68,32 +75,33 @@ Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a.
 - An identity row that already exists with no user is an applicant. Turning auto_approve on later does not convert it: auto_approve changes the registration path, which docs/05 step 3 reaches only for an identity that is not found. A pending application is decided by a moderator, and a blocked identity stays blocked.
 - **The warning.** `ketju config check` warns that `auto_approve` has no effect (`warn()` in `internal/config/validate.go`, and docs/02 "Configuration"). This ticket removes both.
 
-### Approach
+### Approach (revised against fe5cdcb)
 
-1. **Provider policy in the service.** Add `internal/service/identity/policy.go` with `type Policy map[string]ProviderPolicy` and `ProviderPolicy{AutoApprove bool; GroupsClaim string; GroupMap map[string]string}`, built from `config.OIDC.Providers` by `PolicyFrom(cfg)`. `cmd/ketju/serve.go` sets `identity.Service.Policy`. TKT-01M29CKRF9 uses the same type. Whichever of the two lands first creates it. Alternative: ask `oidc.Registry` at request time. It lost because a provider disabled by a failed refresh drops out of `Lookup`, so its policy would vanish between the callback and `POST /auth/register`. Config does not change while the server runs.
-2. **The gate** (`internal/auth/oidc/oidc.go`). Replace `EmailAllowed(email string) bool` with `Gate(id *Identity) GateResult` (`GateOK`, `GateDomain`, `GateUnverified`). With no `AllowedEmailDomains` it returns `GateOK`. Otherwise it returns `GateUnverified` unless `id.EmailVerified`, then `GateDomain` unless the domain matches. The callback in `internal/web/auth/auth.go` logs the result at info and answers 403. `pageNotAllowed` covers the domain case. A new `pageUnverified` says: "This forum accepts sign-ins from this provider only with a verified email address." The IdP already treats both facts as known to the reader, so saying which applies discloses nothing new.
-3. **Is registration open for this provider?** `RegistrationOpen(ctx)` becomes `RegistrationOpenFor(ctx, provider string)`: `mode == "open" || s.Policy[provider].AutoApprove`. Inside `Register`'s `IssueUserWith` create func, the in-transaction check `mode != "open"` becomes the same expression. Registration closing between the callback and the POST is therefore still caught for an ordinary provider. An auto_approve provider is never closed while `mode` is `open` or `approval`. The `Login` interface in `internal/web/auth/auth.go` changes to match.
-4. **Skipping the handle screen.** In `internal/service/identity/handle.go`, split `suggest` into `normalize(s) string`, which returns the normalized string even when it is not a valid handle, and the existing validity filter. Add `AutoHandle(preferred string) (h string, why SkipReason)`, returning `SkipMissing`, `SkipInvalid` or `SkipReserved`, or `h` with no reason. Extract the "free in any case" read from `Register` into `handleFree(ctx, q, h) error`, returning nil or `ErrHandleTaken`, so the 90-day reservation of TKT-01M3NRP3W9 "Implement handle changes with cooldown, reservation, and redirect" hooks in at one place. Add `(*Service).AutoRegister(ctx, c Claims, meta, replaces) (Result, SkipReason, error)`. It calls `AutoHandle`, and when that yields a handle it calls `Register`, which maps `ErrHandleTaken` to `SkipTaken`. `Register` keeps `IssueUserWith` as its only way to a session.
-5. **The callback** (`beginRegistration` in `internal/web/auth/register.go`). If `RegistrationOpenFor` is true and the provider auto-approves, call `AutoRegister`. On success, set the cookie and answer 303 to `return_to`. On a skip reason, seal the registration cookie as today, with a new `pending.Why` field (sealed, so it cannot be forged), and 303 to `/auth/register`. `registerForm` renders `Why` as one line above the field: "Your sign-in's username could not be used as a handle: it is missing / not a valid handle / reserved / taken." The prefill is `normalize(preferred_username)` when that is non-empty, and `Prefill` otherwise. If `RegistrationOpenFor` is true and the provider does not auto-approve, behaviour is unchanged. If it is false, approval mode takes the applicant path of TKT-01M29CKRG9.
-6. **The warning.** Delete the `pr.AutoApprove` branch from `warn()` in `internal/config/validate.go`, with its comment. Delete its expectation in `internal/config/config_test.go`. Delete the docs/02 "Configuration" bullet "auto_approve has no effect until approval-mode registration exists". Update the `RegistrationOpen` doc comment in `register.go`.
-7. **Issuer callers.** `AutoRegister` reaches a session only through `Register` → `IssueUserWith`. `issuerCallers` in `internal/auth/session/chokepoint_test.go`, added by TKT-01M29CKRG9, does not change, because `Register` is still the caller. If this ticket lands first, no list exists yet, and `doorCallers` and `insertCallers` stay as they are.
-8. **Docs.** docs/05 "Provider configuration" gets one sentence on `email_verified` under the gate. docs/07 "URL scheme" `/auth/register` names the reason line. Both are written in the implementing PR.
+What changed since grooming: `identity.Policy`/`ProviderPolicy{GroupMap}` exists (TKT-01M29CKRF9), `identity.HandleFree(ctx, q, h, now)` exists and `Register` already calls it in its transaction (TKT-01M29CKRFS, TestEveryHandleWriteChecksHandleFree), and the applicant path and `issuerCallers` exist (TKT-01M29CKRG9). No schema change and no migration are needed.
+
+1. **Policy.** Add `AutoApprove bool` to `ProviderPolicy`, set by `PolicyFrom`. `(*Service).AutoApproves(provider) bool` reads it. The callback asks the service, not `oidc.Provider.AutoApprove()`, so the check at the callback and the one in `Register`'s transaction read one source. `Provider.AutoApprove()` is removed, since nothing else calls it.
+2. **The gate** (`internal/auth/oidc/oidc.go`). Replace `EmailAllowed(email) bool` with `Gate(id *Identity) GateResult` (`GateOK`, `GateDomain`, `GateUnverified`). With no list it returns `GateOK`. Otherwise it returns `GateUnverified` unless `id.EmailVerified`, then `GateDomain` unless the domain matches. The callback logs the result at info and answers 403 with `pageNotAllowed` or a new `pageUnverified`. Both run before `Login`, so they cover returning members too.
+3. **Open for this provider.** `RegistrationOpen(ctx)` becomes `RegistrationOpenFor(ctx, provider)`: mode `open`, or mode `approval` and the provider auto-approves. `Register`'s in-transaction check uses the same function of mode and policy, so a provider that does not auto-approve is refused under approval mode with `ErrRegistrationClosed`, even with a valid sealed cookie, and nothing is written.
+4. **Skipping the handle screen** (`handle.go`). Split `suggest` into `normalize(s)`, the prefill's transform without the validity filter, and the filter. `AutoHandle(preferred) (string, SkipReason)` returns `SkipMissing` for an empty claim, `SkipInvalid` when it normalizes to nothing or to an invalid handle, and `SkipReserved` for `ErrHandleReserved`. `(*Service).AutoRegister(ctx, c, meta, replaces) (Result, SkipReason, error)` refuses a provider that does not auto-approve, calls `AutoHandle`, then `Register`, and maps `ErrHandleTaken` to `SkipTaken`. `HandleFree` answers that for a handle anyone holds, in any case, and for one a release still reserves. `Register` stays the only way to a session, through `IssueUserWith`.
+5. **The callback** (`beginRegistration`). When registration is not open for this provider, approval mode's applicant path runs, unchanged. When it is open and the provider auto-approves, the callback calls `AutoRegister`. Success sets the session cookie and answers 303 to `return_to`. A skip reason seals the registration cookie with a new `pending.Why` and answers 303 to `/auth/register`. `registerForm` prefills `normalize(preferred_username)` when `Why` is set and that is non-empty, and `Prefill` otherwise, and shows one line naming the reason. When it is open and the provider does not auto-approve, nothing changes.
+6. **The warning.** Delete the `pr.AutoApprove` branch from `warn()`, its case in `TestWarningsNameTheirKeyAndDoNotFail`, and the docs/02 bullet. Remove the 501 branch and the auto_approve subtest of `TestTheBranchesStillToCome`, and reword `pageRegistration`.
+7. **Issuer callers.** `AutoRegister` reaches a session only through `Register` → `IssueUserWith`. `issuerCallers` does not change, and the diff shows it.
+8. **Docs.** docs/05 "Provider configuration" gets one sentence on `email_verified` under the gate. docs/07 `/auth/register` names the reason line, and says an auto_approve provider may register under approval mode.
 
 ### Tests
 
-- `internal/auth/oidc` `TestGate`, a table test: list unset; list set with a matching verified email; a matching domain with `email_verified` false, missing, or the string "false"; a wrong domain that is verified; no email; case in the domain. Each row gives exactly one `GateResult`.
-- `internal/web/auth` `TestTheDomainGateNeedsAVerifiedEmail`. Each refusal is 403 with its own page, and afterwards no identity, user or session row exists (`identity_schema` row counts).
-- `internal/web/auth` `TestAutoApproveUnderApprovalMode`. Two providers, `club` (auto_approve) and `public`, with mode `approval`. A new identity from `club` with `preferred_username` "Ada.L" gets user `ada_l`, active, a member session, and no application. A new identity from `public` gets no `users` row and no member session. Until TKT-01M29CKRG9 lands that is today's 501; afterwards it is a pre-user session.
-- `TestAutoApproveFallsBackToTheHandleScreen`, one subtest per reason (missing, invalid, reserved `admin`, taken `Ada_L` in another case). Each shows the screen with the reason line, the prefill where it applies, and no user row. Submitting a free handle then registers under approval mode, which proves the POST honours the provider's policy.
-- `TestRegisterUnderApprovalModeOnlyForAutoApprove` (service). `Register` with claims from a provider that does not auto-approve, while mode is `approval`, is `ErrRegistrationClosed` and writes nothing, even with a correctly sealed cookie.
-- **Chokepoint and status.** `TestNoProviderLetsAnInactiveUserIn` extends `TestTheCallbackLetsNoInactiveUserIn` (`pending_test.go`) across providers. For each of `pending`, `suspended` and `deactivated`, a user holding identities on both an auto_approve and an ordinary provider signs in through each. The page is "Account unavailable", no session row is written, and `/me` stays anonymous. A new `club` identity whose preferred handle belongs to a suspended account gets `SkipTaken`, never that account.
-- `internal/web/auth` `TestTheLoginPageListsOnlyHealthyProviders`. Three configured providers, one of them failing discovery (the fake IdP's discovery returns 500). `/auth/signin` lists the two others by name, in config order.
-- `internal/config` `TestAutoApproveIsNotAWarning`. A config with `auto_approve = true` checks clean, with no warning.
+- `oidc` `TestGate` (table): list unset; matching and verified; matching with `email_verified` false, absent, or the string "false"; wrong domain, verified; no email; domain case; a subdomain.
+- `web/auth` `TestTheDomainGateNeedsAVerifiedEmail`: each refusal is 403 with its page, and no identity, user or session row exists afterwards. With the list unset, `email_verified` is not needed.
+- `web/auth` `TestAutoApproveUnderApprovalMode`: `club` (auto_approve) and `public`, mode approval. `club` with `preferred_username` "Ada.L" gets active user `ada_l`, a member session, and no application. `public` gets no users row and a pre-user session, not a member.
+- `web/auth` `TestAutoApproveFallsBackToTheHandleScreen`: missing, invalid, reserved `admin`, taken (`Ada_L` held as `ada_l`, and by a suspended account). Each shows the screen with the reason line and the prefill, and writes no user row. Submitting a free handle then registers under approval mode.
+- `identity` `TestRegisterUnderApprovalModeOnlyForAutoApprove`, and the same in `web/auth` with a sealed cookie from a provider that does not auto-approve: `ErrRegistrationClosed` or 403, nothing written.
+- `web/auth` `TestNoProviderLetsAnInactiveUserIn`: pending, suspended and deactivated users holding identities on `club` and `public` sign in through each, under both modes. Each gets "Account unavailable", no session row, and an anonymous `/me`.
+- `web/auth` `TestTheLoginPageListsOnlyHealthyProviders`: three providers, one failing discovery. The page lists the other two by name, in config order.
+- `config`: `auto_approve = true` checks clean, with no warning.
 
 ### Out of scope
 
-- The applicant path for providers that do not auto-approve: TKT-01M29CKRG9. This ticket depends on it, so the "others still require it" half of AC3 can be shown as a pre-user session rather than a 501.
-- Mapping group claims: TKT-01M29CKRF9. It shares `Policy`.
+- The applicant path for providers that do not auto-approve: TKT-01M29CKRG9 (done).
+- Mapping group claims: TKT-01M29CKRF9 (done). It shares `Policy`.
 - Linking: TKT-01M29CKRES.
-- The 90-day reservation of released handles: TKT-01M3NRP3W9. `handleFree` is its hook.
 - Gating on `hd`: not planned. docs/05 gates on the email domain.
