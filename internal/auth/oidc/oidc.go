@@ -542,10 +542,6 @@ func (p *Provider) Name() string {
 	return p.cfg.Key
 }
 
-// AutoApprove reports whether this provider bypasses approval-mode
-// registration.
-func (p *Provider) AutoApprove() bool { return p.cfg.AutoApprove }
-
 // AuthCodeURL is where the browser goes to log in. The caller owns state, nonce
 // and the PKCE verifier, because only it knows which browser started this.
 func (p *Provider) AuthCodeURL(state, nonce, pkceVerifier string) string {
@@ -614,9 +610,9 @@ func (p *Provider) Verify(ctx context.Context, rawIDToken, nonce string) (*Ident
 		Name:              stringClaim(claims, "name"),
 		PreferredUsername: stringClaim(claims, "preferred_username"),
 		// Google's hd claim names the Workspace domain the account belongs to.
-		// It is recorded rather than acted on here: a domain gate that trusts
-		// hd is a different decision from one that trusts the email domain, and
-		// it belongs with the provider-gating ticket.
+		// It is recorded and never gated on: docs/05 gates on the verified
+		// email's domain (Gate), and trusting hd would be a different
+		// decision (settled in grooming for TKT-01M29CKRE9).
 		HostedDomain: stringClaim(claims, "hd"),
 		Groups:       groupsFrom(claims, p.groupsClaim()),
 		RawClaims:    rawClaims,
@@ -631,26 +627,63 @@ func (p *Provider) groupsClaim() string {
 	return "groups"
 }
 
-// EmailAllowed applies the provider's allowed_email_domains gate.
+// GateResult is what the provider's allowed_email_domains gate says of a
+// sign-in.
+type GateResult int
+
+const (
+	// GateOK: the provider has no gate, or the identity passes it.
+	GateOK GateResult = iota
+	// GateUnverified: the provider has a gate, and the IdP does not assert
+	// that the email is verified, so its domain proves nothing.
+	GateUnverified
+	// GateDomain: the email's domain is not one the gate allows, or there
+	// is no email.
+	GateDomain
+)
+
+func (g GateResult) String() string {
+	switch g {
+	case GateOK:
+		return "ok"
+	case GateUnverified:
+		return "email not verified"
+	case GateDomain:
+		return "email domain not allowed"
+	}
+	return fmt.Sprintf("GateResult(%d)", int(g))
+}
+
+// Gate applies the provider's allowed_email_domains gate to id (docs/05
+// "Provider configuration").
 //
 // An unset list allows everything, which is what an operator who did not write
-// one meant. A set list with no matching domain refuses, and an identity with
-// no email refuses too: a gate on a value that is absent is not a gate.
-func (p *Provider) EmailAllowed(email string) bool {
+// one meant, and then nothing requires email_verified. A set list refuses an
+// email the IdP does not assert as verified, whatever its domain: an
+// unverified address is whatever the person typed, so a gate on its domain
+// would be decoration (TKT-01M29CKRE9). Past that, a set list with no
+// matching domain refuses, and an identity with no email refuses too: a gate
+// on a value that is absent is not a gate. The domain is compared whole and
+// without regard to case, so a subdomain is not the domain.
+func (p *Provider) Gate(id *Identity) GateResult {
 	if len(p.cfg.AllowedEmailDomains) == 0 {
-		return true
+		return GateOK
 	}
+	if !id.EmailVerified {
+		return GateUnverified
+	}
+	email := id.Email
 	at := strings.LastIndex(email, "@")
 	if at < 0 || at == len(email)-1 {
-		return false
+		return GateDomain
 	}
 	got := strings.ToLower(email[at+1:])
 	for _, want := range p.cfg.AllowedEmailDomains {
 		if got == strings.ToLower(strings.TrimSpace(want)) {
-			return true
+			return GateOK
 		}
 	}
-	return false
+	return GateDomain
 }
 
 // Identity is what a verified ID token asserts.

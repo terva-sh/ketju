@@ -49,9 +49,14 @@ signed in gets 302 to `return_to`. `return_to` is validated as start
 validates it, and anything but a path on this site becomes `/`. The client's
 link to it is a full page load, since `/auth/*` is outside the client's
 routes. `/auth/register` is open registration's handle screen (05
-"Registration path"). `GET` shows one field, `handle`, prefilled, and needs
+"Registration path"), and an `auto_approve` provider's under either mode.
+`GET` shows one field, `handle`, prefilled, and needs
 the `__Host-ketju_reg` cookie the callback sets; without it, or after its
-fifteen minutes, the page says to sign in again (400). `POST` takes the form
+fifteen minutes, the page says to sign in again (400). When the callback
+tried an `auto_approve` provider's `preferred_username` as the handle and
+could not use it, the screen shows one line above the field naming why:
+the sign-in had none, it is not a valid handle, it is reserved, or it is
+taken. The reason is sealed in the cookie. `POST` takes the form
 field `handle` as `application/x-www-form-urlencoded`, held to this site by
 the cross-origin check (see "CSRF posture"). Success sets the session cookie, clears
 the registration cookie and answers 303 to the sign-in's `return_to`. An

@@ -102,12 +102,24 @@ func Prefill(preferredUsername, email string) string {
 	return ""
 }
 
-// suggest makes s into a handle: ASCII letters lowercased, every run of
-// characters a handle cannot hold turned into one '_', and what a handle
-// may not start with trimmed. A trailing '_' or '-' is trimmed too: '-'
-// because a new handle may not end in one (TKT-01M3ANX1NF), and '_' because
-// it is only ever left over from a character that was dropped.
+// suggest is s made into a handle registration would accept (normalize), or
+// "" when it makes none.
 func suggest(s string) string {
+	h := normalize(s)
+	if _, err := CheckHandle(h); err != nil {
+		return ""
+	}
+	return h
+}
+
+// normalize makes s into the shape of a handle: ASCII letters lowercased,
+// every run of characters a handle cannot hold turned into one '_', what a
+// handle may not start with trimmed, and cut to the longest a handle may
+// be. A trailing '_' or '-' is trimmed too: '-' because a new handle may not
+// end in one (TKT-01M3ANX1NF), and '_' because it is only ever left over
+// from a character that was dropped. The result may still not be a valid
+// handle, too short say, or reserved; suggest and AutoHandle check it.
+func normalize(s string) string {
 	var b strings.Builder
 	dropped := false
 	for i := 0; i < len(s); i++ {
@@ -130,9 +142,16 @@ func suggest(s string) string {
 	if len(h) > domain.HandleMaxLen {
 		h = h[:domain.HandleMaxLen]
 	}
-	h = strings.TrimRight(h, "_-")
-	if _, err := CheckHandle(h); err != nil {
-		return ""
+	return strings.TrimRight(h, "_-")
+}
+
+// FallbackPrefill is what the handle screen offers after an auto_approve
+// provider's preferred_username could not be used as the handle: the
+// normalized name when there is one, so the screen shows what was tried
+// beside the reason, and otherwise Prefill (docs/05 "mode = approval").
+func FallbackPrefill(preferredUsername, email string) string {
+	if h := normalize(preferredUsername); h != "" {
+		return h
 	}
-	return h
+	return Prefill(preferredUsername, email)
 }

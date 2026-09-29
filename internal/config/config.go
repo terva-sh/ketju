@@ -202,11 +202,14 @@ type Provider struct {
 	// it.
 	Scopes []string `toml:"scopes"`
 
-	// AllowedEmailDomains, when set, gates login on the email domain.
+	// AllowedEmailDomains, when set, gates login on the email domain, and
+	// then only an email the provider asserts as verified passes.
 	AllowedEmailDomains []string `toml:"allowed_email_domains"`
 
 	// AutoApprove lets this provider bypass approval-mode registration, for
-	// the case where the IdP is the organisation's own directory.
+	// the case where the IdP is the organisation's own directory. Someone
+	// new from it registers without applying, and without a handle screen
+	// when its preferred_username makes a free handle.
 	AutoApprove bool `toml:"auto_approve"`
 
 	// GroupsClaim names the claim carrying group membership, if any.
