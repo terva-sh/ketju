@@ -23,10 +23,12 @@ references:
     path: docs/05-identity-and-accounts.md
   - ref: pr:177
     path: null
+  - ref: pr:178
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T23:49:57Z
+updated_at: 2026-09-29T23:53:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -130,6 +132,10 @@ Implementation notes, 2026-09-29, for whoever reads the plan against the code.
 - Two refusals the groomed plan did not name: LinkNotYou (409), for a link whose sealed member is no longer who this browser is signed in as, active; and LinkAlready (200 "Already linked"), for the member's own identity. Both write nothing.
 - docs/05 step 3 already carried the intent clause from grooming; this PR adds the routes, the one-transaction write, and the agent refusal under it.
 - Filed TKT-01M3QS0TMV (Link to the link-a-sign-in page from the client), a phase-2 draft: the client has no settings screen until TKT-01M29CXK4 (phase 4), so /auth/link is reachable today only by address.
+
+**agent:claude-code/phase2-run-KRES** at 2026-09-29T23:53:35Z
+
+PR #177 was closed unmerged before any review ran: main moved under it (the suspension lane, TKT-01M29CP2QK) and docs/04 conflicted. PR #178 carries the same tree onto main 4d793b2 as one commit, with the docs/04 audit list holding both lanes' entries. The full race suite passed on the new base.
 
 ## Summary
 
