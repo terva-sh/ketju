@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2P1R6TTJHY28FP7SWPG
 title: Build the admin form editor
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,17 +23,10 @@ blocks_on: none
 references:
   - ref: design:forms
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-p2p1
-  branch: run/p2p1-form-editor
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5cf46d9437f49060
-  commit: f04a476a2a7b0dd7ae45e19dc20fbc02c4ed96fa
-  session: null
-  claimed_at: 2026-09-29T21:53:44Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T21:58:58Z
+updated_at: 2026-09-29T22:14:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,11 +44,11 @@ A preview of the applicant's view belongs here. An admin writing a screening que
 
 ## Acceptance criteria
 
-- [ ] Saving posts the draft with base_version; on 201 the editor shows the new version as active and lists the earlier ones unchanged; on 409 it keeps the draft and says a newer version exists
-- [ ] The editor previews the draft through POST /api/v1/admin/forms/{key}/preview, drawn by the same src/forms renderer the apply screen uses
-- [ ] A draft the server refuses cannot be saved: its path-scoped errors attach to the editor's fields and the save control stays disabled until a preview passes
-- [ ] Any earlier version opens read-only in the same renderer (rendering applications against their version is TKT-01M29CP2MG and TKT-01M3NRX2NN)
-- [ ] The section is shown to admins only, the editor lives under src/screens/admin so TestTheAdminBundleIsSeparate passes, the dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
+- [x] Saving posts the draft with base_version; on 201 the editor shows the new version as active and lists the earlier ones unchanged; on 409 it keeps the draft and says a newer version exists
+- [x] The editor previews the draft through POST /api/v1/admin/forms/{key}/preview, drawn by the same src/forms renderer the apply screen uses
+- [x] A draft the server refuses cannot be saved: its path-scoped errors attach to the editor's fields and the save control stays disabled until a preview passes
+- [x] Any earlier version opens read-only in the same renderer (rendering applications against their version is TKT-01M29CP2MG and TKT-01M3NRX2NN)
+- [x] The section is shown to admins only, the editor lives under src/screens/admin so TestTheAdminBundleIsSeparate passes, the dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
 
 ## Implementation plan
 
@@ -106,3 +99,22 @@ Engineering decisions taken here, with the alternative that lost:
 - The shared renderer: TKT-01M29CP2NG.
 - Rendering applications against their version: TKT-01M29CP2MG (server) and TKT-01M3NRX2NN (screen).
 - Forms other than `registration`.
+
+## Notes
+
+**agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:14:10Z
+
+Gaps settled in building (internals and presentation only; none changes what the server allows, who sees what, or what is stored):
+
+- **The type/property table is presentational, in draft.ts `propsFor`.** It decides which controls a type gets and follows internal/forms's types table. The server still refuses a wrong combination with not_allowed. Putting the table in src/forms/fields.tsx lost: that file is in the apply chunk and counts toward the reader budget.
+- **The notice type is found by `kinds[t].answers === false`, never by name.** FormView.test.tsx "the one type map" forbids the name in any file but fields.tsx and dto.ts.
+- **from_claim is a choice of name, email and preferred_username** (docs/05's list), rather than free text. The server still refuses any other with unknown_claim.
+- **A select's options are one per line in a textarea**, held as typed and split on send, with blank lines left out. A controlled array lost: a newline typed at the end would vanish before the next option could be typed.
+- **"Load the newest version" after a 409 discards the draft, behind a ConfirmButton.** Keeping the draft on the new base lost: it would let an admin save over the other admin's change without seeing it, which is what base_version exists to stop.
+- **Save stays disabled until the draft has changed** as well as passed its preview, so an unchanged draft cannot write a duplicate version.
+- **The reader total grows by 6 B** (45330 to 45336 B gzip). The admin chunk now imports `kinds` and `fieldMessage` from the apply chunk, which adds two names to its export list. No editor code is in a reader chunk. The alternative, copying the words table into the admin chunk, would be a second copy of messages.ts.
+- **e2e seed: an admin, `ada`** (cmd/ketju e2e.go, e2e/session.setup.ts). admin-forms.spec.ts saves the starting fields back at the end of each run, so apply.spec.ts finds the form's content unchanged, at a higher version number.
+
+## Summary
+
+The admin form editor is at /admin/forms (web/client/src/screens/admin/forms), for admins only, in the lazy admin chunk. It is a structured field list beside the server's preview, drawn by src/forms FormView. Previews run 500 ms after each edit. Save sends base_version and is enabled only once this exact revision's preview has passed; 201 shows the new active version, 409 keeps the draft and offers the newest, and 422 marks each error on its control. An error with no control goes in the editor's own lead line. Any version opens read-only. The e2e seed gains an admin, ada, and admin-forms.spec.ts covers the editor at 390 and 1440 px with axe. The reader total grows by 6 B of export names (45336 of 60000 B).
