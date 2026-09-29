@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRHSMCRM9T440314D2Q8
 title: Implement author edit and delete windows with grace edits
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ckrhs
+  branch: run/ckrhs-edit-delete-windows
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac33eecb589b3ab26
+  commit: 2897ac0ad92bfe874d32973bf7a8ed1e3262c88b
+  session: null
+  claimed_at: 2026-09-29T14:45:12Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-29T14:45:15Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-ckrhs
   name: ""
 extensions: {}
 ---
