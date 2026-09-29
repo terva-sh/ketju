@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T05:07:41Z
+updated_at: 2026-09-29T05:57:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,6 +49,7 @@ Replies to a deleted post keep their reply_to link. A tombstone is a gap in cont
 - [ ] A page holding the viewer's own hidden post is cached under class author:<id>, and no other member's answer carries its html in either request order (TestResponseCacheSeparatesTheHiddenPostsAuthor)
 - [ ] The client renders 'Post removed by author' and 'Post removed by a moderator', shows a removed post's body to those served it on a distinct background, and renders a pointer to /t/{moved_to} when moved_to is set (component test; the server fills moved_to in TKT-01M29CYSAM)
 - [ ] A removed post keeps its ordinal: ?ordinal=N serves the page holding it, and a member receives that post with removal set and no html
+- [ ] Removing one post changes nothing for visible posts: members and anonymous viewers still get their html, and their history follows public_edit_history as before (TestVisiblePostsUnchanged)
 
 ## Implementation plan
 
@@ -65,7 +66,11 @@ Groomed 2026-09-29 against main at 7af2c5a.
 ### Approach
 
 1. **DTO**: `dto.Post` gains `removal`, one of `"author"`, `"moderator"` or `"review"`, and null for a visible or moved post. It is derived from the entry flags: `EntryDeleted` is author, `EntryHiddenByMod` with `EntryAutoHidden` is review, and `EntryHiddenByMod` alone is moderator. `EntryAutoHidden` arrives with TKT-01M29CP2PJ, so until then only author and moderator occur. `deleted` stays true for every removal, for compatibility. Update the `internal/dto` goldens and `web/client/src/api/dto.ts`.
-2. **Who gets content** is one function, `revealTo(a access, e threadlog.IndexEntry) bool`, in `internal/service/threads/view.go`. It is true for a moderator, and true for the entry's author when `EntryHiddenByMod` is set. `postsDeps` calls it instead of `p.Tombstone && moderator`. Every read shares it: the page, `Post`, `Replies`, `UserPosts` (`historyBatch` and `historyShows` in `userposts.go`), and `History` in `posts.go`. For history the rule is "revisions are served when `revealTo` is true", which extends the moderator-only rule to the author of a hidden post. Render quotes are unchanged: a quote of any tombstone renders as a tombstone to everyone.
+2. **Who gets a removed post's content** is one function, `revealRemoved(a access, e threadlog.IndexEntry) bool`, in `internal/service/threads/view.go` (narrowed for Terva review 1352 on PR #138, finding 2). It answers only for a removed entry, one where `!e.Flags.Visible()`, and it is never asked about a visible one. It is true for a moderator, and for the entry's author when `EntryHiddenByMod` is set. It is false for a moved entry, which has no content here, and false otherwise. A visible post keeps the path it has today: its content goes to everyone admitted to the thread, and its history goes to whoever `History` admits now (members when `public_edit_history` is on, and moderators always). Every read uses the same rule:
+   - `postsDeps` replaces `p.Tombstone && moderator` with `p.Tombstone && revealRemoved(a, e)`. The page, `Post`, `Replies` and `UserPosts` (`historyBatch` and `historyShows` in `userposts.go`) all assemble through it.
+   - `History` in `posts.go` keeps its admission check for everyone. It then withholds revisions only when the entry is removed and `revealRemoved` is false.
+   - Render quotes are unchanged: a quote of any tombstone renders as a tombstone to everyone.
+   - A single predicate over every entry, visible ones included, lost to this narrower one. "May this viewer see this post" already has an answer for visible posts, in `access` and the history setting, and one function answering both questions invites the mistake review 1352 found.
 3. **Viewer class**: `pagePosts` computes the class from the snapshot. It is `ClassModerator` when `canModerate`. It is `"author:" + id` when any snapshot entry is hidden-by-mod and authored by the viewer. Otherwise it is `ClassMember` or `ClassAnon`. The class passes to `postsDeps` in place of the `moderator` bool. Update the `Class` doc comment on `respcache.Key` and docs/07 "Viewer class".
 4. **Client**:
    - `components/thread/Tombstone.tsx` renders by `removal`: "Post removed by author" or "Post removed by a moderator", plus the review wording chosen by TKT-01M29CP2PJ's open decision. With `moved_to` set, it renders "Post moved to another thread" linking to `/t/{moved_to}`. The ordinal, anchor and reply indicator are kept.
@@ -78,6 +83,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 
 - `TestTombstoneKeepsOrdinalAndPermalink`: a deleted post 5 of 10 is served at `?ordinal=5` as `removal: "author"` with no `html`. Post 6, which replies to 5, keeps `reply_to: 5`. `GET …/posts/5/replies` answers 6.
 - `TestMembersNeverReceiveRemovedContent`: for an author-deleted post and a moderator-hidden post, an anonymous viewer and a member other than the author get no `html` and no revisions. The same holds on the page, `GET …/posts/{n}`, `…/replies` of its parent, `/users/{handle}/posts`, and `…/history`. A moderator gets the `html` in each. A quote of the post renders as a tombstone to all three.
+- `TestVisiblePostsUnchanged`: with a removed post on the page, a member and an anonymous viewer still get every visible post's `html`. A member still gets a visible post's history while `public_edit_history` is on, and `forbidden` when it is off.
 - `TestAuthorSeesOwnHiddenPost`: the author gets `html` and `removal: "moderator"` on the page, the single post, their user posts and the history. For their own self-deleted post they get a tombstone with no `html`.
 - **Response cache invariant**, `TestResponseCacheSeparatesTheHiddenPostsAuthor` (`internal/web/api/respcache_test.go`): with the cache on, request the page as the author, then as another member, then as the author again, and in the reverse order. The other member's answer never carries the hidden post's `html`, the author's always does, and the two use different keys (class `author:<id>` against `member`). A page with no hidden post of the viewer's still uses `member`, so it stays shared.
 - Goldens: `thread.{anon,member,moderator}.json` in `internal/web/api/testdata/golden` gain a deleted post and a hidden post, and a new `thread.author.json` is added.

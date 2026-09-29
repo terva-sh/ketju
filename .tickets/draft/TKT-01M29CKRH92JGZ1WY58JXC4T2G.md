@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T05:39:01Z
+updated_at: 2026-09-29T05:57:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -70,7 +70,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 ### Approach
 
 1. **Setting**: `threads.rename_window_seconds` in `internal/settings/settings.go`, `atLeast(0)`, with a docs/04 settings row (`TestKeysDocumented`). The default is 86400 (settled above). The window is measured from the thread's `created_at`.
-2. **Service** in `internal/service/threads/moderate.go`, through TKT-01M29CKRGS's two helpers (revised for Terva review 1343, finding 3). A moderator's rename and every move go through `moderate`, which audits through `internal/audit`. An author's rename of their own thread goes through `appendEvent`, which writes no audit row. When the actor is both author and moderator, the rename counts as a moderator's and is audited:
+2. **Service** in `internal/service/threads/moderate.go`, through TKT-01M29CKRGS's `appendEvent` (append, synchronous projection). Audit rows come from the projection writer (TKT-01M29CKRGS step 1, revised for Terva review 1352): every `ThreadMoved` is audited, and a `ThreadRenamed` is audited when its actor is not `threads.author_id`, so an author's rename of their own thread writes no row:
    - `Rename(ctx, v, id, title)`: title through `checkTitle`, slug from `Slug(title)`. A moderator may rename at any time. The thread's author, without `moderate`, may rename within the window, needs `reply` in the forum, and is refused in a locked thread (`conflict`), as a member's edit is. Past the window the author gets the new code `rename-window-closed` (403). Anyone else is `forbidden`. An archived thread is `conflict`. A title equal to the current one is `conflict` (no no-op records). Only a moderator's rename is audited, as `thread.renamed` with `{from, to}`. An author renaming their own thread is not a moderation action, and it is in the log either way.
    - `Move(ctx, v, id, forumSlug)`: `canModerate` on the source, then the destination's refusals in the settled order. Moving to the current forum is `conflict`. Audited as `thread.moved` with `{from_forum, to_forum}`.
 3. **Problem code** `rename-window-closed`, 403, with a fixed title, in `internal/problem/problem.go` and `testdata/catalogue.json`. It sits beside TKT-01M29CKRHS's `edit-window-closed` and `delete-window-closed`. `forbidden` with extra text lost: problem bodies never carry request-derived text (docs/07 "Error catalogue"), and a client cannot switch on a title.
@@ -84,7 +84,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - `TestRenameRefusals`: a member who is not the author is `forbidden`; a locked thread is `conflict` to the author; an archived thread is `conflict`; the same title is `conflict`. Each appends nothing.
 - `TestMoveNeedsModerateInBothForums`: `forbidden` without `moderate` in the destination; `not-found` for a destination hidden from the mover; `conflict` for an archived destination to a moderator; success for an admin into an archived one. After a move into a restricted forum, a member without read there gets `not-found` on the next request, which the synchronous projection makes true at once.
 - `TestRenameAndMoveSurviveReindex`: a log with two renames and a move reindexes to the last title, slug and forum, and `forum_thread_counts` moves the thread's counts.
-- Audit: a moderator rename and a move each write one row with the actor and from/to, with target `audit.Thread(id)`. An author rename through `appendEvent` leaves `audit_log` unchanged (`TestAuthorRenameIsNotAudited`).
+- Audit: a moderator rename and a move each write one row with the actor and from/to, with target `audit.Thread(id)`. An author rename leaves `audit_log` unchanged, including after `ketju reindex` (`TestAuthorRenameIsNotAudited`).
 - **Response cache invariant**, `TestRenameMovesTheResponseCacheKey`: a cached page is a miss after a rename, and the new header carries the new title and slug.
 - **Stale slug**, client (`view.test.tsx` and `ThreadPage.test.tsx`): after the served header's slug changes, `/t/{id}/{old}?page=2&lens=author` is replaced by `/t/{id}/{new}?page=2&lens=author` with the hash kept, and `/t/{id}/{old}/7/history` by `/t/{id}/{new}/7/history`.
 
