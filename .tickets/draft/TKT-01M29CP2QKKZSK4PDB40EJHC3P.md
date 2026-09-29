@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:41:12Z
+updated_at: 2026-09-29T06:04:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -81,7 +81,7 @@ Engineering choices made here, each with the alternative that lost:
 3. **The Delete key.** In `internal/store/threadlog`, the `Delete` body gains `Suspension uint64` with `cbor:"suspension,omitempty"` (and the matching JSON tag). docs/03's table row for type 4 and a paragraph like `Edit.mentions` record it. The threads service's moderator delete path (TKT-01M29CRJ5J) takes an optional suspension id.
 4. **`internal/service/moderation/suspend.go`**:
    - `Suspend(ctx, v, by, handle, SuspendRequest{Reason; Until *int64; HidePosts bool})` calls the lifecycle transition, then `hidePosts` when asked.
-   - `hidePosts` takes the user's threads from `post_meta` (`author_id` index), then each thread's ordinals by this author from its index, as the index is the log. Each thread gets one `threadlog.Append` batch of `Delete{Reason: "suspension", Suspension: auditID}` with `Refuse: deleted|hidden|moved`, actor = the moderator. It then appends one `user.posts_hidden {suspension, posts: n}` audit row.
+   - `hidePosts` takes the user's threads from `post_meta` (`author_id` index), then each thread's ordinals by this author from its index, as the index is the log. Each thread gets one `threadlog.Append` batch of `Delete{Reason: "suspension", ByModerator: true, Suspension: auditID}` (`by_moderator` is TKT-01M29CRJ5J's key on PR #138, and the projection writer writes each post's `post.hidden` row, TKT-01M29CKRGS step 1) with `Refuse: deleted|hidden|moved`, actor = the moderator. It then appends one `user.posts_hidden {suspension, posts: n}` audit row.
    - `Unsuspend(ctx, v, by, handle, {RestorePosts bool})`, and `RestorePosts(ctx, v, by, handle)`, which finds `hidden-by-mod` posts by this author whose latest `Delete` frame carries a suspension id recorded for this user (read with `ScanFrames` for the thread; this is a moderator action, not a page), appends `Restore{Reason: "unsuspended"}` to each, and writes `user.posts_restored`.
 5. **`internal/jobs/suspension.go`**: `SuspensionExpiry(lifecycle)` returns a `jobs.Job` that runs every minute over `ExpiredSuspensions(now)` (`status = 'suspended' AND <until column> <= ?`). Add it to the `background` list in `cmd/ketju/serve.go`. Posts hidden with the suspension stay hidden on expiry (maintainer decision above).
 6. **Routes** in `internal/web/api/admin_users.go` (staff, plus `MaySuspend`): `POST /api/v1/admin/users/{handle}/suspend` with `{reason, until?, hide_posts}`, `POST …/unsuspend` with `{restore_posts}`, `POST …/posts/hide`, and `POST …/posts/restore`. Each answers `dto.AdminUserDetail`. They are JSON-only, write-limited and `no-store`.

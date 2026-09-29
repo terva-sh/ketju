@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:07:05Z
-updated_at: 2026-09-29T05:41:12Z
+updated_at: 2026-09-29T06:04:40Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -47,7 +47,7 @@ Each gate answers `unauthenticated` to anonymous, `forbidden` to a pre-user sess
 
 ### The audit helper
 
-`internal/audit` is the one way rows reach `audit_log`: `By{Actor int64; IP string; Via string}`, where `Actor` 0 means no account and is written as SQL NULL, never as id 0, and `audit.System(via)` builds one for work nobody's account did (the command line, an expiry job, the flag auto-hide), recording `via` in `details_json`, `Append(ctx, q, at, by, action, target, details)` and target constructors that fix each `target_id` format: `User(id)` and `Forum(id)` and `Group(id)` and `Flag(id)` and `Application(id)` as decimal ids, `Thread(id)` as the base32 thread id, `Post(thread, ordinal)` as `<base32>/<ordinal>`, and `Setting(key)` as the key. `perm.Promote` and `settings.SetBy` move onto it, and `settings.Change` gains `IP`. `web.ClientIP(r)` is exported for the `ip` column, and it reads the address as the per-address limiter does, never `X-Forwarded-For` (docs/08).
+`internal/audit` is the one way rows reach `audit_log`: `By{Actor int64; IP string; Via string}`, where `Actor` 0 means no account and is written as SQL NULL, never as id 0, and `audit.System(via)` builds one for work nobody's account did (the command line, an expiry job, the flag auto-hide), recording `via` in `details_json`, `Append(ctx, q, at, by, action, target, details)` and target constructors that fix each `target_id` format: `User(id)` and `Forum(id)` and `Group(id)` and `Flag(id)` and `Application(id)` as decimal ids, `Thread(id)` as the base32 thread id, `Post(thread, ordinal)` as `<base32>/<ordinal>`, and `Setting(key)` as the key. `perm.Promote` and `settings.SetBy` move onto it, and `settings.Change` gains `IP`. The projection writer is a caller like any other. The moderation plans on PR #138 (TKT-01M29CKRGS step 1) write the audit row for a log-recorded moderation action inside the transaction that projects the record, from `internal/events/projection/audit.go`, through `audit.Append`. That row carries the frame's timestamp as `at`, the frame's actor in `By.Actor` (0 written as NULL), and an empty `IP`, because the log carries no address. `Append` therefore takes `at` from its caller rather than reading the clock, and accepts an empty `IP`. `web.ClientIP(r)` is exported for the `ip` column, and it reads the address as the per-address limiter does, never `X-Forwarded-For` (docs/08).
 
 ### The admin screen scaffold
 
@@ -79,7 +79,7 @@ Engineering choices made here. A separate ticket rather than "whichever lands fi
 ### Approach
 
 1. `internal/web/api/admin.go`: `admin`, `staff`, `moderates` and `adminRoute`, as described. `perm.ModeratesAny(ctx, v) (bool, error)` answers through the permission cache: true for a moderator or admin by role, otherwise whether any forum grants the viewer `moderate`. No route of its own besides the gates.
-2. `internal/audit`: `By`, `System`, `Target`, `Append`, the constructors, and `audit_test.go`. `Append` writes `By.Actor` 0 as SQL NULL and merges a non-empty `Via` into the details as `"via"`. Refactor `perm.Promote` and `settings.SetBy` onto it, with no change to what they write: their actor 0 already means the command line, and `ketju admin setting set` already records `"via": "cli"`.
+2. `internal/audit`: `By`, `System`, `Target`, `Append`, the constructors, and `audit_test.go`. `Append(ctx, q, at, by, action, target, details)` runs inside the caller's transaction, whether that is a service's `db.Write` or the projection writer's range transaction. `Append` writes `By.Actor` 0 as SQL NULL and merges a non-empty `Via` into the details as `"via"`. Refactor `perm.Promote` and `settings.SetBy` onto it, with no change to what they write: their actor 0 already means the command line, and `ketju admin setting set` already records `"via": "cli"`.
 3. `internal/web`: export `ClientIP`, used by the limiter and by handlers.
 4. docs/04 "audit_log": a table of `target_type` values and `target_id` formats, and the rule that rows go through `internal/audit`.
 5. Client: `AdminRoot.tsx` as a layout with the section list, `screens/admin/common/`, and tests. Run `go generate ./internal/web/spa` and commit `dist`. `npm --prefix web/client run budget` must report the same reader total as before.
@@ -89,7 +89,8 @@ Engineering choices made here. A separate ticket rather than "whichever lands fi
 - `TestAdminRoutesAreGated`: walks every route registered through `adminRoute` and asserts 401 for anonymous, 403 for a pre-user and for a member with no grants, and 403 for a moderator on an admin-gated route. A route added later is covered without editing the test.
 - `TestModeratesGate`: a member of the `moderators` group granted `moderate` on one forum passes `moderates` and fails `staff` and `admin`. The same member with the grant revoked fails `moderates` on the next request.
 - `TestSystemActorIsNull`: `audit.System("expiry")` writes `actor_id` NULL and `"via": "expiry"`, and no row is ever written with actor id 0.
-- `TestOneWayIntoAuditLog`: a source scan like `TestMutationsGoThroughPerm`, failing on a call to `AppendAudit` outside `internal/audit` and `internal/store/db`.
+- `TestOneWayIntoAuditLog`: a source scan like `TestMutationsGoThroughPerm`, failing on a call to `AppendAudit` outside `internal/audit` and `internal/store/db`. The projection writer (`internal/events/projection`) has no exemption: it calls `audit.Append`, and the scan passes because of that (PR #138, TKT-01M29CKRGS step 1).
+- `TestAppendTakesTheCallersTime`: `Append` with a frame's timestamp, actor 0 and an empty IP writes exactly that `at`, NULL, and an empty `ip`, as the projection writer needs.
 - `TestTargetFormats`: each constructor's `target_id`, and a post target round-trips.
 - `TestPromoteUnchanged` and the settings tests stay green: same action, target and details.
 - `TestClientIPIgnoresForwardedFor`.
