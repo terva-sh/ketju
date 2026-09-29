@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T14:59:02Z
-updated_at: 2026-09-29T22:07:20Z
+updated_at: 2026-09-29T22:25:28Z
 created_by:
   id: agent:claude-code/phase2-run-ckrhs
   name: ""
@@ -74,7 +74,7 @@ Engineering choices made here, each with the alternative that lost:
 - **`author_windows` is null for a viewer who may moderate the forum and for a viewer who is not a member.** An anonymous viewer or a pre-user has no posts to act on, so windows would never be read, and leaving them out spares the two settings reads on the anonymous page, the most common one. Sending windows to every viewer who does not moderate lost for that cost. The doc comment and docs/07 say both cases.
 - **The settings are read in `View`'s existing `s.DB.Read`**, beside the read position and watch level, only when the viewer is a member who does not moderate the forum. They go through the same keys `authorWindows` uses (`settings.EditWindowSeconds`, `settings.DeleteWindowSeconds`). A second transaction lost: one read transaction already runs.
 - **Ownership by handle.** A post is the viewer's own when `post.author.handle` equals `viewer.value.user.handle`. `dto.Author` has no id, and both handles are current (a rename changes both). Adding a user id to `Author` lost: it changes every golden to answer one comparison.
-- **One offer rule, as a pure function**, `postControls(post, me, viewer, now)` in `components/thread/postControls.ts`, answering `{edit, delete, restore, closesAt}`. `Post.tsx` and `Tombstone.tsx` both use it, and the tests test it directly. TKT-01M29CRJ5J's client step later widens it to every post for a moderator.
+- **One set of controls for authors and moderators.** One offer rule, the pure function `postControls(post, me, viewer, now)` in `components/thread/postControls.ts`, answers `{edit, delete, restore, closesAt}`. `Post.tsx` and `Tombstone.tsx` both use it, and the tests test it directly. The controls, `PostEditor`, the inline delete confirmation and the page refetch are built here once. TKT-01M3QHKD21 (Show moderators' post controls and the edited-by-a-moderator marker) depends on this ticket. It only widens the rule to every post when `viewer.can_moderate`, and adds the marker. A second set of controls for moderators lost: two components for the same three requests would drift apart.
 - **The page refetches after a change**, through the thread resource's `retry`. The answer's `log_length` is longer, so the new page replaces the cache entry (`storeThreadPage` in `state/threads.ts`). Splicing `CreatedPost.post` into the cached page lost: the cache holds pages at one log length, and a spliced page would be a page at a length that never existed.
 - **Inline editing** in the post's place, with the composer's preview. `components/thread/PostEditor.tsx` replaces the post body while open. `usePreview` in `composer/Composer.tsx` is exported for it. Loading the post into the reply composer lost: the composer is one per thread and carries a reply in progress, which an edit would overwrite.
 - **One timer per page** re-renders when the soonest open window on the page closes, so a control disappears on time without polling. A per-post interval lost: a long page would run one per post.
@@ -84,9 +84,10 @@ Engineering choices made here, each with the alternative that lost:
 1. **DTO** (`internal/dto/dto.go`): `ThreadViewer` gains `AuthorWindows *AuthorWindows json:"author_windows"`, with `type AuthorWindows struct { EditSeconds int json:"edit_seconds"; DeleteSeconds int json:"delete_seconds" }`. The doc comment says when it is null. Regenerate the goldens (`thread.member.json` gains the defaults, `thread.moderator.json` and `thread.anon.json` gain null). Add both types to `web/client/src/api/dto.ts`; `dto-contract.ts` fails the type check otherwise.
 2. **Server** (`internal/service/threads/view.go`, `View`): inside the existing `s.DB.Read`, when `v.Member() && !canModerate`, read the two settings and set `viewer.AuthorWindows`. Nothing else in the view changes, and the posts are built as before.
 3. **Docs**: docs/07 "Thread response shape" gains `author_windows` in the viewer block and when it is null; "Edit, delete and restore" says the client reads the windows there.
-4. **Offer rule** (`components/thread/postControls.ts`): for a post `p`, the viewer's handle `me`, the page's `viewer` and `now` in ms:
+4. **Offer rule** (`components/thread/postControls.ts`): for a post `p`, the viewer's handle `me`, the page's `viewer` and `now` in ms from `Date.now()`:
+   - `created = p.created_at`. It is `Millis`, a JSON number of milliseconds since the epoch (`web/client/src/api/dto.ts`, `dto.Millis` in Go, for example `1757500300000` in `created-post.member.json`), not a date string. The rule still guards it: when a window applies, a `created` that is not a finite number offers nothing rather than comparing `NaN`. Terva review 1488 (PR #167, head f5a4206), finding 2, read it as a string. The shape says otherwise, and the guard and its test make the type part of the rule. `created` is used for both `open` and `closesAt`;
    - own: `me !== null && p.author.handle === me`;
-   - `open(s) = windows === null || (s > 0 && now - p.created_at < s * 1000)`;
+   - `open(s) = windows === null || (s > 0 && now - created < s * 1000)`;
    - edit: own, not deleted, `moved_to` null, `viewer.can_reply`, and `open(edit_seconds)`;
    - delete: own, not deleted, `moved_to` null, and `open(delete_seconds)`;
    - restore: own, deleted, `removal` absent or `"author"` (TKT-01M29CKRJ9 adds `removal`), and `open(delete_seconds)`;
@@ -113,6 +114,7 @@ Engineering choices made here, each with the alternative that lost:
   - `null windows bind nothing`: with `author_windows` null, edit, delete and restore are offered on one's own post at any age.
   - `no edit without can_reply`: in a locked thread a member is offered delete and not edit.
   - `restore only one's own delete`: offered on one's own deleted post inside the delete window, and not when `removal` is `"moderator"`.
+  - `created_at is Millis` (review 1488, finding 2): a post whose `created_at` is the number `now - 1000` is inside a 15-minute window, and one whose `created_at` is not a finite number is offered nothing a window bounds. `closesAt` is `created_at + s * 1000` as a number.
 - Client, `components/thread/PostControls.test.tsx` (fake timers):
   - `the controls disappear when the window passes`: a post 14 minutes old shows delete. After `vi.advanceTimersByTime` past 15 minutes, with no other input, it does not.
   - `edit loads the source and sends the new one`: the editor shows the source route's answer. Save sends `PATCH` with `{source}` and then the page is requested again.
@@ -123,7 +125,7 @@ Engineering choices made here, each with the alternative that lost:
 ### Out of scope
 
 - The source route: TKT-01M3QJYV4Z.
-- A moderator's Edit, Delete and Restore on other members' posts, and "(edited by a moderator)": TKT-01M29CRJ5J.
+- A moderator's Edit, Delete and Restore on other members' posts, and "(edited by a moderator)": TKT-01M3QHKD21, which builds on these controls. The server side is TKT-01M29CRJ5J, merged in PR #165.
 - Tombstone wording and the author's view of a post a moderator hid: TKT-01M29CKRJ9.
 - The post history screen.
 - An edit reason field. The route takes `reason`, but docs/08 asks the author for none, and an empty reason is valid.
@@ -133,3 +135,7 @@ Engineering choices made here, each with the alternative that lost:
 **agent:claude-code/phase2-groom** at 2026-09-29T22:07:20Z
 
 Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. The description assumes Edit and Delete controls that main does not have: Post.tsx offers quote, reply, link and history, and nothing in the client calls PATCH, DELETE or restore on a post. TKT-01M29CKRHS names this ticket as the owner of the client controls, so the plan builds them and gates them by the windows; effort is now M. Editing needs the post's source, which only history carries and history is closed to members when public_edit_history is off, so the route was filed as TKT-01M3QJYV4Z (Serve a post's current source to its author for editing) and linked as a dependency. author_windows is null for non-members as well as for forum moderators; the plan says why.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T22:25:28Z
+
+Terva review 1488 on PR #167, head f5a4206, finding 2 (medium): answered, and the plan is clarified. created_at is Millis, a JSON number of milliseconds (web/client/src/api/dto.ts, dto.Millis; 1757500300000 in the goldens), not a date string, so the subtraction did not produce NaN. The plan now says the type, guards a non-finite value when a window applies, and names the test 'created_at is Millis'. Also, per the coordinator on 2026-09-30, TKT-01M3QHKD21 (Show moderators' post controls and the edited-by-a-moderator marker) now depends on this ticket and widens the same controls. This ticket builds the only set.

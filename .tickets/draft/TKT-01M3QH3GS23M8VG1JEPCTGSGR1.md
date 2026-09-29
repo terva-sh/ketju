@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T21:28:33Z
-updated_at: 2026-09-29T22:07:21Z
+updated_at: 2026-09-29T22:25:28Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -72,20 +72,20 @@ Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at f04a476. The se
 Engineering choices made here, each with the alternative that lost:
 - **New files, not a longer `UsersScreen.tsx`.** `screens/admin/NewAgentForm.tsx` and `screens/admin/AgentPanel.tsx`, with `TokenPanel` inside the second. TKT-01M3P0CYR3 (rename control) also changes the user detail; separate files keep the two PRs from conflicting. Adding them inline in `UserDetail` lost for that reason.
 - **Refusal words specific to this form.** `send` (`screens/admin/common/send.ts`) maps `conflict` to "Someone else changed this while you were working", which is wrong for a taken handle. The form maps `conflict` to "That handle is taken." and `validation-failed` to "That is not a valid handle, or it is reserved." and uses `send`'s words for anything else. Extending `send` with a per-call table lost: one caller needs it.
-- **The token panel is local state of the component that received the answer**, cleared on dismiss and on unmount. Moving to another account or leaving the screen drops it. A module-level signal lost: it would survive navigation.
+- **The token lives only as long as the agent's detail.** Every token, including the one from creation, is shown by `TokenPanel` inside `AgentPanel`, which is part of `UserDetail`, keyed by the handle. `NewAgentForm` holds no token. When the creation answer arrives, the form passes it up to `UsersTab` through `onCreated`. `UsersTab` selects the new agent and gives `UserDetail` the credential as a one-shot `issued` prop. `AgentPanel` copies it into its own state on mount, and `UsersTab` clears its copy in the same step through `onIssuedTaken`. Done, closing the detail, choosing another account and leaving the screen all unmount or clear it. Terva review 1488 (PR #167, head f5a4206), finding 1, found that the first version kept the creation token in `NewAgentForm`, above the list, where closing the detail would not clear it. Two other designs lost. Keeping the token in the form and clearing it when the selection changes is a second lifetime to keep in step. A module-level signal would survive navigation.
 
 ### Approach
 
 1. **`screens/admin/NewAgentForm.tsx`**, rendered above the account list in `UsersTab` when `admin`:
    - A "New agent" button opens the form: `Field`s for handle and display name, and a checkbox "Issue a token now", checked by default.
-   - Submit sends `send<CreatedAgent>('POST', '/api/v1/admin/users', {kind: 'agent', handle, display_name, issue_credential})`. On success it shows `TokenPanel` when `credential` is not null, clears the form, calls the tab's `reload`, and selects the new account with the same `setSelected` a row click uses.
+   - Submit sends `send<CreatedAgent>('POST', '/api/v1/admin/users', {kind: 'agent', handle, display_name, issue_credential})`. On success it clears the form and calls `onCreated(answer)`. It does not render the token. `UsersTab`'s `onCreated` calls the tab's `reload` and selects the new account the way a row click does. It hands `answer.credential` to that account's `UserDetail` as the `issued` prop, and clears it once `AgentPanel` has taken it.
    - Refusals show beside the form with the words above.
-2. **`screens/admin/AgentPanel.tsx`**, rendered by `UserDetail` when `admin && d.agent !== null`, below the facts:
+2. **`screens/admin/AgentPanel.tsx`**, rendered by `UserDetail` when `admin && d.agent !== null`, below the facts. It owns the only `TokenPanel` state. On mount it copies an `issued` prop into that state and calls `onIssuedTaken`.
    - A "Token" block. With a live credential: "Issued {when(created_at)}", "Last used {when(last_used_at)}" or "never", "Issue new token" as a `ConfirmButton` whose prompt says the current token stops working at once, and "Revoke" as a `danger` `ConfirmButton`. Without one: "No live token" and "Issue token", which needs no confirmation because nothing is replaced.
    - Issue sends `POST …/credential`, shows `TokenPanel` with the answer, and refetches the detail. Revoke sends `DELETE …/credential` and refetches it. A 404 on revoke means another admin revoked it first, so the panel refetches and says "This agent has no live token."
    - A "Write limits" block: two number `Field`s, burst and refill seconds, whose placeholders are `default_burst` and `default_refill_seconds`, and whose values are `burst` and `refill_seconds` or empty. The hint says an empty field uses the site default. Save sends `PUT …/agent-limits` with `{burst: n or null, refill_seconds: n or null}` and replaces the detail with the answer. `min=1` on both inputs, and `max=604800` on refill, mirror the server's bounds; the server's `validation-failed` is still shown.
 3. **`TokenPanel`**: the token in a read-only `<input>` (selectable, `autocomplete="off"`, `spellcheck=false`), a "Copy" button using `navigator.clipboard.writeText` that says "Copied" or, when the clipboard is refused, "Select the token and copy it", the line "This token is shown once. Store it now.", and "Done", which clears it. It has `role="status"` so a screen reader announces it, and focus moves to the token when it opens.
-4. **`UserDetail`** in `UsersScreen.tsx` passes `d`, `url` and its detail setter to `AgentPanel`. Nothing else in the file changes, apart from `UsersTab` rendering `NewAgentForm`.
+4. **`UsersScreen.tsx`**: `UserDetail` passes `d`, `url`, its detail setter, `issued` and `onIssuedTaken` to `AgentPanel`. `UsersTab` renders `NewAgentForm` and holds the one-shot handoff described above. On main, the detail has no way to close. It gains a "Close" button that clears the selection and so unmounts the detail. If TKT-01M3P0CYR3 has moved the selection into `?user=`, Close routes to `/admin/users`. Nothing else in the file changes.
 5. **CSS** in `screens/admin/admin.css`, using the existing `admin-*` classes. The token is set in a monospace font so that similar characters can be told apart.
 6. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. `npm run build` runs the budget; the admin chunk is outside `threadViewGzipBytes`.
 
@@ -95,7 +95,9 @@ Engineering choices made here, each with the alternative that lost:
   - `creates an agent with a token`: the request body is exactly `{kind: 'agent', handle, display_name, issue_credential: true}`, the panel shows the token and the line "This token is shown once. Store it now.", and the new account is selected.
   - `creates an agent without a token`: `issue_credential: false`, and no panel.
   - `says a taken handle is taken`: a 409 shows "That handle is taken." and not the generic conflict sentence. A 422 shows the invalid-or-reserved words.
-  - `the token is gone after Done`: after Done, the token string appears nowhere in `document.body.innerHTML`, and not in `localStorage`, `sessionStorage` or `location.href`. The same holds after the detail is closed.
+  - `the token is gone after Done`: after Done, the token string appears nowhere in `document.body.innerHTML`, and not in `localStorage`, `sessionStorage` or `location.href`.
+  - `closing the detail clears the creation token` (review 1488, finding 1): create an agent with a token, then close the detail and, separately, pick another account. Each time the token string is absent from `document.body.innerHTML`, and it does not come back when the new agent is selected again.
+  - `the form holds no token`: after creation, `NewAgentForm`'s subtree does not contain the token.
   - `copies the token`: `navigator.clipboard.writeText` is called with the token. When it rejects, the fallback words show.
   - `issue new token asks first`: nothing is sent until Confirm, then one `POST …/credential`, and the new token shows.
   - `revoke`: one `DELETE …/credential` after Confirm, and the detail refetches. A 404 shows "This agent has no live token."
@@ -117,3 +119,7 @@ Engineering choices made here, each with the alternative that lost:
 **agent:claude-code/phase2-groom** at 2026-09-29T22:07:21Z
 
 Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. Client only; the routes and types are merged with PR #164. The controls go in new files under screens/admin (NewAgentForm.tsx, AgentPanel.tsx) so this ticket and TKT-01M3P0CYR3, which also changes the user detail, do not conflict. Only one lane may change the committed dist at a time.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T22:25:28Z
+
+Terva review 1488 on PR #167, head f5a4206, finding 1 (high, credential handling): accepted and fixed in the plan. The first plan kept the creation token in NewAgentForm, above the list, so closing the detail would not clear it. Now every token, the creation token included, lives only in AgentPanel inside the agent's UserDetail. NewAgentForm passes the answer up and holds no token, and the detail gains a Close button. New tests: 'closing the detail clears the creation token' and 'the form holds no token'.
