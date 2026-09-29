@@ -25,10 +25,12 @@ references:
     path: docs/08-moderation.md
   - ref: pr:175
     path: null
+  - ref: pr:176
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T23:41:33Z
+updated_at: 2026-09-29T23:46:58Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -159,6 +161,10 @@ The first run of the two reopen mutations did not compile (an unused variable), 
 
 Checks run locally at the head before the PR: gofmt, go build, go vet, `go test -race ./...`, the property test at 5000 cases, sqlc regeneration, `go generate ./internal/web/spa` (dist unchanged; thread-view bundle 45330 B of 60000 B), `tsc --noEmit`, and vitest (1306 passed).
 
+**agent:claude-code/phase2-run-cp2pj** at 2026-09-29T23:46:47Z
+
+PR #175 (head 56551e5, base 2e2fe7c) was replaced by PR #176. The suspension PR #172 landed on main under it, and its Terva run 0ce7fc44 ended in error, 'Review superseded: the pull request moved during the run', so it is not a review. The same work is carried onto main at 5c9da6d as one commit, ea61688 on run/cp2pj-flags-2. The carry merges Delete.suspension beside Delete.auto (records.go, the projection audit writer, docs/03 and docs/04), keeps both background jobs in serve, and has TestRestoreDecidesAgainWhenTheLogMoves reach the Publish hook through *posts.Writer, because Service.Writer is now an interface. Checks after the carry: gofmt, vet, go test -race ./..., sqlc current, and dist unchanged (45334 B of 60000 B).
+
 ## Summary
 
-Flags and the auto-hide are built on the server (commit fa88b11 on run/cp2pj-flags). POST /api/v1/threads/{id}/flags answers one receipt for every accepted report; migration 0014 keeps one open flag per reporter per post. At flags.auto_hide_threshold the system appends a Delete with auto and actor 0, which sets hidden-by-mod and the new index bit 6 (EntryAutoHidden), serves removal 'review' (html to the author and moderators, a tombstone to everyone else), and writes a post.auto_hidden audit row as the system. A failed hide answers unavailable with the flag kept; jobs.AutoHideSweep, every minute and at startup, recovers it and enforces a lowered threshold. A moderator's restore dismisses the post's open flags before its append and reopens them only if nothing was appended; the hide, the restore and ConfirmHide share one striped per-post lock. ConfirmHide has no route until the queue (TKT-01M29CRJ4E). AC8, the tombstone's words, is left to TKT-01M29CKRJ9's client half; the flag UI is draft TKT-01M3QQWA5Z.
+Flags and the auto-hide are built on the server (PR #176). POST /api/v1/threads/{id}/flags answers one receipt for every accepted report; migration 0014 keeps one open flag per reporter per post. At flags.auto_hide_threshold the system appends a Delete with auto and actor 0, which sets hidden-by-mod and the new index bit 6 (EntryAutoHidden), serves removal 'review' (html to the author and moderators, a tombstone to everyone else), and writes a post.auto_hidden audit row as the system. A failed hide answers unavailable with the flag kept; jobs.AutoHideSweep, every minute and at startup, recovers it and enforces a lowered threshold. A moderator's restore dismisses the post's open flags before its append and reopens them only if nothing was appended; the hide, the restore and ConfirmHide share one striped per-post lock. ConfirmHide has no route until the queue (TKT-01M29CRJ4E). AC8, the tombstone's words, is left to TKT-01M29CKRJ9's client half; the flag UI is draft TKT-01M3QQWA5Z.
