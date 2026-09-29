@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T15:10:32Z
+updated_at: 2026-09-29T15:24:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -124,6 +124,15 @@ Built at 14ac84f. Three places where the build differs from the revised plan, an
 Criteria evidence: AC1 TestAManualMembershipSurvivesSignIn; AC2 TestGroupMapGrantsNothingUnmapped and TestSyncIdPGroupsIgnoresUnknownAndImplicit; AC3 TestSyncIdPGroupsAddsAndRemoves, TestSyncIdPGroupsIsOneTransaction and TestAFailedGroupSyncFailsTheSignIn; AC4 TestGroupMapNeverSignsInAnInactiveUser and TestSyncIdPGroupsRefusesAnInactiveUser; AC5 TestGroupMapRefusesImplicitGroups and the "a group_map onto members" case of TestConfigCheckFailsNamingKey; AC6 TestGroupMapAtSignIn and TestGroupMapAtRegistration; AC7 TestAnUnmappedProviderSignInDropsIdPGroups; AC8 docs/05 "Roles and groups".
 
 Contract changes for later tickets: `identity.Policy` / `ProviderPolicy{GroupMap}` / `PolicyFrom([]config.Provider)` now exist, and `cmd/ketju/serve.go` sets `identity.Service.Policy`. TKT-01M29CKRE9 adds `AutoApprove` to `ProviderPolicy`. `identity.ClaimsOf` is now the method `(*Service).ClaimsOf`, and the `auth.Login` interface has it. `identity.Service` needs `Perm` for every sign-in, not only a bootstrap one.
+
+**agent:claude-code/phase2-run-ckrf9** at 2026-09-29T15:24:47Z
+
+Terva reviews of PR 147, both clean, with no findings at any severity:
+
+- Run 2bb5ec90-b3c3-41da-a964-cc22c1de4630 (request ready-review-b2ce8ba, Actions run #896): head b2ce8ba36606e330cadb42a5ce7fa419b9783059, base 889870b4f853046430ae18cc75db6f1dcd1debf4.
+- Run 4c5d0778-2a2a-4e81-b725-dd09b8cc7181 (request ready-review-01b7f3c, Actions run #902): head 01b7f3c813de02ccd5b5e5908af12bf2e3826216, base ccc05adb32252b1e51ea6ebb6131a26edbd3ae92. This head adds one comment correction found in self-review: `identity.Service.Bootstrap` no longer says that Perm may be nil.
+
+Main moved to ccc05ad (TKT-01M29CKRHS) while the PR was open. The only file both sides touched is the generated `internal/store/db/dbq/querier.go`, in separate hunks, and the PR stays mergeable. The commits after 01b7f3c touch only `.tickets/`, so the review result is carried to them.
 
 ## Summary
 
