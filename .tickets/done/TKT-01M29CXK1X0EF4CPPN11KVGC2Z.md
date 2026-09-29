@@ -25,10 +25,12 @@ references:
     path: docs/04-data-model.md
   - ref: pr:152
     path: null
+  - ref: pr:153
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T17:19:36Z
+updated_at: 2026-09-29T17:20:07Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
