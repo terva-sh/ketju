@@ -67,10 +67,11 @@ func (s *Service) authorWindows(ctx context.Context) (windows, error) {
 
 // within reports whether a post created at createdMS is still inside a
 // window of d at now. A window is open for its first d and closed from d on,
-// so a window of 0 is never open. A post stamped after now, by a clock that
-// stepped back, is inside every window.
+// and a window of 0 is never open, not even to a post stamped after now by a
+// clock that stepped back (review 1378 on PR #146). Such a post is inside
+// every window that is open at all.
 func within(createdMS int64, now time.Time, d time.Duration) bool {
-	return now.Sub(time.UnixMilli(createdMS)) < d
+	return d > 0 && now.Sub(time.UnixMilli(createdMS)) < d
 }
 
 // authorize says whether v may act on the post e describes, in a thread v has

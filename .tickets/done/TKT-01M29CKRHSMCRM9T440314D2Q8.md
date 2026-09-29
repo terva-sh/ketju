@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T15:00:53Z
+updated_at: 2026-09-29T15:03:51Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -103,6 +103,10 @@ The two new problem codes, `edit-window-closed` and `delete-window-closed`, are 
 The rest of the client work, the `author_windows` viewer field and the controls in `Post.tsx`, is TKT-01M3PTT97X (Offer edit and delete only inside the author windows in the client), filed as a draft that depends on this ticket. The DTO field moved there too, because adding it here would fail the client's `dto-contract.ts` check.
 
 The boundary choice (a window is open for its first N seconds, so 0 never opens, and grace uses strict `<` rather than the plan's `<=`) is recorded in the revised plan and in docs/07.
+
+**agent:claude-code/phase2-run-ckrhs** at 2026-09-29T15:03:51Z
+
+Terva review 1378 (run 2fd82a91-271e-4584-a619-d94dd4bbe3f2, Actions run 890) on PR #146, head 4cdb5dc9fb97d4fe1bd60e9de0767c177b71ab00, base 889870b4f853046430ae18cc75db6f1dcd1debf4. One finding, medium: 'A zero-length window opens when the clock moves backward'. Accepted and fixed: within() now returns false for a window of 0 or less before comparing the age, so a post stamped after now by a clock that stepped back is inside every open window and no closed one, and a grace setting of 0 is off at any age. Tests: TestAuthorWindows gains a stepped-back clock against zero windows, and TestGraceOfZeroIsOff covers grace at age 0 and -60 s. Removing the d > 0 guard fails TestAuthorWindows.
 
 ## Summary
 

@@ -216,6 +216,10 @@ func TestAuthorWindows(t *testing.T) {
 		run(t, "carol", n, created, []attempt{
 			{0, http.MethodPatch, "", `{"source":"x"}`, "edit-window-closed"},
 			{0, http.MethodDelete, "", "", "delete-window-closed"},
+			// Nor to a clock that stepped back behind the post (review 1378
+			// on PR #146).
+			{-time.Minute, http.MethodPatch, "", `{"source":"x"}`, "edit-window-closed"},
+			{-time.Minute, http.MethodDelete, "", "", "delete-window-closed"},
 		})
 	})
 }
@@ -269,6 +273,27 @@ func TestGraceEdit(t *testing.T) {
 	}
 	if at := w.servedEditedAt(id, n); at == nil || int64(*at) != w.clock || int64(*at) == visible {
 		t.Fatalf("after a later edit inside the widened grace, edited_at is %v, want %d", show(at), w.clock)
+	}
+}
+
+// TestGraceOfZeroIsOff: with posts.grace_edit_seconds at 0 no edit is a
+// grace edit, not at the moment of posting and not from a clock that stepped
+// back behind the post (review 1378 on PR #146). The edit window, still
+// open, admits the edit that stepped-back clock makes.
+func TestGraceOfZeroIsOff(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	w.setting("posts.grace_edit_seconds", 0)
+	for _, after := range []int64{0, -60_000} {
+		n, created := w.fresh(id, "carol")
+		w.clock = created + after
+		res := changed(t, send(w.chain(), "carol", http.MethodPatch, postPathN(id, n), `{"source":"no grace"}`))
+		if b := w.editBodies(id, uint32(n)); len(b) != 1 || b[0].Grace {
+			t.Errorf("at %+d ms: the log holds %+v, want one Edit without grace", after, b)
+		}
+		if res.Post.EditedAt == nil {
+			t.Errorf("at %+d ms: the edit is served with edited_at null", after)
+		}
 	}
 }
 
