@@ -26,12 +26,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T06:45:43Z
+updated_at: 2026-09-29T07:04:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase1-run-438e26c1
   name: ""
 extensions: {}
 ---
@@ -155,3 +155,7 @@ Terva review on PR #140, head 075aff1: three medium findings, all accepted and f
 **agent:claude-code/phase2-groom** at 2026-09-29T06:45:43Z
 
 Terva review on PR #140, head bed9b58: two medium findings, both accepted and fixed in the plan. (1) Audit recovery writes the owed flag.dismissed row whatever the request asked, and answers 200 only when the request's own action (dismiss, or resolve/Keep post) matches the completed restore; anything else, remove included, is conflict. (2) The author link goes to /admin/users?prefix={handle} only for a role moderator or admin; a forum-scoped moderator, who cannot pass staff, gets the profile /u/{handle}.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-29T07:04:34Z
+
+Carried from Terva review 1371 on PR #140 (head 4aafbf4), medium, 'Do not treat existing closed flags as audit rows owed by recovery'. The plan's round cap was reached, so this is carried here as a requirement, not by another plan revision. Audit recovery must use an explicit pending marker, for example a flags.audit_pending column set only in the restore transaction that closes the flags. A NULL audit_id alone never means an audit row is owed. ResolvePost's retry and FlagAuditCatchUp consider only rows with the marker set. Add a test that a flag closed by any other path, or before the migration, is never swept.

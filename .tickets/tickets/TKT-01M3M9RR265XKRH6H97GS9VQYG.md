@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-29T05:39:49Z
+updated_at: 2026-09-29T07:04:34Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -134,3 +134,12 @@ Plan PRs #136–#140 were written by five parallel planning agents from grooming
 - #139, review 1345, head e2ce3eb: three highs on the redaction plan (CXJZ9): attachment hashes are journalled before any rewrite, blob-reference drops are made idempotent using the audit row as the resume marker, and the origin search runs to a fixed point.
 - #140, review 1349, head 90d2f7c: see the next note.
 The maintainer accepted all 15 open recommendations on 2026-09-29. They are written into docs/05, 06 and 08 on the run-procedure PR, and into each ticket's Settled section on the plan PRs.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-29T07:04:34Z
+
+Later rounds on the plan PRs; every finding was fixed in the plans unless stated:
+- #136 (identity): clean at 7954dcc; merged.
+- #137 (forms): 1353, block without an identity; 1358, the trigger fallback removed in favour of a deferred FK; 1364, the Alerts count excludes closed applications instead of marking them read. Clean at 6fd62af; merged.
+- #138 (moderation): 1352, the audit row is written by the projection writer in the projection transaction, the content rule applies only to removed posts, and the auto-hide lock is shared with restore; 1359, a hidden post's author reads its history; 1365, flags reopen only when the Restore append fails; 1368, grace edits only before the first visible edit. Round 6 was allowed past the cap by the orchestrator. Clean at 21784df; merged.
+- #139 (follow-ups, redaction): 1351, 1360 and 1366 cover the whole-log marker check, the attachments of every revision, a blob row deleted in the transaction with the file removed after commit, the journal checked first, and dry-run and --resume specified. Clean at d0c5057; merged.
+- #140 (admin): 1356, 1362, 1367 and 1370 cover the late flag, post-state conflicts, restoring a kept post, the queue count for forum-scoped moderators, audit recovery aligned with #138, the author link, and credential issuance refused unless the agent is active (security, fixed). Review 1371, a medium on audit recovery, came in round 7, past the cap. It was carried into TKT-01M29CRJ4E as a requirement and recorded on the PR, and the PR merged at 4aafbf4 under the grant. It is not a disagreement: the finding is accepted, and its fix is required at implementation.
