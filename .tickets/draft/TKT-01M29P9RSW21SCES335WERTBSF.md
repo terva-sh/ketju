@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-12T02:14:17Z
-updated_at: 2026-09-29T05:12:50Z
+updated_at: 2026-09-29T05:41:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -79,6 +79,7 @@ Note the one subtlety worth getting right: the machine-authored frame flag bit i
 - A purpose-built agent surface such as MCP is gated, not scheduled (docs/07). Personal API tokens are a later phase.
 - **The session chokepoint.** Only `session.IssueUserWith` issues sessions, and `chokepoint_test.go` fails on a second door. The credential path issues no session, so the chokepoint's caller lists do not change.
 - The gate, the audit helper and the admin scaffold come from TKT-01M3NRYCP5. The screen is TKT-01M29CXK1X's users screen, in the lazy admin chunk. The built client is committed: run `go generate ./internal/web/spa`.
+- **Maintainer decision 2026-09-29:** the agent rate bucket allows a burst of 20 and refills one token every 30 s, as the site defaults `agents.write_burst` and `agents.write_refill_seconds`. It was proposed in grooming with this reasoning: docs/08 describes normal agent traffic as "twenty posts in a minute while working and then silence for hours". The burst covers that minute, and the refill gives 120 an hour, well under what a runaway would do. These are settings, and an operator can change them. A note on this ticket records it.
 
 Engineering choices made here, each with the alternative that lost:
 - **A table of its own, `agent_credentials`**, rather than rows in `sessions`. `sessions` has the user and pre-user CHECK, the expiry rules the sweeper applies, and the chokepoint scan. A credential row there would need an exemption from all three.
@@ -86,7 +87,6 @@ Engineering choices made here, each with the alternative that lost:
 - **Token format `ketju_agent_` followed by 32 random bytes in base64url.** The prefix lets a secret scanner recognise a leaked one. It is stored as the SHA-256 hash, the `sqltypes.SessionHash` type, and shown once, in the response that issues it.
 - **An `Authorization` header decides the request.** When one is present the cookie is not read. A malformed or unknown bearer, or a revoked one, or one whose agent is not active, is `unauthenticated`, not an anonymous request. An agent with a bad token learns at once, rather than reading as a stranger.
 - **Agents are created as `member`.** A role is then changed through `perm.ChangeRole` (TKT-01M29CXK1X), so a role never changes without its audit row, and there is one path for it.
-- **Bucket defaults: burst 20, one token per 30 s.** docs/08 describes normal agent traffic as "twenty posts in a minute while working and then silence for hours". The burst covers that minute, and the refill gives 120 an hour, well under what a runaway would do. These are settings, and an operator can change them.
 - **What is charged:** every mutating `/api/v1/*` request authenticated by a bearer, except `PUT` and `DELETE /threads/{id}/read` and `/drafts/*`. Reading and marking read is not what the bucket guards against, and charging it would throttle an agent for reading.
 
 ### Approach
@@ -150,6 +150,12 @@ Engineering choices made here, each with the alternative that lost:
 - Changing an account's `kind`.
 - Agent avatars, since uploads are not built.
 - The lifecycle transitions themselves (TKT-01M29CKRFS).
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-29T05:41:12Z
+
+Maintainer decision 2026-09-29: the agent rate bucket allows a burst of 20 and refills one token every 30 s (agents.write_burst and agents.write_refill_seconds defaults). The plan's Settled section records it.
 
 ## Comments
 

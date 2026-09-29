@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:13:04Z
+updated_at: 2026-09-29T05:41:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,7 +45,7 @@ The log is only worth writing if somebody can read it. In a small community the 
 - [ ] No code path in the application updates or deletes an entry
 - [ ] GET /api/v1/admin/audit filters by actor handle or system, action or action prefix, target type and id, and a time range, alone and combined, and pages newest first by an opaque keyset cursor (TestAuditPageFilters, TestAuditPageKeyset)
 - [ ] Each entry whose target is a user, forum, thread, post or setting carries an href to it and the screen renders it as a link, and an absent user draws as deleted-user-<id> (TestAuditTargetsLink)
-- [ ] The endpoint and /admin/audit answer 401 to anonymous, 403 to pre-user and member viewers, and 200 to admins; a moderator gets what the plan's open decision settles, and docs/08 records that decision (TestAuditIsAdminOnly)
+- [ ] The endpoint and /admin/audit answer 401 to anonymous and 403 to pre-user, member and moderator viewers, forum-scoped moderators included, and 200 to admins, and docs/08 records that the log is admin-only (TestAuditIsAdminOnly)
 
 ## Implementation plan
 
@@ -54,7 +54,7 @@ The log is only worth writing if somebody can read it. In a small community the 
 - `audit_log` is append-only. Triggers refuse UPDATE, DELETE and a REPLACE, and `TestAuditLogAppendOnly` (`internal/store/db/moderation_schema_test.go`) refuses any query or SQL literal in `internal/` that tries (docs/04 "audit_log"). AC4 holds today. This ticket must keep it holding and add no write path.
 - Every moderation and administration action appends a row (docs/08 intro). Writing those rows belongs to each action's ticket. This ticket reads them.
 - Rows reach the table through `internal/audit`, whose target constructors fix the `target_id` formats. The target table is in docs/04 (TKT-01M3NRYCP5, a dependency).
-- The view is admin-only (this ticket's AC3). What a moderator may see is the open decision below. Build option (a), and change only the gate if the maintainer picks another.
+- **Maintainer decision 2026-09-29:** the audit log is admin-only, and moderators see none of it. The alternatives were rows about threads in forums a moderator moderates, which lost because audit rows carry no forum and a thread's current forum is not the one it was in when the action happened, and a moderator's own actions only. A note on this ticket records the decision.
 - Admin screens are the lazy admin chunk and do not count against the 60000 B budget (docs/07 "Preact client"). The built client is committed: run `go generate ./internal/web/spa` after any client change.
 - Lists paged by time are cursor-paged with an opaque cursor, and a malformed cursor is `bad-request` (docs/07 "JSON API").
 
@@ -75,13 +75,13 @@ Engineering choices made here:
 4. `internal/dto`: `AuditPage{Entries []AuditEntry; NextCursor string}` and `AuditEntry{ID, At int64; Actor *Author; Action string; Target AuditTarget; Details json.RawMessage; IP string}`, with `AuditTarget{Type, ID, Label, Href string}`. Goldens: `audit.admin.json` (system and member actors, so the nullable actor appears both null and set, as the corpus rules require) and `audit-filtered.admin.json`. Import both in `web/client/src/api/dto-contract.ts`.
 5. `internal/web/api/admin_audit.go`: `GET /api/v1/admin/audit`, `no-store`.
 6. Client: `web/client/src/screens/admin/AuditScreen.tsx` in the admin chunk. It has a filter form (actor handle, action select of known actions plus free text, target type and id, from and to dates in local time, converted to ms), a table newest first (time, actor, action, target link, details as key and value pairs, IP), and an "Older" button that follows the cursor. Add `/admin/audit` to the `AdminRoot` sections, to `routes.tsx`, and to docs/07's URL scheme, because `routes.test.tsx` diffs the table against that document.
-7. Docs: docs/07 "Moderation and admin" documents the endpoint (parameters, codes, page size, cursor). docs/08 records who may read the log, once decided.
+7. Docs: docs/07 "Moderation and admin" documents the endpoint (parameters, codes, page size, cursor). docs/08 records that the log is admin-only (maintainer decision 2026-09-29).
 8. Run `go generate ./internal/web/spa`, commit `dist`, and run `npm --prefix web/client run budget`. The reader total must not move, because the screen is in the admin chunk.
 
 ### Tests
 
 - `views`: `TestAuditPageFilters` covers each filter alone and combined, the `From` and `To` bounds, the `system` actor and an action prefix. `TestAuditPageKeyset` checks that a row appended between two pages appears on neither and nothing repeats. `TestAuditQueriesUseAnIndex` runs `EXPLAIN QUERY PLAN` for the actor, action and target filters and fails on a full scan of `audit_log`.
-- `service/audit`: `TestAuditIsAdminOnly` expects anonymous 401, pre-user 403, member 403, moderator 403 under option (a), and admin 200. `TestAuditTargetsLink` covers user, thread, post, forum and setting targets and their hrefs, plus an absent user drawn as `deleted-user-<id>`. `TestAuditCursorIsOpaque` expects a malformed cursor to be `bad-request`.
+- `service/audit`: `TestAuditIsAdminOnly` expects anonymous 401, pre-user 403, member 403, moderator 403 (a forum-scoped moderator included), and admin 200. `TestAuditTargetsLink` covers user, thread, post, forum and setting targets and their hrefs, plus an absent user drawn as `deleted-user-<id>`. `TestAuditCursorIsOpaque` expects a malformed cursor to be `bad-request`.
 - `TestAuditLogAppendOnly` passes unchanged.
 - dto goldens and the corpus rules.
 - Client: `AuditScreen.test.tsx` checks that filters round-trip through the URL, that "Older" appends the next page, and that targets render as links. `routes.test.tsx` passes with the docs/07 change. `TestTheAdminBundleIsSeparate` stays green.
@@ -89,19 +89,15 @@ Engineering choices made here:
 ### Out of scope
 
 - Writing audit rows. Each action's ticket does that, through `internal/audit` (TKT-01M3NRYCP5).
-- A moderator-scoped view, if the decision below picks (b) or (c). That becomes a follow-up ticket.
+- Any moderator view of the log (maintainer decision 2026-09-29).
 - Export, retention or pruning. The log is append-only and nothing removes a row.
-
-### Open decision
-
-What does a moderator see? Recorded in a note of the same date.
-- (a) Nothing. The endpoint and the screen are admin-only. This is simple, and no row needs mapping to a forum.
-- (b) Rows about threads and posts in forums the moderator may `moderate`. Audit rows do not carry a forum, and a thread can move, so this needs a join through `threads.forum_id` as it stands now, which is not the forum at the time of the action.
-- (c) The moderator's own actions only.
-Recommendation: (a) for Phase 2. "Who moved this thread and why" is asked of an admin (the ticket's description). (b) answers with a forum the thread is in now rather than the one it was in then, which is misleading.
 
 ## Notes
 
 **agent:claude-code/phase2-groom** at 2026-09-29T05:13:04Z
 
 Open decision for the maintainer (grooming, 2026-09-29): what a moderator may see in the audit log. (a) nothing, admin-only; (b) rows about threads and posts in forums they moderate, joined through the thread's current forum; (c) their own actions only. Recommended: (a). (b) answers with the forum a thread is in now, not the one it was in when the action happened. The plan builds (a), so that only the gate changes if another option is chosen. See the plan's Open decision.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T05:41:11Z
+
+Maintainer decision 2026-09-29: the audit log is admin-only; moderators see none of it. This supersedes the open decision in the earlier note. The plan's Settled section records it.
