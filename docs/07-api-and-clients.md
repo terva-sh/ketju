@@ -36,6 +36,7 @@
 /auth/signin?return_to=…           login page
 /auth/{provider}/start  /auth/{provider}/callback  /auth/logout (POST)
 /auth/register (GET, POST)
+/auth/link  /auth/{provider}/link (POST)
 ```
 
 `/auth/*` is the server's in both clients: plain HTML pages and redirects,
@@ -65,6 +66,23 @@ shown again and the reason beside the field. An identity registered in the
 meantime is 409, registration closed in the meantime is 403, and a browser
 that signed in as a member in the meantime is 409: a member adds an identity
 by linking it, never by registering a second account.
+
+`/auth/link` is the "link a sign-in" page (05 "Login flow" step 3): for an
+active member it lists each enabled provider as a one-button form posting
+to `/auth/{key}/link` with the page's `return_to`, and anyone else gets 303
+to `/auth/signin`, with `return_to` bringing them back. `POST
+/auth/{provider}/link` is held to this site by the cross-origin check, and
+refuses anyone but an active member signed in with a session with 403. It
+sets the login cookie, marked with the member's user id, and answers 200
+with a page that sends the browser on to the provider with an immediate
+refresh and a link, not with a redirect: `form-action 'self'` covers where
+a form's submission is redirected. The callback of a link answers 303 to
+`return_to` once the identity is linked, with the session cookie
+untouched. It answers 409 when the identity belongs to another account or
+to an application, or when the browser is no longer signed in as the
+member who started the link, and 200 "Already linked" for the member's own
+identity. A callback that brings an identity nobody has to a browser a
+member is signed in on, without a link started, is 409 and writes nothing.
 
 An approval-mode applicant's pre-user session reaches `/apply`,
 `/apply/status`, `/auth/signin`, `/auth/{provider}/start`,

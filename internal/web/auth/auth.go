@@ -48,6 +48,10 @@ type Flow struct {
 	Nonce    string `json:"n"`
 	Verifier string `json:"v"`
 	ReturnTo string `json:"r"`
+	// LinkUser is the member who started this sign-in as a link, through
+	// the "link a sign-in" action (link.go), and 0 for a plain sign-in. It
+	// is sealed with the rest, so only that action can set it.
+	LinkUser int64 `json:"l,omitempty"`
 }
 
 // Providers is the part of *oidc.Registry the handlers use.
@@ -61,7 +65,10 @@ type Providers interface {
 // Login is the part of *identity.Service the callback and the registration
 // screen use.
 type Login interface {
-	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (identity.Result, error)
+	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, linkUser int64, meta session.Meta, replaces string) (identity.Result, error)
+	// Link attaches an identity to userID, a member who started the
+	// sign-in as a link, and issues no session (link.go).
+	Link(ctx context.Context, userID int64, c identity.Claims, ip string) (identity.LinkRefusal, error)
 	// RegistrationOpenFor is whether someone new from provider may register
 	// rather than apply; AutoApproves whether they skip the handle screen.
 	RegistrationOpenFor(ctx context.Context, provider string) (bool, error)
@@ -114,6 +121,10 @@ func Routes(h *Handler) []web.Route {
 		{Method: get, Path: "/auth/signin", Handler: h.signIn},
 		{Method: get, Path: "/auth/{provider}/start", Handler: h.start},
 		{Method: get, Path: "/auth/{provider}/callback", Handler: h.callback},
+		// Linking another sign-in to a member's account: the page that
+		// offers it, and the start that marks the flow as a link (link.go).
+		{Method: get, Path: LinkPath, Handler: h.linkPage},
+		{Method: post, Path: "/auth/{provider}/link", Handler: h.startLink},
 		// The handle screen of open registration (register.go).
 		{Method: get, Path: RegisterPath, Handler: h.registerForm},
 		{Method: post, Path: RegisterPath, Handler: h.register},
@@ -136,24 +147,35 @@ func (h *Handler) provider(key string) (*oidc.Provider, bool) {
 // start begins a sign-in: fresh state, nonce and PKCE verifier, sealed into
 // the flow cookie with where to go afterwards, and off to the IdP.
 func (h *Handler) start(w http.ResponseWriter, r *http.Request) {
+	if authURL, _, ok := h.begin(w, r, r.URL.Query().Get("return_to"), 0); ok {
+		http.Redirect(w, r, authURL, http.StatusFound)
+	}
+}
+
+// begin is what start and startLink share: a flow for r's provider, sealed
+// into the flow cookie. It returns the IdP's authorization URL to send the
+// browser to, and the provider. When ok is false it has answered the
+// request. linkUser marks the flow as a link that member started, 0 for
+// none.
+func (h *Handler) begin(w http.ResponseWriter, r *http.Request, returnTo string, linkUser int64) (authURL string, p *oidc.Provider, ok bool) {
 	key := r.PathValue("provider")
-	p, ok := h.provider(key)
+	p, ok = h.provider(key)
 	if !ok {
 		writePage(w, http.StatusNotFound, pageNoProvider)
-		return
+		return "", nil, false
 	}
 	f := Flow{Provider: key, State: random(), Nonce: random(), Verifier: random(),
-		ReturnTo: SafeReturnPath(r.URL.Query().Get("return_to"))}
+		ReturnTo: SafeReturnPath(returnTo), LinkUser: linkUser}
 	sealed, err := h.Sealer.Seal(flowPurpose, f)
 	if err != nil {
 		h.Logger.ErrorContext(r.Context(), "sealing a sign-in failed", "error", err)
 		writePage(w, http.StatusInternalServerError, pageFailed)
-		return
+		return "", nil, false
 	}
 	http.SetCookie(w, &http.Cookie{Name: FlowCookie, Value: sealed, Path: "/", MaxAge: int(FlowTTL / time.Second),
 		Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	w.Header().Set("Cache-Control", "no-store")
-	http.Redirect(w, r, p.AuthCodeURL(f.State, f.Nonce, f.Verifier), http.StatusFound)
+	return p.AuthCodeURL(f.State, f.Nonce, f.Verifier), p, true
 }
 
 // callback finishes a sign-in. Every refusal before the IdP's answer is
@@ -222,7 +244,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	if old, err := r.Cookie(session.CookieName); err == nil {
 		replaces = old.Value
 	}
-	res, err := h.Login.Login(ctx, id, domain.ViewerFrom(ctx), session.Meta{
+	res, err := h.Login.Login(ctx, id, domain.ViewerFrom(ctx), f.LinkUser, session.Meta{
 		IP: remoteIP(r), UserAgent: r.UserAgent(), Provider: key}, replaces)
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "sign-in failed", "provider", key, "error", err)
@@ -240,7 +262,10 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	case identity.Register:
 		h.beginRegistration(w, r, id, f.ReturnTo)
 	case identity.Link:
-		writePage(w, http.StatusNotImplemented, pageLinking)
+		h.link(w, r, id, f)
+	case identity.LinkRefused:
+		h.Logger.InfoContext(ctx, "a link was refused", "provider", key, "reason", res.Refusal.String())
+		writeLinkRefused(w, res.Refusal)
 	case identity.Applicant:
 		// An applicant coming back sees their status page, whatever
 		// return_to said: it is the one page they may reach (docs/05

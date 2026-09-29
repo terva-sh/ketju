@@ -217,7 +217,7 @@ func TestAMemberDoesNotRegisterASecondAccount(t *testing.T) {
 	w.idp.Subject = "bob-sub"
 	bob := cookie(w.signIn(""), session.CookieName)
 	resp := w.submit("carol", reg, bob)
-	if resp.StatusCode != http.StatusConflict || !strings.Contains(body(resp), "Linking is not available yet") {
+	if resp.StatusCode != http.StatusConflict || !strings.Contains(body(resp), "<h1>Already signed in</h1>") {
 		t.Fatalf("answered %d", resp.StatusCode)
 	}
 	if _, err := w.store.Lookup(t.Context(), bob.Value); err != nil {

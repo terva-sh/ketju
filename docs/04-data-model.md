@@ -448,6 +448,11 @@ transaction that projects the record, with the frame's timestamp as `at`.
   `"posts"`. A run that changed no post writes neither. Each post also has
   the projection's `post.hidden` or `post.restored` row below, and a
   `post.hidden` written by a suspension carries its `"suspension"` too.
+- Account linking (TKT-01M29CKRES) writes `identity.linked` against the
+  user, with the member as actor, `"provider"` and `"identity"`, the new
+  identity's id, in the transaction that writes the identity (05 "Login
+  flow" step 3). It is the record of when the link happened: the identity's
+  `last_login_at` stays empty until it first signs in.
 - Application review (TKT-01M29CP2MG) writes one row per decision, in the
   transaction that makes it, with the deciding moderator as actor:
   `application.approved` against the application, with `"user_id"`,

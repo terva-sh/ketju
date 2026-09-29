@@ -252,12 +252,11 @@ func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// Someone signed in since the callback, in another tab. A signed-in
-	// member signing in with a new identity is linking it, never making a
-	// second account, as at the callback.
+	// Someone signed in since the callback, in another tab. A member adds
+	// an identity by linking it, never by making a second account.
 	if domain.ViewerFrom(ctx).Member() {
 		clearRegistration(w)
-		writePage(w, http.StatusConflict, pageLinking)
+		writePage(w, http.StatusConflict, pageRegisteringSignedIn)
 		return
 	}
 	var replaces string

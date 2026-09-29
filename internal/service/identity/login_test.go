@@ -75,7 +75,7 @@ func TestACancelledSignInLeavesNoSessionBehind(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	sessions := &cancelling{cancel: cancel}
 	s := &Service{DB: d, Sessions: sessions}
-	_, err = s.Login(ctx, &oidc.Identity{Provider: "fake", Subject: "user-1"}, domain.Viewer{}, session.Meta{}, "old")
+	_, err = s.Login(ctx, &oidc.Identity{Provider: "fake", Subject: "user-1"}, domain.Viewer{}, 0, session.Meta{}, "old")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Login = %v, want the cancellation", err)
 	}

@@ -194,7 +194,7 @@ func TestApprovedApplicantIsNotified(t *testing.T) {
 	pm := perm.New(w.db)
 	ids := &identity.Service{DB: w.db, Sessions: store, Perm: pm, Now: func() time.Time { return w.now }}
 	res, err := ids.Login(t.Context(), &oidc.Identity{Provider: "github", Issuer: "https://github.com", Subject: "carol"},
-		domain.Viewer{}, session.Meta{Provider: "github"}, "")
+		domain.Viewer{}, 0, session.Meta{Provider: "github"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

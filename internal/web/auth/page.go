@@ -3,6 +3,8 @@ package auth
 import (
 	"html/template"
 	"net/http"
+
+	"github.com/terva-sh/ketju/internal/service/identity"
 )
 
 // page is the whole of what a sign-in shows when it does not end in a
@@ -78,10 +80,143 @@ var (
 	// form submitted twice, or from two tabs.
 	pageAlreadyRegistered = pageData{"Already registered", "This sign-in already has an account. " +
 		"Please sign in again to use it.", "/", "Go to the forum"}
-	// The branch whose ticket has not landed: linking (TKT-01M29CKRES).
-	pageLinking = pageData{"Linking is not available yet", "This sign-in is not linked to your account, " +
-		"and linking another identity is not available yet.", "/", "Go to the forum"}
+	// A member signed in, in another tab, while the handle screen was open.
+	// A member adds an identity by linking it, never by registering a
+	// second account.
+	pageRegisteringSignedIn = pageData{"Already signed in", "You are signed in, so this sign-in cannot " +
+		"create a new account. To add it to your account, link it.", LinkPath, "Link a sign-in"}
 )
+
+// The answers to a link (link.go), and to a sign-in that would have been
+// one, by LinkRefusal. Each writes nothing.
+var (
+	// An identity nobody has, from a browser a member is signed in on, with
+	// no link started (docs/05 "Login flow" step 3).
+	pageLinkNoIntent = pageData{"Sign-in not linked", "You are signed in, and this sign-in is not linked " +
+		"to your account. To add it to your account, use Link a sign-in. To use another account, " +
+		"sign out first.", LinkPath, "Link a sign-in"}
+	// The link was started by a member this browser is no longer signed in
+	// as.
+	pageLinkNotYou = pageData{"Sign-in not linked", "The link was started by an account this browser " +
+		"is no longer signed in as, so nothing was linked. Sign in and start again.", "/", "Go to the forum"}
+	pageLinkOtherUser = pageData{"Sign-in not linked", "This sign-in already belongs to another account, " +
+		"so it was not linked to yours.", "/", "Go to the forum"}
+	pageLinkApplicant = pageData{"Sign-in not linked", "This sign-in belongs to an application to join, " +
+		"so it was not linked to your account.", "/", "Go to the forum"}
+	// Linking an identity that is already the member's changes nothing.
+	pageLinkAlready = pageData{"Already linked", "This sign-in is already linked to your account.",
+		"/", "Go to the forum"}
+	// The account may not link: it is not an active member, or it is an
+	// agent, which never uses OIDC.
+	pageLinkNotAllowed = pageData{"Linking not allowed", "This account cannot link a sign-in.",
+		"/", "Go to the forum"}
+	// Nobody is signed in, or an agent credential made the request.
+	pageLinkNeedsMember = pageData{"Linking not allowed", "Sign in to link another sign-in to your account.",
+		"/auth/signin", "Sign in"}
+	// The link page with nothing to offer.
+	pageLinkUnavailable = pageData{"Linking is not available", "This forum has no sign-in provider to link.",
+		"/", "Go to the forum"}
+)
+
+// linkRefusedPages are the page and status for each LinkRefusal.
+var linkRefusedPages = map[identity.LinkRefusal]struct {
+	status int
+	page   pageData
+}{
+	identity.LinkNoIntent:  {http.StatusConflict, pageLinkNoIntent},
+	identity.LinkNotYou:    {http.StatusConflict, pageLinkNotYou},
+	identity.LinkOtherUser: {http.StatusConflict, pageLinkOtherUser},
+	identity.LinkApplicant: {http.StatusConflict, pageLinkApplicant},
+	identity.LinkAlready:   {http.StatusOK, pageLinkAlready},
+}
+
+// writeLinkRefused answers a refused link. A refusal it does not know is
+// the generic failure.
+func writeLinkRefused(w http.ResponseWriter, why identity.LinkRefusal) {
+	p, ok := linkRefusedPages[why]
+	if !ok {
+		writePage(w, http.StatusInternalServerError, pageFailed)
+		return
+	}
+	writePage(w, p.status, p.page)
+}
+
+// linkTmpl is the "link a sign-in" page: one form per enabled provider,
+// each posting to that provider's link start, which the cross-origin check
+// holds to this site.
+var linkTmpl = template.Must(template.New("link").Parse(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Link a sign-in · Ketju</title>
+</head>
+<body>
+<main>
+<h1>Link a sign-in</h1>
+<p>Add another way to sign in to your account. Choose a provider, and sign in there with the account to link.</p>
+<ul>
+{{range .Choices}}<li><form method="post" action="{{.Action}}">
+<input type="hidden" name="return_to" value="{{$.ReturnTo}}">
+<button type="submit">Link {{.Name}}</button>
+</form></li>
+{{end}}</ul>
+<p><a href="{{.ReturnTo}}">Go back</a></p>
+</main>
+</body>
+</html>
+`))
+
+type linkChoice struct {
+	Name, Action string
+}
+
+type linkData struct {
+	Choices  []linkChoice
+	ReturnTo string
+}
+
+func writeLinkPage(w http.ResponseWriter, d linkData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_ = linkTmpl.Execute(w, d)
+}
+
+// continueTmpl is the answer to a link's start: on to the IdP. A redirect
+// would be the natural answer, but the page policy's form-action 'self'
+// covers where a form's submission is redirected, and a browser enforcing
+// it would stop a 303 to the IdP. So the page sends the browser on with an
+// immediate refresh, which no policy directive governs, and offers the
+// same address as a link in case it does not.
+var continueTmpl = template.Must(template.New("continue").Parse(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="refresh" content="0; url={{.URL}}">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Continue to {{.Name}} · Ketju</title>
+</head>
+<body>
+<main>
+<h1>Continue to {{.Name}}</h1>
+<p>Sign in at {{.Name}} with the account to link.</p>
+<p><a href="{{.URL}}">Continue to {{.Name}}</a></p>
+</main>
+</body>
+</html>
+`))
+
+type continueData struct {
+	Name, URL string
+}
+
+func writeContinuePage(w http.ResponseWriter, d continueData) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusOK)
+	_ = continueTmpl.Execute(w, d)
+}
 
 func writePage(w http.ResponseWriter, status int, p pageData) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")

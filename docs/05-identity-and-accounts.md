@@ -137,6 +137,22 @@ fetch and nothing afterwards.
      reasons: a member switching accounts would link them silently, and a
      forged sign-in at a weak provider could attach an attacker's identity
      to someone's account.
+
+     The action is the page `/auth/link`, whose one-button forms post to
+     `POST /auth/{provider}/link` (07 "URL scheme"). That start seals the
+     member's user id into the login cookie, and the callback links only
+     when the browser is still signed in as that member, active. A link
+     attempt never signs anyone in and never registers anyone: an identity
+     that exists is refused with what it belongs to (another account, or an
+     application), and is never re-attached. The link writes the identity
+     with the email and `email_verified` the provider asserted, and one
+     `identity.linked` audit row, in one transaction; it issues no session,
+     and records no sign-in on the identity, so `last_login_at` and
+     `raw_claims_json` stay empty until the identity first signs in. That
+     sign-in goes through the same status check as any other. An agent
+     never uses OIDC, so it cannot link: a request authenticated by an
+     agent credential is refused, and the link transaction refuses any
+     account whose `kind` is not `human`.
    - **Not found, signed out** → registration path (below).
 4. Session cookie: `__Host-ketju_session`, `HttpOnly`, `Secure`, `SameSite=Lax`,
    value is the random session id; the server stores its hash.

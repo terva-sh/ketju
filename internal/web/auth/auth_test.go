@@ -454,22 +454,6 @@ func TestAnInactiveAccountGetsNoSession(t *testing.T) {
 	}
 }
 
-// The branches whose tickets have not landed say so, and sign nobody in.
-func TestTheBranchesStillToCome(t *testing.T) {
-	t.Run("a new identity, signed in: linking", func(t *testing.T) {
-		w := newWorld(t)
-		w.user("bob", "active", "bob-sub")
-		w.idp.Subject = "bob-sub"
-		bob := cookie(w.signIn(""), session.CookieName)
-		w.idp.Subject = "someone-new"
-		flow, authURL := w.begin("")
-		resp := w.do("GET", w.back(authURL), flow, bob)
-		if resp.StatusCode != http.StatusNotImplemented || !strings.Contains(body(resp), "Linking is not available yet") {
-			t.Errorf("answered %d", resp.StatusCode)
-		}
-	})
-}
-
 // count runs a count(*) query.
 func (w *world) count(query string, args ...any) int {
 	w.t.Helper()

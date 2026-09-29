@@ -238,7 +238,7 @@ func TestApproveIssuesNoSession(t *testing.T) {
 
 	ids := &identity.Service{DB: w.db, Sessions: store, Perm: perm.New(w.db), Now: func() time.Time { return w.now }}
 	res, err := ids.Login(t.Context(), &oidc.Identity{Provider: "github", Issuer: "https://github.com", Subject: "carol"},
-		domain.Viewer{}, session.Meta{Provider: "github"}, "")
+		domain.Viewer{}, 0, session.Meta{Provider: "github"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -263,7 +263,7 @@ func TestApprovedThenSuspendedCannotSignIn(t *testing.T) {
 	store := &session.Store{DB: w.db, Now: func() time.Time { return w.now }}
 	ids := &identity.Service{DB: w.db, Sessions: store, Perm: perm.New(w.db), Now: func() time.Time { return w.now }}
 	res, err := ids.Login(t.Context(), &oidc.Identity{Provider: "github", Issuer: "https://github.com", Subject: "erin"},
-		domain.Viewer{}, session.Meta{Provider: "github"}, "")
+		domain.Viewer{}, 0, session.Meta{Provider: "github"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}

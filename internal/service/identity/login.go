@@ -32,9 +32,14 @@ const (
 	// Register: nobody has this identity and nobody is signed in, so this is
 	// someone new (docs/05 "Registration path", TKT-01M29C8005).
 	Register
-	// Link: nobody has this identity and a member is signed in, so this is
-	// an account link (TKT-01M29CKRES).
+	// Link: nobody has this identity, and the member signed in started this
+	// sign-in as a link, so it is to be attached to them by Link
+	// (TKT-01M29CKRES). Nothing has been written yet.
 	Link
+	// LinkRefused: the sign-in was, or would have been, a link, and may not
+	// be one. Result.Refusal says why. Nothing is written and nobody is
+	// signed in.
+	LinkRefused
 	// Applicant: the identity exists with no user, an approval-mode
 	// applicant signing in again, who has a pre-user session (docs/05
 	// "mode = approval" step 4, TKT-01M29CKRG9).
@@ -61,6 +66,8 @@ type Result struct {
 	// Stamp is the account's status_version when Unavailable found it,
 	// which a Reactivate button is bound to (Reactivate).
 	Stamp int64
+	// Refusal is why a link was refused, for LinkRefused.
+	Refusal LinkRefusal
 }
 
 // cleanupTimeout bounds ending a session a failed sign-in issued.
@@ -114,6 +121,15 @@ func (s *Service) now() time.Time {
 // is already signed in as, which only matters for an identity nobody has.
 // replaces is the session token the browser already holds, if any.
 //
+// linkUser is the member who started this sign-in as a link, sealed into
+// the flow cookie by the "link a sign-in" action, and 0 for a plain
+// sign-in. A link attempt never signs anyone in and never registers anyone
+// (linking): its answer is Link or LinkRefused whatever it finds. Without
+// one, an identity nobody has from a browser a member is signed in on is
+// refused as LinkNoIntent, never linked: a member switching accounts, or a
+// forged sign-in at a weak provider, must not attach an identity to an
+// account unasked (docs/05 "Login flow" step 3, decided 2026-09-29).
+//
 // A sign-in that succeeds ends the session it replaces: it never keeps a
 // session id it did not issue (fixation). If that fails, the session just
 // issued is ended too and Login fails, so the browser never comes out
@@ -127,24 +143,28 @@ func (s *Service) now() time.Time {
 // of step with the first. An identity with no user is an approval-mode
 // applicant, who gets a pre-user session from session.IssuePreUser, which
 // refuses any identity that has a user (TKT-01M29CKRG9).
-func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (Result, error) {
+func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, linkUser int64, meta session.Meta, replaces string) (Result, error) {
 	var ident dbq.Identity
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
 		ident, err = q.GetIdentityBySubject(ctx, dbq.GetIdentityBySubjectParams{ProviderKey: id.Provider, Subject: id.Subject})
 		return err
 	})
-	if errors.Is(err, sql.ErrNoRows) {
+	found := err == nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return Result{}, fmt.Errorf("identity: looking up %s: %w", id.Provider, err)
+	}
+	if linkUser != 0 {
+		return linking(found, ident, viewer, linkUser), nil
+	}
+	if !found {
 		// Email is never used to find an identity: two providers asserting
 		// one address are two identities until their owner links them
 		// (docs/05).
 		if viewer.Member() {
-			return Result{Outcome: Link}, nil
+			return Result{Outcome: LinkRefused, Refusal: LinkNoIntent}, nil
 		}
 		return Result{Outcome: Register}, nil
-	}
-	if err != nil {
-		return Result{}, fmt.Errorf("identity: looking up %s: %w", id.Provider, err)
 	}
 
 	token, sess, err := s.Sessions.IssueUser(ctx, ident.ID, meta)
