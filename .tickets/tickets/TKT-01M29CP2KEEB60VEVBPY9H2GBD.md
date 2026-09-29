@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2KEEB60VEVBPY9H2GBD
 title: Implement the declarative form schema and server-side validation
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:forms
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-cp2ke
+  branch: run/cp2ke-form-schema
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a71446fc2cadcb12f
+  commit: 21dbd0411c44bfea3415d04d5d82e97aece5ea27
+  session: null
+  claimed_at: 2026-09-29T15:40:53Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-29T15:46:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-cp2ke
   name: ""
 extensions: {}
 ---
@@ -161,3 +168,22 @@ Engineering decisions taken here, with the alternative that lost:
 - Rendering an application's answers against its version: TKT-01M29CP2MG.
 - The editor UI: TKT-01M29CP2P1. The apply screen, and reading `errors` in `web/client/src/api/problem.ts`: TKT-01M29CP2NG.
 - Forms other than `registration` (reports, polls). The key column allows them, and nothing here builds them.
+
+### Revised at claim (2026-09-29, against main at 21dbd04)
+
+Migration 0011 exists and seeds `registration` v1. `internal/audit` is the one writer of audit_log. Admin routes register through `h.adminRoute(mux, pattern, adminGate, handler)`, whose gate already answers 401 to anonymous and 403 to a pre-user and a non-admin member. Services raise client errors with `problem.Coded`, and `internal/problem` imports the domain packages, never the reverse. The approach above holds, with these changes:
+
+1. `internal/forms` stays pure: no database, no HTTP, and no import of `internal/problem`.
+   - The JSON tags carry `omitempty`, so the canonical stored form holds only what was set.
+   - `Parse` decodes one raw object at a time. An unknown property, a wrong JSON type and trailing data each get a path such as `fields.2.options`, rather than one decoder message. Paths name indices, never a submitted key, so no error body carries request text.
+   - One table, `types map[string]fieldType`. Each entry lists the optional properties its type allows, its `max` cap, and its answer check. A property the entry does not list is `not_allowed`, so the schema rules are table-driven as well as the answers.
+   - One error type, `*forms.Invalid{Kind error; Fields []FieldError}`, whose `Kind` is `ErrInvalidSchema` or `ErrInvalidAnswers`, rather than two types that differ only in the sentinel.
+   - Added rules: a schema over 64 KiB is refused (the API body limit is 64 KiB already). `title`, labels and options refuse control characters (`invalid_text`). `locked` is allowed only where `from_claim` is (`text`, `email`). New codes: `duplicate_option`, `unknown_claim`, and `not_allowed`, which is also the answer code for a value sent to a `markdown_notice`.
+   - A `textarea` answer turns `\r\n` into `\n` before its checks. A locked field stores the claim trimmed, without type checks: it is the IdP's value, not the applicant's.
+2. `internal/problem` gains `Problem.Errors []FieldError` (`errors,omitempty`). `domain.go` maps `forms.ErrInvalidAnswers` and `forms.ErrInvalidSchema` to validation-failed and `forms.ErrUnknownAnswer` to bad-request, and reads the field errors out of a `*forms.Invalid`. Only a validation-failed body carries `errors`.
+3. `formsvc` raises `ErrStaleVersion` as `conflict` and `ErrNoForm` as `not-found` through `problem.Coded`, as the other services do, rather than through the mapping table. `internal/problem` importing a service would invert the dependency. `ErrCorruptSchema` stays unmapped. Version creators are drawn with `UsersByIDs` and `member.Author`.
+4. `internal/audit` gains the target type `form`, whose id is the form's key. docs/04 lists it.
+5. The preview answers `Form` with `version` 0, meaning unsaved. A key that names no form is `not-found`.
+6. `dto.FormField.max` is the effective limit: the field's `max`, or its type's cap. It is 0 for a type without one. No dto field carries `omitempty`.
+7. The client change is types only, in `web/client/src/api/dto.ts` and `dto-contract.ts`. The orchestrator approved it on 2026-09-29, because the contract test fails for any golden that `dto-contract.ts` does not import. `internal/web/spa/dist` must not change.
+8. `api.Deps.Forms` is required, like the other services.
