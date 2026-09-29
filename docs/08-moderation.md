@@ -32,6 +32,43 @@ A restore request would need a flow of its own, and the moderator queue and
 the flag trail already give an author someone to ask. A post an author deleted
 themselves is still theirs to restore within the window.
 
+**Suspension** (TKT-01M29CP2QK, built on TKT-01M29CKRFS). The rules come
+from 05 "Account lifecycle". Moderators suspend members, and admins suspend
+anyone except themselves. The last active admin cannot be suspended. The
+member reads the reason and any end date at sign-in, and is never shadow
+banned. A suspension ends the account's sessions in the transaction that
+writes it.
+- **Hiding the posts is optional.** Each of the account's visible posts gets
+  a moderator's `Delete` carrying the id of the suspension's `audit_log` row
+  (03 `Delete.suspension`). Tombstones, the author's view, forum totals,
+  profile counts, the audit rows and the response cache then treat it as any
+  moderator's hide. It is written to the logs, so it survives a database
+  rebuild. The suspension commits first, because a transaction cannot span
+  the logs. The hide is idempotent, so running it again finishes one that
+  stopped part-way.
+- **A hide reaches only what its moderator may moderate.** A thread in a
+  forum the moderator cannot moderate or see is passed over, and the count
+  says nothing about it. An admin's hide reaches every forum. An archived
+  thread is read-only and is passed over. The forum is judged from the log.
+  The thread is projected up to its length before the moderator is
+  admitted. Each record is appended on the condition that nothing else
+  landed after that length, so a move made in between sends the thread back
+  to be judged again. A thread that cannot be reached is passed over, the
+  rest are finished, and the answer says to run the action again.
+- **The restore is exact.** It puts back only posts whose `Delete` in force
+  carries one of the account's suspensions. A post a moderator hid for its
+  own sake stays hidden, and so does one a moderator restored and then hid
+  again. The restore walks the log to decide, and each `Restore` is written
+  on the condition that nothing landed after the walk.
+- **Expiry is a job.** It runs every minute and lifts every suspension whose
+  end has passed, as an unsuspension by no account with `"via": "expiry"`.
+  It reads the end again in the transaction that lifts it, so a suspension
+  replaced meanwhile stands. The posts a suspension hid stay hidden until a
+  moderator restores them (maintainer decision 2026-09-29). A lazy check at
+  every status read lost, because the session chokepoint, the viewer and
+  perm would each have had to consult the end, and `users.status` would stop
+  being the truth.
+
 **Decided 2026-09-29** (maintainer, on grooming's recommendations):
 - An author may rename their own thread within 24 h (TKT-01M29CKRH9).
 - In an archived forum, moderators may still hide, lock, pin and move

@@ -20,6 +20,8 @@ import (
 func (h *handlers) registerLifecycle(mux *http.ServeMux) {
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/suspend", staffGate, h.adminSuspend)
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/unsuspend", staffGate, h.adminUnsuspend)
+	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/posts/hide", staffGate, h.adminHidePosts)
+	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/posts/restore", staffGate, h.adminRestorePosts)
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/anonymize", adminGate, h.adminAnonymize)
 }
 
@@ -46,11 +48,13 @@ func (h *handlers) deactivate(w http.ResponseWriter, r *http.Request) {
 }
 
 // adminSuspend is POST /api/v1/admin/users/{handle}/suspend with {reason,
-// until?}: until is Unix ms, and null or absent sets no end.
+// until?, hide_posts?}: until is Unix ms, and null or absent sets no end;
+// hide_posts hides the account's posts with the suspension (TKT-01M29CP2QK).
 func (h *handlers) adminSuspend(w http.ResponseWriter, r *http.Request) {
 	var in struct {
-		Reason string      `json:"reason"`
-		Until  *dto.Millis `json:"until"`
+		Reason    string      `json:"reason"`
+		Until     *dto.Millis `json:"until"`
+		HidePosts bool        `json:"hide_posts"`
 	}
 	if err := decodeStrict(r.Body, &in); err != nil {
 		h.fail(w, r, err)
@@ -62,12 +66,37 @@ func (h *handlers) adminSuspend(w http.ResponseWriter, r *http.Request) {
 		until = &t
 	}
 	h.noContent(w, r, h.account.Suspend(r.Context(), domain.ViewerFrom(r.Context()), web.ClientIP(r),
-		r.PathValue("handle"), in.Reason, until))
+		r.PathValue("handle"), in.Reason, until, in.HidePosts))
 }
 
-// adminUnsuspend is POST /api/v1/admin/users/{handle}/unsuspend.
+// adminUnsuspend is POST /api/v1/admin/users/{handle}/unsuspend with an
+// optional {restore_posts}, which restores the posts the account's
+// suspensions hid (TKT-01M29CP2QK). No body restores none.
 func (h *handlers) adminUnsuspend(w http.ResponseWriter, r *http.Request) {
+	var in struct {
+		RestorePosts bool `json:"restore_posts"`
+	}
+	if err := optionalJSON(r.Body, maxReasonBody, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	h.noContent(w, r, h.account.Unsuspend(r.Context(), domain.ViewerFrom(r.Context()), web.ClientIP(r),
+		r.PathValue("handle"), in.RestorePosts))
+}
+
+// adminHidePosts is POST /api/v1/admin/users/{handle}/posts/hide: the
+// visible posts of a suspended account are hidden with its current
+// suspension. It takes no body, and finishes a hide that stopped part-way.
+func (h *handlers) adminHidePosts(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, h.account.HidePosts(r.Context(), domain.ViewerFrom(r.Context()), web.ClientIP(r),
+		r.PathValue("handle")))
+}
+
+// adminRestorePosts is POST /api/v1/admin/users/{handle}/posts/restore: the
+// posts the account's suspensions hid are restored, and no others. It
+// takes no body.
+func (h *handlers) adminRestorePosts(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, h.account.RestorePosts(r.Context(), domain.ViewerFrom(r.Context()), web.ClientIP(r),
 		r.PathValue("handle")))
 }
 

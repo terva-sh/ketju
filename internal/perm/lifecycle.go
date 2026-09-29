@@ -91,9 +91,24 @@ type StatusChange struct {
 // active admin (ErrLastAdmin), counted inside the transaction so two admins
 // suspending each other at once cannot both succeed.
 func (e *Evaluator) ChangeStatus(ctx context.Context, userID int64, c StatusChange) error {
-	return e.write(ctx, func(q *dbq.Queries, now int64) error {
-		return changeStatus(ctx, q, now, userID, c)
+	_, err := e.ChangeStatusID(ctx, userID, c)
+	return err
+}
+
+// ChangeStatusID is ChangeStatus, answering the id of the audit row it
+// wrote. A suspension's hidden posts carry that id, so that a restore can
+// put back exactly the posts it hid (TKT-01M29CP2QK).
+func (e *Evaluator) ChangeStatusID(ctx context.Context, userID int64, c StatusChange) (int64, error) {
+	var id int64
+	err := e.write(ctx, func(q *dbq.Queries, now int64) error {
+		var err error
+		id, err = changeStatus(ctx, q, now, userID, c)
+		return err
 	})
+	if err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 // ChangeStatusIn is ChangeStatus inside the caller's transaction, for a
@@ -101,23 +116,25 @@ func (e *Evaluator) ChangeStatus(ctx context.Context, userID int64, c StatusChan
 // session it issues (identity.Service.Reactivate). The caller must call
 // Invalidate once the transaction has committed.
 func (e *Evaluator) ChangeStatusIn(ctx context.Context, q *dbq.Queries, userID int64, c StatusChange) error {
-	return changeStatus(ctx, q, e.now().UnixMilli(), userID, c)
+	_, err := changeStatus(ctx, q, e.now().UnixMilli(), userID, c)
+	return err
 }
 
-func changeStatus(ctx context.Context, q *dbq.Queries, now, userID int64, c StatusChange) error {
+// changeStatus makes c and answers the id of its audit row.
+func changeStatus(ctx context.Context, q *dbq.Queries, now, userID int64, c StatusChange) (int64, error) {
 	t, ok := transitions[c.Action]
 	if !ok {
-		return fmt.Errorf("%w: %q is not a status change", ErrBadTransition, c.Action)
+		return 0, fmt.Errorf("%w: %q is not a status change", ErrBadTransition, c.Action)
 	}
 	u, err := target(ctx, q, userID, c.Allow)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if !slices.Contains(t.from, u.Status) {
-		return fmt.Errorf("%w: %s from %s", ErrBadTransition, c.Action, u.Status)
+		return 0, fmt.Errorf("%w: %s from %s", ErrBadTransition, c.Action, u.Status)
 	}
 	if err := keepAnAdmin(ctx, q, u, t.to); err != nil {
-		return err
+		return 0, err
 	}
 	var reason string
 	var until sql.NullInt64
@@ -132,18 +149,17 @@ func changeStatus(ctx context.Context, q *dbq.Queries, now, userID int64, c Stat
 	}
 	if err := q.SetUserStatus(ctx, dbq.SetUserStatusParams{Status: t.to, StatusReason: reason, StatusUntil: until,
 		UpdatedAt: now, ID: userID}); err != nil {
-		return err
+		return 0, err
 	}
 	if t.to != domain.StatusActive {
 		if err := deleteSessions(ctx, q, userID); err != nil {
-			return err
+			return 0, err
 		}
 		if _, err := RevokeAgentCredentialIn(ctx, q, time.UnixMilli(now), c.By, userID, c.Action); err != nil {
-			return err
+			return 0, err
 		}
 	}
-	_, err = audit.Append(ctx, q, time.UnixMilli(now), c.By, c.Action, audit.User(userID), details)
-	return err
+	return audit.Append(ctx, q, time.UnixMilli(now), c.By, c.Action, audit.User(userID), details)
 }
 
 // ActionCredentialRevoked is an agent's credential ending, against the

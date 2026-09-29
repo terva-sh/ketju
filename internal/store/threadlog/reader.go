@@ -234,6 +234,42 @@ type Revision struct {
 	Reason string
 }
 
+// Removals walks the log from from to upTo bytes and calls fn for each
+// Delete, with its body, and each Restore, with a nil body, in log order.
+// from is a frame boundary: FileHeaderSize, or a length an earlier walk or
+// an append reported, so a caller can carry on from where it stopped.
+//
+// It is a walk of the log, as History is, for a moderator's action rather
+// than a page: the index keeps a post's flags but not which Delete set
+// them, and a suspension's restore needs the Delete's body
+// (TKT-01M29CP2QK). A damaged frame stops the walk with its error.
+func (r *Reader) Removals(from, upTo int64, fn func(ordinal uint32, del *DeleteBody)) error {
+	var scanErr error
+	err := ScanFramesFrom(r.log, from, upTo, func(rec ScanRecord) bool {
+		h := rec.Header
+		if rec.Err != nil {
+			scanErr = &ReadError{Ordinal: h.Ordinal, Offset: uint64(rec.Offset), Err: rec.Err}
+			return false
+		}
+		switch h.Type {
+		case TypeRestore:
+			fn(h.Ordinal, nil)
+		case TypeDelete:
+			v, err := DecodeBody(h.Type, h.Encoding, rec.Body)
+			if err != nil {
+				scanErr = &ReadError{Ordinal: h.Ordinal, Offset: uint64(rec.Offset), Err: err}
+				return false
+			}
+			fn(h.Ordinal, v.(*DeleteBody))
+		}
+		return true
+	})
+	if err == nil {
+		err = scanErr
+	}
+	return err
+}
+
 // History returns every revision of a post in log order, reading the log up
 // to upTo bytes.
 //

@@ -157,10 +157,19 @@ type (
 	// is not the post's author; the index reads the key, not the actor, so
 	// the record says what it does. An older build ignores the key and shows
 	// a tombstone to everyone, which fails closed.
+	//
+	// Suspension was added the same way, on 2026-09-29 (TKT-01M29CP2QK). It
+	// is the id of the audit_log row of the suspension whose "hide their
+	// posts" wrote this Delete, always with ByModerator. It changes nothing
+	// the index does: it is what lets a later restore put back exactly the
+	// posts that suspension hid, and leave hidden a post a moderator hid for
+	// its own sake. Zero is none. An older build ignores the key, and the
+	// post stays hidden, which fails closed.
 	DeleteBody struct {
 		Reason      string `cbor:"reason,omitempty" json:"reason,omitempty"`
 		Hard        bool   `cbor:"hard,omitempty" json:"hard,omitempty"`
 		ByModerator bool   `cbor:"by_moderator,omitempty" json:"by_moderator,omitempty"`
+		Suspension  uint64 `cbor:"suspension,omitempty" json:"suspension,omitempty"`
 	}
 
 	// RestoreBody clears a soft deletion or a moderator's hide.

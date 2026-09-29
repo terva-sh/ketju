@@ -72,24 +72,33 @@ func code(err error) problem.Code {
 	return problem.FromError(err)
 }
 
-// TestSuspendAuthority is AC7: moderators suspend members only, admins
-// anyone except themselves, and nobody the last active admin. A refusal
-// changes nothing, and unsuspending follows the same rule.
+// TestSuspendAuthority is AC7 here and AC6 of TKT-01M29CP2QK: moderators
+// suspend members only, admins anyone except themselves, and suspending the
+// last active admin, or an account already suspended, is conflict. A
+// refusal changes nothing, and unsuspending follows the same rule.
+//
+// before, when set, is a suspension made first, as actor:target. The last
+// active admin is reached only by an admin whose request began before they
+// were suspended, since an admin cannot suspend themselves: adm2's viewer
+// below is the one it had then.
 func TestSuspendAuthority(t *testing.T) {
 	for _, c := range []struct {
 		name, actor, target string
 		want                problem.Code // "" is allowed
+		before              string
 	}{
-		{"moderator on member", "mod", "mem", ""},
-		{"moderator on moderator", "mod", "mod2", problem.CodeForbidden},
-		{"moderator on admin", "mod", "adm2", problem.CodeForbidden},
-		{"moderator on self", "mod", "mod", problem.CodeForbidden},
-		{"admin on member", "adm", "mem", ""},
-		{"admin on moderator", "adm", "mod", ""},
-		{"admin on another admin", "adm", "adm2", ""},
-		{"admin on self", "adm", "adm", problem.CodeForbidden},
-		{"member on member", "mem", "mem2", problem.CodeForbidden},
-		{"nobody's handle", "adm", "ghost", problem.CodeNotFound},
+		{"moderator on member", "mod", "mem", "", ""},
+		{"moderator on moderator", "mod", "mod2", problem.CodeForbidden, ""},
+		{"moderator on admin", "mod", "adm2", problem.CodeForbidden, ""},
+		{"moderator on self", "mod", "mod", problem.CodeForbidden, ""},
+		{"admin on member", "adm", "mem", "", ""},
+		{"admin on moderator", "adm", "mod", "", ""},
+		{"admin on another admin", "adm", "adm2", "", ""},
+		{"admin on self", "adm", "adm", problem.CodeForbidden, ""},
+		{"member on member", "mem", "mem2", problem.CodeForbidden, ""},
+		{"nobody's handle", "adm", "ghost", problem.CodeNotFound, ""},
+		{"an account already suspended", "adm", "mem", problem.CodeConflict, "mod:mem"},
+		{"the last active admin", "adm2", "adm", problem.CodeConflict, "adm:adm2"},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			w := newWorld(t)
@@ -98,20 +107,29 @@ func TestSuspendAuthority(t *testing.T) {
 				"mod": domain.RoleModerator, "mod2": domain.RoleModerator, "adm": domain.RoleAdmin, "adm2": domain.RoleAdmin} {
 				vs[h] = w.user(h, role)
 			}
-			err := w.svc.Suspend(t.Context(), vs[c.actor], "192.0.2.1", c.target, "spam", nil)
+			if by, of, ok := strings.Cut(c.before, ":"); ok {
+				if err := w.svc.Suspend(t.Context(), vs[by], "", of, "first", nil, false); err != nil {
+					t.Fatalf("the first suspension: %v", err)
+				}
+			}
+			was := ""
+			if c.target != "ghost" {
+				was = w.status(c.target)
+			}
+			err := w.svc.Suspend(t.Context(), vs[c.actor], "192.0.2.1", c.target, "spam", nil, false)
 			if got := code(err); (c.want == "" && err != nil) || (c.want != "" && got != c.want) {
 				t.Fatalf("suspend: %v (code %q), want %q", err, got, c.want)
 			}
 			if c.want != "" {
-				if c.target != "ghost" && w.status(c.target) != domain.StatusActive {
-					t.Errorf("a refused suspension left %s %s", c.target, w.status(c.target))
+				if c.target != "ghost" && w.status(c.target) != was {
+					t.Errorf("a refused suspension left %s %s, was %s", c.target, w.status(c.target), was)
 				}
 				return
 			}
 			if s := w.status(c.target); s != domain.StatusSuspended {
 				t.Fatalf("%s is %s", c.target, s)
 			}
-			if err := w.svc.Unsuspend(t.Context(), vs[c.actor], "", c.target); err != nil {
+			if err := w.svc.Unsuspend(t.Context(), vs[c.actor], "", c.target, false); err != nil {
 				t.Fatalf("unsuspend: %v", err)
 			}
 			if s := w.status(c.target); s != domain.StatusActive {
@@ -126,7 +144,7 @@ func TestSuspendAuthority(t *testing.T) {
 		w := newWorld(t)
 		adm := w.user("adm", domain.RoleAdmin)
 		w.user("other", domain.RoleAdmin)
-		if err := w.svc.Suspend(t.Context(), adm, "", "other", "spam", nil); err != nil {
+		if err := w.svc.Suspend(t.Context(), adm, "", "other", "spam", nil, false); err != nil {
 			t.Fatal(err)
 		}
 		if err := w.svc.Deactivate(t.Context(), adm, ""); code(err) != problem.CodeConflict {
@@ -153,7 +171,7 @@ func TestSuspendAuthority(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if err := w.svc.Suspend(t.Context(), mod, "", "mem", "spam", nil); code(err) != problem.CodeForbidden {
+		if err := w.svc.Suspend(t.Context(), mod, "", "mem", "spam", nil, false); code(err) != problem.CodeForbidden {
 			t.Errorf("a moderator suspended a moderator: %v", err)
 		}
 	})
@@ -180,14 +198,14 @@ func TestSuspendChecksWhatItIsSent(t *testing.T) {
 		{"an end in the past", "spam", &past},
 		{"an end now", "spam", &w.now},
 	} {
-		if err := w.svc.Suspend(t.Context(), mod, "", "mem", c.reason, c.until); code(err) != problem.CodeValidationFailed {
+		if err := w.svc.Suspend(t.Context(), mod, "", "mem", c.reason, c.until, false); code(err) != problem.CodeValidationFailed {
 			t.Errorf("%s: %v", c.name, err)
 		}
 	}
 	if s := w.status("mem"); s != domain.StatusActive {
 		t.Fatalf("a refused suspension left mem %s", s)
 	}
-	if err := w.svc.Suspend(t.Context(), mod, "", "MEM", "  "+strings.Repeat("é", ReasonMaxLen)+" ", &future); err != nil {
+	if err := w.svc.Suspend(t.Context(), mod, "", "MEM", "  "+strings.Repeat("é", ReasonMaxLen)+" ", &future, false); err != nil {
 		t.Fatalf("the longest reason, with an end, by the handle in capitals: %v", err)
 	}
 }

@@ -281,7 +281,7 @@ uses the name, never the literal.
 | 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
 | 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[] | new post_meta row, ordinal = thread.post_count+1 |
 | 3 | `Edit` | source, reason, reply_to, mentions[] (optional), grace (optional bool) | post_meta.current_revision++, edited flag unless `grace`; when `mentions` is present it replaces the post's mention rows |
-| 4 | `Delete` | reason, hard (bool, always false in v1), by_moderator (optional bool) | post_meta.deleted, tombstone shown; the entry's hidden-by-mod flag when `by_moderator`, otherwise its deleted flag |
+| 4 | `Delete` | reason, hard (bool, always false in v1), by_moderator (optional bool), suspension (optional uint) | post_meta.deleted, tombstone shown; the entry's hidden-by-mod flag when `by_moderator`, otherwise its deleted flag |
 | 5 | `Restore` | reason | clears deleted and hidden-by-mod |
 | 10 | `ThreadRenamed` | title, slug | thread row |
 | 11 | `ThreadMoved` | forum_id | thread row |
@@ -327,6 +327,19 @@ no rule to read it. Deriving it from the actor lost for that reason. No log
 written before it holds a `Delete` by a non-author, because the service
 refused one, so no existing record changes meaning. An older reader ignores
 the key and shows a tombstone to everyone, which fails closed.
+
+`Delete.suspension` was added the same way, on 2026-09-29 (TKT-01M29CP2QK).
+It is the id of the `audit_log` row of the suspension whose "hide their
+posts" wrote the `Delete`, which always has `by_moderator` too (08
+"Suspension"). The index ignores it: a hide is a hide whatever caused it.
+It lets a restore put back exactly the posts a suspension hid, and leave hidden
+a post a moderator hid for its own sake or hid again after a restore. That
+restore walks the log to find the `Delete` in force for each post, and
+appends each `Restore` on the condition that the log is still the length it
+walked to. That condition is a check the actor makes in memory, like the flag
+preconditions, and nothing on disk records it. A users-level "posts hidden"
+flag lost, because every count and render path would have had to learn it. An
+older reader ignores the key and the post stays hidden, which fails closed.
 
 Deletion is soft. A `Delete` record leaves the original `Post` bytes intact;
 the reader consults the index flags and returns a tombstone.

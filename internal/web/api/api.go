@@ -80,8 +80,10 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		// carry, so it is built here rather than being one more required
 		// dependency (TKT-01M29CXK1X).
 		groups: &groups.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now},
-		// The lifecycle service likewise (TKT-01M29CKRFS).
-		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now}}
+		// The lifecycle service likewise (TKT-01M29CKRFS), with the thread
+		// service a suspension hides and restores posts through
+		// (TKT-01M29CP2QK).
+		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Threads: d.Threads, Now: d.Users.Now}}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
 		mux.HandleFunc(rt.Pattern(), h.charged(rt.Method, rt.Path, rt.Handler))

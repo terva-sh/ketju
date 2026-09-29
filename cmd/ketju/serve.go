@@ -28,6 +28,7 @@ import (
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/account"
 	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
@@ -416,7 +417,10 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		}
 		return ""
 	}}
-	background := []jobs.Job{jobs.SessionSweep(sessions), gc.Job()}
+	// The expiry job lifts suspensions through the evaluator the requests
+	// use, so the lifted account's cached decisions clear with it.
+	background := []jobs.Job{jobs.SessionSweep(sessions), gc.Job(),
+		jobs.SuspensionExpiry(&account.Service{DB: d, Perm: perms})}
 	if o.job != nil {
 		background = append(background, *o.job)
 	}

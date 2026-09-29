@@ -124,6 +124,14 @@ UPDATE users
 SET status = ?, status_reason = ?, status_until = ?, status_version = status_version + 1, updated_at = ?
 WHERE id = ?;
 
+-- ExpiredSuspensions is the accounts whose suspension has an end at or
+-- before now: the suspension expiry job's work (TKT-01M29CP2QK). A
+-- suspension with no end is never here.
+-- name: ExpiredSuspensions :many
+SELECT id FROM users
+WHERE status = 'suspended' AND status_until IS NOT NULL AND status_until <= CAST(sqlc.arg(now) AS INTEGER)
+ORDER BY id;
+
 -- AnonymizeUser is docs/05's anonymization of the account's row: the
 -- placeholder handle, and nothing left that names the person. The account
 -- becomes deactivated, so it drops out of every list of active accounts and

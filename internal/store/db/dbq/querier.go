@@ -50,6 +50,11 @@ type Querier interface {
 	// adds no second row (TKT-01M29CKRGS). The record is named by its target,
 	// its action and its log offset, which the row's details carry.
 	AuditExistsForRecord(ctx context.Context, arg AuditExistsForRecordParams) (bool, error)
+	// The ids of the audit rows of an action on a target, oldest first, through
+	// the audit_log_target index. A suspension's hidden posts carry the id of
+	// its user.suspended row, so these are the suspensions whose hidden posts
+	// a restore may put back (TKT-01M29CP2QK).
+	AuditIDs(ctx context.Context, arg AuditIDsParams) ([]int64, error)
 	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
 	// Whether a blob has a row, for the collector's recovery of a removal that
 	// a failed commit or a crash interrupted.
@@ -152,6 +157,10 @@ type Querier interface {
 	// parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1); the single write
 	// connection's BEGIN IMMEDIATE keeps the pair atomic against every writer.
 	EnsureReadPosition(ctx context.Context, arg EnsureReadPositionParams) error
+	// ExpiredSuspensions is the accounts whose suspension has an end at or
+	// before now: the suspension expiry job's work (TKT-01M29CP2QK). A
+	// suspension with no end is never here.
+	ExpiredSuspensions(ctx context.Context, now int64) ([]int64, error)
 	// ForumAccessRows is everything perm needs to evaluate a set of forums for
 	// one viewer, in one statement: each forum's visibility, with every
 	// permission row, local to it or global, held by a group the viewer is in,
@@ -419,6 +428,11 @@ type Querier interface {
 	TagsForThreads(ctx context.Context, threadIds []int64) ([]ThreadTag, error)
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
+	// The threads holding a post by the user, from the projection: every
+	// thread a suspension's hide or restore has to look in (TKT-01M29CP2QK).
+	// The thread's own author is taken too, since CreateThread projects its
+	// first post before it answers.
+	ThreadsWithPostsBy(ctx context.Context, userID int64) ([]int64, error)
 	// TouchAgentCredential records a use, at most once per interval: the
 	// statement repeats the check, so concurrent requests write once.
 	TouchAgentCredential(ctx context.Context, arg TouchAgentCredentialParams) (int64, error)

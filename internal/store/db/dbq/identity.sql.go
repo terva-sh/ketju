@@ -192,6 +192,38 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID sql.NullInt64) 
 	return err
 }
 
+const expiredSuspensions = `-- name: ExpiredSuspensions :many
+SELECT id FROM users
+WHERE status = 'suspended' AND status_until IS NOT NULL AND status_until <= CAST(?1 AS INTEGER)
+ORDER BY id
+`
+
+// ExpiredSuspensions is the accounts whose suspension has an end at or
+// before now: the suspension expiry job's work (TKT-01M29CP2QK). A
+// suspension with no end is never here.
+func (q *Queries) ExpiredSuspensions(ctx context.Context, now int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, expiredSuspensions, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIdentityBySubject = `-- name: GetIdentityBySubject :one
 SELECT id, user_id, provider_key, subject, email, email_verified, issuer, last_login_at, raw_claims_json, created_at, updated_at, blocked_at, blocked_by FROM identities WHERE provider_key = ? AND subject = ?
 `

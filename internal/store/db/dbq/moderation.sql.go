@@ -111,6 +111,43 @@ func (q *Queries) AuditExistsForRecord(ctx context.Context, arg AuditExistsForRe
 	return exists, err
 }
 
+const auditIDs = `-- name: AuditIDs :many
+SELECT id FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ? ORDER BY id
+`
+
+type AuditIDsParams struct {
+	TargetType string
+	TargetID   string
+	Action     string
+}
+
+// The ids of the audit rows of an action on a target, oldest first, through
+// the audit_log_target index. A suspension's hidden posts carry the id of
+// its user.suspended row, so these are the suspensions whose hidden posts
+// a restore may put back (TKT-01M29CP2QK).
+func (q *Queries) AuditIDs(ctx context.Context, arg AuditIDsParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, auditIDs, arg.TargetType, arg.TargetID, arg.Action)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const auditLogBefore = `-- name: AuditLogBefore :many
 SELECT id, at, actor_id, "action", target_type, target_id, details_json, ip FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?
 `
@@ -472,4 +509,38 @@ func (q *Queries) SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (i
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const threadsWithPostsBy = `-- name: ThreadsWithPostsBy :many
+SELECT pm.thread_id FROM post_meta pm WHERE pm.author_id = ?1
+UNION
+SELECT t.id FROM threads t WHERE t.author_id = ?1
+ORDER BY 1
+`
+
+// The threads holding a post by the user, from the projection: every
+// thread a suspension's hide or restore has to look in (TKT-01M29CP2QK).
+// The thread's own author is taken too, since CreateThread projects its
+// first post before it answers.
+func (q *Queries) ThreadsWithPostsBy(ctx context.Context, userID int64) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, threadsWithPostsBy, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var thread_id int64
+		if err := rows.Scan(&thread_id); err != nil {
+			return nil, err
+		}
+		items = append(items, thread_id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }

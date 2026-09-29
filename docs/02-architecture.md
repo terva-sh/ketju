@@ -219,6 +219,7 @@ All in-process goroutines, no external queue:
 | Notification generator | event bus | |
 | Session sweeper | hourly | delete expired |
 | Blob GC | daily | refcount 0 for 7 days and named in no thread log (03 "Blob garbage collection") |
+| Suspension expiry | every minute | lift suspensions whose end has passed; their hidden posts stay hidden (08 "Suspension") |
 | Index flush | on idle / shutdown | write index headers |
 | Discovery refresh | on JWKS verify failure / 24 h | per provider |
 

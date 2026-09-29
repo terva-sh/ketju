@@ -90,6 +90,16 @@ type Append struct {
 	// deleted or hidden, whichever it is (TKT-01M29CRJ5J). Zero checks
 	// nothing.
 	RequireAny EntryFlags
+
+	// AtLength, when not zero, is the log length the record must be
+	// written at: nothing may have been appended since the caller read the
+	// log up to it, this batch's earlier records included, or the append
+	// fails with [ErrLogMoved] and writes nothing. It lets a caller decide
+	// from the log's records, which the index does not keep, and append
+	// knowing no record it did not read came in between (a suspension's
+	// exact restore, TKT-01M29CP2QK). A log is never zero bytes long, so
+	// zero is free to mean "checks nothing".
+	AtLength int64
 }
 
 // Result is what an append returns once the record is durable.
@@ -107,6 +117,10 @@ var ErrActorClosed = errors.New("threadlog: thread is closed")
 // post is not in the state the record needs, such as an Edit of a deleted
 // post. Nothing was written.
 var ErrPostState = errors.New("threadlog: the post is not in a state this record applies to")
+
+// ErrLogMoved means an append's AtLength precondition failed: the log had
+// grown past the length the caller read. Nothing was written.
+var ErrLogMoved = errors.New("threadlog: the log has moved on since the length this record was decided at")
 
 type request struct {
 	a     Append
@@ -332,13 +346,18 @@ func (a *Actor) commit(batch []request) {
 	// 1. Encode and number everything. Nothing is on disk yet, so a bad
 	//    request fails alone rather than poisoning the batch.
 	for _, r := range batch {
+		offset := base + int64(len(buf))
+		if r.a.AtLength != 0 && r.a.AtLength != offset {
+			r.reply <- answer{err: fmt.Errorf("%w: decided at %d, the record would be written at %d",
+				ErrLogMoved, r.a.AtLength, offset)}
+			continue
+		}
 		h, body, err := a.frameFor(r.a, staging)
 		if err != nil {
 			r.reply <- answer{err: err}
 			continue
 		}
 
-		offset := base + int64(len(buf))
 		next, err := AppendFrame(buf, h, body)
 		if err != nil {
 			r.reply <- answer{err: err}

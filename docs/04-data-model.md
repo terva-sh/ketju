@@ -439,6 +439,15 @@ transaction that projects the record, with the frame's timestamp as `at`.
   `user.anonymized`. Each carries the status it came `"from"`.
   `user.anonymized` names no handle; the rows written before it, a rename's
   old and new handle included, stay as they are (05 "Account lifecycle").
+  An expired suspension's `user.unsuspended` has no actor and `"via":
+  "expiry"` (TKT-01M29CP2QK).
+- A suspension's posts (TKT-01M29CP2QK, 08 "Suspension") write, against the
+  user, after the thread records are appended and projected:
+  `user.posts_hidden` with `"suspension"`, the id of the `user.suspended`
+  row, and `"posts"`, the number hidden; and `user.posts_restored` with
+  `"posts"`. A run that changed no post writes neither. Each post also has
+  the projection's `post.hidden` or `post.restored` row below, and a
+  `post.hidden` written by a suspension carries its `"suspension"` too.
 - Application review (TKT-01M29CP2MG) writes one row per decision, in the
   transaction that makes it, with the deciding moderator as actor:
   `application.approved` against the application, with `"user_id"`,
@@ -463,7 +472,8 @@ transaction that projects the record, with the frame's timestamp as `at`.
   - when the actor is not the thread's author: `thread.renamed`, against
     the thread, with `"title"` and `"slug"`;
   - when the actor is not the post's author: `post.edited` with `"reason"`
-    and `"revision"`, `post.hidden` (a `Delete` with `by_moderator`, 03),
+    and `"revision"`, `post.hidden` (a `Delete` with `by_moderator`, 03,
+    with `"suspension"` when the `Delete` has one),
     `post.deleted` (one without, which the service never writes) and
     `post.restored` with `"reason"`, against the post. The service projects
     a moderator's edit, hide and restore before it answers, so the row

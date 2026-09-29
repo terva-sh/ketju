@@ -25,6 +25,7 @@ import (
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/member"
+	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
@@ -37,9 +38,18 @@ const ReasonMaxLen = 500
 type Service struct {
 	DB   *db.DB
 	Perm *perm.Evaluator
+	// Threads writes a suspension's hide and restore of the account's
+	// posts. Nil refuses both, for a service that only changes statuses,
+	// such as the expiry job's.
+	Threads *threads.Service
 	// Now is the clock a suspension's end is checked against; nil is
 	// time.Now.
 	Now func() time.Time
+
+	// listed, when set, is called by ExpireSuspensions between reading the
+	// list and changing the first account. Tests use it to change an
+	// account in that gap.
+	listed func()
 }
 
 func (s *Service) now() time.Time {
@@ -82,7 +92,13 @@ func (s *Service) Deactivate(ctx context.Context, v domain.Viewer, ip string) er
 //
 // The reason is 1 to ReasonMaxLen characters once trimmed, with no control
 // characters; until must be in the future. Who may suspend whom is mayActOn.
-func (s *Service) Suspend(ctx context.Context, v domain.Viewer, ip, handle, reason string, until *time.Time) error {
+//
+// With hidePosts, the account's visible posts are then hidden with the
+// suspension (HidePosts). The suspension commits first, because a database
+// transaction cannot span the thread logs. A hide that fails part-way
+// leaves the account suspended and answers the error, and
+// POST …/posts/hide finishes the job.
+func (s *Service) Suspend(ctx context.Context, v domain.Viewer, ip, handle, reason string, until *time.Time, hidePosts bool) error {
 	if err := member.RequireStaff(v, "suspend an account"); err != nil {
 		return err
 	}
@@ -104,29 +120,46 @@ func (s *Service) Suspend(ctx context.Context, v domain.Viewer, ip, handle, reas
 		}
 		ms = until.UnixMilli()
 	}
+	if hidePosts && s.Threads == nil {
+		return errNoThreads
+	}
 	id, err := s.lookup(ctx, handle)
 	if err != nil {
 		return err
 	}
-	return s.Perm.ChangeStatus(ctx, id, perm.StatusChange{
-		By: audit.By{Actor: v.UserID, IP: ip}, Action: perm.ActionSuspended, Reason: reason, Until: ms,
+	by := audit.By{Actor: v.UserID, IP: ip}
+	suspension, err := s.Perm.ChangeStatusID(ctx, id, perm.StatusChange{
+		By: by, Action: perm.ActionSuspended, Reason: reason, Until: ms,
 		Allow: mayActOn(v, "suspend"),
 	})
+	if err != nil || !hidePosts {
+		return err
+	}
+	return s.hide(ctx, v, by, id, suspension)
 }
 
 // Unsuspend is POST /admin/users/{handle}/unsuspend: staff end a
-// suspension, on the same authority as Suspend.
-func (s *Service) Unsuspend(ctx context.Context, v domain.Viewer, ip, handle string) error {
+// suspension, on the same authority as Suspend. With restorePosts, the
+// posts the account's suspensions hid are then restored (RestorePosts).
+// Without it they stay hidden, as they do when a suspension expires.
+func (s *Service) Unsuspend(ctx context.Context, v domain.Viewer, ip, handle string, restorePosts bool) error {
 	if err := member.RequireStaff(v, "unsuspend an account"); err != nil {
 		return err
+	}
+	if restorePosts && s.Threads == nil {
+		return errNoThreads
 	}
 	id, err := s.lookup(ctx, handle)
 	if err != nil {
 		return err
 	}
-	return s.Perm.ChangeStatus(ctx, id, perm.StatusChange{
-		By: audit.By{Actor: v.UserID, IP: ip}, Action: perm.ActionUnsuspended, Allow: mayActOn(v, "unsuspend"),
-	})
+	by := audit.By{Actor: v.UserID, IP: ip}
+	if err := s.Perm.ChangeStatus(ctx, id, perm.StatusChange{
+		By: by, Action: perm.ActionUnsuspended, Allow: mayActOn(v, "unsuspend"),
+	}); err != nil || !restorePosts {
+		return err
+	}
+	return s.restore(ctx, v, by, id)
 }
 
 // Anonymize is POST /admin/users/{handle}/anonymize: an admin anonymizes

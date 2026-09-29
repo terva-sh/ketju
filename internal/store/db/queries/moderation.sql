@@ -50,6 +50,23 @@ SELECT EXISTS (
 -- name: AuditLogBefore :many
 SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?;
 
+-- The ids of the audit rows of an action on a target, oldest first, through
+-- the audit_log_target index. A suspension's hidden posts carry the id of
+-- its user.suspended row, so these are the suspensions whose hidden posts
+-- a restore may put back (TKT-01M29CP2QK).
+-- name: AuditIDs :many
+SELECT id FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ? ORDER BY id;
+
+-- The threads holding a post by the user, from the projection: every
+-- thread a suspension's hide or restore has to look in (TKT-01M29CP2QK).
+-- The thread's own author is taken too, since CreateThread projects its
+-- first post before it answers.
+-- name: ThreadsWithPostsBy :many
+SELECT pm.thread_id FROM post_meta pm WHERE pm.author_id = sqlc.arg(user_id)
+UNION
+SELECT t.id FROM threads t WHERE t.author_id = sqlc.arg(user_id)
+ORDER BY 1;
+
 -- A new blob has no references yet, so it is unreferenced from the moment
 -- it is uploaded; the post that carries it adds the first one.
 -- name: CreateBlob :exec

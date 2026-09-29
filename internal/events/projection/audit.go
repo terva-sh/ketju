@@ -71,11 +71,17 @@ func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, targ
 		// A moderator's Delete hides the post rather than deleting it
 		// (TKT-01M29CRJ5J), and its row says so. A Delete by somebody
 		// else without by_moderator is in no log this server writes.
+		// A hide written by a suspension names it, by the id of its
+		// user.suspended row (TKT-01M29CP2QK).
 		action := ActionPostDeleted
 		if b.ByModerator {
 			action = ActionPostHidden
 		}
-		return postAction(ctx, q, f, action, map[string]any{"reason": b.Reason})
+		details := map[string]any{"reason": b.Reason}
+		if b.Suspension != 0 {
+			details["suspension"] = b.Suspension
+		}
+		return postAction(ctx, q, f, action, details)
 	case *threadlog.RestoreBody:
 		return postAction(ctx, q, f, ActionPostRestored, map[string]any{"reason": b.Reason})
 	}
