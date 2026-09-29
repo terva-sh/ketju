@@ -135,6 +135,17 @@ SET handle = 'deleted-user-' || id, display_name = '', avatar_blob = NULL, bio_s
     updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id);
 
+-- InsertHandleRelease records that a handle left an account, and reserves
+-- it until reserved_until. user_id is null for an anonymized account's old
+-- handle, which redirects nowhere.
+-- name: InsertHandleRelease :exec
+INSERT INTO handle_releases (handle, user_id, released_at, reserved_until) VALUES (?, ?, ?, ?);
+
+-- HandleReserved reports whether a release still reserves the handle at now,
+-- in any case.
+-- name: HandleReserved :one
+SELECT EXISTS (SELECT 1 FROM handle_releases WHERE handle = sqlc.arg(handle) AND reserved_until > sqlc.arg(now));
+
 -- DeleteUserIdentities removes every identity of an anonymized account
 -- (docs/05). An application's identity_id is set to null by its foreign
 -- key. The sessions naming the identities go first (DeleteIdentitySessions).

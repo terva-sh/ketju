@@ -134,6 +134,14 @@ type GroupMember struct {
 	AddedAt int64
 }
 
+type HandleRelease struct {
+	ID            int64
+	Handle        string
+	UserID        sql.NullInt64
+	ReleasedAt    int64
+	ReservedUntil int64
+}
+
 type Identity struct {
 	ID            int64
 	UserID        sql.NullInt64

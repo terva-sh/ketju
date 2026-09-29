@@ -549,9 +549,11 @@ sessions. The states, the reasons, and the audit trail are otherwise the same.
   from 03. The account becomes `deactivated` and its bio is cleared too, and
   it can never be changed again (04 "users"). Another member's `@handle` of
   the old handle is body text: it renders as what was typed and links
-  nobody. The 90-day reservation is written by the rename ticket's
-  `handle_releases` table (TKT-01M3NRP3W9), which adds that write to the
-  anonymization's transaction.
+  nobody. The reservation is a `handle_releases` row naming no user,
+  written in the anonymization's transaction (04), and registration answers
+  "taken" for a reserved handle, so no newcomer can take the old handle, and
+  the links an old mention of it would give them, for 90 days (Terva review
+  1448). Renames write the same rows with a redirect (TKT-01M3NRP3W9).
 
 Every change above is made in `internal/perm`, in one transaction with its
 `audit_log` row (04) and the deletion of every session the account holds, so

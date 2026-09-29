@@ -62,3 +62,31 @@ WHEN NEW.anonymized <> 0
 BEGIN
 	SELECT RAISE(ABORT, 'an account is anonymized, never created so');
 END;
+
+-- A handle that has left an account, and until when nobody else may take it
+-- (docs/04 "handle_releases"). Anonymizing writes a row for the old handle
+-- with no user, reserved for 90 days, so no newcomer can take the handle and
+-- the links an old mention of it would give them (maintainer decision
+-- 2026-09-29; Terva review 1448). The row names no user, so nothing ties the
+-- old handle to deleted-user-<id>. The shape is TKT-01M3NRP3W9's, whose
+-- renames write the same rows with the user they redirect to.
+--
+-- AUTHORITATIVE, and kept forever: a row outlives its reservation, because
+-- mentions need to know who held a handle when (TKT-01M3NRP3W9).
+CREATE TABLE handle_releases (
+	id             INTEGER PRIMARY KEY,
+	-- The users.handle rule of 0002 and 0010, so a release is of a handle
+	-- a user could have held.
+	handle         TEXT    NOT NULL COLLATE NOCASE
+		CHECK (typeof(handle) = 'text'
+		       AND length(handle) BETWEEN 3 AND 30
+		       AND length(CAST(handle AS BLOB)) = length(handle)
+		       AND handle NOT GLOB '*[^a-z0-9_-]*'
+		       AND substr(handle, 1, 1) GLOB '[a-z0-9]'),
+	-- The user the handle redirects to; null for an anonymized account's.
+	user_id        INTEGER REFERENCES users (id),
+	released_at    INTEGER NOT NULL,
+	reserved_until INTEGER NOT NULL CHECK (reserved_until > released_at)
+);
+CREATE INDEX handle_releases_handle ON handle_releases (handle, reserved_until);
+CREATE INDEX handle_releases_user ON handle_releases (user_id);

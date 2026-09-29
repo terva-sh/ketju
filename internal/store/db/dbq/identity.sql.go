@@ -307,6 +307,24 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 	return i, err
 }
 
+const handleReserved = `-- name: HandleReserved :one
+SELECT EXISTS (SELECT 1 FROM handle_releases WHERE handle = ?1 AND reserved_until > ?2)
+`
+
+type HandleReservedParams struct {
+	Handle string
+	Now    int64
+}
+
+// HandleReserved reports whether a release still reserves the handle at now,
+// in any case.
+func (q *Queries) HandleReserved(ctx context.Context, arg HandleReservedParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, handleReserved, arg.Handle, arg.Now)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const identityHolder = `-- name: IdentityHolder :one
 SELECT i.user_id, u.status, u.status_reason, u.status_until, u.status_version
 FROM identities i
@@ -340,6 +358,30 @@ func (q *Queries) IdentityHolder(ctx context.Context, id int64) (IdentityHolderR
 		&i.StatusVersion,
 	)
 	return i, err
+}
+
+const insertHandleRelease = `-- name: InsertHandleRelease :exec
+INSERT INTO handle_releases (handle, user_id, released_at, reserved_until) VALUES (?, ?, ?, ?)
+`
+
+type InsertHandleReleaseParams struct {
+	Handle        string
+	UserID        sql.NullInt64
+	ReleasedAt    int64
+	ReservedUntil int64
+}
+
+// InsertHandleRelease records that a handle left an account, and reserves
+// it until reserved_until. user_id is null for an anonymized account's old
+// handle, which redirects nowhere.
+func (q *Queries) InsertHandleRelease(ctx context.Context, arg InsertHandleReleaseParams) error {
+	_, err := q.db.ExecContext(ctx, insertHandleRelease,
+		arg.Handle,
+		arg.UserID,
+		arg.ReleasedAt,
+		arg.ReservedUntil,
+	)
+	return err
 }
 
 const listUserSessions = `-- name: ListUserSessions :many

@@ -144,6 +144,21 @@ record frame (03), and it decides which rate limit bucket a write is charged
 against (08). An admin provisions every agent account and an agent never
 self-registers (05).
 
+### handle_releases
+```
+id, handle (case-insensitive, the users.handle rule), user_id (nullable),
+released_at, reserved_until
+```
+A handle that has left an account, and until when nobody else may take it.
+Anonymizing writes a row for the old handle with no `user_id`, reserved for
+90 days (`domain.HandleReservation`), in the transaction that anonymizes, and
+registration answers "taken" for a handle some row still reserves
+(TKT-01M29CKRFS, Terva review 1448). A row that names no user ties the old
+handle to nothing, so nobody can learn which account it became. Renames
+write the same rows with the user they redirect to (TKT-01M3NRP3W9). Rows are
+kept after their reservation ends, because mentions need to know who held a
+handle when; nothing sweeps them. AUTHORITATIVE.
+
 ### identities
 ```
 id, user_id, provider_key, subject (IdP 'sub'), email, email_verified,

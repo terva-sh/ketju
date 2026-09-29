@@ -2,6 +2,7 @@ package domain
 
 import (
 	"strconv"
+	"time"
 )
 
 // Account statuses (docs/04 "users", docs/05 "Account lifecycle").
@@ -18,6 +19,12 @@ const (
 // can hold one. The prefix does not mark an anonymized account: the
 // users.anonymized column does (TKT-01M29CKRFS, member.Anonymized).
 const AnonymizedHandlePrefix = "deleted-user"
+
+// HandleReservation is how long a handle that has left an account stays
+// reserved, so that nobody else can take it (docs/05 "Account lifecycle",
+// "Changing a handle"): 90 days, decided 2026-09-28 for renames and
+// 2026-09-29 for anonymization.
+const HandleReservation = 90 * 24 * time.Hour
 
 // DeletedMemberHandle is the placeholder handle for member id:
 // deleted-user-<id>, what an anonymized account is renamed to, and what a

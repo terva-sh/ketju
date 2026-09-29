@@ -194,6 +194,9 @@ type Querier interface {
 	// the screen can say what stands between a group and its deletion.
 	GroupSummaries(ctx context.Context) ([]GroupSummariesRow, error)
 	GroupsForUser(ctx context.Context, userID int64) ([]GroupsForUserRow, error)
+	// HandleReserved reports whether a release still reserves the handle at now,
+	// in any case.
+	HandleReserved(ctx context.Context, arg HandleReservedParams) (bool, error)
 	// The user's IdP-sourced memberships, which sign-in re-evaluation compares
 	// with what the claims say now (perm.SyncIdPGroups).
 	IdPMembershipsForUser(ctx context.Context, userID int64) ([]IdPMembershipsForUserRow, error)
@@ -209,6 +212,10 @@ type Querier interface {
 	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
 	InsertApplication(ctx context.Context, arg InsertApplicationParams) (int64, error)
 	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
+	// InsertHandleRelease records that a handle left an account, and reserves
+	// it until reserved_until. user_id is null for an anonymized account's old
+	// handle, which redirects nowhere.
+	InsertHandleRelease(ctx context.Context, arg InsertHandleReleaseParams) error
 	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error

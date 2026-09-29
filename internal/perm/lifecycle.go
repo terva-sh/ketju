@@ -146,6 +146,10 @@ func changeStatus(ctx context.Context, q *dbq.Queries, now, userID int64, c Stat
 // clears the cache (docs/05 "Account lifecycle"): the handle becomes
 // deleted-user-<id>, the display name, avatar and bio are cleared, the
 // account becomes deactivated, and its sessions and identities are deleted.
+// The old handle is reserved for domain.HandleReservation by a
+// handle_releases row that names no user, so nobody can take it, and the
+// links an old mention of it would give them, while nothing ties it to
+// deleted-user-<id> (maintainer decision 2026-09-29, Terva review 1448).
 // An application that named one of the identities keeps its row with a null
 // identity_id, by the column's foreign key. The ActionAnonymized row names
 // no handle. Post bodies, in the thread logs, are not touched.
@@ -163,6 +167,10 @@ func (e *Evaluator) Anonymize(ctx context.Context, userID int64, by audit.By, al
 			return err
 		}
 		if err := q.AnonymizeUser(ctx, dbq.AnonymizeUserParams{UpdatedAt: now, ID: userID}); err != nil {
+			return err
+		}
+		if err := q.InsertHandleRelease(ctx, dbq.InsertHandleReleaseParams{Handle: u.Handle, ReleasedAt: now,
+			ReservedUntil: now + domain.HandleReservation.Milliseconds()}); err != nil {
 			return err
 		}
 		// Sessions first: sessions.identity_id references the identities.
