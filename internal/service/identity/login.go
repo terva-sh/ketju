@@ -36,14 +36,20 @@ const (
 	// an account link (TKT-01M29CKRES).
 	Link
 	// Applicant: the identity exists with no user, an approval-mode
-	// applicant (docs/05 "mode = approval", TKT-01M29CKRG9).
+	// applicant signing in again, who has a pre-user session (docs/05
+	// "mode = approval" step 4, TKT-01M29CKRG9).
 	Applicant
+	// Applying: someone new under approval mode, whose identity was just
+	// written with no user and who has a pre-user session (docs/05
+	// "mode = approval" step 1). BeginApplication is the one way to it.
+	Applying
 )
 
 // Result is a sign-in's outcome, with the session when there is one.
 type Result struct {
 	Outcome Outcome
-	// Token and Session are set for SignedIn.
+	// Token and Session are set for SignedIn, and for Applicant and
+	// Applying, whose session is a pre-user one.
 	Token   string
 	Session session.Session
 	// Status is the user's status for Unavailable.
@@ -57,6 +63,8 @@ const cleanupTimeout = 5 * time.Second
 type Sessions interface {
 	IssueUser(ctx context.Context, identityID int64, meta session.Meta) (string, session.Session, error)
 	IssueUserWith(ctx context.Context, meta session.Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error)
+	IssuePreUser(ctx context.Context, identityID int64, meta session.Meta) (string, session.Session, error)
+	IssuePreUserWith(ctx context.Context, meta session.Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error)
 	Revoke(ctx context.Context, token string) error
 }
 
@@ -106,10 +114,12 @@ func (s *Service) now() time.Time {
 // then is the sign-in recorded on the identity, so the record is of
 // sign-ins that happened (review 512).
 //
-// Only session.IssueUser creates the session, and it checks the user's
+// Only session.IssueUser creates a member session, and it checks the user's
 // status in the transaction that writes the row (TKT-01M29C7ZZR): Login does
 // not read the status itself, so there is no second check here to fall out
-// of step with the first.
+// of step with the first. An identity with no user is an approval-mode
+// applicant, who gets a pre-user session from session.IssuePreUser, which
+// refuses any identity that has a user (TKT-01M29CKRG9).
 func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (Result, error) {
 	var ident dbq.Identity
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
@@ -136,14 +146,36 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 	case errors.As(err, &inactive):
 		return Result{Outcome: Unavailable, Status: inactive.Status}, nil
 	case errors.Is(err, session.ErrNoUser):
-		return Result{Outcome: Applicant}, nil
+		return s.applicant(ctx, ident.ID, id, meta, replaces)
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: signing in: %w", err)
 	}
 	if err := s.settle(ctx, token, ident.UserID.Int64, id, meta.IP, replaces); err != nil {
 		return Result{}, err
 	}
+	s.recordLogin(ctx, ident.ID, id)
+	return Result{Outcome: SignedIn, Token: token, Session: sess}, nil
+}
 
+// applicant signs in an identity with no user: an approval-mode applicant
+// coming back, who sees the status page (docs/05 "mode = approval" step 4).
+// An identity approved between IssueUser's refusal and this is refused with
+// session.ErrHasUser, and the reader signs in again, as a member.
+func (s *Service) applicant(ctx context.Context, identityID int64, id *oidc.Identity, meta session.Meta, replaces string) (Result, error) {
+	token, sess, err := s.Sessions.IssuePreUser(ctx, identityID, meta)
+	if err != nil {
+		return Result{}, fmt.Errorf("identity: signing in an applicant: %w", err)
+	}
+	if err := s.replace(ctx, token, replaces); err != nil {
+		return Result{}, err
+	}
+	s.recordLogin(ctx, identityID, id)
+	return Result{Outcome: Applicant, Token: token, Session: sess}, nil
+}
+
+// recordLogin notes on the identity a sign-in that happened: when, and the
+// claims the IdP asserted this time.
+func (s *Service) recordLogin(ctx context.Context, identityID int64, id *oidc.Identity) {
 	now := s.now().UnixMilli()
 	verified := int64(0)
 	if id.EmailVerified {
@@ -154,15 +186,14 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 			LastLoginAt:   sql.NullInt64{Int64: now, Valid: true},
 			RawClaimsJson: sql.NullString{String: string(id.RawClaims), Valid: len(id.RawClaims) > 0},
 			Email:         sql.NullString{String: id.Email, Valid: id.Email != ""},
-			EmailVerified: verified, UpdatedAt: now, ID: ident.ID,
+			EmailVerified: verified, UpdatedAt: now, ID: identityID,
 		})
 	}); err != nil {
 		// The session exists and is valid; failing the sign-in now would
 		// leave a row nobody holds the cookie for. The record is
 		// bookkeeping, so it is logged and the sign-in stands.
-		s.logger().WarnContext(ctx, "recording a sign-in failed", "provider", id.Provider, "identity", ident.ID, "error", err)
+		s.logger().WarnContext(ctx, "recording a sign-in failed", "provider", id.Provider, "identity", identityID, "error", err)
 	}
-	return Result{Outcome: SignedIn, Token: token, Session: sess}, nil
 }
 
 // settle is what a sign-in or a registration does once it has issued token
@@ -173,22 +204,8 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 // (review 511), nor signed in with groups its directory has revoked. ip is
 // the request's address, for the audit rows.
 func (s *Service) settle(ctx context.Context, token string, userID int64, id *oidc.Identity, ip, replaces string) error {
-	// abandon ends the session just issued. The request may be what failed:
-	// cancelled mid-sign-in. So the session is ended on a context of its
-	// own, bounded, and a cancelled request cannot leave it behind
-	// (review 513).
-	abandon := func(err error) error {
-		cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
-		defer cancel()
-		if err2 := s.Sessions.Revoke(cctx, token); err2 != nil {
-			err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
-		}
+	if err := s.replace(ctx, token, replaces); err != nil {
 		return err
-	}
-	if replaces != "" {
-		if err := s.Sessions.Revoke(ctx, replaces); err != nil {
-			return fmt.Errorf("identity: ending the session a sign-in replaces: %w", abandon(err))
-		}
 	}
 	// Bootstrap runs once the user is known to be active and signed in, so
 	// a suspended account the configuration names is not made admin. A
@@ -196,10 +213,10 @@ func (s *Service) settle(ctx context.Context, token string, userID int64, id *oi
 	// have only a log line to say why they are not an admin, and signing in
 	// again retries it.
 	if _, err := s.ApplyBootstrap(ctx, userID, id); err != nil {
-		return abandon(err)
+		return s.abandon(ctx, token, err)
 	}
 	if err := s.applyGroupMap(ctx, userID, id, ip); err != nil {
-		return abandon(err)
+		return s.abandon(ctx, token, err)
 	}
 	return nil
 }
@@ -228,4 +245,33 @@ func (s *Service) applyGroupMap(ctx context.Context, userID int64, id *oidc.Iden
 			"added", ch.Added, "removed", ch.Removed)
 	}
 	return nil
+}
+
+// replace ends the session a sign-in replaces, once token has been issued
+// in its place: a browser never keeps a session id it did not issue
+// (fixation). If that fails, token is ended too and replace fails, so the
+// browser never comes out holding a new session while its old one still
+// works (review 511). Every way to a session runs it: a sign-in, a
+// registration, and both applicant paths.
+func (s *Service) replace(ctx context.Context, token, replaces string) error {
+	if replaces == "" {
+		return nil
+	}
+	if err := s.Sessions.Revoke(ctx, replaces); err != nil {
+		return fmt.Errorf("identity: ending the session a sign-in replaces: %w", s.abandon(ctx, token, err))
+	}
+	return nil
+}
+
+// abandon ends the session just issued and returns err, with anything that
+// went wrong doing so. The request may be what failed: cancelled
+// mid-sign-in. So the session is ended on a context of its own, bounded,
+// and a cancelled request cannot leave it behind (review 513).
+func (s *Service) abandon(ctx context.Context, token string, err error) error {
+	cctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), cleanupTimeout)
+	defer cancel()
+	if err2 := s.Sessions.Revoke(cctx, token); err2 != nil {
+		err = errors.Join(err, fmt.Errorf("and ending the session it issued: %w", err2))
+	}
+	return err
 }

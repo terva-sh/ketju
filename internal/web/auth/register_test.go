@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -11,9 +10,9 @@ import (
 	"time"
 
 	"github.com/terva-sh/ketju/internal/auth/session"
+	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/settings"
-	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
 
 // open sets registration.mode to "open".
@@ -226,26 +225,16 @@ func TestAMemberDoesNotRegisterASecondAccount(t *testing.T) {
 	}
 }
 
-// A browser that holds a session that is not a member's, such as an
-// approval-mode applicant's, comes out of registration with only the new
-// session: it never keeps a session id it did not issue.
+// A browser that holds a session that is not a member's, such as one whose
+// user was suspended after it was issued, comes out of registration with
+// only the new session: it never keeps a session id it did not issue. (An
+// approval-mode applicant's pre-user session never reaches the handle
+// screen: the pre-user gate refuses it, TestAPreUserCannotRegister.)
 func TestRegistrationEndsTheSessionItReplaces(t *testing.T) {
 	w := newWorld(t)
 	w.open()
 	reg := w.registering("")
-	var applicant int64
-	if err := w.db.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
-		var err error
-		applicant, err = q.CreateIdentity(t.Context(), dbq.CreateIdentityParams{ProviderKey: "fake", Subject: "applicant",
-			Issuer: w.idp.URL, CreatedAt: 1, UpdatedAt: 1})
-		return err
-	}); err != nil {
-		t.Fatal(err)
-	}
-	old, _, err := w.store.IssuePreUser(t.Context(), applicant, session.Meta{})
-	if err != nil {
-		t.Fatal(err)
-	}
+	old := sessiontest.SignIn(t, w.db, w.user("sam", "suspended", "sam-sub"), time.Now())
 	resp := w.submit("carol", reg, &http.Cookie{Name: session.CookieName, Value: old})
 	if h := signedInAs(t, w, resp); h != "carol" {
 		t.Fatalf("signed in as %s", h)

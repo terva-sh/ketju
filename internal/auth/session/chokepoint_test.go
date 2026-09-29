@@ -39,9 +39,24 @@ const theQuery = "internal/store/db/queries/identity.sql"
 // caller in this package would be a door with no status check that adds no
 // CreateSession caller (review 499).
 var insertCallers = []string{
-	"internal/auth/session/issue.go:IssuePreUser",
+	"internal/auth/session/issue.go:IssuePreUserWith",
 	"internal/auth/session/issue.go:IssueUserWith",
 }
+
+// issuerCallers are every call, from outside this package, of the four
+// functions that issue a session, as "file:func Issuer" (TKT-01M29CKRG9).
+// Each is a way to be signed in, so a new sign-in path shows up here, in the
+// diff that adds it, where a reviewer can ask which check it goes through.
+// Test files are exempt, as they are from the rest of the scan.
+var issuerCallers = []string{
+	"internal/service/identity/apply.go:BeginApplication IssuePreUserWith",
+	"internal/service/identity/login.go:Login IssueUser",
+	"internal/service/identity/login.go:applicant IssuePreUser",
+	"internal/service/identity/register.go:Register IssueUserWith",
+}
+
+// issuers are the exported functions that create a session (issue.go).
+var issuers = []string{"IssuePreUser", "IssuePreUserWith", "IssueUser", "IssueUserWith"}
 
 // table matches the sessions table however SQLite lets it be spelled:
 // quoted with double quotes, backticks or brackets, and qualified by a
@@ -55,11 +70,23 @@ var (
 	updatableOK = []string{"last_used_at"}
 )
 
+// found is what scan reports, each as root-relative "file:func".
+type found struct {
+	// doors are the ways into the sessions table that are not the door.
+	doors []string
+	// callers call the generated CreateSession; inserters call insert.
+	callers, inserters []string
+	// issuers call an issuer from outside this package, as
+	// "file:func Issuer", sorted and without repeats.
+	issuers []string
+}
+
 // scan reports every way into the sessions table under root that is not the
-// door, and the callers of CreateSession it found, as root-relative
-// "file:func". Test files are exempt: a schema test may write a row
-// directly, and only a running server can let anyone in.
-func scan(t *testing.T, root string) (doors, callers, inserters []string) {
+// door, the callers of CreateSession and insert, and the callers of the
+// issuers from outside this package. Test files are exempt: a schema test
+// may write a row directly, and only a running server can let anyone in.
+func scan(t *testing.T, root string) found {
+	var doors, callers, inserters, issued []string
 	t.Helper()
 	fset := token.NewFileSet()
 	err := filepath.WalkDir(root, func(path string, e fs.DirEntry, err error) error {
@@ -86,8 +113,9 @@ func scan(t *testing.T, root string) (doors, callers, inserters []string) {
 			if err != nil {
 				return err
 			}
-			d, c, i := scanGo(rel, f)
+			d, c, i, is := scanGo(rel, f)
 			doors, callers, inserters = append(doors, d...), append(callers, c...), append(inserters, i...)
+			issued = append(issued, is...)
 		case strings.HasSuffix(path, ".sql"):
 			b, err := os.ReadFile(path)
 			if err != nil {
@@ -100,10 +128,11 @@ func scan(t *testing.T, root string) (doors, callers, inserters []string) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return doors, callers, inserters
+	slices.Sort(issued)
+	return found{doors: doors, callers: callers, inserters: inserters, issuers: slices.Compact(issued)}
 }
 
-func scanGo(rel string, f *ast.File) (doors, callers, inserters []string) {
+func scanGo(rel string, f *ast.File) (doors, callers, inserters, issued []string) {
 	inSession := path.Dir(rel) == "internal/auth/session"
 	for _, imp := range f.Imports {
 		if p, _ := strconv.Unquote(imp.Path.Value); p == sessiontestImport {
@@ -124,6 +153,11 @@ func scanGo(rel string, f *ast.File) (doors, callers, inserters []string) {
 				if inSession && n.Sel.Name == "insert" {
 					inserters = append(inserters, rel+":"+fn)
 				}
+				// A selector rather than a call, so a method value handed
+				// on is caught as well as a call.
+				if !inSession && slices.Contains(issuers, n.Sel.Name) {
+					issued = append(issued, rel+":"+fn+" "+n.Sel.Name)
+				}
 			case *ast.BasicLit, *ast.BinaryExpr:
 				// A string, or one assembled from literals and this file's
 				// constants with + (review 500), is checked whole, once.
@@ -143,7 +177,7 @@ func scanGo(rel string, f *ast.File) (doors, callers, inserters []string) {
 			return true
 		})
 	}
-	return doors, callers, inserters
+	return doors, callers, inserters, issued
 }
 
 // constString is the value of a string expression built with + from
@@ -354,10 +388,11 @@ func moduleRoot(t *testing.T) string {
 }
 
 func TestOneDoorIntoSessions(t *testing.T) {
-	doors, callers, inserters := scan(t, moduleRoot(t))
+	f := scan(t, moduleRoot(t))
+	doors, callers, inserters := f.doors, f.callers, f.inserters
 	for _, d := range doors {
 		t.Errorf("a second way into the sessions table: %s. Sessions are created only by "+
-			"IssueUser and IssuePreUser in internal/auth/session/issue.go (TKT-01M29C7ZZR).", d)
+			"the issuers in internal/auth/session/issue.go (TKT-01M29C7ZZR).", d)
 	}
 	slices.Sort(callers)
 	if !slices.Equal(callers, doorCallers) {
@@ -380,10 +415,23 @@ func TestOneDoorIntoSessions(t *testing.T) {
 	}
 }
 
+// TestTheIssuersAreKnown is AC5 of TKT-01M29CKRG9: the functions outside
+// this package that call an issuer are exactly issuerCallers. A new way to
+// be signed in fails here until the list names it.
+func TestTheIssuersAreKnown(t *testing.T) {
+	f := scan(t, moduleRoot(t))
+	if !slices.Equal(f.issuers, issuerCallers) {
+		t.Errorf("the issuers are called from\n  %s\nwant exactly\n  %s\nA new caller is a new way to be signed "+
+			"in: name it in issuerCallers, in the diff that adds it.",
+			strings.Join(f.issuers, "\n  "), strings.Join(issuerCallers, "\n  "))
+	}
+}
+
 // The scan is live: a tree with a door of every kind it knows is caught on
 // each, and a test file doing the same is not.
 func TestTheScanFindsASecondDoor(t *testing.T) {
-	doors, callers, inserters := scan(t, filepath.Join("testdata", "chokepoint"))
+	f := scan(t, filepath.Join("testdata", "chokepoint"))
+	doors, callers, inserters := f.doors, f.callers, f.inserters
 	slices.Sort(doors)
 	want := []string{
 		"internal/other/door.go: imports sessiontest outside a test",
@@ -426,5 +474,11 @@ func TestTheScanFindsASecondDoor(t *testing.T) {
 	slices.Sort(inserters)
 	if !slices.Equal(inserters, []string{"internal/auth/session/backdoor.go:Backdoor"}) {
 		t.Errorf("insert callers %v, want the one in backdoor.go", inserters)
+	}
+	// backdoor.go's own call of IssueUser is inside the package, and
+	// door_test.go's is a test: neither is an issuer caller.
+	if want := []string{"internal/other/apply.go:letIn IssuePreUserWith", "internal/other/apply.go:letIn IssueUser",
+		"internal/other/apply.go:passOn IssueUserWith"}; !slices.Equal(f.issuers, want) {
+		t.Errorf("issuer callers %v, want %v", f.issuers, want)
 	}
 }

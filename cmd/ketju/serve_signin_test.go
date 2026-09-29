@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/terva-sh/ketju/internal/auth/oidc/oidctest"
+	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/web/auth"
 )
 
@@ -73,10 +74,34 @@ func TestServeSignsInThroughAProvider(t *testing.T) {
 	b, _ := io.ReadAll(resp.Body)
 	resp.Body.Close()
 	// Nobody has this identity yet, and registration.mode defaults to
-	// approval, whose applicant path has not landed (TKT-01M29CKRG9):
-	// reaching that page is the whole flow working.
-	if resp.StatusCode != http.StatusNotImplemented || !strings.Contains(string(b), "Registration is not open yet") {
-		t.Errorf("callback answered %d:\n%s", resp.StatusCode, b)
+	// approval: someone new applies, with a pre-user session
+	// (TKT-01M29CKRG9). Reaching the application form is the whole flow
+	// working.
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/apply" {
+		t.Errorf("callback answered %d to %q:\n%s", resp.StatusCode, resp.Header.Get("Location"), b)
+	}
+	var applicant *http.Cookie
+	for _, ck := range resp.Cookies() {
+		if ck.Name == session.CookieName && ck.Value != "" {
+			applicant = ck
+		}
+	}
+	if applicant == nil {
+		t.Fatal("the callback set no session cookie")
+	}
+	// The applicant's session reaches /me, which says so, and not a forum.
+	for target, want := range map[string]int{"/api/v1/me": http.StatusOK, "/api/v1/forums": http.StatusForbidden} {
+		req, _ := http.NewRequest("GET", "http://"+r.addr+target, nil)
+		req.AddCookie(&http.Cookie{Name: applicant.Name, Value: applicant.Value})
+		resp, err := c.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		b, _ := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if resp.StatusCode != want || (target == "/api/v1/me" && !strings.Contains(string(b), `"pre_user":{"provider":"fake"}`)) {
+			t.Errorf("%s as the applicant answered %d, want %d:\n%s", target, resp.StatusCode, want, b)
+		}
 	}
 	if idp.Tokens() != 1 {
 		t.Errorf("%d code exchanges, want 1", idp.Tokens())

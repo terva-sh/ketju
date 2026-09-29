@@ -455,9 +455,13 @@ func TestAnInactiveAccountGetsNoSession(t *testing.T) {
 
 // The branches whose tickets have not landed say so, and sign nobody in.
 func TestTheBranchesStillToCome(t *testing.T) {
-	t.Run("a new identity, signed out: registration", func(t *testing.T) {
-		w := newWorld(t)
+	t.Run("a new identity from an auto_approve provider under approval mode", func(t *testing.T) {
+		// TKT-01M29CKRE9's; until it lands, no account and no application.
+		w := newWorld(t, func(pc *config.Provider) { pc.AutoApprove = true })
 		w.refused(w.signIn(""), http.StatusNotImplemented, "Registration is not open yet")
+		if n := w.count("SELECT count(*) FROM identities"); n != 0 {
+			t.Errorf("%d identities", n)
+		}
 	})
 	t.Run("a new identity, signed in: linking", func(t *testing.T) {
 		w := newWorld(t)
@@ -471,15 +475,18 @@ func TestTheBranchesStillToCome(t *testing.T) {
 			t.Errorf("answered %d", resp.StatusCode)
 		}
 	})
-	t.Run("an identity with no user: an applicant", func(t *testing.T) {
-		w := newWorld(t)
-		w.db.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
-			_, err := q.CreateIdentity(t.Context(), dbq.CreateIdentityParams{ProviderKey: "fake", Subject: "user-1",
-				Issuer: w.idp.URL, CreatedAt: 1, UpdatedAt: 1})
-			return err
-		})
-		w.refused(w.signIn(""), http.StatusNotImplemented, "Application pending")
-	})
+}
+
+// count runs a count(*) query.
+func (w *world) count(query string, args ...any) int {
+	w.t.Helper()
+	var n int
+	if err := w.db.Read(w.t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(w.t.Context(), query, args...).Scan(&n)
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return n
 }
 
 // A sign-in never keeps a session id it did not issue.

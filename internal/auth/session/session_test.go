@@ -451,8 +451,13 @@ func TestViewerPredicates(t *testing.T) {
 				t.Fatalf("a pre-user viewer carries identity %d, want %d", v.IdentityID, w.identity)
 			}
 			want := http.StatusUnauthorized
-			if c.member {
+			switch {
+			case c.member:
 				want = http.StatusOK
+			case c.preUser:
+				// The pre-user gate refuses them before the route runs
+				// (internal/web.PreUserGate).
+				want = http.StatusForbidden
 			}
 			if rec := get(h, c.token); rec.Code != want {
 				t.Fatalf("the protected route answered %d, want %d", rec.Code, want)

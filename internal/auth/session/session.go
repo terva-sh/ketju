@@ -239,6 +239,16 @@ func (s *Store) RevokeUser(ctx context.Context, userID int64) error {
 	})
 }
 
+// RevokePreUser ends every pre-user session bound to identityID. Approving
+// an application calls it (TKT-01M29CP2MG), so the applicant's cookie is
+// gone as well as refused: LookupSession stops resolving a pre-user session
+// the moment its identity has a user, whether or not this runs.
+func (s *Store) RevokePreUser(ctx context.Context, identityID int64) error {
+	return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		return q.DeletePreUserSessions(ctx, sql.NullInt64{Int64: identityID, Valid: true})
+	})
+}
+
 // SweepInterval is how often serve runs Sweep (docs/02 "Background work").
 const SweepInterval = time.Hour
 
@@ -313,8 +323,9 @@ type newSession struct {
 // plaintext exists outside the browser. decide says what the row is, and
 // runs in the transaction that writes it, so what it read is still true
 // when the row lands; an error from it writes nothing and is returned as it
-// is. insert is unexported on purpose, and its only callers are IssueUser
-// and IssuePreUser (issue.go), which decide who may have a session.
+// is. insert is unexported on purpose, and its only callers are
+// IssueUserWith and IssuePreUserWith (issue.go), which decide who may have a
+// session.
 func (s *Store) insert(ctx context.Context, decide func(*dbq.Queries) (newSession, error)) (string, Session, error) {
 	var raw [tokenBytes]byte
 	if _, err := rand.Read(raw[:]); err != nil {

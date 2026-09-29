@@ -52,6 +52,8 @@ var (
 type adminRouteEntry struct {
 	pattern string
 	gate    gate
+	// handler is what the mux runs: the gate, then the route's handler.
+	handler http.HandlerFunc
 }
 
 // registerAdmin registers every admin route. Each section's ticket adds its
@@ -71,12 +73,13 @@ func (h *handlers) adminRoute(mux *http.ServeMux, pattern string, g gate, handle
 	if !ok || method == "" || !strings.HasPrefix(path, adminPrefix) || g.admit == nil {
 		panic(fmt.Sprintf("api: admin route %q must be \"METHOD %s...\" with a gate", pattern, adminPrefix))
 	}
-	h.adminRoutes = append(h.adminRoutes, adminRouteEntry{pattern: pattern, gate: g})
-	mux.HandleFunc(pattern, func(w http.ResponseWriter, r *http.Request) {
+	gated := func(w http.ResponseWriter, r *http.Request) {
 		if g.admit(h, w, r) {
 			handler(w, r)
 		}
-	})
+	}
+	h.adminRoutes = append(h.adminRoutes, adminRouteEntry{pattern: pattern, gate: g, handler: gated})
+	mux.HandleFunc(pattern, gated)
 }
 
 // admin admits an active admin, or writes the refusal and reports false.

@@ -15,12 +15,13 @@ import (
 // a session without checking approval, and a pending applicant walked in.
 // The defense is structural rather than careful review:
 //
-//   - IssueUser (with IssueUserWith, the same check after writing the
-//     identity) and IssuePreUser are the only exported ways to create a
-//     session, and both go through insert, the only caller of the generated
-//     CreateSession. chokepoint_test.go fails the build on a second caller,
-//     on a hand-written INSERT INTO sessions, and on a query that could turn
-//     a pre-user session into a user one.
+//   - IssueUser and IssuePreUser, each with a With twin that runs the same
+//     check after writing the identity, are the only exported ways to
+//     create a session, and all four go through insert, the only caller of
+//     the generated CreateSession. chokepoint_test.go fails the build on a
+//     second caller, on a hand-written INSERT INTO sessions, on a query that
+//     could turn a pre-user session into a user one, and on a caller of an
+//     issuer outside this package that its list does not name.
 //   - Each decides from the database, in the transaction that inserts the
 //     row, not from a status a caller read earlier: a suspension that lands
 //     between a caller's read and the insert cannot be missed.
@@ -104,7 +105,23 @@ func (s *Store) IssueUserWith(ctx context.Context, meta Meta, create func(contex
 // write only a pre-user row, and it refuses with ErrHasUser an identity that
 // already belongs to a user: "no user, by design" is the only case it serves.
 func (s *Store) IssuePreUser(ctx context.Context, identityID int64, meta Meta) (string, Session, error) {
+	return s.IssuePreUserWith(ctx, meta, func(context.Context, *dbq.Queries) (int64, error) { return identityID, nil })
+}
+
+// IssuePreUserWith is IssuePreUser for an identity that create writes, in
+// the transaction that inserts the session. A new applicant's identity row
+// and their pre-user session commit together or not at all, so a failed
+// insert leaves no orphaned identity, and create can read the registration
+// mode in the same transaction as the write (TKT-01M29CKRG9, review 1145).
+// create returns the identity's id; an error from it is returned as it is
+// and writes nothing. The identity then goes through exactly IssuePreUser's
+// check, which reads what create wrote.
+func (s *Store) IssuePreUserWith(ctx context.Context, meta Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, Session, error) {
 	return s.insert(ctx, func(q *dbq.Queries) (newSession, error) {
+		identityID, err := create(ctx, q)
+		if err != nil {
+			return newSession{}, err
+		}
 		h, err := holder(ctx, q, identityID)
 		if err != nil {
 			return newSession{}, err

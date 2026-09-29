@@ -76,6 +76,11 @@ type Querier interface {
 	// Clears every IdP-sourced row of a user. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
 	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
+	// DeletePreUserSessions ends every applicant session bound to an identity:
+	// what approving an application does in its own transaction (TKT-01M29CP2MG).
+	// LookupSession already refuses them once the identity has a user; this
+	// removes the rows.
+	DeletePreUserSessions(ctx context.Context, identityID sql.NullInt64) error
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
 	DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error)
 	DeleteThreadTags(ctx context.Context, threadID int64) error
@@ -169,6 +174,13 @@ type Querier interface {
 	// function, so the sweeper and this cannot disagree about what is expired.
 	// The user fields are the ones GET /me needs, so resolving a request and
 	// answering /me share this query.
+	//
+	// A pre_user session resolves only while its identity exists and still has
+	// no user (TKT-01M29CKRG9). The moment approval links the identity to a
+	// user, the applicant's cookie stops resolving, even if the code that
+	// approved forgot to delete it: a pre-user session never becomes a member
+	// session in place, and the applicant signs in again, through
+	// session.IssueUser's status check.
 	LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error)
 	LowerReadPosition(ctx context.Context, arg LowerReadPositionParams) (int64, error)
 	// MeCounts is GET /me's count statement: the viewer's unread notifications,

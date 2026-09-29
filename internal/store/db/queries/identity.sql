@@ -51,6 +51,13 @@ SELECT * FROM sessions WHERE id_hash = ?;
 -- function, so the sweeper and this cannot disagree about what is expired.
 -- The user fields are the ones GET /me needs, so resolving a request and
 -- answering /me share this query.
+--
+-- A pre_user session resolves only while its identity exists and still has
+-- no user (TKT-01M29CKRG9). The moment approval links the identity to a
+-- user, the applicant's cookie stops resolving, even if the code that
+-- approved forgot to delete it: a pre-user session never becomes a member
+-- session in place, and the applicant signs in again, through
+-- session.IssueUser's status check.
 -- name: LookupSession :one
 SELECT s.id_hash, s.user_id, s.identity_id, s.kind, s.created_at, s.expires_at, s.last_used_at,
        s.oidc_provider_key,
@@ -58,9 +65,11 @@ SELECT s.id_hash, s.user_id, s.identity_id, s.kind, s.created_at, s.expires_at, 
        u.timezone, u.locale, u.prefs_json, u.mark_all_read_at
 FROM sessions s
 LEFT JOIN users u ON u.id = s.user_id
+LEFT JOIN identities i ON i.id = s.identity_id
 WHERE s.id_hash = sqlc.arg(id_hash)
   AND s.expires_at > sqlc.arg(expires_after)
-  AND s.last_used_at > sqlc.arg(last_used_after);
+  AND s.last_used_at > sqlc.arg(last_used_after)
+  AND (s.kind = 'user' OR (s.kind = 'pre_user' AND i.id IS NOT NULL AND i.user_id IS NULL));
 
 -- TouchSession slides last_used_at only when the stored value is due, so the
 -- once-per-five-minutes rule holds in the statement itself: two requests that
@@ -83,6 +92,13 @@ DELETE FROM sessions WHERE id_hash = ?;
 
 -- name: DeleteUserSessions :exec
 DELETE FROM sessions WHERE user_id = ?;
+
+-- DeletePreUserSessions ends every applicant session bound to an identity:
+-- what approving an application does in its own transaction (TKT-01M29CP2MG).
+-- LookupSession already refuses them once the identity has a user; this
+-- removes the rows.
+-- name: DeletePreUserSessions :exec
+DELETE FROM sessions WHERE kind = 'pre_user' AND identity_id = ?;
 
 -- SweepSessions deletes every session LookupSession would refuse: the exact
 -- complement of its liveness test. internal/auth/session binds both cutoffs

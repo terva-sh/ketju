@@ -28,6 +28,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/service/identity"
+	"github.com/terva-sh/ketju/internal/web"
 )
 
 // FlowCookie holds a sign-in's state between start and callback. The
@@ -65,6 +66,7 @@ type Login interface {
 	Register(ctx context.Context, c identity.Claims, handle string, meta session.Meta, replaces string) (identity.Result, error)
 	// ClaimsOf is what the registration cookie carries of id.
 	ClaimsOf(id *oidc.Identity) identity.Claims
+	BeginApplication(ctx context.Context, c identity.Claims, meta session.Meta, replaces string) (identity.Result, error)
 }
 
 // Sessions is the part of *session.Store the handlers use.
@@ -88,22 +90,33 @@ type Handler struct {
 
 // New returns the /auth/* routes.
 func New(h *Handler) http.Handler {
+	mux := http.NewServeMux()
+	for _, rt := range Routes(h) {
+		mux.HandleFunc(rt.Pattern(), rt.Handler)
+	}
+	return mux
+}
+
+// Routes is every route New serves, as a table a test can walk
+// (TKT-01M29CKRG9).
+func Routes(h *Handler) []web.Route {
 	if h.Logger == nil {
 		h.Logger = slog.Default()
 	}
-	mux := http.NewServeMux()
-	// The login page: the client's "Sign in" (signin.go).
-	mux.HandleFunc("GET /auth/signin", h.signIn)
-	mux.HandleFunc("GET /auth/{provider}/start", h.start)
-	mux.HandleFunc("GET /auth/{provider}/callback", h.callback)
-	// The handle screen of open registration (register.go).
-	mux.HandleFunc("GET /auth/register", h.registerForm)
-	mux.HandleFunc("POST /auth/register", h.register)
-	// POST, so a page elsewhere cannot sign a reader out with an image tag;
-	// the CSRF check in front of every write (internal/web) holds it to
-	// this site.
-	mux.HandleFunc("POST /auth/logout", h.logout)
-	return mux
+	get, post := http.MethodGet, http.MethodPost
+	return []web.Route{
+		// The login page: the client's "Sign in" (signin.go).
+		{Method: get, Path: "/auth/signin", Handler: h.signIn},
+		{Method: get, Path: "/auth/{provider}/start", Handler: h.start},
+		{Method: get, Path: "/auth/{provider}/callback", Handler: h.callback},
+		// The handle screen of open registration (register.go).
+		{Method: get, Path: RegisterPath, Handler: h.registerForm},
+		{Method: post, Path: RegisterPath, Handler: h.register},
+		// POST, so a page elsewhere cannot sign a reader out with an image
+		// tag; the CSRF check in front of every write (internal/web) holds
+		// it to this site.
+		{Method: post, Path: "/auth/logout", Handler: h.logout},
+	}
 }
 
 func (h *Handler) provider(key string) (*oidc.Provider, bool) {
@@ -210,11 +223,16 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		h.Logger.InfoContext(ctx, "sign-in refused: the account is not active", "provider", key, "status", res.Status)
 		writePage(w, http.StatusForbidden, pageUnavailable)
 	case identity.Register:
-		h.beginRegistration(w, r, id, f.ReturnTo)
+		h.beginRegistration(w, r, p, id, f.ReturnTo)
 	case identity.Link:
 		writePage(w, http.StatusNotImplemented, pageLinking)
 	case identity.Applicant:
-		writePage(w, http.StatusNotImplemented, pageApplicant)
+		// An applicant coming back sees their status page, whatever
+		// return_to said: it is the one page they may reach (docs/05
+		// "mode = approval" step 4).
+		http.SetCookie(w, session.Cookie(res.Token, res.Session.ExpiresAt))
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, web.ApplyStatusPath, http.StatusSeeOther)
 	default:
 		h.Logger.ErrorContext(ctx, "sign-in ended in an unknown outcome", "outcome", res.Outcome)
 		writePage(w, http.StatusInternalServerError, pageFailed)

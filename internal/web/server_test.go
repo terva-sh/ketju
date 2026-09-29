@@ -8,10 +8,12 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
 
+	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/problem"
 )
@@ -397,6 +399,36 @@ func TestTheMiddlewareRunsInTheDocumentedOrder(t *testing.T) {
 			// flood costs a database query each, and the limiter is protecting
 			// the thing it stands behind.
 			t.Fatalf("ran %v, want %v", seen, want)
+		}
+	}
+
+	// Position 7, the pre-user gate, is not an option, so it shows by
+	// where it stops a pre-user: after the session that says who they are,
+	// before CSRF and the handler.
+	h = New(Groups{
+		API: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			mu.Lock()
+			seen = append(seen, "handler")
+			mu.Unlock()
+		}),
+	}, Options{
+		Logger:    log,
+		RateLimit: record("ratelimit"),
+		Session: func(next http.Handler) http.Handler {
+			return record("session")(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				next.ServeHTTP(w, r.WithContext(domain.WithViewer(r.Context(), domain.Viewer{PreUser: true, IdentityID: 1})))
+			}))
+		},
+		CSRF: record("csrf"),
+	})
+	for path, want := range map[string][]string{
+		"/api/v1/me":     {"ratelimit", "session", "csrf", "handler"},
+		"/api/v1/forums": {"ratelimit", "session"},
+	} {
+		seen = nil
+		do(h, http.MethodGet, path)
+		if !slices.Equal(seen, want) {
+			t.Errorf("a pre-user's %s ran %v, want %v", path, seen, want)
 		}
 	}
 }

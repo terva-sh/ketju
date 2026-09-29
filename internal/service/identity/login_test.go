@@ -29,6 +29,14 @@ func (c *cancelling) IssueUserWith(context.Context, session.Meta, func(context.C
 	return "", session.Session{}, errors.New("not used")
 }
 
+func (c *cancelling) IssuePreUser(context.Context, int64, session.Meta) (string, session.Session, error) {
+	return "", session.Session{}, errors.New("not used")
+}
+
+func (c *cancelling) IssuePreUserWith(context.Context, session.Meta, func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error) {
+	return "", session.Session{}, errors.New("not used")
+}
+
 func (c *cancelling) Revoke(ctx context.Context, token string) error {
 	if token == "old" {
 		c.cancel()

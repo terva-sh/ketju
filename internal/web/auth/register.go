@@ -37,7 +37,9 @@ type pending struct {
 // beginRegistration is the callback's answer for an identity nobody has,
 // from a browser nobody is signed in on. With registration open, the claims
 // go into the registration cookie and the browser to the handle screen.
-func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, id *oidc.Identity, returnTo string) {
+// Otherwise the mode is approval, and someone new from a provider that does
+// not auto-approve applies (beginApplication).
+func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, p *oidc.Provider, id *oidc.Identity, returnTo string) {
 	ctx := r.Context()
 	open, err := h.Login.RegistrationOpen(ctx)
 	if err != nil {
@@ -46,8 +48,12 @@ func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, id *
 		return
 	}
 	if !open {
-		// Approval mode, whose applicant path is TKT-01M29CKRG9's.
-		writePage(w, http.StatusNotImplemented, pageRegistration)
+		if p.AutoApprove() {
+			// Approval mode's auto_approve branch is TKT-01M29CKRE9's.
+			writePage(w, http.StatusNotImplemented, pageRegistration)
+			return
+		}
+		h.beginApplication(w, r, id)
 		return
 	}
 	sealed, err := h.sealRegistration(pending{Claims: h.Login.ClaimsOf(id), ReturnTo: returnTo})
@@ -67,6 +73,42 @@ func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, id *
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, RegisterPath, http.StatusSeeOther)
 }
+
+// beginApplication is approval mode's answer for someone new (docs/05 "mode
+// = approval" step 1): an identity with no user, a pre-user session, and
+// 303 to the application form. The session reaches the application flow
+// and sign-out, and nothing else (web.PreUserRoutes).
+//
+// The two refusals are races with something else the browser or an admin
+// did, and signing in again settles each: another tab wrote the identity,
+// and this sign-in now finds an applicant; or registration opened, and it
+// now reaches the handle screen.
+func (h *Handler) beginApplication(w http.ResponseWriter, r *http.Request, id *oidc.Identity) {
+	ctx := r.Context()
+	var replaces string
+	if old, err := r.Cookie(session.CookieName); err == nil {
+		replaces = old.Value
+	}
+	res, err := h.Login.BeginApplication(ctx, h.Login.ClaimsOf(id), session.Meta{
+		IP: remoteIP(r), UserAgent: r.UserAgent(), Provider: id.Provider}, replaces)
+	switch {
+	case errors.Is(err, identity.ErrAlreadyRegistered), errors.Is(err, identity.ErrRegistrationClosed):
+		h.Logger.InfoContext(ctx, "an application could not begin", "provider", id.Provider, "error", err)
+		writePage(w, http.StatusConflict, pageFailed)
+	case err != nil:
+		h.Logger.ErrorContext(ctx, "beginning an application failed", "provider", id.Provider, "error", err)
+		writePage(w, http.StatusInternalServerError, pageFailed)
+	default:
+		h.Logger.InfoContext(ctx, "someone new is applying", "provider", id.Provider)
+		http.SetCookie(w, session.Cookie(res.Token, res.Session.ExpiresAt))
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, ApplyPath, http.StatusSeeOther)
+	}
+}
+
+// ApplyPath is the application form, where someone new goes under approval
+// mode.
+const ApplyPath = "/apply"
 
 // MaxRegistrationCookie bounds the sealed registration, in bytes. Browsers
 // keep a cookie of up to 4096 bytes counting its name and attributes, and

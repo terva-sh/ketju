@@ -55,9 +55,10 @@ var (
 	// the same for all three (settled in grooming for TKT-01M29C7ZZ9).
 	pageUnavailable = pageData{"Account unavailable", "This account cannot sign in at the moment. " +
 		"If you think this is a mistake, contact the forum's moderators.", "/", "Go to the forum"}
-	// Someone new, when registration.mode is not "open". Approval mode's
-	// application (TKT-01M29CKRG9) has not landed, so there is nothing
-	// else to offer them yet.
+	// Someone new who cannot register: from an auto_approve provider under
+	// approval mode, whose branch is TKT-01M29CKRE9's, or at the handle
+	// screen after registration closed. Anyone else new under approval
+	// mode applies instead (beginApplication).
 	pageRegistration = pageData{"Registration is not open yet", "There is no account for this sign-in, " +
 		"and this forum cannot create one yet.", "/", "Go to the forum"}
 	// The registration cookie is missing or past RegistrationTTL: the handle
@@ -68,12 +69,9 @@ var (
 	// form submitted twice, or from two tabs.
 	pageAlreadyRegistered = pageData{"Already registered", "This sign-in already has an account. " +
 		"Please sign in again to use it.", "/", "Go to the forum"}
-	// The branches whose tickets have not landed: linking (TKT-01M29CKRES)
-	// and approval-mode applicants (TKT-01M29CKRG9).
+	// The branch whose ticket has not landed: linking (TKT-01M29CKRES).
 	pageLinking = pageData{"Linking is not available yet", "This sign-in is not linked to your account, " +
 		"and linking another identity is not available yet.", "/", "Go to the forum"}
-	pageApplicant = pageData{"Application pending", "This sign-in belongs to an application to join, " +
-		"which this forum cannot review yet.", "/", "Go to the forum"}
 )
 
 func writePage(w http.ResponseWriter, status int, p pageData) {

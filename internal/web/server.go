@@ -215,7 +215,15 @@ func group(h http.Handler) http.Handler {
 //     below needs the viewer: CSRF binds its token to the session, handlers
 //     authorize against it, and the request log reports it.
 //
-//  7. CSRF, innermost. It has to be after the session because the token is
+//  7. The pre-user gate (PreUserGate over PreUserRoutes). It needs the
+//     viewer, so it follows the session. It comes before everything that
+//     acts on a request, so an approval-mode applicant reaches nothing but
+//     the application flow whatever a handler checks or forgets to check,
+//     and a route added later is closed to them until PreUserRoutes names
+//     it (TKT-01M29CKRG9). It is not an option: a gate that has to be
+//     wired in is a gate a caller can leave out.
+//
+//  8. CSRF, innermost. It has to be after the session because the token is
 //     bound to one, and it must not run before the rate limiter, or a flood of
 //     tokenless requests would be answered by the more expensive check.
 //
@@ -223,7 +231,7 @@ func group(h http.Handler) http.Handler {
 // budget is one database statement per request (TKT-01M29CCBZ8), and a poll
 // carrying a session cookie -- a browser, or a supervisor's copied curl --
 // would otherwise cost a session lookup and a touch, which is a write. None of
-// 5-7 has anything to do there: the endpoint needs no viewer, answers only GET
+// 5-8 has anything to do there: the endpoint needs no viewer, answers only GET
 // and HEAD, which neither the limiter nor CSRF acts on, and says nothing that
 // depends on who asked.
 //
@@ -240,9 +248,10 @@ func chain(h http.Handler, log *slog.Logger, opts Options) http.Handler {
 	}
 
 	router := h
-	h = csrf(h)               // 7
-	h = wrap(opts.Session, h) // 6
-	h = rateLimit(h)          // 5
+	h = csrf(h)                       // 8
+	h = PreUserGate(PreUserRoutes)(h) // 7
+	h = wrap(opts.Session, h)         // 6
+	h = rateLimit(h)                  // 5
 	h = bypass(HealthPath, router, h)
 	h = limitBody(opts.Limits)(h)  // 4
 	h = securityHeaders(h)         // 3

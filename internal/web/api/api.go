@@ -12,6 +12,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
@@ -20,6 +21,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/threadid"
+	"github.com/terva-sh/ketju/internal/web"
 )
 
 // Deps are the services the handlers call.
@@ -58,32 +60,60 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 	}
 	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, perm: d.Perm, log: log}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /api/v1/me", h.me)
-	mux.HandleFunc("GET /api/v1/forums", h.forumTree)
-	mux.HandleFunc("GET /api/v1/threads/{id}", h.thread)
-	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}", h.post)
-	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}/replies", h.replies)
-	mux.HandleFunc("GET /api/v1/threads/{id}/posts/{ordinal}/history", h.history)
-	mux.HandleFunc("POST /api/v1/render", h.render)
-	mux.HandleFunc("POST /api/v1/threads/{id}/posts", h.reply)
-	mux.HandleFunc("PATCH /api/v1/threads/{id}/posts/{ordinal}", h.editPost)
-	mux.HandleFunc("DELETE /api/v1/threads/{id}/posts/{ordinal}", h.deletePost)
-	mux.HandleFunc("POST /api/v1/threads/{id}/posts/{ordinal}/restore", h.restorePost)
-	mux.HandleFunc("PUT /api/v1/threads/{id}/read", h.markRead)
-	mux.HandleFunc("DELETE /api/v1/threads/{id}/read", h.markUnread)
-	mux.HandleFunc("GET /api/v1/drafts/{thread_id}", h.getDraft)
-	mux.HandleFunc("PUT /api/v1/drafts/{thread_id}", h.putDraft)
-	mux.HandleFunc("DELETE /api/v1/drafts/{thread_id}", h.deleteDraft)
-	mux.HandleFunc("GET /api/v1/forums/{slug}/threads", h.threadList)
-	mux.HandleFunc("POST /api/v1/forums/{slug}/threads", h.createThread)
-	mux.HandleFunc("GET /api/v1/users", h.usersByPrefix)
-	mux.HandleFunc("GET /api/v1/users/{handle}", h.userProfile)
-	mux.HandleFunc("GET /api/v1/users/{handle}/posts", h.userPosts)
+	for _, rt := range h.routes() {
+		mux.HandleFunc(rt.Pattern(), rt.Handler)
+	}
 	h.registerAdmin(mux)
 	mux.Handle("/api/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.CodeNotFound)
 	}))
 	return h, mux
+}
+
+// routes is every route the API serves outside /api/v1/admin/, whose routes
+// register through adminRoute with their gates. build registers exactly
+// these, so the table is the route list rather than a copy of it
+// (TKT-01M29CKRG9): TestPreUserRoutesAreExactlyTheAllowlist walks it through
+// Routes, and TestEveryRouteIsInTheTable fails on a route registered any
+// other way.
+func (h *handlers) routes() []web.Route {
+	get, post, put, patch, del := http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete
+	return []web.Route{
+		{Method: get, Path: "/api/v1/me", Handler: h.me},
+		{Method: get, Path: "/api/v1/forums", Handler: h.forumTree},
+		{Method: get, Path: "/api/v1/threads/{id}", Handler: h.thread},
+		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}", Handler: h.post},
+		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}/replies", Handler: h.replies},
+		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}/history", Handler: h.history},
+		{Method: post, Path: "/api/v1/render", Handler: h.render},
+		{Method: post, Path: "/api/v1/threads/{id}/posts", Handler: h.reply},
+		{Method: patch, Path: "/api/v1/threads/{id}/posts/{ordinal}", Handler: h.editPost},
+		{Method: del, Path: "/api/v1/threads/{id}/posts/{ordinal}", Handler: h.deletePost},
+		{Method: post, Path: "/api/v1/threads/{id}/posts/{ordinal}/restore", Handler: h.restorePost},
+		{Method: put, Path: "/api/v1/threads/{id}/read", Handler: h.markRead},
+		{Method: del, Path: "/api/v1/threads/{id}/read", Handler: h.markUnread},
+		{Method: get, Path: "/api/v1/drafts/{thread_id}", Handler: h.getDraft},
+		{Method: put, Path: "/api/v1/drafts/{thread_id}", Handler: h.putDraft},
+		{Method: del, Path: "/api/v1/drafts/{thread_id}", Handler: h.deleteDraft},
+		{Method: get, Path: "/api/v1/forums/{slug}/threads", Handler: h.threadList},
+		{Method: post, Path: "/api/v1/forums/{slug}/threads", Handler: h.createThread},
+		{Method: get, Path: "/api/v1/users", Handler: h.usersByPrefix},
+		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
+		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},
+	}
+}
+
+// Routes is every route New serves, the admin routes with their gates
+// included, as the handlers New registers. It exists so a test can walk the
+// API route by route (TKT-01M29CKRG9); a server is built with New.
+func Routes(d Deps) []web.Route {
+	h, _ := build(d)
+	out := h.routes()
+	for _, a := range h.adminRoutes {
+		method, path, _ := strings.Cut(a.pattern, " ")
+		out = append(out, web.Route{Method: method, Path: path, Handler: a.handler})
+	}
+	return out
 }
 
 type handlers struct {
