@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T21:21:35Z
+updated_at: 2026-09-29T21:22:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -133,6 +133,10 @@ Implementation notes, 2026-09-29.
 **agent:claude-code/phase2-run-ckrgs** at 2026-09-29T21:21:35Z
 
 Terva review 1471 (head 0a2323e, base fbe4787), finding 1, medium, 'Ensure cached thread pages expire when their pin expires': fixed in the test, not in the code. The response cache holds only a page's posts (threads.pagePosts; respcache.Key). View draws the header, pin included, on every request from the projection row and s.now(), outside the cached entry, so a cache hit cannot serve a stale pin. TestPinExpiryNeedsNoJob now proves it: after the clock passes the pin's end, the next GET is a response-cache hit (Hits +1, Inserts unchanged), its header has pinned null, and it equals a page drawn with no cache (w.same).
+
+**agent:claude-code/phase2-run-ckrgs** at 2026-09-29T21:22:38Z
+
+Terva review of PR #161, head 1a0f7b90bbedb891098a15cf7e500b470db32de6, base fbe4787173af5ec9989c2b3f49e7bfafb11a3c94: clean (run bbf32161-36ac-4708-9502-4ac77d30423b, Actions run #1015, request ready-review-1a0f7b9). No findings. The model marked finding 1 of review 1471 (head 0a2323e) resolved. Commits after this head touch only .tickets/ and are carried.
 
 ## Summary
 
