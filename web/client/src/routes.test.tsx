@@ -332,6 +332,15 @@ describe('the signed-out hint', () => {
     expect(hint.querySelector('a')!.getAttribute('href')).toBe('/auth/signin?return_to=%2Ff%2Fgeneral%3Fx%3D1');
   });
 
+  // Review 1462: a member is refused the application flow, so signing in
+  // from it comes back to the forum index.
+  it.each(['/apply', '/apply/status'])('comes back to the index from %s', async (at) => {
+    viewer.value = structuredClone(anonMe) as Me;
+    const root = await renderAt(at);
+    const hint = root.querySelector('[data-shell="signin-hint"] a')!;
+    expect(hint.getAttribute('href')).toBe('/auth/signin?return_to=%2F');
+  });
+
   it('is not drawn for a member', async () => {
     viewer.value = structuredClone(memberMe) as Me;
     const root = await renderAt('/f/general');

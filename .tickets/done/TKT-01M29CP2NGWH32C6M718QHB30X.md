@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:17:59Z
+updated_at: 2026-09-29T19:20:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -158,6 +158,10 @@ Terva review 1456 (run 06b93a1b-415f-4e11-b16d-7b8205ea7301, Actions run 986) of
 **agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:17:59Z
 
 Terva review 1460 (run b9be8c36-a3c3-4a57-856a-131c93a2ba6f, Actions run 988) of head 5e3f7717e1a17807a915a2331429c979410c06ff on base 3fd598f8245f03a25774b2c22ccaf516d412a5fc: it marks review 1456's finding resolved and raises two medium findings, both fixed and not disputed. (1) 'Show a refusal when a 422 has no usable field errors': with no field to mark, the form says the problem's own words ('That was not accepted. Check it and try again.'); round 2 had dropped that. (2) 'Do not attach errors for an answer changed during submission': the form stays editable while a submission is in flight, and a 422's field errors are now kept only for fields whose current answer is the one sent (stillSent, exported and tested); if every refused field changed in flight, the form says the application was not sent and to send it again. The form-change reload also reads the current answers rather than those captured when Send was pressed. Budget 45203 B gzip of 60000.
+
+**agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:20:43Z
+
+Terva review 1462 (run 9a02fd3f-8184-4374-872c-344aa5114ce1, Actions run 993) of head a6f6a081fd0e79a89062bfa66c23843ec3f4bdd4 on base 3fd598f8245f03a25774b2c22ccaf516d412a5fc: it marks both findings of review 1460 resolved and raises one medium finding, fixed and not disputed: 'Do not return an approved applicant to the status page after sign-in'. The signed-out hint's sign-in link now returns to / from /apply and /apply/status, which refuse a member, as the status page's own sign-in link already did; elsewhere it returns to the page the reader is on. Tested in routes.test.tsx. Budget 45219 B gzip of 60000.
 
 ## Summary
 
