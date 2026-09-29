@@ -263,14 +263,18 @@ function Notes({ url, notes, onAdded }: { url: string; notes: ApplicationNote[];
     if (busy || body.trim() === '') return;
     setBusy(true);
     setError(undefined);
-    const r = await send<ApplicationNote>('POST', `${url}/notes`, { body });
+    const sent = body;
+    const r = await send<ApplicationNote>('POST', `${url}/notes`, { body: sent });
     setBusy(false);
     if (!r.ok) {
       const code = r.error.fieldErrors.body;
       setError(code ? noteMessage(code) : r.message);
       return;
     }
-    setBody('');
+    // The field stays editable while the note is sent. It is cleared only
+    // if it still holds what was sent, so a next note started meanwhile is
+    // kept (Terva review 1478).
+    setBody((b) => (b === sent ? '' : b));
     onAdded(r.value);
   };
   return (

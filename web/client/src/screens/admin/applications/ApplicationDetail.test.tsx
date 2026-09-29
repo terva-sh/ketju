@@ -200,6 +200,35 @@ describe('an application', () => {
     expect(document.querySelector('[data-prior] a')!.getAttribute('href')).toBe('/admin/applications?id=17');
   });
 
+  // Terva review 1478: a note's answer does not erase the next note, begun
+  // while it was on its way.
+  it('keeps a draft written while the last note was being sent', async () => {
+    let answer: (a: { status: number; body: unknown }) => void = () => {};
+    server.routes[`POST ${appUrl(42)}/notes`] = () => new Promise((resolve) => (answer = resolve));
+    const root = await renderAt('/admin/applications?id=42');
+    const box = root.querySelector<HTMLTextAreaElement>('.app-add-note textarea')!;
+    await act(async () => {
+      box.value = 'First.';
+      box.dispatchEvent(new Event('input'));
+    });
+    await act(async () => button(root, 'Add note')!.click());
+    await act(async () => {
+      box.value = 'Second, still being written.';
+      box.dispatchEvent(new Event('input'));
+    });
+    const note: ApplicationNote = {
+      id: 10,
+      author: { handle: 'mona', display_name: 'Mona', avatar: '', role: 'moderator', kind: 'human' },
+      body: 'First.',
+      created_at: 1757606000000,
+    };
+    await act(async () => answer({ status: 201, body: note }));
+    await settle(root);
+    expect(server.sent.at(-1)!.body).toEqual({ body: 'First.' });
+    expect(root.querySelector<HTMLTextAreaElement>('.app-add-note textarea')!.value).toBe('Second, still being written.');
+    expect([...root.querySelectorAll('[data-notes] li')].map((li) => li.textContent).join()).toContain('First.');
+  });
+
   it("says why a note was refused, beside the note's field", async () => {
     server.routes[`POST ${appUrl(42)}/notes`] = () =>
       problemAnswer('validation-failed', 422, { errors: [{ field: 'body', code: 'too_long' }] });

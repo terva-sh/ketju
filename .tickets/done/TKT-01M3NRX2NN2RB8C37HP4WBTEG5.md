@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T21:32:15Z
+updated_at: 2026-09-29T21:35:02Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -173,6 +173,14 @@ Terva review 1476 (PR #162, head 035689c, base fbe4787, run 7a8b3b4b, Actions ru
 - medium, "Cancel pending navigation when leaving the detail": Next pending now sends its request with an AbortController, aborts it when the detail unmounts, and neither routes nor updates state once aborted. Test: "forgets Next pending once the moderator has moved on" holds the answer back, routes to the Denied list, and then answers. The address stays where the moderator went. Dropping the aborted check fails that test.
 
 I also checked the screen's other async paths for the same pattern. None of them navigates. After an unmount, each one at most sets state on a component that is gone, which Preact ignores.
+
+**agent:claude-code/phase2-run-nrx2nn** at 2026-09-29T21:35:02Z
+
+Terva review 1478 (PR #162, head aa62925, base fbe4787, run 228a470c, Actions run #1030) marks the review 1476 finding resolved. It raised one new finding, fixed in the next commit:
+
+- medium, "A completed note request can erase a newer draft": the add-note field is cleared only if it still holds the note that was sent (`setBody((b) => (b === sent ? '' : b))`). A second note started while the first was on its way is kept. The field stays editable, which lets a moderator write on. Test: "keeps a draft written while the last note was being sent". Going back to the unconditional clear fails that test.
+
+The next review is the fifth round on this PR, the docs/13 cap. Budget: 45330 B of 60000 B.
 
 ## Summary
 
