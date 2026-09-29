@@ -23,10 +23,12 @@ blocks_on: none
 references:
   - ref: design:account-lifecycle
     path: docs/05-identity-and-accounts.md
+  - ref: pr:157
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T18:45:16Z
+updated_at: 2026-09-29T18:47:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
