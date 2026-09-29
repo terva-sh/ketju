@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3Q2V25EXKYCTJZ24PM8RP7T
 title: Decide what an approved applicant sees once their pre-user session ends
 type: task
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -19,7 +19,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T17:19:16Z
-updated_at: 2026-09-29T17:28:47Z
+updated_at: 2026-09-29T18:18:26Z
 created_by:
   id: agent:claude-code/phase2-run-cp2kz
   name: ""
@@ -44,3 +44,21 @@ The decision needed from the maintainer is which of these holds:
 2. **Let a retired pre-user session answer the status route alone.** This means a lookup that recognizes a live pre-user session whose identity now has a user, and that is used only by `GET /api/v1/apply/status`. The middleware must not clear such a cookie, and approval must not delete the row (`RevokePreUser`). It needs its own security review.
 
 Whichever is chosen goes into docs/05 step 4, and TKT-01M29CP2KZ is then unblocked.
+
+## Notes
+
+**agent:claude-code/phase2-run-cp2kz** at 2026-09-29T18:17:18Z
+
+Maintainer decision 2026-09-29, relayed by the Phase 2 run's coordinator: **option 1, keep the merged behaviour.** An approved applicant's pre-user session retires: `LookupSession` stops resolving it once the identity has a user, and the session middleware clears the cookie. The applicant then sees the signed-out shell, with a hint such as "Applied? Sign in to see your decision". Signing in gives them a member session through `session.IssueUser`, and the approval notification is waiting there (TKT-01M29CP2N0).
+
+Option 2 lost. A retired pre-user session that still answers the status route would need a second kind of session lookup, a middleware that keeps a cookie it cannot resolve, and approval that leaves the row in place (`RevokePreUser`). That is three loosenings of TKT-01M29CKRG9's guarantee, and all they buy is a page the member session and the notification already provide.
+
+Carried into:
+- TKT-01M29CP2KZ's AC8, reworded: status answers approved only while the pre-user session still resolves, never after approval;
+- docs/05 "mode = approval" step 4, and the docs/07 `/apply` row;
+- a dated superseding note on TKT-01M29CP2MG, replacing its settled item "Approval issues no session" as it concerns the status page, and its plan;
+- a dated superseding note on TKT-01M29CP2NG, replacing its "approved" status state with the signed-out hint.
+
+## Summary
+
+Decided by the maintainer on 2026-09-29: option 1, keep the merged behaviour. An approved applicant's pre-user session retires (LookupSession and the session middleware, TKT-01M29CKRG9). They see the signed-out shell with a hint like 'Applied? Sign in to see your decision', and signing in gives them a member session where the approval notification waits. Carried into TKT-01M29CP2KZ's AC8, docs/05 'mode = approval' step 4 and the docs/07 /apply row, TKT-01M29CP2MG's plan with a note, and a note on TKT-01M29CP2NG.

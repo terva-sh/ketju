@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T07:18:13Z
+updated_at: 2026-09-29T18:18:21Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-cp2kz
   name: ""
 extensions: {}
 ---
@@ -123,3 +123,11 @@ Engineering decisions taken here, with the alternative that lost:
 - The API: TKT-01M29CP2KZ. The schema and the `errors` extension: TKT-01M29CP2KE.
 - The editor preview and the review screen, which reuse `src/forms`: TKT-01M29CP2P1 and TKT-01M3NRX2NN.
 - A message to a denied applicant beyond the status. The maintainer decided on 2026-09-29 that the applicant sees the status only, never the moderator's note (TKT-01M29CP2MG), so the status screen shows none.
+
+## Notes
+
+**agent:claude-code/phase2-run-cp2kz** at 2026-09-29T18:18:21Z
+
+2026-09-29, superseding the "approved" status state (criterion 3 and plan step 4's "approved: a Sign in link to `sign_in`"). Maintainer decision on TKT-01M3Q2V25E (Decide what an approved applicant sees once their pre-user session ends): an approved applicant's pre-user session retires. Once approval links the identity, `LookupSession` stops resolving it and the session middleware clears the cookie, so `/me` turns anonymous and `GET /api/v1/apply/status` answers 401. In practice the status screen never receives `approved`.
+
+What this ticket builds instead: the signed-out shell carries a hint like "Applied? Sign in to see your decision". Signing in gives the applicant a member session, where the approval notification waits (TKT-01M29CP2N0). The status screen can still render `approved` with `sign_in` defensively, since `dto.ApplicationStatus` keeps the value, but no test or criterion should depend on reaching it. The other states (none, pending with withdraw, denied, withdrawn) are unchanged. Recorded by TKT-01M29CP2KZ's agent, which carried the decision.

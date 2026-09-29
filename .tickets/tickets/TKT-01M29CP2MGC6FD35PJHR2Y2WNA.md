@@ -27,12 +27,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-29T18:18:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-cp2kz
   name: ""
 extensions: {}
 ---
@@ -61,7 +61,7 @@ Approval is the only path from a pre-user session to a member session, and it go
 
 ## Implementation plan
 
-Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a.
+Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a. Amended 2026-09-29 by TKT-01M29CP2KZ's agent to carry the maintainer's decision on TKT-01M3Q2V25E (the Settled item it adds, "Approval issues no session", and `TestApproveIssuesNoSession`); nothing else changed.
 
 What exists there:
 - Sessions are created only through `session.insert` in `internal/auth/session/issue.go`, whose only callers are `IssueUserWith` (which also serves `IssueUser`) and `IssuePreUser`. `chokepoint_test.go`'s `doorCallers` and `insertCallers` hold those lists.
@@ -79,12 +79,11 @@ What exists there:
 - **The handle passes registration's checks**: valid, not reserved, and free in any case. A handle released by a rename stays reserved for 90 days (docs/05 "Changing a handle", decided 2026-09-28), so the check honours that reservation once its implementation exists.
 - **A pending account is never created.** Approval writes `status = 'active'` directly (docs/05 step 1), so the profile rule for pending accounts (docs/05 "Account lifecycle", decided 2026-09-28) meets no applicant.
 - **Maintainer decision 2026-09-29: a denied or blocked applicant sees the status only, never the moderator's note.** The status page says "not approved". A blocked applicant also gets no apply control, and the form answers 403 with a fixed message. `decision_note` never appears in `dto.ApplicationStatus` or on any route a pre-user session can reach. A showing of the note verbatim lost, because moderators write it for colleagues and showing it would publish what they did not mean to publish. A separate message-to-the-applicant field remains a possible follow-up, and nothing here builds it. This was the recommendation in grooming; it is recorded in a note on this ticket.
+- **Maintainer decision 2026-09-29 (TKT-01M3Q2V25E): an approved applicant's pre-user session retires, and they learn the decision by signing in.** Once approval links the identity to a user, `LookupSession` no longer resolves the applicant's pre-user session and the session middleware clears its cookie (TKT-01M29CKRG9), so the status page never says "approved" to it. The applicant sees the signed-out shell with a hint like "Applied? Sign in to see your decision"; signing in gives them a member session through `session.IssueUser`, where the approval notification waits (TKT-01M29CP2N0). A retired pre-user session that still answers the status route lost, because it would loosen TKT-01M29CKRG9's session guarantee in three places for a page the member session already provides.
 - **Maintainer decision 2026-09-29: moderators and admins can unblock an identity, with an audit row.** docs/08 asks that tools be reversible, and whoever can block can undo a mistaken block. Having no unblock in v1, and allowing admins only, both lost. Unblocking clears the marker and nothing else: it does not reopen the denied application, and the applicant may apply again under TKT-01M29CP2KZ's 24-hour rule.
 
 Engineering decisions taken here, with the alternative that lost:
-- **Approval issues no session.** The applicant's pre-user session stays as it is and keeps showing the status page, which then says "approved" with a sign-in link (TKT-01M29CP2KZ's `sign_in`). The member session comes from their next sign-in: `identity.Service.Login` finds the identity with a user and calls `session.IssueUser`, which checks the status, and `settle` revokes the pre-user cookie it replaces. Two alternatives lost:
-  - A "continue" endpoint minting a member session from the pre-user cookie would add a caller of `IssueUser` keyed on a cookie issued before the account existed. Re-authenticating with the IdP is the better proof, and the chokepoint lists stay untouched.
-  - Deleting the pre-user sessions at approval would drop the applicant onto a signed-out forum with no explanation.
+- **Approval issues no session, and it retires the applicant's pre-user sessions** (superseded 2026-09-29 by the maintainer decision above; the groomed version kept the pre-user session showing "approved", which merged code rules out). `LookupSession` stops resolving them the moment the identity is linked, whatever approval does, and approval also deletes the rows with `q.DeletePreUserSessions` in its transaction, which TKT-01M29CKRG9 left for it. The member session comes from the applicant's next sign-in: `identity.Service.Login` finds the identity with a user and calls `session.IssueUser`, which checks the status. A "continue" endpoint minting a member session from the pre-user cookie lost: it would add a caller of `IssueUser` keyed on a cookie issued before the account existed. Re-authenticating with the IdP is the better proof, and the chokepoint lists stay untouched.
 - **Approval sets role `member` and nothing else.** The request body has no role field, and an unknown field is refused. A later role change goes through `perm` (`Promote` or a sibling). A bootstrap-named applicant is promoted at their first sign-in by the existing `settle → ApplyBootstrap`, so approval never touches roles.
 - **The display name is the IdP `name` claim, or the handle when it is empty**, as open registration does (`identity.Register`). Reading the form's `name` answer lost, because it couples code to a key an admin can rename.
 - **The suggested handle is `identity.Prefill(preferred_username, email)`** over the identity's stored claims, the same suggestion open registration makes.
@@ -148,7 +147,7 @@ Engineering decisions taken here, with the alternative that lost:
 
 - `internal/service/applications/review_test.go`:
   - `TestApproveIsOneTransactionOrNone`: an approval that succeeds (which fails outright if the status UPDATE precedes the user, as review 1344 found) creates the user (active, member, human), links the identity, and marks the application approved with user_id, with exactly one audit row naming the moderator and the note. A test trigger that fails the audit insert leaves no user, the identity's user_id NULL, the application pending, and no audit row.
-  - `TestApproveIssuesNoSession`: the `sessions` row count is unchanged by approval. The applicant's pre-user session, issued before approval with `IssuePreUser`, still resolves through `session.Middleware` to a viewer with `PreUser` true and `Member()` false. `identity.Login` for that identity then returns `SignedIn` with a fresh session through `IssueUser`.
+  - `TestApproveIssuesNoSession`: approval adds no `sessions` row and deletes the applicant's pre-user rows. The applicant's pre-user session, issued before approval with `IssuePreUser`, no longer resolves through `session.Middleware`, which answers as anonymous and clears the cookie. `identity.Login` for that identity then returns `SignedIn` with a fresh session through `IssueUser`.
   - `TestApprovedThenSuspendedCannotSignIn`: approve, set status suspended, and `Login` returns `Unavailable` with no session row. This is the chokepoint's status check.
   - `TestApproveNeverSetsARole`: a body with `"role":"admin"` is 400; the created user is a member; no `user.promoted` row exists.
   - `TestApproveChecksTheHandle`: invalid and reserved handles are 422 with `errors[handle]`; a taken handle in another case is 409 with `errors[handle]`; the application stays pending.
@@ -195,3 +194,7 @@ This note supersedes the 2026-09-29 note that listed two open decisions. The mai
 2. Moderators and admins can unblock an identity, with an audit row. The plan now builds the unblock: `POST /api/v1/admin/applications/{id}/unblock`, backed by `UnblockIdentity` and one `identity.unblocked` audit row. The application stays denied, and the applicant may apply again under TKT-01M29CP2KZ's 24-hour rule. The review screen's control is TKT-01M3NRX2NN's new criterion 7.
 
 The same commit fixes review 1344's first finding here: approval now creates and links the user before the guarded decision UPDATE, which sets `status` and `user_id` in one statement.
+
+**agent:claude-code/phase2-run-cp2kz** at 2026-09-29T18:18:12Z
+
+2026-09-29, superseding the engineering decision "Approval issues no session" as groomed, where the pre-user session "keeps showing the status page, which then says approved with a sign-in link". Maintainer decision on TKT-01M3Q2V25E (Decide what an approved applicant sees once their pre-user session ends): keep the merged behaviour. Once approval links the identity, `LookupSession` stops resolving the applicant's pre-user session and the session middleware clears its cookie (TKT-01M29CKRG9). The applicant sees the signed-out shell with a hint like "Applied? Sign in to see your decision", and signing in gives them a member session where the approval notification waits. Approval still issues no session. It now also deletes the applicant's pre-user rows with `q.DeletePreUserSessions` in its transaction, and `TestApproveIssuesNoSession` checks that the old session no longer resolves. The plan carries this as a new Settled item. Every other Settled item is unchanged. Recorded by TKT-01M29CP2KZ's agent, which carried the decision.
