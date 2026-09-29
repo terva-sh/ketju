@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:02:34Z
-updated_at: 2026-09-29T05:06:46Z
+updated_at: 2026-09-29T05:38:53Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -49,7 +49,7 @@ Filed during Phase 2 grooming (TKT-01M3M9RR26) from the plan for TKT-01M29CKRFS 
 ### Notes for the plan
 
 - Registration (`identity.Register`), the auto_approve handle skip (TKT-01M29CKRE9), and rename must share one "is this handle free" check. TKT-01M29CKRE9 extracts it as `identity.handleFree(ctx, q, h)`. This ticket adds the reservation lookup there, so a reserved handle counts as taken on all three paths.
-- A reservation table (the old handle `COLLATE NOCASE`, the user it redirects to, and an expiry) needs a migration, plus a `users` column or an audit query for the 30-day cooldown. Whether an anonymized account's old handle is also reserved is an open decision on TKT-01M29CKRFS. Read it before designing the table.
+- A reservation table (the old handle `COLLATE NOCASE`, the user it redirects to, and an expiry) needs a migration, plus a `users` column or an audit query for the 30-day cooldown. An anonymized account's old handle is also reserved for 90 days, with no redirect (maintainer decision 2026-09-29, recorded on TKT-01M29CKRFS). The table therefore needs a row with no redirect target, and a reservation must not name the anonymized user. Audit rows from renames keep the old and new handle after anonymization, and docs/05 says so (maintainer decision 2026-09-29).
 - A rename changes the author rows, so the response cache's authors digest and the render cache's resolved-mention check both see it (docs/07 "The response cache"). Name tests that prove a cached page is not served with the old handle.
 - The member route and the admin route are new API surface. Record them in docs/07 in the same PR.
 
@@ -61,3 +61,10 @@ Filed during Phase 2 grooming (TKT-01M3M9RR26) from the plan for TKT-01M29CKRFS 
 - [ ] Every rename writes an audit_log row with the old and new handle in the transaction that renames
 - [ ] An anonymized account cannot be renamed, by its owner or by an admin
 - [ ] A cached thread page, profile or mention is not served with the old handle after a rename (response and render cache tests)
+- [ ] Anonymizing an account reserves its old handle for 90 days with no redirect, and the reservation row names no user
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-29T05:38:53Z
+
+Maintainer decisions 2026-09-29, from TKT-01M29CKRFS: an anonymized account's old handle is reserved for 90 days with no redirect, and audit rows keep old handles after anonymization, which docs/05 will document. The description and a new criterion reflect the first.
