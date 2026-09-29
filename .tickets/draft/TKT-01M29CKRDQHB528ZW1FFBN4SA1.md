@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T05:38:47Z
+updated_at: 2026-09-29T06:15:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,7 +49,7 @@ Storing `form_version` on the application is what keeps an old application reada
 - [ ] At most one pending application exists per identity, enforced by a partial unique index
 - [ ] The migration seeds the registration form at version 1, and adds application_notes and notifications.application_id, required for exactly the two application kinds
 - [ ] docs/04 names every table, column and trigger the migration adds, including why applications.identity_id is ON DELETE SET NULL
-- [ ] No form can hold an active_version that names no version, on INSERT as well as UPDATE, whether by the deferred foreign key or by the trigger fallback, tested by TestActiveVersionAlwaysExists
+- [ ] forms.active_version is NOT NULL under a deferred foreign key to form_versions, with no trigger fallback; TestActiveVersionAlwaysExists shows that a form committed without a version, a form naming a missing version, and an update to a missing version are each refused at commit
 
 ## Implementation plan
 
@@ -75,10 +75,7 @@ Engineering decisions taken here, with the alternative that lost:
 ### Approach
 
 1. `internal/store/db/migrations/0011_applications_forms.sql`. Use the next free number if another Phase 2 migration lands first.
-   - `forms`: `id INTEGER PRIMARY KEY`, `key TEXT NOT NULL UNIQUE` (CHECK `key GLOB '[a-z]*' AND key NOT GLOB '*[^a-z0-9_]*'`), `title TEXT NOT NULL`, `active_version INTEGER NOT NULL`, `created_at`, `updated_at`, and `FOREIGN KEY (id, active_version) REFERENCES form_versions (form_id, version) DEFERRABLE INITIALLY DEFERRED`. The foreign key is deferred because a form and its first version are inserted in one transaction. If sqlc cannot parse `DEFERRABLE`, the fallback must still enforce the rule on INSERT as well as UPDATE (review 1344), and say so in a note. A trigger cannot be deferred, and a form's first version cannot exist before the form, so the fallback makes `active_version` nullable, with "no version yet" as the only meaning of NULL:
-     - `forms_insert_without_version`, BEFORE INSERT, raises unless NEW.active_version IS NULL. A form is born with no active version, so no insert can name one that does not exist.
-     - `forms_active_version_exists`, BEFORE UPDATE OF active_version, raises when NEW.active_version IS NULL or when no `form_versions` row has (NEW.id, NEW.active_version).
-     - The seed, and TKT-01M29CP2KE's service, then insert the form, insert its version, and set `active_version`, in one transaction. `formsvc` reads a NULL `active_version` as `ErrNoForm`.
+   - `forms`: `id INTEGER PRIMARY KEY`, `key TEXT NOT NULL UNIQUE` (CHECK `key GLOB '[a-z]*' AND key NOT GLOB '*[^a-z0-9_]*'`), `title TEXT NOT NULL`, `active_version INTEGER NOT NULL`, `created_at`, `updated_at`, and `FOREIGN KEY (id, active_version) REFERENCES form_versions (form_id, version) DEFERRABLE INITIALLY DEFERRED`. The foreign key is deferred because a form and its first version are inserted in one transaction. `active_version` is NOT NULL, so a form cannot be committed without a version: a form inserted alone names a version that does not exist, and the deferred check refuses it at commit. There is no trigger fallback (review 1358). sqlc v1.31.1, the pinned version, was run during grooming on 2026-09-29 against this exact `forms` and `form_versions` pair with the deferred clause, plus a join query over it. It generated code with exit 0, so the fallback path had no reason to exist. At run time `foreign_keys` is on, so the check runs at commit. During migrations, the runner turns foreign keys off and runs `foreign_key_check` before commit (`migrate.go`), which checks the seed.
    - `form_versions`: `form_id INTEGER NOT NULL REFERENCES forms (id)`, `version INTEGER NOT NULL CHECK (version >= 1)`, `schema_json TEXT NOT NULL CHECK (json_valid(schema_json))`, `created_by INTEGER REFERENCES users (id)` (null for the seed), `created_at`, and `PRIMARY KEY (form_id, version)`. Add the triggers `form_versions_no_update`, `form_versions_no_delete` and `form_versions_no_replace`, the last refusing an INSERT whose (form_id, version) already exists.
    - `applications`:
      - Columns: `id INTEGER PRIMARY KEY`, `identity_id INTEGER REFERENCES identities (id) ON DELETE SET NULL`, `form_id INTEGER NOT NULL`, `form_version INTEGER NOT NULL`, `answers_json TEXT NOT NULL CHECK (json_valid(answers_json))`, `status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending','approved','denied','withdrawn'))`, `user_id INTEGER REFERENCES users (id)`, `decided_by INTEGER REFERENCES users (id)`, `decided_at INTEGER`, `decision_note TEXT`, `created_at INTEGER NOT NULL`.
@@ -97,7 +94,7 @@ Engineering decisions taken here, with the alternative that lost:
 `internal/store/db/applications_schema_test.go`, in the style of `moderation_schema_test.go`:
 - `TestApplicationRecordsItsFormVersion`: an application naming a (form_id, version) that does not exist is refused; one naming an existing version is stored.
 - `TestFormVersionsAreImmutable`: UPDATE, DELETE and INSERT OR REPLACE of version 1 are refused; version 2 inserts, and version 1's `schema_json` reads back byte-identical.
-- `TestActiveVersionAlwaysExists`: a new form inserted with an `active_version` that names no version is refused, and so is an update of `registration` to a missing version. Under the deferred foreign key both fail at commit. Under the trigger fallback, the insert fails for any non-NULL `active_version`, and the update fails at once. The test is written against whichever design landed.
+- `TestActiveVersionAlwaysExists`: each of these is refused at commit, and nothing from the refused transaction remains afterwards. A form inserted alone, with no version. A form whose `active_version` names a version that does not exist. An update of `registration`'s `active_version` to a missing version. A form inserted together with its version 1 in one transaction commits.
 - `TestApplicationStatusIsConstrained`: 'rejected' is refused; each of the four statuses is accepted with consistent decision fields; each inconsistent pair (pending with decided_at, approved without user_id, withdrawn with decided_by, pending with a note) is refused.
 - `TestOnePendingApplicationPerIdentity`: a second pending application for one identity is refused; a pending one beside a withdrawn one is accepted.
 - `TestBlockedIdentityHasNoUser`: blocking an identity with user_id NULL succeeds; setting user_id on a blocked identity is refused; blocking an identity that has a user is refused.
