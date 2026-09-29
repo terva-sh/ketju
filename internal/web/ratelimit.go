@@ -49,6 +49,17 @@ var (
 	writeRate = Rate{Every: 500 * time.Millisecond, Burst: 60}
 )
 
+// ApplyRate is the per-identity limit on an applicant's writes, submitting
+// and withdrawing an application (docs/05 "Sessions and CSRF", docs/08). A
+// person filling in a form submits a handful of times, validation failures
+// included, so a burst of five, then one a minute, is generous to them and
+// still stops a script that holds a pre-user session and hammers the form
+// from many addresses, which the per-address stage cannot see as one caller.
+// It is not the one-application-per-24-hours rule, which
+// internal/service/applications keeps; this limits attempts, refused ones
+// included.
+var ApplyRate = Rate{Every: time.Minute, Burst: 5}
+
 // maxTrackedKeys bounds how many callers a limiter remembers.
 //
 // Without a bound, a caller with a large address pool turns the limiter itself
@@ -68,12 +79,12 @@ const maxTrackedKeys = 8192
 // that no viewer exists yet when this runs: reading one here would always find
 // nothing, and a key that silently never varies is worse than an honest one.
 //
-// Per-identity limiting therefore cannot live at this position. It needs a
-// second stage after session resolution, and docs/08 names the two callers that
-// want one: the per-agent token bucket (TKT-01M29P9RSW, with the credential it
-// charges against) and the per-identity limit on application submission
-// (TKT-01M29BKBM3, where an unapproved visitor holds a pre-user session).
-// Whichever lands first builds the stage.
+// Per-identity limiting therefore cannot live at this position. It is a
+// second stage after session resolution, KeyedLimit, and docs/08 names the
+// two callers that want one: the per-identity limit on application
+// submission (ApplyRate, TKT-01M29CP2KZ, where an unapproved visitor holds a
+// pre-user session), which built it, and the per-agent token bucket
+// (TKT-01M29P9RSW, with the credential it charges against), which reuses it.
 //
 // Members get no per-session write limit, and that is settled rather than
 // pending: a session is used from one address, so per-session adds nothing over
@@ -201,6 +212,34 @@ func RateLimit(now func() time.Time) func(http.Handler) http.Handler {
 				// AC3: the response says when to retry. Rounded up, so a
 				// client that obeys it exactly does not arrive one tick early
 				// and get refused again.
+				problem.WriteRetryAfter(w, r, problem.CodeRateLimited, retry+time.Second)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// KeyedLimit is the second limiter stage: a token bucket per key, where key
+// reads the key from a request after session resolution, so it can name
+// who is asking rather than where from (docs/08 "The transport-level
+// ceiling"). It knows nothing of what it limits. A request for which key
+// reports no key passes untouched, and one over the rate is answered 429
+// rate-limited with Retry-After. now is the clock; nil is time.Now.
+//
+// Each call makes its own buckets, so wrap every route that shares a limit
+// with the one middleware KeyedLimit returned.
+func KeyedLimit(rate Rate, key func(*http.Request) (string, bool), now func() time.Time) func(http.Handler) http.Handler {
+	l := newLimiter(rate, maxTrackedKeys, now)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			k, ok := key(r)
+			if !ok {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if allowed, retry := l.allow(k); !allowed {
+				// Rounded up, as RateLimit does.
 				problem.WriteRetryAfter(w, r, problem.CodeRateLimited, retry+time.Second)
 				return
 			}

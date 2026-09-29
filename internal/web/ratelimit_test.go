@@ -382,3 +382,52 @@ func TestClientIPIgnoresForwardedFor(t *testing.T) {
 		}
 	}
 }
+
+// TestKeyedLimitIsGeneral: the second stage knows nothing of applications.
+// Keyed here on a header, it gives each key its own bucket whatever address
+// the request comes from, answers the one over the rate with 429 and
+// Retry-After, and passes a request with no key untouched.
+func TestKeyedLimitIsGeneral(t *testing.T) {
+	c := newClock()
+	byHeader := func(r *http.Request) (string, bool) {
+		k := r.Header.Get("X-Test-Key")
+		return k, k != ""
+	}
+	reached := 0
+	h := KeyedLimit(Rate{Every: time.Minute, Burst: 2}, byHeader, c.Now)(
+		http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { reached++ }))
+	send := func(key string, addr int) *httptest.ResponseRecorder {
+		r := httptest.NewRequest(http.MethodPost, "/anything", nil)
+		r.RemoteAddr = "203.0.113." + strconv.Itoa(addr) + ":1234"
+		if key != "" {
+			r.Header.Set("X-Test-Key", key)
+		}
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec
+	}
+	for i := range 2 {
+		if rec := send("a", i+1); rec.Code != http.StatusOK {
+			t.Fatalf("request %d under the burst: %d", i+1, rec.Code)
+		}
+	}
+	rec := send("a", 9)
+	if rec.Code != http.StatusTooManyRequests || rec.Header().Get("Retry-After") == "" {
+		t.Fatalf("over the burst from a fresh address: %d, Retry-After %q", rec.Code, rec.Header().Get("Retry-After"))
+	}
+	if rec := send("b", 9); rec.Code != http.StatusOK {
+		t.Errorf("another key: %d", rec.Code)
+	}
+	for i := range 10 {
+		if rec := send("", 9); rec.Code != http.StatusOK {
+			t.Fatalf("a request with no key, %d: %d", i+1, rec.Code)
+		}
+	}
+	c.advance(time.Minute)
+	if rec := send("a", 9); rec.Code != http.StatusOK {
+		t.Errorf("a minute later: %d", rec.Code)
+	}
+	if reached != 2+1+10+1 {
+		t.Errorf("the handler ran %d times, want 14", reached)
+	}
+}

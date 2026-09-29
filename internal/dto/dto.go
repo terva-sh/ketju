@@ -580,3 +580,41 @@ type FormVersionInfo struct {
 	// migration seeded.
 	CreatedBy *Author `json:"created_by"`
 }
+
+// ApplicationForm is GET /apply/form (docs/07): the active version of the
+// registration form, and what the applicant's identity prefills.
+type ApplicationForm struct {
+	Form Form `json:"form"`
+	// Prefill is keyed by field key: for each field with a from_claim, the
+	// claim the identity carries, when it carries one. A locked field is
+	// stored as this value whatever is submitted.
+	Prefill map[string]string `json:"prefill"`
+}
+
+// ApplicationStatus is GET /apply/status, and the answer to POST /apply and
+// POST /apply/withdraw (docs/07): the applicant's latest application, and
+// what they may do next. It never carries a moderator's note (maintainer
+// decision 2026-09-29).
+type ApplicationStatus struct {
+	// Status is none, pending, approved, denied or withdrawn. It is
+	// approved whenever the identity has a user.
+	Status string `json:"status"`
+	// Provider is the provider key of the identity applying.
+	Provider string `json:"provider"`
+	// SubmittedAt is when the latest application was submitted, null for
+	// none.
+	SubmittedAt *Millis `json:"submitted_at"`
+	// DecidedAt is when it was approved, denied or withdrawn, null while
+	// it is pending or for none.
+	DecidedAt *Millis `json:"decided_at"`
+	// CanWithdraw is true while the application is pending.
+	CanWithdraw bool `json:"can_withdraw"`
+	// CanApply is true when POST /apply would be accepted now.
+	CanApply bool `json:"can_apply"`
+	// CanApplyAt is when an application may be submitted again, set only
+	// when the 24-hour rule is all that stands in the way.
+	CanApplyAt *Millis `json:"can_apply_at"`
+	// SignIn is where an approved applicant signs in as a member, set only
+	// when approved.
+	SignIn *string `json:"sign_in"`
+}

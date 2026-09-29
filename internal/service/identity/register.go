@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -43,13 +44,18 @@ type Claims struct {
 	// could grant nothing, and an IdP that asserts hundreds of groups
 	// would otherwise overflow the cookie that carries these claims.
 	Groups []string `json:"g,omitempty"`
+	// RawClaims is the claim set as the IdP sent it, which an approval-mode
+	// application records on the identity it writes, so the form's
+	// from_claim fields can be prefilled from it (TKT-01M29CP2KZ). It is
+	// never sealed into the registration cookie, which has no room for it.
+	RawClaims json.RawMessage `json:"-"`
 }
 
 // ClaimsOf is the part of id a registration keeps.
 func (s *Service) ClaimsOf(id *oidc.Identity) Claims {
 	return Claims{Provider: id.Provider, Issuer: id.Issuer, Subject: id.Subject, Email: id.Email,
 		EmailVerified: id.EmailVerified, Name: id.Name, PreferredUsername: id.PreferredUsername,
-		Groups: s.Policy.mapped(id.Provider, id.Groups)}
+		Groups: s.Policy.mapped(id.Provider, id.Groups), RawClaims: id.RawClaims}
 }
 
 func (c Claims) identity() *oidc.Identity {

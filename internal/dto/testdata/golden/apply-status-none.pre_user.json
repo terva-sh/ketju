@@ -1,0 +1,10 @@
+{
+  "status": "none",
+  "provider": "github",
+  "submitted_at": null,
+  "decided_at": null,
+  "can_withdraw": false,
+  "can_apply": true,
+  "can_apply_at": null,
+  "sign_in": null
+}

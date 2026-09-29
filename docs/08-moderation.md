@@ -101,11 +101,15 @@ disk, not to pace anybody's posting.
 Both are keyed by address, because the limiter deliberately runs *outside*
 session resolution — a session lookup is a database query, and limiting after
 it would mean an unauthenticated flood costs a query per request. Per-identity
-limiting therefore needs a second stage after session resolution. Two things
-want that stage: the per-agent token bucket above, and the per-identity limit
-on application submission in 05, where an unapproved visitor holds a pre-user
-session. Neither exists yet, and the stage should be built by whichever
-arrives first.
+limiting is therefore a second stage after session resolution,
+`web.KeyedLimit`: a token bucket per key, where the key is read from the
+request once the viewer is known, and a request with no key passes. Two
+things use it. The per-identity limit on application submission in 05, where
+an unapproved visitor holds a pre-user session, built it (TKT-01M29CP2KZ): it
+limits `POST /api/v1/apply` and `POST /api/v1/apply/withdraw` together at
+`web.ApplyRate`, a burst of 5 and then one a minute per identity, from
+however many addresses, refused attempts included. The per-agent token
+bucket above reuses it (TKT-01M29P9RSW).
 
 Members get no per-session write limit, and that is a decision rather than an
 omission. A session is used from one address, so a per-session ceiling covers

@@ -16,6 +16,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
@@ -34,7 +35,7 @@ func (w *adminWorld) logged() *bytes.Buffer {
 	log := slog.New(slog.NewTextHandler(&buf, nil))
 	d := w.db
 	w.h, w.mux = build(Deps{Users: &users.Service{DB: d, Perm: w.perm}, Threads: &threads.Service{DB: d, Perm: w.perm},
-		Forums: &forums.Service{DB: d, Perm: w.perm}, Forms: &formsvc.Service{DB: d}, Perm: w.perm, Logger: log})
+		Forums: &forums.Service{DB: d, Perm: w.perm}, Forms: &formsvc.Service{DB: d}, Applications: &applications.Service{DB: d}, Perm: w.perm, Logger: log})
 	store := &session.Store{DB: d, Now: func() time.Time { return w.now }}
 	pass := func(h http.Handler) http.Handler { return h }
 	w.handler = web.New(web.Groups{API: w.mux}, web.Options{Session: session.Middleware(store, nil), RateLimit: pass, CSRF: pass})

@@ -13,10 +13,12 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/groups"
@@ -33,10 +35,16 @@ type Deps struct {
 	Forums  *forums.Service
 	// Forms answers the admin form routes (forms.go).
 	Forms *formsvc.Service
+	// Applications answers an applicant's routes under /api/v1/apply
+	// (apply.go).
+	Applications *applications.Service
 	// Perm is the process's evaluator. The admin API's moderates gate asks
 	// it (admin.go).
 	Perm   *perm.Evaluator
 	Logger *slog.Logger
+	// Now is the per-identity limiter's clock; nil is time.Now. Tests set
+	// it.
+	Now func() time.Time
 }
 
 // New returns the /api/v1 handler, for web.Groups.API. It receives full
@@ -53,16 +61,17 @@ func New(d Deps) http.Handler {
 // build is New, with the handlers it registered, for a test that walks the
 // admin routes.
 func build(d Deps) (*handlers, *http.ServeMux) {
-	if d.Threads == nil || d.Users == nil || d.Forums == nil || d.Forms == nil || d.Perm == nil {
-		panic(fmt.Sprintf("api.New: Threads, Users, Forums, Forms and Perm are required "+
-			"(Threads set: %t, Users set: %t, Forums set: %t, Forms set: %t, Perm set: %t)",
-			d.Threads != nil, d.Users != nil, d.Forums != nil, d.Forms != nil, d.Perm != nil))
+	if d.Threads == nil || d.Users == nil || d.Forums == nil || d.Forms == nil || d.Applications == nil || d.Perm == nil {
+		panic(fmt.Sprintf("api.New: Threads, Users, Forums, Forms, Applications and Perm are required "+
+			"(Threads set: %t, Users set: %t, Forums set: %t, Forms set: %t, Applications set: %t, Perm set: %t)",
+			d.Threads != nil, d.Users != nil, d.Forums != nil, d.Forms != nil, d.Applications != nil, d.Perm != nil))
 	}
 	log := d.Logger
 	if log == nil {
 		log = slog.Default()
 	}
-	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, perm: d.Perm, log: log,
+	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, applications: d.Applications,
+		perm: d.Perm, log: log, applyLimit: web.KeyedLimit(web.ApplyRate, applicantKey, d.Now),
 		// The groups service needs nothing Users and Perm do not already
 		// carry, so it is built here rather than being one more required
 		// dependency (TKT-01M29CXK1X).
@@ -86,7 +95,7 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 // other way.
 func (h *handlers) routes() []web.Route {
 	get, post, put, patch, del := http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete
-	return []web.Route{
+	return append([]web.Route{
 		{Method: get, Path: "/api/v1/me", Handler: h.me},
 		{Method: get, Path: "/api/v1/forums", Handler: h.forumTree},
 		{Method: get, Path: "/api/v1/threads/{id}", Handler: h.thread},
@@ -108,7 +117,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/users", Handler: h.usersByPrefix},
 		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
 		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},
-	}
+	}, h.applyRoutes()...)
 }
 
 // Routes is every route New serves, the admin routes with their gates
@@ -125,13 +134,18 @@ func Routes(d Deps) []web.Route {
 }
 
 type handlers struct {
-	threads *threads.Service
-	users   *users.Service
-	forums  *forums.Service
-	forms   *formsvc.Service
-	perm    *perm.Evaluator
-	groups  *groups.Service
-	log     *slog.Logger
+	threads      *threads.Service
+	users        *users.Service
+	forums       *forums.Service
+	forms        *formsvc.Service
+	applications *applications.Service
+	perm         *perm.Evaluator
+	groups       *groups.Service
+	log          *slog.Logger
+	// applyLimit is the per-identity stage the application writes share
+	// (apply.go). There is one per handler set, so every route it wraps
+	// draws on the same buckets.
+	applyLimit func(http.Handler) http.Handler
 
 	// adminRoutes is every route adminRoute registered, with its gate.
 	adminRoutes []adminRouteEntry

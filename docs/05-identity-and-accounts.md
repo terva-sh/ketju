@@ -201,8 +201,8 @@ a suggestion and reserves nothing.
    `/apply/status`. What the session may reach is a positive list,
    `web.PreUserRoutes`: `GET /api/v1/me`, the sign-in routes
    (`/auth/signin`, `/auth/{provider}/start`, `/auth/{provider}/callback`),
-   `POST /auth/logout`, `/assets/`, and the `/apply` and `/apply/status`
-   pages. The application API joins it with the form (TKT-01M29CP2KZ).
+   `POST /auth/logout`, `/assets/`, the `/apply` and `/apply/status`
+   pages, and the application API under `/api/v1/apply` (07, TKT-01M29CP2KZ).
    `web.PreUserGate` enforces it in the middleware chain, after session
    resolution and before CSRF and every handler: an API path answers 403
    `forbidden`, any other page 303 to `/apply/status`, and any other
@@ -221,6 +221,28 @@ a suggestion and reserves nothing.
 4. Status page: "Your application is being reviewed." Re-visiting the site
    with that identity shows the same page; a pending applicant can withdraw
    and re-apply once per 24 h to avoid spam.
+
+   The 24-hour rule counts submissions: an identity may submit at most one
+   application per rolling 24 hours, so a re-application after a withdrawal
+   or a denial waits until 24 hours after the previous submission, and is
+   answered `rate-limited` with `Retry-After` until then. A blocked identity
+   is refused the form itself. An identity that already has a user is
+   refused too, and every refusal is checked again in the transaction that
+   stores the application (`internal/service/applications`,
+   TKT-01M29CP2KZ). The status page learns what is possible from the server
+   (`can_apply`, `can_apply_at`, `can_withdraw`), so no client keeps a copy
+   of these rules.
+
+   An approved applicant does not learn the decision on this page (maintainer
+   decision 2026-09-29, TKT-01M3Q2V25E). The status answers `approved`, with
+   `sign_in`, only while the pre-user session still resolves. After approval
+   it never does: the identity has a user, so `LookupSession` stops resolving
+   the session (step 1), and the session middleware clears the cookie on the
+   next request. From then on the applicant is signed out. The signed-out
+   shell carries a hint, "Applied? Sign in to see your decision". Signing in
+   gives them a member session through `session.IssueUser`'s status check,
+   and the approval notification is waiting for them there
+   (TKT-01M29CP2N0).
 5. Moderator reviews at `/admin/applications`: sees answers, the identity's
    provider/email/verified flag, prior applications from the same identity,
    and free-text notes from other moderators. Actions: **approve** (choose or
@@ -379,9 +401,10 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
     unauthenticated flood does not cost a database query per request.
   - By identity, after session resolution. Application submission is the one
     place an unapproved visitor does have an identity — a pre-user session bound
-    to an OIDC subject — so this is where a second stage is worth its cost. It
-    belongs to the approval-mode epic (TKT-01M29BKBM3) with the form it
-    protects.
+    to an OIDC subject — so this is where a second stage is worth its cost.
+    It is `web.KeyedLimit`, keyed on the pre-user session's identity, on
+    `POST /api/v1/apply` and `POST /api/v1/apply/withdraw` at `web.ApplyRate`
+    (08 "The transport-level ceiling", TKT-01M29CP2KZ).
 - There is no per-session write limit for members. See 08: a session is used
   from one address, so per-session limiting adds nothing over the per-address
   write ceiling except for a session replayed from many addresses, and a

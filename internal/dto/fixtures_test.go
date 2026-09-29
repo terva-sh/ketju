@@ -430,6 +430,40 @@ var corpus = map[string]any{
 
 	"form-admin." + tAdmin:   formAdmin(),
 	"form-preview." + tAdmin: formPreview(),
+
+	"apply-form." + tPreUser:             applicationForm(),
+	"apply-status-none." + tPreUser:      ApplicationStatus{Status: "none", Provider: "github", CanApply: true},
+	"apply-status-pending." + tPreUser:   applicationPending(),
+	"apply-status-withdrawn." + tPreUser: applicationWithdrawn(),
+	"apply-status-approved." + tPreUser:  applicationApproved(),
+}
+
+// applicationForm is GET /apply/form for an applicant whose IdP gave a
+// name and an email: the registration form, and both claims to prefill.
+func applicationForm() ApplicationForm {
+	return ApplicationForm{Form: registrationForm(),
+		Prefill: map[string]string{"name": "Carol Applicant", "email": "carol@example.com"}}
+}
+
+// applicationPending is GET /apply/status with an application under review:
+// it may be withdrawn, and nothing may be submitted.
+func applicationPending() ApplicationStatus {
+	return ApplicationStatus{Status: "pending", Provider: "github", SubmittedAt: ptr(Millis(1757600000000)),
+		CanWithdraw: true}
+}
+
+// applicationWithdrawn is GET /apply/status an hour after a withdrawal: a new
+// application may be submitted 24 hours after the last one was.
+func applicationWithdrawn() ApplicationStatus {
+	return ApplicationStatus{Status: "withdrawn", Provider: "github", SubmittedAt: ptr(Millis(1757600000000)),
+		DecidedAt: ptr(Millis(1757603600000)), CanApplyAt: ptr(Millis(1757686400000))}
+}
+
+// applicationApproved is GET /apply/status once the identity has a user: the
+// applicant signs in again, as a member.
+func applicationApproved() ApplicationStatus {
+	return ApplicationStatus{Status: "approved", Provider: "github", SubmittedAt: ptr(Millis(1757600000000)),
+		DecidedAt: ptr(Millis(1757610000000)), SignIn: ptr("/auth/github/start?return_to=/")}
 }
 
 // registrationForm is the seeded registration form, version 1, as a client

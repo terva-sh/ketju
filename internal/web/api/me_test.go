@@ -18,6 +18,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
+	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
@@ -95,7 +96,7 @@ func newMeWorld(t *testing.T) *meWorld {
 	}
 	shell.SetPage(ShellPage(w.users))
 	pass := func(h http.Handler) http.Handler { return h }
-	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: &threads.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}, Forms: &formsvc.Service{DB: d}, Perm: perm.New(d)}), SPA: shell},
+	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: &threads.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}, Forms: &formsvc.Service{DB: d}, Applications: &applications.Service{DB: d}, Perm: perm.New(d)}), SPA: shell},
 		web.Options{Session: session.Middleware(store, nil), RateLimit: pass, CSRF: pass})
 	w.seed()
 	return w
@@ -354,11 +355,13 @@ func TestNewRequiresEveryService(t *testing.T) {
 	u, th, f := &users.Service{DB: d, Perm: perm.New(d)}, &threads.Service{DB: d, Perm: perm.New(d)},
 		&forums.Service{DB: d, Perm: perm.New(d)}
 	p := perm.New(d)
-	fs := &formsvc.Service{DB: d}
-	for name, deps := range map[string]Deps{"no users": {Threads: th, Forums: f, Forms: fs, Perm: p},
-		"no threads": {Users: u, Forums: f, Forms: fs, Perm: p}, "no forums": {Threads: th, Users: u, Forms: fs, Perm: p},
-		"no forms": {Threads: th, Users: u, Forums: f, Perm: p},
-		"no perm":  {Threads: th, Users: u, Forums: f, Forms: fs}, "none": {}} {
+	fs, as := &formsvc.Service{DB: d}, &applications.Service{DB: d}
+	for name, deps := range map[string]Deps{"no users": {Threads: th, Forums: f, Forms: fs, Applications: as, Perm: p},
+		"no threads":      {Users: u, Forums: f, Forms: fs, Applications: as, Perm: p},
+		"no forums":       {Threads: th, Users: u, Forms: fs, Applications: as, Perm: p},
+		"no forms":        {Threads: th, Users: u, Forums: f, Applications: as, Perm: p},
+		"no applications": {Threads: th, Users: u, Forums: f, Forms: fs, Perm: p},
+		"no perm":         {Threads: th, Users: u, Forums: f, Forms: fs, Applications: as}, "none": {}} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
 				if recover() == nil {
@@ -368,7 +371,7 @@ func TestNewRequiresEveryService(t *testing.T) {
 			New(deps)
 		})
 	}
-	New(Deps{Threads: th, Users: u, Forums: f, Forms: fs, Perm: p}) // all: no panic
+	New(Deps{Threads: th, Users: u, Forums: f, Forms: fs, Applications: as, Perm: p}) // all: no panic
 	func() {
 		defer func() {
 			if recover() == nil {

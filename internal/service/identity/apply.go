@@ -72,10 +72,13 @@ func (s *Service) BeginApplication(ctx context.Context, c Claims, meta session.M
 		if err != nil {
 			return 0, err
 		}
-		// Applying is the identity's first sign-in.
+		// Applying is the identity's first sign-in, and its claims are
+		// recorded with it: the application form prefills its from_claim
+		// fields from them (TKT-01M29CP2KZ).
 		return identityID, q.RecordIdentityLogin(ctx, dbq.RecordIdentityLoginParams{
-			LastLoginAt: sql.NullInt64{Int64: now, Valid: true}, Email: email, EmailVerified: verified,
-			UpdatedAt: now, ID: identityID})
+			LastLoginAt:   sql.NullInt64{Int64: now, Valid: true},
+			RawClaimsJson: sql.NullString{String: string(c.RawClaims), Valid: len(c.RawClaims) > 0},
+			Email:         email, EmailVerified: verified, UpdatedAt: now, ID: identityID})
 	})
 	switch {
 	case errors.Is(err, ErrRegistrationClosed), errors.Is(err, ErrAlreadyRegistered):

@@ -15,6 +15,7 @@ import (
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
@@ -35,7 +36,7 @@ func uncached(w *world) *world {
 	w.writes(svc)
 	c := *w
 	c.svc = svc
-	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Forms: &formsvc.Service{DB: w.db}, Perm: perm.New(w.db)})
+	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Forms: &formsvc.Service{DB: w.db}, Applications: &applications.Service{DB: w.db}, Perm: perm.New(w.db)})
 	return &c
 }
 

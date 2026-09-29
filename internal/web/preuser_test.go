@@ -21,6 +21,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
@@ -41,7 +42,8 @@ import (
 // theAllowlist is what a pre-user may reach, written out so that a change
 // to web.PreUserRoutes is a change to this test too, in the same diff: "GET
 // /api/v1/me, the sign-in routes, POST /auth/logout, /assets, and the /apply
-// and /apply/status pages" (AC2). TKT-01M29CP2KZ adds the application API.
+// and /apply/status pages" (AC2), and the application API TKT-01M29CP2KZ
+// added.
 var theAllowlist = []string{
 	"GET /api/v1/me",
 	"GET /auth/signin",
@@ -51,6 +53,10 @@ var theAllowlist = []string{
 	"GET /assets/",
 	"GET /apply",
 	"GET /apply/status",
+	"GET /api/v1/apply/form",
+	"POST /api/v1/apply",
+	"GET /api/v1/apply/status",
+	"POST /api/v1/apply/withdraw",
 }
 
 // gateWorld is a database with an applicant's pre-user session and a
@@ -94,7 +100,7 @@ func newGateWorld(t *testing.T) *gateWorld {
 	store := &session.Store{DB: d}
 	return &gateWorld{t: t, db: d,
 		deps: api.Deps{Users: &users.Service{DB: d, Perm: p}, Threads: &threads.Service{DB: d, Perm: p},
-			Forums: &forums.Service{DB: d, Perm: p}, Forms: &formsvc.Service{DB: d}, Perm: p, Logger: log},
+			Forums: &forums.Service{DB: d, Perm: p}, Forms: &formsvc.Service{DB: d}, Applications: &applications.Service{DB: d}, Perm: p, Logger: log},
 		auth:    &auth.Handler{Sessions: store, Logger: log},
 		session: session.Middleware(store, log),
 		preUser: sessiontest.PreUser(t, d, applicant, now),

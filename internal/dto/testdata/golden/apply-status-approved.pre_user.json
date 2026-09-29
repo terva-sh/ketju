@@ -1,0 +1,10 @@
+{
+  "status": "approved",
+  "provider": "github",
+  "submitted_at": 1757600000000,
+  "decided_at": 1757610000000,
+  "can_withdraw": false,
+  "can_apply": false,
+  "can_apply_at": null,
+  "sign_in": "/auth/github/start?return_to=/"
+}

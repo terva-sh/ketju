@@ -38,9 +38,6 @@ const ApplyStatusPath = "/apply/status"
 // prevents is a pending applicant posting in a forum (TKT-01M29CKRG9). A
 // pre-user is refused even the public reads an anonymous visitor may make:
 // an applicant who wants to read as a guest signs out.
-//
-// The application endpoints under /api/v1/apply join the list with the
-// ticket that registers them (TKT-01M29CP2KZ).
 var PreUserRoutes = []Route{
 	// Who is signed in: pre_user tells the client to show the status page.
 	{Method: http.MethodGet, Path: APIPrefix + "me"},
@@ -54,6 +51,13 @@ var PreUserRoutes = []Route{
 	// The application form and the status page, served as the shell.
 	{Method: http.MethodGet, Path: "/apply"},
 	{Method: http.MethodGet, Path: ApplyStatusPath},
+	// The application API: the form, submitting it, its status, and
+	// withdrawing it (TKT-01M29CP2KZ). internal/service/applications refuses
+	// anyone but a pre-user on each.
+	{Method: http.MethodGet, Path: APIPrefix + "apply/form"},
+	{Method: http.MethodPost, Path: APIPrefix + "apply"},
+	{Method: http.MethodGet, Path: APIPrefix + "apply/status"},
+	{Method: http.MethodPost, Path: APIPrefix + "apply/withdraw"},
 }
 
 // PreUserGate refuses a pre-user session every request that matches no

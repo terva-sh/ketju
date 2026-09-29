@@ -437,3 +437,26 @@ export interface FormSchemaField {
   locked?: boolean;
   markdown?: string;
 }
+
+// ApplicationForm is GET /apply/form (internal/dto ApplicationForm): the
+// active registration form, and the applicant's claims keyed by the field
+// they prefill. A locked field is stored as its prefill whatever is sent.
+export interface ApplicationForm {
+  form: Form;
+  prefill: Record<string, string>;
+}
+
+// ApplicationStatus is GET /apply/status, and the answer to POST /apply and
+// POST /apply/withdraw (internal/dto ApplicationStatus). status is none,
+// pending, approved, denied or withdrawn. can_apply_at is set only when the
+// 24-hour rule alone stands in the way, and sign_in only when approved.
+export interface ApplicationStatus {
+  status: string;
+  provider: string;
+  submitted_at: Millis | null;
+  decided_at: Millis | null;
+  can_withdraw: boolean;
+  can_apply: boolean;
+  can_apply_at: Millis | null;
+  sign_in: string | null;
+}

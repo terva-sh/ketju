@@ -2,8 +2,10 @@ package identity
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,6 +39,32 @@ func TestBeginApplicationWritesAnApplicant(t *testing.T) {
 	}
 	if u, i, n := count(t, s.DB); u != 0 || i != 1 || n != 1 {
 		t.Errorf("%d users, %d identities, %d sessions; want 0, 1, 1", u, i, n)
+	}
+}
+
+// The identity an application writes records the claims the IdP sent, which
+// the application form prefills from (TKT-01M29CP2KZ), and the email.
+func TestBeginApplicationRecordsTheClaims(t *testing.T) {
+	s, _ := applying(t)
+	c := claims("sub-1")
+	c.RawClaims = json.RawMessage(`{"sub":"sub-1","name":"Someone sub-1","preferred_username":"some1"}`)
+	if _, err := s.BeginApplication(t.Context(), c, session.Meta{Provider: "fake"}, ""); err != nil {
+		t.Fatal(err)
+	}
+	var ident dbq.Identity
+	if err := s.DB.Read(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		ident, err = q.GetIdentityBySubject(t.Context(), dbq.GetIdentityBySubjectParams{ProviderKey: "fake", Subject: "sub-1"})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if ident.RawClaimsJson.String != string(c.RawClaims) || ident.Email.String != "sub-1@example.org" || ident.EmailVerified != 1 {
+		t.Errorf("the identity recorded claims %q, email %q (%d)", ident.RawClaimsJson.String, ident.Email.String, ident.EmailVerified)
+	}
+	// The claim set never rides in the registration cookie.
+	if b, _ := json.Marshal(c); strings.Contains(string(b), "preferred_username") {
+		t.Errorf("Claims marshals the raw claim set: %s", b)
 	}
 }
 

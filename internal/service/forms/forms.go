@@ -83,14 +83,23 @@ func (s *Service) now() time.Time {
 func (s *Service) Active(ctx context.Context, key string) (Version, error) {
 	var v Version
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		f, err := formByKey(ctx, q, key)
-		if err != nil {
-			return err
-		}
-		v, err = load(ctx, q, f, int(f.ActiveVersion))
+		var err error
+		v, err = ActiveIn(ctx, q, key)
 		return err
 	})
 	return v, err
+}
+
+// ActiveIn is Active inside a transaction the caller holds, so a caller that
+// writes against the active version reads it in the same transaction as the
+// write: an application is checked against the version that is active when
+// it is stored, not one read a moment before (internal/service/applications).
+func ActiveIn(ctx context.Context, q *dbq.Queries, key string) (Version, error) {
+	f, err := formByKey(ctx, q, key)
+	if err != nil {
+		return Version{}, err
+	}
+	return load(ctx, q, f, int(f.ActiveVersion))
 }
 
 // Version is version n of the form with id formID, whichever version is

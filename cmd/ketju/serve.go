@@ -27,6 +27,7 @@ import (
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/identity"
@@ -484,7 +485,8 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 
 	var root http.Handler = web.New(web.Groups{
-		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Forms: formSvc, Perm: perms, Logger: log}),
+		API: api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Forms: formSvc,
+			Applications: &applications.Service{DB: d}, Perm: perms, Logger: log}),
 		Auth:   auth.New(authh),
 		Assets: spa.Assets(),
 		Health: health.Handler(health.Options{

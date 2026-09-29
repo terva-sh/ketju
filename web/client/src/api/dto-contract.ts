@@ -15,6 +15,8 @@
 import type {
   AdminUserDetail,
   AdminUserList,
+  ApplicationForm,
+  ApplicationStatus,
   CreatedPost,
   CreatedThread,
   Draft,
@@ -45,6 +47,11 @@ import adminUserModerator from '../../../../internal/dto/testdata/golden/admin-u
 import adminUsersAdmin from '../../../../internal/dto/testdata/golden/admin-users.admin.json';
 import permissionPreviewAdmin from '../../../../internal/dto/testdata/golden/permission-preview.admin.json';
 import permissionsAdmin from '../../../../internal/dto/testdata/golden/permissions.admin.json';
+import applyFormPreUser from '../../../../internal/dto/testdata/golden/apply-form.pre_user.json';
+import applyStatusApprovedPreUser from '../../../../internal/dto/testdata/golden/apply-status-approved.pre_user.json';
+import applyStatusNonePreUser from '../../../../internal/dto/testdata/golden/apply-status-none.pre_user.json';
+import applyStatusPendingPreUser from '../../../../internal/dto/testdata/golden/apply-status-pending.pre_user.json';
+import applyStatusWithdrawnPreUser from '../../../../internal/dto/testdata/golden/apply-status-withdrawn.pre_user.json';
 import createdPostMember from '../../../../internal/dto/testdata/golden/created-post.member.json';
 import createdThreadMember from '../../../../internal/dto/testdata/golden/created-thread.member.json';
 import draftMember from '../../../../internal/dto/testdata/golden/draft.member.json';
@@ -114,6 +121,11 @@ export const contract = [
   matches<AdminUserList>()(adminUsersAdmin),
   matches<PermissionPreview>()(permissionPreviewAdmin),
   matches<PermissionGrid>()(permissionsAdmin),
+  matches<ApplicationForm>()(applyFormPreUser),
+  matches<ApplicationStatus>()(applyStatusApprovedPreUser),
+  matches<ApplicationStatus>()(applyStatusNonePreUser),
+  matches<ApplicationStatus>()(applyStatusPendingPreUser),
+  matches<ApplicationStatus>()(applyStatusWithdrawnPreUser),
   matches<CreatedPost>()(createdPostMember),
   matches<CreatedThread>()(createdThreadMember),
   matches<Draft>()(draftMember),

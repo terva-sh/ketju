@@ -27,6 +27,14 @@ type Querier interface {
 	// triggers in migration 0006 refuse it, and TestAuditLogAppendOnly refuses a
 	// query here that tries.
 	AppendAudit(ctx context.Context, arg AppendAuditParams) (int64, error)
+	// Applications (docs/04 "applications", docs/05 "mode = approval"). An
+	// applicant's own acts, submit and withdraw, are written through
+	// internal/service/applications, which checks every refusal in the
+	// transaction that writes.
+	// ApplicantIdentity is what the application rules read about the identity a
+	// pre-user session is bound to: whether it already has a user, whether it is
+	// blocked, and the claims that prefill the form.
+	ApplicantIdentity(ctx context.Context, id int64) (ApplicantIdentityRow, error)
 	// Whether audit_log already records this action on this target. Bootstrap
 	// promotion reads it as its idempotency marker (TKT-01M29C800G), through the
 	// audit_log_target index.
@@ -183,10 +191,14 @@ type Querier interface {
 	// reads it in the transaction that inserts the session, so nothing can
 	// change it between the check and the row.
 	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
+	InsertApplication(ctx context.Context, arg InsertApplicationParams) (int64, error)
 	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
 	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error
+	// LatestApplicationForIdentity is the identity's newest application, pending
+	// or decided. The 24-hour rule counts from its created_at.
+	LatestApplicationForIdentity(ctx context.Context, identityID sql.NullInt64) (LatestApplicationForIdentityRow, error)
 	ListFormVersions(ctx context.Context, formID int64) ([]ListFormVersionsRow, error)
 	// Roots in position order, each followed by its children in position order.
 	// A child sorts by its root's position and id, then after the root itself.
@@ -349,6 +361,9 @@ type Querier interface {
 	UsersByHandlePrefix(ctx context.Context, arg UsersByHandlePrefixParams) ([]UsersByHandlePrefixRow, error)
 	// The authors on one page of a thread, in one query rather than one per post.
 	UsersByIDs(ctx context.Context, ids []int64) ([]User, error)
+	// WithdrawApplication withdraws the identity's pending application, if it
+	// has one. Zero rows means it had none.
+	WithdrawApplication(ctx context.Context, arg WithdrawApplicationParams) (int64, error)
 }
 
 var _ Querier = (*Queries)(nil)

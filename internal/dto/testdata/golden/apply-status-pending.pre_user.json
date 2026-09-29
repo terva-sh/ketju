@@ -1,0 +1,10 @@
+{
+  "status": "pending",
+  "provider": "github",
+  "submitted_at": 1757600000000,
+  "decided_at": null,
+  "can_withdraw": true,
+  "can_apply": false,
+  "can_apply_at": null,
+  "sign_in": null
+}
