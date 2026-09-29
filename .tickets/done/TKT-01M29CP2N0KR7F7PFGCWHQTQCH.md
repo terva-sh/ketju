@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2N0KR7F7PFGCWHQTQCH
 title: Notify moderators and applicants about applications
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,17 +23,10 @@ blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-cp2n0
-  branch: run/p2n0-application-notifications
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac9445920f8020bc5
-  commit: 3297255509fe896f122bc01ce3d180ba2ef3280e
-  session: null
-  claimed_at: 2026-09-29T23:14:07Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T23:15:37Z
+updated_at: 2026-09-29T23:23:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,11 +44,11 @@ In-app only. docs/10 keeps SMTP out of v1, which means an applicant learns the d
 
 ## Acceptance criteria
 
-- [ ] Submitting an application writes one new_application row naming it for each active user with role moderator or admin, in the submission's transaction, and no row for anyone else (tested against a member, a suspended moderator and a moderators-group member without the role)
-- [ ] The applicant's decision shows on GET /apply/status for both outcomes, and an approved applicant also gets one application_decided row as their new user, written in the approval's transaction
-- [ ] A new_application row counts in each recipient's GET /me notifications, so the Alerts badge shows it in both layouts; the queue's own badge is TKT-01M29CRJ4's
-- [ ] No email is sent or required: a test fails on any net/smtp import under internal/ or cmd/, and no mail setting is added
-- [ ] Closing an application (approve, deny or withdraw) never writes read_at; GET /me's notifications counts a new_application row only while its application is pending, so the badge drops while the row stays unread, tested for all three closings and for other kinds
+- [x] Submitting an application writes one new_application row naming it for each active user with role moderator or admin, in the submission's transaction, and no row for anyone else (tested against a member, a suspended moderator and a moderators-group member without the role)
+- [x] The applicant's decision shows on GET /apply/status for both outcomes, and an approved applicant also gets one application_decided row as their new user, written in the approval's transaction
+- [x] A new_application row counts in each recipient's GET /me notifications, so the Alerts badge shows it in both layouts; the queue's own badge is TKT-01M29CRJ4's
+- [x] No email is sent or required: a test fails on any net/smtp import under internal/ or cmd/, and no mail setting is added
+- [x] Closing an application (approve, deny or withdraw) never writes read_at; GET /me's notifications counts a new_application row only while its application is pending, so the badge drops while the row stays unread, tested for all three closings and for other kinds
 
 ## Implementation plan
 
@@ -114,3 +107,26 @@ Engineering decisions taken here, with the alternative that lost:
 - The post notification kinds: TKT-01M29CRJ2T (Phase 3).
 - The moderator queue's own count badge: TKT-01M29CRJ4.
 - Email: docs/10 item 12, a later phase.
+
+## Notes
+
+**agent:claude-code/phase2-run-cp2n0** at 2026-09-29T23:23:10Z
+
+2026-09-30, at the close of the build (commit e9d45de on run/p2n0-application-notifications). The criteria and the plan leave two points open, and this note records how the build treats them.
+
+1. **Criterion 2 is ticked as the maintainer's 2026-09-29 decision on TKT-01M3Q2V25E reworded it.** The criterion says the decision shows on `GET /apply/status` for both outcomes. A denied applicant sees `denied` with `decided_at` there, which `TestDeniedApplicantSeesTheStatus` checks, and no notification is written. An approved applicant cannot reach the status page after approval: their pre-user session stops resolving and is deleted in the approval's transaction (TKT-01M29CP2MG). They learn the decision by signing in, and the maintainer chose that on TKT-01M3Q2V25E. The `application_decided` row waits for them there. `TestApprovedApplicantIsNotified` checks the row, which names the member, the application and the moderator. It checks that a refused insert rolls the approval back. It also checks that `GET /me` counts 1 after signing in through `identity.Login` and the session middleware. TKT-01M29CP2MG's criterion 2 was ticked the same way.
+
+2. **No migration.** The prompt allowed for one, but migration 0011's triggers `notifications_application_kind` and `notifications_application_kind_update` already enforce "application_id is set for the two application kinds and for no other". `TestApplicationNotificationsNameTheApplication` holds them. A CHECK constraint would need a table rebuild and would add nothing. So this ticket takes no migration number and cannot collide with the suspension or flags lanes.
+
+Criterion 3's "Alerts badge in both layouts" rests on the existing shell (TKT-01M29CEE4K), which renders `GET /me`'s `notifications`. The client and the dist are unchanged. `TestNewApplicationCountsInMe` shows the number rising by one per `POST /api/v1/apply` and falling after a denial through `POST /api/v1/admin/applications/{id}/deny`.
+
+## Summary
+
+Applications now notify in-app, through the new `internal/service/notify` package. Each row is written in the transaction of the act that causes it.
+
+- `applications.Submit` writes one `new_application` row, naming the application, for every active user with role moderator or admin, agents included (`NotifyStaffOfApplication`, one INSERT ... SELECT). A member, a suspended or deactivated staff user, and a moderators-group or admins-group member without the role get none. If the insert is refused, the submission is refused too.
+- `applications.Approve` writes one `application_decided` row for the member it created, with the moderator as actor. A denial and a withdrawal write none. A denied applicant sees `denied` on `GET /apply/status`. An approved applicant finds the row after signing in (TKT-01M3Q2V25E).
+- Nothing writes `read_at`. `MeCounts` counts a `new_application` row only while its application is pending, so `GET /me`'s `notifications` and the Alerts badge drop when an application closes, and the row stays unread for Phase 3's list.
+- `TestNoMailIsSent` fails on any `net/smtp` import in non-test Go under `internal/` or `cmd/`.
+
+No migration was needed, because migration 0011's triggers already enforce `application_id` for the two kinds. There is no client or dist change. The change is described in docs/04 "notifications", docs/05 steps 3 and 5, and the docs/07 `GET /me` row. All five criteria are ticked, criterion 2 as TKT-01M3Q2V25E reworded it (see the 2026-09-30 note).
