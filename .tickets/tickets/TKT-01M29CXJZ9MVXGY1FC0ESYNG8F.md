@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-29T14:47:00Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -58,10 +58,14 @@ The rendered-post cache and the search index both hold copies of the text, so re
 - [ ] A pending redaction.journal is resumed before any already-redacted check, so a rerun right after the named post's swap finishes, while naming a redacted post with no journal pending is refused (TestRedactResumeRightAfterTheSwap)
 - [ ] ketju redact has two forms, the redaction and ketju redact --root DIR --resume [--dry-run], its usage text lists both, and the serve refusal names the --resume form; any other combination exits 2 (TestRedactUsage)
 - [ ] --dry-run writes nothing in either form, and with a journal pending it reports the remaining work instead of resuming (TestRedactDryRunWritesNothing)
+- [ ] ketju redact THREAD title blanks title and slug in ThreadCreated and every earlier ThreadRenamed, keeping forum_id and tags, each frame at its original length with a valid CRC, and no byte of an earlier title or slug remains (TestRedactTitleBlanksEveryTitleFrame)
+- [ ] A title redaction appends Redacted {ordinal 0, title true} and then a ThreadRenamed to Title removed, or the operator's --title, so the thread shows the replacement after catch-up and after reindex, and log_length only grows (TestRedactTitleShowsTheReplacement, TestRedactedTitleCatchUpEqualsReindex)
+- [ ] A title marker touches no index entry or post_meta row, and an old slug still redirects by id to the replacement's slug (TestTitleMarkerTouchesNoPost, TestOldSlugRedirectsAfterTitleRedaction)
+- [ ] A title redaction writes one thread.title_redacted audit row with no title text, resumes from its journal after any step, and a later title redaction of the same thread is allowed (TestRedactTitleAuditHasNoTitle, TestRedactTitleResumes, TestRedactTitleUsage)
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). None of this exists yet: there is no `Redacted` type in the catalogue, no `origin` field, no journal, and no search index.
+Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Revised the same day for the title decision on TKT-01M3NS147C. None of this exists yet: there is no `Redacted` type in the catalogue, no `origin` field, no journal, and no search index.
 
 ### Settled in grooming
 Maintainer decisions of 2026-09-28, recorded in docs/03 "Hard redaction", docs/10 item 4 and the notes on TKT-01M29BSPE2:
@@ -75,6 +79,18 @@ Maintainer decisions of 2026-09-28, recorded in docs/03 "Hard redaction", docs/1
 - Quotes of the post in other posts are listed for the operator and never edited.
 - The action is written to `audit_log`, and the thread's index and projections are brought up to date.
 - Types 20 and 21 are advisory, so a log carrying them is read by skipping them (docs/03, decided 2026-09-28).
+
+Maintainer decision of 2026-09-29 on TKT-01M3NS147C (Decide how a thread title is hard-redacted), accepting grooming's recommendation, recorded in docs/03 "Hard redaction":
+- **`ketju redact` accepts a thread title.** It blanks `title` and `slug` in the `ThreadCreated` frame and in every `ThreadRenamed` frame before the marker, keeping `ThreadCreated`'s `forum_id` and `tags`. Each frame is padded to its original length and re-checksummed as post frames are, so the log never shrinks.
+- **The thread then shows "Title removed"**, through a `ThreadRenamed` the command appends after the marker, or the title the operator gives with `--title`. Every surface reads the projection's title as it does after any rename, so no reader, projection or client needs a special case.
+- **Old slugs keep redirecting by id.** Nothing stores them. A stale slug redirects to the replacement's slug as it would after any rename (docs/07).
+- **The marker is `Redacted` (0x80) with `ordinal: 0` and `title: true`**: every title frame before it was blanked. There is one critical type for posts and titles, and it lands here, so no build knows `Redacted` without the field.
+- **Audit rows never carry title text.** TKT-01M29CKRH9's `thread.renamed` rows record `{thread, log_offset}` only, so a redaction leaves no copy of a title in the append-only `audit_log`. This command's own row for a title carries no title either.
+
+Engineering choices for the title target, taken in this revision:
+- **The target is named by the word `title` in place of ORDINAL**: `ketju redact --root DIR --operator HANDLE --reason TEXT [--title TEXT] [--dry-run] THREAD title`. `--title` is accepted only with that target, and is checked by `threads.checkTitle`'s rules. One target per run. A takedown of a title and its opening post is two runs, each with its own journal. Lost: a separate `redact-title` command, which would duplicate the lock, journal, resume and dry-run handling. Also lost: several targets in one run, which the journal format and the "a post is redacted once" marker do not model.
+- **A title can be redacted more than once.** A moderator may later rename the thread to something that also has to go. So the resume marker for a title target is the journal id. `AuditExists` matches `thread.title_redacted` on `details.journal`, not on the thread. The log check is "carries a `Redacted` record with `title: true` whose `reason` and `operator` match the journal", scanning the whole log as `RedactedOrdinals` does. A second title redaction blanks every title frame before its own marker, including the earlier replacement.
+- **No origin following, attachments or quotes for a title.** A split gives the new thread its own title, and nothing quotes a title.
 
 Settled here as engineering choices, to be written into docs/03 in the same PR:
 - **The log never gets shorter.** docs/03 "Caching" makes the log length the thread's version number: monotonic, the ETag, the response-cache key and the live-update offset. The client refuses a page whose `log_length` is lower than the one it holds (`storeThreadPage`, `web/client/src/state/threads.ts:144`), so a tab open across the redaction would keep showing the removed text. An ETag equal to an earlier length would also let a browser revalidate a cached copy that still holds the text. So each rewritten frame keeps its **exact original length**. Its body is the empty body of its type, keeping only `reply_to`, plus a `pad` key: a byte string of zeros (CBOR) or a string of `0` characters (JSON, encoding 2), sized so that the frame length is unchanged. The new log is therefore the old log's length plus the appended `Redacted` frames, one per target ordinal in that log. Every offset in the index, in `post_meta.log_offset` and in `projection_state` stays valid, and the index and projection bring themselves current by replaying only the appended frames. Alternatives that lost:
@@ -101,17 +117,17 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
 - **The operator** is named with `--operator HANDLE`, which must be an active admin (docs/08: "admin, CLI only"). The reason is required.
 
 ### Approach
-1. **Catalogue** (`internal/store/threadlog/records.go`): `TypeRedacted RecordType = 0x80`, and `RedactedBody{Ordinal uint32 "ordinal"; Revisions []uint32 "revisions"; Reason string "reason"; Operator uint64 "operator"}`, added to `catalogue` and `typeNames`. Add `PostBody.Origin *PostOrigin` (`origin`, `{thread_id uint64, ordinal uint32}`), the shape docs/03 gives for split and merge. This ticket reads it and TKT-01M29CXJZZ writes it. Update the docs/03 type table row, the frame-flags/index-entry table (bit 6), and "Hard redaction" with the padding and log-length rule above.
-2. **Index** (`apply.go`, `flags.go`): a `*RedactedBody` case in `Index.Apply`, with `postFlagEffect(TypeRedacted)` returning set `EntryRedacted`, clear `EntryHasAttachments`. Add `EntryRedacted = 1 << 6` to `EntryFlagsKnown`. `Visible()` excludes `EntryRedacted`.
+1. **Catalogue** (`internal/store/threadlog/records.go`): `TypeRedacted RecordType = 0x80`, and `RedactedBody{Ordinal uint32 "ordinal"; Revisions []uint32 "revisions"; Reason string "reason"; Operator uint64 "operator"; Title bool "title,omitempty"}`, where `Title` true means the thread's title frames and `Ordinal` is 0, added to `catalogue` and `typeNames`. Add `PostBody.Origin *PostOrigin` (`origin`, `{thread_id uint64, ordinal uint32}`), the shape docs/03 gives for split and merge. This ticket reads it and TKT-01M29CXJZZ writes it. Update the docs/03 type table row, the frame-flags/index-entry table (bit 6), and "Hard redaction" with the padding and log-length rule above.
+2. **Index** (`apply.go`, `flags.go`): a `*RedactedBody` case in `Index.Apply`, with `postFlagEffect(TypeRedacted)` returning set `EntryRedacted`, clear `EntryHasAttachments`. A title marker (`Title` true, ordinal 0) touches no post entry and sets no flag. `Index.Apply` must not look up post 0. Add `EntryRedacted = 1 << 6` to `EntryFlagsKnown`. `Visible()` excludes `EntryRedacted`.
 3. **Reader and service**:
    - `Reader.HiddenEntry` returns the tombstone for a redacted entry, so a moderator never decodes the padded body.
    - `service/threads/view.go` skips the moderator `HiddenEntry` path for redacted posts.
    - `History` (`service/threads/posts.go:137`) lists revisions with empty `source` and `reason` for a moderator. A member sees the same as for a deleted post.
    - `dto.Post` and `dto.PostHistory` gain `redacted bool` (omitempty), with goldens, and docs/07 gains a sentence on it.
    - `service/threads/mutate.go` adds `EntryRedacted` to the `Append.Refuse` set of Edit, Delete and Restore, so each is a `conflict` (`threadlog.ErrPostState`).
-4. **Projection** (`internal/events/projection/apply.go`): `applyRedacted` sets `post_meta.deleted = 1` for the ordinal and deletes its `mentions` rows, so catch-up of the one frame equals a reindex of the new log. Add the type to the decisions in `TestEveryRecordTypeHasADecision` (`writer_test.go:261`).
-5. **Rewrite** (new `internal/store/threadlog/redact.go`): `RedactLog(src, dst *os.File, targets []RedactedBody) (Rewrite, error)` takes every target ordinal in the log. It walks the source with `ScanFrames`, copies every frame, and for each `Post`/`Edit` of a target ordinal writes `blankBody(h, body, len)` through `AppendFrame`, which recomputes the CRC. It then appends one `Redacted` frame per target, in ordinal order. It refuses a source with any CRC failure or unknown critical record: redaction runs on a sound log or not at all, so fsck first. `Rewrite` reports the revisions cleared, the attachment hashes removed and the origin found. `RedactedOrdinals(log)` answers the resume check by scanning the whole log for `Redacted` records.
-6. **Command** (new `cmd/ketju/redact.go`, registered in `main.go`), in two forms: `ketju redact --root DIR --operator HANDLE --reason TEXT [--dry-run] THREAD ORDINAL`, where THREAD is the base32 id, and `ketju redact --root DIR --resume [--dry-run]`. `--resume` with `--operator`, `--reason` or any argument, or the first form missing any of its parts, is a usage error (exit 2). The usage text lists both forms and the exit codes.
+4. **Projection** (`internal/events/projection/apply.go`): `applyRedacted` sets `post_meta.deleted = 1` for the ordinal and deletes its `mentions` rows (a title marker changes no row: the appended `ThreadRenamed` sets the title through `applyRenamed`), so catch-up of the one frame equals a reindex of the new log. Add the type to the decisions in `TestEveryRecordTypeHasADecision` (`writer_test.go:261`).
+5. **Rewrite** (new `internal/store/threadlog/redact.go`): `RedactLog(src, dst *os.File, targets []RedactedBody) (Rewrite, error)` takes every target ordinal in the log. It walks the source with `ScanFrames`, copies every frame, and for each `Post`/`Edit` of a target ordinal writes `blankBody(h, body, len)` through `AppendFrame`, which recomputes the CRC. It then appends one `Redacted` frame per target, in ordinal order. `RedactTitle(src, dst *os.File, marker RedactedBody, replacement ThreadRenamedBody, actor uint64) (Rewrite, error)` is its title counterpart. It blanks `title` and `slug` in `ThreadCreated` (keeping `forum_id` and `tags`) and in every `ThreadRenamed`, with `blankTitle(h, body, len)` padding each frame to its length. Then it appends the marker and the replacement `ThreadRenamed`, both with the operator as actor. It refuses a source with any CRC failure or unknown critical record: redaction runs on a sound log or not at all, so fsck first. `Rewrite` reports the revisions cleared, the attachment hashes removed and the origin found. `RedactedOrdinals(log)` answers the resume check by scanning the whole log for `Redacted` records.
+6. **Command** (new `cmd/ketju/redact.go`, registered in `main.go`), in two forms: `ketju redact --root DIR --operator HANDLE --reason TEXT [--title TEXT] [--dry-run] THREAD ORDINAL|title`, where THREAD is the base32 id, and `ketju redact --root DIR --resume [--dry-run]`. `--title` without the `title` target is a usage error. `--resume` with `--operator`, `--reason` or any argument, or the first form missing any of its parts, is a usage error (exit 2). The usage text lists both forms and the exit codes.
    - It takes `lock.Acquire(root, "redact")` for the whole run. A `HeldError` is refused with the same wording and exit code reindex uses (stop ketju serve first).
    - It opens the database with `openDatabase(..., migrate=false)` and refuses when `needDatabase` fails.
    - It first looks for `<root>/redaction.journal`. If one exists and the run is `--resume` or names the journal's post, it resumes (step 7), with no check on the post's state. A dry run instead reports the remaining work and writes nothing (settled above). A different post is refused. `--resume` with no journal is a usage error saying nothing is pending.
@@ -121,17 +137,17 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
      - List quotes: every revision of every post in each affected thread whose source quotes the ordinal. Export the quote regex from `internal/render/quote.go` as `render.QuotedOrdinals(source) []uint32`, because quotes are same-thread only.
      - Collect the attachment hashes of every target from **every** `Post` and `Edit` frame of that ordinal (`attachmentsOf`), from the logs as they are before any rewrite. The union per target goes in the journal.
    - `--dry-run` prints the plan and writes nothing, in either form and whether or not a journal is pending.
-7. **Journal**: `<root>/redaction.journal`, JSON `{id (ULID), operator_id, reason, created_at, named {thread, ordinal}, targets [{thread, ordinal, attachments []}], quotes [...]}`. It is written to a temp file, fsynced, renamed into place, and the directory fsynced, all before any log is touched. If a journal exists, `ketju redact` resumes it, when run as `--resume` or when named with the same target, and not under `--dry-run`. A different target is refused (exit 2), naming the pending one and `--resume`. Any leftover `<id>.log.redact` temp file is removed on resume.
+7. **Journal**: `<root>/redaction.journal`, JSON `{id (ULID), operator_id, reason, created_at, named {thread, ordinal}, targets [{thread, ordinal, attachments []}], quotes [...]}`. A title redaction writes `named {thread, title: true}`, `replacement` (the title), one target `{thread, title: true}`, and no quotes or attachments. It is written to a temp file, fsynced, renamed into place, and the directory fsynced, all before any log is touched. If a journal exists, `ketju redact` resumes it, when run as `--resume` or when named with the same target, and not under `--dry-run`. A different target is refused (exit 2), naming the pending one and `--resume`. Any leftover `<id>.log.redact` temp file is removed on resume.
 8. **Per log**, with the journal's targets grouped by thread, in thread-id order:
    - `RedactedOrdinals`: every journaled ordinal of this log is marked, so skip it; none, so rewrite it; some, so refuse as damage (exit 1) and leave the journal in place.
    - To rewrite, write `<id>.log.redact` beside the log, fsync it, rename it over `<id>.log`, and fsync the shard directory. Use one helper, `fsutil.ReplaceFile`, in a new `internal/fsutil` package, with an exported `SyncDir`. Today's `syncDir` is unexported in `internal/store/db/db.go:88`, and the index writers in fsck and `threadcache` do not fsync the directory.
    - Then bring the index current: `threadlog.Open` (which reports `Extended`), then write the `.idx` through `ReplaceFile`.
    - Then bring the projection current with `projection.Writer.ProjectThread(ctx, id, size)` (`writer.go:375`), which projects the appended frames.
-9. **References and audit, one transaction.** In one `db.Write`: check `AuditExists`, and if the row is there, do nothing. Otherwise, for each (target, hash) in the journal, run `DropBlobRef` once. That is one reference per post that listed the hash, as refcount counts posts (docs/03 "Attachments"). A row already at zero, or missing, is skipped and noted in the audit details as drift, not driven below zero. Then `AppendAudit` of the `post.redacted` row as settled above, with `blobs_planned` and no claim of deletion.
+9. **References and audit, one transaction.** In one `db.Write`: check `AuditExists`, and if the row is there, do nothing. Otherwise, for each (target, hash) in the journal, run `DropBlobRef` once. That is one reference per post that listed the hash, as refcount counts posts (docs/03 "Attachments"). A row already at zero, or missing, is skipped and noted in the audit details as drift, not driven below zero. Then `AppendAudit` of the `post.redacted` row as settled above, with `blobs_planned` and no claim of deletion. A title redaction writes, in its own `db.Write` after the swap and the projection, `thread.title_redacted` with target `audit.Thread(id)` and details `{reason, journal, frames_blanked, replacement_by_operator: bool, via: "cli"}`. The details hold no title text, old or new, and `AuditExists` on `details.journal` is its resume marker.
 10. **Blob files**, from the journal's hashes, after that commit: delete a blob only when no log names it (`referencedInLogs`, exported from `internal/jobs`), no avatar names it, and no draft names it. One `db.Write` per blob deletes its row (`DeleteCollectableBlob` with the cutoff set to now, which re-checks refcount zero and no draft or avatar naming it) and appends its `blob.deleted` row. No file is touched inside that transaction. After it commits, remove the blob file and any `<hash>.gc`, then fsync the shard directory. On resume, a journal hash with no row has its file and `.gc` removed if still present, and gets no second `blob.deleted` row. There is no seven-day grace. A redaction is deliberate, and the grace exists for uploads not yet attached. A blob another post still names stays.
 11. **Finish**: delete the journal and fsync the directory. Print the quotes list and a reminder that backups and filesystem snapshots still hold the old bytes.
 12. **Serve**: a `redaction` step in `serve()` (`cmd/ketju/serve.go`) right after the lock step (`:212-223`) and before the database step. It refuses to start while `<root>/redaction.journal` exists, naming `ketju redact --root DIR --resume`.
-13. **Docs**: README gains an operations entry for `ketju redact`. docs/03 is updated as in step 1, and "Hard redaction" gains the three review-1345 rules above: the transitive copy set, the hashes in the journal, and the audit row as the reference-drop marker.
+13. **Docs**: README gains an operations entry for `ketju redact`, including the `title` target. docs/03's type table row for `Redacted` gains the `title` field. docs/03 is updated as in step 1, and "Hard redaction" gains the three review-1345 rules above: the transitive copy set, the hashes in the journal, and the audit row as the reference-drop marker.
 
 ### Tests
 - threadlog:
@@ -169,13 +185,22 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
   - `TestRedactWritesOneAuditRow`;
   - `TestRedactResumesAfterEachStep`, which injects a failure after the journal, after each rename, before and after the directory fsync, after the projection, after the reference-and-audit transaction, and after each blob file delete. It reruns each case and asserts one `Redacted` record per target ordinal, one `post.redacted` row, one `blob.deleted` row per deleted blob, no journal left, and serve then starts and serves the tombstone;
   - `TestRedactRefusesASecondRedaction`.
+- title redaction:
+  - `TestRedactTitleBlanksEveryTitleFrame`: a thread with two renames. No byte of any of its three titles or slugs remains in the log. `forum_id` and `tags` survive. Every earlier frame keeps its length and passes its CRC.
+  - `TestRedactTitleShowsTheReplacement`: after the run, the thread page header, the thread list row and `threads.title` read "Title removed", or the operator's `--title`. `log_length` and the ETag are greater than before.
+  - `TestRedactedTitleCatchUpEqualsReindex`: a `dbtest` dump after catch-up equals one after `ketju reindex`.
+  - `TestTitleMarkerTouchesNoPost`: an ordinal-0 title marker changes no index entry or `post_meta` row, and an older catalogue without `Redacted` refuses the log.
+  - `TestOldSlugRedirectsAfterTitleRedaction`: `/t/{id}/{old-slug}` is replaced by the replacement's slug (client), and the API serves the thread by id.
+  - `TestRedactTitleAuditHasNoTitle`: one `thread.title_redacted` row whose details contain none of the old titles or the replacement. The appended rename's `thread.renamed` row (TKT-01M29CKRH9) carries only `{thread, log_offset}`.
+  - `TestRedactTitleResumes`: failures injected after the journal, after the swap and after the projection each finish on rerun with one marker and one audit row. A second, later title redaction of the same thread succeeds and blanks the first replacement too.
+  - `TestRedactTitleUsage`: `--title` with an ordinal target is exit 2, and a `--title` over 200 characters or holding a control character is refused before anything is written.
 
 ### Out of scope
 - The search index. There is no FTS table in this build; it arrives with TKT-01M29CRJ3B (phase-3). Clearing it on redaction is TKT-01M3NS122F (Clear the search index in the hard-redaction tool), which depends on both.
 - The in-memory render and response caches. They live only in a serve process, and this command runs only while none holds the lock; the tests above prove the restarted server serves the tombstone.
 - Writing `origin` on split and merge. TKT-01M29CXJZZ, which now depends on this ticket.
 - Thumbnails, which have no name yet (docs/03 "Blob garbage collection"). Upload and attach are TKT-01M29CXK0 (phase-3).
-- A thread title. It lives in `ThreadCreated` and `ThreadRenamed` bodies, and docs/03 does not say how it is redacted. That is TKT-01M3NS147C (Decide how a thread title is hard-redacted).
+- Title text in `audit_log`: TKT-01M29CKRH9 writes none (decided 2026-09-29). A title in the search index is TKT-01M3NS122F's to clear once the index exists.
 - Backups and filesystem snapshots, which the command reminds the operator of and cannot reach.
 
 ## Notes

@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:18:23Z
+updated_at: 2026-09-29T14:47:00Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -49,14 +49,14 @@ Retag was split out in Phase 2 grooming on 2026-09-29. Thread tags are Phase 4 (
 - [ ] A move needs moderate in both forums: forbidden without it in the destination, not-found for a destination hidden from the mover, conflict for an archived destination unless the mover is an admin; a refusal appends nothing
 - [ ] An author may rename their own thread until threads.rename_window_seconds after its creation, then gets rename-window-closed with the log unchanged; a moderator may rename at any time
 - [ ] After ketju reindex a thread's title, slug and forum equal its last rename and move records, and forum_thread_counts follows the move
-- [ ] A moderator's rename and every move write one audit_log row with the actor and the from and to values
 - [ ] A page cached before a rename or a move is not served after it (TestRenameMovesTheResponseCacheKey)
 - [ ] No ThreadTagged record is written and no tag route is served: retag belongs to TKT-01M29CYSCP (phase 4)
 - [ ] threads.rename_window_seconds defaults to 86400, and an author's rename writes no audit row (TestAuthorRenameIsNotAudited)
+- [ ] A moderator's rename writes one thread.renamed audit row with details {thread, log_offset} and no title text, and every move writes one row with the actor and {from_forum, to_forum} (TestRenameAuditCarriesNoTitle)
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a.
+Groomed 2026-09-29 against main at 7af2c5a. Revised the same day for the title decision on TKT-01M3NS147C.
 
 ### Settled in grooming
 
@@ -67,12 +67,13 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - **Who may rename**: a moderator at any time, and the thread's author (`threads.author_id`, the `ThreadCreated` actor) within a window (docs/08 "Primitives"). **Who may move**: a moderator (docs/08; docs/07 "Moderation and admin").
 - **A move needs `moderate` in both forums.** It is `forbidden` without `moderate` in the destination, `not-found` when the destination is hidden from the mover, and `conflict` when the destination is archived and the mover is not an admin (docs/04 archived forums; TKT-01M3N24RHD). Moving a thread out of an archived forum is a moderator's to do (maintainer decision 2026-09-29 on TKT-01M3N24RHD). `create_thread` in the destination lost as the test: it would let a moderator of one forum push threads into a forum they do not moderate, where they could not move them back.
 - **Response cache.** Both records are appends and move the log length in `respcache.Key`. The header is drawn from the projection row, uncached, and the synchronous projection in step 2 keeps `access` reading the new forum at once.
+- **A rename's audit row carries no title text.** This is a maintainer decision of 2026-09-29 on TKT-01M3NS147C (Decide how a thread title is hard-redacted), recorded in docs/03 "Hard redaction". A moderator's `thread.renamed` row records `{thread, log_offset}` only, never the old or new title. The log is the record of what the title was. `audit_log` is append-only, so a title copied into it could never be removed by `ketju redact` (TKT-01M29CXJZ9). `{from, to}` titles lost for that reason. A move keeps `{from_forum, to_forum}`, which are ids, not user text.
 
 ### Approach
 
 1. **Setting**: `threads.rename_window_seconds` in `internal/settings/settings.go`, `atLeast(0)`, with a docs/04 settings row (`TestKeysDocumented`). The default is 86400 (settled above). The window is measured from the thread's `created_at`.
 2. **Service** in `internal/service/threads/moderate.go`, through TKT-01M29CKRGS's `appendEvent` (append, synchronous projection). Audit rows come from the projection writer (TKT-01M29CKRGS step 1, revised for Terva review 1352): every `ThreadMoved` is audited, and a `ThreadRenamed` is audited when its actor is not `threads.author_id`, so an author's rename of their own thread writes no row:
-   - `Rename(ctx, v, id, title)`: title through `checkTitle`, slug from `Slug(title)`. A moderator may rename at any time. The thread's author, without `moderate`, may rename within the window, needs `reply` in the forum, and is refused in a locked thread (`conflict`), as a member's edit is. Past the window the author gets the new code `rename-window-closed` (403). Anyone else is `forbidden`. An archived thread is `conflict`. A title equal to the current one is `conflict` (no no-op records). Only a moderator's rename is audited, as `thread.renamed` with `{from, to}`. An author renaming their own thread is not a moderation action, and it is in the log either way.
+   - `Rename(ctx, v, id, title)`: title through `checkTitle`, slug from `Slug(title)`. A moderator may rename at any time. The thread's author, without `moderate`, may rename within the window, needs `reply` in the forum, and is refused in a locked thread (`conflict`), as a member's edit is. Past the window the author gets the new code `rename-window-closed` (403). Anyone else is `forbidden`. An archived thread is `conflict`. A title equal to the current one is `conflict` (no no-op records). Only a moderator's rename is audited, as `thread.renamed` with details `{thread, log_offset}` and no title text (settled above). An author renaming their own thread is not a moderation action, and it is in the log either way.
    - `Move(ctx, v, id, forumSlug)`: `canModerate` on the source, then the destination's refusals in the settled order. Moving to the current forum is `conflict`. Audited as `thread.moved` with `{from_forum, to_forum}`.
 3. **Problem code** `rename-window-closed`, 403, with a fixed title, in `internal/problem/problem.go` and `testdata/catalogue.json`. It sits beside TKT-01M29CKRHS's `edit-window-closed` and `delete-window-closed`. `forbidden` with extra text lost: problem bodies never carry request-derived text (docs/07 "Error catalogue"), and a client cannot switch on a title.
 4. **Routes**: `PATCH /api/v1/threads/{id}` with `{title}`, for both author and moderator, because the service decides who may. A second `/admin` rename route lost: it would double one action. `POST /api/v1/admin/threads/{id}/move` with `{forum}`, the destination slug. Both answer 200 `dto.ThreadHeader` with `no-store` and are charged to the write limiter.
@@ -85,7 +86,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - `TestRenameRefusals`: a member who is not the author is `forbidden`; a locked thread is `conflict` to the author; an archived thread is `conflict`; the same title is `conflict`. Each appends nothing.
 - `TestMoveNeedsModerateInBothForums`: `forbidden` without `moderate` in the destination; `not-found` for a destination hidden from the mover; `conflict` for an archived destination to a moderator; success for an admin into an archived one. After a move into a restricted forum, a member without read there gets `not-found` on the next request, which the synchronous projection makes true at once.
 - `TestRenameAndMoveSurviveReindex`: a log with two renames and a move reindexes to the last title, slug and forum, and `forum_thread_counts` moves the thread's counts.
-- Audit: a moderator rename and a move each write one row with the actor and from/to, with target `audit.Thread(id)`. An author rename leaves `audit_log` unchanged, including after `ketju reindex` (`TestAuthorRenameIsNotAudited`).
+- Audit: a moderator rename and a move each write one row with the actor and target `audit.Thread(id)`. A move's details are `{from_forum, to_forum}`. `TestRenameAuditCarriesNoTitle`: a rename's details are exactly `{thread, log_offset}`, and neither the old nor the new title appears anywhere in the row. An author rename leaves `audit_log` unchanged, including after `ketju reindex` (`TestAuthorRenameIsNotAudited`).
 - **Response cache invariant**, `TestRenameMovesTheResponseCacheKey`: a cached page is a miss after a rename, and the new header carries the new title and slug.
 - **Stale slug**, client (`view.test.tsx` and `ThreadPage.test.tsx`): after the served header's slug changes, `/t/{id}/{old}?page=2&lens=author` is replaced by `/t/{id}/{new}?page=2&lens=author` with the hash kept, and `/t/{id}/{old}/7/history` by `/t/{id}/{new}/7/history`.
 

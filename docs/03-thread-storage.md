@@ -366,6 +366,15 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   if the takedown covers them. It never edits them silently.
 - **Audit.** The action is written to `audit_log`, and the index and
   projections for the thread are rebuilt.
+- **Titles.** Decided 2026-09-29 (TKT-01M3NS147C): the command also redacts
+  a thread's title, because a takedown or an erasure can cover a title as
+  easily as a post, and a rename leaves every earlier title in the log. It
+  blanks `title` and `slug` in `ThreadCreated`, keeping
+  `forum_id` and `tags`, and in every `ThreadRenamed`, each padded so the log
+  never shrinks. It appends `Redacted` with `ordinal` 0 and `title` set, then a
+  `ThreadRenamed` to "Title removed" or the operator's `--title`. Old slugs
+  keep redirecting by id. Rename audit rows record only the thread and log
+  offset, so no copy of the title survives in the append-only `audit_log`.
 
 **Split and merge are the hardest events.** The chosen model: posts are copied
 into the target thread's log as new `Post` records with an `origin

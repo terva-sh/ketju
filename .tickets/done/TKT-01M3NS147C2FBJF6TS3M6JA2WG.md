@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS147C2FBJF6TS3M6JA2WG
 title: Decide how a thread title is hard-redacted
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:35Z
-updated_at: 2026-09-29T07:21:01Z
+updated_at: 2026-09-29T14:47:28Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -45,8 +45,8 @@ Found while planning TKT-01M29CXJZ9 (Build the offline hard-redaction tool), who
 
 ## Acceptance criteria
 
-- [ ] The decision is recorded in docs/03 Hard redaction with the reasoning
-- [ ] If titles are redacted, the work is filed or folded into TKT-01M29CXJZ9 before that ticket is claimed
+- [x] The decision is recorded in docs/03 Hard redaction with the reasoning
+- [x] If titles are redacted, the work is filed or folded into TKT-01M29CXJZ9 before that ticket is claimed
 
 ## Notes
 
@@ -96,3 +96,23 @@ Options and a recommendation, written in Phase 2 grooming (TKT-01M3M9RR26) on 20
 ### Recommendation
 
 A, with i as the default and ii as an option; keep old slugs redirecting; M1, folded into TKT-01M29CXJZ9 before it is claimed (this ticket's second criterion); and a, a change to TKT-01M29CKRH9's plan before that ticket is claimed. The search index drops the title when TKT-01M3NS122F exists. A second critical type (M2) is the fallback if TKT-01M29CXJZ9 lands before this is decided.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T14:47:27Z
+
+Decision, 2026-09-29. The maintainer accepted the recommendation in the previous note exactly as written. It supersedes that note's "Nothing here is decided".
+
+- **`ketju redact` accepts a title** (option A). It blanks `title` and `slug` in `ThreadCreated` and every `ThreadRenamed`, keeping `ThreadCreated`'s `forum_id` and `tags`, each frame padded so the log never shrinks.
+- **The thread shows "Title removed"** through an appended `ThreadRenamed`, or a title the operator gives with `--title` (options i and ii).
+- **Old slugs keep redirecting by id.** Nothing stores them.
+- **The marker is M1**: `Redacted` (0x80) with `ordinal: 0` and a `title` field.
+- **Audit rows, option (a)**: rename audit rows record only the thread and the log offset, never the title text.
+
+Where it is recorded:
+- docs/03 "Hard redaction" gains a "Titles" bullet with the rule and its reasons.
+- TKT-01M29CXJZ9 (Build the offline hard-redaction tool) carries the decision under "Settled in grooming", with the command form (`THREAD title`, `--title`), the journal and resume rules for a title, a `thread.title_redacted` audit row with no title text, and four new criteria. It had not been claimed.
+- TKT-01M29CKRH9 (Implement thread rename and move) carries the audit rule under "Settled in grooming", and its audit criterion now requires `{thread, log_offset}` with no title text. It had not been claimed.
+- The search index is still TKT-01M3NS122F's to clear once it exists.
+
+## Summary
+
+Decided 2026-09-29 by the maintainer, on grooming's recommendation: ketju redact accepts a thread title, blanking title and slug in ThreadCreated (keeping forum_id and tags) and every ThreadRenamed, padded so the log never shrinks; the thread then shows 'Title removed' through an appended rename, or the operator's --title; old slugs keep redirecting by id; the marker is Redacted 0x80 with ordinal 0 and a title field; rename audit rows record only the thread and log offset. Recorded in docs/03 'Hard redaction' and folded into TKT-01M29CXJZ9's plan and criteria before it was claimed; TKT-01M29CKRH9's plan and audit criterion carry the no-title-text rule.
