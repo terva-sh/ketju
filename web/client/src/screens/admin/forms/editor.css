@@ -123,7 +123,9 @@
   background: var(--bg);
   min-width: 0;
 }
+/* 390 px across, border and padding included (Terva review 1494). */
 .fe-phone {
+  box-sizing: border-box;
   max-width: 390px;
   margin: 0 auto;
 }

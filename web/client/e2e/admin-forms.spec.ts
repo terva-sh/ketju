@@ -46,6 +46,15 @@ test('an admin edits the registration form and saves a new version', async ({ pa
     await expect(save).toHaveText(`Save as version ${n + 1}`);
     await expect(save).toBeDisabled();
     await scan(page, 'the editor');
+
+    // The phone frame is 390 px across, its border and padding included
+    // (Terva review 1494).
+    const phone = page.getByRole('button', { name: 'Phone width' });
+    await phone.click();
+    await expect(phone).toHaveAttribute('aria-pressed', 'true');
+    const box = await page.locator('[data-preview]').boundingBox();
+    expect(box!.width).toBeLessThanOrEqual(390);
+    await phone.click();
   });
 
   const added = page.locator('.fe-field').last();
