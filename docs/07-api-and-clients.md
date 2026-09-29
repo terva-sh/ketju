@@ -66,8 +66,9 @@ An approval-mode applicant's pre-user session reaches `/apply`,
 `/auth/{provider}/callback` and `POST /auth/logout` among these, and no
 other: any other page answers 303 to `/apply/status`, and any other
 request 403 (05 "mode = approval"). The client, seeing `pre_user` in
-`/me`, draws the status page at every address but `/apply`, under a bar
-with the wordmark and "Sign out" and no forum navigation.
+`/me`, replaces every address but `/apply` with `/apply/status` and draws
+the status page there, under a bar with the wordmark and "Sign out" and no
+forum navigation (TKT-01M29CP2NG).
 
 `{id}` is the base32 thread id; `{slug}` is advisory — a stale slug
 redirects to the current one.

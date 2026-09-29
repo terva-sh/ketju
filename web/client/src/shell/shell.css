@@ -348,3 +348,15 @@ main h1[tabindex='-1']:focus {
   border-radius: var(--radius);
   cursor: pointer;
 }
+
+/* The signed-out hint (SignInHint.tsx): one quiet line under the bar, the
+   same at every width. */
+.signin-hint {
+  margin: 0;
+  padding: 6px 16px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--rule);
+  color: var(--ink2);
+  font-size: 13px;
+  text-align: center;
+}

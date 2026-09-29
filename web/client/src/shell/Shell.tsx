@@ -3,7 +3,9 @@ import { ReplyBar } from '../composer/ReplyBar';
 import { focusMainHeading } from '../components/focus';
 import { isPhone } from '../state/layout';
 import { shellContext } from '../state/shell';
+import { viewer } from '../state/viewer';
 import { PhoneTopBar } from './PhoneTopBar';
+import { SignInHint } from './SignInHint';
 import { TabBar } from './TabBar';
 import { TopBar } from './TopBar';
 import './shell.css';
@@ -37,6 +39,7 @@ export function Shell({ children }: { children: ComponentChildren }) {
         Skip to content
       </a>
       {phone ? <PhoneTopBar /> : <TopBar />}
+      {!viewer.value.user && <SignInHint />}
       <div class="shell-content" id="main">
         {children}
       </div>

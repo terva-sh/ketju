@@ -77,6 +77,10 @@ export class ProblemError extends Error {
     readonly status: number,
     // Seconds to wait, from Retry-After, when the response carried one.
     readonly retryAfter: number | null = null,
+    // A validation-failed body's field errors (docs/07 "Field errors on
+    // validation-failed"): the code for each field it names, the first
+    // where it names one twice. Empty for every other answer.
+    readonly fieldErrors: Record<string, string> = {},
   ) {
     super(type);
     this.name = 'ProblemError';
@@ -88,15 +92,32 @@ export class ProblemError extends Error {
 // not the server's text, is what a reader sees.
 export async function toProblem(r: Response): Promise<ProblemError> {
   let type: ProblemType = byStatus[r.status] ?? 'internal';
+  let errors: unknown;
   if ((r.headers.get('Content-Type') ?? '').startsWith('application/problem+json')) {
     try {
-      const body = (await r.json()) as { type?: unknown };
+      const body = (await r.json()) as { type?: unknown; errors?: unknown };
       if (typeof body.type === 'string' && body.type in messages) type = body.type as ProblemType;
+      errors = body.errors;
     } catch {
       // An unreadable body keeps the status's code.
     }
   }
-  return new ProblemError(type, r.status, retryAfter(r.headers.get('Retry-After')));
+  const fields = type === 'validation-failed' ? fieldErrors(errors) : {};
+  return new ProblemError(type, r.status, retryAfter(r.headers.get('Retry-After')), fields);
+}
+
+// fieldErrors reads the errors extension: a list of {field, code}. An entry
+// of any other shape is dropped rather than guessed at; the problem's own
+// words still say the answer was refused.
+function fieldErrors(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!Array.isArray(raw)) return out;
+  for (const e of raw) {
+    if (!e || typeof e !== 'object') continue;
+    const { field, code } = e as { field?: unknown; code?: unknown };
+    if (typeof field === 'string' && typeof code === 'string' && !Object.hasOwn(out, field)) out[field] = code;
+  }
+  return out;
 }
 
 // asProblem turns anything a request threw into a ProblemError: fetch

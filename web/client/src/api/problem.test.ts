@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import catalogue from '../../../../internal/problem/testdata/catalogue.json';
+import fieldErrorsBody from '../../../../internal/problem/testdata/field-errors.json';
 import { asProblem, isProblem, knownTypes, problemMessage, ProblemError, toProblem } from './problem';
 
 const codes = Object.keys(catalogue) as (keyof typeof catalogue)[];
@@ -84,5 +85,44 @@ describe('toProblem', () => {
   ])('reads Retry-After %j as %j', async (raw, want) => {
     const p = await toProblem(new Response('', { status: 429, headers: { 'Retry-After': raw } }));
     expect(p.retryAfter).toBe(want);
+  });
+});
+
+// The errors extension on validation-failed (docs/07 "Field errors on
+// validation-failed", TKT-01M29CP2NG), from the server's own golden body.
+describe('field errors', () => {
+  const problem = (body: unknown, status = 422) =>
+    toProblem(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/problem+json' } }));
+
+  it('reads the golden body into a code per field', async () => {
+    const p = await problem(fieldErrorsBody);
+    expect(p.type).toBe('validation-failed');
+    expect(p.fieldErrors).toEqual({ who: 'required', rules: 'wrong_type' });
+  });
+
+  it('keeps the first code for a field named twice, and drops entries of any other shape', async () => {
+    const p = await problem({
+      type: 'validation-failed',
+      status: 422,
+      errors: [
+        { field: 'a', code: 'required' },
+        { field: 'a', code: 'too_long' },
+        { field: 'b' },
+        { field: 3, code: 'required' },
+        null,
+        'c',
+        { field: '', code: 'malformed' },
+        { field: 'constructor', code: 'required' },
+      ],
+    });
+    expect(p.fieldErrors).toEqual({ a: 'required', '': 'malformed', constructor: 'required' });
+  });
+
+  it('carries none on any other type, or without the list', async () => {
+    const conflict = await problem({ type: 'conflict', status: 409, errors: [{ field: 'a', code: 'required' }] }, 409);
+    expect(conflict.fieldErrors).toEqual({});
+    expect((await problem({ type: 'validation-failed', status: 422, errors: 'x' })).fieldErrors).toEqual({});
+    expect((await problem({ type: 'validation-failed', status: 422 })).fieldErrors).toEqual({});
+    expect(new ProblemError('validation-failed', 422).fieldErrors).toEqual({});
   });
 });

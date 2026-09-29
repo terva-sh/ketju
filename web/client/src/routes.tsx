@@ -11,6 +11,12 @@ import { ThreadScreen } from './screens/ThreadScreen';
 // view's bundle budget in TKT-01M29CGBYH depends on it).
 const Admin = lazy(() => import('./screens/admin/AdminRoot'));
 
+// The application screens are one chunk too, fetched the first time /apply
+// or /apply/status renders (TKT-01M29CP2NG). Unlike the admin chunk they
+// count toward the bundle budget.
+const ApplyForm = lazy(() => import('./screens/apply/ApplyRoot').then((m) => m.ApplyScreen));
+const ApplyStatus = lazy(() => import('./screens/apply/ApplyRoot').then((m) => m.StatusScreen));
+
 export interface RouteEntry {
   // A preact-iso pattern: docs/07's {param} written as :param.
   path: string;
@@ -125,8 +131,8 @@ export const routes: RouteEntry[] = [
   { path: '/settings', screen: 'settings', component: placeholder('settings', 'Settings') },
   { path: '/settings/sessions', screen: 'settings-sessions', component: placeholder('settings-sessions', 'Sessions') },
   { path: '/settings/identities', screen: 'settings-identities', component: placeholder('settings-identities', 'Sign-in identities') },
-  { path: '/apply', screen: 'apply', component: placeholder('apply', 'Apply to join') },
-  { path: '/apply/status', screen: 'apply-status', component: placeholder('apply-status', 'Application status') },
+  { path: '/apply', screen: 'apply', component: ApplyForm },
+  { path: '/apply/status', screen: 'apply-status', component: ApplyStatus },
   { path: '/admin', screen: 'admin', component: Admin },
   { path: '/admin/queue', screen: 'admin-queue', component: Admin },
   { path: '/admin/applications', screen: 'admin-applications', component: Admin },

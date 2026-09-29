@@ -17,7 +17,7 @@ export function App() {
 }
 
 function Routes() {
-  const { url, path } = useLocation();
+  const { url } = useLocation();
   // Focus follows the reader to each new screen, and is never lost with a
   // removed element (TKT-01M29CGBXK).
   const onRouteChange = useMemo(() => routeFocuser(location.pathname), []);
@@ -25,7 +25,7 @@ function Routes() {
   // An approval-mode applicant reaches the application flow and nothing
   // else, which the server enforces (TKT-01M29CKRG9); the client draws only
   // that flow, whatever the address.
-  if (viewer.value.pre_user) return <ApplicantShell path={path} />;
+  if (viewer.value.pre_user) return <ApplicantShell />;
   return (
     <Shell>
       <UndecodableAddress url={url}>

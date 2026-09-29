@@ -46,6 +46,13 @@ const (
 
 var seedUsers = []struct{ handle, name string }{{"alice", "Alice Nakamura"}, {"carol", "Carol Ruiz"}}
 
+// seedApplicants are subjects the fake provider signs in who have no
+// account, so registration's default approval mode gives each a pre-user
+// session (TKT-01M29CP2NG). There is one per Playwright project, because
+// each project submits an application and an identity may submit one a day
+// (e2e/apply.spec.ts).
+var seedApplicants = []string{"dana", "erin"}
+
 func runE2E(args []string) error {
 	fs := flag.NewFlagSet("e2e", flag.ContinueOnError)
 	dir := fs.String("dir", "", "directory to create the data directory and config in; must not exist")
@@ -68,6 +75,7 @@ func runE2E(args []string) error {
 	for _, u := range seedUsers {
 		idp.Users = append(idp.Users, u.handle)
 	}
+	idp.Users = append(idp.Users, seedApplicants...)
 
 	site := "http://localhost:" + strconv.Itoa(*port)
 	data := filepath.Join(*dir, "data")

@@ -1,5 +1,6 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
+import { vi } from 'vitest';
 import { resetApiCache } from './api/client';
 import type { ThreadPage } from './api/dto';
 import { App } from './app';
@@ -28,6 +29,16 @@ export async function renderAt(url: string): Promise<HTMLElement> {
   });
   await settle(root);
   return root;
+}
+
+// unmount takes the app renderAt mounted down. A test that changes the
+// viewer back in afterEach calls it first: the app would otherwise render
+// again for the restored viewer, and fetch after the stub is gone.
+export async function unmount() {
+  if (!mounted) return;
+  const prev = mounted;
+  mounted = null;
+  await act(async () => render(null, prev));
 }
 
 // settle waits up to a second for a screen to appear, and returns as soon as
@@ -61,3 +72,40 @@ export function threadPage(thread: { id: string; slug: string; title: string }, 
 }
 
 export const threadJSON = (thread: { id: string; slug: string; title: string }) => JSON.stringify(threadPage(thread));
+
+// Answer is what a stubbed route answers: a status, a JSON body, and any
+// headers beside the content type.
+export type Answer = { status: number; body?: unknown; headers?: Record<string, string> };
+
+export interface StubServer {
+  routes: Record<string, (body: unknown) => Answer | Promise<Answer>>;
+  sent: { method: string; url: string; body: unknown }[];
+}
+
+// stubServer answers fetch from routes, keyed "METHOD /url", and records
+// every request. An error status is sent as problem+json; a route nobody
+// set is not-found.
+export function stubServer(routes: StubServer['routes']): StubServer {
+  const s: StubServer = { routes, sent: [] };
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+    const method = init.method ?? 'GET';
+    const body = init.body ? JSON.parse(init.body as string) : undefined;
+    s.sent.push({ method, url, body });
+    const handler = s.routes[`${method} ${url}`];
+    if (!handler) return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/problem+json' } });
+    const a = await handler(body);
+    return new Response(a.body === undefined ? null : JSON.stringify(a.body), {
+      status: a.status,
+      headers: { 'Content-Type': a.status >= 400 ? 'application/problem+json' : 'application/json', ...a.headers },
+    });
+  });
+  return s;
+}
+
+// problemAnswer is a problem of type at status, as the server writes one.
+export const problemAnswer = (
+  type: string,
+  status: number,
+  extra: Record<string, unknown> = {},
+  headers?: Record<string, string>,
+): Answer => ({ status, body: { type, title: type, status, ...extra }, headers });

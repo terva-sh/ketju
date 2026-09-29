@@ -3,9 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clientScope, nav, routes, serverOwned } from './routes';
 import { act } from 'preact/test-utils';
 import type { Me } from './api/dto';
+import { isPhone } from './state/layout';
 import { viewer } from './state/viewer';
-import { renderAt, screenOf, settle } from './testing';
+import { renderAt, route, screenOf, settle } from './testing';
 import preUser from '../../../internal/dto/testdata/golden/me.pre_user.json';
+import anonMe from '../../../internal/dto/testdata/golden/me.anon.json';
+import memberMe from '../../../internal/dto/testdata/golden/me.member.json';
 
 // One concrete URL per line of docs/07's URL scheme, and the screen it must
 // reach. /auth/* is the server's and is not a client route.
@@ -265,6 +268,23 @@ describe('an applicant', () => {
     ['/apply', 'apply'],
   ])('%s renders %s', async (url, screen) => {
     expect(screenOf(await renderAt(url))).toBe(screen);
+    // The address is replaced with the page shown, so Back does not return
+    // to an address the server would refuse (TKT-01M29CP2NG).
+    expect(location.pathname).toBe(screen === 'apply' ? '/apply' : '/apply/status');
+  });
+
+  it('replaces the address rather than adding one', async () => {
+    await renderAt('/f/general');
+    const depth = history.length;
+    await route('/t/abc/x');
+    await settle(document.body);
+    expect(location.pathname).toBe('/apply/status');
+    expect(history.length).toBe(depth + 1);
+  });
+
+  it('draws no signed-out hint', async () => {
+    const root = await renderAt('/apply/status');
+    expect(root.querySelector('[data-shell="signin-hint"]')).toBeNull();
   });
 
   it('can sign out, and has no forum navigation', async () => {
@@ -281,5 +301,40 @@ describe('an applicant', () => {
   it('is the member shell again once pre_user is gone', async () => {
     viewer.value = structuredClone(saved);
     expect(screenOf(await renderAt('/f/general'))).toBe('thread-list');
+  });
+});
+
+// Approval retires an applicant's pre-user session, so the approved
+// applicant comes back signed out (TKT-01M3Q2V25E). The signed-out shell
+// says where the decision is, at both widths; a member is not told.
+describe('the signed-out hint', () => {
+  let saved: Me;
+  beforeEach(() => {
+    saved = viewer.value;
+    vi.stubGlobal('fetch', () => new Promise(() => {}));
+  });
+  afterEach(() => {
+    viewer.value = saved;
+    isPhone.value = false;
+  });
+
+  it.each([
+    ['desktop', false],
+    ['phone', true],
+  ])('is drawn for a signed-out reader on the %s', async (layout, phone) => {
+    isPhone.value = phone;
+    viewer.value = structuredClone(anonMe) as Me;
+    const root = await renderAt('/f/general?x=1');
+    expect(root.querySelector('[data-layout]')!.getAttribute('data-layout')).toBe(layout);
+    const hint = root.querySelector('[data-shell="signin-hint"]')!;
+    expect(hint.textContent).toBe('Applied? Sign in to see your decision');
+    // The same login page Sign in reaches, coming back here.
+    expect(hint.querySelector('a')!.getAttribute('href')).toBe('/auth/signin?return_to=%2Ff%2Fgeneral%3Fx%3D1');
+  });
+
+  it('is not drawn for a member', async () => {
+    viewer.value = structuredClone(memberMe) as Me;
+    const root = await renderAt('/f/general');
+    expect(root.querySelector('[data-shell="signin-hint"]')).toBeNull();
   });
 });

@@ -1,0 +1,99 @@
+/* The application screens (ApplyScreen.tsx, StatusScreen.tsx). A stranger
+   meets these first, while they are being judged, so they draw like the
+   rest of the site: the serif heading and the accent button of the forum
+   index, one column at most 40 rem wide, and full width with 16 px gutters
+   on a phone. Lazy, with the apply chunk. */
+
+.apply {
+  box-sizing: border-box;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 36px 24px 48px;
+}
+.apply h1 {
+  margin: 0 0 20px;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+
+.apply-loading {
+  color: var(--muted);
+}
+
+.apply-panel p,
+.apply-confirm p {
+  margin: 0 0 12px;
+}
+.apply-lead {
+  font-size: 18px;
+  font-weight: 500;
+  color: var(--ink);
+}
+
+.apply-button {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  padding: 0 20px;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.apply-secondary,
+.apply-danger {
+  min-height: var(--target);
+  padding: 0 16px;
+  border-radius: var(--radius);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+.apply-secondary {
+  border: 1px solid var(--rule2);
+  background: var(--surface);
+  color: var(--ink);
+}
+.apply-danger {
+  border: 1px solid var(--unread);
+  background: var(--surface);
+  color: var(--unread);
+}
+.apply-secondary:disabled,
+.apply-danger:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.apply-confirm {
+  margin-top: 8px;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.apply-confirm-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.apply-confirm .apply-failed {
+  margin: 12px 0 0;
+  color: var(--unread);
+}
+
+@media (max-width: 719.98px) {
+  .apply {
+    padding: 20px 16px 32px;
+  }
+  .apply h1 {
+    font-size: 26px;
+  }
+}
