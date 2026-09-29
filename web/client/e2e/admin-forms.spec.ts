@@ -10,7 +10,8 @@ import { stateFile } from './session';
 // overflow and scanned with axe (WCAG 2.1 A and AA, as e2e/a11y.spec.ts
 // does) in the light theme and the dark.
 //
-// Both projects run against one server, and apply.spec.ts fills in the
+// Both projects run against one server, one after the other (the test
+// checks that the config still says so), and apply.spec.ts fills in the
 // form after them, so each run ends by saving the fields it started with
 // back as the newest version. The version numbers are read from the screen,
 // not assumed.
@@ -31,7 +32,15 @@ async function scan(page: Page, what: string) {
   await page.emulateMedia({ colorScheme: 'light' });
 }
 
-test('an admin edits the registration form and saves a new version', async ({ page }) => {
+test('an admin edits the registration form and saves a new version', async ({ page }, info) => {
+  // Both projects edit the one form on the one server, so their runs must
+  // not overlap, or one would save over the other's base version and the
+  // restore at the end would not hold (Terva review 1496).
+  // playwright.config.ts runs one worker, one test at a time; if that ever
+  // changes, this fails here rather than as a 409 or a wrong form in
+  // apply.spec.ts.
+  expect(info.config.workers, 'one worker: the projects share this form').toBe(1);
+  expect(info.config.fullyParallel, 'no parallel tests: the projects share this form').toBe(false);
   const before = await page.request.get(formUrl);
   expect(before.status()).toBe(200);
   const start = (await before.json()) as { active_version: number; schema: { fields: unknown[] } };
