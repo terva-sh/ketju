@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T22:36:27Z
+updated_at: 2026-09-29T22:37:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,13 +51,13 @@ Replies to a deleted post keep their reply_to link. A tombstone is a gap in cont
 ## Acceptance criteria
 
 - [ ] Replies to a removed post keep reply_to, and GET …/replies of the removed post and the client's expander under its tombstone still list them
-- [ ] For an author-deleted and a moderator-hidden post, anonymous viewers and other members get no html and no revisions from the page, the single post, replies, user posts and history; a moderator gets the html in each
-- [ ] The author of a hidden-by-mod post gets its html with removal moderator on the page, the single post, their user posts and its history; their own self-deleted post stays a tombstone without html
-- [ ] A page holding the viewer's own hidden post is cached under class author:<id>, and no other member's answer carries its html in either request order (TestResponseCacheSeparatesTheHiddenPostsAuthor)
+- [x] For an author-deleted and a moderator-hidden post, anonymous viewers and other members get no html and no revisions from the page, the single post, replies, user posts and history; a moderator gets the html in each
+- [x] The author of a hidden-by-mod post gets its html with removal moderator on the page, the single post, their user posts and its history; their own self-deleted post stays a tombstone without html
+- [x] A page holding the viewer's own hidden post is cached under class author:<id>, and no other member's answer carries its html in either request order (TestResponseCacheSeparatesTheHiddenPostsAuthor)
 - [ ] The client renders 'Post removed by author' and 'Post removed by a moderator', shows a removed post's body to those served it on a distinct background, and renders a pointer to /t/{moved_to} when moved_to is set (component test; the server fills moved_to in TKT-01M29CYSAM)
-- [ ] A removed post keeps its ordinal: ?ordinal=N serves the page holding it, and a member receives that post with removal set and no html
-- [ ] Removing one post changes nothing for visible posts: members and anonymous viewers still get their html, and their history follows public_edit_history as before (TestVisiblePostsUnchanged)
-- [ ] The author of a hidden-by-mod post reads its history even with public_edit_history off, and only for that post while it is hidden (TestHiddenPostsAuthorReadsHistoryWithSettingOff)
+- [x] A removed post keeps its ordinal: ?ordinal=N serves the page holding it, and a member receives that post with removal set and no html
+- [x] Removing one post changes nothing for visible posts: members and anonymous viewers still get their html, and their history follows public_edit_history as before (TestVisiblePostsUnchanged)
+- [x] The author of a hidden-by-mod post reads its history even with public_edit_history off, and only for that post while it is hidden (TestHiddenPostsAuthorReadsHistoryWithSettingOff)
 
 ## Implementation plan
 
@@ -101,3 +101,19 @@ Client PR: `Tombstone` renders each removal's text and the moved pointer. A remo
 - Filling `moved_to` on the server: TKT-01M29CYSAM (phase 4).
 - The moderator lens (`?lens=mod`): TKT-01M29CTY6E (phase 3).
 - Redacted posts' tombstones: TKT-01M29CXJZ9.
+
+## Notes
+
+**agent:claude-code/phase2-run-krj9** at 2026-09-29T22:37:12Z
+
+Server half built on run/krj9-tombstones, commit ac88afa against main at 1dd6ed9.
+
+Split into two PRs under this ticket, as the orchestrator allowed: the client lane (TKT-01M29CP2P1) holds the committed dist. This PR changes no file under internal/web/spa/dist. `go generate ./internal/web/spa` reproduced it byte for byte after the `dto.ts` type change, so it cannot conflict with the client lane. The ticket closes in the client PR.
+
+Ticked in this PR: criteria 2, 3, 4, 6, 7 and 8. Left for the client PR: criterion 1, whose server half (GET …/replies of a removed post lists its replies with reply_to) is TestTombstoneKeepsOrdinalAndPermalink and TestRemovedRepliesFromTheExpander, and whose client half is the expander under a tombstone. Criterion 5 is client work.
+
+Settled while building, internals only:
+- A post carrying both the deleted and hidden-by-mod bits, which only a log appended without the service's checks can hold, is `removal: "author"`, and its author is not served it. The alternative, "moderator", would have served the author a post they had asked to remove. Written into docs/07 "Removed posts".
+- `dto.ts` types `removal` as `string | null`, not a union, because the client's contract test imports the Go goldens as JSON and TypeScript widens their strings.
+- With public_edit_history off, a member asking for an ordinal past the end is still `forbidden`, as before, and not `not-found`. The admission check now runs after the entry is read, so this case is kept explicitly.
+- The internal/dto fixture's #63 became a moderator removal with no moved_to, and a new #64 is the moved post, so no fixture claims to be both removed and moved. The client test that counts the golden page's posts now expects post-64.
