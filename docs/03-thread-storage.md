@@ -99,13 +99,21 @@ discovering it from a refused frame later.
 
 `20` `PostsSplitOut` and `21` `PostsMergedIn` are **held, not free**. They
 appear in the catalogue with names and no body type, they are what
-`RecordType.Reserved` reports, and a reader meeting one refuses rather than
-skipping it. Their bodies are specified in the table under "Record types" and
-will be implemented in Phase 4.
+`RecordType.Reserved` reports, and they sit in the **advisory** range, so a
+reader meeting one skips it rather than refusing the thread. Skipping a split
+or merge leaves a stale render (the moved posts still show in the source
+thread), not a disclosure, and that is the advisory class's test
+(`TestEveryCatalogueTypeIsAdvisory` in `internal/store/threadlog`). The index
+fold and the projection writer both skip them, so the two folds of one log
+agree. Their bodies are specified in the table under "Record types" and will
+be implemented in Phase 4. Decided 2026-09-28 (TKT-01M39973KG): the first
+version of this paragraph said a reader refuses them. The code skipped them
+deliberately from the start, and the document was the one that was wrong.
 
 Every other number is unassigned rather than reserved: `6`–`9`, `17`–`19`,
-`22`–`29`, and `31`–`0x7F` in the advisory range, and the whole critical range
-`0x80`–`0xFF`. `0x00` is never assigned. Unassigned numbers are claimed by the
+`22`–`29`, and `31`–`0x7F` in the advisory range, and `0x81`–`0xFF` in the
+critical range, where `0x80` is claimed for `Redacted` ("Hard redaction").
+`0x00` is never assigned. Unassigned numbers are claimed by the
 procedure in "Claiming a new record type"; held numbers are not available at
 all.
 

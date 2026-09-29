@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-28T22:39:20Z
+updated_at: 2026-09-29T04:50:59Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -116,3 +116,7 @@ Grooming decisions, batch 2, maintainer 2026-09-28. CRJ5J: only moderators resto
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:39:20Z
 
 Terva review 1280 on PR #134, head d7c1473, base 02db608, had three findings, all fixed rather than argued. Medium, 'Do not mark the renderer-version criterion complete before the build': TKT-01M2K1JKS7's criteria 2 (not applicable) and 3 (moved to TKT-01M3N24RM0) are unticked, with a note. Low, 'Clarify that a remote-image link can contact its host': docs/07 now says viewing sends nothing, while following the link does. Medium, 'Reconcile the author-visible label with the flag-confidentiality rationale': the docs/08 rationale is corrected, since the author learning of the review is intended and who flagged stays confidential, and a superseding note is on CP2PJ.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-29T04:50:59Z
+
+Maintainer, 2026-09-28: 'pick up what you recommend next and continue our work through phase 2 autonomously, merging after reviews are complete and issues resolved or disagreements recorded.' This grants the docs/12 merge gate to the rest of Phase 2 grooming and to the Phase 2 implementation run. The run's tracking ticket and procedure will name the grant. A disagreement with a review finding is recorded on the ticket and in the PR, and does not stop the merge. This supersedes docs/12's rule that a medium-or-higher finding answered by argument stops for the maintainer, for Phase 2 only. The recorded disagreements go to the maintainer in the run's report.

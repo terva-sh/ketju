@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-120 done, 7 ready, 1 in progress, 2 blocked, 76 draft, 3 archived (counted 2026-09-28 with
+121 done, 7 ready, 1 in progress, 2 blocked, 75 draft, 3 archived (counted 2026-09-28 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
