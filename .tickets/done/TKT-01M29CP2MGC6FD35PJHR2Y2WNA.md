@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2MGC6FD35PJHR2Y2WNA
 title: Implement moderator application review
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -24,17 +24,10 @@ blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-cp2mg
-  branch: run/cp2mg-application-review
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1ffd451064ec2f46
-  commit: 31e681216c0cacb24f5467a824631f79d61108c5
-  session: null
-  claimed_at: 2026-09-29T19:28:45Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:34:08Z
+updated_at: 2026-09-29T19:50:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -54,17 +47,17 @@ Approval is the only path from a pre-user session to a member session, and it go
 
 ## Acceptance criteria
 
-- [ ] Approve creates the user (active, member, human), links the identity, marks the application approved with user_id, and writes its audit row in one transaction or none; a test failing the audit insert leaves none of them. TKT-01M29CP2N0 adds the applicant's notification inside the same transaction
-- [ ] Approval issues no session: session rows are unchanged, a pre-user session held across approval still resolves as a non-member, the member session comes from the next sign-in through session.IssueUser, and TestOneDoorIntoSessions passes with its caller lists unchanged
-- [ ] An approved user who is suspended before signing in is refused by IssueUser at sign-in, and approval never sets a role other than member or writes a user.promoted row
-- [ ] Deny with block sets the identity's block marker with user_id NULL, and a later GET /apply/form or POST /apply from that identity answers 403
-- [ ] Every decision writes one audit_log row naming the deciding moderator and carrying the note, tested for approve, deny, and deny with block; a denial without a note is refused
-- [ ] Two concurrent decisions on one application produce one decision, one audit row, and 409 conflict for the second, tested for approve against deny and against withdraw
+- [x] Approve creates the user (active, member, human), links the identity, marks the application approved with user_id, and writes its audit row in one transaction or none; a test failing the audit insert leaves none of them. TKT-01M29CP2N0 adds the applicant's notification inside the same transaction
+- [x] Approval issues no session: session rows are unchanged, a pre-user session held across approval still resolves as a non-member, the member session comes from the next sign-in through session.IssueUser, and TestOneDoorIntoSessions passes with its caller lists unchanged
+- [x] An approved user who is suspended before signing in is refused by IssueUser at sign-in, and approval never sets a role other than member or writes a user.promoted row
+- [x] Deny with block sets the identity's block marker with user_id NULL, and a later GET /apply/form or POST /apply from that identity answers 403
+- [x] Every decision writes one audit_log row naming the deciding moderator and carrying the note, tested for approve, deny, and deny with block; a denial without a note is refused
+- [x] Two concurrent decisions on one application produce one decision, one audit row, and 409 conflict for the second, tested for approve against deny and against withdraw
 - [ ] Review routes are staff-only (anonymous 401; member, pre-user and suspended moderator 403) and no-store, and an application renders against the form version it answered after a newer version is active
-- [ ] Approval creates and links the user before the guarded decision UPDATE, which sets status approved and user_id in one statement; zero rows there rolls back the user and the link
-- [ ] A moderator or admin can unblock a denied applicant's identity: blocked_at and blocked_by are cleared, the application stays denied, and one identity.unblocked audit row names the actor; a second unblock is 409 and a member is 403
-- [ ] The decision note never reaches the applicant: no route open to a pre-user session carries it, tested with a distinctive note
-- [ ] Deny with block requires the block UPDATE to affect exactly one row: when the identity was removed or has a user it answers 409 and the denial rolls back, while a plain deny of that application still succeeds
+- [x] Approval creates and links the user before the guarded decision UPDATE, which sets status approved and user_id in one statement; zero rows there rolls back the user and the link
+- [x] A moderator or admin can unblock a denied applicant's identity: blocked_at and blocked_by are cleared, the application stays denied, and one identity.unblocked audit row names the actor; a second unblock is 409 and a member is 403
+- [x] The decision note never reaches the applicant: no route open to a pre-user session carries it, tested with a distinctive note
+- [x] Deny with block requires the block UPDATE to affect exactly one row: when the identity was removed or has a user it answers 409 and the denial rolls back, while a plain deny of that application still succeeds
 
 ## Implementation plan
 
@@ -180,3 +173,25 @@ The same commit fixes review 1344's first finding here: approval now creates and
 **agent:claude-code/phase2-run-cp2kz** at 2026-09-29T18:18:12Z
 
 2026-09-29, superseding the engineering decision "Approval issues no session" as groomed, where the pre-user session "keeps showing the status page, which then says approved with a sign-in link". Maintainer decision on TKT-01M3Q2V25E (Decide what an approved applicant sees once their pre-user session ends): keep the merged behaviour. Once approval links the identity, `LookupSession` stops resolving the applicant's pre-user session and the session middleware clears its cookie (TKT-01M29CKRG9). The applicant sees the signed-out shell with a hint like "Applied? Sign in to see your decision", and signing in gives them a member session where the approval notification waits. Approval still issues no session. It now also deletes the applicant's pre-user rows with `q.DeletePreUserSessions` in its transaction, and `TestApproveIssuesNoSession` checks that the old session no longer resolves. The plan carries this as a new Settled item. Every other Settled item is unchanged. Recorded by TKT-01M29CP2KZ's agent, which carried the decision.
+
+**agent:claude-code/phase2-run-cp2mg** at 2026-09-29T19:49:47Z
+
+2026-09-29, at the close of the build (commit 9dbb88e on run/cp2mg-application-review). Three things the criteria and the groomed plan do not say:
+
+1. **Criterion 7 is left unticked.** Everything in it holds except one word. A suspended moderator is refused every review route, but with 401 `unauthenticated`, not 403. That is the site-wide rule in `member.Require`: an inactive account is treated as no member at all, as the thread endpoints treat it, and `TestAdminRoutesAreGated` pins 401 for every admin route (TKT-01M29CKRFS). Answering 403 here alone would make this ticket's routes disagree with every other admin route, so I kept the rule. `TestReviewIsStaffOnly` checks the 401, and `TestOnlyStaffReview` checks it at the service. Anonymous 401, member / pre-user / group-scoped moderator 403, the no-store answers, and the old form version rendering (`TestOldVersionStillRenders`) all hold. If 403 is wanted, the change belongs in `member.Require` for every route, and a maintainer should decide it.
+
+2. **Criterion 2 is ticked as the maintainer's 2026-09-29 decision on TKT-01M3Q2V25E reworded it.** "Session rows are unchanged" became: approval adds no session and deletes the applicant's pre-user rows (`DeletePreUserSessions`, in the approval's transaction). "Still resolves as a non-member" became: the old cookie resolves as nobody, and the middleware clears it. `TestApproveIssuesNoSession` checks both, checks that another applicant's session is untouched, and checks that `identity.Login` then signs the member in through `IssueUser`. `TestOneDoorIntoSessions` passes with `doorCallers`, `insertCallers` and `issuerCallers` unchanged.
+
+3. **Two departures from the groomed plan, both recorded in the revised plan:** a taken handle is 422 `validation-failed` with `errors[handle] = taken`, not 409, because only a 422 body carries field errors, and a bare 409 could not be told from "already decided" or "identity gone". The errors are coded with `problem.Coded` where they are raised, not mapped in `problem/domain.go`, because that would be an import cycle.
+
+## Summary
+
+Staff now review approval-mode applications through six routes under `/api/v1/admin/applications`, all behind the staff gate. They list, read, note, approve, deny (optionally with a block), and unblock. The service (`internal/service/applications/review.go`) checks `member.RequireStaff` again.
+
+Approval is one transaction that runs these steps in order: CheckHandle, confirm the application is pending, confirm the identity can be linked, HandleFree, CreateUser (active, member, human), link the identity, DecideApplication (status and user_id in one statement, guarded on `pending`), DeletePreUserSessions, and write `application.approved`. It issues no session, and the chokepoint lists are unchanged.
+
+Deny requires a note, which the applicant never sees. A block must mark exactly one identity, or the denial rolls back. Unblock writes `identity.unblocked`, which uses a new audit target type, `identity`.
+
+Handle refusals are 422 with `errors[handle]`, carrying one of three new form codes. Docs 04, 05 and 07 are updated. The dto goldens and the client contract types have the new shapes, and the client dist is unchanged.
+
+Criterion 7 is unticked because a suspended moderator gets 401, not 403. See the 2026-09-29 note.
