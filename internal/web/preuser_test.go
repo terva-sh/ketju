@@ -286,6 +286,7 @@ func TestPreUserRoutesAreExactlyTheAllowlist(t *testing.T) {
 	}
 
 	w := newGateWorld(t)
+	t.Run("each entry names a route", func(t *testing.T) { eachEntryNamesARoute(t, w) })
 	probes := w.walk()
 	if len(probes) < 60 {
 		t.Fatalf("the walk has %d requests; the route tables look empty", len(probes))
@@ -375,12 +376,12 @@ func clientPages(t *testing.T) []string {
 	return out
 }
 
-// Each allowlist entry names something the server serves, so a typo cannot
-// open a path nobody meant or close one somebody needs: a route in
-// api.Routes or auth.Routes, the /assets/ group, or a page of the client's
-// route table, which the server answers with the shell.
-func TestEachAllowlistEntryNamesARoute(t *testing.T) {
-	w := newGateWorld(t)
+// eachEntryNamesARoute checks each allowlist entry names something the
+// server serves, so a typo cannot open a path nobody meant or close one
+// somebody needs: a route in api.Routes or auth.Routes, the /assets/ group,
+// or a page of the client's route table, which the server answers with the
+// shell.
+func eachEntryNamesARoute(t *testing.T, w *gateWorld) {
 	registered := map[string]bool{"GET /assets/": true}
 	for _, rt := range append(api.Routes(w.deps), auth.Routes(w.auth)...) {
 		registered[rt.Pattern()] = true

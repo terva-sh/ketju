@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRG9XYJS4HM1VY1QSJ1V
 title: Implement pre-user sessions restricted to the application flow
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-ckrg9
-  branch: run/ckrg9-pre-user-sessions
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a946fd6ede1643fec
-  commit: ccc05adb32252b1e51ea6ebb6131a26edbd3ae92
-  session: null
-  claimed_at: 2026-09-29T15:14:52Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T15:42:15Z
+updated_at: 2026-09-29T15:44:52Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,13 +41,13 @@ The allowlist has to be positive rather than a set of exclusions. A new endpoint
 
 ## Acceptance criteria
 
-- [ ] A pre-user session is refused on every route outside web.PreUserRoutes, by a gate in the middleware chain after session resolution: an API path answers 403 forbidden and any other page answers 303 to /apply/status
-- [ ] TestPreUserRoutesAreExactlyTheAllowlist walks every route in api.Routes and auth.Routes plus the SPA, /blobs, /events and /assets paths, and shows that a pre-user is accepted only by GET /api/v1/me, the sign-in routes, POST /auth/logout, /assets, and the /apply and /apply/status pages, and that each allowlist entry names a registered route
-- [ ] No query can change a session's kind or user_id (chokepoint scan); once the identity has a user, its pre-user cookie is refused at lookup; and for a pending, suspended or deactivated user the next sign-in writes no member session (TestAPreUserCannotBecomeAMember)
-- [ ] In approval mode, a new identity from a provider without auto_approve gets an identity row with user_id NULL and a pre-user session, written in one transaction by session.IssuePreUserWith, and the callback answers 303 to /apply; a known applicant identity gets 303 to /apply/status
-- [ ] chokepoint_test.go lists the callers of every session issuer (issuerCallers) and the insert callers exactly, and the lists match the code
-- [ ] With pre_user set in /me, the client renders the apply-status screen on every route except /apply (routes.test.tsx), and the committed build is regenerated
-- [ ] A pre-user request for a thread page is refused before the response cache is consulted (TestAPreUserNeverReachesTheResponseCache)
+- [x] A pre-user session is refused on every route outside web.PreUserRoutes, by a gate in the middleware chain after session resolution: an API path answers 403 forbidden and any other page answers 303 to /apply/status
+- [x] TestPreUserRoutesAreExactlyTheAllowlist walks every route in api.Routes and auth.Routes plus the SPA, /blobs, /events and /assets paths, and shows that a pre-user is accepted only by GET /api/v1/me, the sign-in routes, POST /auth/logout, /assets, and the /apply and /apply/status pages, and that each allowlist entry names a registered route
+- [x] No query can change a session's kind or user_id (chokepoint scan); once the identity has a user, its pre-user cookie is refused at lookup; and for a pending, suspended or deactivated user the next sign-in writes no member session (TestAPreUserCannotBecomeAMember)
+- [x] In approval mode, a new identity from a provider without auto_approve gets an identity row with user_id NULL and a pre-user session, written in one transaction by session.IssuePreUserWith, and the callback answers 303 to /apply; a known applicant identity gets 303 to /apply/status
+- [x] chokepoint_test.go lists the callers of every session issuer (issuerCallers) and the insert callers exactly, and the lists match the code
+- [x] With pre_user set in /me, the client renders the apply-status screen on every route except /apply (routes.test.tsx), and the committed build is regenerated
+- [x] A pre-user request for a thread page is refused before the response cache is consulted (TestAPreUserNeverReachesTheResponseCache)
 
 ## Implementation plan
 
@@ -90,7 +83,7 @@ The groomed approach held. What changed on reading the code is marked "Revised".
 
 - `internal/web/preuser_test.go` (package `web_test`):
   - `TestPreUserRoutesAreExactlyTheAllowlist` pins `PreUserRoutes` to the list in AC2. It walks every route in `api.Routes` and `auth.Routes`, `/assets/`, `/blobs/`, `/events`, client pages, and unserved API paths, with GET routes probed as HEAD too. On a server built from the same tables with recording handlers, a member reaches every handler; a pre-user reaches exactly the allowlisted ones and is refused elsewhere before any handler runs. On the real server (real `api.New`, `auth.New`, shell and assets), each refusal has the right status and body, and each allowed route is not refused.
-  - `TestEachAllowlistEntryNamesARoute` checks each entry against the route tables, the `/assets/` group, and the client's route table.
+  - Its subtest "each entry names a route" checks each entry against the route tables, the `/assets/` group, and the client's route table.
   - `TestANewRouteIsClosedToAPreUserByDefault` uses a throwaway route table.
   - `TestThePreUserGateMatchesMethodsAsTheRouterDoes` covers methods.
   - `TestTrickyPathsReachOnlyTheAllowlist` sends dot segments, escapes, doubled slashes and case, and checks that nothing reaches a handler off the list.
@@ -127,3 +120,7 @@ The groomed approach held. What changed on reading the code is marked "Revised".
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:59:38Z
 
 From TKT-01M29CA99R (Implement GET /me): GET /me, and the shell's bootstrap block, return the anonymous shape (user null, zero counts) for a pre-user session, because dto.Me makes a nil user the only signed-out signal and no pre-user shape is documented. The viewer does carry the distinction (domain.Viewer.PreUser and IdentityID, set by internal/auth/session). If the approval screens need /me to say 'signed in as an applicant', decide the field in docs/07 and dto.Me; CA99R's AC1 stays unticked on exactly that clause until then.
+
+## Summary
+
+Approval mode gives someone new an identity with no user and a pre-user session. The new session.IssuePreUserWith writes both in one transaction, through identity.BeginApplication, and the callback answers 303 to /apply. An applicant signing in again gets a fresh pre-user session and 303 to /apply/status. Both paths end the session they replace. An auto_approve provider under approval mode keeps the 501 page for TKT-01M29CKRE9. web.PreUserGate, chain position 7 between session and CSRF, is not optional. It admits a pre-user only to the positive web.PreUserRoutes: GET /api/v1/me, the sign-in routes, POST /auth/logout, /assets/, /apply and /apply/status. Anything else gets 403 forbidden under /api/, 303 to /apply/status for a page, and 403 otherwise, before any handler or the response cache runs. LookupSession stops resolving a pre-user session once its identity has a user. RevokePreUser and DeletePreUserSessions are ready for TKT-01M29CP2MG. The API and auth routes are now tables (api.Routes, auth.Routes, web.Route), so TestPreUserRoutesAreExactlyTheAllowlist walks every route, on a recording server and on the real one. TestEveryRouteIsInTheTable fails the build on a route registered outside a table, and issuerCallers lists every caller of the session issuers. The client draws only the application flow while /me says pre_user, and the rebuilt thread-view bundle is 38548 of 60000 B. Next: TKT-01M29CP2KZ adds its /api/v1/apply routes to web.PreUserRoutes and to theAllowlist in internal/web/preuser_test.go. TKT-01M29CP2NG replaces the placeholders in routes.tsx only. A new sign-in path must add itself to issuerCallers.
