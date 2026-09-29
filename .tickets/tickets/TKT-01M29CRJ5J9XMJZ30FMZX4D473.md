@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ5J9XMJZ30FMZX4D473
 title: Allow moderators to edit and delete any post
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -23,15 +23,22 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-crj5j
+  branch: run/crj5j-mod-edit-delete
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-abb3e55adae65825f
+  commit: a27a7218760ba21ae4db301f17f8b69107fa544f
+  session: null
+  claimed_at: 2026-09-29T21:33:54Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T07:18:23Z
+updated_at: 2026-09-29T21:37:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-crj5j
   name: ""
 extensions: {}
 ---
@@ -53,7 +60,7 @@ A moderator edit of somebody else's words is the most invasive routine action in
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a.
+Groomed 2026-09-29 against main at 7af2c5a. Revised on claim, 2026-09-29, against main at a27a721.
 
 ### Settled in grooming
 
@@ -66,25 +73,27 @@ Groomed 2026-09-29 against main at 7af2c5a.
 
 ### Approach
 
-1. **authorize** (`internal/service/threads/mutate.go`): a viewer with `canModerate` may edit, delete or restore any post, and the author and hidden-by-mod checks apply only to viewers without it. A moderator's edit needs `moderate`, not `reply`. Archived stays `conflict` for everyone. The lock refuses members' edits only, as now.
+Revised on claim. What changed from the groomed plan: the client step moves to a filed draft, because the server lane may not change `internal/web/spa/dist` in this run; the author's restore gets its own precondition so that a race cannot let it clear a moderator's hide; and the synchronous projection is taken only on the moderator path. The orchestrator's brief also asks for the `flags.go` comment fix (step 4).
+
+1. **authorize** (`internal/service/threads/mutate.go`): a viewer with `canModerate` may edit, delete or restore any post, own or not, with no window, and without `reply`. The author, hidden-by-mod, reply and window checks apply only to viewers without it. Archived stays `conflict` for everyone. The lock refuses members' edits only, as now.
 2. **Delete**: `Service.Delete` sets `DeleteBody.ByModerator` when `v.UserID != entry.Author`. The Refuse set stays `gone`, so hiding a post that is already gone is `conflict`.
-3. **Restore**: it must accept a post that is deleted or hidden. `threadlog.Append` gains `RequireAny EntryFlags`, and at least one of its bits must be set. `Restore` uses `RequireAny: EntryDeleted|EntryHiddenByMod`, `Refuse: EntryMoved`. `Actor.checkState` checks it with the same staged fold. Two appends lost: they would not be atomic.
-4. **Index**: `postFlagEffect(h, body)` (widened by TKT-01M29CKRHS). A `Delete` with `ByModerator` sets `EntryHiddenByMod`, and otherwise `EntryDeleted`. `Restore` clears both, as now. Fix the `EntryHiddenByMod` comment in `internal/store/threadlog/flags.go`, which says the author "may not see it". That contradicts the 2026-09-28 decision.
-5. **Projection**: `applyDeleted` sets `post_meta.deleted = 1` for both kinds. The forum and profile counts leave both out (docs/07 `GET /forums`: "the record that does must leave the total too"). `post_meta` gains no column; `TestPostMetaStaysTiny` holds.
-6. **Editor on the read path**: `threadlog.Post` gains `EditorID uint64`, from the current revision's frame header in `decodePost`. `dto.Post` gains `edited_by_moderator bool`: `EntryEdited` is set and `EditorID != Author`. It is drawn in `postsDeps` and shared by the page, the single post, replies and user posts.
-7. **Audit** (revised for Terva review 1352, finding 1): the projection writer writes the rows (TKT-01M29CKRGS step 1). A `Delete` with `by_moderator` is `post.hidden`. An `Edit` or a `Restore` whose actor is not `post_meta.author_id` is `post.edited` or `post.restored`. The target is `audit.Post(id, ordinal)` and the details are `{reason, thread, log_offset}`. An author's edit, delete or restore of their own post produces no row, and neither does a moderator acting on their own post. `TestOwnPostActionsAreNotAudited` holds this, including after reindex. The service calls `appendEvent` for the moderator paths, so the row exists when the handler answers.
-8. **Client**: `Post.tsx` offers Edit, Delete and Restore on every post to a viewer with `viewer.can_moderate`, and shows "(edited by a moderator)" for `edited_by_moderator`. Regenerate `dist/`.
-9. **Docs**: docs/03 record table: the `Delete` body gains `by_moderator`, and its effect is "hidden-by-mod when by_moderator, otherwise deleted". docs/07 "Edit, delete and restore" and the `dto.Post` shape get `edited_by_moderator` and the moderator rules. The docs/07 `dto` golden is regenerated.
+3. **Restore**: `threadlog.Append` gains `RequireAny EntryFlags`: at least one of its bits must be set. `Actor.checkState` checks it with the same staged fold. A moderator's Restore uses `RequireAny: EntryDeleted|EntryHiddenByMod`, `Refuse: EntryMoved`. An author's Restore keeps `Require: EntryDeleted` and adds `EntryHiddenByMod` to its Refuse set, so a moderator's restore-then-hide landing between the author's `authorize` and the append makes the author's restore `conflict` rather than clearing the hide. Two appends lost: they would not be atomic.
+4. **Index**: `postFlagEffect(t, body)`: a `Delete` whose body has `ByModerator` sets `EntryHiddenByMod`, otherwise `EntryDeleted` (pointer and value bodies both read, as `isGrace` does). `Restore` clears both, as now. Fix the `EntryHiddenByMod` comment in `internal/store/threadlog/flags.go`, which says the author "may not see it".
+5. **Projection**: `applyDeleted` already sets `post_meta.deleted = 1` for any Delete, so the forum and profile counts already leave a hidden post out. No change; `TestPostMetaStaysTiny` holds.
+6. **Editor on the read path**: `threadlog.Post` gains `EditorID uint64`, the current revision's frame actor, set in `decodePost`. `dto.Post` gains `edited_by_moderator bool`: `EntryEdited` is set and `EditorID != Author`. It is drawn in `postsDeps`, which the page, the single post, replies and user posts all use. `dto.ts` gains the field (types only) because the contract test requires it; the built dist does not change.
+7. **Audit**: the projection writer writes the rows (TKT-01M29CKRGS step 1); this ticket adds no second writer. A `Delete` with `by_moderator` by someone other than the post's author is `post.hidden`; one without it keeps `post.deleted` (only a hand-made log holds one). `Edit` and `Restore` by a non-author stay `post.edited` and `post.restored`. The service appends a moderator's record on another's post through `appendEvent`'s synchronous projection, so the row exists when the handler answers; an author's own action keeps the asynchronous path. docs/04 names `post.hidden`.
+8. **Client**: out of this lane. Filed as a draft: `Post.tsx` offers Edit, Delete and Restore on every post to `viewer.can_moderate`, and shows "(edited by a moderator)" for `edited_by_moderator`; regenerate `dist/`.
+9. **Docs**: docs/03 record table: the `Delete` body gains `by_moderator`. docs/07 "Edit, delete and restore", the thread response shape, and `dto.Post` get `edited_by_moderator` and the moderator rules. docs/04 audit list. The `internal/dto` goldens are regenerated.
 
 ### Tests
 
 - `TestModeratorEditsAnyPost`: a moderator's edit of a member's post appends an Edit whose frame actor is the moderator. The index `Author` is unchanged, the post is served with `edited_by_moderator: true`, and history lists the moderator as the revision's actor. One `post.edited` audit row is written.
-- `TestModeratorDeleteHidesAndOnlyAModeratorRestores`: a moderator's delete sets `EntryHiddenByMod`, not `EntryDeleted`. The author's restore, edit and delete are each `forbidden` and append nothing. A second moderator's restore clears it. One `post.hidden` and one `post.restored` row are written.
+- `TestModeratorDeleteHidesAndOnlyAModeratorRestores`: a moderator's delete sets `EntryHiddenByMod`, not `EntryDeleted`, and `by_moderator` is in the record. The author's restore, edit and delete are each `forbidden` and append nothing. A moderator's restore clears it. One `post.hidden` and one `post.restored` row are written.
 - `TestModeratorBypassesWindows`: past both author windows, a moderator's edit and delete of a member's post succeed.
 - `TestPostFlagEffectIsWhatApplyDoes`: add Delete with and without `by_moderator`, and Restore under `RequireAny`, including same-batch staging.
-- `TestRestoreRequireAny` (threadlog actor): Restore of a visible post is `ErrPostState`; of a deleted or a hidden post it succeeds; of a moved one it is refused.
+- `TestRestoreRequireAny` (threadlog actor): with `RequireAny`, a Restore of a visible post is `ErrPostState`; of a deleted or a hidden post it succeeds; of a moved one it is refused.
 - Reindex: a log with a moderator's Delete rebuilds the hidden-by-mod bit, and `post_meta.deleted` is 1.
-- **Response cache invariant**, `TestModeratorHideMovesTheResponseCacheKey`: a member's cached page is a miss after the hide, and the post is then a tombstone with no `html`. The moderator's class still gets the content.
+- Response cache, `TestModeratorHideMovesTheResponseCacheKey`: a member's cached page is a miss after the hide, and the post is then a tombstone with no `html`. The moderator's class still gets the content.
 
 ### Out of scope
 
@@ -92,6 +101,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - Auto-hide by flags (`auto`): TKT-01M29CP2PJ.
 - The author windows themselves: TKT-01M29CKRHS.
 - Hard redaction: TKT-01M29CXJZ9.
+- The client controls and marker: the draft named in step 8.
 
 ## Notes
 
