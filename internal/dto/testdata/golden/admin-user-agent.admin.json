@@ -1,0 +1,28 @@
+{
+  "user": {
+    "id": 31,
+    "user": {
+      "handle": "scribe",
+      "display_name": "Scribe",
+      "avatar": "",
+      "role": "member",
+      "kind": "agent"
+    },
+    "status": "active",
+    "created_at": 1757100000000,
+    "last_seen_at": null
+  },
+  "groups": [],
+  "identities": [],
+  "sessions": 0,
+  "agent": {
+    "credential": {
+      "created_at": 1757100000000,
+      "last_used_at": 1757650000000
+    },
+    "burst": 40,
+    "refill_seconds": null,
+    "default_burst": 20,
+    "default_refill_seconds": 30
+  }
+}

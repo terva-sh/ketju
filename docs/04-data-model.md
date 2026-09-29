@@ -203,6 +203,29 @@ immediate. Cookie carries only the session id. `pre_user` sessions carry an
 `identity_id` and no `user_id`; they exist only for approval-mode applicants
 and are accepted by the application endpoints alone (05).
 
+### agents, agent_credentials
+```
+agents: user_id (pk, references users), bucket_burst (nullable, >= 1),
+  bucket_refill_seconds (nullable, 1 to 604800), created_by, created_at
+agent_credentials: id, user_id, token_hash (32 bytes, unique), created_by,
+  created_at, last_used_at (nullable), revoked_at (nullable), revoked_by
+```
+An agent is a `users` row with `kind = 'agent'`. `agents` holds what only an
+agent has: who provisioned it and its token-bucket overrides, where null means
+the site default (`agents.write_burst`, `agents.write_refill_seconds`).
+
+`agent_credentials` holds an agent's bearer credential (05 "Agent accounts"),
+as the SHA-256 of the token, never the token. It is a table of its own
+rather than rows in `sessions`, because `sessions` has the user and pre-user
+CHECK, the expiry rules the sweeper applies, and the chokepoint scan, and a
+credential would need an exemption from all three. There is no expiry;
+revocation is the only way a credential ends, and a revoked row is kept. A
+partial unique index, `agent_credentials_live`, allows one live credential
+per agent. Writing one goes through `internal/auth/agentcred`, which checks
+in the same transaction that the agent is active, and revoking goes through
+`internal/perm`, which writes the audit row; `TestCredentialWritesHaveOneHome`
+holds both. (Migration 0013, TKT-01M29P9RSW.)
+
 ### applications (approval mode)
 ```
 id, identity_id (nullable: application may precede any login),
@@ -449,6 +472,17 @@ transaction that projects the record, with the frame's timestamp as `at`.
   names but `users` lacks, as in a database restored from a backup older
   than the logs, is written as NULL with the log's id as `"log_actor"`, so
   the foreign key cannot hold a thread's projection back.
+- Agent accounts (TKT-01M29P9RSW) write, against the agent and in the
+  transaction that makes the change: `user.created` when an admin provisions
+  one, with `"kind"` and `"handle"`; `agent.credential_issued`, with
+  `"replaced"`, true when a live credential was revoked for it;
+  `agent.credential_revoked`, with `"cause"`: `"admin"` for an admin's
+  revocation, `agent.credential_issued` for a replacement, or the status
+  action (`user.suspended`, `user.deactivated`, `user.anonymized`) that took
+  the agent out of active, written beside that action's own row; and
+  `agent.limits_changed`, with the new `"burst"` and `"refill_seconds"`, null
+  for the site default. The key is `"cause"` rather than `"via"`, because
+  `"via"` says what did an action when no account did.
 
 ### notifications
 ```
@@ -549,6 +583,8 @@ the code by `TestKeysDocumented`:
 <!-- settings:begin -->
 | Key | Default | Meaning |
 |-----|---------|---------|
+| `agents.write_burst` | `20` | Writes an agent may make at once before its token bucket refuses (08) |
+| `agents.write_refill_seconds` | `30` | Seconds for an agent's bucket to regain one write (08) |
 | `flags.auto_hide_threshold` | `3` | Open flags on a post that hide it pending review (08) |
 | `posts.delete_window_seconds` | `900` | How long after posting an author may delete a post (08) |
 | `posts.edit_window_seconds` | `86400` | How long after posting an author may edit a post (08) |
@@ -563,8 +599,8 @@ the code by `TestKeysDocumented`:
 Two defaults are not stated in 05 and 08 and were chosen in TKT-01M29BYYJ0.
 `registration.mode` defaults to `approval`, the v1 mode and the one that
 admits nobody unreviewed. `site_name` defaults to the product's name. The
-agent token-bucket settings (08 "Rate limits") arrive with agent accounts in
-Phase 2, which is also where their defaults get decided.
+agent token-bucket defaults were the maintainer's decision of 2026-09-29
+(TKT-01M29P9RSW, 08 "Rate limits").
 
 ## Projection tables (rebuildable)
 

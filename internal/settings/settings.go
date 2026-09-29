@@ -138,7 +138,24 @@ var (
 	// docs/08 "Flags (reports)": "default 3".
 	FlagAutoHideThreshold = define("flags.auto_hide_threshold", 3,
 		"Open flags on a post that hide it pending review.", atLeast(1))
+
+	// docs/08 "Rate limits": the per-agent token bucket, overridable per
+	// agent. Maintainer decision 2026-09-29 (TKT-01M29P9RSW): a burst of 20
+	// covers "twenty posts in a minute while working", and one token every
+	// 30 s refills 120 an hour.
+	AgentWriteBurst = define("agents.write_burst", 20,
+		"Writes an agent may make at once before its bucket refuses.", atLeast(1))
+	AgentWriteRefillSeconds = define("agents.write_refill_seconds", 30,
+		"Seconds for an agent's bucket to regain one write.", between(1, AgentRefillMaxSeconds))
 )
+
+// AgentRefillMaxSeconds bounds an agent's refill, the site default's and
+// each agent's own: one write a week. The bound has no product meaning
+// beyond "slow"; it exists because a refill is made a time.Duration, and a
+// large enough count of seconds overflows into a rate the limiter reads as
+// no limit at all (Terva review 1477). Migration 0013's CHECK carries the
+// same number.
+const AgentRefillMaxSeconds = 7 * 24 * 60 * 60
 
 // ErrUnknownKey is a key the registry does not have.
 var ErrUnknownKey = errors.New("settings: unknown key")
@@ -445,6 +462,16 @@ func oneOf(allowed ...string) *rule[string] {
 		check: func(s string) error {
 			if !slices.Contains(allowed, s) {
 				return fmt.Errorf("%q is not one of them", s)
+			}
+			return nil
+		}}
+}
+
+func between(least, most int) *rule[int] {
+	return &rule[int]{allowed: fmt.Sprintf("a whole number from %d to %d", least, most),
+		check: func(n int) error {
+			if n < least || n > most {
+				return fmt.Errorf("%d is outside %d to %d", n, least, most)
 			}
 			return nil
 		}}

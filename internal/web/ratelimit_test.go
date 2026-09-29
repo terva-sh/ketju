@@ -431,3 +431,47 @@ func TestKeyedLimitIsGeneral(t *testing.T) {
 		t.Errorf("the handler ran %d times, want 14", reached)
 	}
 }
+
+// TestKeyedRateLimitTakesEachRequestsRate is the per-agent bucket's
+// contract (TKT-01M29P9RSW): the rate comes with the key, so a key whose
+// rate changes keeps its bucket and is limited at the new rate from that
+// request, a lowered burst caps a full bucket at once, and two keys at
+// different rates do not share one.
+func TestKeyedRateLimitTakesEachRequestsRate(t *testing.T) {
+	c := newClock()
+	rates := map[string]Rate{"a": {Every: time.Minute, Burst: 3}, "b": {Every: time.Second, Burst: 1}}
+	h := KeyedRateLimit(func(r *http.Request) (string, Rate, bool) {
+		k := r.Header.Get("X-Test-Key")
+		return k, rates[k], k != ""
+	}, c.Now)(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	send := func(key string) int {
+		r := httptest.NewRequest(http.MethodPost, "/anything", nil)
+		r.Header.Set("X-Test-Key", key)
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, r)
+		return rec.Code
+	}
+	for i := range 3 {
+		if code := send("a"); code != http.StatusOK {
+			t.Fatalf("a's write %d: %d", i+1, code)
+		}
+	}
+	if code := send("a"); code != http.StatusTooManyRequests {
+		t.Fatalf("a over its burst: %d", code)
+	}
+	if send("b") != http.StatusOK || send("b") != http.StatusTooManyRequests {
+		t.Fatal("b's burst of 1 is not its own")
+	}
+	// a's refill drops to a second: one second later it has a token.
+	rates["a"] = Rate{Every: time.Second, Burst: 3}
+	c.advance(time.Second)
+	if code := send("a"); code != http.StatusOK {
+		t.Fatalf("a at its new rate: %d", code)
+	}
+	// A long rest fills a to its burst; lowering the burst caps it at once.
+	c.advance(time.Hour)
+	rates["a"] = Rate{Every: time.Hour, Burst: 1}
+	if send("a") != http.StatusOK || send("a") != http.StatusTooManyRequests {
+		t.Fatal("a lowered burst did not cap the bucket")
+	}
+}

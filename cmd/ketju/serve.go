@@ -16,6 +16,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/auth/agentcred"
 	"github.com/terva-sh/ketju/internal/auth/oidc"
 	"github.com/terva-sh/ketju/internal/auth/seal"
 	"github.com/terva-sh/ketju/internal/auth/session"
@@ -497,7 +498,9 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		Logger:  log,
 		Limits:  web.Limits{Upload: int64(cfg.Limits.AttachmentMB) << 20},
 		SiteURL: cfg.SiteURL,
-		Session: session.Middleware(sessions, log),
+		// A bearer credential decides a request that carries one, and every
+		// other request goes to the session middleware (TKT-01M29P9RSW).
+		Session: agentcred.Middleware(&agentcred.Store{DB: d}, session.Middleware(sessions, log), log),
 	})
 	if o.wrap != nil {
 		root = o.wrap(root)

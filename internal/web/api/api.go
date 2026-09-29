@@ -43,8 +43,8 @@ type Deps struct {
 	// it (admin.go).
 	Perm   *perm.Evaluator
 	Logger *slog.Logger
-	// Now is the per-identity limiter's clock; nil is time.Now. Tests set
-	// it.
+	// Now is the clock of the per-identity limiter and of the per-agent
+	// bucket; nil is time.Now. Tests set it.
 	Now func() time.Time
 }
 
@@ -73,6 +73,9 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 	}
 	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, applications: d.Applications,
 		perm: d.Perm, log: log, applyLimit: web.KeyedLimit(web.ApplyRate, applicantKey, d.Now),
+		// The per-agent bucket (agents.go, TKT-01M29P9RSW): one for the
+		// handler set, so every route it wraps draws on the same buckets.
+		agentLimit: web.KeyedRateLimit(agentCharge, d.Now),
 		// The groups service needs nothing Users and Perm do not already
 		// carry, so it is built here rather than being one more required
 		// dependency (TKT-01M29CXK1X).
@@ -81,7 +84,7 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now}}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
-		mux.HandleFunc(rt.Pattern(), rt.Handler)
+		mux.HandleFunc(rt.Pattern(), h.charged(rt.Method, rt.Path, rt.Handler))
 	}
 	h.registerAdmin(mux)
 	mux.Handle("/api/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -151,6 +154,9 @@ type handlers struct {
 	// (apply.go). There is one per handler set, so every route it wraps
 	// draws on the same buckets.
 	applyLimit func(http.Handler) http.Handler
+	// agentLimit is the per-agent token bucket every write route but the
+	// read position and drafts is charged to (agents.go).
+	agentLimit func(http.Handler) http.Handler
 
 	// adminRoutes is every route adminRoute registered, with its gate.
 	adminRoutes []adminRouteEntry

@@ -74,6 +74,11 @@ func TestSettingsUnknownKeyRejected(t *testing.T) {
 		{"posts.edit_window_seconds", `1.5`, ErrInvalidValue},
 		{"posts.edit_window_seconds", `-1`, ErrInvalidValue},
 		{"flags.auto_hide_threshold", `0`, ErrInvalidValue},
+		{"agents.write_burst", `0`, ErrInvalidValue},
+		{"agents.write_refill_seconds", `0`, ErrInvalidValue},
+		// Past a week the refill would overflow time.Duration (review 1477).
+		{"agents.write_refill_seconds", `604801`, ErrInvalidValue},
+		{"agents.write_refill_seconds", `9223372036854775807`, ErrInvalidValue},
 		{"public_edit_history", `{}`, ErrInvalidValue},
 		{"public_edit_history", `not json`, ErrInvalidValue},
 	} {
@@ -300,7 +305,7 @@ func TestRefusalsSayWhatIsAllowed(t *testing.T) {
 		{"slow_mode.default_seconds", `"x"`, "it takes a whole number, 0 or more"},
 		{"public_edit_history", `yes`, "it takes true or false"},
 		{"site_name", `""`, "it takes text of 1 to 100 characters"},
-		{"site_nam", `"x"`, "the keys are flags.auto_hide_threshold, posts.delete_window_seconds"},
+		{"site_nam", `"x"`, "the keys are agents.write_burst, agents.write_refill_seconds, flags.auto_hide_threshold"},
 	} {
 		err := Set(t.Context(), d, c.key, json.RawMessage(c.value), 0, now)
 		if err == nil || !strings.Contains(err.Error(), c.want) {

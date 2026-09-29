@@ -84,6 +84,10 @@ type Querier interface {
 	// A user's live member sessions, by the lookup's own cutoffs
 	// (session.ExpiredBefore).
 	CountUserSessions(ctx context.Context, arg CountUserSessionsParams) (int64, error)
+	// Agent accounts and their credentials (TKT-01M29P9RSW). Writes go through
+	// internal/service/users (provisioning, limits) and internal/auth/agentcred
+	// (issuing and revoking), each with its audit row in the same transaction.
+	CreateAgent(ctx context.Context, arg CreateAgentParams) error
 	// A new blob has no references yet, so it is unreferenced from the moment
 	// it is uploaded; the post that carries it adds the first one.
 	CreateBlob(ctx context.Context, arg CreateBlobParams) error
@@ -180,6 +184,7 @@ type Querier interface {
 	//
 	// Only forums with an unread thread have a row.
 	ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error)
+	GetAgent(ctx context.Context, userID int64) (Agent, error)
 	GetApplication(ctx context.Context, id int64) (Application, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetFormByID(ctx context.Context, id int64) (Form, error)
@@ -226,6 +231,7 @@ type Querier interface {
 	// "account unavailable" page, and status_version, which the Reactivate
 	// button's cookie is bound to (docs/05 "Login flow").
 	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
+	InsertAgentCredential(ctx context.Context, arg InsertAgentCredentialParams) error
 	InsertApplication(ctx context.Context, arg InsertApplicationParams) (int64, error)
 	InsertApplicationNote(ctx context.Context, arg InsertApplicationNoteParams) (int64, error)
 	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
@@ -267,6 +273,12 @@ type Querier interface {
 	ListProjectionLengths(ctx context.Context) ([]ListProjectionLengthsRow, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	ListUserSessions(ctx context.Context, userID sql.NullInt64) ([]ListUserSessionsRow, error)
+	LiveAgentCredential(ctx context.Context, userID int64) (LiveAgentCredentialRow, error)
+	// LookupAgentCredential resolves a token's hash to a live credential: not
+	// revoked, on an agent account that is active. Anything else is no row, so
+	// a credential stops working the moment its account leaves active, whatever
+	// revoked it or failed to.
+	LookupAgentCredential(ctx context.Context, tokenHash sqltypes.SessionHash) (LookupAgentCredentialRow, error)
 	// LookupSession is the whole of session resolution in one statement: the
 	// session, alive by both expiry rules, and the user it belongs to (none for a
 	// pre_user session). internal/auth/session binds the cutoffs from one
@@ -340,10 +352,15 @@ type Querier interface {
 	// in ordinal order as the index would give them. The replies endpoint uses it
 	// only once the projection has reached the length it serves.
 	RepliesTo(ctx context.Context, arg RepliesToParams) ([]int64, error)
+	// RevokeAgentCredentials ends the account's live credential, if it has one,
+	// and reports how many it ended: 0 or 1, by agent_credentials_live.
+	RevokeAgentCredentials(ctx context.Context, arg RevokeAgentCredentialsParams) (int64, error)
 	// IS rather than =, so a null forum_id matches the global row. Every
 	// parameter is named: see TestQueriesDoNotMixParameterStyles.
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
 	SetActiveFormVersion(ctx context.Context, arg SetActiveFormVersionParams) error
+	// A null override means the site default.
+	SetAgentLimits(ctx context.Context, arg SetAgentLimitsParams) (int64, error)
 	SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (int64, error)
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
@@ -381,6 +398,9 @@ type Querier interface {
 	TagsForThreads(ctx context.Context, threadIds []int64) ([]ThreadTag, error)
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
+	// TouchAgentCredential records a use, at most once per interval: the
+	// statement repeats the check, so concurrent requests write once.
+	TouchAgentCredential(ctx context.Context, arg TouchAgentCredentialParams) (int64, error)
 	// TouchSession slides last_used_at only when the stored value is due, so the
 	// once-per-five-minutes rule holds in the statement itself: two requests that
 	// both read a due value write once between them. It also requires the row to

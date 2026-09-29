@@ -44,8 +44,9 @@ var (
 	// retry loop is stopped before it fills a disk.
 	//
 	// The per-agent token bucket docs/08 actually specifies is a different
-	// mechanism with its own settings, and belongs to TKT-01M29P9RSW with the
-	// agent credential it is charged against.
+	// mechanism with its own settings (TKT-01M29P9RSW): KeyedRateLimit,
+	// wrapping the API's routes in internal/web/api, charged against the
+	// agent credential.
 	writeRate = Rate{Every: 500 * time.Millisecond, Burst: 60}
 )
 
@@ -142,7 +143,15 @@ func newLimiter(r Rate, max int, now func() time.Time) *limiter {
 // allow spends a token. It reports whether the request may proceed and, when
 // it may not, how long until the next token arrives.
 func (l *limiter) allow(key string) (bool, time.Duration) {
-	if l.rate.Burst <= 0 || l.rate.Every <= 0 {
+	return l.allowAt(key, l.rate)
+}
+
+// allowAt is allow at rate rather than the limiter's own, for a key whose
+// rate is its own: an agent's bucket, whose burst and refill are overridable
+// per agent and read afresh on each request. A bucket filled under a larger
+// burst is capped at the new one on its next refill.
+func (l *limiter) allowAt(key string, rate Rate) (bool, time.Duration) {
+	if rate.Burst <= 0 || rate.Every <= 0 {
 		return true, 0 // an unconfigured limiter does not limit
 	}
 
@@ -151,30 +160,30 @@ func (l *limiter) allow(key string) (bool, time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
-	b := l.lookup(key, now)
+	b := l.lookup(key, rate, now)
 
 	// Refill for the time since the last request, capped at the burst.
 	elapsed := now.Sub(b.last)
 	if elapsed > 0 {
-		b.tokens += float64(elapsed) / float64(l.rate.Every)
-		if b.tokens > float64(l.rate.Burst) {
-			b.tokens = float64(l.rate.Burst)
-		}
+		b.tokens += float64(elapsed) / float64(rate.Every)
+	}
+	if b.tokens > float64(rate.Burst) {
+		b.tokens = float64(rate.Burst)
 	}
 	b.last = now
 
 	if b.tokens < 1 {
 		// Time until the bucket holds one whole token.
 		missing := 1 - b.tokens
-		return false, time.Duration(missing * float64(l.rate.Every))
+		return false, time.Duration(missing * float64(rate.Every))
 	}
 	b.tokens--
 	return true, 0
 }
 
-// lookup finds or creates a bucket, rotating generations when the live map is
-// full. The caller holds the lock.
-func (l *limiter) lookup(key string, now time.Time) *bucket {
+// lookup finds or creates a bucket, full at rate, rotating generations when
+// the live map is full. The caller holds the lock.
+func (l *limiter) lookup(key string, rate Rate, now time.Time) *bucket {
 	if b, ok := l.cur[key]; ok {
 		return b
 	}
@@ -187,7 +196,7 @@ func (l *limiter) lookup(key string, now time.Time) *bucket {
 		l.old = l.cur
 		l.cur = make(map[string]*bucket)
 	}
-	b := &bucket{tokens: float64(l.rate.Burst), last: now}
+	b := &bucket{tokens: float64(rate.Burst), last: now}
 	l.cur[key] = b
 	return b
 }
@@ -230,15 +239,27 @@ func RateLimit(now func() time.Time) func(http.Handler) http.Handler {
 // Each call makes its own buckets, so wrap every route that shares a limit
 // with the one middleware KeyedLimit returned.
 func KeyedLimit(rate Rate, key func(*http.Request) (string, bool), now func() time.Time) func(http.Handler) http.Handler {
-	l := newLimiter(rate, maxTrackedKeys, now)
+	return KeyedRateLimit(func(r *http.Request) (string, Rate, bool) {
+		k, ok := key(r)
+		return k, rate, ok
+	}, now)
+}
+
+// KeyedRateLimit is KeyedLimit where key also says the rate, for a limit
+// whose rate is the caller's own and may change between requests: the
+// per-agent token bucket (TKT-01M29P9RSW), whose burst and refill are site
+// settings overridable per agent. A key keeps its bucket when its rate
+// changes, and the new rate applies from that request.
+func KeyedRateLimit(key func(*http.Request) (string, Rate, bool), now func() time.Time) func(http.Handler) http.Handler {
+	l := newLimiter(Rate{}, maxTrackedKeys, now)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			k, ok := key(r)
+			k, rate, ok := key(r)
 			if !ok {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if allowed, retry := l.allow(k); !allowed {
+			if allowed, retry := l.allowAt(k, rate); !allowed {
 				// Rounded up, as RateLimit does.
 				problem.WriteRetryAfter(w, r, problem.CodeRateLimited, retry+time.Second)
 				return

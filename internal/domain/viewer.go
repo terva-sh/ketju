@@ -16,6 +16,12 @@ const (
 	KindAgent = "agent"
 )
 
+// ValidKind reports whether k is a user kind. It is here, beside the kinds,
+// so that a filter can check one without naming KindAgent: outside the few
+// places that must, a check on an agent's kind is what
+// TestNoKindChecksInPermissions refuses (TKT-01M29P9RSW).
+func ValidKind(k string) bool { return k == KindHuman || k == KindAgent }
+
 // Viewer is whoever is making a request, as the session middleware resolved
 // it (TKT-01M29C5Y3E). The zero value is an anonymous viewer.
 type Viewer struct {

@@ -52,9 +52,7 @@ func (s *Service) AdminList(ctx context.Context, v domain.Viewer, f AdminFilter,
 	default:
 		return out, problem.Coded(problem.CodeValidationFailed, fmt.Errorf("users: %q is not a status", f.Status))
 	}
-	switch f.Kind {
-	case "", domain.KindHuman, domain.KindAgent:
-	default:
+	if f.Kind != "" && !domain.ValidKind(f.Kind) {
 		return out, problem.Coded(problem.CodeValidationFailed, fmt.Errorf("users: %q is not a kind", f.Kind))
 	}
 	after := ""
@@ -164,7 +162,8 @@ func (s *Service) adminDetail(ctx context.Context, q *dbq.Queries, handle string
 		return err
 	}
 	out.Sessions = new(int(n))
-	return nil
+	out.Agent, err = agentInfo(ctx, q, u)
+	return err
 }
 
 // SetRole is PUT /admin/users/{handle}/role: an admin sets the account's

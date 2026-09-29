@@ -301,6 +301,34 @@ export interface AdminUserDetail {
   groups: Membership[];
   identities: AdminIdentity[] | null;
   sessions: number | null;
+  // agent is an agent account's credential and limits: admins only, null
+  // for a moderator and for a human.
+  agent: AgentInfo | null;
+}
+
+export interface AgentInfo {
+  credential: AgentCredential | null;
+  // burst and refill_seconds are null when the agent uses the site default.
+  burst: number | null;
+  refill_seconds: number | null;
+  default_burst: number;
+  default_refill_seconds: number;
+}
+
+export interface AgentCredential {
+  created_at: Millis;
+  last_used_at: Millis | null;
+}
+
+// IssuedCredential carries the only copy of an agent's token there will be.
+export interface IssuedCredential {
+  token: string;
+  created_at: Millis;
+}
+
+export interface CreatedAgent {
+  user: AdminUserDetail;
+  credential: IssuedCredential | null;
 }
 
 export interface Group {

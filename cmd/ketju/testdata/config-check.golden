@@ -51,6 +51,8 @@ limits.attachment_mb = 10                                        # default
 
 # runtime settings: stored in the database and changed in the admin UI,
 # never read from this file. Shown with the value a new forum starts with.
+#   agents.write_burst = 20                     # Writes an agent may make at once before its bucket refuses.
+#   agents.write_refill_seconds = 30            # Seconds for an agent's bucket to regain one write.
 #   flags.auto_hide_threshold = 3               # Open flags on a post that hide it pending review.
 #   posts.delete_window_seconds = 900           # How long after posting an author may delete a post.
 #   posts.edit_window_seconds = 86400           # How long after posting an author may edit a post.

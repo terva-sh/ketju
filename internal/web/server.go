@@ -84,9 +84,11 @@ type Options struct {
 	// pass a middleware that returns its argument unchanged; that is explicit
 	// at the call site, which is where the decision should be visible.
 	//
-	// Session is session.Middleware (internal/auth/session), which needs the
-	// database, so it has no default here. Nil leaves every request
-	// anonymous, which is what a test of something else usually wants.
+	// Session is session.Middleware (internal/auth/session), composed
+	// inside agentcred.Middleware so a bearer credential decides a request
+	// that carries one. Both need the database, so there is no default
+	// here. Nil leaves every request anonymous, which is what a test of
+	// something else usually wants.
 	//
 	// They are fields rather than a general "add middleware here" list so that
 	// the order below stays a property of this file. A chain assembled by

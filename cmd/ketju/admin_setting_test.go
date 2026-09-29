@@ -123,7 +123,7 @@ func TestAdminSettingRefuses(t *testing.T) {
 		want string
 	}{
 		{"unknown key", []string{"set", "--root", root, "registration.modes", "open"}, exitNotFound,
-			`unknown key: "registration.modes"; the keys are flags.auto_hide_threshold,`},
+			`unknown key: "registration.modes"; the keys are agents.write_burst,`},
 		{"get unknown key", []string{"get", "--root", root, "nope"}, exitNotFound, "the keys are"},
 		{"unknown key, no database", []string{"get", "--root", empty, "nope"}, exitNotFound, "the keys are"},
 		{"invite", []string{"set", "--root", root, "registration.mode", "invite"}, exitInvalidValue,

@@ -54,5 +54,6 @@
       "last_login_at": null
     }
   ],
-  "sessions": 2
+  "sessions": 2,
+  "agent": null
 }

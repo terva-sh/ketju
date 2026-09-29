@@ -64,6 +64,7 @@ func (h *handlers) registerAdmin(mux *http.ServeMux) {
 	h.registerLifecycle(mux)    // account.go, TKT-01M29CKRFS
 	h.registerApplications(mux) // applications.go, TKT-01M29CP2MG
 	h.registerModeration(mux)   // moderate.go, TKT-01M29CKRGS
+	h.registerAgents(mux)       // agents.go, TKT-01M29P9RSW
 }
 
 // adminRoute registers handler for pattern behind g, and records the route.
@@ -80,7 +81,7 @@ func (h *handlers) adminRoute(mux *http.ServeMux, pattern string, g gate, handle
 		}
 	}
 	h.adminRoutes = append(h.adminRoutes, adminRouteEntry{pattern: pattern, gate: g, handler: gated})
-	mux.HandleFunc(pattern, gated)
+	mux.HandleFunc(pattern, h.charged(method, path, gated))
 }
 
 // admin admits an active admin, or writes the refusal and reports false.

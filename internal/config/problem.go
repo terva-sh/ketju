@@ -85,6 +85,7 @@ func (p *problemList) err() error {
 // row. docs/05 shows some of them in a config.toml example, which is the
 // document that is wrong.
 var movedKeys = map[string]string{
+	"agents":                             "the agent rate limits are runtime settings: they live in the settings table and are changed in the admin UI",
 	"registration":                       "registration policy is a runtime setting: it lives in the settings table and is changed in the admin UI, not by editing this file and restarting",
 	"registration.mode":                  "registration mode is a runtime setting: it lives in the settings table and is changed in the admin UI",
 	"registration.allow_local_passwords": "local passwords are a runtime setting: they live in the settings table and are changed in the admin UI",

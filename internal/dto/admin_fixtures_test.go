@@ -12,6 +12,49 @@ func init() {
 	corpus["admin-group."+tAdmin] = bookClubDetail()
 	corpus["permissions."+tAdmin] = permissionGrid()
 	corpus["permission-preview."+tAdmin] = permissionPreview()
+
+	// Agent accounts (TKT-01M29P9RSW).
+	corpus["admin-user-agent."+tAdmin] = agentDetail()
+	corpus["created-agent."+tAdmin] = CreatedAgent{User: newAgentDetail(true), Credential: &issuedToken}
+	corpus["created-agent-tokenless."+tAdmin] = CreatedAgent{User: newAgentDetail(false)}
+	corpus["issued-credential."+tAdmin] = issuedToken
+}
+
+// issuedToken is a credential as it is issued: the one time the token is
+// in a response.
+var issuedToken = IssuedCredential{Token: "ketju_agent_3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
+	CreatedAt: 1757700000000}
+
+// agentDetail is an agent as an admin sees it: a live credential in use, its
+// own burst, and the site's refill.
+func agentDetail() AdminUserDetail {
+	return AdminUserDetail{
+		User:       AdminUser{ID: 31, User: scribe, Status: "active", CreatedAt: 1757100000000},
+		Groups:     []Membership{},
+		Identities: []AdminIdentity{},
+		Sessions:   ptr(0),
+		Agent: &AgentInfo{
+			Credential: &AgentCredential{CreatedAt: 1757100000000, LastUsedAt: ptr(Millis(1757650000000))},
+			Burst:      ptr(40), DefaultBurst: 20, DefaultRefillSeconds: 30,
+		},
+	}
+}
+
+// newAgentDetail is an agent just provisioned, with a credential never used
+// or with none, and the site's burst and its own refill.
+func newAgentDetail(credential bool) AdminUserDetail {
+	d := AdminUserDetail{
+		User: AdminUser{ID: 32, User: Author{Handle: "indexer", DisplayName: "Indexer", Role: "member", Kind: "agent"},
+			Status: "active", CreatedAt: 1757700000000},
+		Groups:     []Membership{},
+		Identities: []AdminIdentity{},
+		Sessions:   ptr(0),
+		Agent:      &AgentInfo{RefillSeconds: ptr(60), DefaultBurst: 20, DefaultRefillSeconds: 30},
+	}
+	if credential {
+		d.Agent.Credential = &AgentCredential{CreatedAt: issuedToken.CreatedAt}
+	}
+	return d
 }
 
 var (

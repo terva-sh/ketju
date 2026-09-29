@@ -37,6 +37,45 @@ type AdminUserDetail struct {
 	// Sessions is how many live member sessions the account has: admins
 	// only, and null for a moderator.
 	Sessions *int `json:"sessions"`
+	// Agent is an agent account's credential and rate limits: admins only,
+	// and null for a moderator and for a human (TKT-01M29P9RSW).
+	Agent *AgentInfo `json:"agent"`
+}
+
+// AgentInfo is an agent account as the users screen shows it to an admin.
+type AgentInfo struct {
+	// Credential is the live credential, null when the agent has none. The
+	// token itself is never shown again after it is issued.
+	Credential *AgentCredential `json:"credential"`
+	// Burst and RefillSeconds are the agent's own token bucket, null when
+	// it uses the site default, which DefaultBurst and
+	// DefaultRefillSeconds give.
+	Burst                *int `json:"burst"`
+	RefillSeconds        *int `json:"refill_seconds"`
+	DefaultBurst         int  `json:"default_burst"`
+	DefaultRefillSeconds int  `json:"default_refill_seconds"`
+}
+
+// AgentCredential is an agent's live credential, without its token.
+type AgentCredential struct {
+	CreatedAt Millis `json:"created_at"`
+	// LastUsedAt is null for a credential never used. It moves at most once
+	// every five minutes.
+	LastUsedAt *Millis `json:"last_used_at"`
+}
+
+// IssuedCredential is POST /admin/users/{handle}/credential: the new
+// token, shown this once and never again.
+type IssuedCredential struct {
+	Token     string `json:"token"`
+	CreatedAt Millis `json:"created_at"`
+}
+
+// CreatedAgent is POST /admin/users: the new agent account and, when one
+// was asked for, its credential.
+type CreatedAgent struct {
+	User       AdminUserDetail   `json:"user"`
+	Credential *IssuedCredential `json:"credential"`
 }
 
 // GroupRef names a group.

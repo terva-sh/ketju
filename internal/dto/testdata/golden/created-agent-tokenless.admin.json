@@ -1,0 +1,28 @@
+{
+  "user": {
+    "user": {
+      "id": 32,
+      "user": {
+        "handle": "indexer",
+        "display_name": "Indexer",
+        "avatar": "",
+        "role": "member",
+        "kind": "agent"
+      },
+      "status": "active",
+      "created_at": 1757700000000,
+      "last_seen_at": null
+    },
+    "groups": [],
+    "identities": [],
+    "sessions": 0,
+    "agent": {
+      "credential": null,
+      "burst": null,
+      "refill_seconds": 60,
+      "default_burst": 20,
+      "default_refill_seconds": 30
+    }
+  },
+  "credential": null
+}

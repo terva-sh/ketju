@@ -529,6 +529,33 @@ work, so revocation is the only way it ends. Revoking one agent's token stops
 that agent and nothing else, which is the entire reason the credential is not
 the admin's.
 
+What the credential is, as built (TKT-01M29P9RSW):
+- **The token** is `ketju_agent_` followed by 32 random bytes in unpadded
+  base64url. The prefix lets a secret scanner recognise a leaked one. It is
+  stored as its SHA-256 in `agent_credentials` (04), never in `sessions`, and
+  it is shown once, in the response that issues it.
+- **One live credential per agent.** Issuing a new one revokes the old in the
+  same transaction, which is how a leaked token is rotated. Revoked rows are
+  kept as the record of who revoked them and when.
+- **Issuing needs an active agent.** Suspension and deactivation revoke the
+  credential, so a credential issued during a suspension would come alive at
+  unsuspension with nobody having issued it then. The agent's status is read
+  in the transaction that inserts the credential, so a suspension cannot land
+  between the check and the write. An unsuspended agent has no credential
+  until an admin issues one.
+- **The header decides.** A request that carries `Authorization` is
+  authenticated by it and the session cookie is not read. Anything but a live
+  bearer credential of an active agent is `401`, not an anonymous request.
+  A reverse proxy that adds its own `Authorization` header, such as HTTP basic
+  auth in front of a staging site, must strip it before passing the request
+  on, or every request is refused.
+- **It is not a session.** It creates no `sessions` row and sets no cookie, so
+  the session chokepoint (`session.IssueUserWith`) is still the only way a
+  session exists, and no status check is skipped by it: the lookup itself
+  refuses a credential whose agent is not active.
+- **Agents are created as `member`.** A role is then changed through the same
+  audited role change as anyone's.
+
 **Roles apply unchanged.** An agent can be a `member`, a `moderator`, or an
 `admin`. Whether to trust an agent with moderation is an operator's judgement
 and the software does not decide it. This is why `kind` is a separate column
@@ -555,8 +582,11 @@ requirement for the default deployment.
 
 ## Account lifecycle
 
-For an agent, suspension and deactivation revoke its credential rather than its
-sessions. The states, the reasons, and the audit trail are otherwise the same.
+For an agent, suspension, deactivation and anonymization revoke its credential
+as well as its sessions, of which it has none. The revocation is in the same
+transaction as the status change and writes its own `agent.credential_revoked`
+row. Unsuspending does not bring the credential back: an admin issues a new one.
+The states, the reasons, and the audit trail are otherwise the same.
 
 - **Deactivate (self)**: sessions revoked, identities kept, posts kept with
   handle shown. The member returns by signing in with any linked identity and

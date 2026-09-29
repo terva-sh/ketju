@@ -10,6 +10,25 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
+type Agent struct {
+	UserID              int64
+	BucketBurst         sql.NullInt64
+	BucketRefillSeconds sql.NullInt64
+	CreatedBy           sql.NullInt64
+	CreatedAt           int64
+}
+
+type AgentCredential struct {
+	ID         int64
+	UserID     int64
+	TokenHash  sqltypes.SessionHash
+	CreatedBy  sql.NullInt64
+	CreatedAt  int64
+	LastUsedAt sql.NullInt64
+	RevokedAt  sql.NullInt64
+	RevokedBy  sql.NullInt64
+}
+
 type Application struct {
 	ID           int64
 	IdentityID   sql.NullInt64

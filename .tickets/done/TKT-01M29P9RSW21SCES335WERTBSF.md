@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29P9RSW21SCES335WERTBSF
 title: Implement agent accounts, provisioning, and the agent credential
 type: task
-status: ready
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -24,15 +24,17 @@ references:
     path: docs/05-identity-and-accounts.md
   - ref: design:api
     path: docs/07-api-and-clients.md
+  - ref: pr:163
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-12T02:14:17Z
-updated_at: 2026-09-29T07:18:13Z
+updated_at: 2026-09-29T21:30:31Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-p9rsw
   name: ""
 extensions: {}
 ---
@@ -51,18 +53,18 @@ Note the one subtlety worth getting right: the machine-authored frame flag bit i
 
 ## Acceptance criteria
 
-- [ ] users.kind exists with values human and agent, defaulting to human, and is orthogonal to role
-- [ ] An admin can create an agent account and issue its credential in one flow, and revoke the credential without touching the account
-- [ ] The credential authenticates as Authorization: Bearer, is stored hashed, has no idle expiry, and creates no session row
-- [ ] Suspending or deactivating an agent revokes its credential, and the audit log records the actor either way
-- [ ] The server sets the machine-authored frame flag bit from users.kind at append time, and rejects or ignores any client-supplied value
-- [ ] The index entry carries the mirroring machine-authored bit so a lens can filter without decoding bodies
-- [ ] An agent sets its read position only through PUT /threads/{id}/read, with no beacon and no mark-on-render path
-- [ ] author.kind and the per-post machine_authored flag appear in the thread response, and a golden JSON test pins both
-- [ ] An agent can hold the moderator and admin roles through the audited role change, and TestNoKindChecksInPermissions finds no reference to domain.KindAgent outside the frame-flag stamp, the credential, provisioning and the limiter's agent policy
-- [ ] Bearer-authenticated writes, except read positions and drafts, are charged to a per-agent token bucket (site defaults agents.write_burst 20 and agents.write_refill_seconds 30, overridable per agent), and exceeding it is 429 with Retry-After and appends nothing (TestAgentBucket)
-- [ ] A bearer request writes no sessions row and sets no cookie, and the chokepoint's caller lists are unchanged (TestAgentCredentialMintsNoSession, TestOneDoorIntoSessions)
-- [ ] Issuing a credential to an agent whose status is not active answers conflict and writes no credential, so an unsuspended agent has no live credential until one is issued afresh (TestIssueRefusedUnlessActive)
+- [x] users.kind exists with values human and agent, defaulting to human, and is orthogonal to role
+- [x] An admin can create an agent account and issue its credential in one flow, and revoke the credential without touching the account
+- [x] The credential authenticates as Authorization: Bearer, is stored hashed, has no idle expiry, and creates no session row
+- [x] Suspending or deactivating an agent revokes its credential, and the audit log records the actor either way
+- [x] The server sets the machine-authored frame flag bit from users.kind at append time, and rejects or ignores any client-supplied value
+- [x] The index entry carries the mirroring machine-authored bit so a lens can filter without decoding bodies
+- [x] An agent sets its read position only through PUT /threads/{id}/read, with no beacon and no mark-on-render path
+- [x] author.kind and the per-post machine_authored flag appear in the thread response, and a golden JSON test pins both
+- [x] An agent can hold the moderator and admin roles through the audited role change, and TestNoKindChecksInPermissions finds no reference to domain.KindAgent outside the frame-flag stamp, the credential, provisioning and the limiter's agent policy
+- [x] Bearer-authenticated writes, except read positions and drafts, are charged to a per-agent token bucket (site defaults agents.write_burst 20 and agents.write_refill_seconds 30, overridable per agent), and exceeding it is 429 with Retry-After and appends nothing (TestAgentBucket)
+- [x] A bearer request writes no sessions row and sets no cookie, and the chokepoint's caller lists are unchanged (TestAgentCredentialMintsNoSession, TestOneDoorIntoSessions)
+- [x] Issuing a credential to an agent whose status is not active answers conflict and writes no credential, so an unsuspended agent has no live credential until one is issued afresh (TestIssueRefusedUnlessActive)
 
 ## Implementation plan
 
@@ -90,7 +92,26 @@ Engineering choices made here, each with the alternative that lost:
 - **Agents are created as `member`.** A role is then changed through `perm.ChangeRole` (TKT-01M29CXK1X), so a role never changes without its audit row, and there is one path for it.
 - **What is charged:** every mutating `/api/v1/*` request authenticated by a bearer, except `PUT` and `DELETE /threads/{id}/read` and `/drafts/*`. Reading and marking read is not what the bucket guards against, and charging it would throttle an agent for reading.
 
-### Approach
+
+### Approach (revised at claim, 2026-09-29, against main 855ca5d)
+
+What changed from the groomed approach, and why:
+- **The limiter wraps the API group, not a new chain position.** `web.KeyedLimit` is reused through a new `web.KeyedRateLimit`, whose key function also returns the rate, so a per-agent override and a changed site default apply on the next request. `api.New` wraps its mux with it, as it builds `applyLimit`, and shares `Deps.Now` as the test clock. A new `web.Options.IdentityLimit` would have needed wiring in `serve`, and the chain's own rule is that security middleware you have to opt into gets forgotten. The API group is exactly what is charged.
+- **Lifecycle revocation needs no kind check.** `perm.changeStatus`, for any move out of active, and `perm.Anonymize` call `agentcred.RevokeIn`. It revokes the account's live credential and writes `agent.credential_revoked` only when a credential was live. A human has none, so perm never reads `users.kind`. The audit detail is `{"cause": "<transition action>"}`, not `via`, because `audit.By.Via` owns that key.
+- **The client controls are filed as a draft.** The client lane holds the committed dist. This PR is the server, the API and the docs. The users-screen controls (step 8) are a linked draft.
+
+1. **Migration** `0013_agents.sql` (renumbered if another lane lands 0013 first): `agents` and `agent_credentials` as above, plus the partial unique index for one live credential.
+2. **Queries** in `queries/agents.sql`: insert and read `agents`, set limits, insert a credential, revoke live credentials (`:execrows`), look a credential up with its user and overrides, touch `last_used_at`, and read the live credential for the admin detail.
+3. **Settings** `agents.write_burst` (20) and `agents.write_refill_seconds` (30), both `atLeast(1)`, documented in docs/04.
+4. **`internal/auth/agentcred`**: the token (`ketju_agent_` + 32 random bytes, base64url), stored as SHA-256; `Issue(ctx, q, userID, by)`, which reads kind and status in the insert's transaction and refuses a non-agent or a non-active agent; `RevokeIn`; `Store.Lookup` and `Store.Touch`; `Middleware(store, sessionMW, log)`. A present `Authorization` header decides the request and the session middleware is not called. Anything other than a live bearer for an active agent is 401 `unauthenticated` with `WWW-Authenticate: Bearer`.
+5. **Rate policy** in `internal/web/api/agents.go`: the key is `agent:<id>` with the credential's rate. It charges every mutating bearer request except the read-position and draft routes.
+6. **`internal/service/users/agents.go`**: `CreateAgent`, `IssueCredential`, `RevokeCredential`, `SetLimits`, all admin-gated and each audited in its own transaction. `AdminDetail` gains `agent`.
+7. **Routes**, all behind the admin gate and `no-store`: `POST /admin/users`, `POST` and `DELETE /admin/users/{handle}/credential`, and `PUT /admin/users/{handle}/agent-limits`. The DTOs and goldens are as planned below.
+8. **Docs** 04, 05, 07, 08 as planned below.
+
+Tests as listed below. TestNoKindChecksInPermissions allows `threads/create.go` (authorFlags), `internal/auth/agentcred`, `internal/service/users/agents.go` and `internal/web/api/agents.go`, besides `domain` itself. `users/admin.go`'s kind filter moves to `domain.ValidKind`.
+
+### Approach (groomed)
 
 1. **Migration** (next free number):
    - `agents (user_id INTEGER PRIMARY KEY REFERENCES users (id), bucket_burst INTEGER CHECK (bucket_burst >= 1), bucket_refill_seconds INTEGER CHECK (bucket_refill_seconds >= 1), created_by INTEGER REFERENCES users (id), created_at INTEGER NOT NULL)`. A null override means the site default.
@@ -163,6 +184,27 @@ Maintainer decision 2026-09-29: the agent rate bucket allows a burst of 20 and r
 
 Terva review on PR #140, head a9d8a0a, medium (security): accepted and fixed. agentcred.Issue refuses an agent whose status is not active with conflict, checked in the insert's transaction, so a credential cannot be issued during a suspension and come alive at unsuspension (TestIssueRefusedUnlessActive).
 
+**agent:claude-code/phase2-run-p9rsw** at 2026-09-29T21:29:25Z
+
+Built on main 855ca5d, branch run/p9rsw-agent-accounts. Migration 0013 is free on main as of this note. If another lane lands a 0013 first, rename this one to the next number.
+
+What the next person needs:
+- **The client controls are TKT-01M3QH3GS2 (Add agent provisioning controls to the admin users screen), a draft.** The client lane held the committed dist, so this PR is the server, the API, the docs, and the client DTO types. The types are type-only, and `go generate ./internal/web/spa` leaves the dist byte-identical.
+- **GET /me answers an agent as anonymous**, because `users.Me` reads the session and a credential is not one. Nothing is exposed by it. Filed as TKT-01M3QH3X58 (Answer GET /me for an agent authenticated by its credential), a draft.
+- **The limiter wraps each API write route in `api.build`**, through `h.charged`, rather than sitting at a new chain position 6b. The plan's revised Approach gives the reason. The key is per agent (`agent:<user id>`), so rotating a token does not refill the bucket.
+- **A reverse proxy that adds basic auth** sends `Authorization: Basic` on every request, and under the settled "the header decides" rule each of those requests is 401. docs/05 says the proxy must strip the header. I kept the settled rule and did not reopen it.
+- **Audit detail key `cause`, not `via`.** `audit.Append` lets `By.Via` take over `via`, so a system actor's revocation would have lost the transition's name. docs/04 lists the values.
+
+Mutations tried against the tests. Each was caught:
+1. Issue without the active check: TestIssueRefusedUnlessActive and TestIssueThroughTheAPIRefusedUnlessActive.
+2. A status change that does not revoke: TestIssueRefusedUnlessActive and TestSuspendRevokesCredential.
+3. The lookup without `u.status = 'active'`: TestLookupRefusesAllButALiveActiveAgent and TestAgentCredentialRequiresActiveAgent.
+4. A malformed header falling through to the cookie: TestAgentCredentialRequiresActiveAgent.
+5. Nothing charged: TestAgentBucket.
+6. Replies exempt: TestAgentBucket.
+7. Drafts charged: TestAgentBucket.
+8. Per-agent overrides ignored: TestLimitsOverrideTheDefaults and TestAgentBucket.
+
 ## Comments
 
 **agent:claude-code/web** at 2026-09-19T23:21:33Z
@@ -180,3 +222,7 @@ applies to agent traffic too, at 60 burst and one per half second. An agent that
 trips it gets a 429 that did not come from its own bucket. That is intended --
 the ceiling is a crash barrier for every caller -- but it will look like a bug to
 whoever debugs the first agent that hits it.
+
+## Summary
+
+Agent accounts landed on the server. Migration 0013 adds agents and agent_credentials. internal/auth/agentcred issues the ketju_agent_ bearer token, stored as SHA-256 and refused unless the agent is active in the insert's transaction, and resolves it in a middleware that runs instead of the session middleware whenever Authorization is present. It writes no session row and sets no cookie, and the chokepoint lists are unchanged. perm.RevokeAgentCredentialIn revokes the credential inside suspension, deactivation and anonymization. web.KeyedRateLimit charges agent writes, except the read position and drafts, to a per-agent bucket (20 burst, one per 30 s, overridable per agent). Admin routes create agents, issue and revoke tokens, and set limits. The users-screen controls are the draft TKT-01M3QH3GS2, and GET /me for an agent is the draft TKT-01M3QH3X58.

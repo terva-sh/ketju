@@ -20,6 +20,7 @@ import type {
   ApplicationForm,
   ApplicationNote,
   ApplicationStatus,
+  CreatedAgent,
   CreatedPost,
   CreatedThread,
   Draft,
@@ -28,6 +29,7 @@ import type {
   ForumTree,
   GroupDetail,
   GroupList,
+  IssuedCredential,
   Me,
   PermissionGrid,
   PermissionPreview,
@@ -51,6 +53,7 @@ import adminApplicationsModerator from '../../../../internal/dto/testdata/golden
 import applicationNoteModerator from '../../../../internal/dto/testdata/golden/application-note.moderator.json';
 import adminGroupAdmin from '../../../../internal/dto/testdata/golden/admin-group.admin.json';
 import adminGroupsAdmin from '../../../../internal/dto/testdata/golden/admin-groups.admin.json';
+import adminUserAgentAdmin from '../../../../internal/dto/testdata/golden/admin-user-agent.admin.json';
 import adminUserAdmin from '../../../../internal/dto/testdata/golden/admin-user.admin.json';
 import adminUserModerator from '../../../../internal/dto/testdata/golden/admin-user.moderator.json';
 import adminUsersAdmin from '../../../../internal/dto/testdata/golden/admin-users.admin.json';
@@ -61,6 +64,8 @@ import applyStatusApprovedPreUser from '../../../../internal/dto/testdata/golden
 import applyStatusNonePreUser from '../../../../internal/dto/testdata/golden/apply-status-none.pre_user.json';
 import applyStatusPendingPreUser from '../../../../internal/dto/testdata/golden/apply-status-pending.pre_user.json';
 import applyStatusWithdrawnPreUser from '../../../../internal/dto/testdata/golden/apply-status-withdrawn.pre_user.json';
+import createdAgentAdmin from '../../../../internal/dto/testdata/golden/created-agent.admin.json';
+import createdAgentTokenlessAdmin from '../../../../internal/dto/testdata/golden/created-agent-tokenless.admin.json';
 import createdPostMember from '../../../../internal/dto/testdata/golden/created-post.member.json';
 import createdThreadMember from '../../../../internal/dto/testdata/golden/created-thread.member.json';
 import draftMember from '../../../../internal/dto/testdata/golden/draft.member.json';
@@ -71,6 +76,7 @@ import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.jso
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
 import historyMember from '../../../../internal/dto/testdata/golden/history.member.json';
 import historyModerator from '../../../../internal/dto/testdata/golden/history.moderator.json';
+import issuedCredentialAdmin from '../../../../internal/dto/testdata/golden/issued-credential.admin.json';
 import meAnon from '../../../../internal/dto/testdata/golden/me.anon.json';
 import meMember from '../../../../internal/dto/testdata/golden/me.member.json';
 import meModerator from '../../../../internal/dto/testdata/golden/me.moderator.json';
@@ -131,6 +137,7 @@ export const contract = [
   matches<ApplicationNote>()(applicationNoteModerator),
   matches<GroupDetail>()(adminGroupAdmin),
   matches<GroupList>()(adminGroupsAdmin),
+  matches<AdminUserDetail>()(adminUserAgentAdmin),
   matches<AdminUserDetail>()(adminUserAdmin),
   matches<AdminUserDetail>()(adminUserModerator),
   matches<AdminUserList>()(adminUsersAdmin),
@@ -141,6 +148,8 @@ export const contract = [
   matches<ApplicationStatus>()(applyStatusNonePreUser),
   matches<ApplicationStatus>()(applyStatusPendingPreUser),
   matches<ApplicationStatus>()(applyStatusWithdrawnPreUser),
+  matches<CreatedAgent>()(createdAgentAdmin),
+  matches<CreatedAgent>()(createdAgentTokenlessAdmin),
   matches<CreatedPost>()(createdPostMember),
   matches<CreatedThread>()(createdThreadMember),
   matches<Draft>()(draftMember),
@@ -151,6 +160,7 @@ export const contract = [
   matches<ForumTree>()(forumsMember),
   matches<PostHistory>()(historyMember),
   matches<PostHistory>()(historyModerator),
+  matches<IssuedCredential>()(issuedCredentialAdmin),
   matches<Me>()(meAnon),
   matches<Me>()(meMember),
   matches<Me>()(meModerator),

@@ -83,7 +83,8 @@ type StatusChange struct {
 
 // ChangeStatus makes c to userID in one transaction, then clears the cache:
 // the status, the audit row, and, when the account leaves active, the
-// deletion of every session it holds, so its next request is anonymous.
+// deletion of every session it holds and the revocation of an agent's
+// credential, so its next request is anonymous, or for an agent refused.
 //
 // It refuses an anonymized account (ErrAnonymized), a change its status does
 // not allow (ErrBadTransition), and one that would leave the forum with no
@@ -137,15 +138,43 @@ func changeStatus(ctx context.Context, q *dbq.Queries, now, userID int64, c Stat
 		if err := deleteSessions(ctx, q, userID); err != nil {
 			return err
 		}
+		if _, err := RevokeAgentCredentialIn(ctx, q, time.UnixMilli(now), c.By, userID, c.Action); err != nil {
+			return err
+		}
 	}
 	_, err = audit.Append(ctx, q, time.UnixMilli(now), c.By, c.Action, audit.User(userID), details)
 	return err
 }
 
+// ActionCredentialRevoked is an agent's credential ending, against the
+// agent, with what ended it as "cause": an admin's revocation, a
+// replacement, or the status change that took the agent out of active.
+const ActionCredentialRevoked = "agent.credential_revoked"
+
+// RevokeAgentCredentialIn ends userID's live agent credential, if it has
+// one, inside the caller's transaction, and writes ActionCredentialRevoked
+// with {"cause": cause} beside it. It reports whether a credential was
+// live; when none was it writes nothing, so it is safe to call for any
+// account. That is how a status change revokes an agent's credential
+// without asking the account's kind: a human never has one (docs/05
+// "Account lifecycle", TKT-01M29P9RSW).
+//
+// The cause is not written as "via", which audit.By.Via owns.
+func RevokeAgentCredentialIn(ctx context.Context, q *dbq.Queries, at time.Time, by audit.By, userID int64, cause string) (bool, error) {
+	n, err := q.RevokeAgentCredentials(ctx, dbq.RevokeAgentCredentialsParams{Now: at.UnixMilli(),
+		RevokedBy: sql.NullInt64{Int64: by.Actor, Valid: by.Actor != 0}, UserID: userID})
+	if err != nil || n == 0 {
+		return false, err
+	}
+	_, err = audit.Append(ctx, q, at, by, ActionCredentialRevoked, audit.User(userID), map[string]any{"cause": cause})
+	return err == nil, err
+}
+
 // Anonymize anonymizes userID on by's authority, in one transaction, then
 // clears the cache (docs/05 "Account lifecycle"): the handle becomes
 // deleted-user-<id>, the display name, avatar and bio are cleared, the
-// account becomes deactivated, and its sessions and identities are deleted.
+// account becomes deactivated, its sessions and identities are deleted, and
+// an agent's credential is revoked.
 // The old handle is reserved for domain.HandleReservation by a
 // handle_releases row that names no user, so nobody can take it, and the
 // links an old mention of it would give them, while nothing ties it to
@@ -178,6 +207,9 @@ func (e *Evaluator) Anonymize(ctx context.Context, userID int64, by audit.By, al
 			return err
 		}
 		if err := q.DeleteUserIdentities(ctx, sql.NullInt64{Int64: userID, Valid: true}); err != nil {
+			return err
+		}
+		if _, err := RevokeAgentCredentialIn(ctx, q, time.UnixMilli(now), by, userID, ActionAnonymized); err != nil {
 			return err
 		}
 		_, err = audit.Append(ctx, q, time.UnixMilli(now), by, ActionAnonymized, audit.User(userID),
