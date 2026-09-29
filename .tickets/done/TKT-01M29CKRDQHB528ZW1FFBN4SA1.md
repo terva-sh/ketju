@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:42:48Z
+updated_at: 2026-09-29T07:51:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -127,6 +127,12 @@ Additions beyond the grooming plan, each a strengthening that changes nothing a 
 - `TestApplicationNotesAreBounded` for the note table's CHECK and foreign keys, so the mutation pass has a test for them.
 - docs/04 "Conventions" names the one SET NULL exception beside "No cascading deletes".
 
+## Notes
+
+**agent:claude-code/phase2-run-ckrdq** at 2026-09-29T07:51:20Z
+
+Review 1373 (Actions run 874, request ready-review-318bfaa) on head 318bfaa8835d9861d188ef2d27358868cc411f53, base 31f4a797770ed528757acfd7ddb222fe85980317: two medium findings, both fixed in 0e05752. (1) 'Blocked identities can still receive new applications': added the triggers applications_identity_not_blocked (insert) and applications_identity_not_blocked_update (an update of status or identity_id that leaves a blocked identity with a pending application), tested by TestBlockedIdentityCannotApply. Denying and blocking pass in either order, so TKT-01M29CP2MG's deny-and-block is not constrained in order. (2) 'Existing application notifications bypass the new required ID': 0011 deletes notifications of the two application kinds that exist before it. No earlier code writes notifications at all (grep for INTO notifications outside tests finds nothing), so none is expected. Deleting lost to refusing the migration, because such a row cannot name an application and can be neither shown nor acted on. Tested by TestMigrationRemovesUnnamedApplicationNotifications. docs/04 names both triggers and the delete. Mutation pass: 34 mutations, all caught.
+
 ## Summary
 
-Migration 0011_applications_forms.sql adds forms, form_versions, applications and application_notes, identities.blocked_at and blocked_by, and notifications.application_id, and seeds the registration form at version 1 (docs/05's example without the interests select). Every criterion is met and tested in internal/store/db/applications_schema_test.go; a mutation pass removed each of 28 constraints and made two seed changes, and all 30 were caught. docs/04 names every table, column and trigger added, and the one ON DELETE SET NULL exception, which TestNoCascadingDeletes now names. No service queries: consumers write internal/store/db/queries/forms.sql (TKT-01M29CP2KE) and applications.sql (TKT-01M29CP2KZ, TKT-01M29CP2MG). An approval must create the user first and then set status and user_id in one UPDATE, because the CHECK runs per statement.
+Migration 0011_applications_forms.sql adds forms, form_versions, applications and application_notes, identities.blocked_at and blocked_by, and notifications.application_id, and seeds the registration form at version 1 (docs/05's example without the interests select). After review 1373 it also refuses applications from a blocked identity by trigger, and deletes pre-existing application-kind notifications, which cannot name an application. Every criterion is met and tested in internal/store/db/applications_schema_test.go. A mutation pass made 34 mutations (32 constraints, 2 seed changes), and every one was caught. docs/04 names every table, column and trigger added, and the one ON DELETE SET NULL exception, which TestNoCascadingDeletes now names. No service queries: consumers write internal/store/db/queries/forms.sql (TKT-01M29CP2KE) and applications.sql (TKT-01M29CP2KZ, TKT-01M29CP2MG). An approval must create the user first and then set status and user_id in one UPDATE, because the CHECK runs per statement.
