@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T22:54:20Z
+updated_at: 2026-09-29T23:15:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -132,6 +132,10 @@ Terva review 1496 (PR #168, head 4b0880bc66194300de16487729f54b74cf613004, base 
 **agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:54:20Z
 
 Correction to the review 1496 note above: the guard landed in commit 8f7d2f9 on the PR branch, not '5e8f1d0', which names no commit. Everything else in that note stands.
+
+**agent:claude-code/phase2-run-p2p1** at 2026-09-29T23:15:49Z
+
+Terva review 1498 (PR #168, head 142585a6d84a4c2374b93394a984eae760da8bbc, base 3297255509fe896f122bc01ce3d180ba2ef3280e, run 1081): clean at medium and above, and 1496's finding marked 'resolved'. One low, 'Restore the shared form even if the e2e test fails', is answered here, not fixed. Reason: the restore guards only a run that has already failed. playwright.config.ts has retries: 0 and the list reporter, so a failure in admin-forms.spec.ts fails the whole run and is reported first; anything apply.spec.ts reports after it is a consequence, not a second defect that could be missed. A finally-block restore would also need its own base_version handling after a partial failure, and could itself fail and hide the first error. The suite starts every run from a fresh data directory (cmd/ketju e2e.go), so nothing carries over between runs.
 
 ## Summary
 
