@@ -154,13 +154,51 @@ describe('the reply expander', () => {
 
   it('shows a deleted reply as a tombstone', async () => {
     serve(page([post(1, { reply_count: 2 })]), {
-      1: [post(4, { reply_to: 1 }), post(9, { deleted: true, html: '', reply_to: null })],
+      1: [post(4, { reply_to: 1 }), post(9, { deleted: true, html: '', removal: 'author', reply_to: null })],
     });
     const root = await renderAt(`/t/${id}/s?page=1`);
     await click(root, toggle(root, 1)!);
     const gone = root.querySelector('.replies [data-reply="9"]')!;
     expect(gone.classList.contains('tombstone')).toBe(true);
-    expect(gone.textContent).toContain('Post removed.');
+    expect(gone.textContent).toContain('Post removed by author');
+  });
+
+  it('shows a removed reply served with its body apart, marked', async () => {
+    serve(page([post(1, { reply_count: 1 })]), {
+      1: [post(9, { deleted: true, removal: 'moderator', html: '<p>still here</p>', reply_to: 1 })],
+    });
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    await click(root, toggle(root, 1)!);
+    const r = root.querySelector('.replies [data-reply="9"]')!;
+    expect(r.classList.contains('removed')).toBe(true);
+    expect(r.querySelector('.deleted-mark')?.textContent).toBe('removed by a moderator');
+    expect(r.textContent).toContain('still here');
+  });
+
+  // TKT-01M29CKRJ9 AC1: replies to a removed post keep reply_to, so its
+  // tombstone still offers them.
+  it('opens under a tombstone', async () => {
+    const urls = serve(
+      page([post(1, { deleted: true, html: '', removal: 'moderator', reply_count: 2 }), post(2)]),
+      { 1: [post(2, { reply_to: 1 }), post(40, { reply_to: 1, html: '<p>far below</p>' })] },
+    );
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    expect(root.querySelector('#post-1')?.classList.contains('tombstone')).toBe(true);
+    const t = toggle(root, 1)!;
+    expect(t.textContent).toBe('2 replies');
+    await click(root, t);
+    expect(urls).toContain(`/api/v1/threads/${id}/posts/1/replies`);
+    const region = root.querySelector('#post-1 .replies')!;
+    expect([...region.querySelectorAll('.post')].map((e) => e.getAttribute('data-reply'))).toEqual(['2', '40']);
+    expect(region.textContent).toContain('far below');
+    await click(root, t);
+    expect(root.querySelector('.replies')).toBeNull();
+  });
+
+  it('is not offered under a tombstone whose sole reply is directly below', async () => {
+    serve(page([post(1, { deleted: true, html: '', reply_count: 1 }), post(2, { reply_to: 1, reply_to_suppressed: true })]));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    expect(toggle(root, 1)).toBeNull();
   });
 
   it('says so, with a retry, when the replies cannot be loaded', async () => {

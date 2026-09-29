@@ -5,6 +5,7 @@ import { ErrorPanel } from '../ErrorPanel';
 import { Avatar } from './Avatar';
 import { Attachments, permalink, type ThreadRef } from './Post';
 import { PostTime } from './PostTime';
+import { isTombstone, removedMark, TombstoneText } from './removal';
 import { RoleBadge } from './RoleBadge';
 
 // The reply expander (docs/06 "Post anatomy"): "3 replies ▾" opens a post's
@@ -58,15 +59,15 @@ export function Replies({ thread, ordinal }: { thread: ThreadRef; ordinal: numbe
       {res.error && <ErrorPanel error={res.error} what={`Replies to #${ordinal}`} onRetry={res.retry} />}
       {!posts && !res.error && <p class="loading">Loading replies…</p>}
       {posts?.map((p) =>
-        p.deleted && !p.html ? (
+        isTombstone(p) ? (
           <div class="post post--recessed tombstone" key={p.ordinal} data-reply={p.ordinal}>
             <a class="ordinal hit" href={permalink(thread, p.ordinal)}>
               #{p.ordinal}
             </a>
-            <span class="tombstone-text">Post removed.</span>
+            <TombstoneText post={p} />
           </div>
         ) : (
-          <article class="post post--recessed" key={p.ordinal} data-reply={p.ordinal}>
+          <article class={'post post--recessed' + (p.deleted ? ' removed' : '')} key={p.ordinal} data-reply={p.ordinal}>
             <Avatar author={p.author} />
             <div class="post-main">
               <header class="post-header">
@@ -77,7 +78,7 @@ export function Replies({ thread, ordinal }: { thread: ThreadRef; ordinal: numbe
                 <RoleBadge author={p.author} />
                 <PostTime at={p.created_at} />
                 {p.edited_at !== null && <span class="edited">(edited)</span>}
-                {p.deleted && <span class="deleted-mark">deleted</span>}
+                {p.deleted && <span class="deleted-mark">{removedMark(p)}</span>}
               </header>
               <div class="post-body" dangerouslySetInnerHTML={{ __html: p.html }} />
               <Attachments post={p} />

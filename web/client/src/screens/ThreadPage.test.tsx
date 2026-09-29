@@ -205,6 +205,49 @@ describe('a deleted post', () => {
   });
 });
 
+// TKT-01M29CKRJ9 AC5: the tombstone says who removed the post, a moved post
+// points at its new thread, and a removed post served with its body is drawn
+// on a distinct background with a label.
+describe('a removed post', () => {
+  it.each([
+    ['author', 'Post removed by author'],
+    ['moderator', 'Post removed by a moderator'],
+    ['review', 'Post hidden pending review'],
+  ])('removed by %s reads "%s"', async (removal, text) => {
+    serve(page([post(1), post(2, { deleted: true, html: '', removal, reply_to: 1 })]));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    const t = at(root, '#post-2')!;
+    expect(t.classList.contains('tombstone')).toBe(true);
+    expect(t.querySelector('.tombstone-text')?.textContent).toBe(text);
+    expect(t.getAttribute('data-ordinal')).toBe('2');
+    // Its own reply indicator stays: the tombstone is a gap in content,
+    // not in the thread's structure.
+    expect(t.querySelector('.reply-to')?.getAttribute('href')).toBe('#post-1');
+  });
+
+  it('points a moved post at the thread it went to', async () => {
+    serve(page([post(1), post(2, { deleted: true, html: '', moved_to: '3yymw47g00099' })]));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    const t = at(root, '#post-2')!;
+    expect(t.querySelector('.tombstone-text')?.textContent).toBe('Post moved to another thread');
+    expect(t.querySelector('.tombstone-text a')?.getAttribute('href')).toBe('/t/3yymw47g00099');
+  });
+
+  it.each([
+    ['moderator', 'removed by a moderator'],
+    ['author', 'removed by author'],
+  ])('removed by %s and served with its body is drawn apart, marked "%s"', async (removal, mark) => {
+    serve(page([post(1), post(2, { deleted: true, removal, html: '<p>what was said</p>' })]));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    const p = at(root, '#post-2')!;
+    expect(p.classList.contains('removed')).toBe(true);
+    expect(p.classList.contains('tombstone')).toBe(false);
+    expect(p.querySelector('.post-body')?.textContent).toBe('what was said');
+    expect(p.querySelector('.deleted-mark')?.textContent).toBe(mark);
+    expect(at(root, '#post-1')?.classList.contains('removed')).toBe(false);
+  });
+});
+
 // AC5: the divider, and landing on return.
 describe('the unread divider', () => {
   it('sits between the last read post and the next, from the golden page', async () => {

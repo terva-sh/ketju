@@ -269,8 +269,29 @@
   font-family: var(--font-mono);
   font-size: 12px;
 }
+.tombstone-line {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+}
 .tombstone-text {
   font-style: italic;
+}
+
+/* A removed post shown with its body, to a moderator or to its author
+   (docs/08 "Tombstones"): the sunken surface sets it apart in either theme,
+   since the token is themed, and what the muted grey would draw there takes
+   the second ink, as in the reply expander. */
+.post.removed {
+  background: var(--surface2);
+}
+.post.removed .post-header .ordinal,
+.post.removed .edited,
+.post.removed .deleted-mark,
+.post.removed .attachments .size,
+.post.removed .post-footer a {
+  color: var(--ink2);
 }
 
 .unread-divider {

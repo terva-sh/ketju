@@ -3,6 +3,7 @@ import type { Post as PostDTO } from '../../api/dto';
 import { bodyText, selectionIn } from '../../composer/quote';
 import { Avatar } from './Avatar';
 import { PostTime } from './PostTime';
+import { removedMark } from './removal';
 import { Replies, ReplyToggle } from './ReplyExpander';
 import { RoleBadge } from './RoleBadge';
 
@@ -19,6 +20,11 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // Post is one post, laid out as docs/06 "Post anatomy" and the mockups draw
 // it. The body is the server's rendering, sanitized by internal/render; it is
 // the one place the client inserts HTML.
+//
+// A removed post reaches here only when the server sent its body: to a
+// moderator, or to its author when a moderator removed it (docs/07 "Removed
+// posts"). It is drawn on a distinct background, class removed, with a label
+// naming who removed it (docs/08 "Tombstones").
 //
 // The footer carries only what works today. Quote and reply are there when
 // the page offers them, which is when the reader may reply and a composer is
@@ -45,7 +51,7 @@ export function Post({
   const toggle = useHeldStill(() => setOpen((o) => !o));
   return (
     <article
-      class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' deleted' : '')}
+      class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' removed' : '')}
       id={`post-${post.ordinal}`}
       data-ordinal={post.ordinal}
       tabIndex={-1}
@@ -60,7 +66,7 @@ export function Post({
           <RoleBadge author={post.author} />
           <PostTime at={post.created_at} />
           {post.edited_at !== null && <span class="edited">(edited)</span>}
-          {post.deleted && <span class="deleted-mark">deleted</span>}
+          {post.deleted && <span class="deleted-mark">{removedMark(post)}</span>}
           <ReplyTo post={post} />
         </header>
         <div class="post-body" dangerouslySetInnerHTML={{ __html: post.html }} />
@@ -115,7 +121,7 @@ export interface PostActions {
 // they are however the browser anchors its scroll (docs/06: nothing about
 // the canonical page moves); only what is below moves, by the height of the
 // replies, and comes back when they close.
-function useHeldStill(change: () => void): (e: Event) => void {
+export function useHeldStill(change: () => void): (e: Event) => void {
   const held = useRef<{ el: Element; top: number } | null>(null);
   useLayoutEffect(() => {
     const h = held.current;

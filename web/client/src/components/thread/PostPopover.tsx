@@ -7,6 +7,7 @@ import { isControl } from '../focus';
 import { Avatar } from './Avatar';
 import { permalink, type ThreadRef } from './Post';
 import { PostTime } from './PostTime';
+import { isTombstone, removedMark, TombstoneText } from './removal';
 import { RoleBadge } from './RoleBadge';
 
 // PostPopover shows a post that is not on this page, for a reply-to or quote
@@ -49,10 +50,12 @@ export function PostPopover({ thread, ordinal, onClose }: { thread: ThreadRef; o
       {res.error && <ErrorPanel error={res.error} what={`Post #${ordinal}`} onRetry={res.retry} />}
       {!post && !res.error && <p class="loading">Loading #{ordinal}…</p>}
       {post &&
-        (post.deleted && !post.html ? (
-          <p class="tombstone-text">#{ordinal}: Post removed.</p>
+        (isTombstone(post) ? (
+          <p>
+            #{ordinal}: <TombstoneText post={post} />
+          </p>
         ) : (
-          <article class="post popover-post" data-ordinal={ordinal}>
+          <article class={'post popover-post' + (post.deleted ? ' removed' : '')} data-ordinal={ordinal}>
             <Avatar author={post.author} />
             <div class="post-main">
               <header class="post-header">
@@ -60,6 +63,7 @@ export function PostPopover({ thread, ordinal, onClose }: { thread: ThreadRef; o
                 <span class="author">{post.author.display_name || post.author.handle}</span>
                 <RoleBadge author={post.author} />
                 <PostTime at={post.created_at} />
+                {post.deleted && <span class="deleted-mark">{removedMark(post)}</span>}
               </header>
               <div class="post-body" dangerouslySetInnerHTML={{ __html: post.html }} />
             </div>
