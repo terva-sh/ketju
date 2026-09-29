@@ -69,6 +69,14 @@ const (
 	// client's response is to say so, not to offer a sign-in.
 	CodeForbidden Code = "forbidden"
 
+	// CodeEditWindowClosed and CodeDeleteWindowClosed are forbidden, named:
+	// the post is the viewer's, and the site's window for editing it, or for
+	// deleting and restoring it, closed (docs/08 "Primitives",
+	// TKT-01M29CKRHS). A client says which window, and does not offer the
+	// action again.
+	CodeEditWindowClosed   Code = "edit-window-closed"
+	CodeDeleteWindowClosed Code = "delete-window-closed"
+
 	// CodeNotFound covers both "no such route" and "no such object". They are
 	// deliberately the same code: telling an unauthorized reader which thread
 	// ids exist is a disclosure, and the cheapest way not to do that is to
@@ -135,6 +143,8 @@ var catalogue = map[Code]entry{
 	CodeValidationFailed:     {http.StatusUnprocessableEntity, "The request was understood but is not valid."},
 	CodeUnauthenticated:      {http.StatusUnauthorized, "You are not signed in."},
 	CodeForbidden:            {http.StatusForbidden, "You may not do that."},
+	CodeEditWindowClosed:     {http.StatusForbidden, "The time for editing this post has passed."},
+	CodeDeleteWindowClosed:   {http.StatusForbidden, "The time for deleting or restoring this post has passed."},
 	CodeNotFound:             {http.StatusNotFound, "No such endpoint or object."},
 	CodeMethodNotAllowed:     {http.StatusMethodNotAllowed, "That method is not allowed here."},
 	CodeConflict:             {http.StatusConflict, "That conflicts with the current state."},

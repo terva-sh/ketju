@@ -103,6 +103,16 @@ UPDATE post_meta SET current_revision = sqlc.arg(current_revision), edited_at = 
 	reply_to = coalesce(sqlc.narg(reply_to), reply_to), log_offset = sqlc.arg(log_offset)
 WHERE thread_id = sqlc.arg(thread_id) AND ordinal = sqlc.arg(ordinal);
 
+-- SetPostRevision for a grace Edit (TKT-01M29CKRHS). It does not mark an
+-- unedited post edited, and on a post already edited it moves edited_at to
+-- its own time, as the index entry keeps the edited flag and moves to this
+-- revision. The two read paths then agree on edited_at.
+-- name: SetPostRevisionKeepEdited :execrows
+UPDATE post_meta SET current_revision = sqlc.arg(current_revision),
+	edited_at = CASE WHEN edited_at IS NULL THEN NULL ELSE CAST(sqlc.arg(edited_at) AS INTEGER) END,
+	reply_to = coalesce(sqlc.narg(reply_to), reply_to), log_offset = sqlc.arg(log_offset)
+WHERE thread_id = sqlc.arg(thread_id) AND ordinal = sqlc.arg(ordinal);
+
 -- log_offset is the current revision's record, as the index entry's Offset
 -- is, so a Delete or Restore (which is not a revision) leaves it alone.
 -- name: SetPostDeleted :execrows

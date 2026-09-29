@@ -17,6 +17,24 @@
       "status": 409
     }
   },
+  "delete-window-closed": {
+    "status": 403,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "delete-window-closed",
+      "title": "The time for deleting or restoring this post has passed.",
+      "status": 403
+    }
+  },
+  "edit-window-closed": {
+    "status": 403,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "edit-window-closed",
+      "title": "The time for editing this post has passed.",
+      "status": 403
+    }
+  },
   "forbidden": {
     "status": 403,
     "content_type": "application/problem+json",

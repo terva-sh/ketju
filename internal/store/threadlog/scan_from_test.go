@@ -105,3 +105,41 @@ func TestEditMentionsKeyIsOptional(t *testing.T) {
 		t.Fatalf("an Edit from before the key decoded as %+v", b)
 	}
 }
+
+// TestEditGraceKeyIsOptional: grace is written only when true, so an edit
+// that is not a grace edit is byte for byte what a build before the key
+// wrote, and an Edit from before the key decodes as not grace
+// (TKT-01M29CKRHS).
+func TestEditGraceKeyIsOptional(t *testing.T) {
+	for _, enc := range []BodyEncoding{EncodingCBOR, EncodingJSON} {
+		plain, err := EncodeBody(enc, &EditBody{Source: "x", ReplyTo: 3})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if bytes.Contains(plain, []byte("grace")) {
+			t.Errorf("%d: an edit that is not grace carries the key: %q", enc, plain)
+		}
+		graced, err := EncodeBody(enc, &EditBody{Source: "x", Grace: true})
+		if err != nil {
+			t.Fatal(err)
+		}
+		v, err := DecodeBody(TypeEdit, enc, graced)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !v.(*EditBody).Grace {
+			t.Errorf("%d: grace did not survive a round trip", enc)
+		}
+	}
+	old, err := cbor.Marshal(map[string]any{"source": "before the key"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, err := DecodeBody(TypeEdit, EncodingCBOR, old)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v.(*EditBody).Grace {
+		t.Fatal("an Edit from before the key decoded as grace")
+	}
+}

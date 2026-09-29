@@ -226,6 +226,11 @@ type Querier interface {
 	// A null reply_to keeps the row's: an Edit without one keeps the post's
 	// reply link, as the index entry does (TKT-01M29CA9BP).
 	SetPostRevision(ctx context.Context, arg SetPostRevisionParams) (int64, error)
+	// SetPostRevision for a grace Edit (TKT-01M29CKRHS). It does not mark an
+	// unedited post edited, and on a post already edited it moves edited_at to
+	// its own time, as the index entry keeps the edited flag and moves to this
+	// revision. The two read paths then agree on edited_at.
+	SetPostRevisionKeepEdited(ctx context.Context, arg SetPostRevisionKeepEditedParams) (int64, error)
 	SetProjectionState(ctx context.Context, arg SetProjectionStateParams) error
 	SetThreadArchived(ctx context.Context, id int64) (int64, error)
 	SetThreadForum(ctx context.Context, arg SetThreadForumParams) (int64, error)

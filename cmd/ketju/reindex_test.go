@@ -134,6 +134,9 @@ func randomAppend(rng *rand.Rand, posts uint32) (threadlog.Append, uint32) {
 			m := []uint64{uint64(rng.IntN(5))}
 			body.Mentions = &m
 		}
+		// Grace edits, including ones after a visible edit, which only a
+		// hand-made log holds (TKT-01M29CKRHS).
+		body.Grace = rng.IntN(3) == 0
 		a.Ordinal, a.Body = target, body
 	case threadlog.TypeDelete:
 		a.Ordinal, a.Body = target, &threadlog.DeleteBody{}

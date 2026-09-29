@@ -112,6 +112,8 @@ fixed text and never interpolate anything from the request.
 | `bad-request` | 400 | Unparseable JSON, a non-numeric parameter, a thread id that is not base32 |
 | `unauthenticated` | 401 | No viewer. The client offers a sign-in |
 | `forbidden` | 403 | There is a viewer and they may not do this. The client says so, and does not offer a sign-in |
+| `edit-window-closed` | 403 | The post is the viewer's, and `posts.edit_window_seconds` has passed since it was written (08) |
+| `delete-window-closed` | 403 | The post is the viewer's, and `posts.delete_window_seconds` has passed since it was written, so it can no longer be deleted or restored (08) |
 | `not-found` | 404 | No such endpoint *or* no such object — deliberately one code, so the API does not disclose which thread ids exist |
 | `method-not-allowed` | 405 | Right route, wrong verb |
 | `conflict` | 409 | Lost a race, or met the object's state: posting to a closed thread |
@@ -283,11 +285,25 @@ charged to the write limiter. The optional reason body is read to at most
 - A member session is required (anonymous `unauthenticated`, pre-user
   `forbidden`), and access to the thread is the thread page's.
 - Only the post's author may act for now; anyone else, a moderator included,
-  is `forbidden`. The author windows (TKT-01M29CKRHS) and a moderator's reach
-  over every post (TKT-01M29CRJ5J) extend one `authorize` function in
-  `internal/service/threads`. A post hidden by a moderator is `forbidden` to
-  its author. An edit also needs `reply` in the forum; a delete or restore of
-  one's own post does not.
+  is `forbidden`. A moderator's reach over every post (TKT-01M29CRJ5J) will
+  extend the same `authorize` function in `internal/service/threads`. A post
+  hidden by a moderator is `forbidden` to its author. An edit also needs
+  `reply` in the forum; a delete or restore of one's own post does not.
+- The author windows (08, TKT-01M29CKRHS) are measured from the post's
+  creation, revision 1's time. Once `posts.edit_window_seconds` has passed, an
+  edit is `edit-window-closed`; once `posts.delete_window_seconds` has
+  passed, a delete or a restore is `delete-window-closed`. A window is open
+  for its first N seconds and closed from the Nth on, so a window of 0 never
+  opens. A viewer who may moderate the forum is bound by neither window on
+  their own post.
+- An author's edit within `posts.grace_edit_seconds` of posting, of a post
+  with no visible edit, is written as a grace edit (`grace: true` on the
+  `Edit`, docs/03). It is a revision, and history lists it, but the post is
+  served with `edited_at` null until a visible edit. The decision is taken
+  when the edit is written, so changing the setting later restyles no old
+  post. A grace edit never follows a visible one: the actor refuses it as
+  `conflict` if a visible edit lands first, so a served `edited_at` is always
+  the last visible edit's time.
 - An archived thread is `conflict` for all three. A locked thread is
   `conflict` for a member's edit only, since a lock refuses posts and edits
   (08).

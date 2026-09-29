@@ -258,6 +258,15 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 		{"requiring edited, behind an edit", Append{Type: TypeDelete, Ordinal: 1, Require: EntryEdited}, stage(TypeEdit), true},
 		{"requiring edited, nothing ahead", Append{Type: TypeDelete, Ordinal: 1, Require: EntryEdited}, nil, false},
 		{"refusing edited, behind an edit", Append{Type: TypeDelete, Ordinal: 1, Refuse: EntryEdited}, stage(TypeEdit), false},
+		// A staged grace Edit does not, as Apply will not (TKT-01M29CKRHS):
+		// the body it is staged with is read, not only its type.
+		{"refusing edited, behind a grace edit", Append{Type: TypeEdit, Ordinal: 1, Refuse: EntryEdited},
+			[]staged{{req: request{a: Append{Body: &EditBody{Grace: true}}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}}}, true},
+		{"refusing edited, behind a grace edit and a visible one", Append{Type: TypeEdit, Ordinal: 1, Refuse: EntryEdited},
+			[]staged{
+				{req: request{a: Append{Body: &EditBody{Grace: true}}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}},
+				{req: request{a: Append{Body: &EditBody{}}}, header: FrameHeader{Type: TypeEdit, Ordinal: 1}},
+			}, false},
 	} {
 		err := a.checkState(c.req, c.ahead)
 		if (err == nil) != c.ok {
@@ -274,13 +283,30 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 // leaves on the entry are the flags postFlagEffect says, from every starting
 // state. A flag change added to Apply and not to the table fails here, which
 // is how a staged Edit's edited flag went missing (review 1123 on PR #95).
+//
+// The table reads an Edit's body (TKT-01M29CKRHS), so an Edit is tried with
+// and without grace, and the body the table is given is the one an append
+// holds, both as a pointer and as a value, while Apply decodes it from bytes.
 func TestPostFlagEffectIsWhatApplyDoes(t *testing.T) {
+	type try struct {
+		name string
+		ty   RecordType
+		body any
+	}
+	var tries []try
 	for ty := range catalogue {
 		if ty == TypePost {
 			continue // creates an entry rather than changing one
 		}
 		body, _ := NewBody(ty)
-		raw, err := EncodeBody(EncodingCBOR, body)
+		tries = append(tries, try{ty.String(), ty, body})
+	}
+	tries = append(tries,
+		try{"grace Edit", TypeEdit, &EditBody{Source: "x", Grace: true}},
+		try{"grace Edit by value", TypeEdit, EditBody{Source: "x", Grace: true}},
+		try{"Edit by value", TypeEdit, EditBody{Source: "x"}})
+	for _, c := range tries {
+		raw, err := EncodeBody(EncodingCBOR, c.body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -289,14 +315,46 @@ func TestPostFlagEffectIsWhatApplyDoes(t *testing.T) {
 				continue
 			}
 			ix := &Index{entries: []IndexEntry{{Revision: 1, Flags: start}}}
-			h := FrameHeader{Type: ty, Encoding: EncodingCBOR, Ordinal: 1, Revision: 2}
+			h := FrameHeader{Type: c.ty, Encoding: EncodingCBOR, Ordinal: 1, Revision: 2}
 			if err := ix.Apply(h, raw, 0, 0); err != nil {
-				t.Fatalf("%s from %#x: %v", ty, start, err)
+				t.Fatalf("%s from %#x: %v", c.name, start, err)
 			}
-			set, clear := postFlagEffect(ty)
+			set, clear := postFlagEffect(c.ty, c.body)
 			if got, want := ix.entries[0].Flags, (start|set)&^clear; got != want {
-				t.Errorf("%s from %#x: Apply left %#x, postFlagEffect says %#x", ty, start, got, want)
+				t.Errorf("%s from %#x: Apply left %#x, postFlagEffect says %#x", c.name, start, got, want)
 			}
+		}
+	}
+}
+
+// TestGraceEditFlags: a grace Edit leaves the edited flag as it found it,
+// clear on a post only ever grace-edited and set on one already edited, and
+// any other Edit sets it. Nothing clears it (TKT-01M29CKRHS).
+func TestGraceEditFlags(t *testing.T) {
+	grace := &EditBody{Source: "x", Grace: true}
+	for _, c := range []struct {
+		name  string
+		start EntryFlags
+		body  *EditBody
+		want  EntryFlags
+	}{
+		{"grace on the original", 0, grace, 0},
+		{"grace on an edited post", EntryEdited, grace, EntryEdited},
+		{"visible on the original", 0, &EditBody{Source: "x"}, EntryEdited},
+		{"visible on an edited post", EntryEdited, &EditBody{Source: "x"}, EntryEdited},
+		{"grace keeps other flags", EntryHasAttachments, grace, EntryHasAttachments},
+	} {
+		raw, err := EncodeBody(EncodingCBOR, c.body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ix := &Index{entries: []IndexEntry{{Revision: 1, Flags: c.start}}}
+		if err := ix.Apply(FrameHeader{Type: TypeEdit, Encoding: EncodingCBOR, Ordinal: 1, Revision: 2}, raw, 7, 9); err != nil {
+			t.Fatal(err)
+		}
+		e := ix.entries[0]
+		if e.Flags != c.want || e.Revision != 2 || e.Offset != 7 {
+			t.Errorf("%s: entry %+v, want flags %#x at revision 2, offset 7", c.name, e, c.want)
 		}
 	}
 }

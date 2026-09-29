@@ -67,6 +67,9 @@ func (w *world) entry(id threadid.ID, ordinal uint32) threadlog.IndexEntry {
 func TestEditPost(t *testing.T) {
 	w := newWorld(t)
 	id, _ := w.seed()
+	// Past the five minutes of grace, so the edit is a visible one
+	// (TKT-01M29CKRHS); TestGraceEdit covers the other kind.
+	w.clock += 10 * 60_000
 	before := w.logState(id)
 	res := changed(t, send(w.chain(), "carol", http.MethodPatch, postPathN(id, 4),
 		`{"source":"Agreed with @bob, on reflection.","reason":"wrong person"}`))

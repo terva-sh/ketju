@@ -419,7 +419,13 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			Deleted:         p.Flags.Has(threadlog.EntryDeleted) || p.Flags.Has(threadlog.EntryHiddenByMod),
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
 		}
-		if p.Revision > 1 && p.RevisionMS != 0 {
+		// The edited flag, not the revision count: a post whose only edits
+		// are grace edits has more than one revision and is not shown as
+		// edited. When the flag is set the current revision is a visible
+		// edit, so its time is the last visible edit's, as post_meta's
+		// edited_at is (threadlog postFlagEffect, TKT-01M29CKRHS). The flag
+		// comes from the log alone, so the cached posts depend on no setting.
+		if p.Flags.Has(threadlog.EntryEdited) && p.RevisionMS != 0 {
 			at := dto.Millis(p.RevisionMS)
 			d.EditedAt = &at
 		}

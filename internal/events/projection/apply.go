@@ -110,16 +110,38 @@ func applyPost(ctx context.Context, q *dbq.Queries, f frame) error {
 
 // applyEdit moves the post to its new revision. created_at and author stay:
 // they belong to revision 1, as in the index (threadlog applyEdit).
+//
+// A grace Edit (TKT-01M29CKRHS) leaves edited_at null on a post not yet
+// edited, as the index leaves its edited flag clear, and moves it to its own
+// time on one that is, as the index keeps the flag and moves to the new
+// revision. So edited_at is always the index's edited flag at the current
+// revision's time, which is what a thread page serves.
 func applyEdit(ctx context.Context, q *dbq.Queries, f frame) error {
 	b := f.body.(*threadlog.EditBody)
-	if err := one(q.SetPostRevision(ctx, dbq.SetPostRevisionParams{
-		CurrentRevision: revision(f.h),
-		EditedAt:        sql.NullInt64{Int64: f.h.TimestampMS, Valid: true},
-		ReplyTo:         replyTo(b.ReplyTo),
-		LogOffset:       f.offset,
-		ThreadID:        int64(f.thread),
-		Ordinal:         int64(f.h.Ordinal),
-	}))(f, "post"); err != nil {
+	var (
+		n   int64
+		err error
+	)
+	if b.Grace {
+		n, err = q.SetPostRevisionKeepEdited(ctx, dbq.SetPostRevisionKeepEditedParams{
+			CurrentRevision: revision(f.h),
+			EditedAt:        f.h.TimestampMS,
+			ReplyTo:         replyTo(b.ReplyTo),
+			LogOffset:       f.offset,
+			ThreadID:        int64(f.thread),
+			Ordinal:         int64(f.h.Ordinal),
+		})
+	} else {
+		n, err = q.SetPostRevision(ctx, dbq.SetPostRevisionParams{
+			CurrentRevision: revision(f.h),
+			EditedAt:        sql.NullInt64{Int64: f.h.TimestampMS, Valid: true},
+			ReplyTo:         replyTo(b.ReplyTo),
+			LogOffset:       f.offset,
+			ThreadID:        int64(f.thread),
+			Ordinal:         int64(f.h.Ordinal),
+		})
+	}
+	if err := one(n, err)(f, "post"); err != nil {
 		return err
 	}
 	if b.Mentions == nil {

@@ -254,6 +254,75 @@ func TestReplayIsIdempotentPerRecordType(t *testing.T) {
 	}
 }
 
+// TestGraceEditProjection (TKT-01M29CKRHS): a grace Edit keeps a post's
+// edited_at null while it has only grace edits, and a visible Edit sets it.
+// A grace Edit after a visible one, which the service never writes and a
+// hand-made log may hold, moves edited_at to its own time, as the index
+// moves to that revision and keeps its edited flag. After each record the
+// projection agrees with the index, and replaying the log over stale rows or
+// into empty tables, as reindex does, gives the same rows.
+func TestGraceEditProjection(t *testing.T) {
+	f := newFixture(t)
+	id, _ := f.thread("Hello")
+	f.post(id, 5, 0)
+	f.post(id, 6, 0)
+	edit := func(ordinal uint32, at int64, grace bool) int64 {
+		return f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: 5, Ordinal: ordinal, TimeMS: at,
+			Body: &threadlog.EditBody{Source: "fixed", Grace: grace}})
+	}
+	editedAt := func(ordinal int) sql.NullInt64 {
+		var v sql.NullInt64
+		if err := f.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			return tx.QueryRowContext(t.Context(), `SELECT edited_at FROM post_meta WHERE thread_id = ? AND ordinal = ?`,
+				int64(id), ordinal).Scan(&v)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	null := sql.NullInt64{}
+	at := func(ms int64) sql.NullInt64 { return sql.NullInt64{Int64: ms, Valid: true} }
+
+	var end int64
+	for _, step := range []struct {
+		name     string
+		ordinal  uint32
+		ms       int64
+		grace    bool
+		want1    sql.NullInt64
+		wantBoth sql.NullInt64
+	}{
+		{"a grace edit", 1, 1_700_000_200_001, true, null, null},
+		{"a second grace edit", 1, 1_700_000_200_002, true, null, null},
+		{"a grace edit of the other post", 2, 1_700_000_200_003, true, null, null},
+		{"a visible edit", 1, 1_700_000_200_004, false, at(1_700_000_200_004), null},
+		{"a hand-made grace edit after it", 1, 1_700_000_200_005, true, at(1_700_000_200_005), null},
+	} {
+		end = edit(step.ordinal, step.ms, step.grace)
+		f.project(id, end)
+		if got := editedAt(1); got != step.want1 {
+			t.Errorf("after %s: post 1 edited_at %+v, want %+v", step.name, got, step.want1)
+		}
+		if got := editedAt(2); got != step.wantBoth {
+			t.Errorf("after %s: post 2 edited_at %+v, want %+v", step.name, got, step.wantBoth)
+		}
+		f.agreesWithIndex(id)
+	}
+
+	first := f.dump()
+	f.exec(`UPDATE post_meta SET edited_at = 5`)
+	f.exec(`UPDATE projection_state SET log_length = ?`, threadlog.FileHeaderSize)
+	f.project(id, end)
+	if again := f.dump(); again != first {
+		t.Fatalf("replaying over stale rows differs:\n%s\n---\n%s", first, again)
+	}
+	f.clear()
+	f.project(id, end)
+	if rebuilt := f.dump(); rebuilt != first {
+		t.Fatalf("rebuilding from empty differs:\n%s\n---\n%s", first, rebuilt)
+	}
+}
+
 // TestEveryRecordTypeHasADecision is AC3: every type this build knows, and
 // every type docs/03 holds in reserve, has a projection or a written reason
 // it has none. A known type must project: it has a body, so it says
@@ -343,11 +412,13 @@ func TestShortLogIsAnError(t *testing.T) {
 // thread's in-memory index, which is the other fold of the same log. Where
 // both hold a fact they must hold the same one; log_offset in particular is
 // the current revision's record, as IndexEntry.Offset is (review 389).
+// edited_at is the current revision's time when the entry is edited and null
+// when it is not, which is the thread page's edited_at (TKT-01M29CKRHS).
 func (f *fixture) agreesWithIndex(id threadid.ID) {
 	f.t.Helper()
 	type row struct {
 		ordinal, author, created, revision, offset int64
-		replyTo                                    sql.NullInt64
+		replyTo, editedAt                          sql.NullInt64
 		deleted                                    bool
 	}
 	var rows []row
@@ -358,14 +429,14 @@ func (f *fixture) agreesWithIndex(id threadid.ID) {
 			return err
 		}
 		rs, err := tx.QueryContext(f.t.Context(), `SELECT ordinal, author_id, created_at, current_revision,
-			log_offset, reply_to, deleted FROM post_meta WHERE thread_id = ? ORDER BY ordinal`, int64(id))
+			log_offset, reply_to, edited_at, deleted FROM post_meta WHERE thread_id = ? ORDER BY ordinal`, int64(id))
 		if err != nil {
 			return err
 		}
 		defer rs.Close()
 		for rs.Next() {
 			var r row
-			if err := rs.Scan(&r.ordinal, &r.author, &r.created, &r.revision, &r.offset, &r.replyTo, &r.deleted); err != nil {
+			if err := rs.Scan(&r.ordinal, &r.author, &r.created, &r.revision, &r.offset, &r.replyTo, &r.editedAt, &r.deleted); err != nil {
 				return err
 			}
 			rows = append(rows, r)
@@ -391,6 +462,13 @@ func (f *fixture) agreesWithIndex(id threadid.ID) {
 				revision: int64(e.Revision), offset: int64(e.Offset),
 				replyTo: sql.NullInt64{Int64: int64(e.ReplyTo), Valid: e.ReplyTo != 0},
 				deleted: e.Flags.Has(threadlog.EntryDeleted)}
+			if e.Flags.Has(threadlog.EntryEdited) {
+				p, err := th.Reader.HiddenEntry(uint32(r.ordinal), e)
+				if err != nil {
+					return err
+				}
+				want.editedAt = sql.NullInt64{Int64: p.RevisionMS, Valid: true}
+			}
 			if r != want {
 				f.t.Errorf("ordinal %d: post_meta %+v, index %+v", r.ordinal, r, want)
 			}

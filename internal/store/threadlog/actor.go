@@ -485,7 +485,7 @@ func (a *Actor) checkState(req Append, staging []staged) error {
 	flags := e.Flags
 	for _, s := range staging {
 		if s.header.Ordinal == req.Ordinal {
-			set, clear := postFlagEffect(s.header.Type)
+			set, clear := postFlagEffect(s.header.Type, s.req.a.Body)
 			flags = (flags | set) &^ clear
 		}
 	}

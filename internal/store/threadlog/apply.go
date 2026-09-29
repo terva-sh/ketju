@@ -43,7 +43,7 @@ func (ix *Index) Apply(h FrameHeader, body []byte, offset uint64, frameSize int)
 	case *EditBody:
 		return ix.applyEdit(h, b, offset, frameSize)
 	case *DeleteBody, *RestoreBody:
-		set, clear := postFlagEffect(h.Type)
+		set, clear := postFlagEffect(h.Type, v)
 		return ix.setFlags(h.Ordinal, set, clear)
 	default:
 		// ThreadCreated and the thread events. No per-post effect.
@@ -107,7 +107,7 @@ func (ix *Index) applyEdit(h FrameHeader, b *EditBody, offset uint64, frameSize 
 		e.ReplyTo = b.ReplyTo
 	}
 	e.Revision = revisionOf(h)
-	set, clear := postFlagEffect(h.Type)
+	set, clear := postFlagEffect(h.Type, b)
 	e.Flags = (e.Flags | set) &^ clear
 	return nil
 }
@@ -120,14 +120,27 @@ func (ix *Index) applyEdit(h FrameHeader, b *EditBody, offset uint64, frameSize 
 // Edit's edited flag included (review 1123 on PR #95), and
 // TestPostFlagEffectIsWhatApplyDoes holds Apply to it for every type.
 //
+// body is the record's decoded body, or the one an append is about to
+// encode; only an Edit's is read. A grace Edit (TKT-01M29CKRHS) sets nothing:
+// it is a revision the post does not show as an edit. Every other Edit sets
+// the edited flag, and nothing clears it. So a grace Edit on a post that is
+// already edited leaves it edited, and whenever the flag is set the current
+// revision's time is the last visible edit's, which is the edited_at a post
+// is served with (docs/03 "Record types"). The service never writes a grace
+// Edit after a visible one; a hand-made log may, and the projection reads it
+// the same way.
+//
 // A Restore clears hidden-by-mod as well as deleted (docs/08: a moderator's
 // Restore clears it; settled in grooming for TKT-01M29CA9BP). The index
 // cannot judge who wrote a record, so the rule that only a moderator may
 // restore a hidden post is the service's, and the index applies what the log
 // says.
-func postFlagEffect(t RecordType) (set, clear EntryFlags) {
+func postFlagEffect(t RecordType, body any) (set, clear EntryFlags) {
 	switch t {
 	case TypeEdit:
+		if isGrace(body) {
+			return 0, 0
+		}
 		return EntryEdited, 0
 	case TypeDelete:
 		return EntryDeleted, 0
@@ -135,6 +148,19 @@ func postFlagEffect(t RecordType) (set, clear EntryFlags) {
 		return 0, EntryDeleted | EntryHiddenByMod
 	}
 	return 0, 0
+}
+
+// isGrace reports whether body is a grace Edit's. Apply hands over the
+// decoded pointer; an append's body is whatever its caller wrote, so the
+// value form is read too, or the actor's fold and Apply could disagree.
+func isGrace(body any) bool {
+	switch b := body.(type) {
+	case *EditBody:
+		return b != nil && b.Grace
+	case EditBody:
+		return b.Grace
+	}
+	return false
 }
 
 // setFlags turns bits on and off in one entry.

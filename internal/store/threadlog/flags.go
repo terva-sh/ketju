@@ -93,7 +93,9 @@ const (
 	// every body on the page.
 	EntryHasAttachments EntryFlags = 1 << 3
 
-	// EntryEdited marks a post with more than one revision.
+	// EntryEdited marks a post with a visible edit: an Edit that is not a
+	// grace edit (TKT-01M29CKRHS). A post whose only edits are grace edits
+	// has more than one revision and no edited flag.
 	EntryEdited EntryFlags = 1 << 4
 
 	// EntryMachineAuthored mirrors [FrameFlagMachineAuthored] — note the

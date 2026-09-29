@@ -125,11 +125,20 @@ type (
 	// and the post keeps its mentions; non-nil replaces them, and a non-nil
 	// empty slice is an edit that removed every mention. A plain slice with
 	// omitempty could not say that last thing.
+	//
+	// Grace was added the same way, on 2026-09-29 (TKT-01M29CKRHS). It marks
+	// an author's edit made within posts.grace_edit_seconds of posting, which
+	// is stored as a revision but does not mark the post edited. The service
+	// decides it when it writes the record, with the setting then in force,
+	// because the index is rebuilt from the log alone and cannot read a
+	// setting. An older build ignores the key and marks the post edited,
+	// which shows a marker and discloses nothing.
 	EditBody struct {
 		Source   string    `cbor:"source,omitempty" json:"source,omitempty"`
 		Reason   string    `cbor:"reason,omitempty" json:"reason,omitempty"`
 		ReplyTo  uint32    `cbor:"reply_to,omitempty" json:"reply_to,omitempty"`
 		Mentions *[]uint64 `cbor:"mentions,omitempty" json:"mentions,omitempty"`
+		Grace    bool      `cbor:"grace,omitempty" json:"grace,omitempty"`
 	}
 
 	// DeleteBody soft-deletes a post. The body stays on disk and the reader

@@ -278,6 +278,41 @@ func (q *Queries) SetPostRevision(ctx context.Context, arg SetPostRevisionParams
 	return result.RowsAffected()
 }
 
+const setPostRevisionKeepEdited = `-- name: SetPostRevisionKeepEdited :execrows
+UPDATE post_meta SET current_revision = ?1,
+	edited_at = CASE WHEN edited_at IS NULL THEN NULL ELSE CAST(?2 AS INTEGER) END,
+	reply_to = coalesce(?3, reply_to), log_offset = ?4
+WHERE thread_id = ?5 AND ordinal = ?6
+`
+
+type SetPostRevisionKeepEditedParams struct {
+	CurrentRevision int64
+	EditedAt        int64
+	ReplyTo         sql.NullInt64
+	LogOffset       int64
+	ThreadID        int64
+	Ordinal         int64
+}
+
+// SetPostRevision for a grace Edit (TKT-01M29CKRHS). It does not mark an
+// unedited post edited, and on a post already edited it moves edited_at to
+// its own time, as the index entry keeps the edited flag and moves to this
+// revision. The two read paths then agree on edited_at.
+func (q *Queries) SetPostRevisionKeepEdited(ctx context.Context, arg SetPostRevisionKeepEditedParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setPostRevisionKeepEdited,
+		arg.CurrentRevision,
+		arg.EditedAt,
+		arg.ReplyTo,
+		arg.LogOffset,
+		arg.ThreadID,
+		arg.Ordinal,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setProjectionState = `-- name: SetProjectionState :exec
 INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (?, ?, ?)
 ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_at = excluded.updated_at

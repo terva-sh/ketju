@@ -280,7 +280,7 @@ uses the name, never the literal.
 |-----:|------|-------------|----------------------|
 | 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
 | 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[] | new post_meta row, ordinal = thread.post_count+1 |
-| 3 | `Edit` | source, reason, reply_to, mentions[] (optional) | post_meta.current_revision++, edited flag; when `mentions` is present it replaces the post's mention rows |
+| 3 | `Edit` | source, reason, reply_to, mentions[] (optional), grace (optional bool) | post_meta.current_revision++, edited flag unless `grace`; when `mentions` is present it replaces the post's mention rows |
 | 4 | `Delete` | reason, hard (bool, always false in v1) | post_meta.deleted, tombstone shown |
 | 5 | `Restore` | reason | clears deleted |
 | 10 | `ThreadRenamed` | title, slug | thread row |
@@ -302,6 +302,19 @@ structurally, TKT-01M29C2WWG), so a mention added in an edit would otherwise
 never reach the projection. Recording mentions at creation only lost because
 an edited-in mention would silently never notify. Re-rendering during
 projection lost because it would tie the projection to the renderer version.
+
+`Edit.grace` was added the same way, on 2026-09-29 (TKT-01M29CKRHS). `true`
+marks an author's edit within `posts.grace_edit_seconds` of posting, on a post
+with no visible edit yet (08). It is a revision like any other, and history
+lists it, but it does not set the entry's edited flag or `post_meta.edited_at`.
+Any other `Edit` sets both, and nothing clears them. A grace `Edit` on a post
+that already has the flag, which the service never writes, leaves the flag set
+and moves `edited_at` to its own time. So whenever a post is marked edited, the
+current revision's time is the last visible edit's. The service decides grace
+when it writes the record, because the index is rebuilt from the log alone and
+cannot read a setting, and a decision taken on read would put a setting into
+cached responses. An older reader ignores the key and marks the post edited,
+which fails safe: it shows a marker and discloses nothing.
 
 Deletion is soft. A `Delete` record leaves the original `Post` bytes intact;
 the reader consults the index flags and returns a tombstone.
@@ -462,8 +475,8 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 | 12 | 4 | reply_to ordinal (0 = none) | reply-chain lens without touching the DB |
 | 16 | 8 | Author user id | author filter lens without the DB |
 | 24 | 8 | Created at (unix ms, of revision 1) | jump-to-date, "since last visit" |
-| 32 | 2 | Current revision number | cache keys, "edited" marker |
-| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4), machine-authored (5) — `EntryFlags` in `flags.go`, reserved bits 6–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
+| 32 | 2 | Current revision number | cache keys, history |
+| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4, a visible edit: not set by a grace `Edit`), machine-authored (5) — `EntryFlags` in `flags.go`, reserved bits 6–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
 | 36 | 4 | Reserved | segment rollover, see below |
 
 `machine-authored` mirrors frame flag bit 0, so filtering a thread by whether a
