@@ -39,18 +39,28 @@ type Service struct {
 	DB   *db.DB
 	Perm *perm.Evaluator
 	// Threads writes a suspension's hide and restore of the account's
-	// posts. Nil refuses both, for a service that only changes statuses,
-	// such as the expiry job's.
-	Threads *threads.Service
+	// posts: *threads.Service in the server. Nil refuses both, for a
+	// service that only changes statuses, such as the expiry job's.
+	Threads Posts
 	// Now is the clock a suspension's end is checked against; nil is
 	// time.Now.
 	Now func() time.Time
 
 	// listed, when set, is called by ExpireSuspensions between reading the
-	// list and changing the first account. Tests use it to change an
-	// account in that gap.
-	listed func()
+	// list and changing the first account, and lifted by Unsuspend between
+	// the status change and choosing the posts to restore. Tests use them
+	// to change an account in those gaps.
+	listed, lifted func()
 }
+
+// Posts is what the service needs of the thread service
+// (threads.Service.HidePostsOf and RestorePostsOf).
+type Posts interface {
+	HidePostsOf(ctx context.Context, v domain.Viewer, author, suspension int64) (int, error)
+	RestorePostsOf(ctx context.Context, v domain.Viewer, author int64, suspensions []int64) (int, error)
+}
+
+var _ Posts = (*threads.Service)(nil)
 
 func (s *Service) now() time.Time {
 	if s.Now != nil {
@@ -140,8 +150,12 @@ func (s *Service) Suspend(ctx context.Context, v domain.Viewer, ip, handle, reas
 
 // Unsuspend is POST /admin/users/{handle}/unsuspend: staff end a
 // suspension, on the same authority as Suspend. With restorePosts, the
-// posts the account's suspensions hid are then restored (RestorePosts).
-// Without it they stay hidden, as they do when a suspension expires.
+// posts the suspension it lifted hid are then restored, and no others.
+// That suspension is the newest one written before the user.unsuspended row
+// this writes, so a suspension another moderator makes in the moment after,
+// and the posts it hides, are left alone (Terva review 1499 on PR #172).
+// Without restorePosts the posts stay hidden, as they do when a suspension
+// expires.
 func (s *Service) Unsuspend(ctx context.Context, v domain.Viewer, ip, handle string, restorePosts bool) error {
 	if err := member.RequireStaff(v, "unsuspend an account"); err != nil {
 		return err
@@ -154,12 +168,33 @@ func (s *Service) Unsuspend(ctx context.Context, v domain.Viewer, ip, handle str
 		return err
 	}
 	by := audit.By{Actor: v.UserID, IP: ip}
-	if err := s.Perm.ChangeStatus(ctx, id, perm.StatusChange{
+	lifted, err := s.Perm.ChangeStatusID(ctx, id, perm.StatusChange{
 		By: by, Action: perm.ActionUnsuspended, Allow: mayActOn(v, "unsuspend"),
-	}); err != nil || !restorePosts {
+	})
+	if err != nil || !restorePosts {
 		return err
 	}
-	return s.restore(ctx, v, by, id)
+	if s.lifted != nil {
+		s.lifted()
+	}
+	var ids []int64
+	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		ids, err = q.AuditIDs(ctx, suspensionRows(id))
+		return err
+	}); err != nil {
+		return err
+	}
+	// Rows are numbered in the order they are written, and every
+	// suspension leads into suspended, so the newest before lifted is the
+	// one lifted.
+	var this []int64
+	for _, sid := range ids {
+		if sid < lifted {
+			this = []int64{sid}
+		}
+	}
+	return s.restore(ctx, v, by, id, this)
 }
 
 // Anonymize is POST /admin/users/{handle}/anonymize: an admin anonymizes

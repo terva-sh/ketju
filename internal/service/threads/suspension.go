@@ -229,8 +229,20 @@ func (s *Service) eachAuthorThread(ctx context.Context, v domain.Viewer, author 
 // decision and an append. reached is false for a thread that could not be
 // finished and should be tried again later; a thread v may not moderate is
 // reached, since there is nothing for v to do there.
+//
+// v is admitted from the projection row before the thread is opened too,
+// so a thread in a forum v may not see or moderate is passed over without
+// being opened or projected. Whether its log opens, or is quarantined,
+// then never reaches the answer, which would otherwise tell v something
+// about a forum hidden from them (Terva review 1499 on PR #172). The row
+// can trail the log, which only makes this first check pass over a thread
+// v could moderate. The check under the thread is the one that admits.
 func (s *Service) authorThread(ctx context.Context, v domain.Viewer, id threadid.ID, flags threadlog.FrameFlags,
 	change threadChange) (total int, reached bool, err error) {
+	if a, err := s.access(ctx, v, id); err != nil || !a.canModerate {
+		reached, err := admitted(err)
+		return 0, reached, err
+	}
 	for range threadAttempts {
 		var (
 			n       int
@@ -270,13 +282,24 @@ func (s *Service) authorThread(ctx context.Context, v domain.Viewer, id threadid
 		case !entered:
 			return total, false, nil // the thread could not be opened
 		}
-		switch problem.FromError(err) {
-		case problem.CodeNotFound, problem.CodeForbidden, problem.CodeUnauthenticated:
-			return total, true, nil // not v's to moderate
-		case problem.CodeUnavailable:
-			return total, false, nil // quarantined
-		}
-		return total, false, err
+		reached, err := admitted(err)
+		return total, reached, err
 	}
 	return total, false, nil
+}
+
+// admitted sorts access's refusal of a thread for authorThread: one that is
+// not v's to moderate is reached, with nothing to do; a quarantined one is
+// not reached; anything else is an error that stops the walk.
+func admitted(err error) (reached bool, _ error) {
+	if err == nil {
+		return true, nil
+	}
+	switch problem.FromError(err) {
+	case problem.CodeNotFound, problem.CodeForbidden, problem.CodeUnauthenticated:
+		return true, nil
+	case problem.CodeUnavailable:
+		return false, nil
+	}
+	return false, err
 }

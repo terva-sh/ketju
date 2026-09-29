@@ -466,6 +466,31 @@ func TestHideJudgesTheForumTheLogSays(t *testing.T) {
 	}
 }
 
+// A thread that cannot be opened in a forum the moderator cannot see says
+// nothing: it is passed over before it is opened, and the answer is the one
+// a healthy thread there would give (Terva review 1499 on PR #172). An
+// admin, who can see it, is told to run the hide again.
+func TestHideSaysNothingOfAHiddenForumsThreads(t *testing.T) {
+	w, id := suspendedWorld(t)
+	var staff int64
+	w.write(func(q *dbq.Queries) error {
+		var err error
+		staff, err = q.CreateForum(t.Context(), dbq.CreateForumParams{Slug: "staff", Name: "Staff",
+			Visibility: domain.VisibilityRestricted, CreatedAt: 1, UpdatedAt: 1})
+		return err
+	})
+	w.exec(`INSERT INTO threads (id, forum_id, slug, title, author_id, created_at, post_count, last_post_at,
+		last_post_author_id, log_length_projected) VALUES (65537, ?, 'ghost', 'Ghost', ?, 1, 1, 1, ?, 0)`,
+		staff, w.users["carol"], w.users["carol"])
+	w.admin(w.viewer("bob"), http.MethodPost, carolPosts+"suspend", `{"reason":"spam","hide_posts":true}`)
+	if got := w.hidden(id, 4, 5); !slices.Equal(got, []uint32{4, 5}) {
+		t.Errorf("hidden-by-mod %v, want 4 and 5", got)
+	}
+	if rec := w.sendAs(w.anonymizer(), http.MethodPost, carolPosts+"posts/hide", ""); rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("an admin's hide: %d %s, want 503 for the thread it cannot open", rec.Code, rec.Body)
+	}
+}
+
 // A thread that cannot be opened is passed over, every other thread is
 // still done, and the answer says to run it again (Terva review 1495 on PR
 // #169). The thread row here has no log behind it and sorts first.

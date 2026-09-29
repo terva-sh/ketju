@@ -59,7 +59,13 @@ writes it.
   carries one of the account's suspensions. A post a moderator hid for its
   own sake stays hidden, and so does one a moderator restored and then hid
   again. The restore walks the log to decide, and each `Restore` is written
-  on the condition that nothing landed after the walk.
+  on the condition that nothing landed after the walk. An unsuspension's
+  restore takes only the suspension it lifted. The standalone restore takes
+  the suspensions the account had when it was read. Neither can reach a
+  suspension made while it runs.
+- **A thread in a forum the moderator cannot see is never opened.** The
+  moderator is admitted from the projection before the thread is touched,
+  so whether its log is healthy never reaches the answer.
 - **Expiry is a job.** It runs every minute and lifts every suspension whose
   end has passed, as an unsuspension by no account with `"via": "expiry"`.
   It reads the end again in the transaction that lifts it, so a suspension

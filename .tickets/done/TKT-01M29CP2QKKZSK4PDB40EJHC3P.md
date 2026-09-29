@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T22:57:41Z
+updated_at: 2026-09-29T23:13:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -144,6 +144,10 @@ Implementation decisions (2026-09-29), with the alternatives that lost:
 **agent:claude-code/phase2-run-cp2qk** at 2026-09-29T22:54:11Z
 
 Terva review 1495 (run 15741, Actions #1066), head 141ee0a3581adaf3145aaa042cf8b3e4904f6936, base 1dd6ed90c253e04f8906a966943dde764b48e0c6: two medium findings, both fixed. (1) 'Continue past quarantined threads returned by With': a thread that fails to open now counts as unreached like a quarantined one, every other thread is finished, and the answer is unavailable. Pinned by TestHideGoesPastAThreadItCannotOpen. (2) 'Recheck forum authority when applying the thread change' (security: access to posts): the moderator is now admitted under the thread. The projection is brought up to the log's length L first, so an unprojected ThreadMoved is in the forum judged. Every record is appended at the length the previous one left, starting from L (AtLength), so a record landing in between, a move included, sends the thread back to be decided again. Pinned by TestHideJudgesTheForumTheLogSays and TestRestoreDecidesAgainWhenTheLogMoves. Mutations were tried: without the projection before admitting, the forum test fails; with an unopened thread stopping the walk, the open test fails; without AtLength on the restore, the interleaving test fails.
+
+**agent:claude-code/phase2-run-cp2qk** at 2026-09-29T23:13:46Z
+
+Terva review 1499 (run 15790, Actions #1085), head 4a41ce646c360e8f798b35ef5193426a18167bb9, base 2826208 (PR #172, which replaced #169). Both findings are fixed. (1) high, 'Do not restore posts from a suspension created after unsuspending': Unsuspend now takes the audit id of its own user.unsuspended row (ChangeStatusID) and restores only the newest user.suspended row before it, which is the suspension it lifted. The standalone restore takes the suspension ids in the same read as the account. A suspension made while either runs is never included. Pinned by TestUnsuspendRestoresOnlyTheSuspensionItLifted (a hook suspends again between the status change and the choice). (2) medium, 'Check forum access before reporting an inaccessible thread as unavailable': authorThread now admits the moderator from the projection row before opening or projecting the thread, so a thread in a forum they cannot see is passed over unopened and its health never reaches the answer. The check under the thread still decides. Pinned by TestHideSaysNothingOfAHiddenForumsThreads. Both mutations were caught. account.Service.Threads is now a two-method interface (Posts), so the restore's choice can be tested without threads.
 
 ## Summary
 

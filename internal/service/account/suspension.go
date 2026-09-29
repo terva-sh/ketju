@@ -92,17 +92,24 @@ func (s *Service) RestorePosts(ctx context.Context, v domain.Viewer, ip, handle 
 	if s.Threads == nil {
 		return errNoThreads
 	}
-	var u dbq.User
-	if err := s.readAccount(ctx, handle, func(_ *dbq.Queries, t dbq.User) error {
+	var (
+		u   dbq.User
+		ids []int64
+	)
+	if err := s.readAccount(ctx, handle, func(q *dbq.Queries, t dbq.User) error {
 		u = t
-		return nil
+		var err error
+		ids, err = q.AuditIDs(ctx, suspensionRows(t.ID))
+		return err
 	}); err != nil {
 		return err
 	}
 	if err := mayActOn(v, "restore the posts of")(u); err != nil {
 		return err
 	}
-	return s.restore(ctx, v, audit.By{Actor: v.UserID, IP: ip}, u.ID)
+	// The suspensions are the ones there were when the account was read, so
+	// one another moderator makes while this runs keeps its hidden posts.
+	return s.restore(ctx, v, audit.By{Actor: v.UserID, IP: ip}, u.ID, ids)
 }
 
 // hide hides userID's visible posts with suspension and writes
@@ -119,17 +126,9 @@ func (s *Service) hide(ctx context.Context, v domain.Viewer, by audit.By, userID
 	return nil
 }
 
-// restore restores the posts userID's suspensions hid, and writes
-// ActionPostsRestored for however many it restored.
-func (s *Service) restore(ctx context.Context, v domain.Viewer, by audit.By, userID int64) error {
-	var ids []int64
-	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		var err error
-		ids, err = q.AuditIDs(ctx, suspensionRows(userID))
-		return err
-	}); err != nil {
-		return err
-	}
+// restore restores the posts of userID's that the suspensions ids hid, and
+// writes ActionPostsRestored for however many it restored.
+func (s *Service) restore(ctx context.Context, v domain.Viewer, by audit.By, userID int64, ids []int64) error {
 	n, err := s.Threads.RestorePostsOf(ctx, v, userID, ids)
 	if werr := s.postsRow(ctx, by, ActionPostsRestored, userID, n, map[string]any{}); werr != nil && err == nil {
 		err = werr
