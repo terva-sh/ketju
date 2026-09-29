@@ -44,11 +44,19 @@ describe('toProblem', () => {
   });
 
   // A body that is not a problem (a proxy's error page) maps from the
-  // status, and to the same code the server would have sent for it.
+  // status, and to the same code the server would have sent for it. Where
+  // one status carries several codes, as 403 carries forbidden and the two
+  // author windows (TKT-01M29CKRHS), a bare status is the general code: it
+  // cannot say which window closed.
+  const general: Partial<Record<number, keyof typeof catalogue>> = { 403: 'forbidden' };
   it.each(codes)('maps a bare %s status to its code', async (code) => {
     const status = catalogue[code].status;
     const p = await toProblem(new Response('<html>', { status, headers: { 'Content-Type': 'text/html' } }));
-    expect(p.type).toBe(code);
+    expect(p.type).toBe(general[status] ?? code);
+  });
+
+  it('names a general code of the status it stands for', () => {
+    for (const [status, code] of Object.entries(general)) expect(catalogue[code!].status).toBe(Number(status));
   });
 
   it('maps a gateway failure to unavailable and anything else to internal', async () => {
