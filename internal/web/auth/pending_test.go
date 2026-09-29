@@ -32,7 +32,7 @@ func (w *world) withAPI() {
 	w.t.Helper()
 	p := perm.New(w.db)
 	a := api.New(api.Deps{Users: &users.Service{DB: w.db, Perm: p}, Threads: &threads.Service{DB: w.db, Perm: p},
-		Forums: &forums.Service{DB: w.db, Perm: p}, Logger: w.handler.Logger})
+		Forums: &forums.Service{DB: w.db, Perm: p}, Perm: p, Logger: w.handler.Logger})
 	w.srv = web.New(web.Groups{Auth: New(w.handler), API: a}, web.Options{Logger: w.handler.Logger, SiteURL: site,
 		Session: session.Middleware(w.store, w.handler.Logger), RateLimit: func(h http.Handler) http.Handler { return h }})
 }

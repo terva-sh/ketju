@@ -55,7 +55,9 @@ var (
 // into the memory exhaustion it exists to prevent.
 const maxTrackedKeys = 8192
 
-// clientIP is the key a request is charged against.
+// ClientIP is the address a request came from: the key a request is charged
+// against here, and what an audit row records in its ip column
+// (internal/audit), so the two always name the same caller.
 //
 // The address, and only the address. That is not a simplification -- it is
 // forced by where this middleware sits.
@@ -82,7 +84,7 @@ const maxTrackedKeys = 8192
 // trusting it without a configured list of trusted proxies would not weaken
 // this limiter but remove it: every request could claim a fresh key. Reading
 // it needs a trusted-proxy setting that config does not have yet.
-func clientIP(r *http.Request) string {
+func ClientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
 		host = r.RemoteAddr
@@ -195,7 +197,7 @@ func RateLimit(now func() time.Time) func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-			if ok, retry := l.allow(clientIP(r)); !ok {
+			if ok, retry := l.allow(ClientIP(r)); !ok {
 				// AC3: the response says when to retry. Rounded up, so a
 				// client that obeys it exactly does not arrive one tick early
 				// and get refused again.

@@ -14,6 +14,7 @@ import (
 	"strconv"
 
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
@@ -26,7 +27,10 @@ type Deps struct {
 	Threads *threads.Service
 	Users   *users.Service
 	Forums  *forums.Service
-	Logger  *slog.Logger
+	// Perm is the process's evaluator. The admin API's moderates gate asks
+	// it (admin.go).
+	Perm   *perm.Evaluator
+	Logger *slog.Logger
 }
 
 // New returns the /api/v1 handler, for web.Groups.API. It receives full
@@ -36,15 +40,23 @@ type Deps struct {
 // the first request to a route that needs it: a server wired without one is
 // a build mistake, and it should not start.
 func New(d Deps) http.Handler {
-	if d.Threads == nil || d.Users == nil || d.Forums == nil {
-		panic(fmt.Sprintf("api.New: Threads, Users and Forums are required (Threads set: %t, Users set: %t, Forums set: %t)",
-			d.Threads != nil, d.Users != nil, d.Forums != nil))
+	_, mux := build(d)
+	return mux
+}
+
+// build is New, with the handlers it registered, for a test that walks the
+// admin routes.
+func build(d Deps) (*handlers, *http.ServeMux) {
+	if d.Threads == nil || d.Users == nil || d.Forums == nil || d.Perm == nil {
+		panic(fmt.Sprintf("api.New: Threads, Users, Forums and Perm are required "+
+			"(Threads set: %t, Users set: %t, Forums set: %t, Perm set: %t)",
+			d.Threads != nil, d.Users != nil, d.Forums != nil, d.Perm != nil))
 	}
 	log := d.Logger
 	if log == nil {
 		log = slog.Default()
 	}
-	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, log: log}
+	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, perm: d.Perm, log: log}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/v1/me", h.me)
 	mux.HandleFunc("GET /api/v1/forums", h.forumTree)
@@ -67,17 +79,22 @@ func New(d Deps) http.Handler {
 	mux.HandleFunc("GET /api/v1/users", h.usersByPrefix)
 	mux.HandleFunc("GET /api/v1/users/{handle}", h.userProfile)
 	mux.HandleFunc("GET /api/v1/users/{handle}/posts", h.userPosts)
+	h.registerAdmin(mux)
 	mux.Handle("/api/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.CodeNotFound)
 	}))
-	return mux
+	return h, mux
 }
 
 type handlers struct {
 	threads *threads.Service
 	users   *users.Service
 	forums  *forums.Service
+	perm    *perm.Evaluator
 	log     *slog.Logger
+
+	// adminRoutes is every route adminRoute registered, with its gate.
+	adminRoutes []adminRouteEntry
 }
 
 // me is GET /api/v1/me (docs/07): the viewer, their unread counts and their

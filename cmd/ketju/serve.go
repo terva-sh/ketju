@@ -461,7 +461,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 
 	var root http.Handler = web.New(web.Groups{
-		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Logger: log}),
+		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Perm: perms, Logger: log}),
 		Auth:   auth.New(authh),
 		Assets: spa.Assets(),
 		Health: health.Handler(health.Options{

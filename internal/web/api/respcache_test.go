@@ -34,7 +34,7 @@ func uncached(w *world) *world {
 	w.writes(svc)
 	c := *w
 	c.svc = svc
-	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}})
+	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Perm: perm.New(w.db)})
 	return &c
 }
 

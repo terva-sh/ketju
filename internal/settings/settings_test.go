@@ -331,6 +331,35 @@ func TestSetByDetails(t *testing.T) {
 	}
 }
 
+// TestSetByRecordsTheAddress: a change made from a request records the
+// actor and the address it came from, through internal/audit.
+func TestSetByRecordsTheAddress(t *testing.T) {
+	d := openDB(t)
+	if err := d.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		_, err := tx.ExecContext(t.Context(), `INSERT INTO users (id, handle, display_name, status, role, kind,
+			prefs_json, created_at, updated_at) VALUES (4, 'dana', 'Dana', 'active', 'admin', 'human', '{}', 1, 1)`)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := SetBy(t.Context(), d, "site_name", json.RawMessage(`"Club"`),
+		Change{Actor: 4, IP: "192.0.2.7", At: now}); err != nil {
+		t.Fatal(err)
+	}
+	var actor sql.NullInt64
+	var typ, id, details, ip string
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), `SELECT actor_id, target_type, target_id, details_json, ip
+			FROM audit_log WHERE action = ?`, ActionChanged).Scan(&actor, &typ, &id, &details, &ip)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if actor.Int64 != 4 || typ != "setting" || id != "site_name" || details != `{"from":"Ketju","to":"Club"}` ||
+		ip != "192.0.2.7" {
+		t.Errorf("audit row: actor %v, target %s/%s, details %s, ip %q", actor, typ, id, details, ip)
+	}
+}
+
 // TestCurrent: every key, in name order, with its value and whether it is
 // the default; a row that sets a key back to its default counts as the
 // default.

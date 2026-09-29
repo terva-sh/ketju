@@ -130,6 +130,10 @@ type entry struct {
 	gen     uint64
 	expires time.Time
 	forums  map[int64]access
+
+	// moderates is ModeratesAny's answer, once known: set is false until it
+	// has been asked.
+	moderates struct{ set, any bool }
 }
 
 // access is the evaluated state of one forum for one viewer.
@@ -272,6 +276,69 @@ func (e *Evaluator) ReadableForums(ctx context.Context, v domain.Viewer) ([]int6
 		}
 	}
 	return out, nil
+}
+
+// ModeratesAny reports whether v may moderate somewhere: an active moderator
+// or admin by role, or a member whose groups grant moderate in at least one
+// forum they can see (docs/04 "permissions"). The admin API's moderates gate
+// asks it, so a member who moderates one forum through a group reaches the
+// queue, whose handlers then filter by forum.
+//
+// The answer is cached with v's other decisions and cleared by the same
+// writes, so revoking the grant applies on the next request. A forum created
+// since is taken into account within TTL, since creating a forum clears
+// nothing: that matters only for a global grant with no forum to apply to
+// yet.
+func (e *Evaluator) ModeratesAny(ctx context.Context, v domain.Viewer) (bool, error) {
+	if !v.Member() {
+		return false, nil
+	}
+	if v.Role == domain.RoleAdmin || v.Role == domain.RoleModerator {
+		return true, nil
+	}
+	key := cacheKey{session: v.SessionKey, user: v.UserID, role: v.Role, active: v.Active}
+	gen := e.gen.Load()
+	now := e.now()
+	e.mu.Lock()
+	if ent := e.entries[key]; ent != nil && ent.gen == gen && now.Before(ent.expires) && ent.moderates.set {
+		e.mu.Unlock()
+		return ent.moderates.any, nil
+	}
+	e.mu.Unlock()
+
+	var ids []int64
+	err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
+		forums, err := q.ListForums(ctx)
+		for _, f := range forums {
+			ids = append(ids, f.ID)
+		}
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	may, err := e.CanEach(ctx, v, ids, domain.PermModerate)
+	if err != nil {
+		return false, err
+	}
+	answer := false
+	for _, ok := range may {
+		answer = answer || ok
+	}
+
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if gen != e.gen.Load() {
+		return answer, nil // invalidated while evaluating: answer, but do not cache
+	}
+	ent := e.entries[key]
+	if ent == nil || ent.gen != gen || !now.Before(ent.expires) {
+		e.sweepLocked(now)
+		ent = &entry{gen: gen, expires: now.Add(TTL), forums: make(map[int64]access)}
+		e.entries[key] = ent
+	}
+	ent.moderates.set, ent.moderates.any = true, answer
+	return answer, nil
 }
 
 // Invalidate drops every cached decision, in this Evaluator and in every other

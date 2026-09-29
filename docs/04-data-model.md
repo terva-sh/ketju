@@ -310,6 +310,38 @@ id (which is how `INSERT OR REPLACE` would otherwise overwrite a row without
 firing a DELETE trigger), and a test refuses any query or SQL literal in the
 tree that tries any of them.
 
+Rows reach the table only through `internal/audit`, and
+`TestOneWayIntoAuditLog` refuses a call to the insert anywhere else. The
+row is written inside the transaction that makes the change, so the two
+commit together. A service writes it from its own write transaction. For an
+action the thread log records, the projection writer writes it from the
+transaction that projects the record, with the frame's timestamp as `at`.
+
+- `actor_id` is the member who acted, or NULL when no account did: the
+  command line, the configuration, a background job, the flag auto-hide. It
+  is never 0. Such a row names what did the action in `details_json` as
+  `"via"` (`"cli"`, `"expiry"`, `"auto-hide"`).
+- `ip` is the request's address as the per-address rate limiter reads it,
+  never `X-Forwarded-For` (docs/08). It is empty when there was no request,
+  and for a row the projection writer writes, since the log carries no
+  address.
+- `target_type` and `target_id` name what the action was done to, in one
+  format per type, so every row about one thing can be found through the
+  `audit_log_target` index:
+
+<!-- audit-targets:begin -->
+| target_type | target_id |
+|---|---|
+| `user` | the user's id, in decimal |
+| `forum` | the forum's id, in decimal |
+| `group` | the group's id, in decimal |
+| `flag` | the flag's id, in decimal |
+| `application` | the application's id, in decimal |
+| `thread` | the thread's id in base32, as URLs spell it |
+| `post` | `<base32 thread id>/<ordinal>` |
+| `setting` | the setting's key, such as `registration.mode` |
+<!-- audit-targets:end -->
+
 ### notifications
 ```
 id, user_id, kind, thread_id, ordinal, actor_id, at, read_at, application_id

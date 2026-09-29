@@ -1,0 +1,140 @@
+/* The admin layout and the pieces in ./common. Lazy, with the admin chunk:
+   none of this counts against the reader's budget. The section list is a
+   column beside the section from 720 px up, and a row of links above it on
+   a phone. */
+
+.admin {
+  max-width: 1100px;
+  margin: 0 auto;
+  padding: 36px 24px 48px;
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: 24px;
+}
+
+.admin-nav ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px 16px;
+}
+.admin-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 32px;
+  color: var(--ink2);
+  text-decoration: none;
+}
+.admin-nav a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.admin-nav a:hover {
+  color: var(--accent);
+}
+
+.admin-section h1 {
+  margin: 0 0 16px;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.admin-table {
+  overflow-x: auto;
+}
+.admin-table table {
+  width: 100%;
+  border-collapse: collapse;
+}
+.admin-table caption {
+  text-align: left;
+  color: var(--muted);
+  padding-bottom: 8px;
+}
+.admin-table th,
+.admin-table td {
+  text-align: left;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid var(--rule);
+  vertical-align: top;
+}
+.admin-table th {
+  color: var(--muted);
+  font-weight: 500;
+}
+.admin-table .num {
+  text-align: right;
+}
+.admin-empty {
+  color: var(--muted);
+}
+
+.admin-field {
+  display: grid;
+  gap: 4px;
+  margin-bottom: 16px;
+}
+.admin-field label {
+  font-weight: 500;
+  color: var(--ink);
+}
+.admin-hint {
+  margin: 0;
+  color: var(--muted);
+  font-size: 14px;
+}
+.admin-error {
+  margin: 0;
+  color: var(--unread);
+}
+
+.admin-button {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  cursor: pointer;
+}
+.admin-button.danger {
+  border-color: var(--unread);
+  color: var(--unread);
+}
+.admin-button:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+.admin-confirm {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+/* The phone: the section list becomes a row above the section, and the
+   section links and the buttons are drawn at the full 44 px (docs/06
+   "Targets and gestures"). */
+@media (max-width: 719.98px) {
+  .admin {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 24px 16px 48px;
+  }
+  .admin-nav ul {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .admin-nav a,
+  .admin-button {
+    min-height: var(--target);
+  }
+  .admin-button {
+    height: auto;
+  }
+}

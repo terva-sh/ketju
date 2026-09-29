@@ -26,6 +26,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
@@ -230,6 +231,10 @@ type Change struct {
 	// "via": "cli", as `ketju admin promote` does.
 	Details map[string]string
 
+	// IP is the address the change came from, for the audit row: empty for
+	// the command line.
+	IP string
+
 	At time.Time
 }
 
@@ -268,15 +273,13 @@ func SetBy(ctx context.Context, d *db.DB, name string, value json.RawMessage, c 
 			fields[k] = v
 		}
 		fields["from"], fields["to"] = json.RawMessage(from), json.RawMessage(canonical)
-		details, err := json.Marshal(fields)
-		if err != nil {
-			return err
-		}
-		_, err = q.AppendAudit(ctx, dbq.AppendAuditParams{At: at, ActorID: by,
-			Action: "setting.changed", TargetType: "setting", TargetID: name, DetailsJson: string(details)})
+		_, err := audit.Append(ctx, q, c.At, audit.By{Actor: c.Actor, IP: c.IP}, ActionChanged, audit.Setting(name), fields)
 		return err
 	})
 }
+
+// ActionChanged is the audit_log action SetBy writes.
+const ActionChanged = "setting.changed"
 
 // unknown is ErrUnknownKey for name, listing the keys there are.
 func unknown(name string) error {

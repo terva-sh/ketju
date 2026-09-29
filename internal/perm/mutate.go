@@ -3,10 +3,11 @@ package perm
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"strconv"
+	"maps"
+	"time"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
@@ -145,18 +146,14 @@ type Promotion struct {
 // check before the cache is read, so the promoted user's next request
 // meets no stale entry (TestPromoteFromAnotherProcess).
 func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (bool, error) {
-	details := map[string]string{}
+	details := map[string]any{}
 	for k, v := range p.Details {
 		details[k] = v
 	}
 	details["role"] = domain.RoleAdmin
-	dj, err := json.Marshal(details)
-	if err != nil {
-		return false, err
-	}
-	target := strconv.FormatInt(userID, 10)
+	target := audit.User(userID)
 	promoted := false
-	err = e.write(ctx, func(q *dbq.Queries, now int64) error {
+	err := e.write(ctx, func(q *dbq.Queries, now int64) error {
 		u, err := q.GetUser(ctx, userID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNoUser
@@ -164,14 +161,12 @@ func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (boo
 		if err != nil {
 			return err
 		}
-		audit := func(details []byte) error {
-			_, err := q.AppendAudit(ctx, dbq.AppendAuditParams{At: now,
-				ActorID: sql.NullInt64{Int64: p.Actor, Valid: p.Actor != 0}, Action: ActionPromoted,
-				TargetType: "user", TargetID: target, DetailsJson: string(details)})
+		record := func(details map[string]any) error {
+			_, err := audit.Append(ctx, q, time.UnixMilli(now), audit.By{Actor: p.Actor}, ActionPromoted, target, details)
 			return err
 		}
 		if p.Once {
-			seen, err := q.AuditExists(ctx, dbq.AuditExistsParams{TargetType: "user", TargetID: target, Action: ActionPromoted})
+			seen, err := q.AuditExists(ctx, dbq.AuditExistsParams{TargetType: target.Type, TargetID: target.ID, Action: ActionPromoted})
 			if err != nil || seen {
 				return err
 			}
@@ -180,12 +175,9 @@ func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (boo
 			// have been is recorded, so that once demoted they are not
 			// made admin again (review 1128).
 			if u.Role == domain.RoleAdmin {
-				details["already"] = domain.RoleAdmin
-				dj, err := json.Marshal(details)
-				if err != nil {
-					return err
-				}
-				return audit(dj)
+				already := maps.Clone(details)
+				already["already"] = domain.RoleAdmin
+				return record(already)
 			}
 		}
 		if u.Role == domain.RoleAdmin {
@@ -194,7 +186,7 @@ func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (boo
 		if err := q.SetUserRole(ctx, dbq.SetUserRoleParams{Role: domain.RoleAdmin, UpdatedAt: now, ID: userID}); err != nil {
 			return err
 		}
-		if err := audit(dj); err != nil {
+		if err := record(details); err != nil {
 			return err
 		}
 		promoted = true

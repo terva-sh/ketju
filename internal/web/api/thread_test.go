@@ -104,7 +104,7 @@ func newWorldSync(t *testing.T, policy threadlog.SyncPolicy) *world {
 	// also runs through it: a second request for a page is a hit.
 	svc := &threads.Service{DB: d, Perm: perm.New(d), Threads: c, Render: render.NewCache(1 << 20),
 		Responses: respcache.New(1 << 20)}
-	w := &world{t: t, db: d, cache: c, proj: p, svc: svc, handler: New(Deps{Threads: svc, Users: &users.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}}),
+	w := &world{t: t, db: d, cache: c, proj: p, svc: svc, handler: New(Deps{Threads: svc, Users: &users.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}, Perm: perm.New(d)}),
 		users: map[string]int64{}, clock: 1_757_500_000_000, root: root, events: &published{}}
 	w.writes(svc)
 
@@ -576,7 +576,7 @@ func newHandlerFor(w *world) *world {
 	w.writes(svc)
 	c := *w
 	c.svc = svc
-	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}})
+	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Perm: perm.New(w.db)})
 	return &c
 }
 
@@ -731,7 +731,7 @@ func TestQuarantinedThreadIs503(t *testing.T) {
 		svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20),
 			Quarantined: func(id threadid.ID) bool { return id == bad }}
 		c := *w
-		c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}})
+		c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Perm: perm.New(w.db)})
 		return &c
 	}
 	q := quarantine(w)

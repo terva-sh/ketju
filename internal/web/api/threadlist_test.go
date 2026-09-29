@@ -388,7 +388,7 @@ func TestThreadListOpensNoLog(t *testing.T) {
 	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db)} // no Threads, no Render
 	c := *w.world
 	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)},
-		Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}})
+		Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Perm: perm.New(w.db)})
 	f := &forumWorld{world: &c, ids: w.ids}
 	if l := f.threadList("alice", "general", "", ""); len(l.Threads) != 1 || l.Threads[0].Pinned == nil {
 		t.Errorf("%+v", l)

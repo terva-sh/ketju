@@ -362,3 +362,23 @@ func TestASpoofedForwardedForCannotMintFreshKeys(t *testing.T) {
 		t.Error("rotating X-Forwarded-For bypassed the limiter entirely")
 	}
 }
+
+// TestClientIPIgnoresForwardedFor: the address an audit row records is the
+// connection's, as the limiter reads it, and never a header the caller
+// wrote (docs/08).
+func TestClientIPIgnoresForwardedFor(t *testing.T) {
+	for _, c := range []struct{ remote, want string }{
+		{"198.51.100.9:5000", "198.51.100.9"},
+		{"[2001:db8::1]:443", "2001:db8::1"},
+		{"198.51.100.9", "198.51.100.9"}, // no port: taken as it is
+	} {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.RemoteAddr = c.remote
+		req.Header.Set("X-Forwarded-For", "10.0.0.1")
+		req.Header.Set("X-Real-IP", "10.0.0.2")
+		req.Header.Set("Forwarded", "for=10.0.0.3")
+		if got := ClientIP(req); got != c.want {
+			t.Errorf("ClientIP with RemoteAddr %q = %q, want %q", c.remote, got, c.want)
+		}
+	}
+}
