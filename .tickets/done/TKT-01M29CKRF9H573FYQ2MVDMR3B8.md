@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRF9H573FYQ2MVDMR3B8
 title: Map IdP group claims onto local groups
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:identity-roles
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-ckrf9
-  branch: run/ckrf9-idp-group-mapping
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae0f82d2955365a1c
-  commit: 889870b4f853046430ae18cc75db6f1dcd1debf4
-  session: null
-  claimed_at: 2026-09-29T14:55:26Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T14:58:32Z
+updated_at: 2026-09-29T15:09:58Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,14 +43,14 @@ Mapped memberships are marked with source `idp` so re-evaluation never clobbers 
 
 ## Acceptance criteria
 
-- [ ] A source='admin' membership survives a sign-in whose claim does not assert it, and one the claim does assert stays source='admin' (TestAManualMembershipSurvivesSignIn)
-- [ ] A claim value missing from group_map, or mapped to a slug no group has, creates no group and no membership, and an unknown target slug is logged at warn
-- [ ] Each membership the sync adds or removes writes one audit_log row (group.member_added or group.member_removed, with source idp and the provider) in the sync's transaction; a sync that changes nothing writes none; with an injected audit failure the memberships are unchanged and the sign-in fails with no session left
-- [ ] A pending, suspended or deactivated user signing in gets no session and no membership change (TestGroupMapNeverSignsInAnInactiveUser)
-- [ ] ketju config check refuses a group_map that targets everyone or members
-- [ ] At every sign-in, the user's source='idp' memberships become exactly the groups that the provider's group_map yields from this token: newly asserted groups are added, and groups no longer asserted, a missing claim, or a provider with no group_map remove them
-- [ ] A member who gained a group through a mapped provider and then signs in through a provider without group_map loses that idp membership, and the next permission check reflects it (TestAnUnmappedProviderSignInDropsIdPGroups)
-- [ ] docs/05 states that idp memberships are re-evaluated only at sign-in, so a revocation at the IdP takes effect at the member's next sign-in through any provider
+- [x] A source='admin' membership survives a sign-in whose claim does not assert it, and one the claim does assert stays source='admin' (TestAManualMembershipSurvivesSignIn)
+- [x] A claim value missing from group_map, or mapped to a slug no group has, creates no group and no membership, and an unknown target slug is logged at warn
+- [x] Each membership the sync adds or removes writes one audit_log row (group.member_added or group.member_removed, with source idp and the provider) in the sync's transaction; a sync that changes nothing writes none; with an injected audit failure the memberships are unchanged and the sign-in fails with no session left
+- [x] A pending, suspended or deactivated user signing in gets no session and no membership change (TestGroupMapNeverSignsInAnInactiveUser)
+- [x] ketju config check refuses a group_map that targets everyone or members
+- [x] At every sign-in, the user's source='idp' memberships become exactly the groups that the provider's group_map yields from this token: newly asserted groups are added, and groups no longer asserted, a missing claim, or a provider with no group_map remove them
+- [x] A member who gained a group through a mapped provider and then signs in through a provider without group_map loses that idp membership, and the next permission check reflects it (TestAnUnmappedProviderSignInDropsIdPGroups)
+- [x] docs/05 states that idp memberships are re-evaluated only at sign-in, so a revocation at the IdP takes effect at the member's next sign-in through any provider
 
 ## Implementation plan
 
@@ -117,3 +110,19 @@ From TKT-01M29BYYHG, 2026-09-24: the login re-evaluation is two queries in one d
 **agent:claude-code/phase2-groom** at 2026-09-29T05:38:56Z
 
 Review 1342 finding 1 (high) is fixed in the plan. It supersedes the settled item 'Which sign-ins re-evaluate'. Every sign-in now replaces the user's idp memberships with what that provider's group_map yields, and a provider with no map yields none. A sign-in through an unmapped provider therefore drops grants that a mapped directory revoked, instead of keeping them. The plan now states the remaining limit, that memberships are re-evaluated only at sign-in, and docs/05 will record it. TestAnUnmappedProviderSignInDropsIdPGroups and the rewritten criteria cover it.
+
+**agent:claude-code/phase2-run-ckrf9** at 2026-09-29T15:09:49Z
+
+Built at 14ac84f. Three places where the build differs from the revised plan, and why:
+
+1. `DeleteIdPMemberships` is kept, not deleted. The plan's step 2 said it would be removed once it lost its last caller. Production code no longer calls it, but `internal/store/db/forums_groups_test.go` still uses it to prove the schema keeps admin rows. It stays in `decisionWrites`, so no package outside `perm` and the store can call it.
+2. `SyncIdPGroups` refuses a user who is not `active` (`perm.ErrNotActive`), inside its transaction. `session.IssueUser` already refuses an inactive user before `settle` runs, so a sign-in never reaches the sync for one. The check covers a suspension that commits between issuing the session and syncing, and keeps the rule "only an active user is mapped" in the one place that writes.
+3. Audit rows carry `via = "group_map"` with a NULL actor, as docs/04 prescribes for work no account did, plus the request IP. Details are `group`, `group_id`, `source: "idp"` and `provider`.
+
+Criteria evidence: AC1 TestAManualMembershipSurvivesSignIn; AC2 TestGroupMapGrantsNothingUnmapped and TestSyncIdPGroupsIgnoresUnknownAndImplicit; AC3 TestSyncIdPGroupsAddsAndRemoves, TestSyncIdPGroupsIsOneTransaction and TestAFailedGroupSyncFailsTheSignIn; AC4 TestGroupMapNeverSignsInAnInactiveUser and TestSyncIdPGroupsRefusesAnInactiveUser; AC5 TestGroupMapRefusesImplicitGroups and the "a group_map onto members" case of TestConfigCheckFailsNamingKey; AC6 TestGroupMapAtSignIn and TestGroupMapAtRegistration; AC7 TestAnUnmappedProviderSignInDropsIdPGroups; AC8 docs/05 "Roles and groups".
+
+Contract changes for later tickets: `identity.Policy` / `ProviderPolicy{GroupMap}` / `PolicyFrom([]config.Provider)` now exist, and `cmd/ketju/serve.go` sets `identity.Service.Policy`. TKT-01M29CKRE9 adds `AutoApprove` to `ProviderPolicy`. `identity.ClaimsOf` is now the method `(*Service).ClaimsOf`, and the `auth.Login` interface has it. `identity.Service` needs `Perm` for every sign-in, not only a bootstrap one.
+
+## Summary
+
+Every sign-in, and registration as the first, now sets the user's idp memberships to exactly what that provider's group_map yields from the token. An unmapped provider or a missing claim removes them all, and admin rows are never touched. perm.SyncIdPGroups does it in one transaction with one audit row per change (group.member_added/removed, via group_map), refuses inactive users, and skips everyone, members and unknown slugs. identity.settle runs it after bootstrap and ends the new session if it fails. identity.Policy is new. config check refuses group_map onto everyone/members. serve warns about unknown targets. docs/05 records the sign-in-only limit. All eight criteria met.
