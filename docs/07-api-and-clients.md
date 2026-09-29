@@ -191,6 +191,31 @@ action, which is the one place authority is stated. Archiving a thread is
 admin-only there; locking, pinning, moving, renaming, retagging, splitting
 and merging are moderator actions.
 
+#### Users, groups and permissions (TKT-01M29CXK1X)
+
+The `/admin/users` screen, with groups and permissions as its
+`?tab=groups` and `?tab=permissions` tabs. Moderators may list accounts
+and read one, because suspension is a moderator action reached from here;
+everything else is an admin's. Every answer is `no-store`. Every write is
+audited in the transaction that makes it (04 "audit_log") and applies from
+the next request.
+
+| Route | Gate | What it does |
+|---|---|---|
+| `GET /admin/users?prefix=&role=&status=&kind=&cursor=` | staff | `AdminUserList`: 50 accounts per page in handle order, every status included. A filter value that is not a role, status or kind is `validation-failed`; a malformed cursor is `bad-request` |
+| `GET /admin/users/{handle}` | staff | `AdminUserDetail`: the account and its stored groups, each marked `admin` or `idp`. `identities` and `sessions` are an admin's only, and `null` to a moderator |
+| `PUT /admin/users/{handle}/role` `{role}` | admin | Through `perm.ChangeRole`: `user.promoted`, `user.demoted` or `user.role_changed`. Demoting the last active admin is `conflict`. Answers with the detail |
+| `GET /admin/groups` | admin | `GroupList`, each group with its member and grant counts |
+| `POST /admin/groups` `{slug, name, description}` | admin | 201 `Group`. The slug follows 04's group slug rule; a taken slug is `conflict`. The name is 1 to 80 characters, the description at most 500 |
+| `GET /admin/groups/{id}` | admin | `GroupDetail`: the group and its stored members |
+| `PATCH /admin/groups/{id}` `{name?, description?}` | admin | The renamed group. A system group may be renamed; its slug never changes |
+| `DELETE /admin/groups/{id}` | admin | 204. A system group, or one with a stored member or a permission row, is `conflict` |
+| `POST /admin/groups/{id}/members` `{handle}` | admin | Adds the account on the admin's authority. Answers with the `GroupDetail` |
+| `DELETE /admin/groups/{id}/members/{handle}` | admin | Removes it, as above. Adding over or removing an `idp` membership is `conflict`: the next sign-in would undo it (05 "Roles and groups") |
+| `GET /admin/permissions` | admin | `PermissionGrid`: the groups, the forums in index order, and every row, `forum_id` null for a site-wide one |
+| `POST /admin/permissions` `{changes: [{forum_id, group_id, permission, grant}]}` | admin | The batch in one transaction, one audit row per change, or none. A change naming no forum, group or permission, or the same row twice, is `validation-failed`; a grant of a row that exists or a revoke of one that does not is `conflict`, because the grid moved since the batch was staged. At most 500 changes. Answers with the grid |
+| `POST /admin/permissions/preview` `{handle, changes}` | admin | `PermissionPreview`: the account's `allow`, `deny` or `hidden` for each permission in every forum, before and with the batch, decided as a check decides it. Writes nothing, and refuses what applying would |
+
 #### Form versions (TKT-01M29CP2KE)
 
 Admins only: anonymous is `unauthenticated`, and a pre-user, member or

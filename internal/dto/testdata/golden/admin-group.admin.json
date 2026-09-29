@@ -1,0 +1,55 @@
+{
+  "group": {
+    "id": 7,
+    "slug": "book-club",
+    "name": "Book club",
+    "description": "Reads the book forum.",
+    "system": false,
+    "members": 2,
+    "grants": 2
+  },
+  "members": [
+    {
+      "user": {
+        "id": 12,
+        "user": {
+          "handle": "alice",
+          "display_name": "Alice Nakamura",
+          "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+          "role": "member",
+          "kind": "human"
+        },
+        "status": "active",
+        "created_at": 1757000000000,
+        "last_seen_at": 1757600000000
+      },
+      "source": "admin",
+      "added_by": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "added_at": 1757200000000
+    },
+    {
+      "user": {
+        "id": 31,
+        "user": {
+          "handle": "scribe",
+          "display_name": "Scribe",
+          "avatar": "",
+          "role": "member",
+          "kind": "agent"
+        },
+        "status": "suspended",
+        "created_at": 1757100000000,
+        "last_seen_at": null
+      },
+      "source": "idp",
+      "added_by": null,
+      "added_at": 1757300000000
+    }
+  ]
+}

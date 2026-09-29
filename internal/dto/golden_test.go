@@ -155,7 +155,7 @@ func TestEveryPointerFieldIsSeenBothWays(t *testing.T) {
 func TestEveryDeclaredTypeIsReachableFromAResponseRoot(t *testing.T) {
 	declared := declaredTypes(t)
 	if len(declared) == 0 {
-		t.Fatal("no types parsed out of dto.go, so this test is asserting nothing")
+		t.Fatal("no types parsed out of the package, so this test is asserting nothing")
 	}
 
 	reached := map[string]bool{}
@@ -430,22 +430,37 @@ func missingFields(t *testing.T, seen map[string]bool) []string {
 	return out
 }
 
-// declaredTypes parses dto.go for the type names it declares.
+// declaredTypes parses the package's source files, dto.go and the rest
+// (admin.go), for the type names they declare.
 func declaredTypes(t *testing.T) []string {
 	t.Helper()
-	fset := token.NewFileSet()
-	f, err := parser.ParseFile(fset, "dto.go", nil, 0)
+	files, err := filepath.Glob("*.go")
 	if err != nil {
-		t.Fatalf("parsing dto.go: %v", err)
+		t.Fatal(err)
 	}
+	fset := token.NewFileSet()
 	var out []string
-	ast.Inspect(f, func(n ast.Node) bool {
-		ts, ok := n.(*ast.TypeSpec)
-		if ok && ts.Name.IsExported() {
-			out = append(out, ts.Name.Name)
+	parsed := 0
+	for _, name := range files {
+		if strings.HasSuffix(name, "_test.go") {
+			continue
 		}
-		return true
-	})
+		f, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatalf("parsing %s: %v", name, err)
+		}
+		parsed++
+		ast.Inspect(f, func(n ast.Node) bool {
+			ts, ok := n.(*ast.TypeSpec)
+			if ok && ts.Name.IsExported() {
+				out = append(out, ts.Name.Name)
+			}
+			return true
+		})
+	}
+	if parsed < 2 {
+		t.Fatalf("parsed %d source files; dto.go and admin.go at least", parsed)
+	}
 	sort.Strings(out)
 	return out
 }

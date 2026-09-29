@@ -3,6 +3,7 @@ package perm
 import (
 	"database/sql"
 	"errors"
+	"github.com/terva-sh/ketju/internal/audit"
 	"slices"
 	"strings"
 	"testing"
@@ -48,8 +49,9 @@ func (f *fixture) memberships(userID int64) map[string]string {
 	return got
 }
 
-// audited is the membership audit rows about userID, in order, each as
-// "action slug provider via".
+// audited is the IdP mapping's membership audit rows about userID, in
+// order, each as "action slug provider via". An admin's membership rows
+// (source admin) are TestMembershipWritesAudited's.
 func (f *fixture) audited(userID int64) []string {
 	f.t.Helper()
 	var got []string
@@ -58,7 +60,7 @@ func (f *fixture) audited(userID int64) []string {
 			details_json ->> 'provider', details_json ->> 'source', details_json ->> 'via',
 			actor_id IS NULL, ip
 			FROM audit_log WHERE target_type = 'user' AND target_id = CAST(? AS TEXT)
-			AND action LIKE 'group.member_%' ORDER BY id`, userID)
+			AND action LIKE 'group.member_%' AND details_json ->> 'source' = 'idp' ORDER BY id`, userID)
 		if err != nil {
 			return err
 		}
@@ -100,7 +102,7 @@ func TestSyncIdPGroupsAddsAndRemoves(t *testing.T) {
 	sa, sb, sc, sd := f.slug(a), f.slug(b), f.slug(c), f.slug(d)
 	v := f.viewer(domain.RoleMember)
 	f.sync(v.UserID, IdPSync{Provider: "club", IP: "192.0.2.1", Slugs: []string{sa, sb}})
-	if err := f.ev.AddMember(t.Context(), c, v.UserID, 0); err != nil {
+	if err := f.ev.AddMember(t.Context(), audit.By{}, c, v.UserID); err != nil {
 		t.Fatal(err)
 	}
 	before := len(f.audited(v.UserID))

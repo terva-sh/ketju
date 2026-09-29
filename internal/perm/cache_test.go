@@ -2,6 +2,7 @@ package perm
 
 import (
 	"database/sql"
+	"github.com/terva-sh/ketju/internal/audit"
 	"sync"
 	"testing"
 	"time"
@@ -58,10 +59,10 @@ func TestWriteInvalidatesImmediately(t *testing.T) {
 			},
 			steps: []step{
 				{"revoke", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.Revoke(f.t.Context(), 0, f.members, domain.PermReply)
+					return f.ev.Revoke(f.t.Context(), audit.By{}, 0, f.members, domain.PermReply)
 				}, Deny},
 				{"grant", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.Grant(f.t.Context(), forum, f.members, domain.PermReply)
+					return f.ev.Grant(f.t.Context(), audit.By{}, forum, f.members, domain.PermReply)
 				}, Allow},
 			},
 		},
@@ -73,10 +74,10 @@ func TestWriteInvalidatesImmediately(t *testing.T) {
 			},
 			steps: []step{
 				{"add", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.AddMember(f.t.Context(), x, v.UserID, 0)
+					return f.ev.AddMember(f.t.Context(), audit.By{}, x, v.UserID)
 				}, Allow},
 				{"remove", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.RemoveMember(f.t.Context(), x, v.UserID)
+					return f.ev.RemoveMember(f.t.Context(), audit.By{}, x, v.UserID)
 				}, Deny},
 				{"idp sync adds", func(f *fixture, forum, x int64, v domain.Viewer) error {
 					_, err := f.ev.SyncIdPGroups(f.t.Context(), v.UserID, IdPSync{Slugs: []string{f.slug(x)}})
@@ -194,20 +195,22 @@ func TestStaleGenerationIsNotServed(t *testing.T) {
 // every method, including SetRole, whose effect a held Viewer cannot show.
 func TestEveryMutationInvalidates(t *testing.T) {
 	f := newFixture(t)
-	forum, x := f.forum(domain.VisibilityPublic), f.newGroup()
+	forum, x, y := f.forum(domain.VisibilityPublic), f.newGroup(), f.newGroup()
 	v := f.viewer(domain.RoleMember)
 	ctx := t.Context()
 	for name, mutate := range map[string]func() error{
-		"Grant":        func() error { return f.ev.Grant(ctx, forum, x, domain.PermRead) },
-		"Revoke":       func() error { return f.ev.Revoke(ctx, forum, x, domain.PermRead) },
-		"AddMember":    func() error { return f.ev.AddMember(ctx, x, v.UserID, 0) },
-		"RemoveMember": func() error { return f.ev.RemoveMember(ctx, x, v.UserID) },
+		"Grant":        func() error { return f.ev.Grant(ctx, audit.By{}, forum, x, domain.PermRead) },
+		"Revoke":       func() error { return f.ev.Revoke(ctx, audit.By{}, forum, x, domain.PermRead) },
+		"AddMember":    func() error { return f.ev.AddMember(ctx, audit.By{}, x, v.UserID) },
+		"RemoveMember": func() error { return f.ev.RemoveMember(ctx, audit.By{}, x, v.UserID) },
 		"SyncIdPGroups": func() error {
-			_, err := f.ev.SyncIdPGroups(ctx, v.UserID, IdPSync{Slugs: []string{f.slug(x)}})
+			// Another group than x: an IdP membership of x would refuse
+			// AddMember, and the map runs in no fixed order.
+			_, err := f.ev.SyncIdPGroups(ctx, v.UserID, IdPSync{Slugs: []string{f.slug(y)}})
 			return err
 		},
 		"SetVisibility": func() error { return f.ev.SetVisibility(ctx, forum, domain.VisibilityMembers) },
-		"SetRole":       func() error { return f.ev.SetRole(ctx, v.UserID, domain.RoleModerator) },
+		"ChangeRole":    func() error { return f.ev.ChangeRole(ctx, audit.By{}, v.UserID, domain.RoleModerator) },
 	} {
 		f.check(v, forum, domain.PermRead)
 		if cached(f.ev) == 0 {
@@ -232,7 +235,7 @@ func TestFailedWriteKeepsCache(t *testing.T) {
 	// A duplicate grant violates the unique index.
 	f.grant(forum, f.members, domain.PermRead)
 	f.check(v, forum, domain.PermRead)
-	if err := f.ev.Grant(t.Context(), forum, f.members, domain.PermRead); err == nil {
+	if err := f.ev.Grant(t.Context(), audit.By{}, forum, f.members, domain.PermRead); err == nil {
 		t.Fatal("a duplicate grant succeeded")
 	}
 	if cached(f.ev) != 1 {
@@ -291,10 +294,10 @@ func TestConcurrentChecksAndWrites(t *testing.T) {
 		})
 	}
 	for range 20 {
-		if err := f.ev.Grant(ctx, 0, f.members, domain.PermRead); err != nil {
+		if err := f.ev.Grant(ctx, audit.By{}, 0, f.members, domain.PermRead); err != nil {
 			t.Fatal(err)
 		}
-		if err := f.ev.Revoke(ctx, 0, f.members, domain.PermRead); err != nil {
+		if err := f.ev.Revoke(ctx, audit.By{}, 0, f.members, domain.PermRead); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -320,7 +323,7 @@ func TestWriteInvalidatesEveryEvaluator(t *testing.T) {
 	if ok, err := other.Can(t.Context(), member, forum, domain.PermRead); !ok || err != nil {
 		t.Fatalf("before the revoke: got %v, %v; want allow", ok, err)
 	}
-	if err := f.ev.Revoke(t.Context(), 0, f.members, domain.PermRead); err != nil {
+	if err := f.ev.Revoke(t.Context(), audit.By{}, 0, f.members, domain.PermRead); err != nil {
 		t.Fatal(err)
 	}
 	if d, err := other.Check(t.Context(), member, forum, domain.PermRead); d != Deny || err != nil {
@@ -330,11 +333,11 @@ func TestWriteInvalidatesEveryEvaluator(t *testing.T) {
 	// The other Evaluator's entries for sessions that have not come back are
 	// swept on its next fill, not left until the TTL.
 	idle := f.viewer(domain.RoleMember)
-	if err := f.ev.Grant(t.Context(), 0, f.members, domain.PermReply); err != nil {
+	if err := f.ev.Grant(t.Context(), audit.By{}, 0, f.members, domain.PermReply); err != nil {
 		t.Fatal(err)
 	}
 	other.Can(t.Context(), idle, forum, domain.PermRead)
-	if err := f.ev.Revoke(t.Context(), 0, f.members, domain.PermReply); err != nil {
+	if err := f.ev.Revoke(t.Context(), audit.By{}, 0, f.members, domain.PermReply); err != nil {
 		t.Fatal(err)
 	}
 	other.Can(t.Context(), member, forum, domain.PermRead)
@@ -365,7 +368,8 @@ func TestRoleChangeAppliesToTheNextViewer(t *testing.T) {
 	if d := f.check(admin, restricted, domain.PermRead); d != Allow {
 		t.Fatalf("admin before the change: got %v, want allow", d)
 	}
-	if err := f.ev.SetRole(t.Context(), admin.UserID, domain.RoleMember); err != nil {
+	f.viewer(domain.RoleAdmin) // another admin, so this one may be demoted
+	if err := f.ev.ChangeRole(t.Context(), audit.By{}, admin.UserID, domain.RoleMember); err != nil {
 		t.Fatal(err)
 	}
 	var next domain.Viewer

@@ -30,8 +30,12 @@ export async function renderAt(url: string): Promise<HTMLElement> {
   return root;
 }
 
+// settle waits up to a second for a screen to appear, and returns as soon as
+// one has. The first import of the lazy admin chunk in a test worker
+// transforms every admin screen, and under a full parallel run that has
+// taken longer than the quarter second this once allowed (TKT-01M29CXK1X).
 export async function settle(root: HTMLElement) {
-  for (let i = 0; i < 50 && !root.querySelector('[data-screen]'); i++) {
+  for (let i = 0; i < 200 && !root.querySelector('[data-screen]'); i++) {
     await act(() => new Promise((r) => setTimeout(r, 5)));
   }
   await act(() => new Promise((r) => setTimeout(r, 5)));

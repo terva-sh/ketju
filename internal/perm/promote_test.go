@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -25,7 +26,8 @@ func TestPromoteOnceRecordsAnExistingAdmin(t *testing.T) {
 	if len(rows) != 1 || rows[0].details["already"] != domain.RoleAdmin || rows[0].details["via"] != "bootstrap" {
 		t.Fatalf("audit rows %+v, want one marked already admin", rows)
 	}
-	if err := f.ev.SetRole(t.Context(), v.UserID, domain.RoleMember); err != nil {
+	f.viewer(domain.RoleAdmin) // another admin, so v may be demoted
+	if err := f.ev.ChangeRole(t.Context(), audit.By{}, v.UserID, domain.RoleMember); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := f.ev.Promote(t.Context(), v.UserID, once); err != nil || got {
@@ -151,7 +153,8 @@ func TestPromote(t *testing.T) {
 				if ok, err := f.ev.Promote(t.Context(), v.UserID, Promotion{}); err != nil || !ok {
 					t.Fatalf("first promotion = %v, %v", ok, err)
 				}
-				if err := f.ev.SetRole(t.Context(), v.UserID, domain.RoleMember); err != nil {
+				f.viewer(domain.RoleAdmin) // another admin, so v may be demoted
+				if err := f.ev.ChangeRole(t.Context(), audit.By{}, v.UserID, domain.RoleMember); err != nil {
 					t.Fatal(err)
 				}
 			}

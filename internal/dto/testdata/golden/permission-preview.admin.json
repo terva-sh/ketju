@@ -1,0 +1,61 @@
+{
+  "user": {
+    "id": 4,
+    "user": {
+      "handle": "bob",
+      "display_name": "Bob Iyer",
+      "avatar": "",
+      "role": "moderator",
+      "kind": "human"
+    },
+    "status": "active",
+    "created_at": 1756900000000,
+    "last_seen_at": 1757650000000
+  },
+  "forums": [
+    {
+      "forum": {
+        "id": 1,
+        "slug": "general",
+        "name": "General",
+        "visibility": "public"
+      },
+      "before": {
+        "read": "allow",
+        "create_thread": "allow",
+        "reply": "allow",
+        "upload": "deny",
+        "moderate": "allow"
+      },
+      "after": {
+        "read": "allow",
+        "create_thread": "allow",
+        "reply": "allow",
+        "upload": "deny",
+        "moderate": "allow"
+      }
+    },
+    {
+      "forum": {
+        "id": 5,
+        "slug": "books",
+        "name": "Books",
+        "visibility": "restricted"
+      },
+      "before": {
+        "read": "allow",
+        "create_thread": "deny",
+        "reply": "allow",
+        "upload": "deny",
+        "moderate": "allow"
+      },
+      "after": {
+        "read": "hidden",
+        "create_thread": "hidden",
+        "reply": "hidden",
+        "upload": "hidden",
+        "moderate": "hidden"
+      }
+    }
+  ]
+}

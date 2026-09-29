@@ -2,6 +2,7 @@ package auth
 
 import (
 	"database/sql"
+	"github.com/terva-sh/ketju/internal/audit"
 	"net/http"
 	"slices"
 	"strings"
@@ -93,7 +94,7 @@ func (w *world) groups(userID int64) map[string]string {
 	return got
 }
 
-// membershipAudit is the membership rows audit_log holds about userID, in
+// membershipAudit is the IdP mapping's membership rows audit_log holds about userID, in
 // order, each as "action group provider".
 func (w *world) membershipAudit(userID int64) []string {
 	w.t.Helper()
@@ -102,7 +103,8 @@ func (w *world) membershipAudit(userID int64) []string {
 		rows, err := tx.QueryContext(w.t.Context(), `SELECT action, details_json ->> 'group',
 			details_json ->> 'provider', details_json ->> 'source', ip
 			FROM audit_log WHERE target_type = 'user' AND target_id = CAST(? AS TEXT)
-			AND action IN (?, ?) ORDER BY id`, userID, perm.ActionMemberAdded, perm.ActionMemberRemoved)
+			AND action IN (?, ?) AND details_json ->> 'source' = 'idp' ORDER BY id`, userID, perm.ActionMemberAdded,
+			perm.ActionMemberRemoved)
 		if err != nil {
 			return err
 		}
@@ -254,7 +256,7 @@ func TestAManualMembershipSurvivesSignIn(t *testing.T) {
 	alice := w.user("alice", "active", "user-1")
 	staff := w.newGroup("staff")
 	for _, g := range []int64{staff, w.groupID("moderators")} {
-		if err := svc.Perm.AddMember(t.Context(), g, alice, 0); err != nil {
+		if err := svc.Perm.AddMember(t.Context(), audit.By{}, g, alice); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -297,7 +299,7 @@ func TestAnUnmappedProviderSignInDropsIdPGroups(t *testing.T) {
 		}
 		w.identityAt(alice, "club", "user-1")
 		w.identityAt(alice, "other", "user-1")
-		if err := svc.Perm.AddMember(t.Context(), w.newGroup("staff"), alice, 0); err != nil {
+		if err := svc.Perm.AddMember(t.Context(), audit.By{}, w.newGroup("staff"), alice); err != nil {
 			t.Fatal(err)
 		}
 		return w, svc, alice
@@ -314,7 +316,7 @@ func TestAnUnmappedProviderSignInDropsIdPGroups(t *testing.T) {
 		}); err != nil {
 			t.Fatal(err)
 		}
-		if err := svc.Perm.Grant(t.Context(), forum, w.groupID("moderators"), domain.PermModerate); err != nil {
+		if err := svc.Perm.Grant(t.Context(), audit.By{}, forum, w.groupID("moderators"), domain.PermModerate); err != nil {
 			t.Fatal(err)
 		}
 		viewer := domain.Viewer{UserID: alice, Role: domain.RoleMember, Active: true, SessionKey: "alice"}

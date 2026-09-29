@@ -2,6 +2,7 @@ package perm
 
 import (
 	"database/sql"
+	"github.com/terva-sh/ketju/internal/audit"
 	"strconv"
 	"sync"
 	"testing"
@@ -74,7 +75,7 @@ func TestModeratesAnyFollowsGrants(t *testing.T) {
 	if !f.moderatesAny(v) {
 		t.Fatal("after the grant")
 	}
-	if err := f.ev.Revoke(t.Context(), forum, mods, domain.PermModerate); err != nil {
+	if err := f.ev.Revoke(t.Context(), audit.By{}, forum, mods, domain.PermModerate); err != nil {
 		t.Fatal(err)
 	}
 	if f.moderatesAny(v) {

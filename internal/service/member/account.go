@@ -76,3 +76,31 @@ func FillMissing(authors map[int64]dto.Author, ids ...int64) {
 		}
 	}
 }
+
+// AdminUser is u as the admin screens list it (TKT-01M29CXK1X): the author
+// block, with the status and times only staff see.
+func AdminUser(u dbq.User) dto.AdminUser {
+	a := dto.AdminUser{ID: u.ID, User: Author(u), Status: u.Status, CreatedAt: dto.Millis(u.CreatedAt)}
+	if u.LastSeenAt.Valid {
+		a.LastSeenAt = new(dto.Millis(u.LastSeenAt.Int64))
+	}
+	return a
+}
+
+// AuthorsByID is each id's Author, read through q, and Missing for an id
+// the database lacks.
+func AuthorsByID(ctx context.Context, q *dbq.Queries, ids []int64) (map[int64]dto.Author, error) {
+	out := map[int64]dto.Author{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	us, err := q.UsersByIDs(ctx, ids)
+	if err != nil {
+		return nil, err
+	}
+	for _, u := range us {
+		out[u.ID] = Author(u)
+	}
+	FillMissing(out, ids...)
+	return out, nil
+}

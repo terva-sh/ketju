@@ -8,6 +8,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/forms"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -54,6 +55,20 @@ var mapping = []struct {
 	// An edit of a deleted post, a delete of one already gone, a restore of
 	// one that is not deleted: the actor refused the record (TKT-01M29CA9BP).
 	{threadlog.ErrPostState, CodeConflict},
+
+	// The admin users, groups and permissions screens (TKT-01M29CXK1X).
+	// A user or group named by id that is not there; a change that is not
+	// one; and a change the rows as they stand refuse: the last active
+	// admin, a membership the identity provider owns, and a batch staged
+	// against a grid that has moved.
+	{perm.ErrNoUser, CodeNotFound},
+	{perm.ErrNoGroup, CodeNotFound},
+	{perm.ErrInvalidRole, CodeValidationFailed},
+	{perm.ErrInvalidChange, CodeValidationFailed},
+	{perm.ErrImplicitGroup, CodeValidationFailed},
+	{perm.ErrLastAdmin, CodeConflict},
+	{perm.ErrIdPMembership, CodeConflict},
+	{perm.ErrGrantState, CodeConflict},
 
 	// Client sent too much. render.ErrTooLarge is the post source over
 	// render.MaxSource, which docs/07 puts at 64 KB.

@@ -1,8 +1,16 @@
+import type { FunctionComponent } from 'preact';
 import { useLocation } from 'preact-iso';
 import { useShellContext } from '../../state/shell';
 import { viewer } from '../../state/viewer';
 import { sections, sectionsFor } from './sections';
+import { UsersScreen } from './UsersScreen';
 import './admin.css';
+
+// built is each section's screen, by its screen name, as its ticket builds
+// it. A section with none says it is not built yet.
+const built: Record<string, FunctionComponent> = {
+  'admin-users': UsersScreen,
+};
 
 // AdminRoot is the admin layout: the list of sections the viewer may use,
 // and the section the address names. Everything under screens/admin is
@@ -30,7 +38,8 @@ export default function AdminRoot() {
   } else if (!section.may(me)) {
     body = <p>Your account does not have access to this section.</p>;
   } else {
-    body = <p>This screen is not built yet.</p>;
+    const Screen = built[section.screen];
+    body = Screen ? <Screen /> : <p>This screen is not built yet.</p>;
   }
 
   return (

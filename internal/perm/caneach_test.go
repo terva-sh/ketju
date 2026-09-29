@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/terva-sh/ketju/internal/audit"
 	"maps"
 	"math/rand/v2"
 	"strings"
@@ -111,11 +112,11 @@ func TestCanEachAgreesWithCheck(t *testing.T) {
 			g := groups[rng.IntN(len(groups))]
 			p := perms[rng.IntN(len(perms))]
 			if rng.IntN(3) == 0 {
-				if err := f.ev.Grant(t.Context(), 0, g, p); err != nil && !strings.Contains(err.Error(), "UNIQUE") {
+				if err := f.ev.Grant(t.Context(), audit.By{}, 0, g, p); err != nil && !errors.Is(err, ErrGrantState) {
 					t.Fatal(err)
 				}
-			} else if err := f.ev.Grant(t.Context(), forums[rng.IntN(len(forums))], g, p); err != nil &&
-				!strings.Contains(err.Error(), "UNIQUE") {
+			} else if err := f.ev.Grant(t.Context(), audit.By{}, forums[rng.IntN(len(forums))], g, p); err != nil &&
+				!errors.Is(err, ErrGrantState) {
 				t.Fatal(err)
 			}
 		}

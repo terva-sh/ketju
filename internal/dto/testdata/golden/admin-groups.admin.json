@@ -1,0 +1,22 @@
+{
+  "groups": [
+    {
+      "id": 3,
+      "slug": "moderators",
+      "name": "Moderators",
+      "description": "Moderate the forums they are granted.",
+      "system": true,
+      "members": 1,
+      "grants": 1
+    },
+    {
+      "id": 7,
+      "slug": "book-club",
+      "name": "Book club",
+      "description": "Reads the book forum.",
+      "system": false,
+      "members": 2,
+      "grants": 2
+    }
+  ]
+}

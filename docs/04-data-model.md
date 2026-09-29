@@ -247,7 +247,12 @@ groups: id, name, slug, description, is_system, created_at, updated_at
 group_members: group_id, user_id, source ('admin'|'idp'), added_by, added_at
 ```
 System groups: `everyone`, `members`, `moderators`, `admins`, seeded by
-migration with fixed ids. Triggers keep them from being deleted or losing their
+migration with fixed ids. A group an admin creates has a slug of 1 to 40
+characters from a-z, 0-9 and `-`, starting with a letter or a number
+(`domain.ValidateGroupSlug`, settled in TKT-01M29CXK1X; the slug is what an
+IdP `group_map` names). A group can be deleted only when it has no stored
+member and no permission row, in one statement, so nothing is deleted by
+cascade. Triggers keep them from being deleted or losing their
 slug or flag, and stop any other group becoming one. `source` records whether
 an admin added the membership or an IdP claim mapping did; an `idp` row names
 no adder.
@@ -340,6 +345,7 @@ transaction that projects the record, with the frame's timestamp as `at`.
 | `thread` | the thread's id in base32, as URLs spell it |
 | `post` | `<base32 thread id>/<ordinal>` |
 | `setting` | the setting's key, such as `registration.mode` |
+| `permission` | `<forum id>:<group id>:<permission>`, or `global:<group id>:<permission>` for a site-wide row |
 | `form` | the form's key, such as `registration` |
 <!-- audit-targets:end -->
 
@@ -349,6 +355,20 @@ transaction that projects the record, with the frame's timestamp as `at`.
   changes (05 "Roles and groups"). Saving a form version writes
   `form.version_created` against the form, with `{key, version}` in
   `details_json` (05 "Forms").
+- The admin users screen (TKT-01M29CXK1X) writes, each in the transaction
+  that makes the change:
+  - against the user: `user.promoted` for a change to `admin`, with
+    `"from"`; `user.demoted` for a change from `admin`, with `"from"` and
+    `"to"`; `user.role_changed` between `member` and `moderator`, with
+    `"from"` and `"to"`; and `group.member_added` or
+    `group.member_removed`, with the group, its id and `"source":
+    "admin"`. A demotion leaves the user's `user.promoted` rows alone,
+    because bootstrap reads them as "made admin once" (05 "Principles").
+  - against the permission: `permission.granted` or `permission.revoked`,
+    one row per change in a batch, with the group, the forum (null for
+    global) and the permission.
+  - against the group: `group.created`, `group.updated` and
+    `group.deleted`.
 
 ### notifications
 ```

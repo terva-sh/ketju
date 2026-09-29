@@ -1,0 +1,53 @@
+{
+  "groups": [
+    {
+      "id": 3,
+      "slug": "moderators",
+      "name": "Moderators",
+      "description": "Moderate the forums they are granted.",
+      "system": true,
+      "members": 1,
+      "grants": 1
+    },
+    {
+      "id": 7,
+      "slug": "book-club",
+      "name": "Book club",
+      "description": "Reads the book forum.",
+      "system": false,
+      "members": 2,
+      "grants": 2
+    }
+  ],
+  "forums": [
+    {
+      "id": 1,
+      "slug": "general",
+      "name": "General",
+      "visibility": "public"
+    },
+    {
+      "id": 5,
+      "slug": "books",
+      "name": "Books",
+      "visibility": "restricted"
+    }
+  ],
+  "grants": [
+    {
+      "forum_id": null,
+      "group_id": 7,
+      "permission": "reply"
+    },
+    {
+      "forum_id": 5,
+      "group_id": 7,
+      "permission": "read"
+    },
+    {
+      "forum_id": 1,
+      "group_id": 3,
+      "permission": "moderate"
+    }
+  ]
+}

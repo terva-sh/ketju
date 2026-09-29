@@ -13,13 +13,19 @@
 // fails until it is.
 
 import type {
+  AdminUserDetail,
+  AdminUserList,
   CreatedPost,
   CreatedThread,
   Draft,
   Form,
   FormAdmin,
   ForumTree,
+  GroupDetail,
+  GroupList,
   Me,
+  PermissionGrid,
+  PermissionPreview,
   Post,
   PostHistory,
   PostReplies,
@@ -32,6 +38,13 @@ import type {
   UserSuggestions,
 } from './dto';
 
+import adminGroupAdmin from '../../../../internal/dto/testdata/golden/admin-group.admin.json';
+import adminGroupsAdmin from '../../../../internal/dto/testdata/golden/admin-groups.admin.json';
+import adminUserAdmin from '../../../../internal/dto/testdata/golden/admin-user.admin.json';
+import adminUserModerator from '../../../../internal/dto/testdata/golden/admin-user.moderator.json';
+import adminUsersAdmin from '../../../../internal/dto/testdata/golden/admin-users.admin.json';
+import permissionPreviewAdmin from '../../../../internal/dto/testdata/golden/permission-preview.admin.json';
+import permissionsAdmin from '../../../../internal/dto/testdata/golden/permissions.admin.json';
 import createdPostMember from '../../../../internal/dto/testdata/golden/created-post.member.json';
 import createdThreadMember from '../../../../internal/dto/testdata/golden/created-thread.member.json';
 import draftMember from '../../../../internal/dto/testdata/golden/draft.member.json';
@@ -94,6 +107,13 @@ function matches<T>() {
 }
 
 export const contract = [
+  matches<GroupDetail>()(adminGroupAdmin),
+  matches<GroupList>()(adminGroupsAdmin),
+  matches<AdminUserDetail>()(adminUserAdmin),
+  matches<AdminUserDetail>()(adminUserModerator),
+  matches<AdminUserList>()(adminUsersAdmin),
+  matches<PermissionPreview>()(permissionPreviewAdmin),
+  matches<PermissionGrid>()(permissionsAdmin),
   matches<CreatedPost>()(createdPostMember),
   matches<CreatedThread>()(createdThreadMember),
   matches<Draft>()(draftMember),

@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/domain"
@@ -83,10 +84,10 @@ func newAdminWorld(t *testing.T) *adminWorld {
 		t.Fatal(err)
 	}
 	mods := w.group(domain.GroupModerators)
-	if err := w.perm.AddMember(t.Context(), mods, 2, 0); err != nil {
+	if err := w.perm.AddMember(t.Context(), audit.By{}, mods, 2); err != nil {
 		t.Fatal(err)
 	}
-	if err := w.perm.Grant(t.Context(), w.forum, mods, domain.PermModerate); err != nil {
+	if err := w.perm.Grant(t.Context(), audit.By{}, w.forum, mods, domain.PermModerate); err != nil {
 		t.Fatal(err)
 	}
 	for _, u := range adminUsers {
@@ -95,7 +96,8 @@ func newAdminWorld(t *testing.T) *adminWorld {
 	w.tokens["pre-user"] = sessiontest.PreUser(t, d, 1, w.now)
 	w.tokens["anonymous"] = ""
 
-	w.h, w.mux = build(Deps{Users: &users.Service{DB: d, Perm: w.perm}, Threads: &threads.Service{DB: d, Perm: w.perm},
+	clock := func() time.Time { return w.now }
+	w.h, w.mux = build(Deps{Users: &users.Service{DB: d, Perm: w.perm, Now: clock}, Threads: &threads.Service{DB: d, Perm: w.perm},
 		Forums: &forums.Service{DB: d, Perm: w.perm}, Forms: &formsvc.Service{DB: d}, Perm: w.perm})
 	store := &session.Store{DB: d, Now: func() time.Time { return w.now }}
 	pass := func(h http.Handler) http.Handler { return h }
@@ -207,7 +209,7 @@ func TestModeratesGate(t *testing.T) {
 			t.Errorf("the scoped moderator at the %s gate: %d, want %d", g, got, want)
 		}
 	}
-	if err := w.perm.Revoke(t.Context(), w.forum, w.group(domain.GroupModerators), domain.PermModerate); err != nil {
+	if err := w.perm.Revoke(t.Context(), audit.By{}, w.forum, w.group(domain.GroupModerators), domain.PermModerate); err != nil {
 		t.Fatal(err)
 	}
 	if got := w.request("POST /api/v1/admin/_test/moderates/{id}", "scoped"); got != http.StatusForbidden {

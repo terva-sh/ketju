@@ -53,6 +53,15 @@ type Querier interface {
 	// Resolving or dismissing a flag updates it in place; only an open flag can
 	// be closed, so a second moderator's click finds nothing to change.
 	CloseFlag(ctx context.Context, arg CloseFlagParams) (int64, error)
+	// The admin users, groups and permissions screens (TKT-01M29CXK1X). Every
+	// write here that changes a permission decision is called only from
+	// internal/perm (TestMutationsGoThroughPerm); the group writes change no
+	// decision, since a group is created empty and deleted only when empty.
+	// The active admins, which a demotion must not bring to zero.
+	CountActiveAdmins(ctx context.Context) (int64, error)
+	// A user's live member sessions, by the lookup's own cutoffs
+	// (session.ExpiredBefore).
+	CountUserSessions(ctx context.Context, arg CountUserSessionsParams) (int64, error)
 	// A new blob has no references yet, so it is unreferenced from the moment
 	// it is uploaded; the post that carries it adds the first one.
 	CreateBlob(ctx context.Context, arg CreateBlobParams) error
@@ -73,6 +82,11 @@ type Querier interface {
 	// Both compare in lower case, as the log scan does, because the hash is
 	// stored lower case and free text may name it in either (review 1157).
 	DeleteCollectableBlob(ctx context.Context, arg DeleteCollectableBlobParams) (int64, error)
+	// Deletes a group only when nothing refers to it: not a system group, no
+	// stored member, no permission row. One statement, so a member added
+	// between a check and the delete cannot be orphaned (docs/04 "No cascading
+	// deletes").
+	DeleteEmptyGroup(ctx context.Context, id int64) (int64, error)
 	// Clears every IdP-sourced row of a user. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
 	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
@@ -139,8 +153,10 @@ type Querier interface {
 	GetFormVersion(ctx context.Context, arg GetFormVersionParams) (FormVersion, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetForumBySlug(ctx context.Context, slug string) (Forum, error)
+	GetGroup(ctx context.Context, id int64) (Group, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
 	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
+	GetMembership(ctx context.Context, arg GetMembershipParams) (string, error)
 	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)
 	GetReadPosition(ctx context.Context, arg GetReadPositionParams) (ReadPosition, error)
 	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
@@ -152,10 +168,16 @@ type Querier interface {
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
+	GroupMembers(ctx context.Context, groupID int64) ([]GroupMembersRow, error)
+	// Every group with its stored members and its permission rows, counted, so
+	// the screen can say what stands between a group and its deletion.
+	GroupSummaries(ctx context.Context) ([]GroupSummariesRow, error)
 	GroupsForUser(ctx context.Context, userID int64) ([]GroupsForUserRow, error)
 	// The user's IdP-sourced memberships, which sign-in re-evaluation compares
 	// with what the claims say now (perm.SyncIdPGroups).
 	IdPMembershipsForUser(ctx context.Context, userID int64) ([]IdPMembershipsForUserRow, error)
+	// The identities that sign a user in, for an admin's view of the account.
+	IdentitiesForUser(ctx context.Context, userID sql.NullInt64) ([]IdentitiesForUserRow, error)
 	// IdentityHolder is what a sign-in decides a session on: the user an
 	// identity belongs to, if any, and that user's status. internal/auth/session
 	// reads it in the transaction that inserts the session, so nothing can
@@ -171,6 +193,9 @@ type Querier interface {
 	ListForums(ctx context.Context) ([]Forum, error)
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListMigrations(ctx context.Context) ([]SchemaMigration, error)
+	// Every permission row, for the grid and for checking a batch of changes
+	// against what is there.
+	ListPermissions(ctx context.Context) ([]ListPermissionsRow, error)
 	// Startup catch-up reads every thread's projected length in one statement
 	// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
 	ListProjectionLengths(ctx context.Context) ([]ListProjectionLengthsRow, error)
@@ -220,6 +245,7 @@ type Querier interface {
 	//
 	// There is always at least one row: with no unread threads, forum_id is null.
 	MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error)
+	MembershipsForUser(ctx context.Context, userID int64) ([]MembershipsForUserRow, error)
 	// A post's open flags, for the auto-hide threshold (docs/08).
 	OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (int64, error)
 	// The moderator queue: open flags, newest first (docs/08).
@@ -293,6 +319,9 @@ type Querier interface {
 	// make an old post unread. Deleted posts count, as post_count counts them; a
 	// reader decides whether a tombstone is worth a badge.
 	UnreadCount(ctx context.Context, arg UnreadCountParams) (int64, error)
+	// A system group's slug and flag are fixed by trigger; its name and
+	// description are not.
+	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (int64, error)
 	// A Post resets every column, for the same reason UpsertThread does.
 	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
 	// Reading never moves backwards: opening an older page of a thread must not

@@ -421,7 +421,16 @@ sign-in and ends that session. (TKT-01M29CKRF9, after review 1342.)
 during a session, so a group revoked at the IdP stays with the member until
 their next sign-in through any provider. That can be as long as the 90-day
 hard expiry of a session they already hold. An admin who needs it sooner
-removes the membership, or suspends the account, which ends its sessions.
+suspends the account, which ends its sessions, so the membership is
+re-evaluated at the sign-in after the suspension is lifted.
+
+**An `idp` membership is not edited by hand.** The admin screen shows it as
+coming from the identity provider, and removing it or adding the user to
+the same group by hand is `conflict` with the row left as it was
+(TKT-01M29CXK1X). The next sign-in would undo either edit, and taking the
+row over as `admin` would keep a membership the directory has since
+revoked. A membership an admin wants to hold regardless of the directory is
+added by hand in a group the mapping does not target.
 
 Each membership a sign-in adds or removes writes one `audit_log` row in the
 transaction that changes it: `group.member_added` or `group.member_removed`,

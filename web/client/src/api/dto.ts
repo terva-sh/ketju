@@ -260,6 +260,114 @@ export interface Draft {
   updated_at: Millis;
 }
 
+// The admin users, groups and permissions screens (internal/dto admin.go,
+// TKT-01M29CXK1X). Types only: nothing here reaches the reader's bundle.
+
+export interface AdminUser {
+  id: number;
+  user: Author;
+  status: string;
+  created_at: Millis;
+  last_seen_at: Millis | null;
+}
+
+export interface AdminUserList {
+  users: AdminUser[];
+  next_cursor: string;
+}
+
+export interface GroupRef {
+  id: number;
+  slug: string;
+  name: string;
+}
+
+export interface Membership {
+  group: GroupRef;
+  source: string;
+  added_by: Author | null;
+  added_at: Millis;
+}
+
+export interface AdminIdentity {
+  provider: string;
+  email: string | null;
+  email_verified: boolean;
+  last_login_at: Millis | null;
+}
+
+export interface AdminUserDetail {
+  user: AdminUser;
+  groups: Membership[];
+  identities: AdminIdentity[] | null;
+  sessions: number | null;
+}
+
+export interface Group {
+  id: number;
+  slug: string;
+  name: string;
+  description: string;
+  system: boolean;
+  members: number;
+  grants: number;
+}
+
+export interface GroupList {
+  groups: Group[];
+}
+
+export interface GroupMember {
+  user: AdminUser;
+  source: string;
+  added_by: Author | null;
+  added_at: Millis;
+}
+
+export interface GroupDetail {
+  group: Group;
+  members: GroupMember[];
+}
+
+export interface AdminForum {
+  id: number;
+  slug: string;
+  name: string;
+  visibility: string;
+}
+
+export interface Grant {
+  forum_id: number | null;
+  group_id: number;
+  permission: string;
+}
+
+export interface PermissionGrid {
+  groups: Group[];
+  forums: AdminForum[];
+  grants: Grant[];
+}
+
+// Each is allow, deny or hidden.
+export interface Decisions {
+  read: string;
+  create_thread: string;
+  reply: string;
+  upload: string;
+  moderate: string;
+}
+
+export interface ForumEffect {
+  forum: AdminForum;
+  before: Decisions;
+  after: Decisions;
+}
+
+export interface PermissionPreview {
+  user: AdminUser;
+  forums: ForumEffect[];
+}
+
 // Form is a form version as a client renders it (internal/dto Form):
 // the apply screen and the form editor's preview. version is 0 for an
 // unsaved draft. intro_html and a notice's html are rendered by the server.

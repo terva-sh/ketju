@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/perm"
@@ -71,8 +72,17 @@ func TestBootstrapPromotesOnceAtSignIn(t *testing.T) {
 	}
 
 	// Demoted by hand, alice stays demoted: the config does not undo an
-	// admin's decision at her next sign-in.
-	if err := perm.New(w.db).SetRole(t.Context(), alice, "member"); err != nil {
+	// admin's decision at her next sign-in. The demotion is the admin
+	// screen's (perm.ChangeRole), which needs another active admin, since
+	// the last one cannot be demoted.
+	if err := w.db.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		_, err := q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "root", DisplayName: "Root",
+			Status: "active", Role: "admin", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := perm.New(w.db).ChangeRole(t.Context(), audit.By{Via: "test"}, alice, "member"); err != nil {
 		t.Fatal(err)
 	}
 	if h := signedInAs(t, w, w.signIn("")); h != "alice" {

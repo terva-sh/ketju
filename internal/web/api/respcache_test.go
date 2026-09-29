@@ -210,6 +210,61 @@ func TestResponseCacheAfterPromotion(t *testing.T) {
 	}
 }
 
+// TestResponseCacheAfterRoleChange: role changes made through the admin API
+// (TKT-01M29CXK1X) apply on the changed user's next request, and the author
+// badge moves for everyone, with no append to the thread. carol, made admin,
+// promotes alice through the API; alice then demotes carol, and carol's next
+// page is a member's.
+func TestResponseCacheAfterRoleChange(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	path := "/api/v1/threads/" + id.String()
+	for _, who := range []string{"", "alice", "carol"} {
+		w.same(w.session(who), path)
+	}
+	if ok, err := perm.New(w.db).Promote(t.Context(), w.users["carol"], perm.Promotion{}); err != nil || !ok {
+		t.Fatalf("promote: %v, %v", ok, err)
+	}
+	role := func(as, handle, to string) {
+		t.Helper()
+		rec := w.sendAs(w.session(as), "PUT", "/api/v1/admin/users/"+handle+"/role", `{"role":"`+to+`"}`)
+		if rec.Code != 200 {
+			t.Fatalf("%s setting %s to %s: %d %s", as, handle, to, rec.Code, rec.Body)
+		}
+	}
+	badge := func(who, handle string) string {
+		t.Helper()
+		for _, p := range page(t, w.get(w.session(who), path)).Posts {
+			if p.Author.Handle == handle {
+				return p.Author.Role
+			}
+		}
+		t.Fatalf("%s has no post on the page", handle)
+		return ""
+	}
+
+	role("carol", "alice", domain.RoleAdmin)
+	if body := w.same(w.session("alice"), path); !strings.Contains(body, secret) {
+		t.Error("alice, promoted through the API, did not get the deleted text on her next request")
+	}
+	if b := badge("", "alice"); b != domain.RoleAdmin {
+		t.Errorf("an anonymous reader sees alice's badge as %q", b)
+	}
+
+	role("alice", "carol", domain.RoleMember)
+	carol := w.session("carol")
+	if p := page(t, w.get(carol, path)); strings.Contains(p.Posts[2].HTML, secret) || p.Viewer.CanModerate {
+		t.Error("carol, demoted through the API, still moderates on her next request")
+	}
+	w.same(carol, path)
+	for _, who := range []string{"", "alice"} {
+		if b := badge(who, "carol"); b != domain.RoleMember {
+			t.Errorf("%q still sees carol's badge as %q", who, b)
+		}
+		w.same(w.session(who), path)
+	}
+}
+
 // TestResponseCacheSeesARegisteredHandle: a page cached while @dana named
 // nobody draws the mention as a link once dana registers (TKT-01M29C8005),
 // though the thread did not move.

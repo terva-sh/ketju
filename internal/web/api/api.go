@@ -19,6 +19,7 @@ import (
 	"github.com/terva-sh/ketju/internal/problem"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
+	"github.com/terva-sh/ketju/internal/service/groups"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -61,7 +62,11 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 	if log == nil {
 		log = slog.Default()
 	}
-	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, perm: d.Perm, log: log}
+	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, perm: d.Perm, log: log,
+		// The groups service needs nothing Users and Perm do not already
+		// carry, so it is built here rather than being one more required
+		// dependency (TKT-01M29CXK1X).
+		groups: &groups.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now}}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
 		mux.HandleFunc(rt.Pattern(), rt.Handler)
@@ -125,6 +130,7 @@ type handlers struct {
 	forums  *forums.Service
 	forms   *formsvc.Service
 	perm    *perm.Evaluator
+	groups  *groups.Service
 	log     *slog.Logger
 
 	// adminRoutes is every route adminRoute registered, with its gate.

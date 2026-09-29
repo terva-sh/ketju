@@ -1,0 +1,58 @@
+{
+  "user": {
+    "id": 12,
+    "user": {
+      "handle": "alice",
+      "display_name": "Alice Nakamura",
+      "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+      "role": "member",
+      "kind": "human"
+    },
+    "status": "active",
+    "created_at": 1757000000000,
+    "last_seen_at": 1757600000000
+  },
+  "groups": [
+    {
+      "group": {
+        "id": 7,
+        "slug": "book-club",
+        "name": "Book club"
+      },
+      "source": "admin",
+      "added_by": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "added_at": 1757200000000
+    },
+    {
+      "group": {
+        "id": 3,
+        "slug": "moderators",
+        "name": "Moderators"
+      },
+      "source": "idp",
+      "added_by": null,
+      "added_at": 1757300000000
+    }
+  ],
+  "identities": [
+    {
+      "provider": "github",
+      "email": "alice@example.org",
+      "email_verified": true,
+      "last_login_at": 1757600000000
+    },
+    {
+      "provider": "club",
+      "email": null,
+      "email_verified": false,
+      "last_login_at": null
+    }
+  ],
+  "sessions": 2
+}

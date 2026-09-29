@@ -30,3 +30,29 @@ func Require(v domain.Viewer, what string) error {
 		return problem.Coded(problem.CodeUnauthenticated, fmt.Errorf("%s needs a member session", what))
 	}
 }
+
+// RequireStaff admits an active moderator or admin, by role, as the admin
+// API's staff gate does (internal/web/api/admin.go), and refuses anyone
+// else as Require does, or forbidden for a member. A service behind that
+// gate asks again, so a caller that forgot the gate is still refused.
+func RequireStaff(v domain.Viewer, what string) error {
+	if err := Require(v, what); err != nil {
+		return err
+	}
+	if v.Role != domain.RoleAdmin && v.Role != domain.RoleModerator {
+		return problem.Coded(problem.CodeForbidden, fmt.Errorf("only staff may %s", what))
+	}
+	return nil
+}
+
+// RequireAdmin admits an active admin, and refuses anyone else as
+// RequireStaff does.
+func RequireAdmin(v domain.Viewer, what string) error {
+	if err := Require(v, what); err != nil {
+		return err
+	}
+	if v.Role != domain.RoleAdmin {
+		return problem.Coded(problem.CodeForbidden, fmt.Errorf("only an admin may %s", what))
+	}
+	return nil
+}

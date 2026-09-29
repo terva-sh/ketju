@@ -418,42 +418,66 @@ func (e *Evaluator) evaluate(ctx context.Context, v domain.Viewer, forumID int64
 // however many forums are asked about, and with nothing to look up first:
 // ForumAccessRows finds the implicit groups by slug itself and returns each
 // forum's visibility with every permission row a group of v's holds there or
-// globally, and the rules below are applied to those rows. A forum that does
+// globally, and decide applies the rules to those rows. A forum that does
 // not exist comes back hidden and missing.
 //
-// evaluate is this for one forum, so the rules exist once.
+// evaluate is this for one forum, and Preview decides the same rows with
+// staged changes laid over them, so the rules exist once, in decide.
 func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs []int64) (map[int64]access, error) {
-	out := make(map[int64]access, len(forumIDs))
-	for _, id := range forumIDs {
-		out[id] = access{hidden: true, missing: true}
-	}
-	params := dbq.ForumAccessRowsParams{EveryoneSlug: domain.GroupEveryone, ForumIds: forumIDs}
-	if v.Member() {
-		params.UserID, params.MembersSlug = v.UserID, domain.GroupMembers
-	}
 	var rows []dbq.ForumAccessRowsRow
 	if err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
 		var err error
-		rows, err = q.ForumAccessRows(ctx, params)
+		rows, err = q.ForumAccessRows(ctx, accessParams(v, forumIDs))
 		return err
 	}); err != nil {
 		return nil, err
 	}
-
-	type forum struct {
-		visibility string
-		// local[group] and global[group]: what each group of v's is granted
-		// in this forum, and site-wide.
-		local, global map[int64][]domain.Permission
-		// everyone is the everyone group's id, when it holds a row here.
-		everyone int64
+	out := make(map[int64]access, len(forumIDs))
+	for _, id := range forumIDs {
+		out[id] = access{hidden: true, missing: true}
 	}
-	forums := map[int64]*forum{}
+	forums, order := collect(rows)
+	for _, id := range order {
+		a, err := decide(id, forums[id], v)
+		if err != nil {
+			return nil, err
+		}
+		out[id] = a
+	}
+	return out, nil
+}
+
+// accessParams asks ForumAccessRows about forumIDs for v: the everyone
+// group always, and the members group and v's stored memberships only for a
+// member.
+func accessParams(v domain.Viewer, forumIDs []int64) dbq.ForumAccessRowsParams {
+	params := dbq.ForumAccessRowsParams{EveryoneSlug: domain.GroupEveryone, ForumIds: forumIDs}
+	if v.Member() {
+		params.UserID, params.MembersSlug = v.UserID, domain.GroupMembers
+	}
+	return params
+}
+
+// forumRows is one forum as decide reads it: its visibility, and what each
+// of the viewer's groups is granted in it and site-wide.
+type forumRows struct {
+	visibility string
+	// local[group] and global[group]: what each group of v's is granted
+	// in this forum, and site-wide. A group with a key in local is governed
+	// by those rows alone, so a key is present only while it has a row.
+	local, global map[int64][]domain.Permission
+	// everyone is the everyone group's id, when it is known.
+	everyone int64
+}
+
+// collect groups ForumAccessRows' rows by forum, in the order they came.
+func collect(rows []dbq.ForumAccessRowsRow) (map[int64]*forumRows, []int64) {
+	forums := map[int64]*forumRows{}
 	var order []int64
 	for _, r := range rows {
 		f := forums[r.ForumID]
 		if f == nil {
-			f = &forum{visibility: r.Visibility, local: map[int64][]domain.Permission{}, global: map[int64][]domain.Permission{}}
+			f = &forumRows{visibility: r.Visibility, local: map[int64][]domain.Permission{}, global: map[int64][]domain.Permission{}}
 			forums[r.ForumID] = f
 			order = append(order, r.ForumID)
 		}
@@ -469,50 +493,65 @@ func (e *Evaluator) evaluateMany(ctx context.Context, v domain.Viewer, forumIDs 
 			f.global[r.GroupID.Int64] = append(f.global[r.GroupID.Int64], domain.Permission(r.Permission.String))
 		}
 	}
+	return forums, order
+}
 
-	for _, id := range order {
-		f := forums[id]
-		a := access{perms: make(map[domain.Permission]bool)}
-		restricted, noEveryone := false, false
-		switch f.visibility {
-		case domain.VisibilityPublic:
-		case domain.VisibilityMembers:
-			// The everyone grant does not reach a members forum, and an
-			// anonymous viewer has no other group.
-			noEveryone = true
-		case domain.VisibilityRestricted:
-			restricted = true
-		default:
-			return nil, fmt.Errorf("perm: forum %d has unknown visibility %q", id, f.visibility)
-		}
-		// Every group v is in that holds a row here or globally; a group with
-		// no rows grants nothing either way.
-		groups := map[int64]bool{}
-		for g := range f.local {
-			groups[g] = true
-		}
-		for g := range f.global {
-			groups[g] = true
-		}
-		for g := range groups {
-			if noEveryone && g == f.everyone {
-				continue
-			}
-			granted, ok := f.local[g]
-			if !ok && !restricted {
-				granted = f.global[g]
-			}
-			for _, p := range granted {
-				a.perms[p] = true
-			}
-		}
-		if v.Member() && v.Role == domain.RoleModerator {
-			a.perms[domain.PermModerate] = true
-		}
-		a.hidden = restricted && !a.perms[domain.PermRead]
-		out[id] = a
+// decide applies the rules in the package comment to one forum's rows for v.
+// It reads nothing and caches nothing.
+func decide(id int64, f *forumRows, v domain.Viewer) (access, error) {
+	a := access{perms: make(map[domain.Permission]bool)}
+	restricted, noEveryone := false, false
+	switch f.visibility {
+	case domain.VisibilityPublic:
+	case domain.VisibilityMembers:
+		// The everyone grant does not reach a members forum, and an
+		// anonymous viewer has no other group.
+		noEveryone = true
+	case domain.VisibilityRestricted:
+		restricted = true
+	default:
+		return access{}, fmt.Errorf("perm: forum %d has unknown visibility %q", id, f.visibility)
 	}
-	return out, nil
+	// Every group v is in that holds a row here or globally; a group with
+	// no rows grants nothing either way.
+	groups := map[int64]bool{}
+	for g := range f.local {
+		groups[g] = true
+	}
+	for g := range f.global {
+		groups[g] = true
+	}
+	for g := range groups {
+		if noEveryone && f.everyone != 0 && g == f.everyone {
+			continue
+		}
+		granted, ok := f.local[g]
+		if !ok && !restricted {
+			granted = f.global[g]
+		}
+		for _, p := range granted {
+			a.perms[p] = true
+		}
+	}
+	if v.Member() && v.Role == domain.RoleModerator {
+		a.perms[domain.PermModerate] = true
+	}
+	a.hidden = restricted && !a.perms[domain.PermRead]
+	return a, nil
+}
+
+// decision is what Check answers for p, given v's access to the forum.
+func decision(v domain.Viewer, a access, p domain.Permission) Decision {
+	switch {
+	case v.Member() && v.Role == domain.RoleAdmin:
+		return Allow
+	case a.hidden:
+		return Hidden
+	case a.perms[p]:
+		return Allow
+	default:
+		return Deny
+	}
 }
 
 func without(s []int64, x int64) []int64 {

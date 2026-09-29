@@ -3,6 +3,7 @@ package perm
 import (
 	"database/sql"
 	"fmt"
+	"github.com/terva-sh/ketju/internal/audit"
 	"path/filepath"
 	"slices"
 	"sync"
@@ -25,6 +26,9 @@ type fixture struct {
 	n     int
 
 	everyone, members int64
+
+	// actor is the account the admin tests act as, made on first use.
+	actor int64
 }
 
 type fakeClock struct {
@@ -149,7 +153,7 @@ func (f *fixture) viewer(role string, groups ...int64) domain.Viewer {
 		f.t.Fatal(err)
 	}
 	for _, g := range groups {
-		if err := f.ev.AddMember(f.t.Context(), g, id, 0); err != nil {
+		if err := f.ev.AddMember(f.t.Context(), audit.By{}, g, id); err != nil {
 			f.t.Fatal(err)
 		}
 	}
@@ -158,7 +162,7 @@ func (f *fixture) viewer(role string, groups ...int64) domain.Viewer {
 
 func (f *fixture) grant(forumID, groupID int64, p domain.Permission) {
 	f.t.Helper()
-	if err := f.ev.Grant(f.t.Context(), forumID, groupID, p); err != nil {
+	if err := f.ev.Grant(f.t.Context(), audit.By{}, forumID, groupID, p); err != nil {
 		f.t.Fatal(err)
 	}
 }

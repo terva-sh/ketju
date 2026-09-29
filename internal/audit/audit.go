@@ -67,11 +67,13 @@ const (
 	TypeThread      = "thread"
 	TypePost        = "post"
 	TypeSetting     = "setting"
+	TypePermission  = "permission"
 	TypeForm        = "form"
 )
 
 // Types lists every target type, for the documentation test.
-var Types = []string{TypeUser, TypeForum, TypeGroup, TypeFlag, TypeApplication, TypeThread, TypePost, TypeSetting, TypeForm}
+var Types = []string{TypeUser, TypeForum, TypeGroup, TypeFlag, TypeApplication, TypeThread, TypePost, TypeSetting,
+	TypePermission, TypeForm}
 
 func decimal(typ string, id int64) Target { return Target{Type: typ, ID: strconv.FormatInt(id, 10)} }
 
@@ -100,6 +102,17 @@ func Post(thread threadid.ID, ordinal uint32) Target {
 
 // Setting is a runtime setting, by its key.
 func Setting(key string) Target { return Target{Type: TypeSetting, ID: key} }
+
+// Permission is one permission row: <forum id>:<group id>:<permission>, or
+// global:<group id>:<permission> for a site-wide grant, whose forum_id is
+// NULL. forumID 0 means global, as it does in internal/perm.
+func Permission(forumID, groupID int64, permission string) Target {
+	forum := "global"
+	if forumID != 0 {
+		forum = strconv.FormatInt(forumID, 10)
+	}
+	return Target{Type: TypePermission, ID: forum + ":" + strconv.FormatInt(groupID, 10) + ":" + permission}
+}
 
 // Form is a declarative form, by its key, such as registration. The key
 // names the form across its versions; the version an action wrote goes in

@@ -1,10 +1,12 @@
-// Package users answers questions about the viewer's own account.
+// Package users answers questions about the viewer's own account, and the
+// admin users screen's about everyone's (admin.go).
 package users
 
 import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/domain"
@@ -18,6 +20,9 @@ import (
 type Service struct {
 	DB   *db.DB
 	Perm *perm.Evaluator
+	// Now is the clock the admin detail counts live sessions by; nil is
+	// time.Now.
+	Now func() time.Time
 }
 
 // The settings a viewer has not chosen (docs/06 "Paged, not infinite" for the

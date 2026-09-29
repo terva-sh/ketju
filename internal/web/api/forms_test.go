@@ -153,6 +153,7 @@ func TestSaveAFormVersion(t *testing.T) {
 // errors, the catalogue's title, and no version or audit row written.
 func TestInvalidSchemaIsNotSaved(t *testing.T) {
 	w := newAdminWorld(t)
+	written := w.formWrites()
 	bad := `{"title":"T","fields":[{"key":"who","type":"text","label":"L","options":["x"]},{"key":"who","type":"date","label":"L"}]}`
 	for _, path := range []string{"/api/v1/admin/forms/registration/versions", "/api/v1/admin/forms/registration/preview"} {
 		body := saveBody(1, bad)
@@ -174,15 +175,24 @@ func TestInvalidSchemaIsNotSaved(t *testing.T) {
 			t.Errorf("%s: %s", path, rec.Body)
 		}
 	}
-	if n := w.rows(`SELECT count(*) FROM form_versions`) + w.rows(`SELECT count(*) FROM audit_log`); n != 1 {
-		t.Errorf("%d rows, want only the seeded version", n)
+	if n := w.formWrites(); n != written {
+		t.Errorf("%d rows, want the %d the world was built with", n, written)
 	}
+}
+
+// formWrites counts the form versions and audit rows. The world is built
+// with the seeded version and the audit rows of its own setup writes, which
+// go through perm (TKT-01M29CXK1X), so a test that nothing is written
+// compares against the count before its requests.
+func (w *adminWorld) formWrites() int {
+	return w.rows(`SELECT count(*) FROM form_versions`) + w.rows(`SELECT count(*) FROM audit_log`)
 }
 
 // TestPreviewWritesNothing is AC6's preview: the draft is rendered as
 // version 0, and nothing is written.
 func TestPreviewWritesNothing(t *testing.T) {
 	w := newAdminWorld(t)
+	written := w.formWrites()
 	rec := w.send("POST", "/api/v1/admin/forms/registration/preview", "admin", previewBody(draftSchema))
 	if rec.Code != http.StatusOK {
 		t.Fatalf("%d %s", rec.Code, rec.Body)
@@ -194,8 +204,8 @@ func TestPreviewWritesNothing(t *testing.T) {
 	if f.Key != "registration" || f.Version != 0 || len(f.Fields) != 2 || !f.Fields[1].Multiple {
 		t.Errorf("previewed %s", rec.Body)
 	}
-	if n := w.rows(`SELECT count(*) FROM form_versions`) + w.rows(`SELECT count(*) FROM audit_log`); n != 1 {
-		t.Errorf("%d rows, want only the seeded version", n)
+	if n := w.formWrites(); n != written {
+		t.Errorf("%d rows, want the %d the world was built with", n, written)
 	}
 	if n := w.rows(`SELECT active_version FROM forms WHERE key = 'registration'`); n != 1 {
 		t.Errorf("active version %d", n)

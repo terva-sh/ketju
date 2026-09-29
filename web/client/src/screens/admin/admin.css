@@ -118,6 +118,130 @@
   gap: 8px;
 }
 
+/* The users screen (TKT-01M29CXK1X): its tabs, a list beside the detail of
+   what is selected, and the permission grid. */
+.admin-tabs ul {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  gap: 16px;
+  border-bottom: 1px solid var(--rule);
+}
+.admin-tabs a {
+  display: inline-flex;
+  align-items: center;
+  min-height: 36px;
+  color: var(--ink2);
+  text-decoration: none;
+}
+.admin-tabs a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+  box-shadow: inset 0 -2px 0 var(--accent);
+}
+.admin-split {
+  display: grid;
+  grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+  gap: 24px;
+  align-items: start;
+}
+.admin-split > :only-child {
+  grid-column: 1 / -1;
+}
+.admin-link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+.admin-detail h2,
+.admin-form h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.admin-detail h3 {
+  margin: 20px 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.admin-muted {
+  color: var(--muted);
+}
+.admin-facts {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 4px 16px;
+  margin: 0 0 16px;
+}
+.admin-facts dt {
+  color: var(--muted);
+}
+.admin-facts dd {
+  margin: 0;
+}
+.admin-mark {
+  display: inline-block;
+  padding: 0 6px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  color: var(--ink2);
+  font-size: 13px;
+}
+.admin-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 16px;
+}
+.admin-form {
+  margin-top: 24px;
+}
+.admin-inline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0 12px;
+}
+.admin-inline .admin-button {
+  margin-bottom: 16px;
+}
+.admin-field input,
+.admin-field select {
+  height: 36px;
+  padding: 0 8px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+}
+.admin-grid th[scope='row'] {
+  color: var(--ink);
+  font-weight: 500;
+}
+.admin-grid td {
+  text-align: center;
+}
+.admin-grid td.staged,
+.admin-table td.changed {
+  background: var(--accent-soft);
+  font-weight: 600;
+}
+.admin-grid input[type='checkbox'] {
+  width: 20px;
+  height: 20px;
+}
+.admin-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 16px 0;
+}
+
 /* The phone: the section list becomes a row above the section, and the
    section links and the buttons are drawn at the full 44 px (docs/06
    "Targets and gestures"). */
@@ -129,6 +253,19 @@
   .admin-nav ul {
     flex-direction: row;
     flex-wrap: wrap;
+  }
+  .admin-split {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-tabs a,
+  .admin-link,
+  .admin-field input,
+  .admin-field select {
+    min-height: var(--target);
+  }
+  .admin-grid input[type='checkbox'] {
+    width: 28px;
+    height: 28px;
   }
   .admin-nav a,
   .admin-button {
