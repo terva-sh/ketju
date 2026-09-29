@@ -70,8 +70,7 @@ type Service struct {
 	// Now is the clock; nil means time.Now.
 	Now func() time.Time
 	// Bootstrap names the identities made admin at sign-in (docs/05
-	// "Principles"). Perm makes the change; it may be nil only when
-	// Bootstrap names nobody.
+	// "Principles"). Perm makes the change.
 	Bootstrap config.Bootstrap
 	// Perm makes every change a sign-in makes to what a user may do: the
 	// bootstrap promotion, and the IdP group mapping, which runs at every
