@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-12T02:14:17Z
-updated_at: 2026-09-29T21:30:31Z
+updated_at: 2026-09-29T21:39:17Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -204,6 +204,17 @@ Mutations tried against the tests. Each was caught:
 6. Replies exempt: TestAgentBucket.
 7. Drafts charged: TestAgentBucket.
 8. Per-agent overrides ignored: TestLimitsOverrideTheDefaults and TestAgentBucket.
+
+**agent:claude-code/phase2-run-p9rsw** at 2026-09-29T21:39:17Z
+
+Terva review 1477 on PR #163, head 871a11579eea613ac6f31fa0648acf4a2184105a, base fbe4787173af5ec9989c2b3f49e7bfafb11a3c94 (run 6f72a914-f360-4c55-9f84-4bd029341d17, Actions run 1028).
+
+- **medium (security), "Bound refill seconds before converting to time.Duration": accepted and fixed.** A refill large enough to overflow `time.Duration` made the rate non-positive, and the limiter reads that as no limit. The refill is now 1 to 604800 s (one week, `settings.AgentRefillMaxSeconds`) in the setting's rule, in the admin route, and in migration 0013's CHECK. `agentcred.rate` also clamps both numbers, so the bucket cannot fail open whatever is stored. TestRateIsAlwaysALimit checks this, and removing the clamp fails it. The settings and API tests refuse 604801 and the int64 maximum.
+- **high, "Fix invalid new calls in agent detail construction": answered, and changed anyway.** The finding is a false positive. go.mod declares go 1.26.2, which accepts `new(expr)`. `internal/service/users/admin.go` on main already uses the same form (`new(int(n))`, `new(i.Email.String)`), and the package compiled and passed its tests. The three calls are rewritten as locals so that a later review does not raise the finding again. No behaviour changed.
+
+Main moved under #163 (TKT-01M29CKRGS landed and conflicted in docs/04 and api/admin.go), so the final tree is carried onto a27a721 as one commit on run/p9rsw-agent-accounts-2, which replaces #163. Both sides of each conflict were kept.
+
+Mutation 9: dropping the refill clamp in `agentcred.rate` is caught by TestRateIsAlwaysALimit.
 
 ## Comments
 
