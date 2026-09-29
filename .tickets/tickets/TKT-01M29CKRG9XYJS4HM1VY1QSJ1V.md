@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T15:14:55Z
+updated_at: 2026-09-29T15:42:15Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -58,7 +58,7 @@ The allowlist has to be positive rather than a set of exclusions. A new endpoint
 
 ## Implementation plan
 
-Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a.
+Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a. Revised at claim against ccc05ad; the settled items below are carried unchanged.
 
 ### Settled in grooming
 
@@ -71,43 +71,53 @@ Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a.
 - A pre-user session is refused before any thread endpoint runs, so it never reaches the response cache. It adds no viewer class to the cache key (docs/07 "The response cache": `anon` for anyone who is not an active member).
 - The per-identity rate limit on application submission belongs to the approval-mode epic, together with the form it protects (docs/05 "Sessions and CSRF"). It is not this ticket's.
 
-### Approach
+### Approach (revised at claim, 2026-09-29, against main at ccc05ad)
 
-1. **Issuing.** In `internal/auth/session/issue.go`, add `IssuePreUserWith(ctx, meta, create func(ctx, *dbq.Queries) (int64, error))`, the pre-user twin of `IssueUserWith`. `create` writes the identity in the transaction that inserts the session. The holder check follows: an identity that has a user is refused with `ErrHasUser`. `IssuePreUser` becomes a one-line call to `IssuePreUserWith`, as `IssueUser` does to `IssueUserWith`. In `chokepoint_test.go`, `insertCallers` becomes `{issue.go:IssuePreUserWith, issue.go:IssueUserWith}`. Alternative: a separate `CreateIdentity` write before `IssuePreUser`. It lost because a failed session insert would leave an orphaned identity row, and because the registration-mode check would then sit in a different transaction from the write (review 1145).
-2. **Issuer-caller list.** In `chokepoint_test.go`, add `issuerCallers`: every non-test function outside `internal/auth/session` that calls `IssueUser`, `IssueUserWith`, `IssuePreUser` or `IssuePreUserWith`, compared exactly, the same way `doorCallers` is. It starts as `identity/login.go:Login` (IssueUser, IssuePreUser), `identity/register.go:Register` (IssueUserWith), and `identity/apply.go:BeginApplication` (IssuePreUserWith). Every later ticket that adds a sign-in path shows up in this list in its diff.
-3. **The applicant path.** Add `internal/service/identity/apply.go` with `BeginApplication(ctx, c Claims, meta, replaces) (Result, error)`. It runs `IssuePreUserWith`, and the create func does four things inside the transaction. It reads `settings.RegistrationMode.In` and refuses with `ErrRegistrationClosed` unless the mode is `approval`. It refuses with `ErrAlreadyRegistered` an identity that already exists, which covers a race with another tab. It writes `CreateIdentity` with `user_id` NULL. It writes `RecordIdentityLogin`. Then `BeginApplication` revokes `replaces`, following the fixation rule `settle` uses, and does not run bootstrap or group mapping, since there is no user. Add `Outcome` `Applying`, and give `Result` its token and session.
-4. **Login's Applicant outcome.** `Login` currently returns `Applicant` with no session. Change it to call `s.Sessions.IssuePreUser(ctx, ident.ID, meta)` and return `Applicant` with the token. It revokes `replaces` as step 3 does. The `Sessions` interface in `login.go` gains `IssuePreUser` and `IssuePreUserWith`.
-5. **The callback** (`internal/web/auth/auth.go`, `register.go`). `beginRegistration` with registration closed is currently a 501 `pageRegistration`. In approval mode, and for a provider that does not auto-approve, it becomes `BeginApplication`: set the session cookie and answer 303 to `/apply`. The auto_approve branch belongs to TKT-01M29CKRE9. The `identity.Applicant` case becomes: set the cookie, answer 303 to `/apply/status`. `TestTheBranchesStillToCome` loses its registration and applicant subtests, and they move into the tests below.
-6. **Ending a pre-user session once the identity has a user.** `LookupSession` (`internal/store/db/queries/identity.sql`) gains `LEFT JOIN identities i ON i.id = s.identity_id` and `AND (s.kind = 'user' OR i.user_id IS NULL)`. A pre-user cookie then stops resolving at the moment approval links the identity, even if the approval code forgets to delete it. Add the query `DeletePreUserSessions :exec` (`DELETE FROM sessions WHERE kind = 'pre_user' AND identity_id = ?`) and `Store.RevokePreUser(ctx, identityID)` for moderator approval (TKT-01M29CP2MG) to call in its own transaction. Regenerate dbq with sqlc.
-7. **The allowlist gate.** Add `internal/web/preuser.go` with `PreUserGate(allow []Route) func(http.Handler) http.Handler`. It runs in `chain` between session resolution (6) and CSRF (7), and the chain comment and `TestTheMiddlewareRunsInTheDocumentedOrder` gain the position. For a viewer with `PreUser` set, a request that matches no entry is refused. A path under `/api/` gets `problem.CodeForbidden`. Any other GET or HEAD, which is an SPA page, gets 303 to `/apply/status`. Anything else gets 403 forbidden. The list lives in `web.PreUserRoutes`, next to the gate, as exact method-and-pattern pairs:
-   - `GET /api/v1/me`
-   - `GET /auth/signin`, `GET /auth/{provider}/start`, `GET /auth/{provider}/callback`, `POST /auth/logout`
-   - `GET /assets/` (subtree)
-   - `GET /apply`, `GET /apply/status` (the SPA pages)
+The groomed approach held. What changed on reading the code is marked "Revised".
 
-   TKT-01M29CP2KZ adds `GET /api/v1/apply/form`, `POST /api/v1/apply`, `GET /api/v1/apply/status` and `POST /api/v1/apply/withdraw` when it registers them. `/auth/register`, `/blobs/`, `/events` and every other API route stay closed. Alternative: keep `member.Require` in each handler, the exclusion model in use today. It lost because a new read handler is open to a pre-user by default, which is the failure this ticket exists to close.
-8. **A route table the test can walk.** `api.New` registers from an exported `api.Routes(h)` table (`[]web.Route{Method, Pattern, Handler}`) rather than inline `HandleFunc` calls. `auth.New` does the same with `auth.Routes`. Behaviour does not change. The table exists so that a test can enumerate the routes, which a `ServeMux` cannot.
-9. **Client.** In `web/client/src/app.tsx`, when the viewer's `pre_user` is non-null, every route except `/apply` renders the `apply-status` screen. The two screens stay the placeholders in `routes.tsx` until TKT-01M29CP2NG builds them. The header shows "Sign out", which posts to `/auth/logout`, and no forum navigation. Run `go generate ./internal/web/spa` and commit the built client.
-10. **Docs.** docs/05 "mode = approval" step 1 names the gate and its position in the chain. docs/07 "URL scheme" says that a pre-user session is sent to `/apply/status` from any other page. docs/02's middleware list gains the step.
+1. **Issuing.** `internal/auth/session/issue.go` gains `IssuePreUserWith(ctx, meta, create)`, the pre-user twin of `IssueUserWith`: `create` writes the identity in the transaction that inserts the session, and the holder check refuses an identity with a user (`ErrHasUser`). `IssuePreUser` is a one-line call to it. `insertCallers` becomes `{issue.go:IssuePreUserWith, issue.go:IssueUserWith}`. Alternative: a separate `CreateIdentity` write before `IssuePreUser`. It lost because a failed session insert would orphan the identity, and the mode check would sit in a different transaction from the write (review 1145).
+2. **Issuer-caller list.** `chokepoint_test.go` gains `issuerCallers` and `TestTheIssuersAreKnown`: every non-test selector outside `internal/auth/session` naming one of the four issuers, as `file:func Issuer`, compared exactly. A method value counts as well as a call. Revised: the list names `login.go:applicant IssuePreUser`, because Login's applicant branch is its own function.
+3. **The applicant path.** `internal/service/identity/apply.go` `BeginApplication(ctx, c Claims, meta, replaces)`. Inside `IssuePreUserWith` it reads `registration.mode` (refusing `ErrRegistrationClosed` unless `approval`), refuses an existing identity (`ErrAlreadyRegistered`), writes the identity with `user_id` NULL, and records the first sign-in. It then ends `replaces`. Revised: the fixation step is factored out of `settle` as `replace`/`abandon`, so all four session paths share it. The new `Outcome` is `Applying`.
+4. **Login's Applicant outcome.** `ErrNoUser` from `IssueUser` now leads to `applicant`, which calls `IssuePreUser`, ends `replaces`, records the sign-in, and returns `Applicant` with the token. The `Sessions` interface gains both pre-user issuers.
+5. **The callback.** `beginRegistration` takes the provider. With registration closed and a provider that does not auto-approve, it calls `beginApplication`: cookie, 303 to `/apply`. Its two refusals are races (another tab wrote the identity; registration opened) and answer 409 with the "Sign-in failed, try again" page. An auto_approve provider keeps the 501 page for TKT-01M29CKRE9. The `Applicant` outcome sets the cookie and answers 303 to `/apply/status`. Revised: `pageApplicant` is gone, now unused.
+6. **Lookup.** `LookupSession` joins `identities` and requires `s.kind = 'user' OR (s.kind = 'pre_user' AND i.id IS NOT NULL AND i.user_id IS NULL)`. `DeletePreUserSessions` and `Store.RevokePreUser(ctx, identityID)` are there for TKT-01M29CP2MG; its approval transaction can call `q.DeletePreUserSessions` directly. No migration: nothing here needs an index.
+7. **The gate.** `internal/web/preuser.go`: `web.Route{Method, Path, Handler}`, `web.PreUserRoutes`, `web.ApplyStatusPath`, and `PreUserGate(allow)`. The gate compiles `allow` into a ServeMux and lets a pre-user through only when that mux names one of `allow`'s own patterns for the request. It runs at chain position 7, between session (6) and CSRF (now 8), and is not an option. Refusals: 403 `forbidden` problem under `/api/`, 303 to `/apply/status` for any other GET or HEAD, 403 `forbidden` otherwise. Revised: the field is `Path` rather than `Pattern`, and `Route.Pattern()` gives the ServeMux form.
+8. **Route tables.** `api.build` registers from `h.routes()`, a `[]web.Route`. Admin routes still register through `adminRoute`, which now records its gated handler. `api.Routes(d)` returns both. `auth.New` registers from `auth.Routes(h)`. Behaviour does not change.
+9. **Client.** `app.tsx` renders `ApplicantShell` when `viewer.pre_user` is set. It has a wordmark, a "Sign out" form posting to `/auth/logout`, and no forum navigation. It shows the route table's `/apply` screen at `/apply` and the `/apply/status` screen everywhere else. `internal/web/spa/dist` is regenerated.
+10. **Docs.** docs/05 "mode = approval" step 1 names the list, the gate and its position. docs/07 "URL scheme" says where a pre-user goes and what the client draws. The docs/02 diagram lists the chain in order, gate included, and its "Read a thread page" flow names the gate.
 
 ### Tests
 
-- `internal/web/preuser_test.go` `TestPreUserRoutesAreExactlyTheAllowlist`. It builds the real server (`web.New` with the real `api.New` and `auth.New`) and a pre-user cookie from `sessiontest.PreUser`. It walks `api.Routes` and `auth.Routes` plus one SPA path and one `/blobs/`, `/events` and `/assets/` path each, with path values filled in. Every route outside `PreUserRoutes` answers 403 `forbidden` for an API path or 303 to `/apply/status` for a page. Every route on the list answers something other than 403. It also asserts that each `PreUserRoutes` entry matches a registered route, so a typo cannot open or close nothing.
-- `TestANewRouteIsClosedToAPreUserByDefault`. It registers a throwaway route through a test-only table and shows that a pre-user is refused there without any code change to the gate.
-- `internal/auth/session` `TestAPreUserCannotBecomeAMember`. For each of `pending`, `suspended` and `deactivated`: issue a pre-user session, attach the identity to a user in that status (the step approval would take), and assert three things. `Lookup` of the pre-user cookie is `ErrNoSession`. `IssueUser` for the identity is a `*NotActiveError`. No `kind = 'user'` row exists. A control subtest with `active` shows that the next sign-in does get a member session and the old pre-user cookie is still refused.
-- `internal/auth/session` `TestIssuePreUserWithIsAtomic`. An injected trigger on `sessions` insert leaves no identity row. An identity that already has a user is `ErrHasUser` and writes nothing.
-- `chokepoint_test.go`: `TestOneDoorIntoSessions` passes with the new `insertCallers`, and `TestTheIssuersAreKnown` checks `issuerCallers`. The fixture tree under `testdata/chokepoint` gains an extra caller of `IssuePreUserWith`, and the scan must report it.
-- `internal/web/auth` `TestApprovalModeGivesAnApplicantAPreUserSession`. In approval mode with a provider that does not auto-approve, the callback writes an identity with `user_id` NULL, sets a cookie that resolves to `PreUser`, answers 303 `/apply`, and creates no `users` row. A second sign-in with the same identity answers 303 `/apply/status`.
-- `TestAnApplicantSignInEndsTheSessionItReplaces`, the fixation case for both applicant paths.
-- `internal/web/api` `TestAPreUserNeverReachesTheResponseCache`. A pre-user GET of `/api/v1/threads/{id}` is 403, and `respcache` `Stats` shows no lookup and no insert.
-- `internal/web/api` `me_test.go` keeps the `me.pre_user.json` golden. Add a check that `/me` is reachable through the gate.
-- Client: in `routes.test.tsx`, with `pre_user` set, `/`, `/f/general` and `/t/abc/x` render `apply-status`, and `/apply` renders `apply`.
+- `internal/web/preuser_test.go` (package `web_test`):
+  - `TestPreUserRoutesAreExactlyTheAllowlist` pins `PreUserRoutes` to the list in AC2. It walks every route in `api.Routes` and `auth.Routes`, `/assets/`, `/blobs/`, `/events`, client pages, and unserved API paths, with GET routes probed as HEAD too. On a server built from the same tables with recording handlers, a member reaches every handler; a pre-user reaches exactly the allowlisted ones and is refused elsewhere before any handler runs. On the real server (real `api.New`, `auth.New`, shell and assets), each refusal has the right status and body, and each allowed route is not refused.
+  - `TestEachAllowlistEntryNamesARoute` checks each entry against the route tables, the `/assets/` group, and the client's route table.
+  - `TestANewRouteIsClosedToAPreUserByDefault` uses a throwaway route table.
+  - `TestThePreUserGateMatchesMethodsAsTheRouterDoes` covers methods.
+  - `TestTrickyPathsReachOnlyTheAllowlist` sends dot segments, escapes, doubled slashes and case, and checks that nothing reaches a handler off the list.
+- `TestTheMiddlewareRunsInTheDocumentedOrder` shows the gate stops a pre-user after the session and before CSRF.
+- `internal/auth/session`:
+  - `TestAPreUserCannotBecomeAMember`: pending, suspended, deactivated, and an active control.
+  - `TestIssuePreUserWithIsAtomic`: a trigger on the session insert leaves no identity; an identity with a user gets `ErrHasUser`; a refusal from `create` writes nothing.
+  - `TestRevokePreUser`.
+  - `TestTheIssuersAreKnown`. The fixture tree gains unlisted issuer callers, a method value among them, which the scan reports. An in-package caller and a test-file caller are exempt.
+- `internal/service/identity`: `TestBeginApplicationWritesAnApplicant`, `TestBeginApplicationRefuses`, and `TestRegistrationOpenedJustBeforeTheApplication` (review 1145's interleaving).
+- `internal/web/auth`:
+  - `TestApprovalModeGivesAnApplicantAPreUserSession`.
+  - `TestAnApplicantSignInEndsTheSessionItReplaces` and `TestAnApplicantSignInThatCannotEndTheOldSessionFails`, each for both paths.
+  - `TestAPreUserCannotRegister`, `TestAnApplicantCanSignOut`, and the auto_approve case kept at 501.
+  - Revised: `TestRegistrationEndsTheSessionItReplaces` now replaces a suspended user's session. A pre-user never reaches `/auth/register`.
+- `internal/web/api`:
+  - `TestAPreUserNeverReachesTheResponseCache`: 403 on the page, post, replies and history endpoints, and `respcache` stats do not move; a member control shows the counters are live.
+  - `TestEveryRouteIsInTheTable`, an AST scan.
+  - The existing `me_test.go` pre-user case already runs `/me` through `web.New`, which now always carries the gate.
+- `cmd/ketju` `TestServeSignsInThroughAProvider`: a new sign-in under the default approval mode lands on `/apply` with a pre-user cookie that reaches `/me` and is refused `/api/v1/forums`.
+- Client `routes.test.tsx`: with `pre_user` set, `/`, `/f/general`, `/t/abc/x` and other addresses render `apply-status`, and `/apply` renders `apply`. The bar has the sign-out form and no navigation.
 
 ### Out of scope
 
-- The `/apply` API endpoints, the 24-hour withdraw rule, and blocked identities: TKT-01M29CP2KZ. It adds its routes to `PreUserRoutes`.
+- The `/apply` API endpoints, the 24-hour withdraw rule, and blocked identities: TKT-01M29CP2KZ. It adds its routes to `PreUserRoutes` and to `theAllowlist` in `internal/web/preuser_test.go`.
 - The applications and forms schema: TKT-01M29CKRDQ.
-- Approving an application, and calling `RevokePreUser` in the same transaction: TKT-01M29CP2MG.
+- Approving an application, and calling `RevokePreUser` (or `q.DeletePreUserSessions`) in the same transaction: TKT-01M29CP2MG.
 - The real apply and status screens: TKT-01M29CP2NG.
 - The auto_approve branch of `beginRegistration`: TKT-01M29CKRE9.
 - The per-identity limit on application submission: approval-mode epic TKT-01M29BKBM3.
