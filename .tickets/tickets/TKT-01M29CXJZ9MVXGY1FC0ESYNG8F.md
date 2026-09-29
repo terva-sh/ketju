@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T14:47:00Z
+updated_at: 2026-09-29T14:58:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -62,6 +62,7 @@ The rendered-post cache and the search index both hold copies of the text, so re
 - [ ] A title redaction appends Redacted {ordinal 0, title true} and then a ThreadRenamed to Title removed, or the operator's --title, so the thread shows the replacement after catch-up and after reindex, and log_length only grows (TestRedactTitleShowsTheReplacement, TestRedactedTitleCatchUpEqualsReindex)
 - [ ] A title marker touches no index entry or post_meta row, and an old slug still redirects by id to the replacement's slug (TestTitleMarkerTouchesNoPost, TestOldSlugRedirectsAfterTitleRedaction)
 - [ ] A title redaction writes one thread.title_redacted audit row with no title text, resumes from its journal after any step, and a later title redaction of the same thread is allowed (TestRedactTitleAuditHasNoTitle, TestRedactTitleResumes, TestRedactTitleUsage)
+- [ ] Every Redacted marker carries the ULID of the journal that wrote it, and a resumed title redaction skips a log only when a title marker carries its own journal's id, so a second redaction by the same operator for the same reason is never skipped (TestASecondTitleRedactionIsNotSkipped)
 
 ## Implementation plan
 
@@ -89,7 +90,7 @@ Maintainer decision of 2026-09-29 on TKT-01M3NS147C (Decide how a thread title i
 
 Engineering choices for the title target, taken in this revision:
 - **The target is named by the word `title` in place of ORDINAL**: `ketju redact --root DIR --operator HANDLE --reason TEXT [--title TEXT] [--dry-run] THREAD title`. `--title` is accepted only with that target, and is checked by `threads.checkTitle`'s rules. One target per run. A takedown of a title and its opening post is two runs, each with its own journal. Lost: a separate `redact-title` command, which would duplicate the lock, journal, resume and dry-run handling. Also lost: several targets in one run, which the journal format and the "a post is redacted once" marker do not model.
-- **A title can be redacted more than once.** A moderator may later rename the thread to something that also has to go. So the resume marker for a title target is the journal id. `AuditExists` matches `thread.title_redacted` on `details.journal`, not on the thread. The log check is "carries a `Redacted` record with `title: true` whose `reason` and `operator` match the journal", scanning the whole log as `RedactedOrdinals` does. A second title redaction blanks every title frame before its own marker, including the earlier replacement.
+- **A title can be redacted more than once.** A moderator may later rename the thread to something that also has to go. So the resume marker for a title target is the journal id. `AuditExists` matches `thread.title_redacted` on `details.journal`, not on the thread. Every `Redacted` marker carries the id of the journal that wrote it, in a new `journal` field (the journal's ULID). The log check for a title target is "carries a `Redacted` record with `title: true` and `journal` equal to this journal's id", scanning the whole log as `RedactedOrdinals` does. Terva review 1375 (PR #143, head 17f3b02) found that the first version matched on `reason` and `operator`. Neither is unique, so an earlier redaction by the same operator for the same reason could make a resumed run skip a log it never rewrote. Lost: matching on `reason`, `operator` and the frame's timestamp, which is still not unique; and counting title markers against the journal, which a damaged log could satisfy by accident. A second title redaction blanks every title frame before its own marker, including the earlier replacement.
 - **No origin following, attachments or quotes for a title.** A split gives the new thread its own title, and nothing quotes a title.
 
 Settled here as engineering choices, to be written into docs/03 in the same PR:
@@ -117,7 +118,7 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
 - **The operator** is named with `--operator HANDLE`, which must be an active admin (docs/08: "admin, CLI only"). The reason is required.
 
 ### Approach
-1. **Catalogue** (`internal/store/threadlog/records.go`): `TypeRedacted RecordType = 0x80`, and `RedactedBody{Ordinal uint32 "ordinal"; Revisions []uint32 "revisions"; Reason string "reason"; Operator uint64 "operator"; Title bool "title,omitempty"}`, where `Title` true means the thread's title frames and `Ordinal` is 0, added to `catalogue` and `typeNames`. Add `PostBody.Origin *PostOrigin` (`origin`, `{thread_id uint64, ordinal uint32}`), the shape docs/03 gives for split and merge. This ticket reads it and TKT-01M29CXJZZ writes it. Update the docs/03 type table row, the frame-flags/index-entry table (bit 6), and "Hard redaction" with the padding and log-length rule above.
+1. **Catalogue** (`internal/store/threadlog/records.go`): `TypeRedacted RecordType = 0x80`, and `RedactedBody{Ordinal uint32 "ordinal"; Revisions []uint32 "revisions"; Reason string "reason"; Operator uint64 "operator"; Title bool "title,omitempty"; Journal string "journal"}`. `Title` true means the thread's title frames, and `Ordinal` is then 0. `Journal` is the ULID of the journal that wrote the marker, on post and title markers alike, so a marker names its run, added to `catalogue` and `typeNames`. Add `PostBody.Origin *PostOrigin` (`origin`, `{thread_id uint64, ordinal uint32}`), the shape docs/03 gives for split and merge. This ticket reads it and TKT-01M29CXJZZ writes it. Update the docs/03 type table row, the frame-flags/index-entry table (bit 6), and "Hard redaction" with the padding and log-length rule above.
 2. **Index** (`apply.go`, `flags.go`): a `*RedactedBody` case in `Index.Apply`, with `postFlagEffect(TypeRedacted)` returning set `EntryRedacted`, clear `EntryHasAttachments`. A title marker (`Title` true, ordinal 0) touches no post entry and sets no flag. `Index.Apply` must not look up post 0. Add `EntryRedacted = 1 << 6` to `EntryFlagsKnown`. `Visible()` excludes `EntryRedacted`.
 3. **Reader and service**:
    - `Reader.HiddenEntry` returns the tombstone for a redacted entry, so a moderator never decodes the padded body.
@@ -193,6 +194,7 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
   - `TestOldSlugRedirectsAfterTitleRedaction`: `/t/{id}/{old-slug}` is replaced by the replacement's slug (client), and the API serves the thread by id.
   - `TestRedactTitleAuditHasNoTitle`: one `thread.title_redacted` row whose details contain none of the old titles or the replacement. The appended rename's `thread.renamed` row (TKT-01M29CKRH9) carries only `{thread, log_offset}`.
   - `TestRedactTitleResumes`: failures injected after the journal, after the swap and after the projection each finish on rerun with one marker and one audit row. A second, later title redaction of the same thread succeeds and blanks the first replacement too.
+  - `TestASecondTitleRedactionIsNotSkipped`: a first title redaction by operator A with reason R completes. A second by A with R fails after its journal is written and before its swap. The rerun rewrites the log, because no marker carries the second journal's id. It ends with two title markers, each with its own `journal`, and the first replacement title blanked.
   - `TestRedactTitleUsage`: `--title` with an ordinal target is exit 2, and a `--title` over 200 characters or holding a control character is refused before anything is written.
 
 ### Out of scope
