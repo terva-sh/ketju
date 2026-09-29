@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T21:54:50Z
+updated_at: 2026-09-29T22:00:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -111,6 +111,10 @@ AC2 left unticked. Its server half holds: the post is served with `edited_by_mod
 Correction to the plan's step 3, which said the author's Refuse of hidden-by-mod stops a race between `authorize` and the append. It does not need to: an author's Restore already requires the deleted flag, and the service never lets a post be both deleted and hidden, since every Delete refuses `gone`. The Refuse matters only for a post that carries both bits, which a record appended without the service's preconditions can leave. It is kept for that case, and TestRestoreRecordPreconditions holds it with such a post. The mutation run found this: dropping the Refuse was missed until that case was added.
 
 Settled internals, written into docs/07: an author's own edit, delete and restore keep the asynchronous projection, and only a record by someone other than the post's author is projected before the answer (`appendProjecting`, beside `appendEvent`). Projecting every write lost because it adds a database transaction to every author's edit for a row that is never written. A moderator acting on their own post is an ordinary author's action, with no by_moderator and no audit row, as grooming said.
+
+**agent:claude-code/phase2-run-crj5j** at 2026-09-29T22:00:25Z
+
+Terva review 1486 on PR #165 (run ebf3d1da-b375-4268-afe0-d2f23c2a39a1, Actions run #1044), head 9e2c3b2f4164120df18f96cb2ce4717eece38763, base f04a476a2a7b0dd7ae45e19dc20fbc02c4ed96fa. One medium finding, "Keep the append and response readback under the same thread lock". Fixed in 0806275. changePost now appends and reads the answer back in one Threads.With call, with nothing between the two, which is how Edit, Delete and Restore worked before this ticket. The moderator's record is projected after that, through projectNow, which appendEvent also uses. appendProjecting is removed. For accuracy: Threads.With pins the thread and does not lock it. The actor serializes appends, but a write from another request can still land between the append and readBack's snapshot. readBack documents that since review 1119 on PR #95: the answer comes from one snapshot at least as new as the append. The fix removes the window this PR had added, the projection transaction between the append and the read. It cannot remove the window readBack already had.
 
 ## Summary
 
