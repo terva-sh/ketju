@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-29T05:10:10Z
+updated_at: 2026-09-29T05:38:20Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -55,8 +55,8 @@ docs/06 "Read tracking", docs/07 "Read position".
 
 - [ ] markUnread flushes the beacon and waits for every PUT in flight before its DELETE, sends no PUT for the thread until the DELETE answers, lowers the floor to the answer, and runs two marks of one thread in call order (the restored readTracker.test.ts markUnread tests)
 - [ ] A page requested before the DELETE answered does not raise the floor and one requested after it does, and reads made while a DELETE is pending survive a failed DELETE and are sent after a retried mark succeeds (keeps what was read during a failed DELETE for the next mark)
-- [ ] The control is where the open decision in the plan puts it, a Playwright test marks a read thread unread and the server's position stays lowered, and docs/06 Read tracking describes it
 - [ ] The dist is rebuilt with go generate ./internal/web/spa and the thread-view bundle stays within the 60000 B gzip budget
+- [ ] A whole-thread Mark unread action (toolbar and phone more menu) and an Unread from here action on each post mark the thread unread, then return to the thread list; a Playwright test covers both, the server's position stays lowered, and docs/06 Read tracking describes them
 
 ## Implementation plan
 
@@ -75,28 +75,21 @@ Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming).
   - marks of one thread take effect in call order;
   - reads made while the DELETE is pending are judged against its answer, and survive a failed DELETE so that a retried mark still sends them (the review-1149 defect).
 - The removed implementation is at `74c4e8f` (`git show 74c4e8f:web/client/src/state/readTracker.ts`, with its tests in `readTracker.test.ts`). The note of 2026-09-28 supersedes the `dd761e9` pointer. `readTracker.ts:34-39` on main names this ticket as the one that lowers the floor.
+- **Maintainer decision 2026-09-29** (recorded in the note of that date on this ticket; the option offered in grooming as "C with 1"): mark-unread is offered in both places, and afterwards the page returns to the list.
+  - A whole-thread "Mark unread" is in `threadActions` (`web/client/src/shell/threadActions.ts`), so it is on the desktop toolbar and in the phone's more menu. It sends DELETE with no body.
+  - "Unread from here" is in each post's footer (`components/thread/Post.tsx:68-98`). It sends `{ordinal: p.ordinal - 1}`, so that post and every later one are unread.
+  - Once the DELETE answers, the page navigates to the thread list the reader came from, or to the thread's forum list when there is no such entry in history. Nothing on screen is read again, so the mark sticks.
+  - The options that lost were a thread action only, a per-post action only, staying on the page with tracking paused, and staying with tracking as usual. The last would re-read the visible posts within a second and undo the mark.
 - Settled here as engineering choices:
   - Port `markUnread(id, ordinal?)` from `74c4e8f`, with its `held`, `marks` and `after` maps. Since then, `4ccc32d` numbered the loads in `state/threads.ts`. So "requested before the answer" uses that counter, not the old `asking()` wrapper: `load()` records each page's request number in a `WeakMap<ThreadPage, number>`, exposed as `pageRequestedAt(page)`, and `markUnread` records the counter's value when the DELETE answers. The alternative, restoring `asking()` around `loadThreadPage` in `ThreadScreen.tsx`, lost because it keeps a second counter beside one that already orders the same loads.
   - The review-1149 fix: the reads collected while a DELETE is pending are kept per thread past a failed DELETE, in a `carried` map, and are queued against the answer of the next mark that succeeds. They are not queued against the unchanged floor, where they would be dropped.
   - `state/threads.ts` exports `forgetThreadPages(id)`, the existing `forgetThread`, for `markUnread` to call. The old `forgetHeldPages` does not come back as a second function.
 
-### Open decision
-The design says what the control does to the read position but not where it is, what it covers, or what the page does afterwards (docs/06 "Read tracking" and the mockups are silent). That is what a member sees and does, so it is not settled here. The options:
-- **A. The thread action only:** "Mark unread" in `threadActions` (`web/client/src/shell/threadActions.ts`), so it is on the desktop toolbar and the phone's more menu. It sends DELETE with no body, and the whole thread becomes unread.
-- **B. Per post only:** "Unread from here" in each post's footer (`components/thread/Post.tsx:68-98`), sending `{ordinal: p.ordinal - 1}`.
-- **C. Both A and B.**
-And what happens after the answer:
-- **1. Go back to the list the reader came from** (or the thread's forum list). Nothing on screen is read again.
-- **2. Stay on the page** and stop dwell-tracking the posts at or after the mark until the reader navigates.
-- **3. Stay and track as usual.** The posts on screen are read again after the one-second dwell, which undoes the mark within seconds.
-
-Recommendation: **C with 1**. The thread action covers "come back to this later", and the per-post action covers "I stopped here". Leaving the page is what makes either mark stick, which is how mail clients behave. Option 3 is listed only to show why the choice matters.
-
 ### Approach
 1. `web/client/src/state/readTracker.ts`: `export function markUnread(id: string, ordinal?: number): Promise<ReadPosition>`, implementing the settled requirements. Replace the comment at `:34-39` with what now lowers the floor. `trackPosts(id, list, stored, page?)` takes the page, so that a page requested before the mark's answer does not raise the floor.
 2. `web/client/src/state/threads.ts`: `pageRequestedAt` and `forgetThreadPages`, as settled.
-3. The control and what follows it, per the open decision. It is disabled while its DELETE is out. A failure is shown the way the page shows other failed actions, and the reader can try again. On success, any cached thread-list entry for the thread must not still show it as read. Find where the list keeps unread counts, and drop or refresh that entry.
-4. `docs/06` "Read tracking": one paragraph on where the control is and what follows it, once decided.
+3. The controls: the `mark-unread` entry in `threadActions`, and an "Unread from here" button in `Post.tsx`'s footer beside quote and reply (`data-post-action="unread"`), shown only to a signed-in member. Each is disabled while its DELETE is out. A failure is shown the way the page shows other failed actions, and the reader stays on the page and can try again. On success, any cached thread-list entry for the thread must not still show it as read (find where the list keeps unread counts, and drop or refresh that entry), and then the page navigates to the list as settled.
+4. `docs/06` "Read tracking": one paragraph on the two controls and the return to the list, citing the 2026-09-29 decision.
 5. Run `npm --prefix web/client run build`, which includes the budget check, and `go generate ./internal/web/spa`, and commit `internal/web/spa/dist`. The bundle was 38171 B gzip of the 60000 B budget at `2d86f82`.
 
 ### Tests
@@ -109,8 +102,8 @@ Recommendation: **C with 1**. The thread action covers "come back to this later"
   - `takes a page position only from a page asked for after the mark`
   - `sends no body to mark the whole thread unread`
   Plus `keeps what was read during a failed DELETE for the next mark`, the review-1149 case.
-- Vitest for the control: it calls `markUnread` with the right ordinal, and on success does what the decision says.
-- Playwright in `e2e/read-tracking.spec.ts`: mark a read thread unread from the page. The server's position is lower (checked with GET), the thread list shows the thread unread, and no later PUT raises it again while the reader stays wherever the decision puts them.
+- Vitest for the controls: the thread action calls `markUnread(id)` and the post action calls `markUnread(id, ordinal - 1)`. Both navigate to the list on success and stay on failure.
+- Playwright in `e2e/read-tracking.spec.ts`: mark a read thread unread from the page. The server's position is lower (checked with GET), the page is back on the thread list with the thread shown unread, and the same holds for "Unread from here" on a middle post.
 
 ### Out of scope
 - The no-JS route `POST /t/{id}/unread` (docs/07 `:533`), which is the HTML client's (TKT-01M29BN36W).
@@ -131,3 +124,7 @@ The design says what mark-unread does to the read position, but not where the co
 - afterwards: 1, go back to the list; 2, stay and stop dwell-tracking the marked posts; or 3, stay and track as usual. Option 3 re-reads the posts on screen within a second, which undoes the mark.
 
 Recommendation: C with 1. This ticket needs the answer before it is claimed.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T05:38:20Z
+
+Maintainer decision, 2026-09-29, relayed by the Phase 2 grooming coordinator (TKT-01M3M9RR26): the open decision in the note of 2026-09-29 is settled as recommended, C with 1. Mark-unread is both a whole-thread action (desktop toolbar and phone more menu) and an 'Unread from here' action on each post, and after the DELETE answers the page returns to the thread list. This note supersedes the open-decision note. The plan's Settled section and criterion 4 now say so.

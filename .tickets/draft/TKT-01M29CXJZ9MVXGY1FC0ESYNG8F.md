@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T05:10:10Z
+updated_at: 2026-09-29T05:38:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,14 +45,15 @@ The rendered-post cache and the search index both hold copies of the text, so re
 
 ## Acceptance criteria
 
-- [ ] After ketju redact, no byte of any revision's source, mentions, edit reason or attachment list for the post remains in any log that held it (the named post and every copy found through origin, in both directions), and every frame still passes its CRC (TestRedactBlanksEveryRevision, TestRedactFollowsOriginBothWays)
 - [ ] The post keeps its ordinal and permalink and is served as a tombstone to members, its author and moderators; its history lists the revisions with no content; edit, delete and restore of it are conflict
 - [ ] Each rewritten log is its old length plus exactly the appended 0x80 Redacted frame, so the thread's log_length and ETag afterwards exceed every earlier value (TestRedactKeepsEveryFrameLength, TestRedactedThreadPageIsNewer)
 - [ ] The command holds the data-directory lock for its whole run and refuses beside a running serve, and serve refuses to start while redaction.journal exists (TestRedactRefusesBesideServe, TestServeRefusesWhileAJournalExists)
 - [ ] An interruption after any step is finished by rerunning the command, leaving one Redacted record per log, one audit row and no journal (TestRedactResumesAfterEachStep)
 - [ ] One audit_log row with action post.redacted names the operator, who must be an active admin, the reason, and every (thread, ordinal, revisions) cleared
-- [ ] Blobs only the redacted post named are deleted and a blob another post still names stays (TestRedactDeletesOnlyUnsharedBlobs); quotes of the post are listed in the command's output and left unedited (TestRedactListsQuotes)
 - [ ] After the run post_meta marks the post deleted and it has no mentions rows, and a projection caught up from the new log equals one rebuilt by ketju reindex (TestRedactedCatchUpEqualsReindex); there is no search index in this build, and clearing it is TKT-01M3NS122F
+- [ ] After ketju redact, no byte of any revision's source, mentions, edit reason or attachment list remains in any log that held the post or a copy of it, where the copies are the whole origin component found to a fixed point in both directions, and every frame still passes its CRC (TestRedactBlanksEveryRevision, TestRedactFollowsOriginBothWays, TestCopySetIsTransitive)
+- [ ] The journal records every target's attachment hashes before the first swap, and all reference drops commit in one transaction with the audit row, so a resumed run drops each reference exactly once and still deletes an unshared blob (TestRedactResumeDropsEachReferenceOnce, TestRedactResumeAfterSwapStillDeletesTheBlob)
+- [ ] Blobs only the redacted posts named are deleted and a blob another post still names stays (TestRedactDeletesOnlyUnsharedBlobs); quotes of the post are listed in the command's output and left unedited (TestRedactListsQuotes)
 
 ## Implementation plan
 
@@ -78,6 +79,10 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
   To make the pad fit every size, the byte-string header is always written in its 5-byte form (`0x5a` followed by a uint32 length). This was checked during grooming: fxamacker/cbor v2.9.3, with the `decMode` options in `records.go`, decodes `{pad: 0x5a 00000002 0000}` into an empty `PostBody` without error. The smallest real body, `{source:"x"}`, is 10 bytes, which is enough for it. The CBOR is built by hand in one function, and a test decodes it with `DecodeBody` and with the frame parser.
 - **`reply_to` is kept.** It is the thread's structure, not the post's text, and docs/10 item 4 does not list it among what is removed. Keeping it keeps reply counts and the index `ReplyTo` unchanged. An `Edit`'s `reason` is removed, because it is the author's free text. `Delete` and `Restore` frames are left alone.
 - **Index flag bit 6 is `EntryRedacted`.** It uses the spare flag capacity docs/03 names ("the 10 unused bits of the flags field"). `Visible()` excludes it. Applying `Redacted` sets it and clears `EntryHasAttachments`, so an index extended by the one frame equals an index rebuilt from the new log.
+- **Settled by Terva review 1345 on PR #139 (three high findings). Each changes docs/03 "Hard redaction", and the implementing PR updates docs/03 to say so.**
+  - *The copy set is the whole origin component, found to a fixed point.* Following `origin` one step back and one step forward misses a copy of a copy: if B came from A and C from B, naming A or B would leave C's text. The command builds the origin graph over every post in every log and takes the connected component that holds the named post, following edges in both directions until no new post is added. That covers ancestors, descendants of copies and sibling copies. docs/03 "Copies from split and merge" says "in both directions" and must add "transitively, to a fixed point".
+  - *The journal holds the attachment hashes.* After a swap, the post's bodies no longer list their attachments, and a resumed run skips a log that already ends in `Redacted`, so it could not tell which references to drop or which blobs to delete. Planning reads every target's attachment hashes from the logs as they are *before* any rewrite, and the journal records them per target: `targets [{thread, ordinal, attachments []}]`. The journal is fsynced, and its directory entry made durable, before the first swap. From then on the journal, never the logs, is the source of the hashes. docs/03 "Several logs, one redaction" says the journal "lists every (thread, ordinal) to clear" and must add the hashes.
+  - *Reference drops are exactly once.* A refcount above zero does not say whether this redaction already dropped its reference, so a resumed run could drop a second one and free a blob another post still needs. Every `DropBlobRef` of the redaction and the audit row are written in **one** `db.Write` transaction, which first checks `AuditExists` inside the same transaction and does nothing if the row is there. The drops and the audit row therefore commit together or not at all, and the audit row is the marker that they happened. Deleting the blob files comes after that commit, per blob, and is idempotent. A blob with no row is skipped, and every delete condition is checked again. docs/03 "Several logs, one redaction" names only the journal and the `Redacted` marker as resume points and must add this one. The alternative that lost was a per-drop progress entry in the journal. A journal write and a database commit cannot be made atomic, so a crash between them would still drop twice or not at all.
 - **The audit row** is `action = "post.redacted"`, `target_type = "post"`, `target_id = "<thread base32>/<ordinal>"` of the post the operator named, with `actor_id` set to the operator. `details_json` holds the reason, the journal id, every (thread, ordinal, revisions) cleared, the blobs deleted, the quotes listed, and `via: "cli"`. A post can be redacted only once, so `AuditExists` on that target and action is the resume marker.
 - **The operator** is named with `--operator HANDLE`, which must be an active admin (docs/08: "admin, CLI only"). The reason is required.
 
@@ -97,20 +102,21 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
    - It opens the database with `openDatabase(..., migrate=false)` and refuses when `needDatabase` fails.
    - It resolves the operator, who must be an active admin, and refuses a post already carrying `EntryRedacted`.
    - Planning:
-     - Collect the copy set: follow `origin` from the named post back to its source, and find every post in any log whose `origin` names the source. The second is a scan of every log under `threads/`, as `jobs.referencedInLogs` does.
+     - Collect the copy set: one scan of every log under `threads/` (as `jobs.referencedInLogs` walks them) builds the origin edges `(thread, ordinal) -> origin` for every `Post` that has one. The copy set is the connected component that holds the named post, following edges both ways from a work queue until it adds nothing new (`copySet(edges, named) []PostRef` in `cmd/ketju/redact.go`, a pure function).
      - List quotes: every revision of every post in each affected thread whose source quotes the ordinal. Export the quote regex from `internal/render/quote.go` as `render.QuotedOrdinals(source) []uint32`, because quotes are same-thread only.
-     - Collect the attachment hashes.
+     - Collect the attachment hashes of every target's `Post` record from the logs as they are before any rewrite.
    - `--dry-run` prints the plan and writes nothing.
-7. **Journal**: `<root>/redaction.journal`, JSON `{id (ULID), operator_id, reason, created_at, named {thread, ordinal}, targets [{thread, ordinal}], quotes [...]}`. It is written to a temp file, fsynced, renamed into place, and the directory fsynced, all before any log is touched. If a journal exists, `ketju redact` resumes it: with `--resume`, or when named with the same target. A different target is refused (exit 2), naming the pending one. Any leftover `<id>.log.redact` temp file is removed on resume.
+7. **Journal**: `<root>/redaction.journal`, JSON `{id (ULID), operator_id, reason, created_at, named {thread, ordinal}, targets [{thread, ordinal, attachments []}], quotes [...]}`. It is written to a temp file, fsynced, renamed into place, and the directory fsynced, all before any log is touched. If a journal exists, `ketju redact` resumes it: with `--resume`, or when named with the same target. A different target is refused (exit 2), naming the pending one. Any leftover `<id>.log.redact` temp file is removed on resume.
 8. **Per target**, in journal order:
    - If `EndsWithRedacted`, skip the rewrite.
    - Otherwise write `<id>.log.redact` beside the log, fsync it, rename it over `<id>.log`, and fsync the shard directory. Use one helper, `fsutil.ReplaceFile`, in a new `internal/fsutil` package, with an exported `SyncDir`. Today's `syncDir` is unexported in `internal/store/db/db.go:88`, and the index writers in fsck and `threadcache` do not fsync the directory.
    - Then bring the index current: `threadlog.Open` (which reports `Extended`), then write the `.idx` through `ReplaceFile`.
    - Then bring the projection current with `projection.Writer.ProjectThread(ctx, id, size)` (`writer.go:375`), which projects the one appended frame.
-9. **Blobs**: for each hash removed, run `DropBlobRef` once per redacted post that listed it, when the row's refcount is above zero. Then delete the blob only when no log names it (`referencedInLogs`, exported from `internal/jobs`), no avatar names it, and no draft names it. The delete uses the same row-delete, `.gc` rename and remove-after-commit sequence as `BlobGC.collect`, factored into a shared helper and without the seven-day grace. A redaction is deliberate, and the grace exists for uploads not yet attached. A blob another post still names stays.
-10. **Audit and finish**: `AppendAudit` as settled above, skipped when `AuditExists` already holds it. Then delete the journal and fsync the directory. Print the quotes list and a reminder that backups and filesystem snapshots still hold the old bytes.
-11. **Serve**: a `redaction` step in `serve()` (`cmd/ketju/serve.go`) right after the lock step (`:212-223`) and before the database step. It refuses to start while `<root>/redaction.journal` exists, naming `ketju redact --resume`.
-12. **Docs**: README gains an operations entry for `ketju redact`. docs/03 is updated as in step 1.
+9. **References and audit, one transaction.** In one `db.Write`: check `AuditExists`, and if the row is there, do nothing. Otherwise, for each (target, hash) in the journal, run `DropBlobRef` once. That is one reference per post that listed the hash, as refcount counts posts (docs/03 "Attachments"). A row already at zero, or missing, is skipped and noted in the audit details as drift, not driven below zero. Then `AppendAudit` as settled above.
+10. **Blob files**, from the journal's hashes, after that commit: delete a blob only when no log names it (`referencedInLogs`, exported from `internal/jobs`), no avatar names it, and no draft names it. The delete uses the same row-delete, `.gc` rename and remove-after-commit sequence as `BlobGC.collect`, factored into a shared helper and without the seven-day grace. A redaction is deliberate, and the grace exists for uploads not yet attached. A blob another post still names stays.
+11. **Finish**: delete the journal and fsync the directory. Print the quotes list and a reminder that backups and filesystem snapshots still hold the old bytes.
+12. **Serve**: a `redaction` step in `serve()` (`cmd/ketju/serve.go`) right after the lock step (`:212-223`) and before the database step. It refuses to start while `<root>/redaction.journal` exists, naming `ketju redact --resume`.
+13. **Docs**: README gains an operations entry for `ketju redact`. docs/03 is updated as in step 1, and "Hard redaction" gains the three review-1345 rules above: the transitive copy set, the hashes in the journal, and the audit row as the reference-drop marker.
 
 ### Tests
 - threadlog:
@@ -133,10 +139,13 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
   - `TestRedactNeedsAnAdminOperatorAndAReason`;
   - `TestRedactDryRunWritesNothing`;
   - `TestRedactFollowsOriginBothWays` (fixture logs with `origin` written through the codec: naming the copy clears the source, and naming the source clears every copy);
+  - `TestCopySetIsTransitive`: a chain A to B to C, a tree with two copies of one copy, and a cycle-free diamond from merges. Naming any member returns the whole component, and naming an unrelated post returns only itself;
+  - `TestRedactResumeDropsEachReferenceOnce`: a blob named by the redacted post and by two others, refcount 3. Failures are injected after the swap, before the transaction commits, and after it commits. After each rerun, refcount is 2, the blob stays, and the audit row is written once;
+  - `TestRedactResumeAfterSwapStillDeletesTheBlob`: a failure after every log is swapped and before the transaction. The rerun reads the hashes from the journal, and the unshared blob is deleted;
   - `TestRedactListsQuotes`;
   - `TestRedactDeletesOnlyUnsharedBlobs`;
   - `TestRedactWritesOneAuditRow`;
-  - `TestRedactResumesAfterEachStep`, which injects a failure after the journal, after each rename, before and after the directory fsync, after the projection, and after the audit row. It reruns each case and asserts one `Redacted` record per log, one audit row, no journal left, and serve then starts and serves the tombstone;
+  - `TestRedactResumesAfterEachStep`, which injects a failure after the journal, after each rename, before and after the directory fsync, after the projection, after the reference-and-audit transaction, and after each blob file delete. It reruns each case and asserts one `Redacted` record per log, one audit row, no journal left, and serve then starts and serves the tombstone;
   - `TestRedactRefusesASecondRedaction`.
 
 ### Out of scope
@@ -161,3 +170,7 @@ docs/03 "Caching" makes the log length the thread's version number: monotonic, a
 The plan therefore keeps every rewritten frame at its original length, padding the empty body with a zero-filled `pad` key, and the new log is the old one plus the `Redacted` frame. The two alternatives that lost, with reasons, are in the plan. docs/03 "Hard redaction" says each body is "replaced by the empty body of that type", so it must say "padded to the frame's original length" in the same PR. The CBOR decoder's acceptance of the 5-byte bstr header the padding relies on was checked during grooming against fxamacker/cbor v2.9.3.
 
 This ticket also adds `PostBody.origin`, the shape docs/03 gives, and TKT-01M29CXJZZ (Implement split and merge records in the thread log) now depends on this ticket so that it writes the same field.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T05:38:20Z
+
+Terva review 1345 on PR #139 (head e2ce3eb, base 7af2c5a) found three high problems in this plan, all accepted and fixed in it. First, the copy set is now the whole origin component, found to a fixed point, not only one step each way. Second, the journal records every target's attachment hashes before the first swap. Third, all DropBlobRef calls commit in one transaction with the audit row, which is the resume marker, so a reference is dropped exactly once. Each changes docs/03 'Hard redaction', which the implementing PR updates. Criteria 7 to 9 replace the old first and seventh.
