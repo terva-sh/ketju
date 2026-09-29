@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:07:51Z
+updated_at: 2026-09-29T05:39:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,6 +50,8 @@ Reporters see "thanks, a moderator will look" and nothing else. Telling a report
 - [ ] A member's second open flag on the same post adds no row (partial unique index), so the open count counts distinct reporters
 - [ ] While auto-hidden, the author and moderators receive the post's html with removal review, everyone else gets a tombstone without html, and the author's restore is forbidden
 - [ ] A page cached before the auto-hide is not served after it (TestAutoHideMovesTheResponseCacheKey)
+- [ ] A threshold-crossing flag whose hide append fails stays committed and answers unavailable, and the next AutoHideSweep run hides the post (TestAutoHideRecoversFromAFailedAppend)
+- [ ] Anyone other than the author and moderators sees an auto-hidden post as a tombstone reading 'Post hidden pending review'
 
 ## Implementation plan
 
@@ -59,6 +61,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 
 - **Threshold, visibility and restore.** Maintainer decision, 2026-09-28, in note 1 on this ticket and docs/08 "Flags (reports)". The threshold defaults to 3 and is a site setting. `flags.auto_hide_threshold` already exists in `internal/settings/settings.go`, `atLeast(1)`. While a post is auto-hidden, its author and moderators see it marked "hidden pending review", and everyone else sees a tombstone. The auto-hide is hidden-by-mod, so the author cannot restore it; only a moderator can. Queue-only lost because spam would stay up until a moderator is awake.
 - **What stays confidential** (note 2, 2026-09-28, which supersedes note 1's rationale but not its decision; docs/08 corrected to match). The marker does tell the author that flags put the post under review, and that is intended. Who flagged it and how many did stays with moderators. Hiding the post from its author too lost, because a tombstone on their own post tells them the same thing.
+- **Everyone else reads "Post hidden pending review".** Maintainer decision 2026-09-29, accepting the grooming recommendation. Anyone who is neither the author nor a moderator sees an auto-hidden post as a tombstone reading "Post hidden pending review". It is true, and it reveals no count and no reporter. "Post removed by a moderator" lost because no moderator has acted yet. A plain "Post removed" lost because it says less than the truth for no gain.
 - **Reporters see "thanks, a moderator will look" and nothing else** (docs/08, ticket description).
 - **The flag route** is `POST /api/v1/threads/{id}/flags` with `{ordinal, reason, note}` (docs/07 resources table). The form-post row naming this ticket is already in docs/07 "Form posts for viewer state". TKT-01M29CA9CE left the route to this ticket.
 - **The `flags` table exists** (migration 0006: reasons, a CHECK that `other` carries a note, never deleted or replaced), with `CreateFlag`, `CloseFlag` and `OpenFlagCount` in `queries/moderation.sql`.
@@ -72,17 +75,18 @@ Groomed 2026-09-29 against main at 7af2c5a.
 2. **Format** (`internal/store/threadlog`): `DeleteBody` gains `Auto bool`, with cbor and json tags `auto,omitempty`. Add `EntryAutoHidden EntryFlags = 1 << 6` in `flags.go`, and update `EntryFlagsKnown`, the reserved set and the comments. In `postFlagEffect`, a Delete with `Auto` sets `EntryHiddenByMod|EntryAutoHidden`. A Delete with `ByModerator` (TKT-01M29CRJ5J) sets `EntryHiddenByMod` and clears `EntryAutoHidden`. A Restore clears all three bits. `EntryAutoHidden` means something only together with `EntryHiddenByMod`.
 3. **Service**, new `internal/service/threads/flags.go`:
    - `Flag(ctx, v, id, ordinal, reason, note)`. Requires a member session (`MayWrite`) and read access through `access`. Refusals: a `reason` outside the four, `other` without a note, or a note over 1000 characters is `validation-failed`; an ordinal past the end is `not-found`; a post already removed or moved is `conflict`.
-   - In one `db.Write`, insert the flag, then read `OpenFlagCount` and the threshold (`settings.FlagAutoHideThreshold.In`).
-   - After commit, when the count is at or over the threshold, append `Delete{Reason: "hidden pending review", Auto: true}` with `Author: 0` and `Refuse: gone`. An `ErrPostState` there means the post is already hidden, and it is not an error. Then write one audit row: `post.auto_hidden`, `actor_id` NULL, `target_id` `<thread>/<ordinal>`, and details `{open_flags, threshold, log_length}`. The audit log is staff-only (TKT-01M29CP2R4).
-   - Project synchronously, as TKT-01M29CKRGS's helper does.
+   - In one `db.Write`, insert the flag. After it commits, call `EnforceAutoHide(ctx, id, ordinal)`.
+   - **`EnforceAutoHide` is idempotent and reads only durable state** (revised for Terva review 1343 on PR #138, finding 1). It reads `OpenFlagCount` and `settings.FlagAutoHideThreshold`. If the count is at or over the threshold and the post's entry is visible, it appends `Delete{Reason: "hidden pending review", Auto: true}` with `Author: 0` and `Refuse: gone`, projects synchronously, and writes one audit row through `internal/audit` (TKT-01M3NRYCP5) with `by.Actor` 0, action `post.auto_hidden`, target `audit.Post(id, ordinal)`, and details `{open_flags, threshold, log_length}`. `ErrPostState` means the post is already gone, and nothing more is done. The audit log is staff-only (TKT-01M29CP2R4). It runs on every flag at or over the threshold, not only the one that crosses it, so a retried or later flag also retries the hide.
+   - **A failed hide is recovered without waiting for another report.** The committed rows in `flags` are the durable record that a hide is owed, so no outbox is needed. The new job `internal/jobs.AutoHideSweep`, registered with the existing `jobs.Scheduler` with `Every: time.Minute` and run once when `serve` starts, reads `PostsAtFlagThreshold`. That query takes open flags grouped by `(thread_id, ordinal)` having `count(*) >= threshold`, joined to `post_meta` where `deleted = 0` to skip posts already down, through the `flags_post` index. The job calls `EnforceAutoHide` for each. If the append fails, the flag request answers `unavailable`, and the flag stays committed, so the post is hidden by the sweep within a minute at worst. Two other orders lost. Appending before the commit could hide a post on a flag whose insert then fails. An outbox table would duplicate what `flags` already says. A lowered threshold is enforced by the same sweep, which is docs/08's rule: a post with at least N open flags is hidden.
    - The answer is the same for a new flag, a duplicate and a flag that caused the hide.
 4. **A moderator's review.** A moderator's `Restore` of an auto-hidden post (TKT-01M29CRJ5J's path) runs `DismissOpenFlagsForPost` after the append, so the flags stay as dismissed rows and a later flag counts from zero. `Service.ConfirmHide(ctx, v, id, ordinal, reason)` is a moderator's `Delete{ByModerator: true}` with `Require: EntryAutoHidden`, `Refuse: EntryDeleted|EntryMoved`. It turns the pending hide into a moderator's hide and runs `ResolveOpenFlagsForPost`. The moderator queue (TKT-01M29CRJ4E) gives both a UI.
 5. **Route** in `internal/web/api/viewerstate.go`: `POST /api/v1/threads/{id}/flags`, answering 200 `dto.FlagReceipt{Received: true}` (`{"received": true}`) with `no-store`, charged to the write limiter. Add the `dto` type and its golden.
-6. **Client**: a "Flag" item in the post menu (`components/thread/Post.tsx`) for a signed-in member, on a post that is not removed. A dialog offers the four reasons and a note, required for `other`. On success it says "Thanks, a moderator will look." and nothing else. Once TKT-01M29CKRJ9's `removal` field exists, `removal: "review"` renders "Hidden pending review" to the author and to moderators, and the tombstone text for everyone else follows the open decision below. Regenerate `dist/`.
+6. **Client**: a "Flag" item in the post menu (`components/thread/Post.tsx`) for a signed-in member, on a post that is not removed. A dialog offers the four reasons and a note, required for `other`. On success it says "Thanks, a moderator will look." and nothing else. Once TKT-01M29CKRJ9's `removal` field exists, `removal: "review"` renders "Hidden pending review" to the author and to moderators, and the tombstone for everyone else reads "Post hidden pending review" (settled above). Regenerate `dist/`.
 7. **Docs**: docs/03 record table: the `Delete` body gains `auto`, and the index entry flags row gains `auto-hidden (6)` with reserved bits 7 to 15. docs/07 gets the flag route row filled in. docs/04 "flags" notes the partial unique index.
 
 ### Tests
 
+- `TestAutoHideRecoversFromAFailedAppend`: with the writer failing the append once, the threshold-crossing flag answers `unavailable` and its row is committed. One `AutoHideSweep` run then hides the post, and a second run appends nothing. A threshold lowered to 2 is enforced by the next sweep on a post with 2 open flags.
 - `TestAutoHideAtThreshold`: with the threshold at 3, three members flag post 4. The third request appends one `Delete` with `auto: true` and frame actor 0. The entry has hidden-by-mod and auto-hidden. One `post.auto_hidden` audit row is written. A fourth flag appends nothing.
 - `TestDuplicateFlagDoesNotCount`: one member flags twice. There is one row, the open count is 1, and both answers are byte-identical.
 - `TestReporterSeesOnlyTheReceipt`: the answers to the first, the duplicate and the threshold-crossing flag are identical. No endpoint a member can call reports flag counts or reporters.
@@ -92,13 +96,6 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - `TestPostFlagEffectIsWhatApplyDoes` and a reindex test cover `auto`, and a full index rebuild reproduces bit 6.
 - **Response cache invariant**, `TestAutoHideMovesTheResponseCacheKey`: a member's cached page is a miss after the hide, and the post is then a tombstone without content.
 - Migration: the partial unique index refuses a second open flag from one reporter and allows one after dismissal.
-
-### Open decision
-
-What everyone other than the author and moderators reads in place of an auto-hidden post. docs/08 "Tombstones" has two texts, and the 2026-09-28 decision says only "a tombstone".
-- "Post hidden pending review". Recommended: it is true, and it reveals no count and no reporter.
-- "Post removed by a moderator". No moderator has acted yet, so it is not quite true.
-- A plain "Post removed".
 
 ### Out of scope
 
@@ -120,3 +117,7 @@ Supersedes the rationale in the 2026-09-28 decision note, not the decision. Show
 **agent:claude-code/phase2-groom** at 2026-09-29T05:07:51Z
 
 Open decision for the maintainer, from Phase 2 grooming on 2026-09-29: the tombstone text that everyone other than the author and moderators reads for an auto-hidden post. docs/08 Tombstones has two texts, and the 2026-09-28 decision says only 'a tombstone'. Options: 'Post hidden pending review' (recommended: true, and it reveals no count or reporter); 'Post removed by a moderator' (not quite true, since no moderator has acted); a plain 'Post removed'. The plan's Open decision section carries the same.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T05:39:01Z
+
+Maintainer decision, 2026-09-29: anyone other than the author and moderators sees an auto-hidden post as a tombstone reading 'Post hidden pending review', accepting the grooming recommendation. Supersedes the open decision in the earlier note. Moved into the plan's Settled section.

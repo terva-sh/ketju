@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T05:06:07Z
+updated_at: 2026-09-29T05:38:55Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,6 +48,7 @@ Locking is not archiving. A locked thread accepts no posts or edits from members
 - [ ] Lock, unlock, pin and unpin each append one record and write one audit_log row naming the actor, the thread, the action and the reason, and scope and until for pins
 - [ ] Each action is forbidden without moderate in the thread's forum and conflict on an archived thread or when it would change nothing, and a refusal appends nothing and writes no audit row
 - [ ] A page cached before a lock is not served after it: the next GET is a response-cache miss under the new log length (TestLockMovesTheResponseCacheKey)
+- [ ] appendEvent writes no audit row and moderate writes exactly one through internal/audit, and no code in internal/service/threads calls dbq.AppendAudit
 
 ## Implementation plan
 
@@ -64,9 +65,13 @@ Groomed 2026-09-29 against main at 7af2c5a.
 
 ### Approach
 
-1. **Moderation append helper**, new file `internal/service/threads/moderate.go`: `func (s *Service) moderate(ctx, v domain.Viewer, id threadid.ID, rec threadlog.Append, audit auditEntry) (threadlog.Result, error)`. It appends through `s.Writer.Append`, projects synchronously through `s.Project(ctx, id, res.LogLength)` as `CreateThread` does, and then writes one `audit_log` row with `dbq.AppendAudit`: `actor_id` the viewer, `action`, `target_type`, `target_id`, and `details_json` holding the reason, any action fields, and `log_length`. The same helper serves TKT-01M29CKRH9 (rename, move) and TKT-01M29CRJ5J (moderator edits and deletes), which depend on this ticket for it.
+1. **Two helpers, kept apart**, in new file `internal/service/threads/moderate.go` (revised for Terva review 1343 on PR #138, finding 3):
+   - `func (s *Service) appendEvent(ctx, id threadid.ID, rec threadlog.Append) (threadlog.Result, error)` appends through `s.Writer.Append` and projects synchronously through `s.Project(ctx, id, res.LogLength)`, as `CreateThread` does. It writes no audit row. Author actions call only this: an author's rename (TKT-01M29CKRH9) and an author's edit, delete or restore of their own post. Those are not moderation actions and are not audited.
+   - `func (s *Service) moderate(ctx, v domain.Viewer, id threadid.ID, rec threadlog.Append, action string, target audit.Target, details map[string]any) (threadlog.Result, error)` is `appendEvent` followed by one `audit.Append` call. It is used only when the actor acts as a moderator. `audit` is `internal/audit` from TKT-01M3NRYCP5 (Add the admin API gate, audit helper and admin screen scaffold, filed on PR #140). That ticket's `TestOneWayIntoAuditLog` fails on any `dbq.AppendAudit` call outside `internal/audit`, so this helper never calls `dbq.AppendAudit` itself. Targets come from `audit.Thread(id)` and `audit.Post(id, ordinal)`. `details` always carries `log_length`, and the reason and action fields where there are any.
+   - Deciding "audited or not" is the caller's choice between the two functions. There is no flag on a single helper. A boolean argument lost because a call site reading `moderate(..., false)` hides the decision the reviewer asked to see. TKT-01M29CKRH9 and TKT-01M29CRJ5J depend on this ticket for both functions. Once PR #140 lands, link this ticket to TKT-01M3NRYCP5 with `--depends-on`; it cannot be linked from this branch, where that ticket does not exist yet.
    - Order: log first, then the audit row. An audit row written before an append that then fails would record an action that never happened. A missing audit row after a durable append can be recovered from the log, which carries the actor and the time. If the audit write fails, the handler answers `internal` and logs the thread id and log length at error.
    - Synchronous projection because `access` reads `locked` from the projection row. Without it a member's reply sent right after the lock could land.
+   - The four routes below register through TKT-01M3NRYCP5's `adminRoute` with the `staff` gate, then check `moderate` on the thread's forum in the service.
 2. **Service methods** in `moderate.go`: `Lock(ctx, v, id, reason)`, `Unlock(ctx, v, id, reason)`, `Pin(ctx, v, id, scope string, until *time.Time)`, `Unpin(ctx, v, id, scope)`. Each one calls `MayWrite` and then `access`. Refusals, in this order, all before any append:
    - no `canModerate`: `forbidden`;
    - `th.Archived()`: `conflict`;
@@ -83,6 +88,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 ### Tests
 
 - `internal/service/threads/moderate_test.go`: lock, unlock, pin and unpin each append exactly one record of the right type, answer the new header, and write one audit row with the actor, action, target and reason. `forbidden` for a member, `conflict` on an archived thread, and `conflict` on each no-op case each leave the log length unchanged and write no audit row.
+- `TestAppendEventWritesNoAudit`: `appendEvent` appends and projects and leaves `audit_log` unchanged. `moderate` writes exactly one row through `internal/audit`. TKT-01M3NRYCP5's `TestOneWayIntoAuditLog` passes over this package.
 - `TestLockedThreadRefusesMembersNotModerators`: after `Lock`, a member's `Reply` and `Edit` are `conflict`. A moderator's `Reply` succeeds and is served with `author.role` `moderator`. A member's `Delete` of their own post still succeeds.
 - `TestPinExpiryNeedsNoJob`: with `Service.Now` fixed, pin with until = now+1h. The thread list shows it pinned and the header shows `pinned`. Advance the clock past until: the list sorts it with the rest and the header's `pinned` is null. No job runs in the test.
 - `TestLockAndPinSurviveReindex` (`internal/events/projection`): a log with lock, unlock, lock, pin (global, until), unpin (forum, a no-match), and after `ketju reindex` the row is locked with the global pin and its until.
@@ -96,4 +102,4 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - Rename and move: TKT-01M29CKRH9. Retag: TKT-01M29CYSCP (phase 4).
 - Live updates of a lock to open pages: the SSE fan-out, TKT-01M29CRJ3X (phase 3).
 - The audit log view: TKT-01M29CP2R4.
-- Whether a moderator may lock or pin in an archived forum follows the open decision on TKT-01M3N24RHD. Until that decision is made, apply only the archived-thread refusal.
+- Locking and pinning in an archived forum stay open to moderators (maintainer decision 2026-09-29 on TKT-01M3N24RHD). Only the archived-thread refusal applies.

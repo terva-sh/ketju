@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T05:07:41Z
+updated_at: 2026-09-29T05:38:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -71,7 +71,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 4. **Index**: `postFlagEffect(h, body)` (widened by TKT-01M29CKRHS). A `Delete` with `ByModerator` sets `EntryHiddenByMod`, and otherwise `EntryDeleted`. `Restore` clears both, as now. Fix the `EntryHiddenByMod` comment in `internal/store/threadlog/flags.go`, which says the author "may not see it". That contradicts the 2026-09-28 decision.
 5. **Projection**: `applyDeleted` sets `post_meta.deleted = 1` for both kinds. The forum and profile counts leave both out (docs/07 `GET /forums`: "the record that does must leave the total too"). `post_meta` gains no column; `TestPostMetaStaysTiny` holds.
 6. **Editor on the read path**: `threadlog.Post` gains `EditorID uint64`, from the current revision's frame header in `decodePost`. `dto.Post` gains `edited_by_moderator bool`: `EntryEdited` is set and `EditorID != Author`. It is drawn in `postsDeps` and shared by the page, the single post, replies and user posts.
-7. **Audit**: an edit, hide or restore of a post whose author is not the actor writes an audit row through TKT-01M29CKRGS's `moderate` helper. The actions are `post.edited`, `post.hidden` and `post.restored`, with `target_type` `post`, `target_id` `<thread id>/<ordinal>`, and `details_json` `{reason, log_length}`. The helper also projects synchronously. Acting on one's own post writes no audit row, because it is not a moderation action.
+7. **Audit** (revised for Terva review 1343, finding 3): an edit, hide or restore of a post whose author is not the actor goes through TKT-01M29CKRGS's `moderate`, which writes one row through `internal/audit` (TKT-01M3NRYCP5). The actions are `post.edited`, `post.hidden` and `post.restored`, the target is `audit.Post(id, ordinal)`, and the details are `{reason, log_length}`. An author's edit, delete or restore of their own post keeps its existing `s.Writer.Append` call and writes no audit row, because it is not a moderation action. `TestOwnPostActionsAreNotAudited` holds this for a member and for a moderator acting on their own post.
 8. **Client**: `Post.tsx` offers Edit, Delete and Restore on every post to a viewer with `viewer.can_moderate`, and shows "(edited by a moderator)" for `edited_by_moderator`. Regenerate `dist/`.
 9. **Docs**: docs/03 record table: the `Delete` body gains `by_moderator`, and its effect is "hidden-by-mod when by_moderator, otherwise deleted". docs/07 "Edit, delete and restore" and the `dto.Post` shape get `edited_by_moderator` and the moderator rules. The docs/07 `dto` golden is regenerated.
 

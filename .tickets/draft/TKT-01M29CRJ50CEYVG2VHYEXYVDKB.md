@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T05:07:28Z
+updated_at: 2026-09-29T05:39:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -55,6 +55,8 @@ Groomed 2026-09-29 against main at 7af2c5a.
 ### Settled in grooming
 
 - **Slow mode lives in the database, not in the log** (docs/08 "Primitives": "`settings` per thread in DB, not log"). It is a live control rather than part of the thread's history, so no record type is involved. The frozen format is untouched, and slow mode is not recoverable from a log. That is intended.
+- **Slow mode stays in Phase 2.** Maintainer decision 2026-09-29: this ticket keeps the phase-2 milestone, whatever docs/09 says, where slow mode is listed under Phase 4.
+- **Slow mode can be set in an archived forum.** It is a moderation write (maintainer decision 2026-09-29 on TKT-01M3N24RHD); only an archived thread refuses it.
 - **Off by default; moderators are exempt; agents are not** (docs/08 "Primitives" and "Rate limits": "Slow mode applies to agents as it does to anyone").
 - **The check exists.** `slowMode` in `internal/service/threads/create.go` refuses a reply less than N seconds after the author's newest post in the thread, read from the index. It answers `rate-limited` with `Retry-After` rounded up to whole seconds. Today N is the site-wide `slow_mode.default_seconds` (TKT-01M29P9RS0). The settings comment in `internal/settings/settings.go` names this ticket for the per-thread value.
 - **A per-thread value overrides the site default**, including an explicit 0, which turns a thread off under a non-zero default. With no row, the site default applies.
@@ -64,7 +66,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 ### Approach
 
 1. **Migration** (the next free number): `thread_slow_mode (thread_id INTEGER PRIMARY KEY, seconds INTEGER NOT NULL CHECK (seconds >= 0 AND seconds <= 86400), set_by INTEGER REFERENCES users (id), set_at INTEGER NOT NULL)`. It is authoritative, not a projection: no `PROJECTION` marker, and not in `db.ProjectionTables`, so `ketju reindex` keeps it. `TestProjectionTablesAreMarked` holds that. Queries in `queries/moderation.sql`: `GetThreadSlowMode` and `PutThreadSlowMode` (upsert). Regenerate dbq. The upper bound of a day is an engineering guard against a typo, not a policy.
-2. **Service** in `internal/service/threads/moderate.go`: `SetSlowMode(ctx, v, id, seconds int)`. It requires `canModerate` (`forbidden` otherwise) and a thread that is not archived (`conflict`). Seconds outside 0 to 86400 is `validation-failed`. In one `db.Write` it upserts the row and appends an audit row, `thread.slow_mode`, `target_type` `thread`, details `{from, to}`, where `from` is the previous row's value or null. Setting the value the thread already has is `conflict`. There is no log append, so TKT-01M29CKRGS's helper is not used. The pattern is `settings.SetBy`'s.
+2. **Service** in `internal/service/threads/moderate.go`: `SetSlowMode(ctx, v, id, seconds int)`. It requires `canModerate` (`forbidden` otherwise) and a thread that is not archived (`conflict`). Seconds outside 0 to 86400 is `validation-failed`. In one `db.Write` it upserts the row and appends an audit row through `internal/audit` (TKT-01M3NRYCP5): `audit.Append` with action `thread.slow_mode`, target `audit.Thread(id)`, and details `{from, to}`, where `from` is the previous row's value or null. Setting the value the thread already has is `conflict`. There is no log append, so TKT-01M29CKRGS's helpers are not used. The pattern is `settings.SetBy`'s once that moves onto `internal/audit`.
 3. **Reply**: `effectiveSlowMode(ctx, id)` reads the row, or `settings.SlowModeDefaultSeconds` when there is none. It replaces the bare setting read in `Reply`. It is read on every reply, so turning slow mode off applies to the next request. Moderators stay exempt through `a.canModerate`, as now.
 4. **Viewer block**: `dto.ThreadViewer` gains `slow_mode_seconds int` (0 when off) and `next_post_at *Millis`, the viewer's newest post in the thread plus the interval, or null when they may post now or are exempt. Both are computed in `View` beside `can_reply`. Update the dto golden.
 5. **Route**: `PUT /api/v1/admin/threads/{id}/slow-mode` with `{seconds}`, answering 200 `{seconds}` with `no-store`, charged to the write limiter.
@@ -85,3 +87,9 @@ Groomed 2026-09-29 against main at 7af2c5a.
 
 - Per-agent token buckets: TKT-01M29P9RSW.
 - The site-default setting's admin screen: TKT-01M29CXK2H.
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-29T05:39:01Z
+
+Maintainer decision, 2026-09-29: slow mode stays in phase-2, whatever docs/09 says (it lists slow mode under Phase 4). Recorded in the plan's Settled section.
