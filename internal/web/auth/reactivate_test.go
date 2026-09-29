@@ -130,14 +130,14 @@ func (w *world) reactivating(returnTo string) *http.Cookie {
 }
 
 // forged is a reactivation cookie this server sealed for subject, bound to
-// the account row as it stands, so that only the status can refuse it: a
-// tampered browser could not make one, but a page left open could present
-// it.
+// the account's status_version as it stands, so the stamp check passes and
+// only the status can refuse it (Terva review 1452): a tampered browser
+// could not make one, but a page left open could present it.
 func (w *world) forged(subject string) *http.Cookie {
 	w.t.Helper()
 	var stamp int64
 	if err := w.db.Read(w.t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
-		err := tx.QueryRowContext(w.t.Context(), `SELECT u.updated_at FROM users u JOIN identities i ON i.user_id = u.id
+		err := tx.QueryRowContext(w.t.Context(), `SELECT u.status_version FROM users u JOIN identities i ON i.user_id = u.id
 			WHERE i.subject = ?`, subject).Scan(&stamp)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil
@@ -277,6 +277,9 @@ func TestReactivation(t *testing.T) {
 		w := newWorld(t)
 		id := w.user("gone", "active", "user-1")
 		w.change(id, perm.ActionAnonymized, "", 0)
+		// Anonymizing deletes the identities, so the cookie names no
+		// account and is refused before perm is asked; perm's own refusal
+		// (ErrAnonymized) is held by TestBadTransitionsAreRefused.
 		w.refused(w.post(ReactivatePath, w.forged("user-1")), http.StatusForbidden, "Account unavailable")
 		if s := w.status(id); s != domain.StatusDeactivated {
 			t.Errorf("the anonymized account is %s", s)

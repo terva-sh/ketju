@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T19:04:38Z
+updated_at: 2026-09-29T19:15:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -162,6 +162,10 @@ This supersedes the AC9 part of my earlier note of today. AC9 is now met and tic
 **agent:claude-code/phase2-run-ckrfs** at 2026-09-29T19:04:38Z
 
 Terva review 1450 (Actions #979) on head 8cbcca4, base 3fd598f: one finding, medium, "Apply handle reservations to every handle-allocation path". Fixed. Today Register is the only caller of CreateUser, but the check belongs where every path asks. identity.HandleFree(ctx, q, h, now) is now that one check: no user holds h in any case and no release reserves it, answering ErrHandleTaken for both. Register calls it in its writing transaction. TestEveryHandleWriteChecksHandleFree finds every sqlc query that writes users.handle (CreateUser; AnonymizeUser is exempt because it writes deleted-user-<id>). Every Go caller of a non-exempt one must call HandleFree, so the rename, application approval and auto_approve paths fail the test until they do. TestAnAnonymizedHandleIsReserved also calls HandleFree directly at until-1 and until. Both tests were mutation-checked: dropping the call in Register fails both, and dropping the reserved branch fails the second. docs/05 is updated. This supersedes the part of my previous note that left "the other registration paths (HandleFree)" to TKT-01M3NRP3W9 (Implement handle changes with cooldown, reservation, and redirect). The function exists now, with the signature that ticket's plan names; it only has to call it from its new paths.
+
+**agent:claude-code/phase2-run-ckrfs** at 2026-09-29T19:15:19Z
+
+Terva review 1452 (Actions #981) on head 22c853d, base 3fd598f. It marks the review 1450 finding resolved and raises one new finding, medium: "Use status_version when constructing reactivation refusal test cookies". Fixed. The forged() helper in internal/web/auth/reactivate_test.go still read updated_at, which was the stamp before review 1441. So the suspended, pending and active refusal subtests were being refused by the stamp check, not by the transition guard they claim to test. It now reads status_version. Mutation-checked: letting reactivate start from any status now fails all three subtests; before this fix they passed. The anonymized subtest is refused earlier than perm, because anonymizing deletes the identities. A comment now says so, and perm's ErrAnonymized is held by TestBadTransitionsAreRefused and TestDeactivateAndAnonymizeAuthority, both of which fail when it is removed.
 
 ## Summary
 
