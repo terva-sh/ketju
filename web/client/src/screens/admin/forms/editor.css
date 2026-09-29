@@ -1,0 +1,164 @@
+/* The form editor (TKT-01M29CP2P1), in the lazy admin chunk. The draft and
+   the preview sit side by side on a desktop, and one above the other on a
+   tablet or a phone. */
+
+.fe-split {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.form-editor h2 {
+  margin: 0 0 12px;
+  font-size: 20px;
+  font-weight: 600;
+}
+.form-editor h3 {
+  margin: 20px 0 8px;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.fe-body {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+.fe-body textarea,
+.fe-field textarea {
+  padding: 8px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+.fe-field {
+  margin: 0 0 16px;
+  padding: 12px 16px 0;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  min-width: 0;
+}
+.fe-field legend {
+  padding: 0 4px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.fe-number {
+  max-width: 10em;
+}
+.fe-check > span {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.fe-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.fe-check label {
+  font-weight: 400;
+}
+.fe-field-actions {
+  margin: 0 0 16px;
+}
+
+.fe-lead,
+.fe-conflict {
+  margin: 0 0 16px;
+  padding: 12px 16px;
+  border: 1px solid var(--unread);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+}
+.fe-lead p,
+.fe-conflict p {
+  margin: 0 0 8px;
+}
+.fe-lead ul {
+  margin: 0;
+  padding-left: 20px;
+}
+.fe-notice {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.fe-save {
+  align-items: center;
+}
+.fe-save .admin-error {
+  flex-basis: 100%;
+}
+
+.fe-preview-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+.fe-preview-head h2 {
+  margin: 0;
+}
+.fe-preview-head .admin-button[aria-pressed='true'] {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+.fe-frame {
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--bg);
+  min-width: 0;
+}
+.fe-phone {
+  max-width: 390px;
+  margin: 0 auto;
+}
+.fe-form-title {
+  margin: 0 0 12px;
+  font-family: var(--font-serif);
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--ink);
+}
+.fe-refused {
+  color: var(--muted);
+}
+
+.fe-versions {
+  margin-top: 32px;
+}
+.fe-view {
+  margin-top: 16px;
+}
+
+@media (min-width: 1100.02px) {
+  .fe-split {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 719.98px) {
+  .fe-field {
+    padding: 8px 12px 0;
+  }
+  .fe-check input {
+    width: 28px;
+    height: 28px;
+  }
+  .fe-body textarea,
+  .fe-field textarea {
+    min-height: var(--target);
+  }
+}
