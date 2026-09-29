@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2MGC6FD35PJHR2Y2WNA
 title: Implement moderator application review
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -24,15 +24,22 @@ blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-cp2mg
+  branch: run/cp2mg-application-review
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1ffd451064ec2f46
+  commit: 31e681216c0cacb24f5467a824631f79d61108c5
+  session: null
+  claimed_at: 2026-09-29T19:28:45Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T18:18:12Z
+updated_at: 2026-09-29T19:28:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-cp2kz
+  id: agent:claude-code/phase2-run-cp2mg
   name: ""
 extensions: {}
 ---
