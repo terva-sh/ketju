@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-29T05:01:23Z
+updated_at: 2026-09-29T05:39:49Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -124,3 +124,13 @@ Maintainer, 2026-09-28: 'pick up what you recommend next and continue our work t
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-29T05:01:23Z
 
 Terva review 1337 on PR #135, head 5cd773d, base 7af2c5a: one low finding, 'Date the refreshed ticket counts after the ticket transition'. Fixed: docs/11 now says the counts were read on 2026-09-29.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-29T05:39:49Z
+
+Plan PRs #136–#140 were written by five parallel planning agents from grooming-brief.md, one per group: identity, forms, moderation, admin, and follow-ups. The first reviews and their fixes, all fixed and none argued:
+- #136, review 1342, head ba5e6ff: high 'unmapped-provider sign-in can retain revoked IdP permissions' (CKRF9: every sign-in now replaces the IdP-granted groups with what that provider maps, and an unmapped provider grants none); medium 'linking records an identity login that did not occur' (CKRES: a link sets no last-login and no claims).
+- #137, review 1344, head c60fa40: high 'approval updates status before user_id exists' (CP2MG: the user is created and linked first, then status and user_id are set in one UPDATE); high 'refuse new applications from linked identities' (CP2KZ: 409, checked again inside the transaction); medium 'FK fallback does not validate new forms' (CKRDQ: active_version starts NULL and can only be set to a version that exists).
+- #138, review 1343, head 53f8b54: high 'a threshold-crossing flag can leave the post visible' (CP2PJ: a hide on every flag at or over the threshold, plus an AutoHideSweep job); high 'archive invalidation misses another evaluator's cache' (RHD: forums.archived is read on every write request); medium 'audit helper conflicts with unaudited author actions' (appendEvent for author actions, moderate plus internal/audit for moderator actions).
+- #139, review 1345, head e2ce3eb: three highs on the redaction plan (CXJZ9): attachment hashes are journalled before any rewrite, blob-reference drops are made idempotent using the audit row as the resume marker, and the origin search runs to a fixed point.
+- #140, review 1349, head 90d2f7c: see the next note.
+The maintainer accepted all 15 open recommendations on 2026-09-29. They are written into docs/05, 06 and 08 on the run-procedure PR, and into each ticket's Settled section on the plan PRs.

@@ -32,6 +32,21 @@ A restore request would need a flow of its own, and the moderator queue and
 the flag trail already give an author someone to ask. A post an author deleted
 themselves is still theirs to restore within the window.
 
+**Decided 2026-09-29** (maintainer, on grooming's recommendations):
+- An author may rename their own thread within 24 h (TKT-01M29CKRH9).
+- In an archived forum, moderators may still hide, lock, pin and move
+  threads out. Posting is refused to everyone but admins, and moving a thread
+  in stays admin-only (TKT-01M3N24RHD).
+- Suspension: see docs/05 "Account lifecycle" for who may suspend whom. When
+  a suspension expires, the posts it hid stay hidden until a moderator
+  restores them (TKT-01M29CP2QK).
+- The audit log is admin-only; moderators see none of it (TKT-01M29CP2R4).
+- A denied or blocked applicant sees only the status, never the moderator's
+  note. Moderators and admins may unblock an identity, which writes an audit
+  row (TKT-01M29CP2MG).
+- An agent's rate bucket allows a burst of 20 and refills one token every
+  30 s (TKT-01M29P9RSW).
+
 Author edit/delete window: default 24 h for edits, 15 min for delete, both
 site settings. After the window, edits leave the visible "edited" marker and
 full history; the first N minutes (default 5) of edits are collapsed into the
@@ -126,7 +141,9 @@ Decided 2026-09-28 (TKT-01M29CP2PJ). N defaults to 3 and is a site setting.
 While a post is auto-hidden, its author and moderators still see it, marked
 "hidden pending review". Everyone else sees a tombstone in its place, so the
 ordinal and reply links hold. Because the hide is `hidden-by-mod`, the author
-cannot restore it; only a moderator's review clears it. The marker does tell
+cannot restore it; only a moderator's review clears it. Other members see
+the tombstone "hidden pending review", and dismissing every flag on the post
+restores it (decided 2026-09-29, TKT-01M29CP2PJ and TKT-01M29CRJ4E). The marker does tell
 the author that flags put their post under review, and that is intended. What
 stays confidential is who flagged it and how many did, which only moderators
 see. Hiding the post from its author as well lost, because a tombstone on

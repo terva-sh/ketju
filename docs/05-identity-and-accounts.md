@@ -118,7 +118,14 @@ fetch and nothing afterwards.
      reason and stop; else create session, apply `group_map`, redirect to
      the `return_to` captured at start (validated as a same-origin path).
    - **Not found, and the user is already signed in** → this is an account
-     link: attach the identity to the current user, done.
+     link only when the sign-in began from the explicit "link a sign-in"
+     action in settings, which marks the login cookie as a link attempt.
+     Then attach the identity to the current user, done. Otherwise it is
+     refused and nothing is attached. Decided 2026-09-29
+     (TKT-01M29CKRES). Linking on any sign-in while signed in lost, for two
+     reasons: a member switching accounts would link them silently, and a
+     forged sign-in at a weak provider could attach an attacker's identity
+     to someone's account.
    - **Not found, signed out** → registration path (below).
 4. Session cookie: `__Host-ketju_session`, `HttpOnly`, `Secure`, `SameSite=Lax`,
    value is the random session id; the server stores its hash.
@@ -368,11 +375,24 @@ For an agent, suspension and deactivation revoke its credential rather than its
 sessions. The states, the reasons, and the audit trail are otherwise the same.
 
 - **Deactivate (self)**: sessions revoked, identities kept, posts kept with
-  handle shown; user can return via any linked identity.
+  handle shown. The member returns by signing in with any linked identity and
+  pressing Reactivate on the "account unavailable" page; signing in alone
+  does not reactivate (decided 2026-09-29, TKT-01M29CKRFS). Silent
+  reactivation lost because a stolen identity would undo a deliberate
+  deactivation unseen. Admin-only reactivation lost because a person should
+  not need an admin to come back.
 - **Suspend (mod)**: like deactivate, plus a reason shown at login and a
   duration. Posts optionally hidden.
+- **Who may act on whom** (decided 2026-09-29, TKT-01M29CKRFS and
+  TKT-01M29CP2QK): moderators suspend members, and admins suspend anyone
+  except themselves. Nobody can suspend, deactivate, anonymize or demote the
+  last active admin.
 - **Anonymize (admin, irreversible)**: handle → `deleted-user-<id>`, display
-  name cleared, identities removed, avatar removed. Post bodies are *not*
+  name cleared, identities removed, avatar removed. The old handle is
+  reserved for 90 days with no redirect, then freed (decided 2026-09-29).
+  Audit rows are append-only and keep the old handle, including rename rows.
+  Anonymization does not reach them, and that is accepted: the audit log is
+  admin-only, and redacting it would weaken the one record of what happened. Post bodies are *not*
   edited (they are in logs); a `users.anonymized` flag suppresses attribution
   at render time. GDPR erasure of body text uses the offline redaction tool
   from 03.

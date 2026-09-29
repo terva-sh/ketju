@@ -61,6 +61,11 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   TKT-01M29CGBWN). "On screen" is at least half the post in the viewport, or
   half the viewport filled by a post taller than that. The server only ever
   moves the position forward unless the user explicitly marks a thread unread.
+- Marking unread is offered in two places: as a whole-thread action in the
+  toolbar and phone menu, and as "Unread from here" on each post. Either way
+  the page then returns to the list, because staying would re-read the
+  visible posts within a second and undo the mark. Decided 2026-09-29
+  (TKT-01M3KFFFJR).
 - A non-JS client cannot beacon; it marks the highest ordinal *rendered* on a
   page as read when that page is served. Coarser but consistent — the same
   integer, same semantics.
