@@ -8,6 +8,7 @@ package dbq
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
 
 const addBlobRef = `-- name: AddBlobRef :execrows
@@ -339,6 +340,7 @@ func (q *Queries) CreateBlob(ctx context.Context, arg CreateBlobParams) error {
 const createFlag = `-- name: CreateFlag :one
 INSERT INTO flags (thread_id, ordinal, reporter_id, reason, note, created_at)
 VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (thread_id, ordinal, reporter_id) WHERE status = 'open' DO NOTHING
 RETURNING id
 `
 
@@ -351,6 +353,11 @@ type CreateFlagParams struct {
 	CreatedAt  int64
 }
 
+// A reporter's second open flag on a post adds no row: the partial unique
+// index flags_one_open_per_reporter (migration 0014) is the conflict, and
+// the insert does nothing, so it answers no row (sql.ErrNoRows) rather than
+// an id. Only that index is the conflict target, so the CHECK on "other"
+// still refuses a note-less flag, which INSERT OR IGNORE would swallow.
 func (q *Queries) CreateFlag(ctx context.Context, arg CreateFlagParams) (int64, error) {
 	row := q.db.QueryRowContext(ctx, createFlag,
 		arg.ThreadID,
@@ -393,6 +400,53 @@ func (q *Queries) DeleteCollectableBlob(ctx context.Context, arg DeleteCollectab
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const dismissOpenFlagsForPost = `-- name: DismissOpenFlagsForPost :many
+UPDATE flags SET status = 'dismissed', resolved_by = ?1, resolved_at = ?2,
+	resolution_note = ?3
+WHERE thread_id = ?4 AND ordinal = ?5 AND status = 'open'
+RETURNING id
+`
+
+type DismissOpenFlagsForPostParams struct {
+	ResolvedBy     sql.NullInt64
+	ResolvedAt     sql.NullInt64
+	ResolutionNote string
+	ThreadID       int64
+	Ordinal        int64
+}
+
+// A post's open flags, dismissed in place by a moderator's restore
+// (TKT-01M29CP2PJ). The ids come back so that the restore can reopen
+// exactly these if its append fails.
+func (q *Queries) DismissOpenFlagsForPost(ctx context.Context, arg DismissOpenFlagsForPostParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, dismissOpenFlagsForPost,
+		arg.ResolvedBy,
+		arg.ResolvedAt,
+		arg.ResolutionNote,
+		arg.ThreadID,
+		arg.Ordinal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const dropBlobRef = `-- name: DropBlobRef :execrows
@@ -484,6 +538,127 @@ func (q *Queries) OpenFlags(ctx context.Context, limit int64) ([]Flag, error) {
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const postsAtFlagThreshold = `-- name: PostsAtFlagThreshold :many
+SELECT f.thread_id, f.ordinal FROM flags f
+JOIN post_meta p ON p.thread_id = f.thread_id AND p.ordinal = f.ordinal
+WHERE f.status = 'open' AND p.deleted = 0
+GROUP BY f.thread_id, f.ordinal
+HAVING count(*) >= CAST(?1 AS INTEGER)
+ORDER BY f.thread_id, f.ordinal
+`
+
+type PostsAtFlagThresholdRow struct {
+	ThreadID int64
+	Ordinal  int64
+}
+
+// The posts the auto-hide owes a hide: at least threshold open flags, and
+// not already down in the projection. The sweep asks the index again for
+// each before it appends anything, so a projection that lags costs at most
+// one wasted look (TKT-01M29CP2PJ AutoHideSweep).
+func (q *Queries) PostsAtFlagThreshold(ctx context.Context, threshold int64) ([]PostsAtFlagThresholdRow, error) {
+	rows, err := q.db.QueryContext(ctx, postsAtFlagThreshold, threshold)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PostsAtFlagThresholdRow
+	for rows.Next() {
+		var i PostsAtFlagThresholdRow
+		if err := rows.Scan(&i.ThreadID, &i.Ordinal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const reopenFlags = `-- name: ReopenFlags :execrows
+UPDATE flags SET status = 'open', resolved_by = NULL, resolved_at = NULL, resolution_note = ''
+WHERE flags.id IN (/*SLICE:ids*/?) AND flags.status = 'dismissed'
+  AND NOT EXISTS (
+	SELECT 1 FROM flags o
+	WHERE o.thread_id = flags.thread_id AND o.ordinal = flags.ordinal
+	  AND o.reporter_id = flags.reporter_id AND o.status = 'open'
+  )
+`
+
+// Reopens flags a restore dismissed when its append wrote nothing. Only a
+// dismissed flag reopens, so a flag some other path closed since stays
+// closed. A reporter may have flagged the post again while theirs was
+// dismissed, since a flag's insert does not wait on the post's lock; their
+// newer flag then stands for them, and the old one stays dismissed rather
+// than breaking flags_one_open_per_reporter and failing the whole reopen.
+func (q *Queries) ReopenFlags(ctx context.Context, ids []int64) (int64, error) {
+	query := reopenFlags
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	result, err := q.db.ExecContext(ctx, query, queryParams...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const resolveOpenFlagsForPost = `-- name: ResolveOpenFlagsForPost :many
+UPDATE flags SET status = 'resolved', resolved_by = ?1, resolved_at = ?2,
+	resolution_note = ?3
+WHERE thread_id = ?4 AND ordinal = ?5 AND status = 'open'
+RETURNING id
+`
+
+type ResolveOpenFlagsForPostParams struct {
+	ResolvedBy     sql.NullInt64
+	ResolvedAt     sql.NullInt64
+	ResolutionNote string
+	ThreadID       int64
+	Ordinal        int64
+}
+
+// A post's open flags, resolved in place by a moderator who confirms an
+// auto-hide (TKT-01M29CP2PJ ConfirmHide).
+func (q *Queries) ResolveOpenFlagsForPost(ctx context.Context, arg ResolveOpenFlagsForPostParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, resolveOpenFlagsForPost,
+		arg.ResolvedBy,
+		arg.ResolvedAt,
+		arg.ResolutionNote,
+		arg.ThreadID,
+		arg.Ordinal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err

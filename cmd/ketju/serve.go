@@ -411,6 +411,19 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	// holds while any thread is quarantined: a thread whose log is missing
 	// or short may name blobs no log on disk does.
 	step("jobs")
+	// The threads service is built here, before the listener, because the
+	// auto-hide sweep holds it.
+	threadSvc := &threads.Service{
+		DB: d, Perm: perms, Threads: cache, Render: render.NewCacheMB(cfg.Storage.RenderedCacheMB),
+		Responses:   respcache.NewMB(cfg.Storage.ResponseCacheMB),
+		Quarantined: proj.Quarantined,
+		Writer:      &posts.Writer{Publish: bus.Publish},
+		IDs:         threadid.NewGenerator(),
+		Project: func(ctx context.Context, id threadid.ID, logLength int64) error {
+			_, err := proj.ProjectThread(ctx, id, logLength)
+			return err
+		},
+	}
 	gc := &jobs.BlobGC{DB: d, Root: cfg.DataDir, Hold: func() string {
 		if n := proj.QuarantinedCount(); n > 0 {
 			return fmt.Sprintf("%d thread(s) are quarantined", n)
@@ -419,14 +432,24 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}}
 	// The expiry job lifts suspensions through the evaluator the requests
 	// use, so the lifted account's cached decisions clear with it.
+	autoHide := jobs.AutoHideSweep(threadSvc)
 	background := []jobs.Job{jobs.SessionSweep(sessions), gc.Job(),
-		jobs.SuspensionExpiry(&account.Service{DB: d, Perm: perms})}
+		jobs.SuspensionExpiry(&account.Service{DB: d, Perm: perms}), autoHide}
 	if o.job != nil {
 		background = append(background, *o.job)
 	}
 	jobsWait := busDrain
 	if o.jobsWait > 0 {
 		jobsWait = o.jobsWait
+	}
+	// The auto-hide sweep runs once now as well as every minute, so a hide
+	// owed from before a restart is not left to the scheduler's jittered
+	// first run (docs/08 "Flags"). A failure is logged and serve goes on:
+	// the flags still say what is owed, and the next run retries it.
+	if n, err := threadSvc.SweepAutoHide(ctx); err != nil {
+		log.Warn("the startup auto-hide sweep failed; the next run retries it", "hidden", n, "err", err)
+	} else if n > 0 {
+		log.Info("the startup auto-hide sweep hid posts", "hidden", n)
 	}
 	sched := jobs.New(log, background...)
 	if err := sched.Start(run); err != nil {
@@ -441,17 +464,6 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	step("listener")
 	userSvc := &users.Service{DB: d, Perm: perms}
 	forumSvc := &forums.Service{DB: d, Perm: perms, Logger: log}
-	threadSvc := &threads.Service{
-		DB: d, Perm: perms, Threads: cache, Render: render.NewCacheMB(cfg.Storage.RenderedCacheMB),
-		Responses:   respcache.NewMB(cfg.Storage.ResponseCacheMB),
-		Quarantined: proj.Quarantined,
-		Writer:      &posts.Writer{Publish: bus.Publish},
-		IDs:         threadid.NewGenerator(),
-		Project: func(ctx context.Context, id threadid.ID, logLength int64) error {
-			_, err := proj.ProjectThread(ctx, id, logLength)
-			return err
-		},
-	}
 	tmpl, err := spa.Shell()
 	if err != nil {
 		return fail("reading the client shell", err)

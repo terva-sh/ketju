@@ -117,6 +117,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: post, Path: "/api/v1/threads/{id}/posts/{ordinal}/restore", Handler: h.restorePost},
 		{Method: put, Path: "/api/v1/threads/{id}/read", Handler: h.markRead},
 		{Method: del, Path: "/api/v1/threads/{id}/read", Handler: h.markUnread},
+		{Method: post, Path: "/api/v1/threads/{id}/flags", Handler: h.flag},
 		{Method: get, Path: "/api/v1/drafts/{thread_id}", Handler: h.getDraft},
 		{Method: put, Path: "/api/v1/drafts/{thread_id}", Handler: h.putDraft},
 		{Method: del, Path: "/api/v1/drafts/{thread_id}", Handler: h.deleteDraft},

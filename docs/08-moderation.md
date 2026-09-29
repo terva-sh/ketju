@@ -224,6 +224,32 @@ their own post tells them the same thing and hides what is being reviewed. Queue
 with no auto-hide, lost because spam would stay up until a moderator is
 awake.
 
+How it runs (TKT-01M29CP2PJ):
+- A member has one open flag per post. A repeat adds no row, so N counts
+  reporters. After a moderator closes their flag, they may flag the post
+  again, and the new flag counts from zero.
+- The flag is committed first. The hide reads only committed flags and runs on
+  every flag at or over N, not only the one that crosses it. It is a `Delete`
+  with `auto` and actor 0, the system, so the log names no reporter. Its audit
+  row, `post.auto_hidden`, is the system's and carries no count.
+- If the hide cannot be appended, the reporter's request answers `unavailable`
+  and the flag stays. A sweep runs every minute and once at startup, and hides
+  every shown post with at least N open flags. The same sweep enforces a
+  lowered N.
+- A moderator's restore of any post dismisses its open flags in place first,
+  and reopens them only if the `Restore` was never appended. After a durable
+  `Restore` they stay dismissed, so the sweep cannot hide the post again. A
+  flag reported later counts from zero.
+- The hide, a moderator's restore, and a moderator's confirmation of the hide
+  hold one per-post lock. So the sweep cannot read a post's open flags just
+  before a restore dismisses them and then hide the post the moderator has
+  just restored. `ketju serve` is the only writer, so an in-process lock is
+  enough.
+- A moderator who keeps the post hidden appends their own `Delete`
+  (`by_moderator`). That makes the hide theirs and resolves the flags. The
+  moderator queue (TKT-01M29CRJ4E) gives this a button.
+- An archived thread is read-only, so it takes no flags.
+
 ## Post history
 
 Every post has a history view listing revisions with actor, time, and a

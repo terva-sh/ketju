@@ -1,0 +1,12 @@
+-- One open flag per reporter per post (docs/04 "flags", docs/08 "Flags",
+-- TKT-01M29CP2PJ).
+--
+-- A member's second report of a post they already reported adds no row, so
+-- the open count the auto-hide threshold reads is a count of distinct
+-- reporters, and one member cannot hide a post alone by repeating
+-- themselves. The index is partial: once a moderator closes a flag, its
+-- reporter may flag the post again, and the new flag counts from zero.
+--
+-- Nothing wrote flags before this migration, so no duplicate can exist for
+-- it to refuse.
+CREATE UNIQUE INDEX flags_one_open_per_reporter ON flags (thread_id, ordinal, reporter_id) WHERE status = 'open';

@@ -438,6 +438,7 @@ var corpus = map[string]any{
 	"created-thread." + tMember: createdThread(),
 	"unread." + tMember:         crossForumList(),
 	"read." + tMember:           ReadPosition{LastReadOrdinal: 62},
+	"flag-receipt." + tMember:   FlagReceipt{Received: true},
 	"draft." + tMember:          draftReply(),
 	"draft-plain." + tMember:    draftPlain(),
 

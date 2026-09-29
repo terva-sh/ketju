@@ -255,6 +255,13 @@ export interface ReadPosition {
   last_read_ordinal: number;
 }
 
+// FlagReceipt is POST /threads/{id}/flags: that the report was received and
+// nothing else, the same for every accepted report (internal/dto
+// FlagReceipt).
+export interface FlagReceipt {
+  received: boolean;
+}
+
 // Draft is GET and PUT /drafts/{thread_id}: the viewer's one reply draft for
 // the thread. GET answers 204 with no body when there is none
 // (internal/dto Draft).

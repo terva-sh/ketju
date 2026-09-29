@@ -25,7 +25,6 @@ import (
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/member"
-	"github.com/terva-sh/ketju/internal/service/posts"
 	"github.com/terva-sh/ketju/internal/service/respcache"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -59,29 +58,37 @@ const (
 // moderator gets every removed post except a moved one, which has no content
 // here. The author gets their own post while a moderator's removal holds it
 // (docs/08, decided 2026-09-28: "The author still sees the post, marked as
-// removed by a moderator"), and not one they deleted themselves. Anyone else
-// gets nothing.
+// removed by a moderator"), and while the post is hidden pending review
+// (docs/08 "Flags", TKT-01M29CP2PJ), and not one they deleted themselves.
+// Anyone else gets nothing.
 func revealRemoved(a access, e threadlog.IndexEntry) bool {
 	switch removal(e.Flags) {
 	case "":
 		return false
-	case dto.RemovalAuthor:
-		return a.canModerate
-	default:
+	case dto.RemovalModerator, dto.RemovalReview:
 		return a.canModerate || a.viewer.Member() && e.Author == uint64(a.viewer.UserID)
+	default:
+		// The author's own delete, and anything this build does not name:
+		// moderators only, which fails closed.
+		return a.canModerate
 	}
 }
 
 // removal is dto.Post.Removal for an entry's flags: who took the post down,
 // or "" for a visible post and a moved one. The deleted flag wins over
 // hidden-by-mod, since the author asked for the post to go. The service never
-// sets both, but a log appended without its preconditions may.
+// sets both, but a log appended without its preconditions may. A post hidden
+// by a moderator's flag with auto-hidden beside it is hidden pending review
+// (TKT-01M29CP2PJ): revealRemoved serves it as it serves a moderator's hide,
+// to its author and to moderators, and the removal says why.
 func removal(f threadlog.EntryFlags) string {
 	switch {
 	case f.Visible(), f.Has(threadlog.EntryMoved):
 		return ""
 	case f.Has(threadlog.EntryDeleted):
 		return dto.RemovalAuthor
+	case f.Has(threadlog.EntryAutoHidden):
+		return dto.RemovalReview
 	default:
 		return dto.RemovalModerator
 	}
@@ -121,8 +128,10 @@ type Service struct {
 	// nothing.
 	Quarantined func(threadid.ID) bool
 
-	// Writer appends and publishes every post and thread a request writes.
-	Writer *posts.Writer
+	// Writer appends and publishes every post and thread a request writes:
+	// a *posts.Writer in the server. Tests wrap one to fail or hold an
+	// append.
+	Writer Appender
 	// IDs names new threads.
 	IDs *threadid.Generator
 	// Project projects a thread up to a log length before CreateThread
@@ -139,6 +148,20 @@ type Service struct {
 	// trace, when set, is told which path Replies answered from. Tests use it
 	// to prove both paths ran.
 	trace func(path string)
+
+	// flagLocks is the per-post lock of the auto-hide, a moderator's restore
+	// and ConfirmHide (flags.go).
+	flagLocks flagLocks
+	// afterFlagCount, when set, is called by EnforceAutoHide between reading
+	// a post's open flags and appending its hide, still under the lock.
+	// Tests use it to hold the sweep there.
+	afterFlagCount func(id threadid.ID, ordinal uint32)
+}
+
+// Appender is what the service appends through: *posts.Writer, the one
+// seam that appends and publishes (internal/service/posts).
+type Appender interface {
+	Append(th *threadcache.Thread, a threadlog.Append) (threadlog.Result, error)
 }
 
 // Query is what a thread page request asks for. Zero values mean "not given".

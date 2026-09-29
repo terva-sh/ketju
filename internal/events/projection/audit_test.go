@@ -163,6 +163,18 @@ func TestAuditRowsComeFromTheLog(t *testing.T) {
 	expect(o, auditRow{At: 1_700_000_207_300, Actor: actor(moderator), Action: ActionPostHidden, Type: "post", ID: th + "/1",
 		Details: map[string]any{"reason": "off topic"}})
 
+	// The auto-hide (TKT-01M29CP2PJ): actor 0, the system, so the row has no
+	// actor and names the thread log, and it carries no flag count and no
+	// reporter.
+	o, _ = f.at(id, 1_700_000_207_400, threadlog.Append{Type: threadlog.TypeRestore, Author: moderator, Ordinal: 1,
+		Body: &threadlog.RestoreBody{}})
+	expect(o, auditRow{At: 1_700_000_207_400, Actor: actor(moderator), Action: ActionPostRestored, Type: "post", ID: th + "/1",
+		Details: map[string]any{"reason": ""}})
+	o, _ = f.at(id, 1_700_000_207_500, threadlog.Append{Type: threadlog.TypeDelete, Author: 0, Ordinal: 1,
+		Body: &threadlog.DeleteBody{Reason: "hidden pending review", Auto: true}})
+	expect(o, auditRow{At: 1_700_000_207_500, Action: ActionPostAutoHidden, Type: "post", ID: th + "/1",
+		Details: map[string]any{"reason": "hidden pending review", "via": viaLog}})
+
 	// An actor with no users row is NULL, its id kept in the details.
 	o, _ = f.at(id, 1_700_000_208_000, threadlog.Append{Type: threadlog.TypeThreadUnlocked, Author: missing,
 		Body: &threadlog.ThreadUnlockedBody{}})

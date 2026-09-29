@@ -473,11 +473,14 @@ transaction that projects the record, with the frame's timestamp as `at`.
     the thread, with `"title"` and `"slug"`;
   - when the actor is not the post's author: `post.edited` with `"reason"`
     and `"revision"`, `post.hidden` (a `Delete` with `by_moderator`, 03,
-    with `"suspension"` when the `Delete` has one),
-    `post.deleted` (one without, which the service never writes) and
+    with `"suspension"` when the `Delete` has one), `post.auto_hidden` (a
+    `Delete` with `auto`, whose actor is 0, the system, TKT-01M29CP2PJ),
+    `post.deleted` (one with neither, which the service never writes) and
     `post.restored` with `"reason"`, against the post. The service projects
-    a moderator's edit, hide and restore before it answers, so the row
-    exists when the request returns (TKT-01M29CRJ5J).
+    a moderator's edit, hide and restore, and the auto-hide, before it
+    answers, so the row exists when the request returns (TKT-01M29CRJ5J).
+    No row names a reporter or counts flags: moderators read those from
+    `flags`.
 
   An author's own rename, edit, delete or restore writes none, nor does a
   `ThreadCreated`, `Post`, `ThreadTagged` or `ThreadArchived`. A record's
@@ -557,6 +560,11 @@ status ('open'|'resolved'|'dismissed'), resolved_by, resolved_at, resolution_not
 Reports on posts; feeds the moderator queue (08). A flag is resolved or
 dismissed in place and never deleted (a trigger refuses it). `other` requires
 a note. An open flag has no resolver, and a closed one names who and when.
+A partial unique index, `flags_one_open_per_reporter` on `(thread_id, ordinal,
+reporter_id) WHERE status = 'open'` (migration 0014, TKT-01M29CP2PJ), keeps a
+member to one open flag per post. A repeat adds no row, so the open count the
+auto-hide threshold reads is a count of reporters. Once a moderator closes
+their flag, a member may flag the post again.
 
 ### drafts
 ```

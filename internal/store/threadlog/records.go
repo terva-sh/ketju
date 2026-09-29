@@ -165,11 +165,20 @@ type (
 	// posts that suspension hid, and leave hidden a post a moderator hid for
 	// its own sake. Zero is none. An older build ignores the key, and the
 	// post stays hidden, which fails closed.
+	//
+	// Auto was added the same way, on 2026-09-30 (TKT-01M29CP2PJ). It marks
+	// the system's hide of a post whose open flags reached
+	// flags.auto_hide_threshold: hidden-by-mod and auto-hidden, which is
+	// "hidden pending review" (docs/08 "Flags"). Its frame actor is 0, the
+	// system, so the log names no reporter. An older build ignores the key
+	// and reads a Delete whose actor is not the author, which it shows as a
+	// tombstone to everyone, and fails closed.
 	DeleteBody struct {
 		Reason      string `cbor:"reason,omitempty" json:"reason,omitempty"`
 		Hard        bool   `cbor:"hard,omitempty" json:"hard,omitempty"`
 		ByModerator bool   `cbor:"by_moderator,omitempty" json:"by_moderator,omitempty"`
 		Suspension  uint64 `cbor:"suspension,omitempty" json:"suspension,omitempty"`
+		Auto        bool   `cbor:"auto,omitempty" json:"auto,omitempty"`
 	}
 
 	// RestoreBody clears a soft deletion or a moderator's hide.

@@ -40,20 +40,24 @@ func TestFrameReservedBitsAreEveryBitButZero(t *testing.T) {
 		t.Errorf("next free frame flag is %#b, want bit 1", next)
 	}
 	er := EntryFlagsReserved
-	if next := er & -er; next != 1<<6 {
-		t.Errorf("next free entry flag is %#b, want bit 6", next)
+	if next := er & -er; next != 1<<7 {
+		t.Errorf("next free entry flag is %#b, want bit 7", next)
 	}
 }
 
-func TestEntryReservedBitsAreTheTenDocumented(t *testing.T) {
-	if EntryFlagsReserved != 0xffc0 {
-		t.Errorf("EntryFlagsReserved = %#x, want 0xffc0 (bits 6 through 15)", EntryFlagsReserved)
+// Auto-hidden took bit 6 (TKT-01M29CP2PJ), leaving nine.
+func TestEntryReservedBitsAreTheNineDocumented(t *testing.T) {
+	if EntryAutoHidden != 1<<6 {
+		t.Errorf("EntryAutoHidden = %#b, docs/03 assigns it bit 6", EntryAutoHidden)
+	}
+	if EntryFlagsReserved != 0xff80 {
+		t.Errorf("EntryFlagsReserved = %#x, want 0xff80 (bits 7 through 15)", EntryFlagsReserved)
 	}
 	if EntryFlagsReserved&EntryFlagsKnown != 0 {
 		t.Error("reserved and assigned entry bits overlap")
 	}
-	if n := popcount(uint16(EntryFlagsReserved)); n != 10 {
-		t.Errorf("%d reserved entry bits, docs/03 names 10 as the spare capacity", n)
+	if n := popcount(uint16(EntryFlagsReserved)); n != 9 {
+		t.Errorf("%d reserved entry bits, docs/03 names 9 as the spare capacity", n)
 	}
 }
 

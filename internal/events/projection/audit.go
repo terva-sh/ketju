@@ -27,6 +27,7 @@ const (
 	ActionPostEdited     = "post.edited"
 	ActionPostDeleted    = "post.deleted"
 	ActionPostHidden     = "post.hidden"
+	ActionPostAutoHidden = "post.auto_hidden"
 	ActionPostRestored   = "post.restored"
 )
 
@@ -43,7 +44,8 @@ const viaLog = "thread-log"
 //   - always: a lock, unlock, pin, unpin or move;
 //   - when the actor is not the thread's author: a rename;
 //   - when the actor is not the post's author: an Edit, Delete or Restore,
-//     a Delete with by_moderator being post.hidden;
+//     a Delete with by_moderator being post.hidden and one with auto,
+//     whose actor is 0, the system, post.auto_hidden (TKT-01M29CP2PJ);
 //   - never: ThreadCreated, Post, ThreadTagged, and ThreadArchived until its
 //     own ticket decides.
 func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, target audit.Target, details map[string]any, ok bool, err error) {
@@ -73,8 +75,14 @@ func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, targ
 		// else without by_moderator is in no log this server writes.
 		// A hide written by a suspension names it, by the id of its
 		// user.suspended row (TKT-01M29CP2QK).
+		// The auto-hide (TKT-01M29CP2PJ) is the system's, actor 0, and its
+		// row carries no flag count and no reporter: moderators read those
+		// from flags.
 		action := ActionPostDeleted
-		if b.ByModerator {
+		switch {
+		case b.Auto:
+			action = ActionPostAutoHidden
+		case b.ByModerator:
 			action = ActionPostHidden
 		}
 		details := map[string]any{"reason": b.Reason}

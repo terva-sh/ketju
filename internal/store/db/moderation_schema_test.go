@@ -17,12 +17,20 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
 
+// newFlag flags post 3 of thread 42 as reporter.
 func newFlag(t *testing.T, d *DB, reporter int64, reason, note string) (int64, error) {
+	t.Helper()
+	return flagPost(t, d, 3, reporter, reason, note)
+}
+
+// flagPost flags post ordinal of thread 42 as reporter. A reporter's repeat
+// of their own open flag answers sql.ErrNoRows.
+func flagPost(t *testing.T, d *DB, ordinal, reporter int64, reason, note string) (int64, error) {
 	t.Helper()
 	var id int64
 	err := try(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
 		var err error
-		id, err = q.CreateFlag(t.Context(), dbq.CreateFlagParams{ThreadID: 42, Ordinal: 3,
+		id, err = q.CreateFlag(t.Context(), dbq.CreateFlagParams{ThreadID: 42, Ordinal: ordinal,
 			ReporterID: reporter, Reason: reason, Note: note, CreatedAt: 10})
 		return err
 	})
@@ -36,8 +44,9 @@ func TestFlagStatusAndNoDelete(t *testing.T) {
 	d, _ := openTest(t)
 	reporter, mod := newUser(t, d, "reporter"), newUser(t, d, "mod")
 
-	for _, reason := range []string{"spam", "abuse", "off-topic"} {
-		if _, err := newFlag(t, d, reporter, reason, ""); err != nil {
+	// Each on a post of its own: one reporter has one open flag per post.
+	for i, reason := range []string{"spam", "abuse", "off-topic"} {
+		if _, err := flagPost(t, d, int64(10+i), reporter, reason, ""); err != nil {
 			t.Errorf("reason %s: %v", reason, err)
 		}
 	}
@@ -115,14 +124,14 @@ func TestFlagStatusAndNoDelete(t *testing.T) {
 // post's open-flag count is what the auto-hide threshold reads.
 func TestOpenFlagQueries(t *testing.T) {
 	d, _ := openTest(t)
-	reporter := newUser(t, d, "reporter")
+	reporter, second := newUser(t, d, "reporter"), newUser(t, d, "second")
 	for i, at := range []int64{10, 30, 20} {
 		mustExec(t, d, `INSERT INTO flags (thread_id, ordinal, reporter_id, reason, created_at) VALUES (42, ?, ?, 'spam', ?)`,
 			i+1, reporter, at)
 	}
 	mustExec(t, d, `INSERT INTO flags (thread_id, ordinal, reporter_id, reason, created_at, status, resolved_by, resolved_at)
 		VALUES (42, 1, ?, 'spam', 40, 'dismissed', ?, 41)`, reporter, reporter)
-	mustExec(t, d, `INSERT INTO flags (thread_id, ordinal, reporter_id, reason, created_at) VALUES (42, 1, ?, 'abuse', 50)`, reporter)
+	mustExec(t, d, `INSERT INTO flags (thread_id, ordinal, reporter_id, reason, created_at) VALUES (42, 1, ?, 'abuse', 50)`, second)
 
 	var open []dbq.Flag
 	var count int64
@@ -146,6 +155,169 @@ func TestOpenFlagQueries(t *testing.T) {
 	if count != 2 {
 		t.Errorf("post 1 has %d open flags, want 2 (one of three is dismissed)", count)
 	}
+}
+
+// TestOneOpenFlagPerReporter (TKT-01M29CP2PJ, migration 0014): a
+// reporter's second open flag on a post adds no row, through CreateFlag and
+// through a raw insert alike, so the open count counts reporters. Another
+// reporter, another post, and the same reporter after their flag was closed
+// each add one. The CHECK on other still refuses a note-less flag, which a
+// blanket OR IGNORE would have swallowed.
+func TestOneOpenFlagPerReporter(t *testing.T) {
+	d, _ := openTest(t)
+	alice, bob, mod := newUser(t, d, "alice"), newUser(t, d, "bob"), newUser(t, d, "mod")
+	first, err := flagPost(t, d, 1, alice, "spam", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := flagPost(t, d, 1, alice, "abuse", "again"); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("a repeat flag: %v, want sql.ErrNoRows (no row added)", err)
+	}
+	if err := exec(t, d, `INSERT INTO flags (thread_id, ordinal, reporter_id, reason, created_at) VALUES (42, 1, ?, 'spam', 1)`, alice); err == nil {
+		t.Error("a raw insert of a second open flag by one reporter was accepted")
+	}
+	if _, err := flagPost(t, d, 1, alice, "other", ""); err == nil || errors.Is(err, sql.ErrNoRows) {
+		t.Errorf(`a repeat "other" with no note: %v, want the CHECK's refusal`, err)
+	}
+	if _, err := flagPost(t, d, 1, bob, "spam", ""); err != nil {
+		t.Errorf("another reporter: %v", err)
+	}
+	if _, err := flagPost(t, d, 2, alice, "spam", ""); err != nil {
+		t.Errorf("another post: %v", err)
+	}
+	if got := openCount(t, d, 1); got != 2 {
+		t.Errorf("post 1 has %d open flags, want 2 (alice and bob)", got)
+	}
+
+	// Dismissed, alice may flag again, and a reopen of the old flag then
+	// leaves it dismissed rather than breaking the index.
+	var dismissed []int64
+	write(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		dismissed, err = q.DismissOpenFlagsForPost(t.Context(), dbq.DismissOpenFlagsForPostParams{
+			ResolvedBy: sql.NullInt64{Int64: mod, Valid: true}, ResolvedAt: sql.NullInt64{Int64: 20, Valid: true},
+			ResolutionNote: "restored", ThreadID: 42, Ordinal: 1})
+		return err
+	})
+	if len(dismissed) != 2 || openCount(t, d, 1) != 0 {
+		t.Fatalf("dismissed %v, %d left open: want both of post 1's flags closed", dismissed, openCount(t, d, 1))
+	}
+	again, err := flagPost(t, d, 1, alice, "spam", "")
+	if err != nil {
+		t.Fatalf("a flag after a dismissal: %v", err)
+	}
+	var reopened int64
+	write(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		reopened, err = q.ReopenFlags(t.Context(), dismissed)
+		return err
+	})
+	if reopened != 1 || openCount(t, d, 1) != 2 {
+		t.Errorf("reopened %d, %d open: want bob's reopened and alice's newer flag standing for her", reopened, openCount(t, d, 1))
+	}
+	var old, fresh dbq.Flag
+	if err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		if old, err = q.GetFlag(t.Context(), first); err != nil {
+			return err
+		}
+		fresh, err = q.GetFlag(t.Context(), again)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if old.Status != "dismissed" || fresh.Status != "open" {
+		t.Errorf("alice's flags: old %s, new %s; want dismissed and open", old.Status, fresh.Status)
+	}
+}
+
+// TestFlagClosesAndThreshold: DismissOpenFlagsForPost and
+// ResolveOpenFlagsForPost close only the post's open flags and name them,
+// ReopenFlags reopens only dismissed ones, and PostsAtFlagThreshold lists a
+// post with at least threshold open flags that the projection shows.
+func TestFlagClosesAndThreshold(t *testing.T) {
+	d, _ := openTest(t)
+	mod := newUser(t, d, "mod")
+	var reporters []int64
+	for _, h := range []string{"rep1", "rep2", "rep3"} {
+		reporters = append(reporters, newUser(t, d, h))
+	}
+	for ord := int64(1); ord <= 3; ord++ {
+		deleted := 0
+		if ord == 3 {
+			deleted = 1
+		}
+		mustExec(t, d, `INSERT INTO post_meta (thread_id, ordinal, author_id, created_at, deleted, log_offset) VALUES (42, ?, ?, 1, ?, 0)`,
+			ord, mod, deleted)
+	}
+	// Post 1: three reporters. Post 2: two. Post 3: three, but deleted.
+	for _, r := range reporters {
+		for _, ord := range []int64{1, 3} {
+			if _, err := flagPost(t, d, ord, r, "spam", ""); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	for _, r := range reporters[:2] {
+		if _, err := flagPost(t, d, 2, r, "spam", ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	at := func(threshold int64) string {
+		var rows []dbq.PostsAtFlagThresholdRow
+		if err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+			var err error
+			rows, err = q.PostsAtFlagThreshold(t.Context(), threshold)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprint(rows)
+	}
+	if got := at(3); got != "[{42 1}]" {
+		t.Errorf("at threshold 3: %s, want post 1 only (post 3 is deleted)", got)
+	}
+	if got := at(2); got != "[{42 1} {42 2}]" {
+		t.Errorf("at threshold 2: %s, want posts 1 and 2", got)
+	}
+
+	var resolved []int64
+	write(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		resolved, err = q.ResolveOpenFlagsForPost(t.Context(), dbq.ResolveOpenFlagsForPostParams{
+			ResolvedBy: sql.NullInt64{Int64: mod, Valid: true}, ResolvedAt: sql.NullInt64{Int64: 30, Valid: true},
+			ResolutionNote: "confirmed", ThreadID: 42, Ordinal: 1})
+		return err
+	})
+	if len(resolved) != 3 || openCount(t, d, 1) != 0 || openCount(t, d, 2) != 2 {
+		t.Errorf("resolved %v: want post 1's three, post 2 untouched", resolved)
+	}
+	var n int64
+	write(t, d, func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		n, err = q.ReopenFlags(t.Context(), resolved)
+		return err
+	})
+	if n != 0 || openCount(t, d, 1) != 0 {
+		t.Errorf("ReopenFlags reopened %d resolved flags; only a dismissed flag reopens", n)
+	}
+	if got := at(2); got != "[{42 2}]" {
+		t.Errorf("after the resolve, at threshold 2: %s, want post 2", got)
+	}
+}
+
+// openCount is post ordinal of thread 42's open flags.
+func openCount(t *testing.T, d *DB, ordinal int64) int64 {
+	t.Helper()
+	var n int64
+	if err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		n, err = q.OpenFlagCount(t.Context(), dbq.OpenFlagCountParams{ThreadID: 42, Ordinal: ordinal})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // TestAuditLogAppendOnly is AC2, in two layers. The schema refuses UPDATE

@@ -68,7 +68,7 @@ func (f FrameFlags) Unknown() FrameFlags { return f &^ FrameFlagsKnown }
 // EntryFlags are the per-post bits an index entry carries so that a lens can
 // answer without reading the log (docs/03, "Index entry").
 //
-// Six bits used, ten spare. docs/03 names those ten as the spare capacity for
+// Seven bits used, nine spare. docs/03 names those as the spare capacity for
 // this format — the four reserved bytes at offset 36 are NOT general slack,
 // they are held for the segment number that segment rollover would add to the
 // offset field.
@@ -111,13 +111,24 @@ const (
 	// carry it across; do not write the constant from one set into the other.
 	EntryMachineAuthored EntryFlags = 1 << 5
 
-	// EntryFlagsReserved is every bit not yet assigned: 6 through 15, written
-	// zero. The next bit to hand out is bit 6.
+	// EntryAutoHidden marks a post hidden pending review: the system's hide
+	// once its open flags reached flags.auto_hide_threshold (docs/08
+	// "Flags", TKT-01M29CP2PJ). It means something only beside
+	// [EntryHiddenByMod], which the same Delete sets and which is what hides
+	// the post. This bit says why, so that the post reads "hidden pending
+	// review" rather than "removed by a moderator". A Delete with auto sets
+	// both, a moderator's Delete clears this one, and a Restore clears both.
+	// It is set only from the log's auto key, so a rebuild reproduces it. An
+	// older build does not know it and still sees hidden-by-mod.
+	EntryAutoHidden EntryFlags = 1 << 6
+
+	// EntryFlagsReserved is every bit not yet assigned: 7 through 15, written
+	// zero. The next bit to hand out is bit 7.
 	EntryFlagsReserved EntryFlags = ^EntryFlagsKnown
 
 	// EntryFlagsKnown is every bit this build assigns meaning to.
 	EntryFlagsKnown EntryFlags = EntryDeleted | EntryMoved | EntryHiddenByMod |
-		EntryHasAttachments | EntryEdited | EntryMachineAuthored
+		EntryHasAttachments | EntryEdited | EntryMachineAuthored | EntryAutoHidden
 )
 
 // Has reports whether every bit in want is set.

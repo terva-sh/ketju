@@ -162,8 +162,8 @@ const (
 	RemovalAuthor = "author"
 	// RemovalModerator is a post a moderator hid.
 	RemovalModerator = "moderator"
-	// RemovalReview is a post auto-hidden pending review (docs/08 "Flags").
-	// Nothing sets it until auto-hide exists (TKT-01M29CP2PJ).
+	// RemovalReview is a post auto-hidden pending review (docs/08 "Flags",
+	// TKT-01M29CP2PJ): its open flags reached flags.auto_hide_threshold.
 	RemovalReview = "review"
 )
 
@@ -485,6 +485,15 @@ type CreatedThread struct {
 // integer: every post after it is unread, and 0 means none has been read.
 type ReadPosition struct {
 	LastReadOrdinal int `json:"last_read_ordinal"`
+}
+
+// FlagReceipt is the answer to POST /threads/{id}/flags (docs/07,
+// TKT-01M29CP2PJ): that the report was received, and nothing else. It is
+// the same for a new flag, for a member's repeat of their own, and for the
+// flag that hid the post, so a reporter learns no count, no other reporter
+// and no outcome (docs/08 "Flags": "thanks, a moderator will look").
+type FlagReceipt struct {
+	Received bool `json:"received"`
 }
 
 // Draft is a reply the viewer has started and not posted: GET and PUT

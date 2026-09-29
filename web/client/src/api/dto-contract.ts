@@ -24,6 +24,7 @@ import type {
   CreatedPost,
   CreatedThread,
   Draft,
+  FlagReceipt,
   Form,
   FormAdmin,
   ForumTree,
@@ -70,6 +71,7 @@ import createdPostMember from '../../../../internal/dto/testdata/golden/created-
 import createdThreadMember from '../../../../internal/dto/testdata/golden/created-thread.member.json';
 import draftMember from '../../../../internal/dto/testdata/golden/draft.member.json';
 import draftPlainMember from '../../../../internal/dto/testdata/golden/draft-plain.member.json';
+import flagReceiptMember from '../../../../internal/dto/testdata/golden/flag-receipt.member.json';
 import formAdminAdmin from '../../../../internal/dto/testdata/golden/form-admin.admin.json';
 import formPreviewAdmin from '../../../../internal/dto/testdata/golden/form-preview.admin.json';
 import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.json';
@@ -154,6 +156,7 @@ export const contract = [
   matches<CreatedThread>()(createdThreadMember),
   matches<Draft>()(draftMember),
   matches<Draft>()(draftPlainMember),
+  matches<FlagReceipt>()(flagReceiptMember),
   matches<FormAdmin>()(formAdminAdmin),
   matches<Form>()(formPreviewAdmin),
   matches<ForumTree>()(forumsAnon),

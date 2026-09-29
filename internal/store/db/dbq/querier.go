@@ -96,6 +96,11 @@ type Querier interface {
 	// A new blob has no references yet, so it is unreferenced from the moment
 	// it is uploaded; the post that carries it adds the first one.
 	CreateBlob(ctx context.Context, arg CreateBlobParams) error
+	// A reporter's second open flag on a post adds no row: the partial unique
+	// index flags_one_open_per_reporter (migration 0014) is the conflict, and
+	// the insert does nothing, so it answers no row (sql.ErrNoRows) rather than
+	// an id. Only that index is the conflict target, so the CHECK on "other"
+	// still refuses a note-less flag, which INSERT OR IGNORE would swallow.
 	CreateFlag(ctx context.Context, arg CreateFlagParams) (int64, error)
 	CreateForum(ctx context.Context, arg CreateForumParams) (int64, error)
 	CreateGroup(ctx context.Context, arg CreateGroupParams) (int64, error)
@@ -144,6 +149,10 @@ type Querier interface {
 	// key. The sessions naming the identities go first (DeleteIdentitySessions).
 	DeleteUserIdentities(ctx context.Context, userID sql.NullInt64) error
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
+	// A post's open flags, dismissed in place by a moderator's restore
+	// (TKT-01M29CP2PJ). The ids come back so that the restore can reopen
+	// exactly these if its append fails.
+	DismissOpenFlagsForPost(ctx context.Context, arg DismissOpenFlagsForPostParams) ([]int64, error)
 	DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64, error)
 	// LowerReadPosition is mark-unread (DELETE /threads/{id}/read), the only
 	// statement that moves a position back. It never moves one forward: marking
@@ -364,6 +373,11 @@ type Querier interface {
 	// The post's author, for the projection writer to tell an author's own
 	// Edit, Delete or Restore from a moderator's (TKT-01M29CKRGS).
 	PostAuthor(ctx context.Context, arg PostAuthorParams) (int64, error)
+	// The posts the auto-hide owes a hide: at least threshold open flags, and
+	// not already down in the projection. The sweep asks the index again for
+	// each before it appends anything, so a projection that lags costs at most
+	// one wasted look (TKT-01M29CP2PJ AutoHideSweep).
+	PostsAtFlagThreshold(ctx context.Context, threshold int64) ([]PostsAtFlagThresholdRow, error)
 	// PriorApplicationsForIdentity is every application the same identity
 	// submitted before the one at (before_at, before_id), newest first, in the
 	// list's order: the prior applications the review screen shows. One
@@ -378,10 +392,20 @@ type Querier interface {
 	// Removes one IdP-sourced membership, and never one an admin holds.
 	RemoveIdPMembership(ctx context.Context, arg RemoveIdPMembershipParams) (int64, error)
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
+	// Reopens flags a restore dismissed when its append wrote nothing. Only a
+	// dismissed flag reopens, so a flag some other path closed since stays
+	// closed. A reporter may have flagged the post again while theirs was
+	// dismissed, since a flag's insert does not wait on the post's lock; their
+	// newer flag then stands for them, and the old one stays dismissed rather
+	// than breaking flags_one_open_per_reporter and failing the whole reopen.
+	ReopenFlags(ctx context.Context, ids []int64) (int64, error)
 	// A post's direct replies when its thread is not open (post_meta_reply_to),
 	// in ordinal order as the index would give them. The replies endpoint uses it
 	// only once the projection has reached the length it serves.
 	RepliesTo(ctx context.Context, arg RepliesToParams) ([]int64, error)
+	// A post's open flags, resolved in place by a moderator who confirms an
+	// auto-hide (TKT-01M29CP2PJ ConfirmHide).
+	ResolveOpenFlagsForPost(ctx context.Context, arg ResolveOpenFlagsForPostParams) ([]int64, error)
 	// RevokeAgentCredentials ends the account's live credential, if it has one,
 	// and reports how many it ended: 0 or 1, by agent_credentials_live.
 	RevokeAgentCredentials(ctx context.Context, arg RevokeAgentCredentialsParams) (int64, error)

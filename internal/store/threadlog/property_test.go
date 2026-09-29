@@ -181,9 +181,10 @@ func nextRecord(r *rand.Rand, posts uint32) (Append, generated, bool) {
 		ord := 1 + uint32(r.Intn(int(posts)))
 		return Append{
 			Type: TypeDelete, Ordinal: ord, Author: author, TimeMS: ts,
-			// Half are a moderator's, which hide rather than delete
-			// (TKT-01M29CRJ5J).
-			Body: &DeleteBody{Reason: "spam", ByModerator: r.Intn(2) == 1},
+			// A third are a moderator's, which hide rather than delete
+			// (TKT-01M29CRJ5J), and a third the system's auto-hide
+			// (TKT-01M29CP2PJ).
+			Body: deleteBody(r.Intn(3)),
 		}, generated{kind: "Delete", ord: ord}, true
 
 	case roll < 85:
@@ -322,4 +323,10 @@ func TestThreadEventsOnlyStillAgree(t *testing.T) {
 	if !bytes.Equal(a.Index().AppendTo(nil), rec.Index.AppendTo(nil)) {
 		t.Errorf("indexes differ:\n%s", diffIndexes(a.Index(), rec.Index))
 	}
+}
+
+// deleteBody is a Delete of kind k: 0 an author's, 1 a moderator's, 2 the
+// auto-hide's.
+func deleteBody(k int) *DeleteBody {
+	return &DeleteBody{Reason: "spam", ByModerator: k == 1, Auto: k == 2}
 }

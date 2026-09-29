@@ -233,7 +233,7 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 //
 // Deleting a post that is already gone is conflict and appends nothing.
 func (s *Service) Delete(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, reason string) (dto.CreatedPost, error) {
-	return s.setDeleted(ctx, v, id, ordinal, actionDelete, func(e threadlog.IndexEntry, _ access) threadlog.Append {
+	return s.setDeleted(ctx, v, id, ordinal, actionDelete, reason, func(e threadlog.IndexEntry, _ access) threadlog.Append {
 		return threadlog.Append{
 			Type:   threadlog.TypeDelete,
 			Body:   &threadlog.DeleteBody{Reason: reason, ByModerator: e.Author != uint64(v.UserID)},
@@ -255,8 +255,13 @@ func (s *Service) Delete(ctx context.Context, v domain.Viewer, id threadid.ID, o
 //
 // Restoring a post that is not deleted or hidden, or one that was moved, is
 // conflict and appends nothing.
+//
+// A moderator's restore dismisses the post's open flags first, under the
+// post's flag lock, and reopens them only if the Restore was not appended
+// (restoreDismissingFlags, TKT-01M29CP2PJ). That is how a post hidden
+// pending review is cleared.
 func (s *Service) Restore(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, reason string) (dto.CreatedPost, error) {
-	return s.setDeleted(ctx, v, id, ordinal, actionRestore, func(_ threadlog.IndexEntry, a access) threadlog.Append {
+	return s.setDeleted(ctx, v, id, ordinal, actionRestore, reason, func(_ threadlog.IndexEntry, a access) threadlog.Append {
 		return restoreRecord(a.canModerate, reason)
 	})
 }
@@ -279,7 +284,10 @@ func restoreRecord(moderator bool, reason string) threadlog.Append {
 // Archived threads are read-only to everyone; a lock does not stop an author
 // taking their own post down or putting it back, since docs/08's lock
 // refuses posts and edits.
-func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, action postAction,
+//
+// reason is the record's, and for a moderator's restore also the note the
+// dismissed flags carry.
+func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, action postAction, reason string,
 	build func(e threadlog.IndexEntry, a access) threadlog.Append) (dto.CreatedPost, error) {
 	if err := s.MayWrite(v); err != nil {
 		return dto.CreatedPost{}, err
@@ -297,18 +305,25 @@ func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.I
 		return dto.CreatedPost{}, err
 	}
 
-	return s.changePost(ctx, id, ordinal, a, func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error) {
-		now := s.now()
-		if err := authorize(a, e, action, now, w); err != nil {
-			return threadlog.Append{}, err
-		}
-		if th.Archived() {
-			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
-		}
-		rec := build(e, a)
-		rec.Flags, rec.Author, rec.Ordinal, rec.TimeMS = flags, uint64(v.UserID), ordinal, now.UnixMilli()
-		return rec, nil
-	})
+	run := func() (dto.CreatedPost, bool, error) {
+		return s.changePostAppended(ctx, id, ordinal, a, func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error) {
+			now := s.now()
+			if err := authorize(a, e, action, now, w); err != nil {
+				return threadlog.Append{}, err
+			}
+			if th.Archived() {
+				return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+			}
+			rec := build(e, a)
+			rec.Flags, rec.Author, rec.Ordinal, rec.TimeMS = flags, uint64(v.UserID), ordinal, now.UnixMilli()
+			return rec, nil
+		})
+	}
+	if action == actionRestore && a.canModerate {
+		return s.restoreDismissingFlags(ctx, v, id, ordinal, reason, run)
+	}
+	out, _, err := run()
+	return out, err
 }
 
 // changePost appends the record build makes for post ordinal of thread id,
@@ -326,6 +341,16 @@ func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.I
 // keeps the asynchronous path.
 func (s *Service) changePost(ctx context.Context, id threadid.ID, ordinal uint32, a access,
 	build func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error)) (dto.CreatedPost, error) {
+	out, _, err := s.changePostAppended(ctx, id, ordinal, a, build)
+	return out, err
+}
+
+// changePostAppended is changePost, also saying whether the record was
+// appended: true once the append returned, whatever failed after it. A
+// moderator's restore reopens the flags it dismissed only when it is false
+// (restoreDismissingFlags).
+func (s *Service) changePostAppended(ctx context.Context, id threadid.ID, ordinal uint32, a access,
+	build func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error)) (dto.CreatedPost, bool, error) {
 	var (
 		out      dto.CreatedPost
 		res      threadlog.Result
@@ -357,9 +382,9 @@ func (s *Service) changePost(ctx context.Context, id threadid.ID, ordinal uint32
 		}
 	}
 	if err != nil {
-		return dto.CreatedPost{}, err
+		return dto.CreatedPost{}, appended, err
 	}
-	return out, nil
+	return out, true, nil
 }
 
 // readBack answers a write with the post as the viewer now reads it, from

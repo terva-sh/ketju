@@ -102,7 +102,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `DELETE /threads/{id}/posts/{ordinal}` | soft delete; `POST …/restore` to undo |
 | `PUT  /threads/{id}/read` | `{ordinal}` advance read position; `DELETE` marks unread. Both answer 200 `internal/dto` `ReadPosition`; see "Read position" below |
 | `POST /threads/{id}/watch` `{level}` | watch/mute |
-| `POST /threads/{id}/flags` | `{ordinal, reason, note}` |
+| `POST /threads/{id}/flags` | `{ordinal, reason, note}` report a post (08 "Flags", TKT-01M29CP2PJ). A member session and read access are required. `reason` is `spam`, `abuse`, `off-topic` or `other`, and `other` needs a `note`, at most 1000 characters (`validation-failed`); an ordinal the thread lacks is `not-found`; a post already removed or moved, or a post in an archived thread, is `conflict`. Answers 200 `internal/dto` `FlagReceipt`, `{"received": true}`, the same for a new flag, a member's repeat (which adds no row) and the flag that hides the post, and nothing else: no count, no reporter, no outcome. If the flag reaches `flags.auto_hide_threshold` and the hide cannot be appended, the flag is kept and the answer is `unavailable`; the sweep hides the post within a minute. Charged to the write limiters. `no-store` |
 | `POST /render` | `{source, thread_id?, reply_to?}` → `{html, mentions: [{handle}], quotes: [{ordinal, deleted}], reply_to}` (composer preview; the create path records the same facts from the same render, `internal/dto` `RenderResult`). A member session is required (anonymous `unauthenticated`, pre-user `forbidden`). With `thread_id` the viewer must be able to read the thread, quotes resolve against it and `reply_to` is checked (`validation-failed` when no such post; a deleted post is accepted); without it quotes render optimistically and `reply_to` is `bad-request`. Charged to the per-address write limiter; the body limit is the post limit |
 | `GET  /drafts/{thread_id}` `PUT` `DELETE` | composer drafts, one per user per thread → `internal/dto` `Draft`; see "Drafts" below |
 | `GET  /unread` `/new` `/participated` `/watching` | cross-forum thread lists |
@@ -445,18 +445,19 @@ ordinal, `reply_to`, `reply_count` and permalink, so numbering, `?ordinal=`
 and the replies expander hold (08 "Tombstones"). `removal` says who removed
 it: `"author"` for a post its author deleted, `"moderator"` for one a
 moderator hid, and `"review"` for one auto-hidden pending review (08
-"Flags"; nothing sets it until TKT-01M29CP2PJ). It is null for a visible
-post and for a moved one, whose `moved_to` names the thread it went to. A
-post carrying both the deleted and hidden-by-mod bits, which only a log
-appended without the service's checks can hold, is `"author"`.
+"Flags", TKT-01M29CP2PJ). It is null for a visible post and for a moved
+one, whose `moved_to` names the thread it went to. A post carrying both the
+deleted and hidden-by-mod bits, which only a log appended without the
+service's checks can hold, is `"author"`.
 
 Who is served a removed post's body is one rule, `revealRemoved` in
 `internal/service/threads`, used by the page, the single post, replies,
 `/users/{handle}/posts` and history alike:
 - a moderator of the thread's forum gets every removed post's body;
 - the post's author gets it while a moderator's removal holds it, marked
-  `removal: "moderator"` (08, decided 2026-09-28), and not for a post they
-  deleted themselves;
+  `removal: "moderator"` (08, decided 2026-09-28), or while it is hidden
+  pending review, marked `removal: "review"` (TKT-01M29CP2PJ), and not for
+  a post they deleted themselves;
 - nobody else gets it, and nobody gets a moved post's body here.
 
 The rule answers only for removed posts. A visible post keeps the path it
@@ -787,7 +788,7 @@ here.
 | `PUT /api/v1/drafts/{thread_id}` | `POST /t/{id}/draft`, the composer's "Save draft" button (`formaction` on the reply form) | `source`, `reply_to` (optional) | `SaveDraft` |
 | `DELETE /api/v1/drafts/{thread_id}` | `POST /t/{id}/draft/delete` | none | `DeleteDraft` |
 | `POST /api/v1/threads/{id}/watch` | `POST /t/{id}/watch` | `level` | owned by TKT-01M29CRJ29, which builds the route |
-| `POST /api/v1/threads/{id}/flags` | `POST /t/{id}/posts/{ordinal}/flag` | `reason`, `note` | owned by TKT-01M29CP2PJ, which builds the route |
+| `POST /api/v1/threads/{id}/flags` | `POST /t/{id}/posts/{ordinal}/flag` | `reason`, `note` | the JSON route is built (TKT-01M29CP2PJ); the form route is Phase 5 |
 
 The read mark on a page `GET` is the one place a safe method writes. It is
 safe to repeat, because the position only moves forward, and it is what

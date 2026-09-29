@@ -16,6 +16,7 @@ import (
 	"github.com/terva-sh/ketju/internal/jobs"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/service/account"
+	"github.com/terva-sh/ketju/internal/service/posts"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -406,7 +407,9 @@ func TestRestoreDecidesAgainWhenTheLogMoves(t *testing.T) {
 	w.admin(bob, http.MethodPost, carolPosts+"suspend", `{"reason":"spam","hide_posts":true}`)
 
 	fired := false
-	w.svc.Writer.Publish = func(ev events.Event) {
+	// The world's Writer is a *posts.Writer (writes); Service.Writer is the
+	// Appender interface since TKT-01M29CP2PJ.
+	w.svc.Writer.(*posts.Writer).Publish = func(ev events.Event) {
 		w.events.add(ev)
 		if fired || ev.Thread != id {
 			return

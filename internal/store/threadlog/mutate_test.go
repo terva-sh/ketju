@@ -201,6 +201,39 @@ func TestModeratorDeleteSetsHiddenByMod(t *testing.T) {
 	}
 }
 
+// An auto-hide Delete (auto, TKT-01M29CP2PJ) sets hidden-by-mod and
+// auto-hidden, a moderator's Delete of the same post would clear auto-hidden
+// and keep it hidden, a Restore clears all three, and a replay of the log
+// builds the index the actor kept, bit 6 included.
+func TestAutoDeleteSetsAutoHidden(t *testing.T) {
+	a, lg, _, _ := newThread(t, SyncNever)
+	mustAppend(t, a, post("one"))
+	mustAppend(t, a, post("two"))
+	mustAppend(t, a, Append{Type: TypeDelete, Author: 0, Ordinal: 1, Body: &DeleteBody{Reason: "hidden pending review", Auto: true}})
+	mustAppend(t, a, Append{Type: TypeDelete, Author: 0, Ordinal: 2, Body: &DeleteBody{Auto: true}})
+	e1, _ := a.Index().Entry(1)
+	if e1.Flags&(EntryDeleted|EntryHiddenByMod|EntryAutoHidden) != EntryHiddenByMod|EntryAutoHidden || e1.Author != 42 {
+		t.Errorf("after an auto-hide, entry %+v: want hidden-by-mod and auto-hidden, author 42", e1)
+	}
+	// The moderator confirms the hide on #2: still hidden, no longer pending.
+	mustAppend(t, a, Append{Type: TypeDelete, Author: 7, Ordinal: 2, Body: &DeleteBody{ByModerator: true},
+		Require: EntryAutoHidden})
+	if e2, _ := a.Index().Entry(2); e2.Flags&(EntryHiddenByMod|EntryAutoHidden) != EntryHiddenByMod {
+		t.Errorf("after a moderator's delete of an auto-hidden post, entry %+v: want hidden-by-mod only", e2)
+	}
+	if got := replayed(t, lg.bytes()); !reflect.DeepEqual(got.entries, a.Index().entries) {
+		t.Errorf("replay disagrees with the actor:\n replay %+v\n  actor %+v", got.entries, a.Index().entries)
+	}
+	mustAppend(t, a, Append{Type: TypeRestore, Author: 7, Ordinal: 1, Body: &RestoreBody{},
+		RequireAny: EntryDeleted | EntryHiddenByMod, Refuse: EntryMoved})
+	if e, _ := a.Index().Entry(1); !e.Flags.Visible() || e.Flags.Has(EntryAutoHidden) {
+		t.Errorf("after a restore, entry %+v: want visible with auto-hidden clear", e)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 // TestRestoreRequireAny: a Restore under RequireAny deleted|hidden takes a
 // post that is either and refuses one that is neither, and Refuse still
 // refuses a moved post, writing nothing each time it refuses.
@@ -397,7 +430,10 @@ func TestPostFlagEffectIsWhatApplyDoes(t *testing.T) {
 		try{"Edit by value", TypeEdit, EditBody{Source: "x"}},
 		try{"moderator's Delete", TypeDelete, &DeleteBody{ByModerator: true}},
 		try{"moderator's Delete by value", TypeDelete, DeleteBody{ByModerator: true}},
-		try{"Delete by value", TypeDelete, DeleteBody{Reason: "x"}})
+		try{"Delete by value", TypeDelete, DeleteBody{Reason: "x"}},
+		try{"auto-hide Delete", TypeDelete, &DeleteBody{Auto: true}},
+		try{"auto-hide Delete by value", TypeDelete, DeleteBody{Auto: true}},
+		try{"auto and by_moderator Delete", TypeDelete, &DeleteBody{Auto: true, ByModerator: true}})
 	for _, c := range tries {
 		raw, err := EncodeBody(EncodingCBOR, c.body)
 		if err != nil {

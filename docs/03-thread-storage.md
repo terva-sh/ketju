@@ -44,7 +44,7 @@ format frozen on hope.
 |---|---|---|
 | File header (64 B) | 4 B at 12, 20 B at 40 | Yes, ample |
 | Frame fixed part (32 B) | no spare bytes; 15 spare flag bits | Not needed — see below |
-| Index entry (40 B) | 4 B at 36, 10 flag bits | Yes: a uint32 segment number |
+| Index entry (40 B) | 4 B at 36, 9 flag bits (10 until auto-hidden took bit 6, TKT-01M29CP2PJ) | Yes: a uint32 segment number |
 | Index header (32 B) | **none** | Not needed — see below |
 
 Segment rollover is the scenario the reserved bytes exist for: if a log ever
@@ -281,8 +281,8 @@ uses the name, never the literal.
 | 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
 | 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[] | new post_meta row, ordinal = thread.post_count+1 |
 | 3 | `Edit` | source, reason, reply_to, mentions[] (optional), grace (optional bool) | post_meta.current_revision++, edited flag unless `grace`; when `mentions` is present it replaces the post's mention rows |
-| 4 | `Delete` | reason, hard (bool, always false in v1), by_moderator (optional bool), suspension (optional uint) | post_meta.deleted, tombstone shown; the entry's hidden-by-mod flag when `by_moderator`, otherwise its deleted flag |
-| 5 | `Restore` | reason | clears deleted and hidden-by-mod |
+| 4 | `Delete` | reason, hard (bool, always false in v1), by_moderator (optional bool), suspension (optional uint), auto (optional bool) | post_meta.deleted, tombstone shown; the entry's hidden-by-mod and auto-hidden flags when `auto`, its hidden-by-mod flag (clearing auto-hidden) when `by_moderator`, otherwise its deleted flag |
+| 5 | `Restore` | reason | clears deleted, hidden-by-mod and auto-hidden |
 | 10 | `ThreadRenamed` | title, slug | thread row |
 | 11 | `ThreadMoved` | forum_id | thread row |
 | 12 | `ThreadLocked` / 13 `ThreadUnlocked` | reason | thread flags |
@@ -340,6 +340,17 @@ walked to. That condition is a check the actor makes in memory, like the flag
 preconditions, and nothing on disk records it. A users-level "posts hidden"
 flag lost, because every count and render path would have had to learn it. An
 older reader ignores the key and the post stays hidden, which fails closed.
+
+`Delete.auto` was added the same way, on 2026-09-30 (TKT-01M29CP2PJ). `true`
+marks the system's hide of a post whose open flags reached
+`flags.auto_hide_threshold` (08 "Flags"). Its frame actor is 0, the system, so
+that no reporter is named in the log. It sets the entry's hidden-by-mod flag
+and its auto-hidden flag (bit 6), which together read as "hidden pending
+review". A moderator's `Delete` (`by_moderator`) of such a post clears
+auto-hidden and leaves the moderator's hide, and a `Restore` clears both. The
+index reads the key, so a rebuild reproduces bit 6. An older reader ignores the
+key and sees a `Delete` by someone other than the author, which it shows as a
+tombstone to everyone but moderators, and fails closed.
 
 Deletion is soft. A `Delete` record leaves the original `Post` bytes intact;
 the reader consults the index flags and returns a tombstone.
@@ -512,7 +523,7 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 | 16 | 8 | Author user id | author filter lens without the DB |
 | 24 | 8 | Created at (unix ms, of revision 1) | jump-to-date, "since last visit" |
 | 32 | 2 | Current revision number | cache keys, history |
-| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4, a visible edit: not set by a grace `Edit`), machine-authored (5) — `EntryFlags` in `flags.go`, reserved bits 6–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
+| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4, a visible edit: not set by a grace `Edit`), machine-authored (5), auto-hidden (6, hidden pending review, only beside hidden-by-mod) — `EntryFlags` in `flags.go`, reserved bits 7–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
 | 36 | 4 | Reserved | segment rollover, see below |
 
 `machine-authored` mirrors frame flag bit 0, so filtering a thread by whether a
@@ -525,8 +536,8 @@ constant from one set into the other would compile and be wrong.
 
 The reserved 4 bytes at offset 36 are not general slack. They are held for the
 segment number that segment rollover would add to the offset field, described at
-the end of this document. Spare capacity for anything else is the 10 unused bits
-of the flags field.
+the end of this document. Spare capacity for anything else is the unused bits
+of the flags field: 9 since auto-hidden took bit 6 (TKT-01M29CP2PJ).
 
 The width is settled at 40 bytes. Measured in Phase 0 on a 50 000 post thread,
 filtering by author takes 15 us from the in-memory entries against 19.8 ms when

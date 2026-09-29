@@ -1,6 +1,12 @@
+-- A reporter's second open flag on a post adds no row: the partial unique
+-- index flags_one_open_per_reporter (migration 0014) is the conflict, and
+-- the insert does nothing, so it answers no row (sql.ErrNoRows) rather than
+-- an id. Only that index is the conflict target, so the CHECK on "other"
+-- still refuses a note-less flag, which INSERT OR IGNORE would swallow.
 -- name: CreateFlag :one
 INSERT INTO flags (thread_id, ordinal, reporter_id, reason, note, created_at)
 VALUES (?, ?, ?, ?, ?, ?)
+ON CONFLICT (thread_id, ordinal, reporter_id) WHERE status = 'open' DO NOTHING
 RETURNING id;
 
 -- Resolving or dismissing a flag updates it in place; only an open flag can
@@ -19,6 +25,50 @@ SELECT * FROM flags WHERE status = 'open' ORDER BY created_at DESC, id DESC LIMI
 -- A post's open flags, for the auto-hide threshold (docs/08).
 -- name: OpenFlagCount :one
 SELECT count(*) FROM flags WHERE thread_id = ? AND ordinal = ? AND status = 'open';
+
+-- A post's open flags, dismissed in place by a moderator's restore
+-- (TKT-01M29CP2PJ). The ids come back so that the restore can reopen
+-- exactly these if its append fails.
+-- name: DismissOpenFlagsForPost :many
+UPDATE flags SET status = 'dismissed', resolved_by = sqlc.arg(resolved_by), resolved_at = sqlc.arg(resolved_at),
+	resolution_note = sqlc.arg(resolution_note)
+WHERE thread_id = sqlc.arg(thread_id) AND ordinal = sqlc.arg(ordinal) AND status = 'open'
+RETURNING id;
+
+-- A post's open flags, resolved in place by a moderator who confirms an
+-- auto-hide (TKT-01M29CP2PJ ConfirmHide).
+-- name: ResolveOpenFlagsForPost :many
+UPDATE flags SET status = 'resolved', resolved_by = sqlc.arg(resolved_by), resolved_at = sqlc.arg(resolved_at),
+	resolution_note = sqlc.arg(resolution_note)
+WHERE thread_id = sqlc.arg(thread_id) AND ordinal = sqlc.arg(ordinal) AND status = 'open'
+RETURNING id;
+
+-- Reopens flags a restore dismissed when its append wrote nothing. Only a
+-- dismissed flag reopens, so a flag some other path closed since stays
+-- closed. A reporter may have flagged the post again while theirs was
+-- dismissed, since a flag's insert does not wait on the post's lock; their
+-- newer flag then stands for them, and the old one stays dismissed rather
+-- than breaking flags_one_open_per_reporter and failing the whole reopen.
+-- name: ReopenFlags :execrows
+UPDATE flags SET status = 'open', resolved_by = NULL, resolved_at = NULL, resolution_note = ''
+WHERE flags.id IN (sqlc.slice(ids)) AND flags.status = 'dismissed'
+  AND NOT EXISTS (
+	SELECT 1 FROM flags o
+	WHERE o.thread_id = flags.thread_id AND o.ordinal = flags.ordinal
+	  AND o.reporter_id = flags.reporter_id AND o.status = 'open'
+  );
+
+-- The posts the auto-hide owes a hide: at least threshold open flags, and
+-- not already down in the projection. The sweep asks the index again for
+-- each before it appends anything, so a projection that lags costs at most
+-- one wasted look (TKT-01M29CP2PJ AutoHideSweep).
+-- name: PostsAtFlagThreshold :many
+SELECT f.thread_id, f.ordinal FROM flags f
+JOIN post_meta p ON p.thread_id = f.thread_id AND p.ordinal = f.ordinal
+WHERE f.status = 'open' AND p.deleted = 0
+GROUP BY f.thread_id, f.ordinal
+HAVING count(*) >= CAST(sqlc.arg(threshold) AS INTEGER)
+ORDER BY f.thread_id, f.ordinal;
 
 -- The only write audit_log has. Rows are never updated or deleted: the
 -- triggers in migration 0006 refuse it, and TestAuditLogAppendOnly refuses a

@@ -131,12 +131,17 @@ func (ix *Index) applyEdit(h FrameHeader, b *EditBody, offset uint64, frameSize 
 // the same way.
 //
 // A Delete whose body says by_moderator (TKT-01M29CRJ5J) sets hidden-by-mod
-// rather than deleted: a moderator's delete of somebody else's post. The
-// index reads the key, not the actor, so the record's effect is what it
-// says.
+// rather than deleted: a moderator's delete of somebody else's post. It
+// clears auto-hidden, so a moderator's delete of a post hidden pending review
+// makes the hide the moderator's. A Delete whose body says auto
+// (TKT-01M29CP2PJ) sets hidden-by-mod and auto-hidden: the system's hide
+// pending review. auto wins over by_moderator, which no server writes
+// together. The index reads the keys, not the actor, so the record's effect
+// is what it says.
 //
-// A Restore clears hidden-by-mod as well as deleted (docs/08: a moderator's
-// Restore clears it; settled in grooming for TKT-01M29CA9BP). The index
+// A Restore clears auto-hidden, hidden-by-mod and deleted (docs/08: a
+// moderator's Restore clears it; settled in grooming for TKT-01M29CA9BP),
+// so a restored post is visible whatever hid it. The index
 // cannot judge who wrote a record, so the rule that only a moderator may
 // restore a hidden post is the service's, and the index applies what the log
 // says.
@@ -148,12 +153,15 @@ func postFlagEffect(t RecordType, body any) (set, clear EntryFlags) {
 		}
 		return EntryEdited, 0
 	case TypeDelete:
-		if byModerator(body) {
-			return EntryHiddenByMod, 0
+		switch deleteKind(body) {
+		case deleteAuto:
+			return EntryHiddenByMod | EntryAutoHidden, 0
+		case deleteByModerator:
+			return EntryHiddenByMod, EntryAutoHidden
 		}
 		return EntryDeleted, 0
 	case TypeRestore:
-		return 0, EntryDeleted | EntryHiddenByMod
+		return 0, EntryDeleted | EntryHiddenByMod | EntryAutoHidden
 	}
 	return 0, 0
 }
@@ -171,16 +179,33 @@ func isGrace(body any) bool {
 	return false
 }
 
-// byModerator reports whether body is a moderator's Delete's, reading both
-// forms for the reason isGrace does.
-func byModerator(body any) bool {
-	switch b := body.(type) {
+// The kinds of Delete, by what the body says.
+const (
+	deleteByAuthor = iota
+	deleteByModerator
+	deleteAuto
+)
+
+// deleteKind says whose Delete body is: the system's auto-hide, a
+// moderator's, or an author's. It reads both forms for the reason isGrace
+// does.
+func deleteKind(body any) int {
+	var b DeleteBody
+	switch v := body.(type) {
 	case *DeleteBody:
-		return b != nil && b.ByModerator
+		if v != nil {
+			b = *v
+		}
 	case DeleteBody:
-		return b.ByModerator
+		b = v
 	}
-	return false
+	switch {
+	case b.Auto:
+		return deleteAuto
+	case b.ByModerator:
+		return deleteByModerator
+	}
+	return deleteByAuthor
 }
 
 // setFlags turns bits on and off in one entry.
