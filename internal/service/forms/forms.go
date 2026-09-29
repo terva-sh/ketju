@@ -107,17 +107,25 @@ func ActiveIn(ctx context.Context, q *dbq.Queries, key string) (Version, error) 
 func (s *Service) Version(ctx context.Context, formID int64, n int) (Version, error) {
 	var v Version
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		f, err := q.GetFormByID(ctx, formID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return problem.Coded(problem.CodeNotFound, fmt.Errorf("%w: form id %d", ErrNoForm, formID))
-		}
-		if err != nil {
-			return err
-		}
-		v, err = load(ctx, q, f, n)
+		var err error
+		v, err = VersionIn(ctx, q, formID, n)
 		return err
 	})
 	return v, err
+}
+
+// VersionIn is Version inside a transaction the caller holds, so a review
+// reads an application and the version it answered together
+// (internal/service/applications).
+func VersionIn(ctx context.Context, q *dbq.Queries, formID int64, n int) (Version, error) {
+	f, err := q.GetFormByID(ctx, formID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Version{}, problem.Coded(problem.CodeNotFound, fmt.Errorf("%w: form id %d", ErrNoForm, formID))
+	}
+	if err != nil {
+		return Version{}, err
+	}
+	return load(ctx, q, f, n)
 }
 
 // Admin is GET /admin/forms/{key}, and with n > 0 GET

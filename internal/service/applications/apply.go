@@ -1,12 +1,12 @@
-// Package applications is an approval-mode applicant's side of an
-// application (docs/05 "mode = approval" steps 2 to 4): reading the form,
-// submitting it, reading its status, and withdrawing it. Deciding an
-// application is TKT-01M29CP2MG's.
+// Package applications is approval-mode registration's applications
+// (docs/05 "mode = approval"): the applicant's side in this file, reading
+// the form, submitting it, reading its status, and withdrawing it (steps 2
+// to 4), and staff's review in review.go (step 5).
 //
-// Every route here is reached only from a pre-user session: an applicant
-// signed in with an identity that has no user. The rules live here rather
-// than in the handlers, so the HTML client can ask the same questions and
-// get the same answers (docs/07 "Principles").
+// The applicant's routes are reached only from a pre-user session: an
+// applicant signed in with an identity that has no user. The rules live here
+// rather than in the handlers, so the HTML client can ask the same questions
+// and get the same answers (docs/07 "Principles").
 //
 // An applicant is refused, in this order, when their identity already has a
 // user, when it is blocked, when registration.mode is not approval, when
@@ -15,9 +15,9 @@
 // again inside the transaction that writes, so an approval, a block or a
 // change of mode between reading the form and submitting it is not missed.
 //
-// Nothing here issues a session, and nothing here writes an audit row: an
-// applicant's own acts are not moderation or administration (docs/04
-// "audit_log").
+// Nothing in the package issues a session. The applicant's acts write no
+// audit row, because they are not moderation or administration (docs/04
+// "audit_log"); every review decision writes one.
 package applications
 
 import (

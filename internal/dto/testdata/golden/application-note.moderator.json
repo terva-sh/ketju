@@ -1,0 +1,12 @@
+{
+  "id": 9,
+  "author": {
+    "handle": "bob",
+    "display_name": "Bob Iyer",
+    "avatar": "",
+    "role": "moderator",
+    "kind": "human"
+  },
+  "body": "Alice vouched for her in the book club.",
+  "created_at": 1757605000000
+}

@@ -147,15 +147,17 @@ member, so the error goes to the log and the client gets the fixed title.
 
 #### Field errors on `validation-failed`
 
-A `validation-failed` body for a form's answers or a form schema (05
-"Forms") carries one more member, `errors`: a list of `{field, code}`, one
-entry per thing wrong, in order. This is an RFC 9457 extension member. No
-other body has it.
+A `validation-failed` body for a form's answers, a form schema (05
+"Forms"), or an application decision carries one more member, `errors`: a
+list of `{field, code}`, one entry per thing wrong, in order. This is an
+RFC 9457 extension member. No other body has it.
 
 - `field` is an answer's key from the stored schema, or a path into a
   submitted schema of property names and indices, such as
   `fields.2.options` or `title`. The whole schema is `""`. A path never
-  carries a key the request sent, so the body echoes nothing.
+  carries a key the request sent, so the body echoes nothing. An
+  application's approval or denial names its own fields, `handle` and
+  `note`.
 - `code` is one of the codes below. They are API surface, like the `type`s
   above.
 
@@ -178,6 +180,9 @@ other body has it.
 | `too_many` | Over 50 fields or 100 options |
 | `unknown_property` | A property no schema or field has |
 | `malformed` | Not JSON, or more than one JSON value |
+| `invalid_handle` | An approval's `handle` that breaks 04's handle rule |
+| `reserved` | An approval's `handle` kept for a route or for the software |
+| `taken` | An approval's `handle` that a member holds in any case, or that a release still reserves |
 <!-- form-codes:end -->
 
 ### Moderation and admin (`/api/v1/admin/*`, role-gated)
@@ -220,6 +225,31 @@ the next request.
 | `GET /admin/permissions` | admin | `PermissionGrid`: the groups, the forums in index order, and every row, `forum_id` null for a site-wide one |
 | `POST /admin/permissions` `{changes: [{forum_id, group_id, permission, grant}]}` | admin | The batch in one transaction, one audit row per change, or none. A change naming no forum, group or permission, or the same row twice, is `validation-failed`; a grant of a row that exists or a revoke of one that does not is `conflict`, because the grid moved since the batch was staged. At most 500 changes. Answers with the grid |
 | `POST /admin/permissions/preview` `{handle, changes}` | admin | `PermissionPreview`: the account's `allow`, `deny` or `hidden` for each permission in every forum, before and with the batch, decided as a check decides it. Writes nothing, and refuses what applying would |
+
+#### Applications (TKT-01M29CP2MG)
+
+The `/admin/applications` screen, where moderators and admins decide
+approval-mode applications (05 "mode = approval" step 5). Every route is
+staff's: anonymous and inactive viewers are `unauthenticated`, and a
+pre-user or a member without a staff role is `forbidden`. Every answer is
+`no-store`, and none goes near the response cache. An id that names no
+application is `not-found`, and one that is not a positive integer
+`bad-request`. Bodies are decoded strictly: an unknown field is
+`bad-request`.
+
+| Route | What it does |
+|---|---|
+| `GET /admin/applications?status=&cursor=` | `AdminApplicationList`: 25 applications per page, newest first. `status` is `pending` (the default), `approved`, `denied`, `withdrawn` or `all`; anything else is `validation-failed`, and a malformed cursor `bad-request` |
+| `GET /admin/applications/{id}` | `AdminApplication`: the answers against the form version they answered, whichever version is active; the identity (provider, email, verified flag, blocked), or null once removed; the identity's other applications; the moderators' notes; `suggested_handle`; and the decision, null while pending |
+| `POST /admin/applications/{id}/approve` `{handle, note?}` | The `AdminApplication`, approved. In one transaction: the member is created (active, `member`, human), the identity linked, the application approved with the member's id, the applicant's pre-user sessions deleted, and `application.approved` audited. It issues no session. A handle that breaks 04's rule, is reserved, or is taken (in any case, or reserved by a release) is `validation-failed` with `errors: [{field: "handle", code}]`. An application no longer pending is `conflict`, as is one whose identity is gone, has a user, or is blocked; nothing is written. There is no role field |
+| `POST /admin/applications/{id}/deny` `{note, block}` | The `AdminApplication`, denied. The note is required, 1 to 2000 characters, and the applicant never sees it; a missing one is `validation-failed` with `errors: [{field: "note", code}]`. With `block` the identity is blocked too, which must land on exactly one identity with no user, or the denial is `conflict` and nothing is written. One `application.denied` row, with `blocked`. An application no longer pending is `conflict` |
+| `POST /admin/applications/{id}/notes` `{body}` | 201 `ApplicationNote`: a note for the other moderators, 1 to 2000 characters. Not audited: it decides nothing |
+| `POST /admin/applications/{id}/unblock` (empty body or `{}`) | The `AdminApplication`, its identity no longer blocked. The application stays denied, and the applicant may apply again under the 24-hour rule. `identity.unblocked` is audited against the identity. An identity that is not blocked, or is gone, is `conflict` |
+
+Of two decisions on one application at once, one is made and the other is
+`conflict`: the decision is an UPDATE guarded on `status = 'pending'`, and
+the transaction that finds nothing to update rolls back whatever it wrote.
+A withdrawal racing an approval is decided the same way.
 
 #### Form versions (TKT-01M29CP2KE)
 

@@ -48,6 +48,133 @@ func (q *Queries) ApplicantIdentity(ctx context.Context, id int64) (ApplicantIde
 	return i, err
 }
 
+const applicationNotes = `-- name: ApplicationNotes :many
+SELECT id, author_id, body, created_at FROM application_notes
+WHERE application_id = ?
+ORDER BY created_at, id
+`
+
+type ApplicationNotesRow struct {
+	ID        int64
+	AuthorID  int64
+	Body      string
+	CreatedAt int64
+}
+
+func (q *Queries) ApplicationNotes(ctx context.Context, applicationID int64) ([]ApplicationNotesRow, error) {
+	rows, err := q.db.QueryContext(ctx, applicationNotes, applicationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ApplicationNotesRow
+	for rows.Next() {
+		var i ApplicationNotesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.AuthorID,
+			&i.Body,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const blockIdentity = `-- name: BlockIdentity :execrows
+UPDATE identities SET blocked_at = ?, blocked_by = ?, updated_at = ?
+WHERE id = ? AND user_id IS NULL
+`
+
+type BlockIdentityParams struct {
+	BlockedAt sql.NullInt64
+	BlockedBy sql.NullInt64
+	UpdatedAt int64
+	ID        int64
+}
+
+// BlockIdentity marks an identity so its re-applications are refused
+// (docs/05 step 5). Zero rows means it is gone or has a user.
+func (q *Queries) BlockIdentity(ctx context.Context, arg BlockIdentityParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, blockIdentity,
+		arg.BlockedAt,
+		arg.BlockedBy,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const decideApplication = `-- name: DecideApplication :execrows
+UPDATE applications
+SET status = ?1, decided_by = ?2, decided_at = ?3,
+    decision_note = ?4, user_id = ?5
+WHERE id = ?6 AND status = 'pending'
+`
+
+type DecideApplicationParams struct {
+	Status       string
+	DecidedBy    sql.NullInt64
+	DecidedAt    sql.NullInt64
+	DecisionNote sql.NullString
+	UserID       sql.NullInt64
+	ID           int64
+}
+
+// DecideApplication approves or denies a pending application. Zero rows
+// means it was no longer pending: another moderator decided it, or the
+// applicant withdrew it. user_id is the member an approval created, set in
+// the same statement as the status, because the table's CHECK that ties
+// the two is evaluated per statement (review 1344); a denial passes null.
+func (q *Queries) DecideApplication(ctx context.Context, arg DecideApplicationParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, decideApplication,
+		arg.Status,
+		arg.DecidedBy,
+		arg.DecidedAt,
+		arg.DecisionNote,
+		arg.UserID,
+		arg.ID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const getApplication = `-- name: GetApplication :one
+SELECT id, identity_id, form_id, form_version, answers_json, status, user_id, decided_by, decided_at, decision_note, created_at FROM applications WHERE id = ?
+`
+
+func (q *Queries) GetApplication(ctx context.Context, id int64) (Application, error) {
+	row := q.db.QueryRowContext(ctx, getApplication, id)
+	var i Application
+	err := row.Scan(
+		&i.ID,
+		&i.IdentityID,
+		&i.FormID,
+		&i.FormVersion,
+		&i.AnswersJson,
+		&i.Status,
+		&i.UserID,
+		&i.DecidedBy,
+		&i.DecidedAt,
+		&i.DecisionNote,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
 const insertApplication = `-- name: InsertApplication :one
 INSERT INTO applications (identity_id, form_id, form_version, answers_json, status, created_at)
 VALUES (?, ?, ?, ?, 'pending', ?)
@@ -68,6 +195,31 @@ func (q *Queries) InsertApplication(ctx context.Context, arg InsertApplicationPa
 		arg.FormID,
 		arg.FormVersion,
 		arg.AnswersJson,
+		arg.CreatedAt,
+	)
+	var id int64
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertApplicationNote = `-- name: InsertApplicationNote :one
+INSERT INTO application_notes (application_id, author_id, body, created_at)
+VALUES (?, ?, ?, ?)
+RETURNING id
+`
+
+type InsertApplicationNoteParams struct {
+	ApplicationID int64
+	AuthorID      int64
+	Body          string
+	CreatedAt     int64
+}
+
+func (q *Queries) InsertApplicationNote(ctx context.Context, arg InsertApplicationNoteParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, insertApplicationNote,
+		arg.ApplicationID,
+		arg.AuthorID,
+		arg.Body,
 		arg.CreatedAt,
 	)
 	var id int64
@@ -105,6 +257,174 @@ func (q *Queries) LatestApplicationForIdentity(ctx context.Context, identityID s
 		&i.DecidedAt,
 	)
 	return i, err
+}
+
+const linkIdentityToUser = `-- name: LinkIdentityToUser :execrows
+UPDATE identities SET user_id = ?, updated_at = ?
+WHERE id = ? AND user_id IS NULL AND blocked_at IS NULL
+`
+
+type LinkIdentityToUserParams struct {
+	UserID    sql.NullInt64
+	UpdatedAt int64
+	ID        int64
+}
+
+// LinkIdentityToUser gives an applicant's identity the user an approval
+// created. Zero rows means the identity is gone, already has a user, or is
+// blocked.
+func (q *Queries) LinkIdentityToUser(ctx context.Context, arg LinkIdentityToUserParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, linkIdentityToUser, arg.UserID, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const listApplications = `-- name: ListApplications :many
+
+SELECT a.id, a.status, a.created_at, i.provider_key, i.email, i.email_verified
+FROM applications AS a
+LEFT JOIN identities AS i ON i.id = a.identity_id
+WHERE (?1 IS NULL OR a.status = ?1)
+  AND (a.created_at < ?2 OR (a.created_at = ?2 AND a.id < ?3))
+ORDER BY a.created_at DESC, a.id DESC
+LIMIT ?4
+`
+
+type ListApplicationsParams struct {
+	Status   interface{}
+	BeforeAt int64
+	BeforeID int64
+	Lim      int64
+}
+
+type ListApplicationsRow struct {
+	ID            int64
+	Status        string
+	CreatedAt     int64
+	ProviderKey   sql.NullString
+	Email         sql.NullString
+	EmailVerified sql.NullInt64
+}
+
+// Reviewing applications (docs/05 "mode = approval" step 5, TKT-01M29CP2MG).
+// Staff decide them through internal/service/applications, whose writes
+// are each one transaction, and every write that decides is guarded in its
+// own statement, so a decision another moderator made a moment before is
+// found by the UPDATE rather than by a read that could go stale.
+// ListApplications is one page of the review list, newest first, after the
+// keyset (before_at, before_id); a null status lists every status. The
+// identity's provider, email and verified flag come with each row, null
+// once the identity was removed.
+func (q *Queries) ListApplications(ctx context.Context, arg ListApplicationsParams) ([]ListApplicationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listApplications,
+		arg.Status,
+		arg.BeforeAt,
+		arg.BeforeID,
+		arg.Lim,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListApplicationsRow
+	for rows.Next() {
+		var i ListApplicationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ProviderKey,
+			&i.Email,
+			&i.EmailVerified,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const otherApplicationsForIdentity = `-- name: OtherApplicationsForIdentity :many
+SELECT a.id, a.status, a.created_at, i.provider_key, i.email, i.email_verified
+FROM applications AS a
+LEFT JOIN identities AS i ON i.id = a.identity_id
+WHERE a.identity_id = ?1 AND a.id <> ?2
+ORDER BY a.created_at DESC, a.id DESC
+LIMIT 50
+`
+
+type OtherApplicationsForIdentityParams struct {
+	IdentityID sql.NullInt64
+	ID         int64
+}
+
+type OtherApplicationsForIdentityRow struct {
+	ID            int64
+	Status        string
+	CreatedAt     int64
+	ProviderKey   sql.NullString
+	Email         sql.NullString
+	EmailVerified sql.NullInt64
+}
+
+// OtherApplicationsForIdentity is every other application from the same
+// identity, newest first: the prior applications the review screen shows.
+func (q *Queries) OtherApplicationsForIdentity(ctx context.Context, arg OtherApplicationsForIdentityParams) ([]OtherApplicationsForIdentityRow, error) {
+	rows, err := q.db.QueryContext(ctx, otherApplicationsForIdentity, arg.IdentityID, arg.ID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []OtherApplicationsForIdentityRow
+	for rows.Next() {
+		var i OtherApplicationsForIdentityRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.ProviderKey,
+			&i.Email,
+			&i.EmailVerified,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const unblockIdentity = `-- name: UnblockIdentity :execrows
+UPDATE identities SET blocked_at = NULL, blocked_by = NULL, updated_at = ?
+WHERE id = ? AND blocked_at IS NOT NULL
+`
+
+type UnblockIdentityParams struct {
+	UpdatedAt int64
+	ID        int64
+}
+
+// UnblockIdentity clears the block and nothing else. Zero rows means the
+// identity is gone or was not blocked.
+func (q *Queries) UnblockIdentity(ctx context.Context, arg UnblockIdentityParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, unblockIdentity, arg.UpdatedAt, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const withdrawApplication = `-- name: WithdrawApplication :execrows

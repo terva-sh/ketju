@@ -460,3 +460,63 @@ export interface ApplicationStatus {
   can_apply_at: Millis | null;
   sign_in: string | null;
 }
+
+// The applications review screen (internal/dto applications.go,
+// TKT-01M29CP2MG). Staff only; nothing here reaches an applicant.
+
+// AdminApplicationRow is one application in the review list. provider is
+// null once the identity was removed, and email when there is none.
+export interface AdminApplicationRow {
+  id: number;
+  status: string;
+  created_at: Millis;
+  provider: string | null;
+  email: string | null;
+  email_verified: boolean;
+}
+
+// AdminApplicationList is GET /admin/applications, newest first.
+export interface AdminApplicationList {
+  applications: AdminApplicationRow[];
+  next_cursor: string;
+}
+
+// AdminApplication is GET /admin/applications/{id}, and the answer to
+// approve, deny and unblock. form is the version the application answered.
+// identity is null once removed, and decision while pending.
+export interface AdminApplication {
+  id: number;
+  status: string;
+  created_at: Millis;
+  form: Form;
+  answers: Record<string, unknown>;
+  identity: ApplicantIdentity | null;
+  prior: AdminApplicationRow[];
+  notes: ApplicationNote[];
+  suggested_handle: string;
+  decision: ApplicationDecision | null;
+}
+
+export interface ApplicantIdentity {
+  provider: string;
+  email: string | null;
+  email_verified: boolean;
+  blocked: boolean;
+}
+
+// ApplicationNote is one moderator's note, and the answer to POST
+// /admin/applications/{id}/notes.
+export interface ApplicationNote {
+  id: number;
+  author: Author;
+  body: string;
+  created_at: Millis;
+}
+
+// ApplicationDecision: by is null for a withdrawal, user unless approved.
+export interface ApplicationDecision {
+  by: Author | null;
+  at: Millis;
+  note: string;
+  user: Author | null;
+}

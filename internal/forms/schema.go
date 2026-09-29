@@ -112,13 +112,20 @@ const (
 	CodeTooMany         = "too_many"
 	CodeUnknownProperty = "unknown_property"
 	CodeMalformed       = "malformed"
+
+	// The handle an approval gives a new member (TKT-01M29CP2MG), under
+	// the field "handle": not a valid handle, one kept for a route or the
+	// software, and one a member holds or a release still reserves.
+	CodeInvalidHandle = "invalid_handle"
+	CodeReserved      = "reserved"
+	CodeTaken         = "taken"
 )
 
 // Codes lists every code, for the documentation test.
 var Codes = []string{
 	CodeRequired, CodeTooLong, CodeInvalidEmail, CodeInvalidText, CodeNotAnOption, CodeDuplicateOption,
 	CodeWrongType, CodeNotAllowed, CodeInvalidKey, CodeDuplicateKey, CodeUnknownType, CodeUnknownClaim,
-	CodeOutOfRange, CodeTooMany, CodeUnknownProperty, CodeMalformed,
+	CodeOutOfRange, CodeTooMany, CodeUnknownProperty, CodeMalformed, CodeInvalidHandle, CodeReserved, CodeTaken,
 }
 
 // FieldError is one thing wrong: where, and which code.

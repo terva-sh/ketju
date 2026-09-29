@@ -69,11 +69,12 @@ const (
 	TypeSetting     = "setting"
 	TypePermission  = "permission"
 	TypeForm        = "form"
+	TypeIdentity    = "identity"
 )
 
 // Types lists every target type, for the documentation test.
 var Types = []string{TypeUser, TypeForum, TypeGroup, TypeFlag, TypeApplication, TypeThread, TypePost, TypeSetting,
-	TypePermission, TypeForm}
+	TypePermission, TypeForm, TypeIdentity}
 
 func decimal(typ string, id int64) Target { return Target{Type: typ, ID: strconv.FormatInt(id, 10)} }
 
@@ -91,6 +92,10 @@ func Flag(id int64) Target { return decimal(TypeFlag, id) }
 
 // Application is a registration application, by id.
 func Application(id int64) Target { return decimal(TypeApplication, id) }
+
+// Identity is one identity a provider vouches for, by id: an applicant's,
+// whose block staff lift (TKT-01M29CP2MG).
+func Identity(id int64) Target { return decimal(TypeIdentity, id) }
 
 // Thread is a thread, by its base32 id as URLs spell it.
 func Thread(id threadid.ID) Target { return Target{Type: TypeThread, ID: id.String()} }

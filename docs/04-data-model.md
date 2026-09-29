@@ -385,6 +385,7 @@ transaction that projects the record, with the frame's timestamp as `at`.
 | `setting` | the setting's key, such as `registration.mode` |
 | `permission` | `<forum id>:<group id>:<permission>`, or `global:<group id>:<permission>` for a site-wide row |
 | `form` | the form's key, such as `registration` |
+| `identity` | the identity's id, in decimal |
 <!-- audit-targets:end -->
 
 - `action` names what was done, such as `user.promoted` or
@@ -415,6 +416,16 @@ transaction that projects the record, with the frame's timestamp as `at`.
   `user.anonymized`. Each carries the status it came `"from"`.
   `user.anonymized` names no handle; the rows written before it, a rename's
   old and new handle included, stay as they are (05 "Account lifecycle").
+- Application review (TKT-01M29CP2MG) writes one row per decision, in the
+  transaction that makes it, with the deciding moderator as actor:
+  `application.approved` against the application, with `"user_id"`,
+  `"identity_id"`, `"handle"` and `"note"` (empty when none was given);
+  `application.denied` against the application, with `"note"` and
+  `"blocked"`, true only when the block was written; and
+  `identity.unblocked` against the identity, with `"application_id"`, the
+  application the block was lifted from. A block is part of its denial and
+  writes no row of its own. A moderator's note on an application decides
+  nothing and writes none.
 
 ### notifications
 ```

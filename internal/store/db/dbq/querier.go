@@ -40,6 +40,7 @@ type Querier interface {
 	// pre-user session is bound to: whether it already has a user, whether it is
 	// blocked, and the claims that prefill the form.
 	ApplicantIdentity(ctx context.Context, id int64) (ApplicantIdentityRow, error)
+	ApplicationNotes(ctx context.Context, applicationID int64) ([]ApplicationNotesRow, error)
 	// Whether audit_log already records this action on this target. Bootstrap
 	// promotion reads it as its idempotency marker (TKT-01M29C800G), through the
 	// audit_log_target index.
@@ -56,6 +57,9 @@ type Querier interface {
 	// it keeps (TKT-01M29C5Y2S, review 1156). A candidate is only a candidate:
 	// DeleteCollectableBlob checks every condition again as it deletes.
 	BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]BlobGCCandidatesRow, error)
+	// BlockIdentity marks an identity so its re-applications are refused
+	// (docs/05 step 5). Zero rows means it is gone or has a user.
+	BlockIdentity(ctx context.Context, arg BlockIdentityParams) (int64, error)
 	ClearForumThreadCounts(ctx context.Context) error
 	ClearMentions(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
@@ -86,6 +90,12 @@ type Querier interface {
 	// no query that takes the plaintext: hashing belongs to the session store.
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (int64, error)
+	// DecideApplication approves or denies a pending application. Zero rows
+	// means it was no longer pending: another moderator decided it, or the
+	// applicant withdrew it. user_id is the member an approval created, set in
+	// the same statement as the status, because the table's CHECK that ties
+	// the two is evaluated per statement (review 1344); a denial passes null.
+	DecideApplication(ctx context.Context, arg DecideApplicationParams) (int64, error)
 	// DeleteCollectableBlob deletes one blob row only if it is still
 	// collectable at the moment of the delete: still at zero references, still
 	// at zero since before cutoff, and named by no user's avatar and no draft.
@@ -165,6 +175,7 @@ type Querier interface {
 	//
 	// Only forums with an unread thread have a row.
 	ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error)
+	GetApplication(ctx context.Context, id int64) (Application, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetFormByID(ctx context.Context, id int64) (Form, error)
 	// Forms and their versions (docs/04 "forms, form_versions"). Versions are
@@ -211,6 +222,7 @@ type Querier interface {
 	// button's cookie is bound to (docs/05 "Login flow").
 	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
 	InsertApplication(ctx context.Context, arg InsertApplicationParams) (int64, error)
+	InsertApplicationNote(ctx context.Context, arg InsertApplicationNoteParams) (int64, error)
 	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
 	// InsertHandleRelease records that a handle left an account, and reserves
 	// it until reserved_until. user_id is null for an anonymized account's old
@@ -222,6 +234,20 @@ type Querier interface {
 	// LatestApplicationForIdentity is the identity's newest application, pending
 	// or decided. The 24-hour rule counts from its created_at.
 	LatestApplicationForIdentity(ctx context.Context, identityID sql.NullInt64) (LatestApplicationForIdentityRow, error)
+	// LinkIdentityToUser gives an applicant's identity the user an approval
+	// created. Zero rows means the identity is gone, already has a user, or is
+	// blocked.
+	LinkIdentityToUser(ctx context.Context, arg LinkIdentityToUserParams) (int64, error)
+	// Reviewing applications (docs/05 "mode = approval" step 5, TKT-01M29CP2MG).
+	// Staff decide them through internal/service/applications, whose writes
+	// are each one transaction, and every write that decides is guarded in its
+	// own statement, so a decision another moderator made a moment before is
+	// found by the UPDATE rather than by a read that could go stale.
+	// ListApplications is one page of the review list, newest first, after the
+	// keyset (before_at, before_id); a null status lists every status. The
+	// identity's provider, email and verified flag come with each row, null
+	// once the identity was removed.
+	ListApplications(ctx context.Context, arg ListApplicationsParams) ([]ListApplicationsRow, error)
 	ListFormVersions(ctx context.Context, formID int64) ([]ListFormVersionsRow, error)
 	// Roots in position order, each followed by its children in position order.
 	// A child sorts by its root's position and id, then after the root itself.
@@ -285,6 +311,9 @@ type Querier interface {
 	OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (int64, error)
 	// The moderator queue: open flags, newest first (docs/08).
 	OpenFlags(ctx context.Context, limit int64) ([]Flag, error)
+	// OtherApplicationsForIdentity is every other application from the same
+	// identity, newest first: the prior applications the review screen shows.
+	OtherApplicationsForIdentity(ctx context.Context, arg OtherApplicationsForIdentityParams) ([]OtherApplicationsForIdentityRow, error)
 	// The rows permission evaluation (TKT-01M29C5Y2E) needs for one forum: the
 	// forum's own grants and the global ones, for the viewer's groups.
 	PermissionRows(ctx context.Context, arg PermissionRowsParams) ([]PermissionRowsRow, error)
@@ -348,6 +377,9 @@ type Querier interface {
 	// be alive by the same cutoffs as LookupSession, at the time of the write, so
 	// a touch that lands just after the idle boundary cannot revive the session.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
+	// UnblockIdentity clears the block and nothing else. Zero rows means the
+	// identity is gone or was not blocked.
+	UnblockIdentity(ctx context.Context, arg UnblockIdentityParams) (int64, error)
 	// Clears the pin only when its scope matches, so removing a forum pin does
 	// not silently remove a global one (docs/03). SQLite evaluates every SET
 	// expression against the row as it was, so both CASEs see the old scope.

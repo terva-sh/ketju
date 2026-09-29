@@ -1,0 +1,21 @@
+{
+  "applications": [
+    {
+      "id": 42,
+      "status": "pending",
+      "created_at": 1757600000000,
+      "provider": "github",
+      "email": "carol@example.com",
+      "email_verified": true
+    },
+    {
+      "id": 40,
+      "status": "pending",
+      "created_at": 1757590000000,
+      "provider": null,
+      "email": null,
+      "email_verified": false
+    }
+  ],
+  "next_cursor": "MTc1NzU5MDAwMDAwMDo0MA"
+}

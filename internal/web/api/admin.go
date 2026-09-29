@@ -59,9 +59,10 @@ type adminRouteEntry struct {
 // registerAdmin registers every admin route. Each section's ticket adds its
 // routes here, through adminRoute.
 func (h *handlers) registerAdmin(mux *http.ServeMux) {
-	h.registerForms(mux)      // forms.go, TKT-01M29CP2KE
-	h.registerAdminUsers(mux) // admin_users.go, TKT-01M29CXK1X
-	h.registerLifecycle(mux)  // account.go, TKT-01M29CKRFS
+	h.registerForms(mux)        // forms.go, TKT-01M29CP2KE
+	h.registerAdminUsers(mux)   // admin_users.go, TKT-01M29CXK1X
+	h.registerLifecycle(mux)    // account.go, TKT-01M29CKRFS
+	h.registerApplications(mux) // applications.go, TKT-01M29CP2MG
 }
 
 // adminRoute registers handler for pattern behind g, and records the route.

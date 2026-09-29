@@ -264,7 +264,39 @@ a suggestion and reserves nothing.
    subject" which keeps the identity row with `user_id = NULL` and a
    `blocked` marker so re-applications are refused), **request changes**
    (later phase).
-6. Approval is recorded in `audit_log`.
+
+   What each action does (TKT-01M29CP2MG, routes in 07):
+   - **Approve** offers a handle made from the identity's
+     `preferred_username` claim, or else its email's local part, as open
+     registration does. Whatever handle the moderator sends passes
+     registration's checks in the approval's transaction: valid, not
+     reserved, and free in any case, a handle a release still reserves
+     counting as taken. The member's display name is the IdP's `name`
+     claim, or the handle. The member is created `active` with role
+     `member`, never another role, the identity is linked, and the
+     application is approved with the member's id, in one transaction.
+     Approval issues no session. It deletes the applicant's pre-user
+     sessions in the same transaction, and they would stop resolving anyway
+     (step 1). The applicant signs in again and gets a member session
+     through `session.IssueUser`'s status check, so an account suspended in
+     between is refused there.
+   - **Deny** requires a note. The note is written for the other
+     moderators, and the applicant never sees it: the status page says the
+     application was not approved, and nothing more (maintainer decision
+     2026-09-29). "Block this subject" must mark exactly one identity with
+     no user; if the identity was removed or has a user, the denial is
+     refused, and the moderator may deny without the block.
+   - **Unblock.** A moderator or admin can lift a block from the
+     application that set it (maintainer decision 2026-09-29). It clears
+     the marker and nothing else: the application stays denied, and the
+     applicant may apply again under the 24-hour rule.
+   - **Notes** from moderators are kept beside the application and decide
+     nothing.
+
+   Two moderators deciding at once make one decision; the second is told
+   the application was already decided.
+6. Approval is recorded in `audit_log`, as is every denial and every
+   unblock, each naming the deciding moderator (04 "audit_log").
 
 Providers with `auto_approve = true` (e.g. the organization's own SSO) skip
 steps 2–5 and behave as `open` for that provider only.

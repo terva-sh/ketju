@@ -13,9 +13,12 @@
 // fails until it is.
 
 import type {
+  AdminApplication,
+  AdminApplicationList,
   AdminUserDetail,
   AdminUserList,
   ApplicationForm,
+  ApplicationNote,
   ApplicationStatus,
   CreatedPost,
   CreatedThread,
@@ -40,6 +43,12 @@ import type {
   UserSuggestions,
 } from './dto';
 
+import adminApplicationApprovedModerator from '../../../../internal/dto/testdata/golden/admin-application-approved.moderator.json';
+import adminApplicationDeniedModerator from '../../../../internal/dto/testdata/golden/admin-application-denied.moderator.json';
+import adminApplicationPendingModerator from '../../../../internal/dto/testdata/golden/admin-application-pending.moderator.json';
+import adminApplicationWithdrawnModerator from '../../../../internal/dto/testdata/golden/admin-application-withdrawn.moderator.json';
+import adminApplicationsModerator from '../../../../internal/dto/testdata/golden/admin-applications.moderator.json';
+import applicationNoteModerator from '../../../../internal/dto/testdata/golden/application-note.moderator.json';
 import adminGroupAdmin from '../../../../internal/dto/testdata/golden/admin-group.admin.json';
 import adminGroupsAdmin from '../../../../internal/dto/testdata/golden/admin-groups.admin.json';
 import adminUserAdmin from '../../../../internal/dto/testdata/golden/admin-user.admin.json';
@@ -114,6 +123,12 @@ function matches<T>() {
 }
 
 export const contract = [
+  matches<AdminApplication>()(adminApplicationApprovedModerator),
+  matches<AdminApplication>()(adminApplicationDeniedModerator),
+  matches<AdminApplication>()(adminApplicationPendingModerator),
+  matches<AdminApplication>()(adminApplicationWithdrawnModerator),
+  matches<AdminApplicationList>()(adminApplicationsModerator),
+  matches<ApplicationNote>()(applicationNoteModerator),
   matches<GroupDetail>()(adminGroupAdmin),
   matches<GroupList>()(adminGroupsAdmin),
   matches<AdminUserDetail>()(adminUserAdmin),
