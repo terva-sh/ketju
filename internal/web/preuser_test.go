@@ -21,6 +21,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
+	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
@@ -93,7 +94,7 @@ func newGateWorld(t *testing.T) *gateWorld {
 	store := &session.Store{DB: d}
 	return &gateWorld{t: t, db: d,
 		deps: api.Deps{Users: &users.Service{DB: d, Perm: p}, Threads: &threads.Service{DB: d, Perm: p},
-			Forums: &forums.Service{DB: d, Perm: p}, Perm: p, Logger: log},
+			Forums: &forums.Service{DB: d, Perm: p}, Forms: &formsvc.Service{DB: d}, Perm: p, Logger: log},
 		auth:    &auth.Handler{Sessions: store, Logger: log},
 		session: session.Middleware(store, log),
 		preUser: sessiontest.PreUser(t, d, applicant, now),
