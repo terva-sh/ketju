@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T16:02:50Z
+updated_at: 2026-09-29T16:18:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -205,6 +205,17 @@ The admin routes need two response shapes, `dto.Form` and `dto.FormAdmin`, and t
 ### A settled item not verifiable here
 
 "Remote images are rendered as links" depends on TKT-01M3N24RM (Render remote markdown images as links rather than broken images), which is `ready` and not built. Today `render.Render` emits `<img>` for a remote image, in a notice exactly as in a post. `intro_markdown` and notices go through `render.Render`, so they take that rule when TKT-01M3N24RM lands, with no change here. `TestCreateVersionKeepsOldVersions` checks the render call and not the image rule.
+
+**agent:claude-code/phase2-run-cp2ke** at 2026-09-29T16:18:01Z
+
+### Review 1400 on PR 150 (head de3510a, base cffbe50; run 15228, request ready-review-de3510a)
+
+- **medium: Reject line breaks before trimming one-line answers.** Fixed. `line` now checks for control characters before `strings.TrimSpace`, so `"\nhello"` and `"ada@example.org\n"` are `invalid_text`. The textarea check also moved before the trim, so a lone `\r` or `\v` at either end is refused. The new cases are in `TestEveryTypeValidatesFromTheTable`, and docs/05 says it.
+- **low: Refuse an explicitly submitted null for a markdown notice.** Fixed. `Validate` treats a null as absent except for a display type, so a null sent for a notice is `not_allowed`. It has a test case.
+
+### Re-branched: PR 150 replaced
+
+TKT-01M29CKRG9 (PR 149) landed on main while PR 150 was in review. Its new `TestPreUserRoutesAreExactlyTheAllowlist` builds `api.Deps` without `Forms`, which this ticket makes required. So the merged tree panics in that test, though the branches have no textual conflict. The fix edits a file that exists only on main. A force-push is not allowed, and docs/12 says not to merge main into the branch. So the work was cherry-picked onto main at 10a3a7b as `run/cp2ke-form-schema-2`, with one more commit wiring `Forms` into that test. PR 150 is closed unmerged, pointing to the new PR. Review 1400's findings are fixed on the new branch, which gets a fresh review.
 
 ## Summary
 
