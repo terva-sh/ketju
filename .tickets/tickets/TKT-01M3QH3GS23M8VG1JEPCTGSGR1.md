@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T21:28:33Z
-updated_at: 2026-09-29T23:48:47Z
+updated_at: 2026-09-29T23:50:39Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -80,6 +80,15 @@ Engineering choices made here, each with the alternative that lost:
 - **New files, not a longer `UsersScreen.tsx`.** `screens/admin/NewAgentForm.tsx` and `screens/admin/AgentPanel.tsx`, with `TokenPanel` inside the second. TKT-01M3P0CYR3 (rename control) also changes the user detail; separate files keep the two PRs from conflicting. Adding them inline in `UserDetail` lost for that reason.
 - **Refusal words specific to this form.** `send` (`screens/admin/common/send.ts`) maps `conflict` to "Someone else changed this while you were working", which is wrong for a taken handle. The form maps `conflict` to "That handle is taken." and `validation-failed` to "That is not a valid handle, or it is reserved." and uses `send`'s words for anything else. Extending `send` with a per-call table lost: one caller needs it.
 - **The token lives only as long as the agent's detail.** Every token, including the one from creation, is shown by `TokenPanel` inside `AgentPanel`, which is part of `UserDetail`, keyed by the handle. `NewAgentForm` holds no token. When the creation answer arrives, the form passes it up to `UsersTab` through `onCreated`. `UsersTab` selects the new agent and gives `UserDetail` the credential as a one-shot `issued` prop. `AgentPanel` copies it into its own state on mount, and `UsersTab` clears its copy in the same step through `onIssuedTaken`. Done, closing the detail, choosing another account and leaving the screen all unmount or clear it. Terva review 1488 (PR #167, head f5a4206), finding 1, found that the first version kept the creation token in `NewAgentForm`, above the list, where closing the detail would not clear it. Two other designs lost. Keeping the token in the form and clearing it when the selection changes is a second lifetime to keep in step. A module-level signal would survive navigation.
+
+### Revised at claim (2026-09-30, main at 4d793b2)
+
+The code matches the groomed plan: `UsersScreen.tsx` still keeps the selection in `UsersTab` state (TKT-01M3P0CYR3 has not landed, so there is no `?user=`), `UserDetail` has no Close, and the agent routes and DTOs are as settled. Three details the plan left to the build:
+- **The handoff lasts one commit.** `CreatedAgent.user` is the new agent's `AdminUserDetail`, so `UsersTab` hands it to the new `UserDetail` as its first detail (`initial`). `AgentPanel` then mounts in the same render as the selection, takes the token in its state initializer, and `UsersTab` clears its copy from `AgentPanel`'s mount effect. Waiting for the detail GET instead would leave the token in `UsersTab` for a round trip, and indefinitely if that GET failed. Close and picking a row also clear the handoff, so a token never waits there for a detail that is not coming.
+- **Refusals are read with `isProblem`**, not by comparing `.type` or `.status`: `src/api/one-path.test.ts` refuses that under `screens/`.
+- **Focus after Close** returns to the account's row in the list when it is there, so a keyboard user is not left on nothing. The handle and display-name inputs carry `maxLength` 30 and 100 (`domain.HandleMaxLen`, `users.DisplayNameMaxLen`), so the one `validation-failed` the form's words cannot describe, an overlong display name, cannot be sent.
+
+An e2e spec, `e2e/admin-agents.spec.ts`, signs in as the seeded admin `ada` at both widths, creates an agent with a handle unique to the run, checks the token panel, Done, issue and revoke, and scans each state with axe in both themes as `admin-forms.spec.ts` does.
 
 ### Approach
 
