@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2KEEB60VEVBPY9H2GBD
 title: Implement the declarative form schema and server-side validation
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:forms
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-cp2ke
-  branch: run/cp2ke-form-schema
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a71446fc2cadcb12f
-  commit: 21dbd0411c44bfea3415d04d5d82e97aece5ea27
-  session: null
-  claimed_at: 2026-09-29T15:40:53Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T15:46:03Z
+updated_at: 2026-09-29T16:02:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,13 +43,13 @@ The form is data rather than code because three renderers need it: the Preact cl
 
 ## Acceptance criteria
 
-- [ ] Answers validate through one per-type table in internal/forms covering all six types, with no code naming a field key; a table-driven test exercises each type's accepted and refused values
-- [ ] A locked field ignores any submitted value and takes the claim value, tested with a differing value, no value, and no claim (stored empty, not required-checked)
-- [ ] A missing required field answers 422 validation-failed carrying errors: [{field, code: required}], pinned by a golden problem body whose title stays the catalogue's
-- [ ] An unknown field type in a stored schema makes loading that version fail with an error-level log naming the form and version and a 500, never a form without the field
-- [ ] Saving a form version is admin-only (anonymous 401, member and moderator 403), requires base_version to equal the active version (else 409), appends version N+1, moves active_version, and writes a form.version_created audit row in the same transaction
-- [ ] A schema that breaks the rules is refused with 422 and path-scoped errors and writes nothing, and the preview route renders a draft without writing
-- [ ] The seeded registration form parses under the rules, and docs/05 and docs/07 describe the properties, caps, error codes and admin routes
+- [x] Answers validate through one per-type table in internal/forms covering all six types, with no code naming a field key; a table-driven test exercises each type's accepted and refused values
+- [x] A locked field ignores any submitted value and takes the claim value, tested with a differing value, no value, and no claim (stored empty, not required-checked)
+- [x] A missing required field answers 422 validation-failed carrying errors: [{field, code: required}], pinned by a golden problem body whose title stays the catalogue's
+- [x] An unknown field type in a stored schema makes loading that version fail with an error-level log naming the form and version and a 500, never a form without the field
+- [x] Saving a form version is admin-only (anonymous 401, member and moderator 403), requires base_version to equal the active version (else 409), appends version N+1, moves active_version, and writes a form.version_created audit row in the same transaction
+- [x] A schema that breaks the rules is refused with 422 and path-scoped errors and writes nothing, and the preview route renders a draft without writing
+- [x] The seeded registration form parses under the rules, and docs/05 and docs/07 describe the properties, caps, error codes and admin routes
 
 ## Implementation plan
 
@@ -187,3 +180,30 @@ Migration 0011 exists and seeds `registration` v1. `internal/audit` is the one w
 6. `dto.FormField.max` is the effective limit: the field's `max`, or its type's cap. It is 0 for a type without one. No dto field carries `omitempty`.
 7. The client change is types only, in `web/client/src/api/dto.ts` and `dto-contract.ts`. The orchestrator approved it on 2026-09-29, because the contract test fails for any golden that `dto-contract.ts` does not import. `internal/web/spa/dist` must not change.
 8. `api.Deps.Forms` is required, like the other services.
+
+## Notes
+
+**agent:claude-code/phase2-run-cp2ke** at 2026-09-29T16:01:37Z
+
+Built at d446037 on run/cp2ke-form-schema (base 21dbd04).
+
+### Why this PR touches web/client
+
+The admin routes need two response shapes, `dto.Form` and `dto.FormAdmin`, and the dto harness requires every type to have a golden. `web/client/src/api/contract.test.ts` fails the CI "client tests" step for any golden that `dto-contract.ts` does not import. So the PR adds types only, to `web/client/src/api/dto.ts` and `dto-contract.ts`. The orchestrator approved this on 2026-09-29 (option 1: types only, no dist change), while the client lane holds the dist for TKT-01M29CKRG9. `go generate ./internal/web/spa` leaves `internal/web/spa/dist` unchanged, as checked with `git status` before the push. `npx tsc --noEmit -p .` and `npm test` (969 tests) pass.
+
+### Gaps settled here (docs/12 "Gaps the design leaves open"), each written into the docs
+
+- **Three codes beyond the groomed list.** `duplicate_option` is an option or a multiple-select answer given twice. `unknown_claim` is a `from_claim` outside name, email and preferred_username. `malformed` is a body that is not JSON, or trailing JSON. The alternative was to fold them into `not_an_option`, `not_allowed` and `wrong_type`, which lost because a client could then not tell "pick another option" from "this is a bug". All 16 codes are in docs/07 "Field errors on validation-failed", held there by `TestCodesAndTypesAreDocumented`.
+- **The audit target type `form`, keyed by the form's key.** docs/04 lists it, and `TestTargetTypesDocumented` holds the list. It lost to nothing: no existing type names a form, and `setting` is the precedent for a key-shaped id.
+- **`locked` is allowed only where `from_claim` is (text, email).** The grooming allowed `from_claim` on text and email only, and `locked` requires `from_claim`.
+- **Field errors appear only on a validation-failed body.** A `*forms.Invalid` wrapped in another code (forbidden, internal) writes no `errors`, so no other body says what a form held.
+- **`formsvc` raises not-found and conflict through `problem.Coded`**, not through the mapping table the plan named. Mapping `formsvc` errors in `internal/problem` would make problem import a service, an inverted dependency. `ErrCorruptSchema` stays unmapped, as planned.
+- **Create takes the request IP** for the audit row, read as `RemoteAddr`, as `web.ClientIP` reads it.
+
+### A settled item not verifiable here
+
+"Remote images are rendered as links" depends on TKT-01M3N24RM (Render remote markdown images as links rather than broken images), which is `ready` and not built. Today `render.Render` emits `<img>` for a remote image, in a notice exactly as in a post. `intro_markdown` and notices go through `render.Render`, so they take that rule when TKT-01M3N24RM lands, with no change here. `TestCreateVersionKeepsOldVersions` checks the render call and not the image rule.
+
+## Summary
+
+internal/forms parses a form schema and validates answers through one table of six field types, with no code that names a field key. internal/service/forms (formsvc) loads, saves and previews versions. It exposes Active, Version(formID, n), Admin, Create, Preview and ToDTO, which TKT-01M29CP2KZ and TKT-01M29CP2MG call. The four admin form routes sit behind adminGate and answer no-store. A validation-failed body now carries errors [{field, code}] from a closed list of 16 codes, documented in docs/07. A save checks base_version, appends N+1, moves active_version, and audits form.version_created against the new target type form, all in one transaction. A corrupt stored schema is a 500 with an error-level log, and serve logs it at startup. dto.Form and dto.FormAdmin have goldens. The client change is types only (dto.ts, dto-contract.ts), and the dist is unchanged. All seven criteria were met.
