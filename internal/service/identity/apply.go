@@ -17,7 +17,7 @@ import (
 // describes with no user, and places the visitor in a pre-user session bound
 // to it, which reaches the application form, the status page and sign-out,
 // and nothing else (web.PreUserRoutes). replaces is the session token the
-// browser holds, if any, which it ends as a sign-in does.
+// browser holds, if any, which it ends before writing anything.
 //
 // The identity and the session are written in one transaction, or neither
 // is: session.IssuePreUserWith runs the write in the transaction that
@@ -33,6 +33,18 @@ import (
 // mapping applies: approval creates the user, and the applicant's next
 // sign-in, through session.IssueUser, is where both run.
 func (s *Service) BeginApplication(ctx context.Context, c Claims, meta session.Meta, replaces string) (Result, error) {
+	// The session the browser holds is ended first, not after the new one
+	// is issued as Login and Register do (replace). The identity written
+	// below outlives any later failure: if ending the old session failed
+	// after it, the application would have begun without a session, and
+	// the reader's retry would find an applicant coming back rather than
+	// someone new (review 1397). Ended first, a failure writes nothing, and
+	// no session issued here ever sits beside a live old one.
+	if replaces != "" {
+		if err := s.Sessions.Revoke(ctx, replaces); err != nil {
+			return Result{}, fmt.Errorf("identity: ending the session an application replaces: %w", err)
+		}
+	}
 	now := s.now().UnixMilli()
 	token, sess, err := s.Sessions.IssuePreUserWith(ctx, meta, func(ctx context.Context, q *dbq.Queries) (int64, error) {
 		switch mode, err := settings.RegistrationMode.In(ctx, q); {
@@ -70,9 +82,6 @@ func (s *Service) BeginApplication(ctx context.Context, c Claims, meta session.M
 		return Result{}, err
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: beginning an application: %w", err)
-	}
-	if err := s.replace(ctx, token, replaces); err != nil {
-		return Result{}, err
 	}
 	return Result{Outcome: Applying, Token: token, Session: sess}, nil
 }

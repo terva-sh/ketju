@@ -156,6 +156,19 @@ func TestAnApplicantSignInThatCannotEndTheOldSessionFails(t *testing.T) {
 			if n := w.sessions(); n != before {
 				t.Errorf("%d sessions, want %d: the new one ended", n, before)
 			}
+			if returning {
+				return
+			}
+			// Someone new: the failure wrote no identity, so the retry,
+			// with the old session ended, is still an application and goes
+			// to the form, not to a status page for an application that
+			// never began (review 1397).
+			if n := w.count("SELECT count(*) FROM identities WHERE subject = 'user-1'"); n != 0 {
+				t.Errorf("the failed application left %d identities behind", n)
+			}
+			w.handler.Login.(*identity.Service).Sessions = w.store
+			flow, authURL = w.begin("")
+			w.applicantCookie(w.do("GET", w.back(authURL), flow, old), ApplyPath)
 		})
 	}
 }

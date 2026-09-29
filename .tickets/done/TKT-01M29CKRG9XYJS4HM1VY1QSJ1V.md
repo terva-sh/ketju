@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T15:48:38Z
+updated_at: 2026-09-29T16:01:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -72,7 +72,7 @@ The groomed approach held. What changed on reading the code is marked "Revised".
 
 1. **Issuing.** `internal/auth/session/issue.go` gains `IssuePreUserWith(ctx, meta, create)`, the pre-user twin of `IssueUserWith`: `create` writes the identity in the transaction that inserts the session, and the holder check refuses an identity with a user (`ErrHasUser`). `IssuePreUser` is a one-line call to it. `insertCallers` becomes `{issue.go:IssuePreUserWith, issue.go:IssueUserWith}`. Alternative: a separate `CreateIdentity` write before `IssuePreUser`. It lost because a failed session insert would orphan the identity, and the mode check would sit in a different transaction from the write (review 1145).
 2. **Issuer-caller list.** `chokepoint_test.go` gains `issuerCallers` and `TestTheIssuersAreKnown`: every non-test selector outside `internal/auth/session` naming one of the four issuers, as `file:func Issuer`, compared exactly. A method value counts as well as a call. Revised: the list names `login.go:applicant IssuePreUser`, because Login's applicant branch is its own function.
-3. **The applicant path.** `internal/service/identity/apply.go` `BeginApplication(ctx, c Claims, meta, replaces)`. Inside `IssuePreUserWith` it reads `registration.mode` (refusing `ErrRegistrationClosed` unless `approval`), refuses an existing identity (`ErrAlreadyRegistered`), writes the identity with `user_id` NULL, and records the first sign-in. It then ends `replaces`. Revised: the fixation step is factored out of `settle` as `replace`/`abandon`, so all four session paths share it. The new `Outcome` is `Applying`.
+3. **The applicant path.** `internal/service/identity/apply.go` `BeginApplication(ctx, c Claims, meta, replaces)`. Inside `IssuePreUserWith` it reads `registration.mode` (refusing `ErrRegistrationClosed` unless `approval`), refuses an existing identity (`ErrAlreadyRegistered`), writes the identity with `user_id` NULL, and records the first sign-in. It ends `replaces` before writing anything (review 1397): the identity it writes would outlive a failure to end the old session afterwards. Revised: the fixation step is factored out of `settle` as `replace`/`abandon`, which a sign-in, a registration and a returning applicant share. The new `Outcome` is `Applying`.
 4. **Login's Applicant outcome.** `ErrNoUser` from `IssueUser` now leads to `applicant`, which calls `IssuePreUser`, ends `replaces`, records the sign-in, and returns `Applicant` with the token. The `Sessions` interface gains both pre-user issuers.
 5. **The callback.** `beginRegistration` takes the provider. With registration closed and a provider that does not auto-approve, it calls `beginApplication`: cookie, 303 to `/apply`. Its two refusals are races (another tab wrote the identity; registration opened) and answer 409 with the "Sign-in failed, try again" page. An auto_approve provider keeps the 501 page for TKT-01M29CKRE9. The `Applicant` outcome sets the cookie and answers 303 to `/apply/status`. Revised: `pageApplicant` is gone, now unused.
 6. **Lookup.** `LookupSession` joins `identities` and requires `s.kind = 'user' OR (s.kind = 'pre_user' AND i.id IS NOT NULL AND i.user_id IS NULL)`. `DeletePreUserSessions` and `Store.RevokePreUser(ctx, identityID)` are there for TKT-01M29CP2MG; its approval transaction can call `q.DeletePreUserSessions` directly. No migration: nothing here needs an index.
@@ -122,6 +122,10 @@ The groomed approach held. What changed on reading the code is marked "Revised".
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T11:59:38Z
 
 From TKT-01M29CA99R (Implement GET /me): GET /me, and the shell's bootstrap block, return the anonymous shape (user null, zero counts) for a pre-user session, because dto.Me makes a nil user the only signed-out signal and no pre-user shape is documented. The viewer does carry the distinction (domain.Viewer.PreUser and IdentityID, set by internal/auth/session). If the approval screens need /me to say 'signed in as an applicant', decide the field in docs/07 and dto.Me; CA99R's AC1 stays unticked on exactly that clause until then.
+
+**agent:claude-code/phase2-run-ckrg9** at 2026-09-29T16:01:32Z
+
+Review 1397 (run e7314907-3189-4a6c-ab83-4a44dde22f85, Actions run 914), head 1a3564deb45e0f1c1b4628c72f9acbc40ab7f0aa, base cffbe5005e73ec08587e4436f1d957c5ca0e21f0. One finding, medium: 'Roll back a new applicant identity if session replacement fails'. Accepted and fixed. BeginApplication ended the replaced session after IssuePreUserWith had committed the identity. If that revoke failed, the new session was ended but the identity stayed, so the retry took the returning-applicant path to /apply/status for an application that never began. BeginApplication now ends the old session before it writes anything, so a failure writes nothing and the retry is still someone new. The alternative, deleting the identity in abandon, lost for two reasons: a second write that can fail as the first did, and a DELETE on identities outside the transaction that made the row. TestAnApplicantSignInThatCannotEndTheOldSessionFails now also asserts that no identity is left and that the retry lands on /apply. Put back to the old order, the test fails on both assertions.
 
 ## Summary
 

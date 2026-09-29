@@ -251,8 +251,10 @@ func (s *Service) applyGroupMap(ctx context.Context, userID int64, id *oidc.Iden
 // in its place: a browser never keeps a session id it did not issue
 // (fixation). If that fails, token is ended too and replace fails, so the
 // browser never comes out holding a new session while its old one still
-// works (review 511). Every way to a session runs it: a sign-in, a
-// registration, and both applicant paths.
+// works (review 511). A sign-in, a registration and an applicant coming back
+// run it; BeginApplication ends the old session before it writes anything
+// instead, because the identity it writes would outlive a failure here
+// (review 1397).
 func (s *Service) replace(ctx context.Context, token, replaces string) error {
 	if replaces == "" {
 		return nil
