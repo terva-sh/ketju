@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T22:29:36Z
+updated_at: 2026-09-29T22:42:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -120,6 +120,10 @@ Gaps settled in building (internals and presentation only; none changes what the
 **agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:29:36Z
 
 Terva review 1490 (PR #168, head ed68932d6d712c224fced4afd8f8afe78fbe6086, base 796641c8b93abe9ab84f17b8131789b853f59b91, run 1057): three findings, all fixed in 2acc1a1. (1) medium 'Undone edits can still create a new version': Save now also needs the draft's schema to differ from the active one (draft.ts sameSchema, property order ignored). (2) medium 'A failed preview request is treated as a refused schema': only validation-failed is a refusal; any other failure says the preview could not be made and offers 'Try the preview again', which resends the unchanged draft at once. (3) low 'Preview answers survive a saved or discarded draft': reseeding clears the preview's answers. Each fix has a test, and a mutation of each is caught.
+
+**agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:42:24Z
+
+Terva review 1494 (PR #168, head f7a28cb0af73a5d11047ded8c1f6d702f6bbf995, base 1dd6ed90c253e04f8906a966943dde764b48e0c6, run 1063): clean at medium and above; its verdicts on review 1490's findings are all 'resolved'. One low, 'Phone width frame exceeds 390 px', is fixed: .fe-phone is border-box. e2e/admin-forms.spec.ts measures the frame at 390 px or less, and fails at 424 px with the old sizing.
 
 ## Summary
 
