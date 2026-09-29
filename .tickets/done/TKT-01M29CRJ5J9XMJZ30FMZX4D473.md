@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ5J9XMJZ30FMZX4D473
 title: Allow moderators to edit and delete any post
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,17 +23,10 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
-claim:
-  actor: agent:claude-code/phase2-run-crj5j
-  branch: run/crj5j-mod-edit-delete
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-abb3e55adae65825f
-  commit: a27a7218760ba21ae4db301f17f8b69107fa544f
-  session: null
-  claimed_at: 2026-09-29T21:33:54Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T21:37:01Z
+updated_at: 2026-09-29T21:51:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,12 +44,12 @@ A moderator edit of somebody else's words is the most invasive routine action in
 
 ## Acceptance criteria
 
-- [ ] A moderator's edit of another member's post appends an Edit whose frame actor is the moderator, the index entry's author is unchanged, and history names the moderator
+- [x] A moderator's edit of another member's post appends an Edit whose frame actor is the moderator, the index entry's author is unchanged, and history names the moderator
 - [ ] That post is served with edited_by_moderator: true, and the client shows it as edited by a moderator
-- [ ] A moderator's edit and delete of a member's post succeed past both author windows
-- [ ] Every moderator edit, hide and restore of another member's post writes one audit_log row (post.edited, post.hidden, post.restored) naming the actor and the post
-- [ ] A moderator's delete of another's post writes Delete with by_moderator: true and sets hidden-by-mod, not deleted; the author's restore, edit and delete are then forbidden and append nothing; a moderator's restore clears it
-- [ ] A page cached before a moderator's hide is not served after it, and members then get the post as a tombstone without html (TestModeratorHideMovesTheResponseCacheKey)
+- [x] A moderator's edit and delete of a member's post succeed past both author windows
+- [x] Every moderator edit, hide and restore of another member's post writes one audit_log row (post.edited, post.hidden, post.restored) naming the actor and the post
+- [x] A moderator's delete of another's post writes Delete with by_moderator: true and sets hidden-by-mod, not deleted; the author's restore, edit and delete are then forbidden and append nothing; a moderator's restore clears it
+- [x] A page cached before a moderator's hide is not served after it, and members then get the post as a tombstone without html (TestModeratorHideMovesTheResponseCacheKey)
 
 ## Implementation plan
 
@@ -108,3 +101,17 @@ Revised on claim. What changed from the groomed plan: the client step moves to a
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T22:29:23Z
 
 Maintainer decision, 2026-09-28: only a moderator may restore a post a moderator deleted. A moderator's delete of someone else's post sets hidden-by-mod, not deleted, so the existing authorize guard in internal/service/threads/mutate.go already refuses the author's restore, edit and delete as forbidden. The author still sees the post, marked as removed by a moderator. Author-may-restore lost because it makes a moderator's delete a suggestion. Restore-by-request lost because it needs its own flow. Written into docs/08 'Restoring a moderator's delete'. Carry this into the plan's Settled section.
+
+**agent:claude-code/phase2-run-crj5j** at 2026-09-29T21:51:25Z
+
+AC2 left unticked. Its server half holds: the post is served with `edited_by_moderator: true` to every class (TestModeratorEditsAnyPost, and TestModeratorBypassesWindows). Its client half, the marker "edited by a moderator", is not built, because this run's server lane may not change the committed `internal/web/spa/dist`. It is TKT-01M3QHKD21 (Show moderators' post controls and the edited-by-a-moderator marker), filed as a draft that depends on this ticket, together with the Edit, Delete and Restore controls a moderator needs on other members' posts. `web/client/src/api/dto.ts` gained the field, types only, because the contract test requires it; `go generate ./internal/web/spa` left the dist unchanged.
+
+Correction to the plan's step 3, which said the author's Refuse of hidden-by-mod stops a race between `authorize` and the append. It does not need to: an author's Restore already requires the deleted flag, and the service never lets a post be both deleted and hidden, since every Delete refuses `gone`. The Refuse matters only for a post that carries both bits, which a record appended without the service's preconditions can leave. It is kept for that case, and TestRestoreRecordPreconditions holds it with such a post. The mutation run found this: dropping the Refuse was missed until that case was added.
+
+Settled internals, written into docs/07: an author's own edit, delete and restore keep the asynchronous projection, and only a record by someone other than the post's author is projected before the answer (`appendProjecting`, beside `appendEvent`). Projecting every write lost because it adds a database transaction to every author's edit for a row that is never written. A moderator acting on their own post is an ordinary author's action, with no by_moderator and no audit row, as grooming said.
+
+## Summary
+
+A viewer with `moderate` in the thread's forum may edit, delete and restore any post, bound by no window and without `reply`; the record's actor is the moderator and the post keeps its author. A moderator's delete of somebody else's post writes `Delete{by_moderator: true}` (a new optional key, docs/03), which sets hidden-by-mod rather than deleted, so the author's restore, edit and delete are `forbidden` and only a moderator's Restore clears it. `threadlog.Append` gained `RequireAny` for that Restore. `dto.Post` gained `edited_by_moderator`, read from the current revision's frame actor (`threadlog.Post.EditorID`), naming nobody. The projection writer's row for a by_moderator Delete is `post.hidden`, and a moderator's record on another's post is projected before the answer. docs/03, 04 and 07 are updated; the `flags.go` comment is fixed.
+
+AC2's client half (the marker, and moderators' controls on others' posts) is TKT-01M3QHKD21, a draft, because the server lane may not change the committed dist. Everything else is ticked.
