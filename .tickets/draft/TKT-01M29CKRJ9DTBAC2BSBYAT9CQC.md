@@ -17,6 +17,7 @@ origin: null
 dependencies:
   - TKT-01M29CA9AXKRTS6KMN5CTH7461
   - TKT-01M29BYYGYZ8FQB2W2XC14S2T3
+  - TKT-01M29CRJ5J9XMJZ30FMZX4D473
 blocks_on: none
 references:
   - ref: design:tombstones
@@ -24,13 +25,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-11T23:24:59Z
+updated_at: 2026-09-29T05:07:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase2-groom
+  name: ""
 extensions: {}
 ---
 
@@ -42,7 +43,49 @@ Replies to a deleted post keep their reply_to link. A tombstone is a gap in cont
 
 ## Acceptance criteria
 
-- [ ] A tombstone keeps the ordinal and its permalink resolves
-- [ ] Replies to a deleted post keep their reply_to indicator and expander
-- [ ] Moderators see original content inline and members never receive it in any response
-- [ ] A moved post renders as a pointer to its new location
+- [ ] Replies to a removed post keep reply_to, and GET …/replies of the removed post and the client's expander under its tombstone still list them
+- [ ] For an author-deleted and a moderator-hidden post, anonymous viewers and other members get no html and no revisions from the page, the single post, replies, user posts and history; a moderator gets the html in each
+- [ ] The author of a hidden-by-mod post gets its html with removal moderator on the page, the single post, their user posts and its history; their own self-deleted post stays a tombstone without html
+- [ ] A page holding the viewer's own hidden post is cached under class author:<id>, and no other member's answer carries its html in either request order (TestResponseCacheSeparatesTheHiddenPostsAuthor)
+- [ ] The client renders 'Post removed by author' and 'Post removed by a moderator', shows a removed post's body to those served it on a distinct background, and renders a pointer to /t/{moved_to} when moved_to is set (component test; the server fills moved_to in TKT-01M29CYSAM)
+- [ ] A removed post keeps its ordinal: ?ordinal=N serves the page holding it, and a member receives that post with removal set and no html
+
+## Implementation plan
+
+Groomed 2026-09-29 against main at 7af2c5a.
+
+### Settled in grooming
+
+- **Wording and ordinals** (docs/08 "Tombstones"): "Post removed by author" or "Post removed by a moderator". The ordinal, the permalink and the reply lenses keep working, and replies keep their `reply_to`. Moderators see the original inline on a distinct background.
+- **Tombstones come from the index alone** (docs/03 "Read path"): `Reader.ReadEntries` never reads a tombstoned post's bytes, and `Reader.HiddenEntry` is the one path that does.
+- **The author sees their own hidden post.** Maintainer decision, 2026-09-28, on TKT-01M29CRJ5J and in docs/08: "The author still sees the post, marked as removed by a moderator". The same holds for an auto-hidden post, marked "hidden pending review" (decision of 2026-09-28 on TKT-01M29CP2PJ, docs/08 "Flags"). A post the author deleted themselves stays a tombstone without a body to its author (docs/07 `/users/{handle}/posts`).
+- **A new viewer class: the author of a hidden post.** docs/07 names three classes: anon, member and moderator. Serving a member their own hidden post's content from the `member` class would hand it to every member. So when the page's snapshot holds a hidden-by-mod entry whose `Author` is the viewer, the class is `author:<user id>`. That puts the viewer in `respcache.Key` for exactly those pages and no others. Overlaying the content after a `member` cache hit lost: it would be a second assembly path that has to agree with the first, which is how a leak starts. Bypassing the cache for such pages lost only on cost; it would also be correct.
+- **Moved posts.** Nothing in Phase 2 writes a moved post: split is Phase 4 (TKT-01M29CYSAM, TKT-01M29CXJZZ; types 20 and 21 are held). This ticket builds the client pointer from `dto.Post.moved_to`, and the split ticket fills `moved_to` on the server.
+
+### Approach
+
+1. **DTO**: `dto.Post` gains `removal`, one of `"author"`, `"moderator"` or `"review"`, and null for a visible or moved post. It is derived from the entry flags: `EntryDeleted` is author, `EntryHiddenByMod` with `EntryAutoHidden` is review, and `EntryHiddenByMod` alone is moderator. `EntryAutoHidden` arrives with TKT-01M29CP2PJ, so until then only author and moderator occur. `deleted` stays true for every removal, for compatibility. Update the `internal/dto` goldens and `web/client/src/api/dto.ts`.
+2. **Who gets content** is one function, `revealTo(a access, e threadlog.IndexEntry) bool`, in `internal/service/threads/view.go`. It is true for a moderator, and true for the entry's author when `EntryHiddenByMod` is set. `postsDeps` calls it instead of `p.Tombstone && moderator`. Every read shares it: the page, `Post`, `Replies`, `UserPosts` (`historyBatch` and `historyShows` in `userposts.go`), and `History` in `posts.go`. For history the rule is "revisions are served when `revealTo` is true", which extends the moderator-only rule to the author of a hidden post. Render quotes are unchanged: a quote of any tombstone renders as a tombstone to everyone.
+3. **Viewer class**: `pagePosts` computes the class from the snapshot. It is `ClassModerator` when `canModerate`. It is `"author:" + id` when any snapshot entry is hidden-by-mod and authored by the viewer. Otherwise it is `ClassMember` or `ClassAnon`. The class passes to `postsDeps` in place of the `moderator` bool. Update the `Class` doc comment on `respcache.Key` and docs/07 "Viewer class".
+4. **Client**:
+   - `components/thread/Tombstone.tsx` renders by `removal`: "Post removed by author" or "Post removed by a moderator", plus the review wording chosen by TKT-01M29CP2PJ's open decision. With `moved_to` set, it renders "Post moved to another thread" linking to `/t/{moved_to}`. The ordinal, anchor and reply indicator are kept.
+   - `Post.tsx`, given a post with `deleted` and `html`, renders it on a distinct background, class `post removed`, with a label naming the removal. That covers both the moderator's view and the author's own hidden post.
+   - `ReplyExpander` works under a tombstone.
+   - CSS in `components/thread/thread.css` for both themes. Regenerate `dist/`.
+5. **Docs**: docs/07 "Thread response shape" gains `removal` and a fourth viewer class. The `/users/{handle}/posts` row says the author sees their own hidden posts with the body. That replaces "A post hidden by a moderator is a deleted post here", which contradicts the 2026-09-28 decision. docs/06 needs no change.
+
+### Tests
+
+- `TestTombstoneKeepsOrdinalAndPermalink`: a deleted post 5 of 10 is served at `?ordinal=5` as `removal: "author"` with no `html`. Post 6, which replies to 5, keeps `reply_to: 5`. `GET …/posts/5/replies` answers 6.
+- `TestMembersNeverReceiveRemovedContent`: for an author-deleted post and a moderator-hidden post, an anonymous viewer and a member other than the author get no `html` and no revisions. The same holds on the page, `GET …/posts/{n}`, `…/replies` of its parent, `/users/{handle}/posts`, and `…/history`. A moderator gets the `html` in each. A quote of the post renders as a tombstone to all three.
+- `TestAuthorSeesOwnHiddenPost`: the author gets `html` and `removal: "moderator"` on the page, the single post, their user posts and the history. For their own self-deleted post they get a tombstone with no `html`.
+- **Response cache invariant**, `TestResponseCacheSeparatesTheHiddenPostsAuthor` (`internal/web/api/respcache_test.go`): with the cache on, request the page as the author, then as another member, then as the author again, and in the reverse order. The other member's answer never carries the hidden post's `html`, the author's always does, and the two use different keys (class `author:<id>` against `member`). A page with no hidden post of the viewer's still uses `member`, so it stays shared.
+- Goldens: `thread.{anon,member,moderator}.json` in `internal/web/api/testdata/golden` gain a deleted post and a hidden post, and a new `thread.author.json` is added.
+- Client: `Tombstone` renders each removal's text and the moved pointer. A moderator's view renders the removed body with the `removed` class. The reply expander opens under a tombstone.
+
+### Out of scope
+
+- Setting hidden-by-mod (moderator deletes): TKT-01M29CRJ5J. Auto-hide and its wording: TKT-01M29CP2PJ.
+- Filling `moved_to` on the server: TKT-01M29CYSAM (phase 4).
+- The moderator lens (`?lens=mod`): TKT-01M29CTY6E (phase 3).
+- Redacted posts' tombstones: TKT-01M29CXJZ9.
