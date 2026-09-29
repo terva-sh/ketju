@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:50:04Z
+updated_at: 2026-09-29T19:51:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -183,6 +183,10 @@ The same commit fixes review 1344's first finding here: approval now creates and
 2. **Criterion 2 is ticked as the maintainer's 2026-09-29 decision on TKT-01M3Q2V25E reworded it.** "Session rows are unchanged" became: approval adds no session and deletes the applicant's pre-user rows (`DeletePreUserSessions`, in the approval's transaction). "Still resolves as a non-member" became: the old cookie resolves as nobody, and the middleware clears it. `TestApproveIssuesNoSession` checks both, checks that another applicant's session is untouched, and checks that `identity.Login` then signs the member in through `IssueUser`. `TestOneDoorIntoSessions` passes with `doorCallers`, `insertCallers` and `issuerCallers` unchanged.
 
 3. **Two departures from the groomed plan, both recorded in the revised plan:** a taken handle is 422 `validation-failed` with `errors[handle] = taken`, not 409, because only a 422 body carries field errors, and a bare 409 could not be told from "already decided" or "identity gone". The errors are coded with `problem.Coded` where they are raised, not mapped in `problem/domain.go`, because that would be an import cycle.
+
+**agent:claude-code/phase2-run-cp2mg** at 2026-09-29T19:51:41Z
+
+2026-09-29. This note supersedes one line of the revised plan: "The three codes join `forms.Codes` and docs/07's form-codes table." After the rebase onto f1129ce, the client lane's `web/client/src/forms/messages.test.ts` (TKT-01M29CP2NG) requires client wording for every code in that table. Adding the wording would rebuild `internal/web/spa/dist`, which this server-lane PR must not change. The codes `invalid_handle`, `reserved` and `taken` are now constants in `internal/service/applications` (a handle is not a form field), and docs/07 lists them with the approve route. The wire shape is unchanged: `validation-failed` with `errors: [{field: "handle", code}]`. The admin review screen (TKT-01M3NRX2NN) needs its own wording for these three codes.
 
 ## Summary
 
