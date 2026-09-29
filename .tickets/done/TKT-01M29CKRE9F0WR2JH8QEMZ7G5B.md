@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRE9F0WR2JH8QEMZ7G5B
 title: Support multiple providers with domain gates and auto-approve
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:identity-providers
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-ckre9
-  branch: run/ckre9-multi-provider
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae5086623333f99f6
-  commit: fe5cdcb7fbda81cadab35546674c9b2a26e732d2
-  session: null
-  claimed_at: 2026-09-29T21:51:00Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T21:52:00Z
+updated_at: 2026-09-29T22:03:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,14 +43,14 @@ A domain gate only means something when the provider asserts `email_verified`. T
 
 ## Acceptance criteria
 
-- [ ] A sign-in whose email domain is outside the provider's allowed_email_domains answers 403 with the 'Sign-in not allowed' page and writes no identity, user or session row
-- [ ] With allowed_email_domains set, a token whose email_verified is false, absent or the string 'false' answers 403 with a page saying the email is not verified, even when the domain matches; with the list unset, email_verified is not required (TestGate, TestTheDomainGateNeedsAVerifiedEmail)
-- [ ] Under registration.mode approval, a new identity from an auto_approve provider becomes an active member with no application, and one from any other provider gets no users row and no member session (TestAutoApproveUnderApprovalMode)
-- [ ] For an auto_approve provider, a valid, unreserved and free normalized preferred_username becomes the handle at the callback with no screen; a missing, invalid, reserved or taken one shows the handle screen, prefilled where possible, with a line naming which of the four it was
-- [ ] Register refuses a provider without auto_approve while the mode is approval, even with a valid registration cookie, and writes nothing
-- [ ] For each of pending, suspended and deactivated, a user signing in through an auto_approve provider and through an ordinary one gets no session (TestNoProviderLetsAnInactiveUserIn)
-- [ ] With three providers configured and one failing discovery, /auth/signin lists exactly the two enabled ones by name in config order
-- [ ] ketju config check no longer warns about auto_approve: the branch in warn(), its test expectation, and the docs/02 bullet are removed
+- [x] A sign-in whose email domain is outside the provider's allowed_email_domains answers 403 with the 'Sign-in not allowed' page and writes no identity, user or session row
+- [x] With allowed_email_domains set, a token whose email_verified is false, absent or the string 'false' answers 403 with a page saying the email is not verified, even when the domain matches; with the list unset, email_verified is not required (TestGate, TestTheDomainGateNeedsAVerifiedEmail)
+- [x] Under registration.mode approval, a new identity from an auto_approve provider becomes an active member with no application, and one from any other provider gets no users row and no member session (TestAutoApproveUnderApprovalMode)
+- [x] For an auto_approve provider, a valid, unreserved and free normalized preferred_username becomes the handle at the callback with no screen; a missing, invalid, reserved or taken one shows the handle screen, prefilled where possible, with a line naming which of the four it was
+- [x] Register refuses a provider without auto_approve while the mode is approval, even with a valid registration cookie, and writes nothing
+- [x] For each of pending, suspended and deactivated, a user signing in through an auto_approve provider and through an ordinary one gets no session (TestNoProviderLetsAnInactiveUserIn)
+- [x] With three providers configured and one failing discovery, /auth/signin lists exactly the two enabled ones by name in config order
+- [x] ketju config check no longer warns about auto_approve: the branch in warn(), its test expectation, and the docs/02 bullet are removed
 
 ## Implementation plan
 
@@ -105,3 +98,14 @@ What changed since grooming: `identity.Policy`/`ProviderPolicy{GroupMap}` exists
 - Mapping group claims: TKT-01M29CKRF9 (done). It shares `Policy`.
 - Linking: TKT-01M29CKRES.
 - Gating on `hd`: not planned. docs/05 gates on the email domain.
+
+## Summary
+
+Landed in one PR. No schema change, no migration, no client change (the handle screen is server-rendered; `internal/web/spa/dist` and `dto.ts` are untouched).
+
+- **Gate.** `oidc.Provider.Gate(id) GateResult` replaces `EmailAllowed`. With `allowed_email_domains` set, a sign-in needs `email_verified` true (a JSON true or the string "true") and a whole-domain match, case-insensitive. The callback answers 403 with `pageNotAllowed` or the new `pageUnverified`, before `Login`, so a returning member is gated too. `hd` stays recorded only.
+- **auto_approve.** `identity.ProviderPolicy.AutoApprove`, set by `PolicyFrom`. `Policy.registrationOpen(mode, provider)` is open for every provider under "open", for an auto_approve one under "approval", and for nothing under any other mode. `RegistrationOpenFor` (callback) and `Register`'s in-transaction check both use it. `oidc.Provider.AutoApprove()` is removed so the service's policy is the one source.
+- **Handle skip.** `normalize` is split out of `suggest`. `AutoHandle` and `(*Service).AutoRegister` give the handle or a `SkipReason` (missing, invalid, reserved, taken). `AutoRegister` goes through `Register`, so `HandleFree` and `IssueUserWith` apply. The fallback screen reads `pending.Why` (sealed) and prefills `FallbackPrefill`. `issuerCallers` is unchanged.
+- **Warning.** Removed from `warn()`, `TestWarningsNameTheirKeyAndDoNotFail` and docs/02. docs/05 gains the gate paragraph and the auto_approve transaction paragraph; docs/07 describes the reason line.
+
+Tests: `TestGate`, `TestRegistrationOpenFor`, `TestRegisterUnderApprovalModeOnlyForAutoApprove` (service and web), `TestAutoHandle`, `TestAutoRegister`, `TestTheDomainGateNeedsAVerifiedEmail`, `TestAutoApproveUnderApprovalMode`, `TestAutoApproveUnderOpenMode`, `TestAutoApproveFallsBackToTheHandleScreen`, `TestNoProviderLetsAnInactiveUserIn` (3 statuses x 2 modes x 2 providers), `TestTheLoginPageListsOnlyHealthyProviders`, `TestAutoApproveIsNotAWarning`. The commit body lists the mutations tried and the tests that caught each one.
