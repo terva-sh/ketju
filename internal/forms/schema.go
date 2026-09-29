@@ -445,17 +445,18 @@ func (p *parser) text(props map[string]json.RawMessage, name, path string, v *st
 		}
 		return
 	}
+	// The length and the characters are checked before blankness, so an
+	// optional value that is only whitespace is still held to both
+	// (review 1412).
 	switch {
-	case strings.TrimSpace(*v) == "":
-		if required {
-			p.add(at, CodeRequired)
-		}
 	case utf8.RuneCountInString(*v) > max:
 		p.add(at, CodeTooLong)
 	case line && hasControl(*v, ""):
 		p.add(at, CodeInvalidText)
 	case !line && hasControl(*v, "\n\t\r"):
 		p.add(at, CodeInvalidText)
+	case required && strings.TrimSpace(*v) == "":
+		p.add(at, CodeRequired)
 	}
 }
 

@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T16:41:14Z
+updated_at: 2026-09-29T16:53:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -226,6 +226,10 @@ Review 1404 on PR 151 (head 5b03c0d, base 10a3a7b; run 15251, request ready-revi
 **agent:claude-code/phase2-run-cp2ke** at 2026-09-29T16:41:14Z
 
 Review 1407 on PR 151 (head 89ac3f4, base 10a3a7b; run 15264, request ready-review-89ac3f4). It marks review 1404's finding resolved and raises two new findings, both fixed. **high: Reject canonical schemas that exceed the load limit.** Parse now also holds the canonical form it returns to MaxSchemaBytes, and refuses a larger one as too_long. encoding/json escapes U+2028 to six bytes, so a schema can grow when stored. Every schema Parse accepts, and so every version Create stores, now loads again. TestSchemaRules and TestEverySavedVersionLoads cover it with two notices of 6000 U+2028 each: 36 KB as sent, over 64 KiB as stored. **medium: Reject Unicode line separators in one-line answers.** hasControl now refuses U+2028 and U+2029 (Zl, Zp) unless the text allows newlines. So text and email answers, titles, labels and options refuse them, and a textarea keeps them. There are new cases in both table tests. docs/05 and docs/07 say both. A mutation check confirmed each new test fails without its fix.
+
+**agent:claude-code/phase2-run-cp2ke** at 2026-09-29T16:53:16Z
+
+Review 1412 on PR 151 (head 095d52c, base 10a3a7b; run 15276, request ready-review-095d52c): clean. It marks both of review 1407's findings resolved and raises one low finding, which is fixed. **low: Enforce length limits on blank optional text.** Parse's text check now tests the length and the characters before blankness, so an optional intro_markdown or notice label made only of whitespace is still held to its cap and its character rule. TestSchemaRules has three new cases. The fix is a code change, so review round 4 is requested.
 
 ## Summary
 
