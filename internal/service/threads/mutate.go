@@ -314,30 +314,51 @@ func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.I
 // from the post's entry as the open thread holds it, and answers with the
 // post as a's viewer now reads it.
 //
-// A record whose actor is not the post's author, which only a moderator may
-// append, is projected before the answer through appendEvent's synchronous
-// projection, so the audit row the projection writer writes for it exists
-// when the handler replies (TKT-01M29CRJ5J). An author's own record writes
-// no row and keeps the asynchronous path.
+// The answer is read back straight after the append, in the same call on
+// the open thread, before anything else is done (Terva review 1486 on PR
+// #165), so it is the snapshot readBack describes. A record whose actor is
+// not the post's author, which only a moderator may append, is then
+// projected before the answer, as appendEvent projects, so the audit row the
+// projection writer writes for it exists when the handler replies
+// (TKT-01M29CRJ5J). The projection reads the log, not the answer, so it
+// changes nothing the answer says. An author's own record writes no row and
+// keeps the asynchronous path.
 func (s *Service) changePost(ctx context.Context, id threadid.ID, ordinal uint32, a access,
 	build func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error)) (dto.CreatedPost, error) {
-	if _, err := s.appendProjecting(ctx, id, func(th *threadcache.Thread) (threadlog.Append, bool, error) {
+	var (
+		out      dto.CreatedPost
+		res      threadlog.Result
+		appended bool
+		project  bool
+	)
+	err := s.Threads.With(id, func(th *threadcache.Thread) error {
 		e, err := th.Index.Entry(ordinal)
 		if err != nil {
-			return threadlog.Append{}, false, err
+			return err
 		}
 		rec, err := build(th, e)
-		return rec, err == nil && rec.Author != e.Author, err
-	}); err != nil {
-		return dto.CreatedPost{}, err
-	}
-	var out dto.CreatedPost
-	err := s.Threads.With(id, func(th *threadcache.Thread) error {
-		var err error
+		if err != nil {
+			return err
+		}
+		project = rec.Author != e.Author
+		if res, err = s.Writer.Append(th, rec); err != nil {
+			return err
+		}
+		appended = true
 		out, err = s.readBack(ctx, th, id, ordinal, a)
 		return err
 	})
-	return out, err
+	// A durable record is projected even when the read-back failed, so its
+	// row does not wait on the bus for a request that answers an error.
+	if appended && project {
+		if perr := s.projectNow(ctx, id, res.LogLength); perr != nil && err == nil {
+			err = perr
+		}
+	}
+	if err != nil {
+		return dto.CreatedPost{}, err
+	}
+	return out, nil
 }
 
 // readBack answers a write with the post as the viewer now reads it, from
