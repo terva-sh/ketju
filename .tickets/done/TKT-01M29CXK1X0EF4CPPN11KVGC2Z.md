@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T17:20:07Z
+updated_at: 2026-09-29T17:30:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -172,6 +172,17 @@ Checks after both commits: gofmt, go vet, go test -race ./..., tsc, vitest (1024
 Main moved to 3eab1e9 (TKT-01M29CP2KE, the form schema) and PR 152 conflicted. The run instruction was to add a commit that resolves it without force-pushing, so main was merged in (be1a606). But docs/12 says a conflicting lane rebases onto main rather than merging main in, and the merge would not have landed: Forgejo's rebase merge replays each non-merge commit onto main, and `git merge-tree` shows 1762985 conflicting there in internal/audit/audit.go, internal/problem/domain.go and docs/04, although the PR reported mergeable.
 
 Alternatives considered: a force-push after a local rebase is not allowed; a merge style other than rebase is outside the run's authority. So, as TKT-01M29CP2KE did with PR 150, the work is carried onto main at 3eab1e9 as `run/cxk1x-admin-users-2`: one commit, 375650a, whose tree equals PR 152's head 5b323bc (checked with an empty `git diff`), and this ticket-store commit. PR 152 is closed unmerged, pointing to the new PR, and its branch is kept for the per-commit history, which includes the answers to reviews 1414, 1416 and 1419. Review round 4 dispatched on 5b323bc is superseded; the new PR gets a fresh review.
+
+**agent:claude-code/phase2-run-cxk1x** at 2026-09-29T17:30:01Z
+
+Review 1423 (PR 152, reviewed head 5b323bc, base 3eab1e9, run 942; superseded by PR 153 but read, because its tree is PR 153's) marked review 1419's finding resolved and raised one medium finding. Review 1424 (PR 153, reviewed head cd15542, base 3eab1e9, run 946, request ready-review-cd15542) raised the same one and another. Both are fixed in b3b9311 (branch SHA).
+
+1. medium (1423, and 1424 finding 1): a role or membership change could be reported as failed after it committed, because the answer was read in a second transaction. This supersedes the review 1416 note's reason for leaving these alone (a retry is idempotent). That reason still holds for correctness, but a failure reported for a committed change misleads the admin, and the fix is small. perm gains writeThen, which runs a read in the transaction that made the change. ChangeRoleThen, AddMemberThen, RemoveMemberThen and ApplyGrantsThen use it. users.SetRole and the groups membership routes read their answers through it. Test: TestRoleAndMembershipThenReadInTheSameTransaction. It was mutation-checked: with writeThen discarding the read's error, it and the grant test fail.
+2. medium (1424 finding 2): a permission preview's caption could show a role or status read apart from the one its decisions were made for. PreviewThen reads in the transaction Preview decided in, and groups.Preview reads the account and the forums through it. Test: TestPreviewThenReadsInTheSameTransaction.
+
+Also fixed: TestEveryMutationInvalidates ran its mutations from a map. Since Grant and Revoke became checked batches, a Revoke drawn before its Grant was refused, so the test was flaky. It is now an ordered list and passed 20 of 20 runs. TestOnlyRoleWritesSetTheRole now names ChangeRoleThen.
+
+Checks: gofmt, go vet and go test -race ./... pass. The client is unchanged, so the dist is too.
 
 ## Summary
 
