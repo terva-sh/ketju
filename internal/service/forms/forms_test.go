@@ -264,6 +264,29 @@ func TestAnInvalidSchemaWritesNothing(t *testing.T) {
 	}
 }
 
+// TestEverySavedVersionLoads: a schema whose stored, canonical form would be
+// over the load limit is refused at the save, and the active version still
+// loads (review 1407).
+func TestEverySavedVersionLoads(t *testing.T) {
+	s := newService(t)
+	sep := "x" + strings.Repeat(" ", 6000)
+	big := `{"title":"T","fields":[{"key":"a","type":"markdown_notice","markdown":"` + sep + `"},` +
+		`{"key":"b","type":"markdown_notice","markdown":"` + sep + `"}]}`
+	if len(big) > forms.MaxSchemaBytes {
+		t.Fatalf("the fixture is %d bytes as sent; it must fit and grow only when stored", len(big))
+	}
+	_, err := s.Create(t.Context(), admin, Registration, 1, []byte(big), "")
+	if fe := problem.FieldErrorsOf(err); len(fe) != 1 || fe[0] != (problem.FieldError{Field: "", Code: forms.CodeTooLong}) {
+		t.Fatalf("got %v, want the schema refused as too_long", err)
+	}
+	if n := count(t, s.DB, `SELECT count(*) FROM form_versions`); n != 1 {
+		t.Errorf("%d versions, want 1", n)
+	}
+	if _, err := s.Active(t.Context(), Registration); err != nil {
+		t.Errorf("the active version no longer loads: %v", err)
+	}
+}
+
 // TestUnknownFormAndVersionAreNotFound.
 func TestUnknownFormAndVersionAreNotFound(t *testing.T) {
 	s := newService(t)

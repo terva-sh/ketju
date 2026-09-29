@@ -74,6 +74,14 @@ func TestSchemaRules(t *testing.T) {
 		{"a long notice", field(`{"key":"a","type":"markdown_notice","markdown":"` + long(10001) + `"}`), []string{"fields.0.markdown too_long"}},
 		{"markdown on text", field(`{"key":"a","type":"text","label":"L","markdown":"m"}`), []string{"fields.0.markdown not_allowed"}},
 		{"a schema over 64 KiB", `{"title":"` + long(MaxSchemaBytes) + `"}`, []string{" too_long"}},
+		// 36 KB as sent, 72 KB once encoding/json escapes each U+2028 to
+		//  : the stored form would be one no load accepts.
+		{"a schema whose canonical form is over 64 KiB", `{"title":"T","fields":[` +
+			`{"key":"a","type":"markdown_notice","markdown":"x` + strings.Repeat(" ", 6000) + `"},` +
+			`{"key":"b","type":"markdown_notice","markdown":"x` + strings.Repeat(" ", 6000) + `"}]}`, []string{" too_long"}},
+		{"a title with a line separator", `{"title":"a` + " " + `b","fields":[{"key":"a","type":"text","label":"L"}]}`, []string{"title invalid_text"}},
+		{"a label with a paragraph separator", field(`{"key":"a","type":"text","label":"a` + " " + `"}`), []string{"fields.0.label invalid_text"}},
+		{"an option with a line separator", field(`{"key":"a","type":"select","label":"L","options":["x` + " " + `"]}`), []string{"fields.0.options.0 invalid_text"}},
 		{"several at once", `{"title":"","fields":[{"key":"A","type":"text"},{"key":"b","type":"select","label":"L","options":["x","x"]}]}`,
 			[]string{"title required", "fields.0.key invalid_key", "fields.0.label required", "fields.1.options.1 duplicate_option"}},
 	}

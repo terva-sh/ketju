@@ -58,6 +58,10 @@ func TestEveryTypeValidatesFromTheTable(t *testing.T) {
 		{"text with a leading line break", `{"key":"a","type":"text","label":"L"}`, `"\nhello"`, nil, CodeInvalidText},
 		{"text with a trailing line break", `{"key":"a","type":"text","label":"L"}`, `"hello\r\n"`, nil, CodeInvalidText},
 		{"text with a trailing tab", `{"key":"a","type":"text","label":"L"}`, `"hello\t"`, nil, CodeInvalidText},
+		{"text with a line separator", `{"key":"a","type":"text","label":"L"}`, `"a b"`, nil, CodeInvalidText},
+		{"text with a paragraph separator", `{"key":"a","type":"text","label":"L"}`, `"a "`, nil, CodeInvalidText},
+		{"email with a line separator", `{"key":"a","type":"email","label":"L"}`, `"ada@example.org "`, nil, CodeInvalidText},
+		{"textarea keeps a line separator", `{"key":"a","type":"textarea","label":"L"}`, `"a b"`, "a b", ""},
 		{"text as a number", `{"key":"a","type":"text","label":"L"}`, `5`, nil, CodeWrongType},
 		{"text required and blank", `{"key":"a","type":"text","label":"L","required":true}`, `"   "`, nil, CodeRequired},
 

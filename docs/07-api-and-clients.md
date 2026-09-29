@@ -161,7 +161,7 @@ other body has it.
 | Code | Meaning |
 |---|---|
 | `required` | Missing or blank, and required; a required checkbox left unticked |
-| `too_long` | Over the property's or the answer's character limit, or a schema over 64 KiB |
+| `too_long` | Over the property's or the answer's character limit, or a schema over 64 KiB as sent or as stored |
 | `invalid_email` | Not a bare email address |
 | `invalid_text` | Holds a control character, or a line break where one line is expected |
 | `not_an_option` | A select answer that is not one of its options |

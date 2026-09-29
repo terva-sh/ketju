@@ -298,16 +298,18 @@ one table of field types. No code names a field key. A schema is refused
 with `validation-failed` and a list of `{field, code}` errors (07 "Error
 catalogue") when it breaks any of these rules:
 
-- The schema is one JSON object of at most 64 KiB, with only the properties
-  `title`, `intro_markdown` and `fields`. An unknown property is refused
-  rather than ignored, so a schema written by a newer build fails loudly in
-  an older one.
+- The schema is one JSON object with only the properties `title`,
+  `intro_markdown` and `fields`. An unknown property is refused rather than
+  ignored, so a schema written by a newer build fails loudly in an older one.
+- The schema is at most 64 KiB both as sent and in the canonical form it is
+  stored in, which can be longer because JSON escapes some characters. So
+  every version a save accepts can be loaded again.
 - `title` is 1 to 200 characters. `intro_markdown` is at most 10000.
 - `fields` holds 1 to 50 fields. Each has a `key` matching
   `^[a-z][a-z0-9_]{0,39}$`, unique in the form, and a `type` from the table
   below. A `label` of 1 to 500 characters is required except on a
   `markdown_notice`. A title, label or option may not hold a control
-  character.
+  character or a Unicode line or paragraph separator (U+2028, U+2029).
 - Each type allows only the optional properties the table lists. Any other
   is refused as `not_allowed`.
 
@@ -333,7 +335,8 @@ catalogue") when it breaks any of these rules:
 
 Answers are strings trimmed of surrounding space. Control characters are
 checked before the trim, so a one-line answer with a line break at either
-end is refused rather than trimmed. A `null` is no answer, except for a
+end is refused rather than trimmed. A one-line answer (`text`, `email`)
+refuses U+2028 and U+2029 as it refuses `\n`. A `textarea` accepts them. A `null` is no answer, except for a
 `markdown_notice`, which is sent nothing at all. An answer for a key the
 form has no field for is `bad-request`, because the client drew its inputs
 from the schema. A `locked` field ignores whatever was submitted and stores

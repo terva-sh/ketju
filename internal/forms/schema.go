@@ -226,6 +226,19 @@ func Parse(b []byte) (Schema, error) {
 	if err := p.err(); err != nil {
 		return Schema{}, err
 	}
+	// What is stored is the canonical form, and loading it parses it again,
+	// so it is held to the same limit. It can be longer than what was sent:
+	// encoding/json escapes some characters, such as U+2028, to six bytes.
+	// Without this a save could store a version no load accepts (review
+	// 1407).
+	b, err := Canonical(s)
+	if err != nil {
+		return Schema{}, err
+	}
+	if len(b) > MaxSchemaBytes {
+		p.add("", CodeTooLong)
+		return Schema{}, p.err()
+	}
 	return s, nil
 }
 
@@ -457,9 +470,16 @@ func join(path, name string) string {
 func isNull(raw json.RawMessage) bool { return string(bytes.TrimSpace(raw)) == "null" }
 
 // hasControl reports a control character in s other than those in allowed.
+// Unless allowed admits "\n", the Unicode line and paragraph separators
+// (U+2028, U+2029) count too: they are line breaks that unicode.IsControl
+// does not report, and one-line text must not hold one (review 1407).
 func hasControl(s, allowed string) bool {
+	multiline := strings.ContainsRune(allowed, '\n')
 	for _, r := range s {
-		if unicode.IsControl(r) && !strings.ContainsRune(allowed, r) {
+		if strings.ContainsRune(allowed, r) {
+			continue
+		}
+		if unicode.IsControl(r) || (!multiline && unicode.In(r, unicode.Zl, unicode.Zp)) {
 			return true
 		}
 	}
