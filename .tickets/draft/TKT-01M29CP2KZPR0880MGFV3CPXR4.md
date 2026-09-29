@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:38:47Z
+updated_at: 2026-09-29T06:27:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -98,7 +98,7 @@ Engineering decisions taken here, with the alternative that lost:
      - The `applications_one_pending` index stands behind the pending check: a unique violation is `ErrPending`.
      - TKT-01M29CP2N0 adds the moderators' notifications inside this transaction.
    - `Status(ctx, viewer) (dto.ApplicationStatus, error)`: the latest application, or `status: "none"`, with the fields below.
-   - `Withdraw(ctx, viewer)`: `WithdrawApplication`, where zero rows is `ErrNotPending` (conflict). The row is the applicant's own act, so it writes no audit row; docs/04 audits moderation and administration. TKT-01M29CP2N0 adds settling the moderators' notifications here.
+   - `Withdraw(ctx, viewer)`: `WithdrawApplication`, where zero rows is `ErrNotPending` (conflict). The row is the applicant's own act, so it writes no audit row; docs/04 audits moderation and administration. Withdrawing writes no notification; TKT-01M29CP2N0's count stops including the application once it is no longer pending.
    - Map each error in `internal/problem/domain.go`.
 3. `internal/dto`:
    - `ApplicationForm{form Form, prefill map[string]string}`, using `dto.Form` from TKT-01M29CP2KE.

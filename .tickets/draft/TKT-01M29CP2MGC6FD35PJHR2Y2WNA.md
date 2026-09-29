@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:55:46Z
+updated_at: 2026-09-29T06:27:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -122,7 +122,7 @@ Engineering decisions taken here, with the alternative that lost:
      6. `LinkIdentityToUser`, which must affect one row.
      7. `DecideApplication(approved, user_id)`, setting the status and the new user's id in one statement, so the CHECK from TKT-01M29CKRDQ holds when that statement runs. Zero rows is `ErrAlreadyDecided`, and returning it rolls back the user and the link. The write connection serializes transactions, so step 2 already saw the truth; step 7's guard is the one that decides.
      8. `AppendAudit` `application.approved`.
-     TKT-01M29CP2N0 adds the applicant's notification and settles the moderators' ones inside this transaction.
+     TKT-01M29CP2N0 adds the applicant's notification inside this transaction. The moderators' `new_application` rows are left alone, and they leave the count once the application is no longer pending.
    - `Deny(ctx, viewer, id, note, block)`, in one `DB.Write`: the note is required; `GetPendingApplication`; `DecideApplication(denied, NULL)`; then, when `block` is set, `BlockIdentity`, which must affect exactly one row. A block with no identity to act on is `ErrIdentityGone` (409), and the whole denial rolls back: either the identity is NULL because it was removed (`applications.identity_id` is ON DELETE SET NULL, TKT-01M29CKRDQ), or it now has a user. The moderator then sees the application still pending, and may deny it without the block (review 1353). Last comes `AppendAudit` `application.denied`, whose `blocked` records only a block that was written. A denial without `block` needs no identity, so an application whose identity was removed can still be denied.
    - `Unblock(ctx, viewer, id)`, in one `DB.Write`, for the same staff as the other actions: it looks up the application's identity; `UnblockIdentity`, where zero rows (not blocked, or the identity is gone) is `ErrNotBlocked` (409); and `AppendAudit` `identity.unblocked`. The application stays denied.
    - `AddNote(ctx, viewer, id, body)`: the body is 1–2000 characters. It writes no audit row, because it decides nothing.
