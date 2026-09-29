@@ -111,4 +111,16 @@ func TestSetUserStatusWritesTheReason(t *testing.T) {
 	if s, r, u := read(); s != "active" || r != "" || u.Valid {
 		t.Errorf("unsuspended: %s %q %v", s, r, u)
 	}
+	// Every status change counts, anonymizing included, whatever the clock
+	// says: the Reactivate button is bound to the count (review 1441).
+	write(t, d, func(q *dbq.Queries, _ *sql.Tx) error {
+		return q.AnonymizeUser(t.Context(), dbq.AnonymizeUserParams{UpdatedAt: 3, ID: id})
+	})
+	var version int64
+	write(t, d, func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), `SELECT status_version FROM users WHERE id = ?`, id).Scan(&version)
+	})
+	if version != 3 {
+		t.Errorf("status_version %d after three changes, want 3", version)
+	}
 }

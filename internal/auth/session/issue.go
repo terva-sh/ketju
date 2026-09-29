@@ -51,10 +51,10 @@ type NotActiveError struct {
 	Reason string
 	// Until is when a suspension ends, in Unix ms; 0 means no end is set.
 	Until int64
-	// UpdatedAt is the users row's updated_at as the refusal read it. A
-	// reactivation is bound to it, so it is refused once the row has
-	// changed since.
-	UpdatedAt int64
+	// StatusVersion counts the account's status changes, as the refusal
+	// read it. A reactivation is bound to it, so it is refused once the
+	// status has changed since.
+	StatusVersion int64
 }
 
 func (e *NotActiveError) Error() string {
@@ -104,7 +104,7 @@ func (s *Store) IssueUserWith(ctx context.Context, meta Meta, create func(contex
 		}
 		if h.Status.String != "active" {
 			return newSession{}, &NotActiveError{Status: h.Status.String, UserID: h.UserID.Int64,
-				Reason: h.StatusReason.String, Until: h.StatusUntil.Int64, UpdatedAt: h.UpdatedAt.Int64}
+				Reason: h.StatusReason.String, Until: h.StatusUntil.Int64, StatusVersion: h.StatusVersion.Int64}
 		}
 		return newSession{Kind: KindUser, UserID: h.UserID.Int64, IdentityID: identityID,
 			IP: meta.IP, UserAgent: meta.UserAgent, Provider: meta.Provider}, nil

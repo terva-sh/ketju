@@ -18,6 +18,14 @@ import (
 // lifecycle").
 var ErrCannotReactivate = errors.New("identity: the account cannot be reactivated")
 
+// ErrReactivatedNotSignedIn is Reactivate's answer when the account was
+// reactivated but the sign-in that follows could not finish: ending the
+// session it replaces, or applying the bootstrap or the group_map, failed
+// (Terva review 1441). The reactivation has committed and stands, the
+// session just issued has been ended, and signing in again, which the
+// account now may, retries the rest.
+var ErrReactivatedNotSignedIn = errors.New("identity: the account was reactivated, but the sign-in did not finish")
+
 // Reactivate brings back the deactivated account of the identity c names
 // and signs it in (docs/05 "Account lifecycle", decided 2026-09-29 in
 // TKT-01M29CKRFS). c is what the IdP vouched for at a sign-in that found the
@@ -26,10 +34,11 @@ var ErrCannotReactivate = errors.New("identity: the account cannot be reactivate
 // Signing in alone never reactivates: a stale IdP session would otherwise
 // undo a deliberate deactivation unseen.
 //
-// stamp is the account row's updated_at as that sign-in found it
-// (Result.Stamp). A row changed since is refused, so the cookie serves one
-// press: reactivating changes the row, and so does deactivating again, which
-// a cookie from before it cannot undo.
+// stamp is the account's status_version as that sign-in found it
+// (Result.Stamp). Every status change adds 1 to it, so a status changed
+// since is refused and the cookie serves one press: reactivating changes
+// it, and so does deactivating again, which a cookie from before it cannot
+// undo, however close together the two land (Terva review 1441).
 //
 // The account moves from deactivated to active through
 // perm.ChangeStatusIn, which writes user.reactivated, inside the
@@ -41,7 +50,9 @@ var ErrCannotReactivate = errors.New("identity: the account cannot be reactivate
 //
 // Then the sign-in finishes as any other does (settle): the session it
 // replaces is ended, and the bootstrap and the provider's group_map are
-// applied from c.
+// applied from c. If that fails, the session just issued is ended, as for
+// any sign-in, and the answer is ErrReactivatedNotSignedIn, so the caller
+// can say that the account is active and the member should sign in again.
 func (s *Service) Reactivate(ctx context.Context, c Claims, stamp int64, meta session.Meta, replaces string) (Result, error) {
 	if s.Perm == nil {
 		return Result{}, errors.New("identity: no permission evaluator is set, so an account cannot be reactivated")
@@ -61,8 +72,8 @@ func (s *Service) Reactivate(ctx context.Context, c Claims, stamp int64, meta se
 		err = s.Perm.ChangeStatusIn(ctx, q, userID, perm.StatusChange{
 			By: audit.By{Actor: userID, IP: meta.IP}, Action: perm.ActionReactivated,
 			Allow: func(u dbq.User) error {
-				if u.UpdatedAt != stamp {
-					return fmt.Errorf("%w: the account has changed since the sign-in", ErrCannotReactivate)
+				if u.StatusVersion != stamp {
+					return fmt.Errorf("%w: the account's status has changed since the sign-in", ErrCannotReactivate)
 				}
 				return nil
 			}})
@@ -79,7 +90,7 @@ func (s *Service) Reactivate(ctx context.Context, c Claims, stamp int64, meta se
 	}
 	s.Perm.Invalidate()
 	if err := s.settle(ctx, token, userID, c.identity(), meta.IP, replaces); err != nil {
-		return Result{}, err
+		return Result{}, fmt.Errorf("%w: %w", ErrReactivatedNotSignedIn, err)
 	}
 	return Result{Outcome: SignedIn, Token: token, Session: sess}, nil
 }

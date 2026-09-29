@@ -202,10 +202,58 @@ func TestReactivation(t *testing.T) {
 		}
 		w.now = w.now.Add(time.Minute) // still inside the cookie's five minutes
 		w.change(id, perm.ActionDeactivated, "", 0)
+		// As if all three changes had landed in the same millisecond: the
+		// row's timestamp is back where the sign-in found it, and only the
+		// status version tells the two deactivations apart (review 1441).
+		var first int64
+		w.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			return tx.QueryRowContext(t.Context(), `SELECT min(at) FROM audit_log WHERE action = ?`,
+				perm.ActionDeactivated).Scan(&first)
+		})
+		if err := w.db.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			_, err := tx.ExecContext(t.Context(), `UPDATE users SET updated_at = ? WHERE id = ?`, first, id)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
 		sessions := w.sessions()
 		w.refused(w.post(ReactivatePath, c), http.StatusForbidden, "Account unavailable")
 		if s := w.status(id); s != domain.StatusDeactivated || w.sessions() != sessions {
 			t.Errorf("the replay left dee %s with %d sessions", s, w.sessions())
+		}
+	})
+
+	t.Run("a reactivation whose sign-in cannot finish", func(t *testing.T) {
+		// The account is reactivated and stays so; the session just issued
+		// is ended; the page says to sign in again; and signing in works
+		// (review 1441).
+		w := newWorld(t)
+		id := w.user("dee", "active", "user-1")
+		w.user("bob", "active", "bob-sub")
+		w.change(id, perm.ActionDeactivated, "", 0)
+		c := w.reactivating("")
+		w.idp.Subject = "bob-sub"
+		bob := cookie(w.signIn(""), session.CookieName)
+		w.handler.Login.(*identity.Service).Sessions = failingRevoke{w.store, bob.Value}
+
+		resp := w.post(ReactivatePath, c, bob)
+		b := body(resp)
+		if resp.StatusCode != http.StatusInternalServerError || !strings.Contains(b, "<h1>Account reactivated</h1>") ||
+			!strings.Contains(b, `href="/auth/signin"`) {
+			t.Fatalf("answered %d:\n%s", resp.StatusCode, b)
+		}
+		if s := cookie(resp, session.CookieName); s != nil && s.Value != "" {
+			t.Error("a session cookie was set")
+		}
+		if s := w.status(id); s != domain.StatusActive {
+			t.Errorf("dee is %s", s)
+		}
+		if n := w.count(`SELECT count(*) FROM sessions WHERE user_id = ?`, id); n != 0 {
+			t.Errorf("%d of dee's sessions were left", n)
+		}
+		w.idp.Subject = "user-1"
+		if h := signedInAs(t, w, w.signIn("")); h != "dee" {
+			t.Errorf("signing in again signed in %s", h)
 		}
 	})
 

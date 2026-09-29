@@ -68,12 +68,14 @@ func (h *Handler) unavailable(w http.ResponseWriter, r *http.Request, res identi
 // reactivate is the Reactivate button: it brings the deactivated account the
 // cookie names back to active and signs it in, then sends the browser where
 // its sign-in was going. The cookie is cleared whatever happens, and it is
-// bound to the account row as the sign-in found it, so a copy of it is no
-// good once the row has changed: it serves one press.
+// bound to the account's status_version as the sign-in found it, so a copy
+// of it is no good once the status has changed: it serves one press.
 //
 // Only a deactivated account is reactivated; one that is suspended, pending
-// or anonymized, or has changed since the page was shown, is refused and
-// nothing is written (identity.Service.Reactivate).
+// or anonymized, or whose status has changed since the page was shown, is
+// refused and nothing is written (identity.Service.Reactivate). A
+// reactivation whose sign-in could not finish says the account is active
+// and offers the way to sign in.
 func (h *Handler) reactivate(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	var p pending
@@ -98,6 +100,12 @@ func (h *Handler) reactivate(w http.ResponseWriter, r *http.Request) {
 	case errors.Is(err, identity.ErrCannotReactivate):
 		h.Logger.InfoContext(ctx, "reactivation refused", "provider", p.Claims.Provider, "error", err)
 		writePage(w, http.StatusForbidden, pageUnavailable)
+	case errors.Is(err, identity.ErrReactivatedNotSignedIn):
+		// The account is active and the button is spent, so the way on is
+		// an ordinary sign-in, which finishes what this one could not.
+		h.Logger.ErrorContext(ctx, "reactivated, but the sign-in did not finish", "provider", p.Claims.Provider,
+			"error", err)
+		writePage(w, http.StatusInternalServerError, pageReactivatedSignInAgain)
 	case err != nil:
 		h.Logger.ErrorContext(ctx, "reactivation failed", "provider", p.Claims.Provider, "error", err)
 		writePage(w, http.StatusInternalServerError, pageFailed)

@@ -58,7 +58,7 @@ type Result struct {
 	Status string
 	Reason string
 	Until  int64
-	// Stamp is the account row's updated_at when Unavailable found it,
+	// Stamp is the account's status_version when Unavailable found it,
 	// which a Reactivate button is bound to (Reactivate).
 	Stamp int64
 }
@@ -152,7 +152,7 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 	switch {
 	case errors.As(err, &inactive):
 		return Result{Outcome: Unavailable, Status: inactive.Status, Reason: inactive.Reason, Until: inactive.Until,
-			Stamp: inactive.UpdatedAt}, nil
+			Stamp: inactive.StatusVersion}, nil
 	case errors.Is(err, session.ErrNoUser):
 		return s.applicant(ctx, ident.ID, id, meta, replaces)
 	case err != nil:

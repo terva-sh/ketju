@@ -54,6 +54,9 @@ var (
 	// active. A suspended or deactivated one gets writeUnavailable's page.
 	pageUnavailable = pageData{"Account unavailable", "This account cannot sign in at the moment. " +
 		"If you think this is a mistake, contact the forum's moderators.", "/", "Go to the forum"}
+	// The account was reactivated, but the sign-in after it did not finish.
+	pageReactivatedSignInAgain = pageData{"Account reactivated", "Your account is active again, " +
+		"but signing you in did not finish. Please sign in again.", "/auth/signin", "Sign in"}
 	// The reactivation cookie is missing or past ReactivateTTL.
 	pageReactivateExpired = pageData{"Reactivation expired", "Reactivating took too long, " +
 		"or no sign-in is waiting for it. Please sign in again.", "/", "Go to the forum"}

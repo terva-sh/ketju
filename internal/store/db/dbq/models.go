@@ -278,6 +278,7 @@ type User struct {
 	LastSeenAt    sql.NullInt64
 	StatusReason  string
 	StatusUntil   sql.NullInt64
+	StatusVersion int64
 	Anonymized    int64
 }
 

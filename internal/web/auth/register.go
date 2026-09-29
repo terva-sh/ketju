@@ -29,7 +29,8 @@ const RegistrationTTL = 15 * time.Minute
 const RegisterPath = "/auth/register"
 
 // pending is what the registration cookie holds, and the reactivation
-// cookie, which adds the account row's stamp (reactivate.go).
+// cookie, which adds the account's status_version as the sign-in found it
+// (reactivate.go).
 type pending struct {
 	Claims   identity.Claims `json:"c"`
 	ReturnTo string          `json:"r"`

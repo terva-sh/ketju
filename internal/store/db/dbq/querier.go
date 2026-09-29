@@ -204,8 +204,8 @@ type Querier interface {
 	// reads it in the transaction that inserts the session, so nothing can
 	// change it between the check and the row.
 	// The reason and end of a suspension come with the status, for the
-	// "account unavailable" page, and updated_at, which the Reactivate button's
-	// cookie is bound to (docs/05 "Login flow").
+	// "account unavailable" page, and status_version, which the Reactivate
+	// button's cookie is bound to (docs/05 "Login flow").
 	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
 	InsertApplication(ctx context.Context, arg InsertApplicationParams) (int64, error)
 	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
@@ -323,7 +323,8 @@ type Querier interface {
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	// SetUserStatus is every status change but anonymizing (internal/perm,
 	// lifecycle.go). It writes the reason and end with the status, so a
-	// suspension's reason never outlives it.
+	// suspension's reason never outlives it, and counts the change in
+	// status_version.
 	SetUserStatus(ctx context.Context, arg SetUserStatusParams) error
 	// SweepSessions deletes every session LookupSession would refuse: the exact
 	// complement of its liveness test. internal/auth/session binds both cutoffs

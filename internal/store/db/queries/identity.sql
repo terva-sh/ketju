@@ -29,10 +29,10 @@ WHERE id = ?;
 -- reads it in the transaction that inserts the session, so nothing can
 -- change it between the check and the row.
 -- The reason and end of a suspension come with the status, for the
--- "account unavailable" page, and updated_at, which the Reactivate button's
--- cookie is bound to (docs/05 "Login flow").
+-- "account unavailable" page, and status_version, which the Reactivate
+-- button's cookie is bound to (docs/05 "Login flow").
 -- name: IdentityHolder :one
-SELECT i.user_id, u.status, u.status_reason, u.status_until, u.updated_at
+SELECT i.user_id, u.status, u.status_reason, u.status_until, u.status_version
 FROM identities i
 LEFT JOIN users u ON u.id = i.user_id
 WHERE i.id = ?;
@@ -117,9 +117,12 @@ UPDATE users SET role = ?, updated_at = ? WHERE id = ?;
 
 -- SetUserStatus is every status change but anonymizing (internal/perm,
 -- lifecycle.go). It writes the reason and end with the status, so a
--- suspension's reason never outlives it.
+-- suspension's reason never outlives it, and counts the change in
+-- status_version.
 -- name: SetUserStatus :exec
-UPDATE users SET status = ?, status_reason = ?, status_until = ?, updated_at = ? WHERE id = ?;
+UPDATE users
+SET status = ?, status_reason = ?, status_until = ?, status_version = status_version + 1, updated_at = ?
+WHERE id = ?;
 
 -- AnonymizeUser is docs/05's anonymization of the account's row: the
 -- placeholder handle, and nothing left that names the person. The account
@@ -128,7 +131,8 @@ UPDATE users SET status = ?, status_reason = ?, status_until = ?, updated_at = ?
 -- name: AnonymizeUser :exec
 UPDATE users
 SET handle = 'deleted-user-' || id, display_name = '', avatar_blob = NULL, bio_source = '', anonymized = 1,
-    status = 'deactivated', status_reason = '', status_until = NULL, updated_at = sqlc.arg(updated_at)
+    status = 'deactivated', status_reason = '', status_until = NULL, status_version = status_version + 1,
+    updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id);
 
 -- DeleteUserIdentities removes every identity of an anonymized account

@@ -16,7 +16,8 @@ import (
 const anonymizeUser = `-- name: AnonymizeUser :exec
 UPDATE users
 SET handle = 'deleted-user-' || id, display_name = '', avatar_blob = NULL, bio_source = '', anonymized = 1,
-    status = 'deactivated', status_reason = '', status_until = NULL, updated_at = ?1
+    status = 'deactivated', status_reason = '', status_until = NULL, status_version = status_version + 1,
+    updated_at = ?1
 WHERE id = ?2
 `
 
@@ -245,7 +246,7 @@ func (q *Queries) GetSession(ctx context.Context, idHash sqltypes.SessionHash) (
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, anonymized FROM users WHERE id = ?
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -269,13 +270,14 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.LastSeenAt,
 		&i.StatusReason,
 		&i.StatusUntil,
+		&i.StatusVersion,
 		&i.Anonymized,
 	)
 	return i, err
 }
 
 const getUserByHandle = `-- name: GetUserByHandle :one
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, anonymized FROM users WHERE handle = ?
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized FROM users WHERE handle = ?
 `
 
 func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, error) {
@@ -299,24 +301,25 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 		&i.LastSeenAt,
 		&i.StatusReason,
 		&i.StatusUntil,
+		&i.StatusVersion,
 		&i.Anonymized,
 	)
 	return i, err
 }
 
 const identityHolder = `-- name: IdentityHolder :one
-SELECT i.user_id, u.status, u.status_reason, u.status_until, u.updated_at
+SELECT i.user_id, u.status, u.status_reason, u.status_until, u.status_version
 FROM identities i
 LEFT JOIN users u ON u.id = i.user_id
 WHERE i.id = ?
 `
 
 type IdentityHolderRow struct {
-	UserID       sql.NullInt64
-	Status       sql.NullString
-	StatusReason sql.NullString
-	StatusUntil  sql.NullInt64
-	UpdatedAt    sql.NullInt64
+	UserID        sql.NullInt64
+	Status        sql.NullString
+	StatusReason  sql.NullString
+	StatusUntil   sql.NullInt64
+	StatusVersion sql.NullInt64
 }
 
 // IdentityHolder is what a sign-in decides a session on: the user an
@@ -324,8 +327,8 @@ type IdentityHolderRow struct {
 // reads it in the transaction that inserts the session, so nothing can
 // change it between the check and the row.
 // The reason and end of a suspension come with the status, for the
-// "account unavailable" page, and updated_at, which the Reactivate button's
-// cookie is bound to (docs/05 "Login flow").
+// "account unavailable" page, and status_version, which the Reactivate
+// button's cookie is bound to (docs/05 "Login flow").
 func (q *Queries) IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error) {
 	row := q.db.QueryRowContext(ctx, identityHolder, id)
 	var i IdentityHolderRow
@@ -334,7 +337,7 @@ func (q *Queries) IdentityHolder(ctx context.Context, id int64) (IdentityHolderR
 		&i.Status,
 		&i.StatusReason,
 		&i.StatusUntil,
-		&i.UpdatedAt,
+		&i.StatusVersion,
 	)
 	return i, err
 }
@@ -510,7 +513,9 @@ func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error 
 }
 
 const setUserStatus = `-- name: SetUserStatus :exec
-UPDATE users SET status = ?, status_reason = ?, status_until = ?, updated_at = ? WHERE id = ?
+UPDATE users
+SET status = ?, status_reason = ?, status_until = ?, status_version = status_version + 1, updated_at = ?
+WHERE id = ?
 `
 
 type SetUserStatusParams struct {
@@ -523,7 +528,8 @@ type SetUserStatusParams struct {
 
 // SetUserStatus is every status change but anonymizing (internal/perm,
 // lifecycle.go). It writes the reason and end with the status, so a
-// suspension's reason never outlives it.
+// suspension's reason never outlives it, and counts the change in
+// status_version.
 func (q *Queries) SetUserStatus(ctx context.Context, arg SetUserStatusParams) error {
 	_, err := q.db.ExecContext(ctx, setUserStatus,
 		arg.Status,
@@ -652,7 +658,7 @@ func (q *Queries) UsersByHandlePrefix(ctx context.Context, arg UsersByHandlePref
 }
 
 const usersByIDs = `-- name: UsersByIDs :many
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, anonymized FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
 `
 
 // The authors on one page of a thread, in one query rather than one per post.
@@ -693,6 +699,7 @@ func (q *Queries) UsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
 			&i.LastSeenAt,
 			&i.StatusReason,
 			&i.StatusUntil,
+			&i.StatusVersion,
 			&i.Anonymized,
 		); err != nil {
 			return nil, err

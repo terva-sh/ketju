@@ -160,8 +160,9 @@ button posts to `POST /auth/reactivate`. That moves the account from
 inserts the session in, with its `user.reactivated` audit row, and then
 applies the bootstrap and `group_map` as any sign-in does. A suspended,
 pending or anonymized account is never reactivated this way. The cookie is
-bound to the account row's `updated_at` as the sign-in found it, so it serves
-one press, and a copy of it cannot undo a deactivation made after it. Sign-out is `POST /auth/logout`, never a GET, so a
+bound to the account's `status_version` as the sign-in found it, a count
+every status change adds 1 to, so it serves one press, and a copy of it
+cannot undo a deactivation made after it however soon (Terva review 1441). Sign-out is `POST /auth/logout`, never a GET, so a
 page elsewhere cannot sign a reader out with an image tag. (TKT-01M29C7ZZ9.)
 
 Email is never used to auto-link identities across providers. Two providers

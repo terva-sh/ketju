@@ -10,6 +10,13 @@
 ALTER TABLE users ADD COLUMN status_reason TEXT NOT NULL DEFAULT '';
 ALTER TABLE users ADD COLUMN status_until INTEGER;
 
+-- status_version counts the account's status changes: every one adds 1
+-- (SetUserStatus, AnonymizeUser). A Reactivate button's cookie is bound to
+-- it as the sign-in found it, so a copy cannot undo a status change made
+-- after it. A timestamp cannot do this: two changes in one millisecond
+-- would leave it as it was (Terva review 1441).
+ALTER TABLE users ADD COLUMN status_version INTEGER NOT NULL DEFAULT 0;
+
 -- anonymized is what suppresses attribution at render time: the handle is
 -- deleted-user-<id>, and the display name, avatar and bio are gone. Post
 -- bodies are not touched, because they are in append-only logs; erasing body

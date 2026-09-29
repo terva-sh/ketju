@@ -61,6 +61,7 @@ role ('member'|'moderator'|'admin'), kind ('human'|'agent'),
 bio_source, timezone, locale, prefs_json, mark_all_read_at (nullable),
 created_at, updated_at, last_seen_at,
 status_reason (default ''), status_until (nullable, Unix ms),
+status_version (default 0),
 anonymized (0|1, default 0)
 ```
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
@@ -70,7 +71,9 @@ their identity when providers change.
 lifecycle"). `status_reason` and `status_until` are a suspension's reason and
 end, which the member is shown at sign-in; `status_until` is null when no end
 is set. Every status change writes all three columns, so a reason never
-outlives its suspension. `anonymized` marks an anonymized account, and is what
+outlives its suspension, and adds 1 to `status_version`, which the Reactivate
+button's cookie is bound to (05 "Login flow"); a timestamp would not change
+between two changes in the same millisecond. `anonymized` marks an anonymized account, and is what
 every author block reads to withhold the display name and avatar
 (`member.Author`); the `deleted-user` handle prefix no longer marks one.
 Anonymizing sets the handle to `deleted-user-<id>`, clears the display name,
