@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T16:18:22Z
+updated_at: 2026-09-29T16:30:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -218,6 +218,10 @@ The admin routes need two response shapes, `dto.Form` and `dto.FormAdmin`, and t
 ### Re-branched: PR 150 replaced
 
 TKT-01M29CKRG9 (PR 149) landed on main while PR 150 was in review. Its new `TestPreUserRoutesAreExactlyTheAllowlist` builds `api.Deps` without `Forms`, which this ticket makes required. So the merged tree panics in that test, though the branches have no textual conflict. The fix edits a file that exists only on main. A force-push is not allowed, and docs/12 says not to merge main into the branch. So the work was cherry-picked onto main at 10a3a7b as `run/cp2ke-form-schema-2`, with one more commit wiring `Forms` into that test. PR 150 is closed unmerged, pointing to the new PR. Review 1400's findings are fixed on the new branch, which gets a fresh review.
+
+**agent:claude-code/phase2-run-cp2ke** at 2026-09-29T16:30:16Z
+
+Review 1404 on PR 151 (head 5b03c0d, base 10a3a7b; run 15251, request ready-review-5b03c0d): clean, with one low finding. **low: Report duplicate keys even when a field has another error.** Fixed. Parse now checks a valid key for duplicates whether or not the rest of its field parsed, so the response lists duplicate_key beside the field's other errors. TestSchemaRules has two new cases, and TestInvalidSchemaIsNotSaved expects all three errors. The fix is a code change, so a follow-up review of the new head is requested.
 
 ## Summary
 

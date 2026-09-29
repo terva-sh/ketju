@@ -168,7 +168,8 @@ func TestInvalidSchemaIsNotSaved(t *testing.T) {
 			t.Fatal(err)
 		}
 		title, _ := problem.Title(problem.CodeValidationFailed)
-		want := []problem.FieldError{{Field: "fields.0.options", Code: "not_allowed"}, {Field: "fields.1.type", Code: "unknown_type"}}
+		want := []problem.FieldError{{Field: "fields.0.options", Code: "not_allowed"}, {Field: "fields.1.type", Code: "unknown_type"},
+			{Field: "fields.1.key", Code: "duplicate_key"}}
 		if p.Type != problem.CodeValidationFailed || p.Title != title || !reflect.DeepEqual(p.Errors, want) {
 			t.Errorf("%s: %s", path, rec.Body)
 		}

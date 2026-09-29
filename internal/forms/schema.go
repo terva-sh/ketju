@@ -210,16 +210,17 @@ func Parse(b []byte) (Schema, error) {
 		seen := map[string]bool{}
 		for i, rf := range fields {
 			f, ok := p.field(rf, "fields."+strconv.Itoa(i))
-			if !ok {
-				continue
-			}
+			// A valid key is checked for duplicates even on a field with
+			// another error, so every broken rule is reported (review 1404).
 			if f.Key != "" && keyPattern.MatchString(f.Key) {
 				if seen[f.Key] {
 					p.add("fields."+strconv.Itoa(i)+".key", CodeDuplicateKey)
 				}
 				seen[f.Key] = true
 			}
-			s.Fields = append(s.Fields, f)
+			if ok {
+				s.Fields = append(s.Fields, f)
+			}
 		}
 	}
 	if err := p.err(); err != nil {
