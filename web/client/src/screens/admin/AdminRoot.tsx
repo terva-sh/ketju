@@ -3,12 +3,14 @@ import { useLocation } from 'preact-iso';
 import { useShellContext } from '../../state/shell';
 import { viewer } from '../../state/viewer';
 import { sections, sectionsFor } from './sections';
+import { ApplicationsScreen } from './applications/ApplicationsScreen';
 import { UsersScreen } from './UsersScreen';
 import './admin.css';
 
 // built is each section's screen, by its screen name, as its ticket builds
 // it. A section with none says it is not built yet.
 const built: Record<string, FunctionComponent> = {
+  'admin-applications': ApplicationsScreen,
   'admin-users': UsersScreen,
 };
 

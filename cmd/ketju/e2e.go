@@ -53,6 +53,19 @@ var seedUsers = []struct{ handle, name string }{{"alice", "Alice Nakamura"}, {"c
 // (e2e/apply.spec.ts).
 var seedApplicants = []string{"dana", "erin"}
 
+// seedModerator reviews applications (e2e/admin-applications.spec.ts). The
+// fake provider signs them in like the members.
+const seedModerator = "mona"
+
+// seedPending are pending applications on the active registration form,
+// from identities at the fake provider with no account, one per Playwright
+// project, since each project approves one. Nobody signs in as them. Their
+// ids are in seed.json as applications, by project.
+var seedPending = []struct{ project, subject, name string }{
+	{"phone", "pat", "Pat Lee"},
+	{"desktop", "quinn", "Quinn Okafor"},
+}
+
 func runE2E(args []string) error {
 	fs := flag.NewFlagSet("e2e", flag.ContinueOnError)
 	dir := fs.String("dir", "", "directory to create the data directory and config in; must not exist")
@@ -75,6 +88,7 @@ func runE2E(args []string) error {
 	for _, u := range seedUsers {
 		idp.Users = append(idp.Users, u.handle)
 	}
+	idp.Users = append(idp.Users, seedModerator)
 	idp.Users = append(idp.Users, seedApplicants...)
 
 	site := "http://localhost:" + strconv.Itoa(*port)
@@ -93,9 +107,13 @@ func runE2E(args []string) error {
 	if err != nil {
 		return fmt.Errorf("e2e: seeding: %w", err)
 	}
+	applications, err := seedReview(ctx, data, idp.URL)
+	if err != nil {
+		return fmt.Errorf("e2e: seeding the review: %w", err)
+	}
 	// The suite reads what was seeded from here rather than repeating it.
 	fixture, _ := json.Marshal(map[string]any{"thread": "/t/" + thread.String() + "/" + seedSlug,
-		"title": seedTitle, "posts": seedPosts, "users": idp.Users})
+		"title": seedTitle, "posts": seedPosts, "users": idp.Users, "applications": applications})
 	if err := os.WriteFile(filepath.Join(*dir, "seed.json"), fixture, 0o600); err != nil {
 		return fmt.Errorf("e2e: %w", err)
 	}
@@ -317,4 +335,57 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 		return q.UpsertReadPosition(ctx, dbq.UpsertReadPositionParams{UserID: users["alice"], ThreadID: int64(badge),
 			LastReadOrdinal: seedBadgeRead, LastReadAt: now})
 	})
+}
+
+// seedReview writes what the applications review needs (TKT-01M3NRX2NN):
+// seedModerator, and seedPending, each a pending application from an
+// identity with no account, answered on the registration form's active
+// version, a minute apart. It answers the applications' ids by project.
+func seedReview(ctx context.Context, data, issuer string) (map[string]int64, error) {
+	d, err := db.Open(ctx, db.Options{Path: filepath.Join(data, "db", "ketju.db")})
+	if err != nil {
+		return nil, err
+	}
+	defer d.Close()
+	now := time.Now().UnixMilli()
+	ids := map[string]int64{}
+	err = d.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		mona, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: seedModerator, DisplayName: "Mona Varga",
+			Status: domain.StatusActive, Role: domain.RoleModerator, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
+		if err != nil {
+			return err
+		}
+		if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: mona, Valid: true},
+			ProviderKey: e2eProvider, Subject: seedModerator, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
+			return err
+		}
+		form, err := q.GetFormByKey(ctx, "registration")
+		if err != nil {
+			return err
+		}
+		for i, p := range seedPending {
+			at := now - int64(len(seedPending)-i)*60_000
+			email := p.subject + "@example.test"
+			identity, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{ProviderKey: e2eProvider, Subject: p.subject,
+				Email: sql.NullString{String: email, Valid: true}, EmailVerified: 1, Issuer: issuer, CreatedAt: at, UpdatedAt: at})
+			if err != nil {
+				return err
+			}
+			answers, err := json.Marshal(map[string]any{"name": p.name, "email": email,
+				"who": "Alice invited me to the reading group.", "rules": true})
+			if err != nil {
+				return err
+			}
+			if ids[p.project], err = q.InsertApplication(ctx, dbq.InsertApplicationParams{
+				IdentityID: sql.NullInt64{Int64: identity, Valid: true}, FormID: form.ID, FormVersion: form.ActiveVersion,
+				AnswersJson: string(answers), CreatedAt: at}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return ids, nil
 }

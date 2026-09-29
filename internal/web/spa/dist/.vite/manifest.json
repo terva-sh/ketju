@@ -1,16 +1,30 @@
 {
+  "_ApplyRoot-C_SWIqcC.css": {
+    "file": "assets/ApplyRoot-C_SWIqcC.css",
+    "src": "_ApplyRoot-C_SWIqcC.css"
+  },
+  "_ApplyRoot-e1dA2xtP.js": {
+    "file": "assets/ApplyRoot-e1dA2xtP.js",
+    "name": "ApplyRoot",
+    "imports": [
+      "index.html"
+    ],
+    "css": [
+      "assets/ApplyRoot-C_SWIqcC.css"
+    ]
+  },
   "_theme-early-DbsvcKdk.js": {
     "file": "assets/theme-early-DbsvcKdk.js",
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-B1p4Vp6O.js",
+    "file": "assets/index-3KBiumAD.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
       "src/screens/admin/AdminRoot.tsx",
-      "src/screens/apply/ApplyRoot.tsx"
+      "_ApplyRoot-e1dA2xtP.js"
     ],
     "css": [
       "assets/index-C-DbGjxL.css"
@@ -64,27 +78,16 @@
     "src": "src/assets/fonts/newsreader-latin-600-normal.woff2"
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-BVrxSYKm.js",
+    "file": "assets/AdminRoot-DhXO04Ff.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
+      "_ApplyRoot-e1dA2xtP.js",
       "index.html"
     ],
     "css": [
-      "assets/AdminRoot-CjMpNFYU.css"
-    ]
-  },
-  "src/screens/apply/ApplyRoot.tsx": {
-    "file": "assets/ApplyRoot-BHxxTUaY.js",
-    "name": "ApplyRoot",
-    "src": "src/screens/apply/ApplyRoot.tsx",
-    "isDynamicEntry": true,
-    "imports": [
-      "index.html"
-    ],
-    "css": [
-      "assets/ApplyRoot-2DJS67fo.css"
+      "assets/AdminRoot-BP8NTJ9o.css"
     ]
   }
 }

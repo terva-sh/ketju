@@ -1,4 +1,4 @@
-import { useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { isAbort } from '../../../api/problem';
 import { sentence } from './send';
 
@@ -12,11 +12,16 @@ import { sentence } from './send';
 // has shown the failure itself (as a caller of send does). Either way the
 // confirmation stays open so the admin can try again or cancel, and a
 // rejection is shown beside it in send's words. Only success closes it.
+//
+// Focus follows the question, so a keyboard user is never left on a button
+// that has gone: opening it focuses Cancel, the choice that changes
+// nothing, and closing it focuses the action's button again.
 export function ConfirmButton({
   label,
   prompt,
   confirmLabel = 'Confirm',
   danger = false,
+  disabled = false,
   onConfirm,
 }: {
   label: string;
@@ -24,16 +29,27 @@ export function ConfirmButton({
   prompt: string;
   confirmLabel?: string;
   danger?: boolean;
+  // disabled keeps the action from being asked for at all, as when a
+  // required note is still empty.
+  disabled?: boolean;
   onConfirm: () => Promise<boolean | void> | boolean | void;
 }) {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const cls = danger ? 'admin-button danger' : 'admin-button';
+  const action = useRef<HTMLButtonElement>(null);
+  const cancelButton = useRef<HTMLButtonElement>(null);
+  const opened = useRef(false);
+  useEffect(() => {
+    if (asking) cancelButton.current?.focus();
+    else if (opened.current) action.current?.focus();
+    opened.current = opened.current || asking;
+  }, [asking]);
 
   if (!asking) {
     return (
-      <button type="button" class={cls} onClick={() => setAsking(true)}>
+      <button type="button" class={cls} ref={action} disabled={disabled} onClick={() => setAsking(true)}>
         {label}
       </button>
     );
@@ -60,7 +76,7 @@ export function ConfirmButton({
       <button type="button" class={cls} disabled={busy} onClick={confirm}>
         {confirmLabel}
       </button>
-      <button type="button" class="admin-button" disabled={busy} onClick={cancel}>
+      <button type="button" class="admin-button" ref={cancelButton} disabled={busy} onClick={cancel}>
         Cancel
       </button>
       {failed && (

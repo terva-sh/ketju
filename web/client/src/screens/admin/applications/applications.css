@@ -1,0 +1,153 @@
+/* The applications screen (TKT-01M3NRX2NN). Lazy, with the admin chunk.
+   The list's cells wrap rather than widen the page, and the approve and
+   deny controls sit side by side from 720 px up and one above the other on
+   a phone. */
+
+.app-email-line {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border-left: 3px solid var(--accent);
+  background: var(--surface2);
+  color: var(--ink2);
+}
+
+.app-list td {
+  overflow-wrap: anywhere;
+}
+.app-applicant {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 6px;
+}
+.app-email {
+  overflow-wrap: anywhere;
+}
+.app-status {
+  white-space: nowrap;
+  overflow-wrap: normal;
+}
+.app-status[data-status='pending'] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.app-back {
+  margin: 0 0 8px;
+}
+.app-detail h2 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.app-notice {
+  margin: 0 0 16px;
+  padding: 8px 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  color: var(--ink);
+}
+.app-notice:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.app-blocked {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.app-decision {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 24px;
+  align-items: start;
+}
+.app-decide {
+  padding: 16px;
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  background: var(--surface);
+}
+.app-decision .app-decide h3 {
+  margin: 0 0 12px;
+}
+.app-decide .admin-error {
+  margin-top: 8px;
+}
+.app-check {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 8px;
+  align-items: center;
+  margin-bottom: 16px;
+}
+.app-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.app-check .admin-hint {
+  grid-column: 2;
+}
+
+.admin-field textarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  resize: vertical;
+}
+.app-decide .admin-field input[type='text'] {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.app-prior,
+.app-notes {
+  margin: 0 0 16px;
+  padding-left: 20px;
+}
+.app-notes li + li {
+  margin-top: 12px;
+}
+.app-notes p {
+  margin: 0;
+}
+.app-note-body {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.app-note {
+  margin: 8px 0;
+}
+.app-note p {
+  margin: 0 0 4px;
+}
+.app-add-note {
+  margin-top: 16px;
+}
+
+@media (max-width: 719.98px) {
+  .app-decision {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .app-check input {
+    width: 28px;
+    height: 28px;
+  }
+  .app-back a,
+  .app-prior a,
+  .app-list td a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+  }
+}

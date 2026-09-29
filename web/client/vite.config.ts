@@ -56,6 +56,22 @@ export default defineConfig({
     modulePreload: { polyfill: false },
     // Read by the bundle budget check (TKT-01M29CGBYH).
     manifest: true,
+    rolldownOptions: {
+      output: {
+        // The application screens and the form renderer stay one chunk.
+        // The admin screens import the renderer and the application
+        // screens' time format (TKT-01M3NRX2NN); left to itself the
+        // bundler splits what both import into a chunk of its own, and the
+        // reader's lazy apply chunk grows by what two gzip streams cost
+        // over one. The admin chunk imports from this one instead.
+        // Only the modules the test names: the default would pull in what
+        // they import too, the entry's own modules among them.
+        codeSplitting: {
+          includeDependenciesRecursively: false,
+          groups: [{ name: 'ApplyRoot', test: /\/src\/(forms|screens\/apply)\// }],
+        },
+      },
+    },
   },
   test: {
     environment: 'happy-dom',

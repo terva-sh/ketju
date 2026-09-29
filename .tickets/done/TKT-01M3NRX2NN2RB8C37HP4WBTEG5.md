@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NRX2NN2RB8C37HP4WBTEG5
 title: Build the admin applications review screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -22,17 +22,10 @@ dependencies:
   - TKT-01M3NRYCP5BSA717S1HANWY1AA
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-nrx2nn
-  branch: run/nrx2nn-admin-applications
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ace01020aa1186ede
-  commit: 855ca5d40bb5ff7aa92f17e6d50bf70484b996ca
-  session: null
-  claimed_at: 2026-09-29T21:01:03Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T21:03:22Z
+updated_at: 2026-09-29T21:21:31Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -56,15 +49,15 @@ Remember: the built client dist is committed. Run `go generate ./internal/web/sp
 
 ## Acceptance criteria
 
-- [ ] /admin/applications lists applications newest first from GET /api/v1/admin/applications, pending by default with a status filter, and pages with next_cursor
-- [ ] Opening an application shows its answers through the shared src/forms renderer in read-only mode, against the form version it was answered on, with the identity's provider, email and verified flag, its prior applications and the moderators' notes
-- [ ] A moderator can add a note, approve with the suggested handle prefilled and editable, and deny with a required note and a 'block this subject' checkbox
-- [ ] A 409 from approve or deny re-fetches the application and says who decided it; a handle error from the errors extension attaches to the handle field
-- [ ] The screen states that notifications are in-app only and that applicants learn the outcome on their status page
-- [ ] The screen lives under src/screens/admin so TestTheAdminBundleIsSeparate passes, works at 390 px and 1440 px, the dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
-- [ ] A blocked applicant's identity shows as blocked with an Unblock control for moderators and admins, calling POST /api/v1/admin/applications/{id}/unblock (maintainer decision 2026-09-29)
-- [ ] The deny note field says the applicant never sees it, and a moderator on /admin/applications?id=N can reach every action with the keyboard (Decision.test.tsx)
-- [ ] e2e/admin-applications.spec.ts: a seeded moderator approves a seeded pending application at 390 px and 1440 px, and axe reports no violations on the list or the detail
+- [x] /admin/applications lists applications newest first from GET /api/v1/admin/applications, pending by default with a status filter, and pages with next_cursor
+- [x] Opening an application shows its answers through the shared src/forms renderer in read-only mode, against the form version it was answered on, with the identity's provider, email and verified flag, its prior applications and the moderators' notes
+- [x] A moderator can add a note, approve with the suggested handle prefilled and editable, and deny with a required note and a 'block this subject' checkbox
+- [x] A 409 from approve or deny re-fetches the application and says who decided it; a handle error from the errors extension attaches to the handle field
+- [x] The screen states that notifications are in-app only and that applicants learn the outcome on their status page
+- [x] The screen lives under src/screens/admin so TestTheAdminBundleIsSeparate passes, works at 390 px and 1440 px, the dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
+- [x] A blocked applicant's identity shows as blocked with an Unblock control for moderators and admins, calling POST /api/v1/admin/applications/{id}/unblock (maintainer decision 2026-09-29)
+- [x] The deny note field says the applicant never sees it, and a moderator on /admin/applications?id=N can reach every action with the keyboard (Decision.test.tsx)
+- [x] e2e/admin-applications.spec.ts: a seeded moderator approves a seeded pending application at 390 px and 1440 px, and axe reports no violations on the list or the detail
 
 ## Implementation plan
 
@@ -138,3 +131,21 @@ Engineering decisions taken here, with the alternative that lost:
 - The queue and its badge: TKT-01M29CRJ4E, which imports `Decision`.
 - The applicant's notification: TKT-01M29CP2N0.
 - A message to the applicant: not built; the maintainer decided the applicant sees the status only.
+
+## Notes
+
+**agent:claude-code/phase2-run-nrx2nn** at 2026-09-29T21:21:21Z
+
+Built on main at 855ca5d. What the next reader needs, and the calls taken while building:
+
+- Budget: `npm run budget` reads 45325 B gzip of 60000 B, against 45219 B before. The 106 B are the exports the admin chunk imports from the apply chunk (FormView, the answer kinds, `when`). Left to itself, the bundler moved everything the apply and admin chunks share into a third chunk, which cost the reader's total 737 B, because two gzip streams compress worse than one. `vite.config.ts` now keeps `src/forms/` and `src/screens/apply/` in one `ApplyRoot` chunk (`build.rolldownOptions.output.codeSplitting`, with `includeDependenciesRecursively: false`). Without that flag the group pulled the entry's own modules in, and the entry then loaded the apply chunk statically. Alternatives that lost: a copy of the renderer in the admin chunk (the settled "same component" rule rules it out), and accepting the 737 B (the settled "reader total unchanged" rules it out).
+- The list is the common Table at both widths. The planned stacked rows under 720 px were not needed. At 390 px the cells wrap with no horizontal scroll, and the e2e spec checks that. The Status column shows only under the All filter, because every other filter names the one status shown.
+- `ConfirmButton` (common) gained `disabled`, and it now moves focus to Cancel when it asks and back to its button when it closes. Before this, a keyboard user who pressed Deny was left on a button that had gone. Users screen tests still pass.
+- After a decision, the notice takes focus, since the controls that had it are gone.
+- `src/api/one-path.test.ts` refuses `.status ===` anywhere under screens/. The application's own status is read through `hasStatus` (ApplicationList.tsx), and problem types through `isProblem`.
+- Seed (cmd/ketju e2e.go `seedReview`): moderator `mona`, signed in by `session.setup.ts`, and two pending applications from identities with no account (`pat@example.test` for phone, `quinn@example.test` for desktop), on the active registration form. Their ids are in `seed.json` as `applications: {phone, desktop}`. TKT-01M3NTSCMN can reuse mona. The applications are approved by this spec, so that ticket should seed its own.
+- A conflict on approve while the application is still pending tells the moderator that the identity was removed, already has an account, or is blocked, and to deny instead. A conflict on unblock while the identity is still blocked tells them that another denial set the block.
+
+## Summary
+
+The /admin/applications screen is built under web/client/src/screens/admin/applications. It has the pending-by-default list with a ?status= filter and next_cursor paging. ?id=N opens the detail: the answers through FormView read mode against the version the applicant answered, the identity with its blocked state and Unblock, earlier applications, notes with an add-note form, and the decision or the Decision controls, which the queue can import. The no-email line is on both views. The e2e seed adds moderator mona and one pending application per Playwright project, and e2e/admin-applications.spec.ts approves one at each width with axe clean in both themes. The reader bundle total rose 106 B, to 45325 of 60000, because a codeSplitting group keeps the apply chunk whole. Every acceptance criterion is ticked.

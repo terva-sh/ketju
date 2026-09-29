@@ -100,6 +100,26 @@ describe('ConfirmButton', () => {
     expect([...root.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Suspend']);
   });
 
+  it('cannot be asked while disabled', async () => {
+    const root = await mount(<ConfirmButton label="Deny" prompt="Deny it?" disabled onConfirm={vi.fn()} />);
+    expect(root.querySelector('button')!.disabled).toBe(true);
+  });
+
+  // A keyboard user is never left on a button that has gone (TKT-01M3NRX2NN).
+  it('moves focus to Cancel when it asks, and back when it closes', async () => {
+    const root = await mount(<ConfirmButton label="Suspend" prompt="Suspend alice?" onConfirm={async () => true} />);
+    const suspend = root.querySelector('button')!;
+    suspend.focus();
+    await act(async () => suspend.click());
+    expect(document.activeElement?.textContent).toBe('Cancel');
+    await act(async () => (document.activeElement as HTMLButtonElement).click());
+    expect(document.activeElement?.textContent).toBe('Suspend');
+
+    await act(async () => root.querySelector('button')!.click());
+    await act(async () => root.querySelectorAll('button')[0].click());
+    expect(document.activeElement?.textContent).toBe('Suspend');
+  });
+
   it('stays open when the action reports its own failure with false', async () => {
     const root = await mount(<ConfirmButton label="Delete" prompt="Delete it?" onConfirm={async () => false} />);
     await act(async () => root.querySelector('button')!.click());
