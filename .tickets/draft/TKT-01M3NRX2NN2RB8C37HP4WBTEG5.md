@@ -24,7 +24,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T05:08:42Z
+updated_at: 2026-09-29T05:38:47Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -54,3 +54,4 @@ Remember: the built client dist is committed. Run `go generate ./internal/web/sp
 - [ ] A 409 from approve or deny re-fetches the application and says who decided it; a handle error from the errors extension attaches to the handle field
 - [ ] The screen states that notifications are in-app only and that applicants learn the outcome on their status page
 - [ ] The screen lives under src/screens/admin so TestTheAdminBundleIsSeparate passes, works at 390 px and 1440 px, the dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
+- [ ] A blocked applicant's identity shows as blocked with an Unblock control for moderators and admins, calling POST /api/v1/admin/applications/{id}/unblock (maintainer decision 2026-09-29)

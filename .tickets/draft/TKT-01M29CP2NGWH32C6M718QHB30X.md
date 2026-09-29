@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:08:42Z
+updated_at: 2026-09-29T05:38:37Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -122,4 +122,4 @@ Engineering decisions taken here, with the alternative that lost:
 - The pre-user session, its allowlist, and the callback redirect: TKT-01M29CKRG9.
 - The API: TKT-01M29CP2KZ. The schema and the `errors` extension: TKT-01M29CP2KE.
 - The editor preview and the review screen, which reuse `src/forms`: TKT-01M29CP2P1 and TKT-01M3NRX2NN.
-- The wording shown to a denied or blocked applicant beyond the status, which waits on the open decision on TKT-01M29CP2MG.
+- A message to a denied applicant beyond the status. The maintainer decided on 2026-09-29 that the applicant sees the status only, never the moderator's note (TKT-01M29CP2MG), so the status screen shows none.

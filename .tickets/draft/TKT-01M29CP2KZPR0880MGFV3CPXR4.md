@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:08:41Z
+updated_at: 2026-09-29T05:38:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,6 +51,8 @@ Re-visiting the site with a pending identity lands on the status page. A pending
 - [ ] POST /apply and POST /apply/withdraw are limited per identity by a general post-session stage (web.KeyedLimit) keyed on the pre-user session's identity, tested across changing addresses; the summary says the stage was built, for TKT-01M29P9RSW
 - [ ] The four routes are on TKT-01M29CKRG9's pre-user allowlist and its route-enumeration test names them; anonymous gets 401 and an active member 403; every response is no-store
 - [ ] This ticket issues no session: TestOneDoorIntoSessions passes with doorCallers and insertCallers unchanged
+- [ ] An identity that already has a user is refused by GET /apply/form and POST /apply with 409, checked again inside Submit's transaction, and GET /apply/status answers approved with sign_in; tested with a pre-user session held past approval plus 25 hours
+- [ ] ApplicationStatus carries no decision note (maintainer decision 2026-09-29)
 
 ## Implementation plan
 
@@ -68,6 +70,8 @@ What exists there:
 - **A returning applicant sees the status page** (docs/05 step 4).
 - **The 24-hour rule.** docs/05 step 4 says "withdraw and re-apply once per 24 h to avoid spam". It is settled here as counting submissions: an identity may submit at most one application per rolling 24 hours, so a re-application after a withdrawal or a denial waits until 24 hours after the previous submission. It is an anti-spam limit (this ticket's description), so it answers `rate-limited` with `Retry-After`.
 - **A blocked identity is refused at the form**, not after submission (this ticket's criterion). The block is set by TKT-01M29CP2MG.
+- **An identity that already has a user is refused** (review 1344). Approval deliberately leaves the applicant's pre-user session alive, so it can show "approved" (TKT-01M29CP2MG). Without this check, that session could submit a new application once the previous one is 24 hours old: a pending application for someone who is already a member, which approval could never link. `Form` and `Submit` both check `identities.user_id IS NULL`, and `Submit` checks it again inside its transaction.
+- **Maintainer decision 2026-09-29: a denied or blocked applicant sees the status only, never the moderator's note** (recorded on TKT-01M29CP2MG). `ApplicationStatus` has no note field, and a blocked identity gets `can_apply: false` with no reason given.
 - **Per-identity rate limiting is this epic's second limiter stage** (docs/05 "Sessions and CSRF", docs/08 "The transport-level ceiling"). It runs after session resolution and is keyed on the pre-user session's identity. The epic's comment asks that whichever of this ticket and TKT-01M29P9RSW lands first build it as a general stage, and say so in its summary.
 - **Members get no per-session limit** (docs/08). This stage is keyed only for pre-user sessions.
 - **The claims come from the identity row.** `email`, `email_verified`, and `raw_claims_json` for `name` and `preferred_username` feed `from_claim` prefill and the locked fields (docs/05 step 2).
@@ -85,10 +89,10 @@ Engineering decisions taken here, with the alternative that lost:
    - `Service{DB *db.DB; Forms *formsvc.Service; Now func() time.Time}`. `CooldownAfter = 24 * time.Hour`.
    - The viewer checks: an anonymous viewer is `ErrNoApplicant`, which maps to unauthenticated. Any viewer that is not `PreUser` is `ErrNotApplicant`, which maps to forbidden: a member has nothing to apply for.
    - `Form(ctx, viewer) (dto.ApplicationForm, error)`, in one `DB.Read`:
-     - Refusals, in this order: the identity is blocked (`ErrBlocked`, forbidden); `registration.mode` is not "approval" (`ErrNotAccepting`, forbidden); a pending application exists (`ErrPending`, conflict); the latest application is younger than `CooldownAfter` (`*TooSoonError`, rate-limited, with `RetryAfter` for `problem.RetryAfterOf`).
+     - Refusals, in this order: the identity already has a user (`ErrAlreadyMember`, conflict; the status route says approved and gives `sign_in`); the identity is blocked (`ErrBlocked`, forbidden); `registration.mode` is not "approval" (`ErrNotAccepting`, forbidden); a pending application exists (`ErrPending`, conflict); the latest application is younger than `CooldownAfter` (`*TooSoonError`, rate-limited, with `RetryAfter` for `problem.RetryAfterOf`).
      - Otherwise it loads `Forms.Active("registration")` and builds the prefill from the claims for every `from_claim` field.
    - `Submit(ctx, viewer, version int, answers map[string]json.RawMessage) (dto.ApplicationStatus, error)`, in one `DB.Write`:
-     - It repeats every refusal inside the transaction, so a block or a mode change between the form and the submit cannot be missed.
+     - It repeats every refusal inside the transaction, the user check included, so an approval, a block or a mode change between the form and the submit cannot be missed.
      - It requires `version` to equal the active version, or returns `ErrFormChanged` (conflict).
      - It runs `forms.Validate` with the identity's claims and inserts the application with `answers_json` as the normalized answers.
      - The `applications_one_pending` index stands behind the pending check: a unique violation is `ErrPending`.
@@ -119,6 +123,7 @@ Engineering decisions taken here, with the alternative that lost:
 - `internal/service/applications/apply_test.go`:
   - `TestSubmitStoresAgainstTheActiveVersion`: the row has form_version = active, status pending and normalized answers_json. A submit naming version 1 while version 2 is active is 409 and writes no row.
   - `TestBlockedIdentityIsRefusedAtTheForm`: `Form` and `Submit` both return `ErrBlocked` (403), and no row is written.
+  - `TestLinkedIdentityCannotApply`: approve an application, then move the clock 25 hours. With the pre-user session still held, `Form` and `Submit` return `ErrAlreadyMember` (409), no row is written, and `Status` answers approved with `sign_in`. A variant links the identity between `Form` and `Submit` and shows that `Submit`'s in-transaction check refuses it.
   - `TestPendingIdentityIsSentToStatus`: with a pending application, `Form` and `Submit` are 409 and `Status` is pending with `can_withdraw` set.
   - `TestOneApplicationPer24Hours`: after a submit and a withdraw, `Submit` at +1 h is 429 with Retry-After near 23 h, and at +24 h is 201. The same holds after a denial.
   - `TestWithdrawNeedsAPending`.
@@ -141,5 +146,5 @@ Engineering decisions taken here, with the alternative that lost:
 - Notifications on submit and withdraw: TKT-01M29CP2N0.
 - Approve, deny, and the block itself: TKT-01M29CP2MG.
 - The screens: TKT-01M29CP2NG.
-- What a denied or blocked applicant is told beyond the status, which is an open decision on TKT-01M29CP2MG. Until it is decided, the status says `denied` and `can_apply` is false for a blocked identity, with no reason given.
+- Lifting a block: TKT-01M29CP2MG (maintainer decision 2026-09-29). After an unblock, this ticket's rules apply unchanged.
 - The per-agent bucket: TKT-01M29P9RSW, which reuses `KeyedLimit`.
