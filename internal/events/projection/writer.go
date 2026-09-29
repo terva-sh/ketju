@@ -1,7 +1,9 @@
 // Package projection is the subscriber that turns thread-log records into
 // database rows: threads, thread_tags, post_meta and mentions, with
 // projection_state recording how far each thread has been projected
-// (docs/03 "Write path", docs/04 "Projection tables", TKT-01M29C2WW5).
+// (docs/03 "Write path", docs/04 "Projection tables", TKT-01M29C2WW5). It
+// also writes the audit_log row of each moderation action a record makes, in
+// the transaction projecting it (audit.go, TKT-01M29CKRGS).
 //
 // The log is the source of truth and the database catches up to it. Nothing
 // here writes to a log: logs are opened read-only, and a test holds that.
@@ -484,6 +486,12 @@ func (w *Writer) apply(ctx context.Context, q *dbq.Queries, id threadid.ID, rec 
 			return logFault{err}
 		}
 		return err
+	}
+	// In the same transaction, so the row exists exactly when the record's
+	// projection commits (audit.go). A failure here is the database's, not
+	// the log's, and the thread is held and retried.
+	if err := writeAudit(ctx, q, f); err != nil {
+		return fmt.Errorf("auditing %s at offset %d: %w", rec.Header.Type, rec.Offset, err)
 	}
 	if w.applied != nil {
 		w.applied(id, rec.Offset)

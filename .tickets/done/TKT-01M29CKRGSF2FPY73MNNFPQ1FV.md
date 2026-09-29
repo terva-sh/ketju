@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRGSF2FPY73MNNFPQ1FV
 title: Implement thread lock, unlock, pin, and unpin
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
-claim:
-  actor: agent:claude-code/phase2-run-ckrgs
-  branch: run/ckrgs-lock-pin
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a7296d3b7170ebe02
-  commit: 855ca5d40bb5ff7aa92f17e6d50bf70484b996ca
-  session: null
-  claimed_at: 2026-09-29T21:04:00Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T21:04:27Z
+updated_at: 2026-09-29T21:19:15Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,13 +43,13 @@ Locking is not archiving. A locked thread accepts no posts or edits from members
 
 ## Acceptance criteria
 
-- [ ] After ketju reindex a thread's locked, pinned_scope and pinned_until equal what its last lock and pin records say (TestLockAndPinSurviveReindex)
-- [ ] In a locked thread a member's reply and edit answer conflict and append nothing, while a moderator's reply succeeds and is served with author.role moderator
-- [ ] A pin whose until has passed is absent from the thread list's pins and from the thread header's pinned under a fixed clock, with no background job
-- [ ] Lock, unlock, pin and unpin each append one record and write one audit_log row naming the actor, the thread, the action and the reason, and scope and until for pins
-- [ ] Each action is forbidden without moderate in the thread's forum and conflict on an archived thread or when it would change nothing, and a refusal appends nothing and writes no audit row
-- [ ] A page cached before a lock is not served after it: the next GET is a response-cache miss under the new log length (TestLockMovesTheResponseCacheKey)
-- [ ] Audit rows for log-recorded moderation are written by the projection writer in the record's projection transaction: a failed audit insert rolls the projection back and the retry writes the row, reindex adds no duplicate, and an author's own action writes none (TestAuditRowsComeFromTheLog)
+- [x] After ketju reindex a thread's locked, pinned_scope and pinned_until equal what its last lock and pin records say (TestLockAndPinSurviveReindex)
+- [x] In a locked thread a member's reply and edit answer conflict and append nothing, while a moderator's reply succeeds and is served with author.role moderator
+- [x] A pin whose until has passed is absent from the thread list's pins and from the thread header's pinned under a fixed clock, with no background job
+- [x] Lock, unlock, pin and unpin each append one record and write one audit_log row naming the actor, the thread, the action and the reason, and scope and until for pins
+- [x] Each action is forbidden without moderate in the thread's forum and conflict on an archived thread or when it would change nothing, and a refusal appends nothing and writes no audit row
+- [x] A page cached before a lock is not served after it: the next GET is a response-cache miss under the new log length (TestLockMovesTheResponseCacheKey)
+- [x] Audit rows for log-recorded moderation are written by the projection writer in the record's projection transaction: a failed audit insert rolls the projection back and the retry writes the row, reindex adds no duplicate, and an author's own action writes none (TestAuditRowsComeFromTheLog)
 
 ## Implementation plan
 
@@ -121,3 +114,22 @@ Revised 2026-09-29 against main at 855ca5d, at claim. The groomed plan (against 
 - Live updates of a lock to open pages: the SSE fan-out, TKT-01M29CRJ3X (phase 3).
 - The audit log view: TKT-01M29CP2R4.
 - Locking and pinning in an archived forum stay open to moderators (maintainer decision 2026-09-29 on TKT-01M3N24RHD). Only the archived-thread refusal applies.
+
+## Notes
+
+**agent:claude-code/phase2-run-ckrgs** at 2026-09-29T21:19:06Z
+
+Implementation notes, 2026-09-29.
+
+- The client half of the groomed plan (step 6) is TKT-01M3QGH66W (Add lock, unlock, pin and unpin to the thread screen), filed as a draft that depends on this ticket. This PR changes nothing under web/client or internal/web/spa/dist.
+- No migration and no dto change. Two queries were added: AuditExistsForRecord (moderation.sql) and PostAuthor (projection.sql).
+- Mutations tried against the tests: dropping the idempotency check in writeAudit fails TestAuditRowsComeFromTheLog and TestLockAndPinSurviveReindex on reindex; auditing an author's own Edit/Delete/Restore, or an author's own rename, fails TestAuditRowsComeFromTheLog; the header showing an expired pin fails TestPinExpiryNeedsNoJob; skipping the synchronous projection fails TestLockedThreadRefusesMembersNotModerators and TestModerationAppendsOneRecordAndOneAuditRow; taking both LogLength and Projected out of respcache.Key fails TestLockMovesTheResponseCacheKey. Taking out LogLength alone does not: Projected moves with the same append, because the service projects before it answers. Either field alone keeps the invariant.
+- The header now reads the service clock (pin expiry). TestResponseCacheUnderConcurrency failed under -race on the test world's clock, a plain field that w.post advances while readers call View. The test now freezes the readers' clock. The race was in the test harness, not in the server.
+- The actor of an audited record may be missing from users (a database restored from an older backup). audit_log.actor_id references users, so such a row is written with a NULL actor and "log_actor" in its details. Without that, a foreign key failure would hold the thread's projection until someone repaired it by hand. Actor 0 is written with "via": "thread-log". Both are documented in docs/04 "audit_log".
+- The routes are gated staff by role, as docs/07 "Moderation and admin" says, and the service then checks moderate in the thread's forum. A member granted moderate only through a group cannot reach them. That is docs/07's rule; this ticket does not change it.
+
+## Summary
+
+Lock, unlock, pin and unpin are staff routes under /api/v1/admin/threads/{id}/ (internal/web/api/moderate.go). Each is backed by threads.Service Lock, Unlock, Pin and Unpin (internal/service/threads/moderate.go). Each action checks moderate in the thread's forum, then the archived thread, then whether the action would change anything, then the request. It appends one record, projects it synchronously through the shared appendEvent helper, and answers the thread header.
+
+The projection writer now writes the audit_log row for every moderation record it projects, in the same transaction (internal/events/projection/audit.go). The row is keyed by log offset, so a reindex adds none, and it is written through internal/audit. An author's own rename, edit, delete or restore writes no row. The thread header drops a pin whose end has passed. The routes are documented in docs/07 and the audit actions in docs/04. The client screen is TKT-01M3QGH66W.

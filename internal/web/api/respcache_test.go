@@ -327,6 +327,11 @@ func TestResponseCacheUnderConcurrency(t *testing.T) {
 	w := newWorld(t)
 	id, _ := w.seed()
 	path := "/api/v1/threads/" + id.String() + "?page=1"
+	// The page reads the service clock (a pin's expiry, TKT-01M29CKRGS), and
+	// w.clock is a plain field w.post advances. Freeze the readers' clock so
+	// only the thread moves under them.
+	frozen := time.UnixMilli(w.clock)
+	w.svc.Now = func() time.Time { return frozen }
 	var (
 		wg     sync.WaitGroup
 		served atomic.Int64
@@ -378,5 +383,53 @@ appends:
 	}
 	if s := w.svc.Responses.Stats(); s.Hits == 0 {
 		t.Fatalf("stats %+v: the readers never hit the cache", s)
+	}
+}
+
+// TestLockMovesTheResponseCacheKey is AC6, the response cache invariant for
+// moderation (docs/13 "Invariants"): a page cached before a lock is not served
+// after it. The lock is an append, so it moves the log length in the key, and
+// the next GET is a miss drawn under the new length, whose header says
+// locked. Unlock, pin and unpin move it the same way.
+func TestLockMovesTheResponseCacheKey(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	path := "/api/v1/threads/" + id.String()
+	classes := []string{"", "carol", "bob"}
+	for _, step := range []struct {
+		action, body string
+		check        func(dto.ThreadHeader) bool
+	}{
+		{"lock", `{"reason":"cooling off"}`, func(h dto.ThreadHeader) bool { return h.Locked }},
+		{"unlock", ``, func(h dto.ThreadHeader) bool { return !h.Locked }},
+		{"unpin", `{"scope":"forum"}`, func(h dto.ThreadHeader) bool { return h.Pinned == nil }},
+		{"pin", `{"scope":"global"}`, func(h dto.ThreadHeader) bool { return h.Pinned != nil && h.Pinned.Scope == "global" }},
+	} {
+		for _, who := range classes {
+			w.same(w.viewer(who), path)
+		}
+		before := w.svc.Responses.Stats()
+		for _, who := range classes {
+			w.same(w.viewer(who), path)
+		}
+		if s := w.svc.Responses.Stats(); s.Hits != before.Hits+3 || s.Inserts != before.Inserts {
+			t.Fatalf("before the %s the second round was not served from the cache: %+v then %+v", step.action, before, s)
+		}
+
+		h := header(t, w.sendAs(w.viewer("bob"), http.MethodPost, modPath(id, step.action), step.body))
+		before = w.svc.Responses.Stats()
+		for _, who := range classes {
+			rec := w.get(w.viewer(who), path)
+			p := page(t, rec)
+			if p.Thread.LogLength != h.LogLength || !step.check(p.Thread) {
+				t.Errorf("after the %s %q got the header %+v", step.action, who, p.Thread)
+			}
+			if tag := rec.Header().Get("ETag"); !strings.HasPrefix(tag, fmt.Sprintf(`"%s-%d-`, id, h.LogLength)) {
+				t.Errorf("after the %s %q got ETag %s, not one under the new log length %d", step.action, who, tag, h.LogLength)
+			}
+		}
+		if s := w.svc.Responses.Stats(); s.Misses != before.Misses+3 || s.Inserts != before.Inserts+3 || s.Hits != before.Hits {
+			t.Errorf("after the %s the three classes' pages were not fresh draws: %+v then %+v", step.action, before, s)
+		}
 	}
 }

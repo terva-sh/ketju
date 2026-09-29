@@ -426,6 +426,29 @@ transaction that projects the record, with the frame's timestamp as `at`.
   application the block was lifted from. A block is part of its denial and
   writes no row of its own. A moderator's note on an application decides
   nothing and writes none.
+- Moderation the thread log records (TKT-01M29CKRGS) is audited by the
+  projection writer, one row per record, in the transaction that projects
+  it (`internal/events/projection` `audit.go`). Every such row's details
+  carry `"thread"`, the base32 id, and `"log_offset"`, the record's offset,
+  and a row is looked for by target, action and offset before it is
+  written, so a reindex replaying the log adds none. Which records write
+  one is decided from the record and the rows it is projected against:
+  - always, against the thread: `thread.locked` and `thread.unlocked` with
+    `"reason"`; `thread.pinned` and `thread.unpinned` with `"scope"` and
+    `"until"` (Unix ms, or null for no end); `thread.moved` with
+    `"forum_id"`;
+  - when the actor is not the thread's author: `thread.renamed`, against
+    the thread, with `"title"` and `"slug"`;
+  - when the actor is not the post's author: `post.edited` with `"reason"`
+    and `"revision"`, `post.deleted` and `post.restored` with `"reason"`,
+    against the post.
+
+  An author's own rename, edit, delete or restore writes none, nor does a
+  `ThreadCreated`, `Post`, `ThreadTagged` or `ThreadArchived`. A record's
+  actor 0 is written as NULL with `"via": "thread-log"`. An actor the log
+  names but `users` lacks, as in a database restored from a backup older
+  than the logs, is written as NULL with the log's id as `"log_actor"`, so
+  the foreign key cannot hold a thread's projection back.
 
 ### notifications
 ```

@@ -45,6 +45,11 @@ type Querier interface {
 	// promotion reads it as its idempotency marker (TKT-01M29C800G), through the
 	// audit_log_target index.
 	AuditExists(ctx context.Context, arg AuditExistsParams) (bool, error)
+	// Whether audit_log already records the action a thread-log record made:
+	// the projection writer's idempotency check, so a reindex replaying the log
+	// adds no second row (TKT-01M29CKRGS). The record is named by its target,
+	// its action and its log offset, which the row's details carry.
+	AuditExistsForRecord(ctx context.Context, arg AuditExistsForRecordParams) (bool, error)
 	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
 	// Whether a blob has a row, for the collector's recovery of a removal that
 	// a failed commit or a crash interrupted.
@@ -314,6 +319,9 @@ type Querier interface {
 	// The rows permission evaluation (TKT-01M29C5Y2E) needs for one forum: the
 	// forum's own grants and the global ones, for the viewer's groups.
 	PermissionRows(ctx context.Context, arg PermissionRowsParams) ([]PermissionRowsRow, error)
+	// The post's author, for the projection writer to tell an author's own
+	// Edit, Delete or Restore from a moderator's (TKT-01M29CKRGS).
+	PostAuthor(ctx context.Context, arg PostAuthorParams) (int64, error)
 	// PriorApplicationsForIdentity is every application the same identity
 	// submitted before the one at (before_at, before_id), newest first, in the
 	// list's order: the prior applications the review screen shows. One

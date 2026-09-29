@@ -80,6 +80,37 @@ func (q *Queries) AuditExists(ctx context.Context, arg AuditExistsParams) (bool,
 	return exists, err
 }
 
+const auditExistsForRecord = `-- name: AuditExistsForRecord :one
+SELECT EXISTS (
+	SELECT 1 FROM audit_log
+	WHERE target_type = ?1 AND target_id = ?2 AND action = ?3
+	  AND json_extract(details_json, '$.log_offset') = CAST(?4 AS INTEGER)
+)
+`
+
+type AuditExistsForRecordParams struct {
+	TargetType string
+	TargetID   string
+	Action     string
+	LogOffset  int64
+}
+
+// Whether audit_log already records the action a thread-log record made:
+// the projection writer's idempotency check, so a reindex replaying the log
+// adds no second row (TKT-01M29CKRGS). The record is named by its target,
+// its action and its log offset, which the row's details carry.
+func (q *Queries) AuditExistsForRecord(ctx context.Context, arg AuditExistsForRecordParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, auditExistsForRecord,
+		arg.TargetType,
+		arg.TargetID,
+		arg.Action,
+		arg.LogOffset,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const auditLogBefore = `-- name: AuditLogBefore :many
 SELECT id, at, actor_id, "action", target_type, target_id, details_json, ip FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?
 `

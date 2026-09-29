@@ -191,6 +191,24 @@ func (q *Queries) ListProjectionLengths(ctx context.Context) ([]ListProjectionLe
 	return items, nil
 }
 
+const postAuthor = `-- name: PostAuthor :one
+SELECT author_id FROM post_meta WHERE thread_id = ? AND ordinal = ?
+`
+
+type PostAuthorParams struct {
+	ThreadID int64
+	Ordinal  int64
+}
+
+// The post's author, for the projection writer to tell an author's own
+// Edit, Delete or Restore from a moderator's (TKT-01M29CKRGS).
+func (q *Queries) PostAuthor(ctx context.Context, arg PostAuthorParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, postAuthor, arg.ThreadID, arg.Ordinal)
+	var author_id int64
+	err := row.Scan(&author_id)
+	return author_id, err
+}
+
 const repliesTo = `-- name: RepliesTo :many
 SELECT ordinal FROM post_meta WHERE thread_id = ? AND reply_to = ? ORDER BY ordinal
 `

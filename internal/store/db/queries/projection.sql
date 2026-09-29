@@ -113,6 +113,11 @@ UPDATE post_meta SET current_revision = sqlc.arg(current_revision),
 	reply_to = coalesce(sqlc.narg(reply_to), reply_to), log_offset = sqlc.arg(log_offset)
 WHERE thread_id = sqlc.arg(thread_id) AND ordinal = sqlc.arg(ordinal);
 
+-- The post's author, for the projection writer to tell an author's own
+-- Edit, Delete or Restore from a moderator's (TKT-01M29CKRGS).
+-- name: PostAuthor :one
+SELECT author_id FROM post_meta WHERE thread_id = ? AND ordinal = ?;
+
 -- log_offset is the current revision's record, as the index entry's Offset
 -- is, so a Delete or Restore (which is not a revision) leaves it alone.
 -- name: SetPostDeleted :execrows

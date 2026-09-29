@@ -36,6 +36,17 @@ SELECT EXISTS (
 	SELECT 1 FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ?
 );
 
+-- Whether audit_log already records the action a thread-log record made:
+-- the projection writer's idempotency check, so a reindex replaying the log
+-- adds no second row (TKT-01M29CKRGS). The record is named by its target,
+-- its action and its log offset, which the row's details carry.
+-- name: AuditExistsForRecord :one
+SELECT EXISTS (
+	SELECT 1 FROM audit_log
+	WHERE target_type = sqlc.arg(target_type) AND target_id = sqlc.arg(target_id) AND action = sqlc.arg(action)
+	  AND json_extract(details_json, '$.log_offset') = CAST(sqlc.arg(log_offset) AS INTEGER)
+);
+
 -- name: AuditLogBefore :many
 SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?;
 

@@ -207,7 +207,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		}
 
 		res.Body = dto.ThreadPage{
-			Thread: header(id, row, forum, tags, snap.n, snap.logLength),
+			Thread: header(id, row, forum, tags, snap.n, snap.logLength, s.now()),
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
@@ -333,7 +333,13 @@ func matches(header, tag string) bool {
 	return false
 }
 
-func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n int, logLength int64) dto.ThreadHeader {
+// header is a thread page's header. Pinned is set only while the pin is
+// active at now: a pin whose pinned_until has passed is no pin, the rule the
+// thread list applies (views.activePin), so an expiry needs no job to clear
+// it (TKT-01M29CKRGS). The projection row keeps the expired values until the
+// next pin record. The header is never cached, so the clock applies on every
+// request.
+func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n int, logLength int64, now time.Time) dto.ThreadHeader {
 	h := dto.ThreadHeader{
 		ID:    id.String(),
 		Slug:  row.Slug,
@@ -346,7 +352,7 @@ func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n in
 		Tags:      append([]string{}, tags...),
 		CreatedAt: dto.Millis(row.CreatedAt),
 	}
-	if row.PinnedScope.Valid {
+	if pinActive(row, now) {
 		h.Pinned = &dto.Pinned{Scope: row.PinnedScope.String}
 		if row.PinnedUntil.Valid {
 			until := dto.Millis(row.PinnedUntil.Int64)

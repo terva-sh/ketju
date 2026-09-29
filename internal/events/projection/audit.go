@@ -1,0 +1,135 @@
+package projection
+
+import (
+	"context"
+	"database/sql"
+	"errors"
+	"time"
+
+	"github.com/terva-sh/ketju/internal/audit"
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/threadlog"
+)
+
+// The audit actions of moderation the thread log records (docs/04
+// "audit_log"). The writer, not the service that appended the record,
+// writes each row, in the transaction that projects the record
+// (TKT-01M29CKRGS): the append and a database row cannot share a
+// transaction, and the projection is the one place every record is applied
+// exactly once in effect and retried until it is.
+const (
+	ActionThreadLocked   = "thread.locked"
+	ActionThreadUnlocked = "thread.unlocked"
+	ActionThreadPinned   = "thread.pinned"
+	ActionThreadUnpinned = "thread.unpinned"
+	ActionThreadMoved    = "thread.moved"
+	ActionThreadRenamed  = "thread.renamed"
+	ActionPostEdited     = "post.edited"
+	ActionPostDeleted    = "post.deleted"
+	ActionPostRestored   = "post.restored"
+)
+
+// viaLog is what a row names as having acted when the record's actor is 0,
+// which is no account.
+const viaLog = "thread-log"
+
+// auditFor says whether f, already projected through q, is a moderation
+// action, and if so the row's action, target and details.
+//
+// Which records are audited is decided from the record and the rows it was
+// projected against, never by the caller that appended it, so an author's
+// own action cannot produce a row:
+//   - always: a lock, unlock, pin, unpin or move;
+//   - when the actor is not the thread's author: a rename;
+//   - when the actor is not the post's author: an Edit, Delete or Restore;
+//   - never: ThreadCreated, Post, ThreadTagged, and ThreadArchived until its
+//     own ticket decides.
+func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, target audit.Target, details map[string]any, ok bool, err error) {
+	thread := audit.Thread(f.thread)
+	switch b := f.body.(type) {
+	case *threadlog.ThreadLockedBody:
+		return ActionThreadLocked, thread, map[string]any{"reason": b.Reason}, true, nil
+	case *threadlog.ThreadUnlockedBody:
+		return ActionThreadUnlocked, thread, map[string]any{"reason": b.Reason}, true, nil
+	case *threadlog.ThreadPinnedBody:
+		return ActionThreadPinned, thread, map[string]any{"scope": b.Scope, "until": until(b.Until)}, true, nil
+	case *threadlog.ThreadUnpinnedBody:
+		return ActionThreadUnpinned, thread, map[string]any{"scope": b.Scope, "until": until(b.Until)}, true, nil
+	case *threadlog.ThreadMovedBody:
+		return ActionThreadMoved, thread, map[string]any{"forum_id": b.ForumID}, true, nil
+	case *threadlog.ThreadRenamedBody:
+		t, err := q.GetThread(ctx, int64(f.thread))
+		if err != nil || t.AuthorID == int64(f.h.Actor) {
+			return "", target, nil, false, err
+		}
+		return ActionThreadRenamed, thread, map[string]any{"title": b.Title, "slug": b.Slug}, true, nil
+	case *threadlog.EditBody:
+		return postAction(ctx, q, f, ActionPostEdited, map[string]any{"reason": b.Reason, "revision": revision(f.h)})
+	case *threadlog.DeleteBody:
+		return postAction(ctx, q, f, ActionPostDeleted, map[string]any{"reason": b.Reason})
+	case *threadlog.RestoreBody:
+		return postAction(ctx, q, f, ActionPostRestored, map[string]any{"reason": b.Reason})
+	}
+	return "", target, nil, false, nil
+}
+
+// postAction is auditFor for a record about a post: audited only when its
+// actor is not the post's author.
+func postAction(ctx context.Context, q *dbq.Queries, f frame, action string, details map[string]any) (string, audit.Target, map[string]any, bool, error) {
+	author, err := q.PostAuthor(ctx, dbq.PostAuthorParams{ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)})
+	if err != nil || author == int64(f.h.Actor) {
+		return "", audit.Target{}, nil, false, err
+	}
+	return action, audit.Post(f.thread, f.h.Ordinal), details, true, nil
+}
+
+// until is a pin's end as a row states it: null for indefinitely, which the
+// log writes as zero.
+func until(ms int64) any {
+	if ms == 0 {
+		return nil
+	}
+	return ms
+}
+
+// writeAudit writes f's audit row, if f is a moderation action, through q:
+// inside the transaction projecting f, so the row commits exactly when the
+// record's projection does, and a failure rolls both back for the retry.
+//
+// It is idempotent across a replay. Reindex empties the projection tables
+// but never audit_log, and replays every record, so a row is first looked
+// for by its target, its action and the record's log offset.
+//
+// The actor is the frame's. A log may name a member the database lacks, as
+// one restored from a backup older than the logs does, and actor_id
+// references users, so such an actor is written as NULL with the log's id
+// in the details as "log_actor", rather than failing the projection on a
+// foreign key. Actor 0 is no account, named as the thread log.
+func writeAudit(ctx context.Context, q *dbq.Queries, f frame) error {
+	action, target, details, ok, err := auditFor(ctx, q, f)
+	if err != nil || !ok {
+		return err
+	}
+	details["thread"] = f.thread.String()
+	details["log_offset"] = f.offset
+	seen, err := q.AuditExistsForRecord(ctx, dbq.AuditExistsForRecordParams{
+		TargetType: target.Type, TargetID: target.ID, Action: action, LogOffset: f.offset,
+	})
+	if err != nil || seen {
+		return err
+	}
+	by := audit.System(viaLog)
+	if actor := int64(f.h.Actor); actor != 0 {
+		switch _, err := q.GetUser(ctx, actor); {
+		case err == nil:
+			by = audit.By{Actor: actor}
+		case errors.Is(err, sql.ErrNoRows):
+			details["log_actor"] = actor
+			by = audit.By{}
+		default:
+			return err
+		}
+	}
+	_, err = audit.Append(ctx, q, time.UnixMilli(f.h.TimestampMS), by, action, target, details)
+	return err
+}

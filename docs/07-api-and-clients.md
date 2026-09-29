@@ -249,6 +249,37 @@ Of two decisions on one application at once, one is made and the other is
 the transaction that finds nothing to update rolls back whatever it wrote.
 A withdrawal racing an approval is decided the same way.
 
+#### Locking and pinning threads (TKT-01M29CKRGS)
+
+Each route is staff's by role, and the threads service then requires
+`moderate` in the thread's forum. Each appends one record to the thread log, projects it before answering,
+and answers 200 with the thread's `ThreadHeader` as its page now serves it,
+`no-store`. Its `audit_log` row is written by the projection (04
+"audit_log"). The thread is read as `GET /threads/{id}` reads it: one hidden
+from the viewer is `not-found`. Bodies are decoded strictly and bounded at
+4 KiB.
+
+| Route | Body | What it does |
+|---|---|---|
+| `POST /admin/threads/{id}/lock` | `{reason?}`, or none | `ThreadLocked`. Members' replies and edits are then `conflict`; moderators may still post (08 "Locking semantics"). A member may still delete or restore their own post |
+| `POST /admin/threads/{id}/unlock` | `{reason?}`, or none | `ThreadUnlocked` |
+| `POST /admin/threads/{id}/pin` | `{scope, until?}` | `ThreadPinned`, replacing any pin the thread has. `scope` is `forum` or `global`; `until` is Unix ms, null or absent for no end. A pin whose `until` has passed is no pin, in the thread list and the header alike, and nothing runs to clear it |
+| `POST /admin/threads/{id}/unpin` | `{scope}` | `ThreadUnpinned` of the active pin, which must have that scope |
+
+Refusals come in this order, and each writes nothing:
+- `unauthenticated`, or `forbidden`, from the gate;
+- `bad-request` for a pin or unpin body with no `scope`, or a body that is
+  not the route's;
+- `forbidden` without `moderate` in the thread's forum;
+- `conflict` on an archived thread. An archived forum does not refuse them
+  (08, TKT-01M3N24RHD);
+- `conflict` for an action that would change nothing: locking a locked
+  thread, unlocking an open one, unpinning a scope that is not the active
+  pin's (an expired pin included), or pinning with the active pin's scope
+  and `until`;
+- `validation-failed` for a scope other than `forum` or `global`, an
+  `until` not after now, or a reason over 500 characters.
+
 #### Form versions (TKT-01M29CP2KE)
 
 Admins only: anonymous is `unauthenticated`, and a pre-user, member or

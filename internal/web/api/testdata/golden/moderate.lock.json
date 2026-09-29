@@ -1,0 +1,21 @@
+{
+  "id": "0369k573g0001",
+  "slug": "why-we-left-slack",
+  "title": "Why we left Slack",
+  "forum": {
+    "slug": "general",
+    "name": "General"
+  },
+  "post_count": 4,
+  "log_length": 774,
+  "locked": true,
+  "pinned": {
+    "scope": "forum",
+    "until": 1760000000000
+  },
+  "tags": [
+    "meta",
+    "tools"
+  ],
+  "created_at": 1757500100000
+}
