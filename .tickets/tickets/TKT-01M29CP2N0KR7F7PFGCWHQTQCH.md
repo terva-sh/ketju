@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2N0KR7F7PFGCWHQTQCH
 title: Notify moderators and applicants about applications
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -23,15 +23,22 @@ blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-cp2n0
+  branch: run/p2n0-application-notifications
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac9445920f8020bc5
+  commit: 3297255509fe896f122bc01ce3d180ba2ef3280e
+  session: null
+  claimed_at: 2026-09-29T23:14:07Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-29T23:14:08Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-cp2n0
   name: ""
 extensions: {}
 ---
