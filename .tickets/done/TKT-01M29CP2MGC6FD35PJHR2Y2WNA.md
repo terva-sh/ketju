@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:53:49Z
+updated_at: 2026-09-29T19:57:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -189,6 +189,13 @@ The same commit fixes review 1344's first finding here: approval now creates and
 **agent:claude-code/phase2-run-cp2mg** at 2026-09-29T19:51:41Z
 
 2026-09-29. This note supersedes one line of the revised plan: "The three codes join `forms.Codes` and docs/07's form-codes table." After the rebase onto f1129ce, the client lane's `web/client/src/forms/messages.test.ts` (TKT-01M29CP2NG) requires client wording for every code in that table. Adding the wording would rebuild `internal/web/spa/dist`, which this server-lane PR must not change. The codes `invalid_handle`, `reserved` and `taken` are now constants in `internal/service/applications` (a handle is not a form field), and docs/07 lists them with the approve route. The wire shape is unchanged: `validation-failed` with `errors: [{field: "handle", code}]`. The admin review screen (TKT-01M3NRX2NN) needs its own wording for these three codes.
+
+**agent:claude-code/phase2-run-cp2mg** at 2026-09-29T19:57:09Z
+
+Terva review 1470 (run 6bacc65d-0de2-4999-8899-65af058bb2d6, Actions run #1002) of head bf93138f8e7216aca7353afe5bd3d56d2ef6655f on base f1129cedd78726491ef541dc76afaf8d55e086cb reported two findings. Both are fixed in 2f2094e.
+
+- **high: "Unblock can lift a block through an unrelated application".** This is a security finding, so it is fixed and not argued. `UnblockIdentity` now takes the application id. It lifts the block only when that application is denied, was decided at the block's timestamp, and is the identity's newest application. Any other application of the identity gets 409, and the audit row always names the denial that set the block. `TestUnblockOnlyFromTheBlockingDenial` covers it, and removing the new conditions from the statement makes it fail. docs/05 and docs/07 say "from that application and no other".
+- **medium: "The prior-applications list includes applications submitted later".** `PriorApplicationsForIdentity` now returns only applications submitted before the one reviewed, keyed on (created_at, id). The DTO comment and docs/07 now say "submitted before this one". `TestPriorIsOnlyEarlier` covers it.
 
 ## Summary
 
