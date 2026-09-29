@@ -18,6 +18,12 @@
 // Nothing in the package issues a session. The applicant's acts write no
 // audit row, because they are not moderation or administration (docs/04
 // "audit_log"); every review decision writes one.
+//
+// Two acts notify, through internal/service/notify and in their own
+// transactions (TKT-01M29CP2N0): a submission tells every active moderator
+// and admin, and an approval tells the applicant as the member it created.
+// A denial writes no notification, because the applicant has no user to
+// hold one; the status page is how they learn it.
 package applications
 
 import (
@@ -35,6 +41,7 @@ import (
 	"github.com/terva-sh/ketju/internal/forms"
 	"github.com/terva-sh/ketju/internal/problem"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
+	"github.com/terva-sh/ketju/internal/service/notify"
 	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -294,6 +301,11 @@ func (s *Service) Submit(ctx context.Context, v domain.Viewer, version int, answ
 		if err != nil {
 			return err
 		}
+		// Staff hear of it in this transaction, so an application nobody
+		// was told about cannot commit (TKT-01M29CP2N0).
+		if _, err := notify.NewApplication(ctx, q, id, now); err != nil {
+			return err
+		}
 		a.latest = dbq.LatestApplicationForIdentityRow{ID: id, FormID: active.FormID, FormVersion: int64(active.Number),
 			Status: StatusPending, CreatedAt: now.UnixMilli()}
 		a.hasLatest = true
@@ -330,8 +342,9 @@ func (s *Service) Status(ctx context.Context, v domain.Viewer) (dto.ApplicationS
 
 // Withdraw is POST /apply/withdraw: the pending application is withdrawn,
 // or the answer is ErrNotPending. It writes no audit row and no
-// notification: it is the applicant's own act, and a withdrawn application
-// is no longer counted as waiting for review.
+// notification: it is the applicant's own act. It leaves staff's
+// new_application rows unread, and GET /me stops counting them because the
+// application is no longer pending (TKT-01M29CP2N0).
 func (s *Service) Withdraw(ctx context.Context, v domain.Viewer) (dto.ApplicationStatus, error) {
 	identityID, err := identityOf(v)
 	if err != nil {

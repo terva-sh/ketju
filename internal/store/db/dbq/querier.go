@@ -299,6 +299,12 @@ type Querier interface {
 	// and their unread threads by forum, so the service can drop the forums they
 	// cannot read in one batch from perm.
 	//
+	// A new_application notification counts only while its application is
+	// pending (TKT-01M29CP2N0). Closing an application, by approval, denial or
+	// withdrawal, never writes read_at, because nobody read anything; the badge
+	// drops because the application stopped waiting, and the row stays unread
+	// for the notification list. Every other kind counts while unread.
+	//
 	// A thread is unread when its newest post is: past the read position (0 with
 	// no row) and written after mark_all_read_at. That is UnreadCount's per-post
 	// rule (docs/04 "read_positions") applied to the post with the highest
@@ -324,6 +330,21 @@ type Querier interface {
 	// There is always at least one row: with no unread threads, forum_id is null.
 	MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error)
 	MembershipsForUser(ctx context.Context, userID int64) ([]MembershipsForUserRow, error)
+	// NotifyApplicationDecided writes the approved applicant's
+	// application_decided row, as the user the approval created, with the
+	// deciding moderator as actor. A denied applicant has no user, so no row.
+	NotifyApplicationDecided(ctx context.Context, arg NotifyApplicationDecidedParams) error
+	// Notifications (docs/04 "notifications"). They are written through
+	// internal/service/notify, in the transaction of the act that causes them,
+	// and nothing here marks one read: read_at records that the recipient read
+	// it, and only the recipient does that (TKT-01M29CTY86).
+	// NotifyStaffOfApplication writes one new_application row naming the
+	// application for every active user with role moderator or admin (docs/05
+	// "mode = approval" step 3, TKT-01M29CP2N0). Recipients are chosen by role,
+	// the predicate that gates review, not by the moderators group: a group
+	// member without the role cannot open the review queue. Agents with the
+	// role are staff too, and are notified.
+	NotifyStaffOfApplication(ctx context.Context, arg NotifyStaffOfApplicationParams) (int64, error)
 	// A post's open flags, for the auto-hide threshold (docs/08).
 	OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (int64, error)
 	// The moderator queue: open flags, newest first (docs/08).

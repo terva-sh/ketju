@@ -239,8 +239,17 @@ a suggestion and reserves nothing.
    Fields the form marks `from_claim` are prefilled (name, email) and may be
    locked.
 3. Submitting creates an `applications` row (`status = pending`) and notifies
-   everyone in `moderators`+`admins` (notification kind `new_application`,
-   optionally email later).
+   every active user with role `moderator` or `admin`, agents included
+   (notification kind `new_application`, naming the application). The
+   recipients are chosen by role, the predicate that gates review, and not
+   by the `moderators` or `admins` group: a group member without the role
+   cannot open `/admin/applications`. The rows are written in the
+   submission's transaction (`internal/service/notify`, TKT-01M29CP2N0), so
+   an application nobody was told about cannot commit. Notifications are
+   in-app only; email is a later phase (10, item 12). Closing the
+   application, by approval, denial or withdrawal, leaves these rows unread,
+   and `GET /me` stops counting them once the application is no longer
+   pending (04 "notifications").
 4. Status page: "Your application is being reviewed." Re-visiting the site
    with that identity shows the same page; a pending applicant can withdraw
    and re-apply once per 24 h to avoid spam.
@@ -289,13 +298,18 @@ a suggestion and reserves nothing.
      sessions in the same transaction, and they would stop resolving anyway
      (step 1). The applicant signs in again and gets a member session
      through `session.IssueUser`'s status check, so an account suspended in
-     between is refused there.
+     between is refused there. The approval notifies the applicant as the
+     new member: one `application_decided` row, naming the application and
+     the moderator, written in the approval's transaction (TKT-01M29CP2N0).
+     It is what they find after signing in.
    - **Deny** requires a note. The note is written for the other
      moderators, and the applicant never sees it: the status page says the
      application was not approved, and nothing more (maintainer decision
      2026-09-29). "Block this subject" must mark exactly one identity with
      no user; if the identity was removed or has a user, the denial is
-     refused, and the moderator may deny without the block.
+     refused, and the moderator may deny without the block. A denial writes
+     no notification: the applicant has no user to hold one, so the status
+     page is how they learn it.
    - **Unblock.** A moderator or admin can lift a block from the
      application that set it, and from no other (maintainer decision
      2026-09-29). It clears

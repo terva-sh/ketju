@@ -41,6 +41,7 @@ import (
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/member"
+	"github.com/terva-sh/ketju/internal/service/notify"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
@@ -346,7 +347,8 @@ func decided(n int64, err error, id int64) error {
 
 // Approve is POST /admin/applications/{id}/approve: the applicant becomes a
 // member with handle, and the application is approved, in one transaction
-// with its audit row. note is optional. ip is the request's address, for
+// with its audit row and the new member's application_decided
+// notification. note is optional. ip is the request's address, for
 // the audit row.
 //
 // The member is created active, with role member and kind human, and named
@@ -428,6 +430,11 @@ func (s *Service) Approve(ctx context.Context, v domain.Viewer, id int64, handle
 		// The applicant's pre-user sessions no longer resolve, because the
 		// identity has a user; this removes the rows too (TKT-01M3Q2V25E).
 		if err := q.DeletePreUserSessions(ctx, a.IdentityID); err != nil {
+			return err
+		}
+		// The applicant learns the decision by signing in as the new member,
+		// where this row waits (TKT-01M3Q2V25E, TKT-01M29CP2N0).
+		if err := notify.ApplicationDecided(ctx, q, userID, a.ID, v.UserID, now); err != nil {
 			return err
 		}
 		if _, err := audit.Append(ctx, q, now, audit.By{Actor: v.UserID, IP: ip}, ActionApproved, audit.Application(a.ID),

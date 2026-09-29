@@ -250,8 +250,10 @@ by_forum AS (
 	FROM active AS a LEFT JOIN adjust AS j ON j.forum_id = a.forum_id
 	WHERE a.threads - coalesce(j.not_unread, 0) > 0
 )
-SELECT (SELECT count(*) FROM notifications
-        WHERE notifications.user_id = ?1 AND notifications.read_at IS NULL) AS notifications,
+SELECT (SELECT count(*) FROM notifications AS n
+        LEFT JOIN applications AS na ON na.id = n.application_id
+        WHERE n.user_id = ?1 AND n.read_at IS NULL
+          AND (n.kind <> 'new_application' OR na.status = 'pending')) AS notifications,
        f.forum_id, f.threads, f.participated, f.watching
 FROM (SELECT 1) AS one
 LEFT JOIN by_forum AS f ON 1
@@ -268,6 +270,12 @@ type MeCountsRow struct {
 // MeCounts is GET /me's count statement: the viewer's unread notifications,
 // and their unread threads by forum, so the service can drop the forums they
 // cannot read in one batch from perm.
+//
+// A new_application notification counts only while its application is
+// pending (TKT-01M29CP2N0). Closing an application, by approval, denial or
+// withdrawal, never writes read_at, because nobody read anything; the badge
+// drops because the application stopped waiting, and the row stays unread
+// for the notification list. Every other kind counts while unread.
 //
 // A thread is unread when its newest post is: past the read position (0 with
 // no row) and written after mark_all_read_at. That is UnreadCount's per-post

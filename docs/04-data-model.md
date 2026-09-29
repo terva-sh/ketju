@@ -503,6 +503,20 @@ the column existed could not name its application, so migration 0011
 deletes any it finds. No earlier code wrote notifications of any kind, so
 none is expected. (Migration 0011.)
 
+The application kinds are written by `internal/service/notify`, in the
+transaction of the act that causes them (TKT-01M29CP2N0): a submission writes
+one `new_application` row for each active user with role `moderator` or
+`admin`, and an approval writes one `application_decided` row for the member
+it created, with the deciding moderator as `actor_id`. A denial or a
+withdrawal writes none.
+
+`read_at` records that the recipient read the notification, and nothing else
+sets it: closing an application does not. `GET /me`'s `notifications` count
+(`MeCounts`) counts an unread row of any kind but `new_application`, and a
+`new_application` row only while its application is `pending`, so the badge
+drops when an application is decided or withdrawn and the row stays unread
+for the notification list (TKT-01M29CTY86).
+
 ### watches
 ```
 user_id, thread_id (nullable), forum_id (nullable), level ('watch'|'mute')
