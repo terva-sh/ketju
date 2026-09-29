@@ -194,6 +194,24 @@ a suggestion and reserves nothing.
    *not* created yet. Instead the visitor is placed in a "pre-user" session
    bound to the identity id, which may only reach the application form,
    the application status page, and logout.
+
+   The identity and the session are written in one transaction
+   (`session.IssuePreUserWith`), and the callback answers 303 to `/apply`;
+   an applicant who signs in again gets a new pre-user session and 303 to
+   `/apply/status`. What the session may reach is a positive list,
+   `web.PreUserRoutes`: `GET /api/v1/me`, the sign-in routes
+   (`/auth/signin`, `/auth/{provider}/start`, `/auth/{provider}/callback`),
+   `POST /auth/logout`, `/assets/`, and the `/apply` and `/apply/status`
+   pages. The application API joins it with the form (TKT-01M29CP2KZ).
+   `web.PreUserGate` enforces it in the middleware chain, after session
+   resolution and before CSRF and every handler: an API path answers 403
+   `forbidden`, any other page 303 to `/apply/status`, and any other
+   request 403. A route added later is closed to a pre-user until the list
+   names it. The list covers public reads too, so an applicant who wants to
+   read as a guest signs out. A pre-user session stops resolving the moment
+   its identity has a user, so it never becomes a member session in place:
+   after approval the applicant signs in again, through the status check of
+   `session.IssueUser` (TKT-01M29CKRG9).
 2. Render the active version of the `registration` form (see Forms below).
    Fields the form marks `from_claims` are prefilled (name, email) and may be
    locked.

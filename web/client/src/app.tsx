@@ -4,7 +4,9 @@ import { LocationProvider, Router, Route, useLocation } from 'preact-iso';
 import { guardFocus, routeFocuser } from './components/focus';
 import { clientScope, Fallback, routes } from './routes';
 import { NotFound } from './screens/Placeholder';
+import { ApplicantShell } from './shell/ApplicantShell';
 import { Shell } from './shell/Shell';
+import { viewer } from './state/viewer';
 
 export function App() {
   return (
@@ -15,11 +17,15 @@ export function App() {
 }
 
 function Routes() {
-  const { url } = useLocation();
+  const { url, path } = useLocation();
   // Focus follows the reader to each new screen, and is never lost with a
   // removed element (TKT-01M29CGBXK).
   const onRouteChange = useMemo(() => routeFocuser(location.pathname), []);
   useEffect(() => guardFocus(), []);
+  // An approval-mode applicant reaches the application flow and nothing
+  // else, which the server enforces (TKT-01M29CKRG9); the client draws only
+  // that flow, whatever the address.
+  if (viewer.value.pre_user) return <ApplicantShell path={path} />;
   return (
     <Shell>
       <UndecodableAddress url={url}>

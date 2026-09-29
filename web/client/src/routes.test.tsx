@@ -1,8 +1,11 @@
 import { readFileSync } from 'node:fs';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { clientScope, nav, routes, serverOwned } from './routes';
 import { act } from 'preact/test-utils';
+import type { Me } from './api/dto';
+import { viewer } from './state/viewer';
 import { renderAt, screenOf, settle } from './testing';
+import preUser from '../../../internal/dto/testdata/golden/me.pre_user.json';
 
 // One concrete URL per line of docs/07's URL scheme, and the screen it must
 // reach. /auth/* is the server's and is not a client route.
@@ -235,3 +238,48 @@ describe('the route table', () => {
 // shape reduces {param} and :param alike to ":", so the document's names
 // and the table's may differ while the shapes must not.
 const shape = (p: string) => p.replace(/\{[^}]+\}|:[a-z]+/g, ':');
+
+// An approval-mode applicant (TKT-01M29CKRG9): with pre_user set in /me,
+// every address but /apply is the status page, and the shell offers
+// sign-out and no way into the forum. The server refuses the rest anyway;
+// this is what the reader sees.
+describe('an applicant', () => {
+  let saved: Me;
+  beforeEach(() => {
+    saved = viewer.value;
+    viewer.value = structuredClone(preUser) as Me;
+    vi.stubGlobal('fetch', () => new Promise(() => {}));
+  });
+  afterEach(() => {
+    viewer.value = saved;
+  });
+
+  it.each([
+    ['/', 'apply-status'],
+    ['/f/general', 'apply-status'],
+    ['/t/abc/x', 'apply-status'],
+    ['/t/01k4z3j0w8x2c/a-thread/42', 'apply-status'],
+    ['/admin/applications', 'apply-status'],
+    ['/nope', 'apply-status'],
+    ['/apply/status', 'apply-status'],
+    ['/apply', 'apply'],
+  ])('%s renders %s', async (url, screen) => {
+    expect(screenOf(await renderAt(url))).toBe(screen);
+  });
+
+  it('can sign out, and has no forum navigation', async () => {
+    const root = await renderAt('/f/general');
+    const form = root.querySelector<HTMLFormElement>('[data-shell="applicant-bar"] form');
+    expect(form?.getAttribute('method')).toBe('post');
+    expect(form?.getAttribute('action')).toBe('/auth/logout');
+    expect(form?.querySelector('button[type="submit"]')?.textContent).toBe('Sign out');
+    expect(root.querySelectorAll('[data-nav], [data-shell="tabbar"], [data-shell="topbar"]')).toHaveLength(0);
+    // The only link is the skip link: nothing leads into the forum.
+    expect([...root.querySelectorAll('a')].map((a) => a.getAttribute('href'))).toEqual(['#main']);
+  });
+
+  it('is the member shell again once pre_user is gone', async () => {
+    viewer.value = structuredClone(saved);
+    expect(screenOf(await renderAt('/f/general'))).toBe('thread-list');
+  });
+});

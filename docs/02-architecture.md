@@ -5,7 +5,7 @@
 ```
 ┌────────────────────────────────── ketju (one static binary) ───────────────────────────────┐
 │                                                                                            │
-│  net/http server ──► router ──► middleware (session, rate limit, CSRF, logging)            │
+│  net/http server ──► router ──► middleware (log, rate limit, session, pre-user gate, CSRF) │
 │        │                                                                                   │
 │        ├── /api/*         JSON API handlers (the only business-logic entry point)          │
 │        ├── /auth/*        OIDC start/callback, logout                                      │
@@ -77,7 +77,10 @@ DTOs as `/api`, which is what makes the second client cheap.
 ## Request flows
 
 ### Read a thread page
-1. Session middleware resolves the viewer (or anonymous).
+1. Session middleware resolves the viewer (or anonymous). The pre-user gate
+   after it refuses an approval-mode applicant everything outside the
+   application flow (05 "mode = approval"), so an applicant never reaches a
+   thread handler or the response cache.
 2. Handler calls `threads.View(viewer, threadID, lens, cursor)`.
 3. Service checks `permissions` (cached per session for 60 s), opens the
    thread via the thread store, applies the lens to the in-memory index,
