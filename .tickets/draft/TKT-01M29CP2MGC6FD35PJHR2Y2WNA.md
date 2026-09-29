@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:38:55Z
+updated_at: 2026-09-29T05:55:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -57,6 +57,7 @@ Approval is the only path from a pre-user session to a member session, and it go
 - [ ] Approval creates and links the user before the guarded decision UPDATE, which sets status approved and user_id in one statement; zero rows there rolls back the user and the link
 - [ ] A moderator or admin can unblock a denied applicant's identity: blocked_at and blocked_by are cleared, the application stays denied, and one identity.unblocked audit row names the actor; a second unblock is 409 and a member is 403
 - [ ] The decision note never reaches the applicant: no route open to a pre-user session carries it, tested with a distinctive note
+- [ ] Deny with block requires the block UPDATE to affect exactly one row: when the identity was removed or has a user it answers 409 and the denial rolls back, while a plain deny of that application still succeeds
 
 ## Implementation plan
 
@@ -104,7 +105,7 @@ Engineering decisions taken here, with the alternative that lost:
    - `GetPendingApplication`: the application with its identity's user_id and blocked_at, read inside the write transaction.
    - `DecideApplication`: UPDATE … SET status, decided_by, decided_at, decision_note, user_id WHERE id = ? AND status = 'pending', as `:execrows`. `user_id` is a parameter, so an approval sets it in the same statement as the status, and a denial passes NULL.
    - `LinkIdentityToUser`: UPDATE identities SET user_id = ?, updated_at = ? WHERE id = ? AND user_id IS NULL AND blocked_at IS NULL, as `:execrows`.
-   - `BlockIdentity`: UPDATE identities SET blocked_at = ?, blocked_by = ? WHERE id = ? AND user_id IS NULL.
+   - `BlockIdentity`: UPDATE identities SET blocked_at = ?, blocked_by = ? WHERE id = ? AND user_id IS NULL, as `:execrows`.
    - `UnblockIdentity`: UPDATE identities SET blocked_at = NULL, blocked_by = NULL, updated_at = ? WHERE id = ? AND blocked_at IS NOT NULL, as `:execrows`.
    - `InsertApplicationNote` and `ApplicationNotes`, the latter with author handles.
    - Regenerate dbq.
@@ -122,7 +123,7 @@ Engineering decisions taken here, with the alternative that lost:
      7. `DecideApplication(approved, user_id)`, setting the status and the new user's id in one statement, so the CHECK from TKT-01M29CKRDQ holds when that statement runs. Zero rows is `ErrAlreadyDecided`, and returning it rolls back the user and the link. The write connection serializes transactions, so step 2 already saw the truth; step 7's guard is the one that decides.
      8. `AppendAudit` `application.approved`.
      TKT-01M29CP2N0 adds the applicant's notification and settles the moderators' ones inside this transaction.
-   - `Deny(ctx, viewer, id, note, block)`, in one `DB.Write`: the note is required; `DecideApplication(denied, NULL)`; `BlockIdentity` when `block`; `AppendAudit` `application.denied`.
+   - `Deny(ctx, viewer, id, note, block)`, in one `DB.Write`: the note is required; `GetPendingApplication`; `DecideApplication(denied, NULL)`; then, when `block` is set, `BlockIdentity`, which must affect exactly one row. A block with no identity to act on is `ErrIdentityGone` (409), and the whole denial rolls back: either the identity is NULL because it was removed (`applications.identity_id` is ON DELETE SET NULL, TKT-01M29CKRDQ), or it now has a user. The moderator then sees the application still pending, and may deny it without the block (review 1353). Last comes `AppendAudit` `application.denied`, whose `blocked` records only a block that was written. A denial without `block` needs no identity, so an application whose identity was removed can still be denied.
    - `Unblock(ctx, viewer, id)`, in one `DB.Write`, for the same staff as the other actions: it looks up the application's identity; `UnblockIdentity`, where zero rows (not blocked, or the identity is gone) is `ErrNotBlocked` (409); and `AppendAudit` `identity.unblocked`. The application stays denied.
    - `AddNote(ctx, viewer, id, body)`: the body is 1–2000 characters. It writes no audit row, because it decides nothing.
    - Map `ErrAlreadyDecided`, `ErrIdentityGone`, `ErrNotBlocked` and `ErrNotStaff` in `internal/problem/domain.go`. The handle errors reuse the `errors` extension from TKT-01M29CP2KE.
@@ -153,6 +154,7 @@ Engineering decisions taken here, with the alternative that lost:
   - `TestApproveChecksTheHandle`: invalid and reserved handles are 422 with `errors[handle]`; a taken handle in another case is 409 with `errors[handle]`; the application stays pending.
   - `TestDenyWithBlockRefusesReapplication`: the identity has blocked_at and blocked_by set and user_id NULL, and TKT-01M29CP2KZ's `Form` and `Submit` for it return 403.
   - `TestDenyRequiresANote`.
+  - `TestBlockNeedsAnIdentity`: delete the identity of a pending application, then deny with block. The answer is 409 `ErrIdentityGone`; the application stays pending; no audit row is written; and no identity row carries blocked_at. A plain deny of the same application then succeeds, with `blocked: false` in its audit row.
   - `TestUnblockLiftsTheBlock`: after deny with block, a moderator unblocks. blocked_at and blocked_by are NULL, the application stays denied, and one `identity.unblocked` row names the moderator and the application. TKT-01M29CP2KZ's `Form` then answers under the 24-hour rule instead of 403. A second unblock is 409 and writes no row. A member is 403.
   - `TestTheNoteNeverReachesTheApplicant`: after a deny with a distinctive note, neither `GET /apply/status` nor any other route open to the pre-user session carries the note's text.
   - `TestEveryDecisionIsAudited`: approve, deny, and deny with block each write exactly one row with actor_id set to the moderator and `details.note`.
