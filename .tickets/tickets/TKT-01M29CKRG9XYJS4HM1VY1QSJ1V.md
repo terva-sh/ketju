@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRG9XYJS4HM1VY1QSJ1V
 title: Implement pre-user sessions restricted to the application flow
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ckrg9
+  branch: run/ckrg9-pre-user-sessions
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a946fd6ede1643fec
+  commit: ccc05adb32252b1e51ea6ebb6131a26edbd3ae92
+  session: null
+  claimed_at: 2026-09-29T15:14:52Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:18:11Z
+updated_at: 2026-09-29T15:14:55Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-ckrg9
   name: ""
 extensions: {}
 ---
