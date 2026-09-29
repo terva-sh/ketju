@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: design:identity-roles
     path: docs/05-identity-and-accounts.md
+  - ref: pr:147
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T15:09:58Z
+updated_at: 2026-09-29T15:10:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
