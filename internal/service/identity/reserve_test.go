@@ -41,6 +41,15 @@ func TestAnAnonymizedHandleIsReserved(t *testing.T) {
 		t.Errorf("the release names user %v and reserves for %v", user, time.Duration(until-released)*time.Millisecond)
 	}
 
+	// The shared check every allocation path asks (Terva review 1450).
+	for at, want := range map[int64]error{until - 1: ErrHandleTaken, until: nil} {
+		if err := d.Read(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+			return HandleFree(t.Context(), q, "alice", at)
+		}); !errors.Is(err, want) || (want == nil && err != nil) {
+			t.Errorf("HandleFree(alice) at %d = %v, want %v", at, err, want)
+		}
+	}
+
 	for _, h := range []string{"alice", "ALICE"} {
 		if _, err := s.Register(t.Context(), claims("sub-2"), h, session.Meta{Provider: "fake"}, ""); !errors.Is(err, ErrHandleTaken) {
 			t.Errorf("registering %q inside the reservation: %v", h, err)

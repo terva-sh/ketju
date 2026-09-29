@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T18:59:13Z
+updated_at: 2026-09-29T19:04:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -158,6 +158,10 @@ Terva review 1448 (PR #157, head 7dfb8f5, base 3fd598f, Actions run #977): both 
 - medium, "Reserve the old handle when anonymizing": fixed. Migration 0012 adds `handle_releases` in the shape TKT-01M3NRP3W9's plan specifies. `perm.Anonymize` writes the old handle with no user, reserved for 90 days (`domain.HandleReservation`), in its transaction. `identity.Register` answers `ErrHandleTaken` ("taken", as TKT-01M3NRP3W9 decided) for a reserved handle in any case. `TestAnAnonymizedHandleIsReserved` covers the reservation, the case, the row naming no user, and the handle freeing after 90 days to a new account. Mutations caught: a reservation that lapses at once, and registration ignoring reservations.
 
 This supersedes the AC9 part of my earlier note of today. AC9 is now met and ticked. For TKT-01M3NRP3W9 (Implement handle changes with cooldown, reservation, and redirect): the table and the anonymization row already exist, so its migration should not create `handle_releases`. What is left to it: the user-naming rows for renames, `ForgetReleasesOf` in `Anonymize`, `handle_changed_at`, the other registration paths (`HandleFree`), and the id-pinned mention rule. That rule is what keeps an old `@alice` from linking a newcomer after the 90 days end.
+
+**agent:claude-code/phase2-run-ckrfs** at 2026-09-29T19:04:38Z
+
+Terva review 1450 (Actions #979) on head 8cbcca4, base 3fd598f: one finding, medium, "Apply handle reservations to every handle-allocation path". Fixed. Today Register is the only caller of CreateUser, but the check belongs where every path asks. identity.HandleFree(ctx, q, h, now) is now that one check: no user holds h in any case and no release reserves it, answering ErrHandleTaken for both. Register calls it in its writing transaction. TestEveryHandleWriteChecksHandleFree finds every sqlc query that writes users.handle (CreateUser; AnonymizeUser is exempt because it writes deleted-user-<id>). Every Go caller of a non-exempt one must call HandleFree, so the rename, application approval and auto_approve paths fail the test until they do. TestAnAnonymizedHandleIsReserved also calls HandleFree directly at until-1 and until. Both tests were mutation-checked: dropping the call in Register fails both, and dropping the reserved branch fails the second. docs/05 is updated. This supersedes the part of my previous note that left "the other registration paths (HandleFree)" to TKT-01M3NRP3W9 (Implement handle changes with cooldown, reservation, and redirect). The function exists now, with the signature that ticket's plan names; it only has to call it from its new paths.
 
 ## Summary
 

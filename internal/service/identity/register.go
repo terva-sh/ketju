@@ -119,24 +119,11 @@ func (s *Service) Register(ctx context.Context, c Claims, handle string, meta se
 		case !errors.Is(err, sql.ErrNoRows):
 			return 0, err
 		}
-		// The column is NOCASE, so this finds "Alice" for "alice".
-		switch _, err := q.GetUserByHandle(ctx, h); {
-		case err == nil:
-			return 0, ErrHandleTaken
-		case !errors.Is(err, sql.ErrNoRows):
+		// Free of any user and of any reservation, such as an anonymized
+		// account's old handle (TKT-01M29CKRFS), so a newcomer cannot take
+		// it and the links old mentions of it would give them.
+		if err := HandleFree(ctx, q, h, now); err != nil {
 			return 0, err
-		}
-		// A handle an account gave up is reserved for a while, and is
-		// taken until then: an anonymized account's, so a newcomer cannot
-		// take it and the links old mentions of it would give them
-		// (TKT-01M29CKRFS). It answers "taken", not "reserved", so the
-		// form does not say which handles were given up lately
-		// (TKT-01M3NRP3W9).
-		switch reserved, err := q.HandleReserved(ctx, dbq.HandleReservedParams{Handle: h, Now: now}); {
-		case err != nil:
-			return 0, err
-		case reserved:
-			return 0, ErrHandleTaken
 		}
 		var err error
 		userID, err = q.CreateUser(ctx, dbq.CreateUserParams{Handle: h, DisplayName: display,

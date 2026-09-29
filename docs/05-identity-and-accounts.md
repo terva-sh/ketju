@@ -550,10 +550,13 @@ sessions. The states, the reasons, and the audit trail are otherwise the same.
   it can never be changed again (04 "users"). Another member's `@handle` of
   the old handle is body text: it renders as what was typed and links
   nobody. The reservation is a `handle_releases` row naming no user,
-  written in the anonymization's transaction (04), and registration answers
-  "taken" for a reserved handle, so no newcomer can take the old handle, and
-  the links an old mention of it would give them, for 90 days (Terva review
-  1448). Renames write the same rows with a redirect (TKT-01M3NRP3W9).
+  written in the anonymization's transaction (04). `identity.HandleFree` is
+  the one check that a handle may be given out, and it answers "taken" for
+  a reserved handle as for a held one, so no newcomer can take the old
+  handle, and the links an old mention of it would give them, for 90 days
+  (Terva reviews 1448 and 1450). Every path that writes a handle calls it in
+  the writing transaction, and a test holds each new one to that. Renames
+  write the same rows with a redirect (TKT-01M3NRP3W9).
 
 Every change above is made in `internal/perm`, in one transaction with its
 `audit_log` row (04) and the deletion of every session the account holds, so

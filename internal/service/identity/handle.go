@@ -1,12 +1,15 @@
 package identity
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
 	"strings"
 
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
 
 // ErrHandleReserved is a handle registration refuses although it is valid:
@@ -56,6 +59,33 @@ func CheckHandle(h string) (string, error) {
 		return "", fmt.Errorf("%w: %q", ErrHandleReserved, h)
 	}
 	return h, nil
+}
+
+// HandleFree is the one check that h, as CheckHandle returned it, may be
+// given to an account at now: no user holds it, in any case (the column is
+// NOCASE, so "Alice" is found for "alice"), and no release still reserves it
+// (an anonymized account's old handle, for domain.HandleReservation). Either
+// answers ErrHandleTaken, never "reserved", so a form does not say which
+// handles were given up lately (TKT-01M3NRP3W9).
+//
+// Every path that writes a handle calls it inside the transaction that
+// writes, so the answer cannot go stale before the write; Terva review 1450
+// asked that the reservation live here rather than in Register alone, and
+// TestEveryHandleWriteChecksHandleFree holds every writer to it.
+func HandleFree(ctx context.Context, q *dbq.Queries, h string, now int64) error {
+	switch _, err := q.GetUserByHandle(ctx, h); {
+	case err == nil:
+		return ErrHandleTaken
+	case !errors.Is(err, sql.ErrNoRows):
+		return err
+	}
+	switch reserved, err := q.HandleReserved(ctx, dbq.HandleReservedParams{Handle: h, Now: now}); {
+	case err != nil:
+		return err
+	case reserved:
+		return ErrHandleTaken
+	}
+	return nil
 }
 
 // Prefill is the handle the registration screen offers: the IdP's
