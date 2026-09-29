@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2KZPR0880MGFV3CPXR4
 title: Implement application submit, status, and withdraw
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -28,17 +28,10 @@ references:
     path: null
   - ref: pr:155
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-cp2kz
-  branch: run/cp2kz-apply-2
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a03bb477c04f0b009
-  commit: 9d5ef44ab9f73be0a1fbc9bd1c91099a5c98e774
-  session: null
-  claimed_at: 2026-09-29T18:18:34Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T18:21:08Z
+updated_at: 2026-09-29T18:21:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
