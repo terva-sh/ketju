@@ -17,6 +17,7 @@ origin: null
 dependencies:
   - TKT-01M29C5Y1E782FS135JRVBFRJ6
   - TKT-01M29C0WD88M1C8EW4QQTX76NJ
+  - TKT-01M29CXJZ9MVXGY1FC0ESYNG8F
 blocks_on: none
 references:
   - ref: design:storage-records
@@ -24,13 +25,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-11T23:30:21Z
+updated_at: 2026-09-29T05:08:52Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase2-groom
+  name: ""
 extensions: {}
 ---
 
