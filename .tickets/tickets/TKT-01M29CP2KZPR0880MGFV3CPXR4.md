@@ -26,17 +26,10 @@ references:
     path: docs/05-identity-and-accounts.md
   - ref: pr:154
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-cp2kz
-  branch: run/cp2kz-block
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a03bb477c04f0b009
-  commit: 3eab1e9f08455cf00d271b59a5e0f298a1eaf0da
-  session: null
-  claimed_at: 2026-09-29T17:28:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T17:29:03Z
+updated_at: 2026-09-29T17:29:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
