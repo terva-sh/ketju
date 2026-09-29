@@ -44,18 +44,26 @@ func Account(ctx context.Context, d *db.DB, v domain.Viewer, handle string) (dbq
 	return u, nil
 }
 
-// Author is u as a profile and its post history draw it. An anonymized
-// account shows its placeholder handle and nothing else that named the
-// person: anonymizing clears the display name and avatar (docs/05), and
-// they are withheld here too, so a row caught halfway cannot bring either
-// back.
+// Author is the one way a users row becomes the author block a post header,
+// a thread list's last poster, the forum tree, a profile and its post
+// history draw (TKT-01M29CKRFS). Every surface that names a member draws it
+// through here, so the rule below cannot hold on one page and not another.
+//
+// An anonymized account (users.anonymized) shows its placeholder handle and
+// nothing else that named the person: anonymizing clears the display name
+// and avatar (docs/05), and they are withheld here too, so a row caught
+// halfway cannot bring either back.
 func Author(u dbq.User) dto.Author {
 	a := dto.Author{Handle: u.Handle, DisplayName: u.DisplayName, Avatar: u.AvatarBlob.String, Role: u.Role, Kind: u.Kind}
-	if domain.Anonymized(u.Handle) {
+	if Anonymized(u) {
 		a.DisplayName, a.Avatar = "", ""
 	}
 	return a
 }
+
+// Anonymized reports whether u is an anonymized account, from the column
+// anonymizing sets (docs/05 "Account lifecycle").
+func Anonymized(u dbq.User) bool { return u.Anonymized != 0 }
 
 // Missing is how a post, thread or last post draws an author id the database
 // does not have: a database restored from a backup older than the logs, or

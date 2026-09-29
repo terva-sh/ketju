@@ -192,8 +192,7 @@ func (s *Service) listDetails(ctx context.Context, rows []views.ThreadRow) (map[
 		}
 		us, err := q.UsersByIDs(ctx, people)
 		for _, u := range us {
-			authors[u.ID] = dto.Author{Handle: u.Handle, DisplayName: u.DisplayName,
-				Avatar: u.AvatarBlob.String, Role: u.Role, Kind: u.Kind}
+			authors[u.ID] = member.Author(u)
 		}
 		return err
 	})

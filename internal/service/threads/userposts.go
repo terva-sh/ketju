@@ -50,7 +50,7 @@ func (s *Service) Profile(ctx context.Context, v domain.Viewer, handle string) (
 	}
 
 	out := dto.Profile{User: member.Author(u), JoinedAt: dto.Millis(u.CreatedAt), PostCount: n}
-	if u.BioSource != "" && !domain.Anonymized(u.Handle) {
+	if u.BioSource != "" && !member.Anonymized(u) {
 		// A bio is not in a thread, so a quote in one has no post to point
 		// at: every quoted post is reported missing, and the renderer draws
 		// the quote as a plain blockquote rather than a link to an ordinal

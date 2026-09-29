@@ -59,10 +59,30 @@ id, handle (unique, case-insensitive), display_name, avatar_blob,
 status ('active'|'pending'|'suspended'|'deactivated'),
 role ('member'|'moderator'|'admin'), kind ('human'|'agent'),
 bio_source, timezone, locale, prefs_json, mark_all_read_at (nullable),
-created_at, updated_at, last_seen_at
+created_at, updated_at, last_seen_at,
+status_reason (default ''), status_until (nullable, Unix ms),
+anonymized (0|1, default 0)
 ```
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.
+
+**The account lifecycle** (migration 0012, TKT-01M29CKRFS, 05 "Account
+lifecycle"). `status_reason` and `status_until` are a suspension's reason and
+end, which the member is shown at sign-in; `status_until` is null when no end
+is set. Every status change writes all three columns, so a reason never
+outlives its suspension. `anonymized` marks an anonymized account, and is what
+every author block reads to withhold the display name and avatar
+(`member.Author`); the `deleted-user` handle prefix no longer marks one.
+Anonymizing sets the handle to `deleted-user-<id>`, clears the display name,
+avatar and bio, and makes the account `deactivated`, so it drops out of every
+list of active accounts. A fifth status lost to the flag: it would need a
+rebuild of `users` to change the CHECK, and a fifth case in every status rule
+of 05 and 07. Three triggers hold it in the schema: an anonymized row's
+handle, display name, avatar, bio, flag and status never change
+(`users_anonymized_is_final`), the flag goes on only with the
+`deleted-user-<id>` handle (`users_anonymized_handle`), and no row is inserted
+anonymized. Status changes are decision writes and go through `internal/perm`
+with their audit row (see "audit_log").
 
 **Member ids are never reused.** Thread logs name members by `id`, as the
 author and actor of every record and in a post's mentions, so an id handed to
@@ -369,6 +389,14 @@ transaction that projects the record, with the frame's timestamp as `at`.
     global) and the permission.
   - against the group: `group.created`, `group.updated` and
     `group.deleted`.
+- The account lifecycle (TKT-01M29CKRFS) writes, against the user and in
+  the transaction that changes the status and deletes the account's
+  sessions: `user.deactivated`, `user.suspended` with `"reason"` and
+  `"until"` (Unix ms, or null for no end), `user.unsuspended`,
+  `user.reactivated`, whose actor is the member coming back, and
+  `user.anonymized`. Each carries the status it came `"from"`.
+  `user.anonymized` names no handle; the rows written before it, a rename's
+  old and new handle included, stay as they are (05 "Account lifecycle").
 
 ### notifications
 ```

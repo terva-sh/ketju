@@ -531,8 +531,7 @@ func (s *Service) users(ctx context.Context, ids map[int64]bool) (map[int64]dto.
 	err := s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
 		us, err := dq.UsersByIDs(ctx, list)
 		for _, u := range us {
-			out[u.ID] = dto.Author{Handle: u.Handle, DisplayName: u.DisplayName,
-				Avatar: u.AvatarBlob.String, Role: u.Role, Kind: u.Kind}
+			out[u.ID] = member.Author(u)
 		}
 		return err
 	})

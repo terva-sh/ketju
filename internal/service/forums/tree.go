@@ -115,8 +115,7 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 	// thread page.
 	authors := map[int64]dto.Author{}
 	for _, u := range users {
-		authors[u.ID] = dto.Author{Handle: u.Handle, DisplayName: u.DisplayName,
-			Avatar: u.AvatarBlob.String, Role: u.Role, Kind: u.Kind}
+		authors[u.ID] = member.Author(u)
 	}
 	for _, l := range last {
 		member.FillMissing(authors, l.LastPostAuthorID)

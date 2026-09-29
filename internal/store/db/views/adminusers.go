@@ -28,6 +28,7 @@ type AdminUserRow struct {
 	Status      string
 	CreatedAt   int64
 	LastSeenAt  sql.NullInt64
+	Anonymized  int64
 }
 
 // AdminUsers is up to limit accounts matching f with a handle after after,
@@ -56,7 +57,7 @@ func AdminUsers(ctx context.Context, tx *sql.Tx, f AdminUserFilter, after string
 		where = append(where, "handle > ?")
 		args = append(args, after)
 	}
-	q := `SELECT id, handle, display_name, avatar_blob, role, kind, status, created_at, last_seen_at FROM users`
+	q := `SELECT id, handle, display_name, avatar_blob, role, kind, status, created_at, last_seen_at, anonymized FROM users`
 	if len(where) > 0 {
 		q += " WHERE " + strings.Join(where, " AND ")
 	}
@@ -72,7 +73,7 @@ func AdminUsers(ctx context.Context, tx *sql.Tx, f AdminUserFilter, after string
 	for rows.Next() {
 		var r AdminUserRow
 		if err := rows.Scan(&r.ID, &r.Handle, &r.DisplayName, &r.Avatar, &r.Role, &r.Kind, &r.Status,
-			&r.CreatedAt, &r.LastSeenAt); err != nil {
+			&r.CreatedAt, &r.LastSeenAt, &r.Anonymized); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

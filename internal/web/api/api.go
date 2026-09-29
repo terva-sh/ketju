@@ -18,6 +18,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/service/account"
 	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
@@ -75,7 +76,9 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		// The groups service needs nothing Users and Perm do not already
 		// carry, so it is built here rather than being one more required
 		// dependency (TKT-01M29CXK1X).
-		groups: &groups.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now}}
+		groups: &groups.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now},
+		// The lifecycle service likewise (TKT-01M29CKRFS).
+		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now}}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
 		mux.HandleFunc(rt.Pattern(), rt.Handler)
@@ -117,6 +120,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/users", Handler: h.usersByPrefix},
 		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
 		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},
+		{Method: post, Path: "/api/v1/settings/deactivate", Handler: h.deactivate},
 	}, h.applyRoutes()...)
 }
 
@@ -141,6 +145,7 @@ type handlers struct {
 	applications *applications.Service
 	perm         *perm.Evaluator
 	groups       *groups.Service
+	account      *account.Service
 	log          *slog.Logger
 	// applyLimit is the per-identity stage the application writes share
 	// (apply.go). There is one per handler set, so every route it wraps

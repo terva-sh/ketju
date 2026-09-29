@@ -40,10 +40,11 @@ var (
 	// ErrInvalidRole is ChangeRole's answer for a role that is not one of
 	// the three.
 	ErrInvalidRole = errors.New("perm: not a role")
-	// ErrLastAdmin is ChangeRole's answer for a change that would leave no
-	// active admin. The screen must not be how a forum loses its only admin
-	// (settled in grooming for TKT-01M29CXK1X).
-	ErrLastAdmin = errors.New("perm: the last active admin cannot be demoted")
+	// ErrLastAdmin is the answer for a change that would leave no active
+	// admin: a demotion (ChangeRole), and a suspension, deactivation or
+	// anonymization (lifecycle.go). The forum must not be able to lock
+	// itself out (settled in grooming for TKT-01M29CXK1X and TKT-01M29CKRFS).
+	ErrLastAdmin = errors.New("perm: the last active admin cannot be demoted, suspended, deactivated or anonymized")
 	// ErrNoGroup is the answer for a group id that names no group.
 	ErrNoGroup = errors.New("perm: no such group")
 	// ErrImplicitGroup is the answer for a membership of everyone or

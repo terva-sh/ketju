@@ -69,6 +69,10 @@ var mapping = []struct {
 	{perm.ErrLastAdmin, CodeConflict},
 	{perm.ErrIdPMembership, CodeConflict},
 	{perm.ErrGrantState, CodeConflict},
+	// The account lifecycle (TKT-01M29CKRFS): a status change the account's
+	// status does not allow, and any change to an anonymized account.
+	{perm.ErrBadTransition, CodeConflict},
+	{perm.ErrAnonymized, CodeConflict},
 
 	// Client sent too much. render.ErrTooLarge is the post source over
 	// render.MaxSource, which docs/07 puts at 64 KB.

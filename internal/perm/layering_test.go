@@ -24,6 +24,11 @@ var decisionWrites = map[string]bool{
 	"RemoveMembership":     true,
 	"SetForumVisibility":   true,
 	"SetUserRole":          true,
+	// A status decides what a viewer may do, so the account lifecycle's
+	// writes are here too, and each goes with its audit row (lifecycle.go).
+	"SetUserStatus":        true,
+	"AnonymizeUser":        true,
+	"DeleteUserIdentities": true,
 }
 
 // TestMutationsGoThroughPerm is how AC4's "any group or permission write

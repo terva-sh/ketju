@@ -82,7 +82,7 @@ func (s *Service) AdminList(ctx context.Context, v domain.Viewer, f AdminFilter,
 	for _, r := range rows {
 		out.Users = append(out.Users, member.AdminUser(dbq.User{ID: r.ID, Handle: r.Handle, DisplayName: r.DisplayName,
 			AvatarBlob: r.Avatar, Role: r.Role, Kind: r.Kind, Status: r.Status, CreatedAt: r.CreatedAt,
-			LastSeenAt: r.LastSeenAt}))
+			LastSeenAt: r.LastSeenAt, Anonymized: r.Anonymized}))
 	}
 	return out, nil
 }

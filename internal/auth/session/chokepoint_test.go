@@ -52,6 +52,10 @@ var issuerCallers = []string{
 	"internal/service/identity/apply.go:BeginApplication IssuePreUserWith",
 	"internal/service/identity/login.go:Login IssueUser",
 	"internal/service/identity/login.go:applicant IssuePreUser",
+	// A deactivated member's Reactivate button: the status change runs
+	// inside the create func, and the session goes through IssueUser's
+	// status check after it (TKT-01M29CKRFS).
+	"internal/service/identity/reactivate.go:Reactivate IssueUserWith",
 	"internal/service/identity/register.go:Register IssueUserWith",
 }
 

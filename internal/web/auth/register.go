@@ -28,10 +28,12 @@ const RegistrationTTL = 15 * time.Minute
 // RegisterPath is the handle screen, GET to show it and POST to submit it.
 const RegisterPath = "/auth/register"
 
-// pending is what the registration cookie holds.
+// pending is what the registration cookie holds, and the reactivation
+// cookie, which adds the account row's stamp (reactivate.go).
 type pending struct {
 	Claims   identity.Claims `json:"c"`
 	ReturnTo string          `json:"r"`
+	Stamp    int64           `json:"t,omitempty"`
 }
 
 // beginRegistration is the callback's answer for an identity nobody has,
@@ -127,12 +129,18 @@ var errRegistrationTooBig = errors.New("the sealed registration is larger than a
 // still do not fit the registration is refused rather than sent to a
 // browser that would drop it.
 func (h *Handler) sealRegistration(p pending) (string, error) {
+	return h.sealPending(registrationPurpose, p)
+}
+
+// sealPending is sealRegistration for purpose: the reactivation cookie
+// carries the same claims and return_to, and sheds them the same way.
+func (h *Handler) sealPending(purpose string, p pending) (string, error) {
 	shed := []func(*pending){
 		func(p *pending) { p.Claims.Name, p.Claims.PreferredUsername = "", "" },
 		func(p *pending) { p.ReturnTo = "/" },
 	}
 	for i := 0; ; i++ {
-		sealed, err := h.Sealer.Seal(registrationPurpose, p)
+		sealed, err := h.Sealer.Seal(purpose, p)
 		if err != nil || len(sealed) <= MaxRegistrationCookie {
 			return sealed, err
 		}

@@ -23,6 +23,11 @@ type Querier interface {
 	// row exists already, whatever its source, it is left alone. The count is 1
 	// when it inserted, so only a membership the mapping made is audited.
 	AddIdPMembership(ctx context.Context, arg AddIdPMembershipParams) (int64, error)
+	// AnonymizeUser is docs/05's anonymization of the account's row: the
+	// placeholder handle, and nothing left that names the person. The account
+	// becomes deactivated, so it drops out of every list of active accounts and
+	// is served as a deactivated account is. The schema's triggers keep it so.
+	AnonymizeUser(ctx context.Context, arg AnonymizeUserParams) error
 	// The only write audit_log has. Rows are never updated or deleted: the
 	// triggers in migration 0006 refuse it, and TestAuditLogAppendOnly refuses a
 	// query here that tries.
@@ -97,6 +102,10 @@ type Querier interface {
 	DeleteEmptyGroup(ctx context.Context, id int64) (int64, error)
 	// Clears every IdP-sourced row of a user. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
+	// DeleteIdentitySessions ends every session bound to one of the user's
+	// identities, a pre-user session from before an approval included, whose
+	// user_id is null and which DeleteUserSessions would miss.
+	DeleteIdentitySessions(ctx context.Context, userID sql.NullInt64) error
 	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
 	// DeletePreUserSessions ends every applicant session bound to an identity:
 	// what approving an application does in its own transaction (TKT-01M29CP2MG).
@@ -106,6 +115,10 @@ type Querier interface {
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
 	DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error)
 	DeleteThreadTags(ctx context.Context, threadID int64) error
+	// DeleteUserIdentities removes every identity of an anonymized account
+	// (docs/05). An application's identity_id is set to null by its foreign
+	// key. The sessions naming the identities go first (DeleteIdentitySessions).
+	DeleteUserIdentities(ctx context.Context, userID sql.NullInt64) error
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
 	DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64, error)
 	// LowerReadPosition is mark-unread (DELETE /threads/{id}/read), the only
@@ -190,6 +203,9 @@ type Querier interface {
 	// identity belongs to, if any, and that user's status. internal/auth/session
 	// reads it in the transaction that inserts the session, so nothing can
 	// change it between the check and the row.
+	// The reason and end of a suspension come with the status, for the
+	// "account unavailable" page, and updated_at, which the Reactivate button's
+	// cookie is bound to (docs/05 "Login flow").
 	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
 	InsertApplication(ctx context.Context, arg InsertApplicationParams) (int64, error)
 	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
@@ -305,6 +321,10 @@ type Querier interface {
 	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) (int64, error)
 	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
+	// SetUserStatus is every status change but anonymizing (internal/perm,
+	// lifecycle.go). It writes the reason and end with the status, so a
+	// suspension's reason never outlives it.
+	SetUserStatus(ctx context.Context, arg SetUserStatusParams) error
 	// SweepSessions deletes every session LookupSession would refuse: the exact
 	// complement of its liveness test. internal/auth/session binds both cutoffs
 	// from session.ExpiredBefore, so the sweeper deletes nothing a lookup at the

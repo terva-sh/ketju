@@ -52,8 +52,15 @@ type Result struct {
 	// Applying, whose session is a pre-user one.
 	Token   string
 	Session session.Session
-	// Status is the user's status for Unavailable.
+	// Status is the user's status for Unavailable, and Reason and Until a
+	// suspension's reason and end (Unix ms, 0 for none), which the page
+	// shows (docs/05 "Login flow").
 	Status string
+	Reason string
+	Until  int64
+	// Stamp is the account row's updated_at when Unavailable found it,
+	// which a Reactivate button is bound to (Reactivate).
+	Stamp int64
 }
 
 // cleanupTimeout bounds ending a session a failed sign-in issued.
@@ -144,7 +151,8 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 	var inactive *session.NotActiveError
 	switch {
 	case errors.As(err, &inactive):
-		return Result{Outcome: Unavailable, Status: inactive.Status}, nil
+		return Result{Outcome: Unavailable, Status: inactive.Status, Reason: inactive.Reason, Until: inactive.Until,
+			Stamp: inactive.UpdatedAt}, nil
 	case errors.Is(err, session.ErrNoUser):
 		return s.applicant(ctx, ident.ID, id, meta, replaces)
 	case err != nil:

@@ -28,8 +28,11 @@ WHERE id = ?;
 -- identity belongs to, if any, and that user's status. internal/auth/session
 -- reads it in the transaction that inserts the session, so nothing can
 -- change it between the check and the row.
+-- The reason and end of a suspension come with the status, for the
+-- "account unavailable" page, and updated_at, which the Reactivate button's
+-- cookie is bound to (docs/05 "Login flow").
 -- name: IdentityHolder :one
-SELECT i.user_id, u.status
+SELECT i.user_id, u.status, u.status_reason, u.status_until, u.updated_at
 FROM identities i
 LEFT JOIN users u ON u.id = i.user_id
 WHERE i.id = ?;
@@ -111,6 +114,34 @@ WHERE expires_at <= sqlc.arg(expires_after)
 
 -- name: SetUserRole :exec
 UPDATE users SET role = ?, updated_at = ? WHERE id = ?;
+
+-- SetUserStatus is every status change but anonymizing (internal/perm,
+-- lifecycle.go). It writes the reason and end with the status, so a
+-- suspension's reason never outlives it.
+-- name: SetUserStatus :exec
+UPDATE users SET status = ?, status_reason = ?, status_until = ?, updated_at = ? WHERE id = ?;
+
+-- AnonymizeUser is docs/05's anonymization of the account's row: the
+-- placeholder handle, and nothing left that names the person. The account
+-- becomes deactivated, so it drops out of every list of active accounts and
+-- is served as a deactivated account is. The schema's triggers keep it so.
+-- name: AnonymizeUser :exec
+UPDATE users
+SET handle = 'deleted-user-' || id, display_name = '', avatar_blob = NULL, bio_source = '', anonymized = 1,
+    status = 'deactivated', status_reason = '', status_until = NULL, updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id);
+
+-- DeleteUserIdentities removes every identity of an anonymized account
+-- (docs/05). An application's identity_id is set to null by its foreign
+-- key. The sessions naming the identities go first (DeleteIdentitySessions).
+-- name: DeleteUserIdentities :exec
+DELETE FROM identities WHERE user_id = ?;
+
+-- DeleteIdentitySessions ends every session bound to one of the user's
+-- identities, a pre-user session from before an approval included, whose
+-- user_id is null and which DeleteUserSessions would miss.
+-- name: DeleteIdentitySessions :exec
+DELETE FROM sessions WHERE identity_id IN (SELECT i.id FROM identities i WHERE i.user_id = sqlc.arg(user_id));
 
 -- The authors on one page of a thread, in one query rather than one per post.
 -- name: UsersByIDs :many

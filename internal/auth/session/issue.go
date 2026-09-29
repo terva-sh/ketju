@@ -42,9 +42,19 @@ type Meta struct {
 // shows the reason for (docs/05 step 3).
 var ErrNotActive = errors.New("session: the user is not active")
 
-// NotActiveError is ErrNotActive with the user's status.
+// NotActiveError is ErrNotActive with the user's status, and for a
+// suspension its reason and end, which the "account unavailable" page shows
+// (docs/05 "Login flow"). UserID is whose account it is, for reactivation.
 type NotActiveError struct {
 	Status string
+	UserID int64
+	Reason string
+	// Until is when a suspension ends, in Unix ms; 0 means no end is set.
+	Until int64
+	// UpdatedAt is the users row's updated_at as the refusal read it. A
+	// reactivation is bound to it, so it is refused once the row has
+	// changed since.
+	UpdatedAt int64
 }
 
 func (e *NotActiveError) Error() string {
@@ -93,7 +103,8 @@ func (s *Store) IssueUserWith(ctx context.Context, meta Meta, create func(contex
 			return newSession{}, ErrNoUser
 		}
 		if h.Status.String != "active" {
-			return newSession{}, &NotActiveError{Status: h.Status.String}
+			return newSession{}, &NotActiveError{Status: h.Status.String, UserID: h.UserID.Int64,
+				Reason: h.StatusReason.String, Until: h.StatusUntil.Int64, UpdatedAt: h.UpdatedAt.Int64}
 		}
 		return newSession{Kind: KindUser, UserID: h.UserID.Int64, IdentityID: identityID,
 			IP: meta.IP, UserAgent: meta.UserAgent, Provider: meta.Provider}, nil

@@ -67,6 +67,7 @@ type Login interface {
 	// ClaimsOf is what the registration cookie carries of id.
 	ClaimsOf(id *oidc.Identity) identity.Claims
 	BeginApplication(ctx context.Context, c identity.Claims, meta session.Meta, replaces string) (identity.Result, error)
+	Reactivate(ctx context.Context, c identity.Claims, stamp int64, meta session.Meta, replaces string) (identity.Result, error)
 }
 
 // Sessions is the part of *session.Store the handlers use.
@@ -112,6 +113,8 @@ func Routes(h *Handler) []web.Route {
 		// The handle screen of open registration (register.go).
 		{Method: get, Path: RegisterPath, Handler: h.registerForm},
 		{Method: post, Path: RegisterPath, Handler: h.register},
+		// A deactivated member's Reactivate button (reactivate.go).
+		{Method: post, Path: ReactivatePath, Handler: h.reactivate},
 		// POST, so a page elsewhere cannot sign a reader out with an image
 		// tag; the CSRF check in front of every write (internal/web) holds
 		// it to this site.
@@ -221,7 +224,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, f.ReturnTo, http.StatusSeeOther)
 	case identity.Unavailable:
 		h.Logger.InfoContext(ctx, "sign-in refused: the account is not active", "provider", key, "status", res.Status)
-		writePage(w, http.StatusForbidden, pageUnavailable)
+		h.unavailable(w, r, res, id, f.ReturnTo)
 	case identity.Register:
 		h.beginRegistration(w, r, p, id, f.ReturnTo)
 	case identity.Link:

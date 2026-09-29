@@ -28,8 +28,9 @@ import (
 //   - sam is suspended, dee deactivated and penny pending; sam and dee each
 //     wrote a post in general before their status changed;
 //   - erin is a plain member, dana an admin, bob (the world's) a moderator;
-//   - deleted-user-9 is an anonymized account whose row still holds its old
-//     name, avatar and bio, as a row caught halfway would.
+//   - deleted-user-9 is an anonymized account (users.anonymized) whose row
+//     still holds its old name, avatar and bio, as a row caught halfway
+//     would.
 type profileWorld struct {
 	*world
 	lounge, staff int64
@@ -57,8 +58,8 @@ func newProfileWorld(t *testing.T) *profileWorld {
 	})
 	w.exec(`UPDATE users SET bio_source = ?, created_at = ? WHERE id = ?`,
 		"Runs the *book club*.\n\n> [quote=#3]\n> quoted", 1_757_000_000_000, w.users["alice"])
-	w.exec(`UPDATE users SET display_name = 'Old Name', avatar_blob = 'a1b2c3old', bio_source = 'I am Old Name.' WHERE id = ?`,
-		w.users["deleted-user-9"])
+	w.exec(`UPDATE users SET display_name = 'Old Name', avatar_blob = 'a1b2c3old', bio_source = 'I am Old Name.',
+		anonymized = 1 WHERE id = ?`, w.users["deleted-user-9"])
 
 	w.write(func(q *dbq.Queries) error {
 		var err error

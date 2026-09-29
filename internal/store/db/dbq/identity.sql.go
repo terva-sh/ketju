@@ -13,6 +13,27 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
+const anonymizeUser = `-- name: AnonymizeUser :exec
+UPDATE users
+SET handle = 'deleted-user-' || id, display_name = '', avatar_blob = NULL, bio_source = '', anonymized = 1,
+    status = 'deactivated', status_reason = '', status_until = NULL, updated_at = ?1
+WHERE id = ?2
+`
+
+type AnonymizeUserParams struct {
+	UpdatedAt int64
+	ID        int64
+}
+
+// AnonymizeUser is docs/05's anonymization of the account's row: the
+// placeholder handle, and nothing left that names the person. The account
+// becomes deactivated, so it drops out of every list of active accounts and
+// is served as a deactivated account is. The schema's triggers keep it so.
+func (q *Queries) AnonymizeUser(ctx context.Context, arg AnonymizeUserParams) error {
+	_, err := q.db.ExecContext(ctx, anonymizeUser, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const createIdentity = `-- name: CreateIdentity :one
 INSERT INTO identities (user_id, provider_key, subject, email, email_verified, issuer, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -115,6 +136,18 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, 
 	return id, err
 }
 
+const deleteIdentitySessions = `-- name: DeleteIdentitySessions :exec
+DELETE FROM sessions WHERE identity_id IN (SELECT i.id FROM identities i WHERE i.user_id = ?1)
+`
+
+// DeleteIdentitySessions ends every session bound to one of the user's
+// identities, a pre-user session from before an approval included, whose
+// user_id is null and which DeleteUserSessions would miss.
+func (q *Queries) DeleteIdentitySessions(ctx context.Context, userID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, deleteIdentitySessions, userID)
+	return err
+}
+
 const deletePreUserSessions = `-- name: DeletePreUserSessions :exec
 DELETE FROM sessions WHERE kind = 'pre_user' AND identity_id = ?
 `
@@ -134,6 +167,18 @@ DELETE FROM sessions WHERE id_hash = ?
 
 func (q *Queries) DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error {
 	_, err := q.db.ExecContext(ctx, deleteSession, idHash)
+	return err
+}
+
+const deleteUserIdentities = `-- name: DeleteUserIdentities :exec
+DELETE FROM identities WHERE user_id = ?
+`
+
+// DeleteUserIdentities removes every identity of an anonymized account
+// (docs/05). An application's identity_id is set to null by its foreign
+// key. The sessions naming the identities go first (DeleteIdentitySessions).
+func (q *Queries) DeleteUserIdentities(ctx context.Context, userID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, deleteUserIdentities, userID)
 	return err
 }
 
@@ -200,7 +245,7 @@ func (q *Queries) GetSession(ctx context.Context, idHash sqltypes.SessionHash) (
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at FROM users WHERE id = ?
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, anonymized FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -222,12 +267,15 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenAt,
+		&i.StatusReason,
+		&i.StatusUntil,
+		&i.Anonymized,
 	)
 	return i, err
 }
 
 const getUserByHandle = `-- name: GetUserByHandle :one
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at FROM users WHERE handle = ?
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, anonymized FROM users WHERE handle = ?
 `
 
 func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, error) {
@@ -249,30 +297,45 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.LastSeenAt,
+		&i.StatusReason,
+		&i.StatusUntil,
+		&i.Anonymized,
 	)
 	return i, err
 }
 
 const identityHolder = `-- name: IdentityHolder :one
-SELECT i.user_id, u.status
+SELECT i.user_id, u.status, u.status_reason, u.status_until, u.updated_at
 FROM identities i
 LEFT JOIN users u ON u.id = i.user_id
 WHERE i.id = ?
 `
 
 type IdentityHolderRow struct {
-	UserID sql.NullInt64
-	Status sql.NullString
+	UserID       sql.NullInt64
+	Status       sql.NullString
+	StatusReason sql.NullString
+	StatusUntil  sql.NullInt64
+	UpdatedAt    sql.NullInt64
 }
 
 // IdentityHolder is what a sign-in decides a session on: the user an
 // identity belongs to, if any, and that user's status. internal/auth/session
 // reads it in the transaction that inserts the session, so nothing can
 // change it between the check and the row.
+// The reason and end of a suspension come with the status, for the
+// "account unavailable" page, and updated_at, which the Reactivate button's
+// cookie is bound to (docs/05 "Login flow").
 func (q *Queries) IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error) {
 	row := q.db.QueryRowContext(ctx, identityHolder, id)
 	var i IdentityHolderRow
-	err := row.Scan(&i.UserID, &i.Status)
+	err := row.Scan(
+		&i.UserID,
+		&i.Status,
+		&i.StatusReason,
+		&i.StatusUntil,
+		&i.UpdatedAt,
+	)
 	return i, err
 }
 
@@ -446,6 +509,32 @@ func (q *Queries) SetUserRole(ctx context.Context, arg SetUserRoleParams) error 
 	return err
 }
 
+const setUserStatus = `-- name: SetUserStatus :exec
+UPDATE users SET status = ?, status_reason = ?, status_until = ?, updated_at = ? WHERE id = ?
+`
+
+type SetUserStatusParams struct {
+	Status       string
+	StatusReason string
+	StatusUntil  sql.NullInt64
+	UpdatedAt    int64
+	ID           int64
+}
+
+// SetUserStatus is every status change but anonymizing (internal/perm,
+// lifecycle.go). It writes the reason and end with the status, so a
+// suspension's reason never outlives it.
+func (q *Queries) SetUserStatus(ctx context.Context, arg SetUserStatusParams) error {
+	_, err := q.db.ExecContext(ctx, setUserStatus,
+		arg.Status,
+		arg.StatusReason,
+		arg.StatusUntil,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const sweepSessions = `-- name: SweepSessions :execrows
 DELETE FROM sessions
 WHERE expires_at <= ?1
@@ -563,7 +652,7 @@ func (q *Queries) UsersByHandlePrefix(ctx context.Context, arg UsersByHandlePref
 }
 
 const usersByIDs = `-- name: UsersByIDs :many
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, anonymized FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
 `
 
 // The authors on one page of a thread, in one query rather than one per post.
@@ -602,6 +691,9 @@ func (q *Queries) UsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.LastSeenAt,
+			&i.StatusReason,
+			&i.StatusUntil,
+			&i.Anonymized,
 		); err != nil {
 			return nil, err
 		}

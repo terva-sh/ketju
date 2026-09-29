@@ -276,6 +276,9 @@ type User struct {
 	CreatedAt     int64
 	UpdatedAt     int64
 	LastSeenAt    sql.NullInt64
+	StatusReason  string
+	StatusUntil   sql.NullInt64
+	Anonymized    int64
 }
 
 type Watch struct {

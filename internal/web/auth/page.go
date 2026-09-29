@@ -50,11 +50,13 @@ var (
 	// allowed_email_domains refused the address.
 	pageNotAllowed = pageData{"Sign-in not allowed", "This forum does not accept sign-ins from that account's email address.",
 		"/", "Go to the forum"}
-	// A suspended or deactivated account, and a pending one. The reason and
-	// any end date are Phase 2 moderation columns; until then the page is
-	// the same for all three (settled in grooming for TKT-01M29C7ZZ9).
+	// A pending account, and the fallback for any account that is not
+	// active. A suspended or deactivated one gets writeUnavailable's page.
 	pageUnavailable = pageData{"Account unavailable", "This account cannot sign in at the moment. " +
 		"If you think this is a mistake, contact the forum's moderators.", "/", "Go to the forum"}
+	// The reactivation cookie is missing or past ReactivateTTL.
+	pageReactivateExpired = pageData{"Reactivation expired", "Reactivating took too long, " +
+		"or no sign-in is waiting for it. Please sign in again.", "/", "Go to the forum"}
 	// Someone new who cannot register: from an auto_approve provider under
 	// approval mode, whose branch is TKT-01M29CKRE9's, or at the handle
 	// screen after registration closed. Anyone else new under approval
@@ -79,6 +81,56 @@ func writePage(w http.ResponseWriter, status int, p pageData) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(status)
 	_ = pageTmpl.Execute(w, p)
+}
+
+// unavailableTmpl is the "account unavailable" page for a suspended or
+// deactivated account (docs/05 "Login flow"). A suspension shows its reason
+// and end: there is no shadow banning (docs/08). A deactivated account is
+// offered the Reactivate button, a form posting to /auth/reactivate, which
+// the sealed reactivation cookie set with this page stands behind.
+// html/template escapes the reason, which a moderator wrote.
+var unavailableTmpl = template.Must(template.New("unavailable").Parse(`<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Account unavailable · Ketju</title>
+</head>
+<body>
+<main>
+<h1>Account unavailable</h1>
+{{if .Suspended}}<p>This account is suspended.</p>
+{{if .Reason}}<p>Reason: {{.Reason}}</p>
+{{end}}{{if .Until}}<p>Until: {{.Until}}</p>
+{{else}}<p>No end date is set.</p>
+{{end}}<p>If you think this is a mistake, contact the forum's moderators.</p>
+{{else}}<p>This account is deactivated.</p>
+{{if .Reactivate}}<form method="post" action="{{.Action}}">
+<p><button type="submit">Reactivate my account</button></p>
+</form>
+{{else}}<p>Please sign in again to reactivate it.</p>
+{{end}}{{end}}<p><a href="/">Go to the forum</a></p>
+</main>
+</body>
+</html>
+`))
+
+type unavailableData struct {
+	Suspended bool
+	Reason    string
+	// Until is the suspension's end as a reader sees it, or empty.
+	Until string
+	// Reactivate offers the button; Action is where it posts.
+	Reactivate bool
+	Action     string
+}
+
+func writeUnavailable(w http.ResponseWriter, d unavailableData) {
+	d.Action = ReactivatePath
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(http.StatusForbidden)
+	_ = unavailableTmpl.Execute(w, d)
 }
 
 // handleRule is the handle rule in words, from domain.ValidateHandle.

@@ -2,7 +2,6 @@ package domain
 
 import (
 	"strconv"
-	"strings"
 )
 
 // Account statuses (docs/04 "users", docs/05 "Account lifecycle").
@@ -16,16 +15,9 @@ const (
 // AnonymizedHandlePrefix starts the handle an anonymized account is given,
 // deleted-user-<id> (docs/05 "Account lifecycle"). Registration refuses
 // every handle that starts with it (docs/04 "users"), so no other account
-// can hold one.
+// can hold one. The prefix does not mark an anonymized account: the
+// users.anonymized column does (TKT-01M29CKRFS, member.Anonymized).
 const AnonymizedHandlePrefix = "deleted-user"
-
-// Anonymized reports whether handle is an anonymized account's. There is no
-// users.anonymized column yet, since anonymizing is Phase 2 (TKT-01M29CKRFS);
-// the reserved prefix is what tells one apart until there is. A stored handle
-// is lowercase ASCII, so the comparison needs no folding.
-func Anonymized(handle string) bool {
-	return strings.HasPrefix(handle, AnonymizedHandlePrefix)
-}
 
 // DeletedMemberHandle is the placeholder handle for member id:
 // deleted-user-<id>, what an anonymized account is renamed to, and what a

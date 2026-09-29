@@ -115,7 +115,8 @@ fetch and nothing afterwards.
    `sub`, `email`, `email_verified`, `name`, `picture`, optional groups claim.
 3. Look up `identities (provider_key, sub)`.
    - **Found** → load user; if `status = suspended|deactivated` show the
-     reason and stop; else create session, apply `group_map`, redirect to
+     reason and stop, offering a deactivated account the Reactivate button
+     (below); else create session, apply `group_map`, redirect to
      the `return_to` captured at start (validated as a same-origin path).
    - **Not found, and the user is already signed in** → this is an account
      link only when the sign-in began from the explicit "link a sign-in"
@@ -148,8 +149,19 @@ the ten minutes, by the cookie being cleared on first use, and by the IdP's
 single-use codes.
 
 A suspended, deactivated or pending account that signs in gets an "account
-unavailable" page and no session. The reason and any end date come with the
-Phase 2 moderation columns. Sign-out is `POST /auth/logout`, never a GET, so a
+unavailable" page and no session. A suspended account is shown the reason and
+the end date, or "No end date is set" (`users.status_reason` and
+`status_until`, TKT-01M29CKRFS). A deactivated account is offered a
+"Reactivate my account" button, which is the only way it returns ("Account
+lifecycle"): the page sets `__Host-ketju_reactivate`, a sealed cookie that
+lasts five minutes and carries the claims this sign-in verified, and the
+button posts to `POST /auth/reactivate`. That moves the account from
+`deactivated` to `active` inside the transaction `session.IssueUserWith`
+inserts the session in, with its `user.reactivated` audit row, and then
+applies the bootstrap and `group_map` as any sign-in does. A suspended,
+pending or anonymized account is never reactivated this way. The cookie is
+bound to the account row's `updated_at` as the sign-in found it, so it serves
+one press, and a copy of it cannot undo a deactivation made after it. Sign-out is `POST /auth/logout`, never a GET, so a
 page elsewhere cannot sign a reader out with an image tag. (TKT-01M29C7ZZ9.)
 
 Email is never used to auto-link identities across providers. Two providers
@@ -387,7 +399,8 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
 - Server-side sessions (table `sessions`), 30-day idle expiry, 90-day hard
   expiry, sliding `last_used_at` updated at most once per 5 minutes.
 - Session list in user settings with "sign out this device / everywhere".
-- Suspending a user deletes their sessions.
+- Suspending, deactivating or anonymizing a user deletes their sessions, in
+  the transaction that changes the status ("Account lifecycle").
 - CSRF: the API is JSON-only and rejects non-JSON content types on
   mutating routes; cookies are `SameSite=Lax`; Go's `net/http`
   `CrossOriginProtection` (1.25+) is enabled for form posts used by the
@@ -532,7 +545,19 @@ sessions. The states, the reasons, and the audit trail are otherwise the same.
   admin-only, and redacting it would weaken the one record of what happened. Post bodies are *not*
   edited (they are in logs); a `users.anonymized` flag suppresses attribution
   at render time. GDPR erasure of body text uses the offline redaction tool
-  from 03.
+  from 03. The account becomes `deactivated` and its bio is cleared too, and
+  it can never be changed again (04 "users"). Another member's `@handle` of
+  the old handle is body text: it renders as what was typed and links
+  nobody. The 90-day reservation is written by the rename ticket's
+  `handle_releases` table (TKT-01M3NRP3W9), which adds that write to the
+  anonymization's transaction.
+
+Every change above is made in `internal/perm`, in one transaction with its
+`audit_log` row (04) and the deletion of every session the account holds, so
+the account's next request is anonymous. The session middleware builds each
+viewer from the `users` row as well, so an account that is not active has no
+member rights even on a request already in flight when the change commits.
+(TKT-01M29CKRFS.)
 
 Whose profile is served (`GET /users/{handle}`, 07) follows from the
 states above. A pending account has not joined, so its profile and history

@@ -22,8 +22,9 @@ var reservedHandles = []string{"admin", "api", "assets", "auth", "blobs", "event
 
 // reservedPrefix is the handle an anonymized account is given,
 // deleted-user-<id> (docs/05 "Account lifecycle"). Anything that starts with
-// it could pass for one, and a profile reads the prefix as the sign of an
-// anonymized account (domain.Anonymized).
+// it could pass for one. What marks an anonymized account is the
+// users.anonymized column (member.Anonymized); the prefix is only refused
+// here, so that no member can look like one.
 const reservedPrefix = domain.AnonymizedHandlePrefix
 
 // NormalizeHandle is a handle as typed, made into the form it is stored in:

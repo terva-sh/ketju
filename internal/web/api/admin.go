@@ -61,6 +61,7 @@ type adminRouteEntry struct {
 func (h *handlers) registerAdmin(mux *http.ServeMux) {
 	h.registerForms(mux)      // forms.go, TKT-01M29CP2KE
 	h.registerAdminUsers(mux) // admin_users.go, TKT-01M29CXK1X
+	h.registerLifecycle(mux)  // account.go, TKT-01M29CKRFS
 }
 
 // adminRoute registers handler for pattern behind g, and records the route.
