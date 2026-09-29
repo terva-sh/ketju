@@ -69,8 +69,17 @@ export function ApplicationDetail({ id, status = 'pending' }: { id: string; stat
     );
   }
 
+  // changed takes an application a change answered with. Its notes are
+  // merged with the notes already shown rather than replacing them: a note
+  // added while the change was on its way may be missing from the answer,
+  // and must not vanish when the answer lands last (Terva review 1474).
+  // Notes are shown oldest first, which is their id order.
   const changed = (next: AdminApplication, said: string) => {
-    setFresh(next);
+    setFresh((f) => {
+      const shown = (f ?? res.data)?.notes ?? [];
+      const missing = shown.filter((n) => !next.notes.some((x) => x.id === n.id));
+      return missing.length ? { ...next, notes: [...next.notes, ...missing].sort((x, y) => x.id - y.id) } : next;
+    });
     setNotice(said);
   };
   // A note is added to the application as it is when the answer comes, not

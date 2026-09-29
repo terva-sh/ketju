@@ -143,6 +143,49 @@ describe('an application', () => {
     expect([...root.querySelectorAll('[data-notes] li')].map((li) => li.textContent).join()).toContain('Checked with Alice.');
   });
 
+  // Terva review 1474: the other order. The decision's answer, which does
+  // not carry the note, lands after the note's, and the note stays.
+  it('keeps a note whose answer lands before a decision that missed it', async () => {
+    let answerDeny: (a: { status: number; body: unknown }) => void = () => {};
+    const note: ApplicationNote = {
+      id: 10,
+      author: { handle: 'mona', display_name: 'Mona', avatar: '', role: 'moderator', kind: 'human' },
+      body: 'Checked with Alice.',
+      created_at: 1757606000000,
+    };
+    server.routes[`POST ${appUrl(42)}/notes`] = () => ({ status: 201, body: note });
+    server.routes[`POST ${appUrl(42)}/deny`] = () => new Promise((resolve) => (answerDeny = resolve));
+    const root = await renderAt('/admin/applications?id=42');
+
+    const deny = root.querySelector<HTMLTextAreaElement>('[data-deny-note]')!;
+    await act(async () => {
+      deny.value = 'No.';
+      deny.dispatchEvent(new Event('input'));
+    });
+    const section = [...root.querySelectorAll<HTMLElement>('[data-decision] section')][1];
+    await click(root, button(section, 'Deny'));
+    await act(async () => button(section, 'Deny')!.click());
+
+    const box = root.querySelector<HTMLTextAreaElement>('.app-add-note textarea')!;
+    await act(async () => {
+      box.value = 'Checked with Alice.';
+      box.dispatchEvent(new Event('input'));
+    });
+    await click(root, button(root, 'Add note'));
+    expect([...root.querySelectorAll('[data-notes] li')]).toHaveLength(2);
+
+    // The denial committed before the note, so its answer has only bob's.
+    const denied = { ...pendingApp(), status: 'denied' };
+    denied.decision = { by: approvedApp().decision!.by, at: 1757609000000, note: 'No.', user: null };
+    await act(async () => answerDeny({ status: 200, body: denied }));
+    await settle(root);
+    expect(root.querySelector('[data-decided]')).not.toBeNull();
+    const notes = [...root.querySelectorAll('[data-notes] li')].map((li) => li.textContent);
+    expect(notes).toHaveLength(2);
+    expect(notes[0]).toContain('@bob');
+    expect(notes[1]).toContain('Checked with Alice.');
+  });
+
   // Terva review 1472, finding 2: the way back returns to the list the
   // application was opened from.
   it('goes back to the filter it was opened from', async () => {

@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T21:26:33Z
+updated_at: 2026-09-29T21:29:14Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -157,6 +157,14 @@ Terva review 1472 (PR #162, head 8bff57c, base fbe4787, run 9ff78247, Actions ru
 - medium, "The detail URL rejects valid large application IDs": `applicationID` accepts any positive int64, checked with BigInt against 2^63-1, and keeps the digits as a string. A Number would round an id past 2^53. The detail requests those exact digits. Tests cover the boundary on both sides and a 19-digit id. One limit remains: ids that arrive in JSON bodies (list rows, `prior`) are still JS numbers, which is true of every id this client reads. SQLite rowids here are nowhere near 2^53.
 
 Budget unchanged at 45325 B.
+
+**agent:claude-code/phase2-run-nrx2nn** at 2026-09-29T21:29:14Z
+
+Terva review 1474 (PR #162, head 24a48fb, base fbe4787, run da720bde, Actions run #1023) marks all three findings from review 1472 resolved. It raised one new finding, fixed in the next commit:
+
+- medium, "A decision response can erase a concurrently added note": `changed` no longer replaces the application wholesale. It keeps any note already shown that the decision's answer lacks, ordered by id, which is oldest first. Test: "keeps a note whose answer lands before a decision that missed it" holds the denial's answer back until the note has landed. Going back to `setFresh(next)` fails that test.
+
+Budget: 45328 B of 60000 B.
 
 ## Summary
 
