@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS19315QTWBKNZN782VRF1
 title: Autosave reply drafts from the composer
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -20,12 +20,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-29T15:11:15Z
+updated_at: 2026-09-29T15:28:10Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -140,3 +140,9 @@ Engineering decisions taken here, with the alternative that lost:
 - The new-thread draft and screen: TKT-01M3NS16VH, which reuses `state/drafts.ts`.
 - The server routes: done in TKT-01M29CA9CE.
 - Showing a draft's existence in thread lists: not designed.
+
+## Notes
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-29T15:28:04Z
+
+Carried from the round-5 review of PR #143 (head 4f38f14), at docs/13's cap. Both findings are accepted as requirements. (1) A successful post clears the localStorage backup as well as the server draft. (2) The local backup and the server draft are ordered by a revision counter shared by both sides, carried in the draft body and bumped on every save, never by comparing the client's clock with the server's updated_at. Add tests for both. TKT-01M3NS16VH shares state/drafts.ts and inherits both.

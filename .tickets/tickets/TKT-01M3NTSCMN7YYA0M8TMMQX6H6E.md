@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NTSCMN7YYA0M8TMMQX6H6E
 title: "Prove Phase 2's exit: approval registration and agent credentials e2e"
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -24,12 +24,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-29T07:22:45Z
+updated_at: 2026-09-29T15:28:10Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

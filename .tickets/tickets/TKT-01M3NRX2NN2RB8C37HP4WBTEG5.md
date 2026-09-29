@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NRX2NN2RB8C37HP4WBTEG5
 title: Build the admin applications review screen
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -25,12 +25,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T07:18:30Z
+updated_at: 2026-09-29T15:28:10Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

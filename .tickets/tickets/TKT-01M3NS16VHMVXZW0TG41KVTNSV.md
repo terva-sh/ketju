@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS16VHMVXZW0TG41KVTNSV
 title: Build the new-thread screen with draft autosave
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -22,12 +22,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-29T15:11:15Z
+updated_at: 2026-09-29T15:28:10Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

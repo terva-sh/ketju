@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NRP3W9XSXYMSPNYS7JGYF4
 title: Implement handle changes with cooldown, reservation, and redirect
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:02:34Z
-updated_at: 2026-09-29T14:45:15Z
+updated_at: 2026-09-29T15:28:10Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
