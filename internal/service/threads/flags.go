@@ -73,6 +73,9 @@ type FlagRequest struct {
 // down or its thread takes no records.
 var errNothingToHide = errors.New("threads: nothing to hide")
 
+// errNoOpenFlags is a resolve that found no open flag on the post.
+var errNoOpenFlags = errors.New("threads: the post has no open flag")
+
 // Flag is POST /threads/{id}/flags (docs/07): a member's report of a post,
 // then the auto-hide it may owe (docs/08 "Flags").
 //
@@ -89,6 +92,13 @@ var errNothingToHide = errors.New("threads: nothing to hide")
 // The flag is committed before the hide is tried, and the hide reads only
 // committed flags. If the hide fails, the answer is unavailable with the
 // flag kept, and AutoHideSweep hides the post within a minute.
+//
+// The check that the post is shown, the insert and the hide all hold the
+// post's flag lock (Terva review 1504 on PR #176). A flag checked against
+// the post before a moderator's restore therefore cannot be inserted after
+// the restore dismissed the others, and hide the post the moderator just
+// restored. A flag that waited for the restore checks the restored post and
+// counts from zero.
 func (s *Service) Flag(ctx context.Context, v domain.Viewer, id threadid.ID, req FlagRequest) (dto.FlagReceipt, error) {
 	if err := s.MayWrite(v); err != nil {
 		return dto.FlagReceipt{}, err
@@ -98,6 +108,11 @@ func (s *Service) Flag(ctx context.Context, v domain.Viewer, id threadid.ID, req
 	}
 	if err := checkFlag(req.Reason, req.Note); err != nil {
 		return dto.FlagReceipt{}, err
+	}
+	unlock := s.flagLocks.lock(id, req.Ordinal)
+	defer unlock()
+	if s.beforeFlagCheck != nil {
+		s.beforeFlagCheck(id, req.Ordinal)
 	}
 	if err := s.Threads.With(id, func(th *threadcache.Thread) error {
 		if th.Archived() {
@@ -124,7 +139,7 @@ func (s *Service) Flag(ctx context.Context, v domain.Viewer, id threadid.ID, req
 	}); err != nil {
 		return dto.FlagReceipt{}, err
 	}
-	if _, err := s.EnforceAutoHide(ctx, id, req.Ordinal); err != nil {
+	if _, err := s.enforceAutoHide(ctx, id, req.Ordinal); err != nil {
 		return dto.FlagReceipt{}, problem.Coded(problem.CodeUnavailable,
 			fmt.Errorf("threads: the flag on post %d of %s is kept, and the hide it owes is left to the sweep: %w",
 				req.Ordinal, id, err))
@@ -169,6 +184,12 @@ func checkFlag(reason, note string) error {
 func (s *Service) EnforceAutoHide(ctx context.Context, id threadid.ID, ordinal uint32) (bool, error) {
 	unlock := s.flagLocks.lock(id, ordinal)
 	defer unlock()
+	return s.enforceAutoHide(ctx, id, ordinal)
+}
+
+// enforceAutoHide is EnforceAutoHide for a caller already holding the
+// post's flag lock.
+func (s *Service) enforceAutoHide(ctx context.Context, id threadid.ID, ordinal uint32) (bool, error) {
 	if s.Quarantined != nil && s.Quarantined(id) {
 		return false, nil
 	}
@@ -315,6 +336,13 @@ func (s *Service) restoreDismissingFlags(ctx context.Context, v domain.Viewer, i
 // refuses deleted and moved, so a post not pending review is conflict and
 // nothing changes. The sweep acts only on a shown post, so a failure
 // between the Delete and the resolve leaves nothing for it to hide again.
+//
+// That failure is recoverable by asking again (Terva review 1504 on PR
+// #176). A post already hidden by a moderator, no longer pending review,
+// with flags still open, has its flags resolved and nothing appended: that
+// is a confirmation whose resolve failed, or a hide by hand the queue is
+// now keeping. The same post with no open flag is conflict, since there is
+// nothing left to confirm.
 func (s *Service) ConfirmHide(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, reason string) (dto.CreatedPost, error) {
 	if err := s.MayWrite(v); err != nil {
 		return dto.CreatedPost{}, err
@@ -336,6 +364,47 @@ func (s *Service) ConfirmHide(ctx context.Context, v domain.Viewer, id threadid.
 	}
 	unlock := s.flagLocks.lock(id, ordinal)
 	defer unlock()
+	resolve := func() error {
+		return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			ids, err := q.ResolveOpenFlagsForPost(ctx, dbq.ResolveOpenFlagsForPostParams{
+				ResolvedBy:     sql.NullInt64{Int64: v.UserID, Valid: true},
+				ResolvedAt:     sql.NullInt64{Int64: s.now().UnixMilli(), Valid: true},
+				ResolutionNote: reason, ThreadID: int64(id), Ordinal: int64(ordinal),
+			})
+			if err == nil && len(ids) == 0 {
+				return errNoOpenFlags
+			}
+			return err
+		})
+	}
+	var (
+		hidden bool
+		out    dto.CreatedPost
+	)
+	if err := s.Threads.With(id, func(th *threadcache.Thread) error {
+		e, err := th.Index.Entry(ordinal)
+		if err != nil {
+			return err
+		}
+		f := e.Flags
+		hidden = f.Has(threadlog.EntryHiddenByMod) && f&(threadlog.EntryAutoHidden|threadlog.EntryDeleted|threadlog.EntryMoved) == 0
+		if hidden {
+			out, err = s.readBack(ctx, th, id, ordinal, a)
+		}
+		return err
+	}); err != nil {
+		return dto.CreatedPost{}, err
+	}
+	if hidden {
+		switch err := resolve(); {
+		case errors.Is(err, errNoOpenFlags):
+			return dto.CreatedPost{}, problem.Coded(problem.CodeConflict,
+				fmt.Errorf("threads: post %d of %s is already a moderator's hide with no open flag", ordinal, id))
+		case err != nil:
+			return dto.CreatedPost{}, err
+		}
+		return out, nil
+	}
 	out, appended, err := s.changePostAppended(ctx, id, ordinal, a, func(th *threadcache.Thread, _ threadlog.IndexEntry) (threadlog.Append, error) {
 		if th.Archived() {
 			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
@@ -351,14 +420,7 @@ func (s *Service) ConfirmHide(ctx context.Context, v domain.Viewer, id threadid.
 	if !appended {
 		return dto.CreatedPost{}, err
 	}
-	if rerr := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		_, err := q.ResolveOpenFlagsForPost(ctx, dbq.ResolveOpenFlagsForPostParams{
-			ResolvedBy:     sql.NullInt64{Int64: v.UserID, Valid: true},
-			ResolvedAt:     sql.NullInt64{Int64: s.now().UnixMilli(), Valid: true},
-			ResolutionNote: reason, ThreadID: int64(id), Ordinal: int64(ordinal),
-		})
-		return err
-	}); rerr != nil {
+	if rerr := resolve(); rerr != nil && !errors.Is(rerr, errNoOpenFlags) {
 		err = errors.Join(err, fmt.Errorf("threads: resolving the flags of post %d of %s after its hide: %w", ordinal, id, rerr))
 	}
 	if err != nil {

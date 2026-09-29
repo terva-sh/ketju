@@ -805,3 +805,127 @@ func TestConfirmHide(t *testing.T) {
 		t.Errorf("audit rows %v, want %v", got, want)
 	}
 }
+
+// TestFlagHoldsThePostLock (Terva review 1504 on PR #176): a flag checks the
+// post, inserts and hides under the post's flag lock, so it cannot straddle
+// a moderator's restore.
+//   - A flag arriving while a restore holds the lock waits, then checks the
+//     restored post and counts from one, and hides nothing.
+//   - A restore arriving while a flag holds the lock waits for the flag to
+//     finish, so a flag checked before the restore is never inserted after
+//     the restore dismissed the others.
+func TestFlagHoldsThePostLock(t *testing.T) {
+	t.Run("a flag during a restore", func(t *testing.T) {
+		w := newFlagWorld(t)
+		w.hide(1)
+		reached, release := make(chan struct{}), make(chan struct{})
+		w.writer.set(func(a threadlog.Append) {
+			if a.Type == threadlog.TypeRestore {
+				close(reached)
+				<-release
+			}
+		}, nil)
+		restored := make(chan error, 1)
+		go func() { _, err := w.restore("mod", 1); restored <- err }()
+		<-reached
+		flagged := make(chan error, 1)
+		go func() {
+			_, err := w.svc.Flag(context.Background(), w.viewer("rep4"), w.id, FlagRequest{Ordinal: 1, Reason: FlagSpam})
+			flagged <- err
+		}()
+		select {
+		case err := <-flagged:
+			t.Fatalf("the flag finished (%v) while the restore held the post's lock", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+		close(release)
+		if err := <-restored; err != nil {
+			t.Fatal(err)
+		}
+		if err := <-flagged; err != nil {
+			t.Fatalf("the flag after the restore: %v", err)
+		}
+		if n := w.openFlags(1); n != 1 || !w.entry(1).Flags.Visible() {
+			t.Errorf("after the restore and the late flag: %d open, post %#x; want 1 and shown", n, w.entry(1).Flags)
+		}
+	})
+
+	t.Run("a restore during a flag", func(t *testing.T) {
+		w := newFlagWorld(t)
+		w.hide(1)
+		held, release := make(chan struct{}), make(chan struct{})
+		w.svc.beforeFlagCheck = func(threadid.ID, uint32) {
+			close(held)
+			<-release
+		}
+		flagged := make(chan error, 1)
+		go func() {
+			_, err := w.svc.Flag(context.Background(), w.viewer("rep4"), w.id, FlagRequest{Ordinal: 1, Reason: FlagSpam})
+			flagged <- err
+		}()
+		<-held
+		restored := make(chan error, 1)
+		go func() { _, err := w.restore("mod", 1); restored <- err }()
+		select {
+		case err := <-restored:
+			t.Fatalf("the restore finished (%v) while a flag held the post's lock", err)
+		case <-time.After(50 * time.Millisecond):
+		}
+		close(release)
+		if err := <-flagged; codeOf(err) != problem.CodeConflict {
+			t.Errorf("the flag checked against the hidden post: %v, want conflict", err)
+		}
+		if err := <-restored; err != nil {
+			t.Fatal(err)
+		}
+		w.svc.beforeFlagCheck = nil
+		if n := w.openFlags(1); n != 0 || !w.entry(1).Flags.Visible() {
+			t.Errorf("after the flag and the restore: %d open, post %#x; want none and shown", n, w.entry(1).Flags)
+		}
+	})
+}
+
+// TestConfirmHideRecoversAFailedResolve (Terva review 1504 on PR #176): a
+// confirmation whose Delete is durable but whose resolve fails leaves the
+// post a moderator's hide with its flags open, and asking again resolves
+// them without appending a second Delete. With nothing left open it is
+// conflict.
+func TestConfirmHideRecoversAFailedResolve(t *testing.T) {
+	w := newFlagWorld(t)
+	w.hide(1)
+	exec := func(stmt string) {
+		t.Helper()
+		if err := w.db.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			_, err := tx.ExecContext(t.Context(), stmt)
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	exec(`CREATE TRIGGER test_refuse_resolve BEFORE UPDATE ON flags WHEN NEW.status = 'resolved'
+		BEGIN SELECT RAISE(ABORT, 'injected'); END`)
+	if _, err := w.svc.ConfirmHide(t.Context(), w.viewer("mod"), w.id, 1, "spam"); err == nil {
+		t.Fatal("the confirmation succeeded with its resolve failing")
+	}
+	if e := w.entry(1); e.Flags&(threadlog.EntryHiddenByMod|threadlog.EntryAutoHidden) != threadlog.EntryHiddenByMod {
+		t.Fatalf("after the half-done confirmation the entry is %#x: want the moderator's hide", e.Flags)
+	}
+	if n := w.openFlags(1); n != 3 {
+		t.Fatalf("%d open flags after the failed resolve, want 3", n)
+	}
+	exec(`DROP TRIGGER test_refuse_resolve`)
+	before := w.logLength()
+	if _, err := w.svc.ConfirmHide(t.Context(), w.viewer("mod"), w.id, 1, "spam"); err != nil {
+		t.Fatalf("asking again: %v", err)
+	}
+	if w.logLength() != before {
+		t.Error("asking again appended to the log")
+	}
+	want := map[string]string{"rep1": "resolved by mod", "rep2": "resolved by mod", "rep3": "resolved by mod"}
+	if got := w.flagStatuses(1); !reflect.DeepEqual(got, want) {
+		t.Errorf("flags after asking again %v, want %v", got, want)
+	}
+	if _, err := w.svc.ConfirmHide(t.Context(), w.viewer("mod"), w.id, 1, "spam"); codeOf(err) != problem.CodeConflict {
+		t.Errorf("a third confirmation: %v, want conflict", err)
+	}
+}

@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T23:48:35Z
+updated_at: 2026-09-29T23:55:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -168,6 +168,10 @@ PR #175 (head 56551e5, base 2e2fe7c) was replaced by PR #176. The suspension PR 
 **agent:claude-code/phase2-run-cp2pj** at 2026-09-29T23:48:29Z
 
 AC8 ticked, superseding the work note's reason for leaving it open. TKT-01M29CKRJ9's client half landed on main in PR #174 (main 4d793b2). Its removedText in components/thread/removal.tsx draws a tombstone with removal 'review' as 'Post hidden pending review', and ThreadPage.test.tsx asserts those words. This PR serves an auto-hidden post to anyone but its author and moderators as a tombstone with removal 'review' and no html (TestAutoHiddenVisibility), so the two together meet the criterion. The summary's line about AC8 is superseded by this note.
+
+**agent:claude-code/phase2-run-cp2pj** at 2026-09-29T23:55:43Z
+
+Terva review 1504 on PR #176 (head 1a463d7, base 4d793b2, run 3b328c27, Actions run 1114): two findings, both accepted and fixed. (1) high, 'Serialize flag insertion with restore dismissal'. Flag now takes the post's flag lock before it checks the post, and holds it through the insert and the hide. So a flag checked before a moderator's restore cannot be inserted after the restore dismissed the others. A flag that waits for the restore checks the restored post and counts from zero. Test: TestFlagHoldsThePostLock, with a flag during a held restore and a restore during a held flag. Removing the lock from Flag fails both subtests. (2) medium, 'Provide recovery when confirmation cannot resolve flags'. ConfirmHide on a post that is already a moderator's hide, no longer pending review, with open flags now resolves them and appends nothing, so asking again completes a confirmation whose resolve failed. The same post with no open flag is conflict. Test: TestConfirmHideRecoversAFailedResolve, which injects the resolve failure with a temporary trigger. Disabling the branch fails it. docs/08 is updated for both.
 
 ## Summary
 

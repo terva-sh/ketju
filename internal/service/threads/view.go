@@ -156,6 +156,10 @@ type Service struct {
 	// a post's open flags and appending its hide, still under the lock.
 	// Tests use it to hold the sweep there.
 	afterFlagCount func(id threadid.ID, ordinal uint32)
+	// beforeFlagCheck, when set, is called by Flag once it holds the post's
+	// flag lock, before it checks the post. Tests use it to hold a flag
+	// there.
+	beforeFlagCheck func(id threadid.ID, ordinal uint32)
 }
 
 // Appender is what the service appends through: *posts.Writer, the one

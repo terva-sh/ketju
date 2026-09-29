@@ -601,9 +601,9 @@ WHERE flags.id IN (/*SLICE:ids*/?) AND flags.status = 'dismissed'
 
 // Reopens flags a restore dismissed when its append wrote nothing. Only a
 // dismissed flag reopens, so a flag some other path closed since stays
-// closed. A reporter may have flagged the post again while theirs was
-// dismissed, since a flag's insert does not wait on the post's lock; their
-// newer flag then stands for them, and the old one stays dismissed rather
+// closed. If a reporter has an open flag on the post again, which the
+// service's per-post lock prevents but a hand-written insert could make,
+// their newer flag stands for them, and the old one stays dismissed rather
 // than breaking flags_one_open_per_reporter and failing the whole reopen.
 func (q *Queries) ReopenFlags(ctx context.Context, ids []int64) (int64, error) {
 	query := reopenFlags
