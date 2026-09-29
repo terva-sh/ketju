@@ -135,7 +135,12 @@ inert rather than orphaned.
 
 `blocked_at` and `blocked_by` are the "block this subject" marker a denial
 can set (05 "mode = approval" step 5), and a blocked identity's applications
-are refused. A block keeps `user_id` NULL: the triggers
+are refused. The schema refuses them as well as the submit path:
+`applications_identity_not_blocked` refuses inserting an application for a
+blocked identity, and `applications_identity_not_blocked_update` refuses an
+update (of `status` or `identity_id`) that leaves a blocked identity with a
+pending application. Denying an application and blocking its identity pass
+in either order. A block keeps `user_id` NULL: the triggers
 `identities_blocked_has_no_user` (on an update of `user_id`),
 `identities_block_needs_no_user` (on an update of `blocked_at`) and
 `identities_insert_blocked` refuse a row that has both, so a block cannot be
@@ -316,7 +321,10 @@ new_application (moderators).
 since `thread_id` and `ordinal` name posts. It is required for exactly those
 two kinds: the triggers `notifications_application_kind` (on insert) and
 `notifications_application_kind_update` (on an update of `kind` or
-`application_id`) refuse anything else. (Migration 0011.)
+`application_id`) refuse anything else. A row of either kind written before
+the column existed could not name its application, so migration 0011
+deletes any it finds. No earlier code wrote notifications of any kind, so
+none is expected. (Migration 0011.)
 
 ### watches
 ```

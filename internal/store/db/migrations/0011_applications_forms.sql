@@ -148,12 +148,41 @@ BEGIN
 	SELECT RAISE(ABORT, 'a blocked identity cannot have a user');
 END;
 
+-- The block refuses re-applications in the schema too, not only in the
+-- submit path (review 1373): no application is inserted for a blocked
+-- identity, and no update gives one a pending application, by reopening one
+-- or by moving one to it. Denying an application and blocking its identity
+-- pass, in either order, because neither makes an application pending.
+CREATE TRIGGER applications_identity_not_blocked
+BEFORE INSERT ON applications
+WHEN EXISTS (SELECT 1 FROM identities WHERE id = NEW.identity_id AND blocked_at IS NOT NULL)
+BEGIN
+	SELECT RAISE(ABORT, 'a blocked identity cannot apply');
+END;
+
+CREATE TRIGGER applications_identity_not_blocked_update
+BEFORE UPDATE OF identity_id, status ON applications
+WHEN NEW.status = 'pending'
+	AND EXISTS (SELECT 1 FROM identities WHERE id = NEW.identity_id AND blocked_at IS NOT NULL)
+BEGIN
+	SELECT RAISE(ABORT, 'a blocked identity cannot apply');
+END;
+
 -- The application a new_application or application_decided notification is
 -- about. thread_id and ordinal name posts, so neither kind could say which
 -- application it meant. It is required for exactly those two kinds, on
 -- insert and on any update of the kind or the column.
 ALTER TABLE notifications ADD COLUMN application_id INTEGER REFERENCES applications (id);
 CREATE INDEX notifications_application ON notifications (application_id);
+
+-- The triggers below guard new writes, so a row written before this
+-- migration must meet the rule already (review 1373). An application
+-- notification from before it cannot name its application, because no
+-- applications table existed, and it can be neither shown nor acted on. No
+-- code before this migration writes notifications of any kind, so none is
+-- expected; any there is removed rather than left to break every reader of
+-- the rule.
+DELETE FROM notifications WHERE kind IN ('new_application', 'application_decided');
 
 CREATE TRIGGER notifications_application_kind
 BEFORE INSERT ON notifications

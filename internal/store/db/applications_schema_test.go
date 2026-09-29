@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -27,6 +28,8 @@ func newApplication(t *testing.T, d *DB, identity sql.NullInt64) int64 {
 	})
 	return id
 }
+
+func itoa(v int64) string { return strconv.FormatInt(v, 10) }
 
 // oneValue reads a single value, failing the test if the query does.
 func oneValue[T any](t *testing.T, d *DB, query string, args ...any) T {
@@ -318,6 +321,46 @@ func TestBlockedIdentityHasNoUser(t *testing.T) {
 	mustExec(t, d, `UPDATE identities SET user_id = ? WHERE id = ?`, member, applicant)
 }
 
+// TestBlockedIdentityCannotApply: a block refuses re-applications in the
+// schema (review 1373). Denying and blocking pass in either order, and
+// unblocking lets the identity apply again.
+func TestBlockedIdentityCannotApply(t *testing.T) {
+	d, _ := openTest(t)
+	mod := newUser(t, d, "mod")
+	ident := sql.NullInt64{Int64: newIdentity(t, d, sql.NullInt64{}, "applicant"), Valid: true}
+	other := sql.NullInt64{Int64: newIdentity(t, d, sql.NullInt64{}, "other"), Valid: true}
+	first := newApplication(t, d, ident)
+	second := newApplication(t, d, other)
+
+	// Block, then deny, in one transaction; the other order is below.
+	execAll(t, d,
+		`UPDATE identities SET blocked_at = 5, blocked_by = `+itoa(mod)+` WHERE id = `+itoa(ident.Int64),
+		`UPDATE applications SET status = 'denied', decided_by = `+itoa(mod)+`, decided_at = 5 WHERE id = `+itoa(first),
+	)
+	ins := `INSERT INTO applications (identity_id, form_id, form_version, answers_json, created_at) VALUES (?, 1, 1, '{}', 6)`
+	if err := exec(t, d, ins, ident); err == nil || !strings.Contains(err.Error(), "blocked identity cannot apply") {
+		t.Errorf("a blocked identity applied again: %v", err)
+	}
+	if err := exec(t, d, `UPDATE applications SET status = 'pending', decided_by = NULL, decided_at = NULL WHERE id = ?`,
+		first); err == nil || !strings.Contains(err.Error(), "blocked identity cannot apply") {
+		t.Errorf("a blocked identity's denied application was reopened: %v", err)
+	}
+	// Moving another identity's pending application onto the blocked one.
+	if err := exec(t, d, `UPDATE applications SET identity_id = ? WHERE id = ?`, ident, second); err == nil ||
+		!strings.Contains(err.Error(), "blocked identity cannot apply") {
+		t.Errorf("a pending application was moved onto a blocked identity: %v", err)
+	}
+
+	// Deny, then block.
+	execAll(t, d,
+		`UPDATE applications SET status = 'denied', decided_by = `+itoa(mod)+`, decided_at = 7 WHERE id = `+itoa(second),
+		`UPDATE identities SET blocked_at = 7, blocked_by = `+itoa(mod)+` WHERE id = `+itoa(other.Int64),
+	)
+
+	mustExec(t, d, `UPDATE identities SET blocked_at = NULL, blocked_by = NULL WHERE id = ?`, ident)
+	mustExec(t, d, ins, ident)
+}
+
 // TestApplicationOutlivesItsIdentity: identities are removed (account
 // linking, anonymization), and the application stays with a null identity.
 func TestApplicationOutlivesItsIdentity(t *testing.T) {
@@ -448,5 +491,35 @@ func TestRegistrationFormIsSeeded(t *testing.T) {
 	want := []string{"name:text:required", "email:email:optional", "who:textarea:required", "rules:checkbox:required"}
 	if form.Title == "" || !slices.Equal(got, want) {
 		t.Errorf("the seeded form is %q with fields %v, want a title and %v", form.Title, got, want)
+	}
+}
+
+// TestMigrationRemovesUnnamedApplicationNotifications: the application kinds
+// existed before 0011 without a column to name their application. 0011
+// removes any such row, so the rule holds for old rows as well as new ones
+// (review 1373), and it leaves every other notification alone.
+func TestMigrationRemovesUnnamedApplicationNotifications(t *testing.T) {
+	d, _ := openUnmigrated(t)
+	if err := d.migrate(t.Context(), migrationsBefore(t, 11), "m"); err != nil {
+		t.Fatal(err)
+	}
+	u := itoa(createUser(t, d, "notified"))
+	execAll(t, d,
+		`INSERT INTO notifications (user_id, kind, at) VALUES (`+u+`, 'new_application', 1)`,
+		`INSERT INTO notifications (user_id, kind, at) VALUES (`+u+`, 'application_decided', 2)`,
+		`INSERT INTO notifications (user_id, kind, thread_id, ordinal, at) VALUES (`+u+`, 'mention', 42, 3, 3)`,
+	)
+	if err := d.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var left []string
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		left = rows(t, tx, `SELECT kind, thread_id, ordinal, application_id FROM notifications ORDER BY id`)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"[mention 42 3 <nil>]"}; !slices.Equal(left, want) {
+		t.Errorf("after 0011 the notifications are %v, want %v", left, want)
 	}
 }
