@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
 import { apiGet, apiSend } from '../../api/client';
 import type { ApplicationForm, ApplicationStatus, Form, FormField } from '../../api/dto';
@@ -21,6 +21,9 @@ const statusURL = '/api/v1/apply/status';
 // that is not in approval mode read the same, as the API gives no reason
 // either (docs/07).
 export const notAccepting = 'This community is not accepting applications right now.';
+
+// changedSince is a refusal of answers the applicant has already changed.
+export const changedSince = 'Your application was not sent, and you have changed the answers it was refused over. Send it again.';
 
 export function ApplyScreen() {
   const { route } = useLocation();
@@ -67,20 +70,24 @@ export function ApplyScreen() {
     return () => ctl.abort();
   }, [attempt]);
 
+  // latest is the answers as they are now. The form stays editable while a
+  // submission is in flight, so what a refusal describes, the answers sent,
+  // can differ from these by the time it arrives.
+  const latest = useRef(values);
+  latest.current = values;
+
   const submit = async () => {
     if (!data) return;
     setBusy(true);
     setMessage(null);
+    const sent = answersOf(data.form, values);
     try {
-      await apiSend<ApplicationStatus>('POST', '/api/v1/apply', {
-        version: data.form.version,
-        answers: answersOf(data.form, values),
-      });
+      await apiSend<ApplicationStatus>('POST', '/api/v1/apply', { version: data.form.version, answers: sent });
       route('/apply/status', true);
       return;
     } catch (err) {
       if (isAbort(err)) return;
-      await refused(asProblem(err));
+      await refused(asProblem(err), sent);
     } finally {
       setBusy(false);
     }
@@ -88,13 +95,20 @@ export function ApplyScreen() {
 
   // refused says what a refused submission means. Field errors describe
   // only the submission that drew them, so any other answer clears them
-  // (review 1456).
-  const refused = async (p: ProblemError) => {
+  // (review 1456), and so does an answer changed while it was in flight
+  // (review 1460).
+  const refused = async (p: ProblemError, sent: Values) => {
     if (isProblem(p, 'validation-failed')) {
-      setErrors({ ...p.fieldErrors });
+      const still = stillSent(p.fieldErrors, sent, latest.current);
+      setErrors(still);
       setRefusals((n) => n + 1);
-      // The line saying so is drawn from errors, and goes with the last.
-      setMessage(null);
+      // With a field to mark, the line saying so is drawn from the errors
+      // and goes with the last. With none, the refusal must still be said
+      // (review 1460): the body named no field, or every field it named
+      // has changed since.
+      if (Object.keys(still).length > 0) setMessage(null);
+      else if (Object.keys(p.fieldErrors).length > 0) setMessage(changedSince);
+      else setMessage(problemMessage(p).text);
       return;
     }
     setErrors({});
@@ -122,7 +136,7 @@ export function ApplyScreen() {
         return;
       }
       const f = await apiGet<ApplicationForm>(formURL);
-      take(f, data ? { form: data.form, values } : undefined);
+      take(f, data ? { form: data.form, values: latest.current } : undefined);
       setMessage('The form changed while you were filling it in. Your answers are kept where the questions are the same. Check them and send it again.');
     } catch (err) {
       setMessage(problemMessage(err).text);
@@ -179,6 +193,17 @@ export function carried(previous: { form: Form; values: Values }, field: FormFie
     if (!chosen.every((c) => c === '' || field.options.includes(c as string))) return undefined;
   }
   return v;
+}
+
+// stillSent is the field errors that still describe the form: those for a
+// field whose answer is the one that was sent. An error for a key that was
+// not sent, a locked field or the schema as a whole, stands.
+export function stillSent(errors: Record<string, string>, sent: Values, now: Values): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [k, code] of Object.entries(errors)) {
+    if (!Object.hasOwn(sent, k) || JSON.stringify(sent[k]) === JSON.stringify(now[k])) out[k] = code;
+  }
+  return out;
 }
 
 // withoutKey is o less its entry for key.

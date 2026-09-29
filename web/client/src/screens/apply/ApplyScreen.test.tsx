@@ -5,7 +5,7 @@ import type { Value } from '../../forms/fields';
 import { fieldMessage } from '../../forms/messages';
 import { viewer } from '../../state/viewer';
 import { problemAnswer, renderAt, screenOf, settle, stubServer, unmount, type StubServer } from '../../testing';
-import { carried, notAccepting } from './ApplyScreen';
+import { carried, changedSince, notAccepting, stillSent } from './ApplyScreen';
 import preUser from '../../../../../internal/dto/testdata/golden/me.pre_user.json';
 import memberMe from '../../../../../internal/dto/testdata/golden/me.member.json';
 import applyForm from '../../../../../internal/dto/testdata/golden/apply-form.pre_user.json';
@@ -190,6 +190,52 @@ describe('the apply screen', () => {
     expect(root.querySelector('[aria-invalid]')).toBeNull();
     expect(root.querySelector('.form-error')).toBeNull();
     expect(root.querySelector('.form-message')!.textContent).toBe(notAccepting);
+  });
+
+  // Review 1460.
+  it.each([
+    ['no list', {}],
+    ['a list of nothing usable', { errors: [{ field: 3 }, 'x'] }],
+  ])('still says a 422 with %s was refused', async (_, extra) => {
+    server.routes['POST /api/v1/apply'] = () => problemAnswer('validation-failed', 422, extra);
+    const root = await filledIn();
+    await send(root);
+    expect(root.querySelector('[aria-invalid]')).toBeNull();
+    expect(root.querySelector('.form-message')!.textContent).toBe('That was not accepted. Check it and try again.');
+    expect(location.pathname).toBe('/apply');
+  });
+
+  it('does not mark an answer changed while the submission was in flight', async () => {
+    let answer!: (a: { status: number; body: unknown }) => void;
+    server.routes['POST /api/v1/apply'] = () => new Promise((r) => (answer = r));
+    const root = await filledIn();
+    await act(async () => root.querySelector<HTMLButtonElement>('form.form-view button[type="submit"]')!.click());
+    // The golden refuses who and rules. who changes before the answer lands.
+    type(root, 'who', 'Alice and Carol invited me');
+    await act(async () => answer({ status: 422, body: fieldErrorsBody }));
+    await until(() => !root.querySelector('[aria-busy]'));
+    expect(field(root, 'who').querySelector('textarea')!.hasAttribute('aria-invalid')).toBe(false);
+    expect(field(root, 'rules').querySelector('input')!.getAttribute('aria-invalid')).toBe('true');
+    expect(document.activeElement).toBe(field(root, 'rules').querySelector('input'));
+
+    // Both changed in flight: nothing to mark, and it says so.
+    server.routes['POST /api/v1/apply'] = () => new Promise((r) => (answer = r));
+    await act(async () => root.querySelector<HTMLButtonElement>('form.form-view button[type="submit"]')!.click());
+    type(root, 'who', 'Just Alice');
+    act(() => field(root, 'rules').querySelector<HTMLInputElement>('input')!.click());
+    await act(async () => answer({ status: 422, body: fieldErrorsBody }));
+    await until(() => !root.querySelector('[aria-busy]'));
+    expect(root.querySelector('[aria-invalid]')).toBeNull();
+    expect(root.querySelector('.form-message')!.textContent).toBe(changedSince);
+  });
+
+  it('keeps an error for what was sent, and for a key that was not', () => {
+    const sent = { a: 'x', b: ['1'], c: true };
+    expect(stillSent({ a: 'required', b: 'required', c: 'required', gone: 'required' }, sent, { a: 'x', b: ['1', '2'], c: true })).toEqual({
+      a: 'required',
+      c: 'required',
+      gone: 'required',
+    });
   });
 
   it('says applications are closed on a 403, and gives no reason', async () => {
