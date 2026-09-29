@@ -39,7 +39,7 @@ func (q *Queries) AddAdminMembership(ctx context.Context, arg AddAdminMembership
 	return err
 }
 
-const addIdPMembership = `-- name: AddIdPMembership :exec
+const addIdPMembership = `-- name: AddIdPMembership :execrows
 INSERT INTO group_members (group_id, user_id, source, added_by, added_at)
 VALUES (?, ?, 'idp', NULL, ?)
 ON CONFLICT (group_id, user_id) DO NOTHING
@@ -52,10 +52,14 @@ type AddIdPMembershipParams struct {
 }
 
 // An IdP mapping never overrides a membership an admin set by hand: if the
-// row exists already, whatever its source, it is left alone.
-func (q *Queries) AddIdPMembership(ctx context.Context, arg AddIdPMembershipParams) error {
-	_, err := q.db.ExecContext(ctx, addIdPMembership, arg.GroupID, arg.UserID, arg.AddedAt)
-	return err
+// row exists already, whatever its source, it is left alone. The count is 1
+// when it inserted, so only a membership the mapping made is audited.
+func (q *Queries) AddIdPMembership(ctx context.Context, arg AddIdPMembershipParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, addIdPMembership, arg.GroupID, arg.UserID, arg.AddedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const createForum = `-- name: CreateForum :one
@@ -122,8 +126,7 @@ const deleteIdPMemberships = `-- name: DeleteIdPMemberships :exec
 DELETE FROM group_members WHERE user_id = ? AND source = 'idp'
 `
 
-// Login re-evaluation clears the IdP-sourced rows and re-adds what the claims
-// say now, in one transaction. Admin rows are not touched.
+// Clears every IdP-sourced row of a user. Admin rows are not touched.
 func (q *Queries) DeleteIdPMemberships(ctx context.Context, userID int64) error {
 	_, err := q.db.ExecContext(ctx, deleteIdPMemberships, userID)
 	return err
@@ -424,6 +427,43 @@ func (q *Queries) GroupsForUser(ctx context.Context, userID int64) ([]GroupsForU
 	return items, nil
 }
 
+const idPMembershipsForUser = `-- name: IdPMembershipsForUser :many
+SELECT gm.group_id, g.slug
+FROM group_members gm JOIN groups g ON g.id = gm.group_id
+WHERE gm.user_id = ? AND gm.source = 'idp'
+ORDER BY gm.group_id
+`
+
+type IdPMembershipsForUserRow struct {
+	GroupID int64
+	Slug    string
+}
+
+// The user's IdP-sourced memberships, which sign-in re-evaluation compares
+// with what the claims say now (perm.SyncIdPGroups).
+func (q *Queries) IdPMembershipsForUser(ctx context.Context, userID int64) ([]IdPMembershipsForUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, idPMembershipsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []IdPMembershipsForUserRow
+	for rows.Next() {
+		var i IdPMembershipsForUserRow
+		if err := rows.Scan(&i.GroupID, &i.Slug); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listForums = `-- name: ListForums :many
 SELECT f.id, f.parent_id, f.slug, f.name, f.description, f.position, f.visibility, f.archived, f.created_at, f.updated_at FROM forums AS f
 LEFT JOIN forums AS root ON root.id = f.parent_id
@@ -554,6 +594,24 @@ func (q *Queries) PermissionRows(ctx context.Context, arg PermissionRowsParams) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const removeIdPMembership = `-- name: RemoveIdPMembership :execrows
+DELETE FROM group_members WHERE group_id = ? AND user_id = ? AND source = 'idp'
+`
+
+type RemoveIdPMembershipParams struct {
+	GroupID int64
+	UserID  int64
+}
+
+// Removes one IdP-sourced membership, and never one an admin holds.
+func (q *Queries) RemoveIdPMembership(ctx context.Context, arg RemoveIdPMembershipParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, removeIdPMembership, arg.GroupID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const removeMembership = `-- name: RemoveMembership :exec

@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -739,16 +740,14 @@ func TestASingleStringGroupsClaimIsAccepted(t *testing.T) {
 	}
 }
 
-// TestAnUnmappedGroupGrantsNothing states the rule that authenticating is not
-// authorising.
-//
-// Defaulting an unmapped user into a local group would mean everyone the IdP
-// admits becomes a member of something, which is the opposite of the decision
-// an operator makes by writing a group map at all.
-func TestAnUnmappedGroupGrantsNothing(t *testing.T) {
+// TestTheGroupsClaimIsReadAsAsserted: every value, in order, duplicates
+// included. Mapping them onto local groups is identity.Policy.LocalGroups'
+// (TestPolicyLocalGroups), which applies group_map.
+func TestTheGroupsClaimIsReadAsAsserted(t *testing.T) {
 	f := newFakeIdP(t)
-	f.claims = map[string]any{"groups": []string{"unmapped", "staff", "staff"}}
+	f.claims = map[string]any{"teams": []string{"unmapped", "staff", "staff"}}
 	pc := f.providerConfig("p0")
+	pc.GroupsClaim = "teams"
 	pc.GroupMap = map[string]string{"staff": "moderators"}
 
 	r, err := New(context.Background(), testConfig(pc),
@@ -763,10 +762,8 @@ func TestAnUnmappedGroupGrantsNothing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Verify: %v", err)
 	}
-	got := p.LocalGroups(id)
-	if len(got) != 1 || got[0] != "moderators" {
-		t.Errorf("LocalGroups = %v, want [moderators]: unmapped grants nothing and a "+
-			"duplicate grants once", got)
+	if want := []string{"unmapped", "staff", "staff"}; !slices.Equal(id.Groups, want) {
+		t.Errorf("Groups = %v, want %v", id.Groups, want)
 	}
 }
 

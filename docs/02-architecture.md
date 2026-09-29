@@ -156,7 +156,11 @@ operator should choose knowingly:
   control.
 
 Everything the loader refuses is an error, including a runtime setting
-written into `config.toml`.
+written into `config.toml`, and a provider's `group_map` onto `everyone` or
+`members`, whose membership is implicit and never stored. A `group_map`
+target that names no group is neither: only the database can tell, so
+`serve` logs it at startup and at each sign-in that meets it (05 "Roles and
+groups").
 
 ## Observability
 

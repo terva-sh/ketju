@@ -362,8 +362,21 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	// One evaluator for the process: sign-in promotes through it (bootstrap),
 	// and its cache is the one every request reads.
 	perms := perm.New(d)
+	// A group_map target no group has grants nothing. It is said here, once,
+	// as well as at each sign-in that meets it, because only the database
+	// can tell, so config check cannot (docs/02 "Configuration").
+	policy := identity.PolicyFrom(cfg.OIDC.Providers)
+	unknown, err := policy.UnknownTargets(ctx, d)
+	if err != nil {
+		return fail("checking the providers' group_map", err)
+	}
+	for _, u := range unknown {
+		log.Warn("a provider's group_map names a group that does not exist, so it grants nothing",
+			"provider", u.Provider, "group", u.Slug)
+	}
 	authh := &auth.Handler{Sealer: sealer, Sessions: sessions, HTTPClient: o.idpClient, Logger: log,
-		Login: &identity.Service{DB: d, Sessions: sessions, Logger: log, Bootstrap: cfg.Bootstrap, Perm: perms}}
+		Login: &identity.Service{DB: d, Sessions: sessions, Logger: log, Bootstrap: cfg.Bootstrap, Perm: perms,
+			Policy: policy}}
 	if len(cfg.OIDC.Providers) > 0 {
 		reg, err := oidc.New(ctx, cfg, oidc.Options{Logger: log, HTTPClient: o.idpClient})
 		if err != nil {

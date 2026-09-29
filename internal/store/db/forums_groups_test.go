@@ -236,12 +236,21 @@ func TestGroupMemberSource(t *testing.T) {
 		}); err != nil {
 			return err
 		}
-		for _, g := range []int64{mods, editors} {
-			if err := q.AddIdPMembership(t.Context(), dbq.AddIdPMembershipParams{GroupID: g, UserID: user, AddedAt: 1}); err != nil {
+		for g, want := range map[int64]int64{mods: 0, editors: 1} {
+			n, err := q.AddIdPMembership(t.Context(), dbq.AddIdPMembershipParams{GroupID: g, UserID: user, AddedAt: 1})
+			if err != nil {
 				return err
 			}
+			if n != want {
+				t.Errorf("adding group %d from the IdP inserted %d rows, want %d", g, n, want)
+			}
 		}
-		return nil
+		// Removing an IdP membership never removes one an admin holds.
+		n, err := q.RemoveIdPMembership(t.Context(), dbq.RemoveIdPMembershipParams{GroupID: mods, UserID: user})
+		if err == nil && n != 0 {
+			t.Errorf("RemoveIdPMembership removed %d rows of an admin membership", n)
+		}
+		return err
 	})
 	if got := memberships(); got[mods] != domain.MembershipAdmin || got[editors] != domain.MembershipIdP {
 		t.Fatalf("after first login: %v, want moderators=admin (the IdP did not overwrite it), editors=idp", got)
@@ -252,7 +261,8 @@ func TestGroupMemberSource(t *testing.T) {
 		if err := q.DeleteIdPMemberships(t.Context(), user); err != nil {
 			return err
 		}
-		return q.AddIdPMembership(t.Context(), dbq.AddIdPMembershipParams{GroupID: readers, UserID: user, AddedAt: 2})
+		_, err := q.AddIdPMembership(t.Context(), dbq.AddIdPMembershipParams{GroupID: readers, UserID: user, AddedAt: 2})
+		return err
 	})
 	got := memberships()
 	want := map[int64]string{mods: domain.MembershipAdmin, readers: domain.MembershipIdP}

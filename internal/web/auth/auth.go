@@ -63,6 +63,8 @@ type Login interface {
 	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (identity.Result, error)
 	RegistrationOpen(ctx context.Context) (bool, error)
 	Register(ctx context.Context, c identity.Claims, handle string, meta session.Meta, replaces string) (identity.Result, error)
+	// ClaimsOf is what the registration cookie carries of id.
+	ClaimsOf(id *oidc.Identity) identity.Claims
 }
 
 // Sessions is the part of *session.Store the handlers use.

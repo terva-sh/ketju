@@ -20,8 +20,9 @@ type Querier interface {
 	// count reaches zero. refcount's CHECK refuses going below zero.
 	AddBlobRef(ctx context.Context, hash string) (int64, error)
 	// An IdP mapping never overrides a membership an admin set by hand: if the
-	// row exists already, whatever its source, it is left alone.
-	AddIdPMembership(ctx context.Context, arg AddIdPMembershipParams) error
+	// row exists already, whatever its source, it is left alone. The count is 1
+	// when it inserted, so only a membership the mapping made is audited.
+	AddIdPMembership(ctx context.Context, arg AddIdPMembershipParams) (int64, error)
 	// The only write audit_log has. Rows are never updated or deleted: the
 	// triggers in migration 0006 refuse it, and TestAuditLogAppendOnly refuses a
 	// query here that tries.
@@ -72,8 +73,7 @@ type Querier interface {
 	// Both compare in lower case, as the log scan does, because the hash is
 	// stored lower case and free text may name it in either (review 1157).
 	DeleteCollectableBlob(ctx context.Context, arg DeleteCollectableBlobParams) (int64, error)
-	// Login re-evaluation clears the IdP-sourced rows and re-adds what the claims
-	// say now, in one transaction. Admin rows are not touched.
+	// Clears every IdP-sourced row of a user. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
 	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
@@ -142,6 +142,9 @@ type Querier interface {
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
 	GroupsForUser(ctx context.Context, userID int64) ([]GroupsForUserRow, error)
+	// The user's IdP-sourced memberships, which sign-in re-evaluation compares
+	// with what the claims say now (perm.SyncIdPGroups).
+	IdPMembershipsForUser(ctx context.Context, userID int64) ([]IdPMembershipsForUserRow, error)
 	// IdentityHolder is what a sign-in decides a session on: the user an
 	// identity belongs to, if any, and that user's status. internal/auth/session
 	// reads it in the transaction that inserts the session, so nothing can
@@ -209,6 +212,8 @@ type Querier interface {
 	// RecordIdentityLogin notes a sign-in on the identity: when, and the claims
 	// the IdP asserted this time, which may have changed since the last.
 	RecordIdentityLogin(ctx context.Context, arg RecordIdentityLoginParams) error
+	// Removes one IdP-sourced membership, and never one an admin holds.
+	RemoveIdPMembership(ctx context.Context, arg RemoveIdPMembershipParams) (int64, error)
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
 	// A post's direct replies when its thread is not open (post_meta_reply_to),
 	// in ordinal order as the index would give them. The replies endpoint uses it

@@ -20,6 +20,7 @@ var decisionWrites = map[string]bool{
 	"AddAdminMembership":   true,
 	"AddIdPMembership":     true,
 	"DeleteIdPMemberships": true,
+	"RemoveIdPMembership":  true,
 	"RemoveMembership":     true,
 	"SetForumVisibility":   true,
 	"SetUserRole":          true,

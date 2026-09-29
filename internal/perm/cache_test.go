@@ -79,10 +79,12 @@ func TestWriteInvalidatesImmediately(t *testing.T) {
 					return f.ev.RemoveMember(f.t.Context(), x, v.UserID)
 				}, Deny},
 				{"idp sync adds", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.SyncIdPGroups(f.t.Context(), v.UserID, []int64{x})
+					_, err := f.ev.SyncIdPGroups(f.t.Context(), v.UserID, IdPSync{Slugs: []string{f.slug(x)}})
+					return err
 				}, Allow},
 				{"idp sync removes", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.SyncIdPGroups(f.t.Context(), v.UserID, nil)
+					_, err := f.ev.SyncIdPGroups(f.t.Context(), v.UserID, IdPSync{})
+					return err
 				}, Deny},
 			},
 		},
@@ -196,11 +198,14 @@ func TestEveryMutationInvalidates(t *testing.T) {
 	v := f.viewer(domain.RoleMember)
 	ctx := t.Context()
 	for name, mutate := range map[string]func() error{
-		"Grant":         func() error { return f.ev.Grant(ctx, forum, x, domain.PermRead) },
-		"Revoke":        func() error { return f.ev.Revoke(ctx, forum, x, domain.PermRead) },
-		"AddMember":     func() error { return f.ev.AddMember(ctx, x, v.UserID, 0) },
-		"RemoveMember":  func() error { return f.ev.RemoveMember(ctx, x, v.UserID) },
-		"SyncIdPGroups": func() error { return f.ev.SyncIdPGroups(ctx, v.UserID, []int64{x}) },
+		"Grant":        func() error { return f.ev.Grant(ctx, forum, x, domain.PermRead) },
+		"Revoke":       func() error { return f.ev.Revoke(ctx, forum, x, domain.PermRead) },
+		"AddMember":    func() error { return f.ev.AddMember(ctx, x, v.UserID, 0) },
+		"RemoveMember": func() error { return f.ev.RemoveMember(ctx, x, v.UserID) },
+		"SyncIdPGroups": func() error {
+			_, err := f.ev.SyncIdPGroups(ctx, v.UserID, IdPSync{Slugs: []string{f.slug(x)}})
+			return err
+		},
 		"SetVisibility": func() error { return f.ev.SetVisibility(ctx, forum, domain.VisibilityMembers) },
 		"SetRole":       func() error { return f.ev.SetRole(ctx, v.UserID, domain.RoleModerator) },
 	} {

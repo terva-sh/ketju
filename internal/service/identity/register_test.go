@@ -35,7 +35,7 @@ func registry(t *testing.T) (*Service, *db.DB) {
 	if err := settings.Set(t.Context(), d, settings.RegistrationMode.Name, json.RawMessage(`"open"`), 0, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	return &Service{DB: d, Sessions: &session.Store{DB: d}}, d
+	return &Service{DB: d, Sessions: &session.Store{DB: d}, Perm: perm.New(d)}, d
 }
 
 func claims(subject string) Claims {
@@ -273,7 +273,8 @@ func TestRegisterAppliesTheBootstrap(t *testing.T) {
 // again retries the promotion.
 func TestRegisterWhoseBootstrapFails(t *testing.T) {
 	s, d := registry(t)
-	s.Bootstrap = config.Bootstrap{AdminSubjects: []string{"fake:boss"}} // and no Perm
+	s.Bootstrap = config.Bootstrap{AdminSubjects: []string{"fake:boss"}}
+	s.Perm = nil
 	if _, err := s.Register(t.Context(), claims("boss"), "boss", session.Meta{}, ""); err == nil {
 		t.Fatal("Register succeeded without the promotion the configuration asks for")
 	}

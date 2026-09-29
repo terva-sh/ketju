@@ -73,7 +73,13 @@ type Service struct {
 	// "Principles"). Perm makes the change; it may be nil only when
 	// Bootstrap names nobody.
 	Bootstrap config.Bootstrap
-	Perm      *perm.Evaluator
+	// Perm makes every change a sign-in makes to what a user may do: the
+	// bootstrap promotion, and the IdP group mapping, which runs at every
+	// sign-in. A sign-in fails without it.
+	Perm *perm.Evaluator
+	// Policy is each provider's configuration of a sign-in through it
+	// (PolicyFrom). Nil means no provider maps groups.
+	Policy Policy
 }
 
 func (s *Service) logger() *slog.Logger {
@@ -135,7 +141,7 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: signing in: %w", err)
 	}
-	if err := s.settle(ctx, token, ident.UserID.Int64, id, replaces); err != nil {
+	if err := s.settle(ctx, token, ident.UserID.Int64, id, meta.IP, replaces); err != nil {
 		return Result{}, err
 	}
 
@@ -161,11 +167,13 @@ func (s *Service) Login(ctx context.Context, id *oidc.Identity, viewer domain.Vi
 }
 
 // settle is what a sign-in or a registration does once it has issued token
-// to userID: end the session it replaces, then apply the bootstrap
-// configuration. If either fails, the session just issued is ended too and
-// settle fails, so the browser never comes out holding a new session while
-// its old one still works (review 511).
-func (s *Service) settle(ctx context.Context, token string, userID int64, id *oidc.Identity, replaces string) error {
+// to userID: end the session it replaces, apply the bootstrap
+// configuration, then the provider's group_map. If any of them fails, the
+// session just issued is ended too and settle fails, so the browser never
+// comes out holding a new session while its old one still works
+// (review 511), nor signed in with groups its directory has revoked. ip is
+// the request's address, for the audit rows.
+func (s *Service) settle(ctx context.Context, token string, userID int64, id *oidc.Identity, ip, replaces string) error {
 	// abandon ends the session just issued. The request may be what failed:
 	// cancelled mid-sign-in. So the session is ended on a context of its
 	// own, bounded, and a cancelled request cannot leave it behind
@@ -190,6 +198,35 @@ func (s *Service) settle(ctx context.Context, token string, userID int64, id *oi
 	// again retries it.
 	if _, err := s.ApplyBootstrap(ctx, userID, id); err != nil {
 		return abandon(err)
+	}
+	if err := s.applyGroupMap(ctx, userID, id, ip); err != nil {
+		return abandon(err)
+	}
+	return nil
+}
+
+// applyGroupMap makes userID's IdP-mapped memberships exactly what this
+// sign-in's provider maps from this token (docs/05 "Roles and groups"). It
+// runs at every sign-in, through a provider with a group_map or not: one
+// without asserts no groups, so a directory's revocation cannot be dodged
+// by signing in through another provider (review 1342). A slug the map
+// names and no group has is logged, for the operator to fix.
+func (s *Service) applyGroupMap(ctx context.Context, userID int64, id *oidc.Identity, ip string) error {
+	if s.Perm == nil {
+		return errors.New("identity: no permission evaluator is set, so the sign-in's group mapping cannot run")
+	}
+	ch, err := s.Perm.SyncIdPGroups(ctx, userID, perm.IdPSync{Provider: id.Provider, IP: ip,
+		Slugs: s.Policy.LocalGroups(id.Provider, id.Groups)})
+	if err != nil {
+		return fmt.Errorf("identity: applying group_map: %w", err)
+	}
+	for _, slug := range ch.Unknown {
+		s.logger().WarnContext(ctx, "a sign-in's group_map names a group that does not exist, so it granted nothing",
+			"provider", id.Provider, "group", slug)
+	}
+	if len(ch.Added)+len(ch.Removed) > 0 {
+		s.logger().InfoContext(ctx, "group_map changed a member's groups", "provider", id.Provider, "user", userID,
+			"added", ch.Added, "removed", ch.Removed)
 	}
 	return nil
 }

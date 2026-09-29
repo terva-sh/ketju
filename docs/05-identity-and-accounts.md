@@ -324,6 +324,33 @@ every login and marked `source = 'idp'` so manual memberships, marked
 rows and re-adds what the claims say now, and an IdP mapping never overwrites a
 row an admin set.
 
+**Every sign-in re-evaluates, through whichever provider.** A sign-in makes
+the user's `idp` memberships exactly the groups that this sign-in's provider
+maps from this token. A provider with no `group_map` asserts no groups, and so
+does a token that leaves the claim out, so either removes every `idp`
+membership. A member cannot keep a group their directory revoked by signing
+in through a second provider. With two providers that both map groups, each
+sign-in leaves what that provider's directory asserts now. A claim value the
+map does not name grants nothing, and a map target that names no group grants
+nothing and is logged at warn, at startup and at each sign-in that meets it.
+The implicit `everyone` and `members` groups cannot be targets; `config check`
+refuses them. Registration is the first sign-in, and maps the same way.
+Mapping changes groups and never `users.role`. Only an active user who has
+just been given a session is mapped, and a mapping that fails fails the
+sign-in and ends that session. (TKT-01M29CKRF9, after review 1342.)
+
+**Memberships are re-evaluated only at sign-in.** Nothing re-reads the claims
+during a session, so a group revoked at the IdP stays with the member until
+their next sign-in through any provider. That can be as long as the 90-day
+hard expiry of a session they already hold. An admin who needs it sooner
+removes the membership, or suspends the account, which ends its sessions.
+
+Each membership a sign-in adds or removes writes one `audit_log` row in the
+transaction that changes it: `group.member_added` or `group.member_removed`,
+targeting the user, with no actor, `"via": "group_map"`, and the group, its
+id, `"source": "idp"` and the provider in `details_json`. A sign-in that
+changes nothing writes nothing.
+
 ## Agent accounts
 
 An agent is a full member: `users.kind = 'agent'`, its own handle, its own

@@ -62,6 +62,7 @@ func TestConfigCheckFailsNamingKey(t *testing.T) {
 		{"a bad admin subject", "data_dir = \"d\"\n[bootstrap]\nadmin_subjects = [\"bare\"]\n", nil, "bootstrap.admin_subjects"},
 		{"a bad admin email", "data_dir = \"d\"\n[bootstrap]\nadmin_emails = [\"nobody\"]\n", nil, "bootstrap.admin_emails"},
 		{"a bad variable", "data_dir = \"d\"\n", map[string]string{"KETJU_STORAGE_OPEN_THREADS": "many"}, "storage.open_threads"},
+		{"a group_map onto members", strings.Replace(layered, `"moderators"`, `"members"`, 1), nil, "oidc.providers.club.group_map"},
 		{"malformed TOML", "listen = \":1\"\ndata_dir = \n", nil, "data_dir"},
 		{"malformed TOML in a table", "data_dir = \"d\"\n[storage]\nfsync = group\n", nil, "storage.fsync"},
 	} {

@@ -37,17 +37,24 @@ type Claims struct {
 	EmailVerified     bool   `json:"ev,omitempty"`
 	Name              string `json:"n,omitempty"`
 	PreferredUsername string `json:"u,omitempty"`
+	// Groups are the values of the groups claim that the provider's
+	// group_map names, so the new member's first sign-in maps them as any
+	// later one would. Values the map does not name are dropped: they
+	// could grant nothing, and an IdP that asserts hundreds of groups
+	// would otherwise overflow the cookie that carries these claims.
+	Groups []string `json:"g,omitempty"`
 }
 
 // ClaimsOf is the part of id a registration keeps.
-func ClaimsOf(id *oidc.Identity) Claims {
+func (s *Service) ClaimsOf(id *oidc.Identity) Claims {
 	return Claims{Provider: id.Provider, Issuer: id.Issuer, Subject: id.Subject, Email: id.Email,
-		EmailVerified: id.EmailVerified, Name: id.Name, PreferredUsername: id.PreferredUsername}
+		EmailVerified: id.EmailVerified, Name: id.Name, PreferredUsername: id.PreferredUsername,
+		Groups: s.Policy.mapped(id.Provider, id.Groups)}
 }
 
 func (c Claims) identity() *oidc.Identity {
 	return &oidc.Identity{Provider: c.Provider, Issuer: c.Issuer, Subject: c.Subject, Email: c.Email,
-		EmailVerified: c.EmailVerified, Name: c.Name, PreferredUsername: c.PreferredUsername}
+		EmailVerified: c.EmailVerified, Name: c.Name, PreferredUsername: c.PreferredUsername, Groups: c.Groups}
 }
 
 // RegistrationOpen reports whether someone new may register themselves:
@@ -75,10 +82,10 @@ func (s *Service) RegistrationOpen(ctx context.Context) (bool, error) {
 // account and the other ErrHandleTaken. The write connection serializes the
 // two, and the users table's NOCASE unique index stands behind the read.
 //
-// A config-named admin is promoted right after, as a sign-in would promote
-// them (ApplyBootstrap). If that fails, the session just issued is ended and
-// Register fails, as Login does; the account stands, and signing in again
-// retries the promotion.
+// A config-named admin is promoted right after, and the provider's
+// group_map applied, as a sign-in would do both (settle). If either fails,
+// the session just issued is ended and Register fails, as Login does; the
+// account stands, and signing in again retries them.
 func (s *Service) Register(ctx context.Context, c Claims, handle string, meta session.Meta, replaces string) (Result, error) {
 	h, err := CheckHandle(handle)
 	if err != nil {
@@ -147,7 +154,7 @@ func (s *Service) Register(ctx context.Context, c Claims, handle string, meta se
 	case err != nil:
 		return Result{}, fmt.Errorf("identity: registering: %w", err)
 	}
-	if err := s.settle(ctx, token, userID, c.identity(), replaces); err != nil {
+	if err := s.settle(ctx, token, userID, c.identity(), meta.IP, replaces); err != nil {
 		return Result{}, err
 	}
 	return Result{Outcome: SignedIn, Token: token, Session: sess}, nil

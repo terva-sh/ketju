@@ -50,7 +50,7 @@ func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, id *
 		writePage(w, http.StatusNotImplemented, pageRegistration)
 		return
 	}
-	sealed, err := h.sealRegistration(pending{Claims: identity.ClaimsOf(id), ReturnTo: returnTo})
+	sealed, err := h.sealRegistration(pending{Claims: h.Login.ClaimsOf(id), ReturnTo: returnTo})
 	if errors.Is(err, errRegistrationTooBig) {
 		h.Logger.WarnContext(ctx, "registration refused: the provider's claims do not fit in a cookie",
 			"provider", id.Provider, "error", err)

@@ -7,6 +7,8 @@ import (
 	"os"
 	"strconv"
 	"strings"
+
+	"github.com/terva-sh/ketju/internal/domain"
 )
 
 // validate checks everything that survived decoding, defaults and overrides.
@@ -193,6 +195,11 @@ func validateProviders(c *Config, p *problemList) {
 		for from, to := range pr.GroupMap {
 			if from == "" || to == "" {
 				p.addf(key+".group_map", "maps %q to %q; neither side may be empty", from, to)
+			}
+			// Membership of these is implicit and never stored (a trigger
+			// refuses the row), so a mapping onto one could grant nothing.
+			if to == domain.GroupEveryone || to == domain.GroupMembers {
+				p.addf(key+".group_map", "maps %q to %q, which is implicit; every member is in it already", from, to)
 			}
 		}
 		if pr.GroupsClaim == "" && len(pr.GroupMap) > 0 {

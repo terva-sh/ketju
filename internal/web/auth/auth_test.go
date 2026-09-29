@@ -21,6 +21,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/seal"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/config"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -81,7 +82,7 @@ func newWorld(t *testing.T, configure ...func(*config.Provider)) *world {
 	}
 	w.sealer.Now = func() time.Time { return w.now }
 	w.handler = &Handler{Providers: reg, Sealer: w.sealer, Sessions: w.store, HTTPClient: w.idp.Client(), Logger: log,
-		Login: &identity.Service{DB: d, Sessions: w.store, Logger: log}}
+		Login: &identity.Service{DB: d, Sessions: w.store, Logger: log, Perm: perm.New(d)}}
 	w.srv = web.New(web.Groups{Auth: New(w.handler)}, web.Options{Logger: log, SiteURL: site,
 		Session: session.Middleware(w.store, log), RateLimit: func(h http.Handler) http.Handler { return h }})
 	return w

@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"maps"
+	"slices"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/audit"
@@ -75,21 +77,134 @@ func (e *Evaluator) RemoveMember(ctx context.Context, groupID, userID int64) err
 	})
 }
 
-// SyncIdPGroups replaces userID's IdP-sourced memberships with groupIDs, in
-// one transaction, as login re-evaluation does (TKT-01M29CKRF9). Memberships
-// an admin added are kept.
-func (e *Evaluator) SyncIdPGroups(ctx context.Context, userID int64, groupIDs []int64) error {
-	return e.write(ctx, func(q *dbq.Queries, now int64) error {
-		if err := q.DeleteIdPMemberships(ctx, userID); err != nil {
+// The audit_log actions SyncIdPGroups writes, one row per membership it
+// adds or removes (docs/05 "Roles and groups").
+const (
+	ActionMemberAdded   = "group.member_added"
+	ActionMemberRemoved = "group.member_removed"
+)
+
+// ViaGroupMap is the "via" of SyncIdPGroups' audit rows: no account made
+// the change, the provider's group_map did.
+const ViaGroupMap = "group_map"
+
+// ErrNotActive is SyncIdPGroups' answer for a user who is not active. An
+// IdP mapping applies only to an active user who has just signed in.
+var ErrNotActive = errors.New("perm: the user is not active")
+
+// IdPSync is one sign-in's view of a user's IdP-mapped groups.
+type IdPSync struct {
+	// Provider is the config key of the provider the user signed in with.
+	Provider string
+	// IP is the sign-in request's address, for the audit rows.
+	IP string
+	// Slugs are the local groups the provider's group_map yields from this
+	// sign-in's token. Empty means none, and removes every idp membership.
+	Slugs []string
+}
+
+// Changes is what SyncIdPGroups did, by group slug.
+type Changes struct {
+	Added, Removed []string
+	// Unknown are slugs no group has. They were skipped.
+	Unknown []string
+}
+
+// SyncIdPGroups makes userID's IdP-sourced memberships exactly the groups
+// s.Slugs names, as every sign-in does (TKT-01M29CKRF9, docs/05 "Roles and
+// groups"). A membership an admin added is never changed or removed, and a
+// slug naming the implicit everyone or members group, or no group at all,
+// is skipped: a claim never creates a group.
+//
+// Each membership it adds or removes writes one audit row, in the same
+// transaction, so the change and its record commit together or not at all.
+// A sync that changes nothing writes nothing. A user who is not active gets
+// ErrNotActive and no change.
+func (e *Evaluator) SyncIdPGroups(ctx context.Context, userID int64, s IdPSync) (Changes, error) {
+	var ch Changes
+	err := e.write(ctx, func(q *dbq.Queries, now int64) error {
+		ch = Changes{}
+		u, err := q.GetUser(ctx, userID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNoUser
+		}
+		if err != nil {
 			return err
 		}
-		for _, g := range groupIDs {
-			if err := q.AddIdPMembership(ctx, dbq.AddIdPMembershipParams{GroupID: g, UserID: userID, AddedAt: now}); err != nil {
+		if u.Status != domain.StatusActive {
+			return fmt.Errorf("%w (%s)", ErrNotActive, u.Status)
+		}
+
+		want := map[int64]string{}
+		seen := map[string]bool{}
+		for _, slug := range s.Slugs {
+			if seen[slug] || slug == domain.GroupEveryone || slug == domain.GroupMembers {
+				continue
+			}
+			seen[slug] = true
+			g, err := q.GetGroupBySlug(ctx, slug)
+			if errors.Is(err, sql.ErrNoRows) {
+				ch.Unknown = append(ch.Unknown, slug)
+				continue
+			}
+			if err != nil {
 				return err
 			}
+			want[g.ID] = g.Slug
+		}
+		have, err := q.IdPMembershipsForUser(ctx, userID)
+		if err != nil {
+			return err
+		}
+
+		record := func(action string, groupID int64, slug string) error {
+			_, err := audit.Append(ctx, q, time.UnixMilli(now), audit.By{IP: s.IP, Via: ViaGroupMap}, action,
+				audit.User(userID), map[string]any{"group": slug, "group_id": groupID, "source": domain.MembershipIdP,
+					"provider": s.Provider})
+			return err
+		}
+		held := make(map[int64]bool, len(have))
+		for _, m := range have {
+			held[m.GroupID] = true
+			if _, ok := want[m.GroupID]; ok {
+				continue
+			}
+			n, err := q.RemoveIdPMembership(ctx, dbq.RemoveIdPMembershipParams{GroupID: m.GroupID, UserID: userID})
+			if err != nil {
+				return err
+			}
+			if n == 0 {
+				continue
+			}
+			if err := record(ActionMemberRemoved, m.GroupID, m.Slug); err != nil {
+				return err
+			}
+			ch.Removed = append(ch.Removed, m.Slug)
+		}
+		for _, id := range slices.Sorted(maps.Keys(want)) {
+			if held[id] {
+				continue
+			}
+			n, err := q.AddIdPMembership(ctx, dbq.AddIdPMembershipParams{GroupID: id, UserID: userID, AddedAt: now})
+			if err != nil {
+				return err
+			}
+			// 0: the user is in the group already on an admin's
+			// authority, which the mapping neither changes nor records.
+			if n == 0 {
+				continue
+			}
+			if err := record(ActionMemberAdded, id, want[id]); err != nil {
+				return err
+			}
+			ch.Added = append(ch.Added, want[id])
 		}
 		return nil
 	})
+	if err != nil {
+		return Changes{}, err
+	}
+	return ch, nil
 }
 
 // SetVisibility changes a forum's visibility.

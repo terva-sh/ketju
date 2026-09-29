@@ -42,16 +42,28 @@ SET source = 'admin', added_by = excluded.added_by, added_at = excluded.added_at
 WHERE group_members.source = 'idp';
 
 -- An IdP mapping never overrides a membership an admin set by hand: if the
--- row exists already, whatever its source, it is left alone.
--- name: AddIdPMembership :exec
+-- row exists already, whatever its source, it is left alone. The count is 1
+-- when it inserted, so only a membership the mapping made is audited.
+-- name: AddIdPMembership :execrows
 INSERT INTO group_members (group_id, user_id, source, added_by, added_at)
 VALUES (?, ?, 'idp', NULL, ?)
 ON CONFLICT (group_id, user_id) DO NOTHING;
 
--- Login re-evaluation clears the IdP-sourced rows and re-adds what the claims
--- say now, in one transaction. Admin rows are not touched.
+-- Clears every IdP-sourced row of a user. Admin rows are not touched.
 -- name: DeleteIdPMemberships :exec
 DELETE FROM group_members WHERE user_id = ? AND source = 'idp';
+
+-- The user's IdP-sourced memberships, which sign-in re-evaluation compares
+-- with what the claims say now (perm.SyncIdPGroups).
+-- name: IdPMembershipsForUser :many
+SELECT gm.group_id, g.slug
+FROM group_members gm JOIN groups g ON g.id = gm.group_id
+WHERE gm.user_id = ? AND gm.source = 'idp'
+ORDER BY gm.group_id;
+
+-- Removes one IdP-sourced membership, and never one an admin holds.
+-- name: RemoveIdPMembership :execrows
+DELETE FROM group_members WHERE group_id = ? AND user_id = ? AND source = 'idp';
 
 -- name: GroupsForUser :many
 SELECT group_id, source FROM group_members WHERE user_id = ? ORDER BY group_id;

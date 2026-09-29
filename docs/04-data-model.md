@@ -342,6 +342,11 @@ transaction that projects the record, with the frame's timestamp as `at`.
 | `setting` | the setting's key, such as `registration.mode` |
 <!-- audit-targets:end -->
 
+- `action` names what was done, such as `user.promoted` or
+  `setting.changed`. The IdP group mapping writes `group.member_added` and
+  `group.member_removed` against the user, one row per membership a sign-in
+  changes (05 "Roles and groups").
+
 ### notifications
 ```
 id, user_id, kind, thread_id, ordinal, actor_id, at, read_at, application_id

@@ -631,30 +631,6 @@ func (p *Provider) groupsClaim() string {
 	return "groups"
 }
 
-// LocalGroups maps an identity's IdP groups onto local group names through the
-// configured group_map.
-//
-// An unmapped group yields nothing rather than a default. Authenticating
-// establishes who someone is and says nothing about what this forum meant to
-// grant them, and an operator who writes a group map has already expressed that
-// distinction by writing one.
-func (p *Provider) LocalGroups(id *Identity) []string {
-	if id == nil || len(p.cfg.GroupMap) == 0 {
-		return nil
-	}
-	seen := map[string]bool{}
-	var out []string
-	for _, g := range id.Groups {
-		local, ok := p.cfg.GroupMap[g]
-		if !ok || local == "" || seen[local] {
-			continue
-		}
-		seen[local] = true
-		out = append(out, local)
-	}
-	return out
-}
-
 // EmailAllowed applies the provider's allowed_email_domains gate.
 //
 // An unset list allows everything, which is what an operator who did not write

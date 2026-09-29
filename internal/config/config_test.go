@@ -276,6 +276,22 @@ func TestProviderProblemsAreRefusedByName(t *testing.T) {
 	}
 }
 
+// TestGroupMapRefusesImplicitGroups: everyone and members hold every member
+// implicitly and never as a row, so a group_map onto either is a problem,
+// named by the provider's group_map key. Another target is not.
+func TestGroupMapRefusesImplicitGroups(t *testing.T) {
+	t.Parallel()
+	provider := minimal + "\nsite_url = \"https://x.example\"\n[[oidc.providers]]\nkey = \"club\"\nname = \"Club\"\n" +
+		"issuer = \"https://idp.example\"\nclient_id = \"c\"\nclient_secret = \"s\"\ngroups_claim = \"groups\"\n"
+	for _, target := range []string{"everyone", "members"} {
+		e := loadErr(t, write(t, provider+"group_map = { staff = \"moderators\", all = \""+target+"\" }\n"), env(nil))
+		if !hasKey(e, "oidc.providers.club.group_map") || !strings.Contains(e.Error(), "implicit") {
+			t.Errorf("a group_map onto %s: problems %v", target, e)
+		}
+	}
+	mustLoad(t, write(t, provider+"group_map = { staff = \"moderators\", \"members\" = \"editors\" }\n"), env(nil))
+}
+
 // TestAnIssuerIsKeptExactlyAsWritten: whether an issuer ends in a slash is the
 // provider's choice, not ours. Authentik's per-application issuer ends in one
 // and Google's does not, and discovery compares the configured issuer with the
