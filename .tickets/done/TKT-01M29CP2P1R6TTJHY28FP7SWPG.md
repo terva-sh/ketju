@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T22:15:05Z
+updated_at: 2026-09-29T22:29:36Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -116,6 +116,10 @@ Gaps settled in building (internals and presentation only; none changes what the
 - **Save stays disabled until the draft has changed** as well as passed its preview, so an unchanged draft cannot write a duplicate version.
 - **The reader total grows by 6 B** (45330 to 45336 B gzip). The admin chunk now imports `kinds` and `fieldMessage` from the apply chunk, which adds two names to its export list. No editor code is in a reader chunk. The alternative, copying the words table into the admin chunk, would be a second copy of messages.ts.
 - **e2e seed: an admin, `ada`** (cmd/ketju e2e.go, e2e/session.setup.ts). admin-forms.spec.ts saves the starting fields back at the end of each run, so apply.spec.ts finds the form's content unchanged, at a higher version number.
+
+**agent:claude-code/phase2-run-p2p1** at 2026-09-29T22:29:36Z
+
+Terva review 1490 (PR #168, head ed68932d6d712c224fced4afd8f8afe78fbe6086, base 796641c8b93abe9ab84f17b8131789b853f59b91, run 1057): three findings, all fixed in 2acc1a1. (1) medium 'Undone edits can still create a new version': Save now also needs the draft's schema to differ from the active one (draft.ts sameSchema, property order ignored). (2) medium 'A failed preview request is treated as a refused schema': only validation-failed is a refusal; any other failure says the preview could not be made and offers 'Try the preview again', which resends the unchanged draft at once. (3) low 'Preview answers survive a saved or discarded draft': reseeding clears the preview's answers. Each fix has a test, and a mutation of each is caught.
 
 ## Summary
 
