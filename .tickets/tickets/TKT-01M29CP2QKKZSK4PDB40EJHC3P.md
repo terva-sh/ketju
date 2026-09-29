@@ -18,6 +18,7 @@ dependencies:
   - TKT-01M29CKRFSDCGKH605X8Y4RT3C
   - TKT-01M3NRYCP5BSA717S1HANWY1AA
   - TKT-01M29CXK1X0EF4CPPN11KVGC2Z
+  - TKT-01M29CRJ5J9XMJZ30FMZX4D473
 blocks_on: none
 references:
   - ref: design:moderation-primitives
@@ -25,12 +26,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T07:18:13Z
+updated_at: 2026-09-29T22:06:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
