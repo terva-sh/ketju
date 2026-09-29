@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NRX2NN2RB8C37HP4WBTEG5
 title: Build the admin applications review screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -22,15 +22,22 @@ dependencies:
   - TKT-01M3NRYCP5BSA717S1HANWY1AA
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-nrx2nn
+  branch: run/nrx2nn-admin-applications
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ace01020aa1186ede
+  commit: 855ca5d40bb5ff7aa92f17e6d50bf70484b996ca
+  session: null
+  claimed_at: 2026-09-29T21:01:03Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T15:28:10Z
+updated_at: 2026-09-29T21:01:04Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-nrx2nn
   name: ""
 extensions: {}
 ---
