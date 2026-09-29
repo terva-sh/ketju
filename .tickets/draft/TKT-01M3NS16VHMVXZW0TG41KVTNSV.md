@@ -22,7 +22,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-29T07:20:28Z
+updated_at: 2026-09-29T14:44:31Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -57,6 +57,7 @@ No ticket builds the screen. Found while planning TKT-01M3K9XBJA.
 - [ ] forbidden, conflict (archived), validation-failed, payload-too-large and rate-limited from the draft save or the create are said in words, keep the typed text, and disable Post where retrying cannot succeed (NewThreadScreen.test.tsx)
 - [ ] On a phone the screen hides the tab bar through ShellContext.composing and carries Post in the top bar (Shell.test.tsx)
 - [ ] The dist is regenerated with go generate ./internal/web/spa and committed
+- [ ] An archived forum's notice never disables Post before the API has answered, so an admin can start a thread in an archived forum from the screen (NewThreadScreen.test.tsx)
 
 ## Implementation plan
 
@@ -83,7 +84,7 @@ Engineering decisions taken here, with the alternative that lost:
 - **Autosave through `state/drafts.ts`** from TKT-01M3NS1931 (Autosave reply drafts from the composer), with the key `new:<forum>` and the snapshot `{title, source}`. This ticket depends on it. Its rules hold here too: a 1500 ms debounce, a loaded draft never overwrites typed text, blank title and body mean `DELETE`, and requests for one draft keep their order.
 - **On a phone the screen is the sheet.** The page itself is the full-screen column the sheet uses (`.composer.in-sheet`), with Post in the top bar. `ShellContext` gains `composing: true`, which hides the tab bar the way `reply` does. Lost: opening `ComposerSheet` as a dialog over an empty page, since there is no page under it to return to; Back leaves the route.
 - **Not lazy.** The screen is small and reuses the composer already in the main chunk; the budget counts a lazy chunk anyway (`bundle.mjs`).
-- **A refusal is shown when the API gives it.** There is no `can_create_thread` flag to read beforehand. An archived forum is known up front when `/forums` is held (`peekGet`), and the screen says so before anything is typed. Otherwise the first draft save or the Post answers `forbidden` or `conflict`, the screen shows it, turns autosave off and disables Post, and keeps the text so it can be copied. Filing a capability flag on the thread list lost for now: it changes a cached projection answer to save one refusal.
+- **The API decides who may post; the client only warns.** There is no `can_create_thread` flag to read beforehand. When `/forums` is held (`peekGet`) and the forum is archived, the screen shows a notice before anything is typed: "This forum is archived. Only admins can start threads here." It does **not** disable Post on that basis, because admins may post in an archived forum (docs/04, docs/08) and the rule belongs to the server. Post is disabled only after the API itself has answered `forbidden` or `conflict` to a draft save or to the Post. Then the screen shows the refusal, turns autosave off, and keeps the text so it can be copied. Terva review 1372 (PR #143, head 6d6aeea) found that the first version disabled Post for an admin too. Two alternatives lost: disabling up front for every viewer whose role is not admin, which copies a server rule into the client and goes stale when TKT-01M3N24RHD changes it; and filing a capability flag on the thread list, which changes a cached projection answer to save one refusal.
 - **The client deletes the draft after creating the thread**, as for replies (docs/07 "Drafts": `DELETE` is safe to retry). Lost: deleting it inside the create transaction, which changes TKT-01M29CA9B9's create path for no gain the retry does not give.
 
 ### Approach
@@ -106,7 +107,7 @@ Engineering decisions taken here, with the alternative that lost:
 
 - `composer/ComposerBody.test.tsx`: the preview sends `thread_id` only when given. `Composer.test.tsx` and `ComposerSheet.test.tsx` pass unchanged.
 - `state/newThread.test.ts`: a loaded draft fills an empty form with title and body and not a typed one; `createThread` posts once on a double click, drops the draft, and clears the form; a refusal keeps the text.
-- `screens/NewThreadScreen.test.tsx`: Post is off with a blank title or body; each refusal's words; an archived forum held in `/forums` shows its notice before typing and disables Post; a `forbidden` draft save turns autosave off and disables Post; success routes to the thread; the title input and the textarea are labelled.
+- `screens/NewThreadScreen.test.tsx`: Post is off with a blank title or body; each refusal's words; an archived forum held in `/forums` shows its notice before typing and leaves Post enabled, for a member and for an admin; an admin's Post in an archived forum is sent and its 201 routes to the thread; a `conflict` answer then disables Post for a member; a `forbidden` draft save turns autosave off and disables Post; success routes to the thread; the title input and the textarea are labelled.
 - `shell/Shell.test.tsx`: `composing` hides the tab bar at 390 px.
 - `e2e/new-thread.spec.ts` at 390 px and 1440 px: alice opens `/f/general/new` from the thread list, types a title and body, waits for "Draft saved"; a second context from `stateFile('alice')` finds both; posting lands on `/t/{id}/{slug}` with post 1 shown, and `GET /api/v1/forums/general/draft` is 204. Axe reports no violations on the screen, and the page has no horizontal scroll. The spec deletes the draft before it starts.
 - `npm run budget` passes.

@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-29T07:17:27Z
+updated_at: 2026-09-29T14:45:25Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -42,7 +42,7 @@ Found while planning TKT-01M3NRP3W9 in Phase 2 grooming (TKT-01M3M9RR26).
 ### What to build
 
 - On the admin user detail from TKT-01M29CXK1X, for an admin only: a "Change handle" field and a confirm button, through `screens/admin/common/` (TKT-01M3NRYCP5).
-- The answer's field errors attach to the field: `invalid`, `reserved`, `taken`, `same`. A `conflict` for an anonymized account says it cannot be renamed.
+- The answer's field errors attach to the field, with the meanings TKT-01M3NRP3W9 fixes: `invalid` (not a valid handle), `reserved` (a route name or the `deleted-user-` prefix), `taken` (held by someone in any case, or released by a rename within the last 90 days), and `same` (the current handle). The words for `taken` say it may have been released recently. There is no separate code for a released handle. A `conflict` for an anonymized account says it cannot be renamed.
 - The screen says that the old handle is reserved for 90 days and redirects to the new one.
 - After success the detail reloads under the new handle, and the address is replaced with it.
 - Everything stays under `screens/admin/`, so `TestTheAdminBundleIsSeparate` passes. Rebuild the dist with `go generate ./internal/web/spa`.
@@ -50,6 +50,6 @@ Found while planning TKT-01M3NRP3W9 in Phase 2 grooming (TKT-01M3M9RR26).
 ## Acceptance criteria
 
 - [ ] An admin can rename a member from the admin user detail through POST /api/v1/admin/users/{handle}/rename, and a moderator sees no rename control (AdminUserRename.test.tsx)
-- [ ] invalid, reserved, taken and same attach to the handle field, and an anonymized account's conflict is said in words
 - [ ] After a rename the detail shows the new handle and the address is replaced with it
 - [ ] The control lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, and the dist is regenerated with go generate ./internal/web/spa and committed
+- [ ] invalid, reserved, taken and same attach to the handle field with TKT-01M3NRP3W9's meanings, a released handle shows as taken, and an anonymized account's conflict is said in words (AdminUserRename.test.tsx)

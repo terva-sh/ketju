@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:02:34Z
-updated_at: 2026-09-29T07:17:37Z
+updated_at: 2026-09-29T14:45:15Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -91,7 +91,13 @@ Engineering decisions taken here, with the alternative that lost:
 - **The redirect names the user id, not the new handle.** A chain alice → bob → carol sends both old handles to carol with no rewrite. Lost: storing the new handle, which is stale after a second rename.
 - **The cooldown is a column, `users.handle_changed_at`**, written only by a member's own rename. Lost: reading `audit_log` details (couples behaviour to an operational record's JSON), and `MAX(released_at)` (counts admin renames and loses rows to anonymization).
 - **Readings of the settled text, not new rules.** "A member may change their own handle once every 30 days" counts the member's own changes, so an admin rename neither waits for nor starts the member's cooldown. "Not reserved" applies to everyone, so a member cannot take back their own old handle inside the 90 days, and neither can an admin for them. A note on this ticket flags the second for the maintainer; it is not an open decision, because the literal rule is buildable and safe.
-- **A released handle answers "taken", not "reserved"**, from `HandleFree` (`ErrHandleTaken`). A registrant cannot probe which handles were released recently, and the auto_approve reason line says "taken".
+- **A released handle answers "taken", not "reserved"**, from `HandleFree` (`ErrHandleTaken`). A registrant cannot probe which handles were released recently, and the auto_approve reason line says "taken". The field codes therefore have one meaning each, on the rename routes, in registration and in every control that shows them (TKT-01M3P0CYR3):
+  - `invalid`: `domain.ValidateHandle` refuses it.
+  - `reserved`: `CheckHandle` refuses it as a route name (`admin`, `api`, …) or as the `deleted-user-` prefix (`ErrHandleReserved`). It never means a released handle.
+  - `taken`: `HandleFree` refuses it, because a user holds it in any case or a release still reserves it.
+  - `same`: it is the account's current handle.
+
+  Terva review 1372 (PR #143, head 6d6aeea) found the first version implied a released handle could answer `reserved`. Lost: a separate `released` code, which would tell a stranger which handles were given up in the last 90 days.
 - **Only a member is redirected.** Anonymous `GET /api/v1/users/{old}` stays `unauthenticated`, and anonymous `/u/{old}` gets the shell, as for any profile. A redirect to a pending account is `not-found` except to staff. Following the profile rule keeps a stranger from learning who renamed to what.
 - **The redirect covers `/posts` too**, keeping the query string (the cursor names no account): `/u/{old}/posts` and `/api/v1/users/{old}/posts`. docs/07 lists the two paths together.
 - **Rename lives in `internal/service/identity/rename.go`**, beside `CheckHandle` and `HandleFree`, because identity owns the handle rules. Lost: `perm` (a rename changes no permission decision) and TKT-01M29CKRFS's `internal/service/account` (status transitions; the handle rules would be split across two packages).
@@ -120,7 +126,7 @@ Engineering decisions taken here, with the alternative that lost:
    - `RenameUser :execrows`: `UPDATE users SET handle = ?, handle_changed_at = COALESCE(?, handle_changed_at), updated_at = ? WHERE id = ? AND handle = ?` plus `AND anonymized = 0` once TKT-01M29CKRFS's column exists (it is a dependency). The old handle in the WHERE makes two concurrent renames produce one.
 3. **One check** (`internal/service/identity/handle.go`): `HandleFree(ctx, q, h, now) error` returns `ErrHandleTaken` when a user holds `h` in any case or `HandleReserved` is true. `Register`, `AutoRegister` (TKT-01M29CKRE9) and `Rename` call it. If TKT-01M29CP2MG has landed, its `Approve` step 4 switches from `GetUserByHandle` to `HandleFree` in this PR; if not, its plan already requires the reservation check and it calls `HandleFree` when it lands.
 4. **Rename** (`internal/service/identity/rename.go`): `(*Service).Rename(ctx, v domain.Viewer, target string, to string, byAdmin bool) (dto.HandleChange, error)`. `v` must be a member (`member.Require`); a self-rename targets `v`'s own row, an admin rename the row `target` names (not-found otherwise). In one `db.Write`:
-   1. `CheckHandle(to)`: an invalid or reserved handle is a field error (`validation-failed`, `errors[handle]` `invalid` or `reserved`, TKT-01M29CP2KE's extension).
+   1. `CheckHandle(to)`: an invalid handle, or a route name or the `deleted-user-` prefix, is a field error (`validation-failed`, `errors[handle]` `invalid` or `reserved`, TKT-01M29CP2KE's extension).
    2. `GetUser`. Anonymized (the column; `domain.Anonymized(handle)` until it exists) is `conflict`. The same handle is `validation-failed` `errors[handle] = same`.
    3. For a self-rename, `handle_changed_at + 30 days > now` is `conflict` with `available_at`.
    4. `HandleFree(to)`: taken is `conflict`, `errors[handle] = taken`.
@@ -146,7 +152,7 @@ Engineering decisions taken here, with the alternative that lost:
 
 - `internal/service/identity/rename_test.go`:
   - `TestRenameCooldown`: a second self-rename inside 30 days is `conflict` with `available_at` = first + 30 days; at that instant it succeeds. An admin rename inside the window succeeds and leaves `handle_changed_at` unchanged.
-  - `TestRenameChecksTheHandle`: invalid, reserved (`admin`), taken in another case, and released within 90 days are each refused with their field code; the same handle is `same`.
+  - `TestRenameChecksTheHandle`: invalid is `invalid`; `admin` and `deleted-user-9` are `reserved`; a handle held in another case is `taken`; a handle released within 90 days is `taken` and never `reserved`; the current handle is `same`.
   - `TestReleasedHandleIsTakenEverywhere`: after a rename, `Register`, `AutoRegister` (TKT-01M29CKRE9) and `Rename` by another member all get `ErrHandleTaken` for the old handle, and `Approve` too when TKT-01M29CP2MG has landed. With the clock 90 days and 1 ms later, `Register` succeeds.
   - `TestRenameIsOneTransaction`: a `BEFORE INSERT ON audit_log` trigger that fails leaves the handle, `handle_changed_at` and `handle_releases` as they were.
   - `TestRenameWritesOneAuditRow`: `user.renamed`, `target_type` user, the actor (member or admin), and `{from, to}`.

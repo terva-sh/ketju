@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-29T07:19:32Z
+updated_at: 2026-09-29T14:45:01Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -49,8 +49,9 @@ No ticket covers the client half. Found while planning TKT-01M3K9XBJA (Autosave 
 - [ ] A loaded draft fills only an empty composer with no reply target and no post in flight, and loading sends no PUT (state/composer.test.ts)
 - [ ] Saves are debounced to one PUT per 1500 ms pause, nothing is sent unchanged, a blank composer is a DELETE, and requests for one draft reach the server in order (state/drafts.test.ts)
 - [ ] A successful post deletes the draft and cancels any pending save, and afterwards GET /api/v1/drafts/{id} is 204 (state/drafts.test.ts, e2e/drafts.spec.ts)
-- [ ] A forbidden or conflict answer turns autosave off for that thread, and pending saves are flushed with keepalive on pagehide (state/drafts.test.ts)
 - [ ] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
+- [ ] A forbidden or conflict answer turns autosave off for that thread (state/drafts.test.ts)
+- [ ] On pagehide the save starts inside the handler when no request for that draft is in flight; with one in flight no second request starts, and the snapshot kept in localStorage is sent on the next load when it is newer than the server draft (state/drafts.test.ts)
 
 ## Implementation plan
 
@@ -74,7 +75,13 @@ What exists there:
 Engineering decisions taken here, with the alternative that lost:
 - **One autosave module for both kinds of draft**, `state/drafts.ts`, keyed `reply:<thread>` or `new:<forum>`. TKT-01M3NS16VH (Build the new-thread screen with draft autosave) reuses it for the forum draft, and depends on this ticket. Lost: autosave inside `Composer.tsx`, which the new-thread screen would copy, and which stops when the phone's sheet unmounts.
 - **Saves are driven by the state, not the textarea.** A signals `effect` on each composer's `source` and `replyTo` schedules the save, so a quote, a reply chip, a discard and typing are all saved the same way. Lost: calls from each handler, where the next handler added would forget one.
-- **Debounce of 1500 ms**, and a flush on `pagehide` with `keepalive`. The preview already spends one write-limiter token per 400 ms pause (2 per second, burst 60, `internal/web/ratelimit.go`), and saving on each preview would double that. A source over 64 KiB is not sent on `pagehide`, because browsers refuse larger `keepalive` bodies; the debounced save has already sent it.
+- **Debounce of 1500 ms.** The preview already spends one write-limiter token per 400 ms pause (2 per second, burst 60, `internal/web/ratelimit.go`), and saving on each preview would double that.
+- **Leaving the page never waits on a promise, and never sends two requests for one draft at once** (Terva review 1372, PR #143, head 6d6aeea: a flush queued behind an in-flight `PUT` may never start before the page is torn down). Three rules together:
+  1. Every draft request is sent with `keepalive: true` when its body is under 64 KiB, the browser's `keepalive` limit, so a request already in flight survives the unload.
+  2. On `pagehide`, for each draft whose snapshot differs from the last one sent, the handler runs synchronously. If no request for that draft is in flight, it calls `fetch` with `keepalive` at once, inside the handler.
+  3. If one is in flight, sending a second could overtake it, because the server gives two requests for one draft no order, and the older text would win. So the handler writes the unsent snapshot to `localStorage` under `ketju.draft.<handle>.<key>` instead, with the time. The handle is the owner `composerFor` already uses, since `/me` carries no user id. The next `loadReplyDraft` for that key in this browser compares it with the server draft's `updated_at`. When the local copy is newer, it fills the composer from it, sends it through the queue, and removes it. A source of 64 KiB or more takes the same path. Signing out and an owner change clear every `ketju.draft.*` entry, so the next person to use the browser never sees it.
+
+  What is lost is bounded: the last edit made while a save was in flight reaches another device only after this browser next opens the thread. Lost: waiting on the chain in `pagehide`, the flaw the review found; aborting the in-flight request and sending the final one, since an abort does not unsend a body the server may still apply after the newer one; and a client revision the server compares, which changes the drafts API (TKT-01M29CA9CE, done) and its schema for a window of about 1.5 s.
 - **A loaded draft never overwrites what the reader typed.** It fills the composer only if the source is empty, no reply target is set, and no post is in flight. Otherwise the local text wins and is saved over the server copy on its next save.
 - **Empty means delete.** When the source is blank and there is no reply target, the save is a `DELETE`.
 - **The draft is loaded by the thread page, not by the composer**, when `viewer.can_reply` is true, once per thread per session. The reply bar then shows it on a phone before the sheet ever opens. Lost: putting the draft into the thread response's viewer block, which would save a request but change the thread endpoint's contract and its goldens.
@@ -88,7 +95,7 @@ Engineering decisions taken here, with the alternative that lost:
    - Per key: the last saved snapshot, a timer, a `status` signal (`idle | saving | saved | failed | off`), and one promise chain, so a `PUT` in flight is always followed, never overtaken, by a later `PUT` or `DELETE`.
    - `watch(key, read: () => Snapshot)`: the `effect` that schedules a save `draftDelay` (1500) ms after the snapshot last changed. It sends nothing when the snapshot equals the last saved one.
    - `drop(key)`: cancels the timer, marks the empty snapshot as saved, and queues a `DELETE`.
-   - `flushAll({ keepalive: true })` on `pagehide`, registered once.
+   - Each key records whether a request is in flight. `unload()` on `pagehide`, registered once, applies the three rules above synchronously. It starts at most one `keepalive` fetch per key and awaits nothing. `restoreLocal(key, serverUpdatedAt)` is the load-time half.
    - Refusals: `forbidden`, `conflict` (a locked or archived thread), `not-found` and `unauthenticated` turn autosave off for the key; `rate-limited` waits for `Retry-After`; anything else is `failed` and the next change retries.
    - `resetDrafts()` for tests. An owner change in `composerFor` calls it, so one person's pending save never goes out under the next person's session.
 3. `state/composer.ts`:
@@ -110,7 +117,10 @@ Engineering decisions taken here, with the alternative that lost:
   - `a post deletes and cancels the pending save`: a change, then a successful `postReply` before the delay ends, sends one `DELETE` and no `PUT`.
   - `requests keep their order`: a slow `PUT` then a `DELETE` reach the server in that order.
   - `a refusal turns autosave off` for 403 and 409, and `rate-limited waits for Retry-After`.
-  - `pagehide flushes with keepalive`, and skips a source over 64 KiB.
+  - `pagehide starts the save inside the handler`: with nothing in flight, `fetch` is called with `keepalive` before the handler returns, with no microtask in between.
+  - `pagehide never overtakes an in-flight save`: with a `PUT` in flight, no second request starts. The snapshot goes to `localStorage`, and a later `loadReplyDraft` with an older server `updated_at` fills the composer from it, sends it, and clears it. With a newer server draft, the local copy is discarded.
+  - `a source of 64 KiB or more is kept locally on pagehide`.
+  - `signing out clears local drafts`.
   - `an owner change drops pending saves`.
 - `state/composer.test.ts` (new): `loadReplyDraft` fills an empty composer with source and reply target; it does not overwrite typed text or a chip; a 204 changes nothing; loading sends no `PUT`.
 - `composer/Composer.test.tsx`: the status line.
