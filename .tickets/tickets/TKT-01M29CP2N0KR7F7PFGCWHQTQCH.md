@@ -33,7 +33,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T23:14:08Z
+updated_at: 2026-09-29T23:15:37Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -59,10 +59,11 @@ In-app only. docs/10 keeps SMTP out of v1, which means an applicant learns the d
 
 ## Implementation plan
 
-Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a.
+Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a. Revised 2026-09-30 at claim, against main at 3297255.
 
 What exists there:
-- `notifications` exists (migration 0005) with the kinds `new_application` and `application_decided`. TKT-01M29CKRDQ adds `application_id`.
+- `notifications` has the kinds `new_application` and `application_decided` (migration 0005), and `application_id` (migration 0011). The triggers `notifications_application_kind` and `notifications_application_kind_update` already require `application_id` for exactly the two application kinds, and `TestApplicationNotificationsNameTheApplication` holds them. So this ticket needs no migration and takes no migration number.
+- `internal/service/applications` has `Submit` and `Withdraw` (apply.go, TKT-01M29CP2KZ) and `Approve`, `Deny` and `Unblock` (review.go, TKT-01M29CP2MG). Each is one `DB.Write` transaction.
 - Nothing writes a notification yet. The post notification generator is Phase 3's TKT-01M29CRJ2T, and the list screen is Phase 3's TKT-01M29CTY86.
 - `GET /me`'s `notifications` counts unread rows (`MeCounts` in `internal/store/db/queries/viewer_state.sql`), and the shell's Alerts badge shows it in both layouts (TKT-01M29CEE4K).
 
@@ -73,36 +74,39 @@ What exists there:
 - **An applicant learns the decision by returning to the status page** (this ticket's description). The status page is TKT-01M29CP2KZ's `GET /apply/status`, which reads the application row, so it shows both outcomes.
 - **Recipients are active users with role `moderator` or `admin`.** docs/05 step 3 writes "everyone in `moderators`+`admins`", which names the system groups, while review is gated on the role (docs/08 "Primitives", docs/07 "Moderation and admin"), and docs/04 says the role "implies nothing about the `moderators` group". A member of the `moderators` group without the role cannot open `/admin/applications`, so notifying them sends them to a 403. Settled on the role, the predicate that gates the work. docs/05 step 3 is corrected in this ticket's PR.
 - **The rows are written in the transaction that causes them**: the submission, the decision, or the withdrawal. The event bus lost because it carries post appends, whose catch-up replays thread logs. A database-only event lost between commit and publish would never be replayed.
+- **Maintainer decision 2026-09-29 (TKT-01M3Q2V25E), superseding the third item above for an approved applicant.** An approved applicant's pre-user session retires at approval, so they do not learn the decision on the status page. They learn it by signing in: the member session shows the `application_decided` row, written as their new user. A denied applicant sees the status only (maintainer decision 2026-09-29 on TKT-01M29CP2MG), on `GET /apply/status`, with no note.
 
 Engineering decisions taken here, with the alternative that lost:
 - **A denied applicant gets no `notifications` row.** They have no `users` row, and `notifications.user_id` is NOT NULL, so the status page is their whole notification. An approved applicant gets an `application_decided` row as their new user, which they see in Alerts after signing in.
 - **Closing an application never touches `read_at`; the unread count leaves out `new_application` rows whose application is no longer pending** (review 1364). `read_at` means that a recipient read the notification. Deciding or withdrawing an application is not that, so writing `read_at` then would record a read that never happened. The count in `MeCounts`, which `GET /me`'s `notifications` and so the Alerts badge read, counts a `new_application` row only while its application is pending. Two alternatives lost. Marking the rows read at decision time, as the first plan did, falsifies the read state. Leaving the count alone would let the badge count decided applications forever, because nothing can mark them read until Phase 3's list exists. Deleting the rows lost too, because the Phase 3 list should still show that an application arrived.
 - **The rows are written by `internal/service/notify`** (docs/02 lists `service/notify/`), as functions taking a `*dbq.Queries`, so each caller runs them in its own transaction. TKT-01M29CRJ2T's post generator joins the same package later.
+- **No migration.** The database already enforces `application_id` for the two kinds (migration 0011's triggers). A CHECK constraint would need a table rebuild and adds nothing the triggers do not.
 
 ### Approach
 
 1. `internal/store/db/queries/notifications.sql`, regenerated into dbq:
    - `NotifyStaffOfApplication`: `INSERT INTO notifications (user_id, kind, application_id, at) SELECT id, 'new_application', ?, ? FROM users WHERE status = 'active' AND role IN ('moderator', 'admin')`, one statement.
    - `NotifyApplicationDecided`: one row with kind application_decided, the user_id, application_id and actor_id.
-   - `MeCounts` (in `viewer_state.sql`): its `notifications` subquery becomes a count of unread rows `LEFT JOIN applications AS a ON a.id = notifications.application_id`, keeping a row when `notifications.kind <> 'new_application' OR a.status = 'pending'`. The `notifications_application` index from TKT-01M29CKRDQ and the primary key of `applications` keep the join cheap. `mecounts_plan_test.go` is extended so the plan still uses `notifications_user` and reads no table in full.
+   - `MeCounts` (in `viewer_state.sql`): its `notifications` subquery becomes a count of unread rows `LEFT JOIN applications AS a ON a.id = notifications.application_id`, keeping a row when `notifications.kind <> 'new_application' OR a.status = 'pending'`. The `notifications_user` index and the primary key of `applications` keep the join cheap. `TestMeCountsScansNoTable` already fails on a SCAN of any table not on its list, so it holds the new plan.
 2. `internal/service/notify/applications.go`: `NewApplication(ctx, q, appID, now)`, and `ApplicationDecided(ctx, q, userID, appID, actorID, now)`. There is no settle function: closing an application writes nothing to `notifications`.
 3. The calls, added inside the existing transactions:
-   - `applications.Submit` (TKT-01M29CP2KZ) calls `NewApplication`.
-   - `applications.Approve` (TKT-01M29CP2MG) calls `ApplicationDecided` for the new user, with the moderator as actor.
-   - `applications.Deny` and `applications.Withdraw` write no notification.
-4. No client change is needed for the badge. The Alerts badge already reads `GET /me`'s `notifications`. The admin screen's in-app-only statement is TKT-01M3NRX2NN's.
-5. docs/05 step 3: recipients by role, and the rows are written in the submitting transaction. docs/04 "notifications": the `application_id` use, and that a `new_application` row counts as unread only while its application is pending, with `read_at` left alone.
+   - `applications.Submit` calls `NewApplication` after `InsertApplication`.
+   - `applications.Approve` calls `ApplicationDecided` for the new user, with the moderator as actor, before the audit row.
+   - `applications.Deny`, `applications.Withdraw` and `applications.Unblock` write no notification.
+4. No client change is needed for the badge. The Alerts badge already reads `GET /me`'s `notifications`. The admin screen's in-app-only statement is TKT-01M3NRX2NN's. `internal/web/spa/dist` is not touched.
+5. docs/05 step 3: recipients by role, and the rows are written in the submitting transaction. docs/05 step 5: approve's "notifies applicant" means the `application_decided` row for the new user. docs/04 "notifications": the writers, and that a `new_application` row counts as unread only while its application is pending, with `read_at` left alone.
 
 ### Tests
 
-- `internal/service/notify/applications_test.go` and `internal/service/applications`:
-  - `TestEveryStaffMemberIsNotified`: the users are an admin, a moderator, a member, a suspended moderator, an agent moderator, and a `moderators`-group member without the role. A submission writes exactly one `new_application` row each for the admin, the moderator and the agent moderator, all naming the application, and no row for anyone else.
-  - `TestNotificationFailureFailsTheSubmission`: a test trigger refusing the insert leaves no application row.
-  - `TestClosedApplicationLeavesTheCount`: after approve, deny, or withdraw, every recipient's `new_application` row still has read_at NULL, and a moderator's `GET /me` `notifications` drops back by one. Another pending application still counts. A `reply_to_you` row with no application still counts. A row the moderator marked read stays read.
-  - `TestApprovedApplicantIsNotified`: one `application_decided` row for the new user, with actor set to the moderator and the application_id. After signing in, the user's `GET /me` `notifications` is 1.
-  - `TestDeniedApplicantSeesTheStatus`: `GET /apply/status` answers denied with decided_at, and no `application_decided` row exists.
-- `internal/web/api/me_test.go`: `TestNewApplicationCountsInMe` shows a moderator's count rises by one per submission.
-- `TestNoMailIsSent`: a scan of non-test Go under `internal/` and `cmd/` fails on an import of `net/smtp`.
+- `internal/service/notify/applications_test.go`:
+  - `TestEveryStaffMemberIsNotified`: the users are an admin, a moderator, a member, a suspended moderator, an agent moderator, and a `moderators`-group member without the role. `NewApplication` writes exactly one `new_application` row each for the admin, the moderator and the agent moderator, all naming the application, and no row for anyone else.
+  - `TestNoMailIsSent`: a scan of non-test Go under `internal/` and `cmd/` fails on an import of `net/smtp`.
+- `internal/service/applications`:
+  - `TestSubmitNotifiesStaff`: a submission through `Submit` writes the rows in its transaction; a test trigger refusing the notification insert leaves no application row.
+  - `TestClosedApplicationLeavesTheCount`: after approve, deny, or withdraw, every recipient's `new_application` row still has read_at NULL, and a moderator's `MeCounts` `notifications` drops back by one. Another pending application still counts. A `reply_to_you` row with no application still counts. A row the moderator marked read stays read and is not counted.
+  - `TestApprovedApplicantIsNotified`: one `application_decided` row for the new user, with actor set to the moderator and the application_id; a trigger refusing it rolls the approval back. After signing in, the user's `GET /me` count is 1 (through `MeCounts`).
+  - `TestDeniedApplicantSeesTheStatus`: `Status` answers denied with decided_at, and no `application_decided` row exists.
+- `internal/web/api`: `TestNewApplicationCountsInMe` shows a moderator's `GET /me` `notifications` rises by one per submission through `POST /api/v1/apply`, and falls when one is denied.
 
 ### Out of scope
 
