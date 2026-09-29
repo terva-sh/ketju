@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M29CP2KZPR0880MGFV3CPXR4
 title: Implement application submit, status, and withdraw
 type: task
-status: ready
-status_reason: null
+status: blocked
+status_reason: "Terva reviews 1425 and 1427 on PR #154 raise a medium session-contract finding: after approval GET /apply/status cannot answer approved, because LookupSession and session.Middleware retire the pre-user cookie. Fixing it is a security/product decision; see TKT-01M3Q2V25E"
 priority: high
 due_on: null
 labels:
@@ -19,19 +19,29 @@ dependencies:
   - TKT-01M29CKRG9XYJS4HM1VY1QSJ1V
   - TKT-01M29CKRDQHB528ZW1FFBN4SA1
   - TKT-01M29CP2KEEB60VEVBPY9H2GBD
+  - TKT-01M3Q2V25EXKYCTJZ24PM8RP7T
 blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
-claim: null
+  - ref: pr:154
+    path: null
+claim:
+  actor: agent:claude-code/phase2-run-cp2kz
+  branch: run/cp2kz-block
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a03bb477c04f0b009
+  commit: 3eab1e9f08455cf00d271b59a5e0f298a1eaf0da
+  session: null
+  claimed_at: 2026-09-29T17:28:33Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T07:18:13Z
+updated_at: 2026-09-29T17:29:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-cp2kz
   name: ""
 extensions: {}
 ---
@@ -148,3 +158,17 @@ Engineering decisions taken here, with the alternative that lost:
 - The screens: TKT-01M29CP2NG.
 - Lifting a block: TKT-01M29CP2MG (maintainer decision 2026-09-29). After an unblock, this ticket's rules apply unchanged.
 - The per-agent bucket: TKT-01M29P9RSW, which reuses `KeyedLimit`.
+
+## Notes
+
+**agent:claude-code/phase2-run-cp2kz** at 2026-09-29T17:28:59Z
+
+Blocked, with the work in PR #154 (branch run/cp2kz-apply, head 66b9669596826b4a00a667f8b9c48d6cd5fd1ae6, base 3eab1e9f08455cf00d271b59a5e0f298a1eaf0da), which is left open for a person. That branch carries the implementation, the revised plan with Settled in grooming unchanged, the notes, AC1 to AC7 and AC9 ticked, and the summary. CI and the reviews ran on it.
+
+Terva review 1425 (on 8a976a5) raised two findings that are now fixed on 66b9669: the viewer is checked before the body is read, and an empty chunked withdraw body is accepted. Review 1427 (run 1f2a0e17-9635-4b20-91a2-5a8fc0866f61, on 66b9669) confirms both are resolved. Both reviews raise the same medium finding, "Approved applicants cannot retrieve their approved status": AC8's GET /apply/status cannot answer approved to the applicant's session after approval. The finding is about the session contract. Under docs/13 it must be fixed or the ticket blocked, never answered by argument. It cannot be fixed in scope. LookupSession stops resolving a pre-user session whose identity has a user (TKT-01M29CKRG9, docs/05 step 1), and session.Middleware clears any cookie that does not resolve, so the applicant's first request after approval deletes the cookie. Reaching "approved" would mean changing both, and TKT-01M29CKRG9's merged design contradicts TKT-01M29CP2MG's settled grooming on exactly this point. That choice is a security and product decision (docs/12 "Gaps the design leaves open", "When a ticket cannot proceed").
+
+TKT-01M3Q2V25E (Decide what an approved applicant sees once their pre-user session ends) lays out the two choices. If the maintainer keeps the merged behaviour and rewords AC8, PR #154 can be rebased onto main (this ticket file will conflict: take the PR's done/ copy) and merged after a fresh review. If the maintainer chooses the retired-session route, that is a new security change, made in TKT-01M3Q2V25E or a successor.
+
+**agent:claude-code/phase2-run-cp2kz** at 2026-09-29T17:29:03Z
+
+in-progress to blocked: Terva reviews 1425 and 1427 on PR #154 raise a medium session-contract finding: after approval GET /apply/status cannot answer approved, because LookupSession and session.Middleware retire the pre-user cookie. Fixing it is a security/product decision; see TKT-01M3Q2V25E
