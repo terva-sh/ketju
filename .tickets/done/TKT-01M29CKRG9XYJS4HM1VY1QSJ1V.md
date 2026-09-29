@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:approval-mode
     path: docs/05-identity-and-accounts.md
+  - ref: pr:149
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T15:44:52Z
+updated_at: 2026-09-29T15:48:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
