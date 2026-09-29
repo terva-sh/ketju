@@ -77,27 +77,33 @@ func within(createdMS int64, now time.Time, d time.Duration) bool {
 // authorize says whether v may act on the post e describes, in a thread v has
 // already been admitted to as a, at now.
 //
-// This is the seam the moderation tickets extend. TKT-01M29CKRHS added the
-// author windows; a moderator's reach over every post is TKT-01M29CRJ5J.
-// For now only the post's author may act.
+// A viewer who may moderate the thread's forum may edit, delete or restore
+// any post, their own or anyone's, bound by no window and without needing
+// reply there (TKT-01M29CRJ5J; docs/08; the windows' exemption was settled
+// in grooming for TKT-01M29CKRHS). The moderate permission is the grant. What
+// makes a moderator's edit of somebody else's words acceptable is that it is
+// visible: the record's actor, the post's marker and its history name it.
 //
-// A post a moderator hid is not its author's to touch: the author did not
-// ask for it to go (docs/08, "hidden-by-mod"), and a Restore clears the flag,
-// which is a moderator's decision. Nothing sets the flag in this build, so
-// this is a guard for when something does.
-//
-// Editing also needs reply in the forum, since an edit writes new words
-// there as a post does. Deleting and restoring one's own post do not.
+// Everyone else may act only on their own post, and not on one a moderator
+// hid: the author did not ask for it to go (docs/08 "Restoring a
+// moderator's delete"), and a Restore clears the flag, which is a
+// moderator's decision. Editing also needs reply in the forum, since an edit
+// writes new words there as a post does. Deleting and restoring one's own
+// post do not.
 //
 // Last, the windows, measured from the post's creation (revision 1): an
 // edit within posts.edit_window_seconds, a delete or a restore of one's own
-// delete within posts.delete_window_seconds (docs/08 "Restoring a
-// moderator's delete"). A viewer who may moderate the forum is bound by
-// neither (docs/08, settled in grooming for TKT-01M29CKRHS).
+// delete within posts.delete_window_seconds.
+//
+// The archived and locked refusals are the callers', since they depend on
+// the thread rather than on the post.
 func authorize(a access, e threadlog.IndexEntry, action postAction, now time.Time, w windows) error {
+	if a.canModerate {
+		return nil
+	}
 	if e.Author != uint64(a.viewer.UserID) {
 		return problem.Coded(problem.CodeForbidden,
-			fmt.Errorf("threads: only its author may %s a post", action))
+			fmt.Errorf("threads: only its author or a moderator may %s a post", action))
 	}
 	if e.Flags.Has(threadlog.EntryHiddenByMod) {
 		return problem.Coded(problem.CodeForbidden,
@@ -106,9 +112,6 @@ func authorize(a access, e threadlog.IndexEntry, action postAction, now time.Tim
 	if action == actionEdit && !a.canReply {
 		return problem.Coded(problem.CodeForbidden,
 			fmt.Errorf("threads: this viewer may not write in this thread's forum"))
-	}
-	if a.canModerate {
-		return nil
 	}
 	switch action {
 	case actionEdit:
@@ -150,41 +153,41 @@ func isGrace(v domain.Viewer, e threadlog.IndexEntry, now time.Time, w windows) 
 // the actor refuses it, so a Delete that lands between the checks here and
 // the append cannot be silently undone by the edit. The window, the grace
 // decision and the record's time all read one clock reading.
+//
+// A moderator's edit of somebody else's post is an Edit whose actor is the
+// moderator; the post keeps its author (TKT-01M29CRJ5J). It is never a grace
+// edit, and it is projected before the answer, so its audit row exists when
+// the handler replies.
 func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, req EditRequest) (dto.CreatedPost, error) {
-	var out dto.CreatedPost
 	if err := s.MayWrite(v); err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 	a, err := s.access(ctx, v, id)
 	if err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 	if err := checkPost(req.Source, nil); err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 	flags, err := s.authorFlags(ctx, v)
 	if err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 	w, err := s.authorWindows(ctx)
 	if err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 
-	err = s.Threads.With(id, func(th *threadcache.Thread) error {
-		e, err := th.Index.Entry(ordinal)
-		if err != nil {
-			return err
-		}
+	return s.changePost(ctx, id, ordinal, a, func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error) {
 		now := s.now()
 		if err := authorize(a, e, actionEdit, now, w); err != nil {
-			return err
+			return threadlog.Append{}, err
 		}
 		switch {
 		case th.Archived():
-			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
 		case a.row.Locked != 0 && !a.canModerate:
-			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is locked", id))
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is locked", id))
 		}
 		var replyTo *uint32
 		if e.ReplyTo != 0 {
@@ -192,7 +195,7 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 		}
 		r, err := s.renderSource(ctx, th, req.Source, replyTo)
 		if err != nil {
-			return err
+			return threadlog.Append{}, err
 		}
 		pb := postBody(req.Source, r)
 		grace := isGrace(v, e, now, w)
@@ -200,7 +203,7 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 		if grace {
 			refuse |= threadlog.EntryEdited
 		}
-		if _, err := s.Writer.Append(th, threadlog.Append{
+		return threadlog.Append{
 			Type: threadlog.TypeEdit, Flags: flags, Author: uint64(v.UserID), Ordinal: ordinal,
 			Body: &threadlog.EditBody{
 				Source: req.Source, Reason: req.Reason,
@@ -213,81 +216,149 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 			},
 			TimeMS: now.UnixMilli(),
 			Refuse: refuse,
-		}); err != nil {
-			return err
-		}
-		out, err = s.readBack(ctx, th, id, ordinal, a)
-		return err
+		}, nil
 	})
-	return out, err
 }
 
 // Delete is DELETE /threads/{id}/posts/{ordinal} (docs/07): a Delete record,
 // after which the post is a tombstone to everyone but a moderator. The
 // post's bytes stay in the log (docs/03, "Deletion is soft").
 //
+// A moderator's delete of somebody else's post writes by_moderator, which
+// hides the post (hidden-by-mod) rather than deleting it, so that only a
+// moderator may restore it (docs/08 "Restoring a moderator's delete",
+// TKT-01M29CRJ5J). A moderator's delete of their own post is an ordinary
+// delete.
+//
 // Deleting a post that is already gone is conflict and appends nothing.
 func (s *Service) Delete(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, reason string) (dto.CreatedPost, error) {
-	return s.setDeleted(ctx, v, id, ordinal, actionDelete, threadlog.Append{
-		Type: threadlog.TypeDelete, Body: &threadlog.DeleteBody{Reason: reason},
-		Refuse: gone,
+	return s.setDeleted(ctx, v, id, ordinal, actionDelete, func(e threadlog.IndexEntry, _ access) threadlog.Append {
+		return threadlog.Append{
+			Type:   threadlog.TypeDelete,
+			Body:   &threadlog.DeleteBody{Reason: reason, ByModerator: e.Author != uint64(v.UserID)},
+			Refuse: gone,
+		}
 	})
 }
 
 // Restore is POST /threads/{id}/posts/{ordinal}/restore (docs/07): a Restore
 // record, after which the post reads at its current revision again.
 //
-// Restoring a post that is not deleted, or one that was moved, is conflict
-// and appends nothing.
+// A moderator restores a post that is deleted or hidden by a moderator. An
+// author restores only their own delete. authorize refuses the author a
+// hidden post, and the append checks it again against the post as it
+// stands when the record is written: it needs the deleted flag, and it
+// refuses hidden-by-mod as well, so a post carrying both bits, which a
+// record appended without the service's preconditions could leave, is still
+// only a moderator's to restore, since a Restore clears both.
+//
+// Restoring a post that is not deleted or hidden, or one that was moved, is
+// conflict and appends nothing.
 func (s *Service) Restore(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, reason string) (dto.CreatedPost, error) {
-	return s.setDeleted(ctx, v, id, ordinal, actionRestore, threadlog.Append{
-		Type: threadlog.TypeRestore, Body: &threadlog.RestoreBody{Reason: reason},
-		Require: threadlog.EntryDeleted, Refuse: threadlog.EntryMoved,
+	return s.setDeleted(ctx, v, id, ordinal, actionRestore, func(_ threadlog.IndexEntry, a access) threadlog.Append {
+		return restoreRecord(a.canModerate, reason)
 	})
 }
 
-// setDeleted is Delete and Restore: the same checks, then rec appended with
-// the viewer as its actor. Archived threads are read-only to everyone; a
-// lock does not stop an author taking their own post down or putting it
-// back, since docs/08's lock refuses posts and edits.
-func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, action postAction, rec threadlog.Append) (dto.CreatedPost, error) {
-	var out dto.CreatedPost
+// restoreRecord is the Restore a viewer appends, with its preconditions: a
+// moderator's takes a post that is deleted or hidden, and anyone else's
+// takes only a deleted one and refuses a hidden one.
+func restoreRecord(moderator bool, reason string) threadlog.Append {
+	rec := threadlog.Append{Type: threadlog.TypeRestore, Body: &threadlog.RestoreBody{Reason: reason}}
+	if moderator {
+		rec.RequireAny, rec.Refuse = threadlog.EntryDeleted|threadlog.EntryHiddenByMod, threadlog.EntryMoved
+	} else {
+		rec.Require, rec.Refuse = threadlog.EntryDeleted, threadlog.EntryHiddenByMod|threadlog.EntryMoved
+	}
+	return rec
+}
+
+// setDeleted is Delete and Restore: the same checks, then the record build
+// makes for the post's entry, appended with the viewer as its actor.
+// Archived threads are read-only to everyone; a lock does not stop an author
+// taking their own post down or putting it back, since docs/08's lock
+// refuses posts and edits.
+func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, action postAction,
+	build func(e threadlog.IndexEntry, a access) threadlog.Append) (dto.CreatedPost, error) {
 	if err := s.MayWrite(v); err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 	a, err := s.access(ctx, v, id)
 	if err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 	flags, err := s.authorFlags(ctx, v)
 	if err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 	w, err := s.authorWindows(ctx)
 	if err != nil {
-		return out, err
+		return dto.CreatedPost{}, err
 	}
 
-	err = s.Threads.With(id, func(th *threadcache.Thread) error {
+	return s.changePost(ctx, id, ordinal, a, func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error) {
+		now := s.now()
+		if err := authorize(a, e, action, now, w); err != nil {
+			return threadlog.Append{}, err
+		}
+		if th.Archived() {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+		}
+		rec := build(e, a)
+		rec.Flags, rec.Author, rec.Ordinal, rec.TimeMS = flags, uint64(v.UserID), ordinal, now.UnixMilli()
+		return rec, nil
+	})
+}
+
+// changePost appends the record build makes for post ordinal of thread id,
+// from the post's entry as the open thread holds it, and answers with the
+// post as a's viewer now reads it.
+//
+// The answer is read back straight after the append, in the same call on
+// the open thread, before anything else is done (Terva review 1486 on PR
+// #165), so it is the snapshot readBack describes. A record whose actor is
+// not the post's author, which only a moderator may append, is then
+// projected before the answer, as appendEvent projects, so the audit row the
+// projection writer writes for it exists when the handler replies
+// (TKT-01M29CRJ5J). The projection reads the log, not the answer, so it
+// changes nothing the answer says. An author's own record writes no row and
+// keeps the asynchronous path.
+func (s *Service) changePost(ctx context.Context, id threadid.ID, ordinal uint32, a access,
+	build func(th *threadcache.Thread, e threadlog.IndexEntry) (threadlog.Append, error)) (dto.CreatedPost, error) {
+	var (
+		out      dto.CreatedPost
+		res      threadlog.Result
+		appended bool
+		project  bool
+	)
+	err := s.Threads.With(id, func(th *threadcache.Thread) error {
 		e, err := th.Index.Entry(ordinal)
 		if err != nil {
 			return err
 		}
-		now := s.now()
-		if err := authorize(a, e, action, now, w); err != nil {
+		rec, err := build(th, e)
+		if err != nil {
 			return err
 		}
-		if th.Archived() {
-			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
-		}
-		rec.Flags, rec.Author, rec.Ordinal, rec.TimeMS = flags, uint64(v.UserID), ordinal, now.UnixMilli()
-		if _, err := s.Writer.Append(th, rec); err != nil {
+		project = rec.Author != e.Author
+		if res, err = s.Writer.Append(th, rec); err != nil {
 			return err
 		}
+		appended = true
 		out, err = s.readBack(ctx, th, id, ordinal, a)
 		return err
 	})
-	return out, err
+	// A durable record is projected even when the read-back failed, so its
+	// row does not wait on the bus for a request that answers an error.
+	if appended && project {
+		if perr := s.projectNow(ctx, id, res.LogLength); perr != nil && err == nil {
+			err = perr
+		}
+	}
+	if err != nil {
+		return dto.CreatedPost{}, err
+	}
+	return out, nil
 }
 
 // readBack answers a write with the post as the viewer now reads it, from

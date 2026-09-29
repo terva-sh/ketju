@@ -767,47 +767,66 @@ func TestTheGroupsClaimIsReadAsAsserted(t *testing.T) {
 	}
 }
 
-func TestTheEmailDomainGate(t *testing.T) {
+// TestGate is the allowed_email_domains gate, applied to the token as the
+// IdP signed it, so email_verified is read as Verify reads it
+// (TKT-01M29CKRE9 AC2). Each row gives exactly one result.
+func TestGate(t *testing.T) {
 	f := newFakeIdP(t)
-	pc := f.providerConfig("p0")
-	pc.AllowedEmailDomains = []string{"Example.COM", "example.org"}
+	gated := f.providerConfig("p0")
+	gated.AllowedEmailDomains = []string{"Example.COM", "example.org"}
 
-	r, err := New(context.Background(), testConfig(pc),
+	r, err := New(context.Background(), testConfig(gated),
 		Options{Logger: discard(), HTTPClient: clientFor(f)})
 	if err != nil {
 		t.Fatalf("New: %v", err)
 	}
 	t.Cleanup(func() { _ = r.Close() })
-	p, _ := r.Lookup("p0")
+	g, _ := r.Lookup("p0")
+	// The same IdP with no list: an operator who did not write a gate did
+	// not mean to have one, and nothing requires email_verified.
+	o, _ := newRegistry(t, Options{Logger: discard()}, f).Lookup("p0")
 
 	cases := []struct {
-		email string
-		want  bool
+		name   string
+		p      *Provider
+		claims map[string]any
+		want   GateResult
 	}{
-		{"drew@example.com", true},
-		{"drew@EXAMPLE.com", true},
-		{"drew@example.org", true},
-		{"drew@evil.example", false},
-		{"drew@sub.example.com", false},
+		{"no list, no email", o, map[string]any{}, GateOK},
+		{"no list, unverified, another domain", o, map[string]any{"email": "drew@evil.example", "email_verified": false}, GateOK},
+		{"no list, verified", o, map[string]any{"email": "drew@example.com", "email_verified": true}, GateOK},
+
+		{"matching and verified", g, map[string]any{"email": "drew@example.com", "email_verified": true}, GateOK},
+		{"the list's other domain", g, map[string]any{"email": "drew@example.org", "email_verified": true}, GateOK},
+		{"matching in another case", g, map[string]any{"email": "drew@EXAMPLE.com", "email_verified": true}, GateOK},
+		{"verified as the string true", g, map[string]any{"email": "drew@example.com", "email_verified": "true"}, GateOK},
+
+		{"matching, email_verified false", g, map[string]any{"email": "drew@example.com", "email_verified": false}, GateUnverified},
+		{"matching, email_verified absent", g, map[string]any{"email": "drew@example.com"}, GateUnverified},
+		{"matching, email_verified the string false", g, map[string]any{"email": "drew@example.com", "email_verified": "false"}, GateUnverified},
+		{"matching, email_verified the string True", g, map[string]any{"email": "drew@example.com", "email_verified": "True"}, GateUnverified},
+		{"matching, email_verified 1", g, map[string]any{"email": "drew@example.com", "email_verified": 1}, GateUnverified},
+		{"matching, email_verified null", g, map[string]any{"email": "drew@example.com", "email_verified": nil}, GateUnverified},
+		{"another domain, unverified", g, map[string]any{"email": "drew@evil.example"}, GateUnverified},
+
+		{"another domain, verified", g, map[string]any{"email": "drew@evil.example", "email_verified": true}, GateDomain},
+		{"a subdomain, verified", g, map[string]any{"email": "drew@sub.example.com", "email_verified": true}, GateDomain},
+		{"the domain as a prefix, verified", g, map[string]any{"email": "drew@example.com.evil.example", "email_verified": true}, GateDomain},
 		// A gate on a value that is absent is not a gate.
-		{"", false},
-		{"drew", false},
-		{"drew@", false},
+		{"no email, verified", g, map[string]any{"email_verified": true}, GateDomain},
+		{"no domain, verified", g, map[string]any{"email": "drew", "email_verified": true}, GateDomain},
+		{"an empty domain, verified", g, map[string]any{"email": "drew@", "email_verified": true}, GateDomain},
 	}
 	for _, c := range cases {
-		if got := p.EmailAllowed(c.email); got != c.want {
-			t.Errorf("EmailAllowed(%q) = %v, want %v", c.email, got, c.want)
-		}
-	}
-}
-
-func TestNoDomainListAllowsEveryone(t *testing.T) {
-	f := newFakeIdP(t)
-	r := newRegistry(t, Options{Logger: discard()}, f)
-	p, _ := r.Lookup("p0")
-	if !p.EmailAllowed("anyone@anywhere.example") {
-		t.Error("an unset allowed_email_domains refused someone; an operator who did not " +
-			"write a gate did not mean to have one")
+		t.Run(c.name, func(t *testing.T) {
+			id, err := c.p.Verify(context.Background(), f.mintWith(t, f.signWithKey(), f.tokenKeyID(), c.claims), "")
+			if err != nil {
+				t.Fatalf("Verify: %v", err)
+			}
+			if got := c.p.Gate(id); got != c.want {
+				t.Errorf("Gate = %v, want %v", got, c.want)
+			}
+		})
 	}
 }
 

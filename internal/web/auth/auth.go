@@ -62,8 +62,12 @@ type Providers interface {
 // screen use.
 type Login interface {
 	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, meta session.Meta, replaces string) (identity.Result, error)
-	RegistrationOpen(ctx context.Context) (bool, error)
+	// RegistrationOpenFor is whether someone new from provider may register
+	// rather than apply; AutoApproves whether they skip the handle screen.
+	RegistrationOpenFor(ctx context.Context, provider string) (bool, error)
+	AutoApproves(provider string) bool
 	Register(ctx context.Context, c identity.Claims, handle string, meta session.Meta, replaces string) (identity.Result, error)
+	AutoRegister(ctx context.Context, c identity.Claims, meta session.Meta, replaces string) (identity.Result, identity.SkipReason, error)
 	// ClaimsOf is what the registration cookie carries of id.
 	ClaimsOf(id *oidc.Identity) identity.Claims
 	BeginApplication(ctx context.Context, c identity.Claims, meta session.Meta, replaces string) (identity.Result, error)
@@ -199,8 +203,16 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		fail("the provider's answer did not verify", err)
 		return
 	}
-	if !p.EmailAllowed(id.Email) {
-		h.Logger.InfoContext(ctx, "sign-in refused by allowed_email_domains", "provider", key)
+	// The gate runs before anything is looked up or written, so it holds
+	// for a returning member as for someone new.
+	switch g := p.Gate(id); g {
+	case oidc.GateOK:
+	case oidc.GateUnverified:
+		h.Logger.InfoContext(ctx, "sign-in refused by allowed_email_domains", "provider", key, "reason", g.String())
+		writePage(w, http.StatusForbidden, pageUnverified)
+		return
+	default:
+		h.Logger.InfoContext(ctx, "sign-in refused by allowed_email_domains", "provider", key, "reason", g.String())
 		writePage(w, http.StatusForbidden, pageNotAllowed)
 		return
 	}
@@ -226,7 +238,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 		h.Logger.InfoContext(ctx, "sign-in refused: the account is not active", "provider", key, "status", res.Status)
 		h.unavailable(w, r, res, id, f.ReturnTo)
 	case identity.Register:
-		h.beginRegistration(w, r, p, id, f.ReturnTo)
+		h.beginRegistration(w, r, id, f.ReturnTo)
 	case identity.Link:
 		writePage(w, http.StatusNotImplemented, pageLinking)
 	case identity.Applicant:

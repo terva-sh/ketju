@@ -71,6 +71,8 @@ export interface Post {
   author: Author;
   created_at: Millis;
   edited_at: Millis | null;
+  // The current revision is a moderator's edit; names nobody.
+  edited_by_moderator: boolean;
   reply_to: number | null;
   reply_to_suppressed: boolean;
   reply_count: number;

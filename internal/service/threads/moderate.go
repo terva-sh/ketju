@@ -164,8 +164,10 @@ func (s *Service) moderate(ctx context.Context, v domain.Viewer, id threadid.ID,
 // record and its row are projected together.
 //
 // The moderation tickets that write thread records share it: rename and move
-// (TKT-01M29CKRH9), a moderator's delete and restore (TKT-01M29CRJ5J), and
-// the flag auto-hide (TKT-01M29CP2PJ).
+// (TKT-01M29CKRH9) and the flag auto-hide (TKT-01M29CP2PJ). A moderator's
+// edit, delete and restore of another's post (TKT-01M29CRJ5J) append through
+// changePost, which reads the answer back first, and project through
+// projectNow as this does.
 func (s *Service) appendEvent(ctx context.Context, id threadid.ID,
 	build func(th *threadcache.Thread) (threadlog.Append, error)) (threadlog.Result, error) {
 	var res threadlog.Result
@@ -180,12 +182,20 @@ func (s *Service) appendEvent(ctx context.Context, id threadid.ID,
 	if err != nil {
 		return res, err
 	}
-	if s.Project != nil {
-		if err := s.Project(ctx, id, res.LogLength); err != nil {
-			return res, fmt.Errorf("threads: projecting %s after a moderation record: %w", id, err)
-		}
+	return res, s.projectNow(ctx, id, res.LogLength)
+}
+
+// projectNow projects thread id up to n through Project, synchronously, for
+// a moderation record whose audit row must exist when the request answers.
+// No Project is no synchronous projection, as in a service built without one.
+func (s *Service) projectNow(ctx context.Context, id threadid.ID, n int64) error {
+	if s.Project == nil {
+		return nil
 	}
-	return res, nil
+	if err := s.Project(ctx, id, n); err != nil {
+		return fmt.Errorf("threads: projecting %s after a moderation record: %w", id, err)
+	}
+	return nil
 }
 
 // threadHeader is thread id's header as its page now serves it to v: the

@@ -11,6 +11,7 @@
     },
     "created_at": 1757500300000,
     "edited_at": null,
+    "edited_by_moderator": false,
     "reply_to": 61,
     "reply_to_suppressed": true,
     "reply_count": 0,

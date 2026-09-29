@@ -208,10 +208,12 @@ func TestDeleteAndRestorePost(t *testing.T) {
 	}
 }
 
-// TestChangePostRefusals: who may act, and on what. Only the author, and
-// not a moderator yet (TKT-01M29CRJ5J); a member only to edit what they may
-// reply to; a locked thread refuses a member's edit but not their delete; an
-// archived one refuses everything. Every refusal leaves the log alone.
+// TestChangePostRefusals: who may act, and on what. Only the author or a
+// moderator (TKT-01M29CRJ5J, whose own tests are in modposts_test.go); a
+// member only to edit what they may reply to; a locked thread refuses a
+// member's edit but not their delete, and nothing of a moderator's; an
+// archived one refuses everything, a moderator included. Every refusal
+// leaves the log alone.
 func TestChangePostRefusals(t *testing.T) {
 	type attempt struct{ who, method, path, body, want string }
 	check := func(t *testing.T, w *world, id threadid.ID, h http.Handler, cases []attempt) {
@@ -245,8 +247,6 @@ func TestChangePostRefusals(t *testing.T) {
 			{"pre-user", http.MethodPost, p4 + "/restore", "", "forbidden"},
 			{"alice", http.MethodPatch, p4, `{"source":"x"}`, "forbidden"},
 			{"alice", http.MethodDelete, p4, "", "forbidden"},
-			{"bob", http.MethodPatch, p4, `{"source":"x"}`, "forbidden"},
-			{"bob", http.MethodDelete, p4, "", "forbidden"},
 			{"alice", http.MethodPost, postPathN(id, 3) + "/restore", "", "forbidden"},
 			{"carol", http.MethodPatch, postPathN(id, 99), `{"source":"x"}`, "not-found"},
 			{"carol", http.MethodDelete, postPathN(id, 0), "", "bad-request"},
@@ -286,6 +286,8 @@ func TestChangePostRefusals(t *testing.T) {
 			// A moderator passes the lock for their own post.
 			{"bob", http.MethodPost, postPathN(id, 3) + "/restore", "", "ok"},
 			{"bob", http.MethodPatch, postPathN(id, 3), `{"source":"moderator's own"}`, "ok"},
+			// And for a member's.
+			{"bob", http.MethodPatch, postPathN(id, 1), `{"source":"moderator's edit"}`, "ok"},
 		})
 	})
 
@@ -297,6 +299,8 @@ func TestChangePostRefusals(t *testing.T) {
 			{"carol", http.MethodPatch, postPathN(id, 4), `{"source":"x"}`, "conflict"},
 			{"carol", http.MethodDelete, postPathN(id, 4), "", "conflict"},
 			{"bob", http.MethodPost, postPathN(id, 3) + "/restore", "", "conflict"},
+			{"bob", http.MethodPatch, postPathN(id, 4), `{"source":"x"}`, "conflict"},
+			{"bob", http.MethodDelete, postPathN(id, 4), "", "conflict"},
 		})
 	})
 }

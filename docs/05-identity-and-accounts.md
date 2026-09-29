@@ -83,6 +83,16 @@ its own rather than needing a restart. If *every* provider fails, startup does
 abort: a forum nobody can sign in to should say so rather than serve an empty
 login page.
 
+`allowed_email_domains` gates every sign-in through the provider, a
+returning member's as well as someone new's, before the identity is looked
+up. When it is set, a sign-in passes only if the provider asserts
+`email_verified` as true and the email's domain is on the list, compared
+whole and without regard to case. An unverified address is whatever the
+person typed, so its domain proves nothing. The two refusals are both 403,
+each with its own page. With the list unset, nothing requires
+`email_verified`. Google's `hd` claim is recorded and never gated on.
+(TKT-01M29CKRE9.)
+
 The login page is `GET /auth/signin?return_to=…` (07 "URL scheme"), and it
 is where the client's "Sign in" goes. It lists the providers that are
 configured and not disabled, each by its `name`, and skips straight to a
@@ -310,6 +320,16 @@ the normal "choose a handle" screen appears, prefilled with the normalized
 name when it has one, above a line saying why it could not be used: missing,
 not a valid handle, reserved, or taken. A handle released by a rename stays
 reserved for 90 days (below), so it does not count as free.
+
+The account made at the callback goes through the same registration as the
+handle screen's, in one transaction with its session, so a handle an
+inactive account holds is taken like any other, and that account is never
+the one signed in. Whether registration is open for the provider is read
+again in that transaction: under approval mode, a registration cookie from
+a provider without `auto_approve` is refused and writes nothing. An
+identity that already exists with no user is an applicant whatever the
+provider's setting, since only an identity that is not found reaches the
+registration path. (TKT-01M29CKRE9.)
 
 ## Changing a handle
 

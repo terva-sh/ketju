@@ -274,12 +274,6 @@ func warn(c *Config) []string {
 		if pr.InsecureSkipIssuerCheck {
 			out = append(out, key+".insecure_skip_issuer_check: on, so this provider's ID tokens are accepted without checking who issued them; it exists for the one provider family whose issuer differs from its discovery URL (docs/09), and is otherwise a hole")
 		}
-		if pr.AutoApprove {
-			// Approval-mode registration is TKT-01M29CKRE9's, and until it
-			// lands auto_approve changes nothing (internal/service/identity
-			// RegistrationOpen). That ticket removes this warning.
-			out = append(out, key+`.auto_approve: on, but this version has no approval queue for it to bypass, so it has no effect; someone new from this provider can register only while registration.mode is "open"`)
-		}
 	}
 	return out
 }

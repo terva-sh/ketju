@@ -14,6 +14,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/seal"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/config"
+	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/web"
 )
 
@@ -26,7 +27,9 @@ func signInAt(returnTo string) string {
 	return "/auth/signin?return_to=" + url.QueryEscape(returnTo)
 }
 
-// withProviders swaps w's providers for these, all at w's in-process IdP.
+// withProviders swaps w's providers for these, all at w's in-process IdP,
+// and the sign-in's policy for theirs, as serve builds both from one
+// configuration.
 func (w *world) withProviders(pcs ...config.Provider) {
 	w.t.Helper()
 	reg, err := oidc.New(w.t.Context(), &config.Config{SiteURL: site, OIDC: config.OIDC{Providers: pcs}},
@@ -36,6 +39,7 @@ func (w *world) withProviders(pcs ...config.Provider) {
 	}
 	w.t.Cleanup(func() { reg.Close() })
 	w.handler.Providers = reg
+	w.handler.Login.(*identity.Service).Policy = identity.PolicyFrom(pcs)
 }
 
 // hostileReturnTo are return_to values that name somewhere other than this

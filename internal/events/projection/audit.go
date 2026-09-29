@@ -26,6 +26,7 @@ const (
 	ActionThreadRenamed  = "thread.renamed"
 	ActionPostEdited     = "post.edited"
 	ActionPostDeleted    = "post.deleted"
+	ActionPostHidden     = "post.hidden"
 	ActionPostRestored   = "post.restored"
 )
 
@@ -41,7 +42,8 @@ const viaLog = "thread-log"
 // own action cannot produce a row:
 //   - always: a lock, unlock, pin, unpin or move;
 //   - when the actor is not the thread's author: a rename;
-//   - when the actor is not the post's author: an Edit, Delete or Restore;
+//   - when the actor is not the post's author: an Edit, Delete or Restore,
+//     a Delete with by_moderator being post.hidden;
 //   - never: ThreadCreated, Post, ThreadTagged, and ThreadArchived until its
 //     own ticket decides.
 func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, target audit.Target, details map[string]any, ok bool, err error) {
@@ -66,7 +68,14 @@ func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, targ
 	case *threadlog.EditBody:
 		return postAction(ctx, q, f, ActionPostEdited, map[string]any{"reason": b.Reason, "revision": revision(f.h)})
 	case *threadlog.DeleteBody:
-		return postAction(ctx, q, f, ActionPostDeleted, map[string]any{"reason": b.Reason})
+		// A moderator's Delete hides the post rather than deleting it
+		// (TKT-01M29CRJ5J), and its row says so. A Delete by somebody
+		// else without by_moderator is in no log this server writes.
+		action := ActionPostDeleted
+		if b.ByModerator {
+			action = ActionPostHidden
+		}
+		return postAction(ctx, q, f, action, map[string]any{"reason": b.Reason})
 	case *threadlog.RestoreBody:
 		return postAction(ctx, q, f, ActionPostRestored, map[string]any{"reason": b.Reason})
 	}

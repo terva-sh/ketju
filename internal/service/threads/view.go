@@ -434,6 +434,10 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 		if p.Flags.Has(threadlog.EntryEdited) && p.RevisionMS != 0 {
 			at := dto.Millis(p.RevisionMS)
 			d.EditedAt = &at
+			// Read from the current revision's frame, which the log length
+			// already keys, so the cached page needs no editor row
+			// (settled in grooming for TKT-01M29CRJ5J).
+			d.EditedByModerator = p.EditorID != p.Author
 		}
 		if p.ReplyTo != 0 {
 			r := int(p.ReplyTo)

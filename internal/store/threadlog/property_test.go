@@ -181,7 +181,9 @@ func nextRecord(r *rand.Rand, posts uint32) (Append, generated, bool) {
 		ord := 1 + uint32(r.Intn(int(posts)))
 		return Append{
 			Type: TypeDelete, Ordinal: ord, Author: author, TimeMS: ts,
-			Body: &DeleteBody{Reason: "spam"},
+			// Half are a moderator's, which hide rather than delete
+			// (TKT-01M29CRJ5J).
+			Body: &DeleteBody{Reason: "spam", ByModerator: r.Intn(2) == 1},
 		}, generated{kind: "Delete", ord: ord}, true
 
 	case roll < 85:

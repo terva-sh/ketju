@@ -130,6 +130,11 @@ func (ix *Index) applyEdit(h FrameHeader, b *EditBody, offset uint64, frameSize 
 // Edit after a visible one; a hand-made log may, and the projection reads it
 // the same way.
 //
+// A Delete whose body says by_moderator (TKT-01M29CRJ5J) sets hidden-by-mod
+// rather than deleted: a moderator's delete of somebody else's post. The
+// index reads the key, not the actor, so the record's effect is what it
+// says.
+//
 // A Restore clears hidden-by-mod as well as deleted (docs/08: a moderator's
 // Restore clears it; settled in grooming for TKT-01M29CA9BP). The index
 // cannot judge who wrote a record, so the rule that only a moderator may
@@ -143,6 +148,9 @@ func postFlagEffect(t RecordType, body any) (set, clear EntryFlags) {
 		}
 		return EntryEdited, 0
 	case TypeDelete:
+		if byModerator(body) {
+			return EntryHiddenByMod, 0
+		}
 		return EntryDeleted, 0
 	case TypeRestore:
 		return 0, EntryDeleted | EntryHiddenByMod
@@ -159,6 +167,18 @@ func isGrace(body any) bool {
 		return b != nil && b.Grace
 	case EditBody:
 		return b.Grace
+	}
+	return false
+}
+
+// byModerator reports whether body is a moderator's Delete's, reading both
+// forms for the reason isGrace does.
+func byModerator(body any) bool {
+	switch b := body.(type) {
+	case *DeleteBody:
+		return b != nil && b.ByModerator
+	case DeleteBody:
+		return b.ByModerator
 	}
 	return false
 }

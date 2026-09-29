@@ -50,6 +50,11 @@ var (
 	// allowed_email_domains refused the address.
 	pageNotAllowed = pageData{"Sign-in not allowed", "This forum does not accept sign-ins from that account's email address.",
 		"/", "Go to the forum"}
+	// allowed_email_domains is set, and the provider did not say the
+	// address is verified. The IdP already told the reader both facts, so
+	// saying which refusal it was discloses nothing new.
+	pageUnverified = pageData{"Sign-in not allowed", "This forum accepts sign-ins from this provider " +
+		"only with a verified email address.", "/", "Go to the forum"}
 	// A pending account, and the fallback for any account that is not
 	// active. A suspended or deactivated one gets writeUnavailable's page.
 	pageUnavailable = pageData{"Account unavailable", "This account cannot sign in at the moment. " +
@@ -60,12 +65,11 @@ var (
 	// The reactivation cookie is missing or past ReactivateTTL.
 	pageReactivateExpired = pageData{"Reactivation expired", "Reactivating took too long, " +
 		"or no sign-in is waiting for it. Please sign in again.", "/", "Go to the forum"}
-	// Someone new who cannot register: from an auto_approve provider under
-	// approval mode, whose branch is TKT-01M29CKRE9's, or at the handle
-	// screen after registration closed. Anyone else new under approval
-	// mode applies instead (beginApplication).
-	pageRegistration = pageData{"Registration is not open yet", "There is no account for this sign-in, " +
-		"and this forum cannot create one yet.", "/", "Go to the forum"}
+	// Someone new who cannot register: registration closed, for this
+	// provider, between the callback and the account being written. Signing
+	// in again reaches the application form instead (beginApplication).
+	pageRegistration = pageData{"Registration is not open", "There is no account for this sign-in, " +
+		"and registration closed while it was being created. Please sign in again.", "/auth/signin", "Sign in"}
 	// The registration cookie is missing or past RegistrationTTL: the handle
 	// screen was opened without a sign-in, or left too long.
 	pageRegistrationExpired = pageData{"Registration expired", "Choosing a handle took too long, " +
@@ -153,7 +157,8 @@ var registerTmpl = template.Must(template.New("register").Parse(`<!doctype html>
 <main>
 <h1>Choose a handle</h1>
 <p>Your handle is how others mention you, as @handle. Nobody else on this forum can have it.</p>
-<form method="post" action="/auth/register">
+{{if .Why}}<p id="handle-why">{{.Why}}</p>
+{{end}}<form method="post" action="/auth/register">
 <p><label for="handle">Handle</label></p>
 <p><input id="handle" name="handle" type="text" value="{{.Handle}}" required minlength="3" maxlength="30"
  autocomplete="username" autocapitalize="none" spellcheck="false"
@@ -169,6 +174,9 @@ var registerTmpl = template.Must(template.New("register").Parse(`<!doctype html>
 
 type registerData struct {
 	Handle, Error, Rule string
+	// Why says why an auto_approve provider's preferred_username was not
+	// used as the handle, above the field.
+	Why string
 }
 
 func writeRegisterPage(w http.ResponseWriter, status int, d registerData) {

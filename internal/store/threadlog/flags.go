@@ -86,7 +86,12 @@ const (
 	EntryMoved EntryFlags = 1 << 1
 
 	// EntryHiddenByMod marks a post hidden by moderation, which is distinct
-	// from deleted: the author did not ask for it and may not see it.
+	// from deleted: the author did not ask for it, and only a moderator's
+	// Restore clears it. The author still sees their post, marked as removed
+	// by a moderator, and everyone else but a moderator sees a tombstone
+	// (docs/08 "Restoring a moderator's delete", decided 2026-09-28; the
+	// author's view is TKT-01M29CKRJ9). A Delete with by_moderator sets it
+	// (TKT-01M29CRJ5J).
 	EntryHiddenByMod EntryFlags = 1 << 2
 
 	// EntryHasAttachments lets a listing show a paperclip without decoding

@@ -238,7 +238,6 @@ client_secret = "s"
 	for _, c := range []struct{ body, key string }{
 		{minimal + "\n[storage]\nfsync = \"never\"", "storage.fsync:"},
 		{minimal + provider + "insecure_skip_issuer_check = true\n", "oidc.providers.odd.insecure_skip_issuer_check:"},
-		{minimal + provider + "auto_approve = true\n", "oidc.providers.odd.auto_approve:"},
 	} {
 		_, warnings, err := Load(write(t, c.body), env(nil))
 		if err != nil {
@@ -253,6 +252,34 @@ client_secret = "s"
 	_, warnings, err := Load(write(t, minimal), env(nil))
 	if err != nil || len(warnings) != 0 {
 		t.Errorf("a minimal config: warnings %q, err %v; want neither", warnings, err)
+	}
+}
+
+// TestAutoApproveIsNotAWarning: auto_approve lets a provider register people
+// under approval mode now (TKT-01M29CKRE9), so it is a plain setting, not
+// one the check warns about.
+func TestAutoApproveIsNotAWarning(t *testing.T) {
+	t.Parallel()
+
+	body := minimal + `
+site_url = "https://forum.example.org"
+[[oidc.providers]]
+key = "club"
+name = "Club SSO"
+issuer = "https://sso.club.example"
+client_id = "c"
+client_secret = "s"
+auto_approve = true
+`
+	c, warnings, err := Load(write(t, body), env(nil))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if len(warnings) != 0 {
+		t.Errorf("warnings %q, want none", warnings)
+	}
+	if len(c.OIDC.Providers) != 1 || !c.OIDC.Providers[0].AutoApprove {
+		t.Errorf("auto_approve did not load: %+v", c.OIDC.Providers)
 	}
 }
 

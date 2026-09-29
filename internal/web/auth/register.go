@@ -35,31 +35,43 @@ type pending struct {
 	Claims   identity.Claims `json:"c"`
 	ReturnTo string          `json:"r"`
 	Stamp    int64           `json:"t,omitempty"`
+	// Why is set when an auto_approve provider's preferred_username could
+	// not be the handle, and the handle screen says why. It is sealed with
+	// the rest, so a browser cannot choose it.
+	Why identity.SkipReason `json:"w,omitempty"`
 }
 
 // beginRegistration is the callback's answer for an identity nobody has,
-// from a browser nobody is signed in on. With registration open, the claims
-// go into the registration cookie and the browser to the handle screen.
-// Otherwise the mode is approval, and someone new from a provider that does
-// not auto-approve applies (beginApplication).
-func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, p *oidc.Provider, id *oidc.Identity, returnTo string) {
+// from a browser nobody is signed in on (docs/05 "Registration path").
+//
+// When registration is not open for this provider, the mode is approval and
+// the provider does not auto-approve, and someone new applies
+// (beginApplication). When it is open and the provider auto-approves, the
+// account is made here, under the handle the IdP's preferred_username
+// makes, if it makes a free one. Otherwise, or for any other provider, the
+// claims go into the registration cookie and the browser to the handle
+// screen, which says why the preferred_username was not used when it was
+// tried.
+func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, id *oidc.Identity, returnTo string) {
 	ctx := r.Context()
-	open, err := h.Login.RegistrationOpen(ctx)
+	open, err := h.Login.RegistrationOpenFor(ctx, id.Provider)
 	if err != nil {
 		h.Logger.ErrorContext(ctx, "reading the registration mode failed", "error", err)
 		writePage(w, http.StatusInternalServerError, pageFailed)
 		return
 	}
 	if !open {
-		if p.AutoApprove() {
-			// Approval mode's auto_approve branch is TKT-01M29CKRE9's.
-			writePage(w, http.StatusNotImplemented, pageRegistration)
-			return
-		}
 		h.beginApplication(w, r, id)
 		return
 	}
-	sealed, err := h.sealRegistration(pending{Claims: h.Login.ClaimsOf(id), ReturnTo: returnTo})
+	p := pending{Claims: h.Login.ClaimsOf(id), ReturnTo: returnTo}
+	if h.Login.AutoApproves(id.Provider) {
+		var done bool
+		if p.Why, done = h.autoRegister(w, r, p); done {
+			return
+		}
+	}
+	sealed, err := h.sealRegistration(p)
 	if errors.Is(err, errRegistrationTooBig) {
 		h.Logger.WarnContext(ctx, "registration refused: the provider's claims do not fit in a cookie",
 			"provider", id.Provider, "error", err)
@@ -75,6 +87,55 @@ func (h *Handler) beginRegistration(w http.ResponseWriter, r *http.Request, p *o
 		MaxAge: int(RegistrationTTL / time.Second), Secure: true, HttpOnly: true, SameSite: http.SameSiteLaxMode})
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, RegisterPath, http.StatusSeeOther)
+}
+
+// autoRegister is the callback registering someone new from an auto_approve
+// provider with no handle screen (docs/05 "mode = approval"). done is true
+// when it has answered the request: signed in and sent on, or refused.
+// Otherwise nothing was written, and why says what the handle screen,
+// shown instead, tells the reader.
+//
+// The refusals are the handle screen's, for the same races: the identity
+// registered in another tab, or registration closed since the callback
+// read the mode.
+func (h *Handler) autoRegister(w http.ResponseWriter, r *http.Request, p pending) (why identity.SkipReason, done bool) {
+	ctx := r.Context()
+	var replaces string
+	if old, err := r.Cookie(session.CookieName); err == nil {
+		replaces = old.Value
+	}
+	res, why, err := h.Login.AutoRegister(ctx, p.Claims, session.Meta{
+		IP: remoteIP(r), UserAgent: r.UserAgent(), Provider: p.Claims.Provider}, replaces)
+	switch {
+	case errors.Is(err, identity.ErrAlreadyRegistered):
+		h.Logger.InfoContext(ctx, "an auto-approved registration found the identity registered", "provider", p.Claims.Provider)
+		writePage(w, http.StatusConflict, pageAlreadyRegistered)
+	case errors.Is(err, identity.ErrRegistrationClosed):
+		h.Logger.InfoContext(ctx, "an auto-approved registration found registration closed", "provider", p.Claims.Provider)
+		writePage(w, http.StatusForbidden, pageRegistration)
+	case err != nil:
+		h.Logger.ErrorContext(ctx, "an auto-approved registration failed", "provider", p.Claims.Provider, "error", err)
+		writePage(w, http.StatusInternalServerError, pageFailed)
+	case why != identity.SkipNone:
+		h.Logger.InfoContext(ctx, "an auto-approved registration needs a handle", "provider", p.Claims.Provider,
+			"reason", skipWords[why])
+		return why, false
+	default:
+		h.Logger.InfoContext(ctx, "registered a new member without a handle screen", "provider", p.Claims.Provider)
+		http.SetCookie(w, session.Cookie(res.Token, res.Session.ExpiresAt))
+		w.Header().Set("Cache-Control", "no-store")
+		http.Redirect(w, r, SafeReturnPath(p.ReturnTo), http.StatusSeeOther)
+	}
+	return identity.SkipNone, true
+}
+
+// skipWords end the handle screen's line saying why the sign-in's username
+// was not used.
+var skipWords = map[identity.SkipReason]string{
+	identity.SkipMissing:  "the sign-in did not include one",
+	identity.SkipInvalid:  "it is not a valid handle",
+	identity.SkipReserved: "it is reserved",
+	identity.SkipTaken:    "it is taken",
 }
 
 // beginApplication is approval mode's answer for someone new (docs/05 "mode
@@ -175,8 +236,12 @@ func (h *Handler) registerForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	writeRegisterPage(w, http.StatusOK, registerData{
-		Handle: identity.Prefill(p.Claims.PreferredUsername, p.Claims.Email)})
+	d := registerData{Handle: identity.Prefill(p.Claims.PreferredUsername, p.Claims.Email)}
+	if words, ok := skipWords[p.Why]; ok {
+		d.Handle = identity.FallbackPrefill(p.Claims.PreferredUsername, p.Claims.Email)
+		d.Why = "Your sign-in's username could not be used as your handle: " + words + "."
+	}
+	writeRegisterPage(w, http.StatusOK, d)
 }
 
 // register takes the handle and, if registration gives it out, signs the new

@@ -463,8 +463,11 @@ transaction that projects the record, with the frame's timestamp as `at`.
   - when the actor is not the thread's author: `thread.renamed`, against
     the thread, with `"title"` and `"slug"`;
   - when the actor is not the post's author: `post.edited` with `"reason"`
-    and `"revision"`, `post.deleted` and `post.restored` with `"reason"`,
-    against the post.
+    and `"revision"`, `post.hidden` (a `Delete` with `by_moderator`, 03),
+    `post.deleted` (one without, which the service never writes) and
+    `post.restored` with `"reason"`, against the post. The service projects
+    a moderator's edit, hide and restore before it answers, so the row
+    exists when the request returns (TKT-01M29CRJ5J).
 
   An author's own rename, edit, delete or restore writes none, nor does a
   `ThreadCreated`, `Post`, `ThreadTagged` or `ThreadArchived`. A record's

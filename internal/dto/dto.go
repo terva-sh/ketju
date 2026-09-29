@@ -167,6 +167,11 @@ type Post struct {
 	// EditedAt is nil for a post that has never been edited, which is not the
 	// same as one edited at the moment it was written.
 	EditedAt *Millis `json:"edited_at"`
+	// EditedByModerator is true when the post shows as edited and its
+	// current revision was written by someone other than its author, which
+	// only a moderator may do (TKT-01M29CRJ5J). It names nobody: the post's
+	// history does (docs/08 "Post history").
+	EditedByModerator bool `json:"edited_by_moderator"`
 
 	// ReplyTo is the ordinal this post answers, nil for a top-level post.
 	ReplyTo *int `json:"reply_to"`

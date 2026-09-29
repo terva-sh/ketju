@@ -281,8 +281,8 @@ uses the name, never the literal.
 | 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
 | 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[] | new post_meta row, ordinal = thread.post_count+1 |
 | 3 | `Edit` | source, reason, reply_to, mentions[] (optional), grace (optional bool) | post_meta.current_revision++, edited flag unless `grace`; when `mentions` is present it replaces the post's mention rows |
-| 4 | `Delete` | reason, hard (bool, always false in v1) | post_meta.deleted, tombstone shown |
-| 5 | `Restore` | reason | clears deleted |
+| 4 | `Delete` | reason, hard (bool, always false in v1), by_moderator (optional bool) | post_meta.deleted, tombstone shown; the entry's hidden-by-mod flag when `by_moderator`, otherwise its deleted flag |
+| 5 | `Restore` | reason | clears deleted and hidden-by-mod |
 | 10 | `ThreadRenamed` | title, slug | thread row |
 | 11 | `ThreadMoved` | forum_id | thread row |
 | 12 | `ThreadLocked` / 13 `ThreadUnlocked` | reason | thread flags |
@@ -315,6 +315,18 @@ when it writes the record, because the index is rebuilt from the log alone and
 cannot read a setting, and a decision taken on read would put a setting into
 cached responses. An older reader ignores the key and marks the post edited,
 which fails safe: it shows a marker and discloses nothing.
+
+`Delete.by_moderator` was added the same way, on 2026-09-29 (TKT-01M29CRJ5J).
+`true` marks a moderator's delete of somebody else's post, which the service
+writes whenever a `Delete`'s actor is not the post's author. It sets the
+entry's hidden-by-mod flag rather than deleted, so that only a moderator may
+restore the post (08 "Restoring a moderator's delete"). Both mark
+`post_meta.deleted`, and a `Restore` clears either. The index reads the key,
+not the actor, so the record's effect is what it says, and `ketju dump` needs
+no rule to read it. Deriving it from the actor lost for that reason. No log
+written before it holds a `Delete` by a non-author, because the service
+refused one, so no existing record changes meaning. An older reader ignores
+the key and shows a tombstone to everyone, which fails closed.
 
 Deletion is soft. A `Delete` record leaves the original `Post` bytes intact;
 the reader consults the index flags and returns a tombstone.

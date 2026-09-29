@@ -82,7 +82,8 @@ func newWorld(t *testing.T, configure ...func(*config.Provider)) *world {
 	}
 	w.sealer.Now = func() time.Time { return w.now }
 	w.handler = &Handler{Providers: reg, Sealer: w.sealer, Sessions: w.store, HTTPClient: w.idp.Client(), Logger: log,
-		Login: &identity.Service{DB: d, Sessions: w.store, Logger: log, Perm: perm.New(d)}}
+		Login: &identity.Service{DB: d, Sessions: w.store, Logger: log, Perm: perm.New(d),
+			Policy: identity.PolicyFrom([]config.Provider{pc})}}
 	w.srv = web.New(web.Groups{Auth: New(w.handler)}, web.Options{Logger: log, SiteURL: site,
 		Session: session.Middleware(w.store, log), RateLimit: func(h http.Handler) http.Handler { return h }})
 	return w
@@ -455,14 +456,6 @@ func TestAnInactiveAccountGetsNoSession(t *testing.T) {
 
 // The branches whose tickets have not landed say so, and sign nobody in.
 func TestTheBranchesStillToCome(t *testing.T) {
-	t.Run("a new identity from an auto_approve provider under approval mode", func(t *testing.T) {
-		// TKT-01M29CKRE9's; until it lands, no account and no application.
-		w := newWorld(t, func(pc *config.Provider) { pc.AutoApprove = true })
-		w.refused(w.signIn(""), http.StatusNotImplemented, "Registration is not open yet")
-		if n := w.count("SELECT count(*) FROM identities"); n != 0 {
-			t.Errorf("%d identities", n)
-		}
-	})
 	t.Run("a new identity, signed in: linking", func(t *testing.T) {
 		w := newWorld(t)
 		w.user("bob", "active", "bob-sub")

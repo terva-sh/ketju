@@ -152,8 +152,6 @@ operator should choose knowingly:
   right for an import or a test run;
 - `insecure_skip_issuer_check` exists for one provider family (09) and is a
   hole anywhere else;
-- `auto_approve` has no effect until approval-mode registration exists, so
-  it does not open registration;
 - a `client_secret_file` that is group or world writable, because
   bind-mounted and projected secrets land with modes an application does not
   control.

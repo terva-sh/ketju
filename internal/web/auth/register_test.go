@@ -204,7 +204,7 @@ func TestRegistrationClosedMidway(t *testing.T) {
 	if err := settings.Set(t.Context(), w.db, settings.RegistrationMode.Name, json.RawMessage(`"approval"`), 0, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	w.refused(w.submit("carol", reg), http.StatusForbidden, "Registration is not open yet")
+	w.refused(w.submit("carol", reg), http.StatusForbidden, "Registration is not open")
 }
 
 // A member who signed in, in another tab, since the callback does not make

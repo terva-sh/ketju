@@ -147,21 +147,167 @@ func TestRegisterTwice(t *testing.T) {
 	}
 }
 
-// Registration is only for mode = "open", and says so if an admin closes it
-// while someone is choosing a handle.
-func TestRegisterWhenClosed(t *testing.T) {
-	s, d := registry(t)
+// approval sets registration.mode to "approval".
+func approval(t *testing.T, d *db.DB) {
+	t.Helper()
 	if err := settings.Set(t.Context(), d, settings.RegistrationMode.Name, json.RawMessage(`"approval"`), 0, time.Now()); err != nil {
 		t.Fatal(err)
 	}
-	if open, err := s.RegistrationOpen(t.Context()); err != nil || open {
-		t.Fatalf("RegistrationOpen = %v, %v; want false", open, err)
+}
+
+// clubAndFake is the policy of two providers: "club" auto-approves, and
+// "fake", which claims() signs in through, does not.
+var clubAndFake = PolicyFrom([]config.Provider{{Key: "club", AutoApprove: true}, {Key: "fake"}})
+
+// clubClaims are claims() through the auto_approve provider.
+func clubClaims(subject, preferred string) Claims {
+	c := claims(subject)
+	c.Provider, c.PreferredUsername = "club", preferred
+	return c
+}
+
+// Registration is open for a provider under mode "open", and under
+// "approval" only for an auto_approve one; a provider the policy does not
+// name is not one (docs/05 "mode = approval").
+func TestRegistrationOpenFor(t *testing.T) {
+	s, d := registry(t)
+	s.Policy = clubAndFake
+	for _, c := range []struct {
+		mode, provider string
+		want           bool
+	}{
+		{"open", "fake", true},
+		{"open", "club", true},
+		{"open", "unconfigured", true},
+		{"approval", "fake", false},
+		{"approval", "club", true},
+		{"approval", "unconfigured", false},
+	} {
+		if err := settings.Set(t.Context(), d, settings.RegistrationMode.Name, json.RawMessage(`"`+c.mode+`"`), 0, time.Now()); err != nil {
+			t.Fatal(err)
+		}
+		if got, err := s.RegistrationOpenFor(t.Context(), c.provider); err != nil || got != c.want {
+			t.Errorf("mode %s, provider %s: RegistrationOpenFor = %v, %v; want %v", c.mode, c.provider, got, err, c.want)
+		}
 	}
-	if _, err := s.Register(t.Context(), claims("sub-1"), "alice", session.Meta{}, ""); !errors.Is(err, ErrRegistrationClosed) {
-		t.Fatalf("Register = %v, want ErrRegistrationClosed", err)
+	// A mode the registry may allow later opens nothing until someone says
+	// what it means.
+	if clubAndFake.registrationOpen("invite", "club") {
+		t.Error(`an unknown mode opened registration for an auto_approve provider`)
 	}
-	if u, i, n := count(t, d); u+i+n != 0 {
-		t.Errorf("a closed registration wrote %d users, %d identities, %d sessions", u, i, n)
+}
+
+// TestRegisterUnderApprovalModeOnlyForAutoApprove is AC5: under approval
+// mode Register refuses a provider without auto_approve, whatever the
+// caller holds, and writes nothing; an auto_approve provider registers. It
+// is also Register saying so if an admin closes registration while someone
+// is choosing a handle.
+func TestRegisterUnderApprovalModeOnlyForAutoApprove(t *testing.T) {
+	for name, policy := range map[string]Policy{"no policy": nil, "club and fake": clubAndFake} {
+		t.Run(name, func(t *testing.T) {
+			s, d := registry(t)
+			s.Policy = policy
+			approval(t, d)
+			if _, err := s.Register(t.Context(), claims("sub-1"), "alice", session.Meta{}, ""); !errors.Is(err, ErrRegistrationClosed) {
+				t.Fatalf("Register = %v, want ErrRegistrationClosed", err)
+			}
+			if u, i, n := count(t, d); u+i+n != 0 {
+				t.Errorf("a closed registration wrote %d users, %d identities, %d sessions", u, i, n)
+			}
+		})
+	}
+	t.Run("through the auto_approve provider", func(t *testing.T) {
+		s, d := registry(t)
+		s.Policy = clubAndFake
+		approval(t, d)
+		res, err := s.Register(t.Context(), clubClaims("sub-1", ""), "alice", session.Meta{}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		sess, err := (&session.Store{DB: d}).Lookup(t.Context(), res.Token)
+		if err != nil || sess.User == nil || sess.User.Handle != "alice" || sess.User.Status != "active" {
+			t.Fatalf("the session is %+v, %v; want active alice", sess.User, err)
+		}
+	})
+}
+
+// AutoHandle is the handle a preferred_username makes, normalized as the
+// prefill is, or the reason it makes none (docs/05, AC4).
+func TestAutoHandle(t *testing.T) {
+	for _, c := range []struct {
+		preferred string
+		want      string
+		why       SkipReason
+	}{
+		{"Ada.L", "ada_l", SkipNone},
+		{"  carol  ", "carol", SkipNone},
+		{"bob-", "bob", SkipNone},
+		{"an.exceptionally.long.preferred.username", "an_exceptionally_long_preferre", SkipNone},
+		{"", "", SkipMissing},
+		{"   ", "", SkipMissing},
+		{"ab", "", SkipInvalid},
+		{"日本語", "", SkipInvalid},
+		{"!!", "", SkipInvalid},
+		{"Admin", "", SkipReserved},
+		{"auth", "", SkipReserved},
+		{"deleted-user-7", "", SkipReserved},
+	} {
+		h, why := AutoHandle(c.preferred)
+		if h != c.want || why != c.why {
+			t.Errorf("AutoHandle(%q) = %q, %v; want %q, %v", c.preferred, h, why, c.want, c.why)
+		}
+	}
+}
+
+// AutoRegister registers under the preferred handle with no screen, or
+// writes nothing and says why. A handle anyone holds is taken, whatever
+// their status, and the holder is never who comes out signed in.
+func TestAutoRegister(t *testing.T) {
+	for _, mode := range []string{"open", "approval"} {
+		t.Run(mode, func(t *testing.T) {
+			s, d := registry(t)
+			s.Policy = clubAndFake
+			if mode == "approval" {
+				approval(t, d)
+			}
+			res, why, err := s.AutoRegister(t.Context(), clubClaims("sub-1", "Ada.L"), session.Meta{}, "")
+			if err != nil || why != SkipNone {
+				t.Fatalf("AutoRegister = %v, %v", why, err)
+			}
+			sess, err := (&session.Store{DB: d}).Lookup(t.Context(), res.Token)
+			if err != nil || sess.User == nil || sess.User.Handle != "ada_l" || sess.User.Status != "active" {
+				t.Fatalf("the session is %+v, %v; want active ada_l", sess.User, err)
+			}
+
+			// ada_l is taken, then suspended: a newcomer asking for Ada_L
+			// is told it is taken, and gets nothing.
+			if err := d.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+				_, err := tx.ExecContext(t.Context(), "UPDATE users SET status = 'suspended' WHERE handle = 'ada_l'")
+				return err
+			}); err != nil {
+				t.Fatal(err)
+			}
+			for _, c := range []struct {
+				preferred string
+				why       SkipReason
+			}{{"Ada_L", SkipTaken}, {"", SkipMissing}, {"x", SkipInvalid}, {"admin", SkipReserved}} {
+				res, why, err := s.AutoRegister(t.Context(), clubClaims("sub-2", c.preferred), session.Meta{}, "")
+				if err != nil || why != c.why || res.Token != "" {
+					t.Errorf("%q: AutoRegister = %+v, %v, %v; want %v and nothing", c.preferred, res, why, err, c.why)
+				}
+			}
+			if u, i, n := count(t, d); u != 1 || i != 1 || n != 1 {
+				t.Errorf("%d users, %d identities, %d sessions; want the first registration's alone", u, i, n)
+			}
+
+			// A provider without auto_approve must choose a handle.
+			if _, _, err := s.AutoRegister(t.Context(), claims("sub-3"), session.Meta{}, ""); !errors.Is(err, ErrNotAutoApprove) {
+				t.Errorf("AutoRegister through fake = %v, want ErrNotAutoApprove", err)
+			}
+			if u, _, _ := count(t, d); u != 1 {
+				t.Errorf("%d users after the refusal", u)
+			}
+		})
 	}
 }
 
