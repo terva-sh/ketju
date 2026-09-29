@@ -24,10 +24,12 @@ references:
     path: docs/08-moderation.md
   - ref: pr:170
     path: null
+  - ref: pr:174
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T22:55:39Z
+updated_at: 2026-09-29T23:37:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
