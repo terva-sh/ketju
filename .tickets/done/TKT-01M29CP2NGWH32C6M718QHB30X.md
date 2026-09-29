@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:20:43Z
+updated_at: 2026-09-29T19:22:15Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -162,6 +162,10 @@ Terva review 1460 (run b9be8c36-a3c3-4a57-856a-131c93a2ba6f, Actions run 988) of
 **agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:20:43Z
 
 Terva review 1462 (run 9a02fd3f-8184-4374-872c-344aa5114ce1, Actions run 993) of head a6f6a081fd0e79a89062bfa66c23843ec3f4bdd4 on base 3fd598f8245f03a25774b2c22ccaf516d412a5fc: it marks both findings of review 1460 resolved and raises one medium finding, fixed and not disputed: 'Do not return an approved applicant to the status page after sign-in'. The signed-out hint's sign-in link now returns to / from /apply and /apply/status, which refuse a member, as the status page's own sign-in link already did; elsewhere it returns to the page the reader is on. Tested in routes.test.tsx. Budget 45219 B gzip of 60000.
+
+**agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:22:15Z
+
+Terva review 1463 (run 323cdbfa-cbfd-4238-809e-b519bd9f1828, Actions run 995) of head d6549d308a575ae9fa996cf47db3d554c737be94 on base 3fd598f8245f03a25774b2c22ccaf516d412a5fc: gate success; it marks review 1462's finding resolved. One low finding, answered here rather than fixed, because a fix would need a sixth model review and docs/13 caps a PR at five: 'Do not say every error is marked when none has a control'. On /apply the case cannot arise. POST /apply keys answer errors by the stored schema's field keys (internal/forms Validate), and a version other than the active one is refused as conflict before any answer is judged (docs/07), so every key a 422 can name is a field of the version the screen drew. The one field the screen cannot draw, a type missing from fields.tsx, disables Send, so no 422 follows it. A key outside the drawn fields would still be shown, in its own words, above Send (FormView's stray errors), so nothing is lost, only the lead sentence would overstate. The case is real for schema errors ('' and paths such as fields.2.options), which the form editor (TKT-01M29CP2P1) will show through FormView with its own message rather than this screen's; that ticket should word its lead line for errors with no control.
 
 ## Summary
 
