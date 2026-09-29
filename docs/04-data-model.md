@@ -340,12 +340,15 @@ transaction that projects the record, with the frame's timestamp as `at`.
 | `thread` | the thread's id in base32, as URLs spell it |
 | `post` | `<base32 thread id>/<ordinal>` |
 | `setting` | the setting's key, such as `registration.mode` |
+| `form` | the form's key, such as `registration` |
 <!-- audit-targets:end -->
 
 - `action` names what was done, such as `user.promoted` or
   `setting.changed`. The IdP group mapping writes `group.member_added` and
   `group.member_removed` against the user, one row per membership a sign-in
-  changes (05 "Roles and groups").
+  changes (05 "Roles and groups"). Saving a form version writes
+  `form.version_created` against the form, with `{key, version}` in
+  `details_json` (05 "Forms").
 
 ### notifications
 ```

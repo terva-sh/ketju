@@ -194,6 +194,20 @@ type Problem struct {
 	// Status repeats the HTTP status, per RFC 9457, so a body that has been
 	// copied out of its response is still self-describing.
 	Status int `json:"status"`
+
+	// Errors lists what was wrong, field by field, on a validation-failed
+	// body whose error says so: a form's answers or a form schema
+	// (TKT-01M29CP2KE). It is an RFC 9457 extension member. Each entry is a
+	// field key from a stored schema or a path of property names and
+	// indices, with a code from a closed list, so it echoes nothing the
+	// request sent. It is absent from every other body.
+	Errors []FieldError `json:"errors,omitempty"`
+}
+
+// FieldError is one entry in a problem's errors.
+type FieldError struct {
+	Field string `json:"field"`
+	Code  string `json:"code"`
 }
 
 // Write sends the problem for a code.
@@ -202,6 +216,12 @@ type Problem struct {
 // typo in an error path should not take down the process, and it must not
 // produce a response with an empty type that a client cannot switch on.
 func Write(w http.ResponseWriter, r *http.Request, c Code) {
+	write(w, r, c, nil)
+}
+
+// write is Write with a problem's field errors. Only a validation-failed
+// body carries them.
+func write(w http.ResponseWriter, r *http.Request, c Code, errs []FieldError) {
 	e, ok := catalogue[c]
 	if !ok {
 		c = CodeInternal
@@ -221,7 +241,10 @@ func Write(w http.ResponseWriter, r *http.Request, c Code) {
 	if r != nil && r.Method == http.MethodHead {
 		return
 	}
-	_ = json.NewEncoder(w).Encode(Problem{Type: c, Title: e.Title, Status: e.Status})
+	if c != CodeValidationFailed {
+		errs = nil
+	}
+	_ = json.NewEncoder(w).Encode(Problem{Type: c, Title: e.Title, Status: e.Status, Errors: errs})
 }
 
 // WriteRetryAfter writes a problem with a Retry-After header.
@@ -264,5 +287,5 @@ func WriteError(ctx context.Context, w http.ResponseWriter, r *http.Request, log
 		WriteRetryAfter(w, r, c, after)
 		return
 	}
-	Write(w, r, c)
+	write(w, r, c, FieldErrorsOf(err))
 }

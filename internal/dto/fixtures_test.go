@@ -19,6 +19,8 @@ package dto
 //     fixture does not exercise it, and there is no version of that worth
 //     committing.
 
+import "encoding/json"
+
 func ptr[T any](v T) *T { return &v }
 
 const (
@@ -27,6 +29,8 @@ const (
 	tModerator = "moderator"
 	// tPreUser is an approval-mode applicant; only /me has a shape for one.
 	tPreUser = "pre_user"
+	// tAdmin is an admin; the admin routes have a shape for no one else.
+	tAdmin = "admin"
 )
 
 // alice is an ordinary human member.
@@ -423,6 +427,58 @@ var corpus = map[string]any{
 	"user-posts." + tMember:     userPosts(tMember),
 	"user-posts." + tModerator:  userPosts(tModerator),
 	"user-posts-own." + tMember: userPostsOwn(),
+
+	"form-admin." + tAdmin:   formAdmin(),
+	"form-preview." + tAdmin: formPreview(),
+}
+
+// registrationForm is the seeded registration form, version 1, as a client
+// renders it: a prefilled name, a locked email, and no notice.
+func registrationForm() Form {
+	return Form{
+		Key: "registration", Version: 1, Title: "Apply to join", IntroHTML: "<p>Tell us a bit about yourself…</p>\n",
+		Fields: []FormField{
+			{Key: "name", Type: "text", Label: "Name", Required: true, Max: 200, Options: []string{}, FromClaim: "name"},
+			{Key: "email", Type: "email", Label: "Email", Max: 254, Options: []string{}, Locked: true, FromClaim: "email"},
+			{Key: "who", Type: "textarea", Label: "Who invited you or how did you find us?", Required: true, Max: 1000, Options: []string{}},
+			{Key: "rules", Type: "checkbox", Label: "I have read the guidelines", Required: true, Options: []string{}},
+		},
+	}
+}
+
+// formAdmin is GET /admin/forms/registration after an admin saved version
+// 2: the history newest first, the seeded version with no author, and the
+// active version rendered beside its stored schema.
+func formAdmin() FormAdmin {
+	f := formPreview()
+	f.Version = 2
+	return FormAdmin{
+		Key: "registration", Title: "Registration", ActiveVersion: 2,
+		Versions: []FormVersionInfo{
+			{Version: 2, CreatedAt: 1757600000000, CreatedBy: &Author{Handle: "root", DisplayName: "Site Admin", Role: "admin", Kind: "human"}},
+			{Version: 1, CreatedAt: 0, CreatedBy: nil},
+		},
+		Form: f,
+		Schema: json.RawMessage(`{"title":"Apply to join","intro_markdown":"Tell us a bit about yourself…","fields":[` +
+			`{"key":"name","type":"text","label":"Name","required":true,"from_claim":"name"},` +
+			`{"key":"email","type":"email","label":"Email","from_claim":"email","locked":true},` +
+			`{"key":"who","type":"textarea","label":"Who invited you or how did you find us?","required":true,"max":1000},` +
+			`{"key":"rules","type":"checkbox","label":"I have read the guidelines","required":true},` +
+			`{"key":"interests","type":"select","label":"Interests","options":["Games","Books","Hiking"],"multiple":true},` +
+			`{"key":"welcome","type":"markdown_notice","markdown":"Be **kind**."}]}`),
+	}
+}
+
+// formPreview is POST /admin/forms/registration/preview: an unsaved draft,
+// version 0, with a select and a notice beside the seeded fields.
+func formPreview() Form {
+	f := registrationForm()
+	f.Version = 0
+	f.Fields = append(f.Fields,
+		FormField{Key: "interests", Type: "select", Label: "Interests", Options: []string{"Games", "Books", "Hiking"}, Multiple: true},
+		FormField{Key: "welcome", Type: "markdown_notice", Options: []string{}, HTML: "<p>Be <strong>kind</strong>.</p>\n"},
+	)
+	return f
 }
 
 // profile is GET /users/alice. The two classes differ where docs/07 says:

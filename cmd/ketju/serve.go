@@ -27,6 +27,7 @@ import (
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
+	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/posts"
@@ -253,6 +254,15 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	if err := d.Migrate(ctx); err != nil {
 		return fail("migrating the database "+dbPath, err)
 	}
+	// The registration form is loaded once here so a stored schema that no
+	// longer parses is said at startup, when the operator is looking, and
+	// not first to an applicant. It is not fatal: members can still use the
+	// forum, and only the apply and form routes answer 500 (TKT-01M29CP2KE).
+	formSvc := &formsvc.Service{DB: d}
+	if _, err := formSvc.Active(ctx, formsvc.Registration); err != nil {
+		log.Error("the registration form cannot be loaded; applying to join and the form editor will fail",
+			"form", formsvc.Registration, "err", err)
+	}
 
 	step("stores")
 	cache, err := threadcache.New(cfg.DataDir, threadcache.Options{
@@ -474,7 +484,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 
 	var root http.Handler = web.New(web.Groups{
-		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Perm: perms, Logger: log}),
+		API:    api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Forms: formSvc, Perm: perms, Logger: log}),
 		Auth:   auth.New(authh),
 		Assets: spa.Assets(),
 		Health: health.Handler(health.Options{

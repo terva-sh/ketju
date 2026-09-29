@@ -167,6 +167,7 @@ func TestTargetFormats(t *testing.T) {
 		{Thread(id), Target{"thread", "01k4z3j0w8x2c"}},
 		{Post(id, 42), Target{"post", "01k4z3j0w8x2c/42"}},
 		{Setting("registration.mode"), Target{"setting", "registration.mode"}},
+		{Form("registration"), Target{"form", "registration"}},
 	} {
 		if c.got != c.want {
 			t.Errorf("got %+v, want %+v", c.got, c.want)

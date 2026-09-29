@@ -67,10 +67,11 @@ const (
 	TypeThread      = "thread"
 	TypePost        = "post"
 	TypeSetting     = "setting"
+	TypeForm        = "form"
 )
 
 // Types lists every target type, for the documentation test.
-var Types = []string{TypeUser, TypeForum, TypeGroup, TypeFlag, TypeApplication, TypeThread, TypePost, TypeSetting}
+var Types = []string{TypeUser, TypeForum, TypeGroup, TypeFlag, TypeApplication, TypeThread, TypePost, TypeSetting, TypeForm}
 
 func decimal(typ string, id int64) Target { return Target{Type: typ, ID: strconv.FormatInt(id, 10)} }
 
@@ -99,6 +100,11 @@ func Post(thread threadid.ID, ordinal uint32) Target {
 
 // Setting is a runtime setting, by its key.
 func Setting(key string) Target { return Target{Type: TypeSetting, ID: key} }
+
+// Form is a declarative form, by its key, such as registration. The key
+// names the form across its versions; the version an action wrote goes in
+// the row's details.
+func Form(key string) Target { return Target{Type: TypeForm, ID: key} }
 
 // ParsePost reads a post target's id back into its thread and ordinal.
 func ParsePost(id string) (threadid.ID, uint32, error) {

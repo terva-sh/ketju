@@ -18,6 +18,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
+	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
@@ -95,7 +96,7 @@ func newAdminWorld(t *testing.T) *adminWorld {
 	w.tokens["anonymous"] = ""
 
 	w.h, w.mux = build(Deps{Users: &users.Service{DB: d, Perm: w.perm}, Threads: &threads.Service{DB: d, Perm: w.perm},
-		Forums: &forums.Service{DB: d, Perm: w.perm}, Perm: w.perm})
+		Forums: &forums.Service{DB: d, Perm: w.perm}, Forms: &formsvc.Service{DB: d}, Perm: w.perm})
 	store := &session.Store{DB: d, Now: func() time.Time { return w.now }}
 	pass := func(h http.Handler) http.Handler { return h }
 	w.handler = web.New(web.Groups{API: w.mux}, web.Options{Session: session.Middleware(store, nil), RateLimit: pass, CSRF: pass})

@@ -1,0 +1,15 @@
+{
+  "type": "validation-failed",
+  "title": "The request was understood but is not valid.",
+  "status": 422,
+  "errors": [
+    {
+      "field": "who",
+      "code": "required"
+    },
+    {
+      "field": "rules",
+      "code": "wrong_type"
+    }
+  ]
+}

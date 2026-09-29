@@ -14,6 +14,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
+	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
@@ -388,7 +389,7 @@ func TestThreadListOpensNoLog(t *testing.T) {
 	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db)} // no Threads, no Render
 	c := *w.world
 	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)},
-		Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Perm: perm.New(w.db)})
+		Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Forms: &formsvc.Service{DB: w.db}, Perm: perm.New(w.db)})
 	f := &forumWorld{world: &c, ids: w.ids}
 	if l := f.threadList("alice", "general", "", ""); len(l.Threads) != 1 || l.Threads[0].Pinned == nil {
 		t.Errorf("%+v", l)

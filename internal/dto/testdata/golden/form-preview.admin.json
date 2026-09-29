@@ -1,0 +1,84 @@
+{
+  "key": "registration",
+  "version": 0,
+  "title": "Apply to join",
+  "intro_html": "<p>Tell us a bit about yourself…</p>\n",
+  "fields": [
+    {
+      "key": "name",
+      "type": "text",
+      "label": "Name",
+      "required": true,
+      "max": 200,
+      "options": [],
+      "multiple": false,
+      "locked": false,
+      "from_claim": "name",
+      "html": ""
+    },
+    {
+      "key": "email",
+      "type": "email",
+      "label": "Email",
+      "required": false,
+      "max": 254,
+      "options": [],
+      "multiple": false,
+      "locked": true,
+      "from_claim": "email",
+      "html": ""
+    },
+    {
+      "key": "who",
+      "type": "textarea",
+      "label": "Who invited you or how did you find us?",
+      "required": true,
+      "max": 1000,
+      "options": [],
+      "multiple": false,
+      "locked": false,
+      "from_claim": "",
+      "html": ""
+    },
+    {
+      "key": "rules",
+      "type": "checkbox",
+      "label": "I have read the guidelines",
+      "required": true,
+      "max": 0,
+      "options": [],
+      "multiple": false,
+      "locked": false,
+      "from_claim": "",
+      "html": ""
+    },
+    {
+      "key": "interests",
+      "type": "select",
+      "label": "Interests",
+      "required": false,
+      "max": 0,
+      "options": [
+        "Games",
+        "Books",
+        "Hiking"
+      ],
+      "multiple": true,
+      "locked": false,
+      "from_claim": "",
+      "html": ""
+    },
+    {
+      "key": "welcome",
+      "type": "markdown_notice",
+      "label": "",
+      "required": false,
+      "max": 0,
+      "options": [],
+      "multiple": false,
+      "locked": false,
+      "from_claim": "",
+      "html": "<p>Be <strong>kind</strong>.</p>\n"
+    }
+  ]
+}

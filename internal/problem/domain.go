@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/terva-sh/ketju/internal/events"
+	"github.com/terva-sh/ketju/internal/forms"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -40,6 +41,13 @@ var mapping = []struct {
 	// Client asked for a reply to a post that is not in the thread. The
 	// request parsed; what it names does not exist there.
 	{render.ErrInvalidReplyTo, CodeValidationFailed},
+
+	// A form's answers or a form schema that breaks the rules. The body
+	// lists each field and its code (FieldErrorsOf). An answer naming no
+	// field is a client bug: the client drew its inputs from the schema.
+	{forms.ErrInvalidAnswers, CodeValidationFailed},
+	{forms.ErrInvalidSchema, CodeValidationFailed},
+	{forms.ErrUnknownAnswer, CodeBadRequest},
 
 	// Client asked for something the object's state refuses.
 	{threadlog.ErrActorClosed, CodeConflict},
@@ -139,6 +147,21 @@ func RetryAfterOf(err error) (time.Duration, bool) {
 		return r.after, true
 	}
 	return 0, false
+}
+
+// FieldErrorsOf returns the field errors err carries, or nil. A form's
+// refusal (*forms.Invalid) carries them; WriteError puts them in a
+// validation-failed body and nowhere else.
+func FieldErrorsOf(err error) []FieldError {
+	var inv *forms.Invalid
+	if !errors.As(err, &inv) || len(inv.Fields) == 0 {
+		return nil
+	}
+	out := make([]FieldError, len(inv.Fields))
+	for i, f := range inv.Fields {
+		out[i] = FieldError{Field: f.Field, Code: f.Code}
+	}
+	return out
 }
 
 // FromError returns the code for an error.

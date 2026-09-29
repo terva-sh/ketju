@@ -17,6 +17,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
+	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
@@ -29,6 +30,8 @@ type Deps struct {
 	Threads *threads.Service
 	Users   *users.Service
 	Forums  *forums.Service
+	// Forms answers the admin form routes (forms.go).
+	Forms *formsvc.Service
 	// Perm is the process's evaluator. The admin API's moderates gate asks
 	// it (admin.go).
 	Perm   *perm.Evaluator
@@ -49,16 +52,16 @@ func New(d Deps) http.Handler {
 // build is New, with the handlers it registered, for a test that walks the
 // admin routes.
 func build(d Deps) (*handlers, *http.ServeMux) {
-	if d.Threads == nil || d.Users == nil || d.Forums == nil || d.Perm == nil {
-		panic(fmt.Sprintf("api.New: Threads, Users, Forums and Perm are required "+
-			"(Threads set: %t, Users set: %t, Forums set: %t, Perm set: %t)",
-			d.Threads != nil, d.Users != nil, d.Forums != nil, d.Perm != nil))
+	if d.Threads == nil || d.Users == nil || d.Forums == nil || d.Forms == nil || d.Perm == nil {
+		panic(fmt.Sprintf("api.New: Threads, Users, Forums, Forms and Perm are required "+
+			"(Threads set: %t, Users set: %t, Forums set: %t, Forms set: %t, Perm set: %t)",
+			d.Threads != nil, d.Users != nil, d.Forums != nil, d.Forms != nil, d.Perm != nil))
 	}
 	log := d.Logger
 	if log == nil {
 		log = slog.Default()
 	}
-	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, perm: d.Perm, log: log}
+	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, perm: d.Perm, log: log}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
 		mux.HandleFunc(rt.Pattern(), rt.Handler)
@@ -120,6 +123,7 @@ type handlers struct {
 	threads *threads.Service
 	users   *users.Service
 	forums  *forums.Service
+	forms   *formsvc.Service
 	perm    *perm.Evaluator
 	log     *slog.Logger
 

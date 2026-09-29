@@ -131,6 +131,12 @@ type Querier interface {
 	// Only forums with an unread thread have a row.
 	ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
+	GetFormByID(ctx context.Context, id int64) (Form, error)
+	// Forms and their versions (docs/04 "forms, form_versions"). Versions are
+	// written through internal/service/forms, which parses the schema first and
+	// writes the audit row in the same transaction.
+	GetFormByKey(ctx context.Context, key string) (Form, error)
+	GetFormVersion(ctx context.Context, arg GetFormVersionParams) (FormVersion, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetForumBySlug(ctx context.Context, slug string) (Forum, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
@@ -155,9 +161,11 @@ type Querier interface {
 	// reads it in the transaction that inserts the session, so nothing can
 	// change it between the check and the row.
 	IdentityHolder(ctx context.Context, id int64) (IdentityHolderRow, error)
+	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
 	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error
+	ListFormVersions(ctx context.Context, formID int64) ([]ListFormVersionsRow, error)
 	// Roots in position order, each followed by its children in position order.
 	// A child sorts by its root's position and id, then after the root itself.
 	ListForums(ctx context.Context) ([]Forum, error)
@@ -183,6 +191,7 @@ type Querier interface {
 	// session.IssueUser's status check.
 	LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error)
 	LowerReadPosition(ctx context.Context, arg LowerReadPositionParams) (int64, error)
+	MaxFormVersion(ctx context.Context, formID int64) (int64, error)
 	// MeCounts is GET /me's count statement: the viewer's unread notifications,
 	// and their unread threads by forum, so the service can drop the forums they
 	// cannot read in one batch from perm.
@@ -234,6 +243,7 @@ type Querier interface {
 	// IS rather than =, so a null forum_id matches the global row. Every
 	// parameter is named: see TestQueriesDoNotMixParameterStyles.
 	RevokePermission(ctx context.Context, arg RevokePermissionParams) error
+	SetActiveFormVersion(ctx context.Context, arg SetActiveFormVersionParams) error
 	SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (int64, error)
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error

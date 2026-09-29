@@ -259,3 +259,73 @@ export interface Draft {
   reply_to: number | null;
   updated_at: Millis;
 }
+
+// Form is a form version as a client renders it (internal/dto Form):
+// the apply screen and the form editor's preview. version is 0 for an
+// unsaved draft. intro_html and a notice's html are rendered by the server.
+export interface Form {
+  key: string;
+  version: number;
+  title: string;
+  intro_html: string;
+  fields: FormField[];
+}
+
+// FormField is one field of a Form (internal/dto FormField). Every property
+// is present: max is the effective limit, 0 for a type without text;
+// options is empty except on a select; html is a markdown_notice's body.
+export interface FormField {
+  key: string;
+  type: string;
+  label: string;
+  required: boolean;
+  max: number;
+  options: string[];
+  multiple: boolean;
+  locked: boolean;
+  from_claim: string;
+  html: string;
+}
+
+// FormAdmin is GET /admin/forms/{key} and its versions, and the answer to a
+// save (internal/dto FormAdmin). Admins only. schema is the stored schema,
+// which the editor edits and sends back.
+export interface FormAdmin {
+  key: string;
+  title: string;
+  active_version: number;
+  versions: FormVersionInfo[];
+  form: Form;
+  schema: FormSchema;
+}
+
+// FormVersionInfo is one version in a form's history, newest first.
+// created_by is null for the version the migration seeded.
+export interface FormVersionInfo {
+  version: number;
+  created_at: Millis;
+  created_by: Author | null;
+}
+
+// FormSchema is a form version's schema_json (docs/05 "Forms"). The stored
+// form is canonical: a property left at its default is absent.
+export interface FormSchema {
+  title: string;
+  intro_markdown?: string;
+  fields: FormSchemaField[];
+}
+
+// FormSchemaField is one field of a FormSchema. Which optional properties
+// a field may carry depends on its type; the server holds the rules.
+export interface FormSchemaField {
+  key: string;
+  type: string;
+  label?: string;
+  required?: boolean;
+  max?: number;
+  options?: string[];
+  multiple?: boolean;
+  from_claim?: string;
+  locked?: boolean;
+  markdown?: string;
+}

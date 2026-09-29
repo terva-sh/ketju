@@ -16,6 +16,8 @@ import type {
   CreatedPost,
   CreatedThread,
   Draft,
+  Form,
+  FormAdmin,
   ForumTree,
   Me,
   Post,
@@ -34,6 +36,8 @@ import createdPostMember from '../../../../internal/dto/testdata/golden/created-
 import createdThreadMember from '../../../../internal/dto/testdata/golden/created-thread.member.json';
 import draftMember from '../../../../internal/dto/testdata/golden/draft.member.json';
 import draftPlainMember from '../../../../internal/dto/testdata/golden/draft-plain.member.json';
+import formAdminAdmin from '../../../../internal/dto/testdata/golden/form-admin.admin.json';
+import formPreviewAdmin from '../../../../internal/dto/testdata/golden/form-preview.admin.json';
 import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.json';
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
 import historyMember from '../../../../internal/dto/testdata/golden/history.member.json';
@@ -94,6 +98,8 @@ export const contract = [
   matches<CreatedThread>()(createdThreadMember),
   matches<Draft>()(draftMember),
   matches<Draft>()(draftPlainMember),
+  matches<FormAdmin>()(formAdminAdmin),
+  matches<Form>()(formPreviewAdmin),
   matches<ForumTree>()(forumsAnon),
   matches<ForumTree>()(forumsMember),
   matches<PostHistory>()(historyMember),

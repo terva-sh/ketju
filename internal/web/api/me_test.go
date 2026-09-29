@@ -18,6 +18,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
+	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
@@ -94,7 +95,7 @@ func newMeWorld(t *testing.T) *meWorld {
 	}
 	shell.SetPage(ShellPage(w.users))
 	pass := func(h http.Handler) http.Handler { return h }
-	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: &threads.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}, Perm: perm.New(d)}), SPA: shell},
+	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: &threads.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}, Forms: &formsvc.Service{DB: d}, Perm: perm.New(d)}), SPA: shell},
 		web.Options{Session: session.Middleware(store, nil), RateLimit: pass, CSRF: pass})
 	w.seed()
 	return w
@@ -353,9 +354,11 @@ func TestNewRequiresEveryService(t *testing.T) {
 	u, th, f := &users.Service{DB: d, Perm: perm.New(d)}, &threads.Service{DB: d, Perm: perm.New(d)},
 		&forums.Service{DB: d, Perm: perm.New(d)}
 	p := perm.New(d)
-	for name, deps := range map[string]Deps{"no users": {Threads: th, Forums: f, Perm: p},
-		"no threads": {Users: u, Forums: f, Perm: p}, "no forums": {Threads: th, Users: u, Perm: p},
-		"no perm": {Threads: th, Users: u, Forums: f}, "none": {}} {
+	fs := &formsvc.Service{DB: d}
+	for name, deps := range map[string]Deps{"no users": {Threads: th, Forums: f, Forms: fs, Perm: p},
+		"no threads": {Users: u, Forums: f, Forms: fs, Perm: p}, "no forums": {Threads: th, Users: u, Forms: fs, Perm: p},
+		"no forms": {Threads: th, Users: u, Forums: f, Perm: p},
+		"no perm":  {Threads: th, Users: u, Forums: f, Forms: fs}, "none": {}} {
 		t.Run(name, func(t *testing.T) {
 			defer func() {
 				if recover() == nil {
@@ -365,7 +368,7 @@ func TestNewRequiresEveryService(t *testing.T) {
 			New(deps)
 		})
 	}
-	New(Deps{Threads: th, Users: u, Forums: f, Perm: p}) // all: no panic
+	New(Deps{Threads: th, Users: u, Forums: f, Forms: fs, Perm: p}) // all: no panic
 	func() {
 		defer func() {
 			if recover() == nil {

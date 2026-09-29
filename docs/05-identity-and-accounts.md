@@ -213,7 +213,7 @@ a suggestion and reserves nothing.
    after approval the applicant signs in again, through the status check of
    `session.IssueUser` (TKT-01M29CKRG9).
 2. Render the active version of the `registration` form (see Forms below).
-   Fields the form marks `from_claims` are prefilled (name, email) and may be
+   Fields the form marks `from_claim` are prefilled (name, email) and may be
    locked.
 3. Submitting creates an `applications` row (`status = pending`) and notifies
    everyone in `moderators`+`admins` (notification kind `new_application`,
@@ -290,6 +290,60 @@ the Preact client renders the same schema. A non-JS client renders it with
 `html/template` trivially — this is one reason the form is data, not code.
 Admins edit the form in a small UI that writes a new version; the old version
 stays for old applications.
+
+#### The schema rules (TKT-01M29CP2KE)
+
+`internal/forms` parses a schema and validates answers against it, through
+one table of field types. No code names a field key. A schema is refused
+with `validation-failed` and a list of `{field, code}` errors (07 "Error
+catalogue") when it breaks any of these rules:
+
+- The schema is one JSON object of at most 64 KiB, with only the properties
+  `title`, `intro_markdown` and `fields`. An unknown property is refused
+  rather than ignored, so a schema written by a newer build fails loudly in
+  an older one.
+- `title` is 1 to 200 characters. `intro_markdown` is at most 10000.
+- `fields` holds 1 to 50 fields. Each has a `key` matching
+  `^[a-z][a-z0-9_]{0,39}$`, unique in the form, and a `type` from the table
+  below. A `label` of 1 to 500 characters is required except on a
+  `markdown_notice`. A title, label or option may not hold a control
+  character.
+- Each type allows only the optional properties the table lists. Any other
+  is refused as `not_allowed`.
+
+<!-- form-types:begin -->
+| Type | Optional properties | `max` cap | The answer |
+|---|---|---|---|
+| `text` | `required`, `max`, `from_claim`, `locked` | 200 | a string on one line |
+| `email` | `required`, `max`, `from_claim`, `locked` | 254 | a bare address, as `net/mail` reads it |
+| `textarea` | `required`, `max` | 5000 | a string; `\n` and tab allowed, `\r\n` stored as `\n` |
+| `checkbox` | `required` | none | `true` or `false`; required means ticked |
+| `select` | `required`, `options`, `multiple` | none | one of `options`, or with `multiple` a list of them without repeats |
+| `markdown_notice` | `markdown` | none | none: it is display only, and a value sent for it is refused |
+<!-- form-types:end -->
+
+- `max` is 1 to the type's cap and counts characters. Without it the cap
+  applies.
+- `options` is required on a `select`: 1 to 100 unique options of 1 to 200
+  characters each.
+- `from_claim` is one of `name`, `email` or `preferred_username`. `locked`
+  requires `from_claim`.
+- `markdown` is a notice's body, at most 10000 characters. It and
+  `intro_markdown` are rendered through `internal/render` like a post.
+
+Answers are strings trimmed of surrounding space. An answer for a key the
+form has no field for is `bad-request`, because the client drew its inputs
+from the schema. A `locked` field ignores whatever was submitted and stores
+the claim. When the IdP sent no such claim it stores an empty value and is
+not held to `required`, because the applicant cannot supply a value the IdP
+withheld.
+
+A saved schema is stored in canonical form, so the same schema always
+stores the same bytes. Each version is parsed when it is loaded. A stored
+version that no longer parses is a 500 and an error-level log naming the
+form and version, never a form served without the field it could not read.
+The server logs the same at startup for the registration form, and keeps
+serving.
 
 ## Sessions and CSRF
 

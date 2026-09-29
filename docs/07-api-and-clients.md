@@ -143,6 +143,41 @@ No error body ever carries the underlying error text. A database constraint
 name describes the schema to whoever provoked it and means nothing to a
 member, so the error goes to the log and the client gets the fixed title.
 
+#### Field errors on `validation-failed`
+
+A `validation-failed` body for a form's answers or a form schema (05
+"Forms") carries one more member, `errors`: a list of `{field, code}`, one
+entry per thing wrong, in order. This is an RFC 9457 extension member. No
+other body has it.
+
+- `field` is an answer's key from the stored schema, or a path into a
+  submitted schema of property names and indices, such as
+  `fields.2.options` or `title`. The whole schema is `""`. A path never
+  carries a key the request sent, so the body echoes nothing.
+- `code` is one of the codes below. They are API surface, like the `type`s
+  above.
+
+<!-- form-codes:begin -->
+| Code | Meaning |
+|---|---|
+| `required` | Missing or blank, and required; a required checkbox left unticked |
+| `too_long` | Over the property's or the answer's character limit, or a schema over 64 KiB |
+| `invalid_email` | Not a bare email address |
+| `invalid_text` | Holds a control character, or a line break where one line is expected |
+| `not_an_option` | A select answer that is not one of its options |
+| `duplicate_option` | An option, or a multiple select answer, given twice |
+| `wrong_type` | The wrong JSON type: a number for a string, a string for a list |
+| `not_allowed` | A property this field type does not take, or a value sent for a `markdown_notice` |
+| `invalid_key` | A field key that does not match `^[a-z][a-z0-9_]{0,39}$` |
+| `duplicate_key` | A field key already used in the form |
+| `unknown_type` | A field type that is not one of the six |
+| `unknown_claim` | A `from_claim` that is not `name`, `email` or `preferred_username` |
+| `out_of_range` | A `max` below 1 or over the type's cap |
+| `too_many` | Over 50 fields or 100 options |
+| `unknown_property` | A property no schema or field has |
+| `malformed` | Not JSON, or more than one JSON value |
+<!-- form-codes:end -->
+
 ### Moderation and admin (`/api/v1/admin/*`, role-gated)
 
 Queue (flags + applications), application approve/deny, thread
@@ -155,6 +190,26 @@ Each route is gated on the role docs/08's "Primitives" table names for its
 action, which is the one place authority is stated. Archiving a thread is
 admin-only there; locking, pinning, moving, renaming, retagging, splitting
 and merging are moderator actions.
+
+#### Form versions (TKT-01M29CP2KE)
+
+Admins only: anonymous is `unauthenticated`, and a pre-user, member or
+moderator is `forbidden`. Every answer is `no-store`. A key or version that
+names nothing is `not-found`.
+
+| Route | |
+|---|---|
+| `GET /admin/forms/{key}` | `internal/dto` `FormAdmin`: the form's key and name, `active_version`, `versions` newest first (each with `created_at` and `created_by`, null for the seeded version), the active version rendered as `form`, and its stored `schema` |
+| `GET /admin/forms/{key}/versions/{version}` | `FormAdmin` with that version as `form` and `schema` |
+| `POST /admin/forms/{key}/versions` | `{base_version, schema}` → 201 `FormAdmin` at the new version. `base_version` must be the active version, or it is `conflict` and nothing is written: another admin saved since the editor loaded the form. A schema that breaks the rules (05 "Forms") is `validation-failed` with field errors and writes nothing. The version is appended as the next number and made active, and `form.version_created` is audited, in one transaction. Earlier versions are never changed |
+| `POST /admin/forms/{key}/preview` | `{schema}` → `internal/dto` `Form`, rendered as an applicant would see it, as `version` 0. Refused as a save would be, and writes nothing |
+
+`Form` is also what the apply screen draws. Each field carries every
+property: `max` is the effective limit (the field's, or its type's cap, 0
+for a type without text), `options` is empty except on a select, and `html`
+is a `markdown_notice`'s rendered body. `intro_html` is the rendered
+`intro_markdown`. A stored version that no longer parses is `internal`
+(05 "Forms").
 
 ### Thread response shape (abridged)
 

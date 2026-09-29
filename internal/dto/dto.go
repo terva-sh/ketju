@@ -47,6 +47,8 @@
 // forever.
 package dto
 
+import "encoding/json"
+
 // Millis is a unix-millisecond timestamp, UTC.
 //
 // docs/04 makes this the project-wide time representation, chosen partly so
@@ -510,4 +512,71 @@ type UserPost struct {
 	Thread ThreadLink `json:"thread"`
 	Forum  ForumRef   `json:"forum"`
 	Post   Post       `json:"post"`
+}
+
+// Form is a declarative form version as a client renders it (docs/05
+// "Forms"): the apply screen, the form editor's preview, and a future HTML
+// client draw the same fields from this one shape.
+type Form struct {
+	// Key names the form, such as registration.
+	Key string `json:"key"`
+	// Version is the version this is, or 0 for an unsaved draft the
+	// editor previewed.
+	Version int    `json:"version"`
+	Title   string `json:"title"`
+	// IntroHTML is the schema's intro_markdown rendered by
+	// internal/render, empty when there is none.
+	IntroHTML string      `json:"intro_html"`
+	Fields    []FormField `json:"fields"`
+}
+
+// FormField is one field of a Form. Every property is present for every
+// type, at its zero value where the type does not use it.
+type FormField struct {
+	Key string `json:"key"`
+	// Type is text, textarea, email, checkbox, select or markdown_notice.
+	Type string `json:"type"`
+	// Label may be empty for a markdown_notice.
+	Label    string `json:"label"`
+	Required bool   `json:"required"`
+	// Max is the most characters an answer may have: the field's max, or
+	// its type's cap. It is 0 for a type that takes no text.
+	Max int `json:"max"`
+	// Options and Multiple are a select's. Options is empty otherwise.
+	Options  []string `json:"options"`
+	Multiple bool     `json:"multiple"`
+	// Locked means the server stores the FromClaim claim whatever is
+	// submitted, so the client shows the value and does not offer to edit
+	// it.
+	Locked bool `json:"locked"`
+	// FromClaim names the IdP claim that prefills the field, or is empty.
+	FromClaim string `json:"from_claim"`
+	// HTML is a markdown_notice's body rendered by internal/render. It is
+	// empty for every other type.
+	HTML string `json:"html"`
+}
+
+// FormAdmin is GET /admin/forms/{key} and its versions (docs/07): a form as
+// the admin editor edits it. Admins only.
+type FormAdmin struct {
+	Key string `json:"key"`
+	// Title is the form's own name, not its schema's title.
+	Title         string            `json:"title"`
+	ActiveVersion int               `json:"active_version"`
+	Versions      []FormVersionInfo `json:"versions"`
+	// Form is the version this answer is about, rendered: the active one,
+	// or the one the path names.
+	Form Form `json:"form"`
+	// Schema is that version's schema_json as stored, which is what the
+	// editor edits and what POST /admin/forms/{key}/versions takes back.
+	Schema json.RawMessage `json:"schema"`
+}
+
+// FormVersionInfo is one version in a form's history, newest first.
+type FormVersionInfo struct {
+	Version   int    `json:"version"`
+	CreatedAt Millis `json:"created_at"`
+	// CreatedBy is the admin who saved it, or null for the version the
+	// migration seeded.
+	CreatedBy *Author `json:"created_by"`
 }
