@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T17:34:48Z
+updated_at: 2026-09-29T17:36:07Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -188,13 +188,30 @@ Checks: gofmt, go vet and go test -race ./... pass. The client is unchanged, so 
 
 Review 1428 (PR 153, reviewed head 6217bb3, base 3eab1e9, run 959, request ready-review-6217bb3) marked both review 1424 findings resolved. It raised one low finding: a site-wide grant's audit details recorded forum_id 0, which names no forum. Fixed in the next commit on run/cxk1x-admin-users-2 (branch SHA, answer review 1428). A site-wide row's details now carry null for forum and forum_id. TestGrantsApplyInOneTransaction asserts both kinds of row and fails against the old details. gofmt, vet and go test -race ./... pass; the client is unchanged.
 
+**agent:claude-code/phase2-run-cxk1x** at 2026-09-29T17:36:07Z
+
+Review round 3 on PR 153 (request ready-review-281820c, run 961) is clean for head 281820c, base 3eab1e9, and marks review 1428's finding resolved (PR comment 18758). Three review rounds were used on PR 153; PR 152 used four. The summary is updated for PR 153. This ticket-store commit is reviewed with carry=true.
+
 ## Summary
 
-The admin users screen is built, server and client, and every role, membership, grant and group change is audited in its own transaction.
+The admin users screen is built, server and client, and every role, membership, grant and group change is audited in the transaction that makes it. The work landed through PR #153, which replaced PR #152 after main moved (see the re-branch note).
 
-- `internal/perm`: `ChangeRole` (promotion through Promote's body, `user.demoted` that leaves `user.promoted` alone, `user.role_changed`, and the last active admin refused), `ApplyGrants` (one transaction, one `permission.*` row per change, refused whole when a change names nothing or disagrees with the rows), audited `AddMember`/`RemoveMember` that refuse IdP rows, and `Preview`, which decides with the same `decide` Check uses. The unaudited `SetRole` is gone; `Grant`/`Revoke` are one-change batches.
-- New `internal/service/groups`, admin methods on `internal/service/users`, `views.AdminUsers`, and thirteen routes under `/api/v1/admin/` behind the staff or admin gate (docs/07).
-- DTOs and goldens in `internal/dto/admin.go`; new audit target type `permission` and the group slug rule in docs/04; docs/05 says an IdP membership is not edited by hand.
-- Client: `UsersScreen` with Groups and Permissions tabs in the lazy admin chunk, with staging, preview and apply for the grid. The reader bundle is 38665 of 60000 B.
+- `internal/perm`
+  - `ChangeRole`: a promotion goes through Promote's body. A demotion writes `user.demoted` and leaves `user.promoted` alone. A change between member and moderator writes `user.role_changed`. The last active admin is refused.
+  - `ApplyGrants`: one transaction, with one `permission.*` row per change. A site-wide row's forum is null in the details. The batch is refused whole when a change names nothing or disagrees with the rows.
+  - `AddMember`/`RemoveMember` are audited and refuse IdP rows.
+  - `Preview` decides with the same `decide` Check uses.
+  - Each write has a `...Then` form (`writeThen`) that reads the answer in the same transaction, so a committed change is never reported as failed. `PreviewThen` does the same for a preview.
+  - The unaudited `SetRole` is gone, and `Grant`/`Revoke` are one-change batches.
+- A new `internal/service/groups`, admin methods on `internal/service/users`, `views.AdminUsers`, and thirteen routes under `/api/v1/admin/` behind the staff or admin gate (docs/07).
+- DTOs and goldens are in `internal/dto/admin.go`. docs/04 gains the new audit target type `permission` and the group slug rule. docs/05 says an IdP membership is not edited by hand.
+- Client: `UsersScreen` with Groups and Permissions tabs in the lazy admin chunk.
+  - The grid supports staging, preview and apply. It is locked while a batch applies, and stale previews are dropped.
+  - A role change reloads the list.
+  - The group form edits the name and the description.
+  - The reader bundle is 38673 of 60000 B.
 
-For the next ticket: suspension (TKT-01M29CP2QK) and agent provisioning (TKT-01M29P9RSW) add their controls to `UsersScreen`'s detail panel; `member.RequireStaff`/`RequireAdmin` and `member.AdminUser` are there to reuse. AdminRoot renders a section through its `built` map.
+For the next ticket:
+- Suspension (TKT-01M29CP2QK) and agent provisioning (TKT-01M29P9RSW) add their controls to `UsersScreen`'s detail panel. `member.RequireStaff`/`RequireAdmin` and `member.AdminUser` are there to reuse, and AdminRoot renders a section through its `built` map.
+- A write that answers with what it changed should use perm's `...Then` forms.
+- The admin API test world's setup writes two audit rows, so count audit rows as deltas.
