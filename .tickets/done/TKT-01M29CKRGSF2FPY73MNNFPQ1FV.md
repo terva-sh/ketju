@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
+  - ref: pr:161
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T21:19:15Z
+updated_at: 2026-09-29T21:20:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
