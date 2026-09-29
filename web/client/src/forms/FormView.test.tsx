@@ -162,7 +162,9 @@ describe('FormView', () => {
     const root = mount({ form: g.form, mode: 'fill', prefill: g.prefill, values });
     expect(root.querySelectorAll('[aria-invalid]')).toHaveLength(0);
 
-    act(() => render(<FormView form={g.form} mode="fill" prefill={g.prefill} values={values} errors={p.fieldErrors} />, root));
+    act(() =>
+      render(<FormView form={g.form} mode="fill" prefill={g.prefill} values={values} errors={p.fieldErrors} refusals={1} />, root),
+    );
     const who = fieldEl(root, 'who').querySelector('textarea')!;
     const rules = fieldEl(root, 'rules').querySelector('input')!;
     for (const [control, key, code] of [
@@ -177,6 +179,30 @@ describe('FormView', () => {
     expect(fieldEl(root, 'name').querySelector('[aria-invalid]')).toBeNull();
     // who comes before rules in the form, so focus is there.
     expect(document.activeElement).toBe(who);
+  });
+
+  it('moves focus on a refusal, not on a change to the errors', () => {
+    const g = golden();
+    const values = initialValues(g.form, g.prefill);
+    const both = { who: 'required', rules: 'required' };
+    const draw = (errors: Record<string, string>, refusals: number) =>
+      act(() => render(<FormView form={g.form} mode="fill" values={values} errors={errors} refusals={refusals} />, root));
+    const root = mount({ form: g.form, mode: 'fill', values });
+    const who = fieldEl(root, 'who').querySelector('textarea')!;
+    const rules = fieldEl(root, 'rules').querySelector('input')!;
+
+    // Errors with no refusal counted, as a preview might show: no focus.
+    draw(both, 0);
+    expect(document.activeElement).not.toBe(who);
+    draw(both, 1);
+    expect(document.activeElement).toBe(who);
+    // The reader corrects who: its error goes, and focus stays with them.
+    draw({ rules: 'required' }, 1);
+    expect(document.activeElement).toBe(who);
+    expect(who.hasAttribute('aria-invalid')).toBe(false);
+    // The next refusal moves focus again.
+    draw({ rules: 'required' }, 2);
+    expect(document.activeElement).toBe(rules);
   });
 
   it('says an error for no field drawn above Submit', () => {

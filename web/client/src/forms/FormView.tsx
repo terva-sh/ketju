@@ -25,9 +25,14 @@ export interface FormViewProps {
   // shows its entry and is never sent.
   prefill?: Record<string, string>;
   values?: Values;
-  // The code for each field the last submission was refused over. When it
-  // changes and names a field, focus moves to the first such field.
+  // The code for each field the last submission was refused over, less any
+  // the reader has since changed.
   errors?: Record<string, string>;
+  // refusals counts the submissions refused with field errors. Each time it
+  // goes up, focus moves to the first field in errors. It is a count, not
+  // the errors themselves, so clearing one error as the reader corrects it
+  // does not pull focus away from where they are typing (review 1456).
+  refusals?: number;
   // read mode's answers, as they were stored.
   answers?: Record<string, unknown>;
   // The sign-in provider a locked field's value came from, for its label.
@@ -74,7 +79,8 @@ export function unknownFields(form: Form): FormField[] {
 }
 
 export function FormView(props: FormViewProps) {
-  const { form, mode, prefill = {}, values = {}, errors = {}, provider, onChange, onSubmit, busy, message } = props;
+  const { form, mode, prefill = {}, values = {}, errors = {}, refusals = 0, provider, onChange, onSubmit, busy, message } =
+    props;
   const base = useId();
   const root = useRef<HTMLFormElement>(null);
   const idOf = (i: number) => `${base}-f${i}`;
@@ -83,10 +89,11 @@ export function FormView(props: FormViewProps) {
   // After a refused submission, focus goes to the first field refused, in
   // the order the form draws them, so a reader starts where the problem is.
   useEffect(() => {
+    if (refusals === 0) return;
     const i = form.fields.findIndex((f) => Object.hasOwn(errors, f.key));
     if (i < 0) return;
     root.current?.querySelector<HTMLElement>(`[id="${idOf(i)}"]`)?.focus();
-  }, [errors]);
+  }, [refusals]);
 
   // Errors naming no field drawn here, the whole schema's "" among them,
   // are said above Submit rather than lost.

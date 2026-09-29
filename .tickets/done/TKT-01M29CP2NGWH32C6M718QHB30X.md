@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:10:33Z
+updated_at: 2026-09-29T19:14:18Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -150,6 +150,10 @@ Criterion 4, as the note of 2026-09-29 supersedes it: approved is drawn, with it
 **agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:10:33Z
 
 Terva review 1453 (run 6c8c21ce-1a88-420e-91ed-4232efe2ad4c, Actions run 984) of head 15009d064b2d7e0339c1a373dcf1e524fb1edbc7 on base 3fd598f8245f03a25774b2c22ccaf516d412a5fc: two medium findings, both fixed, neither disputed. (1) 'Identify a pending application by status, not withdrawal permission': a 409 on submit now goes to the status page when the status is pending or can_apply is false (approved, denied or withdrawn within the day, blocked, closed), and reloads the form only when the applicant may still apply, since the server checks every other refusal before the version. (2) 'Do not preserve answers when a field changes type': ApplyScreen's exported carried() keeps an answer across a form change only when the field keeps its kind in fields.tsx's map and its multiple flag, and every chosen option is still offered. Tested in ApplyScreen.test.tsx. Also, found in my own read of the diff: a member opening /apply is refused 403 and was told registration is closed; they are now told they are already a member. Budget after the fix: 44979 B gzip of 60000.
+
+**agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:14:18Z
+
+Terva review 1456 (run 06b93a1b-415f-4e11-b16d-7b8205ea7301, Actions run 986) of head 3122d7a5df6b78ea6e34ef57f036b3c80e22fec5 on base 3fd598f8245f03a25774b2c22ccaf516d412a5fc: it marks both findings of review 1453 resolved, and raises one medium finding, fixed and not disputed: 'Clear field errors when their answers change or a different refusal arrives'. Editing an answer now drops that field's error; any refusal other than validation-failed clears every field error; and the form-level 'Some answers need another look' line is drawn from the remaining errors, so it goes with the last. FormView moves focus on a new prop, refusals, a count of refused submissions, rather than on any change to errors, so clearing an error as the reader types does not pull focus away. Tested in FormView.test.tsx and ApplyScreen.test.tsx; mutations of each part caught. Budget 45062 B gzip of 60000.
 
 ## Summary
 

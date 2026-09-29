@@ -29,6 +29,7 @@ export function ApplyScreen() {
   const [attempt, setAttempt] = useState(0);
   const [values, setValues] = useState<Values>({});
   const [errors, setErrors] = useState<Record<string, string>>({});
+  const [refusals, setRefusals] = useState(0);
   const [message, setMessage] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   useShellContext({ title: 'Apply to join', actions: [] }, []);
@@ -85,11 +86,19 @@ export function ApplyScreen() {
     }
   };
 
+  // refused says what a refused submission means. Field errors describe
+  // only the submission that drew them, so any other answer clears them
+  // (review 1456).
   const refused = async (p: ProblemError) => {
     if (isProblem(p, 'validation-failed')) {
       setErrors({ ...p.fieldErrors });
-      setMessage('Some answers need another look. Each one is marked.');
-    } else if (isProblem(p, 'conflict')) {
+      setRefusals((n) => n + 1);
+      // The line saying so is drawn from errors, and goes with the last.
+      setMessage(null);
+      return;
+    }
+    setErrors({});
+    if (isProblem(p, 'conflict')) {
       await conflicted();
     } else if (isProblem(p, 'forbidden')) {
       setMessage(notAccepting);
@@ -136,11 +145,16 @@ export function ApplyScreen() {
           prefill={data.prefill}
           values={values}
           errors={errors}
+          refusals={refusals}
           provider={viewer.value.pre_user?.provider}
           busy={busy}
           submitLabel="Send application"
-          message={message}
-          onChange={(k, v) => setValues((vs) => ({ ...vs, [k]: v }))}
+          message={message ?? (Object.keys(errors).length > 0 ? 'Some answers need another look. Each one is marked.' : null)}
+          onChange={(k, v) => {
+            setValues((vs) => ({ ...vs, [k]: v }));
+            // A changed answer is no longer the one refused.
+            setErrors((es) => (Object.hasOwn(es, k) ? withoutKey(es, k) : es));
+          }}
           onSubmit={submit}
         />
       )}
@@ -165,6 +179,13 @@ export function carried(previous: { form: Form; values: Values }, field: FormFie
     if (!chosen.every((c) => c === '' || field.options.includes(c as string))) return undefined;
   }
   return v;
+}
+
+// withoutKey is o less its entry for key.
+function withoutKey(o: Record<string, string>, key: string): Record<string, string> {
+  const out = { ...o };
+  delete out[key];
+  return out;
 }
 
 // isPending is an application under review.

@@ -160,6 +160,38 @@ describe('the apply screen', () => {
     expect(location.pathname).toBe('/apply');
   });
 
+  // Review 1456: an error describes the submission that drew it, and goes
+  // when the answer changes or a later submission is refused otherwise.
+  it('clears an error as its answer changes, and every error on another refusal', async () => {
+    server.routes['POST /api/v1/apply'] = () => ({ status: 422, body: fieldErrorsBody });
+    const root = await filledIn();
+    await send(root);
+    const who = field(root, 'who').querySelector('textarea')!;
+    expect(document.activeElement).toBe(who);
+    expect(root.querySelector('.form-message')!.textContent).toContain('Some answers need another look');
+
+    type(root, 'who', 'A friend');
+    expect(who.hasAttribute('aria-invalid')).toBe(false);
+    expect(field(root, 'who').querySelector('.form-error')).toBeNull();
+    expect(document.activeElement).toBe(who);
+    expect(field(root, 'rules').querySelector('input')!.getAttribute('aria-invalid')).toBe('true');
+    expect(root.querySelector('.form-message')!.textContent).toContain('Some answers need another look');
+
+    // The last one corrected, nothing is said to need another look.
+    act(() => field(root, 'rules').querySelector<HTMLInputElement>('input')!.click());
+    expect(root.querySelector('[aria-invalid]')).toBeNull();
+    expect(root.querySelector('.form-message')).toBeNull();
+
+    // Refused again with errors, then refused for another reason.
+    await send(root);
+    expect(root.querySelectorAll('[aria-invalid="true"]').length).toBe(2);
+    server.routes['POST /api/v1/apply'] = () => problemAnswer('forbidden', 403);
+    await send(root);
+    expect(root.querySelector('[aria-invalid]')).toBeNull();
+    expect(root.querySelector('.form-error')).toBeNull();
+    expect(root.querySelector('.form-message')!.textContent).toBe(notAccepting);
+  });
+
   it('says applications are closed on a 403, and gives no reason', async () => {
     server.routes['POST /api/v1/apply'] = () => problemAnswer('forbidden', 403);
     const root = await filledIn();
