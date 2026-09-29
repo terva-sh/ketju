@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T17:30:01Z
+updated_at: 2026-09-29T17:34:48Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -183,6 +183,10 @@ Review 1423 (PR 152, reviewed head 5b323bc, base 3eab1e9, run 942; superseded by
 Also fixed: TestEveryMutationInvalidates ran its mutations from a map. Since Grant and Revoke became checked batches, a Revoke drawn before its Grant was refused, so the test was flaky. It is now an ordered list and passed 20 of 20 runs. TestOnlyRoleWritesSetTheRole now names ChangeRoleThen.
 
 Checks: gofmt, go vet and go test -race ./... pass. The client is unchanged, so the dist is too.
+
+**agent:claude-code/phase2-run-cxk1x** at 2026-09-29T17:34:48Z
+
+Review 1428 (PR 153, reviewed head 6217bb3, base 3eab1e9, run 959, request ready-review-6217bb3) marked both review 1424 findings resolved. It raised one low finding: a site-wide grant's audit details recorded forum_id 0, which names no forum. Fixed in the next commit on run/cxk1x-admin-users-2 (branch SHA, answer review 1428). A site-wide row's details now carry null for forum and forum_id. TestGrantsApplyInOneTransaction asserts both kinds of row and fails against the old details. gofmt, vet and go test -race ./... pass; the client is unchanged.
 
 ## Summary
 
