@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRDQHB528ZW1FFBN4SA1
 title: Add the applications and forms schema
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:data-model-applications
     path: docs/04-data-model.md
-claim:
-  actor: agent:claude-code/phase2-run-ckrdq
-  branch: run/ckrdq-applications-forms-schema
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a269d391ef083a6a0
-  commit: 31f4a797770ed528757acfd7ddb222fe85980317
-  session: null
-  claimed_at: 2026-09-29T07:24:59Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:40:18Z
+updated_at: 2026-09-29T07:42:15Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,14 +42,14 @@ Storing `form_version` on the application is what keeps an old application reada
 
 ## Acceptance criteria
 
-- [ ] applications.(form_id, form_version) is a foreign key to form_versions, and a test shows an application naming a missing version is refused
-- [ ] form_versions refuses UPDATE, DELETE and a replacing INSERT by trigger, and a test shows saving version 2 leaves version 1 byte-identical
-- [ ] Application status is constrained by CHECK to pending, approved, denied and withdrawn, with the decision fields consistent with the status; each refused combination is tested
-- [ ] An identity can be marked blocked while keeping user_id NULL, and triggers refuse giving a blocked identity a user or blocking one that has a user
-- [ ] At most one pending application exists per identity, enforced by a partial unique index
-- [ ] The migration seeds the registration form at version 1, and adds application_notes and notifications.application_id, required for exactly the two application kinds
-- [ ] docs/04 names every table, column and trigger the migration adds, including why applications.identity_id is ON DELETE SET NULL
-- [ ] forms.active_version is NOT NULL under a deferred foreign key to form_versions, with no trigger fallback; TestActiveVersionAlwaysExists shows that a form committed without a version, a form naming a missing version, and an update to a missing version are each refused at commit
+- [x] applications.(form_id, form_version) is a foreign key to form_versions, and a test shows an application naming a missing version is refused
+- [x] form_versions refuses UPDATE, DELETE and a replacing INSERT by trigger, and a test shows saving version 2 leaves version 1 byte-identical
+- [x] Application status is constrained by CHECK to pending, approved, denied and withdrawn, with the decision fields consistent with the status; each refused combination is tested
+- [x] An identity can be marked blocked while keeping user_id NULL, and triggers refuse giving a blocked identity a user or blocking one that has a user
+- [x] At most one pending application exists per identity, enforced by a partial unique index
+- [x] The migration seeds the registration form at version 1, and adds application_notes and notifications.application_id, required for exactly the two application kinds
+- [x] docs/04 names every table, column and trigger the migration adds, including why applications.identity_id is ON DELETE SET NULL
+- [x] forms.active_version is NOT NULL under a deferred foreign key to form_versions, with no trigger fallback; TestActiveVersionAlwaysExists shows that a form committed without a version, a form naming a missing version, and an update to a missing version are each refused at commit
 
 ## Implementation plan
 
@@ -131,3 +124,7 @@ Additions beyond the grooming plan, each a strengthening that changes nothing a 
 - `notifications_application_kind_update`, a BEFORE UPDATE OF kind, application_id twin of the insert trigger, so an UPDATE cannot break the rule the insert trigger enforces.
 - `TestApplicationNotesAreBounded` for the note table's CHECK and foreign keys, so the mutation pass has a test for them.
 - docs/04 "Conventions" names the one SET NULL exception beside "No cascading deletes".
+
+## Summary
+
+Migration 0011_applications_forms.sql adds forms, form_versions, applications and application_notes, identities.blocked_at and blocked_by, and notifications.application_id, and seeds the registration form at version 1 (docs/05's example without the interests select). Every criterion is met and tested in internal/store/db/applications_schema_test.go; a mutation pass removed each of 28 constraints and made two seed changes, and all 30 were caught. docs/04 names every table, column and trigger added, and the one ON DELETE SET NULL exception, which TestNoCascadingDeletes now names. No service queries: consumers write internal/store/db/queries/forms.sql (TKT-01M29CP2KE) and applications.sql (TKT-01M29CP2KZ, TKT-01M29CP2MG). An approval must create the user first and then set status and user_id in one UPDATE, because the CHECK runs per statement.
