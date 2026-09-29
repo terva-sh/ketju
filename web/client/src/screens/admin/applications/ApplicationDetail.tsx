@@ -11,7 +11,15 @@ import { ConfirmButton } from '../common/ConfirmButton';
 import { Field } from '../common/Field';
 import { send } from '../common/send';
 import { Decision, noteMax, noteMessage } from './Decision';
-import { ApplicantCell, applicationHref, hasStatus, StatusMark } from './ApplicationList';
+import {
+  ApplicantCell,
+  applicationHref,
+  filterLabel,
+  hasStatus,
+  listHref,
+  StatusMark,
+  type Filter,
+} from './ApplicationList';
 
 // ApplicationDetail is one application, at /admin/applications?id=N: who
 // applied and through which sign-in, the answers against the form version
@@ -20,7 +28,10 @@ import { ApplicantCell, applicationHref, hasStatus, StatusMark } from './Applica
 //
 // Everything here is staff's: the applicant sees their status only, never a
 // note (TKT-01M29CP2MG).
-export function ApplicationDetail({ id }: { id: number }) {
+//
+// id is the address's digits, as ApplicationsScreen checked them, and
+// status the list it was opened from, which the way back returns to.
+export function ApplicationDetail({ id, status = 'pending' }: { id: string; status?: Filter }) {
   const url = `/api/v1/admin/applications/${id}`;
   const res = useResource(url, (signal) => apiGet<AdminApplication>(url, { signal }));
   // fresh is the application as the last change on this screen answered it.
@@ -35,11 +46,17 @@ export function ApplicationDetail({ id }: { id: number }) {
     if (notice) noticeRef.current?.focus();
   }, [notice]);
 
+  const back = (
+    <a href={listHref(status)}>
+      {status === 'all' ? 'All applications' : `${filterLabel(status)} applications`}
+    </a>
+  );
+
   if (!a) {
     if (res.error) {
       return isProblem(res.error, 'not-found') ? (
         <p>
-          There is no application #{id}. <a href="/admin/applications">Back to applications</a>
+          There is no application #{id}. {back}
         </p>
       ) : (
         <ErrorPanel error={res.error} what="The application" onRetry={res.retry} />
@@ -56,14 +73,21 @@ export function ApplicationDetail({ id }: { id: number }) {
     setFresh(next);
     setNotice(said);
   };
+  // A note is added to the application as it is when the answer comes, not
+  // as it was when the note was sent: a decision may have landed between
+  // the two, and must not be undone here (Terva review 1472). A decision's
+  // answer already carries any note written before it.
+  const noted = (n: ApplicationNote) =>
+    setFresh((f) => {
+      const cur = f ?? res.data!;
+      return cur.notes.some((x) => x.id === n.id) ? cur : { ...cur, notes: [...cur.notes, n] };
+    });
 
   return (
-    <section class="admin-detail app-detail" aria-labelledby="app-title" data-application={a.id}>
-      <p class="app-back">
-        <a href="/admin/applications">All pending applications</a>
-      </p>
+    <section class="admin-detail app-detail" aria-labelledby="app-title" data-application={id}>
+      <p class="app-back">{back}</p>
       <h2 id="app-title">
-        Application #{a.id} <StatusMark status={a.status} />
+        Application #{id} <StatusMark status={a.status} />
       </h2>
       {notice && (
         <p class="app-notice" role="status" tabIndex={-1} ref={noticeRef} data-notice>
@@ -113,13 +137,13 @@ export function ApplicationDetail({ id }: { id: number }) {
         <ul class="app-prior" data-prior>
           {a.prior.map((p) => (
             <li key={p.id}>
-              <a href={applicationHref(p.id)}>Application #{p.id}</a>, {when(p.created_at)} <StatusMark status={p.status} />
+              <a href={applicationHref(p.id, status)}>Application #{p.id}</a>, {when(p.created_at)} <StatusMark status={p.status} />
             </li>
           ))}
         </ul>
       )}
 
-      <Notes url={url} notes={a.notes} onAdded={(n) => setFresh({ ...a, notes: [...a.notes, n] })} />
+      <Notes url={url} notes={a.notes} onAdded={noted} />
     </section>
   );
 }

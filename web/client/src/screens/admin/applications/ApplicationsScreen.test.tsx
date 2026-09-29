@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminApplicationList, Me } from '../../../api/dto';
 import { viewer } from '../../../state/viewer';
 import { renderAt, screenOf, settle, stubServer, unmount, type StubServer } from '../../../testing';
+import { applicationID } from './ApplicationsScreen';
 import { appUrl, asModerator, listPage, pendingApp } from './fixtures';
 
 // The list at /admin/applications (TKT-01M3NRX2NN): pending by default, a
@@ -106,6 +107,34 @@ describe('the applications list', () => {
     expect(gets()).toEqual([appUrl(42)]);
     expect(root.querySelector('[data-application="42"]')).not.toBeNull();
     expect(root.querySelector('[data-no-email]')).not.toBeNull();
+  });
+
+  // Terva review 1472, finding 2.
+  it('carries the filter into an application and back', async () => {
+    server.routes[`GET ${listUrl('denied')}`] = () => ({ status: 200, body: listPage() });
+    const root = await renderAt('/admin/applications?status=denied');
+    expect(root.querySelector('[data-application-link="42"]')!.getAttribute('href')).toBe(
+      '/admin/applications?id=42&status=denied',
+    );
+  });
+
+  // Terva review 1472, finding 3: any positive int64 is an application
+  // number, and its digits are asked for as they are.
+  it('accepts every int64 id, and only those', async () => {
+    expect(applicationID('9223372036854775807')).toBe('9223372036854775807');
+    expect(applicationID('9223372036854775808')).toBeNull();
+    expect(applicationID('10000000000000000000')).toBeNull();
+    expect(applicationID('0')).toBeNull();
+    expect(applicationID('042')).toBeNull();
+    expect(applicationID('-1')).toBeNull();
+
+    const big = '12345678901234567891';
+    expect(applicationID(big)).toBeNull();
+    const id = '1234567890123456789';
+    server.routes[`GET /api/v1/admin/applications/${id}`] = () => ({ status: 200, body: pendingApp() });
+    const root = await renderAt(`/admin/applications?id=${id}`);
+    expect(gets()).toEqual([`/api/v1/admin/applications/${id}`]);
+    expect(root.querySelector('h2')!.textContent).toContain(`Application #${id}`);
   });
 
   it('says so for an id that is not a number, and asks for nothing', async () => {

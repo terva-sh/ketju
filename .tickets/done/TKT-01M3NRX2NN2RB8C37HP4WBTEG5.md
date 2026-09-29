@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T21:22:03Z
+updated_at: 2026-09-29T21:26:33Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -147,6 +147,16 @@ Built on main at 855ca5d. What the next reader needs, and the calls taken while 
 - `src/api/one-path.test.ts` refuses `.status ===` anywhere under screens/. The application's own status is read through `hasStatus` (ApplicationList.tsx), and problem types through `isProblem`.
 - Seed (cmd/ketju e2e.go `seedReview`): moderator `mona`, signed in by `session.setup.ts`, and two pending applications from identities with no account (`pat@example.test` for phone, `quinn@example.test` for desktop), on the active registration form. Their ids are in `seed.json` as `applications: {phone, desktop}`. TKT-01M3NTSCMN can reuse mona. The applications are approved by this spec, so that ticket should seed its own.
 - A conflict on approve while the application is still pending tells the moderator that the identity was removed, already has an account, or is blocked, and to deny instead. A conflict on unblock while the identity is still blocked tells them that another denial set the block.
+
+**agent:claude-code/phase2-run-nrx2nn** at 2026-09-29T21:26:33Z
+
+Terva review 1472 (PR #162, head 8bff57c, base fbe4787, run 9ff78247, Actions run #1018): three findings, all fixed in the next commit.
+
+- high, "A note response can restore stale pending state after a decision": the note's answer now updates the application as it stands when the answer arrives. It uses a functional `setFresh` and skips a note that is already present. It no longer uses the copy captured at render. Test: "keeps a decision that lands while a note is on its way" holds the note's answer back until a denial lands. Putting the old update back fails that test.
+- medium, "Returning from a filtered detail loses the filter": `applicationHref(id, status)` carries `&status=` when the filter is not pending. The detail's link back returns to `listHref(status)` and names that list, for example "Denied applications". Earlier-application links keep the filter too. Tests cover the list's link, the link back, and the pending default.
+- medium, "The detail URL rejects valid large application IDs": `applicationID` accepts any positive int64, checked with BigInt against 2^63-1, and keeps the digits as a string. A Number would round an id past 2^53. The detail requests those exact digits. Tests cover the boundary on both sides and a 19-digit id. One limit remains: ids that arrive in JSON bodies (list rows, `prior`) are still JS numbers, which is true of every id this client reads. SQLite rowids here are nowhere near 2^53.
+
+Budget unchanged at 45325 B.
 
 ## Summary
 

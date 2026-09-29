@@ -25,7 +25,17 @@ const labels: Record<Filter, string> = {
   all: 'All',
 };
 
-export const applicationHref = (id: number) => `/admin/applications?id=${id}`;
+// applicationHref opens one application. It carries the list's filter, when
+// it is not the default, so the detail's way back returns to the same list
+// (Terva review 1472).
+export const applicationHref = (id: number | string, status: Filter = 'pending') =>
+  `/admin/applications?id=${id}${status === 'pending' ? '' : `&status=${status}`}`;
+
+// listHref is the list under one filter.
+export const listHref = (status: Filter) =>
+  status === 'pending' ? '/admin/applications' : `/admin/applications?status=${status}`;
+
+export const filterLabel = (status: Filter) => labels[status];
 
 // hasStatus is whether an application is in status: pending, approved,
 // denied or withdrawn. It is the application's own state, not an error's.
@@ -101,7 +111,7 @@ export function ApplicationList({ status }: { status: Filter }) {
     }
   };
 
-  const choose = (v: string) => route(v === 'pending' ? '/admin/applications' : `/admin/applications?status=${v}`);
+  const choose = (v: string) => route(listHref(v as Filter));
 
   return (
     <div class="app-list">
@@ -135,7 +145,7 @@ export function ApplicationList({ status }: { status: Filter }) {
               key: 'id',
               label: 'Application',
               cell: (r) => (
-                <a href={applicationHref(r.id)} data-application-link={r.id}>
+                <a href={applicationHref(r.id, status)} data-application-link={r.id}>
                   #{r.id}
                 </a>
               ),

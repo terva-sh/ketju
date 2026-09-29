@@ -102,6 +102,61 @@ describe('an application', () => {
     expect(root.querySelector<HTMLTextAreaElement>('.app-add-note textarea')!.value).toBe('');
   });
 
+  // Terva review 1472, finding 1: a note whose answer arrives after a
+  // decision must not bring the pending application back.
+  it('keeps a decision that lands while a note is on its way', async () => {
+    let answerNote: (a: { status: number; body: unknown }) => void = () => {};
+    server.routes[`POST ${appUrl(42)}/notes`] = () => new Promise((resolve) => (answerNote = resolve));
+    const denied = { ...pendingApp(), status: 'denied' };
+    denied.decision = { by: approvedApp().decision!.by, at: 1757609000000, note: 'No.', user: null };
+    server.routes[`POST ${appUrl(42)}/deny`] = () => ({ status: 200, body: denied });
+    const root = await renderAt('/admin/applications?id=42');
+
+    const box = root.querySelector<HTMLTextAreaElement>('.app-add-note textarea')!;
+    await act(async () => {
+      box.value = 'Checked with Alice.';
+      box.dispatchEvent(new Event('input'));
+    });
+    await act(async () => button(root, 'Add note')!.click());
+
+    const deny = root.querySelector<HTMLTextAreaElement>('[data-deny-note]')!;
+    await act(async () => {
+      deny.value = 'No.';
+      deny.dispatchEvent(new Event('input'));
+    });
+    const section = [...root.querySelectorAll<HTMLElement>('[data-decision] section')][1];
+    await click(root, button(section, 'Deny'));
+    await click(root, button(section, 'Deny'));
+    expect(root.querySelector('[data-decided]')).not.toBeNull();
+
+    const note: ApplicationNote = {
+      id: 10,
+      author: { handle: 'mona', display_name: 'Mona', avatar: '', role: 'moderator', kind: 'human' },
+      body: 'Checked with Alice.',
+      created_at: 1757606000000,
+    };
+    await act(async () => answerNote({ status: 201, body: note }));
+    await settle(root);
+    expect(root.querySelector('[data-decision]')).toBeNull();
+    expect(root.querySelector('[data-decided]')!.textContent).toContain('Denied by @bob');
+    expect(root.querySelector('h2 [data-status]')!.textContent).toBe('denied');
+    expect([...root.querySelectorAll('[data-notes] li')].map((li) => li.textContent).join()).toContain('Checked with Alice.');
+  });
+
+  // Terva review 1472, finding 2: the way back returns to the list the
+  // application was opened from.
+  it('goes back to the filter it was opened from', async () => {
+    const root = await renderAt('/admin/applications?id=17&status=denied');
+    const back = root.querySelector<HTMLAnchorElement>('.app-back a')!;
+    expect(back.getAttribute('href')).toBe('/admin/applications?status=denied');
+    expect(back.textContent).toBe('Denied applications');
+    await renderAt('/admin/applications?id=42');
+    const pendingBack = document.querySelector<HTMLAnchorElement>('.app-back a')!;
+    expect(pendingBack.getAttribute('href')).toBe('/admin/applications');
+    expect(pendingBack.textContent).toBe('Pending applications');
+    expect(document.querySelector('[data-prior] a')!.getAttribute('href')).toBe('/admin/applications?id=17');
+  });
+
   it("says why a note was refused, beside the note's field", async () => {
     server.routes[`POST ${appUrl(42)}/notes`] = () =>
       problemAnswer('validation-failed', 422, { errors: [{ field: 'body', code: 'too_long' }] });

@@ -10,10 +10,19 @@ import './applications.css';
 //
 // The server's staff gate decides who may use it (internal/web/api
 // applications.go); AdminRoot offers it to moderators and admins only.
+// maxID is the largest id the server's int64 holds.
+const maxID = 9223372036854775807n;
+
+// applicationID is ?id= when it names a positive int64, kept as the digits:
+// a Number would round an id past 2^53 (Terva review 1472).
+export function applicationID(raw: string): string | null {
+  return /^[1-9][0-9]{0,18}$/.test(raw) && BigInt(raw) <= maxID ? raw : null;
+}
+
 export function ApplicationsScreen() {
   const { query } = useLocation();
   const raw = query.id ?? '';
-  const id = /^[1-9][0-9]{0,15}$/.test(raw) ? Number(raw) : null;
+  const id = applicationID(raw);
   const status: Filter = (filters as readonly string[]).includes(query.status ?? '') ? (query.status as Filter) : 'pending';
   return (
     <div class="admin-applications">
@@ -27,7 +36,7 @@ export function ApplicationsScreen() {
           That is not an application number. <a href="/admin/applications">Back to applications</a>
         </p>
       ) : id !== null ? (
-        <ApplicationDetail key={id} id={id} />
+        <ApplicationDetail key={id} id={id} status={status} />
       ) : (
         <ApplicationList key={status} status={status} />
       )}
