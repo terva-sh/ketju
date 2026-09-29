@@ -311,12 +311,14 @@ type Querier interface {
 	OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (int64, error)
 	// The moderator queue: open flags, newest first (docs/08).
 	OpenFlags(ctx context.Context, limit int64) ([]Flag, error)
-	// OtherApplicationsForIdentity is every other application from the same
-	// identity, newest first: the prior applications the review screen shows.
-	OtherApplicationsForIdentity(ctx context.Context, arg OtherApplicationsForIdentityParams) ([]OtherApplicationsForIdentityRow, error)
 	// The rows permission evaluation (TKT-01M29C5Y2E) needs for one forum: the
 	// forum's own grants and the global ones, for the viewer's groups.
 	PermissionRows(ctx context.Context, arg PermissionRowsParams) ([]PermissionRowsRow, error)
+	// PriorApplicationsForIdentity is every application the same identity
+	// submitted before the one at (before_at, before_id), newest first, in the
+	// list's order: the prior applications the review screen shows. One
+	// submitted later is not prior to it (review 1470).
+	PriorApplicationsForIdentity(ctx context.Context, arg PriorApplicationsForIdentityParams) ([]PriorApplicationsForIdentityRow, error)
 	// Writes go through internal/settings.Set, which refuses an unknown key or
 	// an ill-typed value and writes the audit row in the same transaction.
 	PutSetting(ctx context.Context, arg PutSettingParams) error
@@ -377,8 +379,14 @@ type Querier interface {
 	// be alive by the same cutoffs as LookupSession, at the time of the write, so
 	// a touch that lands just after the idle boundary cannot revive the session.
 	TouchSession(ctx context.Context, arg TouchSessionParams) (int64, error)
-	// UnblockIdentity clears the block and nothing else. Zero rows means the
-	// identity is gone or was not blocked.
+	// UnblockIdentity lifts the block that the application application_id set,
+	// and nothing else. That application must be denied, must be the
+	// identity's newest, and must have been decided at the moment of the
+	// block: a denial and its block are written in one transaction with one
+	// timestamp, and a blocked identity can submit nothing newer. So an
+	// older, later or unrelated application cannot lift a block, and the audit
+	// row names the denial that set it (review 1470). Zero rows means the
+	// identity is gone, is not blocked, or was not blocked by that application.
 	UnblockIdentity(ctx context.Context, arg UnblockIdentityParams) (int64, error)
 	// Clears the pin only when its scope matches, so removing a forum pin does
 	// not silently remove a global one (docs/03). SQLite evaluates every SET

@@ -482,8 +482,9 @@ export interface AdminApplicationList {
 }
 
 // AdminApplication is GET /admin/applications/{id}, and the answer to
-// approve, deny and unblock. form is the version the application answered.
-// identity is null once removed, and decision while pending.
+// approve, deny and unblock. form is the version the application answered,
+// and prior the identity's applications submitted before it. identity is
+// null once removed, and decision while pending.
 export interface AdminApplication {
   id: number;
   status: string;

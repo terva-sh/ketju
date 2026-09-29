@@ -352,21 +352,23 @@ func (q *Queries) ListApplications(ctx context.Context, arg ListApplicationsPara
 	return items, nil
 }
 
-const otherApplicationsForIdentity = `-- name: OtherApplicationsForIdentity :many
+const priorApplicationsForIdentity = `-- name: PriorApplicationsForIdentity :many
 SELECT a.id, a.status, a.created_at, i.provider_key, i.email, i.email_verified
 FROM applications AS a
 LEFT JOIN identities AS i ON i.id = a.identity_id
-WHERE a.identity_id = ?1 AND a.id <> ?2
+WHERE a.identity_id = ?1
+  AND (a.created_at < ?2 OR (a.created_at = ?2 AND a.id < ?3))
 ORDER BY a.created_at DESC, a.id DESC
 LIMIT 50
 `
 
-type OtherApplicationsForIdentityParams struct {
+type PriorApplicationsForIdentityParams struct {
 	IdentityID sql.NullInt64
-	ID         int64
+	BeforeAt   int64
+	BeforeID   int64
 }
 
-type OtherApplicationsForIdentityRow struct {
+type PriorApplicationsForIdentityRow struct {
 	ID            int64
 	Status        string
 	CreatedAt     int64
@@ -375,17 +377,19 @@ type OtherApplicationsForIdentityRow struct {
 	EmailVerified sql.NullInt64
 }
 
-// OtherApplicationsForIdentity is every other application from the same
-// identity, newest first: the prior applications the review screen shows.
-func (q *Queries) OtherApplicationsForIdentity(ctx context.Context, arg OtherApplicationsForIdentityParams) ([]OtherApplicationsForIdentityRow, error) {
-	rows, err := q.db.QueryContext(ctx, otherApplicationsForIdentity, arg.IdentityID, arg.ID)
+// PriorApplicationsForIdentity is every application the same identity
+// submitted before the one at (before_at, before_id), newest first, in the
+// list's order: the prior applications the review screen shows. One
+// submitted later is not prior to it (review 1470).
+func (q *Queries) PriorApplicationsForIdentity(ctx context.Context, arg PriorApplicationsForIdentityParams) ([]PriorApplicationsForIdentityRow, error) {
+	rows, err := q.db.QueryContext(ctx, priorApplicationsForIdentity, arg.IdentityID, arg.BeforeAt, arg.BeforeID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []OtherApplicationsForIdentityRow
+	var items []PriorApplicationsForIdentityRow
 	for rows.Next() {
-		var i OtherApplicationsForIdentityRow
+		var i PriorApplicationsForIdentityRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Status,
@@ -408,19 +412,34 @@ func (q *Queries) OtherApplicationsForIdentity(ctx context.Context, arg OtherApp
 }
 
 const unblockIdentity = `-- name: UnblockIdentity :execrows
-UPDATE identities SET blocked_at = NULL, blocked_by = NULL, updated_at = ?
-WHERE id = ? AND blocked_at IS NOT NULL
+UPDATE identities SET blocked_at = NULL, blocked_by = NULL, updated_at = ?1
+WHERE blocked_at IS NOT NULL
+  AND id = (
+    SELECT a.identity_id FROM applications AS a
+    WHERE a.id = ?2
+      AND a.status = 'denied'
+      AND a.decided_at = identities.blocked_at
+      AND NOT EXISTS (
+        SELECT 1 FROM applications AS n
+        WHERE n.identity_id = a.identity_id
+          AND (n.created_at > a.created_at OR (n.created_at = a.created_at AND n.id > a.id))))
 `
 
 type UnblockIdentityParams struct {
-	UpdatedAt int64
-	ID        int64
+	UpdatedAt     int64
+	ApplicationID int64
 }
 
-// UnblockIdentity clears the block and nothing else. Zero rows means the
-// identity is gone or was not blocked.
+// UnblockIdentity lifts the block that the application application_id set,
+// and nothing else. That application must be denied, must be the
+// identity's newest, and must have been decided at the moment of the
+// block: a denial and its block are written in one transaction with one
+// timestamp, and a blocked identity can submit nothing newer. So an
+// older, later or unrelated application cannot lift a block, and the audit
+// row names the denial that set it (review 1470). Zero rows means the
+// identity is gone, is not blocked, or was not blocked by that application.
 func (q *Queries) UnblockIdentity(ctx context.Context, arg UnblockIdentityParams) (int64, error) {
-	result, err := q.db.ExecContext(ctx, unblockIdentity, arg.UpdatedAt, arg.ID)
+	result, err := q.db.ExecContext(ctx, unblockIdentity, arg.UpdatedAt, arg.ApplicationID)
 	if err != nil {
 		return 0, err
 	}

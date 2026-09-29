@@ -51,13 +51,16 @@ LIMIT sqlc.arg(lim);
 -- name: GetApplication :one
 SELECT * FROM applications WHERE id = ?;
 
--- OtherApplicationsForIdentity is every other application from the same
--- identity, newest first: the prior applications the review screen shows.
--- name: OtherApplicationsForIdentity :many
+-- PriorApplicationsForIdentity is every application the same identity
+-- submitted before the one at (before_at, before_id), newest first, in the
+-- list's order: the prior applications the review screen shows. One
+-- submitted later is not prior to it (review 1470).
+-- name: PriorApplicationsForIdentity :many
 SELECT a.id, a.status, a.created_at, i.provider_key, i.email, i.email_verified
 FROM applications AS a
 LEFT JOIN identities AS i ON i.id = a.identity_id
-WHERE a.identity_id = sqlc.arg(identity_id) AND a.id <> sqlc.arg(id)
+WHERE a.identity_id = sqlc.arg(identity_id)
+  AND (a.created_at < sqlc.arg(before_at) OR (a.created_at = sqlc.arg(before_at) AND a.id < sqlc.arg(before_id)))
 ORDER BY a.created_at DESC, a.id DESC
 LIMIT 50;
 
@@ -85,11 +88,26 @@ WHERE id = ? AND user_id IS NULL AND blocked_at IS NULL;
 UPDATE identities SET blocked_at = ?, blocked_by = ?, updated_at = ?
 WHERE id = ? AND user_id IS NULL;
 
--- UnblockIdentity clears the block and nothing else. Zero rows means the
--- identity is gone or was not blocked.
+-- UnblockIdentity lifts the block that the application application_id set,
+-- and nothing else. That application must be denied, must be the
+-- identity's newest, and must have been decided at the moment of the
+-- block: a denial and its block are written in one transaction with one
+-- timestamp, and a blocked identity can submit nothing newer. So an
+-- older, later or unrelated application cannot lift a block, and the audit
+-- row names the denial that set it (review 1470). Zero rows means the
+-- identity is gone, is not blocked, or was not blocked by that application.
 -- name: UnblockIdentity :execrows
-UPDATE identities SET blocked_at = NULL, blocked_by = NULL, updated_at = ?
-WHERE id = ? AND blocked_at IS NOT NULL;
+UPDATE identities SET blocked_at = NULL, blocked_by = NULL, updated_at = sqlc.arg(updated_at)
+WHERE blocked_at IS NOT NULL
+  AND id = (
+    SELECT a.identity_id FROM applications AS a
+    WHERE a.id = sqlc.arg(application_id)
+      AND a.status = 'denied'
+      AND a.decided_at = identities.blocked_at
+      AND NOT EXISTS (
+        SELECT 1 FROM applications AS n
+        WHERE n.identity_id = a.identity_id
+          AND (n.created_at > a.created_at OR (n.created_at = a.created_at AND n.id > a.id))));
 
 -- name: InsertApplicationNote :one
 INSERT INTO application_notes (application_id, author_id, body, created_at)

@@ -82,9 +82,9 @@ var (
 	// identity was removed, already has a user, or (for an approval) is
 	// blocked. It is conflict, and nothing is written.
 	ErrIdentityGone = errors.New("applications: the application's identity cannot take this decision")
-	// ErrNotBlocked is an unblock of an identity that is not blocked, or is
-	// gone. It is conflict.
-	ErrNotBlocked = errors.New("applications: the identity is not blocked")
+	// ErrNotBlocked is an unblock of an identity that is not blocked, is
+	// gone, or was blocked by another of its applications. It is conflict.
+	ErrNotBlocked = errors.New("applications: the identity is not blocked by this application")
 )
 
 // staff refuses a viewer who may not review: anonymous or inactive is
@@ -276,7 +276,8 @@ func detail(ctx context.Context, q *dbq.Queries, id int64) (dto.AdminApplication
 		case !errors.Is(err, sql.ErrNoRows):
 			return out, err
 		}
-		prior, err := q.OtherApplicationsForIdentity(ctx, dbq.OtherApplicationsForIdentityParams{IdentityID: a.IdentityID, ID: a.ID})
+		prior, err := q.PriorApplicationsForIdentity(ctx, dbq.PriorApplicationsForIdentityParams{IdentityID: a.IdentityID,
+			BeforeAt: a.CreatedAt, BeforeID: a.ID})
 		if err != nil {
 			return out, err
 		}
@@ -500,10 +501,15 @@ func (s *Service) Deny(ctx context.Context, v domain.Viewer, id int64, note stri
 	return out, nil
 }
 
-// Unblock is POST /admin/applications/{id}/unblock: the block on the
-// application's identity is lifted, and nothing else changes; the
-// application stays denied, and the identity may apply again under the
-// 24-hour rule. An identity that is not blocked, or is gone, is conflict.
+// Unblock is POST /admin/applications/{id}/unblock: the block the denial of
+// application id set is lifted, and nothing else changes; the application
+// stays denied, and the identity may apply again under the 24-hour rule.
+//
+// Only the denial that set the current block can lift it, which the
+// UnblockIdentity statement decides in one go (review 1470): another of the
+// identity's applications, older or newer, cannot, so the audit row always
+// names the denial whose block it lifted. An identity that is not blocked,
+// is gone, or was blocked by another application is conflict.
 func (s *Service) Unblock(ctx context.Context, v domain.Viewer, id int64, ip string) (dto.AdminApplication, error) {
 	if err := staff(v, "unblock an applicant"); err != nil {
 		return dto.AdminApplication{}, err
@@ -519,7 +525,7 @@ func (s *Service) Unblock(ctx context.Context, v domain.Viewer, id int64, ip str
 		if !a.IdentityID.Valid {
 			return refused
 		}
-		n, err := q.UnblockIdentity(ctx, dbq.UnblockIdentityParams{UpdatedAt: now.UnixMilli(), ID: a.IdentityID.Int64})
+		n, err := q.UnblockIdentity(ctx, dbq.UnblockIdentityParams{UpdatedAt: now.UnixMilli(), ApplicationID: a.ID})
 		if err != nil {
 			return err
 		}

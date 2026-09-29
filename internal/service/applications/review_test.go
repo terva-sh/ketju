@@ -717,7 +717,7 @@ func TestGuardedStatements(t *testing.T) {
 	if _, err := w.svc.Deny(t.Context(), moderator, id, "no", true, ""); err != nil {
 		t.Fatal(err)
 	}
-	linked, _ := w.pendingApp("wes")
+	linked, linkedApp := w.pendingApp("wes")
 	w.exec(`UPDATE identities SET user_id = 3 WHERE id = ?`, linked.IdentityID)
 	if err := w.db.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
 		ctx := t.Context()
@@ -740,7 +740,7 @@ func TestGuardedStatements(t *testing.T) {
 					BlockedBy: sql.NullInt64{Int64: 2, Valid: true}, UpdatedAt: 9, ID: linked.IdentityID})
 			},
 			"unblock an unblocked identity": func() (int64, error) {
-				return q.UnblockIdentity(ctx, dbq.UnblockIdentityParams{UpdatedAt: 9, ID: linked.IdentityID})
+				return q.UnblockIdentity(ctx, dbq.UnblockIdentityParams{UpdatedAt: 9, ApplicationID: linkedApp})
 			},
 		} {
 			if n, err := f(); err != nil || n != 0 {
@@ -753,5 +753,81 @@ func TestGuardedStatements(t *testing.T) {
 	}
 	if s := w.status(id); s != StatusDenied {
 		t.Errorf("the denied application is %s", s)
+	}
+}
+
+// Review 1470: only the denial that set the current block lifts it. An
+// identity denied once without a block, then again with one, cannot be
+// unblocked through the first denial, and the audit row of the unblock
+// that works names the second.
+func TestUnblockOnlyFromTheBlockingDenial(t *testing.T) {
+	w := newReviewWorld(t)
+	v, first := w.pendingApp("xan")
+	if _, err := w.svc.Deny(t.Context(), moderator, first, "not yet", false, ""); err != nil {
+		t.Fatal(err)
+	}
+	w.now = w.now.Add(CooldownAfter)
+	if err := w.submit(v); err != nil {
+		t.Fatal(err)
+	}
+	var second int64
+	if err := w.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), `SELECT id FROM applications WHERE identity_id = ? AND status = 'pending'`,
+			v.IdentityID).Scan(&second)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w.now = w.now.Add(time.Minute)
+	if _, err := w.svc.Deny(t.Context(), moderator, second, "spam", true, ""); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := w.svc.Unblock(t.Context(), admin, first, "")
+	wantCode(t, "unblocking through the earlier denial", err, ErrNotBlocked, problem.CodeConflict)
+	if n := w.count(`SELECT count(*) FROM identities WHERE id = ? AND blocked_at IS NOT NULL`, v.IdentityID); n != 1 {
+		t.Fatal("the earlier denial lifted the block")
+	}
+	if n := w.count(`SELECT count(*) FROM audit_log WHERE action = ?`, ActionUnblocked); n != 0 {
+		t.Errorf("%d unblock rows after the refusal", n)
+	}
+
+	if _, err := w.svc.Unblock(t.Context(), admin, second, ""); err != nil {
+		t.Fatal(err)
+	}
+	rows := w.audits(ActionUnblocked, "identity", v.IdentityID)
+	if len(rows) != 1 || rows[0].details["application_id"] != float64(second) {
+		t.Errorf("the unblock's audit rows: %+v", rows)
+	}
+}
+
+// Review 1470: prior applications are the ones submitted before the one
+// reviewed. Reading the earlier application does not list the later one.
+func TestPriorIsOnlyEarlier(t *testing.T) {
+	w := newReviewWorld(t)
+	v, first := w.pendingApp("yui")
+	if _, err := w.svc.Withdraw(t.Context(), v); err != nil {
+		t.Fatal(err)
+	}
+	w.now = w.now.Add(CooldownAfter)
+	if err := w.submit(v); err != nil {
+		t.Fatal(err)
+	}
+	early, err := w.svc.Get(t.Context(), moderator, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(early.Prior) != 0 {
+		t.Errorf("the first application lists %+v as prior", early.Prior)
+	}
+	list, err := w.svc.List(t.Context(), moderator, StatusPending, "")
+	if err != nil || len(list.Applications) != 1 {
+		t.Fatalf("the pending list: %+v, %v", list, err)
+	}
+	late, err := w.svc.Get(t.Context(), moderator, list.Applications[0].ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(late.Prior) != 1 || late.Prior[0].ID != first || late.Prior[0].Status != StatusWithdrawn {
+		t.Errorf("the second application's prior: %+v", late.Prior)
 	}
 }

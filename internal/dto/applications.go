@@ -43,7 +43,8 @@ type AdminApplication struct {
 	Answers json.RawMessage `json:"answers"`
 	// Identity is null once the identity was removed.
 	Identity *ApplicantIdentity `json:"identity"`
-	// Prior are the identity's other applications, newest first.
+	// Prior are the applications the identity submitted before this one,
+	// newest first.
 	Prior []AdminApplicationRow `json:"prior"`
 	// Notes are the moderators' notes, oldest first.
 	Notes []ApplicationNote `json:"notes"`

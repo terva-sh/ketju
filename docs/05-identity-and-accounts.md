@@ -287,7 +287,8 @@ a suggestion and reserves nothing.
      no user; if the identity was removed or has a user, the denial is
      refused, and the moderator may deny without the block.
    - **Unblock.** A moderator or admin can lift a block from the
-     application that set it (maintainer decision 2026-09-29). It clears
+     application that set it, and from no other (maintainer decision
+     2026-09-29). It clears
      the marker and nothing else: the application stays denied, and the
      applicant may apply again under the 24-hour rule.
    - **Notes** from moderators are kept beside the application and decide
