@@ -218,14 +218,17 @@ func (e *Evaluator) applyGrants(ctx context.Context, q *dbq.Queries, now int64, 
 		if err != nil {
 			return err
 		}
-		var forumSlug any
+		// A site-wide row has no forum: its slug and id are null in the
+		// details, as forum_id is in the row (Terva review 1428). 0 is only
+		// this package's key for it.
+		var forumSlug, forumID any
 		if c.ForumID != 0 {
-			forumSlug = g.forums[c.ForumID]
+			forumSlug, forumID = g.forums[c.ForumID], c.ForumID
 		}
 		if _, err := audit.Append(ctx, q, time.UnixMilli(now), by, action,
 			audit.Permission(c.ForumID, c.GroupID, string(c.Permission)),
 			map[string]any{"group": g.groups[c.GroupID].Slug, "group_id": c.GroupID, "forum": forumSlug,
-				"forum_id": c.ForumID, "permission": string(c.Permission)}); err != nil {
+				"forum_id": forumID, "permission": string(c.Permission)}); err != nil {
 			return err
 		}
 	}

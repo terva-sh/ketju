@@ -389,6 +389,16 @@ func TestGrantsApplyInOneTransaction(t *testing.T) {
 			t.Errorf("audit row %d: %+v, want %+v", i, r, wantRows[i])
 		}
 	}
+	// A forum row names its forum; a site-wide row names none, with null
+	// rather than the 0 perm keys it by (review 1428).
+	if d := rows[0].details; d["forum_id"] != float64(forum) || d["forum"] == nil {
+		t.Errorf("a forum row's details %v, want forum_id %d and its slug", d, forum)
+	}
+	for _, r := range rows[1:] {
+		if v, ok := r.details["forum_id"]; !ok || v != nil || r.details["forum"] != nil {
+			t.Errorf("a site-wide row's details %v, want forum and forum_id null", r.details)
+		}
+	}
 
 	// A failing audit insert takes the whole batch with it.
 	f.failAudit()
