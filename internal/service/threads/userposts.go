@@ -130,12 +130,12 @@ func (s *Service) userPostCount(ctx context.Context, userID int64, forums []int6
 //
 // Who is served which account is member.Account's rule. A post in a forum v
 // cannot read is left out, and so is a moved post, which renders in its
-// thread as a pointer. A deleted post is left out for a member; the author
-// sees their own marked deleted, as the thread page shows it to them, with
-// no body; a moderator or admin sees it marked deleted with its body, as
-// the thread page's moderator view does. A post a moderator hid is a
-// deleted post here, as it is on the thread page (docs/08: hiding is a
-// Delete variant).
+// thread as a pointer. A deleted or hidden post is left out for a member.
+// The author sees their own as their thread page shows it to them: one they
+// deleted is marked deleted with no body, and one a moderator hid is marked
+// removed by a moderator, with its body (docs/08, decided 2026-09-28;
+// TKT-01M29CKRJ9). A moderator or admin sees each marked, with its body, as
+// the thread page's moderator view does.
 //
 // Paging is a keyset on (created_at, thread, ordinal) descending, which
 // post_meta's author index serves in order, so a post written while a
@@ -189,7 +189,7 @@ func (s *Service) UserPosts(ctx context.Context, v domain.Viewer, handle, cursor
 		}); err != nil {
 			return out, err
 		}
-		rendered, err := s.historyBatch(ctx, rows, authors, staff, own)
+		rendered, err := s.historyBatch(ctx, rows, authors, v, staff, own)
 		if err != nil {
 			return out, err
 		}
@@ -221,11 +221,14 @@ func (s *Service) UserPosts(ctx context.Context, v domain.Viewer, handle, cursor
 	return out, nil
 }
 
-// historyBatch renders the rows' posts that the history shows this viewer,
-// keyed by position. Each thread is opened once, for all its posts in the
-// batch, and its index, not post_meta, decides which are shown.
+// historyBatch renders the rows' posts that the history shows v, keyed by
+// position. Each thread is opened once, for all its posts in the batch, and
+// its index, not post_meta, decides which are shown. A removed post carries
+// its body where revealRemoved says so, with staff in the moderator's place:
+// to staff, and to its author while a moderator's removal holds it.
 func (s *Service) historyBatch(ctx context.Context, rows []views.UserPostRow, authors map[int64]dto.Author,
-	staff, own bool) (map[views.PostKey]dto.Post, error) {
+	v domain.Viewer, staff, own bool) (map[views.PostKey]dto.Post, error) {
+	a := access{viewer: v, canModerate: staff}
 	byThread := map[int64][]uint32{}
 	var order []int64
 	for _, r := range rows {
@@ -252,7 +255,7 @@ func (s *Service) historyBatch(ctx context.Context, rows []views.UserPostRow, au
 				return err
 			}
 			snap = snap.keep(func(e threadlog.IndexEntry) bool { return historyShows(e.Flags, staff, own) })
-			posts, err := s.posts(ctx, th, id, snap, authors, Query{}, staff)
+			posts, err := s.posts(ctx, th, id, snap, authors, Query{}, a)
 			if err != nil {
 				return err
 			}

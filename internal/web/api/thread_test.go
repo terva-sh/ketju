@@ -268,14 +268,30 @@ func (w *world) seed() (threadid.ID, int64) {
 	return id, end
 }
 
+// hiddenSecret is the body of the post seedHidden has a moderator hide.
+const hiddenSecret = "a post only its author and a moderator still read"
+
+// seedHidden is seed with one more post, #5, alice's, which bob then hid
+// with a moderator's delete: beside seed's #3, which its author deleted, it
+// is the goldens' post removed by a moderator (TKT-01M29CKRJ9).
+func (w *world) seedHidden() (threadid.ID, int64) {
+	w.t.Helper()
+	id, _ := w.seed()
+	w.post(id, "alice", hiddenSecret, 0)
+	end := w.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["bob"]), Ordinal: 5,
+		Body: &threadlog.DeleteBody{Reason: "off topic", ByModerator: true}})
+	return id, end
+}
+
 // TestThreadPageGoldens is AC1: the response for each viewer class, decoded
-// strictly into dto.ThreadPage and compared with a committed golden.
+// strictly into dto.ThreadPage and compared with a committed golden. The
+// author class is alice's, whose post #5 a moderator hid (TKT-01M29CKRJ9).
 // Regenerate with `go test ./internal/web/api -update`.
 func TestThreadPageGoldens(t *testing.T) {
 	w := newWorld(t)
-	id, _ := w.seed()
+	id, _ := w.seedHidden()
 	pages := map[string]string{}
-	for class, handle := range map[string]string{"anon": "", "member": "carol", "moderator": "bob"} {
+	for class, handle := range map[string]string{"anon": "", "member": "carol", "moderator": "bob", "author": "alice"} {
 		t.Run(class, func(t *testing.T) {
 			rec := w.get(w.viewer(handle), "/api/v1/threads/"+id.String())
 			p := page(t, rec)
@@ -303,8 +319,14 @@ func TestThreadPageGoldens(t *testing.T) {
 			}
 		})
 	}
-	if pages["anon"] == pages["member"] || pages["member"] == pages["moderator"] {
+	if pages["anon"] == pages["member"] || pages["member"] == pages["moderator"] || pages["member"] == pages["author"] {
 		t.Fatal("two viewer classes got identical pages; the distinction is not exercised")
+	}
+	// The author's page differs from a member's in the hidden post's body,
+	// not only in the viewer block.
+	if !strings.Contains(pages["author"], hiddenSecret) || strings.Contains(pages["member"], hiddenSecret) ||
+		strings.Contains(pages["anon"], hiddenSecret) || !strings.Contains(pages["moderator"], hiddenSecret) {
+		t.Fatal("the hidden post's body went to the wrong classes")
 	}
 }
 

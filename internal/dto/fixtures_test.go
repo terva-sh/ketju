@@ -144,6 +144,25 @@ func threadPage(class string) ThreadPage {
 				HTML:              deletedHTML,
 				Attachments:       []Attachment{},
 				Deleted:           true,
+				Removal:           ptr(RemovalModerator),
+				MovedTo:           nil,
+				MachineAuthored:   false,
+			},
+			{
+				// A moved post: a pointer to the thread it went to, with no
+				// removal and no body for anyone.
+				Ordinal:           64,
+				Revision:          1,
+				Author:            alice,
+				CreatedAt:         1757500500000,
+				EditedAt:          nil,
+				ReplyTo:           nil,
+				ReplyToSuppressed: false,
+				ReplyCount:        0,
+				HTML:              "",
+				Attachments:       []Attachment{},
+				Deleted:           true,
+				Removal:           nil,
 				MovedTo:           ptr("3yymw47g00099"),
 				MachineAuthored:   false,
 			},
@@ -552,7 +571,7 @@ func userPosts(class string) UserPosts {
 	}, NextCursor: "MTc1NzQwMDAwMDAwMHwxMjM0NXw0"}
 	if class == tModerator {
 		gone := older
-		gone.Ordinal, gone.CreatedAt, gone.Deleted = 9, 1757450000000, true
+		gone.Ordinal, gone.CreatedAt, gone.Deleted, gone.Removal = 9, 1757450000000, true, ptr(RemovalAuthor)
 		gone.HTML = "<p>the text a moderator still needs to read</p>"
 		out.Posts = append(out.Posts, UserPost{
 			Thread: ThreadLink{ID: "3yymw47g00002", Slug: "book-club", Title: "Book club"},
@@ -564,8 +583,8 @@ func userPosts(class string) UserPosts {
 	return out
 }
 
-// userPostsOwn is alice's own history: her deleted post is there, marked
-// deleted, with no body, as her thread page shows it to her; and it is the
+// userPostsOwn is alice's own history: the post she deleted is there, marked
+// deleted by its author, with no body, as her thread page shows it to her; and it is the
 // last page, so there is no cursor.
 func userPostsOwn() UserPosts {
 	out := userPosts(tModerator)

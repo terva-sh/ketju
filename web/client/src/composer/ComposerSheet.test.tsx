@@ -16,6 +16,7 @@ function page(over: { canReply?: boolean } = {}): ThreadPage {
     ordinal,
     html,
     deleted: false,
+    removal: null,
     reply_to: null,
     reply_to_suppressed: false,
     author: { ...g.posts[0].author, handle },

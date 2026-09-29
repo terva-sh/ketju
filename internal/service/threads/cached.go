@@ -32,11 +32,14 @@ import (
 // A request with after_log_length is not cached: it is a filtered page, and
 // rare.
 func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
-	authors map[int64]dto.Author, q Query, size int, projected int64, class string) ([]dto.Post, error) {
-	moderator := class == ClassModerator
+	authors map[int64]dto.Author, q Query, size int, projected int64, a access) ([]dto.Post, error) {
 	if q.HasAfter || !s.Responses.Enabled() {
-		return s.posts(ctx, th, id, snap, authors, q, moderator)
+		return s.posts(ctx, th, id, snap, authors, q, a)
 	}
+	// The class is read from the snapshot the posts are drawn from, so a
+	// page that shows this viewer their own removed post is keyed to them
+	// (TKT-01M29CKRJ9), and one that does not stays shared.
+	class := pageClass(a, snap)
 	digest, err := authorsDigest(authors)
 	if err != nil {
 		return nil, err
@@ -59,7 +62,7 @@ func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id thre
 			return out, nil
 		}
 	}
-	out, deps, err := s.postsDeps(ctx, th, id, snap, authors, q, moderator)
+	out, deps, err := s.postsDeps(ctx, th, id, snap, authors, q, a)
 	if err != nil {
 		return nil, err
 	}

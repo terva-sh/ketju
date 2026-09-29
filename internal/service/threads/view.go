@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -39,11 +40,69 @@ const DefaultPageSize = 25
 
 // Viewer classes (docs/07): what a response's cacheable part depends on.
 // Moderators see tombstone contents; members and anonymous viewers do not.
+// The author of a post a moderator removed sees that post, so a page holding
+// one is drawn for the class ClassAuthor followed by their user id, and is
+// shared with no one else (see pageClass).
 const (
 	ClassAnon      = "anon"
 	ClassMember    = "member"
 	ClassModerator = "moderator"
+	ClassAuthor    = "author:"
 )
+
+// revealRemoved says whether a gets the content of the removed post whose
+// entry is e: its body, and its revisions in History (TKT-01M29CKRJ9).
+//
+// It answers only for a removed entry, one that is not Visible, and is false
+// for a visible one: a visible post's content goes to everyone admitted to
+// the thread, and its history to whoever History admits, as before. A
+// moderator gets every removed post except a moved one, which has no content
+// here. The author gets their own post while a moderator's removal holds it
+// (docs/08, decided 2026-09-28: "The author still sees the post, marked as
+// removed by a moderator"), and not one they deleted themselves. Anyone else
+// gets nothing.
+func revealRemoved(a access, e threadlog.IndexEntry) bool {
+	switch removal(e.Flags) {
+	case "":
+		return false
+	case dto.RemovalAuthor:
+		return a.canModerate
+	default:
+		return a.canModerate || a.viewer.Member() && e.Author == uint64(a.viewer.UserID)
+	}
+}
+
+// removal is dto.Post.Removal for an entry's flags: who took the post down,
+// or "" for a visible post and a moved one. The deleted flag wins over
+// hidden-by-mod, since the author asked for the post to go. The service never
+// sets both, but a log appended without its preconditions may.
+func removal(f threadlog.EntryFlags) string {
+	switch {
+	case f.Visible(), f.Has(threadlog.EntryMoved):
+		return ""
+	case f.Has(threadlog.EntryDeleted):
+		return dto.RemovalAuthor
+	default:
+		return dto.RemovalModerator
+	}
+}
+
+// pageClass is the viewer class the posts in snap are drawn and cached for.
+// It is the access check's class, except for a viewer who is served a removed
+// post only because they wrote it: then it is ClassAuthor and their user id,
+// so those posts are cached for them alone. A page holding no such post keeps
+// the shared class.
+func pageClass(a access, snap snapshot) string {
+	if a.class == ClassModerator {
+		return a.class
+	}
+	for _, e := range snap.entries {
+		if revealRemoved(a, e) {
+			return ClassAuthor + strconv.FormatInt(a.viewer.UserID, 10)
+		}
+	}
+	return a.class
+}
 
 // Service reads threads.
 type Service struct {
@@ -129,7 +188,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	if err != nil {
 		return Result{}, err
 	}
-	v, row, class, canModerate := a.viewer, a.row, a.class, a.canModerate
+	v, row, canModerate := a.viewer, a.row, a.canModerate
 
 	var (
 		forum    dbq.Forum
@@ -211,7 +270,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
-		if res.Body.Posts, err = s.pagePosts(ctx, th, id, snap, authors, q, size, row.LogLengthProjected, class); err != nil {
+		if res.Body.Posts, err = s.pagePosts(ctx, th, id, snap, authors, q, size, row.LogLengthProjected, a); err != nil {
 			return err
 		}
 		return res.finish(id, snap.logLength, ifNoneMatch)
@@ -362,18 +421,19 @@ func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n in
 	return h
 }
 
-// posts reads, renders and assembles the page's posts, reading the
+// posts reads, renders and assembles the page's posts for a, reading the
 // revisions the snapshot names rather than whatever the index holds by now.
+// A removed post carries its body only where revealRemoved says so.
 func (s *Service) posts(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
-	users map[int64]dto.Author, q Query, moderator bool) ([]dto.Post, error) {
-	out, _, err := s.postsDeps(ctx, th, id, snap, users, q, moderator)
+	users map[int64]dto.Author, q Query, a access) ([]dto.Post, error) {
+	out, _, err := s.postsDeps(ctx, th, id, snap, users, q, a)
 	return out, err
 }
 
 // postsDeps is posts, also returning what the HTML was drawn against: every
 // post's quotes and handle lookups, for the response cache to check on a hit.
 func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
-	users map[int64]dto.Author, q Query, moderator bool) ([]dto.Post, render.Deps, error) {
+	users map[int64]dto.Author, q Query, a access) ([]dto.Post, render.Deps, error) {
 	out := []dto.Post{}
 	var deps render.Deps
 	entries := snap.entries
@@ -402,7 +462,7 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 		if q.HasAfter && int64(entries[i].Offset) < q.After {
 			continue
 		}
-		if p.Tombstone && moderator {
+		if p.Tombstone && revealRemoved(a, entries[i]) {
 			var err error
 			if p, err = th.Reader.HiddenEntry(p.Ordinal, entries[i]); err != nil {
 				return nil, deps, err
@@ -424,6 +484,9 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			Attachments:     []dto.Attachment{},
 			Deleted:         p.Flags.Has(threadlog.EntryDeleted) || p.Flags.Has(threadlog.EntryHiddenByMod),
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
+		}
+		if r := removal(p.Flags); r != "" {
+			d.Removal = &r
 		}
 		// The edited flag, not the revision count: a post whose only edits
 		// are grace edits has more than one revision and is not shown as
@@ -449,8 +512,9 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 		for _, h := range p.Attachments {
 			d.Attachments = append(d.Attachments, dto.Attachment{Hash: h})
 		}
-		// A tombstone reaches here with its source only for a moderator.
-		if !p.Tombstone || moderator {
+		// A removed post reaches here with its source only when revealRemoved
+		// let HiddenEntry read it, and that read cleared Tombstone.
+		if !p.Tombstone {
 			var (
 				used render.Deps
 				err  error

@@ -160,10 +160,16 @@ func TestModeratorDeleteHidesAndOnlyAModeratorRestores(t *testing.T) {
 	if b, ok := fr[len(fr)-1].body.(*threadlog.DeleteBody); !ok || !b.ByModerator || fr[len(fr)-1].h.Actor != uint64(w.users["bob"]) {
 		t.Errorf("the last record for #4 is %+v: want bob's Delete with by_moderator", fr[len(fr)-1])
 	}
-	for _, who := range []string{"", "alice", "carol"} {
+	for _, who := range []string{"", "alice"} {
 		if p := decodePost(t, newHandlerFor(w).get(w.viewer(who), p4)); !p.Deleted || p.HTML != "" {
 			t.Errorf("%q reads the hidden post as %+v: want a tombstone without html", who, p)
 		}
+	}
+	// Its author still sees it, marked removed by a moderator (docs/08,
+	// TKT-01M29CKRJ9).
+	if p := decodePost(t, newHandlerFor(w).get(w.viewer("carol"), p4)); !p.Deleted ||
+		p.Removal == nil || *p.Removal != dto.RemovalModerator || !strings.Contains(p.HTML, "Agreed with") {
+		t.Errorf("carol reads her hidden post as %+v: want it with html, removed by a moderator", p)
 	}
 
 	for _, c := range []struct{ method, path, body string }{
@@ -273,13 +279,14 @@ func TestModeratorBypassesWindows(t *testing.T) {
 // TestModeratorHideMovesTheResponseCacheKey is AC6, the response cache
 // invariant (docs/13 "Invariants"): a page cached before a moderator's hide
 // is not served after it. The Delete is an append, so it moves the log
-// length in the key; members and anonymous viewers then get the post as a
-// tombstone without html, and a moderator still gets its content.
+// length in the key; other members and anonymous viewers then get the post
+// as a tombstone without html, and a moderator and the post's author still
+// get its content.
 func TestModeratorHideMovesTheResponseCacheKey(t *testing.T) {
 	w := newWorld(t)
 	id, _ := w.seed()
 	path := "/api/v1/threads/" + id.String()
-	classes := []string{"", "carol", "bob"}
+	classes := []string{"", "alice", "bob", "carol"}
 	for _, who := range classes {
 		w.same(w.viewer(who), path)
 	}
@@ -289,7 +296,7 @@ func TestModeratorHideMovesTheResponseCacheKey(t *testing.T) {
 			t.Fatalf("before the hide %q got #4 as %+v", who, p.Posts[3])
 		}
 	}
-	if s := w.svc.Responses.Stats(); s.Hits != before.Hits+3 || s.Inserts != before.Inserts {
+	if s := w.svc.Responses.Stats(); s.Hits != before.Hits+4 || s.Inserts != before.Inserts {
 		t.Fatalf("before the hide the second round was not served from the cache: %+v then %+v", before, s)
 	}
 
@@ -305,14 +312,16 @@ func TestModeratorHideMovesTheResponseCacheKey(t *testing.T) {
 		switch {
 		case post.Ordinal != 4 || !post.Deleted:
 			t.Errorf("after the hide %q got #4 as %+v: want a tombstone", who, post)
-		case who == "bob" && !strings.Contains(post.HTML, "Agreed with"):
-			t.Errorf("after the hide the moderator got #4 without its content: %+v", post)
-		case who != "bob" && post.HTML != "":
+		case (who == "bob" || who == "carol") && !strings.Contains(post.HTML, "Agreed with"):
+			t.Errorf("after the hide %q got #4 without its content: %+v", who, post)
+		case who != "bob" && who != "carol" && post.HTML != "":
 			t.Errorf("after the hide %q got #4 with html %q", who, post.HTML)
 		}
 	}
-	if s := w.svc.Responses.Stats(); s.Misses != before.Misses+3 || s.Inserts != before.Inserts+3 || s.Hits != before.Hits {
-		t.Errorf("after the hide the three classes' pages were not fresh draws: %+v then %+v", before, s)
+	// Alice and carol shared the member entry before the hide; after it,
+	// carol's page is her own (class author:<id>), so there are four.
+	if s := w.svc.Responses.Stats(); s.Misses != before.Misses+4 || s.Inserts != before.Inserts+4 || s.Hits != before.Hits {
+		t.Errorf("after the hide the four viewers' pages were not fresh draws: %+v then %+v", before, s)
 	}
 	for _, who := range classes {
 		w.same(w.viewer(who), path)

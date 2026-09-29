@@ -7,8 +7,8 @@
       "slug": "general",
       "name": "General"
     },
-    "post_count": 4,
-    "log_length": 718,
+    "post_count": 5,
+    "log_length": 881,
     "locked": false,
     "pinned": {
       "scope": "forum",
@@ -52,6 +52,7 @@
       "html": "\u003cp\u003eThe bill was the \u003cstrong\u003esmaller\u003c/strong\u003e half of it.\u003c/p\u003e\n",
       "attachments": [],
       "deleted": false,
+      "removal": null,
       "moved_to": null,
       "machine_authored": false
     },
@@ -74,6 +75,7 @@
       "html": "\u003cp\u003eSummarising the thread so far.\u003c/p\u003e\n",
       "attachments": [],
       "deleted": false,
+      "removal": null,
       "moved_to": null,
       "machine_authored": true
     },
@@ -96,6 +98,7 @@
       "html": "",
       "attachments": [],
       "deleted": true,
+      "removal": "author",
       "moved_to": null,
       "machine_authored": false
     },
@@ -118,6 +121,30 @@
       "html": "\u003cp\u003eAgreed with \u003ca href=\"/u/alice\" class=\"mention\" rel=\"nofollow\"\u003e@alice\u003c/a\u003e on this.\u003c/p\u003e\n",
       "attachments": [],
       "deleted": false,
+      "removal": null,
+      "moved_to": null,
+      "machine_authored": false
+    },
+    {
+      "ordinal": 5,
+      "revision": 1,
+      "author": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757500900000,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 0,
+      "html": "",
+      "attachments": [],
+      "deleted": true,
+      "removal": "moderator",
       "moved_to": null,
       "machine_authored": false
     }

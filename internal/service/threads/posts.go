@@ -3,6 +3,7 @@ package threads
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/terva-sh/ketju/internal/domain"
@@ -131,39 +132,52 @@ func (s *Service) Replies(ctx context.Context, v domain.Viewer, id threadid.ID, 
 // source; the client diffs them (docs/08 "Post history").
 //
 // Moderators may always read it, and members when public_edit_history is on.
-// It is a members' feature, so an anonymous viewer is unauthenticated. A
-// deleted post's history is a tombstone to everyone but a moderator: its old
-// revisions are its content by another route.
+// It is a members' feature, so an anonymous viewer is unauthenticated. The
+// author of a post a moderator removed may also read that post's history
+// whatever the setting says, for as long as it stays removed: they are served
+// the post, and a moderator may have edited it before removing it
+// (TKT-01M29CKRJ9, docs/08). That admits them to that post alone.
+//
+// A removed post's history is a tombstone, `deleted` with no revisions, to
+// everyone revealRemoved refuses: its old revisions are its content by
+// another route.
 func (s *Service) History(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, ifNoneMatch string) (Served[dto.PostHistory], error) {
 	var res Served[dto.PostHistory]
 	a, err := s.access(ctx, v, id)
 	if err != nil {
 		return res, err
 	}
+	public := true
 	if !a.canModerate {
 		if !a.viewer.Member() {
 			return res, problem.Coded(problem.CodeUnauthenticated, fmt.Errorf("threads: post history needs a signed-in reader"))
 		}
-		public, err := settings.PublicEditHistory.Get(ctx, s.DB)
-		if err != nil {
+		if public, err = settings.PublicEditHistory.Get(ctx, s.DB); err != nil {
 			return res, err
 		}
-		if !public {
-			return res, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: public_edit_history is off"))
-		}
 	}
+	refused := problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: public_edit_history is off"))
 
 	err = s.Threads.With(id, func(th *threadcache.Thread) error {
 		snap, err := s.stable(th, func(ix *threadlog.Index, logLength int64) ([]uint32, error) {
 			return []uint32{ordinal}, nil
 		})
 		if err != nil {
+			if !public && errors.Is(err, threadlog.ErrNoSuchOrdinal) {
+				// Refused as it was before the entry was read, so a
+				// member without the setting learns nothing new here.
+				return refused
+			}
 			return err
 		}
 		e := snap.entries[0]
-		res.Body = dto.PostHistory{Ordinal: int(ordinal), Revisions: []dto.PostRevision{},
-			Deleted: !e.Flags.Visible()}
-		if res.Body.Deleted && !a.canModerate {
+		removed := !e.Flags.Visible()
+		reveal := removed && revealRemoved(a, e)
+		if !public && !reveal {
+			return refused
+		}
+		res.Body = dto.PostHistory{Ordinal: int(ordinal), Revisions: []dto.PostRevision{}, Deleted: removed}
+		if removed && !reveal {
 			return res.finish(id, snap.logLength, ifNoneMatch)
 		}
 
@@ -212,5 +226,5 @@ func (s *Service) assemble(ctx context.Context, th *threadcache.Thread, id threa
 	if err != nil {
 		return nil, err
 	}
-	return s.posts(ctx, th, id, snap, authors, Query{}, a.class == ClassModerator)
+	return s.posts(ctx, th, id, snap, authors, Query{}, a)
 }

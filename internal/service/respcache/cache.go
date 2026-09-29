@@ -54,9 +54,11 @@ type Key struct {
 	Lens     string
 	// Renderer is the render.Version the HTML was drawn with.
 	Renderer int
-	// Class is the viewer class: anon, member or moderator (docs/07).
-	// Moderators see tombstone contents, so a moderator's posts must never
-	// reach anyone else, and the reverse.
+	// Class is the viewer class: anon, member, moderator, or author:<user
+	// id> for a page holding a post a moderator removed that this viewer
+	// wrote (docs/07, TKT-01M29CKRJ9). Moderators see tombstone contents, and
+	// an author sees their own removed post, so those posts must never reach
+	// anyone else, and the reverse.
 	Class string
 	// Authors is a digest of the page's authors' rows as they were read for
 	// this request. A rename, a role change or an anonymization moves no log,

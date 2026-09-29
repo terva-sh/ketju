@@ -156,6 +156,17 @@ type ThreadViewer struct {
 	CanModerate bool   `json:"can_moderate"`
 }
 
+// Post.Removal values: who took a post down (docs/08 "Tombstones").
+const (
+	// RemovalAuthor is a post its author deleted.
+	RemovalAuthor = "author"
+	// RemovalModerator is a post a moderator hid.
+	RemovalModerator = "moderator"
+	// RemovalReview is a post auto-hidden pending review (docs/08 "Flags").
+	// Nothing sets it until auto-hide exists (TKT-01M29CP2PJ).
+	RemovalReview = "review"
+)
+
 // Post is one rendered post on a thread page.
 type Post struct {
 	Ordinal int `json:"ordinal"`
@@ -185,9 +196,15 @@ type Post struct {
 	HTML        string       `json:"html"`
 	Attachments []Attachment `json:"attachments"`
 
-	// Deleted marks a tombstone. An anon or member response carries no HTML
-	// for one; a moderator response does, per docs/07's viewer classes.
+	// Deleted marks a post that is not shown as itself: removed or moved. It
+	// stays true for every removal, as it was before Removal existed. An
+	// anon or member response carries no HTML for one; a moderator's does,
+	// and so does the author's for their own post a moderator removed
+	// (docs/07 "Viewer class", TKT-01M29CKRJ9).
 	Deleted bool `json:"deleted"`
+	// Removal says who removed the post: RemovalAuthor, RemovalModerator or
+	// RemovalReview. Nil for a visible post and for a moved one.
+	Removal *string `json:"removal"`
 	// MovedTo is the thread id a split moved this post to, nil otherwise.
 	MovedTo *string `json:"moved_to"`
 

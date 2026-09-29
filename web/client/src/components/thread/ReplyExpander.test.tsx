@@ -20,6 +20,7 @@ function post(ordinal: number, over: Partial<Post> = {}): Post {
     reply_to_suppressed: false,
     reply_count: 0,
     deleted: false,
+    removal: null,
     html: `<p>body of ${ordinal}</p>`,
     ...over,
   };

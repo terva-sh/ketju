@@ -221,7 +221,8 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 }
 
 // Delete is DELETE /threads/{id}/posts/{ordinal} (docs/07): a Delete record,
-// after which the post is a tombstone to everyone but a moderator. The
+// after which the post is a tombstone to everyone revealRemoved does not
+// serve it to: a moderator, and the author of a post a moderator hid. The
 // post's bytes stay in the log (docs/03, "Deletion is soft").
 //
 // A moderator's delete of somebody else's post writes by_moderator, which

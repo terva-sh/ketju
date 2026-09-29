@@ -109,7 +109,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /search?q=&forum=&author=&after=&before=` | FTS5 results with snippets |
 | `GET  /notifications` `POST /notifications/read` | |
 | `POST /blobs` (multipart) `GET /blobs/{hash}` | attachments; GET is outside `/api` at `/blobs/…` with immutable caching |
-| `GET  /users/{handle}` `/users/{handle}/posts` | profiles. `/users/{handle}` answers `{user: author, bio_html, joined_at, post_count, status}`, `internal/dto` `Profile`: `bio_html` is the bio rendered as a post is (a quote in it links nowhere, having no thread), and `status` is null except to moderators and admins. `/users/{handle}/posts?cursor=` answers `{posts: [{thread, forum, post}], next_cursor}`, `internal/dto` `UserPosts`: each post rendered as its thread page renders it for the viewer, with a link to its thread and forum, newest first, 25 to a page. Paging is keyset on (created_at, thread, ordinal) descending, so a post written while a reader pages does not appear twice, and a page is short only at the end of the history; the cursor is opaque, names no account, and one that is malformed is `bad-request`. A moved post is left out. Whether a post is deleted is read from its thread's index rather than from `post_meta`, which trails the log, and the count reads it the same way, so the history and the count agree while the projection catches up. The handle matches case-insensitively and an unknown one is `not-found`. An anonymized account (`users.anonymized`, 04) shows its `deleted-user-<id>` handle and no display name, avatar or bio, in the profile and on every post in its history, as every author block does (`member.Author`, TKT-01M29CKRFS); its old handle is `not-found`. Both answers are `no-store`. A member session is required for both, as for `GET /users?prefix=` (anonymous `unauthenticated`, pre-user `forbidden`). The post count counts the user's non-deleted posts in forums this viewer can read, so it varies by viewer and says nothing about forums the viewer cannot read. The history spans forums and leaves out posts in forums the viewer cannot read. A deleted post is left out for other members; the author sees their own deleted posts, marked deleted and without a body, as their thread page shows them, and moderators and admins see them marked deleted with the body, as the thread page's moderator view does. A post hidden by a moderator is a deleted post here, as it is on the thread page (08). A deleted post never counts, even for a viewer whose history shows it, so the count equals the posts a member's history lists and is less than an author's, moderator's or admin's history by the deleted posts it shows. A pending account is `not-found` except to moderators and admins; a suspended or deactivated account's profile is served, and its status is shown only to moderators and admins (05, "Account lifecycle"). Decided by the maintainer on 2026-09-28 (TKT-01M3KJJNDC) |
+| `GET  /users/{handle}` `/users/{handle}/posts` | profiles. `/users/{handle}` answers `{user: author, bio_html, joined_at, post_count, status}`, `internal/dto` `Profile`: `bio_html` is the bio rendered as a post is (a quote in it links nowhere, having no thread), and `status` is null except to moderators and admins. `/users/{handle}/posts?cursor=` answers `{posts: [{thread, forum, post}], next_cursor}`, `internal/dto` `UserPosts`: each post rendered as its thread page renders it for the viewer, with a link to its thread and forum, newest first, 25 to a page. Paging is keyset on (created_at, thread, ordinal) descending, so a post written while a reader pages does not appear twice, and a page is short only at the end of the history; the cursor is opaque, names no account, and one that is malformed is `bad-request`. A moved post is left out. Whether a post is deleted is read from its thread's index rather than from `post_meta`, which trails the log, and the count reads it the same way, so the history and the count agree while the projection catches up. The handle matches case-insensitively and an unknown one is `not-found`. An anonymized account (`users.anonymized`, 04) shows its `deleted-user-<id>` handle and no display name, avatar or bio, in the profile and on every post in its history, as every author block does (`member.Author`, TKT-01M29CKRFS); its old handle is `not-found`. Both answers are `no-store`. A member session is required for both, as for `GET /users?prefix=` (anonymous `unauthenticated`, pre-user `forbidden`). The post count counts the user's non-deleted posts in forums this viewer can read, so it varies by viewer and says nothing about forums the viewer cannot read. The history spans forums and leaves out posts in forums the viewer cannot read. A deleted or hidden post is left out for other members. The author sees their own as their thread page shows them: a post they deleted is marked `removal: "author"` without a body, and a post a moderator hid is marked `removal: "moderator"` with its body (08, decided 2026-09-28; TKT-01M29CKRJ9). Moderators and admins see both marked, with the body, as the thread page's moderator view does. A deleted post never counts, even for a viewer whose history shows it, so the count equals the posts a member's history lists and is less than an author's, moderator's or admin's history by the deleted posts it shows. A pending account is `not-found` except to moderators and admins; a suspended or deactivated account's profile is served, and its status is shown only to moderators and admins (05, "Account lifecycle"). Decided by the maintainer on 2026-09-28 (TKT-01M3KJJNDC) |
 | `GET  /users?prefix=&limit=` | `{users: [author]}`: mention autocomplete, `internal/dto` `UserSuggestions`. Up to `limit` (default 8, at most 20) active members whose handle starts with `prefix`, case-insensitively, in handle order; a prefix no handle can start with is an empty list. Every handle offered is one the renderer resolves as a mention, so a handle ending in `-`, which the mention syntax reads as punctuation, is not offered. Registration no longer gives one out, but a handle given out before that rule may still end in `-` (04 "users"), so the filter stays. A member session is required (anonymous `unauthenticated`, pre-user `forbidden`) |
 | `GET  /settings` `PATCH /settings` | prefs; `GET/DELETE /settings/sessions` ; `GET/DELETE /settings/identities/{id}` |
 | `POST /settings/deactivate` | the viewer deactivates their own account (05 "Account lifecycle"): 204 `no-store`, every session of the account deleted in the same transaction, this one included, and the session cookie cleared. The last active admin is `conflict`. Anonymous is `unauthenticated`, a pre-user `forbidden`. They come back by signing in and pressing Reactivate (05 "Login flow"). TKT-01M29CKRFS |
@@ -320,7 +320,7 @@ is a `markdown_notice`'s rendered body. `intro_html` is the rendered
     {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,
      "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3,
-     "html": "<p>…</p>", "attachments": [], "deleted": false, "moved_to": null,
+     "html": "<p>…</p>", "attachments": [], "deleted": false, "removal": null, "moved_to": null,
      "machine_authored": false, "edited_by_moderator": false}
   ]
 }
@@ -329,8 +329,9 @@ is a `markdown_notice`'s rendered body. `intro_html` is the rendered
 `ETag: "3yymw47g00001-483920-r3"`; `Vary: Cookie`. The viewer block is the
 only per-user part, and it is cheap; everything above it comes from the
 response cache keyed on `(thread, page, lens, log_length, renderer_version,
-viewer_class)` where `viewer_class ∈ {anon, member, moderator}` (moderators
-see tombstone contents).
+viewer_class)` where `viewer_class ∈ {anon, member, moderator, author:<id>}`
+(moderators see tombstone contents, and so does the author of a post a
+moderator removed; see "Removed posts" below).
 
 #### What the thread endpoint does (TKT-01M29CA9AX)
 
@@ -369,8 +370,8 @@ see tombstone contents).
   anonymous viewer and `forbidden` to a member without read. `lens` is not
   served yet and is `bad-request`, not ignored.
 - **Goldens.** `internal/dto/testdata/golden` fixes the shape;
-  `internal/web/api/testdata/golden/thread.{anon,member,moderator}.json` are
-  what the endpoint actually serves for one seeded thread, regenerated with
+  `internal/web/api/testdata/golden/thread.{anon,member,moderator,author}.json`
+  are what the endpoint actually serves for one seeded thread, regenerated with
   `go test ./internal/web/api -update`.
 
 #### The response cache (TKT-01M29CCBY0)
@@ -393,7 +394,11 @@ above is the design's; the implementation settles four internals:
   the viewer may moderate the thread's forum (an admin may), `member` for an
   active member, `anon` otherwise, a suspended account included. A role
   change is seen on the next request, because the session reads the role
-  from the users row every time.
+  from the users row every time. One class is read from the page itself:
+  when the page's snapshot holds a post a moderator removed and the viewer,
+  not a moderator, wrote it, the class is `author:<user id>`, since that
+  page carries the post's body for them alone (TKT-01M29CKRJ9). Every other
+  page a member reads stays `member` and shared.
 - **What the key cannot name** is kept beside the entry and checked on every
   hit, as the render cache does: the handles the posts' mentions resolved
   and the state of the posts they quote. A user registering a mentioned
@@ -419,12 +424,43 @@ source}]}`.
 - History is a members' feature: an anonymous viewer is `unauthenticated`,
   a member is `forbidden` when `public_edit_history` is off, and a
   moderator may always read it.
-- A deleted post is a tombstone from all three to anyone but a moderator:
-  no HTML from the first two, and `deleted: true` with no revisions from
-  history, since the old revisions are the deleted content by another route.
+- A removed post is a tombstone from all three to anyone the "Removed
+  posts" rule below does not serve it to: no HTML from the first two, and
+  `deleted: true` with no revisions from history, since the old revisions
+  are the removed content by another route.
+- The author of a post a moderator removed may read that post's history
+  even when `public_edit_history` is off, for as long as it stays removed.
+  That admits them to that post alone: their visible posts and the posts
+  they deleted themselves follow the setting as before.
 - Each carries the same body-hash ETag and answers `If-None-Match` with 304.
 - History walks the whole log (revisions are not chained in the format), so
   it is for a person opening it, not for a page.
+
+#### Removed posts (TKT-01M29CKRJ9)
+
+A post that is not shown as itself carries `deleted: true` and keeps its
+ordinal, `reply_to`, `reply_count` and permalink, so numbering, `?ordinal=`
+and the replies expander hold (08 "Tombstones"). `removal` says who removed
+it: `"author"` for a post its author deleted, `"moderator"` for one a
+moderator hid, and `"review"` for one auto-hidden pending review (08
+"Flags"; nothing sets it until TKT-01M29CP2PJ). It is null for a visible
+post and for a moved one, whose `moved_to` names the thread it went to. A
+post carrying both the deleted and hidden-by-mod bits, which only a log
+appended without the service's checks can hold, is `"author"`.
+
+Who is served a removed post's body is one rule, `revealRemoved` in
+`internal/service/threads`, used by the page, the single post, replies,
+`/users/{handle}/posts` and history alike:
+- a moderator of the thread's forum gets every removed post's body;
+- the post's author gets it while a moderator's removal holds it, marked
+  `removal: "moderator"` (08, decided 2026-09-28), and not for a post they
+  deleted themselves;
+- nobody else gets it, and nobody gets a moved post's body here.
+
+The rule answers only for removed posts. A visible post keeps the path it
+had: its body goes to everyone admitted to the thread, and its history to
+whoever the setting admits. A quote of any removed post renders as a
+tombstone to everyone.
 
 #### Edit, delete and restore (TKT-01M29CA9BP)
 

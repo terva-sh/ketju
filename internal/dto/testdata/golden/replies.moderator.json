@@ -20,6 +20,7 @@
       "html": "<p>Summarising the thread so far.</p>",
       "attachments": [],
       "deleted": false,
+      "removal": null,
       "moved_to": null,
       "machine_authored": true
     },
@@ -42,7 +43,8 @@
       "html": "<p>the text a moderator still needs to read</p>",
       "attachments": [],
       "deleted": true,
-      "moved_to": "3yymw47g00099",
+      "removal": "moderator",
+      "moved_to": null,
       "machine_authored": false
     }
   ]

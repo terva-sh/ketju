@@ -34,6 +34,7 @@
       "html": "<p>Summarising the thread so far.</p>",
       "attachments": [],
       "deleted": false,
+      "removal": null,
       "moved_to": null,
       "machine_authored": false
     },

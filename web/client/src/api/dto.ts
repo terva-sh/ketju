@@ -79,6 +79,9 @@ export interface Post {
   html: string;
   attachments: Attachment[];
   deleted: boolean;
+  // Who removed the post: 'author', 'moderator' or 'review'; null for a
+  // visible or moved post (docs/07 "Removed posts").
+  removal: string | null;
   moved_to: string | null;
   machine_authored: boolean;
 }

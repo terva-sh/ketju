@@ -18,6 +18,7 @@
     "html": "\u003cp\u003eAgreed with \u003ca href=\"/u/bob\" class=\"mention\" rel=\"nofollow\"\u003e@bob\u003c/a\u003e, on reflection.\u003c/p\u003e\n",
     "attachments": [],
     "deleted": false,
+    "removal": null,
     "moved_to": null,
     "machine_authored": false
   },

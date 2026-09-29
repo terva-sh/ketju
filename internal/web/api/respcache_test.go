@@ -433,3 +433,60 @@ func TestLockMovesTheResponseCacheKey(t *testing.T) {
 		}
 	}
 }
+
+// TestResponseCacheSeparatesTheHiddenPostsAuthor is the response cache
+// invariant for TKT-01M29CKRJ9 (docs/13 "Invariants"): a page holding a post
+// a moderator hid is drawn for its author under a class of their own, so in
+// either request order, and again once both entries are warm, the other
+// member's answer never carries the hidden post's html and the author's
+// always does, from two entries. A page that holds none of the viewer's
+// hidden posts keeps the shared member entry.
+func TestResponseCacheSeparatesTheHiddenPostsAuthor(t *testing.T) {
+	for _, order := range [][]string{{"alice", "carol", "alice"}, {"carol", "alice", "carol"}} {
+		t.Run(strings.Join(order, ","), func(t *testing.T) {
+			w := newWorld(t)
+			id, _ := w.seedHidden()
+			path := "/api/v1/threads/" + id.String()
+			for round := range 2 {
+				for _, who := range order {
+					body := w.same(w.viewer(who), path)
+					if author := who == "alice"; strings.Contains(body, hiddenSecret) != author {
+						t.Fatalf("round %d: %q (author=%v) got a page with the hidden text=%v", round, who, author, !author)
+					}
+				}
+			}
+			// Two keys: alice's and the member one. Each was inserted by
+			// its first request, and the other four requests hit.
+			if s := w.svc.Responses.Stats(); s.Inserts != 2 || s.Entries != 2 || s.Hits != 4 {
+				t.Fatalf("stats %+v: want two entries, one per key, and the rest hits", s)
+			}
+			// scribe, another member, shares carol's entry.
+			if body := w.same(w.viewer("scribe"), path); strings.Contains(body, hiddenSecret) {
+				t.Fatal("another member got the hidden text")
+			}
+			if s := w.svc.Responses.Stats(); s.Inserts != 2 || s.Hits != 5 {
+				t.Fatalf("stats %+v: another member did not share the member entry", s)
+			}
+		})
+	}
+
+	// A page without alice's hidden post is the member page for her too.
+	w := newWorld(t)
+	id := w.longThread(1, 30)
+	w.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["bob"]), Ordinal: 2,
+		Body: &threadlog.DeleteBody{ByModerator: true}})
+	base := "/api/v1/threads/" + id.String()
+	w.same(w.viewer("carol"), base+"?page=2")
+	before := w.svc.Responses.Stats()
+	w.same(w.viewer("alice"), base+"?page=2")
+	if s := w.svc.Responses.Stats(); s.Inserts != before.Inserts || s.Hits != before.Hits+1 {
+		t.Errorf("alice's page 2, which holds none of her hidden posts, was not the shared member entry: %+v then %+v", before, s)
+	}
+	for _, who := range []string{"carol", "alice"} {
+		w.same(w.viewer(who), base+"?page=1")
+		p := page(t, w.get(w.viewer(who), base+"?page=1"))
+		if got := p.Posts[1]; got.Ordinal != 2 || !got.Deleted || (got.HTML != "") != (who == "alice") {
+			t.Errorf("%s's page 1 has alice's hidden post 2 as %+v", who, got)
+		}
+	}
+}
