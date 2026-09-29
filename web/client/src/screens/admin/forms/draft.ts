@@ -114,6 +114,25 @@ function fieldOut({ f, options }: DraftField): FormSchemaField {
   return o as unknown as FormSchemaField;
 }
 
+// sameSchema is whether two schemas say the same thing, whatever order
+// their properties are in: a draft whose edits were undone is the version
+// it was loaded from, and saving it would write a copy (Terva review 1490).
+export function sameSchema(a: FormSchema, b: FormSchema): boolean {
+  return sorted(a) === sorted(b);
+}
+
+function sorted(v: unknown): string {
+  if (Array.isArray(v)) return `[${v.map(sorted).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o)
+      .sort()
+      .map((k) => `${JSON.stringify(k)}:${sorted(o[k])}`)
+      .join(',')}}`;
+  }
+  return JSON.stringify(v);
+}
+
 // newKey is a key no field of d has yet.
 function newKey(d: Draft): string {
   const used = new Set(d.fields.map((x) => x.f.key));

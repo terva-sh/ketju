@@ -209,12 +209,70 @@ describe('the form editor', () => {
     // Correcting the key clears what was said about it at once, and Save
     // waits for the preview of the corrected draft.
     refuse = false;
-    await type(root, inBox(fieldBox(root, 2), 'Key'), 'who');
+    await type(root, inBox(fieldBox(root, 2), 'Key'), 'who_invited');
     expect(inBox(fieldBox(root, 2), 'Key').hasAttribute('aria-invalid')).toBe(false);
     expect(saveButton(root).disabled).toBe(true);
     await previewed(root);
     expect(root.querySelector('[data-lead]')).toBeNull();
     expect(saveButton(root).disabled).toBe(false);
+  });
+
+  // Terva review 1490: an edit undone is no change, and saving it would
+  // write a copy of the active version.
+  it('does not offer to save a draft whose edits were undone', async () => {
+    const root = await renderAt('/admin/forms');
+    await type(root, labelled(root, 'Title'), 'Something else');
+    await previewed(root);
+    expect(saveButton(root).disabled).toBe(false);
+    await type(root, labelled(root, 'Title'), 'Apply to join');
+    await previewed(root);
+    expect(saveButton(root).disabled).toBe(true);
+    expect(root.querySelector('#fe-save-hint')!.textContent).toBe('Nothing has changed since this version was saved.');
+
+    await click(root, button(root, 'Add field'));
+    await click(root, button(fieldBox(root, 6), 'Remove'));
+    await previewed(root);
+    expect(saveButton(root).disabled).toBe(true);
+  });
+
+  // Terva review 1490: a failed request says nothing about the draft. It is
+  // not marked refused, and it can be asked for again without an edit.
+  it('tells a failed preview request from a refusal, and tries it again on request', async () => {
+    let fail = true;
+    const ok = server.routes[`POST ${url}/preview`];
+    server.routes[`POST ${url}/preview`] = (body) => (fail ? problemAnswer('unavailable', 503) : ok(body));
+    const root = await renderAt('/admin/forms');
+    await type(root, labelled(root, 'Title'), 'Join');
+    await previewed(root);
+
+    const failed = root.querySelector('[data-preview-failed]')!;
+    expect(failed.textContent).toContain('The preview could not be made.');
+    expect(root.querySelector('[data-lead]')).toBeNull();
+    expect(root.querySelector('[data-preview-refused]')).toBeNull();
+    expect(saveButton(root).disabled).toBe(true);
+
+    fail = false;
+    await click(root, button(failed, 'Try the preview again'));
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    await settle(root);
+    expect(sentTo('/preview')).toHaveLength(2);
+    expect(root.querySelector('[data-preview-failed]')).toBeNull();
+    expect(root.querySelector('[data-preview] .fe-form-title')!.textContent).toBe('Join');
+    expect(saveButton(root).disabled).toBe(false);
+  });
+
+  // Terva review 1490: answers tried in the preview go with the draft.
+  it('clears the answers tried in the preview when a save reseeds the draft', async () => {
+    server.routes[`POST ${url}/versions`] = () => ({ status: 201, body: saved('Join the club') });
+    const root = await renderAt('/admin/forms');
+    const name = () => root.querySelector<HTMLInputElement>('[data-preview] [data-field="name"] input')!;
+    await type(root, name(), 'Sample Name');
+    expect(name().value).toBe('Sample Name');
+    await type(root, labelled(root, 'Title'), 'Join the club');
+    await previewed(root);
+    expect(name().value).toBe('Sample Name');
+    await click(root, saveButton(root));
+    expect(name().value).toBe('');
   });
 
   it('a 422 on save attaches its errors, focuses the lead line, and disables save', async () => {

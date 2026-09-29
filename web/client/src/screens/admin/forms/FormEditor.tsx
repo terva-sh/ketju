@@ -18,6 +18,7 @@ import {
   fromSchema,
   moveField,
   removeField,
+  sameSchema,
   toSchema,
   typeLabel,
   updateField,
@@ -47,11 +48,14 @@ export const previewDelay = 500;
 const none: Attached = { placed: {}, unplaced: [] };
 
 // Preview is the server's answer about one revision of the draft: the form
-// as an applicant would see it, or the words for its refusal.
+// as an applicant would see it, the words for its refusal, or the words for
+// a request that failed, which says nothing about the draft and can be
+// tried again (Terva review 1490).
 interface Preview {
   rev: number;
   form?: Form;
   refused?: string;
+  failed?: string;
 }
 
 export function FormEditor() {
@@ -83,6 +87,10 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
   const [saveError, setSaveError] = useState('');
   const [notice, setNotice] = useState('');
   const [newType, setNewType] = useState(fieldTypes[0]);
+  // retries counts the times the preview was asked for again after its
+  // request failed; a retry is sent at once, not after the edit delay.
+  const [retries, setRetries] = useState(0);
+  const retried = useRef(false);
   const root = useRef<HTMLDivElement>(null);
   const noticeRef = useRef<HTMLParagraphElement>(null);
   const conflictRef = useRef<HTMLDivElement>(null);
@@ -99,6 +107,9 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
     setRev(0);
     setPreview({ rev: 0, form: a.form });
     setAttached(none);
+    // Answers tried in the preview were for the draft that has gone (Terva
+    // review 1490).
+    setValues({});
     setConflict(false);
     setSaveError('');
   };
@@ -120,11 +131,15 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
 
   // The preview of each revision, 500 ms after the edit that made it. An
   // edit meanwhile starts the wait again and aborts the request in flight,
-  // so only the newest draft's answer is ever shown.
+  // so only the newest draft's answer is ever shown. Only validation-failed
+  // is a refusal of the draft; any other failure is the request's, and
+  // leaves what was said about the draft as it was.
   useEffect(() => {
     if (rev === 0) return;
     const ctl = new AbortController();
     const sent = draft;
+    const delay = retried.current ? 0 : previewDelay;
+    retried.current = false;
     const timer = setTimeout(async () => {
       try {
         const r = await send<Form>('POST', `${formUrl}/preview`, { schema: toSchema(sent) }, { signal: ctl.signal });
@@ -132,19 +147,27 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
         if (r.ok) {
           setPreview({ rev, form: r.value });
           setAttached(none);
-        } else {
+        } else if (isProblem(r.error, 'validation-failed')) {
           setPreview({ rev, refused: r.message });
           setAttached(attach(r.error.fieldErrors, sent));
+        } else {
+          setPreview({ rev, failed: r.message });
         }
       } catch {
         // Aborted by a newer edit: send rejects for nothing else.
       }
-    }, previewDelay);
+    }, delay);
     return () => {
       clearTimeout(timer);
       ctl.abort();
     };
-  }, [rev]);
+  }, [rev, retries]);
+  const retryPreview = () => {
+    retried.current = true;
+    // No revision is -1, so the draft reads as being checked meanwhile.
+    setPreview({ rev: -1 });
+    setRetries((n) => n + 1);
+  };
 
   useEffect(() => {
     const want = focusNext.current;
@@ -169,7 +192,8 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
   }, [conflict]);
 
   const checking = rev > 0 && preview.rev !== rev;
-  const passed = rev > 0 && preview.rev === rev && !!preview.form;
+  const changed = rev > 0 && !sameSchema(toSchema(draft), admin.schema);
+  const passed = changed && preview.rev === rev && !!preview.form;
   const canSave = passed && !conflict;
 
   const save = async () => {
@@ -235,13 +259,15 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
     return out;
   };
   const refused = preview.rev === rev && preview.refused !== undefined;
+  const failed = preview.rev === rev ? preview.failed : undefined;
   const placedCount = Object.keys(attached.placed).length;
 
   let saveHint = '';
   if (conflict) saveHint = '';
-  else if (rev === 0) saveHint = 'Nothing has changed since this version was saved.';
   else if (checking) saveHint = 'Checking the draft…';
   else if (refused) saveHint = 'The draft cannot be saved until the server accepts it.';
+  else if (failed !== undefined) saveHint = 'The draft cannot be saved until its preview has been made.';
+  else if (!changed) saveHint = 'Nothing has changed since this version was saved.';
 
   return (
     <div class="form-editor" ref={root}>
@@ -380,12 +406,19 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
           <p class="admin-muted" aria-live="polite" data-preview-state>
             {checking ? 'Updating the preview…' : 'What an applicant sees. Nothing entered here is sent.'}
           </p>
-          {refused || !preview.form ? (
+          {failed !== undefined ? (
+            <div class="fe-failed" role="alert" data-preview-failed>
+              <p>The preview could not be made. {failed}</p>
+              <button type="button" class="admin-button" onClick={retryPreview}>
+                Try the preview again
+              </button>
+            </div>
+          ) : refused ? (
             <p class="fe-refused" data-preview-refused>
               The server did not accept this draft, so there is nothing to preview. The problems are marked in the
               draft.
             </p>
-          ) : (
+          ) : !preview.form ? null : (
             <div class={phone ? 'fe-frame fe-phone' : 'fe-frame'} data-preview>
               <p class="fe-form-title">{preview.form.title}</p>
               <FormView

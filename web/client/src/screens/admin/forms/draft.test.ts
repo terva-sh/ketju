@@ -10,6 +10,7 @@ import {
   moveField,
   propsFor,
   removeField,
+  sameSchema,
   toSchema,
   typeLabel,
   updateField,
@@ -68,6 +69,16 @@ describe('the draft', () => {
     const typed = updateField(d, interests.id, { optionsText: 'Games\n\nBooks\n' });
     expect(typed.fields[4].options).toBe('Games\n\nBooks\n');
     expect(toSchema(typed).fields[4].options).toEqual(['Games', 'Books']);
+  });
+
+  it('knows a schema whose properties come in another order for the same one', () => {
+    const s = schema();
+    const reversed = <T extends object>(o: T) => Object.fromEntries(Object.entries(o).reverse()) as T;
+    const reordered = reversed({ ...s, fields: s.fields.map(reversed) });
+    expect(JSON.stringify(reordered)).not.toBe(JSON.stringify(s));
+    expect(sameSchema(reordered, s)).toBe(true);
+    expect(sameSchema({ ...s, title: 'Other' }, s)).toBe(false);
+    expect(sameSchema({ ...s, fields: s.fields.slice(1) }, s)).toBe(false);
   });
 
   it('carries a property it draws no control for', () => {
