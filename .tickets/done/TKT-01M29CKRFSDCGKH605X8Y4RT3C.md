@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T19:15:19Z
+updated_at: 2026-09-29T21:00:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-ckrfs
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -50,12 +50,12 @@ Anonymize does not edit post bodies, because they are in append-only logs. Erasi
 - [x] Each transition writes its audit_log row (user.deactivated, user.suspended with reason and until, user.unsuspended, user.anonymized with no handle) in the same transaction as the status change; with an injected audit failure the status, sessions and identities are unchanged
 - [x] Signing in as a suspended user answers 403 with the reason, HTML-escaped, and the end date or 'No end date is set', and issues no session
 - [x] Anonymize sets users.anonymized, renames to deleted-user-<id>, clears display name, avatar and bio, and deletes identities; a schema trigger refuses any later change to those fields, and thread log files are byte-identical before and after
-- [ ] After anonymization, the post header, thread-list last poster, profile, history, mentions and quotes of the account show deleted-user-<id> with no display name or avatar, read from users.anonymized, and a cached page is not served with the old author (TestAnonymizedAttributionEverywhere, TestResponseCacheAfterAnonymize)
 - [x] Status writes go only through perm (SetUserStatus and AnonymizeUser are in decisionWrites), and the last active admin cannot be suspended, deactivated, anonymized or demoted (TestLastAdminCannotLeave)
 - [x] Moderators can suspend members only, and admins anyone except themselves (TestSuspendAuthority)
 - [x] A deactivated member who signs in sees a Reactivate button; using it returns the account to active through session.IssueUserWith and writes user.reactivated, and a suspended, pending or anonymized account cannot use it (TestReactivation)
 - [x] After anonymization the old handle is reserved for 90 days with no redirect (once TKT-01M3NRP3W9's reservation table exists), and docs/05 says anonymization leaves earlier audit rows, old handles included, in place
 - [x] After suspend or deactivate, signing in through any linked identity writes no session row; after anonymize the identities are gone and the old identity id is ErrNoIdentity; the chokepoint's issuerCallers gains only identity/reactivate.go:Reactivate
+- [x] After anonymization, the post header, thread-list last poster, profile, history and quotes of the account show deleted-user-<id> with no display name or avatar, read from users.anonymized; earlier @mentions of the account render as unlinked plain text (maintainer decision 2026-09-29, TKT-01M3Q7Q1T4); and a cached page is not served with the old author (TestAnonymizedAttributionEverywhere, TestResponseCacheAfterAnonymize)
 
 ## Implementation plan
 
@@ -166,6 +166,10 @@ Terva review 1450 (Actions #979) on head 8cbcca4, base 3fd598f: one finding, med
 **agent:claude-code/phase2-run-ckrfs** at 2026-09-29T19:15:19Z
 
 Terva review 1452 (Actions #981) on head 22c853d, base 3fd598f. It marks the review 1450 finding resolved and raises one new finding, medium: "Use status_version when constructing reactivation refusal test cookies". Fixed. The forged() helper in internal/web/auth/reactivate_test.go still read updated_at, which was the stamp before review 1441. So the suspended, pending and active refusal subtests were being refused by the stamp check, not by the transition guard they claim to test. It now reads status_version. Mutation-checked: letting reactivate start from any status now fails all three subtests; before this fix they passed. The anonymized subtest is refused earlier than perm, because anonymizing deletes the identities. A comment now says so, and perm's ErrAnonymized is held by TestBadTransitionsAreRefused and TestDeactivateAndAnonymizeAuthority, both of which fail when it is removed.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-29T21:00:20Z
+
+Criterion 5 was reworded to the maintainer's 2026-09-29 decision on TKT-01M3Q7Q1T4: mentions of an anonymized account render as unlinked plain text, as built and pinned by TestAnonymizedAttributionEverywhere. It is now ticked.
 
 ## Summary
 

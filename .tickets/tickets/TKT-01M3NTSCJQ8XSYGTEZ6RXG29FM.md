@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-29T15:28:19Z
+updated_at: 2026-09-29T21:00:34Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -84,3 +84,16 @@ Main was green after each merge.
 **agent:claude-code/phase2-run-orchestrator** at 2026-09-29T15:28:19Z
 
 Promoted to ready after #143 merged: TKT-01M3NRP3W9, 3NRX2NN, 3NS16VH, 3NS1931 and 3NTSCMN. TKT-01M3P0CYR3 (admin rename control) and TKT-01M3PTT97X (client edit and delete windows) were filed during the run and have no groomed plan, so under docs/13 they stay draft until one is written.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-29T21:00:34Z
+
+More merges, written by the orchestrator in one batch:
+- TKT-01M29CKRF9 (Map IdP group claims onto local groups): PR #147 at 21dbd04. Adds identity.Policy and perm.SyncIdPGroups, which writes the group.member_added and group.member_removed audit rows. Every sign-in now requires identity.Service.Perm. Both reviews were clean.
+- TKT-01M29CKRG9 (Implement pre-user sessions restricted to the application flow): PR #149 at 10a3a7b. Adds web.PreUserGate at chain position 7 with the positive allowlist web.PreUserRoutes, and makes the API and auth routes walkable tables. Review 1397 had one medium, fixed; the next run was clean.
+- TKT-01M29CP2KE (Implement the declarative form schema and server-side validation): PR #151 at 3eab1e9, which superseded #150 after main moved. Adds internal/forms, formsvc, and field errors on validation-failed. Reviews 1404, 1407 and 1412 were all fixed.
+- TKT-01M29CXK1X (Build the admin users, groups, and permissions screens): PR #153 at 9d5ef44, which superseded #152. Adds perm.ChangeRole and the ...Then forms, and user.demoted. The last admin cannot be demoted. Every finding was fixed.
+- TKT-01M29CP2KZ (Implement application submit, status, and withdraw): PR #156 at 3fd598f, carried from #154, after #155 blocked the ticket on TKT-01M3Q2V25E. The maintainer chose "sign in again" on 2026-09-29. Adds internal/service/applications and web.KeyedLimit.
+- TKT-01M29CKRFS (Implement the account lifecycle: deactivate, suspend, anonymize): PR #157 at 31e6812, after five review rounds with every finding fixed. Adds perm.ChangeStatus with status_version, handle_releases, and identity.HandleFree, which TestEveryHandleWriteChecksHandleFree enforces. AC5 waited on TKT-01M3Q7Q1T4; the maintainer chose plain text on 2026-09-29, and AC5 is now reworded and ticked.
+- TKT-01M29CP2NG (Build the apply and status screens): PR #158 at f1129ce, after five rounds with every finding fixed. One low was answered in a note. Adds the shared src/forms renderer. The bundle is 45219 of 60000 B.
+- TKT-01M29CP2MG (Implement moderator application review): PR #159 at 855ca5d. Review 1470 had a high and a medium, both fixed; the next run was clean. **AC7 is unticked:** a suspended moderator gets 401 rather than 403, because member.Require answers 401 to every inactive account across the site. That goes to the maintainer to accept or reword.
+Main was green after each merge.

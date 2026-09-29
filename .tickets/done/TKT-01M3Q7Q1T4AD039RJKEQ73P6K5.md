@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3Q7Q1T4AD039RJKEQ73P6K5
 title: Decide how a mention of an anonymized account renders
 type: task
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T18:44:28Z
-updated_at: 2026-09-29T18:44:28Z
+updated_at: 2026-09-29T21:00:13Z
 created_by:
   id: agent:claude-code/phase2-run-ckrfs
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-ckrfs
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -45,3 +45,13 @@ A mention is resolved by the handle typed in the post body, at every render (`th
 ### Recommendation
 
 A. Then TKT-01M29CKRFS's fifth criterion should read "mentions of the account no longer link it", and it can be ticked.
+
+## Notes
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-29T21:00:13Z
+
+Maintainer decision, 2026-09-29: option A, plain text. After anonymization, other members' earlier @mentions of the account render as the typed text, link nobody, and show no avatar. Nothing on the page ties the old handle to deleted-user-<id>, which is consistent with the rule that an anonymized handle gets no redirect. B, which resolves by user id and draws @deleted-user-<id>, lost because it re-creates the link the no-redirect rule avoids. This is the behaviour TestAnonymizedAttributionEverywhere already pins. TKT-01M3NRP3W9's id-pinned mention rule must keep this for anonymized accounts.
+
+## Summary
+
+Decided: a mention of an anonymized account renders as unlinked plain text, as built.
