@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QGH66WA5X7DBGZS8662S5T
 title: Add lock, unlock, pin and unpin to the thread screen
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-29T22:07:20Z
+updated_at: 2026-09-29T22:49:17Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

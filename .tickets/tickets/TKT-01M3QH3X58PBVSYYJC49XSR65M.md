@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QH3X58PBVSYYJC49XSR65M
 title: Answer GET /me for an agent authenticated by its credential
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T21:28:46Z
-updated_at: 2026-09-29T22:07:21Z
+updated_at: 2026-09-29T22:49:17Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:02:34Z
-updated_at: 2026-09-29T15:28:10Z
+updated_at: 2026-09-29T22:49:17Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -196,3 +196,7 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-29. Three things for whoev
 3. **Readings of the settled text, not new decisions.** An admin rename neither waits for nor starts the member's 30-day cooldown. A member cannot take back their own old handle during its 90 days, because the rule says "not reserved" without exception. If the maintainer wants the former owner exempt, it is one condition in `HandleFree`.
 
 Filed: TKT-01M3P0CYR3 (Add a rename control to the admin users screen). Linked: this ticket now depends on TKT-01M3NRYCP5 (audit helper and admin gate) and TKT-01M29CKRFS (the anonymized column, and `perm.Anonymize`, where the reservation write goes).
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-29T22:49:17Z
+
+Orchestrator, 2026-09-29, from planning TKT-01M3P0CYR3 (PR #167): answer a taken or reserved handle as validation-failed with errors[handle], not as conflict. The server attaches field errors only to validation-failed (TestOnlyValidationFailedCarriesErrors), and application approval already answers that way. Use approval's field codes (invalid_handle, reserved, taken) so one table of wording covers both.

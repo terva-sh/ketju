@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QHKD21M1JPCQBZVCQZ4V6K
 title: Show moderators' post controls and the edited-by-a-moderator marker
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -23,12 +23,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T21:37:14Z
-updated_at: 2026-09-29T22:25:28Z
+updated_at: 2026-09-29T22:49:17Z
 created_by:
   id: agent:claude-code/phase2-run-crj5j
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3P0CYR3WQ2FKJWGVHXM9FFZ
 title: Add a rename control to the admin users screen
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -23,12 +23,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-29T22:07:20Z
+updated_at: 2026-09-29T22:49:17Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

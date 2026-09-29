@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-29T21:00:34Z
+updated_at: 2026-09-29T22:49:17Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -97,3 +97,15 @@ More merges, written by the orchestrator in one batch:
 - TKT-01M29CP2NG (Build the apply and status screens): PR #158 at f1129ce, after five rounds with every finding fixed. One low was answered in a note. Adds the shared src/forms renderer. The bundle is 45219 of 60000 B.
 - TKT-01M29CP2MG (Implement moderator application review): PR #159 at 855ca5d. Review 1470 had a high and a medium, both fixed; the next run was clean. **AC7 is unticked:** a suspended moderator gets 401 rather than 403, because member.Require answers 401 to every inactive account across the site. That goes to the maintainer to accept or reword.
 Main was green after each merge.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-29T22:49:17Z
+
+More merges, written by the orchestrator in one batch:
+- TKT-01M3NRX2NN (Build the admin applications review screen): PR #162 at fe5cdcb. Five rounds; every finding fixed. Decision.tsx is exported for the queue, the e2e seed adds the moderator mona, and ApplyRoot has a codeSplitting group. The bundle grew 111 B to 45330 B, so the "reader total unchanged" clause holds only approximately; the ticket note explains why.
+- TKT-01M29CKRGS (Implement thread lock, unlock, pin, and unpin): PR #161 at a27a721. The projection writer now writes the moderation audit rows by log offset. Review 1471's medium was answered with a test proving the code already correct; the re-review was clean. The client work is TKT-01M3QGH66W.
+- TKT-01M29P9RSW (Implement agent accounts, provisioning, and the agent credential): PR #164 at f04a476, replacing #163. Adds internal/auth/agentcred, web.KeyedRateLimit with a 20/30s bucket, lifecycle revocation, and migration 0013. Review 1477: the medium (refill overflow) was fixed; the high was a false positive and was rewritten anyway. The UI work is TKT-01M3QH3GS2; /me for agents is TKT-01M3QH3X58.
+- TKT-01M29CRJ5J (Allow moderators to edit and delete any post): PR #165 at 796641c. Adds Delete.by_moderator (hidden-by-mod), Append.RequireAny, and dto.Post.edited_by_moderator. Review 1486's medium was fixed. AC2's client half is in TKT-01M3QHKD21.
+- TKT-01M29CKRE9 (Support multiple providers with domain gates and auto-approve): PR #166 at 1dd6ed9. The review was clean with no findings. The domain gate requires email_verified, auto_approve registers under approval mode, and the config warning is removed.
+- Grooming PR #167: plans for seven run-filed drafts, all promoted here. The high finding on agent-token handling was fixed. A medium on timestamps was answered as a false positive, since created_at is Millis, and the plan was clarified.
+Main was green after each merge.
+Open question for the maintainer's report: a member who moderates a forum through a group grant has can_moderate, but the role-based staff gate refuses them lock and pin (docs/07 "by role"). Kept for Phase 2.

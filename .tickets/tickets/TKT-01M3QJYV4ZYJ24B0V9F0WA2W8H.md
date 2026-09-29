@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QJYV4ZYJ24B0V9F0WA2W8H
 title: Serve a post's current source to its author for editing
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -20,12 +20,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T22:00:57Z
-updated_at: 2026-09-29T22:07:02Z
+updated_at: 2026-09-29T22:49:17Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
