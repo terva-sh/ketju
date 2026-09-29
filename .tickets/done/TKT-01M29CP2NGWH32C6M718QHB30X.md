@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:06:00Z
+updated_at: 2026-09-29T19:10:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -146,6 +146,10 @@ Built on run/cp2ng-apply-screens from main at 3fd598f. Facts the next ticket nee
 **agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:05:15Z
 
 Criterion 4, as the note of 2026-09-29 supersedes it: approved is drawn, with its sign_in link as a plain anchor to /auth/..., which is outside clientScope and so a full page load (StatusScreen.test.tsx 'draws approved with its sign-in link'). Nothing depends on reaching it: approval retires the pre-user session, so the status route answers 401, which the screen draws as 'If you applied to join, sign in to see your decision', and the signed-out shell carries the hint. The other four states, and the pre-user redirect under the reduced shell, are tested in StatusScreen.test.tsx, routes.test.tsx and e2e/apply.spec.ts.
+
+**agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:10:33Z
+
+Terva review 1453 (run 6c8c21ce-1a88-420e-91ed-4232efe2ad4c, Actions run 984) of head 15009d064b2d7e0339c1a373dcf1e524fb1edbc7 on base 3fd598f8245f03a25774b2c22ccaf516d412a5fc: two medium findings, both fixed, neither disputed. (1) 'Identify a pending application by status, not withdrawal permission': a 409 on submit now goes to the status page when the status is pending or can_apply is false (approved, denied or withdrawn within the day, blocked, closed), and reloads the form only when the applicant may still apply, since the server checks every other refusal before the version. (2) 'Do not preserve answers when a field changes type': ApplyScreen's exported carried() keeps an answer across a form change only when the field keeps its kind in fields.tsx's map and its multiple flag, and every chosen option is still offered. Tested in ApplyScreen.test.tsx. Also, found in my own read of the diff: a member opening /apply is refused 403 and was told registration is closed; they are now told they are already a member. Budget after the fix: 44979 B gzip of 60000.
 
 ## Summary
 

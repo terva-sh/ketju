@@ -4,7 +4,7 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-DMsnF6Ax.js",
+    "file": "assets/index-RAHIe8eP.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
@@ -64,7 +64,7 @@
     "src": "src/assets/fonts/newsreader-latin-600-normal.woff2"
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-BqejwtKq.js",
+    "file": "assets/AdminRoot-C7CM5W-d.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
@@ -76,7 +76,7 @@
     ]
   },
   "src/screens/apply/ApplyRoot.tsx": {
-    "file": "assets/ApplyRoot-CfDBQcTV.js",
+    "file": "assets/ApplyRoot-XC-QqEe4.js",
     "name": "ApplyRoot",
     "src": "src/screens/apply/ApplyRoot.tsx",
     "isDynamicEntry": true,

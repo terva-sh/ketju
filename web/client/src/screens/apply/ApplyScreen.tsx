@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
 import { apiGet, apiSend } from '../../api/client';
-import type { ApplicationForm, ApplicationStatus } from '../../api/dto';
+import type { ApplicationForm, ApplicationStatus, Form, FormField } from '../../api/dto';
 import { asProblem, isAbort, isProblem, problemMessage, type ProblemError } from '../../api/problem';
 import { ErrorPanel } from '../../components/ErrorPanel';
+import { kindOf, type Value } from '../../forms/fields';
 import { answersOf, FormView, initialValues, type Values } from '../../forms/FormView';
 import { useShellContext } from '../../state/shell';
 import { viewer } from '../../state/viewer';
@@ -32,12 +33,17 @@ export function ApplyScreen() {
   const [busy, setBusy] = useState(false);
   useShellContext({ title: 'Apply to join', actions: [] }, []);
 
-  // take puts a loaded form on screen. kept are answers from a version the
-  // server has since replaced: each is carried over where the new version
-  // still has a field of that key that takes an answer.
-  const take = (f: ApplicationForm, kept?: Values) => {
+  // take puts a loaded form on screen. previous is the version the server
+  // has since replaced, with the answers given to it: each answer is carried
+  // over only where it still fits (carried, below).
+  const take = (f: ApplicationForm, previous?: { form: Form; values: Values }) => {
     const fresh = initialValues(f.form, f.prefill);
-    if (kept) for (const k of Object.keys(fresh)) if (Object.hasOwn(kept, k)) fresh[k] = kept[k];
+    if (previous) {
+      for (const field of f.form.fields) {
+        const v = carried(previous, field);
+        if (v !== undefined && Object.hasOwn(fresh, field.key)) fresh[field.key] = v;
+      }
+    }
     setData(f);
     setValues(fresh);
     setErrors({});
@@ -96,17 +102,18 @@ export function ApplyScreen() {
 
   // A 409 is one of two things (docs/07): an application already pending,
   // perhaps sent from another tab, or a form that changed since it was
-  // loaded. The status tells them apart.
+  // loaded. The status tells them apart (review 1453). The server checks
+  // every other refusal before the version, so a form change leaves the
+  // applicant free to apply; anything else is the status page's to explain.
   const conflicted = async () => {
     try {
       const s = await apiGet<ApplicationStatus>(statusURL);
-      // The one status a submission conflicts with; the status page shows it.
-      if (s.can_withdraw) {
+      if (isPending(s) || !s.can_apply) {
         route('/apply/status', true);
         return;
       }
       const f = await apiGet<ApplicationForm>(formURL);
-      take(f, values);
+      take(f, data ? { form: data.form, values } : undefined);
       setMessage('The form changed while you were filling it in. Your answers are kept where the questions are the same. Check them and send it again.');
     } catch (err) {
       setMessage(problemMessage(err).text);
@@ -141,9 +148,43 @@ export function ApplyScreen() {
   );
 }
 
+// carried is the answer given to the previous version's field of the same
+// key, if it still fits the new field, or undefined (review 1453). It fits
+// when the field kept its kind in fields.tsx's map and whether it takes
+// several choices, and, for a field with options, when every choice made is
+// still one of them. Otherwise the new field starts empty: a line of text
+// kept in a box would be sent as text while the box showed unticked.
+export function carried(previous: { form: Form; values: Values }, field: FormField): Value | undefined {
+  const was = previous.form.fields.find((f) => f.key === field.key);
+  if (!was || !Object.hasOwn(previous.values, field.key)) return undefined;
+  const kind = kindOf(field);
+  if (!kind || kindOf(was) !== kind || was.multiple !== field.multiple) return undefined;
+  const v = previous.values[field.key];
+  if (field.options.length > 0) {
+    const chosen = Array.isArray(v) ? v : [v];
+    if (!chosen.every((c) => c === '' || field.options.includes(c as string))) return undefined;
+  }
+  return v;
+}
+
+// isPending is an application under review.
+const isPending = ({ status }: ApplicationStatus) => status === 'pending';
+
 // LoadRefusal is why the form is not shown: the refusals an applicant can
 // meet before filling it in, and any failure to reach it.
 function LoadRefusal({ error, onRetry }: { error: ProblemError; onRetry: () => void }) {
+  // A member is refused the form too (docs/07), and is not an applicant a
+  // closed registration turned away.
+  if (isProblem(error, 'forbidden') && viewer.value.user) {
+    return (
+      <div class="apply-panel">
+        <p class="apply-lead">You are already a member, so there is nothing to apply for.</p>
+        <p>
+          <a href="/">Go to the forums</a>
+        </p>
+      </div>
+    );
+  }
   if (isProblem(error, 'forbidden')) return <p class="apply-lead">{notAccepting}</p>;
   if (isProblem(error, 'rate-limited')) {
     return (
