@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T21:01:04Z
+updated_at: 2026-09-29T21:03:22Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -67,6 +67,16 @@ Remember: the built client dist is committed. Run `go generate ./internal/web/sp
 - [ ] e2e/admin-applications.spec.ts: a seeded moderator approves a seeded pending application at 390 px and 1440 px, and axe reports no violations on the list or the detail
 
 ## Implementation plan
+
+Revised at claim, 2026-09-29, against main at 855ca5d. The groomed plan below stands, with its `### Settled in grooming` unchanged; these are the corrections main forces:
+
+- Step 1 is done: TKT-01M29CP2MG added `AdminApplicationList`, `AdminApplicationRow`, `AdminApplication`, `ApplicantIdentity`, `ApplicationNote` and `ApplicationDecision` to `dto.ts`, with goldens `admin-application*.moderator.json`. The tests use those goldens.
+- The handle codes are `invalid_handle`, `reserved` and `taken` (docs/07 "Applications"), not forms.Codes, so `Decision.tsx` carries its own sentence for each. The deny note's codes (`required`, `too_long`, `invalid_text`) are forms.Codes and read through `forms/messages.ts`'s `fieldMessage`.
+- An approve refused as `conflict` while the application is still pending means its identity is gone, has an account, or is blocked (docs/07); the screen says so and offers Deny. A deny-with-block refused while still pending gets the plan's "Deny without blocking" sentence.
+- Unblock lifts only the block the newest denial set (review 1470). A `conflict` re-fetches and says the block was set by another of the identity's applications.
+- Times use `screens/apply/when.ts` (the viewer's timezone and locale) rather than a second copy.
+- e2e seed: `mona` (moderator, an identity at the fake provider, signed in by `session.setup.ts`) and two pending applications from identities with no user, one per Playwright project, since each project approves one. Their ids go into `seed.json` as `applications: {phone, desktop}`.
+
 
 Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 9425310.
 
