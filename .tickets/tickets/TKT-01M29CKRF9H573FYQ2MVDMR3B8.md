@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRF9H573FYQ2MVDMR3B8
 title: Map IdP group claims onto local groups
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:identity-roles
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ckrf9
+  branch: run/ckrf9-idp-group-mapping
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae0f82d2955365a1c
+  commit: 889870b4f853046430ae18cc75db6f1dcd1debf4
+  session: null
+  claimed_at: 2026-09-29T14:55:26Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:18:23Z
+updated_at: 2026-09-29T14:58:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-ckrf9
   name: ""
 extensions: {}
 ---
@@ -54,7 +61,7 @@ Mapped memberships are marked with source `idp` so re-evaluation never clobbers 
 
 ## Implementation plan
 
-Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a.
+Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a. Revised at claim against main at 889870b.
 
 ### Settled in grooming
 
@@ -70,33 +77,29 @@ Groomed 2026-09-29 for Phase 2 (TKT-01M3M9RR26) against main at 7af2c5a.
 
 ### Approach
 
-1. **Provider policy.** Use `identity.Policy` (`internal/service/identity/policy.go`, built from config in `cmd/ketju/serve.go`) with `GroupsClaim` and `GroupMap`. Create it if TKT-01M29CKRE9 has not landed; that ticket defines the same type for `AutoApprove`. Add `(Policy) LocalGroups(provider string, id *oidc.Identity) []string`, which is empty when the provider has no `group_map`, with the slugs from the existing `LocalGroups` logic, moved or called. `settle` gains the provider's identity claims, which it already receives as `id *oidc.Identity`.
-2. **Sync with audit** (`internal/perm/mutate.go`). Replace `SyncIdPGroups(ctx, userID, groupIDs)` with `SyncIdPGroups(ctx, userID int64, s IdPSync) (Changes, error)`, where `IdPSync{Provider string; Slugs []string}`. In one `e.write`:
-   - Resolve the slugs with `GetGroupBySlug`. An unknown slug is skipped and reported in `Changes.Unknown`. `everyone` and `members` are skipped.
-   - Read the current idp rows with a new query `IdPMembershipsForUser :many` (`SELECT group_id FROM group_members WHERE user_id = ? AND source = 'idp'`).
-   - Compute `added` and `removed`.
-   - For each removed group, `RemoveIdPMembership` (a new query: `DELETE … WHERE group_id = ? AND user_id = ? AND source = 'idp'`) and `AppendAudit{Action: "group.member_removed", TargetType: "user", TargetID: userID, DetailsJson: {"group": slug, "source": "idp", "provider": p}}`.
-   - For each added group, `AddIdPMembership`. Only when it inserted a row (change the query to `:execrows`) does it append `group.member_added` with the same details. A row an admin already holds is neither changed nor audited.
-   - Keep `DeleteIdPMemberships` for callers that clear everything, or delete it if nothing uses it. Add `IdPMembershipsForUser`, `RemoveIdPMembership` and the `:execrows` form to `decisionWrites` in `internal/perm/layering_test.go` where they write.
+Revised at claim. What changed from the groomed approach, and why: TKT-01M29CKRE9 has not landed, so this ticket creates `identity.Policy`; `internal/audit` now exists, so the audit rows go through `audit.Append`; and registration carries the mapped claim values in its sealed cookie, so a new member gets their groups at once.
 
-   A sign-in that changes nothing writes no audit row, so every sign-in does not add noise. The cache is invalidated after commit, as every `perm` write is.
-3. **Calling it.** In `identity.settle`, after `ApplyBootstrap`, call `s.Perm.SyncIdPGroups` with `Policy.LocalGroups` on every sign-in, mapped or not, so that an unmapped provider's empty list removes the `idp` rows. Then log any `Changes.Unknown` at warn with the provider and the slug, and on error `abandon`. Registration (`Register`, and `AutoRegister` from TKT-01M29CKRE9) reaches `settle` too, so a new member gets their mapped groups at once.
-4. **Config check** (`internal/config/validate.go` `validateProviders`). A `group_map` value of `everyone` or `members` is a problem: "is implicit; every member is in it already". `ketju serve` checks at startup that every target slug names a group, and logs an unknown one at warn, as the registry logs a disabled provider. It cannot be a config error, because the check needs the database. docs/02 "Configuration" gains the problem.
-5. **Explicit claim default.** `oidc.Provider.groupsClaim()` falls back to `"groups"` when `groups_claim` is empty. Config validation already refuses a `group_map` without `groups_claim`, so the fallback only matters for a provider with no map, where nothing reads it. Leave it as it is.
-6. **Docs.** docs/05 "Roles and groups" gains three things: the rule that every sign-in re-evaluates, with an unmapped provider asserting no groups; the sign-in-only limit; and the two audit actions. docs/04 "audit_log" lists the actions.
+1. **Provider policy.** New `internal/service/identity/policy.go`: `type Policy map[string]ProviderPolicy`, `ProviderPolicy{GroupMap map[string]string}`, `PolicyFrom([]config.Provider)`, and `(Policy) LocalGroups(provider string, groups []string) []string`. The mapping logic moves here from `oidc.Provider.LocalGroups`, which is deleted and its test moved beside the new one. The registry is the wrong owner, because a provider disabled by a failed refresh drops out of `Lookup`. TKT-01M29CKRE9 adds `AutoApprove` to `ProviderPolicy`. `cmd/ketju/serve.go` sets `identity.Service.Policy`.
+2. **Sync with audit** (`internal/perm/mutate.go`). `SyncIdPGroups(ctx, userID int64, s IdPSync) (Changes, error)`, with `IdPSync{Provider, IP string; Slugs []string}` and `Changes{Added, Removed, Unknown []string}`. In one `e.write`:
+   - the user must be `active`, or it returns `ErrNotActive` and writes nothing;
+   - slugs are de-duplicated, `everyone` and `members` skipped, and each resolved with `GetGroupBySlug`; an unknown one is reported in `Changes.Unknown`;
+   - the current idp rows are read with a new `IdPMembershipsForUser :many` (group id and slug);
+   - each removed group goes through a new `RemoveIdPMembership :execrows`, each added one through `AddIdPMembership`, changed to `:execrows`;
+   - each row actually inserted or deleted writes one audit row through `audit.Append`: action `group.member_added` or `group.member_removed`, target `audit.User(userID)`, a NULL actor with `via = "group_map"`, the request's IP, and details `{group, group_id, source: "idp", provider}`. A row an admin holds is neither changed nor audited.
+
+   `DeleteIdPMemberships` loses its last caller and is deleted. `decisionWrites` in `internal/perm/layering_test.go` gains `RemoveIdPMembership`.
+3. **Calling it.** `identity.settle` takes the request IP and, after `ApplyBootstrap`, calls `s.Perm.SyncIdPGroups` with `s.Policy.LocalGroups(id.Provider, id.Groups)` on every sign-in, mapped or not. It logs each unknown slug at warn with the provider, and on any error, including a nil `Perm`, it `abandon`s. `Claims` gains `Groups` (json `g`). `Service.ClaimsOf(id)` replaces the free `ClaimsOf` and keeps only the claim values the provider's `group_map` names, so the sealed registration cookie is bounded by the operator's map rather than by how many groups the IdP asserts. The `Login` interface in `internal/web/auth` gains `ClaimsOf`.
+4. **Config check** (`internal/config/validate.go`). A `group_map` value of `everyone` or `members` is a problem. `ketju serve` checks at startup that every target slug names a group (`Policy.UnknownTargets`) and logs an unknown one at warn. docs/02 "Configuration" gains the problem.
+5. **Claim default.** `oidc.Provider.groupsClaim()` stays as it is.
+6. **Docs.** docs/05 "Roles and groups": every sign-in re-evaluates, an unmapped provider asserts no groups, the sign-in-only limit, and the two audit actions. docs/04 "audit_log" names the two actions.
 
 ### Tests
 
-- `internal/perm` `TestSyncIdPGroupsAddsAndRemoves`. A user with idp rows {a, b} and an admin row {c}, synced with {b, c, d}, ends with idp {b, d}, `c` still `source = 'admin'`, and audit rows exactly `member_removed a` and `member_added d`. A second identical sync writes no audit row.
-- `TestSyncIdPGroupsIsOneTransaction`. An injected `BEFORE INSERT ON audit_log` trigger makes the sync fail, and the memberships are exactly as before (no half-applied diff). The perm cache is not invalidated on the failed write (`TestFailedWriteKeepsCache` pattern).
-- `TestSyncIdPGroupsIgnoresUnknownAndImplicit`. The slugs `nope`, `everyone` and `members` create no group and no row. `nope` comes back in `Changes.Unknown`, and the other two are skipped.
-- `TestSyncIdPGroupsInvalidates`. After a sync that adds `moderators`, whose group grants `moderate` on forum F, the next `Check` for that viewer sees `moderate` without waiting out the TTL.
-- `internal/web/auth` `TestGroupMapAtSignIn`. With the fake IdP asserting `groups: ["forum-mods"]` and `group_map = {"forum-mods" = "moderators"}`, sign-in adds the membership and the audit row. The next sign-in asserting `[]`, and then one with the claim absent, each removes it and writes one `member_removed`.
-- `TestAManualMembershipSurvivesSignIn` (AC2).
-- `TestAnUnmappedProviderSignInDropsIdPGroups` (review 1342, finding 1). A member with identities on `club` (mapped) and `other` (unmapped) gains `moderators` through `club`. `club` then stops asserting `forum-mods`, and the member signs in through `other`. The `moderators` membership is gone, one `group.member_removed` row names `other`, and the next `perm` check has no `moderate`. A second subtest has two mapped providers that disagree: after each sign-in, the `idp` rows equal that provider's mapping alone. A `source='admin'` row survives both subtests.
-- `TestAFailedGroupSyncFailsTheSignIn`. With the audit trigger injected, the callback answers 500, no session row is left for the user, and the replaced session is already gone, following `TestBootstrapFailureFailsTheSignIn`.
-- `TestGroupMapNeverSignsInAnInactiveUser`. For each of `pending`, `suspended` and `deactivated`, sign-in is "Account unavailable", `SyncIdPGroups` is not called (no audit rows), and memberships are unchanged.
-- `internal/config` `TestGroupMapRefusesImplicitGroups`.
+- `internal/perm`: `TestSyncIdPGroupsAddsAndRemoves`, `TestSyncIdPGroupsIsOneTransaction` (an injected `BEFORE INSERT ON audit_log` trigger: memberships unchanged, cache not invalidated), `TestSyncIdPGroupsIgnoresUnknownAndImplicit`, `TestSyncIdPGroupsInvalidates`, `TestSyncIdPGroupsRefusesAnInactiveUser`.
+- `internal/service/identity`: `TestPolicyLocalGroups` (moved from oidc) and the `ClaimsOf` filter.
+- `internal/web/auth`: `TestGroupMapAtSignIn`, `TestAManualMembershipSurvivesSignIn`, `TestAnUnmappedProviderSignInDropsIdPGroups` (two subtests), `TestAFailedGroupSyncFailsTheSignIn` (no session left, the replaced session gone), `TestGroupMapNeverSignsInAnInactiveUser`, `TestGroupMapAtRegistration`.
+- `internal/config`: `TestGroupMapRefusesImplicitGroups`.
+- The session chokepoint test's caller list does not change: sessions are still issued only by `session.IssueUser` and `IssueUserWith`.
 
 ### Out of scope
 
