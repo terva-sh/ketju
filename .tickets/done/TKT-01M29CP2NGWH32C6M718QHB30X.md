@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2NGWH32C6M718QHB30X
 title: Build the apply and status screens
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:forms
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase2-run-cp2ng
-  branch: run/cp2ng-apply-screens
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab4276a58a3bcfa90
-  commit: 3fd598f8245f03a25774b2c22ccaf516d412a5fc
-  session: null
-  claimed_at: 2026-09-29T18:36:35Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T18:41:30Z
+updated_at: 2026-09-29T19:05:28Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,12 +43,12 @@ This screen is a stranger's first impression of the community, seen while they a
 
 ## Acceptance criteria
 
-- [ ] The apply screen draws its fields only from GET /apply/form: a test renders two different schemas and the inputs follow, and field types are named only in src/forms's one type-to-component map; an unknown type shows a notice and disables submit
-- [ ] A 422 body's errors attach to their fields (aria-invalid, aria-describedby, visible text) and focus moves to the first, tested from the golden problem body
-- [ ] A locked prefilled field renders read-only with its claim value and a visible lock label, and is left out of the POST /apply body, tested
-- [ ] A pre-user viewer on any other client route is sent to /apply/status under a reduced shell, and the status screen renders none, pending (with withdraw), approved (with a full-load sign-in link), denied and withdrawn
-- [ ] e2e/apply.spec.ts opens both screens at 390 px and 1440 px with no horizontal overflow and no axe violations, and submits the seeded form
-- [ ] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
+- [x] The apply screen draws its fields only from GET /apply/form: a test renders two different schemas and the inputs follow, and field types are named only in src/forms's one type-to-component map; an unknown type shows a notice and disables submit
+- [x] A 422 body's errors attach to their fields (aria-invalid, aria-describedby, visible text) and focus moves to the first, tested from the golden problem body
+- [x] A locked prefilled field renders read-only with its claim value and a visible lock label, and is left out of the POST /apply body, tested
+- [x] A pre-user viewer on any other client route is sent to /apply/status under a reduced shell, and the status screen renders none, pending (with withdraw), approved (with a full-load sign-in link), denied and withdrawn
+- [x] e2e/apply.spec.ts opens both screens at 390 px and 1440 px with no horizontal overflow and no axe violations, and submits the seeded form
+- [x] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
 
 ## Implementation plan
 
@@ -135,3 +128,23 @@ The "approved" status state (criterion 4, and the approved line of the old step 
 2026-09-29, superseding the "approved" status state (criterion 3 and plan step 4's "approved: a Sign in link to `sign_in`"). Maintainer decision on TKT-01M3Q2V25E (Decide what an approved applicant sees once their pre-user session ends): an approved applicant's pre-user session retires. Once approval links the identity, `LookupSession` stops resolving it and the session middleware clears the cookie, so `/me` turns anonymous and `GET /api/v1/apply/status` answers 401. In practice the status screen never receives `approved`.
 
 What this ticket builds instead: the signed-out shell carries a hint like "Applied? Sign in to see your decision". Signing in gives the applicant a member session, where the approval notification waits (TKT-01M29CP2N0). The status screen can still render `approved` with `sign_in` defensively, since `dto.ApplicationStatus` keeps the value, but no test or criterion should depend on reaching it. The other states (none, pending with withdraw, denied, withdrawn) are unchanged. Recorded by TKT-01M29CP2KZ's agent, which carried the decision.
+
+**agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:05:10Z
+
+Built on run/cp2ng-apply-screens from main at 3fd598f. Facts the next ticket needs:
+
+- **Budget.** `npm run budget`: 44811 B gzip of 60000 (74.7%), up from 38673. The apply chunk is 4692 B JS and 1140 B CSS gzip, and it counts, as planned. The entry grew by the field-error parsing and the signed-out hint.
+- **`src/forms` is ready for the admin screens.** `FormView` takes `mode: 'fill' | 'preview' | 'read'`; `initialValues`, `answersOf` and `unknownFields` are exported. `fieldMessage` has words for every code in docs/07's form-codes table, schema codes included, so the form editor (TKT-01M29CP2P1) can show a save's field errors with it. `messages.test.ts` holds the table to the document in both directions. Importing `FormView` from the admin chunk puts `forms.css` in that chunk.
+- **`ProblemError.fieldErrors`** is a `Record<string, string>` from field to code, read only on `validation-failed`.
+- **The signed-out hint** (maintainer decision, TKT-01M3Q2V25E) is shown to every signed-out viewer, at both widths, as one line under the top bar linking to the same `/auth/signin?return_to=` as Sign in. `/me` does not carry `registration.mode`, so the client cannot show it only in approval mode; the sentence reads correctly in any mode. Adding the mode to `/me` would be a server change for a line of text, and no ticket asks for it.
+- **The e2e fixture** has two applicant subjects with no account, `dana` and `erin` (`cmd/ketju/e2e.go` `seedApplicants`), one per Playwright project, since an identity may submit once a day. A first sign-in lands on `/apply`, not `/apply/status`: the callback sends an applicant with no application to the form. The fake provider sends no name or email claim, so the locked email field is empty in e2e; the unit tests cover a prefilled lock.
+- **Test helpers.** `src/testing.tsx` gained `stubServer`, `problemAnswer` and `unmount`. A test that restores the viewer in `afterEach` must `unmount()` first, or the app renders again for the restored viewer and fetches after the stub is gone (happy-dom then prints an AbortError at teardown).
+- **Docs.** docs/07's pre-user paragraph now says the client replaces the address with `/apply/status`.
+
+**agent:claude-code/phase2-run-cp2ng** at 2026-09-29T19:05:15Z
+
+Criterion 4, as the note of 2026-09-29 supersedes it: approved is drawn, with its sign_in link as a plain anchor to /auth/..., which is outside clientScope and so a full page load (StatusScreen.test.tsx 'draws approved with its sign-in link'). Nothing depends on reaching it: approval retires the pre-user session, so the status route answers 401, which the screen draws as 'If you applied to join, sign in to see your decision', and the signed-out shell carries the hint. The other four states, and the pre-user redirect under the reduced shell, are tested in StatusScreen.test.tsx, routes.test.tsx and e2e/apply.spec.ts.
+
+## Summary
+
+The apply and status screens are built. /apply draws the registration form from GET /api/v1/apply/form through a shared renderer, src/forms (FormView, the one type map in fields.tsx, field error words in messages.ts), and handles every refusal the API gives. /apply/status draws none, pending with a confirmed withdraw, approved defensively, denied and withdrawn from the server's can_apply, can_apply_at and can_withdraw, and a 401 as 'sign in to see your decision'. A pre-user viewer's other addresses are replaced with /apply/status under the reduced shell, and the signed-out shell carries 'Applied? Sign in to see your decision' (TKT-01M3Q2V25E). Both screens are one lazy chunk; the reader budget is 44811 of 60000 B gzip. e2e/apply.spec.ts signs in a seeded applicant per project, scans both screens with axe in both themes at 390 and 1440 px, and submits the form.
