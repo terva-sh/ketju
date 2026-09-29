@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-29T04:50:59Z
+updated_at: 2026-09-29T05:01:23Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -120,3 +120,7 @@ Terva review 1280 on PR #134, head d7c1473, base 02db608, had three findings, al
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-29T04:50:59Z
 
 Maintainer, 2026-09-28: 'pick up what you recommend next and continue our work through phase 2 autonomously, merging after reviews are complete and issues resolved or disagreements recorded.' This grants the docs/12 merge gate to the rest of Phase 2 grooming and to the Phase 2 implementation run. The run's tracking ticket and procedure will name the grant. A disagreement with a review finding is recorded on the ticket and in the PR, and does not stop the merge. This supersedes docs/12's rule that a medium-or-higher finding answered by argument stops for the maintainer, for Phase 2 only. The recorded disagreements go to the maintainer in the run's report.
+
+**agent:claude-code/phase1-run-438e26c1** at 2026-09-29T05:01:23Z
+
+Terva review 1337 on PR #135, head 5cd773d, base 7af2c5a: one low finding, 'Date the refreshed ticket counts after the ticket transition'. Fixed: docs/11 now says the counts were read on 2026-09-29.

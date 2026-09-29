@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-28, after the second batch of Phase 2 grooming, against the store. They are written by hand, so
+Counts last read 2026-09-29, after the reserved-types decision in Phase 2 grooming, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-121 done, 7 ready, 1 in progress, 2 blocked, 75 draft, 3 archived (counted 2026-09-28 with
+121 done, 7 ready, 1 in progress, 2 blocked, 75 draft, 3 archived (counted 2026-09-29 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
