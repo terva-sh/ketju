@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-12T02:14:17Z
-updated_at: 2026-09-29T05:41:12Z
+updated_at: 2026-09-29T06:56:02Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -62,6 +62,7 @@ Note the one subtlety worth getting right: the machine-authored frame flag bit i
 - [ ] An agent can hold the moderator and admin roles through the audited role change, and TestNoKindChecksInPermissions finds no reference to domain.KindAgent outside the frame-flag stamp, the credential, provisioning and the limiter's agent policy
 - [ ] Bearer-authenticated writes, except read positions and drafts, are charged to a per-agent token bucket (site defaults agents.write_burst 20 and agents.write_refill_seconds 30, overridable per agent), and exceeding it is 429 with Retry-After and appends nothing (TestAgentBucket)
 - [ ] A bearer request writes no sessions row and sets no cookie, and the chokepoint's caller lists are unchanged (TestAgentCredentialMintsNoSession, TestOneDoorIntoSessions)
+- [ ] Issuing a credential to an agent whose status is not active answers conflict and writes no credential, so an unsuspended agent has no live credential until one is issued afresh (TestIssueRefusedUnlessActive)
 
 ## Implementation plan
 
@@ -98,7 +99,7 @@ Engineering choices made here, each with the alternative that lost:
    Revoked rows are kept as a record.
 2. **Settings** in `internal/settings`: `agents.write_burst` (20, `atLeast(1)`) and `agents.write_refill_seconds` (30, `atLeast(1)`). Add both rows to docs/04's table (`TestKeysDocumented`).
 3. **`internal/auth/agentcred`** (new):
-   - `Store`. `Issue(ctx, q, userID, by) (token string, err)` is used inside a caller's transaction. It refuses a user whose kind is not `agent`, revokes any live row, and inserts. `RevokeIn(ctx, q, userID, by, via)`.
+   - `Store`. `Issue(ctx, q, userID, by) (token string, err)` is used inside a caller's transaction. It refuses a user whose kind is not `agent`, and a user whose status is not `active` with `ErrAgentNotActive`, which maps to `conflict`. Suspension and deactivation revoke the credential, so a credential issued while the agent is suspended would come alive at unsuspension without anyone issuing it then (Terva review on PR #140, head a9d8a0a). The status is read in the same transaction as the insert, so a suspension cannot land between the check and the write. Otherwise it revokes any live row and inserts. `CreateAgent` creates the agent `active`, so its issue passes. `RevokeIn(ctx, q, userID, by, via)`.
    - `Lookup(ctx, token) (Credential, error)`: one query joining `agent_credentials`, `users` and `agents`, and reading the two settings rows beside them. It returns nothing unless the credential is not revoked, `users.kind = 'agent'` and `users.status = 'active'`. `last_used_at` is touched at most every 5 minutes, as `session.TouchInterval`.
    - `Middleware(store, next func(http.Handler) http.Handler, log)`. When `Authorization` is present it must be `Bearer <token>`, or the answer is `unauthenticated`. After a lookup the context carries `domain.Viewer{UserID, Active: true, Role, SessionKey: <hash of the hash>}` and `agentcred.From(ctx)`, the burst and refill included. Without the header it defers to the session middleware. `serve` wires `Options.Session` to the composition, so the chain's order in `internal/web/server.go` does not change.
    - The logging redactor already drops `authorization` and `token` (`internal/logging/logging.go`). Do not log the credential under any other name.
@@ -131,6 +132,7 @@ Engineering choices made here, each with the alternative that lost:
 - `TestAgentHasNoIdentity`: provisioning writes no `identities` row, so `IssueUser` has nothing to sign the agent in with.
 - `TestCredentialStoredHashed`: the token's bytes appear in no table and in no log line from a request that carried it.
 - `TestRevokeStopsOnlyThatAgent`: two agents, one revoked. The other still authenticates, and the revoked agent's `users` row is unchanged.
+- `TestIssueRefusedUnlessActive`: issuing to a suspended, deactivated or pending agent answers `conflict`, and no `agent_credentials` row is written. After unsuspension the agent has no live credential until one is issued.
 - `TestIssueReplacesTheLiveCredential`: the old token is 401 at once.
 - `TestSuspendRevokesCredential`: through TKT-01M29CKRFS's transition. The credential is revoked in the same transaction, and a test trigger aborting the audit insert leaves it live. Both audit rows name the actor.
 - `TestAgentCreationAuditedInOneTransaction`: the `users` row, the `agents` row, the credential and the audit rows are written all together or not at all.
@@ -156,6 +158,10 @@ Engineering choices made here, each with the alternative that lost:
 **agent:claude-code/phase2-groom** at 2026-09-29T05:41:12Z
 
 Maintainer decision 2026-09-29: the agent rate bucket allows a burst of 20 and refills one token every 30 s (agents.write_burst and agents.write_refill_seconds defaults). The plan's Settled section records it.
+
+**agent:claude-code/phase2-groom** at 2026-09-29T06:56:02Z
+
+Terva review on PR #140, head a9d8a0a, medium (security): accepted and fixed. agentcred.Issue refuses an agent whose status is not active with conflict, checked in the insert's transaction, so a credential cannot be issued during a suspension and come alive at unsuspension (TestIssueRefusedUnlessActive).
 
 ## Comments
 
