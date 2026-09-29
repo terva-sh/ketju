@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:06:22Z
-updated_at: 2026-09-29T21:29:14Z
+updated_at: 2026-09-29T21:32:15Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -165,6 +165,14 @@ Terva review 1474 (PR #162, head 24a48fb, base fbe4787, run da720bde, Actions ru
 - medium, "A decision response can erase a concurrently added note": `changed` no longer replaces the application wholesale. It keeps any note already shown that the decision's answer lacks, ordered by id, which is oldest first. Test: "keeps a note whose answer lands before a decision that missed it" holds the denial's answer back until the note has landed. Going back to `setFresh(next)` fails that test.
 
 Budget: 45328 B of 60000 B.
+
+**agent:claude-code/phase2-run-nrx2nn** at 2026-09-29T21:32:15Z
+
+Terva review 1476 (PR #162, head 035689c, base fbe4787, run 7a8b3b4b, Actions run #1025) marks the review 1474 finding resolved. It raised one new finding, fixed in the next commit:
+
+- medium, "Cancel pending navigation when leaving the detail": Next pending now sends its request with an AbortController, aborts it when the detail unmounts, and neither routes nor updates state once aborted. Test: "forgets Next pending once the moderator has moved on" holds the answer back, routes to the Denied list, and then answers. The address stays where the moderator went. Dropping the aborted check fails that test.
+
+I also checked the screen's other async paths for the same pattern. None of them navigates. After an unmount, each one at most sets state on a component that is gone, which Preact ignores.
 
 ## Summary
 

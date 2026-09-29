@@ -192,22 +192,33 @@ function Decided({ a }: { a: AdminApplication }) {
 
 // NextPending opens the newest application still waiting, so a moderator
 // can go on from one they have just decided without the list between.
+//
+// Its request is aborted when the detail goes, so a moderator who has moved
+// on elsewhere meanwhile is not taken from there when it answers (Terva
+// review 1476).
 function NextPending() {
   const { route } = useLocation();
   const [said, setSaid] = useState('');
   const [busy, setBusy] = useState(false);
+  const pending = useRef<AbortController | null>(null);
+  useEffect(() => () => pending.current?.abort(), []);
   const next = async () => {
+    const ctl = new AbortController();
+    pending.current = ctl;
     setBusy(true);
     setSaid('');
     try {
-      const list = await apiGet<AdminApplicationList>('/api/v1/admin/applications?status=pending');
+      const list = await apiGet<AdminApplicationList>('/api/v1/admin/applications?status=pending', {
+        signal: ctl.signal,
+      });
+      if (ctl.signal.aborted) return;
       const first = list.applications[0];
       if (first) route(applicationHref(first.id));
       else setSaid('No other application is waiting.');
     } catch (err) {
-      if (!isAbort(err)) setSaid('The waiting applications could not be loaded. Try again.');
+      if (!isAbort(err) && !ctl.signal.aborted) setSaid('The waiting applications could not be loaded. Try again.');
     } finally {
-      setBusy(false);
+      if (!ctl.signal.aborted) setBusy(false);
     }
   };
   return (

@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminApplication, ApplicationNote, Me } from '../../../api/dto';
 import { viewer } from '../../../state/viewer';
-import { problemAnswer, renderAt, settle, stubServer, unmount, type StubServer } from '../../../testing';
+import { problemAnswer, renderAt, route, settle, stubServer, unmount, type StubServer } from '../../../testing';
 import { approvedApp, appUrl, asModerator, deniedApp, listPage, pendingApp } from './fixtures';
 
 // One application at /admin/applications?id=N (TKT-01M3NRX2NN): the answers
@@ -266,6 +266,22 @@ describe('an application', () => {
     expect(location.search).toBe('?id=42');
     await settle(root);
     expect(root.querySelector('[data-application="42"]')).not.toBeNull();
+  });
+
+  // Terva review 1476: a Next pending still in flight when the moderator
+  // goes elsewhere does not take them from there.
+  it('forgets Next pending once the moderator has moved on', async () => {
+    let answer: (a: { status: number; body: unknown }) => void = () => {};
+    server.routes['GET /api/v1/admin/applications?status=pending'] = () => new Promise((resolve) => (answer = resolve));
+    server.routes['GET /api/v1/admin/applications?status=denied'] = () => ({ status: 200, body: listPage() });
+    const root = await renderAt('/admin/applications?id=17');
+    await act(async () => button(root, 'Next pending')!.click());
+    await route('/admin/applications?status=denied');
+    await settle(root);
+    await act(async () => answer({ status: 200, body: listPage() }));
+    await settle(root);
+    expect(location.pathname + location.search).toBe('/admin/applications?status=denied');
+    expect(root.querySelector('[data-application]')).toBeNull();
   });
 
   it('says when nothing else is waiting', async () => {
