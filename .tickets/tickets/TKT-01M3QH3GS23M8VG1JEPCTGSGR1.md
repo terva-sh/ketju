@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QH3GS23M8VG1JEPCTGSGR1
 title: Add agent provisioning controls to the admin users screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ dependencies:
   - TKT-01M29P9RSW21SCES335WERTBSF
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qh3gs2
+  branch: run/qh3gs2-agent-controls
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a67e927a2c82c40bc
+  commit: 4d793b2cfd4c79ae829bbb55fd8c0da523a76447
+  session: null
+  claimed_at: 2026-09-29T23:48:45Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T21:28:33Z
-updated_at: 2026-09-29T22:49:16Z
+updated_at: 2026-09-29T23:48:47Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-qh3gs2
   name: ""
 extensions: {}
 ---
