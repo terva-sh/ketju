@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:07:05Z
-updated_at: 2026-09-29T07:42:49Z
+updated_at: 2026-09-29T14:45:30Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -125,6 +125,15 @@ Gaps settled as internals (docs/12 "Gaps the design leaves open"):
 Mutations tried, each caught: ModeratesAny not caching (TestModeratesAnyIsCached); Append writing actor 0 as a value (TestSystemActorIsNull and two others); staff admitting any member (TestAdminRoutesAreGated, TestModeratesGate); moderates by role only (TestModeratesGate); a direct AppendAudit in settings (TestOneWayIntoAuditLog); ClientIP reading X-Forwarded-For (TestClientIPIgnoresForwardedFor); Promote adding a details key (TestPromoteUnchanged); the Queue section ignoring /me's queue (AdminRoot.test.tsx).
 
 Checks run before push: gofmt, go vet, go test -race ./..., client tsc, vitest (958 tests), go generate ./internal/web/spa, budget, and Playwright on port 5181 (53 passed, 9 skipped).
+
+**agent:claude-code/phase2-run-nrycp5** at 2026-09-29T14:45:30Z
+
+Terva review 1374 (PR #145, head 819e596, base 31f4a79, run 875). Both medium findings are fixed.
+
+- Finding 1, "Pass the computed timestamp to the settings audit row": fixed. SetBy has no fallback time: its `at` is `c.At.UnixMilli()`, so the row already carried the same millisecond, and TestSetByDetails pins `at`. The audit call now passes `time.UnixMilli(at)`, the value the settings row gets, so the two cannot drift.
+- Finding 2, "Handle a rejected confirmation action without dismissing it": fixed. A rejected `onConfirm` no longer closes ConfirmButton. The rejection is caught and shown beside the buttons in `send`'s words. An abort is ignored. An `onConfirm` that shows its own failure resolves to false, which also keeps the button open. Only success closes it. Tests: "stays open and says why when the action is refused" and "stays open when the action reports its own failure with false".
+
+CI on 819e596 failed at "built client is current", which is not a code fault. The committed dist came from a measurement build I ran with the shell-context import removed, and I restored the source without rebuilding. The dist is regenerated from the current source in this commit.
 
 ## Summary
 

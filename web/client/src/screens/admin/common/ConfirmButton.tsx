@@ -1,10 +1,17 @@
 import { useState } from 'preact/hooks';
+import { isAbort } from '../../../api/problem';
+import { sentence } from './send';
 
 // ConfirmButton is an action that asks first: the first press shows what
 // will happen with Confirm and Cancel beside it, and only Confirm acts. The
 // admin screens use it for anything that cannot be taken back in one step,
 // such as suspending a member or deleting a forum. While the action runs
 // both buttons are disabled, so a second press cannot send it twice.
+//
+// onConfirm reports a failure by rejecting, or by resolving to false when it
+// has shown the failure itself (as a caller of send does). Either way the
+// confirmation stays open so the admin can try again or cancel, and a
+// rejection is shown beside it in send's words. Only success closes it.
 export function ConfirmButton({
   label,
   prompt,
@@ -17,10 +24,11 @@ export function ConfirmButton({
   prompt: string;
   confirmLabel?: string;
   danger?: boolean;
-  onConfirm: () => Promise<unknown> | void;
+  onConfirm: () => Promise<boolean | void> | boolean | void;
 }) {
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<string | null>(null);
   const cls = danger ? 'admin-button danger' : 'admin-button';
 
   if (!asking) {
@@ -32,12 +40,19 @@ export function ConfirmButton({
   }
   const confirm = async () => {
     setBusy(true);
+    setFailed(null);
+    let done = false;
     try {
-      await onConfirm();
-    } finally {
-      setBusy(false);
-      setAsking(false);
+      done = (await onConfirm()) !== false;
+    } catch (err) {
+      if (!isAbort(err)) setFailed(sentence(err));
     }
+    setBusy(false);
+    if (done) setAsking(false);
+  };
+  const cancel = () => {
+    setFailed(null);
+    setAsking(false);
   };
   return (
     <span class="admin-confirm" role="group" aria-label={label}>
@@ -45,9 +60,14 @@ export function ConfirmButton({
       <button type="button" class={cls} disabled={busy} onClick={confirm}>
         {confirmLabel}
       </button>
-      <button type="button" class="admin-button" disabled={busy} onClick={() => setAsking(false)}>
+      <button type="button" class="admin-button" disabled={busy} onClick={cancel}>
         Cancel
       </button>
+      {failed && (
+        <span class="admin-error" role="alert">
+          {failed}
+        </span>
+      )}
     </span>
   );
 }

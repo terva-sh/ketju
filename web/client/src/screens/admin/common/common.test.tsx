@@ -1,6 +1,7 @@
 import { render, type ComponentChild } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { ProblemError } from '../../../api/problem';
 import { ConfirmButton } from './ConfirmButton';
 import { Field } from './Field';
 import { send } from './send';
@@ -77,6 +78,34 @@ describe('ConfirmButton', () => {
     await act(async () => root.querySelectorAll('button')[0].click());
     expect(acted).toHaveBeenCalledTimes(1);
     expect(buttons()).toEqual(['Suspend']);
+  });
+
+  // Terva review 1374 (PR #145, head 819e596): a failed action keeps the
+  // confirmation open, says why, and can be tried again.
+  it('stays open and says why when the action is refused', async () => {
+    let attempts = 0;
+    const acted = vi.fn(async () => {
+      attempts++;
+      if (attempts === 1) throw new ProblemError('conflict', 409);
+    });
+    const root = await mount(<ConfirmButton label="Suspend" prompt="Suspend alice?" onConfirm={acted} />);
+    await act(async () => root.querySelector('button')!.click());
+    await act(async () => root.querySelectorAll('button')[0].click());
+    expect(root.querySelector('[role="alert"]')?.textContent).toContain('Someone else changed this');
+    expect([...root.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Confirm', 'Cancel']);
+    expect(root.querySelectorAll('button')[0].disabled).toBe(false);
+
+    await act(async () => root.querySelectorAll('button')[0].click());
+    expect(acted).toHaveBeenCalledTimes(2);
+    expect([...root.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Suspend']);
+  });
+
+  it('stays open when the action reports its own failure with false', async () => {
+    const root = await mount(<ConfirmButton label="Delete" prompt="Delete it?" onConfirm={async () => false} />);
+    await act(async () => root.querySelector('button')!.click());
+    await act(async () => root.querySelectorAll('button')[0].click());
+    expect([...root.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Confirm', 'Cancel']);
+    expect(root.querySelector('[role="alert"]')).toBeNull();
   });
 });
 

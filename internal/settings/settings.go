@@ -273,7 +273,7 @@ func SetBy(ctx context.Context, d *db.DB, name string, value json.RawMessage, c 
 			fields[k] = v
 		}
 		fields["from"], fields["to"] = json.RawMessage(from), json.RawMessage(canonical)
-		_, err := audit.Append(ctx, q, c.At, audit.By{Actor: c.Actor, IP: c.IP}, ActionChanged, audit.Setting(name), fields)
+		_, err := audit.Append(ctx, q, time.UnixMilli(at), audit.By{Actor: c.Actor, IP: c.IP}, ActionChanged, audit.Setting(name), fields)
 		return err
 	})
 }
