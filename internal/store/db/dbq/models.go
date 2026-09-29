@@ -10,6 +10,28 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
+type Application struct {
+	ID           int64
+	IdentityID   sql.NullInt64
+	FormID       int64
+	FormVersion  int64
+	AnswersJson  string
+	Status       string
+	UserID       sql.NullInt64
+	DecidedBy    sql.NullInt64
+	DecidedAt    sql.NullInt64
+	DecisionNote sql.NullString
+	CreatedAt    int64
+}
+
+type ApplicationNote struct {
+	ID            int64
+	ApplicationID int64
+	AuthorID      int64
+	Body          string
+	CreatedAt     int64
+}
+
 type AuditLog struct {
 	ID          int64
 	At          int64
@@ -56,6 +78,23 @@ type Flag struct {
 	ResolvedBy     sql.NullInt64
 	ResolvedAt     sql.NullInt64
 	ResolutionNote string
+}
+
+type Form struct {
+	ID            int64
+	Key           string
+	Title         string
+	ActiveVersion int64
+	CreatedAt     int64
+	UpdatedAt     int64
+}
+
+type FormVersion struct {
+	FormID     int64
+	Version    int64
+	SchemaJson string
+	CreatedBy  sql.NullInt64
+	CreatedAt  int64
 }
 
 type Forum struct {
@@ -107,6 +146,8 @@ type Identity struct {
 	RawClaimsJson sql.NullString
 	CreatedAt     int64
 	UpdatedAt     int64
+	BlockedAt     sql.NullInt64
+	BlockedBy     sql.NullInt64
 }
 
 type LocalCredential struct {
@@ -123,14 +164,15 @@ type Mention struct {
 }
 
 type Notification struct {
-	ID       int64
-	UserID   int64
-	Kind     string
-	ThreadID sql.NullInt64
-	Ordinal  sql.NullInt64
-	ActorID  sql.NullInt64
-	At       int64
-	ReadAt   sql.NullInt64
+	ID            int64
+	UserID        int64
+	Kind          string
+	ThreadID      sql.NullInt64
+	Ordinal       sql.NullInt64
+	ActorID       sql.NullInt64
+	At            int64
+	ReadAt        sql.NullInt64
+	ApplicationID sql.NullInt64
 }
 
 type Permission struct {

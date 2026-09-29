@@ -45,7 +45,10 @@ runner stays ours; sqlc does not run migrations.
   users (threads, posts, applications), sequential otherwise.
 - Timestamps are unix milliseconds, UTC.
 - No cascading deletes. Users are deactivated, never removed; content is
-  soft-deleted in logs.
+  soft-deleted in logs. Foreign keys are NO ACTION, with one exception:
+  `applications.identity_id` is ON DELETE SET NULL, which deletes nothing
+  (see "applications"). `TestNoCascadingDeletes` names it, so a second
+  exception needs a decision of its own.
 - Every table has `created_at`; mutable tables have `updated_at`.
 
 ## Authoritative tables
@@ -121,13 +124,25 @@ self-registers (05).
 ### identities
 ```
 id, user_id, provider_key, subject (IdP 'sub'), email, email_verified,
-issuer, last_login_at, raw_claims_json (last seen, for admin debugging)
+issuer, last_login_at, raw_claims_json (last seen, for admin debugging),
+blocked_at (nullable), blocked_by (nullable)
 UNIQUE (provider_key, subject)
 ```
 One user, many identities: account linking is a first-class operation.
 `provider_key` refers to a provider block in `config.toml`, not to a table, so
 an operator can remove a provider from config and its identities become
 inert rather than orphaned.
+
+`blocked_at` and `blocked_by` are the "block this subject" marker a denial
+can set (05 "mode = approval" step 5), and a blocked identity's applications
+are refused. A block keeps `user_id` NULL: the triggers
+`identities_blocked_has_no_user` (on an update of `user_id`),
+`identities_block_needs_no_user` (on an update of `blocked_at`) and
+`identities_insert_blocked` refuse a row that has both, so a block cannot be
+undone by linking the identity to an account, and a member cannot be blocked
+this way. Clearing both columns unblocks. Two columns lost against a separate
+blocks table: a block has one state per identity, and the application form's
+check would pay a join for nothing. (Migration 0011, TKT-01M29CKRDQ.)
 
 ### local_credentials (optional feature, off by default)
 ```
@@ -149,16 +164,68 @@ and are accepted by the application endpoints alone (05).
 ```
 id, identity_id (nullable: application may precede any login),
 form_id, form_version, answers_json, status ('pending'|'approved'|'denied'|'withdrawn'),
-decided_by, decided_at, decision_note, created_at
+user_id (nullable), decided_by, decided_at, decision_note, created_at
+FOREIGN KEY (form_id, form_version) -> form_versions
+UNIQUE (identity_id) WHERE status = 'pending'
 ```
+An application names the form version it answered, so an admin's later edit
+cannot change what an old answer meant. At most one application per identity
+is pending (`applications_one_pending`).
+
+`identity_id` is ON DELETE SET NULL, the one foreign key that is not NO
+ACTION. Account linking removes identities (07 `DELETE
+/settings/identities/{id}`), and so does anonymization (05). Under NO ACTION an
+identity that had ever applied could never be removed. NO ACTION exists
+because users are never deleted; identities are, and the application outlives
+its identity with a null `identity_id`.
+
+`user_id` is the member an approval created. It records that even after the
+identity is removed, where following identity to user would not.
+
+CHECKs keep the decision fields consistent with the status: `decided_at` is
+set exactly when the status is not `pending` (a withdrawal records when);
+`user_id` is set exactly when it is `approved`; and `decided_by` and
+`decision_note` appear only on `approved` or `denied`, because a withdrawal
+has no deciding moderator. A CHECK runs per statement, not at commit, so an
+approval creates the user first and then sets `status` and `user_id` in one
+UPDATE. (Migration 0011, TKT-01M29CKRDQ.)
+
+### application_notes
+```
+id, application_id, author_id, body (1 to 2000 characters), created_at
+```
+The free-text notes moderators leave on an application (05 "mode =
+approval" step 5). `decision_note` is the decision's one reason; these are the
+discussion. Rows rather than a JSON array on the application, so a note is
+appended without rewriting the application and names its author by foreign
+key. (Migration 0011.)
 
 ### forms, form_versions
 ```
-forms: id, key (e.g. 'registration'), title, active_version
+forms: id, key (e.g. 'registration'), title, active_version, created_at, updated_at
 form_versions: form_id, version, schema_json, created_by, created_at
+PRIMARY KEY (form_id, version)
 ```
 Schema is a small declarative field list (see 05). Versioned so old
 applications remain readable after the form changes.
+
+`forms.active_version` is NOT NULL under a foreign key to `form_versions`
+that is deferred to commit, because a form and its first version are
+inserted in one transaction. A form committed without a version, or naming
+one it does not have, is refused at commit, with no trigger behind it. A
+`key` is lowercase ASCII letters, digits and `_`, starting with a letter.
+
+A version is immutable once written. The triggers
+`form_versions_no_update`, `form_versions_no_delete` and
+`form_versions_no_replace` refuse UPDATE, DELETE, and an INSERT reusing an
+existing (form, version), which is how `INSERT OR REPLACE` would otherwise
+overwrite one, as `audit_log`'s do. An edit writes the next version and moves
+`active_version`. `created_by` is null for the seeded version.
+
+Migration 0011 seeds the `registration` form at version 1, because
+registration defaults to approval and a fresh install needs the form on its
+first start. It holds 05's example without the illustrative `interests`
+select.
 
 ### forums
 ```
@@ -240,10 +307,16 @@ tree that tries any of them.
 
 ### notifications
 ```
-id, user_id, kind, thread_id, ordinal, actor_id, at, read_at
+id, user_id, kind, thread_id, ordinal, actor_id, at, read_at, application_id
 ```
 Kinds: reply_to_you, mention, quoted, thread_you_watch, application_decided,
 new_application (moderators).
+
+`application_id` names the application the two application kinds are about,
+since `thread_id` and `ordinal` name posts. It is required for exactly those
+two kinds: the triggers `notifications_application_kind` (on insert) and
+`notifications_application_kind_update` (on an update of `kind` or
+`application_id`) refuse anything else. (Migration 0011.)
 
 ### watches
 ```

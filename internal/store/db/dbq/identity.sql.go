@@ -134,7 +134,7 @@ func (q *Queries) DeleteUserSessions(ctx context.Context, userID sql.NullInt64) 
 }
 
 const getIdentityBySubject = `-- name: GetIdentityBySubject :one
-SELECT id, user_id, provider_key, subject, email, email_verified, issuer, last_login_at, raw_claims_json, created_at, updated_at FROM identities WHERE provider_key = ? AND subject = ?
+SELECT id, user_id, provider_key, subject, email, email_verified, issuer, last_login_at, raw_claims_json, created_at, updated_at, blocked_at, blocked_by FROM identities WHERE provider_key = ? AND subject = ?
 `
 
 type GetIdentityBySubjectParams struct {
@@ -157,6 +157,8 @@ func (q *Queries) GetIdentityBySubject(ctx context.Context, arg GetIdentityBySub
 		&i.RawClaimsJson,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		&i.BlockedAt,
+		&i.BlockedBy,
 	)
 	return i, err
 }

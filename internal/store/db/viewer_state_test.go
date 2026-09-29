@@ -116,14 +116,17 @@ func TestDraftUniqueness(t *testing.T) {
 func TestNotificationKindsClosed(t *testing.T) {
 	d, _ := openTest(t)
 	u := newUser(t, d, "notified")
-	ins := `INSERT INTO notifications (user_id, kind, at) VALUES (?, ?, 1)`
+	// The application kinds name their application (0011), and only they do.
+	app := newApplication(t, d, sql.NullInt64{})
+	ins := `INSERT INTO notifications (user_id, kind, at, application_id) VALUES (?, ?, 1, ?)`
 	for _, k := range domain.NotificationKinds {
-		if err := exec(t, d, ins, u, k); err != nil {
+		appID := sql.NullInt64{Int64: app, Valid: k == domain.NotifyNewApplication || k == domain.NotifyApplicationDecided}
+		if err := exec(t, d, ins, u, k, appID); err != nil {
 			t.Errorf("kind %s was refused: %v", k, err)
 		}
 	}
 	for _, k := range []string{"like", "", "Mention"} {
-		if err := exec(t, d, ins, u, k); err == nil {
+		if err := exec(t, d, ins, u, k, nil); err == nil {
 			t.Errorf("kind %q was accepted", k)
 		}
 	}

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CKRDQHB528ZW1FFBN4SA1
 title: Add the applications and forms schema
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:data-model-applications
     path: docs/04-data-model.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ckrdq
+  branch: run/ckrdq-applications-forms-schema
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a269d391ef083a6a0
+  commit: 31f4a797770ed528757acfd7ddb222fe85980317
+  session: null
+  claimed_at: 2026-09-29T07:24:59Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-29T07:40:18Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-ckrdq
   name: ""
 extensions: {}
 ---
@@ -54,6 +61,8 @@ Storing `form_version` on the application is what keeps an old application reada
 ## Implementation plan
 
 Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a. The newest migration there is 0010_users_autoincrement.sql, and no table for applications, forms or blocks exists yet.
+
+Revised at claim on 2026-09-29 against main at 31f4a79 (agent:claude-code/phase2-run-ckrdq). The newest migration is still 0010, so this one is 0011. The grooming plan below stands as written; "Revised at claim" at the end lists what the code required beyond it.
 
 ### Settled in grooming
 
@@ -110,3 +119,15 @@ Engineering decisions taken here, with the alternative that lost:
 - Every read and write path: TKT-01M29CP2KZ (submit, status, withdraw), TKT-01M29CP2MG (review), TKT-01M29CP2N0 (notification rows).
 - The pre-user session and the identity row it creates: TKT-01M29CKRG9.
 - Unblocking an identity (maintainer decision 2026-09-29): TKT-01M29CP2MG. Clearing `blocked_at` and `blocked_by` passes the block triggers, so no schema change is needed.
+
+### Revised at claim
+
+Three existing tests assumed the schema this ticket changes, and are adjusted rather than weakened:
+- `TestNoCascadingDeletes` required every foreign key to be NO ACTION. It now names `applications.identity_id -> identities` as the one allowed exception, requires that exception to be exactly ON DELETE SET NULL, and fails if the exception disappears, so a second exception still needs a decision.
+- `TestUsersAutoincrementMigration` compared every foreign key to users before and after "migrate to the latest", which now includes 0011's new references. It migrates through 0010 only, which is what it tests.
+- `TestNotificationKindsClosed` inserted the application kinds without an application; it now gives them one.
+
+Additions beyond the grooming plan, each a strengthening that changes nothing a member sees:
+- `notifications_application_kind_update`, a BEFORE UPDATE OF kind, application_id twin of the insert trigger, so an UPDATE cannot break the rule the insert trigger enforces.
+- `TestApplicationNotesAreBounded` for the note table's CHECK and foreign keys, so the mutation pass has a test for them.
+- docs/04 "Conventions" names the one SET NULL exception beside "No cascading deletes".

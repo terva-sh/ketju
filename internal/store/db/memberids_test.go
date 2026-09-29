@@ -141,7 +141,9 @@ func TestUsersAutoincrementMigration(t *testing.T) {
 		t.Fatalf("only %d foreign keys name users before 0010: %v", len(refsBefore), refsBefore)
 	}
 
-	if err := d.Migrate(t.Context()); err != nil {
+	// Through 0010 only: later migrations add tables and columns of their
+	// own, which the before-and-after comparison would read as changes.
+	if err := d.migrate(t.Context(), migrationsBefore(t, 11), "m"); err != nil {
 		t.Fatal(err)
 	}
 

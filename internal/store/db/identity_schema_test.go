@@ -209,8 +209,14 @@ func TestSessionIDColumnIsHashOnly(t *testing.T) {
 // TestNoCascadingDeletes is AC4, written over every table so it also guards
 // the migrations that come after this one: users are deactivated, never
 // removed, and nothing is deleted behind the caller's back (docs/04).
+//
+// The one exception is named here, so a second needs a decision of its own:
+// applications.identity_id is ON DELETE SET NULL, because identities are
+// removed (account linking, anonymization) and an application outlives its
+// identity (0011, docs/04 "applications"). It deletes nothing.
 func TestNoCascadingDeletes(t *testing.T) {
 	d, _ := openTest(t)
+	allowed := map[string]string{"applications.identity_id -> identities": "SET NULL"}
 	var bad []string
 	fks := 0
 	err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
@@ -228,8 +234,14 @@ func TestNoCascadingDeletes(t *testing.T) {
 				return err
 			}
 			fks++
-			if onDelete != "NO ACTION" || onUpdate != "NO ACTION" {
-				bad = append(bad, table+"."+from+" -> "+to+": ON DELETE "+onDelete+", ON UPDATE "+onUpdate)
+			fk := table + "." + from + " -> " + to
+			want, ok := allowed[fk]
+			if !ok {
+				want = "NO ACTION"
+			}
+			delete(allowed, fk)
+			if onDelete != want || onUpdate != "NO ACTION" {
+				bad = append(bad, fk+": ON DELETE "+onDelete+", ON UPDATE "+onUpdate+"; want ON DELETE "+want)
 			}
 		}
 		return rows.Err()
@@ -241,7 +253,10 @@ func TestNoCascadingDeletes(t *testing.T) {
 		t.Fatal("found no foreign keys at all, so this test is checking nothing")
 	}
 	for _, b := range bad {
-		t.Errorf("%s; every foreign key must be NO ACTION", b)
+		t.Errorf("%s; every other foreign key must be NO ACTION", b)
+	}
+	for fk := range allowed {
+		t.Errorf("the allowed exception %s no longer exists; remove it here", fk)
 	}
 
 	// And NO ACTION is enforced: a user with a session cannot be deleted.
