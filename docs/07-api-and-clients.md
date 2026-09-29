@@ -157,8 +157,9 @@ RFC 9457 extension member. No other body has it.
   `fields.2.options` or `title`. The whole schema is `""`. A path never
   carries a key the request sent, so the body echoes nothing. An
   application's approval or denial names its own fields, `handle` and
-  `note`.
-- `code` is one of the codes below. They are API surface, like the `type`s
+  `note` (below, "Applications").
+- `code` is one of the codes below, or for an approval's `handle` one of
+  the three listed with that route. They are API surface, like the `type`s
   above.
 
 <!-- form-codes:begin -->
@@ -180,9 +181,6 @@ RFC 9457 extension member. No other body has it.
 | `too_many` | Over 50 fields or 100 options |
 | `unknown_property` | A property no schema or field has |
 | `malformed` | Not JSON, or more than one JSON value |
-| `invalid_handle` | An approval's `handle` that breaks 04's handle rule |
-| `reserved` | An approval's `handle` kept for a route or for the software |
-| `taken` | An approval's `handle` that a member holds in any case, or that a release still reserves |
 <!-- form-codes:end -->
 
 ### Moderation and admin (`/api/v1/admin/*`, role-gated)
@@ -241,8 +239,8 @@ application is `not-found`, and one that is not a positive integer
 |---|---|
 | `GET /admin/applications?status=&cursor=` | `AdminApplicationList`: 25 applications per page, newest first. `status` is `pending` (the default), `approved`, `denied`, `withdrawn` or `all`; anything else is `validation-failed`, and a malformed cursor `bad-request` |
 | `GET /admin/applications/{id}` | `AdminApplication`: the answers against the form version they answered, whichever version is active; the identity (provider, email, verified flag, blocked), or null once removed; the identity's other applications; the moderators' notes; `suggested_handle`; and the decision, null while pending |
-| `POST /admin/applications/{id}/approve` `{handle, note?}` | The `AdminApplication`, approved. In one transaction: the member is created (active, `member`, human), the identity linked, the application approved with the member's id, the applicant's pre-user sessions deleted, and `application.approved` audited. It issues no session. A handle that breaks 04's rule, is reserved, or is taken (in any case, or reserved by a release) is `validation-failed` with `errors: [{field: "handle", code}]`. An application no longer pending is `conflict`, as is one whose identity is gone, has a user, or is blocked; nothing is written. There is no role field |
-| `POST /admin/applications/{id}/deny` `{note, block}` | The `AdminApplication`, denied. The note is required, 1 to 2000 characters, and the applicant never sees it; a missing one is `validation-failed` with `errors: [{field: "note", code}]`. With `block` the identity is blocked too, which must land on exactly one identity with no user, or the denial is `conflict` and nothing is written. One `application.denied` row, with `blocked`. An application no longer pending is `conflict` |
+| `POST /admin/applications/{id}/approve` `{handle, note?}` | The `AdminApplication`, approved. In one transaction: the member is created (active, `member`, human), the identity linked, the application approved with the member's id, the applicant's pre-user sessions deleted, and `application.approved` audited. It issues no session. A refused handle is `validation-failed` with `errors: [{field: "handle", code}]`, the code one of `invalid_handle` (breaks 04's handle rule), `reserved` (kept for a route or the software) and `taken` (a member holds it in any case, or a release still reserves it). An application no longer pending is `conflict`, as is one whose identity is gone, has a user, or is blocked; nothing is written. There is no role field |
+| `POST /admin/applications/{id}/deny` `{note, block}` | The `AdminApplication`, denied. The note is required, 1 to 2000 characters, and the applicant never sees it; a missing, overlong or control-character note is `validation-failed` with `errors: [{field: "note", code}]`, the code `required`, `too_long` or `invalid_text`. With `block` the identity is blocked too, which must land on exactly one identity with no user, or the denial is `conflict` and nothing is written. One `application.denied` row, with `blocked`. An application no longer pending is `conflict` |
 | `POST /admin/applications/{id}/notes` `{body}` | 201 `ApplicationNote`: a note for the other moderators, 1 to 2000 characters. Not audited: it decides nothing |
 | `POST /admin/applications/{id}/unblock` (empty body or `{}`) | The `AdminApplication`, its identity no longer blocked. The application stays denied, and the applicant may apply again under the 24-hour rule. `identity.unblocked` is audited against the identity. An identity that is not blocked, or is gone, is `conflict` |
 

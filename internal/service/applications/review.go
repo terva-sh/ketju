@@ -60,6 +60,15 @@ const (
 	ActionUnblocked = "identity.unblocked"
 )
 
+// The codes a refused handle carries in a validation-failed body's errors,
+// under the field "handle" (docs/07 "Applications"). They are the
+// approval's own, not forms.Codes: a handle is no form's field.
+const (
+	CodeInvalidHandle = "invalid_handle"
+	CodeReserved      = "reserved"
+	CodeTaken         = "taken"
+)
+
 // The refusals a review adds. Each is coded where it is raised.
 var (
 	// ErrNoApplication is an id that names no application. It is
@@ -120,9 +129,9 @@ func checkHandle(handle string) (string, error) {
 	h, err := identity.CheckHandle(handle)
 	switch {
 	case errors.Is(err, identity.ErrHandleReserved):
-		return "", invalid("handle", forms.CodeReserved)
+		return "", invalid("handle", CodeReserved)
 	case err != nil:
-		return "", invalid("handle", forms.CodeInvalidHandle)
+		return "", invalid("handle", CodeInvalidHandle)
 	}
 	return h, nil
 }
@@ -384,7 +393,7 @@ func (s *Service) Approve(ctx context.Context, v domain.Viewer, id int64, handle
 		// as every path that gives out a handle is (TKT-01M29CKRFS).
 		switch err := identity.HandleFree(ctx, q, h, at); {
 		case errors.Is(err, identity.ErrHandleTaken):
-			return invalid("handle", forms.CodeTaken)
+			return invalid("handle", CodeTaken)
 		case err != nil:
 			return err
 		}
@@ -395,7 +404,7 @@ func (s *Service) Approve(ctx context.Context, v domain.Viewer, id int64, handle
 		userID, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: h, DisplayName: display,
 			Status: domain.StatusActive, Role: domain.RoleMember, Kind: domain.KindHuman, CreatedAt: at, UpdatedAt: at})
 		if db.IsUniqueViolation(err) {
-			return invalid("handle", forms.CodeTaken)
+			return invalid("handle", CodeTaken)
 		}
 		if err != nil {
 			return err
