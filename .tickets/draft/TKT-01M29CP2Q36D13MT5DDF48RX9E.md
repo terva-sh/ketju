@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T05:57:23Z
+updated_at: 2026-09-29T06:18:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -72,7 +72,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - **TKT-01M39WZY8C (Build the post history screen) was folded into this ticket** on 2026-09-28 by the maintainer's decision, and archived as a duplicate. Its route, endpoint shape, refusals and placeholder detail are in this ticket's description. Everything below builds on them.
 - **The route** is `/t/{id}/{slug}/{ordinal}/history` (docs/07 "URL scheme"). It replaces `PostHistoryPending` in `web/client/src/screens/ThreadScreen.tsx`, the PR #64 placeholder. The slug correction stays: `ThreadScreen` already runs `canonicalThreadUrl` on this route, and the screen stays under it.
 - **The endpoint exists**: `GET /api/v1/threads/{id}/posts/{ordinal}/history` → `dto.PostHistory{ordinal, deleted, revisions: [{revision, actor, at, reason, source}]}` (`History` in `internal/service/threads/posts.go`, TKT-01M29CA9C2). The client diffs two revisions' sources (docs/08 "Post history"; settled for TKT-01M29CA9C2).
-- **Refusals** are the endpoint's (docs/07 "The post endpoints"): an anonymous reader is `unauthenticated`, a member is `forbidden` when `public_edit_history` is off, and a moderator may always read it. They render through `ErrorPanel`.
+- **Refusals** are the endpoint's (docs/07 "The post endpoints"): an anonymous reader is `unauthenticated`, a member is `forbidden` when `public_edit_history` is off, and a moderator may always read it. They render through `ErrorPanel`. One exception, built by TKT-01M29CKRJ9 (revised for Terva review 1359): the author of a hidden-by-mod post is admitted to that post's history even when `public_edit_history` is off. The screen needs no special case for it, because it renders whatever the endpoint serves.
 - **A moderator already receives a deleted post's revisions.** `History` returns early only when the post is removed and the viewer lacks `canModerate`, so the description's "needs the endpoint changed" is out of date on main. A member gets `deleted: true` with no revisions, and that is the refusal the criterion means. TKT-01M29CKRJ9 widens "moderator" to "moderator, or the author of their own hidden post" through one `revealRemoved` rule, which applies only to removed posts and leaves the history of visible posts as it is. That is not this ticket's work.
 - **Grace revisions are listed** (docs/08: grace edits are "still stored"). TKT-01M29CKRHS writes `grace: true` into the `Edit` body.
 - **The diff is computed on the client, word by word, from the markdown sources.** The HTML is never diffed.
@@ -91,7 +91,7 @@ Groomed 2026-09-29 against main at 7af2c5a.
 - Refusals: `unauthenticated` and `forbidden` render through `ErrorPanel`, and `deleted: true` renders the notice.
 - `ThreadPage.test.tsx` "the post history route": the placeholder assertions are replaced by the screen's, and `/t/{id}/{old-slug}/27/history` is corrected to the current slug.
 - Server: `TestHistoryListsGraceRevisions`. After a grace edit and a later edit, history has three revisions and only the second has `grace: true`. The page shows the edited marker from the third.
-- `TestHistoryOfARemovedPost` keeps the endpoint's rule: a member gets `deleted: true` with no revisions, and a moderator gets them all.
+- `TestHistoryOfARemovedPost` keeps the endpoint's rule: a member gets `deleted: true` with no revisions, and a moderator gets them all. The author of a hidden-by-mod post gets them too, with the setting off as well as on; that case is TKT-01M29CKRJ9's `TestHiddenPostsAuthorReadsHistoryWithSettingOff`, and this screen renders it like any other history.
 
 ### Out of scope
 
