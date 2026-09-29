@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2NGWH32C6M718QHB30X
 title: Build the apply and status screens
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:forms
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-cp2ng
+  branch: run/cp2ng-apply-screens
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab4276a58a3bcfa90
+  commit: 3fd598f8245f03a25774b2c22ccaf516d412a5fc
+  session: null
+  claimed_at: 2026-09-29T18:36:35Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T18:18:21Z
+updated_at: 2026-09-29T18:41:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-cp2kz
+  id: agent:claude-code/phase2-run-cp2ng
   name: ""
 extensions: {}
 ---
@@ -52,13 +59,14 @@ This screen is a stranger's first impression of the community, seen while they a
 
 ## Implementation plan
 
-Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a.
+Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a. Revised at claim on 2026-09-29 against main at 3fd598f, by agent:claude-code/phase2-run-cp2ng.
 
-What exists there:
-- `/apply` and `/apply/status` are placeholder routes in `web/client/src/routes.tsx`.
-- `Me.pre_user` is typed in `src/api/dto.ts`, with a `me.pre_user` golden.
-- `src/api/problem.ts` turns a problem's type into words, and has no field-level errors yet.
-- The thread-view bundle measures 38171 B gzip against the 60000 B budget in `web/client/budget.json`. `bundle.mjs` counts every chunk except `src/screens/admin/`, so these screens count even when lazy.
+What exists at 3fd598f:
+- The four `/api/v1/apply` routes exist and are on `web.PreUserRoutes` (TKT-01M29CP2KZ).
+- `src/shell/ApplicantShell.tsx` draws the reduced shell for a pre-user viewer and renders the route table's `/apply` or `/apply/status` entry, both still placeholders. It does not change the address.
+- `Form`, `FormField`, `ApplicationForm` and `ApplicationStatus` are typed in `src/api/dto.ts`, with goldens `apply-form.pre_user`, `apply-status-*.pre_user`.
+- `validation-failed` bodies carry `errors: [{field, code}]` (`internal/problem/testdata/field-errors.json`). `src/api/problem.ts` does not read them yet.
+- The reader bundle is 38673 of 60000 B gzip.
 
 ### Settled in grooming
 
@@ -76,46 +84,42 @@ Engineering decisions taken here, with the alternative that lost:
 - **`/apply` and `/apply/status` are one lazy chunk, `src/screens/apply/`,** so a member's first paint never downloads them. They still count toward the budget, which is correct: `bundle.mjs` exempts only the admin screens.
 - **A pre-user viewer is kept inside the application flow by the client too.** Any other client route replaces itself with `/apply/status`. The server's allowlist (TKT-01M29CKRG9) is the enforcement; this redirect only avoids showing a shell whose every request would be refused. For a pre-user viewer the shell draws the site name and Sign out, with no tabs, badges or search.
 
+### Superseded by the maintainer, 2026-09-29
+
+The "approved" status state (criterion 4, and the approved line of the old step 4) is superseded by the maintainer's decision on TKT-01M3Q2V25E, carried in this ticket's note of 2026-09-29: an approved applicant's pre-user session retires, so the status screen never receives `approved` in practice. The signed-out shell carries the hint "Applied? Sign in to see your decision" instead. The status screen still renders `approved` with its `sign_in` link defensively, because `dto.ApplicationStatus` keeps the value, and no test or criterion depends on reaching it.
+
 ### Approach
 
-1. `src/api/problem.ts`: parse the `errors` extension from TKT-01M29CP2KE into `fieldErrors: Record<string, string>` on the thrown problem. `src/forms/messages.ts` maps each code in docs/07's list to words. A code the client does not know falls back to the problem's own message.
-2. `src/forms/FormView.tsx`:
-   - Props: `form: Form`, `prefill`, `values`, `errors`, `mode: 'fill' | 'preview' | 'read'`, `onChange`, `onSubmit`, and `answers` for read mode.
-   - It renders `intro_html` and each field through `fields.tsx`.
-   - A locked field is a read-only input holding its prefill value, with a lock icon and "From your {provider} account". It is left out of the submitted `answers`.
-   - Every input has a `<label>`, plus `aria-invalid` and `aria-describedby` pointing at its error text. After a failed submit, focus moves to the first invalid field.
-   - `markdown_notice` HTML is set with `dangerouslySetInnerHTML`, as post HTML is, because the server sanitized it.
-3. `src/screens/apply/ApplyScreen.tsx` (`/apply`):
-   - It loads `GET /apply/form` and submits `POST /apply` with `{version, answers}`. A 201 navigates to `/apply/status`.
-   - 409: a pending application goes to `/apply/status`. The form-changed case reloads the form and keeps the values whose keys still exist.
-   - 422 attaches the field errors.
-   - 403 shows the fixed not-accepting message.
-   - 429 says when applying is possible again, from `Retry-After`.
-4. `src/screens/apply/StatusScreen.tsx` (`/apply/status`) loads `GET /apply/status` and renders:
-   - none: a link to `/apply`.
-   - pending: "Your application is being reviewed", with a Withdraw button behind a confirmation that posts `POST /apply/withdraw`.
-   - approved: a Sign in link to `sign_in`, as a full page load, since `/auth/*` is server-owned (`clientScope` in `routes.tsx`).
-   - denied and withdrawn: the date, plus an Apply again link when `can_apply` is true, or the date from `can_apply_at` when it is not.
-5. `src/routes.tsx`: replace both placeholders with a `lazy(() => import('./screens/apply/ApplyRoot'))`. `app.tsx` or `shell/Shell.tsx` redirects a pre-user viewer, and draws the reduced shell for one. If TKT-01M29CKRG9 already landed a minimal status page or redirect, this ticket replaces it.
-6. Styles go in `src/screens/apply/apply.css` and use the tokens in `src/styles/tokens.css`. At most 40 rem wide on desktop, and full width with 16 px gutters under 720 px.
-7. Build: `npm run build`, then `go generate ./internal/web/spa`, then commit `internal/web/spa/dist`. Record the `npm run budget` figure in a note.
+1. `src/api/problem.ts`: `ProblemError` gains `fieldErrors: Record<string, string>` (field to code, first code per field wins), read from a `validation-failed` body's `errors` extension. Entries that are not `{field: string, code: string}` are dropped.
+2. `src/forms/messages.ts`: words for every code in docs/07's form-codes table. `fieldMessage(code, field)` falls back to the problem table's `validation-failed` text for a code it does not know.
+3. `src/forms/fields.tsx`: the one map from field type to a `FieldKind`: whether the type takes an answer, its empty value, the control that draws it (label included), and how read mode shows an answer. No other file names a field type.
+4. `src/forms/FormView.tsx`: props `form`, `prefill`, `values`, `errors`, `mode: 'fill' | 'preview' | 'read'`, `answers` (read mode), `provider`, `onChange`, `onSubmit`, `busy`. It renders `intro_html` and each field through `fields.tsx`, with `aria-invalid` and `aria-describedby` on each control pointing at its visible error text. When `errors` changes and is not empty, focus moves to the first invalid control in schema order. A locked field is read-only, holds its prefill, and carries a lock icon and "From your {provider} account". An unknown type is a visible notice and Submit is disabled. `answersOf(form, values)` builds the POST body's answers: every answering, unlocked field, and never a locked or display-only one. `initialValues(form, prefill)` seeds the values.
+5. `src/screens/apply/ApplyScreen.tsx` (`/apply`): loads `GET /api/v1/apply/form`, submits `POST /api/v1/apply` with `{version, answers}`.
+   - 201: replace to `/apply/status`.
+   - 409: read the status. Pending goes to `/apply/status`. Otherwise the form changed: reload it, keep the values whose keys still exist, and say so.
+   - 422: attach the field errors; a field error for no drawn field shows as a form-level message.
+   - 403: "Applications are not being accepted right now", with no reason (a blocked identity is told nothing more, docs/07).
+   - 429: when applying is possible again, from `Retry-After`.
+   - The form load's refusals read the same way (409 goes to the status page).
+6. `src/screens/apply/StatusScreen.tsx` (`/apply/status`): loads `GET /api/v1/apply/status` and renders none (Apply link, or when applying opens, or not accepting), pending ("Your application is being reviewed", with Withdraw behind an inline confirmation that posts `POST /api/v1/apply/withdraw` and shows the answer), approved (defensive: a full-load link to `sign_in`), denied and withdrawn (the date, then Apply again when `can_apply`, or the date from `can_apply_at`). A 401 means the session ended, which is what approval does: it says "Sign in to see your decision" with a full-load link to `/auth/signin`.
+7. `src/routes.tsx`: `/apply` and `/apply/status` become two `lazy()` views of one module, `src/screens/apply/ApplyRoot.tsx`, so one chunk.
+8. `src/shell/ApplicantShell.tsx`: any path but `/apply` and `/apply/status` is replaced with `/apply/status`, and focus moves to the new screen's heading on each change of path, as the Router's `routeFocuser` does for the member shell.
+9. `src/shell/Shell.tsx`: for a signed-out viewer (null user, no `pre_user`) a one-line hint under the top bar, "Applied? Sign in to see your decision", linking to the same `/auth/signin?return_to=` as Sign in. The client does not know `registration.mode` (it is not in `/me`), so the hint shows to every signed-out viewer; the sentence reads correctly in either mode.
+10. Styles in `src/forms/forms.css` and `src/screens/apply/apply.css`, from `src/styles/tokens.css`: at most 40 rem wide on desktop, full width with 16 px gutters under 720 px, 44 px targets on the phone.
+11. e2e: `cmd/ketju/e2e.go` adds two applicant subjects to the fake provider's users with no account, one per Playwright project, so each project submits once. `registration.mode` is `approval` by default.
+12. Docs: docs/07's pre-user paragraph says the client replaces the address with `/apply/status`.
+13. Build: `npm run build`, `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, record the budget figure in a note.
 
 ### Tests
 
-- `src/forms/FormView.test.tsx`:
-  - `renders every field type` from a fixture with all six.
-  - `follows the schema`: two different schemas render different inputs, with no field hard-coded.
-  - `an unknown type shows a notice and disables submit`.
-  - `a locked field is read-only, labelled, and absent from the submitted answers`.
-  - `field errors attach` from the golden 422 body: aria-invalid, describedby, visible text, and focus on the first.
-  - `read mode shows answers`.
-- `src/api/problem.test.ts`: `errors` parse into `fieldErrors`, and an unknown code falls back.
-- `src/screens/apply/ApplyScreen.test.tsx`: submit leads to status; 409 leads to status; the form-changed reload; 403; and 429 with Retry-After.
-- `src/screens/apply/StatusScreen.test.tsx`: each status. Withdraw asks for confirmation and then posts. The approved state links to `sign_in` as a full load.
-- `src/shell/Shell.test.tsx`: a pre-user viewer on `/` is replaced to `/apply/status`, and the reduced shell draws no tabs or badges.
-- `routes.test.tsx` still diffs the route table against docs/07.
-- `e2e/apply.spec.ts`: a pre-user session through the fake IdP in `e2e/session.ts` with `registration.mode` approval. Both screens load at 390 px and 1440 px with `scrollWidth <= clientWidth`, and axe reports no violations. It submits the seeded form and lands on pending.
-- `internal/web/spa` `TestTheAdminBundleIsSeparate` still passes, and `npm run budget` passes.
+- `src/api/problem.test.ts`: the golden field-errors body parses into `fieldErrors`; malformed entries are dropped; other types carry none.
+- `src/forms/messages.test.ts`: every code in docs/07's form-codes table has words, and the table names no other; an unknown code falls back.
+- `src/forms/FormView.test.tsx`: renders every type; two schemas render different inputs; an unknown type shows a notice and disables submit; a locked field is read-only, labelled, holds the prefill and is absent from the answers; the golden 422 body attaches errors (aria-invalid, describedby, visible text) and focuses the first; read mode shows answers; no file outside `fields.tsx` names a field type.
+- `src/screens/apply/ApplyScreen.test.tsx`: submit posts `{version, answers}` without the locked field and lands on status; 409 pending goes to status; 409 form-changed reloads and keeps values; 422; 403; 429 with Retry-After.
+- `src/screens/apply/StatusScreen.test.tsx`: none, pending, approved, denied, withdrawn from goldens; withdraw asks first and posts; 401 offers sign-in.
+- `src/routes.test.tsx`: a pre-user viewer at `/f/general` ends at `/apply/status`; a signed-out viewer sees the hint, and a member and a pre-user do not.
+- `e2e/apply.spec.ts`: a pre-user session through the fake provider. Both screens at 390 px and 1440 px with no horizontal overflow and no axe violations (WCAG 2.1 A and AA, both themes); submits the seeded form and lands on pending; a member route replaces itself with `/apply/status`.
+- `npm run budget` passes, `TestTheAdminBundleIsSeparate` passes.
 
 ### Out of scope
 
