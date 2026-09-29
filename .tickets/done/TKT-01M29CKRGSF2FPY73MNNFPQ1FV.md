@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T21:20:04Z
+updated_at: 2026-09-29T21:21:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -129,6 +129,10 @@ Implementation notes, 2026-09-29.
 - The header now reads the service clock (pin expiry). TestResponseCacheUnderConcurrency failed under -race on the test world's clock, a plain field that w.post advances while readers call View. The test now freezes the readers' clock. The race was in the test harness, not in the server.
 - The actor of an audited record may be missing from users (a database restored from an older backup). audit_log.actor_id references users, so such a row is written with a NULL actor and "log_actor" in its details. Without that, a foreign key failure would hold the thread's projection until someone repaired it by hand. Actor 0 is written with "via": "thread-log". Both are documented in docs/04 "audit_log".
 - The routes are gated staff by role, as docs/07 "Moderation and admin" says, and the service then checks moderate in the thread's forum. A member granted moderate only through a group cannot reach them. That is docs/07's rule; this ticket does not change it.
+
+**agent:claude-code/phase2-run-ckrgs** at 2026-09-29T21:21:35Z
+
+Terva review 1471 (head 0a2323e, base fbe4787), finding 1, medium, 'Ensure cached thread pages expire when their pin expires': fixed in the test, not in the code. The response cache holds only a page's posts (threads.pagePosts; respcache.Key). View draws the header, pin included, on every request from the projection row and s.now(), outside the cached entry, so a cache hit cannot serve a stale pin. TestPinExpiryNeedsNoJob now proves it: after the clock passes the pin's end, the next GET is a response-cache hit (Hits +1, Inserts unchanged), its header has pinned null, and it equals a page drawn with no cache (w.same).
 
 ## Summary
 

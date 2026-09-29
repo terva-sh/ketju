@@ -262,9 +262,21 @@ func TestPinExpiryNeedsNoJob(t *testing.T) {
 	if l, h := pinned(); !l || !h {
 		t.Fatalf("a millisecond before its end the pin shows in the list %v and the header %v", l, h)
 	}
+	// The expiry appends nothing, so the log length and the response cache
+	// key stay where they were, and the page's posts are a cache hit. The
+	// header is not part of the cached entry: it is drawn on every request
+	// from the projection row and the clock, so the hit still drops the pin
+	// and equals a page drawn with no cache at all (review 1471, finding 1).
 	w.clock = until
+	before := w.svc.Responses.Stats()
 	if l, h := pinned(); l || h {
 		t.Fatalf("at its end the pin still shows in the list %v and the header %v", l, h)
+	}
+	if s := w.svc.Responses.Stats(); s.Hits != before.Hits+1 || s.Inserts != before.Inserts {
+		t.Fatalf("the page after the expiry was not a cache hit: %+v then %+v", before, s)
+	}
+	if body := w.same(w.viewer("carol"), "/api/v1/threads/"+id.String()); !strings.Contains(body, `"pinned":null`) {
+		t.Fatalf("a cached page after the expiry still carries the pin: %s", body)
 	}
 }
 
