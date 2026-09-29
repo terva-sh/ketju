@@ -92,11 +92,13 @@ func threadPage(class string) ThreadPage {
 		Lens: &Lens{Kind: "author", Value: "drew", Shown: 7, Hidden: 205},
 		Posts: []Post{
 			{
-				Ordinal:           61,
-				Revision:          2,
-				Author:            alice,
-				CreatedAt:         1757500100000,
-				EditedAt:          ptr(Millis(1757500200000)),
+				Ordinal:   61,
+				Revision:  2,
+				Author:    alice,
+				CreatedAt: 1757500100000,
+				EditedAt:  ptr(Millis(1757500200000)),
+				// Its second revision was a moderator's (TKT-01M29CRJ5J).
+				EditedByModerator: true,
 				ReplyTo:           ptr(57),
 				ReplyToSuppressed: false,
 				ReplyCount:        3,

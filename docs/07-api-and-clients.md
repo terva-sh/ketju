@@ -316,7 +316,7 @@ is a `markdown_notice`'s rendered body. `intro_html` is the rendered
      "created_at": 1757500100000, "edited_at": 1757500200000,
      "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3,
      "html": "<p>…</p>", "attachments": [], "deleted": false, "moved_to": null,
-     "machine_authored": false}
+     "machine_authored": false, "edited_by_moderator": false}
   ]
 }
 ```
@@ -436,18 +436,32 @@ charged to the write limiter. The optional reason body is read to at most
 
 - A member session is required (anonymous `unauthenticated`, pre-user
   `forbidden`), and access to the thread is the thread page's.
-- Only the post's author may act for now; anyone else, a moderator included,
-  is `forbidden`. A moderator's reach over every post (TKT-01M29CRJ5J) will
-  extend the same `authorize` function in `internal/service/threads`. A post
-  hidden by a moderator is `forbidden` to its author. An edit also needs
-  `reply` in the forum; a delete or restore of one's own post does not.
+- The post's author may act on it, and so may a viewer with `moderate` in
+  the thread's forum, on any post (TKT-01M29CRJ5J); anyone else is
+  `forbidden`. A moderator's record names the moderator as its actor, and
+  the post keeps its author. A moderator's edit is never a grace edit and
+  does not need `reply`. A moderator's delete of somebody else's post writes
+  `by_moderator` (03) and hides the post (`hidden-by-mod`) rather than
+  deleting it, so only a moderator may restore it (08 "Restoring a
+  moderator's delete"). A post hidden by a moderator is `forbidden` to its
+  author for all three. An author's edit also needs `reply` in the forum; a
+  delete or restore of one's own post does not.
+- A post whose current revision is an edit by someone other than its author
+  is served with `edited_by_moderator: true`, beside its `edited_at`. It
+  names nobody; the post's history names the moderator (08 "Post history").
+  It is read from the current revision's frame, which the log length already
+  keys, so the response cache needs no editor row.
+- A moderator's edit, hide or restore of somebody else's post is projected
+  before the answer, so its `audit_log` row (`post.edited`, `post.hidden`,
+  `post.restored`, 04) exists when the request returns. An author's own
+  action writes no row.
 - The author windows (08, TKT-01M29CKRHS) are measured from the post's
   creation, revision 1's time. Once `posts.edit_window_seconds` has passed, an
   edit is `edit-window-closed`; once `posts.delete_window_seconds` has
   passed, a delete or a restore is `delete-window-closed`. A window is open
   for its first N seconds and closed from the Nth on, so a window of 0 never
   opens. A viewer who may moderate the forum is bound by neither window on
-  their own post.
+  their own post or on anyone else's.
 - An author's edit within `posts.grace_edit_seconds` of posting, of a post
   with no visible edit, is written as a grace edit (`grace: true` on the
   `Edit`, docs/03). It is a revision, and history lists it, but the post is
@@ -462,8 +476,10 @@ charged to the write limiter. The optional reason body is read to at most
 - The source is checked and rendered as a reply's is, against the thread and
   the post's own `reply_to`, which an edit keeps. The `Edit` records that
   `reply_to` and the mentions the render found.
-- An edit or a delete of a post that is deleted, hidden or moved, and a
-  restore of one that is not deleted, is `conflict` and appends nothing. The
+- An edit or a delete of a post that is deleted, hidden or moved, a
+  moderator's restore of one that is neither deleted nor hidden, and an
+  author's restore of one that is not deleted, is `conflict` and appends
+  nothing. The
   thread's actor checks this against the post's flags as they stand when the
   record is written, so a delete racing an edit cannot be undone by it.
   Deleting twice is `conflict` rather than a quiet success, so the log keeps

@@ -37,6 +37,12 @@ type Post struct {
 	ReplyTo   uint32
 	Flags     EntryFlags
 
+	// EditorID is the actor of the current revision: the record the entry
+	// points at. It equals Author for an unedited post, and for an edited one
+	// it is whoever made the last edit, a moderator's included
+	// (TKT-01M29CRJ5J). Zero when Tombstone, since no record was read.
+	EditorID uint64
+
 	// RevisionMS is when the current revision was written: the timestamp of
 	// the record the entry points at. It equals CreatedMS for an unedited
 	// post and is the edit time for an edited one. Zero when Tombstone, since
@@ -194,7 +200,7 @@ func decodePost(frame []byte, ordinal uint32, e IndexEntry) (Post, error) {
 	p := Post{
 		Ordinal: ordinal, Revision: e.Revision, Author: e.Author,
 		CreatedMS: e.CreatedMS, ReplyTo: e.ReplyTo, Flags: e.Flags,
-		RevisionMS: h.TimestampMS,
+		RevisionMS: h.TimestampMS, EditorID: h.Actor,
 	}
 
 	v, err := DecodeBody(h.Type, h.Encoding, body)

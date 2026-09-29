@@ -147,6 +147,22 @@ func TestAuditRowsComeFromTheLog(t *testing.T) {
 	expect(o, auditRow{At: 1_700_000_207_000, Actor: actor(moderator), Action: ActionPostDeleted, Type: "post", ID: th + "/1",
 		Details: map[string]any{"reason": "spam"}})
 
+	// A moderator's restore, edit and hide of the author's post, as the
+	// service writes them (TKT-01M29CRJ5J): a Delete with by_moderator is
+	// post.hidden.
+	o, _ = f.at(id, 1_700_000_207_100, threadlog.Append{Type: threadlog.TypeRestore, Author: moderator, Ordinal: 1,
+		Body: &threadlog.RestoreBody{Reason: "not spam"}})
+	expect(o, auditRow{At: 1_700_000_207_100, Actor: actor(moderator), Action: ActionPostRestored, Type: "post", ID: th + "/1",
+		Details: map[string]any{"reason": "not spam"}})
+	o, _ = f.at(id, 1_700_000_207_200, threadlog.Append{Type: threadlog.TypeEdit, Author: moderator, Ordinal: 1,
+		Body: &threadlog.EditBody{Source: "[removed a phone number]", Reason: "privacy"}})
+	expect(o, auditRow{At: 1_700_000_207_200, Actor: actor(moderator), Action: ActionPostEdited, Type: "post", ID: th + "/1",
+		Details: map[string]any{"reason": "privacy", "revision": float64(3)}})
+	o, _ = f.at(id, 1_700_000_207_300, threadlog.Append{Type: threadlog.TypeDelete, Author: moderator, Ordinal: 1,
+		Body: &threadlog.DeleteBody{Reason: "off topic", ByModerator: true}})
+	expect(o, auditRow{At: 1_700_000_207_300, Actor: actor(moderator), Action: ActionPostHidden, Type: "post", ID: th + "/1",
+		Details: map[string]any{"reason": "off topic"}})
+
 	// An actor with no users row is NULL, its id kept in the details.
 	o, _ = f.at(id, 1_700_000_208_000, threadlog.Append{Type: threadlog.TypeThreadUnlocked, Author: missing,
 		Body: &threadlog.ThreadUnlockedBody{}})
@@ -210,6 +226,61 @@ func TestAuditRowsComeFromTheLog(t *testing.T) {
 	got := f.auditRows()
 	if len(got) != len(rows)+1 || got[len(got)-1].Action != ActionThreadLocked || got[len(got)-1].ID != id2.String() {
 		t.Fatalf("after the retry the audit rows are %+v", got)
+	}
+}
+
+// TestModeratorHideIsDeletedInPostMeta: a moderator's Delete marks the post
+// deleted in post_meta, as an author's does, so the forum and profile counts
+// leave it out, and a reindex rebuilds it so; a Restore clears it
+// (TKT-01M29CRJ5J).
+func TestModeratorHideIsDeletedInPostMeta(t *testing.T) {
+	f := newFixture(t)
+	f.users(author, moderator)
+	id, _ := f.thread("Hidden")
+	f.post(id, author, 0)
+	f.post(id, author, 0)
+	end := f.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: moderator, Ordinal: 1,
+		Body: &threadlog.DeleteBody{ByModerator: true}})
+	f.project(id, end)
+	deleted := func(when string, want ...int64) {
+		t.Helper()
+		var got []int64
+		if err := f.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			rows, err := tx.QueryContext(t.Context(), `SELECT deleted FROM post_meta WHERE thread_id = ? ORDER BY ordinal`, int64(id))
+			if err != nil {
+				return err
+			}
+			defer rows.Close()
+			for rows.Next() {
+				var d int64
+				if err := rows.Scan(&d); err != nil {
+					return err
+				}
+				got = append(got, d)
+			}
+			return rows.Err()
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("%s: post_meta.deleted %v, want %v", when, got, want)
+		}
+	}
+	deleted("projected", 1, 0)
+	if _, err := f.w.Reindex(t.Context(), nil); err != nil {
+		t.Fatal(err)
+	}
+	deleted("reindexed", 1, 0)
+	end = f.append(id, threadlog.Append{Type: threadlog.TypeRestore, Author: moderator, Ordinal: 1,
+		Body: &threadlog.RestoreBody{}})
+	f.project(id, end)
+	deleted("restored", 0, 0)
+	var actions []string
+	for _, r := range f.auditRows() {
+		actions = append(actions, r.Action)
+	}
+	if want := []string{ActionPostHidden, ActionPostRestored}; !reflect.DeepEqual(actions, want) {
+		t.Fatalf("audit actions %v, want %v", actions, want)
 	}
 }
 

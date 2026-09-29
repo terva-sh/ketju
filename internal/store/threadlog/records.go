@@ -148,12 +148,22 @@ type (
 	// rewrites the log, which is the one operation in this design that is not
 	// append-only; the field exists so that a log carrying one is
 	// distinguishable rather than ambiguous.
+	//
+	// ByModerator was added after the version 1 freeze as an optional key,
+	// on 2026-09-29 (TKT-01M29CRJ5J). It marks a moderator's delete of
+	// somebody else's post, which hides the post (hidden-by-mod) rather than
+	// deleting it, so that only a moderator may restore it (docs/08
+	// "Restoring a moderator's delete"). The service writes it when the actor
+	// is not the post's author; the index reads the key, not the actor, so
+	// the record says what it does. An older build ignores the key and shows
+	// a tombstone to everyone, which fails closed.
 	DeleteBody struct {
-		Reason string `cbor:"reason,omitempty" json:"reason,omitempty"`
-		Hard   bool   `cbor:"hard,omitempty" json:"hard,omitempty"`
+		Reason      string `cbor:"reason,omitempty" json:"reason,omitempty"`
+		Hard        bool   `cbor:"hard,omitempty" json:"hard,omitempty"`
+		ByModerator bool   `cbor:"by_moderator,omitempty" json:"by_moderator,omitempty"`
 	}
 
-	// RestoreBody clears a soft deletion.
+	// RestoreBody clears a soft deletion or a moderator's hide.
 	RestoreBody struct {
 		Reason string `cbor:"reason,omitempty" json:"reason,omitempty"`
 	}

@@ -171,9 +171,81 @@ func TestRestoreReturnsThePostAtItsCurrentRevision(t *testing.T) {
 	}
 }
 
+// A moderator's Delete (by_moderator, TKT-01M29CRJ5J) sets hidden-by-mod and
+// not deleted, an ordinary one the reverse, a Restore clears either, and a
+// replay of the log builds the index the actor kept.
+func TestModeratorDeleteSetsHiddenByMod(t *testing.T) {
+	a, lg, _, _ := newThread(t, SyncNever)
+	mustAppend(t, a, post("one"))
+	mustAppend(t, a, post("two"))
+	mustAppend(t, a, Append{Type: TypeDelete, Author: 7, Ordinal: 1, Body: &DeleteBody{Reason: "spam", ByModerator: true}})
+	mustAppend(t, a, Append{Type: TypeDelete, Author: 42, Ordinal: 2, Body: &DeleteBody{}})
+	e1, _ := a.Index().Entry(1)
+	e2, _ := a.Index().Entry(2)
+	if e1.Flags&(EntryDeleted|EntryHiddenByMod) != EntryHiddenByMod || e1.Author != 42 {
+		t.Errorf("after a moderator's delete, entry %+v: want hidden-by-mod only, author 42", e1)
+	}
+	if e2.Flags&(EntryDeleted|EntryHiddenByMod) != EntryDeleted {
+		t.Errorf("after an ordinary delete, entry %+v: want deleted only", e2)
+	}
+	if got := replayed(t, lg.bytes()); !reflect.DeepEqual(got.entries, a.Index().entries) {
+		t.Errorf("replay disagrees with the actor:\n replay %+v\n  actor %+v", got.entries, a.Index().entries)
+	}
+	mustAppend(t, a, Append{Type: TypeRestore, Author: 7, Ordinal: 1, Body: &RestoreBody{},
+		RequireAny: EntryDeleted | EntryHiddenByMod, Refuse: EntryMoved})
+	if e, _ := a.Index().Entry(1); !e.Flags.Visible() {
+		t.Errorf("after a restore, entry %+v is not visible", e)
+	}
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// TestRestoreRequireAny: a Restore under RequireAny deleted|hidden takes a
+// post that is either and refuses one that is neither, and Refuse still
+// refuses a moved post, writing nothing each time it refuses.
+func TestRestoreRequireAny(t *testing.T) {
+	restore := Append{Type: TypeRestore, Ordinal: 1, Body: &RestoreBody{},
+		RequireAny: EntryDeleted | EntryHiddenByMod, Refuse: EntryMoved}
+	for _, c := range []struct {
+		name  string
+		flags EntryFlags
+		ok    bool
+	}{
+		{"visible", 0, false},
+		{"edited and visible", EntryEdited, false},
+		{"deleted", EntryDeleted, true},
+		{"hidden", EntryHiddenByMod, true},
+		{"deleted and hidden", EntryDeleted | EntryHiddenByMod, true},
+		{"moved", EntryMoved, false},
+		{"hidden and moved", EntryHiddenByMod | EntryMoved, false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			a, lg, _, _ := newThread(t, SyncNever)
+			defer a.Close()
+			mustAppend(t, a, post("one"))
+			a.ix.mu.Lock()
+			a.ix.entries[0].Flags |= c.flags
+			a.ix.mu.Unlock()
+			size := len(lg.bytes())
+			_, err := a.Append(restore)
+			if (err == nil) != c.ok {
+				t.Fatalf("err %v, want ok=%v", err, c.ok)
+			}
+			if !c.ok {
+				if !errors.Is(err, ErrPostState) {
+					t.Errorf("err %v, want ErrPostState", err)
+				}
+				if len(lg.bytes()) != size {
+					t.Errorf("a refused restore grew the log from %d to %d bytes", size, len(lg.bytes()))
+				}
+			}
+		})
+	}
+}
+
 // A Restore clears hidden-by-mod as well as deleted (settled in grooming:
-// a moderator's Restore clears it, docs/08). Nothing in this build sets the
-// flag through a record yet, so it is set on the entry directly.
+// a moderator's Restore clears it, docs/08), from an entry with both set.
 func TestRestoreClearsHiddenByMod(t *testing.T) {
 	ix := &Index{}
 	ix.entries = []IndexEntry{{Revision: 1, Flags: EntryDeleted | EntryHiddenByMod | EntryEdited}}
@@ -241,6 +313,13 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 	}
 	edit := Append{Type: TypeEdit, Ordinal: 1, Refuse: EntryDeleted}
 	restore := Append{Type: TypeRestore, Ordinal: 1, Require: EntryDeleted}
+	// A moderator's Restore, and an author's, as the service writes them
+	// (TKT-01M29CRJ5J).
+	modRestore := Append{Type: TypeRestore, Ordinal: 1, RequireAny: EntryDeleted | EntryHiddenByMod, Refuse: EntryMoved}
+	ownRestore := Append{Type: TypeRestore, Ordinal: 1, Require: EntryDeleted, Refuse: EntryHiddenByMod | EntryMoved}
+	hide := staged{req: request{a: Append{Body: &DeleteBody{ByModerator: true}}}, header: FrameHeader{Type: TypeDelete, Ordinal: 1}}
+	del := staged{header: FrameHeader{Type: TypeDelete, Ordinal: 1}}
+	undo := staged{header: FrameHeader{Type: TypeRestore, Ordinal: 1}}
 	for _, c := range []struct {
 		name  string
 		req   Append
@@ -254,6 +333,17 @@ func TestPreconditionsSeeTheBatchAhead(t *testing.T) {
 		{"restore behind a delete", restore, stage(TypeDelete), true},
 		{"restore behind a delete and a restore", restore, stage(TypeDelete, TypeRestore), false},
 		{"edit behind another post's delete", edit, []staged{{header: FrameHeader{Type: TypeDelete, Ordinal: 2}}}, true},
+		// A staged moderator's Delete is read from its body as a hide
+		// (TKT-01M29CRJ5J).
+		{"moderator's restore, nothing ahead", modRestore, nil, false},
+		{"moderator's restore behind a hide", modRestore, []staged{hide}, true},
+		{"moderator's restore behind a delete", modRestore, []staged{del}, true},
+		{"moderator's restore behind a hide and a restore", modRestore, []staged{hide, undo}, false},
+		{"author's restore behind a hide", ownRestore, []staged{hide}, false},
+		{"author's restore behind a delete", ownRestore, []staged{del}, true},
+		{"author's restore behind a delete, a restore and a hide", ownRestore, []staged{del, undo, hide}, false},
+		{"refusing hidden, behind a hide", Append{Type: TypeEdit, Ordinal: 1, Refuse: EntryHiddenByMod}, []staged{hide}, false},
+		{"refusing deleted, behind a hide", edit, []staged{hide}, true},
 		// A staged Edit sets the edited flag, as Apply will (review 1123).
 		{"requiring edited, behind an edit", Append{Type: TypeDelete, Ordinal: 1, Require: EntryEdited}, stage(TypeEdit), true},
 		{"requiring edited, nothing ahead", Append{Type: TypeDelete, Ordinal: 1, Require: EntryEdited}, nil, false},
@@ -304,7 +394,10 @@ func TestPostFlagEffectIsWhatApplyDoes(t *testing.T) {
 	tries = append(tries,
 		try{"grace Edit", TypeEdit, &EditBody{Source: "x", Grace: true}},
 		try{"grace Edit by value", TypeEdit, EditBody{Source: "x", Grace: true}},
-		try{"Edit by value", TypeEdit, EditBody{Source: "x"}})
+		try{"Edit by value", TypeEdit, EditBody{Source: "x"}},
+		try{"moderator's Delete", TypeDelete, &DeleteBody{ByModerator: true}},
+		try{"moderator's Delete by value", TypeDelete, DeleteBody{ByModerator: true}},
+		try{"Delete by value", TypeDelete, DeleteBody{Reason: "x"}})
 	for _, c := range tries {
 		raw, err := EncodeBody(EncodingCBOR, c.body)
 		if err != nil {

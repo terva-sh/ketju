@@ -164,23 +164,41 @@ func (s *Service) moderate(ctx context.Context, v domain.Viewer, id threadid.ID,
 // record and its row are projected together.
 //
 // The moderation tickets that write thread records share it: rename and move
-// (TKT-01M29CKRH9), a moderator's delete and restore (TKT-01M29CRJ5J), and
+// (TKT-01M29CKRH9), a moderator's edit, delete and restore of another's post
+// (TKT-01M29CRJ5J, through appendProjecting), and
 // the flag auto-hide (TKT-01M29CP2PJ).
 func (s *Service) appendEvent(ctx context.Context, id threadid.ID,
 	build func(th *threadcache.Thread) (threadlog.Append, error)) (threadlog.Result, error) {
-	var res threadlog.Result
-	err := s.Threads.With(id, func(th *threadcache.Thread) error {
+	return s.appendProjecting(ctx, id, func(th *threadcache.Thread) (threadlog.Append, bool, error) {
 		rec, err := build(th)
+		return rec, true, err
+	})
+}
+
+// appendProjecting is appendEvent for a caller that decides from the open
+// thread whether its record is a moderation record: build's bool says
+// whether to project synchronously. Edit, Delete and Restore use it, and
+// project only a record by somebody other than the post's author
+// (TKT-01M29CRJ5J), so an author's own action keeps the asynchronous path.
+func (s *Service) appendProjecting(ctx context.Context, id threadid.ID,
+	build func(th *threadcache.Thread) (threadlog.Append, bool, error)) (threadlog.Result, error) {
+	var (
+		res     threadlog.Result
+		project bool
+	)
+	err := s.Threads.With(id, func(th *threadcache.Thread) error {
+		rec, p, err := build(th)
 		if err != nil {
 			return err
 		}
+		project = p
 		res, err = s.Writer.Append(th, rec)
 		return err
 	})
 	if err != nil {
 		return res, err
 	}
-	if s.Project != nil {
+	if project && s.Project != nil {
 		if err := s.Project(ctx, id, res.LogLength); err != nil {
 			return res, fmt.Errorf("threads: projecting %s after a moderation record: %w", id, err)
 		}
