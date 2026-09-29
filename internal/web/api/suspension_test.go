@@ -466,6 +466,32 @@ func TestHideJudgesTheForumTheLogSays(t *testing.T) {
 	}
 }
 
+// The other way round: a thread whose projection still puts it in a forum
+// the moderator cannot see, and whose log has since moved it into one they
+// moderate, is found and hidden (Terva review 1503 on PR #172).
+func TestHideFindsAThreadMovedIntoSight(t *testing.T) {
+	w, _ := suspendedWorld(t)
+	var staff int64
+	w.write(func(q *dbq.Queries) error {
+		var err error
+		staff, err = q.CreateForum(t.Context(), dbq.CreateForumParams{Slug: "staff", Name: "Staff",
+			Visibility: domain.VisibilityRestricted, CreatedAt: 1, UpdatedAt: 1})
+		return err
+	})
+	moved := w.threadIn(3, staff, "Moved out of staff", "carol")
+	if err := w.cache.With(moved, func(th *threadcache.Thread) error {
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadMoved, Author: uint64(w.users["bob"]),
+			Body: &threadlog.ThreadMovedBody{ForumID: uint64(w.forum)}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	w.admin(w.viewer("bob"), http.MethodPost, carolPosts+"suspend", `{"reason":"spam","hide_posts":true}`)
+	if got := w.hidden(moved, 1); len(got) != 1 {
+		t.Error("bob's hide passed over a thread the log had moved into his forum")
+	}
+}
+
 // A thread that cannot be opened in a forum the moderator cannot see says
 // nothing: it is passed over before it is opened, and the answer is the one
 // a healthy thread there would give (Terva review 1499 on PR #172). An

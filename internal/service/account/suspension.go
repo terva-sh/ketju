@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sync"
 
 	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
@@ -58,16 +59,13 @@ func (s *Service) HidePosts(ctx context.Context, v domain.Viewer, ip, handle str
 	if s.Threads == nil {
 		return errNoThreads
 	}
-	var (
-		u   dbq.User
-		ids []int64
-	)
-	if err := s.readAccount(ctx, handle, func(q *dbq.Queries, t dbq.User) error {
-		u = t
-		var err error
-		ids, err = q.AuditIDs(ctx, suspensionRows(t.ID))
+	id, err := s.lookup(ctx, handle)
+	if err != nil {
 		return err
-	}); err != nil {
+	}
+	defer lockAccount(id)()
+	u, ids, err := s.readSuspensions(ctx, id)
+	if err != nil {
 		return err
 	}
 	if err := mayActOn(v, "hide the posts of")(u); err != nil {
@@ -92,16 +90,13 @@ func (s *Service) RestorePosts(ctx context.Context, v domain.Viewer, ip, handle 
 	if s.Threads == nil {
 		return errNoThreads
 	}
-	var (
-		u   dbq.User
-		ids []int64
-	)
-	if err := s.readAccount(ctx, handle, func(q *dbq.Queries, t dbq.User) error {
-		u = t
-		var err error
-		ids, err = q.AuditIDs(ctx, suspensionRows(t.ID))
+	id, err := s.lookup(ctx, handle)
+	if err != nil {
 		return err
-	}); err != nil {
+	}
+	defer lockAccount(id)()
+	u, ids, err := s.readSuspensions(ctx, id)
+	if err != nil {
 		return err
 	}
 	if err := mayActOn(v, "restore the posts of")(u); err != nil {
@@ -183,6 +178,7 @@ func (s *Service) ExpireSuspensions(ctx context.Context) (int64, error) {
 		if err := ctx.Err(); err != nil {
 			return n, err
 		}
+		unlock := lockAccount(id)
 		err := s.Perm.ChangeStatus(ctx, id, perm.StatusChange{
 			By: audit.System(ViaExpiry), Action: perm.ActionUnsuspended,
 			Allow: func(t dbq.User) error {
@@ -192,6 +188,7 @@ func (s *Service) ExpireSuspensions(ctx context.Context) (int64, error) {
 				return nil
 			},
 		})
+		unlock()
 		switch {
 		case err == nil:
 			n++
@@ -205,20 +202,67 @@ func (s *Service) ExpireSuspensions(ctx context.Context) (int64, error) {
 	return n, errors.Join(errs...)
 }
 
-// readAccount reads the account handle names and calls fn with it, in one
-// read transaction. A handle nobody has is not-found.
-func (s *Service) readAccount(ctx context.Context, handle string, fn func(q *dbq.Queries, u dbq.User) error) error {
+// readSuspensions reads account id and the ids of its user.suspended rows,
+// oldest first, in one read transaction.
+func (s *Service) readSuspensions(ctx context.Context, id int64) (dbq.User, []int64, error) {
+	var (
+		u   dbq.User
+		ids []int64
+	)
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		u, err := q.GetUserByHandle(ctx, handle)
-		if err != nil {
+		var err error
+		if u, err = q.GetUser(ctx, id); err != nil {
 			return err
 		}
-		return fn(q, u)
+		ids, err = q.AuditIDs(ctx, suspensionRows(id))
+		return err
 	})
 	if errors.Is(err, sql.ErrNoRows) {
-		return problem.Coded(problem.CodeNotFound, fmt.Errorf("account: no account has the handle %q", handle))
+		return u, nil, problem.Coded(problem.CodeNotFound, fmt.Errorf("account: user %d no longer exists", id))
 	}
-	return err
+	return u, ids, err
+}
+
+// accountLocks serialize the work on one account's suspension within this
+// process: suspending, unsuspending, a hide, a restore and an expiry
+// (Terva review 1503 on PR #172). A hide or restore writes the thread logs
+// after the status transaction has committed, and nothing else ties the two
+// together. Without the lock, a moderator's unsuspend and restore could
+// finish while another's hide was still appending, and the hide would leave
+// posts hidden on an account whose suspension had been lifted and its
+// posts restored. One process serves a data directory (docs/02), so a lock
+// in the process is a lock over every writer. It is package-level because
+// the API's service and the expiry job's are two values.
+var accountLocks = struct {
+	mu sync.Mutex
+	m  map[int64]*accountLock
+}{m: map[int64]*accountLock{}}
+
+type accountLock struct {
+	mu      sync.Mutex
+	waiters int
+}
+
+// lockAccount takes account id's lock and returns its release. The entry
+// is dropped once nobody holds or waits for it.
+func lockAccount(id int64) (unlock func()) {
+	accountLocks.mu.Lock()
+	l := accountLocks.m[id]
+	if l == nil {
+		l = &accountLock{}
+		accountLocks.m[id] = l
+	}
+	l.waiters++
+	accountLocks.mu.Unlock()
+	l.mu.Lock()
+	return func() {
+		l.mu.Unlock()
+		accountLocks.mu.Lock()
+		if l.waiters--; l.waiters == 0 {
+			delete(accountLocks.m, id)
+		}
+		accountLocks.mu.Unlock()
+	}
 }
 
 // suspensionRows names the user.suspended rows about userID.

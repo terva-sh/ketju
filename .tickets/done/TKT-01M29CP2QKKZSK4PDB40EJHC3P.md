@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T23:13:46Z
+updated_at: 2026-09-29T23:29:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -148,6 +148,10 @@ Terva review 1495 (run 15741, Actions #1066), head 141ee0a3581adaf3145aaa042cf8b
 **agent:claude-code/phase2-run-cp2qk** at 2026-09-29T23:13:46Z
 
 Terva review 1499 (run 15790, Actions #1085), head 4a41ce646c360e8f798b35ef5193426a18167bb9, base 2826208 (PR #172, which replaced #169). Both findings are fixed. (1) high, 'Do not restore posts from a suspension created after unsuspending': Unsuspend now takes the audit id of its own user.unsuspended row (ChangeStatusID) and restores only the newest user.suspended row before it, which is the suspension it lifted. The standalone restore takes the suspension ids in the same read as the account. A suspension made while either runs is never included. Pinned by TestUnsuspendRestoresOnlyTheSuspensionItLifted (a hook suspends again between the status change and the choice). (2) medium, 'Check forum access before reporting an inaccessible thread as unavailable': authorThread now admits the moderator from the projection row before opening or projecting the thread, so a thread in a forum they cannot see is passed over unopened and its health never reaches the answer. The check under the thread still decides. Pinned by TestHideSaysNothingOfAHiddenForumsThreads. Both mutations were caught. account.Service.Threads is now a two-method interface (Posts), so the restore's choice can be tested without threads.
+
+**agent:claude-code/phase2-run-cp2qk** at 2026-09-29T23:29:50Z
+
+Terva review 1503 (run 15803, Actions #1088), head 93c2a471d16e57b6f95638c618abca681cb57a02, base 2826208 (PR #172). Both medium findings are fixed. (1) 'Project a moved thread before deciding it is out of scope': every thread is now opened and projected before the admitting check under it, so a ThreadMoved into the moderator's forum that is not yet projected is found. The projection-row check before opening now decides only whether a failure to reach the thread is reported, which keeps review 1499's no-disclosure rule. Pinned by TestHideFindsAThreadMovedIntoSight, with TestHideSaysNothingOfAHiddenForumsThreads still green. (2) 'Do not hide posts after the suspension has been lifted': suspending, unsuspending, hide, restore and expiry on one account now hold a per-account lock in the process (package-level, so the API's service and the expiry job's share it; one process serves a data directory, docs/02). An unsuspension with restore waits for a running hide, and HidePosts reads the status under the lock, so a hide after an unsuspension is conflict. Pinned by TestUnsuspendWaitsForARunningHide. Mutations were tried: skipping on the row's refusal, reporting every failure, and hiding without the lock. All three were caught.
 
 ## Summary
 

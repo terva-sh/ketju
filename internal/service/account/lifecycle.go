@@ -47,9 +47,9 @@ type Service struct {
 	Now func() time.Time
 
 	// listed, when set, is called by ExpireSuspensions between reading the
-	// list and changing the first account, and lifted by Unsuspend between
-	// the status change and choosing the posts to restore. Tests use them
-	// to change an account in those gaps.
+	// list and changing the first account, and lifted by Unsuspend, holding
+	// the account's lock, between the status change and choosing the posts
+	// to restore. Tests use them to change an account in those gaps.
 	listed, lifted func()
 }
 
@@ -137,6 +137,8 @@ func (s *Service) Suspend(ctx context.Context, v domain.Viewer, ip, handle, reas
 	if err != nil {
 		return err
 	}
+	// Held through the hide, so an unsuspension waits for it (lockAccount).
+	defer lockAccount(id)()
 	by := audit.By{Actor: v.UserID, IP: ip}
 	suspension, err := s.Perm.ChangeStatusID(ctx, id, perm.StatusChange{
 		By: by, Action: perm.ActionSuspended, Reason: reason, Until: ms,
@@ -167,6 +169,9 @@ func (s *Service) Unsuspend(ctx context.Context, v domain.Viewer, ip, handle str
 	if err != nil {
 		return err
 	}
+	// Held through the restore, so a hide of this account waits for it,
+	// and one already running finishes first (lockAccount).
+	defer lockAccount(id)()
 	by := audit.By{Actor: v.UserID, IP: ip}
 	lifted, err := s.Perm.ChangeStatusID(ctx, id, perm.StatusChange{
 		By: by, Action: perm.ActionUnsuspended, Allow: mayActOn(v, "unsuspend"),

@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
 
@@ -126,8 +129,11 @@ func TestUnsuspendRestoresOnlyTheSuspensionItLifted(t *testing.T) {
 	if err := w.svc.Suspend(t.Context(), mod, "", "mem", "spam", nil, false); err != nil {
 		t.Fatal(err)
 	}
+	// The account's lock is held here, so the new suspension is made as a
+	// writer that does not take it would make it: straight through perm.
 	w.svc.lifted = func() {
-		if err := w.svc.Suspend(t.Context(), mod, "", "mem", "again", nil, false); err != nil {
+		if _, err := w.svc.Perm.ChangeStatusID(t.Context(), w.idOf("mem"), perm.StatusChange{
+			By: audit.By{Actor: mod.UserID}, Action: perm.ActionSuspended, Reason: "again"}); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -149,5 +155,95 @@ func TestUnsuspendRestoresOnlyTheSuspensionItLifted(t *testing.T) {
 	}
 	if !slices.EqualFunc(posts.restored, [][]int64{ids}, slices.Equal) {
 		t.Errorf("the standalone restore took %v, want %v", posts.restored, ids)
+	}
+}
+
+// idOf is the id of the account handle names.
+func (w *world) idOf(handle string) int64 {
+	w.t.Helper()
+	var id int64
+	if err := w.db.Read(w.t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		u, err := q.GetUserByHandle(w.t.Context(), handle)
+		id = u.ID
+		return err
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return id
+}
+
+// blockingPosts holds a hide open until released, and records the order
+// in which hides and restores ran.
+type blockingPosts struct {
+	mu      sync.Mutex
+	order   []string
+	inHide  chan struct{}
+	release chan struct{}
+}
+
+func (b *blockingPosts) note(s string) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.order = append(b.order, s)
+}
+
+func (b *blockingPosts) seen() []string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return slices.Clone(b.order)
+}
+
+func (b *blockingPosts) HidePostsOf(context.Context, domain.Viewer, int64, int64) (int, error) {
+	b.note("hide started")
+	close(b.inHide)
+	<-b.release
+	b.note("hide finished")
+	return 1, nil
+}
+
+func (b *blockingPosts) RestorePostsOf(context.Context, domain.Viewer, int64, []int64) (int, error) {
+	b.note("restore")
+	return 1, nil
+}
+
+// An unsuspension with restore_posts waits for a hide of the same account
+// that is still appending, so the restore runs after the last hide and
+// nothing the hide wrote is left standing (Terva review 1503 on PR #172). A
+// hide asked for once the unsuspension has committed is conflict.
+func TestUnsuspendWaitsForARunningHide(t *testing.T) {
+	w := newWorld(t)
+	b := &blockingPosts{inHide: make(chan struct{}), release: make(chan struct{})}
+	w.svc.Threads = b
+	mod := w.user("mod", domain.RoleModerator)
+	w.user("mem", domain.RoleMember)
+	if err := w.svc.Suspend(t.Context(), mod, "", "mem", "spam", nil, false); err != nil {
+		t.Fatal(err)
+	}
+
+	hid := make(chan error, 1)
+	go func() { hid <- w.svc.HidePosts(t.Context(), mod, "", "mem") }()
+	<-b.inHide
+	lifted := make(chan error, 1)
+	go func() { lifted <- w.svc.Unsuspend(t.Context(), mod, "", "mem", true) }()
+	select {
+	case err := <-lifted:
+		t.Fatalf("the unsuspension finished while the hide was running: %v", err)
+	case <-time.After(100 * time.Millisecond):
+	}
+	if s := w.status("mem"); s != domain.StatusSuspended {
+		t.Errorf("mem is %s while the hide runs", s)
+	}
+	close(b.release)
+	if err := <-hid; err != nil {
+		t.Fatal(err)
+	}
+	if err := <-lifted; err != nil {
+		t.Fatal(err)
+	}
+	if got, want := b.seen(), []string{"hide started", "hide finished", "restore"}; !slices.Equal(got, want) {
+		t.Errorf("ran %v, want %v", got, want)
+	}
+	if err := w.svc.HidePosts(t.Context(), mod, "", "mem"); code(err) != "conflict" {
+		t.Errorf("a hide after the unsuspension: %v, want conflict", err)
 	}
 }

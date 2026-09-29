@@ -230,27 +230,36 @@ func (s *Service) eachAuthorThread(ctx context.Context, v domain.Viewer, author 
 // finished and should be tried again later; a thread v may not moderate is
 // reached, since there is nothing for v to do there.
 //
-// v is admitted from the projection row before the thread is opened too,
-// so a thread in a forum v may not see or moderate is passed over without
-// being opened or projected. Whether its log opens, or is quarantined,
-// then never reaches the answer, which would otherwise tell v something
-// about a forum hidden from them (Terva review 1499 on PR #172). The row
-// can trail the log, which only makes this first check pass over a thread
-// v could moderate. The check under the thread is the one that admits.
+// Every thread is opened and projected, so an unprojected ThreadMoved into
+// a forum v moderates is found (Terva review 1503 on PR #172). What v is
+// told about a thread that fails before v is admitted to it, by failing to
+// open, to project or being quarantined, depends on the projection row as
+// it stood before: only a thread that row lets v read is reported as
+// unreached. A thread in a forum hidden from v is passed over in silence
+// whatever happens to it, so the answer tells v nothing about that forum
+// (Terva review 1499). A failure after v is admitted, in change, is v's
+// thread's and is returned.
 func (s *Service) authorThread(ctx context.Context, v domain.Viewer, id threadid.ID, flags threadlog.FrameFlags,
 	change threadChange) (total int, reached bool, err error) {
-	if a, err := s.access(ctx, v, id); err != nil || !a.canModerate {
-		reached, err := admitted(err)
-		return 0, reached, err
+	_, err = s.access(ctx, v, id)
+	var known bool // the row lets v read the thread, so its failures may be told
+	switch problem.FromError(err) {
+	case problem.CodeUnavailable: // quarantined, and readable by v
+		known = true
+	case problem.CodeNotFound, problem.CodeForbidden, problem.CodeUnauthenticated:
+	default:
+		if err != nil {
+			return 0, false, err
+		}
+		known = true
 	}
 	for range threadAttempts {
 		var (
-			n       int
-			last    int64
-			entered bool
+			n        int
+			last     int64
+			admitted bool
 		)
 		err := s.Threads.With(id, func(th *threadcache.Thread) error {
-			entered = true
 			at := th.Actor.LogLength()
 			// The row access reads is the log's up to at, a ThreadMoved
 			// included, so the forum v is judged against is the one the
@@ -265,6 +274,7 @@ func (s *Service) authorThread(ctx context.Context, v domain.Viewer, id threadid
 			if !a.canModerate || th.Archived() {
 				return nil
 			}
+			admitted = true
 			n, last, err = change(th, flags, at)
 			return err
 		})
@@ -279,27 +289,14 @@ func (s *Service) authorThread(ctx context.Context, v domain.Viewer, id threadid
 			return total, true, nil
 		case errors.Is(err, threadlog.ErrLogMoved):
 			continue // decide again, on the log as it now stands
-		case !entered:
-			return total, false, nil // the thread could not be opened
+		case admitted:
+			return total, false, err
 		}
-		reached, err := admitted(err)
-		return total, reached, err
+		switch problem.FromError(err) {
+		case problem.CodeNotFound, problem.CodeForbidden, problem.CodeUnauthenticated:
+			return total, true, nil // not v's to moderate
+		}
+		return total, !known, nil // could not be reached; said only when v may read it
 	}
 	return total, false, nil
-}
-
-// admitted sorts access's refusal of a thread for authorThread: one that is
-// not v's to moderate is reached, with nothing to do; a quarantined one is
-// not reached; anything else is an error that stops the walk.
-func admitted(err error) (reached bool, _ error) {
-	if err == nil {
-		return true, nil
-	}
-	switch problem.FromError(err) {
-	case problem.CodeNotFound, problem.CodeForbidden, problem.CodeUnauthenticated:
-		return true, nil
-	case problem.CodeUnavailable:
-		return false, nil
-	}
-	return false, err
 }

@@ -63,9 +63,16 @@ writes it.
   restore takes only the suspension it lifted. The standalone restore takes
   the suspensions the account had when it was read. Neither can reach a
   suspension made while it runs.
-- **A thread in a forum the moderator cannot see is never opened.** The
-  moderator is admitted from the projection before the thread is touched,
-  so whether its log is healthy never reaches the answer.
+- **A hidden forum's threads say nothing.** Every thread is opened and
+  projected, so a move into the moderator's forum that the projection has
+  not caught up with is found. A thread that cannot be reached is reported
+  only when the projection lets the moderator read it, so the answer tells
+  them nothing about a forum they cannot see.
+- **The work on one account runs one at a time.** Suspending, unsuspending,
+  hiding, restoring and expiry on the same account are serialized in the
+  process, which is the only writer (02). An unsuspension that restores
+  waits for a hide still appending, and a hide asked for after an
+  unsuspension is `conflict`.
 - **Expiry is a job.** It runs every minute and lifts every suspension whose
   end has passed, as an unsuspension by no account with `"via": "expiry"`.
   It reads the end again in the transaction that lifts it, so a suspension
