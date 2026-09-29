@@ -198,20 +198,26 @@ func TestEveryMutationInvalidates(t *testing.T) {
 	forum, x, y := f.forum(domain.VisibilityPublic), f.newGroup(), f.newGroup()
 	v := f.viewer(domain.RoleMember)
 	ctx := t.Context()
-	for name, mutate := range map[string]func() error{
-		"Grant":        func() error { return f.ev.Grant(ctx, audit.By{}, forum, x, domain.PermRead) },
-		"Revoke":       func() error { return f.ev.Revoke(ctx, audit.By{}, forum, x, domain.PermRead) },
-		"AddMember":    func() error { return f.ev.AddMember(ctx, audit.By{}, x, v.UserID) },
-		"RemoveMember": func() error { return f.ev.RemoveMember(ctx, audit.By{}, x, v.UserID) },
-		"SyncIdPGroups": func() error {
-			// Another group than x: an IdP membership of x would refuse
-			// AddMember, and the map runs in no fixed order.
+	// In order: a Revoke is refused unless the Grant before it made the row,
+	// and a RemoveMember is a no-op unless the AddMember before it ran.
+	for _, m := range []struct {
+		name   string
+		mutate func() error
+	}{
+		{"Grant", func() error { return f.ev.Grant(ctx, audit.By{}, forum, x, domain.PermRead) }},
+		{"Revoke", func() error { return f.ev.Revoke(ctx, audit.By{}, forum, x, domain.PermRead) }},
+		{"AddMember", func() error { return f.ev.AddMember(ctx, audit.By{}, x, v.UserID) }},
+		{"RemoveMember", func() error { return f.ev.RemoveMember(ctx, audit.By{}, x, v.UserID) }},
+		{"SyncIdPGroups", func() error {
+			// Another group than x, so AddMember never meets an IdP
+			// membership of x.
 			_, err := f.ev.SyncIdPGroups(ctx, v.UserID, IdPSync{Slugs: []string{f.slug(y)}})
 			return err
-		},
-		"SetVisibility": func() error { return f.ev.SetVisibility(ctx, forum, domain.VisibilityMembers) },
-		"ChangeRole":    func() error { return f.ev.ChangeRole(ctx, audit.By{}, v.UserID, domain.RoleModerator) },
+		}},
+		{"SetVisibility", func() error { return f.ev.SetVisibility(ctx, forum, domain.VisibilityMembers) }},
+		{"ChangeRole", func() error { return f.ev.ChangeRole(ctx, audit.By{}, v.UserID, domain.RoleModerator) }},
 	} {
+		name, mutate := m.name, m.mutate
 		f.check(v, forum, domain.PermRead)
 		if cached(f.ev) == 0 {
 			t.Fatalf("%s: the check did not fill the cache", name)

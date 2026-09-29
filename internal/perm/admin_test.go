@@ -439,6 +439,83 @@ func TestApplyGrantsThenReadsInTheSameTransaction(t *testing.T) {
 	}
 }
 
+// A role or membership change whose read fails is not made, and the read
+// sees the change it follows (Terva review 1423).
+func TestRoleAndMembershipThenReadInTheSameTransaction(t *testing.T) {
+	f := newFixture(t)
+	f.viewer(domain.RoleAdmin)
+	v := f.viewer(domain.RoleMember)
+	g := f.newGroup()
+	mark := f.lastAudit()
+	failed := errors.New("the read failed")
+	fail := func(*dbq.Queries) error { return failed }
+	if err := f.ev.ChangeRoleThen(t.Context(), f.by(), v.UserID, domain.RoleModerator, fail); !errors.Is(err, failed) {
+		t.Errorf("ChangeRoleThen answered %v, want the read's error", err)
+	}
+	if got := f.role(v.UserID); got != domain.RoleMember {
+		t.Errorf("role %s after a change whose read failed, want member", got)
+	}
+	if err := f.ev.AddMemberThen(t.Context(), f.by(), g, v.UserID, fail); !errors.Is(err, failed) {
+		t.Errorf("AddMemberThen answered %v, want the read's error", err)
+	}
+	if _, in := f.memberships(v.UserID)[f.slug(g)]; in {
+		t.Error("a membership whose read failed was made")
+	}
+	if rows := f.rowsSince(mark); len(rows) != 0 {
+		t.Errorf("changes whose read failed left %d audit rows", len(rows))
+	}
+
+	var role string
+	if err := f.ev.ChangeRoleThen(t.Context(), f.by(), v.UserID, domain.RoleModerator, func(q *dbq.Queries) error {
+		u, err := q.GetUser(t.Context(), v.UserID)
+		role = u.Role
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if role != domain.RoleModerator {
+		t.Errorf("the read saw role %s, want moderator", role)
+	}
+	count := func(n *int) func(q *dbq.Queries) error {
+		return func(q *dbq.Queries) error {
+			ms, err := q.GroupMembers(t.Context(), g)
+			*n = len(ms)
+			return err
+		}
+	}
+	var added, removed int
+	if err := f.ev.AddMemberThen(t.Context(), f.by(), g, v.UserID, count(&added)); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.ev.RemoveMemberThen(t.Context(), f.by(), g, v.UserID, count(&removed)); err != nil {
+		t.Fatal(err)
+	}
+	if added != 1 || removed != 0 {
+		t.Errorf("the reads saw %d members after the add and %d after the remove, want 1 and 0", added, removed)
+	}
+}
+
+// PreviewThen reads in the transaction it decided in: the read runs, and
+// its error is the preview's (Terva review 1424).
+func TestPreviewThenReadsInTheSameTransaction(t *testing.T) {
+	f := newFixture(t)
+	f.forum(domain.VisibilityPublic)
+	v := f.viewer(domain.RoleModerator)
+	failed := errors.New("the read failed")
+	if _, err := f.ev.PreviewThen(t.Context(), v.UserID, nil, func(*dbq.Queries) error { return failed }); !errors.Is(err, failed) {
+		t.Errorf("PreviewThen answered %v, want the read's error", err)
+	}
+	var role string
+	effects, err := f.ev.PreviewThen(t.Context(), v.UserID, nil, func(q *dbq.Queries) error {
+		u, err := q.GetUser(t.Context(), v.UserID)
+		role = u.Role
+		return err
+	})
+	if err != nil || len(effects) != 1 || role != domain.RoleModerator {
+		t.Errorf("PreviewThen: %d effects, role %q, %v; want 1, moderator, nil", len(effects), role, err)
+	}
+}
+
 // grid is every permission row as "<forum or 0>:<group>:<permission>".
 func (f *fixture) grid() []string {
 	f.t.Helper()
@@ -553,14 +630,15 @@ func TestPreviewRefusesWhatApplyRefuses(t *testing.T) {
 }
 
 // TestOnlyRoleWritesSetTheRole: inside this package, only promote and
-// ChangeRole call SetUserRole, so no path changes a role without its audit
-// row. TestMutationsGoThroughPerm keeps the call out of every other package.
+// ChangeRoleThen (which ChangeRole calls) call SetUserRole, so no path
+// changes a role without its audit row. TestMutationsGoThroughPerm keeps
+// the call out of every other package.
 func TestOnlyRoleWritesSetTheRole(t *testing.T) {
 	entries, err := os.ReadDir(".")
 	if err != nil {
 		t.Fatal(err)
 	}
-	allowed := map[string]bool{"promote": true, "ChangeRole": true}
+	allowed := map[string]bool{"promote": true, "ChangeRoleThen": true}
 	fset := token.NewFileSet()
 	found := map[string]bool{}
 	for _, e := range entries {
@@ -584,7 +662,7 @@ func TestOnlyRoleWritesSetTheRole(t *testing.T) {
 				if sel, ok := call.Fun.(*ast.SelectorExpr); ok && sel.Sel.Name == "SetUserRole" {
 					found[fn.Name.Name] = true
 					if !allowed[fn.Name.Name] {
-						t.Errorf("%s calls SetUserRole in %s; only promote and ChangeRole may, since they audit it",
+						t.Errorf("%s calls SetUserRole in %s; only promote and ChangeRoleThen may, since they audit it",
 							fset.Position(call.Pos()), fn.Name.Name)
 					}
 				}

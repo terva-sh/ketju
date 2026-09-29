@@ -232,7 +232,7 @@ func (e *Evaluator) Promote(ctx context.Context, userID int64, p Promotion) (boo
 // promote is Promote inside the caller's transaction, for u as read in it.
 // ChangeRole calls it too, so a promotion from the admin screen is the same
 // write with the same audit row as one from bootstrap or the command line.
-// Only promote and ChangeRole call SetUserRole (TestOnlyRoleWritesSetTheRole).
+// Only promote and ChangeRoleThen call SetUserRole (TestOnlyRoleWritesSetTheRole).
 func promote(ctx context.Context, q *dbq.Queries, now int64, u dbq.User, p Promotion) (bool, error) {
 	details := map[string]any{}
 	for k, v := range p.Details {

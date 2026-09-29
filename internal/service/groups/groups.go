@@ -332,18 +332,20 @@ func (s *Service) userID(ctx context.Context, handle string) (dbq.User, error) {
 // AddMember is POST /admin/groups/{id}/members: the account joins the
 // group on the admin's authority, through perm.AddMember, which audits it.
 // A membership the identity provider's mapping made is conflict and left as
-// it is. It answers with the group as it now stands.
+// it is. It answers with the group as it now stands, read in the same
+// transaction, so an error means the membership was not changed (Terva
+// review 1423).
 func (s *Service) AddMember(ctx context.Context, v domain.Viewer, ip string, id int64, handle string) (dto.GroupDetail, error) {
-	return s.membership(ctx, v, ip, id, handle, s.Perm.AddMember)
+	return s.membership(ctx, v, ip, id, handle, s.Perm.AddMemberThen)
 }
 
 // RemoveMember is DELETE /admin/groups/{id}/members/{handle}, as AddMember.
 func (s *Service) RemoveMember(ctx context.Context, v domain.Viewer, ip string, id int64, handle string) (dto.GroupDetail, error) {
-	return s.membership(ctx, v, ip, id, handle, s.Perm.RemoveMember)
+	return s.membership(ctx, v, ip, id, handle, s.Perm.RemoveMemberThen)
 }
 
 func (s *Service) membership(ctx context.Context, v domain.Viewer, ip string, id int64, handle string,
-	do func(context.Context, audit.By, int64, int64) error) (dto.GroupDetail, error) {
+	do func(context.Context, audit.By, int64, int64, func(*dbq.Queries) error) error) (dto.GroupDetail, error) {
 	if err := member.RequireAdmin(v, "change a group's members"); err != nil {
 		return dto.GroupDetail{}, err
 	}
@@ -351,10 +353,15 @@ func (s *Service) membership(ctx context.Context, v domain.Viewer, ip string, id
 	if err != nil {
 		return dto.GroupDetail{}, err
 	}
-	if err := do(ctx, audit.By{Actor: v.UserID, IP: ip}, id, u.ID); err != nil {
+	var out dto.GroupDetail
+	if err := do(ctx, audit.By{Actor: v.UserID, IP: ip}, id, u.ID, func(q *dbq.Queries) error {
+		var err error
+		out, err = detail(ctx, q, id)
+		return err
+	}); err != nil {
 		return dto.GroupDetail{}, err
 	}
-	return s.Detail(ctx, v, id)
+	return out, nil
 }
 
 // Change is one staged grid change as the API takes it: grant or revoke
@@ -472,12 +479,15 @@ func (s *Service) Preview(ctx context.Context, v domain.Viewer, handle string, c
 	if err != nil {
 		return dto.PermissionPreview{}, err
 	}
-	effects, err := s.Perm.Preview(ctx, u.ID, pc)
-	if err != nil {
-		return dto.PermissionPreview{}, err
-	}
+	// The account and the forums are read in the transaction the decisions
+	// are made in, so the caption's role and status are the ones decided for
+	// (Terva review 1424).
 	forums := map[int64]dto.AdminForum{}
-	err = s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+	effects, err := s.Perm.PreviewThen(ctx, u.ID, pc, func(q *dbq.Queries) error {
+		var err error
+		if u, err = q.GetUser(ctx, u.ID); err != nil {
+			return err
+		}
 		fs, err := q.ListForums(ctx)
 		for _, f := range fs {
 			forums[f.ID] = adminForum(f)
@@ -489,11 +499,8 @@ func (s *Service) Preview(ctx context.Context, v domain.Viewer, handle string, c
 	}
 	out := dto.PermissionPreview{User: member.AdminUser(u), Forums: []dto.ForumEffect{}}
 	for _, fe := range effects {
-		f, ok := forums[fe.ForumID]
-		if !ok {
-			continue // created and deleted between the two reads: nothing to show
-		}
-		out.Forums = append(out.Forums, dto.ForumEffect{Forum: f, Before: decisions(fe.Before), After: decisions(fe.After)})
+		out.Forums = append(out.Forums, dto.ForumEffect{Forum: forums[fe.ForumID], Before: decisions(fe.Before),
+			After: decisions(fe.After)})
 	}
 	return out, nil
 }

@@ -95,78 +95,84 @@ func (s *Service) AdminDetail(ctx context.Context, v domain.Viewer, handle strin
 	if err := member.RequireStaff(v, "read an account"); err != nil {
 		return out, err
 	}
-	admin := v.Role == domain.RoleAdmin
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		u, err := q.GetUserByHandle(ctx, handle)
-		if errors.Is(err, sql.ErrNoRows) {
-			return problem.Coded(problem.CodeNotFound, fmt.Errorf("users: no account has the handle %q", handle))
-		}
-		if err != nil {
-			return err
-		}
-		out = dto.AdminUserDetail{User: member.AdminUser(u), Groups: []dto.Membership{}}
-		ms, err := q.MembershipsForUser(ctx, u.ID)
-		if err != nil {
-			return err
-		}
-		var adders []int64
-		for _, m := range ms {
-			if m.AddedBy.Valid {
-				adders = append(adders, m.AddedBy.Int64)
-			}
-		}
-		authors, err := member.AuthorsByID(ctx, q, adders)
-		if err != nil {
-			return err
-		}
-		for _, m := range ms {
-			mb := dto.Membership{Group: dto.GroupRef{ID: m.GroupID, Slug: m.Slug, Name: m.Name}, Source: m.Source,
-				AddedAt: dto.Millis(m.AddedAt)}
-			if m.AddedBy.Valid {
-				a := authors[m.AddedBy.Int64]
-				mb.AddedBy = &a
-			}
-			out.Groups = append(out.Groups, mb)
-		}
-		if !admin {
-			return nil
-		}
-		ids, err := q.IdentitiesForUser(ctx, sql.NullInt64{Int64: u.ID, Valid: true})
-		if err != nil {
-			return err
-		}
-		out.Identities = []dto.AdminIdentity{}
-		for _, i := range ids {
-			ai := dto.AdminIdentity{Provider: i.ProviderKey, EmailVerified: i.EmailVerified != 0}
-			if i.Email.Valid {
-				ai.Email = new(i.Email.String)
-			}
-			if i.LastLoginAt.Valid {
-				ai.LastLoginAt = new(dto.Millis(i.LastLoginAt.Int64))
-			}
-			out.Identities = append(out.Identities, ai)
-		}
-		now := time.Now
-		if s.Now != nil {
-			now = s.Now
-		}
-		cut := session.ExpiredBefore(now())
-		n, err := q.CountUserSessions(ctx, dbq.CountUserSessionsParams{UserID: sql.NullInt64{Int64: u.ID, Valid: true},
-			ExpiresAfter: cut.ExpiresAt, LastUsedAfter: cut.LastUsedAt})
-		if err != nil {
-			return err
-		}
-		out.Sessions = new(int(n))
-		return nil
+		return s.adminDetail(ctx, q, handle, v.Role == domain.RoleAdmin, &out)
 	})
 	return out, err
+}
+
+// adminDetail reads AdminDetail's answer into out, in q's transaction; the
+// identities and sessions only when admin.
+func (s *Service) adminDetail(ctx context.Context, q *dbq.Queries, handle string, admin bool, out *dto.AdminUserDetail) error {
+	u, err := q.GetUserByHandle(ctx, handle)
+	if errors.Is(err, sql.ErrNoRows) {
+		return problem.Coded(problem.CodeNotFound, fmt.Errorf("users: no account has the handle %q", handle))
+	}
+	if err != nil {
+		return err
+	}
+	*out = dto.AdminUserDetail{User: member.AdminUser(u), Groups: []dto.Membership{}}
+	ms, err := q.MembershipsForUser(ctx, u.ID)
+	if err != nil {
+		return err
+	}
+	var adders []int64
+	for _, m := range ms {
+		if m.AddedBy.Valid {
+			adders = append(adders, m.AddedBy.Int64)
+		}
+	}
+	authors, err := member.AuthorsByID(ctx, q, adders)
+	if err != nil {
+		return err
+	}
+	for _, m := range ms {
+		mb := dto.Membership{Group: dto.GroupRef{ID: m.GroupID, Slug: m.Slug, Name: m.Name}, Source: m.Source,
+			AddedAt: dto.Millis(m.AddedAt)}
+		if m.AddedBy.Valid {
+			a := authors[m.AddedBy.Int64]
+			mb.AddedBy = &a
+		}
+		out.Groups = append(out.Groups, mb)
+	}
+	if !admin {
+		return nil
+	}
+	ids, err := q.IdentitiesForUser(ctx, sql.NullInt64{Int64: u.ID, Valid: true})
+	if err != nil {
+		return err
+	}
+	out.Identities = []dto.AdminIdentity{}
+	for _, i := range ids {
+		ai := dto.AdminIdentity{Provider: i.ProviderKey, EmailVerified: i.EmailVerified != 0}
+		if i.Email.Valid {
+			ai.Email = new(i.Email.String)
+		}
+		if i.LastLoginAt.Valid {
+			ai.LastLoginAt = new(dto.Millis(i.LastLoginAt.Int64))
+		}
+		out.Identities = append(out.Identities, ai)
+	}
+	now := time.Now
+	if s.Now != nil {
+		now = s.Now
+	}
+	cut := session.ExpiredBefore(now())
+	n, err := q.CountUserSessions(ctx, dbq.CountUserSessionsParams{UserID: sql.NullInt64{Int64: u.ID, Valid: true},
+		ExpiresAfter: cut.ExpiresAt, LastUsedAfter: cut.LastUsedAt})
+	if err != nil {
+		return err
+	}
+	out.Sessions = new(int(n))
+	return nil
 }
 
 // SetRole is PUT /admin/users/{handle}/role: an admin sets the account's
 // role, through perm.ChangeRole, which audits it in the same transaction
 // and refuses to demote the last active admin (conflict). ip is the
 // request's address, for the audit row. It answers with the account as it
-// now stands.
+// now stands, read in the same transaction, so an error means the role was
+// not changed (Terva review 1423).
 func (s *Service) SetRole(ctx context.Context, v domain.Viewer, ip, handle, role string) (dto.AdminUserDetail, error) {
 	if err := member.RequireAdmin(v, "change a role"); err != nil {
 		return dto.AdminUserDetail{}, err
@@ -183,8 +189,11 @@ func (s *Service) SetRole(ctx context.Context, v domain.Viewer, ip, handle, role
 	if err != nil {
 		return dto.AdminUserDetail{}, err
 	}
-	if err := s.Perm.ChangeRole(ctx, audit.By{Actor: v.UserID, IP: ip}, id, role); err != nil {
+	var out dto.AdminUserDetail
+	if err := s.Perm.ChangeRoleThen(ctx, audit.By{Actor: v.UserID, IP: ip}, id, role, func(q *dbq.Queries) error {
+		return s.adminDetail(ctx, q, handle, true, &out)
+	}); err != nil {
 		return dto.AdminUserDetail{}, err
 	}
-	return s.AdminDetail(ctx, v, handle)
+	return out, nil
 }

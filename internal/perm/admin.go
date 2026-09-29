@@ -79,10 +79,36 @@ var (
 // decision cached for the old one. A request already holding the old Viewer
 // finishes under the old role.
 func (e *Evaluator) ChangeRole(ctx context.Context, by audit.By, userID int64, role string) error {
+	return e.ChangeRoleThen(ctx, by, userID, role, nil)
+}
+
+// writeThen is write, then read in the same transaction, with the change
+// made. A caller that answers with what it changed reads it here, so a
+// failed read rolls the change back rather than reporting a failure for a
+// change that committed (Terva reviews 1416 and 1423): the answer describes
+// the committed rows, or nothing was changed. read must only read, and may
+// be nil.
+func (e *Evaluator) writeThen(ctx context.Context, fn func(q *dbq.Queries, now int64) error,
+	read func(q *dbq.Queries) error) error {
+	return e.write(ctx, func(q *dbq.Queries, now int64) error {
+		if err := fn(q, now); err != nil {
+			return err
+		}
+		if read != nil {
+			return read(q)
+		}
+		return nil
+	})
+}
+
+// ChangeRoleThen is ChangeRole, then read in the same transaction
+// (writeThen). read runs after a change that was a no-op too.
+func (e *Evaluator) ChangeRoleThen(ctx context.Context, by audit.By, userID int64, role string,
+	read func(q *dbq.Queries) error) error {
 	if !domain.ValidRole(role) {
 		return fmt.Errorf("%w: %q", ErrInvalidRole, role)
 	}
-	return e.write(ctx, func(q *dbq.Queries, now int64) error {
+	return e.writeThen(ctx, func(q *dbq.Queries, now int64) error {
 		u, err := q.GetUser(ctx, userID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNoUser
@@ -117,7 +143,7 @@ func (e *Evaluator) ChangeRole(ctx context.Context, by audit.By, userID int64, r
 		_, err = audit.Append(ctx, q, time.UnixMilli(now), by, action, audit.User(userID),
 			map[string]any{"from": u.Role, "to": role})
 		return err
-	})
+	}, read)
 }
 
 // GrantChange is one staged change to the permission grid: grant or revoke
@@ -155,26 +181,17 @@ func (e *Evaluator) ApplyGrants(ctx context.Context, by audit.By, changes []Gran
 	return e.ApplyGrantsThen(ctx, by, changes, nil)
 }
 
-// ApplyGrantsThen is ApplyGrants, then read, in the same transaction, with
-// the batch applied. A caller that answers with the grid as it now stands
-// reads it here, so a failed read rolls the batch back rather than
-// reporting a failure for a batch that committed (Terva review 1416):
-// the answer describes the committed rows, or the batch is unmade. read
-// must only read.
+// ApplyGrantsThen is ApplyGrants, then read in the same transaction, with
+// the batch applied (writeThen). A caller that answers with the grid as it
+// now stands reads it here.
 func (e *Evaluator) ApplyGrantsThen(ctx context.Context, by audit.By, changes []GrantChange,
 	read func(q *dbq.Queries) error) error {
 	if len(changes) == 0 {
 		return nil
 	}
-	return e.write(ctx, func(q *dbq.Queries, now int64) error {
-		if err := e.applyGrants(ctx, q, now, by, changes); err != nil {
-			return err
-		}
-		if read != nil {
-			return read(q)
-		}
-		return nil
-	})
+	return e.writeThen(ctx, func(q *dbq.Queries, now int64) error {
+		return e.applyGrants(ctx, q, now, by, changes)
+	}, read)
 }
 
 func (e *Evaluator) applyGrants(ctx context.Context, q *dbq.Queries, now int64, by audit.By, changes []GrantChange) error {
@@ -288,7 +305,20 @@ func (g grid) check(changes []GrantChange) error {
 // directory's decision, and the screen does not edit what the next sign-in
 // would undo.
 func (e *Evaluator) AddMember(ctx context.Context, by audit.By, groupID, userID int64) error {
-	return e.membership(ctx, by, groupID, userID, true)
+	return e.membership(ctx, by, groupID, userID, true, nil)
+}
+
+// AddMemberThen is AddMember, then read in the same transaction
+// (writeThen). read runs after a change that was a no-op too.
+func (e *Evaluator) AddMemberThen(ctx context.Context, by audit.By, groupID, userID int64,
+	read func(q *dbq.Queries) error) error {
+	return e.membership(ctx, by, groupID, userID, true, read)
+}
+
+// RemoveMemberThen is RemoveMember, as AddMemberThen.
+func (e *Evaluator) RemoveMemberThen(ctx context.Context, by audit.By, groupID, userID int64,
+	read func(q *dbq.Queries) error) error {
+	return e.membership(ctx, by, groupID, userID, false, read)
 }
 
 // RemoveMember removes userID from groupID on by's authority, and records
@@ -296,11 +326,12 @@ func (e *Evaluator) AddMember(ctx context.Context, by audit.By, groupID, userID 
 // is not in the group is left alone, and nothing is recorded. An IdP
 // membership is refused with ErrIdPMembership and left as it is.
 func (e *Evaluator) RemoveMember(ctx context.Context, by audit.By, groupID, userID int64) error {
-	return e.membership(ctx, by, groupID, userID, false)
+	return e.membership(ctx, by, groupID, userID, false, nil)
 }
 
-func (e *Evaluator) membership(ctx context.Context, by audit.By, groupID, userID int64, add bool) error {
-	return e.write(ctx, func(q *dbq.Queries, now int64) error {
+func (e *Evaluator) membership(ctx context.Context, by audit.By, groupID, userID int64, add bool,
+	read func(q *dbq.Queries) error) error {
+	return e.writeThen(ctx, func(q *dbq.Queries, now int64) error {
 		g, err := q.GetGroup(ctx, groupID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return ErrNoGroup
@@ -341,7 +372,7 @@ func (e *Evaluator) membership(ctx context.Context, by audit.By, groupID, userID
 		_, err = audit.Append(ctx, q, time.UnixMilli(now), by, action, audit.User(userID),
 			map[string]any{"group": g.Slug, "group_id": groupID, "source": domain.MembershipAdmin})
 		return err
-	})
+	}, read)
 }
 
 // ForumEffect is one forum's decisions for a member, before and after a
@@ -362,98 +393,119 @@ type ForumEffect struct {
 // their role and status as stored, so a user who is not active is previewed
 // as anonymous. The forums come in ListForums order.
 func (e *Evaluator) Preview(ctx context.Context, userID int64, changes []GrantChange) ([]ForumEffect, error) {
+	return e.PreviewThen(ctx, userID, changes, nil)
+}
+
+// PreviewThen is Preview, then read in the same transaction, so what a
+// caller reads to describe the preview, the user's role and status and the
+// forums, is what the decisions were made from (Terva review 1424). read
+// may be nil.
+func (e *Evaluator) PreviewThen(ctx context.Context, userID int64, changes []GrantChange,
+	read func(q *dbq.Queries) error) ([]ForumEffect, error) {
 	var out []ForumEffect
 	err := e.db.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		out = nil
-		u, err := q.GetUser(ctx, userID)
-		if errors.Is(err, sql.ErrNoRows) {
-			return ErrNoUser
-		}
-		if err != nil {
+		if err := e.preview(ctx, q, userID, changes, &out); err != nil {
 			return err
 		}
-		v := domain.Viewer{UserID: u.ID, Role: u.Role, Active: u.Status == domain.StatusActive}
-		if !v.Member() {
-			v = domain.Anonymous()
-		}
-		g, err := readGrid(ctx, q)
-		if err != nil {
-			return err
-		}
-		if err := g.check(changes); err != nil {
-			return err
-		}
-		forums, err := q.ListForums(ctx)
-		if err != nil {
-			return err
-		}
-		ids := make([]int64, len(forums))
-		for i, f := range forums {
-			ids[i] = f.ID
-		}
-		if len(ids) == 0 {
-			return nil
-		}
-		rows, err := q.ForumAccessRows(ctx, accessParams(v, ids))
-		if err != nil {
-			return err
-		}
-		// The groups v is in, as ForumAccessRows counts them.
-		in := map[int64]bool{}
-		var everyone int64
-		for id, gr := range g.groups {
-			switch {
-			case gr.Slug == domain.GroupEveryone:
-				in[id], everyone = true, id
-			case gr.Slug == domain.GroupMembers && v.Member():
-				in[id] = true
-			}
-		}
-		if v.Member() {
-			mine, err := q.GroupsForUser(ctx, v.UserID)
-			if err != nil {
-				return err
-			}
-			for _, m := range mine {
-				in[m.GroupID] = true
-			}
-		}
-		before, _ := collect(rows)
-		after, _ := collect(rows)
-		for _, f := range after {
-			f.everyone = everyone
-		}
-		for _, c := range changes {
-			if !in[c.GroupID] {
-				continue
-			}
-			for id, f := range after {
-				switch {
-				case c.ForumID == 0:
-					f.global = overlay(f.global, c.GroupID, c.Permission, c.Grant)
-				case c.ForumID == id:
-					f.local = overlay(f.local, c.GroupID, c.Permission, c.Grant)
-				}
-			}
-		}
-		for _, id := range ids {
-			b, err := decide(id, before[id], v)
-			if err != nil {
-				return err
-			}
-			a, err := decide(id, after[id], v)
-			if err != nil {
-				return err
-			}
-			fe := ForumEffect{ForumID: id, Before: map[domain.Permission]Decision{}, After: map[domain.Permission]Decision{}}
-			for _, p := range domain.AllPermissions {
-				fe.Before[p], fe.After[p] = decision(v, b, p), decision(v, a, p)
-			}
-			out = append(out, fe)
+		if read != nil {
+			return read(q)
 		}
 		return nil
 	})
 	return out, err
+}
+
+// preview is Preview's body, in q's transaction, into out.
+func (e *Evaluator) preview(ctx context.Context, q *dbq.Queries, userID int64, changes []GrantChange,
+	out *[]ForumEffect) error {
+	*out = nil
+	u, err := q.GetUser(ctx, userID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ErrNoUser
+	}
+	if err != nil {
+		return err
+	}
+	v := domain.Viewer{UserID: u.ID, Role: u.Role, Active: u.Status == domain.StatusActive}
+	if !v.Member() {
+		v = domain.Anonymous()
+	}
+	g, err := readGrid(ctx, q)
+	if err != nil {
+		return err
+	}
+	if err := g.check(changes); err != nil {
+		return err
+	}
+	forums, err := q.ListForums(ctx)
+	if err != nil {
+		return err
+	}
+	ids := make([]int64, len(forums))
+	for i, f := range forums {
+		ids[i] = f.ID
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := q.ForumAccessRows(ctx, accessParams(v, ids))
+	if err != nil {
+		return err
+	}
+	// The groups v is in, as ForumAccessRows counts them.
+	in := map[int64]bool{}
+	var everyone int64
+	for id, gr := range g.groups {
+		switch {
+		case gr.Slug == domain.GroupEveryone:
+			in[id], everyone = true, id
+		case gr.Slug == domain.GroupMembers && v.Member():
+			in[id] = true
+		}
+	}
+	if v.Member() {
+		mine, err := q.GroupsForUser(ctx, v.UserID)
+		if err != nil {
+			return err
+		}
+		for _, m := range mine {
+			in[m.GroupID] = true
+		}
+	}
+	before, _ := collect(rows)
+	after, _ := collect(rows)
+	for _, f := range after {
+		f.everyone = everyone
+	}
+	for _, c := range changes {
+		if !in[c.GroupID] {
+			continue
+		}
+		for id, f := range after {
+			switch {
+			case c.ForumID == 0:
+				f.global = overlay(f.global, c.GroupID, c.Permission, c.Grant)
+			case c.ForumID == id:
+				f.local = overlay(f.local, c.GroupID, c.Permission, c.Grant)
+			}
+		}
+	}
+	for _, id := range ids {
+		b, err := decide(id, before[id], v)
+		if err != nil {
+			return err
+		}
+		a, err := decide(id, after[id], v)
+		if err != nil {
+			return err
+		}
+		fe := ForumEffect{ForumID: id, Before: map[domain.Permission]Decision{}, After: map[domain.Permission]Decision{}}
+		for _, p := range domain.AllPermissions {
+			fe.Before[p], fe.After[p] = decision(v, b, p), decision(v, a, p)
+		}
+		*out = append(*out, fe)
+	}
+	return nil
 }
 
 // overlay is m with group's grant of p added or removed. A group left with
