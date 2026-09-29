@@ -34,7 +34,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-29T19:28:47Z
+updated_at: 2026-09-29T19:34:08Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -68,12 +68,16 @@ Approval is the only path from a pre-user session to a member session, and it go
 
 ## Implementation plan
 
-Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a. Amended 2026-09-29 by TKT-01M29CP2KZ's agent to carry the maintainer's decision on TKT-01M3Q2V25E (the Settled item it adds, "Approval issues no session", and `TestApproveIssuesNoSession`); nothing else changed.
+Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 7af2c5a. Amended 2026-09-29 by TKT-01M29CP2KZ's agent to carry the maintainer's decision on TKT-01M3Q2V25E. Revised 2026-09-29 at claim, against main at 31e6812, by agent:claude-code/phase2-run-cp2mg. Every Settled item below is carried unchanged.
 
-What exists there:
-- Sessions are created only through `session.insert` in `internal/auth/session/issue.go`, whose only callers are `IssueUserWith` (which also serves `IssueUser`) and `IssuePreUser`. `chokepoint_test.go`'s `doorCallers` and `insertCallers` hold those lists.
-- `perm.Evaluator.Promote` writes a role change and its `user.promoted` audit row in one transaction (`internal/perm/mutate.go`).
-- `identity.CheckHandle` and `identity.Prefill` live in `internal/service/identity/handle.go`.
+What exists at 31e6812:
+- Sessions are created only through `session.insert`; `chokepoint_test.go` holds `doorCallers`, `insertCallers` and `issuerCallers`. `DeletePreUserSessions` exists in `identity.sql` for this ticket.
+- `identity.CheckHandle`, `identity.Prefill` and `identity.HandleFree(ctx, q, h, now)` live in `internal/service/identity/handle.go`. `TestEveryHandleWriteChecksHandleFree` fails any file that calls `CreateUser` without `HandleFree`.
+- `member.RequireStaff` is the service-side staff rule; `adminRoute` with `staffGate` is the route-side one. An inactive viewer has no role and is refused as unauthenticated (401) by both, which `TestAdminRoutesAreGated` pins for every admin route.
+- `internal/audit.Append` is the only writer of `audit_log`. It has no `identity` target type yet.
+- `internal/service/applications` (apply.go) holds the applicant's side; `formsvc` has `ActiveIn`, `Version` and `ToDTO`.
+- `internal/problem` imports the domain packages, so a service that imports `problem` cannot be mapped from `problem/domain.go` (an import cycle). `applications` codes its errors where they are raised with `problem.Coded`, and this ticket does the same.
+- Field errors (`errors: [{field, code}]`) are carried only on a `validation-failed` body, from a `*forms.Invalid`, with a code from `forms.Codes`, which docs/07's form-codes table must list.
 
 ### Settled in grooming
 
@@ -89,6 +93,7 @@ What exists there:
 - **Maintainer decision 2026-09-29 (TKT-01M3Q2V25E): an approved applicant's pre-user session retires, and they learn the decision by signing in.** Once approval links the identity to a user, `LookupSession` no longer resolves the applicant's pre-user session and the session middleware clears its cookie (TKT-01M29CKRG9), so the status page never says "approved" to it. The applicant sees the signed-out shell with a hint like "Applied? Sign in to see your decision"; signing in gives them a member session through `session.IssueUser`, where the approval notification waits (TKT-01M29CP2N0). A retired pre-user session that still answers the status route lost, because it would loosen TKT-01M29CKRG9's session guarantee in three places for a page the member session already provides.
 - **Maintainer decision 2026-09-29: moderators and admins can unblock an identity, with an audit row.** docs/08 asks that tools be reversible, and whoever can block can undo a mistaken block. Having no unblock in v1, and allowing admins only, both lost. Unblocking clears the marker and nothing else: it does not reopen the denied application, and the applicant may apply again under TKT-01M29CP2KZ's 24-hour rule.
 
+
 Engineering decisions taken here, with the alternative that lost:
 - **Approval issues no session, and it retires the applicant's pre-user sessions** (superseded 2026-09-29 by the maintainer decision above; the groomed version kept the pre-user session showing "approved", which merged code rules out). `LookupSession` stops resolving them the moment the identity is linked, whatever approval does, and approval also deletes the rows with `q.DeletePreUserSessions` in its transaction, which TKT-01M29CKRG9 left for it. The member session comes from the applicant's next sign-in: `identity.Service.Login` finds the identity with a user and calls `session.IssueUser`, which checks the status. A "continue" endpoint minting a member session from the pre-user cookie lost: it would add a caller of `IssueUser` keyed on a cookie issued before the account existed. Re-authenticating with the IdP is the better proof, and the chokepoint lists stay untouched.
 - **Approval sets role `member` and nothing else.** The request body has no role field, and an unknown field is refused. A later role change goes through `perm` (`Promote` or a sibling). A bootstrap-named applicant is promoted at their first sign-in by the existing `settle → ApplyBootstrap`, so approval never touches roles.
@@ -96,82 +101,52 @@ Engineering decisions taken here, with the alternative that lost:
 - **The suggested handle is `identity.Prefill(preferred_username, email)`** over the identity's stored claims, the same suggestion open registration makes.
 - **The decision is guarded in SQL:** `UPDATE applications … WHERE id = ? AND status = 'pending'` inside the `BEGIN IMMEDIATE` write. Zero rows is `ErrAlreadyDecided`, which maps to conflict, and the whole transaction rolls back, including a user created earlier in it. A version column lost, because status already is the version.
 - **An approval sets `status` and `user_id` in the same UPDATE, after the user exists** (review 1344). TKT-01M29CKRDQ's CHECK `(status = 'approved') = (user_id IS NOT NULL)` is evaluated per statement, not at commit. A decision UPDATE that ran before `CreateUser` would fail on every approval.
-- **A denial requires a note, of 1–2000 characters** ("deny (with note)", docs/05). An approval's note is optional.
+- **The handle is checked by `identity.HandleFree` inside the approval's transaction** (added at claim: main now has it, and `TestEveryHandleWriteChecksHandleFree` requires it of every `CreateUser` caller). A handle a user holds in any case, or a release still reserves, is `taken`.
+- **Every handle refusal is `validation-failed` (422) with `errors: [{field: "handle", code}]`, the code one of `invalid_handle`, `reserved` or `taken`** (changed at claim from the groomed "taken is 409 with errors[handle]"). `internal/problem` carries field errors only on a validation-failed body, and a 409 without them could not be told apart from the other two conflicts an approval can meet (already decided, identity gone). Allowing `errors` on a conflict body lost: it changes a contract every client reads, pinned by `TestOnlyValidationFailedCarriesErrors`, for one field. The three codes join `forms.Codes` and docs/07's form-codes table, whose test holds them together.
+- **The errors are coded where they are raised** (`problem.Coded`), as `apply.go` does, not mapped in `problem/domain.go` as groomed: `problem` imports the domain packages and `applications` imports `problem`, so a table entry would be an import cycle. The staff rule is `member.RequireStaff`, not a new `ErrNotStaff`.
+- **A denial requires a note, of 1–2000 characters** ("deny (with note)", docs/05). An approval's note is optional, and at most 2000. A missing or overlong note is validation-failed with `errors: [{field: "note", code: "required" | "too_long"}]`.
 - **One audit row per decision**, with target type `application`, the application id as target, and the deciding moderator as actor:
   - `application.approved` with `{user_id, identity_id, handle, note}`;
   - `application.denied` with `{note, blocked}`;
-  - `identity.unblocked`, with target type `identity`, the identity id as target, and `{application_id}`.
+  - `identity.unblocked`, with target type `identity`, the identity id as target, and `{application_id}`. `identity` is a new `internal/audit` target type, listed in docs/04's audit-targets table.
   A block writes no separate row, because it is part of the denial.
+- **The pending application is read with the existing `GetApplication`-style row and `ApplicantIdentity`** rather than a joined `GetPendingApplication`: the write transaction reads both anyway, and the guarded UPDATEs decide.
 
 ### Approach
 
-1. `internal/store/db/queries/applications.sql`, beside TKT-01M29CP2KZ's queries:
-   - `ListApplications`: keyset on (created_at, id) descending with an optional status, 25 to a page.
-   - `GetApplication`, and `ApplicationsForIdentity` for the prior applications.
-   - `GetPendingApplication`: the application with its identity's user_id and blocked_at, read inside the write transaction.
-   - `DecideApplication`: UPDATE … SET status, decided_by, decided_at, decision_note, user_id WHERE id = ? AND status = 'pending', as `:execrows`. `user_id` is a parameter, so an approval sets it in the same statement as the status, and a denial passes NULL.
-   - `LinkIdentityToUser`: UPDATE identities SET user_id = ?, updated_at = ? WHERE id = ? AND user_id IS NULL AND blocked_at IS NULL, as `:execrows`.
-   - `BlockIdentity`: UPDATE identities SET blocked_at = ?, blocked_by = ? WHERE id = ? AND user_id IS NULL, as `:execrows`.
-   - `UnblockIdentity`: UPDATE identities SET blocked_at = NULL, blocked_by = NULL, updated_at = ? WHERE id = ? AND blocked_at IS NOT NULL, as `:execrows`.
-   - `InsertApplicationNote` and `ApplicationNotes`, the latter with author handles.
+1. `internal/store/db/queries/applications.sql`:
+   - `ListApplications`: keyset on (created_at, id) descending with an optional status, joined to the identity for provider, email and verified; 25 to a page.
+   - `GetApplication`, and `OtherApplicationsForIdentity` for the prior applications (at most 50, newest first).
+   - `DecideApplication`: UPDATE … SET status, decided_by, decided_at, decision_note, user_id WHERE id = ? AND status = 'pending', as `:execrows`.
+   - `LinkIdentityToUser`: … WHERE id = ? AND user_id IS NULL AND blocked_at IS NULL, as `:execrows`.
+   - `BlockIdentity`: … WHERE id = ? AND user_id IS NULL, as `:execrows`.
+   - `UnblockIdentity`: … WHERE id = ? AND blocked_at IS NOT NULL, as `:execrows`.
+   - `InsertApplicationNote` and `ApplicationNotes`.
    - Regenerate dbq.
-2. `internal/service/applications/review.go`:
-   - `staff(viewer)`: anonymous is `ErrNoApplicant` (401). Otherwise the viewer needs `Member()` with role moderator or admin, else `ErrNotStaff` (403).
-   - `List(ctx, viewer, status, cursor)`.
-   - `Get(ctx, viewer, id) (dto.AdminApplication, error)`: the application; its own form version through `formsvc.Version(form_id, form_version)`, which works whatever the active version is now; the answers; the identity (provider, email, email_verified, blocked), or null once removed; the prior applications; the notes; `suggested_handle`; and the decision (decided_by as an author, decided_at, note).
-   - `Approve(ctx, viewer, id, handle, note)`, in one `DB.Write`:
-     1. Run `identity.CheckHandle(handle)`. An invalid or reserved handle is a field error `{field: "handle", code: "invalid" | "reserved"}`, 422.
-     2. `GetPendingApplication`. A missing row is not-found. A row no longer pending is `ErrAlreadyDecided` (409).
-     3. The identity must still exist, have no user, and not be blocked, else `ErrIdentityGone` (409).
-     4. `GetUserByHandle` in any case: taken is a field error `{handle, taken}`, 409.
-     5. `CreateUser` with status active, role member, kind human, and the display name as settled. A unique violation is `taken`.
-     6. `LinkIdentityToUser`, which must affect one row.
-     7. `DecideApplication(approved, user_id)`, setting the status and the new user's id in one statement, so the CHECK from TKT-01M29CKRDQ holds when that statement runs. Zero rows is `ErrAlreadyDecided`, and returning it rolls back the user and the link. The write connection serializes transactions, so step 2 already saw the truth; step 7's guard is the one that decides.
-     8. `AppendAudit` `application.approved`.
-     TKT-01M29CP2N0 adds the applicant's notification inside this transaction. The moderators' `new_application` rows are left alone, and they leave the count once the application is no longer pending.
-   - `Deny(ctx, viewer, id, note, block)`, in one `DB.Write`: the note is required; `GetPendingApplication`; `DecideApplication(denied, NULL)`; then, when `block` is set, `BlockIdentity`, which must affect exactly one row. A block with no identity to act on is `ErrIdentityGone` (409), and the whole denial rolls back: either the identity is NULL because it was removed (`applications.identity_id` is ON DELETE SET NULL, TKT-01M29CKRDQ), or it now has a user. The moderator then sees the application still pending, and may deny it without the block (review 1353). Last comes `AppendAudit` `application.denied`, whose `blocked` records only a block that was written. A denial without `block` needs no identity, so an application whose identity was removed can still be denied.
-   - `Unblock(ctx, viewer, id)`, in one `DB.Write`, for the same staff as the other actions: it looks up the application's identity; `UnblockIdentity`, where zero rows (not blocked, or the identity is gone) is `ErrNotBlocked` (409); and `AppendAudit` `identity.unblocked`. The application stays denied.
-   - `AddNote(ctx, viewer, id, body)`: the body is 1–2000 characters. It writes no audit row, because it decides nothing.
-   - Map `ErrAlreadyDecided`, `ErrIdentityGone`, `ErrNotBlocked` and `ErrNotStaff` in `internal/problem/domain.go`. The handle errors reuse the `errors` extension from TKT-01M29CP2KE.
-3. `internal/dto`:
-   - `AdminApplicationList{applications []AdminApplicationRow, next_cursor}`, where a row is `{id, status, created_at, provider, email, email_verified}`.
-   - `AdminApplication{id, status, created_at, form Form, answers map[string]any, identity *ApplicantIdentity, prior []AdminApplicationRow, notes []ApplicationNote, suggested_handle, decision *ApplicationDecision}`.
-   - `ApplicationNote{author Author, body, created_at}` and `ApplicationDecision{by *Author, at, note, user *Author}`.
-   - Add goldens, the types in `web/client/src/api/dto.ts` and `dto-contract.ts`, and `go generate ./internal/web/spa` with any diff committed.
-4. `internal/web/api/applications.go`. Every route answers `no-store` and none goes near `internal/service/respcache`:
-   - `GET /api/v1/admin/applications?status=&cursor=`. `status` is one of pending (the default), approved, denied, withdrawn or all.
-   - `GET /api/v1/admin/applications/{id}`.
-   - `POST /api/v1/admin/applications/{id}/approve` with `{handle, note?}`, returning 200 `AdminApplication`.
-   - `POST /api/v1/admin/applications/{id}/deny` with `{note, block}`, returning 200.
-   - `POST /api/v1/admin/applications/{id}/notes` with `{body}`, returning 201 `ApplicationNote`.
-   - `POST /api/v1/admin/applications/{id}/unblock` with an empty body, returning 200 `AdminApplication` with the identity no longer blocked. It is keyed on the application because that is where the review screen shows the block.
-   - Bodies decode with `DisallowUnknownFields`.
-5. Docs:
-   - docs/07: the admin application routes and their codes.
-   - docs/05 step 5: approval issues no session and the applicant signs in again; how the handle is suggested; where the display name comes from; that a denial needs a note, which the applicant never sees; and that staff can lift a block, with an audit row.
+2. `internal/service/applications/review.go`: `List`, `Get`, `Approve`, `Deny`, `Unblock`, `AddNote`, each refusing through `member.RequireStaff` first; the writes in one `DB.Write` each, in the order the groomed plan gives (Approve: CheckHandle, application pending, identity usable, HandleFree, CreateUser, LinkIdentityToUser, DecideApplication with the user id, DeletePreUserSessions, audit). `formsvc.VersionIn(ctx, q, formID, n)` is added so `Get` reads the version the application answered in its own transaction.
+3. `internal/dto`: `AdminApplicationList`, `AdminApplicationRow`, `AdminApplication`, `ApplicantIdentity`, `ApplicationNote`, `ApplicationDecision`, with goldens; the matching types in `web/client/src/api/dto.ts` and `dto-contract.ts`, types only, because the contract test requires every golden there. `internal/web/spa/dist` is not changed (the client lane, TKT-01M29CP2NG, holds it); a types-only edit leaves the build byte-identical, which is checked before pushing.
+4. `internal/web/api/applications.go`, every route through `adminRoute` with `staffGate`, every answer `no-store`, none near `respcache`, bodies decoded with `decodeStrict`:
+   - `GET /api/v1/admin/applications?status=&cursor=` (pending by default; approved, denied, withdrawn or all);
+   - `GET /api/v1/admin/applications/{id}`;
+   - `POST …/{id}/approve` `{handle, note?}` → 200 `AdminApplication`;
+   - `POST …/{id}/deny` `{note, block}` → 200 `AdminApplication`;
+   - `POST …/{id}/notes` `{body}` → 201 `ApplicationNote`;
+   - `POST …/{id}/unblock` → 200 `AdminApplication`.
+5. Docs: docs/07 (the routes and their codes; the three handle codes in the form-codes table), docs/05 step 5 (approval issues no session and retires the pre-user sessions; the handle suggestion and checks; the display name; a denial needs a note the applicant never sees; staff can lift a block, audited), docs/04 (the `identity` audit target and the three actions).
 
 ### Tests
 
 - `internal/service/applications/review_test.go`:
-  - `TestApproveIsOneTransactionOrNone`: an approval that succeeds (which fails outright if the status UPDATE precedes the user, as review 1344 found) creates the user (active, member, human), links the identity, and marks the application approved with user_id, with exactly one audit row naming the moderator and the note. A test trigger that fails the audit insert leaves no user, the identity's user_id NULL, the application pending, and no audit row.
-  - `TestApproveIssuesNoSession`: approval adds no `sessions` row and deletes the applicant's pre-user rows. The applicant's pre-user session, issued before approval with `IssuePreUser`, no longer resolves through `session.Middleware`, which answers as anonymous and clears the cookie. `identity.Login` for that identity then returns `SignedIn` with a fresh session through `IssueUser`.
-  - `TestApprovedThenSuspendedCannotSignIn`: approve, set status suspended, and `Login` returns `Unavailable` with no session row. This is the chokepoint's status check.
-  - `TestApproveNeverSetsARole`: a body with `"role":"admin"` is 400; the created user is a member; no `user.promoted` row exists.
-  - `TestApproveChecksTheHandle`: invalid and reserved handles are 422 with `errors[handle]`; a taken handle in another case is 409 with `errors[handle]`; the application stays pending.
-  - `TestDenyWithBlockRefusesReapplication`: the identity has blocked_at and blocked_by set and user_id NULL, and TKT-01M29CP2KZ's `Form` and `Submit` for it return 403.
-  - `TestDenyRequiresANote`.
-  - `TestBlockNeedsAnIdentity`: delete the identity of a pending application, then deny with block. The answer is 409 `ErrIdentityGone`; the application stays pending; no audit row is written; and no identity row carries blocked_at. A plain deny of the same application then succeeds, with `blocked: false` in its audit row.
-  - `TestUnblockLiftsTheBlock`: after deny with block, a moderator unblocks. blocked_at and blocked_by are NULL, the application stays denied, and one `identity.unblocked` row names the moderator and the application. TKT-01M29CP2KZ's `Form` then answers under the 24-hour rule instead of 403. A second unblock is 409 and writes no row. A member is 403.
-  - `TestTheNoteNeverReachesTheApplicant`: after a deny with a distinctive note, neither `GET /apply/status` nor any other route open to the pre-user session carries the note's text.
-  - `TestEveryDecisionIsAudited`: approve, deny, and deny with block each write exactly one row with actor_id set to the moderator and `details.note`.
-  - `TestConcurrentDecisionsProduceOne`: approve and deny race on one application 200 times. Each round has one success, one 409, and one audit row. Withdraw against approve behaves the same.
-  - `TestOldVersionStillRenders`: an application on version 1, with version 2 active, returns version 1's form and its answers.
-- `internal/web/api/applications_test.go`:
-  - `TestReviewIsStaffOnly`: anonymous is 401, a member 403, a pre-user 403, a suspended moderator 403, a moderator and an admin 200.
-  - `TestPriorApplicationsAndNotes`.
-  - `TestReviewResponsesAreNoStore`.
-- Chokepoint: `TestOneDoorIntoSessions` passes with `doorCallers` and `insertCallers` unchanged, and this ticket adds no caller of `IssueUser`, `IssueUserWith` or `IssuePreUser`, which a reviewer checks with `grep -rn 'Issue\(User\|PreUser\)' internal --include='*.go' | grep -v _test`.
-- The goldens for AdminApplication, AdminApplicationList and ApplicationNote, with the client contract test.
+  - `TestApproveIsOneTransactionOrNone` (success, and a trigger failing the audit insert leaves nothing);
+  - `TestApproveIssuesNoSession` (no session row added, the pre-user rows deleted, the old cookie resolves as anonymous and is cleared by `session.Middleware`, then `identity.Login` signs in through `IssueUser`);
+  - `TestApprovedThenSuspendedCannotSignIn`;
+  - `TestApproveNeverSetsARole` (service side: the created user is a member and no `user.promoted` row; the `"role"` body field is 400 in the API test);
+  - `TestApproveChecksTheHandle` (invalid, reserved, taken in another case, and reserved by a release, each 422 with `errors[handle]`, the application still pending);
+  - `TestDenyWithBlockRefusesReapplication`; `TestDenyRequiresANote`; `TestBlockNeedsAnIdentity`; `TestUnblockLiftsTheBlock`;
+  - `TestEveryDecisionIsAudited`; `TestConcurrentDecisionsProduceOne` (approve against deny, and approve against withdraw, raced); `TestOldVersionStillRenders`.
+- `internal/web/api/applications_test.go`: `TestReviewIsStaffOnly` (anonymous 401, member 403, pre-user 403, suspended moderator refused, moderator and admin 200), `TestPriorApplicationsAndNotes`, `TestReviewResponsesAreNoStore`, `TestApproveRefusesARole`, and `TestTheNoteNeverReachesTheApplicant`, which walks every API route as the denied applicant's pre-user session through the real chain and finds the distinctive note in no body.
+- Chokepoint: `TestOneDoorIntoSessions` passes with its caller lists unchanged, and this ticket adds no caller of an issuer. `TestEveryHandleWriteChecksHandleFree` passes with review.go as a `CreateUser` caller.
+- Audit rows are counted as deltas in the admin test world.
 
 ### Out of scope
 
