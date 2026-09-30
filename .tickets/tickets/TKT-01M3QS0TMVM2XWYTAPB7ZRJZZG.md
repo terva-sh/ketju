@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QS0TMVM2XWYTAPB7ZRJZZG
 title: Link to the link-a-sign-in page from the client
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ dependencies:
   - TKT-01M29CKRES18SZSCQRV8XSNBT2
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qs0tmv
+  branch: run/qs0tmv-link-sign-in
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5586a3f3215d1594
+  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
+  session: null
+  claimed_at: 2026-09-30T18:43:10Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T23:46:54Z
-updated_at: 2026-09-30T08:53:28Z
+updated_at: 2026-09-30T18:45:00Z
 created_by:
   id: agent:claude-code/phase2-run-KRES
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-qs0tmv
   name: ""
 extensions: {}
 ---
@@ -52,7 +59,7 @@ This ticket adds a way to reach it from the client before then: a "Link a sign-i
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 43a844d. The server half is merged: TKT-01M29CKRES (Implement account linking), PR #178, which built `GET /auth/link` (`internal/web/auth/link.go`, `linkPage`). Refreshed against main at 5124209 on 2026-09-30: references corrected, and the e2e spec's cost against the `/auth/*` limiter settled. Nothing this plan builds has landed.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 43a844d. The server half is merged: TKT-01M29CKRES (Implement account linking), PR #178, which built `GET /auth/link` (`internal/web/auth/link.go`, `linkPage`). Refreshed against main at 5124209 on 2026-09-30. Revised at claim on 2026-09-30 against main at 13709f0, by agent:claude-code/phase2-run-qs0tmv: `/u/:handle` is still `placeholder('profile', 'Profile')`, `linkPage` and its template are as the plan says, and the only change since the refresh that touches this plan is the `/auth/*` budget below. The budget is now 70000 B (`budget.json`).
 
 ### Settled in grooming
 
@@ -72,31 +79,33 @@ Engineering choices made here, each with the alternative that lost:
 - **An agent is not a browser viewer.** `/me` for an agent has a non-null `user` with `kind: "agent"` (`internal/dto/testdata/golden/me.agent.json`), but an agent authenticates only by bearer credential (`agentcred.Middleware`), which a browser does not send, and `/auth/link` refuses an agent (`linker`, `link.go:35-41`). So `user !== null` stays the only check. A `kind` check in the client lost as a rule the server already enforces.
 - **The e2e specs wait out the `/auth/*` limiter** (settled in the refresh of 2026-09-30). `/auth/*` allows a burst of 10 per address, refilling one every 6 s (`authRate`, `internal/web/ratelimit.go:34`). `session.setup.ts` spends 8 of them, and each `GET /auth/link` spends one more. `phase2-exit.spec.ts:49-67` already waits out a 429 as its `Retry-After` says, in a local `through()` helper. This ticket moves `through()` into `e2e/session.ts` as an exported helper, unchanged, and `phase2-exit.spec.ts` imports it from there. TKT-01M3QVWKAG uses it too. A second copy in the new spec lost, because the two would drift. Raising the limit for e2e lost, because the limiter is under test like the rest.
 
+
+### Revised at claim, 2026-09-30
+
+- **The e2e spec paces itself with `paceAuth`; `through()` stays where it is.** This supersedes the "moves `through()` into `e2e/session.ts`" sentence of the last settled item above, and keeps its decision that the limiter is not raised for e2e. After the refresh, TKT-01M3S1TVPD (PR #233) gave the run an `/auth/*` budget in `e2e/session.ts`: a spec that spends `/auth/*` calls `paceAuth(n)` with its count at the start of the test, before any request, and adds its row to the table above `stateFile`. The orchestrator's instructions for this ticket say the same, and add: do not change the shared `signIn` helper, and do not retry around a 429. So `through()` stays local to `phase2-exit.spec.ts`, and `link-sign-in.spec.ts` starts from alice's stored session (`stateFile('alice')`) and calls `paceAuth(1)`, since each project spends one `GET /auth/link`. TKT-01M3QVWKAG paces itself the same way.
+- **The phone flow starts on the forum index, not a thread page.** A phone thread page has no tab bar (it shows the reply bar; `smoke.spec.ts`), so the Me tab is pressed from `/`. At 1440 px the top bar's handle is pressed from the same page. Both are `[data-nav=me]`.
+- **The handle is compared as preact-iso gives it.** `useRoute().params.handle` is already percent-decoded (`exec` in `preact-iso/src/router.js`), and `viewer.value.user.handle` is the stored form, so both are folded with the ASCII fold settled above and compared.
+
 ### Approach
 
-1. **`shell/nav.ts`**: `export function linkSignInHref(url: string): string`, as above, with a comment naming TKT-01M29CKRES and the move to `/settings/identities` with TKT-01M29CXK4.
-2. **`shell/LinkSignIn.tsx`**: `LinkSignIn()` returns `null` unless `viewer.value.user`. Otherwise it returns `<a class="hit" href={linkSignInHref(useLocation().url)} data-nav="link-sign-in">Link a sign-in</a>`, with the line "Add another way to sign in to this account." It is a plain anchor with no `onClick`, so the router does not take it.
-3. **Place it on the own profile page.** A new `screens/ProfilePlaceholder.tsx` serves `/u/:handle` in `routes.tsx` (`:129`), in place of `placeholder('profile', 'Profile')`. It renders what `screens/Placeholder.tsx` renders, keeping `<main class="scaffold" data-screen="profile">` so the route tests hold. When `params.handle` equals `viewer.value.user.handle`, compared with the ASCII fold settled above, it adds an "Account" block holding `<LinkSignIn />`. TKT-01M3QVWKAG adds its Sign out form to the same block, so the block is its own element with `data-account`.
-4. **CSS** in `shell/shell.css`, or the screen's stylesheet, with targets of at least `var(--target)` (44 px, `styles/tokens.css:50`). The anchor takes the shared `.hit` class from `styles/base.css:74`.
-5. **e2e helper.** Move `through()` from `phase2-exit.spec.ts` into `e2e/session.ts`, exported, as settled.
-6. Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and check that the budget line stays under `threadViewGzipBytes` (60000 B). The thread view was 47415 B after PR #202 (TKT-01M3QQWA5Z); record the new figure in a note.
+1. **`shell/nav.ts`**: `export function linkSignInHref(url: string): string` answers `/auth/link?return_to=${encodeURIComponent(url)}`, with a comment naming TKT-01M29CKRES and the move to `/settings/identities` with TKT-01M29CXK4. Beside it, `sameHandle(a, b)`, the ASCII-only fold.
+2. **`shell/LinkSignIn.tsx`**: `LinkSignIn()` returns `null` unless `viewer.value.user`. Otherwise a `<p>` with "Add another way to sign in to this account." and `<a class="hit" href={linkSignInHref(useLocation().url)} data-nav="link-sign-in">Link a sign-in</a>`. A plain anchor with no `onClick`; `/auth/*` is outside `clientScope`, so it is a full page load.
+3. **`screens/ProfilePlaceholder.tsx`** serves `/u/:handle` in `routes.tsx` in place of `placeholder('profile', 'Profile')`. It renders what `Placeholder` renders, keeping `<main class="scaffold" data-screen="profile">`. When the viewer is a member and `sameHandle(params.handle, viewer.value.user.handle)`, it adds `<section data-account aria-labelledby=…>` with an `<h2>Account</h2>` holding `<LinkSignIn />`. TKT-01M3QVWKAG adds Sign out to the same section. It is in the reader bundle, and small.
+4. **CSS**: none unless the page needs it; the anchor takes `.hit` (`styles/base.css`), which pads it to `var(--target)` on the phone.
+5. **e2e**: new `e2e/link-sign-in.spec.ts`, and its row in the budget table in `e2e/session.ts`.
+6. `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and record the reader bundle's figure against 70000 B (54924 B before) in a note.
 
 ### Tests
 
-- **`shell/Shell.test.tsx`**, or a new `shell/LinkSignIn.test.tsx`:
+- **`shell/LinkSignIn.test.tsx`**, with viewers from the `/me` goldens:
   - `builds the link address`: `linkSignInHref('/unread?x=1&y=a%20b')` is `'/auth/link?return_to=' + encodeURIComponent('/unread?x=1&y=a%20b')`.
-  - `a member sees the entry on their own profile`: with a signed-in viewer on `/u/{their handle}`, in any case, the anchor has that `href`. On another member's profile there is none.
-  - `nobody else does`: absent for a signed-out viewer, and for a pre-user (`user: null`, `pre_user` set).
-  - The viewers come from the `/me` goldens (`internal/dto/testdata/golden/me.{anon,member,pre_user}.json`), as `Shell.test.tsx:9-11` does, since `Me` has gained fields (`queue`) since the plan was written.
-- **`routes.test.tsx`**: `/auth/link` and `/auth/link?return_to=%2F` are outside `clientScope`, in the `clientScope %s` table (`routes.test.tsx:203-217`) that already holds `//ketju.test/auth/logout`.
-- **e2e, new `e2e/link-sign-in.spec.ts`**, run in both Playwright projects (390 px and 1440 px):
-  - A signed-in member on a thread page presses their handle (1440 px) or the Me tab (390 px), then presses "Link a sign-in" on their profile.
-  - The browser lands on `/auth/link` with `return_to` naming their profile's path, `/u/{handle}`, and the server's page offers the fake provider the e2e server runs. The navigation goes through `through()`, so a 429 is waited out.
-  - A signed-out reader finds no entry, and neither does a member on someone else's profile.
-- **Invariants held by the server's tests, which stay green:**
-  - A link cannot mint a member session for a pending, suspended or deactivated user: `TestLinkRefusesAnInactiveMember`, `TestLinkNeedsTheMembersSession`, `TestTheLinkStartNeedsAMember` and `TestNoLinkWithoutIntent`.
-  - Every session still comes through the chokepoint: `TestOneDoorIntoSessions`, whose allowed-caller list this ticket does not change.
-  - This ticket adds no server code, no session path and no cached DTO.
+  - `sameHandle` folds ASCII only: `Alice`/`alice` match; `Ken`/`ken` (Kelvin sign) do not.
+  - `a member sees the entry on their own profile`: on `/u/alice` and `/u/ALICE`, the anchor's `href` is `linkSignInHref` of that address, inside `[data-account]`. On `/u/carol` there is no entry and no Account block.
+  - `nobody else does`: absent for a signed-out viewer and for a pre-user (`user: null`, `pre_user` set) on `/u/alice`.
+- **`routes.test.tsx`**: `/auth/link` and `/auth/link?return_to=%2F` out of `clientScope`, in the `clientScope %s` table; `/u/alice` still renders `profile`.
+- **e2e `link-sign-in.spec.ts`**, both projects, alice's stored session, `paceAuth(1)` first: from `/`, press `[data-nav=me]`, land on `/u/alice`, press "Link a sign-in", land on the server's `/auth/link` with `return_to=/u/alice`, whose page offers "Link Fake". Then `/u/carol` has no entry, and a signed-out context on `/u/alice` has none. Neither of those spends `/auth/*`.
+- **Budget checks**: the full suite, and the worst case, the `/auth/*` spenders alone back to back: `npx playwright test e2e/apply.spec.ts e2e/phase2-exit.spec.ts e2e/sign-in.spec.ts e2e/smoke.spec.ts e2e/link-sign-in.spec.ts`.
+- **Invariants held by the server's tests, which stay green:** `TestLinkRefusesAnInactiveMember`, `TestLinkNeedsTheMembersSession`, `TestTheLinkStartNeedsAMember`, `TestNoLinkWithoutIntent`, and `TestOneDoorIntoSessions`. This ticket adds no server code, no session path and no cached DTO.
 
 ### Out of scope
 
@@ -104,6 +113,7 @@ Engineering choices made here, each with the alternative that lost:
 - Any change to `/auth/link`, `/auth/{provider}/link` or the callback: TKT-01M29CKRES, done.
 - The Sign out control on the same page: TKT-01M3QVWKAG (Give signed-in members a Sign out control), which depends on this ticket.
 - A real profile screen. This ticket keeps the placeholder and adds only the Account block.
+- Any change to `signIn`, `through()` or the limiter.
 
 ## Notes
 
