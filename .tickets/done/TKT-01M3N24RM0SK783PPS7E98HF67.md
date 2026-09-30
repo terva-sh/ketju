@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3N24RM0SK783PPS7E98HF67
 title: Render remote markdown images as links rather than broken images
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-n24rm0
-  branch: run/n24rm0-remote-images-as-links
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a6a066913edb55bf4
-  commit: c158b5f351a4fd17dfcbbfbc800f98e554bf0e7e
-  session: null
-  claimed_at: 2026-09-30T02:25:05Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-30T02:28:07Z
+updated_at: 2026-09-30T02:37:02Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -45,11 +38,11 @@ Attachment images, which are same-origin, and `data:` images the sanitizer alrea
 
 ## Acceptance criteria
 
-- [ ] A markdown image whose source is http, https (in any case) or protocol-relative, including /\host, renders as <a href> to that URL with the alt text, or the URL when there is none, as its text, and never as an img element (TestRemoteImageIsNeverAnImg, images-remote golden)
-- [ ] An image whose source is exactly /blobs/<64 lowercase hex> still renders as an img, and near misses render as links (TestAttachmentImageStaysAnImg, images-attachment golden)
-- [ ] An image inside a link renders as text inside that link, and a data: or javascript: image renders as its alt text, with no broken img (images-nested and images-unsafe goldens)
-- [ ] The sanitizer keeps an img src only when it matches the attachment pattern (TestPolicyDropsNonAttachmentImgSrc)
-- [ ] render.Version is 5, pipeline.sum is regenerated at version 5, and docs/07 records the rules beside the 2026-09-28 decision
+- [x] A markdown image whose source is http, https (in any case) or protocol-relative, including /\host, renders as <a href> to that URL with the alt text, or the URL when there is none, as its text, and never as an img element (TestRemoteImageIsNeverAnImg, images-remote golden)
+- [x] An image whose source is exactly /blobs/<64 lowercase hex> still renders as an img, and near misses render as links (TestAttachmentImageStaysAnImg, images-attachment golden)
+- [x] An image inside a link renders as text inside that link, and a data: or javascript: image renders as its alt text, with no broken img (images-nested and images-unsafe goldens)
+- [x] The sanitizer keeps an img src only when it matches the attachment pattern (TestPolicyDropsNonAttachmentImgSrc)
+- [x] render.Version is 5, pipeline.sum is regenerated at version 5, and docs/07 records the rules beside the 2026-09-28 decision
 
 ## Implementation plan
 
@@ -104,3 +97,22 @@ Profile bios (`threads/userposts.go`) and form help text (`forms/forms.go`) rend
 - The attachment upload and attach paths, and the URL an attachment is written with in a post. That is TKT-01M29CXK0 (phase-3). If it chooses a URL form other than `/blobs/<hash>`, it changes `attachmentSrc` and bumps `Version`.
 - A server-side image proxy (docs/07: it can be revisited later).
 - Any CSP change.
+
+## Notes
+
+**agent:claude-code/phase2-run-n24rm0** at 2026-09-30T02:36:53Z
+
+Built in ed200c4 on run/n24rm0-remote-images-as-links. Choices made while building, beyond the plan:
+
+- `linkable` asks the policy (`sanitize('<a href="...">x</a>')`) on the exact escaped bytes the renderer writes, instead of restating the scheme allowlist. A second copy would drift from bluemonday. TestLinkableMatchesThePolicy compares it with a markdown link to the same URL through the whole pipeline, over 20 URLs including unparseable ones.
+- The policy keeps AllowImages' other rules (`align` ImageAlign, `alt` Paragraph, `height`/`width` NumberOrPercent) and replaces only `src`. The grooming approach listed `alt`, `height` and `width` with no pattern; that would have loosened the `alt` and size rules, which this ticket did not decide.
+- An attachment image inside a link stays an img (an img in an a nests no link). The nested rule applies to images that would otherwise become links, which is the reason the settled item gives.
+- An unlinkable image with no alt text writes nothing. In a paragraph of its own that leaves `<p></p>`, which is harmless and shows nothing broken.
+- Link text is the image's inline text: text, code spans, autolink labels and `@handle` as typed. Raw HTML inside the alt is dropped, as goldmark drops it from alt.
+- `HTTPS://` comes out as `https://` because bluemonday normalises the scheme, and `/\host` as `/%5Chost` because goldmark URL-escapes the backslash, the same as for a markdown link to either URL. The result is a same-origin path.
+
+`go generate ./internal/web/spa` leaves `internal/web/spa/dist` byte-identical (thread-view bundle 45708 B gzip).
+
+## Summary
+
+A markdown image now renders as an img only when its source is exactly /blobs/<64 lowercase hex>. Any other image becomes a link to its URL with the alt text (or the URL) as text. Inside a link it becomes that text, and with a source no link may carry it becomes its alt text. The sanitizer keeps img src only for the attachment pattern. render.Version is 5, which retires the render cache, the response cache and every thread ETag; no rendered HTML is persisted, so nothing else needed changing. Rules recorded in docs/07 beside the 2026-09-28 decision. No client change; the dist is unchanged.
