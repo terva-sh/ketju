@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import catalogue from '../../../../internal/problem/testdata/catalogue.json';
 import fieldErrorsBody from '../../../../internal/problem/testdata/field-errors.json';
 import { asProblem, isProblem, knownTypes, problemMessage, ProblemError, toProblem } from './problem';
+import { hasStatus } from './status';
 
 const codes = Object.keys(catalogue) as (keyof typeof catalogue)[];
 
@@ -124,5 +125,20 @@ describe('field errors', () => {
     expect((await problem({ type: 'validation-failed', status: 422, errors: 'x' })).fieldErrors).toEqual({});
     expect((await problem({ type: 'validation-failed', status: 422 })).fieldErrors).toEqual({});
     expect(new ProblemError('validation-failed', 422).fieldErrors).toEqual({});
+  });
+});
+
+// hasStatus tells apart the statuses one code covers (TKT-01M3QMRE47): the
+// server's own 503 from a proxy's 502 or 504, all of them unavailable.
+describe('hasStatus', () => {
+  it('matches the status a problem was answered with, and nothing else', async () => {
+    const proxy = await toProblem(new Response('<html>Bad gateway</html>', { status: 502 }));
+    const own = await toProblem(new Response('{}', { status: 503, headers: { 'Content-Type': 'application/problem+json' } }));
+    expect(isProblem(proxy, 'unavailable') && isProblem(own, 'unavailable')).toBe(true);
+    expect(hasStatus(own, 500, 503)).toBe(true);
+    expect(hasStatus(proxy, 500, 503)).toBe(false);
+    // A network failure never reached the server, so it has no HTTP status.
+    expect(hasStatus(asProblem(new TypeError('offline')), 500, 502, 503, 504)).toBe(false);
+    expect(hasStatus('?', 503)).toBe(false);
   });
 });

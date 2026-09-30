@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'preact/hooks';
 import type { AdminUserDetail, Me } from '../../api/dto';
 import { isProblem } from '../../api/problem';
+import { hasStatus } from '../../api/status';
 import { viewer } from '../../state/viewer';
 import { ConfirmButton } from './common/ConfirmButton';
 import { Field } from './common/Field';
@@ -146,15 +147,27 @@ export function SuspensionPanel({
 
   const fail = (text: string): Message => ({ text, alert: true });
   const done = (text: string): Message => ({ text, alert: false });
-  const unfinished = (r: Sent<unknown>) =>
-    !r.ok && (isProblem(r.error, 'unavailable') || isProblem(r.error, 'internal'));
+  // unfinished is an answer the step after the commit can give: the
+  // server's own 503 (a thread it could not reach) or a 500. A proxy's 502 or
+  // 504 is unavailable too, but says nothing about which step failed
+  // (Terva review 1586, finding 2).
+  const unfinished = (r: Sent<unknown>) => !r.ok && hasStatus(r.error, 500, 503);
+  // unreached is the server's own 503 to a hide or a restore: some threads
+  // could not be reached, after the rest were done.
+  const unreached = (r: Sent<unknown>) => !r.ok && hasStatus(r.error, 503);
 
   const suspend = (body: { reason: string; until: number | null; hide_posts: boolean }) =>
     run(
       () => send('POST', `${url}/suspend`, body),
       (r, fresh) => {
-        if (r.ok) return done(`@${handle} is suspended.`);
         const now = isStatus(fresh, 'suspended');
+        // A success is said as the refreshed account stands, which another
+        // moderator may have changed since (Terva review 1586, finding 1).
+        if (r.ok) {
+          return now
+            ? done(`@${handle} is suspended.`)
+            : fail(`@${handle} was suspended, but is not suspended now. Someone else may have lifted it. What is shown now is current.`);
+        }
         // The finish words need both signs: an answer the hide step can give,
         // and an account that went from not suspended to suspended. Neither
         // code is unique to the hide, and a conflict committed nothing.
@@ -179,6 +192,9 @@ export function SuspensionPanel({
     (r, fresh) => {
       if (r.ok) {
         setRestore(false);
+        if (isStatus(fresh, 'suspended')) {
+          return fail(`@${handle} was unsuspended, but is suspended again now, perhaps by someone else. What is shown now is current.`);
+        }
         return done(
           restore
             ? `@${handle} is no longer suspended, and the posts this suspension hid are restored where you moderate.`
@@ -201,7 +217,7 @@ export function SuspensionPanel({
     () => send('POST', `${url}/posts/hide`),
     (r) => {
       if (r.ok) return done(`The visible posts of @${handle} are hidden, where you moderate.`);
-      if (isProblem(r.error, 'unavailable')) {
+      if (unreached(r)) {
         return fail('Some threads could not be reached. Press Hide their posts again to finish them.');
       }
       return fail(r.message);
@@ -212,7 +228,7 @@ export function SuspensionPanel({
     () => send('POST', `${url}/posts/restore`),
     (r) => {
       if (r.ok) return done('Posts a suspension hid are restored, where you moderate.');
-      if (isProblem(r.error, 'unavailable')) {
+      if (unreached(r)) {
         return fail('Some threads could not be reached. Press Restore hidden posts again to finish them.');
       }
       return fail(r.message);

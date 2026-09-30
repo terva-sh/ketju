@@ -495,6 +495,43 @@ describe('the answers', () => {
     expect(labels(panel(root))).not.toContain('Hide their posts');
   });
 
+  // Terva review 1586, finding 2: a proxy's 502 or 504 is unavailable too,
+  // but is not the hide step's answer.
+  for (const status of [502, 504]) {
+    it(`does not call a proxy's ${status} a partial hide`, async () => {
+      routes[`POST ${base}/suspend`] = hideStops(status, 'unavailable');
+      const root = await openAlice();
+      await suspendWith(root, 'spam', '7', { hide: true });
+      expect(message(root)).toBe('The server is briefly unavailable. Try again shortly.');
+      expect(message(root)).not.toContain('hidden');
+    });
+  }
+
+  // Terva review 1586, finding 1: a success is said as the refreshed account
+  // stands, which another moderator may have changed in between.
+  it('does not say suspended when the refreshed account is not', async () => {
+    routes[`POST ${base}/suspend`] = () => noContent;
+    const root = await openAlice();
+    await suspendWith(root, 'spam', '7');
+    expect(message(root)).toBe(
+      '@alice was suspended, but is not suspended now. Someone else may have lifted it. What is shown now is current.',
+    );
+  });
+
+  it('does not say unsuspended when the refreshed account is suspended', async () => {
+    account = suspended(null);
+    routes[`POST ${base}/unsuspend`] = () => {
+      account = suspended(null, 'suspended again');
+      return noContent;
+    };
+    const root = await openAlice();
+    await press(root, 'Unsuspend');
+    await press(root, 'Confirm');
+    expect(message(root)).toBe(
+      '@alice was unsuspended, but is suspended again now, perhaps by someone else. What is shown now is current.',
+    );
+  });
+
   it('does not call a failure without hide_posts a partial hide', async () => {
     routes[`POST ${base}/suspend`] = hideStops(503, 'unavailable');
     const root = await openAlice();
