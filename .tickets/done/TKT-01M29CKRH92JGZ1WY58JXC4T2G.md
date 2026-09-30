@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-30T02:37:12Z
+updated_at: 2026-09-30T02:43:10Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -124,6 +124,10 @@ Criterion 1 evidence, in two halves. Server: TestRenameMovesTheResponseCacheKey 
 **agent:claude-code/phase2-run-krh9** at 2026-09-30T02:37:12Z
 
 PR #190 was replaced by #193. Per-thread slow mode (#188) landed on main while #190 was open and left it unmergeable. The final tree was carried onto main at a827aef as one commit, and the only conflict was docs/07, where both sections are kept. #190's Terva review was clean at head 3306304 over base ffddc6b (run 8b58f0ef, Actions run 1219); #193 needs its own.
+
+**agent:claude-code/phase2-run-krh9** at 2026-09-30T02:43:10Z
+
+Terva review 1535 on PR #193, head b1fa6a5 over base a827aef, run f4bda2ab (Actions 1235), had two medium findings, both fixed. (1) Project the current log before the initial access check. appendDecided now pre-checks only that the thread exists, and admits the viewer only under the thread, from the row projected to the log's length. Test: TestRenameJudgesAnUnprojectedMove. (2) Bound rename-window seconds before converting to time.Duration. A count past what a Duration holds is now the longest window. Test: TestRenameWindowTooLargeForADuration. The same overflow exists in posts.edit_window_seconds and posts.delete_window_seconds on main (authorWindows in internal/service/threads/mutate.go). That is outside this ticket, so it is filed as a draft.
 
 ## Summary
 
