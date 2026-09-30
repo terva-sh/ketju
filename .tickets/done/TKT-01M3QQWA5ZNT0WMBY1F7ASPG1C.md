@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QQWA5ZNT0WMBY1F7ASPG1C
 title: Add the flag item and dialog to the post menu
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:flags
     path: docs/08-moderation.md
-claim:
-  actor: agent:claude-code/phase2-run-qqwa5z
-  branch: run/qqwa5z-flag-dialog
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a6ccc4b1ca7a420d7
-  commit: 052db1ddeecdaffe90e8ffe339f1e03eb2e9be28
-  session: null
-  claimed_at: 2026-09-30T03:28:22Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T03:47:06Z
+updated_at: 2026-09-30T03:47:45Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
@@ -59,15 +52,15 @@ The tombstone text for `removal: "review"` ("Post hidden pending review", and "h
 
 ## Acceptance criteria
 
-- [ ] The dialog offers spam, abuse, off-topic and other, needs a non-blank note for other, refuses a note over 1000 code points unsent, and sends exactly {ordinal, reason, note} to POST /api/v1/threads/{id}/flags once per press (FlagDialog.test.tsx)
-- [ ] At 390 px link, flag and history sit under the post footer's more control, and e2e/targets.spec.ts passes for it and its items
-- [ ] The dist from go generate ./internal/web/spa is committed and the thread-view bundle stays under threadViewGzipBytes in budget.json
-- [ ] A signed-in member sees flag in the footer of another member's shown post, and not on their own post, a deleted or moved post, nor for a signed-out reader (Post.test.tsx)
-- [ ] A 422, 409, 403, 404 or 429 shows its sentence and keeps the form filled (FlagDialog.test.tsx)
-- [ ] Only a 200 shows "Thanks, a moderator will look.", with no count or outcome and no second request for the thread page; a 503 unavailable says the report could not be sent and keeps the form (FlagDialog.test.tsx, ThreadScreen.test.tsx)
-- [ ] A kept flag whose auto-hide fails answers 200 {"received":true}, the error is logged, and the sweep hides the post; a flag on a quarantined thread answers 503 with no flags row (TestAutoHideRecoversFromAFailedAppend, TestAFailedHideAnswersTheReceipt, TestAQuarantinedThreadKeepsNoFlag)
-- [ ] The dialog is modal: focus starts inside, Tab wraps, and Escape and Close close it. Focus then returns to the returnTo control the post handed over: the flag button on desktop, and the post's visible More button on a phone, never document.body (FlagDialog.test.tsx; ThreadScreen.test.tsx "flags a post from the page" and "flags a post from the phone's More")
-- [ ] The server refuses a self-flag with 403 forbidden and writes no flags row, on the author's shown post and on their own hidden post. On the shown post another member's flag is accepted, and on the hidden post another member with no open flag gets conflict, as on main (TestFlagRefusesTheAuthor, TestFlagRouteRefusals)
+- [x] The dialog offers spam, abuse, off-topic and other, needs a non-blank note for other, refuses a note over 1000 code points unsent, and sends exactly {ordinal, reason, note} to POST /api/v1/threads/{id}/flags once per press (FlagDialog.test.tsx)
+- [x] At 390 px link, flag and history sit under the post footer's more control, and e2e/targets.spec.ts passes for it and its items
+- [x] The dist from go generate ./internal/web/spa is committed and the thread-view bundle stays under threadViewGzipBytes in budget.json
+- [x] A signed-in member sees flag in the footer of another member's shown post, and not on their own post, a deleted or moved post, nor for a signed-out reader (Post.test.tsx)
+- [x] A 422, 409, 403, 404 or 429 shows its sentence and keeps the form filled (FlagDialog.test.tsx)
+- [x] Only a 200 shows "Thanks, a moderator will look.", with no count or outcome and no second request for the thread page; a 503 unavailable says the report could not be sent and keeps the form (FlagDialog.test.tsx, ThreadScreen.test.tsx)
+- [x] A kept flag whose auto-hide fails answers 200 {"received":true}, the error is logged, and the sweep hides the post; a flag on a quarantined thread answers 503 with no flags row (TestAutoHideRecoversFromAFailedAppend, TestAFailedHideAnswersTheReceipt, TestAQuarantinedThreadKeepsNoFlag)
+- [x] The dialog is modal: focus starts inside, Tab wraps, and Escape and Close close it. Focus then returns to the returnTo control the post handed over: the flag button on desktop, and the post's visible More button on a phone, never document.body (FlagDialog.test.tsx; ThreadScreen.test.tsx "flags a post from the page" and "flags a post from the phone's More")
+- [x] The server refuses a self-flag with 403 forbidden and writes no flags row, on the author's shown post and on their own hidden post. On the shown post another member's flag is accepted, and on the hidden post another member with no open flag gets conflict, as on main (TestFlagRefusesTheAuthor, TestFlagRouteRefusals)
 
 ## Implementation plan
 
@@ -197,3 +190,17 @@ Terva review 1516 on PR #181 (head 9fc6307), finding 3 (medium), accepted. This 
 **agent:claude-code/phase2-groom** at 2026-09-30T01:34:38Z
 
 Terva review 1525 on PR #181 (head 8bcf19f), two medium findings, both accepted. (1) On a phone, flag sits in PostMore, which closes when an item is chosen, so focus could not return to the flag item. The dialog is now told where to return: Post calls onFlag(ordinal, returnTo), with the flag button on desktop and the More button's ref on a phone. ThreadBody keeps it, and FlagDialog focuses it on unmount if it is still connected and visible, or else the post's article. Capturing document.activeElement at mount lost. New tests: 'flags a post from the phone's More' and 'returns focus where it is told'. (2) The self-flag criterion claimed another member's flag on the author's hidden post is accepted. On main, Flag answers conflict for a post that is not shown, unless that reporter already has an open flag (HasOpenFlag). The acceptance case is narrowed to the shown post, and the hidden-post case asserts conflict. No route change. Criteria 2 and 6 are replaced.
+
+**agent:claude-code/phase2-run-qqwa5z** at 2026-09-30T03:47:34Z
+
+Built on run/qqwa5z-flag-dialog from main at 052db1d. Three departures from the plan, each recorded in the revised plan as "Revised at claim".
+
+- The forbidden sentence is "You cannot flag this post. It is your own, or you no longer have access to it." threads.access also answers forbidden when read access to the thread was withdrawn after the page loaded. The plan's "You cannot flag your own post." would be untrue in that case, and the client cannot tell the two apart from the problem type.
+- The PostMore list items do not carry .hit. Each is drawn at least var(--target) high and as wide as the list, so the padding would add nothing. The More button carries .hit.
+- The e2e flow is a new e2e/flag.spec.ts, not an edit to replies.spec.ts, to keep clear of the Phase 2 exit lane's spec edits. Alice flags carol's #3 at both widths, and the second width is a repeat that gets the same receipt. One flag is under the threshold, so nothing on the page changes for other specs. targets.spec.ts's small() takes an optional root, because the open list covers the post below it. On the phone a radio is a 44 px box (appearance: none, the circle drawn by a gradient), because the target check presses 21 px beside each input.
+
+Evidence: go test -race ./... is green, and so are vitest (48 files, 1475 tests), tsc --noEmit -p . and Playwright (70 passed, 10 skipped by width). The thread view is 47363 B gzip, up from 45724 B on main (+1639 B, 78.9% of 60000 B). Each commit body lists the mutations tried against the tests; each was caught.
+
+## Summary
+
+Flag is in the post footer for a signed-in member on another member's shown post: between link and history on desktop, and under the new PostMore disclosure on a phone. FlagDialog sends {ordinal, reason, note} once per press, says the thanks only on 200, words each refusal with the form kept, and returns focus to the control the post handed over. On the server, threads.Service.Flag refuses a self-flag with forbidden, and a kept flag whose auto-hide fails answers the receipt beside threads.ErrHideDeferred, which the handler logs at warn, so unavailable now means nothing was kept. docs/07 and docs/08 say both. The dist is regenerated: the thread view is 47363 B gzip (+1639 B).
