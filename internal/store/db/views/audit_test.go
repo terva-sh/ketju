@@ -44,6 +44,8 @@ func insertAudit(t *testing.T, d *db.DB, rows ...auditRow) {
 	exec(t, d, stmts...)
 }
 
+func ms(n int64) *int64 { return &n }
+
 func auditPage(t *testing.T, d *db.DB, f AuditFilter) []int64 {
 	t.Helper()
 	if f.Limit == 0 {
@@ -99,14 +101,17 @@ func TestAuditPageFilters(t *testing.T) {
 		{"action prefix", AuditFilter{Action: "user.", ActionPrefix: true}, []int64{4, 3, 1}},
 		{"target type", AuditFilter{TargetType: "post"}, []int64{7, 6, 5}},
 		{"target", AuditFilter{TargetType: "post", TargetID: "3yymw47g00001/4"}, []int64{6, 5}},
-		{"from, inclusive", AuditFilter{From: 800}, []int64{10, 9, 8}},
-		{"to, exclusive", AuditFilter{To: 200}, []int64{6, 1}},
-		{"from and to", AuditFilter{From: 150, To: 400}, []int64{6, 3, 2}},
+		{"from, inclusive", AuditFilter{From: ms(800)}, []int64{10, 9, 8}},
+		{"to, exclusive", AuditFilter{To: ms(200)}, []int64{6, 1}},
+		{"from and to", AuditFilter{From: ms(150), To: ms(400)}, []int64{6, 3, 2}},
+		// 0 is a bound, not the absence of one.
+		{"to the epoch", AuditFilter{To: ms(0)}, []int64{}},
+		{"from the epoch", AuditFilter{From: ms(0)}, []int64{10, 9, 8, 7, 6, 5, 4, 3, 2, 1}},
 		{"actor and action prefix", AuditFilter{Actor: 1, Action: "post.", ActionPrefix: true}, []int64{6}},
 		{"system and target", AuditFilter{System: true, TargetType: "user", TargetID: "2"}, []int64{3}},
-		{"action and time", AuditFilter{Action: "post.", ActionPrefix: true, From: 400}, []int64{7, 5}},
+		{"action and time", AuditFilter{Action: "post.", ActionPrefix: true, From: ms(400)}, []int64{7, 5}},
 		{"everything", AuditFilter{Actor: 2, Action: "thread.", ActionPrefix: true, TargetType: "thread",
-			TargetID: "3yymw47g00001", From: 100, To: 950}, []int64{9, 2}},
+			TargetID: "3yymw47g00001", From: ms(100), To: ms(950)}, []int64{9, 2}},
 		{"before", AuditFilter{Before: 5}, []int64{4, 3, 2, 1}},
 		{"before with a filter", AuditFilter{Before: 9, Actor: 2}, []int64{5, 2}},
 		{"limit", AuditFilter{Limit: 3}, []int64{10, 9, 8}},

@@ -125,6 +125,9 @@ func TestAuditQueryParameters(t *testing.T) {
 		{"?target_type=user&target_id=5", []int64{expired}},
 		{"?from=2000", []int64{changed, expired}},
 		{"?to=2000", []int64{promoted}},
+		// 0 is a bound like any other: nothing was written before the epoch.
+		{"?to=0", []int64{}},
+		{"?from=0", []int64{changed, expired, promoted}},
 		{"?actor=nobody", []int64{}},
 	} {
 		rec := w.audit("admin", c.query)

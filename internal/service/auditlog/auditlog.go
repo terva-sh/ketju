@@ -138,7 +138,7 @@ func filter(in Query) (views.AuditFilter, error) {
 	}
 	for _, b := range []struct {
 		name, v string
-		to      *int64
+		to      **int64
 	}{{"from", in.From, &f.From}, {"to", in.To, &f.To}} {
 		if b.v == "" {
 			continue
@@ -147,7 +147,7 @@ func filter(in Query) (views.AuditFilter, error) {
 		if err != nil || n < 0 {
 			return f, badRequest("%s is %q; it is Unix ms", b.name, b.v)
 		}
-		*b.to = n
+		*b.to = &n
 	}
 	if in.Cursor != "" {
 		n, err := decodeCursor(in.Cursor)

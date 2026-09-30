@@ -29,8 +29,9 @@ type AuditFilter struct {
 	TargetID   string
 
 	// From is the first millisecond included and To the first one not, as
-	// Unix ms against the row's at. 0 does not bound.
-	From, To int64
+	// Unix ms against the row's at. nil does not bound; 0 is a bound like
+	// any other, so To of 0 selects only rows from before the epoch.
+	From, To *int64
 
 	// Before is the keyset cursor: only rows with a smaller id. 0 starts at
 	// the newest row.
@@ -103,13 +104,13 @@ func auditQuery(f AuditFilter) (string, []any) {
 			args = append(args, f.TargetID)
 		}
 	}
-	if f.From != 0 {
+	if f.From != nil {
 		where = append(where, "at >= ?")
-		args = append(args, f.From)
+		args = append(args, *f.From)
 	}
-	if f.To != 0 {
+	if f.To != nil {
 		where = append(where, "at < ?")
-		args = append(args, f.To)
+		args = append(args, *f.To)
 	}
 	if f.Before != 0 {
 		where = append(where, "id < ?")

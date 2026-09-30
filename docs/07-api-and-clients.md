@@ -515,7 +515,7 @@ is optional, and the ones given are combined:
 | `action` | one action, or every action starting with it when it ends in `.`, such as `user.` |
 | `target_type` | one of the target types in 04 "audit_log"; anything else is `bad-request` |
 | `target_id` | one thing of `target_type`, in that type's id format. Without `target_type` it is `bad-request` |
-| `from`, `to` | Unix ms: `from` the first included, `to` the first not. Anything but a non-negative integer is `bad-request` |
+| `from`, `to` | Unix ms: `from` the first included, `to` the first not. `0` is a bound like any other, so `to=0` selects nothing. Anything but a non-negative integer is `bad-request` |
 | `cursor` | the previous page's `next_cursor`. A cursor the server did not issue is `bad-request` |
 
 Each entry carries the row's `id`, `at`, `action`, `details` (the row's
