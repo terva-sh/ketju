@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3P0CYR3WQ2FKJWGVHXM9FFZ
 title: Add a rename control to the admin users screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ dependencies:
   - TKT-01M29CXK1X0EF4CPPN11KVGC2Z
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-p0cyr3
+  branch: run/p0cyr3-admin-rename
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a8acab4e0d1b65acf
+  commit: 6d1e9ab3ede0d38a86da5e615755621d9ddadafc
+  session: null
+  claimed_at: 2026-09-30T13:20:39Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T08:57:21Z
+updated_at: 2026-09-30T13:20:39Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-p0cyr3
   name: ""
 extensions: {}
 ---
