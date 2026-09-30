@@ -171,7 +171,10 @@ async function overrideInsets(cdp: CDPSession, insets: Partial<typeof inset>): P
 
 // winning is the value of the declaration that wins property for the element:
 // the inline style, else the last matched author rule that sets it, since
-// CSS.getMatchedStylesForNode lists matched rules in cascade order. None of
+// CSS.getMatchedStylesForNode lists matched rules in cascade order. The
+// padding shorthand sets it too (review 1581). Chromium lists a shorthand's
+// longhands beside it, so a later `padding: 5px` already reads as 5px, but
+// the shorthand is counted as well rather than trusted to that. None of
 // these bars sets the property !important, which the check refuses rather
 // than rank.
 async function winning(cdp: CDPSession, el: Locator, property: string): Promise<string | undefined> {
@@ -186,7 +189,7 @@ async function winning(cdp: CDPSession, el: Locator, property: string): Promise<
     expect(nodeId, 'the bar is in the document').toBeGreaterThan(0);
     const styles = await cdp.send('CSS.getMatchedStylesForNode', { nodeId });
     const sets = (props: { name: string; value: string; disabled?: boolean; parsedOk?: boolean; important?: boolean }[]) =>
-      props.filter((p) => p.name === property && !p.disabled && p.parsedOk !== false);
+      props.filter((p) => (p.name === property || p.name === 'padding') && !p.disabled && p.parsedOk !== false);
     const inline = sets(styles.inlineStyle?.cssProperties ?? []);
     if (inline.length > 0) return inline[inline.length - 1].value;
     const rules = (styles.matchedCSSRules ?? []).filter((m) => m.rule.origin !== 'user-agent');
