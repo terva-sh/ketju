@@ -27,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-30T02:25:06Z
+updated_at: 2026-09-30T02:28:07Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -53,7 +53,7 @@ Attachment images, which are same-origin, and `data:` images the sanitizer alrea
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming).
+Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Revised at claim on 2026-09-29 against main at c158b5f.
 
 ### Settled in grooming
 - **Remote images are rendered as links.** Decided 2026-09-28 in TKT-01M2K1JKS7, recorded in docs/07 (`:567-575`): "`img-src 'self' data:` ... stays, and the renderer turns a markdown image with a remote source into a plain link to its URL, so nothing renders broken and merely viewing the post sends nothing to the image's host." The link text is the alt text, or the URL when there is no alt text (this ticket's description). The CSP in `internal/web/security.go:114` does not change. A proxy and relaxing `img-src` both lost (docs/07).
@@ -66,30 +66,39 @@ Settled here as engineering choices, to be written into docs/07 beside the decis
 - **An image inside a link** (`[![alt](src)](href)`) becomes its alt text, or its URL when there is no alt text, as text inside the outer link. HTML cannot nest links, and a parser splits a nested `<a>` apart. Rendering the image's link after the outer one lost because it puts a second link where the author wrote one.
 - **The sanitizer is tightened as a second layer.** `img` keeps `src` only when it matches the attachment pattern (`p.AllowAttrs("src").Matching(attachmentSrc).OnElements("img")` in place of `AllowImages()`'s any-URL `src`). A remote image that reached the policy by any path other than the renderer, such as a future extension, then loses its `src` and never loads.
 
-### Approach
-1. `internal/render/image.go` (new): an `imageRenderer` registered for `ast.KindImage` through `html.WithNodeRenderers`, in the way `NewQuoteRenderer` and `NewMentionRenderer` are (`quote.go:288-296`, `mention.go:232-242`). Add it to the renderer list in `render.go:206-220`. It:
-   - renders an attachment destination (`attachmentSrc`, a `regexp` of `^/blobs/[0-9a-f]{64}$`) exactly as goldmark's `renderImage` does today;
-   - renders a non-attachment image as a link or as text, as settled above. Whether a URL is linkable is decided by the same rules the policy applies to `a[href]`, in one function `linkable(dest string) bool`, so the renderer cannot write a link the sanitizer would strip. The alt text is `n.Text(source)`, escaped;
-   - inside an `*ast.Link` ancestor, writes text only.
-2. `internal/render/policy.go`: replace `p.AllowImages()` with `p.AllowElements("img")`, `p.AllowAttrs("alt", "height", "width").OnElements("img")` and `p.AllowAttrs("src").Matching(attachmentSrc).OnElements("img")`. Also rewrite the stale comment at `:61-65`, which says external sources are permitted.
-3. `render.go`: `Version = 5`, and a line in the version history comment if there is one.
-4. Goldens under `internal/render/testdata/golden/`:
-   - `images.md` changes (all four of its images are remote), so run `go test ./internal/render -update` *after* the bump, as `TestRendererVersionTracksOutput` requires.
-   - New cases:
-     - `images-remote.md`: http, https, uppercase `HTTPS:`, `//host`, `/\host`, with alt, without alt, with a title;
-     - `images-attachment.md`: `/blobs/<hash>`, and near misses such as an uppercase hash, a short hash, `/blobs/<hash>/x` and `https://site/blobs/<hash>`, each of which must become a link;
-     - `images-nested.md`;
-     - `images-unsafe.md`: `data:image/png`, `javascript:`.
-5. docs/07: under the decision, add the settled rules above: the attachment pattern, link or text, the nested case, and the policy layer.
-6. No client code changes. The composer preview (`POST /api/v1/render`) uses the same renderer, so the dist does not change.
+
+### Approach (revised at claim)
+Read at c158b5f: goldmark is v2.1.1 (`renderImage` writes `<img src alt title>` through `ContextLinkURLWriter` and `ContextTextWriter`), bluemonday v1.0.27, and `render.Version` is 4.
+
+1. `internal/render/image.go` (new): `NewImageRenderer()`, an `html.Extension` that registers a node renderer for `ast.KindImage` through `html.WithNodeRenderers`, like `NewQuoteRenderer` and `NewMentionRenderer`, added to `mdRenderer` in `render.go`. It decides in this order:
+   - the destination matches `attachmentSrc` (`^/blobs/[0-9a-f]{64}$`, matched against the decoded destination): write the `<img>` exactly as goldmark's `renderImage` does, including inside a link, because an `<img>` inside an `<a>` nests no link;
+   - otherwise, when `linkable(dest)` is false (`data:`, `javascript:`, anything goldmark calls dangerous or the policy would drop from `a[href]`): write the alt text as plain text, and nothing when there is none;
+   - otherwise, inside an `*ast.Link` ancestor: write the alt text, or the URL when there is no alt text, as plain text;
+   - otherwise: `<a href="URL" title="...">alt or URL</a>`, the URL escaped by goldmark's link URL writer, as `renderLink` does.
+   The alt text is the image's inline text content (text, code spans, autolink labels and `@handle` as typed), written through goldmark's text writer so it is escaped the way goldmark escapes alt. "No alt text" means nothing but whitespace.
+   `linkable` asks the policy itself: it sanitizes `<a href="ESCAPED">x</a>`, built from the same escaped bytes the renderer would write, and reports whether `href` survived. A second copy of the scheme rules would drift from bluemonday; asking the policy cannot.
+2. `internal/render/policy.go`: replace `p.AllowImages()` with the rules it set minus the any-URL `src`: `img` with `align` (ImageAlign), `alt` (Paragraph), `height`/`width` (NumberOrPercent), and `src` only matching `attachmentSrc`. Keeping the other three rules unchanged keeps this ticket's change to the one decided. Rewrite the stale comment that says external sources are permitted.
+3. `render.go`: `Version = 5`, and a line saying why.
+4. Goldens: bump first, then `go test ./internal/render -update`. `images.md` changes. New cases `images-remote`, `images-attachment`, `images-nested`, `images-unsafe`, as the grooming plan lists.
+5. docs/07: under the 2026-09-28 decision, the rules above.
+6. No client change; `go generate ./internal/web/spa` must leave `internal/web/spa/dist` byte-identical.
+
+### How existing rendered HTML picks up the change
+Nothing is re-rendered or migrated, because rendered HTML is never persisted: the thread logs and the database hold sources only (`render/cache.go`). Bumping `render.Version` to 5 retires every cached rendering at once:
+- the in-process render cache keys on `Key.Version` (`render/cache.go`);
+- the response cache keys on `Renderer: render.Version` (`service/threads/cached.go:50`);
+- every thread ETag carries `r<Version>` (`service/threads/view.go:419`), and thread responses are `private, no-cache`, so a browser holding version-4 HTML revalidates, misses the ETag, and gets version-5 HTML.
+
+Profile bios (`threads/userposts.go`) and form help text (`forms/forms.go`) render on every read, so they change on deploy. No cache key or storage change is needed.
 
 ### Tests
 - The golden cases above, with `pipeline.sum` at version 5.
-- `TestRemoteImageIsNeverAnImg` (`render_test.go`): over a table of remote sources, the output has no `<img` and has an `<a href="...">`. This is criterion 1.
-- `TestAttachmentImageStaysAnImg`: `/blobs/<hash>` renders `<img src="/blobs/<hash>" alt="...">`. This is criterion 2.
-- `TestPolicyDropsNonAttachmentImgSrc` (`policy_test.go`): raw `<img src="https://x">` through `Policy().Sanitize` keeps no `src`, and `/blobs/<hash>` keeps it.
-- `TestLinkableMatchesThePolicy`: for each URL in a table, `linkable` agrees with whether the policy keeps `a[href]`.
-- The existing `policy_test.go` cases (`:93`, `:98`, `:101`) still pass `assertSafe`.
+- `TestRemoteImageIsNeverAnImg` (`image_test.go`): http, https, `HTTPS:`, `//host`, `/\host`, relative, with and without alt; no `<img`, and an `<a href>` to the URL.
+- `TestAttachmentImageStaysAnImg`: `/blobs/<hash>` renders `<img src="/blobs/<hash>" alt="...">`; near misses (uppercase, short, suffix, absolute URL, query) render as links.
+- `TestNestedAndUnsafeImages`: an image in a link is text in that link with one `<a>`; `data:` and `javascript:` images are alt text and no `<img>`.
+- `TestPolicyDropsNonAttachmentImgSrc` (`policy_test.go`): raw `<img src="https://x">` keeps no `src`; `/blobs/<hash>` keeps it.
+- `TestLinkableMatchesThePolicy`: for a table of URLs, `linkable` agrees with whether a markdown link `[x](url)` through the full pipeline keeps its `href`.
+- Existing `policy_test.go` safety cases still pass `assertSafe`.
 
 ### Out of scope
 - The attachment upload and attach paths, and the URL an attachment is written with in a post. That is TKT-01M29CXK0 (phase-3). If it chooses a URL form other than `/blobs/<hash>`, it changes `attachmentSrc` and bumps `Version`.
