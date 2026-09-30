@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
+import { paceAuth } from './session';
 
 // The application screens (TKT-01M29CP2NG), at 390 px and 1440 px: an
 // approval-mode applicant signs in through the fake provider, lands on the
@@ -11,7 +12,9 @@ import { expect, test, type Page } from '@playwright/test';
 // Each project signs in as its own applicant (cmd/ketju e2e.go
 // seedApplicants), because an identity may submit one application a day.
 // A sign-in costs two of the ten /auth/* requests allowed in a burst
-// (docs/08); see e2e/session.ts.
+// (docs/08). The spec first waits for the limiter to refill two
+// (paceAuth), so the sign-in holds however fast the specs before it ran
+// and however little they left; see the budget in e2e/session.ts.
 
 const applicants: Record<string, string> = { phone: 'dana', desktop: 'erin' };
 
@@ -32,6 +35,7 @@ test('an applicant applies and waits on the status page', async ({ page }, info)
   expect(who, `an applicant for the ${info.project.name} project`).toBeDefined();
 
   await test.step('sign in, and land on the form', async () => {
+    await paceAuth(2);
     // A first sign-in goes to the form; one after an application goes to
     // the status page (docs/05 "mode = approval" step 1).
     await page.goto('/auth/fake/start');
