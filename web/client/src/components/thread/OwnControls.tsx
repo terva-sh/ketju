@@ -137,7 +137,9 @@ export function useOwn(own: Own | undefined, ordinal: number) {
       setBusy(false);
     }
   };
-  return { mode: own ? mode : null, offer, failure, busy, open, close, send, deleteUntil: own?.deleteUntil ?? null };
+  // refresh asks for the page again, for a refusal that says it is stale.
+  const refresh = () => own?.onChanged();
+  return { mode: own ? mode : null, offer, failure, busy, open, close, send, refresh, deleteUntil: own?.deleteUntil ?? null };
 }
 
 // withdrawn is what an open editor or confirmation says once its control is
@@ -153,7 +155,9 @@ function note(o: OwnState, kind: 'edit' | 'delete'): string | null {
 
 // DeleteConfirm asks before a delete, inline in the post, and says until when
 // the author can restore it. Cancel has focus when it opens, so a second
-// Enter does not delete; Escape cancels.
+// Enter does not delete; Escape cancels. Neither closes it while the delete
+// is in flight, since a refusal is said here and would have nowhere to go
+// (Terva review 1610).
 export function DeleteConfirm({ o, ordinal }: { o: OwnState; ordinal: number }) {
   const cancel = useRef<HTMLButtonElement>(null);
   useEffect(() => cancel.current?.focus(), []);
@@ -167,7 +171,7 @@ export function DeleteConfirm({ o, ordinal }: { o: OwnState; ordinal: number }) 
       onKeyDown={(e) => {
         if (e.key !== 'Escape' || e.defaultPrevented) return;
         e.preventDefault();
-        o.close('delete');
+        if (!o.busy) o.close('delete');
       }}
     >
       <p>
@@ -187,7 +191,7 @@ export function DeleteConfirm({ o, ordinal }: { o: OwnState; ordinal: number }) 
         <button type="button" class="own-send" disabled={!o.offer.delete || o.busy} onClick={() => void o.send('delete')}>
           Delete
         </button>
-        <button type="button" ref={cancel} onClick={() => o.close('delete')}>
+        <button type="button" ref={cancel} disabled={o.busy} onClick={() => o.close('delete')}>
           Cancel
         </button>
       </div>
@@ -210,7 +214,10 @@ function Until({ at }: { at: number }) {
 // the author or a moderator and is never held on the client (no ETag), and
 // saves with PATCH {source}. It is not a draft: closing it drops the text.
 // A save that is refused keeps the text, says why, and leaves Save off while
-// the offer is withdrawn.
+// the offer is withdrawn. Cancel is off while a save is in flight, so the
+// text and the answer's words are still there when it comes back (Terva
+// review 1610). A refusal to load the source that says the page is stale
+// asks for the page again, as a refused save does.
 export function PostEditor({
   o,
   thread,
@@ -236,7 +243,9 @@ export function PostEditor({
         setLoaded({ source: r.source });
       },
       (err) => {
-        if (!ctl.signal.aborted && !isAbort(err)) setLoaded({ error: err });
+        if (ctl.signal.aborted || isAbort(err)) return;
+        setLoaded({ error: err });
+        if (stale(err)) o.refresh();
       },
     );
     return () => ctl.abort();
@@ -256,7 +265,7 @@ export function PostEditor({
   }, [loaded]);
 
   const cancel = (
-    <button type="button" class="discard" onClick={() => o.close('edit')}>
+    <button type="button" class="discard" disabled={o.busy} onClick={() => o.close('edit')}>
       Cancel
     </button>
   );
@@ -267,7 +276,7 @@ export function PostEditor({
           <p>Loading the post…</p>
         ) : (
           <p class="own-failure" role="alert">
-            {problemMessage(loaded.error).text}
+            {ownFailure('edit', loaded.error)}
           </p>
         )}
         <div class="own-buttons">

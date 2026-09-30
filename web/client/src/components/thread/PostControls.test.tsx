@@ -60,7 +60,7 @@ const created = (log: number): Answer => ({
 // pages answers the thread GETs in turn, the last one again for any later
 // request; a Promise holds its answer until it settles.
 let pages: (ThreadPage | Promise<ThreadPage>)[];
-let routes: Record<string, (b: unknown) => Answer>;
+let routes: Record<string, (b: unknown) => Answer | Promise<Answer>>;
 let server: StubServer;
 const saved = viewer.value;
 beforeEach(() => {
@@ -354,6 +354,52 @@ describe("the viewer's own post", () => {
     expect(footer(root)).toEqual(['quote', 'reply']);
     // Neither refusal asked for the page again.
     expect(gets()).toBe(1);
+  });
+
+  // Terva review 1610, finding 1: Cancel would drop the text and the
+  // answer's words while a save was in flight.
+  it('a save in flight keeps the editor open', async () => {
+    let answer!: (a: Answer) => void;
+    routes[`PATCH ${postUrl}`] = () => new Promise<Answer>((r) => (answer = r));
+    const root = await renderAt(`/t/${id}/a`);
+    await click(control(root, 'edit'));
+    await type(root, 'held words');
+    await click(save(root));
+    const cancel = [...editor(root)!.querySelectorAll<HTMLButtonElement>('.composer-foot button')].find((b) => b.textContent === 'Cancel')!;
+    expect(cancel.disabled).toBe(true);
+    expect(save(root).textContent).toBe('Saving…');
+    expect(area(root).readOnly).toBe(true);
+    await act(async () => answer(problemAnswer('validation-failed', 422)));
+    await wait();
+    expect(editor(root)!.querySelector('[role=alert]')?.textContent).toBe(
+      'The post was not accepted: it may be empty, or quote a post that is not in this thread.',
+    );
+    expect(area(root).value).toBe('held words');
+    expect(cancel.disabled).toBe(false);
+  });
+
+  it('a delete in flight keeps the confirmation open', async () => {
+    let answer!: (a: Answer) => void;
+    routes[`DELETE ${postUrl}`] = () => new Promise<Answer>((r) => (answer = r));
+    const root = await renderAt(`/t/${id}/a`);
+    await click(control(root, 'delete'));
+    await click(confirmButton(root, 'Delete'));
+    expect(confirmButton(root, 'Cancel').disabled).toBe(true);
+    await act(async () => void confirmOf(root)!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(confirmOf(root)).not.toBeNull();
+    await act(async () => answer(problemAnswer('unavailable', 503)));
+    await wait();
+    expect(confirmOf(root)!.querySelector('[role=alert]')?.textContent).toBe('The server is briefly unavailable. Try again shortly.');
+    expect(confirmButton(root, 'Cancel').disabled).toBe(false);
+  });
+
+  // Terva review 1610, finding 2.
+  it('a stale refusal of the source asks for the page again', async () => {
+    routes[`GET ${postUrl}/source`] = () => problemAnswer('forbidden', 403);
+    const root = await renderAt(`/t/${id}/a`);
+    await click(control(root, 'edit'));
+    expect(editor(root)?.querySelector('[role=alert]')?.textContent).toBe('You may no longer edit this post.');
+    expect(gets()).toBe(2);
   });
 
   it('a conflict says so and asks for the page again', async () => {
