@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-30T10:59:06Z
+updated_at: 2026-09-30T11:15:20Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
@@ -54,11 +54,11 @@ What the groomed plan asked of the client:
 
 ## Acceptance criteria
 
-- [ ] Each action sends the body its route takes ({reason} or {}, {scope, until}, {scope} of the active pin), and the answer's header shows at once and invalidates the cached pages at the old log length (ThreadScreen.test.tsx, threads.test.ts)
-- [ ] The thread head shows a locked thread's notice and an active pin's scope and end, a 409 keeps the panel open and refetches, and a member's composer is absent when can_reply is false (ThreadScreen.test.tsx)
+- [x] Each action sends the body its route takes ({reason} or {}, {scope, until}, {scope} of the active pin), and the answer's header shows at once and invalidates the cached pages at the old log length (ThreadScreen.test.tsx, threads.test.ts)
+- [x] The thread head shows a locked thread's notice and an active pin's scope and end, a 409 keeps the panel open and refetches, and a member's composer is absent when can_reply is false (ThreadScreen.test.tsx)
 - [ ] Nothing imports from screens/admin, the thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
-- [ ] The thread actions offer Lock or Unlock, and Pin or Unpin, by the header's state, whenever viewer.can_moderate is true, whatever the role, and never when it is false (threadActions.test.ts, ThreadScreen.test.tsx 'a moderator sees the moderation actions')
-- [ ] The global scope, Unpin of a global pin, and Pin over a global pin are offered only when the viewer's role is moderator or admin (threadActions.test.ts 'a global pin is staff's', ThreadScreen.test.tsx 'a group moderator is not offered a global pin')
+- [x] The thread actions offer Lock or Unlock, and Pin or Unpin, by the header's state, whenever viewer.can_moderate is true, whatever the role, and never when it is false (threadActions.test.ts, ThreadScreen.test.tsx 'a moderator sees the moderation actions')
+- [x] The global scope, Unpin of a global pin, and Pin over a global pin are offered only when the viewer's role is moderator or admin (threadActions.test.ts 'a global pin is staff's', ThreadScreen.test.tsx 'a group moderator is not offered a global pin')
 
 ## Implementation plan
 
@@ -150,3 +150,15 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. The routes are behind 
 **agent:claude-code/phase2-groom** at 2026-09-30T09:17:52Z
 
 Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) By the maintainer decision of 2026-09-30 (docs/08) and TKT-01M3RQP0TG, the actions are offered on viewer.can_moderate alone. A group-granted moderator now gets them, and the role test is gone. Criterion 1 was replaced by criterion 4. The 'Who may act' item is carried verbatim and marked superseded. (2) A global pin stays staff's by role (TKT-01M3RQP0TG), so the global radio, and Unpin and Pin over a global pin, need a role of moderator or admin. New criterion 5. (3) The plan now names what #202 put on the thread screen (onFlag, mayFlag, PostMore, FlagDialog with trapTab, apiSend's status option), uses apiSend with status 200, adds the forbidden words, and uses the bundle figure of 47415 of 60000 B. (4) Out of scope no longer defers who may act to the design: that is TKT-01M3RQP0TG's.
+
+**agent:claude-code/phase2-run-qgh66w** at 2026-09-30T11:15:20Z
+
+Built on a local branch from main at f388921, not yet pushed: the client dist is held by another lane (PR #213), and docs/13 allows one open dist PR at a time. Criterion 3 stays unticked until the dist is regenerated and committed after replaying onto main.
+
+Checks run locally: `npx tsc --noEmit -p .`; Vitest 49 files, 1515 tests; `npm run build`, whose reader bundle measured 49007 B gzip against 47415 B on main, +1592 B, 81.7% of 60000 B. Playwright passed on port 8797 with the new `e2e/thread-moderation.spec.ts` at both widths. The desktop smoke spec failed once in a full local run, on the /auth rate limit (a 429 on sign-in, 10 per burst and one every 6 s, internal/web/ratelimit.go). That spec signs in again, and this change adds no sign-in. The desktop project run alone then passed, 38 passed and 6 skipped.
+
+Mutations tried against the tests are listed in the commit body. Every one was caught except removing the panel's thread check alone, which the reset on navigation also covers. Removing both is caught.
+
+Two choices made beyond the plan and its "Revised on claim", recorded here:
+- The pin panel sends scope `forum` whenever the viewer is not staff, even if the global radio was chosen before the role went. The test 'pins in the forum once the viewer is no longer staff' covers it.
+- A refusal of type not-found, gone or unauthenticated also asks for the page again, as conflict and forbidden do, because each changes what the page may show.
