@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3MTQG5ATJPTEPZHNBYHAHBF
 title: Stop Playwright checks timing out under CI runner contention
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-mtqg5a
+  branch: run/mtqg5a-playwright-contention
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa13a7c1a9ba735db
+  commit: 0ece8913bbe21d0ea8f65bc4b1f6ee530da827ca
+  session: null
+  claimed_at: 2026-09-30T11:03:50Z
+  expires_at: null
 archive: null
 created_at: 2026-09-28T20:19:02Z
-updated_at: 2026-09-30T08:52:39Z
+updated_at: 2026-09-30T11:03:54Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-mtqg5a
   name: ""
 extensions: {}
 ---
