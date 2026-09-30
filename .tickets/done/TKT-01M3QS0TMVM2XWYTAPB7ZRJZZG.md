@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QS0TMVM2XWYTAPB7ZRJZZG
 title: Link to the link-a-sign-in page from the client
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ dependencies:
   - TKT-01M29CKRES18SZSCQRV8XSNBT2
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qs0tmv
-  branch: run/qs0tmv-link-sign-in
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5586a3f3215d1594
-  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
-  session: null
-  claimed_at: 2026-09-30T18:43:10Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T23:46:54Z
-updated_at: 2026-09-30T18:45:00Z
+updated_at: 2026-09-30T19:39:42Z
 created_by:
   id: agent:claude-code/phase2-run-KRES
   name: ""
@@ -52,10 +45,10 @@ This ticket adds a way to reach it from the client before then: a "Link a sign-i
 
 ## Acceptance criteria
 
-- [ ] The entry is absent for a signed-out reader and for a pre-user (user null, pre_user set) (LinkSignIn or Shell test)
-- [ ] The entry is a plain anchor to linkSignInHref(url) = /auth/link?return_to= plus the encoded current path and query, and /auth/link is outside clientScope (nav and routes.test.tsx)
-- [ ] The dist from go generate ./internal/web/spa is committed and the thread-view bundle stays under threadViewGzipBytes in budget.json
-- [ ] At 390 px and 1440 px a signed-in member presses their handle or the Me tab, then "Link a sign-in" in the Account block of their own profile page, and lands on the server's /auth/link page; another member's profile has no entry (e2e/link-sign-in.spec.ts)
+- [x] The entry is absent for a signed-out reader and for a pre-user (user null, pre_user set) (LinkSignIn or Shell test)
+- [x] The entry is a plain anchor to linkSignInHref(url) = /auth/link?return_to= plus the encoded current path and query, and /auth/link is outside clientScope (nav and routes.test.tsx)
+- [x] The dist from go generate ./internal/web/spa is committed and the thread-view bundle stays under threadViewGzipBytes in budget.json
+- [x] At 390 px and 1440 px a signed-in member presses their handle or the Me tab, then "Link a sign-in" in the Account block of their own profile page, and lands on the server's /auth/link page; another member's profile has no entry (e2e/link-sign-in.spec.ts)
 
 ## Implementation plan
 
@@ -132,3 +125,40 @@ Terva review 1516 on PR #181 (head 9fc6307), finding 1 (medium), accepted. The e
 **agent:claude-code/phase2-groom** at 2026-09-30T08:53:28Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. Nothing it builds has landed, and /u/:handle is still the placeholder (routes.tsx:129); PR #186's handle redirects are server-side (api.ProfileRedirects) and do not touch the client route. Corrected in the Settled items, with their decisions unchanged: a linked identity signs in through session.IssueUser's status check, not IssueUserWith (login.go:170); the docs/13 heading is now 'Running two lanes, changed'. Corrected elsewhere: the routes.test.tsx table is the clientScope one at :203-217, which holds //ketju.test/auth/logout; the e2e provider is the fake one; .hit lives in styles/base.css. Settled as engineering choices, with the alternatives that lost in the plan: the own-profile check folds ASCII only, as NormalizeHandle does; user !== null stays the only viewer check, since an agent never has a browser session and /auth/link refuses agents; and the e2e spec waits out the /auth/* limiter (burst 10, setup spends 8) through phase2-exit.spec.ts's through() helper, which this ticket moves into e2e/session.ts for TKT-01M3QVWKAG to share. Component tests build viewers from the /me goldens, since Me gained queue. Budget reference: 47415 of 60000 B. The criteria are unchanged and still checkable.
+
+**agent:claude-code/phase2-run-qs0tmv** at 2026-09-30T19:39:21Z
+
+Built on main at cd485ef, after TKT-01M3PTT97X (PR #243). The work was first built on 13709f0 while another lane held the dist, then replayed onto cd485ef without the old dist commit, and the dist was regenerated.
+
+Reader bundle: 57204 B gzip of 70000 B, against 56988 B on main at cd485ef, so +216 B. On 13709f0 the delta was +217 B (54924 to 55141 B).
+
+Evidence for the criteria:
+- AC1: `shell/LinkSignIn.test.tsx` covers a signed-out reader, a pre-user (the pre_user golden) and a viewer who signs out while on the page.
+- AC2: `linkSignInHref` in `shell/nav.ts`. The `clientScope %s` table in `routes.test.tsx` now holds `/auth/link`, `/auth/link?return_to=%2F` and `/auth/link?return_to=%2Fu%2Falice`.
+- AC3: the dist commit, and `npm run budget`.
+- AC4: `e2e/link-sign-in.spec.ts`, in both projects.
+
+The spec paces itself with `paceAuth(1)` and has its row in the budget in `e2e/session.ts`, per "Revised at claim" in the plan. `signIn` and `through()` are unchanged.
+
+Local runs on cd485ef:
+- tsc, and vitest (1906 passed).
+- `npm run budget`.
+- gofmt, `go build`, `go vet` and `go test -race`.
+- The `/auth/*` spenders alone, back to back: `npx playwright test e2e/apply.spec.ts e2e/phase2-exit.spec.ts e2e/sign-in.spec.ts e2e/smoke.spec.ts e2e/link-sign-in.spec.ts` passed 20 of 20. It also passed 20 of 20 on 13709f0.
+- The full Playwright suite passed on both bases, 181 passed and 11 skipped each time.
+
+Beside #243: `isOwn` (`components/thread/postControls.ts`) compares two server-given handles with `toLowerCase`, which is harmless because both are stored handles. `sameHandle` here compares a handle typed in the URL, which is why it keeps the settled ASCII-only fold. The two do not overlap, and `isOwn` is left as it is.
+
+## Summary
+
+A signed-in member now reaches the server's "link a sign-in" page from the client.
+
+On the member's own profile, `/u/{handle}`, an Account block holds "Link a sign-in", a plain anchor to `/auth/link?return_to=/u/{handle}`. The top bar's handle and the phone's Me tab already lead to that profile. The block is shown only when `/me` gives a user, and only when the route's handle and the viewer's handle match under the ASCII-only fold (`sameHandle` in `shell/nav.ts`). The profile is still a placeholder; `screens/ProfilePlaceholder.tsx` serves the route and passes the block to `Placeholder` as children.
+
+`linkSignInHref` builds the address, and `/auth/link` is outside `clientScope`, so pressing the link is a full page load of the server's page.
+
+`e2e/link-sign-in.spec.ts` covers the flow at 390 px and 1440 px. It spends one `/auth/*` request per project, calls `paceAuth(1)` first, and has its row in the budget in `e2e/session.ts`.
+
+The reader bundle grew by 216 B, to 57204 of 70000 B. No server code changed.
+
+Next: TKT-01M3QVWKAG adds Sign out to the same `[data-account]` block. When TKT-01M29CXK4 builds `/settings/identities`, its "add" button is `linkSignInHref`.
