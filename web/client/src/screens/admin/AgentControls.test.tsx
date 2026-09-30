@@ -429,6 +429,127 @@ describe('changes in flight together', () => {
   });
 });
 
+// Terva review 1508, finding 1: an issue and a revoke never run together, so
+// neither can answer after the other and undo it on screen.
+describe('one token change at a time', () => {
+  it('holds a revoke until an issue has answered', async () => {
+    let answerIssue!: (a: Answer) => void;
+    routes['POST /api/v1/admin/users/scribe/credential'] = () => new Promise<Answer>((r) => (answerIssue = r));
+    const revoked = structuredClone(agentDetail) as AdminUserDetail;
+    revoked.agent!.credential = null;
+    routes['DELETE /api/v1/admin/users/scribe/credential'] = () => {
+      routes['GET /api/v1/admin/users/scribe'] = () => ({ status: 200, body: revoked });
+      return { status: 204 };
+    };
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const panel = root.querySelector('[data-agent-panel]')!;
+    const asking = (label: string) => panel.querySelector(`.admin-confirm[aria-label="${label}"]`)!;
+
+    // Both confirmations open, then the issue confirmed and still in flight.
+    await press(root, panel, 'Revoke');
+    await press(root, panel, 'Issue new token');
+    const revokeAsk = asking('Revoke');
+    const issueAsk = asking('Issue new token');
+    await press(root, issueAsk, 'Confirm');
+    await press(root, revokeAsk, 'Confirm');
+    expect(sent.some((s) => s.method === 'DELETE')).toBe(false);
+    expect(panel.querySelector('.admin-error')!.textContent).toContain('Another token change is still being made');
+
+    await act(async () => answerIssue({ status: 201, body: { ...issuedGolden, token: issuedToken } }));
+    await settle(root);
+    expect(tokenInput(root)!.value).toBe(issuedToken);
+    await press(root, revokeAsk, 'Confirm');
+    expect(sent.filter((s) => s.method === 'DELETE')).toHaveLength(1);
+    expect(root.querySelector('[data-token-panel]')).toBeNull();
+    expect(panel.querySelector('[data-no-credential]')).not.toBeNull();
+  });
+
+  it('disables the other token action while one is in flight', async () => {
+    let answerIssue!: (a: Answer) => void;
+    routes['POST /api/v1/admin/users/scribe/credential'] = () => new Promise<Answer>((r) => (answerIssue = r));
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const panel = root.querySelector('[data-agent-panel]')!;
+    await press(root, panel, 'Issue new token');
+    await press(root, panel, 'Confirm');
+    expect(button(panel, 'Revoke').disabled).toBe(true);
+    await act(async () => answerIssue({ status: 201, body: issuedGolden }));
+    await settle(root);
+    expect(button(panel, 'Revoke').disabled).toBe(false);
+  });
+});
+
+// Terva review 1508, finding 2: the refetch after a token change sets the
+// agent's fields only.
+describe('the refetch after a token change', () => {
+  it('does not undo a role change that answered while it was in flight', async () => {
+    const moderator = structuredClone(agentDetail) as AdminUserDetail;
+    moderator.user.user.role = 'moderator';
+    const later = structuredClone(agentDetail) as AdminUserDetail; // role member, as the GET began
+    later.agent!.credential = { created_at: issuedGolden.created_at, last_used_at: 1757800000000 };
+    let answerGet!: (a: Answer) => void;
+    routes['POST /api/v1/admin/users/scribe/credential'] = () => {
+      routes['GET /api/v1/admin/users/scribe'] = () => new Promise<Answer>((r) => (answerGet = r));
+      return { status: 201, body: issuedGolden };
+    };
+    routes['PUT /api/v1/admin/users/scribe/role'] = () => ({ status: 200, body: moderator });
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const detail = root.querySelector('[data-detail="scribe"]')!;
+    const panel = detail.querySelector('[data-agent-panel]')!;
+    await press(root, panel, 'Issue new token');
+    await press(root, panel, 'Confirm');
+
+    const select = detail.querySelector<HTMLSelectElement>('.admin-role select')!;
+    await act(async () => {
+      select.value = 'moderator';
+      select.dispatchEvent(new Event('change'));
+    });
+    await press(root, detail, 'Change role');
+    await press(root, detail, 'Confirm');
+    expect(detail.querySelector('[data-role]')!.textContent).toBe('moderator');
+
+    await act(async () => answerGet({ status: 200, body: later }));
+    await settle(root);
+    expect(detail.querySelector('[data-role]')!.textContent).toBe('moderator');
+    expect(panel.querySelector('[data-last-used]')!.textContent).not.toBe('never');
+  });
+
+  it('a role answer that arrives after a new token does not bring the old token back', async () => {
+    const moderator = structuredClone(agentDetail) as AdminUserDetail; // the old credential
+    moderator.user.user.role = 'moderator';
+    let answerRole!: (a: Answer) => void;
+    routes['PUT /api/v1/admin/users/scribe/role'] = () => new Promise<Answer>((r) => (answerRole = r));
+    const replaced = structuredClone(agentDetail) as AdminUserDetail;
+    replaced.agent!.credential = { created_at: issuedGolden.created_at, last_used_at: null };
+    routes['POST /api/v1/admin/users/scribe/credential'] = () => {
+      routes['GET /api/v1/admin/users/scribe'] = () => ({ status: 200, body: replaced });
+      return { status: 201, body: issuedGolden };
+    };
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const detail = root.querySelector('[data-detail="scribe"]')!;
+    const select = detail.querySelector<HTMLSelectElement>('.admin-role select')!;
+    await act(async () => {
+      select.value = 'moderator';
+      select.dispatchEvent(new Event('change'));
+    });
+    await press(root, detail, 'Change role');
+    await press(root, detail.querySelector('.admin-role')!, 'Confirm');
+
+    const panel = detail.querySelector('[data-agent-panel]')!;
+    await press(root, panel, 'Issue new token');
+    await press(root, panel, 'Confirm');
+    expect(panel.querySelector('[data-last-used]')!.textContent).toBe('never');
+
+    await act(async () => answerRole({ status: 200, body: moderator }));
+    await settle(root);
+    expect(detail.querySelector('[data-role]')!.textContent).toBe('moderator');
+    expect(panel.querySelector('[data-last-used]')!.textContent).toBe('never');
+  });
+});
+
 describe('an agent’s write limits', () => {
   const limitInputs = (root: HTMLElement) => ({
     burst: root.querySelector<HTMLInputElement>('[data-burst]')!,

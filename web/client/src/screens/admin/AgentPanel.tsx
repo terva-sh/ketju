@@ -42,7 +42,13 @@ export function AgentPanel({
   const [token, setToken] = useState<IssuedCredential | null>(() => issued);
   const [failed, setFailed] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [issuing, setIssuing] = useState(false);
+  // pending is a token change in flight. Only one runs at a time: an issue
+  // and a revoke answering out of order could otherwise show a revoked
+  // token as live (Terva review 1508). The ref holds the lock, so a
+  // confirmation already open cannot slip past it; the state disables the
+  // buttons.
+  const [pending, setPending] = useState(false);
+  const inFlight = useRef(false);
   const heading = useRef<HTMLHeadingElement>(null);
   useEffect(() => {
     if (issued) onIssuedTaken();
@@ -52,9 +58,10 @@ export function AgentPanel({
   // Each change's answer is applied to the detail on screen when it
   // arrives, by the fields that change made: a token issued while a limits
   // save is in flight is not undone by the save's answer, nor the limits by
-  // the issue's (Terva review 1507). version orders the one full
-  // replacement, the refetch after issuing or revoking: it applies only if
-  // no change answered while it was in flight.
+  // the issue's (Terva review 1507). The refetch after issuing or revoking
+  // sets the agent's fields only, so a role or group change in the rest of
+  // the detail stands (Terva review 1508), and version drops it if an agent
+  // change answered while it was in flight.
   const version = useRef(0);
   const apply = (change: (a: AgentInfo) => AgentInfo) => {
     version.current++;
@@ -64,7 +71,7 @@ export function AgentPanel({
     const mine = ++version.current;
     try {
       const next = await apiGet<AdminUserDetail>(url);
-      if (mine === version.current) onDetail(() => next);
+      if (mine === version.current) onDetail((now) => ({ ...now, agent: next.agent }));
     } catch {
       // The change was made and is already shown; a failed refetch leaves
       // that in place rather than replacing it with an error.
@@ -78,7 +85,22 @@ export function AgentPanel({
     apply((a) => ({ ...a, burst, refill_seconds, default_burst, default_refill_seconds }));
   };
 
-  const issue = async () => {
+  const oneAtATime = (change: () => Promise<boolean | void>) => async () => {
+    if (inFlight.current) {
+      setFailed('Another token change is still being made. Try again when it finishes.');
+      return false;
+    }
+    inFlight.current = true;
+    setPending(true);
+    try {
+      return await change();
+    } finally {
+      inFlight.current = false;
+      setPending(false);
+    }
+  };
+
+  const issue = oneAtATime(async () => {
     const r = await send<IssuedCredential>('POST', `${url}/credential`);
     if (!r.ok) {
       setFailed(isProblem(r.error, 'conflict') ? 'Only an active agent can be given a token.' : r.message);
@@ -89,16 +111,8 @@ export function AgentPanel({
     setToken(r.value);
     withCredential({ created_at: r.value.created_at, last_used_at: null });
     void refresh();
-  };
-  const issueFirst = async () => {
-    setIssuing(true);
-    try {
-      await issue();
-    } finally {
-      setIssuing(false);
-    }
-  };
-  const revoke = async () => {
+  });
+  const revoke = oneAtATime(async () => {
     const r = await send('DELETE', `${url}/credential`);
     // not-found is another admin having revoked it first: the answer the
     // admin wanted, already true.
@@ -113,7 +127,7 @@ export function AgentPanel({
     withCredential(null);
     heading.current?.focus();
     void refresh();
-  };
+  });
   const done = () => {
     setToken(null);
     heading.current?.focus();
@@ -144,17 +158,19 @@ export function AgentPanel({
             <ConfirmButton
               label="Issue new token"
               prompt={`Issue a new token for ${handle}? The current token stops working at once.`}
+              disabled={pending}
               onConfirm={issue}
             />
             <ConfirmButton
               label="Revoke"
               danger
               prompt={`Revoke ${handle}'s token? It stops working at once.`}
+              disabled={pending}
               onConfirm={revoke}
             />
           </>
         ) : (
-          <button type="button" class="admin-button" disabled={issuing} onClick={issueFirst}>
+          <button type="button" class="admin-button" disabled={pending} onClick={() => void issue()}>
             Issue token
           </button>
         )}

@@ -276,7 +276,10 @@ function UserDetail({
   const [failed, setFailed] = useState<string | null>(null);
   const d = fresh ?? res.data;
   // shown is the detail on screen now, for a change that answers after the
-  // render that started it (AgentPanel's update, Terva review 1507).
+  // render that started it. Every change applies its answer to that, by the
+  // fields it made, so changes in flight together do not undo each other on
+  // screen: a role answer keeps a token issued meanwhile, and a token
+  // answer keeps the role (Terva reviews 1507 and 1508).
   const shown = useRef(d);
   shown.current = d;
   const update = (change: (d: AdminUserDetail) => AdminUserDetail) =>
@@ -312,7 +315,7 @@ function UserDetail({
       return false;
     }
     setFailed(null);
-    setFresh(r.value);
+    update((now) => ({ ...r.value, agent: now.agent }));
     setRole(null);
     onRoleChanged();
   };
@@ -323,7 +326,7 @@ function UserDetail({
       return false;
     }
     setFailed(null);
-    setFresh({ ...d, groups: d.groups.filter((g) => g.group.id !== groupID) });
+    update((now) => ({ ...now, groups: now.groups.filter((g) => g.group.id !== groupID) }));
   };
 
   return (
