@@ -130,8 +130,9 @@ its ticket says:
 - **The frozen log format.** New record types are claimed by docs/03's
   procedure. New optional fields are allowed. The index flag bits are
   assigned in docs/03.
-- **The client bundle budget** is 60000 B gzip. The built client is committed,
-  so run `go generate ./internal/web/spa`.
+- **The client bundle budget** is 70000 B gzip, raised from 60000 B by the
+  maintainer on 2026-09-30 (docs/07). The built client is committed, so run
+  `go generate ./internal/web/spa`.
 
 ## Running two lanes, changed
 
