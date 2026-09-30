@@ -18,12 +18,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T03:28:14Z
-updated_at: 2026-09-30T03:28:17Z
+updated_at: 2026-09-30T04:02:57Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -43,3 +43,91 @@ Either:
 Read the fixture and time it on an idle runner first, because a longer timeout alone only moves the failure.
 
 Reported by the rename/move lane on 2026-09-30.
+
+## Acceptance criteria
+
+- [ ] dbtest.Open returns a database identical in schema and schema_migrations to a fresh Migrate (TestTemplateIsAFreshMigration), independent of every other (TestTemplateOpensAreIndependent), and migrates once per test binary (TestTemplateMigratesOnce)
+- [ ] Every test fixture outside internal/store/db and cmd/ketju opens its database through dbtest.Open, and TestFixturesUseTheTemplate fails on a new .Migrate( call elsewhere
+- [ ] A note records every package's go test -race -count=1 elapsed time before and after, on one named machine and commit, and internal/perm and internal/web/api each take less than half their time on 9a8fc76
+- [ ] The race step in .forgejo/workflows/ci.yml is unchanged unless the maintainer answers the open decision with (b)
+
+## Implementation plan
+
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76.
+
+### What was measured
+
+On an idle 12-core workstation at 9a8fc76 (Go 1.27.1):
+- `go test -race -count=1 ./internal/perm/` took 119 s.
+  - `TestUnionWithGlobalFallback` took 29 s, for 60 fixtures in its subtests.
+  - `TestPreviewMatchesApply` took 21 s, and `TestCanEachAgreesWithCheck` 20 s.
+  - The package has no `t.Parallel`.
+- `go test -race -count=1 ./...` spent 966 s of package time across 43 packages. The slowest were:
+
+  | package | seconds |
+  |---|---|
+  | `internal/web/api` | 154 |
+  | `internal/perm` | 128 |
+  | `cmd/ketju` | 90 |
+  | `internal/web/auth` | 86 |
+  | `internal/store/db` | 79 |
+  | `internal/events/projection` | 69 |
+  | `internal/store/db/views` | 66 |
+  | `internal/service/threads` | 59 |
+
+CI run 1240 failed in `internal/perm` at Go's default 10-minute timeout, with the fixture still in `applyMigrations` (TKT-01M29CKRH9 note 6), and run 1242 failed the same way (TKT-01M29CXJZ9 note 9). A runner slower than this workstation by a factor of five, sharing its CPU with another run, reaches that timeout. The perm fixture (`newFixtureWith` in `internal/perm/perm_test.go`) opens a fresh database and runs all 17 migrations for every test and subtest, about 150 times per package run. Each migration run is SQLite translated to Go (`ncruces/go-sqlite3`, `go.mod`), instrumented by `-race`, on a `synchronous(full)` database (`internal/store/db/db.go`).
+
+### Settled in grooming
+
+- **Make the fixture cheap; the timeout stays as it is** (engineering choice). The description itself notes that "a longer timeout alone only moves the failure". The migration cost is paid once per test binary instead of once per test. The same approach as TKT-01M3MTQG5A (Stop Playwright checks timing out under CI runner contention): bound the work and do not widen the budget. That ticket changes only `web/client/e2e`, so the two do not overlap.
+- **The template is a file copy, not `VACUUM INTO` or the backup API** (engineering choice). `VACUUM INTO` cannot run inside the transaction that every `DB.Read` and `DB.Write` opens. The driver's `Conn.Backup` would break the rule that only `internal/store/db/driver.go` imports the driver (`TestOnlyDriverGoImportsADriver`). A database closed cleanly is whole in its main file, as `cmd/ketju/reindex_test.go` already relies on for its backup: closing checkpoints the WAL, and that test checks that the `-wal` file is empty.
+- **The helper lives in `internal/store/db/dbtest`,** which exists for "test helpers over the database that more than one package's tests need" and is imported only from `_test` files. `internal/store/db`'s own tests keep calling `Migrate`, because they test it, and they could not import `dbtest` without a cycle. `cmd/ketju` keeps its own opening, because its tests exercise serve's real startup. `dbtest/dump_test.go` keeps its fresh migration, because it is the template's reference.
+- **Workflow changes are outside this ticket.** docs/12 "Changing CI" lets a run add steps to `Build and Test` but does not list editing an existing step. The comment in `.forgejo/workflows/ci.yml` reads it the same way: "docs/12 lets a run add steps to this job and not edit the ones it has". So adding `-timeout` to `go test -race ./...` needs the maintainer. See the open decision.
+
+### Open decision
+
+Should the race step, `go test -race ./...` in `.forgejo/workflows/ci.yml`, also get an explicit `-timeout`, and its stale comment ("The suite is seconds") be corrected? Editing an existing CI step needs the maintainer under docs/12 "Changing CI".
+- (a) No. The template fix removes the cause, and the default 10 minutes then leaves several times the headroom.
+- (b) Yes, with `-timeout 20m`, as a guard against the next slow fixture.
+
+Recommendation: (a) now. Revisit (b) only if a package's race time still exceeds a third of the default after this ticket, measured as below. The plan is written for (a). Under (b) the one-line edit and the comment fix join step 5, with the maintainer's permission cited in the PR.
+
+### Approach
+
+1. **`internal/store/db/dbtest/template.go`** (new):
+   - `func Open(t testing.TB, opts db.Options) *db.DB`. When `opts.Path` is empty it becomes `t.TempDir()/db/ketju.db`.
+   - It creates the parent directory, writes the template's bytes there with mode 0600, and calls `db.Open(t.Context(), opts)`. It registers `t.Cleanup(d.Close)` and returns the database, already migrated.
+   - The template is built once per test binary behind a `sync.Once`. It opens a database in a directory from `os.MkdirTemp("", "ketju-dbtest-")`, calls `Migrate`, and closes it. It fails if the `-wal` file is not empty, then reads the main file into memory and removes the directory. A build error is kept and reported through `t.Fatal` by every `Open`.
+   - `Open` does not call `Migrate` again. Its doc comment says the database it returns is exactly what `Migrate` makes, and the test in the Tests section holds it to that.
+2. **Move the fixtures to `dbtest.Open`**, in this order, measuring after each:
+   - `internal/perm/perm_test.go` (`newFixtureWith`, which keeps `Trace` through `opts`);
+   - `internal/web/api` (`thread_test.go`'s `newWorld`, and `admin_test.go`, `me_test.go`, `apply_test.go`);
+   - `internal/web/auth/auth_test.go`, `internal/web/preuser_test.go`, `internal/web/health/health_test.go`;
+   - `internal/events/projection/writer_test.go`, `internal/store/db/views/threadlist_test.go`;
+   - `internal/service/*` (threads, identity, applications, account, forms, notify, users);
+   - `internal/auth/session`, `internal/auth/agentcred`, `internal/audit`, `internal/settings`, `internal/forms` and `internal/jobs`.
+
+   A fixture that migrates and then seeds keeps its seeding. The only change is the open and the migrate.
+3. **Keep new fixtures on the template.** Add `TestFixturesUseTheTemplate` in `dbtest`, in the style of `TestOnlyDriverGoImportsADriver`. It walks the module's `_test.go` files and fails on a `.Migrate(` call outside `internal/store/db` (its own package and `dbtest`) and `cmd/ketju`, naming the file and line.
+4. **Measure.** Run `go test -race -count=1 -json ./...` on the same machine before and after, and record every package's elapsed time in a note on this ticket, with the commit and the machine.
+5. No change to `.forgejo/workflows/ci.yml` under (a).
+
+### Tests
+
+- `TestTemplateIsAFreshMigration` (new, `dbtest/template_test.go`): a database from `dbtest.Open` and one from a fresh `db.Open` plus `Migrate` have identical `sqlite_schema` rows (type, name and sql, ordered) and identical `schema_migrations` versions. It runs the query that `schemaSnapshot` in `internal/store/db/migrate_test.go` uses, copied into `dbtest` because that helper is unexported in package `db`.
+- `TestTemplateOpensAreIndependent` (new): a row written through one `dbtest.Open` is absent from a second one opened afterwards, and both pass `PRAGMA integrity_check` and `PRAGMA foreign_key_check`.
+- `TestTemplateMigratesOnce` (new): with a `db.Options.Trace` counter, a second and a third `dbtest.Open` run no `CREATE TABLE` statement.
+- `TestFixturesUseTheTemplate` (step 3).
+- The whole suite passes under `go test -race ./...` with no test changed except in how it opens its database.
+
+### Out of scope
+
+- Playwright's timeouts (TKT-01M3MTQG5A).
+- Workflow `concurrency` and runner capacity, which are the maintainer's (docs/12 "Changing CI").
+- `t.Parallel` in `internal/perm`. It would add a second change in behaviour to this one, and the template alone removes the cost.
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-30T04:02:57Z
+
+Groomed 2026-09-30 (TKT-01M3M9RR26). Open decision for the maintainer: should the race step go test -race ./... also get an explicit -timeout (and its stale 'The suite is seconds' comment corrected)? docs/12 'Changing CI' does not let a run edit an existing step. (a) no, the template database removes the cause; (b) yes, -timeout 20m as a guard. Recommendation (a); the plan is written for it. Measured at 9a8fc76 on an idle 12-core workstation: internal/perm 119 s alone, 128 s within the full race suite; internal/web/api 154 s; the full suite 966 s of package time over 43 packages.
