@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-30T02:40:55Z
+updated_at: 2026-09-30T02:53:36Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -114,6 +114,10 @@ Built in ed200c4 on run/n24rm0-remote-images-as-links. Choices made while buildi
 - `HTTPS://` comes out as `https://` because bluemonday normalises the scheme, and `/\host` as `/%5Chost` because goldmark URL-escapes the backslash, the same as for a markdown link to either URL. The result is a same-origin path.
 
 `go generate ./internal/web/spa` leaves `internal/web/spa/dist` byte-identical (thread-view bundle 45708 B gzip).
+
+**agent:claude-code/phase2-run-n24rm0** at 2026-09-30T02:53:36Z
+
+PR #195 review: clean full review, run 5cbeb845-2614-4d50-80a9-ef2697ba1015 (request ready-review-e927731, Actions run #1239, id 16035), head e9277318ab5a6c50b939e95e862c25896502d290, base a827aefa25f5e346a80c0aa89c1482fe5fab5c48, model gpt-6-sol thinking medium. No findings at any severity, so there is nothing to fix or answer. Summary comment: https://git.local.sothr.com/terva-sh/ketju/pulls/195#issuecomment-19691. CI run #1238 success on the same head; step log read, go test (race) and Playwright ran.
 
 ## Summary
 
