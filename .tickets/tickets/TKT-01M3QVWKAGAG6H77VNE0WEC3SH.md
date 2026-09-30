@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T00:37:01Z
-updated_at: 2026-09-30T08:54:26Z
+updated_at: 2026-09-30T12:10:14Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -101,3 +101,7 @@ Engineering choices made here, each with the alternative that lost:
 **agent:claude-code/phase2-groom** at 2026-09-30T08:54:26Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. Nothing it builds has landed. The Settled items are carried unchanged except the docs/13 heading, now 'Running two lanes, changed'. Settled as engineering choices, with the alternatives that lost in the plan: SignOutForm puts its class on the button, where ApplicantShell has it today and where shell.css's .topbar.applicant .sign-out styles it (the earlier plan read as if the class were on the form); the e2e spec signs out a session of its own, signed in fresh as carol in a new context, because signing out from stateFile('carol') would revoke the session every later spec loads; its /auth/* navigations go through the through() helper TKT-01M3QS0TMV moves into e2e/session.ts, and signIn is changed to use it, since the setup spends 8 of the 10-request /auth/* burst. The browser-local draft copies of TKT-01M3NS1931 need no hook in the form: that ticket clears copies not belonging to the current viewer on the next page load. Test references now carry files and lines (TestLogout auth_test.go:532, TestAnApplicantCanSignOut apply_test.go:201, the two csrf_test.go tests, routes.test.tsx:290). Budget reference: 47415 of 60000 B. The criteria are unchanged and still checkable; criterion 2's e2e/sign-out.spec.ts is the spec described.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T12:10:14Z
+
+Carried from grooming of TKT-01M3S1TVPD (2026-09-30). That ticket forbids retrying around the /auth limit inside the shared e2e signIn helper. This ticket's plan changes signIn to wait out a 429. Put any such wait in this ticket's own sign-out spec and leave e2e/session.ts signIn unchanged, so the two tickets do not collide.
