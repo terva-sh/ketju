@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M39WBN4QAMNRBXCGD85CDJF0
 title: Commit Playwright screenshots and the safe-area check for the mockups
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ dependencies:
   - TKT-01M29CCC0FVTZ2YXNXB2EK4R4Q
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-39wbn4q
-  branch: run/39wbn4q-screenshots-safe-area
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae6a5be0267f09de1
-  commit: 4918f907efd36aac88f588786a67b84e1a2137df
-  session: null
-  claimed_at: 2026-09-30T12:01:35Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-30T12:19:46Z
+updated_at: 2026-09-30T12:21:27Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -56,9 +49,9 @@ Once CGBY1, CEE4K and CCC0F are in, add Playwright captures of a seeded thread a
 
 ## Acceptance criteria
 
-- [ ] web/client/e2e/screenshots/ holds thread-{phone,desktop}-{light,dark}.png of the seeded thread with a read position partway, written by e2e/thread.spec.ts under KETJU_SCREENSHOTS=1, beside the forum-index PNGs already there
-- [ ] Every visible divergence of the forum index and the thread page from Main, FrontDark, MobileFront{Light,Dark}, Thread{Light,Dark} and MobileThread{Light,Dark} in docs/mockups is listed in the pull request and in a note on this ticket, each either filed as a draft ticket or cited as an intended change
-- [ ] At 390 px with a safe-area inset of 47 px top and 34 px bottom emulated through Emulation.setSafeAreaInsetsOverride, a Playwright test asserts the tab bar's and reply bar's computed padding-bottom is 34px, the phone top bar's padding-top is 47px, and their no-inset fallbacks; if the CI Chromium lacks that method, it asserts through CSS.getMatchedStylesForNode that the winning declaration for each is the env(safe-area-inset-*) one, and the PR says which ran (TKT-01M29CCC0F AC3)
+- [x] web/client/e2e/screenshots/ holds thread-{phone,desktop}-{light,dark}.png of the seeded thread with a read position partway, written by e2e/thread.spec.ts under KETJU_SCREENSHOTS=1, beside the forum-index PNGs already there
+- [x] Every visible divergence of the forum index and the thread page from Main, FrontDark, MobileFront{Light,Dark}, Thread{Light,Dark} and MobileThread{Light,Dark} in docs/mockups is listed in the pull request and in a note on this ticket, each either filed as a draft ticket or cited as an intended change
+- [x] At 390 px with a safe-area inset of 47 px top and 34 px bottom emulated through Emulation.setSafeAreaInsetsOverride, a Playwright test asserts the tab bar's and reply bar's computed padding-bottom is 34px, the phone top bar's padding-top is 47px, and their no-inset fallbacks; if the CI Chromium lacks that method, it asserts through CSS.getMatchedStylesForNode that the winning declaration for each is the env(safe-area-inset-*) one, and the PR says which ran (TKT-01M29CCC0F AC3)
 
 ## Implementation plan
 
@@ -152,3 +145,11 @@ Divergences of the committed screenshots (web/client/e2e/screenshots/forum-index
 - P3 Phone footer "quote reply"; docs/06 "Mobile" says reply, quote. Filed as TKT-01M3S3Z9GT (Order the phone post footer reply, quote as docs/06 says).
 - P4 Phone pager uses text steps and no picker. The picker is TKT-01M29CGBZ (Add the page picker and lens sheets on phones); the icon steps are filed in TKT-01M3S3ZZSZ.
 - P6 Reply bar has no round compose button. Intended: posting is in the sheet's head (ReplyBar.tsx, TKT-01M3ART992). The chip exists; nothing is being replied to.
+
+## Summary
+
+Landed in PR #226. `web/client/e2e/thread.spec.ts` checks the thread page's mockup parts at 390 and 1440 px on page 3 of the seeded thread, with alice's read position at #53. Under `KETJU_SCREENSHOTS=1` it writes `thread-{phone,desktop}-{light,dark}.png`, which is 450 KB for the four. The forum-index captures were refreshed with the same fonts wait and time mask, 290 KB for the four. Each `<time>` is masked, and two fresh runs wrote byte-identical PNGs.
+
+The safe-area check ran through `Emulation.setSafeAreaInsetsOverride` in CI, on Chromium 152.0.7977.82 Alpine (run 1452). The tab bar and the reply bar have a `padding-bottom` of 34px, and the phone top bar has a `padding-top` of 47px. Each is 0px with the override emptied. The `CSS.getMatchedStylesForNode` fallback is kept, and `KETJU_SAFE_AREA_METHOD=matched` forces it. It passes locally, and a 5px padding mutation fails under both methods. The check found no CSS bug.
+
+Every divergence from docs/mockups is in the note of 2026-09-30 and in the PR, cited as intended, owned by an existing ticket, or filed. The nine drafts under TKT-01M29BN367 are TKT-01M3S3Z9E1, TKT-01M3S3Z9GT, TKT-01M3S3ZF48, TKT-01M3S3ZF6J, TKT-01M3S3ZRYD, TKT-01M3S3ZS0H, TKT-01M3S3ZZQD, TKT-01M3S3ZZSZ and TKT-01M3S3ZZYA. No `web/client/src` or dist change.
