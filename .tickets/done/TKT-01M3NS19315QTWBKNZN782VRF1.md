@@ -17,11 +17,13 @@ origin: null
 dependencies:
   - TKT-01M3K9XBJA8FSJ8ADCEY284SGA
 blocks_on: none
-references: []
+references:
+  - ref: pr:227
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T12:20:49Z
+updated_at: 2026-09-30T12:21:09Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
