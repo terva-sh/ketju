@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QH3X58PBVSYYJC49XSR65M
 title: Answer GET /me for an agent authenticated by its credential
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ dependencies:
   - TKT-01M29P9RSW21SCES335WERTBSF
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qh3x58
+  branch: run/qh3x58-agent-me
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa4b7e514cd78a2d0
+  commit: c24635c2e3213538c0c98b0db621b51a77941b2f
+  session: null
+  claimed_at: 2026-09-30T01:56:44Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T21:28:46Z
-updated_at: 2026-09-29T22:49:17Z
+updated_at: 2026-09-30T01:56:47Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-qh3x58
   name: ""
 extensions: {}
 ---
