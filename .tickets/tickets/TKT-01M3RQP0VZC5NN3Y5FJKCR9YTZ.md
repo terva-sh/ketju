@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T08:42:46Z
-updated_at: 2026-09-30T19:35:53Z
+updated_at: 2026-09-30T22:53:26Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -120,3 +120,17 @@ Phase-2 drafts filed during the run, to groom next:
 **agent:claude-code/phase2-run-orchestrator** at 2026-09-30T19:35:43Z
 
 2026-10-01 log. #241 merged at b37c46a (the maintainer's decisions; reviews 1606/1607 low finding fixed, clean on 1eb0160; CI run 1578). TKT-01M3PTT97X Offer edit and delete only inside the author windows in the client: PR #243 merged at cd485ef (review 1610 high and medium fixed, then clean on cd485ef; CI run 1587). Adds viewer.author_windows, postControls/isOwn, OwnControls and ComposerBody's editing prop; reader bundle 56988 B of 70000 B. #242 merged at 46c1081: plans for TKT-01M3SAKPK9, TKT-01M3S8Y2NA and TKT-01M3SK2HFE (review 1608 medium fixed: afterAll closes in finally; review 1609 medium fixed by bounding the change-and-back case, with the no-lookup case pinned by a test and the generation-counter alternative recorded as lost; clean on dbbc108; CI run 1582). The three are promoted to ready here. Dist queue: QS0TMV (holding), QV39H4, KFFFJR, CP2Q3, QHKD21, QVWKAG, SAKPK9; S8Y2NA and SK2HFE change tests only and run beside it.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T22:53:26Z
+
+2026-10-01 log (orchestrator), merges since #244:
+- TKT-01M3QS0TMV Link to the link-a-sign-in page from the client: #245 at d28aead (review 1599 clean on 1726076; CI run 1598). "Link a sign-in" in an Account block on the member's own profile; the spec is paced with paceAuth(1); /auth worst case 20/20; reader 57204 B.
+- TKT-01M3SK2HFE Restore the registration form after a failed admin-forms e2e test: #246 (clean review run 1605 on ba2f282, carried to 9a7dd6c; CI runs 1604, 1611). The afterAll restores through the admin API, with the context closed in finally; the deliberate break failed only that test in each project; dist unchanged.
+- TKT-01M3QV39H4 Clear the agent limits form's Saved status when a field is edited: #247 at c9909b0 (clean on c9909b0, run 1609; CI run 1608). Reader unchanged at 57203 B.
+- TKT-01M3KFFFJR Add the mark-unread control to the thread page: #248 at 4471ea6 (reviews 1619, 1622, 1623 and 1624, then clean on 4471ea6 in run 1626; CI run 1625). One disagreement pending maintainer: review 1623, on awaiting refreshViewer() before navigating. Review coverage gap: the clean review did not judge the tail of threads.ts. The Terva follow-up was refused because the PR had merged (run 1629), so the orchestrator read the diff and found nothing. The ticket note has the details. Reader 58151 B.
+- TKT-01M29CP2Q3 Build the post history view with word-level diffs: #249 at 466e82e (review 1625 medium fixed, a crash on huge diffs; clean on 466e82e, run 1637; CI run 1636). AC6's quoted text differs; the screen says "Post removed permanently", as redacted posts do everywhere else. Reader 59923 B.
+- TKT-01M3S8Y2NA Stop ApplicationDetail.test.tsx failing in full vitest runs: #250 at 5cf26ce (clean on 8591cca, run 1640; CI run 1639). Cause: the lazy admin chunk's first import used up settle's bound under load. renderAt now loads the chunk first. 7/20 red on main, 20/20 green on the fix.
+- TKT-01M3QHKD21 Show moderators' post controls and the edited-by-a-moderator marker: #251 at 0f8efbe (review 1626 medium and low fixed; clean on 0cae5e7, run 1648; CI run 1647). Adds the viewer field forum_read_only, which closes the archived-forum gap #243 recorded. Reader 60162 B.
+- Filed draft TKT-01M3SZ3GCE Stop admin-applications.spec.ts timing out under CI load, from main's push run #1592. It is not promoted.
+- The run brief now says a review reporting a truncated diff is not a full review of the untruncated part, and requires a follow-up while the PR is still open.
+Remaining: TKT-01M3QVWKAG (sign out, holds the dist) and TKT-01M3SAKPK9 (reply guard, built locally, queued).
