@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S8Y2NAEJ64N6ZGFV43F7A5
 title: Stop ApplicationDetail.test.tsx failing in full vitest runs
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-s8y2na
+  branch: run/s8y2na-app-detail-test
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a2abcf406ab544ec2
+  commit: 387c401689a9ca53acdbb432c90b0da348f601f2
+  session: null
+  claimed_at: 2026-09-30T19:55:42Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T13:44:15Z
-updated_at: 2026-09-30T19:35:26Z
+updated_at: 2026-09-30T19:55:44Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-s8y2na
   name: ""
 extensions: {}
 ---
