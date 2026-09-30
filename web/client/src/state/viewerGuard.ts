@@ -14,6 +14,12 @@ import { viewer } from './viewer';
 //
 // Only a page with a viewer to hide acts. A signed-out page shows what
 // anyone may see, and is not reloaded when someone signs in elsewhere.
+//
+// The guard never changes the viewer signal. A change the page learns of
+// itself, from /me, is the screens' to handle in place: the thread page asks
+// again for a page fetched for someone else (TKT-01M3QHKD21). The guard is
+// for the changes a page cannot learn of, and a reload also drops what
+// module memory holds, such as the last thread list (state/lists.ts).
 
 // who names a viewer: a member by handle, an applicant by provider, and ''
 // for nobody.
