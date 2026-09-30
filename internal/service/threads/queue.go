@@ -319,7 +319,11 @@ func stateOf(f threadlog.EntryFlags) postState {
 // close: the hide never appends on a post hidden pending review, so against
 // a Keep or dismiss that restores one, the post ends shown or hidden by the
 // suspension, both with its flags dismissed, which are the two serial
-// orders (flagLocks; TestSuspensionHideWhileTheQueueRestores,
+// orders. That restore dismisses the flags before its Restore and never
+// reaches closeFlags, so a hide landing after the Restore and before the
+// flag.dismissed row still ends with the flags dismissed and the row
+// written; closeFlags' conflict is only for a close with no Restore
+// (flagLocks; TestSuspensionHideWhileTheQueueRestores,
 // TestSuspensionHideRacesTheQueueRestore,
 // TestStateChangeIsConflictNotSuccess). A failed append leaves the flags
 // open too. Where the flags are closed without a Restore, the close and the

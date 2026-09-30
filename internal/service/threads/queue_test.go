@@ -1,6 +1,7 @@
 package threads
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -1467,12 +1468,14 @@ func (w *queueWorld) checkSerial(keepErr error) string {
 	return ""
 }
 
-// TestSuspensionHideWhileTheQueueRestores is the two orders, each forced.
+// TestSuspensionHideWhileTheQueueRestores is the orders, each forced.
 //   - (a) The Keep holds its Restore until HidePostsOf has returned. The
 //     hide does not wait for it, passes over post 1 and writes nothing on
 //     it; after the release the post is shown with its flags dismissed.
 //   - (b) The Keep completes first, and the hide then hides the restored
 //     post for the suspension, its flags still dismissed.
+//   - (c) The hide lands between the Keep's Restore and its row, and the
+//     outcome is (b)'s.
 func TestSuspensionHideWhileTheQueueRestores(t *testing.T) {
 	t.Run("the hide first", func(t *testing.T) {
 		w := newQueueWorld(t)
@@ -1539,6 +1542,54 @@ func TestSuspensionHideWhileTheQueueRestores(t *testing.T) {
 			t.Errorf("the hide answered %d, %v: want 2, post 1 and the post in other", n, err)
 		}
 		if got := w.checkSerial(nil); got != "suspension" {
+			t.Errorf("the outcome is %q, want suspension", got)
+		}
+		if got, want := w.removals(1), []string{"Delete auto", "Restore", "Delete suspension=1"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("post 1's removals %v, want %v", got, want)
+		}
+	})
+	// (c) The hide lands after the Keep's Restore and before its
+	// flag.dismissed row (Terva review 1575 on PR #217). The Keep's restore
+	// path dismisses the flags before its Restore and never reaches
+	// closeFlags, so this is (b) with the row written late: the Keep
+	// answers restored, and the flags end dismissed with their row. The
+	// hide runs from the Keep's projection of its Restore, which comes
+	// after the append and before the row.
+	t.Run("the hide between the Restore and the row", func(t *testing.T) {
+		w := newQueueWorld(t)
+		w.hide(1)
+		inner := w.svc.Project
+		armed, fired := true, false
+		var (
+			hidden  int
+			hideErr error
+		)
+		w.svc.Project = func(ctx context.Context, id threadid.ID, n int64) error {
+			if err := inner(ctx, id, n); err != nil {
+				return err
+			}
+			if armed && id == w.id && w.entry(1).Flags.Visible() {
+				armed = false // the hide projects too, through here
+				if open, rows := w.openFlags(1), len(w.flagRows()); open != 0 || rows != 0 {
+					t.Errorf("at the Restore's projection: %d open flags and %d flag rows, want the flags dismissed and no row yet", open, rows)
+				}
+				hidden, hideErr = w.suspendHide()
+				fired = true
+			}
+			return nil
+		}
+		res, err := w.svc.ResolvePost(t.Context(), w.as("mod"), w.id, 1, Resolution{Action: QueueResolve})
+		w.svc.Project = inner
+		if !fired {
+			t.Fatal("the hide never ran between the Restore and the row")
+		}
+		if err != nil || res.Post != dto.QueuePostRestored || len(res.Flags) != 3 {
+			t.Errorf("the Keep answered %+v, %v: want restored, naming the 3 flags it dismissed", res, err)
+		}
+		if hideErr != nil || hidden != 2 {
+			t.Errorf("the hide answered %d, %v: want 2, post 1 and the post in other", hidden, hideErr)
+		}
+		if got := w.checkSerial(err); got != "suspension" {
 			t.Errorf("the outcome is %q, want suspension", got)
 		}
 		if got, want := w.removals(1), []string{"Delete auto", "Restore", "Delete suspension=1"}; !reflect.DeepEqual(got, want) {

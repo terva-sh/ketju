@@ -21,7 +21,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T02:06:43Z
-updated_at: 2026-09-30T10:47:03Z
+updated_at: 2026-09-30T10:51:24Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -134,6 +134,10 @@ Timing under -race, locally: TestSuspensionHideRacesTheQueueRestore about 11 s (
 **agent:claude-code/phase2-run-r10vp3** at 2026-09-30T10:47:03Z
 
 Review 1573 on PR #217 (head 4ded7ec, base 94ce6d8), medium, fixed: 'Wait for either the Restore hook or an early Keep result'. The forced order (a) in TestSuspensionHideWhileTheQueueRestores waited on holding alone, so a Keep that answered before its Restore would hang the test. It now selects on holding, the Keep's answer and a 10 s guard. Checked by mutation: with the Keep made to answer conflict before its Restore, the test fails in 1 s naming the Keep's answer instead of hanging.
+
+**agent:claude-code/phase2-run-r10vp3** at 2026-09-30T10:51:24Z
+
+Review 1575 on PR #217 (head a406658, base 94ce6d8), medium, fixed with a test: 'Account for a hide between Restore and flag closure'. The finding assumed the Keep closes its flags through closeFlags after the Restore, and could conflict there. It does not. On a post hidden pending review the Keep takes the restore path (queueRestore, restoreDismissingFlagsLocked): it dismisses the flags before the Restore, appends, then writes the flag.dismissed row. It never reaches closeFlags. Rather than argue, TestSuspensionHideWhileTheQueueRestores gains a forced order (c): the hide runs from the Keep's projection of its Restore, after the append and before the row. The outcome is (b): the Keep answers restored with its 3 flags, and the post is hidden by suspension 1 with 0 open flags and one flag.dismissed row. The ResolvePost comment now says the restore path skips closeFlags. Checked by mutation: a Keep that skips its row when the post is no longer shown fails (c) as not a serial outcome.
 
 ## Summary
 
