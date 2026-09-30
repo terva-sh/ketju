@@ -18,7 +18,9 @@ origin: TKT-01M29CXJZ9MVXGY1FC0ESYNG8F
 dependencies:
   - TKT-01M29CXJZ9MVXGY1FC0ESYNG8F
 blocks_on: none
-references: []
+references:
+  - ref: pr:228
+    path: null
 claim:
   actor: agent:claude-code/phase2-run-r1wpns
   branch: run/r1wpns-redacted-dto
@@ -29,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T02:21:56Z
-updated_at: 2026-09-30T12:46:40Z
+updated_at: 2026-09-30T12:47:11Z
 created_by:
   id: agent:claude-code/phase2-run-cxjz9
   name: ""
