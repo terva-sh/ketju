@@ -7,9 +7,12 @@ status: draft
 status_reason: null
 priority: normal
 due_on: null
-labels: []
+labels:
+  - area:test
+  - area:client
+  - effort:S
 assignees: []
-milestone: null
+milestone: phase-2
 parent: null
 origin: null
 dependencies: []
@@ -18,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T20:11:42Z
-updated_at: 2026-09-30T20:11:42Z
+updated_at: 2026-09-30T20:11:58Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
