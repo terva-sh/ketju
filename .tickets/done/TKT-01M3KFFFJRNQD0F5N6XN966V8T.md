@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T20:48:57Z
+updated_at: 2026-09-30T20:56:17Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -192,6 +192,15 @@ Replayed onto origin/main at c9909b0 (after #243, #245 and #247), with the old d
 - **`PostControls.test.tsx` lists the footer actions.** Its `footer()` helper now leaves out `unread`, which every signed-in member has on every post and `ThreadScreen.test.tsx` covers. The two assertions of the full order name it in its place.
 
 Figures: the reader bundle is 58062 B gzip of 70000 B, up 859 B from 57203 B on main. Vitest 1934 passed; gofmt, build, vet and `go test -race ./...` are clean; the full Playwright suite on port 18961 is recorded in the summary.
+
+**agent:claude-code/phase2-run-kfffjr** at 2026-09-30T20:56:17Z
+
+Terva review 1619 (run 1617) on PR #248, head b52b599, base 9b142b7. One medium finding, "Wait for queued marks before returning to the list". Accepted and fixed in 3a0c99e:
+- Two marks of one thread, from a post and from the thread's actions, ran in call order, but each returned to the list as soon as its own DELETE answered. So the list could load counts the later mark was about to change.
+- `markAndReturn` now drops the held counts after every mark that succeeds, but navigates only when `marking(id)`, a new export of the read tracker, says no mark of the thread is still out.
+- Tests: "takes one press at a time while a mark is out" now asserts that the page stays on the thread and asks for no list until the second mark lands, and fails when the guard is removed. "says a later mark is still out when an earlier one settles" covers `marking`.
+
+Reader bundle after the fix: 58075 B gzip of 70000 B, up 872 B from 57203 B.
 
 ## Summary
 
