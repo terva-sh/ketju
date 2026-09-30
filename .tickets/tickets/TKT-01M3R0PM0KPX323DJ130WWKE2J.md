@@ -24,7 +24,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T09:19:52Z
+updated_at: 2026-09-30T09:37:16Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
@@ -65,7 +65,7 @@ Tests: the notice text, the disabled Send and the countdown under fake timers, t
 - [ ] A successful post starts the wait for a viewer without can_moderate when slow_mode_seconds > 0, and a moderator is never held (Composer.test.tsx)
 - [ ] Mounting the composer keeps the later of its local deadline and the page's next_post_at, and null or an earlier value never shortens it: closing and reopening the phone sheet during the wait after a successful post keeps Send disabled until the wait ends (ComposerSheet.test.tsx 'reopening the sheet keeps the wait', Composer.test.tsx 'the page never shortens the wait')
 - [ ] 'Slow mode…' is offered whenever viewer.can_moderate is true, whatever the role, and never when it is false; it is prefilled from slow_mode_seconds, sends one PUT /api/v1/admin/threads/{id}/slow-mode {seconds}, asks for the page again, and shows conflict, validation-failed and forbidden beside the field (ThreadScreen.test.tsx 'a moderator sets slow mode', 'a group moderator sets slow mode', 'a member is not offered slow mode')
-- [ ] The countdown ticks with one-second timeouts, so a next_post_at 40 days ahead still holds Send after 2147483647 ms (Composer.test.tsx 'a far wait holds Send')
+- [ ] A next_post_at 40 days ahead holds Send from mount with the countdown reading 960:00:00, ticks once a second, and releases Send exactly at the deadline after vi.setSystemTime moves the clock near it, in at most ten timer callbacks (Composer.test.tsx 'a far wait holds Send')
 
 ## Implementation plan
 
@@ -140,7 +140,8 @@ Added in the refresh of 2026-09-30:
 - **`composer/Composer.test.tsx`**, with `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })` for the countdown cases:
   - `shows the slow mode notice`: 30 gives "Slow mode: one post every 30 seconds", 300 gives "every 5 minutes", 60 gives "every minute", 7200 gives "every 2 hours", 90 gives "every 90 seconds", and 0 shows no `[data-slow-mode]`.
   - `holds Send until next_post_at`: with `nextPostAt` 42 s ahead and a draft typed, Send is disabled and the countdown reads "0:42". After 41 s it is still disabled. After 42 s it is enabled and the countdown is gone, and no request was made.
-  - `a far wait holds Send`: with `nextPostAt` 40 days ahead, Send is still disabled after `vi.advanceTimersByTime(2_147_483_647)`, and the countdown shows hours.
+  - `a far wait holds Send` (review 1564 on PR #211): it runs a bounded number of ticks, never one advance across the whole wait, because each tick sets the next one-second timeout. With the clock at T0 and `nextPostAt` at T0 + 40 days, Send is disabled on mount and the countdown reads "960:00:00", so the deadline did not fire at once. After `vi.advanceTimersByTime(3_000)` it reads "959:59:57" and Send is still disabled.
+    Then `vi.setSystemTime(T0 + 40 days - 5_000)` and `vi.advanceTimersByTime(1_000)`: it reads "0:04" and Send is still held, so the far deadline did not overflow into an early one. After `vi.advanceTimersByTime(4_000)` Send is enabled and the countdown is gone. At most ten timer callbacks run in the test.
   - `a moderator is never held`: with `exempt: true` and `seconds: 30`, a successful post leaves Send enabled for the next draft.
   - `a post starts the wait`: with `seconds: 30` and `exempt: false`, a successful post disables Send for the next draft for 30 s.
 - **`composer/Post.test.tsx`** ("a refused post"): the `rate-limited` row with `Retry-After: 30` still keeps the source and says "post again in 30 seconds". It now expects Send to be disabled, and enabled again 30 s later under fake timers. The other rows are unchanged.
@@ -174,3 +175,7 @@ Review 1540 on PR #203 (head 22de825), medium, accepted: the composer overwrote 
 **agent:claude-code/phase2-groom** at 2026-09-30T09:19:52Z
 
 Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) 'Slow mode…' is offered on viewer.can_moderate alone, by the maintainer decision of 2026-09-30 (docs/08) and TKT-01M3RQP0TG, which puts the route behind the moderates gate. The 'Only staff set slow mode' item is carried verbatim and marked superseded. Criterion 6 was replaced by criterion 7. The tests now include 'a group moderator sets slow mode', and 403 gets its own words. (2) For TKT-01M3R33SR5, a huge site default gives a far next_post_at. The countdown keeps one-second ticks, never one long timeout. New criterion 8 and test 'a far wait holds Send'. A default above 86400 prefills Custom, and Save refuses it before sending. (3) The two corrections to the description still hold at a660ae5. #202 did not touch the composer, the Composer and PostButton props are as the plan assumes, apiSend is called with status 200, and the bundle figure is 47415 of 60000 B.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:37:16Z
+
+Review 1564 on PR #211 (head eea67a7), medium, accepted. 'a far wait holds Send' advanced fake timers by 2147483647 ms, and useCountdown's one-second reschedule would run about 2.1 million callbacks. Instead, the test now checks the mount reading (960:00:00), three ticks, and then vi.setSystemTime to 5 s before the deadline, with release exactly at it: at most ten callbacks. It still proves that a huge deadline neither fires at once nor overflows. This note supersedes the refresh note's description of the test. Criterion 8 was rewritten to match.

@@ -9,7 +9,7 @@ priority: high
 due_on: null
 labels:
   - area:moderation
-  - effort:S
+  - effort:M
 assignees: []
 milestone: phase-2
 parent: TKT-01M29BN36JH4M1W5819D06PGPP
@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T08:42:45Z
-updated_at: 2026-09-30T09:16:55Z
+updated_at: 2026-09-30T09:37:16Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
