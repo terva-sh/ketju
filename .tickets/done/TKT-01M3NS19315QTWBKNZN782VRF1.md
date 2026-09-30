@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS19315QTWBKNZN782VRF1
 title: Autosave reply drafts from the composer
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ dependencies:
   - TKT-01M3K9XBJA8FSJ8ADCEY284SGA
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-ns1931
-  branch: run/ns1931-reply-drafts
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac6c39099534bd3eb
-  commit: f388921469800497b3e8496ea4a023e3d41a7296
-  session: null
-  claimed_at: 2026-09-30T10:57:05Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T11:26:21Z
+updated_at: 2026-09-30T12:20:49Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -56,7 +49,7 @@ No ticket covers the client half. Found while planning TKT-01M3K9XBJA (Autosave 
 - [x] A reply and its reply target typed in one browser context are restored in a second context signed in as the same member, in the composer at 1440 px and in the reply bar at 390 px (e2e/drafts.spec.ts)
 - [x] A loaded draft fills only an empty composer with no reply target and no post in flight, and loading sends no PUT (state/composer.test.ts)
 - [x] Saves are debounced to one PUT per 1500 ms pause, nothing is sent unchanged, a blank composer is a DELETE, and requests for one draft reach the server in order (state/drafts.test.ts)
-- [ ] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
+- [x] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
 - [x] A forbidden or conflict answer turns autosave off for that thread (state/drafts.test.ts)
 - [x] Autosave for a draft is disarmed until its GET answers, so a load slower than the debounce never deletes the server draft; an empty composer sends DELETE only when the server is known to hold a non-empty draft, and a failed load never deletes (state/drafts.test.ts)
 - [x] A successful post deletes the draft, cancels any pending save and removes this browser's local copy, and afterwards GET /api/v1/drafts/{id} is 204 and a reload restores nothing (state/drafts.test.ts, e2e/drafts.spec.ts)
@@ -242,3 +235,7 @@ Built against main at f388921 as the plan settles it. The plan's Implementation 
 Bundle: the thread view is 49521 B gzip of the 60000 B budget, up 2106 B from 47415 B at f388921.
 
 e2e: drafts.spec.ts replies to post 10, not post 2, because replies.spec.ts asserts that post 2 has no reply expander. Locally, the desktop smoke sign-in hits the /auth burst limit (429) on main at f388921 as well as on this branch, so it is not caused by this change; every other spec passes here.
+
+## Summary
+
+The composer's source and reply target autosave to the viewer's reply draft (GET/PUT/DELETE /api/v1/drafts/{id}) and load when the thread page opens, so the phone's reply bar shows a draft before the sheet opens. state/drafts.ts is the shared autosave module, keyed reply:<thread> or new:<forum>, for TKT-01M3NS16VH to reuse. It debounces saves by 1500 ms, keeps one request in flight per key, stays disarmed until the GET answers, and deletes only a draft the server is known to hold. On pagehide it keeps a localStorage copy ordered by the server's revision, and it never reads the client's clock. api/client.ts gains apiGetOptional ({body, headers}) and apiSend's onHeaders. The thread view is 51126 B gzip of 60000 B, up 2107 B. All ten criteria are met. The implementation choices beyond the plan are in the note of 2026-09-30.
