@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T11:44:08Z
+updated_at: 2026-09-30T11:47:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -228,6 +228,10 @@ Criteria 3, 4 and 5 are now ticked. Their screen halves are in `AuditScreen.test
 The 47415 B figure was written at grooming as "the reader does not grow". It did grow, by the route entry alone, so the box stays empty rather than ticked on a reading the words do not support.
 
 Admin chunk (gzip -9): JavaScript 19843 B to 21404 B, CSS 2215 B to 2235 B.
+
+**agent:claude-code/phase2-run-cp2r4** at 2026-09-30T11:47:26Z
+
+Review 1578 (PR #222, head 7ee6d11, base 163c33a, run 4128ad18, Actions run #1433): both findings fixed in fefb18e. High, "Reject backslashes in audit target hrefs": safeHref now refuses an href with a backslash or control character, and draws a link only when the href resolves to this origin; the safeHref tests fail if the old leading-slash check is restored. Low, "Preserve years 0001-0099 when applying date filters": startOf sets the date with setFullYear, and dateOf pads the year; the date filter test fails if the constructor is restored. Bundle figures supersede the earlier note: the reader is now 47426 B gzip. Its entry is 99924 B raw in both builds, and 99868 B on main; the 56 raw bytes are the /admin/audit route entry, and the gzip figure also moves by a few bytes whenever the lazy chunks' hashed filenames, which the entry names, change. AC6 stays unticked for the reason the earlier note gives. Admin chunk after the fix, gzip -9: JavaScript 21480 B, CSS 2235 B.
 
 ## Summary
 
