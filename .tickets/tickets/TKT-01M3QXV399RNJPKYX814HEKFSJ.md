@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T12:16:33Z
+updated_at: 2026-09-30T12:36:08Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
@@ -104,58 +104,47 @@ Added in the refresh of 2026-09-30:
 - **Long deadlines** (engineering choice, from TKT-01M3R33SR5 (Bound the post edit and delete windows before making Durations)). `threads.rename_window_seconds` has no upper bound. `renameWindow` clamps it to the longest `time.Duration`, so `rename_until` can be up to about 292 years ahead. That is still under 2^53 ms, so it is an exact JSON number. A browser fires a `setTimeout` longer than 2^31 − 1 ms (about 24.8 days) at once. So the timer that withdraws Rename is set for at most that long, and when it fires early it sets itself again. The helper is `delayUntil(at: number, now: number): number` in `web/client/src/components/thread/deadline.ts`, with the bound `maxTimeout = 2_147_483_647`. Whichever of this ticket and TKT-01M3PTT97X (Offer edit and delete only inside the author windows in the client) lands first adds it, and the second imports it.
 - **The thread screen as it stands now.** PR #202 (TKT-01M3QQWA5Z) added `onFlag`, `mayFlag`, `PostMore`, `FlagDialog`, and `apiSend`'s `init.status`. PR #205 (TKT-01M3QJYV4Z) added the post source route. Neither touches the thread head or `threadActions`. `forumsUrl` is exported by `screens/ForumIndex.tsx`, which is already in the main bundle. The reader bundle is 47415 B of 60000 B gzip on main.
 
+
+Revised on claim, 2026-09-30, against main at de1771d (TKT-01M3QGH66W's PR #224 merged, and TKT-01M3RQP0TG's #214 and TKT-01M3R33SR5's #218 before it). Everything under "Settled in grooming" above is carried unchanged. What the code as it stands changed in the approach is marked **(revised)**.
+
 ### Approach
 
 1. **Server: `rename_until`.**
-   - `internal/dto/dto.go`: `ThreadViewer` gains `RenameUntil *Millis` with `json:"rename_until"`, whose comment carries the rule above.
-   - `internal/service/threads/moderate.go`: extract `authorRenameCheck` from `Rename`'s `!a.canModerate` branch, keeping the refusal order. Add `renameUntil(a access, archived bool, window time.Duration, now time.Time) *dto.Millis`. It returns nil unless `a.viewer.Member() && !a.canModerate && a.row.AuthorID == a.viewer.UserID && authorRenameCheck(...) == nil`, and otherwise `a.row.CreatedAt + window` in ms. The window comes from `renameWindow`, which is clamped today; TKT-01M3R33SR5 replaces the inline clamp with `secondsDuration`. A clamped window yields a far-future time, never an overflow: `window.Milliseconds()` is at most about 9.2e12.
-   - `View` in `internal/service/threads/view.go`: read `renameWindow` only when the viewer is the thread's author and `canModerate` is false, so no other page view pays for the read. Set `viewer.RenameUntil` inside `Threads.With`, beside `nextPostAt`, where `th.Archived()` is known.
-   - Update the fixtures in `internal/dto/fixtures_test.go` so one case sets `rename_until`. Regenerate the goldens with `go test ./internal/dto -update` and `go test ./internal/web/api -update`. In `internal/web/api/testdata/golden`, `thread.author.json` carries a time, and `thread.anon.json`, `thread.member.json` and `thread.moderator.json` carry null. In `internal/dto/testdata/golden` the thread goldens follow the fixtures.
-   - docs/07: add `rename_until` to "Thread response shape" and to "Renaming and moving threads".
-2. **Client types**: `web/client/src/api/dto.ts` `ThreadViewer` gains `rename_until: Millis | null`. The fixtures that build a viewer by hand gain it, and `dto-contract.ts` checks the golden.
+   - `internal/dto/dto.go`: `ThreadViewer` gains `RenameUntil *Millis` with `json:"rename_until"`, whose comment carries the rule.
+   - `internal/service/threads/moderate.go`: `authorRenameCheck(a access, archived bool, window time.Duration, now time.Time) error` holds the author's checks in Rename's order (archived thread, `readOnlyForum`, locked, `reply`, window). `Rename` calls it for a viewer without `moderate`, and keeps the archived-thread conflict for a moderator, so the refusal order is unchanged. `renameUntil(a, archived, window, now) *dto.Millis` is `a.row.CreatedAt + window.Milliseconds()` when `mayOwnRename(a)` (a member, the thread's author, without `moderate`) and `authorRenameCheck` passes, and nil otherwise. **(revised)** `mayOwnRename` is shared by `renameUntil` and `View`, so the setting is read only for the one viewer it can matter to. The window is `renameWindow`'s, which on main already goes through `secondsDuration`.
+   - `View` in `internal/service/threads/view.go` reads `renameWindow` only when `mayOwnRename(a)`, and sets `viewer.RenameUntil` inside `Threads.With`, where `th.Archived()` is known.
+   - `internal/dto/fixtures_test.go`: the member fixture carries `rename_until`. Goldens regenerated in `internal/dto/testdata/golden` and `internal/web/api/testdata/golden` (only `thread.author.json` carries a time).
+   - docs/07: `rename_until` in "Renaming and moving threads" and in "Thread response shape".
+2. **Client types**: `web/client/src/api/dto.ts` `ThreadViewer` gains `rename_until: Millis | null`. No fixture builds a viewer by hand; `threadPage` in `testing.tsx` reads the member golden.
 3. **Actions** (`web/client/src/shell/threadActions.ts`):
-   - The options gain `rename?: () => void`, which adds "Rename…" (id `rename`).
-   - TKT-01M3QGH66W's `moderate` option gains `move: () => void`, which adds "Move…" (id `move`). It is set whenever `moderate` is, which is whenever `viewer.can_moderate`.
-   - `ThreadScreen` passes `rename` when `viewer.can_moderate`, or when `rename_until !== null && Date.now() < rename_until`. A timer set with `delayUntil(rename_until, Date.now())` re-renders the actions when the window closes. The history route passes neither.
-4. **`components/thread/ModerateDialog.tsx`** gains two kinds.
-   - `rename`: a text input labelled "Title", prefilled with the current title. Send is disabled while the trimmed title is empty, has more than 200 code points (`[...t].length`, matching `checkTitle`'s rune count), or equals the current title. It sends `apiSend<ThreadHeader>('PATCH', `/api/v1/threads/${id}`, {title}, { status: 200 })`.
-   - `move`: a `<select>` labelled "Move to", built from `apiGet<ForumTree>(forumsUrl)`. Children are indented under their parent, the current forum (`header.forum.slug`) is left out, and archived forums are listed only when the viewer's role is `admin`. It sends `apiSend<ThreadHeader>('POST', `/api/v1/admin/threads/${id}/move`, {forum}, { status: 200 })`. While the tree loads the select is disabled. A failed load shows `problemMessage` and a Retry.
-   - On 200: `storeThreadHeader(id, header)`, close the panel, and `route(canonicalThreadUrl(location, header) ?? current, true)`. After a move, also `forgetGets((u) => u.startsWith('/api/v1/forums'))`, so the forum index and both forums' thread lists are fetched again.
-   - Refusals keep the panel open with the typed value:
-     - `rename-window-closed` shows its catalogue message from `api/problem.ts`, and Rename is then withdrawn from the actions for this page.
-     - `forbidden` says "You cannot move this thread there." for a move, and uses `problemMessage` for a rename.
-     - `conflict` says "This thread changed while you were working, or is already there." and asks for the page again.
-     - `validation-failed` says "Enter a title of 1 to 200 characters."
-     - `not-found` says "That forum is no longer there." for a move.
-5. **CSS** in `components/thread/thread.css`, reusing TKT-01M3QGH66W's panel styles.
-6. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Confirm that `npm run build`'s budget line is under 60000 B, and record the change from 47415 B in the PR.
+   - `PanelKind` is `ModerateKind | 'rename' | 'move'`.
+   - The options gain `rename?: () => void`, which adds "Rename…" (id `rename`) after Reply and First unread.
+   - **(revised)** The `moderate` option's `open` takes a `PanelKind`, and Move ("Move…", id `move`) is added after the lock and pin kinds whenever `moderate` is set, calling `open('move')`. A separate `move` callback would be set exactly when `moderate` is, so it carried nothing.
+4. **`ThreadScreen`**:
+   - Rename is offered when `viewer.can_moderate`, or while `rename_until` is in the future. A timer set with `delayUntil(rename_until, Date.now())` re-renders the screen, and is set again while the window is still open, so a timer that fired early (40 days ahead) sets itself again. The history route offers neither.
+   - **(revised)** A `rename-window-closed` answer withdraws Rename from the actions for this thread at once (`closedOn`) and does not ask for the page again, so the panel keeps the typed title beside the catalogue message. Asking for the page again would drop the form, because the page's `rename_until` would be null.
+   - **(revised)** The effect that replaces a stale slug in the address now compares with the header shown (`head`, the newer of the page's and the cache's by log length), not with `res.data.thread`. Otherwise the page answered before a rename would put the old slug back as soon as the rename replaced the address, until the page was answered again.
+5. **`components/thread/ModerateDialog.tsx`** gains two kinds.
+   - `rename`: a text input labelled "Title", prefilled with the current title, with the hint "Up to 200 characters." Send is disabled while the trimmed title is empty, has more than 200 code points (`[...t].length`, matching `checkTitle`'s rune count), or equals the current title. It sends `PATCH /api/v1/threads/{id}` with `{title}` trimmed.
+   - `move`: a `<select>` labelled "Move to", built from `apiGet<ForumTree>(forumsUrl)` by `destinations(forums, current, admin)`: every listed forum but the current one, children after their parent and indented with an em space, archived forums only to an admin. The tree is `GET /api/v1/forums`, which lists only forums the viewer may read, so the list shows no forum the forum index would not. While it loads the select is disabled; a failed load shows `problemMessage` and a Retry. It sends `POST /api/v1/admin/threads/{id}/move` with `{forum}`.
+   - On 200: `storeThreadHeader(id, header)`; after a move `forgetGets((u) => u.startsWith(forumsUrl))`, so the forum index and every thread list are fetched again; `route(canonicalThreadUrl(location, header), true)` when the slug changed; then the page is asked for again and the panel closes.
+   - Refusals keep the panel open with the typed value (`moderateRefusal`): `rename-window-closed` its catalogue message; `forbidden` "You cannot move this thread there." for a move and the catalogue message for a rename; `conflict` "This thread changed while you were working, or is already there."; `validation-failed` "Enter a title of 1 to 200 characters."; `not-found` "That forum is no longer there." for a move. Conflict and the access refusals ask for the page again, as for lock and pin.
+6. **CSS**: `.moderate-field select` joins the panel's input styles in `components/thread/thread.css`.
+7. `components/thread/deadline.ts` adds `delayUntil` and `maxTimeout`, since TKT-01M3PTT97X has not landed. If it lands first, this ticket imports its file instead.
+8. `go generate ./internal/web/spa` and commit `internal/web/spa/dist` once this lane holds the dist (docs/13 "Running two lanes"). Record the bundle change in the PR: +868 B (49019 B to 49887 B gzip) measured on de1771d.
 
 ### Tests
 
-- **Server:**
-  - `TestRenameUntil` (new, `internal/web/api/rename_test.go`):
-    - the author inside the window gets `created_at + window`;
-    - the author past it, in a locked thread, in an archived forum, and without `reply` gets null;
-    - a moderator, by role or through a group, gets null whether or not they are the author;
-    - another member and an anonymous reader get null;
-    - with `threads.rename_window_seconds` at 0 the author gets null;
-    - with it at 10000000000 the author gets `created_at + math.MaxInt64/1e6` ms, never a negative or earlier time.
-  - `TestRenameUntilIsInTheViewerBlock` (new): the author and a member read the same page. The posts come from one response cache entry, with no second render, and only the author's viewer block carries `rename_until`. Moving the clock past the window, with no append, turns it null and changes the ETag. This is the response-cache test for the new per-viewer field.
-  - `TestRenameWindow`, `TestRenameWindowTooLargeForADuration` and the refusal tests stay green through the extracted `authorRenameCheck`.
-  - The `internal/dto` golden and fixture tests pass, and `web/client/src/api/contract.test.ts` passes.
+- **Server** (`internal/web/api/renameuntil_test.go`):
+  - `TestRenameUntil`: the author inside the window gets `created_at + 86400000`, and a millisecond before the end; null at the end, where the author's rename is `rename-window-closed`; null for an anonymous reader, another member, a moderator by role, a group moderator, a moderator by role or group who is the author, and an inactive author; null in a locked thread, an archived forum, an archived thread, and without `reply` (where the rename is `forbidden`); null with the window at 0; and `created_at + math.MaxInt64/1e6` ms with the window at 10000000000 seconds.
+  - `TestRenameUntilIsInTheViewerBlock`: the author and another member share one response cache insert and one hit, and only the author's viewer block carries `rename_until`; moving the clock to the end with no append serves null from the same entry and changes the ETag.
+  - The rename and move tests of TKT-01M29CKRH9 stay green through the extracted `authorRenameCheck`, and the goldens and `web/client/src/api/contract.test.ts` pass.
 - **Client:**
-  - `shell/threadActions.test.ts`: Rename appears with `rename` and Move with `moderate.move`, and neither appears without its option.
-  - `components/thread/deadline.test.ts` (whichever ticket adds it): `delayUntil` returns `at - now` below the bound, the bound for a deadline 30 days ahead, and 0 for one already passed.
-  - `screens/ThreadScreen.test.tsx`:
-    - `a moderator is offered rename and move`: role `moderator` with `can_moderate`.
-    - `a group moderator is offered rename and move`: role `member` with `can_moderate`. A member without it is offered neither unless they are the author inside the window.
-    - `the author is offered rename while the window is open`: with `rename_until` 60 s ahead, Rename shows, and after `vi.advanceTimersByTime(60_000)` it is gone. With `rename_until: null` it never shows. With `rename_until` 40 days ahead, Rename still shows after `vi.advanceTimersByTime(2_147_483_647)`, so the long timer did not fire at once and withdraw it.
-    - `rename sends the title and follows the new slug`: PATCH with `{"title":"New title"}`. The answer's header (new slug, longer `log_length`) shows at once, and the address is replaced with one carrying the new slug that keeps ordinal 42, the lens and `#post-42`.
-    - `move lists the forums and follows the header`: the current forum is not listed, and an archived forum is not listed to a moderator. The POST body is `{"forum":"lounge"}`. The header's forum shows, and the forum GETs are forgotten.
-    - `an admin may move into an archived forum`: the archived forum is listed.
-    - `refusals keep the panel open`: `rename-window-closed` (403), `forbidden` (403), `conflict` (409) and `validation-failed` (422) each show their words, and the typed value is still in the field.
-  - The thread-view bundle stays within 60000 B gzip, and `TestTheAdminBundleIsSeparate` passes, because nothing imports from `screens/admin`.
-- **Invariants:** no session is issued. The response cache key is unchanged, because `rename_until` is in the uncached viewer block (`TestRenameUntilIsInTheViewerBlock`). The rename and move records move the log length, which `TestRenameMovesTheResponseCacheKey` (TKT-01M29CKRH9) already holds. Who may move, and the move's forum checks, are TKT-01M3RQP0TG's tests (`TestMoveNeedsModerateInBothForums`, `TestThreadModerationGate`).
+  - `shell/threadActions.test.ts`: Rename with `rename`, Move with `moderate`, neither without.
+  - `components/thread/deadline.test.ts`: `at - now` below the bound, the bound 30 days ahead and at the longest window, 0 once passed.
+  - `screens/ThreadScreen.test.tsx`: a moderator, and a group moderator, are offered rename and move, and a member without `can_moderate` or a window neither; the author is offered Rename while the window is open and not after it closes, never with `rename_until: null`, and still after `vi.advanceTimersByTime(2_147_483_647)` with the window 40 days ahead, with no `setTimeout` longer than 2147483647 ms; rename sends the trimmed title, disables Send for the same, an empty and a 201-character title, shows the new title at once and replaces the address keeping ordinal 61, the lens and `#post-61`; move lists the forums without the current one or an archived one, sends `{forum}`, shows the new forum and forgets the forum GETs; an admin sees archived forums; conflict, validation-failed, forbidden, not-found and rename-window-closed each keep the panel open with their words and the typed value, and rename-window-closed withdraws Rename.
+  - `e2e/thread-rename-move.spec.ts`, at 390 px and 1440 px, with mona's stored session: rename and rename back, with the address following; move to the reading group and back; the move panel passes axe in each theme, one scan per test (#223).
+- **Invariants:** no session is issued. The response cache key is unchanged (`TestRenameUntilIsInTheViewerBlock`). No route, audit action or permission changes.
 
 ### Out of scope
 
