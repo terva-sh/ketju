@@ -1,7 +1,7 @@
 # 13 — The Autonomous Phase 2 Run
 
 Status: in force from the merge of this document until every `phase-2`
-ticket is done. The exit gate closed on 2026-09-30, and the maintainer then
+ticket is done or archived. The exit gate closed on 2026-09-30, and the maintainer then
 extended the run to the rest of Phase 2 (see "The extension of 2026-09-30").
 Like [12-autonomous-run.md](12-autonomous-run.md), it covers one run, not a
 standing policy.
@@ -79,9 +79,12 @@ So, under the extension:
   done autonomously). The orchestrator logs merges there, and its summary is
   the report: every recorded disagreement, every criterion merged unticked,
   and every open question.
-- **Plans were refreshed against `main` on 2026-09-30** before the remaining
-  tickets were promoted. As before, revise the plan when you claim a ticket,
-  and carry its `### Settled in grooming` forward.
+- **Plans are refreshed against `main` before anything more is promoted.**
+  Each open ticket's plan is checked against the code as it stands after the
+  exit gate, in grooming PRs that pass the gate like any other. A ticket is
+  promoted only once its refresh has merged, and the refresh adds a dated
+  note to the ticket. As before, revise the plan when you claim a ticket and
+  carry its `### Settled in grooming` forward.
 - The maintainer's decisions of 2026-09-30 are in docs/08 "Decided
   2026-09-30". In short: thread moderation follows the forum grant; the flag
   receipt stays as built in #202; and the CI race step keeps its timeout.
