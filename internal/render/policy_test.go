@@ -250,6 +250,45 @@ func TestFootnoteIDsCannotBeChosenFreely(t *testing.T) {
 	}
 }
 
+// TestPolicyDropsNonAttachmentImgSrc is the fourth criterion: the sanitizer
+// is a second layer under the image renderer. An img that reaches it by any
+// other path keeps its src only when the src is an attachment.
+func TestPolicyDropsNonAttachmentImgSrc(t *testing.T) {
+	t.Parallel()
+
+	for _, src := range []string{
+		"https://example.org/a.png",
+		"HTTPS://example.org/a.png",
+		"http://example.org/a.png",
+		"//example.org/a.png",
+		`/\example.org/a.png`,
+		"/blobs/" + strings.ToUpper(testBlob),
+		"/blobs/" + testBlob + "/x",
+		"/blobs/" + testBlob + "?x=1",
+		"https://example.org/blobs/" + testBlob,
+		"data:image/png;base64,iVBORw0KGgo=",
+		"relative.png",
+	} {
+		out := sanitize(`<img src="` + src + `" alt="x">`)
+		for _, img := range elements(t, out, "img") {
+			if got, ok := attr(img, "src"); ok {
+				t.Errorf("sanitize kept src=%q on an img: %s", got, out)
+			}
+		}
+	}
+
+	out := sanitize(`<img src="/blobs/` + testBlob + `" alt="x" title="t" width="10">`)
+	imgs := elements(t, out, "img")
+	if len(imgs) != 1 {
+		t.Fatalf("an attachment img did not survive: %q", out)
+	}
+	for k, want := range map[string]string{"src": "/blobs/" + testBlob, "alt": "x", "title": "t", "width": "10"} {
+		if got, _ := attr(imgs[0], k); got != want {
+			t.Errorf("%s = %q, want %q: %s", k, got, want, out)
+		}
+	}
+}
+
 // TestLinksGetNofollow: every link in user content is untrusted, and the forum
 // should not be lending its reputation to whatever somebody pasted.
 func TestLinksGetNofollow(t *testing.T) {

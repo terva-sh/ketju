@@ -60,12 +60,17 @@ var policy = sync.OnceValue(func() *bluemonday.Policy {
 	p.AllowTables()
 	p.AllowAttrs("align").Matching(tableAlign).OnElements("th", "td")
 
-	// Images. External sources are permitted, which is a privacy trade
-	// recorded on the ticket: a post can embed an image from anywhere, and
-	// loading it tells that host who read the thread. Attachments
-	// (TKT-01M29CXK0) are the answer, and the decision to proxy or refuse
-	// remote images belongs with them, not here.
-	p.AllowImages()
+	// Images. An img keeps its src only when the src is an attachment
+	// (attachmentSrc, image.go). The renderer already turns every other
+	// markdown image into a link or text (docs/07, decided 2026-09-28), so
+	// this is the second layer: an img that reaches the policy by any other
+	// path, such as a future extension, loses its src and never loads, and
+	// loading it would tell a remote host who read the thread. The other
+	// rules are the ones AllowImages sets, which this replaced.
+	p.AllowAttrs("align").Matching(bluemonday.ImageAlign).OnElements("img")
+	p.AllowAttrs("alt").Matching(bluemonday.Paragraph).OnElements("img")
+	p.AllowAttrs("height", "width").Matching(bluemonday.NumberOrPercent).OnElements("img")
+	p.AllowAttrs("src").Matching(attachmentSrc).OnElements("img")
 
 	// Code blocks keep their language class so that highlighting, whether in
 	// the client or later in this pipeline, has something to key on.

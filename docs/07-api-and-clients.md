@@ -950,6 +950,34 @@ loosen the policy for every page and send every reader's address to any host a
 poster names. A server-side proxy lost for now because it is an SSRF surface
 that needs hardening of its own; it can be revisited later.
 
+The renderer (`internal/render/image.go`, renderer version 5) applies these
+rules to a markdown image, in this order:
+
+- **An attachment stays an image.** An attachment is a destination of exactly
+  `/blobs/<64 lowercase hex>`, the URL `GET /blobs/{hash}` serves, and it
+  renders as `<img>`, inside a link or not. Anything that only resembles one,
+  such as an uppercase hash, a suffix, a query or `https://host/blobs/<hash>`,
+  is not an attachment. Deciding by "has no scheme" lost, because
+  `//host/x.png` and `/\host/x.png` have no scheme and a browser loads both
+  from another host.
+- **A source no link could carry becomes its alt text.** When the sanitizer
+  would drop the URL from a link (`data:`, `javascript:`, and every scheme
+  but http, https and mailto), the image is its alt text as plain text, and
+  nothing when there is none. The renderer asks the sanitizer's policy rather
+  than keeping its own list of schemes, so it never writes a link the
+  sanitizer strips.
+- **An image inside a link becomes text inside that link:** its alt text, or
+  its URL when there is none. HTML cannot nest links. Writing the image's
+  link after the outer one lost, because it puts a second link where the
+  author wrote one.
+- **Any other image becomes a link** to its URL, `<a href="URL">`, with the
+  alt text as the link text, or the URL when the alt text is empty or only
+  whitespace. The markdown title becomes the link's `title`.
+
+The sanitizer is the second layer: an `img` keeps `src` only when it matches
+the attachment pattern, so an image that reaches the policy by another path
+loses its source and loads nothing.
+
 `default-src 'self'` is the no-third-party-origins rule: everything the client
 needs is served from this binary. `script-src` and `style-src` carry the nonce
 and never `'unsafe-inline'` — that keyword would make the nonce decorative,

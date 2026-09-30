@@ -56,7 +56,11 @@ import (
 
 // Version identifies this pipeline's output. Read the rule above before
 // changing it, and read it again before deciding not to.
-const Version = 4
+//
+// 5: a markdown image with any source but an attachment renders as a link or
+// as text, and the sanitizer keeps an img src only for an attachment
+// (TKT-01M3N24RM0).
+const Version = 5
 
 // MaxSource is the largest source Render will accept.
 //
@@ -217,5 +221,8 @@ var (
 		// renderer, untouched.
 		NewQuoteRenderer(),
 		NewMentionRenderer(),
+		// Images: an attachment stays an image, anything else becomes a link
+		// or text, because the CSP would show it broken (image.go).
+		NewImageRenderer(),
 	))
 )
