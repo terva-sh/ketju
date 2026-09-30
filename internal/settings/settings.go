@@ -116,8 +116,8 @@ var (
 	AllowLocalPasswords = define("registration.allow_local_passwords", false,
 		"Whether accounts may sign in with a local password as well as a provider.", nil)
 
-	// docs/08 "Primitives". Off by default (TKT-01M29P9RS0); per-thread slow
-	// mode is Phase 2 (TKT-01M29CRJ50).
+	// docs/08 "Primitives". Off by default (TKT-01M29P9RS0). A thread's own
+	// value in thread_slow_mode overrides it, 0 included (TKT-01M29CRJ50).
 	SlowModeDefaultSeconds = define("slow_mode.default_seconds", 0,
 		"Minimum seconds between one member's posts in a thread; 0 is off.", atLeast(0))
 

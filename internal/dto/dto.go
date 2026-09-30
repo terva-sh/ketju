@@ -154,6 +154,22 @@ type ThreadViewer struct {
 	Watch       string `json:"watch"`
 	CanReply    bool   `json:"can_reply"`
 	CanModerate bool   `json:"can_moderate"`
+	// SlowModeSeconds is the thread's slow mode, the minimum seconds between
+	// one member's posts: the thread's own value, or the site default when it
+	// has none. 0 is off. Moderators are exempt, but it is served to them
+	// too, so they can see what the thread asks of everyone else.
+	SlowModeSeconds int `json:"slow_mode_seconds"`
+	// NextPostAt is when slow mode next lets this viewer post: their newest
+	// post in the thread plus SlowModeSeconds. It is null when they may post
+	// now, when they are exempt, and for an anonymous viewer. It is per
+	// viewer, which is why slow mode is in this block and not the header.
+	NextPostAt *Millis `json:"next_post_at"`
+}
+
+// SlowMode answers PUT /admin/threads/{id}/slow-mode: the thread's slow mode
+// as it now stands, in seconds, 0 for off (TKT-01M29CRJ50).
+type SlowMode struct {
+	Seconds int `json:"seconds"`
 }
 
 // Post.Removal values: who took a post down (docs/08 "Tombstones").

@@ -35,7 +35,9 @@
     "last_read_ordinal": 42,
     "watch": "mute",
     "can_reply": true,
-    "can_moderate": true
+    "can_moderate": true,
+    "slow_mode_seconds": 30,
+    "next_post_at": null
   },
   "posts": [
     {

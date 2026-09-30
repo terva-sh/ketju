@@ -218,3 +218,12 @@ WHERE blobs.hash = sqlc.arg('hash')
   AND blobs.unreferenced_since <= CAST(sqlc.arg('cutoff') AS INTEGER)
   AND NOT EXISTS (SELECT 1 FROM users WHERE instr(lower(users.avatar_blob), blobs.hash) > 0)
   AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(lower(drafts.source), blobs.hash) > 0);
+
+-- A thread's slow mode (docs/04 "thread_slow_mode", TKT-01M29CRJ50). No row
+-- is sql.ErrNoRows, and the site default applies.
+-- name: GetThreadSlowMode :one
+SELECT * FROM thread_slow_mode WHERE thread_id = ?;
+
+-- name: PutThreadSlowMode :exec
+INSERT INTO thread_slow_mode (thread_id, seconds, set_by, set_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (thread_id) DO UPDATE SET seconds = excluded.seconds, set_by = excluded.set_by, set_at = excluded.set_at;

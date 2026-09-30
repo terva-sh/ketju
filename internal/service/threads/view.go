@@ -264,12 +264,21 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		return Result{}, err
 	}
 
+	// Slow mode is per thread and next_post_at per viewer, so both are in
+	// the viewer block, which is never cached; the posts do not depend on
+	// either (TKT-01M29CRJ50).
+	slow, err := s.effectiveSlowMode(ctx, id)
+	if err != nil {
+		return Result{}, err
+	}
 	viewer := dto.ThreadViewer{
 		LastReadOrdinal: int(lastRead),
 		Watch:           watch,
 		CanReply:        a.canReply && (row.Locked == 0 || canModerate) && readOnlyForum(a) == nil,
 		CanModerate:     canModerate,
+		SlowModeSeconds: slow,
 	}
+	now := s.now()
 
 	var res Result
 	err = s.Threads.With(id, func(th *threadcache.Thread) error {
@@ -285,6 +294,11 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			snap = snapshot{logLength: logLength, n: th.Index.Len()}
 			snap.page, pageErr = PageFor(q, snap.n, size, v.Member(), lastRead)
 			if pageErr != nil {
+				return
+			}
+			// From the same snapshot as the page, so a post of v's on it is
+			// the one next_post_at counts from.
+			if viewer.NextPostAt, pageErr = nextPostAt(a, th.Index, slow, now); pageErr != nil {
 				return
 			}
 			from := uint32((snap.page-1)*size + 1)
@@ -305,7 +319,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		}
 
 		res.Body = dto.ThreadPage{
-			Thread: header(id, row, forum, tags, snap.n, snap.logLength, s.now()),
+			Thread: header(id, row, forum, tags, snap.n, snap.logLength, now),
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}

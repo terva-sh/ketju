@@ -284,6 +284,13 @@ type Thread struct {
 	LivePostCount      int64
 }
 
+type ThreadSlowMode struct {
+	ThreadID int64
+	Seconds  int64
+	SetBy    sql.NullInt64
+	SetAt    int64
+}
+
 type ThreadTag struct {
 	ThreadID int64
 	Tag      string

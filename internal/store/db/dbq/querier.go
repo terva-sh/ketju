@@ -250,6 +250,9 @@ type Querier interface {
 	// A reply draft: one per user per thread (drafts_thread). New-thread drafts,
 	// keyed by forum, have no endpoint yet.
 	GetThreadDraft(ctx context.Context, arg GetThreadDraftParams) (Draft, error)
+	// A thread's slow mode (docs/04 "thread_slow_mode", TKT-01M29CRJ50). No row
+	// is sql.ErrNoRows, and the site default applies.
+	GetThreadSlowMode(ctx context.Context, threadID int64) (ThreadSlowMode, error)
 	GetUser(ctx context.Context, id int64) (User, error)
 	GetUserByHandle(ctx context.Context, handle string) (User, error)
 	GrantPermission(ctx context.Context, arg GrantPermissionParams) error
@@ -426,6 +429,7 @@ type Querier interface {
 	// Writes go through internal/settings.Set, which refuses an unknown key or
 	// an ill-typed value and writes the audit row in the same transaction.
 	PutSetting(ctx context.Context, arg PutSettingParams) error
+	PutThreadSlowMode(ctx context.Context, arg PutThreadSlowModeParams) error
 	// RecordIdentityLogin notes a sign-in on the identity: when, and the claims
 	// the IdP asserted this time, which may have changed since the last.
 	RecordIdentityLogin(ctx context.Context, arg RecordIdentityLoginParams) error

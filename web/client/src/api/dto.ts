@@ -63,6 +63,15 @@ export interface ThreadViewer {
   watch: string;
   can_reply: boolean;
   can_moderate: boolean;
+  // slow_mode_seconds is the thread's effective slow mode, 0 for off.
+  slow_mode_seconds: number;
+  // next_post_at is when slow mode next lets this viewer post, or null.
+  next_post_at: Millis | null;
+}
+
+// SlowMode is PUT /admin/threads/{id}/slow-mode's answer.
+export interface SlowMode {
+  seconds: number;
 }
 
 export interface Post {

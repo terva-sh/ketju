@@ -175,11 +175,17 @@ func threadPage(class string) ThreadPage {
 
 	switch class {
 	case tAnon:
-		p.Viewer = ThreadViewer{LastReadOrdinal: 0, Watch: "", CanReply: false, CanModerate: false}
+		p.Viewer = ThreadViewer{LastReadOrdinal: 0, Watch: "", CanReply: false, CanModerate: false,
+			SlowModeSeconds: 30, NextPostAt: nil}
 	case tMember:
-		p.Viewer = ThreadViewer{LastReadOrdinal: 60, Watch: "watch", CanReply: true, CanModerate: false}
+		// In slow mode, and waiting: the member's last post was at
+		// 1757500500000, and the thread asks 30 s between posts.
+		p.Viewer = ThreadViewer{LastReadOrdinal: 60, Watch: "watch", CanReply: true, CanModerate: false,
+			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000))}
 	case tModerator:
-		p.Viewer = ThreadViewer{LastReadOrdinal: 42, Watch: "mute", CanReply: true, CanModerate: true}
+		// Exempt: the interval is shown, and there is nothing to wait for.
+		p.Viewer = ThreadViewer{LastReadOrdinal: 42, Watch: "mute", CanReply: true, CanModerate: true,
+			SlowModeSeconds: 30, NextPostAt: nil}
 	}
 	return p
 }
@@ -358,7 +364,7 @@ func lockedThread() ThreadPage {
 		},
 		Page:   Pagination{Number: 1, Size: 25, TotalPages: 1},
 		Lens:   nil,
-		Viewer: ThreadViewer{LastReadOrdinal: 2, Watch: "", CanReply: false, CanModerate: false},
+		Viewer: ThreadViewer{LastReadOrdinal: 2, Watch: "", CanReply: false, CanModerate: false, SlowModeSeconds: 0, NextPostAt: nil},
 		Posts: []Post{{
 			Ordinal:     1,
 			Revision:    1,
@@ -443,6 +449,8 @@ var corpus = map[string]any{
 	"history." + tModerator: postHistory(tModerator),
 
 	"thread-locked." + tMember: lockedThread(),
+
+	"slow-mode." + tModerator: SlowMode{Seconds: 30},
 
 	"render." + tMember:         renderReply(),
 	"render-plain." + tMember:   renderPlain(),

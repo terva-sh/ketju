@@ -576,6 +576,24 @@ func (q *Queries) GetFlag(ctx context.Context, id int64) (Flag, error) {
 	return i, err
 }
 
+const getThreadSlowMode = `-- name: GetThreadSlowMode :one
+SELECT thread_id, seconds, set_by, set_at FROM thread_slow_mode WHERE thread_id = ?
+`
+
+// A thread's slow mode (docs/04 "thread_slow_mode", TKT-01M29CRJ50). No row
+// is sql.ErrNoRows, and the site default applies.
+func (q *Queries) GetThreadSlowMode(ctx context.Context, threadID int64) (ThreadSlowMode, error) {
+	row := q.db.QueryRowContext(ctx, getThreadSlowMode, threadID)
+	var i ThreadSlowMode
+	err := row.Scan(
+		&i.ThreadID,
+		&i.Seconds,
+		&i.SetBy,
+		&i.SetAt,
+	)
+	return i, err
+}
+
 const hasOpenFlag = `-- name: HasOpenFlag :one
 SELECT EXISTS (
 	SELECT 1 FROM flags WHERE thread_id = ? AND ordinal = ? AND reporter_id = ? AND status = 'open'
@@ -732,6 +750,28 @@ func (q *Queries) PostsOwedFlagAudit(ctx context.Context, cutoff sql.NullInt64) 
 		return nil, err
 	}
 	return items, nil
+}
+
+const putThreadSlowMode = `-- name: PutThreadSlowMode :exec
+INSERT INTO thread_slow_mode (thread_id, seconds, set_by, set_at) VALUES (?, ?, ?, ?)
+ON CONFLICT (thread_id) DO UPDATE SET seconds = excluded.seconds, set_by = excluded.set_by, set_at = excluded.set_at
+`
+
+type PutThreadSlowModeParams struct {
+	ThreadID int64
+	Seconds  int64
+	SetBy    sql.NullInt64
+	SetAt    int64
+}
+
+func (q *Queries) PutThreadSlowMode(ctx context.Context, arg PutThreadSlowModeParams) error {
+	_, err := q.db.ExecContext(ctx, putThreadSlowMode,
+		arg.ThreadID,
+		arg.Seconds,
+		arg.SetBy,
+		arg.SetAt,
+	)
+	return err
 }
 
 const reopenFlags = `-- name: ReopenFlags :execrows

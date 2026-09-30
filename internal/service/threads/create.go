@@ -15,7 +15,6 @@ import (
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/member"
-	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -83,7 +82,7 @@ func (s *Service) Reply(ctx context.Context, v domain.Viewer, id threadid.ID, re
 	if err != nil {
 		return out, err
 	}
-	slow, err := settings.SlowModeDefaultSeconds.Get(ctx, s.DB)
+	slow, err := s.effectiveSlowMode(ctx, id)
 	if err != nil {
 		return out, err
 	}
@@ -300,22 +299,12 @@ func (s *Service) authorFlags(ctx context.Context, v domain.Viewer) (threadlog.F
 
 // slowMode refuses a post that comes less than seconds after the author's
 // newest post in the thread, saying how long is left (docs/08 "Primitives").
-// Zero seconds is off. The newest post is the index's, which is the log's.
+// Zero seconds is off. seconds is the thread's effective slow mode
+// (effectiveSlowMode).
 func slowMode(ix *threadlog.Index, author int64, seconds int, now time.Time) error {
-	if seconds <= 0 {
-		return nil
-	}
-	mine := ix.ByAuthor(uint64(author))
-	if len(mine) == 0 {
-		return nil
-	}
-	last, err := ix.Entry(mine[len(mine)-1])
-	if err != nil {
+	wait, err := slowModeWait(ix, author, seconds, now)
+	if err != nil || wait <= 0 {
 		return err
-	}
-	wait := time.UnixMilli(last.CreatedMS).Add(time.Duration(seconds) * time.Second).Sub(now)
-	if wait <= 0 {
-		return nil
 	}
 	// Retry-After is whole seconds; rounding up means trying again when it
 	// says to is never early.

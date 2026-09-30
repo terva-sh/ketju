@@ -43,6 +43,7 @@ import type {
   QueueResolution,
   ReadPosition,
   RenderResult,
+  SlowMode,
   ThreadList,
   ThreadPage,
   UserPosts,
@@ -101,6 +102,7 @@ import renderMember from '../../../../internal/dto/testdata/golden/render.member
 import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
 import repliesMember from '../../../../internal/dto/testdata/golden/replies.member.json';
 import repliesModerator from '../../../../internal/dto/testdata/golden/replies.moderator.json';
+import slowModeModerator from '../../../../internal/dto/testdata/golden/slow-mode.moderator.json';
 import threadAnon from '../../../../internal/dto/testdata/golden/thread.anon.json';
 import threadLockedMember from '../../../../internal/dto/testdata/golden/thread-locked.member.json';
 import threadMember from '../../../../internal/dto/testdata/golden/thread.member.json';
@@ -191,6 +193,7 @@ export const contract = [
   matches<ReadPosition>()(readMember),
   matches<RenderResult>()(renderMember),
   matches<RenderResult>()(renderPlainMember),
+  matches<SlowMode>()(slowModeModerator),
   matches<ThreadPage>()(threadAnon),
   matches<ThreadPage>()(threadLockedMember),
   matches<ThreadPage>()(threadMember),

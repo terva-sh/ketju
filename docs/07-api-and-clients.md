@@ -118,7 +118,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /forums/{slug}/threads?cursor=&sort=` | thread list rows → `internal/dto` `ThreadList`, answered from projections alone. The first page opens with the pins: global pins from every forum the viewer may read, then this forum's own, each by latest activity, at most 50; a pin past its `pinned_until` is no pin, and pins past the 50 sort with the rest. Then 25 threads with a post, newest `last_post_at` first, or newest `created_at` first for `sort=created`; the pins are not counted. `next_cursor` is opaque, bound to its forum and sort, and empty at the end; paging is keyset, so a thread bumped between pages moves up rather than appearing twice. Every page leaves out exactly the forum's threads the first page showed as pins, which the cursor carries, so a pin that ends between pages is not shown again. A cursor is a position, not a credential: one that is malformed or was made for another forum or sort, or any other `sort`, is `bad-request`. `unread` is the viewer's unread posts by the per-post rule (read position and `mark_all_read_at`) and `last_read_ordinal` their position, both 0 for an anonymous viewer. Access answers as the thread page does: an unknown or hidden forum is `not-found`, a signed-in-only one `unauthenticated` to an anonymous viewer, `forbidden` to a member without read. `no-store` |
 | `POST /forums/{slug}/threads` | create thread `{title, source, tags}` → 201 `{thread, post}`, `internal/dto` `CreatedThread`: the thread page's header and a `CreatedPost` for post 1, each as a later read serves it. A member session is required (anonymous `unauthenticated`, pre-user `forbidden`); a forum hidden from the viewer is `not-found`, an archived one is `conflict` except to an admin (04, checked before `create_thread`, so the refusal says why), and one without `create_thread` is `forbidden`. The title is trimmed and must be 1–200 characters with no control characters; the slug is derived from it (an ASCII fold, at most 60 characters). `tags` must be absent or empty until tag rules exist. The source is checked as a reply's is. The thread is projected before the response, so it can be opened at once |
 | `GET  /threads/{id}?page=&ordinal=&lens=&after_log_length=` | thread header + page of rendered posts + lens meta + viewer read position |
-| `POST /threads/{id}/posts` | `{source, reply_to?, attachments?}` → 201 `{post, ordinal, revision, log_length}`, `internal/dto` `CreatedPost`: the post as `GET /threads/{id}/posts/{ordinal}` serves it, written after the record is durable. A member session is required; without `reply` it is `forbidden`, and not-found or unauthenticated as for any read of the thread. A locked thread is `conflict` except to a moderator; an archived one is `conflict` to everyone, and a thread in an archived forum is `conflict` to everyone but an admin (04), before `reply` is checked. Slow mode (`slow_mode.default_seconds`, off by default; moderators exempt) is `rate-limited` with `Retry-After` set to the seconds left. An empty source, a `reply_to` naming no post, and any attachment (nothing uploads yet) are `validation-failed`; an over-long source is `payload-too-large`. Every refusal comes before anything is appended. Charged to the per-address write limiter |
+| `POST /threads/{id}/posts` | `{source, reply_to?, attachments?}` → 201 `{post, ordinal, revision, log_length}`, `internal/dto` `CreatedPost`: the post as `GET /threads/{id}/posts/{ordinal}` serves it, written after the record is durable. A member session is required; without `reply` it is `forbidden`, and not-found or unauthenticated as for any read of the thread. A locked thread is `conflict` except to a moderator; an archived one is `conflict` to everyone, and a thread in an archived forum is `conflict` to everyone but an admin (04), before `reply` is checked. Slow mode is the thread's own value (`PUT /admin/threads/{id}/slow-mode`), or `slow_mode.default_seconds` when it has none, off by default. Moderators are exempt, and agent accounts are not. A reply too soon after the author's last post in the thread is `rate-limited`, with `Retry-After` set to the seconds left, rounded up. The page's `viewer.next_post_at` says the same in advance. An empty source, a `reply_to` naming no post, and any attachment (nothing uploads yet) are `validation-failed`; an over-long source is `payload-too-large`. Every refusal comes before anything is appended. Charged to the per-address write limiter |
 | `GET  /threads/{id}/posts/{ordinal}` | single post (popover, permalink) |
 | `GET  /threads/{id}/posts/{ordinal}/replies` | direct replies (inline expander) |
 | `GET  /threads/{id}/posts/{ordinal}/history` | revisions, each with actor, time, reason and source; the client diffs them |
@@ -354,6 +354,38 @@ Refusals come in this order, and each writes nothing:
 - `validation-failed` for a scope other than `forum` or `global`, an
   `until` not after now, or a reason over 500 characters.
 
+#### Slow mode (TKT-01M29CRJ50)
+
+`PUT /admin/threads/{id}/slow-mode` with `{seconds}` sets the minimum number
+of seconds between one member's posts in the thread, 0 to 86400, where 0 is
+off. It answers 200 `internal/dto` `SlowMode`, `{seconds}`, with
+`no-store`, and it is charged to the per-address write limiter. The gate and
+the `moderate` check are the same as for locking and pinning. The value is
+kept in `thread_slow_mode` (04) and appends nothing to the log (08
+"Primitives"). It overrides `slow_mode.default_seconds`, and an explicit 0
+turns slow mode off under a non-zero default. The change and its
+`thread.slow_mode` audit row, with `"from"` and `"to"`, are written in one
+transaction. `"from"` is null when the thread had no value of its own.
+
+Refusals come in lock's order, and each writes nothing:
+- `unauthenticated` or `forbidden` from the gate;
+- `bad-request` for a body with no `seconds`, a `seconds` that is not an
+  integer, or any other field;
+- `forbidden` without `moderate` in the thread's forum;
+- `conflict` on an archived thread. An archived forum does not refuse it;
+- `validation-failed` for seconds outside 0 to 86400;
+- `conflict` for the value the thread already has. A thread with no value
+  of its own has none to repeat, so setting the site default there is a
+  change: it pins the thread against a later change of the default.
+
+Slow mode reaches the thread page through its viewer block, never its
+posts. `slow_mode_seconds` is the effective interval, which every viewer
+gets. `next_post_at` is when the viewer's slow mode ends: their newest post
+in the thread plus the interval, in Unix ms. It is null while they may post,
+for a moderator, who is exempt, and for an anonymous viewer. Setting slow
+mode moves no response cache key, because the cached posts do not depend on
+it. The page's ETag changes, because it hashes the viewer block.
+
 #### Form versions (TKT-01M29CP2KE)
 
 Admins only: anonymous is `unauthenticated`, and a pre-user, member or
@@ -384,7 +416,8 @@ is a `markdown_notice`'s rendered body. `intro_html` is the rendered
              "tags": ["meta"], "created_at": 1757500000000},
   "page": {"number": 3, "size": 25, "total_pages": 9},
   "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205},
-  "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_moderate": false},
+  "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_moderate": false,
+             "slow_mode_seconds": 30, "next_post_at": null},
   "posts": [
     {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,

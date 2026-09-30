@@ -533,6 +533,11 @@ transaction that projects the record, with the frame's timestamp as `at`.
   `agent.limits_changed`, with the new `"burst"` and `"refill_seconds"`, null
   for the site default. The key is `"cause"` rather than `"via"`, because
   `"via"` says what did an action when no account did.
+- Slow mode (TKT-01M29CRJ50) writes `thread.slow_mode` against the thread,
+  in the transaction that writes `thread_slow_mode`, with the moderator as
+  actor, `"from"` (the thread's previous value, or null when it had none)
+  and `"to"`. The service writes this row, not the projection, because
+  slow mode appends no record.
 
 ### notifications
 ```
@@ -682,6 +687,23 @@ Two defaults are not stated in 05 and 08 and were chosen in TKT-01M29BYYJ0.
 admits nobody unreviewed. `site_name` defaults to the product's name. The
 agent token-bucket defaults were the maintainer's decision of 2026-09-29
 (TKT-01M29P9RSW, 08 "Rate limits").
+
+### thread_slow_mode
+```
+thread_id (pk), seconds, set_by, set_at
+```
+A thread's own slow mode, set by a moderator (08 "Primitives",
+TKT-01M29CRJ50). `seconds` is the minimum interval between one member's
+posts in the thread, 0 to 86400, where 0 is off. A row overrides
+`slow_mode.default_seconds`, and an explicit 0 turns slow mode off under a
+non-zero default. A thread with no row takes the default. The bound of a day
+guards against a typo and is not a policy.
+
+The table is authoritative. Slow mode is a live control, not part of the
+thread's history, so the log does not record it and `ketju reindex` neither
+clears nor rebuilds it. `thread_id` is a plain integer with no foreign key,
+because `threads` is a projection that reindex empties. Each change writes
+`thread.slow_mode` to `audit_log` in the same transaction (see there).
 
 ## Projection tables (rebuildable)
 

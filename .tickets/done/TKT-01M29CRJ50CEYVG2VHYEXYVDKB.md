@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ50CEYVG2VHYEXYVDKB
 title: Implement per-thread slow mode
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
-claim:
-  actor: agent:claude-code/phase2-run-crj50
-  branch: run/crj50-slow-mode
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1fea6a8b3dd4de89
-  commit: 2fc352f4a76c324d96b907c02cc2d0bb77155807
-  session: null
-  claimed_at: 2026-09-30T01:48:36Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-30T01:50:08Z
+updated_at: 2026-09-30T02:02:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,12 +41,12 @@ Slow mode is the tool for a thread that is heating up, and it works by making pe
 
 ## Acceptance criteria
 
-- [ ] A reply inside the thread's interval answers rate-limited with Retry-After equal to the whole seconds left, rounded up, and appends nothing
-- [ ] Moderators are exempt and agent accounts are not
+- [x] A reply inside the thread's interval answers rate-limited with Retry-After equal to the whole seconds left, rounded up, and appends nothing
+- [x] Moderators are exempt and agent accounts are not
 - [ ] The interval is per thread in thread_slow_mode, overrides slow_mode.default_seconds (an explicit 0 included), survives a restart and ketju reindex, and the composer shows it from viewer.slow_mode_seconds
-- [ ] Setting 0 lets the next reply through at once
-- [ ] Setting slow mode is forbidden without moderate, and each change writes one audit_log row with from and to
-- [ ] Setting slow mode leaves the page's posts under the same response-cache key while the viewer block reflects it (TestSlowModeIsInTheViewerBlockNotTheCache)
+- [x] Setting 0 lets the next reply through at once
+- [x] Setting slow mode is forbidden without moderate, and each change writes one audit_log row with from and to
+- [x] Setting slow mode leaves the page's posts under the same response-cache key while the viewer block reflects it (TestSlowModeIsInTheViewerBlockNotTheCache)
 
 ## Implementation plan
 
@@ -122,3 +115,23 @@ Revised 2026-09-30 by agent:claude-code/phase2-run-crj50 against main at 2fc352f
 **agent:claude-code/phase2-groom** at 2026-09-29T05:39:01Z
 
 Maintainer decision, 2026-09-29: slow mode stays in phase-2, whatever docs/09 says (it lists slow mode under Phase 4). Recorded in the plan's Settled section.
+
+**agent:claude-code/phase2-run-crj50** at 2026-09-30T02:01:35Z
+
+Criterion 3 is left unticked. Its server half is done and tested: the interval lives in thread_slow_mode (migration 0016). It overrides slow_mode.default_seconds, an explicit 0 included (TestSlowModeOverridesDefault). It survives a restart and ketju reindex (cmd/ketju TestSlowModeSurvivesRestartAndReindex). viewer.slow_mode_seconds and viewer.next_post_at are served. What remains is "the composer shows it from viewer.slow_mode_seconds", which is client work. The orchestrator scoped this PR to the server half because another lane holds the committed dist. That work is TKT-01M3R0PM0KPX323DJ130WWKE2J (Show slow mode in the composer and add the moderator's slow mode dialog), filed as a draft that depends on this ticket.
+
+Decisions taken in the build:
+- **The audit row comes from the service, not the projection writer.** The run prompt said that thread-level moderation goes through the projection writer's audit rows by log offset, as lock and pin do. That path exists for actions the thread log records. The settled item "Slow mode lives in the database, not in the log" means there is no record and no offset, and the original plan said TKT-01M29CKRGS's helpers are not used. So SetSlowMode writes its row through audit.Append, from its own db.Write, in the transaction that writes thread_slow_mode (docs/04 "audit_log": "A service writes it from its own write transaction"). internal/audit stays the only writer, and TestOneWayIntoAuditLog passes.
+- **A write over no row is a change.** Setting 0, or the site default, on a thread with no row writes the row, with "from" null. It pins the thread against a later change of the default. Only repeating the row's own value is conflict. docs/07 "Slow mode" says so.
+- **The route sits behind the staff gate, as lock and pin do.** A member whose group grants moderate in the forum is exempt from slow mode (canModerate) but cannot set it, the same asymmetry lock has. The moderates gate would admit them, and that is a product change, so this PR does not make it.
+- **The archived check reads the thread cache before the write.** It does not hold the thread through the DB write, so an archive that lands in between leaves a slow mode on a thread nobody can post in. That is harmless, and the comment on SetSlowMode records it.
+- **web/client/src/api/dto.ts and dto-contract.ts carry the new types.** internal/dto's golden tests require every new field populated and every type golden'd, and the client contract test and tsc hold dto.ts to the goldens. The orchestrator approved type-only edits on condition that dist stays byte-identical. go generate ./internal/web/spa left it byte-identical.
+- **The migration is 0016.** #186 (handle changes) also adds 0016, and whichever merges second renumbers (migrate.go).
+
+**agent:claude-code/phase2-run-crj50** at 2026-09-30T02:02:26Z
+
+Supersedes the migration number in the previous note: #186 merged first with 0016_handle_changes, so this ticket's migration is 0017_thread_slow_mode. The branch had not been pushed, so it was rebased onto c24635c before its first push.
+
+## Summary
+
+Server half landed. Migration 0017 adds thread_slow_mode, which is authoritative with no foreign key to threads. PUT /api/v1/admin/threads/{id}/slow-mode {seconds} sits behind the staff gate and is moderate-checked. It writes the row and its thread.slow_mode audit row (from, to) in one transaction through internal/audit. Reply reads the thread's value or the site default. The thread page's viewer block gains slow_mode_seconds and next_post_at, and the cached posts are untouched. Criterion 3's composer half is TKT-01M3R0PM0KPX323DJ130WWKE2J (draft).
