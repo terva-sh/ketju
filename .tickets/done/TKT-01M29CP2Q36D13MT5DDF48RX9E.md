@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2Q36D13MT5DDF48RX9E
 title: Build the post history view with word-level diffs
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:post-history
     path: docs/08-moderation.md
-claim:
-  actor: agent:claude-code/phase2-run-cp2q3
-  branch: run/cp2q3-post-history
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac9f0ed705612d47b
-  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
-  session: null
-  claimed_at: 2026-09-30T18:42:44Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T19:07:40Z
+updated_at: 2026-09-30T21:54:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -64,14 +57,14 @@ The diff is computed rather than stored, which costs nothing because both revisi
 
 ## Acceptance criteria
 
-- [ ] The screen lists every revision with actor, time and reason, and wordDiff marks a one-word change inside a long line as exactly one deleted and one inserted word (wordDiff.test.ts, PostHistory.test.tsx)
-- [ ] A grace-edited revision is listed with grace: true and a grace note although the post shows no edited marker (TestHistoryListsGraceRevisions, PostHistory.test.tsx)
-- [ ] For a removed post a member gets deleted: true with no revisions and the screen shows the withheld notice, while a moderator gets and can compare every revision (TestTombstoneFromEveryEndpoint, PostHistory.test.tsx)
-- [ ] Any two revisions can be chosen and compared (PostHistory.test.tsx)
-- [ ] /t/{id}/{slug}/{ordinal}/history renders the screen instead of the PR #64 placeholder, and a stale slug there is corrected to the current one (ThreadPage.test.tsx)
-- [ ] A history with redacted: true says 'This post was removed permanently.': as the notice when there are no revisions, and above a moderator's revisions with no comparison offered (PostHistory.test.tsx)
-- [ ] The reader bundle stays within the 60000 B gzip budget, the PR records the total against 47415 B, and the dist from go generate ./internal/web/spa is committed
-- [ ] A member is refused with forbidden when public_edit_history is off and an anonymous reader with unauthenticated, both rendered through ErrorPanel, while a moderator of the forum, by role or through a group's grant, always reads the history (TestHistory, TestHistoryForAForumModeratorByGrant, PostHistory.test.tsx)
+- [x] The screen lists every revision with actor, time and reason, and wordDiff marks a one-word change inside a long line as exactly one deleted and one inserted word (wordDiff.test.ts, PostHistory.test.tsx)
+- [x] A grace-edited revision is listed with grace: true and a grace note although the post shows no edited marker (TestHistoryListsGraceRevisions, PostHistory.test.tsx)
+- [x] For a removed post a member gets deleted: true with no revisions and the screen shows the withheld notice, while a moderator gets and can compare every revision (TestTombstoneFromEveryEndpoint, PostHistory.test.tsx)
+- [x] Any two revisions can be chosen and compared (PostHistory.test.tsx)
+- [x] /t/{id}/{slug}/{ordinal}/history renders the screen instead of the PR #64 placeholder, and a stale slug there is corrected to the current one (ThreadPage.test.tsx)
+- [x] A history with redacted: true says 'This post was removed permanently.': as the notice when there are no revisions, and above a moderator's revisions with no comparison offered (PostHistory.test.tsx)
+- [x] The reader bundle stays within the 60000 B gzip budget, the PR records the total against 47415 B, and the dist from go generate ./internal/web/spa is committed
+- [x] A member is refused with forbidden when public_edit_history is off and an anonymous reader with unauthenticated, both rendered through ErrorPanel, while a moderator of the forum, by role or through a group's grant, always reads the history (TestHistory, TestHistoryForAForumModeratorByGrant, PostHistory.test.tsx)
 
 ## Implementation plan
 
@@ -165,3 +158,21 @@ Unchanged from the refresh:
 **agent:claude-code/phase2-groom** at 2026-09-30T08:52:37Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The Settled items are carried verbatim; new ones follow them. Changes: (1) now depends on TKT-01M3R1WPNS (Expose hard redaction in the post DTO and client), because a moderator's history of a hard-redacted post (PR #192) is revisions with empty sources, and the screen needs PostHistory.redacted to say 'removed permanently' instead of offering a diff of empty text. A criterion and tests were added for it. (2) 'Moderator' is moderate in the thread's forum, by role or through a group (access.canModerate), which matches the maintainer's decision of 2026-09-30. TestHistoryForAForumModeratorByGrant is new, because TestHistory covers role moderators only. (3) TestHistoryOfARemovedPost did not exist. The criteria now name TestTombstoneFromEveryEndpoint and TestHistory instead. (4) The screen is reader code. The budget is recorded against 47415 B of 60000 B, and a criterion says so. (5) PostMore (PR #202) links to history, and no change is needed there. threadlog.Revision still has no Grace, so the server step stands. Every criterion now names its test.
+
+**agent:claude-code/phase2-run-cp2q3** at 2026-09-30T21:54:17Z
+
+Replayed onto main at 4471ea6 (after #243, #245 to #248), and the dist was regenerated there.
+
+**Conflicts.** `ThreadScreen.tsx`: the placeholder was dropped, and #243's `ThreadBody` signature (`onChanged`) was kept. `thread.css`: both additions were kept, #243's own-controls block first.
+
+**Mark-unread (#248).** It stays put when the reader goes to a post's history, because `markAndReturn` checks the path (`onThreadBody`) rather than the screen. Its test left the history endpoint unstubbed, so the screen showed a not-found panel. It now serves the history and checks the screen is still shown, with its revision, after the mark lands.
+
+**Criterion 6's words.** The criterion quotes "This post was removed permanently." The screen says "Post removed permanently", which is `removedText` in `components/thread/removal.tsx`. The settled item says the words "follow TKT-01M3R1WPNS's", and that ticket shipped `removedText` (#228, #237) on the tombstone, the popover and the moderator queue. The orchestrator's brief for this lane gives the same words. So a redacted post reads alike everywhere, and the criterion is ticked on what it asks: the notice when there are no revisions, and above a moderator's revisions with no comparison offered.
+
+**Bundle (criterion 7).** The reader bundle is 59919 B of 70000 B. That is +1768 B over main at 4471ea6 (58151 B), and +12504 B over the 47415 B the criterion names, which was main at 5124209, before the Phase 2 reader tickets landed. A lazy route chunk was measured on 13709f0: 57551 B lazy against 56686 B static. `bundle.mjs` counts reader lazy chunks, and two gzip streams compress worse than one, so the screen is a static import.
+
+**e2e.** `e2e/post-history.spec.ts` passes at 390 px and 1440 px on alice's stored session, with one axe scan per test in each theme. The full suite had 191 passed and 11 skipped on port 18971.
+
+## Summary
+
+The post history screen replaces the PR #64 placeholder at /t/{id}/{slug}/{ordinal}/history. It lists every revision newest first with actor, role, absolute time (PostTime), reason and a grace note, and diffs any two chosen, word by word, with a hand-written Myers diff (web/client/src/history/wordDiff.ts, capped at 1000 edits, no dependency). Refusals render through ErrorPanel. A withheld removed post says so, and a redacted one reads 'Post removed permanently' (removedText) with no comparison. Server: threadlog.Revision.Grace and dto.PostRevision.grace. TestHistoryForAForumModeratorByGrant covers the group-grant moderator. e2e/post-history.spec.ts runs at both widths with one axe scan per test. The reader bundle is 59919 B of 70000 B (+1768 B over main at 4471ea6). All criteria ticked; criterion 6's quoted sentence is removedText's wording, as the note explains.
