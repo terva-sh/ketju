@@ -1,6 +1,7 @@
 import { useRoute } from 'preact-iso';
 import { LinkSignIn } from '../shell/LinkSignIn';
 import { sameHandle } from '../shell/nav';
+import { SignOutForm } from '../shell/SignOut';
 import { viewer } from '../state/viewer';
 import { Placeholder } from './Placeholder';
 
@@ -8,8 +9,8 @@ import { Placeholder } from './Placeholder';
 // the viewer's own profile it adds an Account block, where the account's
 // actions are until the settings screens (TKT-01M29CXK4) exist: the top
 // bar's handle and the phone's Me tab both come here, so the block is one
-// press from every screen (decided 2026-09-29, TKT-01M3QS0TMV).
-// TKT-01M3QVWKAG puts Sign out in the same block.
+// press from every screen (decided 2026-09-29, TKT-01M3QS0TMV). Sign out is
+// there too (TKT-01M3QVWKAG), for this browser only.
 export function ProfilePlaceholder() {
   const { params } = useRoute();
   const me = viewer.value.user;
@@ -20,6 +21,7 @@ export function ProfilePlaceholder() {
         <section data-account aria-labelledby="account-heading">
           <h2 id="account-heading">Account</h2>
           <LinkSignIn />
+          <SignOutForm class="sign-out" />
         </section>
       )}
     </Placeholder>

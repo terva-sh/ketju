@@ -190,7 +190,9 @@ main h1[tabindex='-1']:focus {
 .topbar.applicant form {
   margin: 0;
 }
-.topbar.applicant .sign-out {
+/* Sign out (SignOut.tsx), in the applicant's bar and on the member's own
+   profile: a full 44 px target at every width. */
+.sign-out {
   min-height: var(--target);
   padding: 0 14px;
   border: 1px solid var(--rule);
