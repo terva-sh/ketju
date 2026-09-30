@@ -19,7 +19,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:06:43Z
-updated_at: 2026-09-30T03:57:59Z
+updated_at: 2026-09-30T04:21:39Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -46,9 +46,9 @@ Reported by the moderator queue lane on 2026-09-30.
 - [ ] HidePostsOf and RestorePostsOf take no flag lock stripe, and the flagLocks, ResolvePost and closeFlags comments say why, naming the tests below
 - [ ] TestSuspensionHidePassesOverAnAutoHiddenPost: the real HidePostsOf leaves a post hidden pending review untouched, with its flags open
 - [ ] TestSuspensionHideWhileTheQueueRestores: in both orders the post and its flag rows end in a serial outcome, shown with flags dismissed or hidden by the suspension with flags dismissed
-- [ ] TestSuspensionHideRacesTheQueueRestore: 20 concurrent runs under -race each end in one of those two outcomes, never with flags open beside a flag.dismissed row and never with a second Delete after the auto-hide
 - [ ] TestStateChangeIsConflictNotSuccess calls the real HidePostsOf from afterQueueRead while the queue holds the stripe, and gains an unsuspension's-restore case
 - [ ] docs/08 Suspension says the hide passes over a post hidden pending review
+- [ ] TestSuspensionHideRacesTheQueueRestore: 20 concurrent runs under -race each end in outcome (a) or (b), or untouched when the Keep answered an error; in post 1's log no Delete follows a Delete without an intervening Restore; and the final post state and flag rows agree (shown or suspension-hidden with 0 open flags and one flag.dismissed row, or auto-hidden with every flag open and no row)
 
 ## Implementation plan
 
@@ -87,7 +87,14 @@ Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The de
 - `TestSuspensionHideWhileTheQueueRestores`, the ordered cases, deterministic:
   - (a) The queue's Keep holds its `Restore` in `w.writer.set` until `HidePostsOf` has returned. The hide does not wait on the queue, answers 0 for post 1, and writes nothing on it. After the release, post 1 is shown, 0 flags are open, and there is one `flag.dismissed` row.
   - (b) The queue's Keep completes, then `HidePostsOf` runs. Post 1 is hidden-by-mod and not auto-hidden, its `Delete` in force carries suspension 1, 0 flags are open, and there is one `flag.dismissed` row.
-- `TestSuspensionHideRacesTheQueueRestore`, under `-race`: 20 iterations, each with a fresh world. A Keep through `ResolvePost` and `HidePostsOf` start together on a released barrier. Every end state must be (a) or (b) above. The test fails if the post is shown with flags open, if flags are open next to a `flag.dismissed` row, or if the post has more than one `Delete` after its auto-hide. The count stays at 20 because of TKT-01M3R5P3CN (Keep the Go race tests inside their timeout under CI runner load).
+- `TestSuspensionHideRacesTheQueueRestore`, under `-race`: 20 iterations, each with a fresh world. A Keep through `ResolvePost` and `HidePostsOf` start together on a released barrier. Every end state must be (a) or (b) above. The one exception is a Keep that answered an error, which must leave the post untouched. For every iteration the test asserts:
+  - **The log alternates.** Walking post 1's records in log order, no `Delete` follows another `Delete` without a `Restore` between them. Outcome (b) is auto-hide `Delete`, `Restore`, then the suspension's `Delete`, which passes. Two `Delete`s in a row fail. (Review 1540 on PR #203: a flat "no second Delete" would refuse the valid outcome (b).)
+  - **The post and its flag rows agree** (`w.entry(1).Flags`, `w.openFlags(1)`, `w.flagRows()`):
+    - shown: 0 open flags, and exactly one `flag.dismissed` row, from the Keep;
+    - hidden by the suspension: hidden-by-mod without auto-hidden, the `Delete` in force carrying `Suspension: 1`, 0 open flags, and exactly one `flag.dismissed` row;
+    - hidden pending review: every flag still open and no `flag.dismissed` row. This arises only if the Keep failed, and the Keep's answer must then be an error.
+
+    Any other combination fails, with the iteration and the log's record types in the message. Examples: flags open beside a `flag.dismissed` row, auto-hidden with 0 open flags, or shown with flags open. The count stays at 20 because of TKT-01M3R5P3CN (Keep the Go race tests inside their timeout under CI runner load).
 - `TestStateChangeIsConflictNotSuccess` (existing): its "a suspension's hide" case calls the real `HidePostsOf` from `afterQueueRead` in place of the hand-built `Delete`. The call returns while the queue still holds the stripe, which proves that the hide takes no stripe and cannot deadlock against the queue. The assertions stay as they are: `conflict`, flags left open, one `Delete`, and the audit row.
 - A new case in the same table, "an unsuspension's restore": post 1 is hidden by `HidePostsOf` and then flagged. `RestorePostsOf` runs from `afterQueueRead` during a Dismiss. The answer is `conflict` and the flags are left open, or the order is dismiss then restore. The post is never shown with a `flag.dismissed` row saying "hidden".
 
@@ -101,3 +108,7 @@ Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The de
 **agent:claude-code/phase2-groom** at 2026-09-30T03:57:59Z
 
 Groomed 2026-09-30 (TKT-01M3M9RR26). Decided: the precondition already makes it safe, so the bulk hide does not take the lock, and the ticket adds the tests that prove it. Retitled from 'Take the per-post flag lock in a suspension's bulk hide'. The lock is flagLocks in internal/service/threads/flags.go, and the hide is HidePostsOf in internal/service/threads/suspension.go; the description named internal/service/flags, which does not exist. The reasoning and the lock's costs are in the plan's Settled section.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T04:21:39Z
+
+Review 1540 on PR #203 (head 22de825), medium, accepted: the race criterion forbade any second Delete, which outcome (b) needs. It now requires that no Delete follows a Delete without an intervening Restore, and that the post state and flag rows agree in every interleaving. The plan's race test says the same.

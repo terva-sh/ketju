@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T04:04:40Z
+updated_at: 2026-09-30T04:21:39Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
@@ -63,6 +63,7 @@ Tests: the notice text, the disabled Send and the countdown under fake timers, t
 - [ ] A rate-limited answer keeps the draft, says the wait from Retry-After, and holds Send until it passes, under fake timers (Post.test.tsx)
 - [ ] A successful post starts the wait for a viewer without can_moderate when slow_mode_seconds > 0, and a moderator is never held (Composer.test.tsx)
 - [ ] 'Slow mode…' is offered only with can_moderate and a role of moderator or admin; it is prefilled from slow_mode_seconds, sends one PUT /api/v1/admin/threads/{id}/slow-mode {seconds}, asks for the page again, and shows conflict and validation-failed beside the field (ThreadScreen.test.tsx)
+- [ ] Mounting the composer keeps the later of its local deadline and the page's next_post_at, and null or an earlier value never shortens it: closing and reopening the phone sheet during the wait after a successful post keeps Send disabled until the wait ends (ComposerSheet.test.tsx 'reopening the sheet keeps the wait', Composer.test.tsx 'the page never shortens the wait')
 
 ## Implementation plan
 
@@ -85,7 +86,7 @@ Two corrections to the description, read from main:
 - **Only staff set slow mode** (TKT-01M29CRJ50 note 2). The route is behind `staffGate`, so "Slow mode…" is offered with `mayModerate`, meaning `viewer.can_moderate` and a role of moderator or admin, as lock is. A member whose group grants `moderate` is exempt from slow mode but cannot set it. That asymmetry is the server's, and changing it is a product change outside this ticket.
 - **Setting a value over no row is a change** (TKT-01M29CRJ50 note 2). Setting the site default on a thread with no row of its own pins it and is not `conflict`. So the client cannot predict `conflict` from `slow_mode_seconds`, and always sends.
 - **One deadline per composer** (engineering choice). `Composer` in `state/composer.ts` gains `slowUntil: Signal<number | null>`, a Unix ms, set from three sources:
-  - the page's `next_post_at`, whenever the page's value changes;
+  - the page's `next_post_at`, on mount and whenever the page's value changes, keeping whichever deadline is later (Approach step 2);
   - a `rate-limited` answer's `Retry-After`, as `Date.now() + retryAfter * 1000`;
   - the viewer's own successful post, as `Date.now() + slow_mode_seconds * 1000`, when `slow_mode_seconds > 0` and the viewer does not moderate. The page's viewer block is not fetched again after a post, so without this Send would stay enabled into a certain refusal.
 
@@ -105,7 +106,7 @@ Two corrections to the description, read from main:
    - `discardReply` leaves `slowUntil` alone, because the wait is the viewer's, not the draft's.
 2. **`composer/Composer.tsx`**:
    - `Composer` and `PostButton` take `slow?: { seconds: number; nextPostAt: number | null; exempt: boolean }`.
-   - An effect on `slow.nextPostAt` sets `c.slowUntil.value = slow.nextPostAt`.
+   - An effect on mount and on `slow.nextPostAt` reconciles, and never simply assigns: `c.slowUntil.value = later(c.slowUntil.value, slow.nextPostAt)`. `later` returns the larger of the two, and treats null as "no deadline". A deadline in the past counts as null. So a page value never replaces a later local deadline, and null never clears one. The page may be one fetched before the viewer's own post, whose viewer block still says null. Without this rule, closing and reopening the phone sheet remounts `Composer` and clears the wait (review 1540 on PR #203). A successful post and a `rate-limited` answer set the deadline directly (step 1). Both can happen only while Send is enabled, which means no local deadline is in force.
    - A hook `useCountdown(until: number | null)` in `composer/countdown.ts` (new) re-renders once a second with `setTimeout` until `until` passes, and returns the seconds left, or 0.
    - `PostButton` is disabled while `posting || !source.trim() || left > 0`, and passes `slow` to `postReply`.
    - Above the toolbar, when `slow.seconds > 0`, a `<p class="slow-mode" data-slow-mode>` shows the notice. When `left > 0`, a `<span id="slow-wait-{thread}" data-slow-wait>` shows the countdown.
@@ -133,7 +134,8 @@ Two corrections to the description, read from main:
   - `a moderator is never held`: with `exempt: true` and `seconds: 30`, a successful post leaves Send enabled for the next draft.
   - `a post starts the wait`: with `seconds: 30` and `exempt: false`, a successful post disables Send for the next draft for 30 s.
 - **`composer/Post.test.tsx`** ("a refused post"): the `rate-limited` row with `Retry-After: 30` still keeps the source and says "post again in 30 seconds". It now expects Send to be disabled, and enabled again 30 s later under fake timers. The other rows are unchanged.
-- **`composer/ComposerSheet.test.tsx`**: the sheet's Post is disabled while the wait holds, and closing and reopening the sheet keeps the wait.
+- **`composer/ComposerSheet.test.tsx`**, `reopening the sheet keeps the wait` (review 1540): with `seconds: 30`, `exempt: false` and the page's `next_post_at` null, a successful post from the sheet starts the wait. The sheet is closed and reopened 10 s later, and the page it is given still says `next_post_at: null`. Post is disabled with "0:20" and is enabled again 20 s later under fake timers.
+- **`composer/Composer.test.tsx`**, `the page never shortens the wait`: `slowUntil` 30 s ahead, then a rerender with `nextPostAt` 5 s ahead, then with null. Send stays disabled until 30 s. A later `nextPostAt` of 60 s moves the wait to 60 s.
 - **`screens/ThreadScreen.test.tsx`**:
   - `a moderator sets slow mode`: role `moderator` with `can_moderate`. "Slow mode…" opens the panel prefilled from `slow_mode_seconds: 30` with "30 seconds" chosen. Choosing 5 minutes sends exactly one `PUT /api/v1/admin/threads/{id}/slow-mode` with `{"seconds":300}`, then asks for the page again, and the notice then reads "every 5 minutes".
   - `slow mode refusals stay beside the field`: 409 and 422 each show their words, and the panel stays open with the choice kept. A Custom value of 86401 sends nothing.
@@ -153,3 +155,7 @@ Two corrections to the description, read from main:
 **agent:claude-code/phase2-groom** at 2026-09-30T04:04:40Z
 
 Groomed 2026-09-30 (TKT-01M3M9RR26). Now depends on TKT-01M3QGH66W (Add lock, unlock, pin and unpin to the thread screen): the 'TKT-01M29CKRGS dialog pattern' the description names was never built on the client. The Retry-After words and the kept draft already exist (postFailure, Post.test.tsx), so criterion 3 now asks for the countdown after such an answer and names Post.test.tsx. Settled as an engineering choice: one slowUntil signal per composer, fed by next_post_at, Retry-After and the viewer's own post.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T04:21:39Z
+
+Review 1540 on PR #203 (head 22de825), medium, accepted: the composer overwrote slowUntil with the page's next_post_at on mount, so after a post the held page's null cleared the wait when the phone sheet reopened. The plan now keeps the later of the two and never lets null or an earlier value shorten the wait. New criterion 7, with the tests 'reopening the sheet keeps the wait' and 'the page never shortens the wait'.
