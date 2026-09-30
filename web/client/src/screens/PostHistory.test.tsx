@@ -11,7 +11,8 @@ const id = '3yymw47g00001';
 const slug = 'why-we-left-slack';
 const at = '/t/' + id + '/' + slug + '/27/history';
 const base = golden as PostHistory;
-const [alice, bob] = [base.revisions[0].actor, base.revisions[1].actor];
+const alice = base.revisions[0].actor;
+const bob = base.revisions.find((r) => r.actor.role === 'moderator')!.actor;
 
 function rev(revision: number, source: string, over: Partial<PostRevision> = {}): PostRevision {
   return { revision, actor: alice, at: 1757500000000 + revision * 60_000, reason: '', source, grace: false, ...over };

@@ -442,14 +442,17 @@ func postReplies(class string) PostReplies {
 	return PostReplies{Ordinal: 61, Posts: []Post{page.Posts[1], page.Posts[2]}}
 }
 
-// postHistory is post 61's history. A moderator's edit with a reason sits
-// beside the author's original, so actor and reason are both seen; the
-// deleted variant is what a member gets for a tombstoned post.
+// postHistory is post 61's history. The author's grace edit, made a minute
+// after posting, and a moderator's edit with a reason sit beside the
+// original, so actor, reason and grace are all seen; the deleted variant is
+// what a member gets for a tombstoned post.
 func postHistory(class string) PostHistory {
 	h := PostHistory{Ordinal: 61, Revisions: []PostRevision{
 		{Revision: 1, Actor: alice, At: 1757500100000, Reason: "",
-			Source: "The bill was the *smaller* half of it."},
-		{Revision: 2, Actor: bob, At: 1757500200000, Reason: "fixed the emphasis",
+			Source: "The bill was the smaller half of it."},
+		{Revision: 2, Actor: alice, At: 1757500160000, Reason: "",
+			Source: "The bill was the *smaller* half of it.", Grace: true},
+		{Revision: 3, Actor: bob, At: 1757500200000, Reason: "fixed the emphasis",
 			Source: "The bill was the **smaller** half of it."},
 	}}
 	if class == tMember {
