@@ -10,6 +10,7 @@ import { threadHref } from '../components/ThreadRow';
 import { meHref } from '../shell/nav';
 import { isPhone } from '../state/layout';
 import {
+  canDiscard,
   createThread,
   discardNewThread,
   loadNewThreadDraft,
@@ -85,8 +86,12 @@ export function NewThreadScreen() {
       route(threadHref(res.thread));
     });
   };
+  // Discard waits for the draft to load and for something to discard, on
+  // both layouts, so it never deletes a draft the reader has not seen
+  // (Terva review 1591).
+  const discardable = !!n && canDiscard(n);
   const discard = () => {
-    if (!n) return;
+    if (!n || !canDiscard(n)) return;
     if ((n.title.value.trim() || n.source.value.trim()) && !confirm('Discard this thread? The title and text will be deleted.')) return;
     discardNewThread(slug);
   };
@@ -99,11 +104,11 @@ export function NewThreadScreen() {
         : {
             title: 'New thread',
             back,
-            actions: n ? [{ id: 'discard-thread', label: 'Discard draft', run: discard }] : [],
+            actions: discardable ? [{ id: 'discard-thread', label: 'Discard draft', run: discard }] : [],
             composing: !!n,
             primary: n ? { id: 'post-thread', label: posting ? 'Posting…' : 'Post', run: post, disabled: !canPost } : undefined,
           },
-    [missing, slug, name, !!n, posting, canPost],
+    [missing, slug, name, !!n, posting, canPost, discardable],
   );
   useShellContext(ctx, [ctx]);
 
@@ -166,7 +171,7 @@ export function NewThreadScreen() {
                 {note}
               </span>
             )}
-            <button type="button" class="discard" disabled={posting || (!n.title.value && !n.source.value)} onClick={discard}>
+            <button type="button" class="discard" disabled={!discardable} onClick={discard}>
               Discard
             </button>
             <button type="button" class="post-reply" data-post-thread disabled={!canPost} aria-busy={posting} onClick={post}>

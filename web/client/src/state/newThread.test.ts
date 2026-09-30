@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetApiCache } from '../api/client';
 import type { Me } from '../api/dto';
 import { draftDelay } from './drafts';
-import { createThread, discardNewThread, loadNewThreadDraft, newThreadFor, newThreadNote, refusedHere, resetNewThreads } from './newThread';
+import { canDiscard, createThread, discardNewThread, loadNewThreadDraft, newThreadFor, newThreadNote, refusedHere, resetNewThreads } from './newThread';
 import { viewer } from './viewer';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 
@@ -260,6 +260,65 @@ describe('creating the thread', () => {
     expect(refusedHere(n)).toBe(off);
     await wait(draftDelay);
     expect(writes()).toEqual(['PUT T|body']);
+  });
+
+  // Terva review 1591, finding 1.
+  it('discard does nothing before the draft loads, or to an empty form', async () => {
+    server = { revision: 2, live: { title: 'Unseen', source: 'not shown yet' } };
+    held = {};
+    const loading = loadNewThreadDraft(F);
+    const n = newThreadFor(F);
+    expect(canDiscard(n)).toBe(false);
+    discardNewThread(F);
+    n.title.value = 'typed early';
+    expect(canDiscard(n)).toBe(false);
+    discardNewThread(F);
+    expect(n.title.value).toBe('typed early');
+    n.title.value = '';
+    // A second visit while the GET is out does not count as loaded.
+    await loadNewThreadDraft(F);
+    expect(n.loaded.value).toBe(false);
+    held.resolve!(apply(held.call!));
+    await loading;
+    expect(n.loaded.value).toBe(true);
+    expect(n.title.value).toBe('Unseen');
+    await tick();
+    expect(writes()).toEqual([]);
+    expect(server.live).toEqual({ title: 'Unseen', source: 'not shown yet' });
+
+    // Once shown, it can be discarded; an empty form then sends nothing.
+    discardNewThread(F);
+    await tick();
+    expect(writes()).toEqual(['DELETE']);
+    discardNewThread(F);
+    await tick();
+    expect(writes()).toEqual(['DELETE']);
+  });
+
+  // Terva review 1591, finding 2.
+  it('a create answered after the viewer changed drops nothing and answers null', async () => {
+    let answer!: (r: Response) => void;
+    await loadNewThreadDraft(F);
+    const n = newThreadFor(F);
+    n.title.value = 'T';
+    n.source.value = 'alice’s';
+    const base = fakeFetch;
+    vi.stubGlobal('fetch', (u: string, init: RequestInit = {}) =>
+      u === create ? (calls.push({ method: 'POST', url: u, body: undefined }), new Promise<Response>((r) => (answer = r))) : base(u, init),
+    );
+    const creating = createThread(F);
+    await tick();
+    // Someone else signs in in this tab and opens the same forum, with a
+    // draft of their own.
+    viewer.value = { ...(member as Me), user: { ...(member as Me).user!, handle: 'bob' } };
+    server = { revision: 7, live: { title: 'Bob’s', source: 'draft' } };
+    await loadNewThreadDraft(F);
+    expect(newThreadFor(F).title.value).toBe('Bob’s');
+    answer(apply({ method: 'POST', url: create, body: { title: 'T', source: 'alice’s' } }));
+    expect(await creating).toBeNull();
+    await tick();
+    expect(writes()).toEqual([]);
+    expect(server.live).toEqual({ title: 'Bob’s', source: 'draft' });
   });
 
   it('discard deletes the draft and forgets a refusal', async () => {

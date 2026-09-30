@@ -23,6 +23,14 @@ export interface NewThread {
   // the last attempt was refused, until the next one or a discard.
   posting: Signal<boolean>;
   failure: Signal<unknown>;
+  // loaded is set once the draft's GET has answered, whatever it answered.
+  // Until then Discard is off: the server may hold a draft the reader has
+  // not been shown, and discarding would delete it unseen (Terva review
+  // 1591).
+  loaded: Signal<boolean>;
+  // loading is whether loadNewThreadDraft has asked, so a second visit
+  // while the first GET is still out does not set loaded early.
+  loading: boolean;
 }
 
 const states = new Map<string, NewThread>();
@@ -48,6 +56,8 @@ export function newThreadFor(forum: string): NewThread {
       summoned: signal(0),
       posting: signal(false),
       failure: signal(null),
+      loaded: signal(false),
+      loading: false,
     };
     states.set(forum, s);
     // Disarmed until loadNewThreadDraft answers, so an empty form never
@@ -63,9 +73,11 @@ export function newThreadFor(forum: string): NewThread {
 // an empty form with nothing being posted: what the reader typed meanwhile
 // wins, and is saved over it. Whether this browser's own copy wins instead
 // is decided by the server's revision (state/drafts.ts restoreLocal).
-export function loadNewThreadDraft(forum: string): Promise<void> {
+export async function loadNewThreadDraft(forum: string): Promise<void> {
   const n = newThreadFor(forum);
-  return load<ForumDraft>(
+  if (n.loading) return;
+  n.loading = true;
+  await load<ForumDraft>(
     draftKey(forum),
     (d) => ({ title: typeof d.title === 'string' ? d.title : '', source: typeof d.source === 'string' ? d.source : '' }),
     (s) => {
@@ -80,6 +92,7 @@ export function loadNewThreadDraft(forum: string): Promise<void> {
       return true;
     },
   );
+  n.loaded.value = true;
 }
 
 // createThread creates forum's thread from its composer (POST
@@ -92,8 +105,13 @@ export function loadNewThreadDraft(forum: string): Promise<void> {
 // are cleared, so clearing them is not a change to save, and drop removes
 // this browser's copy with the server's draft. A refusal keeps the text and
 // records why, for the screen to say.
+//
+// An answer that arrives after the viewer has changed belongs to nobody on
+// screen: it drops no draft, since the key would now be the next person's,
+// and answers null, so the screen goes nowhere (Terva review 1591).
 export async function createThread(forum: string): Promise<CreatedThread | null> {
   const n = newThreadFor(forum);
+  const who = owner;
   const title = n.title.value;
   const source = n.source.value;
   if (n.posting.value || !title.trim() || !source.trim()) return null;
@@ -101,6 +119,7 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
   n.failure.value = null;
   try {
     const res = await apiSend<CreatedThread>('POST', `/api/v1/forums/${encodeURIComponent(forum)}/threads`, { title, source });
+    if (!current(forum, n, who)) return null;
     drop(draftKey(forum));
     batch(() => {
       n.title.value = '';
@@ -116,10 +135,26 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
   }
 }
 
+// current is whether n is still forum's composer for the viewer who was
+// who, read without starting a new one.
+function current(forum: string, n: NewThread, who: string | null): boolean {
+  return (viewer.peek().user?.handle ?? '') === who && owner === who && states.get(forum) === n;
+}
+
+// canDiscard is whether Discard may act: the draft has loaded, nothing is
+// being posted, and there is something to discard.
+export function canDiscard(n: NewThread): boolean {
+  return n.loaded.value && !n.posting.value && !!(n.title.value || n.source.value);
+}
+
 // discardNewThread empties forum's composer, and any refusal, and deletes
-// the draft.
+// the draft. It does nothing until the draft has loaded, and nothing to the
+// server while the form is empty: either way the only draft it could delete
+// is one the reader has not been shown.
 export function discardNewThread(forum: string) {
   const n = newThreadFor(forum);
+  n.failure.value = null;
+  if (!canDiscard(n)) return;
   drop(draftKey(forum));
   batch(() => {
     n.title.value = '';

@@ -278,4 +278,28 @@ describe('on a phone', () => {
     await wait(20);
     expect(location.pathname).toBe(`/t/${thread.id}/${thread.slug}`);
   });
+
+  // Terva review 1591: Discard is offered only once the draft has loaded
+  // and there is something to discard, so it never deletes one unseen.
+  it('offers Discard in the more menu only once the draft has loaded', async () => {
+    isPhone.value = true;
+    let answer!: (a: Answer) => void;
+    const s = serve('general', {
+      'GET /api/v1/forums/general/draft': () => new Promise<Answer>((r) => (answer = r)),
+    });
+    const root = await renderAt(general);
+    const actions = () => shellContext.value?.actions.map((a) => a.id) ?? [];
+    expect(actions()).toEqual([]);
+    expect(root.querySelector('[aria-label=More]')).toBeNull();
+    await act(async () => answer({ status: 200, body: { forum: 'general', title: 'Saved', source: 'unseen', updated_at: 0, revision: 3 } }));
+    await wait(5);
+    expect(title(root).value).toBe('Saved');
+    expect(actions()).toEqual(['discard-thread']);
+    vi.stubGlobal('confirm', () => true);
+    await act(() => shellContext.value!.actions[0].run());
+    await wait(5);
+    expect(sent(s, 'DELETE', '/api/v1/forums/general/draft')).toHaveLength(1);
+    expect(title(root).value).toBe('');
+    expect(actions()).toEqual([]);
+  });
 });
