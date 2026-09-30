@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-30T12:58:04Z
+updated_at: 2026-09-30T13:15:50Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -148,6 +148,20 @@ Settled in the refresh of 2026-09-30:
 - "Reply as new thread" and split, which open this composer with content: Phase 4 (docs/06 "Moderator flow for drift").
 - A capability flag saying up front whether the reader may create a thread here: not filed; the refusal is shown when it comes.
 - Slow mode in the reply composer: TKT-01M3R0PM0K.
+
+
+### Revised at claim (2026-09-30, main at 6b5dc9a)
+
+Everything above stands, `### Settled in grooming` and the refresh's items included. Built against main at 6b5dc9a, where TKT-01M3K9XBJA (#215) and TKT-01M3NS1931 (#227) have both landed. What the build does differently from the approach, each with the alternative that lost:
+- **The route is eager, measured both ways.** Eager, the reader bundle is 52903 B gzip (+1689 B over 51214 B). Lazy, it is 55381 B: Vite splits the modules the screen shares with the thread page into a third chunk, and `bundle.mjs` counts every reader chunk. Lost: the lazy route, which costs 2478 B more.
+- **`ComposerBody` takes `head`, `notice` and `foot` slots** and draws the section, the tabs in the head, the toolbar, the textarea and the preview. `Composer` puts the h2 and chip in `head`, the refusal in `notice` and its footer in `foot`, so its markup is unchanged and its tests pass unchanged. `focus` is split from `sheet`: the reply sheet takes focus when it opens, while the new-thread screen leaves focus on the heading the route focuser moves it to. The mention list's id comes from `useId`. Lost: a `mode` prop, as the grooming settled.
+- **The forum comes from `useResource('/api/v1/forums')`,** which shows a held tree at once and revalidates it, rather than from `peekGet` alone. A forum absent from the viewer's tree is `NotFound`. Lost: reading `not-found` from the draft load, because `load` in `state/drafts.ts` turns a refused load into autosave off and does not return it. Changing that would change the shared engine for one screen.
+- **`drafts.ts` gains `draftStatus(key)`**, a read of the status it already keeps, so `newThreadNote` can say "Draft not saved" when a refused save turned autosave off. `draftNote` says nothing then, and the reply composer keeps that. No rule of the engine changes.
+- **The owner check is shared.** `composer.ts` exports `checkOwner()`, which `newThreadFor` calls before its own map's check, so whichever composer is asked for first after a viewer change resets the draft keys and neither resets the other's fresh ones.
+- **On a phone, Discard is in the top bar's more menu** (`ShellContext.actions`) and the draft line is in the composer's head, since the sheet layout hides the footer. On a desktop both are in the footer.
+- **The title field and the refusal are inside the composer card** (`notice`), above the toolbar, so the phone's column reads title, text, toolbar.
+- **Creating the thread lands on `threadHref` (`/t/{id}/{slug}?page=1`)** and forgets the held forum tree and the forum's list pages, so going back shows the new thread at once.
+- **The e2e spec has two tests per width**, the draft-and-post flow and one axe scan of the screen, after TKT-01M3MTQG5A's one scan per test. Both start from alice's stored session.
 
 ## Notes
 
