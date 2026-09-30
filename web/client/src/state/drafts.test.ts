@@ -294,9 +294,42 @@ describe('before the draft has loaded', () => {
   it('a disarmed key sends nothing on pagehide', async () => {
     hold('GET');
     void loadReplyDraft(T);
-    composerFor(T).source.value = 'x';
+    pagehide();
+    composerFor(T).replyTo.value = 3;
+    composerFor(T).replyTo.value = null;
     pagehide();
     await wait(draftDelay);
+    expect(writes()).toEqual([]);
+    expect(copy()).toBeNull();
+  });
+
+  // Terva review 1583, finding 1.
+  it('text typed before the load answers is kept on pagehide, and restored on a 204', async () => {
+    hold('GET');
+    void loadReplyDraft(T);
+    composerFor(T).source.value = 'typed while it loaded';
+    pagehide();
+    await wait(draftDelay);
+    expect(writes()).toEqual([]);
+    expect(copy()).toEqual({ snapshot: { source: 'typed while it loaded', reply_to: null }, base: null, inflight: 0, deletes: 0 });
+    newPage();
+    await loadReplyDraft(T);
+    await tick();
+    expect(composerFor(T).source.value).toBe('typed while it loaded');
+    expect(draftNote(key)).toBe('Restored from this browser');
+    expect(server.live).toEqual({ source: 'typed while it loaded', reply_to: null });
+  });
+
+  it('text typed before the load answers loses to a server draft on the next load', async () => {
+    hold('GET');
+    void loadReplyDraft(T);
+    composerFor(T).source.value = 'typed while it loaded';
+    pagehide();
+    server = { revision: 3, live: { source: 'from the phone', reply_to: null } };
+    newPage();
+    await loadReplyDraft(T);
+    await wait(draftDelay);
+    expect(composerFor(T).source.value).toBe('from the phone');
     expect(writes()).toEqual([]);
     expect(copy()).toBeNull();
   });
@@ -393,6 +426,26 @@ describe('refusals', () => {
     expect(writes()).toEqual(['PUT a']);
     await wait(100);
     expect(writes()).toEqual(['PUT a', 'PUT ab']);
+  });
+
+  // Terva review 1583, finding 2.
+  it('a save queued before the 429 waits for Retry-After too', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'a';
+    await wait(draftDelay);
+    c.source.value = 'ab';
+    await wait(draftDelay);
+    put.resolve!(problem('rate-limited', 429, { 'Retry-After': '5' }));
+    await tick();
+    expect(writes()).toEqual(['PUT a']);
+    expect(draftNote(key)).toBe('Draft not saved');
+    await wait(4900);
+    expect(writes()).toEqual(['PUT a']);
+    await wait(100);
+    expect(writes()).toEqual(['PUT a', 'PUT ab']);
+    expect(server.live).toEqual({ source: 'ab', reply_to: null });
   });
 
   it('a post during a Retry-After deletes once it has passed', async () => {

@@ -250,12 +250,10 @@ function failed(e: Entry, r: Req, err: unknown) {
     if (r.del) e.unsureDeletes++;
   }
   if (refused(err)) return turnOff(e);
-  if (next(e)) return;
-  // Not saved: the next change, or pagehide, sends the draft again.
-  e.held = unanswered ? null : r.prior;
-  e.sent = null;
-  e.status.value = 'failed';
-  if (isProblem(err, 'rate-limited')) {
+  // A rate-limited answer holds back everything after it, a request already
+  // queued included, until Retry-After has passed (Terva review 1583).
+  const limited = isProblem(err, 'rate-limited');
+  if (limited) {
     e.waiting = true;
     clearTimeout(e.timer);
     e.timer = setTimeout(() => {
@@ -263,7 +261,14 @@ function failed(e: Entry, r: Req, err: unknown) {
       e.waiting = false;
       if (!next(e)) flush(e);
     }, ((err as ProblemError).retryAfter ?? draftDelay / 1000) * 1000);
+  } else if (next(e)) return;
+  // Not saved: the next change, pagehide or the Retry-After sends the draft
+  // again, unless a newer request is already waiting to.
+  if (!e.next) {
+    e.held = unanswered ? null : r.prior;
+    e.sent = null;
   }
+  e.status.value = 'failed';
 }
 
 function next(e: Entry): boolean {
@@ -397,23 +402,31 @@ export function drop(key: DraftKey) {
 // Every non-empty draft not seen saved is kept, and an empty one while the
 // server may hold a draft: a post's DELETE queued behind a save in flight is
 // then sent by the next load, if nothing but that save reached the draft.
+//
+// A key still disarmed sends nothing, but what was typed before its GET
+// answered is kept, with no base (Terva review 1583). The next load restores
+// it on a 204. On a 200 the server's draft wins, as for every copy with no
+// base: nothing orders the two, and restoring the copy would save it over a
+// draft another device may have written since.
 function unload() {
   for (const e of entries.values()) {
     if (!e.waiting) {
       clearTimeout(e.timer);
       e.timer = undefined;
     }
-    if (!e.armed || e.off) continue;
+    if (e.off) continue;
     if (e.next) {
       e.held = e.next.prior;
       e.next = null;
     }
     const snap = e.read();
     const j = JSON.stringify(snap);
-    if (!e.current && j === e.confirmed) continue;
-    e.sent = e.current ? e.current.json : e.confirmed;
     const empty = isEmpty(snap);
-    if (!e.current && (empty || new TextEncoder().encode(j).length < keepaliveLimit)) flush(e);
+    if (e.armed) {
+      if (!e.current && j === e.confirmed) continue;
+      e.sent = e.current ? e.current.json : e.confirmed;
+      if (!e.current && (empty || new TextEncoder().encode(j).length < keepaliveLimit)) flush(e);
+    }
     if (!e.owner || (empty && !e.current && !e.held)) continue;
     const c: Copy = {
       snapshot: snap,
