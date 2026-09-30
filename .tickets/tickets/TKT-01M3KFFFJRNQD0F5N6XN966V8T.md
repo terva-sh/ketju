@@ -27,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T18:42:36Z
+updated_at: 2026-09-30T18:47:49Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -67,7 +67,7 @@ docs/06 "Read tracking", docs/07 "Read position".
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Refreshed against main at 5124209 on 2026-09-30: line references corrected, the docs/06 step removed because it has landed, and the per-post control fitted to the phone's "more" disclosure from PR #202.
+Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Refreshed against main at 5124209 on 2026-09-30. Revised at claim on 2026-09-30 against main at 13709f0 (agent:claude-code/phase2-run-kfffjr). The settled items below are carried unchanged. The approach adds where the page returns to and how a failure shows, and fits the post footer and thread screen as the moderation panel, drafts and the redacted marker left them.
 
 ### Settled in grooming
 - The server contract is docs/07 "Read position" (`:751-784`), and it landed with TKT-01M29CA9CE:
@@ -98,19 +98,29 @@ Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). R
   - **Stale counts are dropped, not patched.** Thread-list rows carry `unread` and `last_read_ordinal` (`api/dto.ts:145-146`) and are held by `api/client.ts` under `/api/v1/forums/{slug}/threads?…`. The forum index holds per-forum counts under `/api/v1/forums`, and the nav badge reads `viewer.unread`. After a successful mark, `forgetGets((u) => u.startsWith('/api/v1/forums'))` drops both, and `refreshViewer()` refreshes the badge, before the page navigates. Editing the held rows in place lost, because the list's order and counts are the server's to compute.
 
 ### Approach
-1. `web/client/src/state/readTracker.ts`: `export function markUnread(id: string, ordinal?: number): Promise<ReadPosition>`, implementing the settled requirements. Replace the comment at `:34-39` with what now lowers the floor. `trackPosts(id, list, stored)` (`:175`) gains a fourth parameter, `page`, so that a page requested before the mark's answer does not raise the floor. Its one caller, `useReadTracking` in `screens/ThreadScreen.tsx:279-285`, already has the page in its effect's dependencies.
-2. `web/client/src/state/threads.ts`: `pageRequestedAt` over the `loads` counter (`:190`, bumped in `load()` at `:84-119`), and `forgetThreadPages`, which exports `forgetThread` (`:194`), as settled.
-3. The controls:
-   - the `mark-unread` entry in `threadActions`, passed from `ThreadScreen.tsx:96-104` when `tracksUnread()` is true;
-   - on desktop, an "Unread from here" button in `Post.tsx`'s footer (`data-post-action="unread"`), after quote and reply;
-   - on a phone, the same action as an item in `PostMore`, as settled.
-
-   A failure is shown the way the page shows other failed actions, and the reader stays on the page and can try again. On success, drop the held forum and thread-list bodies and refresh the viewer as settled, then navigate to the list.
-4. `docs/06` "Mobile" (`:240-242`): add "unread from here" to the controls under "more". The "Read tracking" paragraph on the two controls is already on main (`docs/06-thread-views.md:64-68`).
-5. Run `npm --prefix web/client run build`, which ends with the budget check (`scripts/budget.mjs`), and `go generate ./internal/web/spa`, and commit `internal/web/spa/dist`. The thread view was 47415 B gzip of the 60000 B `threadViewGzipBytes` budget after PR #202 (TKT-01M3QQWA5Z). Record the new figure in a note.
+1. `web/client/src/state/readTracker.ts`: `export function markUnread(id: string, ordinal?: number): Promise<ReadPosition>`, ported from `74c4e8f` with its `held`, `marks` and `after` maps, implementing the settled requirements.
+   - The comment at `:34-39` is replaced with what now lowers the floor.
+   - `markedAt` records `loadCount()` from `state/threads.ts` when the DELETE answers, in place of the old private clock.
+   - `trackPosts(id, list, stored, page?)` takes the page. It takes `stored` as known only when no mark has answered for the thread, or when `pageRequestedAt(page)` is later than the newest mark.
+   - `carried` keeps, per thread, the highest read collected during a mark whose DELETE failed, and the next mark that succeeds queues it against its answer (the review-1149 fix). The same read is also queued against the unchanged floor when the DELETE fails, as the removed code did, so a read past that floor still goes out although the mark failed. A read at or below the floor is dropped there and kept only in `carried`, which is the settled fix: before, that drop was all that happened to it.
+   - `resetReadTracker` clears the new maps.
+2. `web/client/src/state/threads.ts`:
+   - `load()` records each page it answers with its request number in a `WeakMap<ThreadPage, number>`. When a 304 hands back a body already recorded, it keeps the larger number. A 304 to a request made after the mark means the server says that body is still right, and its ETag hashes the viewer's position.
+   - `pageRequestedAt(page)` reads the map, and `loadCount()` reads the `loads` counter.
+   - `forgetThreadPages(id)` is the existing `forgetThread`, exported under that name.
+3. `web/client/src/state/lists.ts` (new, a few lines): `ThreadListScreen` records the address of the list it shows, with its cursor and sort, through `rememberList(forum, href)`. `listFor(forum)` answers that address when it is for the thread's forum, and `/f/{forum}` otherwise. This is how the page knows "the list the reader came from": preact-iso keeps no history of its own, and `history` cannot read any entry but the current one.
+4. The controls, in `screens/ThreadScreen.tsx`:
+   - `markAndReturn` calls `markUnread`. On success it calls `forgetGets((u) => u.startsWith('/api/v1/forums'))` and `refreshViewer()`, as settled, then `route(listFor(forum), true)`, but only if the reader is still on this thread, as `posted` checks. It replaces the thread's history entry rather than pushing one, so Back does not reopen the page just marked and read it again.
+   - The whole-thread action, "Mark unread" (`mark-unread`), goes in `threadActions` after First unread. It is passed when `tracksUnread()` is true, on the thread body once a page is on screen, and not on the post history route. Its `run` ignores a press while a mark is out, which a ref tracks.
+   - A failure of the whole-thread action shows as a `role=alert` paragraph under the thread head: "This thread could not be marked unread." followed by `problemMessage`'s text, as `FlagDialog` and `ModerateDialog` word their refusals. The reader stays and can press again.
+   - Per post: `ThreadBody` passes `onUnread(ordinal)` to `Post` when `tracksUnread()` is true. It sends `ordinal - 1` and returns the mark's promise. `Post` holds the busy and error state for its own control.
+   - On desktop the control is a footer button, "unread from here" (`data-post-action="unread"`), after quote and reply, and `disabled` while its DELETE is out. On a phone, `PostMore` takes an optional `onUnread` and shows the item, which closes the list as flag's does. A failure shows as a `role=alert` paragraph under that post's footer.
+   - Tombstones get no control. The whole-thread action covers them.
+5. `docs/06` "Mobile" (`:240-242`): add "unread from here" to the controls under "more".
+6. Run `npm --prefix web/client run build`, which ends with the budget check, then `go generate ./internal/web/spa`, and commit `internal/web/spa/dist`. Report the reader bundle's change from 54924 B.
 
 ### Tests
-- Vitest in `readTracker.test.ts`: the seven tests removed with `69f66a0`, restored and adapted:
+- Vitest in `readTracker.test.ts`: the seven tests removed with `69f66a0`, restored and adapted. The page-order test uses `loadThreadPage` in place of `asking`.
   - `flushes and waits for every PUT before the DELETE, and sends nothing while it is out`
   - `starts no PUT while it waits for one already out`
   - `keeps what is read while the DELETE is out, and judges it by the answer`
@@ -118,13 +128,24 @@ Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). R
   - `runs overlapping marks one at a time, in call order`
   - `takes a page position only from a page asked for after the mark`
   - `sends no body to mark the whole thread unread`
+
   Plus `keeps what was read during a failed DELETE for the next mark`, the review-1149 case.
-- Vitest for the controls: the thread action calls `markUnread(id)` and the post action calls `markUnread(id, ordinal - 1)`, from the footer on desktop and from `PostMore` on a phone. Both drop the held list bodies and navigate to the list on success, and stay on failure. The post action is offered to a signed-in member in a thread they cannot reply in, and to nobody signed out.
-- Playwright in `e2e/read-tracking.spec.ts`, which signs in as carol from `stateFile('carol')`: mark a read thread unread from the page. The server's position is lower (checked with `readPosition` from `e2e/session.ts`), and the page is back on the thread list with the thread shown unread. The same holds for "Unread from here" on a middle post, reached on a phone through `[data-post-more]` first, as `e2e/flag.spec.ts` does. Each test sets carol's position with `setReadPosition` before it starts, because other specs move it.
+- Vitest for the controls, in `ThreadScreen.test.tsx`:
+  - the thread action sends DELETE with no body, and the post action sends `{ordinal: N - 1}`, from the footer on desktop and from `PostMore` on a phone;
+  - on success both drop the held forum and list bodies and navigate to the list, which is the remembered list when it belongs to this forum;
+  - on failure both stay on the page and show an alert;
+  - the post action is offered to a signed-in member in a thread they cannot reply in, and to nobody signed out.
+- `threadActions.test.ts`: Mark unread is offered only when it is handed over.
+- Playwright in `e2e/read-tracking.spec.ts`, signed in as carol from `stateFile('carol')`. Each test sets carol's position with `setReadPosition` first, and waits out the dwell before pressing, so that no read is pending when the DELETE goes.
+  - Mark the thread unread from the page, through the desktop toolbar or the phone's more menu. The server's position is 0, and the page is back on General's list with the thread's unread badge showing.
+  - "Unread from here" on post 3, reached on a phone through `[data-post-more]` first, as `e2e/flag.spec.ts` does. The DELETE's body is `{ordinal: 2}`, the position is 2, and the page is on the list.
+
+  Each test runs at most one axe scan.
 
 ### Out of scope
 - The no-JS route `POST /t/{id}/unread` (docs/07 `:1009`), which is the HTML client's (TKT-01M29BN36W).
 - A keyboard shortcut for the control. It can be added to `keyboard/shortcuts.ts` once the control exists.
+- A server change. The DELETE acts on the session's own user, taken from the session and never from the request (`internal/web/api/viewerstate.go:64`, `internal/service/threads/viewerstate.go:101`), so no member can move another member's position through it.
 
 ## Notes
 
