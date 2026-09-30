@@ -52,6 +52,21 @@ const flagLockStripes = 256
 // nothing else. The zero value is ready. A caller holds one stripe at a time
 // and takes it before the thread, never inside Threads.With, so no two
 // orders exist to deadlock.
+//
+// A suspension's hide and restore of an author's posts (HidePostsOf,
+// RestorePostsOf) walk many posts and take no stripe (TKT-01M3R10VP3). They
+// need none. Each of their records carries its precondition (Refuse gone for
+// the hide, Require hidden-by-mod for the restore) and the log length it was
+// decided at, both checked when it lands, so each is atomic against the
+// post's state. The hide passes over a post hidden pending review, and never
+// clears the auto-hidden bit the queue's Restore requires, so against the
+// queue every outcome is a serial order. Taking the stripe would mean one
+// Threads.With per post, since the hide decides inside With, and a first
+// account-then-stripe lock order, for no outcome the preconditions do not
+// already give. TestSuspensionHidePassesOverAnAutoHiddenPost,
+// TestSuspensionHideWhileTheQueueRestores,
+// TestSuspensionHideRacesTheQueueRestore and
+// TestStateChangeIsConflictNotSuccess prove it.
 type flagLocks struct {
 	stripes [flagLockStripes]sync.Mutex
 }

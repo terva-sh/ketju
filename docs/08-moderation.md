@@ -45,7 +45,8 @@ writes it.
   moderator's hide. It is written to the logs, so it survives a database
   rebuild. The suspension commits first, because a transaction cannot span
   the logs. The hide is idempotent, so running it again finishes one that
-  stopped part-way.
+  stopped part-way. It passes over a post hidden pending review, which stays
+  in the moderator queue for a moderator to decide (TKT-01M3R10VP3).
 - **A hide reaches only what its moderator may moderate.** A thread in a
   forum the moderator cannot moderate or see is passed over, and the count
   says nothing about it. An admin's hide reaches every forum. An archived

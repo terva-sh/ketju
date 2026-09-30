@@ -315,8 +315,14 @@ func stateOf(f threadlog.EntryFlags) postState {
 // (closeFlags). A delete or restore of one post from the thread page holds
 // the lock too, so what can still land outside it is a suspension's hide
 // or restore of an author's posts; that is ErrPostState, or closeFlags'
-// conflict, with the flags left open. A failed append leaves the flags open
-// too. Where the flags are closed without a Restore, the close and the
+// conflict, with the flags left open. That is not a gap the lock would
+// close: the hide never appends on a post hidden pending review, so against
+// a Keep or dismiss that restores one, the post ends shown or hidden by the
+// suspension, both with its flags dismissed, which are the two serial
+// orders (flagLocks; TestSuspensionHideWhileTheQueueRestores,
+// TestSuspensionHideRacesTheQueueRestore,
+// TestStateChangeIsConflictNotSuccess). A failed append leaves the flags
+// open too. Where the flags are closed without a Restore, the close and the
 // audit row are one write.
 //
 // The restore path writes its row only once the Restore append succeeded,
@@ -484,7 +490,11 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 // open (Terva review 1522 on PR #184). A delete or restore of one post holds
 // the flag lock, so none lands in between; what is left is a suspension's
 // hide or restore of every post by one author, which walks threads without
-// the per-post lock and which this check narrows to the write itself.
+// the per-post lock. This check makes one landing before it conflict. One
+// landing between the check and the commit (Threads.With is not exclusive)
+// reads as the close, then the hide or restore: the flags and the post
+// agree with that serial order, and the lock would change only which of
+// two valid orders is recorded (flagLocks; TestStateChangeIsConflictNotSuccess).
 // stateAny skips the check, for the close after the queue's own Delete.
 func (s *Service) closeFlags(ctx context.Context, by audit.By, id threadid.ID, ordinal uint32, r Resolution,
 	decided postState, post string) (dto.QueueResolution, error) {

@@ -847,47 +847,85 @@ func TestFailedActionStaysInQueue(t *testing.T) {
 // between the queue's read and its write is conflict, with the flags left
 // open and no flag row, for every action on a shown post (Terva reviews
 // 1522 and 1524 on PR #184). The change is appended straight to the log,
-// bypassing the post's flag lock: a moderator's Delete, as a suspension's
-// hide of an author's posts writes it, and the system's auto-hide. A remove
-// meets it as its append's precondition; dismiss and resolve, which append
-// nothing, meet it when they read the state again before their write.
+// bypassing the post's flag lock: a suspension's hide of an author's posts,
+// the system's auto-hide, and an unsuspension's restore of a post the
+// suspension hid. A remove meets a hide as its append's precondition;
+// dismiss and resolve, which append nothing, meet it when they read the
+// state again before their write, and the restore likewise.
+//
+// The suspension's hide and restore are the real HidePostsOf and
+// RestorePostsOf (TKT-01M3R10VP3), called from afterQueueRead while the
+// queue holds the post's stripe. Each returning at all proves it takes no
+// stripe: sync.Mutex is not reentrant, so one that did would wait for the
+// queue that is waiting for it. Both also reach the author's post in
+// "other", so their audit rows come in pairs.
 func TestStateChangeIsConflictNotSuccess(t *testing.T) {
-	hides := []struct {
-		name  string
-		rec   func(w *queueWorld) threadlog.Append
-		audit string
-	}{
-		{"a suspension's hide", func(w *queueWorld) threadlog.Append {
-			return threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["mod2"]),
-				Body: &threadlog.DeleteBody{Reason: "suspended", ByModerator: true}}
-		}, "post.hidden by mod2"},
-		{"the auto-hide", func(w *queueWorld) threadlog.Append {
-			return threadlog.Append{Type: threadlog.TypeDelete, Body: &threadlog.DeleteBody{Reason: AutoHideReason, Auto: true}}
-		}, "post.auto_hidden by system"},
+	const noStripe = 10 * time.Second // a guard against a deadlock, not a wait
+	within := func(t *testing.T, what string, fn func() (int, error)) {
+		t.Helper()
+		done := make(chan error, 1)
+		go func() {
+			_, err := fn()
+			done <- err
+		}()
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("%s: %v", what, err)
+			}
+		case <-time.After(noStripe):
+			t.Fatalf("%s waited on the stripe the queue holds", what)
+		}
 	}
-	for _, hide := range hides {
+	changes := []struct {
+		name    string
+		setup   func(t *testing.T, w *queueWorld)
+		change  func(t *testing.T, w *queueWorld, id threadid.ID, ordinal uint32)
+		deletes int
+		audit   []string
+	}{
+		{"a suspension's hide", nil, func(t *testing.T, w *queueWorld, _ threadid.ID, _ uint32) {
+			within(t, "the suspension's hide", w.suspendHide)
+		}, 1, []string{"post.hidden by mod2", "post.hidden by mod2"}},
+		{"the auto-hide", nil, func(_ *testing.T, w *queueWorld, id threadid.ID, ordinal uint32) {
+			w.appendTo(id, threadlog.Append{Type: threadlog.TypeDelete, Ordinal: ordinal,
+				Body: &threadlog.DeleteBody{Reason: AutoHideReason, Auto: true}})
+		}, 1, []string{"post.auto_hidden by system"}},
+		// The flag was reported on the shown post, then the author was
+		// suspended with their posts hidden: the queue lists the post as
+		// hidden by a moderator, and the restore lands while it decides.
+		// The post ends shown with its flag open, never shown with a
+		// flag.dismissed row saying it is hidden.
+		{"an unsuspension's restore", func(t *testing.T, w *queueWorld) {
+			if n, err := w.suspendHide(); err != nil || n != 2 {
+				t.Fatalf("the suspension's hide answered %d, %v", n, err)
+			}
+		}, func(t *testing.T, w *queueWorld, _ threadid.ID, _ uint32) {
+			within(t, "the unsuspension's restore", w.suspendRestore)
+		}, 0, []string{"post.hidden by mod2", "post.hidden by mod2", "post.restored by mod2", "post.restored by mod2"}},
+	}
+	for _, c := range changes {
 		for _, action := range []string{QueueRemove, QueueDismiss, QueueResolve} {
-			t.Run(hide.name+"/"+action, func(t *testing.T) {
+			t.Run(c.name+"/"+action, func(t *testing.T) {
 				w := newQueueWorld(t)
 				w.mustFlag("rep1", 1)
-				before := w.logLength()
-				w.svc.afterQueueRead = func(id threadid.ID, ordinal uint32) {
-					rec := hide.rec(w)
-					rec.Ordinal = ordinal
-					w.appendTo(id, rec)
+				if c.setup != nil {
+					c.setup(t, w)
 				}
+				before := w.logLength()
+				w.svc.afterQueueRead = func(id threadid.ID, ordinal uint32) { c.change(t, w, id, ordinal) }
 				if _, err := w.resolve("mod", w.id, 1, action); codeOf(err) != problem.CodeConflict {
-					t.Fatalf("the %s after %s: %v, want conflict", action, hide.name, err)
+					t.Fatalf("the %s after %s: %v, want conflict", action, c.name, err)
 				}
 				w.svc.afterQueueRead = nil
 				if w.openFlags(1) != 1 || len(w.flagRows()) != 0 {
 					t.Errorf("after the conflict: %d open flags, rows %v", w.openFlags(1), w.flagRows())
 				}
-				if n := w.deletes(before); n != 1 {
-					t.Errorf("%d Deletes, want only the hide's", n)
+				if n := w.deletes(before); n != c.deletes {
+					t.Errorf("%d Deletes, want %d, the change's", n, c.deletes)
 				}
-				if got, want := w.audit(), []string{hide.audit}; !reflect.DeepEqual(got, want) {
-					t.Errorf("audit %v, want %v", got, want)
+				if got := w.audit(); !reflect.DeepEqual(got, c.audit) {
+					t.Errorf("audit %v, want %v", got, c.audit)
 				}
 			})
 		}
@@ -1297,4 +1335,261 @@ func TestQueueActionRefusals(t *testing.T) {
 	if w.openFlags(1) != 1 {
 		t.Error("a refusal closed the flag")
 	}
+}
+
+// A suspension's hide and restore of an author's posts take no flag lock
+// stripe (TKT-01M3R10VP3). The tests below prove that the queue's actions
+// still end in a serial order against them: HidePostsOf never appends on a
+// post hidden pending review, and each of its Deletes refuses a post that
+// is already down, so a Delete can land on post 1 only after the queue's
+// Restore.
+
+// suspension is the audit id the tests' suspension hides carry.
+const suspension = 1
+
+// suspendHide is mod2's hide of the author's posts for suspension 1. It
+// only reads the world's clock, so it may run beside a queue action.
+func (w *queueWorld) suspendHide() (int, error) {
+	return w.svc.HidePostsOf(w.t.Context(), w.as("mod2"), w.users["author"], suspension)
+}
+
+// suspendRestore is mod2's restore of the author's posts that suspension 1
+// hid, as an unsuspension runs it.
+func (w *queueWorld) suspendRestore() (int, error) {
+	return w.svc.RestorePostsOf(w.t.Context(), w.as("mod2"), w.users["author"], []int64{suspension})
+}
+
+// removals is post ordinal's Delete and Restore records in log order, as
+// "Delete auto", "Delete suspension=N", "Delete" or "Restore".
+func (w *queueWorld) removals(ordinal uint32) []string {
+	w.t.Helper()
+	var out []string
+	for _, f := range w.frames(0) {
+		if f.h.Ordinal != ordinal {
+			continue
+		}
+		switch f.h.Type {
+		case threadlog.TypeDelete:
+			b, _ := f.body.(*threadlog.DeleteBody)
+			switch {
+			case b != nil && b.Auto:
+				out = append(out, "Delete auto")
+			case b != nil && b.Suspension != 0:
+				out = append(out, fmt.Sprintf("Delete suspension=%d", b.Suspension))
+			default:
+				out = append(out, "Delete")
+			}
+		case threadlog.TypeRestore:
+			out = append(out, "Restore")
+		}
+	}
+	return out
+}
+
+// dismissedRows counts the flag.dismissed rows, and fails on any other
+// flag row.
+func (w *queueWorld) dismissedRows() int {
+	w.t.Helper()
+	n := 0
+	for _, r := range w.flagRows() {
+		if r.action != ActionFlagDismissed {
+			w.t.Errorf("flag row %s by %s: only flag.dismissed is expected", r.action, r.actor)
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// TestSuspensionHidePassesOverAnAutoHiddenPost: the real HidePostsOf leaves
+// a post hidden pending review to the queue. Post 1 keeps its auto-hide and
+// its three open flags and gets no second Delete, while the author's shown
+// post 2, and their post in "other", get the suspension's Delete.
+func TestSuspensionHidePassesOverAnAutoHiddenPost(t *testing.T) {
+	w := newQueueWorld(t)
+	w.hide(1)
+	shown := w.post("still shown")
+	n, err := w.suspendHide()
+	if err != nil || n != 2 {
+		t.Fatalf("the hide answered %d, %v: want 2, post %d here and the post in other", n, err, shown)
+	}
+	if e := w.entry(1); !e.Flags.Has(threadlog.EntryHiddenByMod|threadlog.EntryAutoHidden) || w.openFlags(1) != 3 {
+		t.Errorf("post 1 after the hide: %#x with %d open flags, want hidden pending review with 3", e.Flags, w.openFlags(1))
+	}
+	if got, want := w.removals(1), []string{"Delete auto"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("post 1's removals %v, want %v", got, want)
+	}
+	if got, want := w.removals(shown), []string{fmt.Sprintf("Delete suspension=%d", suspension)}; !reflect.DeepEqual(got, want) {
+		t.Errorf("post %d's removals %v, want %v", shown, got, want)
+	}
+	if e := w.entry(shown); !e.Flags.Has(threadlog.EntryHiddenByMod) || e.Flags.Has(threadlog.EntryAutoHidden) {
+		t.Errorf("post %d after the hide: %#x, want hidden by a moderator", shown, e.Flags)
+	}
+}
+
+// checkSerial fails unless post 1 and its flag rows are one of the serial
+// outcomes of a queue Keep against a suspension's hide, and answers which:
+//   - "shown": the hide passed the post before the Restore. 0 flags are
+//     open and one flag.dismissed row records the Keep.
+//   - "suspension": the Restore landed first and the hide then hid the
+//     post. It is hidden by a moderator and not auto-hidden, the Delete in
+//     force carries the suspension, 0 flags are open, and there is one
+//     flag.dismissed row.
+//   - "pending": the Keep failed and changed nothing. Every flag is open
+//     and there is no flag row. keepErr must then be an error.
+//
+// In every outcome no Delete of post 1 follows another Delete without a
+// Restore between them (review 1540 on PR #203).
+func (w *queueWorld) checkSerial(keepErr error) string {
+	w.t.Helper()
+	log := w.removals(1)
+	down := false
+	for i, r := range log {
+		isDelete := strings.HasPrefix(r, "Delete")
+		if isDelete && down {
+			w.t.Errorf("post 1's record %d is a Delete of a post already down: %v", i, log)
+		}
+		down = isDelete
+	}
+	f, open, rows := w.entry(1).Flags, w.openFlags(1), w.dismissedRows()
+	switch {
+	case f.Visible() && open == 0 && rows == 1 && keepErr == nil:
+		return "shown"
+	case f.Has(threadlog.EntryHiddenByMod) && !f.Has(threadlog.EntryAutoHidden) && !f.Has(threadlog.EntryDeleted) &&
+		len(log) > 0 && log[len(log)-1] == fmt.Sprintf("Delete suspension=%d", suspension) &&
+		open == 0 && rows == 1 && keepErr == nil:
+		return "suspension"
+	case f.Has(threadlog.EntryHiddenByMod|threadlog.EntryAutoHidden) && open == 3 && rows == 0 && keepErr != nil:
+		return "pending"
+	}
+	w.t.Errorf("post 1 ends %#x with %d open flags and %d flag.dismissed rows, the Keep answered %v, log %v: not a serial outcome",
+		f, open, rows, keepErr, log)
+	return ""
+}
+
+// TestSuspensionHideWhileTheQueueRestores is the two orders, each forced.
+//   - (a) The Keep holds its Restore until HidePostsOf has returned. The
+//     hide does not wait for it, passes over post 1 and writes nothing on
+//     it; after the release the post is shown with its flags dismissed.
+//   - (b) The Keep completes first, and the hide then hides the restored
+//     post for the suspension, its flags still dismissed.
+func TestSuspensionHideWhileTheQueueRestores(t *testing.T) {
+	t.Run("the hide first", func(t *testing.T) {
+		w := newQueueWorld(t)
+		w.hide(1)
+		holding, release := make(chan struct{}), make(chan struct{})
+		w.writer.set(func(a threadlog.Append) {
+			if a.Type == threadlog.TypeRestore {
+				close(holding)
+				<-release
+			}
+		}, nil)
+		kept := make(chan error, 1)
+		go func() {
+			_, err := w.svc.ResolvePost(t.Context(), w.as("mod"), w.id, 1, Resolution{Action: QueueResolve})
+			kept <- err
+		}()
+		<-holding
+		before := w.logLength()
+		type answer struct {
+			n   int
+			err error
+		}
+		hid := make(chan answer, 1)
+		go func() {
+			n, err := w.suspendHide()
+			hid <- answer{n, err}
+		}()
+		var a answer
+		select {
+		case a = <-hid:
+		case <-time.After(10 * time.Second):
+			close(release)
+			t.Fatal("the hide waited for the queue's Restore")
+		}
+		if a.err != nil || a.n != 1 {
+			t.Errorf("the hide answered %d, %v: want 1, the post in other and not post 1", a.n, a.err)
+		}
+		if recs := w.frames(before); len(recs) != 0 {
+			t.Errorf("the hide wrote %d records on the queue's thread, want none", len(recs))
+		}
+		close(release)
+		if err := <-kept; err != nil {
+			t.Fatalf("the Keep: %v", err)
+		}
+		w.writer.set(nil, nil)
+		if got := w.checkSerial(nil); got != "shown" {
+			t.Errorf("the outcome is %q, want shown", got)
+		}
+	})
+	t.Run("the Keep first", func(t *testing.T) {
+		w := newQueueWorld(t)
+		w.hide(1)
+		w.mustResolve("mod", w.id, 1, QueueResolve, dto.QueuePostRestored)
+		if n, err := w.suspendHide(); err != nil || n != 2 {
+			t.Errorf("the hide answered %d, %v: want 2, post 1 and the post in other", n, err)
+		}
+		if got := w.checkSerial(nil); got != "suspension" {
+			t.Errorf("the outcome is %q, want suspension", got)
+		}
+		if got, want := w.removals(1), []string{"Delete auto", "Restore", "Delete suspension=1"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("post 1's removals %v, want %v", got, want)
+		}
+	})
+}
+
+// raceRuns is how many fresh worlds TestSuspensionHideRacesTheQueueRestore
+// runs. It stays at 20 so that the package keeps inside the CI race step's
+// timeout under runner load (TKT-01M3R5P3CN).
+const raceRuns = 20
+
+// TestSuspensionHideRacesTheQueueRestore, under -race: in each of raceRuns
+// fresh worlds a Keep of post 1, hidden pending review, and a suspension's
+// hide of its author start together from a closed channel, with no lock
+// between them. Whatever the scheduler does, post 1 and its flag rows end
+// in a serial outcome (checkSerial), and the hide's count agrees with it.
+// The forced orders are TestSuspensionHideWhileTheQueueRestores; this is
+// the interleavings between them.
+func TestSuspensionHideRacesTheQueueRestore(t *testing.T) {
+	seen := map[string]int{}
+	for i := range raceRuns {
+		w := newQueueWorld(t)
+		w.hide(1)
+		start := make(chan struct{})
+		var (
+			wg      sync.WaitGroup
+			keepErr error
+			hidden  int
+			hideErr error
+		)
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			<-start
+			_, keepErr = w.svc.ResolvePost(t.Context(), w.as("mod"), w.id, 1, Resolution{Action: QueueResolve})
+		}()
+		go func() {
+			defer wg.Done()
+			<-start
+			hidden, hideErr = w.suspendHide()
+		}()
+		close(start)
+		wg.Wait()
+		if hideErr != nil {
+			t.Errorf("run %d: the hide: %v", i, hideErr)
+		}
+		out := w.checkSerial(keepErr)
+		want := 1 // the post in other
+		if out == "suspension" {
+			want = 2
+		}
+		if out != "" && hidden != want {
+			t.Errorf("run %d: the outcome is %s and the hide answered %d, want %d", i, out, hidden, want)
+		}
+		if t.Failed() {
+			t.Fatalf("run %d failed; outcomes so far %v", i, seen)
+		}
+		seen[out]++
+	}
+	t.Logf("outcomes over %d runs: %v", raceRuns, seen)
 }
