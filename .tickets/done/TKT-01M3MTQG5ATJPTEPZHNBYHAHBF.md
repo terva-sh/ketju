@@ -22,10 +22,12 @@ references:
     path: null
   - ref: ticket:TKT-01M3S1TVPD1MV96KCAHRJSRQVG
     path: null
+  - ref: pr:223
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-28T20:19:02Z
-updated_at: 2026-09-30T11:44:00Z
+updated_at: 2026-09-30T11:44:26Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
