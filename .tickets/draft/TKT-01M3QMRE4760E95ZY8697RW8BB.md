@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T00:52:13Z
+updated_at: 2026-09-30T01:05:58Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
@@ -62,9 +62,9 @@ Tests: the dialog's validation and the badge text. `TestTheAdminBundleIsSeparate
 - [ ] An empty or blank reason, one over 500 code points, one with a control character, and a past end are refused beside the field with nothing sent (SuspensionControls.test.tsx)
 - [ ] Unsuspend sends {restore_posts} from an unchecked checkbox; Hide their posts (suspended accounts only) and Restore hidden posts each send one bodiless POST after confirmation (SuspensionControls.test.tsx)
 - [ ] A moderator sees the controls only on members, an admin on anyone but themselves, and nobody on a pending or deleted-user- account (SuspensionControls.test.tsx)
-- [ ] A suspend whose hide failed says the account is suspended and offers Hide their posts, and 409 on suspend and unsuspend show their own sentences (SuspensionControls.test.tsx)
 - [ ] The controls live in screens/admin/SuspensionPanel.tsx, UserDetail gains only its import, refetch and one element, TestTheAdminBundleIsSeparate passes, and the dist from go generate ./internal/web/spa is committed
 - [ ] A suspended account shows its reason as text and its end, or until lifted; after every answer, success or failure, both the detail and the users list are fetched again, so a suspend whose hide failed leaves the row saying suspended (SuspensionControls.test.tsx)
+- [ ] refetch resolves to the refreshed detail and the panel awaits it: a failed suspend whose refreshed status is suspended shows the finish words and offers Hide their posts, one still active shows only the refusal sentence, a failed refetch says to reload, and 409 on unsuspend has its own sentence (a hide that stopped, a refused suspend is not a partial hide, a refetch that fails)
 
 ## Implementation plan
 
@@ -91,8 +91,9 @@ Engineering choices made here, each with the alternative that lost:
 - **"Hide their posts" is offered on its own for a suspended account.** It finishes a hide that stopped part-way, and it lets a moderator hide the posts after suspending without doing so.
 - **Both checkboxes start unchecked.** Hiding and restoring the posts are judgements separate from the suspension, as the maintainer's expiry decision reasons. Checked defaults lost because they would hide or restore posts without anyone choosing to.
 - **A chosen end is a date and a time** (`<input type="datetime-local">`, `min` now), sent as that local moment in Unix ms, so the end the moderator picks is the end the status shows. A date alone lost: it leaves open when on that day the suspension ends. The presets are now plus 24 h times 1, 7 or 30.
+- **`refetch` answers the detail it fetched** (Terva review 1520 on PR #181). A failed suspend's words depend on the account's status after the failure, so the panel must read the refreshed detail, not the one it rendered with. `refetch: () => Promise<AdminUserDetail | null>` fetches the detail with `apiGet`, stores it as `UserDetail`'s `fresh`, and resolves to it, or to `null` when the fetch itself fails. The panel awaits it before choosing its words. Two alternatives lost. `res.retry()` returns nothing to await, so the words would be chosen from the stale detail. Deriving the words in an effect when new props arrive would tie the message to render timing, and a detail refreshed by something else could set it off.
 - **One new file per control group.** The controls are `screens/admin/SuspensionPanel.tsx`, which holds the status line, the suspend form, unsuspend, hide and restore. `UserDetail` gains one import, a `refetch` helper and one element. TKT-01M3QH3GS2 (agent controls, PR #179) and TKT-01M3P0CYR3 (rename control) also change `UserDetail`, in `AgentPanel.tsx` and `RenameControl.tsx`. Adding the controls inline in `UserDetail` lost because of the merge conflicts with those two.
-- **Every answer refetches the detail and asks for the list again**, success or failure (Terva review 1516 on PR #181, finding 2). The routes answer 204 with no detail. A failure can also leave the account changed: a suspension can commit before its hide fails, and after that the list row would still say `active`. Two alternatives lost. Patching the detail locally would guess at what the server did. Reloading the list only when the refetched detail differs from the old one would mean waiting for `useResource`'s refetch, and a missed change costs more than one extra list request after a refusal.
+- **Every answer refetches the detail and asks for the list again**, success or failure (Terva review 1516 on PR #181, finding 2). The routes answer 204 with no detail. A failure can also leave the account changed: a suspension can commit before its hide fails, and after that the list row would still say `active`. Two alternatives lost. Patching the detail locally would guess at what the server did. Reloading the list only when the refetched detail differs from the old one lost: a missed change costs more than one extra list request after a refusal.
 - **The status line lives in the panel, not in the facts list.** `UserDetail`'s `<dd data-status>` stays as it is. The panel draws its own line under the facts, so the other two tickets' hunks are left alone.
 
 ### Approach
@@ -102,7 +103,7 @@ Engineering choices made here, each with the alternative that lost:
    - `internal/service/users/admin.go`, `adminDetail`: set it from `u.StatusReason` and `u.StatusUntil` when `u.Status == domain.StatusSuspended`, before the `if !admin` return, so moderators get it. `SetRole` and `SetAgentLimits` answer through `adminDetail` and carry it too.
    - `internal/dto/admin_fixtures_test.go`: an `admin-user-suspended.moderator` fixture, with its golden. `web/client/src/api/dto.ts`: `AdminSuspension` and the field. `web/client/src/api/dto-contract.ts`: `matches<AdminUserDetail>()` for the new golden.
    - docs/07 "Users, groups and permissions": the `GET /admin/users/{handle}` row names `suspension`.
-2. **`screens/admin/SuspensionPanel.tsx`**, with props `{d: AdminUserDetail, url: string, refetch: () => void, onListChanged: () => void}`. It reads the viewer from `state/viewer`.
+2. **`screens/admin/SuspensionPanel.tsx`**, with props `{d: AdminUserDetail, url: string, refetch: () => Promise<AdminUserDetail | null>, onListChanged: () => void}`. It reads the viewer from `state/viewer`.
    - `mayAct(viewer, d)` mirrors `mayActOn`: false for the viewer's own account, true for an admin, true for a moderator on a `member`, false otherwise. It is also false for a `pending` account and for a `deleted-user-` handle (the anonymized rule in this grooming). When false, the panel renders only the status line.
    - **Status line** (`data-suspension`), when `d.suspension` is set: "Suspended until {whenAt(until)}" or "Suspended until lifted", then "Reason: {reason}" as text, never HTML. `whenAt(ms)` formats local `YYYY-MM-DD HH:MM` and sits in this file.
    - **Suspend** (status `active` or `deactivated`): a "Suspend" button opens an inline form, not a modal, in the style of the other admin forms.
@@ -115,14 +116,16 @@ Engineering choices made here, each with the alternative that lost:
    - **Unsuspend** (status `suspended`): a "Restore posts hidden with this suspension" checkbox, unchecked, then `ConfirmButton` "Unsuspend", which sends `{restore_posts}`.
    - **Hide their posts** (status `suspended`): `ConfirmButton` "Hide their posts", prompt "Hide every visible post by @{handle} in forums you moderate?", sending `POST …/posts/hide` with no body.
    - **Restore hidden posts** (whenever `mayAct`): `ConfirmButton` "Restore hidden posts", prompt "Restore the posts a suspension of @{handle} hid, in forums you moderate?", sending `POST …/posts/restore` with no body. On success it says "Posts a suspension hid are restored, where you moderate." It says no count, because the server gives none.
-   - **Answers.** After every answer, success or failure, the panel calls `refetch()` and `onListChanged()`, so the row's status follows the account, including after a failed request that changed it.
-     - A failed suspend with `hide_posts`, whose refetched status is `suspended`, says "@{handle} is suspended, but not every post could be hidden. Press Hide their posts to finish."
+   - **Answers.** After every answer, success or failure, the panel calls `onListChanged()` and awaits `refetch()`, so the row's status follows the account, including after a failed request that changed it. It chooses its words from what `refetch` resolved to:
+     - A failed suspend with `hide_posts`, when the refreshed detail's status is `suspended`, says "@{handle} is suspended, but not every post could be hidden. Press Hide their posts to finish."
+     - A failed suspend, when the refreshed detail is not suspended, says the refusal's words (below) and does not mention a hide, because nothing was suspended.
+     - When `refetch` resolves to `null`, the refusal's words are followed by "Reload to see the account as it is now.", and the panel does not guess at the status.
      - `unavailable` from hide says "Some threads could not be reached. Press Hide their posts again to finish them."
      - `conflict` on suspend says "This account cannot be suspended now. It may already be suspended, or be the last active admin." On unsuspend it says "This account is no longer suspended."
      - Anything else gets `send`'s sentence.
 3. **`screens/admin/UsersScreen.tsx`**:
    - Import `SuspensionPanel`.
-   - In `UserDetail`, add `const refetch = () => { setFresh(null); res.retry(); };` and render `<SuspensionPanel d={d} url={url} refetch={refetch} onListChanged={onRoleChanged} />` directly after the facts `</dl>`.
+   - In `UserDetail`, add `const refetch = async () => { try { const next = await apiGet<AdminUserDetail>(url); setFresh(next); return next; } catch (err) { if (isAbort(err)) throw err; return null; } };` and render `<SuspensionPanel d={d} url={url} refetch={refetch} onListChanged={onRoleChanged} />` directly after the facts `</dl>`.
    - Nothing else in the file changes. If TKT-01M3QH3GS2 has merged, keep its `update` helper and `admin-detail-head`. `refetch` sits beside them.
 4. **CSS** in `screens/admin/admin.css`: `.admin-suspension` for the status line and the form, using the existing `admin-*` classes and tokens.
 5. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. `npm run build` runs the budget, and the admin chunk is outside `threadViewGzipBytes`.
@@ -144,9 +147,11 @@ Engineering choices made here, each with the alternative that lost:
   - `a moderator acts on members only`: a moderator sees the controls on a member, and none on a moderator, an admin, or their own account.
   - `an admin acts on anyone but themselves`: an admin sees the controls on another admin, and none on their own account.
   - `no controls on a pending or anonymized account`: none for status `pending` or a `deleted-user-7` handle.
-  - `a hide that stopped`: a suspend with `hide_posts` answers 503, and the refetched detail is suspended. The finish words show, and Hide their posts is offered.
+  - `a hide that stopped`: a suspend with `hide_posts` answers 503, and the refetched detail is suspended. The finish words show only after the refetch has resolved, Hide their posts is offered, and the list's row says `suspended`.
+  - `a refused suspend is not a partial hide`: a suspend with `hide_posts` answers 409, and the refetched detail is still `active`. The conflict sentence shows, with no finish words and no Hide their posts.
+  - `a refetch that fails`: the suspend answers 503 and the detail refetch fails. The refusal's words and "Reload to see the account as it is now." show, with no finish words.
   - `conflict words`: a 409 on suspend and a 409 on unsuspend show their sentences.
-  - `refetches and reloads`: after a success, and after a failure, the detail and the list are each requested again. `a hide that stopped` also checks that the list is requested again, and that its row then says `suspended`.
+  - `refetches and reloads`: after a success, and after a failure, the detail and the list are each requested again. `refetch` resolves to the detail it stored.
   - `an agent is warned`: the prompt for a `kind: 'agent'` account names the token.
 - `UsersScreen.test.tsx` still passes, including `shows a moderator the list and the detail read-only…`, extended to find the suspension controls on a member.
 - `TestTheAdminBundleIsSeparate` passes: nothing outside `screens/admin` imports the panel.
@@ -174,3 +179,7 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30, against main at 43a844
 **agent:claude-code/phase2-groom** at 2026-09-30T00:52:13Z
 
 Terva review 1516 on PR #181 (head 9fc6307), finding 2 (medium), accepted. The panel now asks for the users list again after every answer, success or failure, not only after a success, so a suspend that committed before its hide failed no longer leaves the row saying active. Reloading only when the refetched detail differs lost: it would mean waiting for useResource's refetch. The plan, the test 'refetches and reloads' and criterion 8 are updated.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T01:05:58Z
+
+Terva review 1520 on PR #181 (head 3395e26), one medium finding, accepted. The failed-hide words depended on a refreshed status that the planned refetch (res.retry, returning void) never gave back. refetch now fetches with apiGet, stores the detail, and resolves to it, or to null if the fetch fails. The panel awaits it before choosing its words. Tests are named for both failure cases, 'a hide that stopped' and 'a refused suspend is not a partial hide', plus 'a refetch that fails'. Criterion 6 is rewritten to match.
