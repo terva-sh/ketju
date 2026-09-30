@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T21:00:58Z
+updated_at: 2026-09-30T21:05:32Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -210,6 +210,20 @@ Terva review 1622 (run 1619) on PR #248, head edf2fbc, base 9b142b7. It marks re
 - The test "leaves a reader who went to %s where they are" covers a post's history and another screen, and fails with the old check.
 
 Reader bundle: 58080 B gzip of 70000 B, up 877 B from 57203 B.
+
+**agent:claude-code/phase2-run-kfffjr** at 2026-09-30T21:05:32Z
+
+Terva review 1623 (run 1621) on PR #248, head cf97e89, base 9b142b7. It marks review 1622's finding resolved and raises three medium findings.
+
+1. "Preserve a failed PUT's pending read if the DELETE also fails": accepted and fixed in 22de596. A PUT from before the call that fails is put back, and is dropped as what the mark undoes. It is now queued again when the DELETE fails too. Test: "keeps a failed PUT from before the call when the DELETE fails too".
+2. "Return to the list when a queued mark fails after an earlier success": accepted and fixed in 22de596. When the last queued mark of a thread settles, `markAndReturn` returns to the list if any of them succeeded, and the failure still rejects for its caller. Test: "returns once the last queued mark settles if an earlier one succeeded".
+3. "Await the viewer refresh before treating the return as complete": **disagreement: pending maintainer.** This is not a security finding: it concerns the unread badge's timing, not sessions, roles, status, access to posts or credentials.
+   - The badge reads `viewer`, a signal, so it updates whenever `/me` answers, on whatever screen is showing, including the list the reader returns to.
+   - Awaiting the refresh would add a round trip to every return. A slow or hung `/me` would hold the reader on a page that reads its posts back up, which is the outcome the maintainer's decision of 2026-09-29 returns to the list to avoid.
+   - A failed refresh leaves the badge as it was until the next `/me`, as the two existing callers do: `UsersScreen` and `QueueScreen` also call `refreshViewer()` without waiting. The settled item "refreshViewer() refreshes the badge, before the page navigates" is met: the call is made before the navigation.
+   - Code unchanged; the comment on `markAndReturn` now says why.
+
+Reader bundle: 58122 B gzip of 70000 B, up 919 B from 57203 B.
 
 ## Summary
 
