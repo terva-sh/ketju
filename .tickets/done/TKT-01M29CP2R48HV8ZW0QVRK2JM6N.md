@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T11:47:26Z
+updated_at: 2026-09-30T18:44:31Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-cp2r4
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -51,7 +51,7 @@ The log is only worth writing if somebody can read it. In a small community the 
 - [x] Each entry whose target is a user, forum, thread, post, setting, flag, application, group, permission or form carries an href and the screen renders it as a link; a blob or identity target has none; an absent user draws as deleted-user-<id>; a thread.moved entry carries both forums in related (TestAuditTargetsLink)
 - [x] The endpoint and /admin/audit answer 401 to anonymous and 403 to pre-user, member and moderator viewers, forum-scoped moderators and members who moderate through a group included, and 200 to admins, and docs/08 records that the log is admin-only (TestAuditIsAdminOnly)
 - [x] audit.Actions lists every action written today, post.redacted, blob.deleted, thread.title_redacted, thread.renamed, thread.moved, thread.slow_mode, user.renamed, flag.resolved and flag.dismissed included; it matches docs/04 audit_log in both directions; and the answer's actions fill the screen's action filter (TestActionsDocumented, AuditScreen.test.tsx)
-- [ ] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total stays at 47415 B, and the dist from go generate ./internal/web/spa is committed
+- [x] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total stays at 47415 B, and the dist from go generate ./internal/web/spa is committed
 
 ## Implementation plan
 
@@ -232,6 +232,10 @@ Admin chunk (gzip -9): JavaScript 19843 B to 21404 B, CSS 2215 B to 2235 B.
 **agent:claude-code/phase2-run-cp2r4** at 2026-09-30T11:47:26Z
 
 Review 1578 (PR #222, head 7ee6d11, base 163c33a, run 4128ad18, Actions run #1433): both findings fixed in fefb18e. High, "Reject backslashes in audit target hrefs": safeHref now refuses an href with a backslash or control character, and draws a link only when the href resolves to this origin; the safeHref tests fail if the old leading-slash check is restored. Low, "Preserve years 0001-0099 when applying date filters": startOf sets the date with setFullYear, and dateOf pads the year; the date filter test fails if the constructor is restored. Bundle figures supersede the earlier note: the reader is now 47426 B gzip. Its entry is 99924 B raw in both builds, and 99868 B on main; the 56 raw bytes are the /admin/audit route entry, and the gzip figure also moves by a few bytes whenever the lazy chunks' hashed filenames, which the entry names, change. AC6 stays unticked for the reason the earlier note gives. Admin chunk after the fix, gzip -9: JavaScript 21480 B, CSS 2235 B.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T18:44:31Z
+
+Maintainer accepted AC6 on 2026-10-01: the reader grew 11 B (47415 to 47426 B gzip, the /admin/audit route entry and the lazy chunks' hashed names) against a criterion of no growth, and the maintainer accepted that growth in place of the criterion. AC6 is ticked on that acceptance, not on the letter of the criterion. Recorded in docs/08 "Decided 2026-10-01".
 
 ## Summary
 

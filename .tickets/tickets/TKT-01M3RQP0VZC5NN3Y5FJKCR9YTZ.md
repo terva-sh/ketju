@@ -25,7 +25,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T08:42:46Z
-updated_at: 2026-09-30T16:41:45Z
+updated_at: 2026-09-30T18:45:03Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -108,3 +108,7 @@ Phase-2 drafts filed during the run, to groom next:
 - TKT-01M3SAKPK9 (reply post after a viewer change)
 - TKT-01M3S8Y2NA (ApplicationDetail flake)
 - TKT-01M3SK2HFE (admin-forms restore)
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T18:45:03Z
+
+2026-10-01: maintainer answered the five open questions. Accepted the reply-autosave disagreement (review 1585, TKT-01M3NS1931) and the new-thread e2e disagreement (review 1591 finding 3, TKT-01M3NS16VH); accepted TKT-01M29CP2R4 AC6 (reader +11 B), now ticked; decided absolute post times (spike TKT-01M3S3ZF48, done, docs/06); and resumed the run for the seven ready tickets and the three run-filed drafts. Recorded on branch run/phase2-decisions-1001 (docs/06, docs/08 "Decided 2026-10-01", docs/11). Lanes started: TKT-01M3PTT97X holds the dist; KFFFJR, CP2Q3, QS0TMV and QV39H4 are preparing locally; the three drafts are being groomed.

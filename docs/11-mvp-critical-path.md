@@ -55,7 +55,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-182 done, 14 ready, 1 in progress, 2 blocked, 53 draft, 3 archived (counted 2026-09-30 with
+183 done, 14 ready, 1 in progress, 2 blocked, 52 draft, 3 archived (counted 2026-10-01 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -234,7 +234,10 @@ edit and delete windows (`TKT-01M3PTT97X`), moderators' post controls
 are the two epics and three the run filed: a reply post answered after the
 viewer changed (`TKT-01M3SAKPK9`), a flaky vitest file (`TKT-01M3S8Y2NA`) and
 an e2e form restore (`TKT-01M3SK2HFE`). The screenshot work filed nine visual
-drafts under `TKT-01M29BN367` with no milestone.
+drafts under `TKT-01M29BN367` with no milestone; on 2026-10-01 the maintainer
+settled one of them, the post-times spike `TKT-01M3S3ZF48`, as absolute times,
+and it is done. The same day the maintainer resumed the run for the seven ready
+tickets and the three drafts.
 
 ## The critical path
 

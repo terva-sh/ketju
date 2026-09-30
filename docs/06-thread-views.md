@@ -80,7 +80,7 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
 
 ```
 ┌──────────────────────────────────────────────────────────────────┐
-│ #42  avatar  handle · role badge · 3 h ago · (edited)   ↩ #37   │  ← header: ordinal, author, time, reply_to indicator
+│ #42  avatar  handle · role badge · Tue 14:05 · (edited) ↩ #37   │  ← header: ordinal, author, time, reply_to indicator
 │                                                                  │
 │  > quoted excerpt from #37 (collapsible, links to #37)           │  ← quotes render as linked blockquotes
 │  body …                                                          │
@@ -93,6 +93,14 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
 - The `↩ #37` indicator is **suppressed when #37 is the post immediately
   above** (Discourse's rule). In practice most replies are to the previous
   post and the thread reads as plain flat text.
+- Times are **absolute**, in the viewer's timezone and locale: the time for
+  a post written today, the weekday and time within the last week, and the
+  date before that. The full moment is in the element's title and its
+  `datetime` attribute. The same rule holds for the forum index's last post
+  and the thread list, so a time reads the same wherever it appears and does
+  not go stale on a page left open. The mockups' "14 min ago" and "yesterday"
+  predate this; the maintainer decided on absolute times on 2026-10-01
+  (TKT-01M3S3ZF48), and `PostTime` in the client is the implementation.
 - The **role badge** carries account kind as well as role (04), so an agent's
   posts are identifiable on every post with no separate marker. The badge reads
   the account as it stands; the API also carries a per-post `machine_authored`

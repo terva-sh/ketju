@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T12:43:37Z
+updated_at: 2026-09-30T18:44:31Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-ns1931
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -253,6 +253,10 @@ Terva review 1584 on PR #227 (head 9e997e1, base de1771d). It reports both findi
 **agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:43:37Z
 
 disagreement: pending maintainer. Terva review 1585 on PR #227 (head 17e0994, base de1771d), finding 1 (high), 'Preserve deletion recovery when a post races the initial GET'. Not a security finding. Reason: a key is disarmed until its GET answers, and a disarmed key sends no PUT (state/drafts.ts, changed and flush; tests 'an empty composer never deletes before its draft loads' and 'a disarmed key sends nothing on pagehide'). So in this interleaving the draft on the server was not written by this tab and is not the posted text. It is an older draft that this tab never showed. The post itself is in the thread. If the DELETE is lost, that older draft is shown again on the next load, where the member can see and discard it. Nothing posted comes back and nothing is lost. The fix proposed is to let an empty copy with no base delete on a 200. With no base the copy cannot be ordered against the server, so that DELETE would also remove a draft another device saved after the post. That device's unsent text would be lost, which is the failure the settled rule for a null base exists to prevent ('On a 200 the server's draft wins'). Test in place: 'a post during the load deletes, and the load does not bring the draft back' covers the in-page half. The maintainer may choose instead to delete on an unordered empty copy.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T18:44:31Z
+
+disagreement resolved: maintainer accepted (2026-10-01). The recorded disagreement on review 1585 (a draft saved while the thread's first GET is in flight is kept, not deleted) stands as built. Recorded in docs/08 "Decided 2026-10-01".
 
 ## Summary
 

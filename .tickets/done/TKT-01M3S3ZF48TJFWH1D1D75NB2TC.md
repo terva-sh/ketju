@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZF48TJFWH1D1D75NB2TC
 title: Decide between relative and absolute post times
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T12:17:38Z
-updated_at: 2026-09-30T12:17:38Z
+updated_at: 2026-09-30T18:44:45Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-39wbn4q
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -40,4 +40,12 @@ Relative, absolute, or relative with a cut-over to absolute, for posts, for the 
 
 ## Acceptance criteria
 
-- [ ] docs/06 records whether post, last-post and thread-list times are relative, absolute, or relative with a cut-over, and PostTime follows it
+- [x] docs/06 records whether post, last-post and thread-list times are relative, absolute, or relative with a cut-over, and PostTime follows it
+
+## Implementation plan
+
+Record the maintainer's decision of 2026-10-01 (absolute times) in docs/06 "Post anatomy" and in docs/08 "Decided 2026-10-01". PostTime already writes absolute times (the time today, weekday and time within a week, else the date, with the full moment in title and datetime), and ForumIndex, ThreadRow, Post, PostPopover and ReplyExpander all use it, so no client change is needed. The alternatives were relative and relative with a cut-over; the maintainer chose absolute, and it needs no code change. An absolute time also doesn't go stale on a page left open, which is a reason to keep it rather than the reason it won.
+
+## Summary
+
+Decided by the maintainer on 2026-10-01: times are absolute. docs/06 "Post anatomy" now says so for posts, the forum index's last post and the thread list, and notes that the mockups' relative times predate the decision; docs/08 "Decided 2026-10-01" lists it. PostTime.tsx already follows the rule, so there is no client change.

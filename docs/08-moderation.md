@@ -116,6 +116,16 @@ writes it.
   (docs/07). The reader was near 55 KB, with several Phase 2 reader tickets
   still to land.
 
+**Decided 2026-10-01** (maintainer, answering the run's recorded questions):
+- Two recorded disagreements are accepted as built: a reply draft saved while
+  the thread's first load is in flight is kept rather than deleted (review
+  1585, TKT-01M3NS1931), and the e2e projects share one new-thread draft
+  because they run serially (review 1591, TKT-01M3NS16VH).
+- The audit screen's reader-bundle growth of 11 B is accepted in place of its
+  "no reader growth" criterion (TKT-01M29CP2R4).
+- Post, last-post and thread-list times are absolute, not relative (docs/06,
+  TKT-01M3S3ZF48).
+
 Author edit/delete window: default 24 h for edits, 15 min for delete, both
 site settings. After the window, edits leave the visible "edited" marker and
 full history; the first N minutes (default 5) of edits are collapsed into the

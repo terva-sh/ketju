@@ -24,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-30T14:16:56Z
+updated_at: 2026-09-30T18:44:31Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-ns16vh
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -195,6 +195,10 @@ CI run 1522 on 0a72954 failed in the Playwright step on a single test, a11y.spec
 disagreement: pending maintainer. Terva review 1591 on PR #235 (head 0a72954, base 7e7756f), finding 3 (medium), 'The viewport e2e runs share and delete one draft'. Not a security finding.
 
 Reason: the two projects never run at the same time. `web/client/playwright.config.ts` sets `workers: 1` and `fullyParallel: false`, and its comment explains why: both projects share one server. So the phone flow test finishes, including its `finally`, which deletes the draft, before the desktop one starts. `drafts.spec.ts` (TKT-01M3NS1931) shares alice's reply draft across both projects on the same grounds. The review saw the diff only, not the config. Giving each project its own account would need a second member who can post in events and a stored session for them, which adds a sign-in to the /auth burst the suite paces. If the config ever runs projects in parallel, every spec that shares a seeded reader's state breaks alike, and that change owns the fix.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T18:44:31Z
+
+disagreement resolved: maintainer accepted (2026-10-01). Review 1591 finding 3 (the e2e projects share one new-thread draft; they run serially) stands as built. Recorded in docs/08 "Decided 2026-10-01".
 
 ## Summary
 
