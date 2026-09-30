@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T13:44:15Z
-updated_at: 2026-09-30T19:55:44Z
+updated_at: 2026-09-30T21:04:18Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -58,15 +58,7 @@ Reported by the Phase 2 run orchestrator on 2026-09-30.
 
 ## Implementation plan
 
-Groomed 2026-09-30 against main at 13709f0 (TKT-01M3M9RR26). The cause is not known. The first step is to find it, and the fix is planned against the candidates that reading the code turns up.
-
-What exists at 13709f0:
-- `web/client/src/screens/admin/applications/ApplicationDetail.test.tsx` has 16 tests in `describe('an application')`. Each renders the whole app with `renderAt('/admin/applications?id=N')` from `web/client/src/testing.tsx`, over `stubServer` routes. `beforeEach` sets `viewer.value = asModerator()`. `afterEach` runs `unmount()`, restores the viewer, and calls `vi.unstubAllGlobals()`. The file uses real timers.
-- `settle(root)` in `testing.tsx` loops up to 200 × 5 ms until `root.querySelector('[data-screen]')` matches, then waits one more 5 ms timer. Its comment says the 1 s bound was raised because "the first import of the lazy admin chunk in a test worker transforms every admin screen" and took longer than 250 ms under a full parallel run (TKT-01M29CXK1X).
-- `AdminRoot` (lazy in `routes.tsx`) renders `<main data-screen="admin-applications">` at once. `ApplicationDetail` renders "Loading…" until `useResource` (`api/resource.ts`) has an answer to `apiGet(appUrl(id))`. So `settle` can return while the detail is still "Loading…". After it returns, the test's first query (`.form-read`, `[data-application="42"]`, `[data-decided]`, `[data-blocked]`) depends on the stubbed fetch, `Response.json()` and the re-render all finishing inside one 5 ms timer. The local `click()` helper calls `settle` after `data-screen` is already present, so there it is a single 5 ms wait for the POST, any GET that follows it, and the render. 'says so when another denial set the block' waits for three requests that way.
-- `vite.config.ts` sets `environment: 'happy-dom'` and `css: true` and sets neither `pool` nor `isolate`. With Vitest's defaults (`vitest` 5.0.1 in `package.json`), each test file gets its own module graph and its own happy-dom window. If that holds, no module state, fake timer or `vi.stubGlobal` from another file can reach this one.
-- Twelve other files use `vi.useFakeTimers()`: `state/drafts.test.ts`, `state/newThread.test.ts`, `state/composer.test.ts`, `state/readTracker.test.ts`, `composer/Post.test.tsx`, `composer/Composer.test.tsx`, `composer/ComposerSheet.test.tsx`, `keyboard/shortcuts.test.tsx`, `screens/NewThreadScreen.test.tsx`, `screens/ThreadListScreen.test.tsx`, `screens/ThreadScreen.test.tsx` and `screens/admin/SuspensionControls.test.tsx`. Its neighbours `ApplicationsScreen.test.tsx` and `Decision.test.tsx` use real timers and the same `unstubAllGlobals` teardown.
-- The failure was seen in 2 of 6 full runs on the TKT-01M3NS16VH lane (local branch at 6b5dc9a, 2026-09-30). The file passes alone, and that lane did not touch it. The failing assertion was not recorded.
+Revised 2026-09-30 on claim, against main at 387c401, after the investigation recorded in the first note. The groomed plan listed five candidate causes. The evidence names candidate 2: the first import of the lazy admin chunk in a test file is transformed and evaluated inside `settle`'s 200 × 5 ms bound, and on a loaded host that import takes longer than the bound. The same failure shows in FormEditor.test.tsx, Decision.test.tsx and routes.test.tsx, so the fix is general and goes in testing.tsx, as step 4 of the groomed plan prescribes for a general cause.
 
 ### Settled in grooming
 
@@ -76,36 +68,60 @@ What exists at 13709f0:
 
 ### Approach
 
-1. **Reproduce.** In `web/client`, run the full suite repeatedly and keep every result, for example:
-   ```
-   for i in $(seq 30); do npx vitest run --reporter=json --outputFile="$SCRATCH/run-$i.json" >"$SCRATCH/run-$i.log" 2>&1; done
-   ```
-   `$SCRATCH` is a `mktemp -d` under `~/.cache/agent-scratch/ketju/`. For each failing run, record the test name, the assertion, and whether Vitest reported an assertion failure or an unhandled error attributed to the file. If 30 runs show nothing, add CPU load the way TKT-01M3MTQG5A and TKT-01M3RZXGBA did (`taskset -c 0,1` with busy `yes` loops, and a trap that kills them), and record that load in the note.
-2. **Separate timing from leakage** with three runs of 20:
-   - (a) The file alone under the same load: `npx vitest run src/screens/admin/applications/ApplicationDetail.test.tsx`. If it fails alone under load, the cause is timing inside the file, not state from another file.
-   - (b) The full suite with one worker (`--maxWorkers=1`). If it passes serialized but fails in parallel, the cause is contention.
-   - (c) The printed resolved config (`npx vitest --config vite.config.ts --printConfig`, or the Vitest 5 equivalent), to confirm `isolate: true` and the pool. Isolation off would put the cross-file candidates back in play.
-3. **Name the cause** from these candidates, found by reading the file and its neighbours. Record in the note which one the evidence points to and which it rules out:
-   1. **`settle` returns before the data.** `[data-screen]` appears with "Loading…", and the one 5 ms timer races the stubbed answer's `Response.json()` and the re-render. This is the most likely cause: it passes alone and fails only under a loaded parallel run, and every assertion after `renderAt` or `click` depends on it.
-   2. **The lazy admin chunk takes more than 1 s** to import in a busy worker. Then `settle` runs out with no `[data-screen]` at all, and the first query finds nothing. This is the same class of failure TKT-01M29CXK1X met, when it raised the bound instead.
-   3. **An unawaited promise from the previous test.** A request the unmounted app, or an aborted `Next pending` (`pending.current?.abort()`), starts after `vi.unstubAllGlobals()` would reach happy-dom's real `fetch` with a relative URL and reject. Vitest reports that as an unhandled error against the file.
-   4. **Shared module state within the file.** `mounted` in `testing.tsx`, the `api/client.ts` cache (`resetApiCache`), `state/threads.ts`'s cache, the `viewer` signal, and `history` and `location`, which 'goes back to the filter it was opened from' changes with two `renderAt` calls in one test.
-   5. **State from another file.** A fake timer left on, a `fetch` stub never removed, or module state such as `viewer`. This can happen only if step 2(c) shows isolation off.
-4. **Fix the named cause at its source:**
-   - If it is (1) or (2), make the wait follow the condition, not a clock. `renderAt` and the file's `click` wait until the screen has finished loading, within the existing 1 s bound. That means waiting for the element the test reads next, or for the detail's "Loading…" to be gone. The engineering choice between changing `settle` in `testing.tsx` for every screen and adding a condition helper used by this file follows from the evidence. If the early return is general, the fix goes in `testing.tsx` and every existing caller keeps passing. If it is specific to this screen's load, the fix goes in the file. Record the choice and the alternative in the note. Do not raise the 200 × 5 ms bound.
-   - If it is (3), await or abort the stray request in the screen's cleanup, or in the test's teardown before the stub is removed, and add an assertion that `server.sent` has nothing after unmount.
-   - If it is (4) or (5), reset the state in the owning module's reset function (`resetApiCache`, `resetThreadCache`, or a new one) and call it from `renderAt` or `afterEach`. Or restore the fake timer or stub in the file that left it.
-5. If the cause is in `testing.tsx`, check the other callers of `settle` and `renderAt` under the same full runs. The 20-run proof covers the whole suite, so a fix that breaks another file shows there.
+1. In `web/client/src/testing.tsx`, add a table of the lazy chunks that `routes.tsx` splits off, keyed by the addresses that load them: `/admin` loads `./screens/admin/AdminRoot`, and `/apply` loads `./screens/apply/ApplyRoot`. `renderAt` awaits the import for its URL before it mounts anything. `routes.tsx`'s `lazy()` import still runs, and it resolves to the module already loaded. The comment names this ticket and the cause.
+2. `settle` is unchanged: its 200 × 5 ms bound and its code stay as they are. Its comment is updated to say that `renderAt` now loads the chunk. The import has no bound of its own beyond Vitest's unchanged 5 s test timeout, because it waits on the chunk itself, not on a clock. No `retry`, no new or raised timeout, and no `skip`, `todo` or `only`.
+3. `ApplicationDetail.test.tsx` is not changed, so its 16 tests keep their assertions. The `beforeAll` preloads in AgentControls.test.tsx and QueueScreen.test.tsx become redundant. They are left alone as out of scope, because removing them is churn this ticket does not need.
+4. No change under `web/client/src` outside test support: testing.tsx is imported only by tests. `go generate ./internal/web/spa` must leave `internal/web/spa/dist` unchanged.
 
 ### Tests
 
-- The 16 existing tests in `ApplicationDetail.test.tsx` keep their assertions. No test is removed, skipped, retried or given a longer timeout.
-- **20 consecutive full runs** (`npx vitest run` in `web/client`, unfiltered), under the same load that reproduced the failure in step 1, with `ApplicationDetail.test.tsx` passing in all 20 and the suite green in all 20. A note records the command, the load, the commit, and the pass count.
-- The same 20 runs on main, before the fix, show the failure at least once, so the proof is not a run too light to reproduce it. If main passes all 20 under that load, raise the load until main fails. Record both.
-- If the fix changes `settle` or `renderAt` in `testing.tsx`, its comment names this ticket and the cause, and every other file that calls them passes in the same 20 runs.
+- The same load that reproduced the failure on main: 48 unpinned busy `yes` loops on the 12-CPU host. Run 20 consecutive `npx vitest run` in `web/client`, unfiltered, on the fix. Every run must be green, with ApplicationDetail.test.tsx passing in each. The same 20 runs on main, recorded in the first note and the next, must show the failure.
+- `npx tsc --noEmit -p .` and `npm run build` in `web/client` pass. The dist is unchanged.
 
-### Out of scope
+## Notes
 
-- Raising any timeout, the `settle` bound, or Vitest's `testTimeout`, and turning on `retry` in `vite.config.ts`.
-- Other flaky files, unless the same cause shows in them during the 20 runs. If one fails for a different reason, file it as its own `phase-2` ticket rather than fixing it here.
-- Changes to `ApplicationDetail.tsx` itself, unless the cause is in the screen, such as a request it fails to abort on unmount.
+**agent:claude-code/phase2-run-s8y2na** at 2026-09-30T21:03:46Z
+
+Cause, found before any code change. Commit 87c567f (origin/main 387c401 plus the claim), web/client, 12-CPU host shared with other lanes. Load is N busy `yes` loops, unpinned and killed by a trap after each batch. Results, logs and the run script are in a scratch directory under ~/.cache/agent-scratch/ketju/.
+
+### The failure
+
+- Test: `an application > shows the answers through the form renderer, against the version they answered`, the first test in the file.
+- Assertion: `expect(read).not.toBeNull()` at ApplicationDetail.test.tsx:48:22, message `AssertionError: expected null not to be null`.
+- Vitest reports an assertion failure. Every run had 0 unhandled errors.
+- A failing test takes 1371 to 1581 ms. A passing first test takes 150 to 600 ms. TKT-01M3NS16VH saw the failure "at about 1.4 s".
+
+### The cause: candidate 2, the lazy admin chunk
+
+The first import of the lazy admin chunk (`routes.tsx` `lazy(() => import('./screens/admin/AdminRoot'))`) in a test file has to be transformed and evaluated. On a loaded host, or while other workers ask Vite for transforms at the start of a parallel run, that takes longer than `settle`'s 200 turns of 5 ms. `settle` then returns with no `[data-screen]` in the root, and the test's first query finds nothing.
+
+To see this, I ran instrumented runs with a temporary copy of `settle` that logged its turn count, its time, whether `[data-screen]` was present, and whether the detail still said "Loading…". The instrumentation was reverted before any other change.
+- Alone, with the host at load average about 46: 2 of 4 runs failed. In both, `settle` used all 200 turns (1281 and 1598 ms) and returned with `screen: false`.
+- Alone, 20 runs under 12 loops: all passed. The first test's first `settle` still used 55 to 161 of its 200 turns, 317 to 989 ms, on the chunk alone.
+
+### What separates it from the other candidates
+
+- (a) The file alone under load, `npx vitest run src/screens/admin/applications/ApplicationDetail.test.tsx`, 20 runs under 48 loops: 7 failed (runs 1, 2, 3, 5, 6, 9, 12). Every failure was the same test and the same assertion, at 1371 to 1581 ms. The cause is inside the file's own run, so state from another file (candidate 5) is not needed to produce it.
+- (b) The full suite with one worker, `npx vitest run --maxWorkers=1`, under 48 loops: all 5 runs passed. That is 5 runs rather than the plan's 20, because each run takes about 5 minutes under this load. This file ran 10th to 20th, after 3 to 9 other admin files. With one worker, earlier admin files have already had the chunk transformed by the time this file runs, so its import only evaluates. The failure follows the chunk's first, cold import, not load on its own.
+- (c) Resolved config, printed with `createVitest('test')` from `vitest/node` (Vitest 5.0.1 has no `--printConfig`): `pool: forks`, `isolate: true`, `environment: happy-dom`, `testTimeout: 5000`. Each file has its own module graph, which rules out candidate 5.
+- Candidate 1 (`settle` returns before the data): ruled out. Across 735 `settle` calls in this file over 25 instrumented runs, none returned with `[data-screen]` present while the detail still showed "Loading…". The stubbed fetch, `Response.json()` and the re-render always finished inside the final 5 ms act.
+- Candidate 3 (an unawaited promise after unmount): ruled out. There were 0 unhandled errors in every run, and the failing test is the first in the file, so no earlier test could leave a request running.
+- Candidate 4 (shared state within the file): ruled out for the same reason. The failure is always the first test, before any other test in the file has run.
+
+### The same cause in other files, so the fix is general
+
+Full runs on main, `npx vitest run` with nothing filtered: 9 under 4 loops pinned to CPUs 0 and 1, 10 under 12 loops and 10 under 36 loops all passed. 10 under 48 loops failed in 7 runs. Every failure was the first test to render the admin chunk in its file, at 1415 to 1896 ms, meaning `settle` used all 200 turns:
+- FormEditor.test.tsx 'draws the active version as a draft of fields, and its form as the preview', `expected null not to be null`, in runs 4, 5 and 7;
+- Decision.test.tsx 'prefills the suggested handle, which stays editable', `Cannot read properties of null (reading 'value')`, in runs 7 to 10;
+- routes.test.tsx '/admin renders admin', `expected null to be 'admin'`, in run 4.
+
+Vitest's sequencer runs a file that failed last time first in the next run, while every transform is still cold. So one failure makes the next more likely: Decision.test.tsx failed 4 times in a row here, and TKT-01M3NS16VH's lane saw this file fail 2 times in 6. AgentControls.test.tsx and QueueScreen.test.tsx already import `AdminRoot` in a `beforeAll` (PR #179 and d512bd3) and never failed.
+
+### The fix
+
+`renderAt` in testing.tsx awaits the import of the lazy chunk its address needs (the admin chunk for /admin, the apply chunk for /apply) before it renders. The test then waits on the chunk itself, not on a clock, and `settle`'s 200 × 5 ms bound is left for the screen's render and its requests. The bound is unchanged. The import is bounded only by Vitest's unchanged 5 s test timeout. `routes.tsx`'s lazy `import()` still runs, and it resolves to the module already loaded.
+
+Alternatives considered:
+- A `beforeAll` import in this file only, as AgentControls and QueueScreen do. This lost because the same failure showed in three other files in the same runs, and the plan puts a general cause in testing.tsx.
+- A `beforeAll` with a 30 s hook timeout, as those files use. This lost because it adds a timeout, which the ticket rules out.
+- Preloading inside `settle`. This lost because it would add an await to every `settle` call on an admin path while an app is mounted, which changes the timing of every such test. `renderAt` imports before it mounts anything.
