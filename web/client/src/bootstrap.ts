@@ -11,6 +11,7 @@ export const anonymous: Me = {
   pre_user: null,
   unread: { threads: 0, participated: 0, watching: 0 },
   notifications: 0,
+  queue: null,
   settings: { timezone: '', locale: '', page_size: 25 },
 };
 

@@ -1,16 +1,16 @@
 import { useLocation } from 'preact-iso';
 import { Icon } from '../components/Icon';
-import { viewer } from '../state/viewer';
+import { badges, viewer } from '../state/viewer';
 import { Badge } from './Badge';
 import { alerts, current, links, meHref } from './nav';
 
 // TopBar is the desktop and tablet navigation (mockup nav()): the wordmark,
 // the sections, then search, alerts, the moderation queue for those who
-// have one, and the reader.
+// have one (/me's queue is a number for them), and the reader.
 export function TopBar() {
   const { path, url } = useLocation();
   const me = viewer.value;
-  const role = me.user?.role;
+  const queue = badges.value.queue;
   return (
     <header class="topbar desktop" data-shell="topbar">
       <a class="wordmark" href="/">
@@ -39,9 +39,16 @@ export function TopBar() {
           <Icon name="bell" />
           <Badge n={alerts.value.badge} what="notifications" />
         </a>
-        {(role === 'moderator' || role === 'admin') && (
-          <a class="icon-link" href="/admin/queue" aria-label="Moderation queue">
+        {queue !== null && (
+          <a
+            class="icon-link"
+            href="/admin/queue"
+            data-nav="queue"
+            aria-label="Moderation queue"
+            aria-current={current('/admin/queue', path) ? 'page' : undefined}
+          >
             <Icon name="inbox" />
+            <Badge n={queue} what="items to review" />
           </a>
         )}
         <a class="who" href={meHref(url)} data-nav="me">

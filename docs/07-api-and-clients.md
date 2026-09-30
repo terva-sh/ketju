@@ -306,6 +306,23 @@ actions decide is in 08 "Flags".
 across every page, counted with the same `WHERE` clauses, and null for a
 viewer `perm.ModeratesAny` does not admit.
 
+The client reads it as the whole question. At both widths the top bar
+shows a queue button whenever `queue` is a number, with the count as its
+badge and no badge at zero, and the admin shell offers the Queue section
+on the same condition, so a member moderating one forum through a group
+gets both. The screen at `/admin/queue` lists the items in the server's
+order with More for the next page. A flag item shows the post as a
+moderator reads it, its state, and its reports, with an optional note and
+Remove post, Keep post and Dismiss flags, each confirmed first. Keep post
+is not offered on a post a moderator hid by hand, which the screen says is
+the thread page's to restore, and Remove post is not offered on one
+already down. A success takes the item out and fetches `/me` again for
+the badge; `conflict` says another moderator has already handled it and
+fetches the queue again, as any other failure does. An application item
+opens the applications screen's approve and deny controls in place. The
+author's link goes to the users screen for a moderator or admin by role,
+and to the profile for anyone else, whom that screen would refuse.
+
 #### Locking and pinning threads (TKT-01M29CKRGS)
 
 Each route is staff's by role, and the threads service then requires

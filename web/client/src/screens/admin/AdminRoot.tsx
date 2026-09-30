@@ -5,6 +5,7 @@ import { viewer } from '../../state/viewer';
 import { sections, sectionsFor } from './sections';
 import { ApplicationsScreen } from './applications/ApplicationsScreen';
 import { FormEditor } from './forms/FormEditor';
+import { QueueScreen } from './queue/QueueScreen';
 import { UsersScreen } from './UsersScreen';
 import './admin.css';
 
@@ -13,6 +14,7 @@ import './admin.css';
 const built: Record<string, FunctionComponent> = {
   'admin-applications': ApplicationsScreen,
   'admin-forms': FormEditor,
+  'admin-queue': QueueScreen,
   'admin-users': UsersScreen,
 };
 

@@ -110,12 +110,34 @@ describe('the navigation shell', () => {
     expect(root.querySelector('.tabbar [aria-current=page]')?.getAttribute('data-nav')).toBe('forums');
   });
 
-  it('offers the moderation queue to a moderator only', async () => {
+  // AC3 of TKT-01M29CRJ4E: the queue's button and its count follow /me's
+  // queue at both widths. A viewer with no queue (null) gets no button;
+  // anyone who moderates somewhere gets the count, a member moderating a
+  // forum through a group included; an empty queue shows the button bare.
+  it('offers the moderation queue, with its count, to whoever has one', async () => {
+    const queueLink = (root: HTMLElement) => root.querySelector('a[href="/admin/queue"]');
     let root = await renderAt('/');
-    expect(root.querySelector('a[href="/admin/queue"]')).toBeNull();
+    expect(queueLink(root)).toBeNull();
+    await setPhone(true);
+    expect(queueLink(root)).toBeNull();
+    await setPhone(false);
+
     viewer.value = structuredClone(moderator) as Me;
     root = await renderAt('/');
-    expect(root.querySelector('a[href="/admin/queue"]')).not.toBeNull();
+    expect(badgesOf(root).queue).toBe('4');
+    await setPhone(true);
+    expect(badgesOf(root).queue).toBe('4');
+    await setPhone(false);
+
+    viewer.value = { ...(structuredClone(member) as Me), queue: 1 };
+    root = await renderAt('/');
+    expect(badgesOf(root).queue).toBe('1');
+    await act(() => void (viewer.value = { ...viewer.value, queue: 0 }));
+    expect(queueLink(root)).not.toBeNull();
+    expect(badgesOf(root).queue).toBeNull();
+    await setPhone(true);
+    expect(queueLink(root)).not.toBeNull();
+    expect(badgesOf(root).queue).toBeNull();
   });
 
   it('marks the section the reader is in', async () => {

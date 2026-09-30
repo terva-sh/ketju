@@ -7,8 +7,7 @@ import type { Me } from '../../api/dto';
 //
 //   - Queue: anyone who moderates somewhere. /me's queue says so: it is a
 //     number for them and null for anyone else (TKT-01M29CRJ4E), which is
-//     how a member who moderates one forum through a group sees it. Until
-//     /me carries queue, it follows the role.
+//     how a member who moderates one forum through a group sees it.
 //   - Applications and Users: moderators and admins, by role (the staff
 //     gate).
 //   - Everything else: admins.
@@ -24,12 +23,9 @@ const role = (me: Me) => me.user?.role ?? '';
 const isAdmin = (me: Me) => role(me) === 'admin';
 const isStaff = (me: Me) => isAdmin(me) || role(me) === 'moderator';
 
-// /me's queue, which TKT-01M29CRJ4E adds to dto.Me: undefined until it
-// does, then a number or null.
-function moderatesSomewhere(me: Me): boolean {
-  const queue = (me as Me & { queue?: number | null }).queue;
-  return queue === undefined ? isStaff(me) : queue !== null;
-}
+// moderatesSomewhere is whether /me gave me a queue. A viewer from before
+// the server carried it has none, and is offered none.
+const moderatesSomewhere = (me: Me) => me.queue !== null && me.queue !== undefined;
 
 export const sections: Section[] = [
   { path: '/admin/queue', screen: 'admin-queue', title: 'Moderation queue', may: moderatesSomewhere },

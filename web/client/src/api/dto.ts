@@ -182,10 +182,8 @@ export interface Me {
   unread: UnreadCounts;
   notifications: number;
   // The moderator queue's item count, the top bar's badge; null for a viewer
-  // with no queue (TKT-01M29CRJ4E). The server always sends it. It is optional
-  // only until the client reads it, so the anonymous default in bootstrap.ts
-  // needs no change in the server's PR.
-  queue?: number | null;
+  // with no queue (TKT-01M29CRJ4E).
+  queue: number | null;
   settings: Settings;
 }
 

@@ -1,0 +1,64 @@
+/* The moderation queue (TKT-01M29CRJ4E). Lazy, with the admin chunk. */
+
+.queue-notice:empty {
+  display: none;
+}
+.queue-notice {
+  margin: 0 0 16px;
+  color: var(--ink2);
+}
+
+.queue-items {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.queue-item {
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  padding: 16px;
+}
+
+.queue-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-bottom: 8px;
+}
+.queue-head h2 {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+.queue-head h2 a {
+  color: var(--ink);
+}
+
+.queue-post {
+  border-left: 3px solid var(--rule);
+  padding-left: 12px;
+  margin: 8px 0 12px;
+}
+.queue-author {
+  margin: 0 0 4px;
+}
+
+.queue-reports {
+  margin: 0 0 12px;
+  padding-left: 20px;
+}
+.queue-report-note {
+  color: var(--ink2);
+}
+
+.queue-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
