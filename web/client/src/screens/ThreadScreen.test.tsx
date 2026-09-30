@@ -1129,13 +1129,18 @@ describe('marking unread from the thread screen', () => {
     expect(deletes()).toEqual([{ url: read, body: { ordinal: 61 } }]);
     await act(async () => release());
     await wait();
-    expect(location.pathname).toBe('/f/general');
-    await act(async () => release());
-    await wait();
+    // Review 1619: the first mark has landed, but the second is still to,
+    // so the page stays and no list is asked for with counts about to change.
+    expect(location.pathname).toBe(`/t/${id}/a`);
+    expect(server.sent.filter((r) => r.url.startsWith(list))).toEqual([]);
     expect(deletes()).toEqual([
       { url: read, body: { ordinal: 61 } },
       { url: read, body: undefined },
     ]);
+    await act(async () => release());
+    await wait();
+    expect(location.pathname).toBe('/f/general');
+    expect(server.sent.filter((r) => r.url.startsWith(list))).toHaveLength(1);
   });
 
   it('is offered to a member who may not reply, and to nobody signed out', async () => {

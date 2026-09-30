@@ -201,6 +201,12 @@ export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> 
   return run;
 }
 
+// marking is whether a markUnread of thread id has been called and has not
+// finished. A mark's promise settles after its own count is released, so a
+// caller told of one mark's end can ask whether a later one is still to land
+// (Terva review 1619 on PR #248).
+export const marking = (id: string) => held.has(id);
+
 // A post is on screen when at least half of it is in the viewport, or it
 // fills at least half the viewport: a post taller than two screens is never
 // half visible, and is still being read.

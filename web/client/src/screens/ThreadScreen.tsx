@@ -36,7 +36,7 @@ import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/short
 import { isPhone } from '../state/layout';
 import { composerFor, loadReplyDraft, quotePost, replyToPost, type Slow } from '../state/composer';
 import { listFor } from '../state/lists';
-import { markUnread, trackPosts } from '../state/readTracker';
+import { marking, markUnread, trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { refreshViewer, viewer } from '../state/viewer';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
@@ -151,11 +151,11 @@ export function ThreadScreen() {
   // Mark unread is offered to a signed-in reader on the thread body once a
   // page is on screen, whatever else they may do there: a member who may not
   // reply in a locked thread still has a position to lower. A press while a
-  // mark is out is ignored (marking), and a failure says so under the head
+  // mark is out is ignored (pressed), and a failure says so under the head
   // and leaves the reader where they are, to press again.
   const forumSlug = head?.forum.slug;
   const offerMark = !history && !!res.data && tracksUnread() && !!forumSlug;
-  const marking = useRef(false);
+  const pressed = useRef(false);
   const [markFailed, setMarkFailed] = useState<{ thread: string; error: unknown } | null>(null);
   const actions = useMemo(
     () =>
@@ -165,12 +165,12 @@ export function ThreadScreen() {
             firstUnread: unread ? () => firstUnread(known, lastRead, postCount, route) : undefined,
             markUnread: offerMark
               ? () => {
-                  if (marking.current) return;
-                  marking.current = true;
+                  if (pressed.current) return;
+                  pressed.current = true;
                   setMarkFailed(null);
                   markAndReturn(known.id, forumSlug!, route)
                     .catch((error: unknown) => setMarkFailed({ thread: known.id, error }))
-                    .finally(() => (marking.current = false));
+                    .finally(() => (pressed.current = false));
                 }
               : undefined,
             moderate: mayModerate
@@ -490,11 +490,17 @@ const onThread = (id: string) => location.pathname.startsWith(`/t/${encodeURICom
 // The thread's history entry is replaced, so Back does not reopen the page
 // just marked. A reader who has left the thread while it was marking stays
 // where they went. It rejects with the mark's failure, for the caller to show.
+//
+// Marks of one thread run in call order, and only the last to settle leaves
+// the page: a list shown after an earlier one would hold counts a later one
+// is about to change, and nothing asks for a list already on screen again
+// (Terva review 1619 on PR #248). Each one that succeeds drops the held
+// counts, so what it changed is not shown whatever the later ones do.
 async function markAndReturn(id: string, forum: string, route: (url: string, replace?: boolean) => void, ordinal?: number) {
   await markUnread(id, ordinal);
   forgetGets((u) => u.startsWith('/api/v1/forums'));
   void refreshViewer().catch(() => undefined);
-  if (onThread(id)) route(listFor(forum), true);
+  if (!marking(id) && onThread(id)) route(listFor(forum), true);
 }
 
 // useArrival scrolls once per request key, when its page first arrives:

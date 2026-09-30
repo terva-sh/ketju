@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, peekGet, resetApiCache } from '../api/client';
 import type { ThreadPage } from '../api/dto';
-import { batchMs, dwellMs, flush, markUnread, readUrl, resetReadTracker, trackPosts } from './readTracker';
+import { batchMs, dwellMs, flush, marking, markUnread, readUrl, resetReadTracker, trackPosts } from './readTracker';
 import { loadThreadPage, resetThreadCache } from './threads';
 import golden from '../../../../internal/dto/testdata/golden/thread.member.json';
 
@@ -645,6 +645,24 @@ describe('markUnread', () => {
     await flush();
     expect(puts().map((s) => s.body)).toEqual([{ ordinal: 6 }, { ordinal: 4 }]);
     stop();
+  });
+
+  // Review 1619 on PR #248: a caller told of one mark's end can ask whether
+  // a later one is still out.
+  it('says a later mark is still out when an earlier one settles', async () => {
+    const releases: (() => void)[] = [];
+    answer = (s) => new Promise((r) => releases.push(() => r(stored(s.body?.ordinal ?? 0))));
+    expect(marking('t1')).toBe(false);
+    const first = markUnread('t1', 2);
+    const second = markUnread('t1');
+    await drain();
+    releases.shift()!();
+    await first;
+    expect(marking('t1')).toBe(true);
+    await drain();
+    releases.shift()!();
+    await second;
+    expect(marking('t1')).toBe(false);
   });
 
   it('sends no body to mark the whole thread unread', async () => {
