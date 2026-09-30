@@ -140,4 +140,5 @@ export const routes: RouteEntry[] = [
   { path: '/admin/users', screen: 'admin-users', component: Admin },
   { path: '/admin/forms', screen: 'admin-forms', component: Admin },
   { path: '/admin/settings', screen: 'admin-settings', component: Admin },
+  { path: '/admin/audit', screen: 'admin-audit', component: Admin },
 ];

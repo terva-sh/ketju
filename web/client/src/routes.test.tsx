@@ -40,6 +40,7 @@ const urls: [string, string][] = [
   ['/admin/users', 'admin-users'],
   ['/admin/forms', 'admin-forms'],
   ['/admin/settings', 'admin-settings'],
+  ['/admin/audit', 'admin-audit'],
 ];
 
 afterEach(() => {

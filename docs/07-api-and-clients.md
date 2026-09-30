@@ -32,7 +32,7 @@
 /u/{handle}  /u/{handle}/posts
 /settings  /settings/sessions  /settings/identities
 /apply  /apply/status
-/admin  /admin/queue  /admin/applications  /admin/forums  /admin/users  /admin/forms  /admin/settings
+/admin  /admin/queue  /admin/applications  /admin/forums  /admin/users  /admin/forms  /admin/settings  /admin/audit
 /auth/signin?return_to=…           login page
 /auth/{provider}/start  /auth/{provider}/callback  /auth/logout (POST)
 /auth/register (GET, POST)
@@ -577,6 +577,17 @@ the forum the thread left and then the forum it went to, resolved as a
 last page. Each kind of thing a page names is read in one statement for
 the whole page, and each filter searches an index (migrations 0006 and
 0019).
+
+The screen at `/admin/audit` is offered to admins only, and asks the
+server nothing for anyone else. Its address carries the filters as the
+endpoint's own parameters, so a filtered view is a link that can be pasted
+and Back returns to the list before. The form edits a draft that Apply puts
+in the address, so typing fetches nothing. The action filter offers
+`actions`, and each noun's prefix before them, and it takes free text. The
+dates are local, and "To" includes its day. The table shows the time, who
+acted ("System" and its `via` when no account did), the action, the target
+and any `related` forums as links, the details as keys and values drawn as
+text, and the address. Older follows `next_cursor` and appends the page.
 
 ### Thread response shape (abridged)
 

@@ -184,6 +184,16 @@
 .admin-facts dd {
   margin: 0;
 }
+/* The audit log's details sit in a table cell: no space below them, and a
+   long value (a hash, a list of flag ids) wraps rather than widening the
+   table (TKT-01M29CP2R4). */
+.audit-details {
+  margin: 0;
+  gap: 0 8px;
+}
+.audit-details dd {
+  overflow-wrap: anywhere;
+}
 .admin-mark {
   display: inline-block;
   padding: 0 6px;

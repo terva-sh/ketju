@@ -10,7 +10,8 @@ import type { Me } from '../../api/dto';
 //     how a member who moderates one forum through a group sees it.
 //   - Applications and Users: moderators and admins, by role (the staff
 //     gate).
-//   - Everything else: admins.
+//   - Everything else: admins. The audit log is an admin's alone, whatever
+//     else a moderator may do (docs/08 "Decided 2026-09-29").
 export interface Section {
   path: string;
   // The screen's name, as routes.tsx gives it, rendered as data-screen.
@@ -34,6 +35,7 @@ export const sections: Section[] = [
   { path: '/admin/forums', screen: 'admin-forums', title: 'Forums', may: isAdmin },
   { path: '/admin/forms', screen: 'admin-forms', title: 'Application forms', may: isAdmin },
   { path: '/admin/settings', screen: 'admin-settings', title: 'Site settings', may: isAdmin },
+  { path: '/admin/audit', screen: 'admin-audit', title: 'Audit log', may: isAdmin },
 ];
 
 // sectionsFor is the sections me may use, in list order.

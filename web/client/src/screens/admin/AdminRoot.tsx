@@ -4,6 +4,7 @@ import { useShellContext } from '../../state/shell';
 import { viewer } from '../../state/viewer';
 import { sections, sectionsFor } from './sections';
 import { ApplicationsScreen } from './applications/ApplicationsScreen';
+import { AuditScreen } from './AuditScreen';
 import { FormEditor } from './forms/FormEditor';
 import { ForumsScreen } from './ForumsScreen';
 import { QueueScreen } from './queue/QueueScreen';
@@ -14,6 +15,7 @@ import './admin.css';
 // it. A section with none says it is not built yet.
 const built: Record<string, FunctionComponent> = {
   'admin-applications': ApplicationsScreen,
+  'admin-audit': AuditScreen,
   'admin-forms': FormEditor,
   'admin-forums': ForumsScreen,
   'admin-queue': QueueScreen,

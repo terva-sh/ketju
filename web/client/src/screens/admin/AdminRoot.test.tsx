@@ -52,6 +52,7 @@ describe('the admin section list', () => {
       'Forums',
       'Application forms',
       'Site settings',
+      'Audit log',
     ]);
   });
 
