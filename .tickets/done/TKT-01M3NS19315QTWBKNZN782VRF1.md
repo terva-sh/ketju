@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T12:21:09Z
+updated_at: 2026-09-30T12:27:57Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -237,6 +237,10 @@ Built against main at f388921 as the plan settles it. The plan's Implementation 
 Bundle: the thread view is 49521 B gzip of the 60000 B budget, up 2106 B from 47415 B at f388921.
 
 e2e: drafts.spec.ts replies to post 10, not post 2, because replies.spec.ts asserts that post 2 has no reply expander. Locally, the desktop smoke sign-in hits the /auth burst limit (429) on main at f388921 as well as on this branch, so it is not caused by this change; every other spec passes here.
+
+**agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:27:57Z
+
+Terva review 1580 on PR #227 (head 59c1641, base de1771d), both findings fixed in 9ee874f. Finding 1 (high), 'Keep a queued post DELETE when pagehide interrupts an in-flight save': pagehide now keeps an empty copy while the server may hold a draft. The next load deletes the draft when the revision is at most base + inflight, and keeps another device's draft otherwise. Tests: 'a post while a save is in flight is deleted by the next load when the page goes', 'a draft saved elsewhere after this tab's post is kept', 'blanking while a save is in flight is deleted by the next load when the page goes', 'a DELETE sent on pagehide keeps an empty copy until it is answered', and 'an empty copy that cannot be ordered is dropped'. Finding 2 (medium), 'Do not bypass Retry-After when the draft changes': after a 429 the key waits, and no edit, hidden page, pagehide or post sends before Retry-After has passed. Tests: 'neither an edit, a hidden page nor pagehide shortens a Retry-After' and 'a post during a Retry-After deletes once it has passed'. Bundle: 51188 B gzip.
 
 ## Summary
 
