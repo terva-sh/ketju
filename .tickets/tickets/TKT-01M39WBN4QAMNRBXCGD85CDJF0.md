@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-30T12:01:36Z
+updated_at: 2026-09-30T12:15:13Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -62,7 +62,7 @@ Once CGBY1, CEE4K and CCC0F are in, add Playwright captures of a seeded thread a
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). All three dependencies are done: TKT-01M29CGBY1 (Playwright), TKT-01M29CEE4K (the app shell) and TKT-01M29CCC0F (the CSS system). Refreshed against main at 5124209 on 2026-09-30: line references corrected, and the phone top bar's no-inset fallback corrected from 8px to 0px.
+Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). All three dependencies are done: TKT-01M29CGBY1 (Playwright), TKT-01M29CEE4K (the app shell) and TKT-01M29CCC0F (the CSS system). Refreshed against main at 5124209 on 2026-09-30: line references corrected, and the phone top bar's no-inset fallback corrected from 8px to 0px. Revised on claim, 2026-09-30, against main at 4918f90 (agent:claude-code/phase2-run-39wbn4q): the capture moved from page 1 to page 3, and the times are masked; see the Approach.
 
 ### Settled in grooming
 - This ticket carries three criteria that other tickets left unticked (the note of 2026-09-24):
@@ -75,30 +75,32 @@ Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). A
   - thread: `ThreadLight.dc.html`, `ThreadDark.dc.html`, `MobileThreadLight.dc.html`, `MobileThreadDark.dc.html`.
 - Settled here, as the engineering choice: the safe-area check emulates a non-zero inset through the Chrome DevTools Protocol, because Playwright has no device descriptor that sets one. The primary method is `Emulation.setSafeAreaInsetsOverride`, followed by a computed-style assertion. If the CI Chromium (Alpine's, `ci.yml:122-137`) does not implement that method, use `CSS.getMatchedStylesForNode` instead, asserting that the winning declaration for each property is the `env(safe-area-inset-*)` one. The Vitest test (`src/styles/breakpoints.test.ts:48-66`) only reads base.css as text. Unlike it, this check proves the cascade: `.shell .replybar` (`composer/composer.css:251-265`) and `.topbar.phone` (`shell/shell.css:208-221`) override base.css's left and right padding, and the check must see what finally applies.
 
+
 ### Approach
-1. **Thread screenshots.** New `web/client/e2e/thread.spec.ts`, run in both projects, signed in as alice (`test.use({ storageState: stateFile('alice') })`):
-   - read `seed.thread` from `${KETJU_E2E_DIR}/seed.json`, as `a11y.spec.ts:18` does, since `e2e/session.ts` exports no seed;
-   - open `${seed.thread}?page=1` and wait for `#post-2 details.quote .quote-source`, as `a11y.spec.ts:35-36` does;
-   - under `KETJU_SCREENSHOTS=1`, capture `thread-${project}-${theme}.png` for light and dark into `e2e/screenshots/`, using the same full-height viewport handling as `forum-index.spec.ts:40-51`;
-   - carol has read the whole seeded thread and alice has read none of it (`cmd/ketju/e2e.go:36-38`), but other specs (flag, replies, shortcuts, a11y) open the thread as alice and move her position. So for alice, set a read position partway with `setReadPosition` (`e2e/session.ts:38`) before the capture, so the amber "last read #N" divider and the unread edge the mockups draw are in the picture.
-2. **Safe-area check.** In the same file, phone project only:
-   - open a CDP session with `page.context().newCDPSession(page)` and send `Emulation.setSafeAreaInsetsOverride` with `{insets: {top: 47, bottom: 34, left: 0, right: 0}}`;
-   - on the thread list, assert the computed `padding-bottom` of `[data-shell="tabbar"]` is `34px` and the `padding-top` of `[data-shell="phone-topbar"]` (`shell/PhoneTopBar.tsx:16`) is `47px`. `.topbar.phone` sets no `padding-top`, so base.css's `.topbar { padding-top: env(safe-area-inset-top, 0px) }` (`styles/base.css:53-57`) is the one that applies;
-   - on the thread page, assert the `padding-bottom` of `[data-shell="replybar"]` is `34px`;
-   - then clear the override and assert the fallbacks: `0px` for the tab bar, `0px` for the top bar and `0px` for the reply bar. The earlier plan said `8px` for the top bar; that was wrong at 7af2c5a too, because `max(8px, …)` in `.topbar.phone` applies only to the left and right padding.
-   - If the method is missing (CDP answers "method not found"), use the `CSS.getMatchedStylesForNode` fallback settled above, and say in the PR which method ran.
-3. **Run and commit.** Run `KETJU_SCREENSHOTS=1 npx playwright test e2e/thread.spec.ts e2e/forum-index.spec.ts`, commit the four new thread PNGs, and refresh the forum-index PNGs if they changed.
-4. **Divergences.** Open each mockup beside its screenshot. List every visible divergence in the PR description, one line each, grouped by screen and theme: layout, spacing, colour, type, missing or extra elements. Copy the same list into a note on this ticket, because a PR description is not in the repository. A divergence that is a real defect is filed as a draft ticket under TKT-01M29BN367 and named in the list. One that the design has since changed on purpose cites where.
-5. No `web/client/src` change is expected, so the dist and the bundle budget are untouched. If a defect is fixed here instead of being filed, rebuild the dist with `go generate ./internal/web/spa` and keep it under the 60000 B gzip budget (`threadViewGzipBytes` in `web/client/budget.json`). The thread view was 47415 B after PR #202 (TKT-01M3QQWA5Z).
+1. **Thread screenshots.** New `web/client/e2e/thread.spec.ts`, run in both projects, signed in as alice through the stored session (`test.use({ storageState: stateFile('alice') })`); it adds no sign-in.
+   - Read `seed.thread` from `${KETJU_E2E_DIR}/seed.json`, as `a11y.spec.ts` does.
+   - Set alice's read position to 53 with `setReadPosition` (`e2e/session.ts`), since flag, replies, shortcuts and a11y move it, then open `${seed.thread}?page=3`.
+   - Page 3, not page 1 as the refresh planned: the mockups draw page 3 of their thread, and page 3 is the seeded thread's last page, so the composer, both pagers, the divider ("last read #53") and a reply-to indicator (#55 answers #1) all fit in one capture. Page 1's full height was 3832 px on the desktop and its PNG 270 KB; page 3's is 134 KB.
+   - Test `the thread page renders the mockup's parts`: ordinal, name and time header; the reply-to indicator; the divider between #53 and #54 and the unread edge after it; the numbered pager and the composer on the desktop, "Page 3 of N" and the reply bar on the phone. The seed has no moderator post and no removed post, so the badge and the tombstone row are listed as seed divergences, not asserted.
+   - Under `KETJU_SCREENSHOTS=1` it captures `thread-{phone,desktop}-{light,dark}.png` at the page's full height, as `forum-index.spec.ts` does, after `document.fonts.ready`, with `animations: 'disabled'` and `caret: 'hide'`, and with each post's `<time>` masked, because the seeded times are relative to when the seed ran.
+2. **Forum-index screenshots refreshed** with the same fonts wait and a mask over the last posts' times, so no committed mockup screenshot carries a time. The four PNGs are regenerated.
+3. **Safe-area check** in the same file, phone project only (`the bars pad by the safe-area insets`):
+   - `page.context().newCDPSession(page)`, then `Emulation.setSafeAreaInsetsOverride` with `{top: 47, bottom: 34, left: 0, right: 0}`;
+   - on `/f/general`, `padding-bottom` of `[data-shell="tabbar"]` is `34px` and `padding-top` of `[data-shell="phone-topbar"]` is `47px`; on the thread page, `padding-bottom` of `[data-shell="replybar"]` is `34px`;
+   - then an empty override, and each is `0px`;
+   - if the method is not found, `CSS.getMatchedStylesForNode`: the last author declaration of each property is `env(safe-area-inset-*, 0px)` (the built CSS is minified, so the space is optional), and none is `!important`;
+   - the test prints `safe-area check: <method>` and records it as an annotation, so the CI step log says which ran; `KETJU_SAFE_AREA_METHOD=matched` forces the fallback so it can be exercised on a Chromium that has both.
+4. **Divergences.** Render each mockup beside its screenshot and list every visible divergence in the PR and in a note here, each filed as a draft under TKT-01M29BN367, cited as an intended change, or named as owned by an existing ticket.
+5. No `web/client/src` or `internal/web/spa/dist` change. A real CSS bug the check finds is filed as a draft and its criterion is left unticked.
 
 ### Tests
-- `thread.spec.ts`: `the thread page renders the mockup's parts` (ordinal, name, badge and time header, reply-to indicator, tombstone row, divider, pager or "Page N of M") in both projects; the capture runs under `KETJU_SCREENSHOTS=1`.
-- `thread.spec.ts` (phone): `the bars pad by the safe-area insets`.
-- CI's Playwright step passes. Screenshots are not written there.
+- `thread.spec.ts`: `the thread page renders the mockup's parts` in both projects; `the bars pad by the safe-area insets` on the phone.
+- CI's Playwright step runs both. Screenshots are not written there.
 
 ### Out of scope
-- Fixing the divergences found. Each becomes its own draft ticket unless it is a one-line fix.
-- The thread list screenshots, which are already committed and have no mockup.
+- Fixing the divergences found. Each becomes its own draft ticket unless an existing ticket owns it.
+- Seeding a moderator post and a removed post in `cmd/ketju/e2e.go`, which is outside this ticket's e2e-and-docs scope.
+- The thread list screenshots, which have no mockup.
 - Real-device checks, which are TKT-01M38WTK.
 
 ## Notes
