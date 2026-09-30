@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R5P3CNPZ6QWHZK46ECSJKR
 title: Keep the Go race tests inside their timeout under CI runner load
 type: chore
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -15,15 +15,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-r5p3cn
+  branch: run/r5p3cn-template-db
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a3bcf1742c4a5390e
+  commit: 53623117f3d0bf68f6f4043ebc63791773139d58
+  session: null
+  claimed_at: 2026-09-30T09:57:48Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T03:28:14Z
-updated_at: 2026-09-30T09:08:00Z
+updated_at: 2026-09-30T09:57:50Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-r5p3cn
   name: ""
 extensions: {}
 ---
