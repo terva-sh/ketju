@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:43:17Z
-updated_at: 2026-09-30T02:43:17Z
+updated_at: 2026-09-30T03:55:10Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-krh9
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -35,4 +35,42 @@ Found in Terva review 1535 on PR #193 (TKT-01M29CKRH9). authorWindows in interna
 
 ## Acceptance criteria
 
-- [ ] A window setting past what a time.Duration holds leaves the window open rather than closed, with a test per setting
+- [ ] posts.edit_window_seconds, posts.delete_window_seconds and posts.grace_edit_seconds at 10000000000 each leave their window open 30 days after posting, one subtest per setting (TestAuthorWindowsTooLargeForADuration)
+- [ ] secondsDuration never returns a negative Duration for a count from 0 up, and renameWindow, authorWindows and slowModeWait all convert through it (TestSecondsDuration)
+- [ ] slow_mode.default_seconds at 10000000000 still refuses a member's second reply with rate-limited (TestSlowModeDefaultTooLargeForADuration)
+- [ ] No setting's validation rule changes
+
+## Implementation plan
+
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The fix to follow is `renameWindow` in `internal/service/threads/moderate.go` (PR #193, TKT-01M29CKRH9, Terva review 1535 finding 2). A count of seconds past `math.MaxInt64/time.Second` becomes `time.Duration(math.MaxInt64)`, the longest window there is. `TestRenameWindowTooLargeForADuration` in `internal/web/api/rename_test.go` proves it.
+
+### Settled in grooming
+
+- **The defaults are the maintainer's and stay** (docs/08 "Primitives": "default 24 h for edits, 15 min for delete"; grace "default 5"; the rename window of 24 h, maintainer decision 2026-09-29, TKT-01M29CKRH9). The settings are defined in `internal/settings/settings.go` as `posts.edit_window_seconds`, `posts.delete_window_seconds` and `posts.grace_edit_seconds`, each `atLeast(0)`.
+- **Clamp at the conversion; do not bound the settings** (engineering choice, following PR #193). An upper bound on a setting lost for two reasons. `Key.In` validates a stored value on every read and returns an error for one outside the rule, so a site that already stores a large value would fail every edit, delete and grace check after the upgrade. And a very large window is a legitimate operator choice, "never close", which the clamp keeps.
+- **One helper for every seconds setting in this package** (engineering choice). `renameWindow`, `authorWindows` and the slow mode arithmetic each turn an unbounded `int` into a `time.Duration`. A single `secondsDuration(n int) time.Duration` in `internal/service/threads/mutate.go` does it for all three, so the next setting cannot repeat the bug. A copy of the clamp in each place lost because the copies can drift. Putting the helper in `internal/settings` lost: settings returns plain values and no caller outside this package needs it. `internal/auth/agentcred` already bounds its refill with `between(1, AgentRefillMaxSeconds)` and is not touched.
+- **`slow_mode.default_seconds` has the same bug, and this ticket fixes it** (engineering choice, a widening of the description). `slowModeWait` in `internal/service/threads/slowmode.go` computes `time.Duration(seconds)*time.Second` from `effectiveSlowMode`, which falls back to the site default, and the default is `atLeast(0)` with no bound. An overflow makes the wait negative, and `max(0, …)` then turns slow mode off. A thread's own value is capped at `MaxSlowModeSeconds` (a day) by the handler and the `thread_slow_mode` CHECK, so only the site default reaches the overflow. Filing a separate ticket lost: it is the same one-line fix with the same helper.
+
+### Approach
+
+1. `internal/service/threads/mutate.go`: add
+   `func secondsDuration(n int) time.Duration`. It returns `time.Duration(math.MaxInt64)` when `int64(n) > int64(math.MaxInt64/time.Second)`, and otherwise `time.Duration(n) * time.Second`. Its comment cites Terva reviews 1535 and this ticket. A negative `n` cannot come from a setting, since every rule is `atLeast(0)`; the helper returns it unchanged, and `within` already treats `d <= 0` as closed.
+2. `authorWindows`: replace `time.Duration(n) * time.Second` with `secondsDuration(n)`.
+3. `renameWindow` in `moderate.go`: replace its inline clamp with `secondsDuration(n)`, keeping behaviour identical.
+4. `slowModeWait` in `slowmode.go`: use `secondsDuration(seconds)`. `time.Time.Add` and `Time.Sub` saturate, so a wait of the longest Duration does not overflow further, and `nextPostAt` reports a `next_post_at` far in the future rather than null.
+5. No migration, no settings change, no DTO change.
+
+### Tests
+
+- `TestSecondsDuration` (new, `internal/service/threads/windows_test.go`, package `threads`): 0, 1, 86400, `math.MaxInt64/int(time.Second)` exactly, one more, and 10000000000. The first four convert exactly; the last two give `time.Duration(math.MaxInt64)`, never a negative value.
+- `TestAuthorWindowsTooLargeForADuration` (new, `internal/web/api/windows_test.go`), one subtest per setting, each after `w.setting(name, 10_000_000_000)` and a fresh post of carol's with the clock moved 30 days on:
+  - `posts.edit_window_seconds`: carol's edit answers 200.
+  - `posts.delete_window_seconds`: carol's delete answers 200.
+  - `posts.grace_edit_seconds`: carol's edit is stored as a grace Edit (`w.editBodies` shows `Grace: true`) and is served with `edited_at` null.
+- `TestSlowModeDefaultTooLargeForADuration` (new, `internal/web/api/slowmode_test.go`): with `slow_mode.default_seconds` at 10000000000 and no thread row, a member's second reply is `rate-limited` with a `Retry-After`, and the page's `viewer.next_post_at` is not null.
+- `TestRenameWindowTooLargeForADuration` keeps passing through the shared helper.
+
+### Out of scope
+
+- Bounding any setting's stored value (see Settled).
+- The admin site settings screen's validation (TKT-01M29CXK2).

@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T00:23:12Z
-updated_at: 2026-09-30T00:23:12Z
+updated_at: 2026-09-30T03:54:29Z
 created_by:
   id: agent:claude-code/phase2-run-qh3gs2
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-qh3gs2
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -39,3 +39,41 @@ Terva review 1510 on PR #179 (head a064d60), low: after a successful save of an 
 
 - [ ] Editing either limit field after a save removes 'Saved.' (AgentControls.test.tsx)
 - [ ] An answer to a save does not show 'Saved.' when a field was edited while the save was in flight (AgentControls.test.tsx)
+- [ ] An answer shows 'Saved.' when both fields still hold the text that was sent (AgentControls.test.tsx)
+- [ ] The dist from go generate ./internal/web/spa is committed
+
+## Implementation plan
+
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The form is `Limits` in `web/client/src/screens/admin/AgentPanel.tsx`, from TKT-01M29P9RSW's admin half (PR #179). The route is `PUT /api/v1/admin/users/{handle}/agent-limits` with `{burst, refill_seconds}`, each a number or null for the site default. It answers 200 `AdminUserDetail`. Nothing on the server changes.
+
+### Settled in grooming
+
+- **The limits and their bounds are the maintainer's** (decision 2026-09-29, TKT-01M29P9RSW, docs/08 "Rate limits"): a burst of 20 and one token every 30 s by default, a refill of at most 604800 s (`settings.AgentRefillMaxSeconds`, mirrored as `refillMax` in `AgentPanel.tsx`). This ticket changes neither.
+- **"Saved." means the fields show what the server holds.** Any edit to either field clears it. An answer shows it only when both fields still hold the text that was sent.
+- **The comparison is on the field text, not on an edit counter** (engineering choice). The ticket asks for "the fields still hold what was sent". A counter bumped on every input lost: typing a character and deleting it would hide "Saved." beside values that are, in fact, saved.
+- **The comparison reads the fields through a ref.** The `save` closure holds the `burst` and `refill` of the render that submitted, so it cannot see an edit made while the PUT is in flight. A ref that each render sets to the current `{burst, refill}` is what `save` reads when the answer comes back. Moving the check into a `useEffect` on `[burst, refill, saved]` lost: it would show "Saved." for one render before clearing it.
+- **The error line is unchanged.** Clearing `failed` on input is a different behaviour that nobody reported, and it would hide a refusal before the admin has read it.
+- **The built client is committed** (docs/13 "Running two lanes"). This ticket regenerates `internal/web/spa/dist` with `go generate ./internal/web/spa`, so it takes the client lane.
+
+### Approach
+
+1. `web/client/src/screens/admin/AgentPanel.tsx`, `Limits`:
+   - Add `const current = useRef({ burst, refill })`, and set `current.current = { burst, refill }` on every render.
+   - Each field's `onInput` sets its value and calls `setSaved(false)`.
+   - In `save`, take `const sent = { burst, refill }` before the PUT. On an `ok` answer, call `setFailed(null)` and `onSaved(res.value)` as now, then `setSaved(current.current.burst === sent.burst && current.current.refill === sent.refill)`.
+   - The `useEffect` that carries a refetched detail into unedited fields stays as it is. After a save it can only rewrite a field that still shows the value it was given, so it does not make a saved field look edited.
+   - Update the comment above `Limits` to say when "Saved." shows.
+2. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`.
+
+### Tests
+
+In `web/client/src/screens/admin/AgentControls.test.tsx`, a new `describe('the saved status', …)` using the file's `renderAt`, `open`, `type` and `submit` helpers:
+- `clears when either field is edited after a save`: save a burst of 7 and see "Saved.". Type into the burst field and "Saved." is gone. Save again, then type into the refill field, and it is gone.
+- `does not show for an answer to fields edited in flight`: hold the PUT's answer in a promise, as `changes in flight together` does. Submit with a burst of 7, type 8 into the burst field, then answer 200. "Saved." is absent, the field still reads 8, and no second PUT was sent.
+- `shows when the fields still hold what was sent`: the same held answer with no edit shows "Saved.".
+- The existing `a limits answer that arrives after a new token does not bring the old token back` still passes. Its fields are unedited during the flight, so it still sees "Saved.".
+
+### Out of scope
+
+- Server changes to the limits route (TKT-01M29P9RSW, done).
+- Clearing the error line on input (see Settled).
