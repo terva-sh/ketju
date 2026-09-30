@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R10VP32VXJ35AK76NBHCWH
 title: Prove a suspension's bulk hide cannot race the queue's restore
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -16,17 +16,10 @@ dependencies:
   - TKT-01M29CRJ4E4AZ079KEHVGJ01DS
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-r10vp3
-  branch: run/r10vp3-suspension-hide-race
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a29067fc06146fffd
-  commit: ae1839e4af4edf46f5b93577f535aea33da16565
-  session: null
-  claimed_at: 2026-09-30T10:29:19Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T02:06:43Z
-updated_at: 2026-09-30T10:29:22Z
+updated_at: 2026-09-30T10:40:32Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -50,12 +43,12 @@ Reported by the moderator queue lane on 2026-09-30.
 
 ## Acceptance criteria
 
-- [ ] HidePostsOf and RestorePostsOf take no flag lock stripe, and the flagLocks, ResolvePost and closeFlags comments say why, naming the tests below
-- [ ] TestSuspensionHidePassesOverAnAutoHiddenPost: the real HidePostsOf leaves a post hidden pending review untouched, with its flags open
-- [ ] TestSuspensionHideWhileTheQueueRestores: in both orders the post and its flag rows end in a serial outcome, shown with flags dismissed or hidden by the suspension with flags dismissed
-- [ ] TestStateChangeIsConflictNotSuccess calls the real HidePostsOf from afterQueueRead while the queue holds the stripe, and gains an unsuspension's-restore case
-- [ ] docs/08 Suspension says the hide passes over a post hidden pending review
-- [ ] TestSuspensionHideRacesTheQueueRestore: 20 concurrent runs under -race each end in outcome (a) or (b), or untouched when the Keep answered an error; in post 1's log no Delete follows a Delete without an intervening Restore; and the final post state and flag rows agree (shown or suspension-hidden with 0 open flags and one flag.dismissed row, or auto-hidden with every flag open and no row)
+- [x] HidePostsOf and RestorePostsOf take no flag lock stripe, and the flagLocks, ResolvePost and closeFlags comments say why, naming the tests below
+- [x] TestSuspensionHidePassesOverAnAutoHiddenPost: the real HidePostsOf leaves a post hidden pending review untouched, with its flags open
+- [x] TestSuspensionHideWhileTheQueueRestores: in both orders the post and its flag rows end in a serial outcome, shown with flags dismissed or hidden by the suspension with flags dismissed
+- [x] TestStateChangeIsConflictNotSuccess calls the real HidePostsOf from afterQueueRead while the queue holds the stripe, and gains an unsuspension's-restore case
+- [x] docs/08 Suspension says the hide passes over a post hidden pending review
+- [x] TestSuspensionHideRacesTheQueueRestore: 20 concurrent runs under -race each end in outcome (a) or (b), or untouched when the Keep answered an error; in post 1's log no Delete follows a Delete without an intervening Restore; and the final post state and flag rows agree (shown or suspension-hidden with 0 open flags and one flag.dismissed row, or auto-hidden with every flag open and no row)
 
 ## Implementation plan
 
@@ -123,3 +116,19 @@ Review 1540 on PR #203 (head 22de825), medium, accepted: the race criterion forb
 **agent:claude-code/phase2-groom** at 2026-09-30T08:49:22Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The plan is current and is not rewritten. Checked: HidePostsOf and RestorePostsOf (internal/service/threads/suspension.go:73, :120), threadAttempts (:48), flagLocks (flags.go:55), ResolvePost and its comment (queue.go:328, the 'suspension's hide or restore' paragraph at :313-317), closeFlags and its 'narrows to the write itself' comment (:477-489), queueRestore (:550), newQueueWorld, flagRows and TestStateChangeIsConflictNotSuccess with its hand-built 'a suspension's hide' case (queue_test.go:39, :242, :854), faultWriter.set, w.hide, w.entry and w.openFlags (flags_test.go), and docs/08 'Suspension', which does not yet say the hide passes over a post hidden pending review. Since the plan, PR #202 made Flag refuse the author's own post (5032402). The tests are unaffected: w.hide flags as rep1 to rep3 and insertFlag writes rows directly, so no fixture flags as the author. The same PR's ErrHideDeferred path touches Flag, not the queue's Keep.
+
+**agent:claude-code/phase2-run-r10vp3** at 2026-09-30T10:40:12Z
+
+Built on main at ae1839e (commit ab6285a on run/r10vp3-suspension-hide-race). The premise holds: the race test found no violation, so no lock was taken and no server behaviour changed. Over 20 runs locally it saw 9 runs end shown (a) and 11 end hidden by the suspension (b); none ended outside a serial outcome.
+
+Where the build differs from the plan's wording, and why:
+- The hide's counts are one higher than the plan says. newQueueWorld gives the author a post in "other", which mod2 moderates, so HidePostsOf answers 2 in TestSuspensionHidePassesOverAnAutoHiddenPost, 1 in order (a) and 2 in order (b). The race test checks the count against the outcome: 1 for shown, 2 for suspension.
+- For the same reason, the real hide and restore in TestStateChangeIsConflictNotSuccess write audit rows in pairs (this thread and "other"). The table now carries the expected audit and Delete count per case.
+- The unsuspension's-restore case reports the flag on the shown post first, then runs HidePostsOf, rather than hiding and then flagging. Flag refuses a post that is not shown, so flag-then-hide is the order a member can produce, and the state the queue sees is the same: hidden by a moderator, flag open.
+- The no-stripe proof is a 10 s guard around each call from afterQueueRead (a deadlock guard, not a wait): sync.Mutex is not reentrant, so a hide that took the stripe would never return. Mutation 3 in the commit body confirms it fires.
+
+Timing under -race, locally: TestSuspensionHideRacesTheQueueRestore about 11 s (0.55 s per fresh world, mostly the migrated DB), the whole internal/service/threads package 58 s. It uses no sleeps; the goroutines start from one closed channel.
+
+## Summary
+
+The groomed premise held: a suspension's HidePostsOf and RestorePostsOf take no flag lock stripe and need none. The race test found no violation, so no server behaviour changed. Added TestSuspensionHidePassesOverAnAutoHiddenPost, TestSuspensionHideWhileTheQueueRestores (both forced orders) and TestSuspensionHideRacesTheQueueRestore (20 fresh worlds under -race, no sleeps, about 11 s locally; every run ended shown or hidden by the suspension with its flags dismissed, and no Delete followed a Delete). TestStateChangeIsConflictNotSuccess now calls the real HidePostsOf while the queue holds the stripe, and has an unsuspension's-restore case. The flagLocks, ResolvePost and closeFlags comments explain why no stripe is taken and name the tests, and docs/08 Suspension says the hide passes over a post hidden pending review. Three mutations were tried, including taking the rejected lock, and each was caught.
