@@ -481,67 +481,94 @@ func (w *world) logHeaders(id threadid.ID) []threadlog.FrameHeader {
 // each is forbidden and writes nothing of hers. The move is landed from the
 // service's Project hook, which every decision calls once it has read the
 // length, so the timing is exact rather than raced.
+//
+// Each action is also asked when it would change nothing: locking a locked
+// thread, the slow mode the thread has, a move to the forum it is in. That
+// refusal is an answer too, and it is not given at a length the log has left,
+// so it is forbidden rather than conflict (Terva review 1570, finding 1).
 func TestAMoveLandingMidDecisionIsJudged(t *testing.T) {
 	for _, a := range threadActions {
-		t.Run(a.name, func(t *testing.T) {
-			w, _, lounge, _, _ := forumModWorld(t)
-			id := w.threadIn(70, w.forum, "Moved mid-decision", "alice")
-			bob := w.viewer("bob")
-			switch a.action {
-			case "unlock":
-				if _, err := w.svc.Lock(t.Context(), bob, id, ""); err != nil {
-					t.Fatal(err)
+		for _, noop := range []bool{false, true} {
+			name := a.name
+			if noop {
+				name += " that changes nothing"
+			}
+			t.Run(name, func(t *testing.T) { moveMidDecision(t, a, noop) })
+		}
+	}
+}
+
+// moveMidDecision is one case of TestAMoveLandingMidDecisionIsJudged: the
+// thread is put in the state a needs, or, when noop, in the state in which a
+// would change nothing.
+func moveMidDecision(t *testing.T, a threadAction, noop bool) {
+	w, _, lounge, _, _ := forumModWorld(t)
+	id := w.threadIn(70, w.forum, "Moved mid-decision", "alice")
+	bob := w.viewer("bob")
+	var err error
+	switch {
+	case a.action == "unlock" && !noop, a.action == "lock" && noop:
+		_, err = w.svc.Lock(t.Context(), bob, id, "")
+	case a.action == "unpin" && !noop, a.action == "pin" && noop:
+		_, err = w.svc.Pin(t.Context(), bob, id, threads.PinForum, nil)
+	case a.action == "slow-mode" && noop:
+		_, err = w.svc.SetSlowMode(t.Context(), bob, "", id, 30)
+	case a.action == "move" && noop:
+		a.body = moveTo("general")
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
+	if noop {
+		// Without the move, bob's answer is conflict: the case is one in
+		// which the action would change nothing.
+		if got := problemCode(t, send(w.chain(), "bob", a.method, modPath(id, a.action), a.body)); got != "conflict" {
+			t.Fatalf("bob's %s answered %s; the case needs conflict", a.name, got)
+		}
+	}
+	project := w.svc.Project
+	var once sync.Once
+	w.svc.Project = func(ctx context.Context, tid threadid.ID, n int64) error {
+		err := project(ctx, tid, n)
+		if tid == id {
+			once.Do(func() {
+				if err := w.cache.With(id, func(th *threadcache.Thread) error {
+					_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadMoved,
+						Author: uint64(w.users["bob"]), TimeMS: w.clock,
+						Body: &threadlog.ThreadMovedBody{ForumID: uint64(lounge)}})
+					return err
+				}); err != nil {
+					t.Error(err)
 				}
-			case "unpin":
-				if _, err := w.svc.Pin(t.Context(), bob, id, threads.PinForum, nil); err != nil {
-					t.Fatal(err)
-				}
-			}
-			project := w.svc.Project
-			var once sync.Once
-			w.svc.Project = func(ctx context.Context, tid threadid.ID, n int64) error {
-				err := project(ctx, tid, n)
-				if tid == id {
-					once.Do(func() {
-						if err := w.cache.With(id, func(th *threadcache.Thread) error {
-							_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadMoved,
-								Author: uint64(w.users["bob"]), TimeMS: w.clock,
-								Body: &threadlog.ThreadMovedBody{ForumID: uint64(lounge)}})
-							return err
-						}); err != nil {
-							t.Error(err)
-						}
-					})
-				}
-				return err
-			}
-			before, slow := w.logState(id), w.slowModeRow(id)
-			if got := problemCode(t, send(w.chain(), "gina", a.method, modPath(id, a.action), a.body)); got != "forbidden" {
-				t.Errorf("gina's %s: %s, want forbidden", a.name, got)
-			}
-			w.svc.Project = project
-			// The only record added is bob's move.
-			hs := w.logHeaders(id)
-			if last := hs[len(hs)-1]; last.Type != threadlog.TypeThreadMoved {
-				t.Errorf("the last record is %v, want bob's move", last.Type)
-			}
-			if after := w.logState(id); after.posts != before.posts || after.size <= before.size {
-				t.Errorf("the log went from %+v to %+v", before, after)
-			}
-			for _, hd := range hs {
-				if hd.Actor == uint64(w.users["gina"]) {
-					t.Errorf("gina's %s appended a %v", a.name, hd.Type)
-				}
-			}
-			if got := w.slowModeRow(id); got != slow {
-				t.Errorf("gina's %s changed the slow mode row: %s then %s", a.name, slow, got)
-			}
-			for _, r := range w.auditLog() {
-				if r.actor.Int64 == w.users["gina"] {
-					t.Errorf("gina's %s wrote the audit row %+v", a.name, r)
-				}
-			}
-		})
+			})
+		}
+		return err
+	}
+	before, slow := w.logState(id), w.slowModeRow(id)
+	if got := problemCode(t, send(w.chain(), "gina", a.method, modPath(id, a.action), a.body)); got != "forbidden" {
+		t.Errorf("gina's %s: %s, want forbidden", a.name, got)
+	}
+	w.svc.Project = project
+	// The only record added is bob's move.
+	hs := w.logHeaders(id)
+	if last := hs[len(hs)-1]; last.Type != threadlog.TypeThreadMoved {
+		t.Errorf("the last record is %v, want bob's move", last.Type)
+	}
+	if after := w.logState(id); after.posts != before.posts || after.size <= before.size {
+		t.Errorf("the log went from %+v to %+v", before, after)
+	}
+	for _, hd := range hs {
+		if hd.Actor == uint64(w.users["gina"]) {
+			t.Errorf("gina's %s appended a %v", a.name, hd.Type)
+		}
+	}
+	if got := w.slowModeRow(id); got != slow {
+		t.Errorf("gina's %s changed the slow mode row: %s then %s", a.name, slow, got)
+	}
+	for _, r := range w.auditLog() {
+		if r.actor.Int64 == w.users["gina"] {
+			t.Errorf("gina's %s wrote the audit row %+v", a.name, r)
+		}
 	}
 }
 

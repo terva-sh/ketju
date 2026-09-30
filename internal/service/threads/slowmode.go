@@ -54,8 +54,13 @@ const ActionSlowMode = "thread.slow_mode"
 // admits v from that row (admitAt). The transaction that writes the row
 // checks that the log is still L before it commits, and otherwise rolls back
 // and decides again. A move, or an archive, that lands before that check is
-// judged; one that lands after it is ordered after the change. A thread
-// written to without pause for threadAttempts decisions is conflict.
+// judged; one that lands after it is ordered after the change. A refusal
+// once v is admitted is an answer too, and is given only if the log is still
+// L, as appendDecided gives decide's (stillAt). So the value the thread
+// already has, read in the transaction, is never answered as conflict to a
+// viewer a move has just taken the thread from (Terva review 1570,
+// finding 1). A thread written to without pause for threadAttempts decisions
+// is conflict.
 func (s *Service) SetSlowMode(ctx context.Context, v domain.Viewer, ip string, id threadid.ID, seconds int) (dto.SlowMode, error) {
 	var out dto.SlowMode
 	if err := s.MayWrite(v); err != nil {
@@ -73,17 +78,17 @@ func (s *Service) SetSlowMode(ctx context.Context, v domain.Viewer, ip string, i
 				return err
 			}
 			if !a.canModerate {
-				return problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id))
+				return stillAt(th, at, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id)))
 			}
 			if th.Archived() {
-				return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+				return stillAt(th, at, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id)))
 			}
 			if seconds < 0 || seconds > MaxSlowModeSeconds {
-				return problem.Coded(problem.CodeValidationFailed,
-					fmt.Errorf("threads: slow mode is 0 to %d seconds, not %d", MaxSlowModeSeconds, seconds))
+				return stillAt(th, at, problem.Coded(problem.CodeValidationFailed,
+					fmt.Errorf("threads: slow mode is 0 to %d seconds, not %d", MaxSlowModeSeconds, seconds)))
 			}
 			now := s.now()
-			return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			return stillAt(th, at, s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 				var from any // null: the thread had no value of its own
 				switch row, err := q.GetThreadSlowMode(ctx, int64(id)); {
 				case err == nil && row.Seconds == int64(seconds):
@@ -109,7 +114,7 @@ func (s *Service) SetSlowMode(ctx context.Context, v domain.Viewer, ip string, i
 					return threadlog.ErrLogMoved
 				}
 				return nil
-			})
+			}))
 		})
 		if errors.Is(err, threadlog.ErrLogMoved) {
 			continue

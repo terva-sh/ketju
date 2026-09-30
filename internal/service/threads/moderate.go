@@ -273,7 +273,9 @@ func (s *Service) threadExists(ctx context.Context, id threadid.ID) error {
 // at once cannot both pass on a forum the first move just took it out of.
 // The suspension decides the same way (authorThread).
 //
-// decide may refuse, and then nothing is appended. The answer is the
+// decide may refuse, and then nothing is appended. The refusal is answered
+// only if the log is still the length it was decided at, and otherwise the
+// request is decided again (stillAt). The answer is the
 // thread's header as its page now serves it, once the record is projected,
 // which is also what writes its audit row.
 //
@@ -305,7 +307,7 @@ func (s *Service) appendDecided(ctx context.Context, v domain.Viewer, id threadi
 			now := s.now()
 			rec, err := decide(a, th, now)
 			if err != nil {
-				return err
+				return stillAt(th, at, err)
 			}
 			rec.Flags, rec.Author, rec.TimeMS, rec.AtLength = flags, uint64(v.UserID), now.UnixMilli(), at
 			res, err = s.Writer.Append(th, rec)
@@ -323,6 +325,22 @@ func (s *Service) appendDecided(ctx context.Context, v domain.Viewer, id threadi
 		return s.threadHeader(ctx, v, id)
 	}
 	return out, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s kept changing while this request was decided", id))
+}
+
+// stillAt answers err, a refusal made once v was admitted at log length at,
+// only if the log is still that length, and ErrLogMoved otherwise, so the
+// request is decided again. A refusal is an answer, and decide may read state
+// newer than at, such as the thread cache's archived flag or, in SetSlowMode,
+// the value in its transaction. Checking the length after it keeps a moderator
+// whom a move has just taken the thread from from being told why an action
+// would change nothing there (Terva review 1570, finding 1). Access errors
+// are not passed through here: a thread hidden from v stays not-found
+// however busy its log is.
+func stillAt(th *threadcache.Thread, at int64, err error) error {
+	if err != nil && !errors.Is(err, threadlog.ErrLogMoved) && th.Actor.LogLength() != at {
+		return threadlog.ErrLogMoved
+	}
+	return err
 }
 
 // admitAt reads the log length L of the open thread th, projects thread id
