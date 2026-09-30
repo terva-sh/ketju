@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T10:42:46Z
+updated_at: 2026-09-30T10:46:10Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -58,7 +58,7 @@ The log is only worth writing if somebody can read it. In a small community the 
 
 ## Implementation plan
 
-Groomed 2026-09-29. Refreshed 2026-09-30 against main at 5124209.
+Groomed 2026-09-29. Refreshed 2026-09-30 against main at 5124209. Revised at claim on 2026-09-30 against main at 94ce6d8.
 
 ### Settled in grooming
 
@@ -84,6 +84,23 @@ Engineering choices made in the refresh, each with the alternative that lost:
 - **User targets link to `/u/{handle}`**, the profile. The admin detail at `/admin/users?user={handle}` needs the address change TKT-01M3P0CYR3 makes, and this ticket does not wait on it. Once that lands, the href can change in one place (`targetHref`).
 - **A moved thread's forums are resolved.** `thread.moved` carries `from_forum` and `to_forum` as ids. The entry carries them as `related` targets with the forums' names and `/f/{slug}` links, because "who moved this thread, and from where" is the question the ticket names.
 
+### Revised at claim (2026-09-30, main at 94ce6d8)
+
+The Settled items above are carried verbatim. This section records what changed on main since the refresh, and what the claim adds. Each choice names the alternative that lost.
+- **Two PRs, in order**, as the moderator queue landed (#184, then #185). The forum-admin lane (PR #213) holds the client dist, and only one lane at a time may have an open PR that changes it (docs/13 "Running two lanes").
+  - PR 1 is the server half: the migration, `audit.Actions` and its docs/04 table, the view query, `internal/service/auditlog`, the DTOs and goldens, the route, and docs/07. A types-only `dto.ts` and `dto-contract.ts` edit rides with it, because `contract.test.ts` fails on a golden that file does not import. `go generate ./internal/web/spa` must leave the dist byte-identical. The ticket stays `in-progress` after PR 1.
+  - PR 2 is the screen, the dist and the close.
+  - Waiting for the dist to hold one PR lost, because the server half does not need the dist and #213 may take a while.
+- **The migration is 0019**, not 0018, because `0018_draft_title_revision.sql` landed with PR #215. The number is checked again before each push.
+- **No audit action landed since the refresh.** Main at 94ce6d8 writes exactly the 45 actions `audit.Actions` lists. PR #214 moved gates and wrote no new row, and PRs #215 and #216 write none. The `forum.*` actions of TKT-01M29CXK19 (PR #213) go into the list in whichever of the two tickets lands second.
+- **Group targets resolve to the group's name**, in one more batched statement, so a `group.*` row reads "Moderators" rather than "group 3". The href is unchanged. A label of "group {id}" lost, because an admin would have to look the id up to answer the question the ticket names.
+- **The resolution statements are sqlc queries**: `AuditThreads`, `AuditForums`, `AuditGroups` and `AuditFlags` in `queries/moderation.sql`. Their shape is fixed, so docs/04 "Engine" puts them in sqlc, and only the filter query is hand-written in `views`.
+- **The API takes `from` and `to` as Unix ms**, and a value that is not a non-negative integer is `bad-request`. The screen converts local dates to ms. Accepting ISO dates on the server lost, because the time zone is the browser's to know.
+- **An absent user target draws as `deleted-user-<id>` with no href**, as AC3 asks. An anonymized account keeps its `/u/deleted-user-<id>` link, because that profile resolves.
+- **The service asks again.** `Query` calls `member.RequireAdmin` before it reads anything, so a caller that forgot the admin gate is still refused, as the users service does behind the staff gate.
+
+Criteria in PR 1: AC1 and AC2 are server-only, and PR 1 ticks them. AC3, AC4 and AC5 each name the screen as well as the endpoint, and AC6 is the screen, so all four stay unticked until PR 2. A note records what PR 1 proved of each.
+
 ### What changed since the plan was written
 
 Read from main at 5124209:
@@ -97,19 +114,19 @@ Read from main at 5124209:
   - `agent.credential_issued`, `agent.credential_revoked`, `agent.limits_changed` and `user.created` (TKT-01M29P9RSW).
   - `user.posts_hidden` and `user.posts_restored` (TKT-01M29CP2QK).
 - `member.AuthorsByID` (`internal/service/member/account.go`) resolves actors in one batch. It draws an absent user with `member.Missing` and an anonymized one with `member.Author`.
-- The newest migration is 0017 (`0017_thread_slow_mode.sql`), so the index migration is 0018 unless another ticket claims it first.
+- The newest migration is 0017 (`0017_thread_slow_mode.sql`), so the index migration is 0018 unless another ticket claims it first. (Superseded at claim: 0019.)
 - docs/07 "Moderation and admin" is now split into `####` subsections, one per area. The endpoint gets its own subsection.
 
 ### Approach
 
-1. **Migration `0018_audit_log_filters.sql`** (the next free number): `CREATE INDEX audit_log_actor ON audit_log (actor_id, id)` and `CREATE INDEX audit_log_action ON audit_log (action, id)`. `audit_log_target (target_type, target_id, at)` and `audit_log_at` already exist (0006).
+1. **Migration `0019_audit_log_filters.sql`** (the next free number at claim): `CREATE INDEX audit_log_actor ON audit_log (actor_id, id)` and `CREATE INDEX audit_log_action ON audit_log (action, id)`. `audit_log_target (target_type, target_id, at)` and `audit_log_at` already exist (0006).
 2. **`internal/audit`**: `Actions []string`, every action written today (listed above), sorted. docs/04 "audit_log" gains an `<!-- audit-actions:begin -->` table of action, target type and ticket, fenced as the `audit-targets` table already is, so the prose's other dotted names (`registration.mode`) are not read as actions. `TestActionsDocumented` reads that table and fails on a name in one and not the other, as `TestTargetTypesDocumented` does for types. The table includes `flag.resolved` and `flag.dismissed`, against the post, which docs/04 lacked.
 3. **`internal/store/db/views/audit.go`**: `AuditFilter{Actor *int64; System bool; Action string; ActionPrefix bool; TargetType, TargetID string; From, To int64; Before int64; Limit int}` and `AuditPage(ctx, tx, f) ([]dbq.AuditLog, error)`. It uses `?` parameters only, and ends with `ORDER BY id DESC LIMIT ?`. `From` is inclusive and `To` exclusive, in Unix ms. `System` selects `actor_id IS NULL`, which covers the command line, the expiry job, the auto-hide and thread-log rows with no actor.
 4. **`internal/service/auditlog`** (new, beside the `internal/audit` writer): `Service{DB}` with `Query(ctx, v, q Query) (dto.AuditPage, error)`.
-   - The gate is the admin gate (`adminGate`, `internal/web/api/admin.go`).
+   - The gate is the admin gate (`adminGate`, `internal/web/api/admin.go`), and the service asks again (`member.RequireAdmin`).
    - Parameters: `actor` (a handle, or `system`), `action` (exact, or a prefix ending in `.` such as `user.`), `target_type` with `target_id`, `from`, `to` and `cursor`. An unknown actor handle returns an empty page rather than an error: the caller is an admin, and nothing leaks. A `target_id` without a `target_type` is `bad-request`, and so is a `target_type` not in `audit.Types`.
    - The page size is 50. `next_cursor` is the last id, base64url-encoded, and empty at the end.
-   - Resolution is batched per page, with one statement per kind: actors and user targets through `member.AuthorsByID`; threads (title, slug) for thread and post targets and for flags' posts; forums for forum targets and for `thread.moved`'s `from_forum` and `to_forum`; flags (thread, ordinal) for flag targets.
+   - Resolution is batched per page, with one statement per kind: actors and user targets through `member.AuthorsByID`; threads (title, slug) for thread and post targets and for flags' posts; forums for forum targets and for `thread.moved`'s `from_forum` and `to_forum`; groups (name) for group targets; flags (thread, ordinal) for flag targets.
    - `targetHref` gives each type its link:
      - user: `/u/{handle}`;
      - thread: `/t/{id}/{slug}`;
@@ -118,21 +135,21 @@ Read from main at 5124209:
      - setting: `/admin/settings`, with the key as the label;
      - flag: the flagged post's link, labelled "flag {id} on #{ordinal}";
      - application: `/admin/applications?id={id}`;
-     - group: `/admin/users?tab=groups`;
+     - group: `/admin/users?tab=groups`, labelled with the group's name;
      - permission: `/admin/users?tab=permissions`;
      - form: `/admin/forms`;
      - identity: no link, labelled "identity {id}";
      - blob: no link, since a `blob.deleted` blob is gone. The label is the first 12 hex digits, and the full hash is in `id`.
-   - A row whose target no longer resolves gets its raw id as the label and no `href`.
-5. **`internal/dto`**: `AuditPage{Entries []AuditEntry; Actions []string; NextCursor string}` and `AuditEntry{ID int64; At Millis; Actor *Author; Action string; Target AuditTarget; Related []AuditTarget; Details json.RawMessage; IP string}`, with `AuditTarget{Type, ID, Label, Href string}`. `Related` is empty (`[]`), not null, except for `thread.moved`. Goldens: `audit.admin.json`, with a system actor and a member actor so the nullable actor appears both null and set, as the corpus rules require, and one `thread.moved` row with `related` set; and `audit-filtered.admin.json`. Import both in `web/client/src/api/dto-contract.ts`.
-6. **`internal/web/api/admin_audit.go`**: `GET /api/v1/admin/audit` through `adminRoute` with `adminGate`, `no-store`. Register it in `registerAdmin`.
-7. **Client**: `web/client/src/screens/admin/AuditScreen.tsx`, in the admin chunk.
+   - A row whose target no longer resolves gets its raw id as the label and no `href`, except an absent user, which draws as `deleted-user-<id>`.
+5. **`internal/dto`**: `AuditPage{Entries []AuditEntry; Actions []string; NextCursor string}` and `AuditEntry{ID int64; At Millis; Actor *Author; Action string; Target AuditTarget; Related []AuditTarget; Details json.RawMessage; IP string}`, with `AuditTarget{Type, ID, Label, Href string}`. `Related` is empty (`[]`), not null, except for `thread.moved`. Goldens: `audit.admin.json`, with a system actor and a member actor so the nullable actor appears both null and set, as the corpus rules require, and one `thread.moved` row with `related` set; and `audit-filtered.admin.json`. Import both in `web/client/src/api/dto-contract.ts`, with the types in `dto.ts` (PR 1).
+6. **`internal/web/api/admin_audit.go`**: `GET /api/v1/admin/audit` through `adminRoute` with `adminGate`, `no-store`. Register it in `registerAdmin`, and add it to `adminRouteGates` in `admin_test.go` with `admin`.
+7. **Client** (PR 2): `web/client/src/screens/admin/AuditScreen.tsx`, in the admin chunk.
    - A filter form: actor handle, an action select of `actions` plus free text, target type (a select of the twelve) and id, and from and to dates in local time, converted to ms.
    - A table, newest first, with the time, the actor, the action, the target link, `related` links, the details as key and value pairs, and the IP. Details render as text, never HTML.
    - An "Older" button follows the cursor.
    - Add `/admin/audit` to `sections.ts` (`isAdmin`), to `routes.tsx`, and to docs/07's URL scheme line, because `routes.test.tsx` diffs the table against that document.
-8. **Docs**: a new `####` subsection under docs/07 "Moderation and admin", "The audit log (TKT-01M29CP2R4)", documents the endpoint: parameters, codes, page size and cursor. docs/04 "audit_log" gains the two flag actions (step 2).
-9. Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and run `npm --prefix web/client run budget`. The reader total must stay at 47415 B, because the screen is in the admin chunk.
+8. **Docs** (PR 1): a new `####` subsection under docs/07 "Moderation and admin", "The audit log (TKT-01M29CP2R4)", documents the endpoint: parameters, codes, page size and cursor. docs/04 "audit_log" gains the two flag actions (step 2).
+9. (PR 2) Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and run `npm --prefix web/client run budget`. The reader total must stay at 47415 B, because the screen is in the admin chunk.
 
 ### Tests
 
@@ -144,7 +161,7 @@ Read from main at 5124209:
   - `TestAuditCursorIsOpaque`: a malformed cursor is `bad-request`, and so are a `target_id` alone and an unknown `target_type`.
 - `TestAuditLogAppendOnly` and `TestOneWayIntoAuditLog` pass unchanged.
 - The dto goldens and the corpus rules.
-- Client: `AuditScreen.test.tsx` checks that the filters round-trip through the URL, that "Older" appends the next page, that targets and `related` render as links, and that a detail holding `<b>` renders as text. `routes.test.tsx` passes with the docs/07 change. `TestTheAdminBundleIsSeparate` stays green.
+- Client (PR 2): `AuditScreen.test.tsx` checks that the filters round-trip through the URL, that "Older" appends the next page, that targets and `related` render as links, and that a detail holding `<b>` renders as text. `routes.test.tsx` passes with the docs/07 change. `TestTheAdminBundleIsSeparate` stays green.
 
 ### Out of scope
 
