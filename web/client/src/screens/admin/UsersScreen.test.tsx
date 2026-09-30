@@ -180,7 +180,7 @@ describe('the users tab', () => {
     expect(detail.querySelector('select')).toBeNull();
     expect(detail.querySelector('[data-sessions]')).toBeNull();
     expect(detail.textContent).not.toContain('Identities');
-    expect(buttons(detail)).toEqual([]);
+    expect(buttons(detail)).toEqual(['Close']);
   });
 
   // Terva review 1414, finding 3: a page asked for under one filter is not

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QH3GS23M8VG1JEPCTGSGR1
 title: Add agent provisioning controls to the admin users screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ dependencies:
   - TKT-01M29P9RSW21SCES335WERTBSF
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qh3gs2
-  branch: run/qh3gs2-agent-controls
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a67e927a2c82c40bc
-  commit: 4d793b2cfd4c79ae829bbb55fd8c0da523a76447
-  session: null
-  claimed_at: 2026-09-29T23:48:45Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T21:28:33Z
-updated_at: 2026-09-29T23:50:39Z
+updated_at: 2026-09-30T00:06:33Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -52,11 +45,11 @@ All of it is admin-only and in the lazy admin chunk. The built client is committ
 
 ## Acceptance criteria
 
-- [ ] An admin creates an agent from the users screen with and without a token, the request to POST /api/v1/admin/users is exactly {kind: "agent", handle, display_name, issue_credential}, and a 409 says the handle is taken (AgentControls.test.tsx)
-- [ ] A new token shows once in a panel with a copy button and the line "This token is shown once. Store it now.", and after Done or closing the detail it is in neither the DOM, web storage nor the address (AgentControls.test.tsx)
-- [ ] An agent's detail shows its live credential's issue and last-use times, Issue new token sends POST .../credential only after confirmation, and Revoke sends DELETE .../credential only after confirmation (AgentControls.test.tsx)
-- [ ] The burst and refill fields show default_burst and default_refill_seconds as placeholders, and PUT .../agent-limits sends null for an empty field (AgentControls.test.tsx)
-- [ ] A moderator, and an admin viewing a human, see no agent controls; TestTheAdminBundleIsSeparate and the bundle budget pass, and the dist regenerated with go generate ./internal/web/spa is committed
+- [x] An admin creates an agent from the users screen with and without a token, the request to POST /api/v1/admin/users is exactly {kind: "agent", handle, display_name, issue_credential}, and a 409 says the handle is taken (AgentControls.test.tsx)
+- [x] A new token shows once in a panel with a copy button and the line "This token is shown once. Store it now.", and after Done or closing the detail it is in neither the DOM, web storage nor the address (AgentControls.test.tsx)
+- [x] An agent's detail shows its live credential's issue and last-use times, Issue new token sends POST .../credential only after confirmation, and Revoke sends DELETE .../credential only after confirmation (AgentControls.test.tsx)
+- [x] The burst and refill fields show default_burst and default_refill_seconds as placeholders, and PUT .../agent-limits sends null for an empty field (AgentControls.test.tsx)
+- [x] A moderator, and an admin viewing a human, see no agent controls; TestTheAdminBundleIsSeparate and the bundle budget pass, and the dist regenerated with go generate ./internal/web/spa is committed
 
 ## Implementation plan
 
@@ -139,3 +132,20 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. Client only; the route
 **agent:claude-code/phase2-groom** at 2026-09-29T22:25:28Z
 
 Terva review 1488 on PR #167, head f5a4206, finding 1 (high, credential handling): accepted and fixed in the plan. The first plan kept the creation token in NewAgentForm, above the list, so closing the detail would not clear it. Now every token, the creation token included, lives only in AgentPanel inside the agent's UserDetail. NewAgentForm passes the answer up and holds no token, and the detail gains a Close button. New tests: 'closing the detail clears the creation token' and 'the form holds no token'.
+
+**agent:claude-code/phase2-run-qh3gs2** at 2026-09-30T00:06:22Z
+
+Built on main at 4d793b2. Three choices differ from the plan's letter, and one shared file changed:
+
+- **The limit fields are text with `inputMode="numeric"`, not `type=number` with min and max.** A number input reports what it cannot parse ("1e", "12-") as an empty value, and this form sends empty as null. A typo would then reset the agent's limit to the site default without anyone asking. The client holds each field to the server's bounds (burst at least 1, refill 1 to 604800) before sending, and shows the server's `validation-failed` if it still refuses. Test: `sends nothing the server would refuse`.
+- **Issue and revoke show the change at once, then refetch.** The answer says exactly what changed: a new credential with `last_used_at` null, or none. The refetch is ordered by a counter, so a slow GET cannot overwrite a newer limits answer, and a failed GET leaves the local update in place.
+- **The handover lasts one render.** `CreatedAgent.user` seeds the new `UserDetail` (`initial`), so `AgentPanel` mounts in the same render as the selection and clears `UsersTab`'s copy from its mount effect. `choose()` (a row, or Close) also clears it. Mutations: dropping either clear alone is covered by the other. Dropping both brings the creation token back when the agent is chosen again, and `is gone when the detail is closed…` and `…another account is chosen…` fail.
+- **`common/ConfirmButton.tsx`**: on close it now refocuses its button only when focus went to the body with the question. Playwright found that after "Issue new token", Confirm put focus back on the button and took it from the token panel. New test: `leaves focus where the action moved it`, which fails without the change.
+
+Other mutations tried: removing `setToken(null)` from Done and from revoke fails three tests. Removing the confirmation step fails the issue and revoke tests.
+
+e2e: `e2e/admin-agents.spec.ts` runs as ada at 390 and 1440 px. It creates an agent with a token, checks the token is accepted as a bearer (200) and gone from the page after Done, saves a limit, issues a new token (the old one is then 401), revokes (the new one is then 401), and closes. axe finds no violations in either theme at five states. The probe reads only the status, because GET /me answers an agent as anonymous; TKT-01M3QH3X (Answer GET /me for an agent authenticated by its credential) owns that. Full suite: 65 passed, 9 skipped, on port 5181. Reader bundle 45575 of 60000 B.
+
+## Summary
+
+The admin users screen creates agents and manages their tokens and write limits. NewAgentForm (screens/admin) posts {kind, handle, display_name, issue_credential} and holds no token. AgentPanel, inside the agent's UserDetail, holds every one-time token in its own state only, so Done, Close, choosing another account and leaving the screen each drop it. The detail gained a Close button, and ConfirmButton no longer takes back focus an action moved. Unit tests are in AgentControls.test.tsx, and e2e/admin-agents.spec.ts runs with axe at 390 and 1440 px. The dist is regenerated, and the reader bundle is 45575 of 60000 B.

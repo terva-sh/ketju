@@ -242,6 +242,64 @@
   margin: 16px 0;
 }
 
+/* Agent accounts (TKT-01M3QH3GS2): the new-agent form above the list, and
+   on an agent's detail its token and write limits. The one-time token is
+   set in the monospace face, so that 0 and O, and l and 1, can be told
+   apart when it is copied by hand. */
+.admin-detail-head {
+  display: flex;
+  align-items: start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.admin-detail-head h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.admin-new-agent {
+  margin-bottom: 24px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--rule);
+}
+.admin-check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 36px;
+}
+.admin-check input {
+  width: 20px;
+  height: 20px;
+  margin: 0;
+}
+.admin-token {
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid var(--unread);
+  border-radius: var(--radius);
+  background: var(--unread-soft);
+}
+.admin-token-warning {
+  margin: 0 0 8px;
+  color: var(--ink);
+  font-weight: 600;
+}
+.admin-token .admin-field {
+  margin-bottom: 8px;
+}
+.admin-field input.admin-token-value {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-mono);
+}
+.admin-token .admin-actions {
+  align-items: center;
+  margin: 0;
+}
+.admin-limits .admin-field input {
+  width: 8em;
+}
+
 /* The phone: the section list becomes a row above the section, and the
    section links and the buttons are drawn at the full 44 px (docs/06
    "Targets and gestures"). */
@@ -264,6 +322,13 @@
     min-height: var(--target);
   }
   .admin-grid input[type='checkbox'] {
+    width: 28px;
+    height: 28px;
+  }
+  .admin-check {
+    min-height: var(--target);
+  }
+  .admin-check input {
     width: 28px;
     height: 28px;
   }

@@ -120,6 +120,17 @@ describe('ConfirmButton', () => {
     expect(document.activeElement?.textContent).toBe('Suspend');
   });
 
+  // An action that opens something and focuses it keeps that focus: the
+  // token panel an issued token opens, on an agent's detail (TKT-01M3QH3GS2).
+  it('leaves focus where the action moved it', async () => {
+    const elsewhere = document.createElement('input');
+    const root = await mount(<ConfirmButton label="Issue" prompt="Issue one?" onConfirm={() => elsewhere.focus()} />);
+    root.append(elsewhere);
+    await act(async () => root.querySelector('button')!.click());
+    await act(async () => root.querySelectorAll('button')[0].click());
+    expect(document.activeElement).toBe(elsewhere);
+  });
+
   it('stays open when the action reports its own failure with false', async () => {
     const root = await mount(<ConfirmButton label="Delete" prompt="Delete it?" onConfirm={async () => false} />);
     await act(async () => root.querySelector('button')!.click());

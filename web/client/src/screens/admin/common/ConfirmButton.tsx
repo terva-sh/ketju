@@ -15,7 +15,9 @@ import { sentence } from './send';
 //
 // Focus follows the question, so a keyboard user is never left on a button
 // that has gone: opening it focuses Cancel, the choice that changes
-// nothing, and closing it focuses the action's button again.
+// nothing, and closing it focuses the action's button again. An action that
+// moved focus itself, to what it opened, keeps it there: the button is
+// focused only when focus went with the question, to the page's body.
 export function ConfirmButton({
   label,
   prompt,
@@ -43,7 +45,9 @@ export function ConfirmButton({
   const opened = useRef(false);
   useEffect(() => {
     if (asking) cancelButton.current?.focus();
-    else if (opened.current) action.current?.focus();
+    else if (opened.current && (document.activeElement === null || document.activeElement === document.body)) {
+      action.current?.focus();
+    }
     opened.current = opened.current || asking;
   }, [asking]);
 

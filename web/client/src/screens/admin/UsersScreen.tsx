@@ -1,15 +1,17 @@
 import { useLocation } from 'preact-iso';
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { apiGet } from '../../api/client';
-import type { AdminUser, AdminUserDetail, AdminUserList } from '../../api/dto';
+import type { AdminUser, AdminUserDetail, AdminUserList, AgentInfo, CreatedAgent, IssuedCredential } from '../../api/dto';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../../components/ErrorPanel';
 import { viewer } from '../../state/viewer';
+import { AgentPanel } from './AgentPanel';
 import { ConfirmButton } from './common/ConfirmButton';
 import { Field } from './common/Field';
 import { send } from './common/send';
 import { Table } from './common/Table';
 import { GroupsTab } from './GroupsTab';
+import { NewAgentForm } from './NewAgentForm';
 import { PermissionsTab } from './PermissionsTab';
 
 // UsersScreen is /admin/users (TKT-01M29CXK1X): the accounts, and for an
@@ -83,6 +85,14 @@ function UsersTab({ admin }: { admin: boolean }) {
   const [more, setMore] = useState<AdminUserList[]>([]);
   const [moreError, setMoreError] = useState<unknown>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  // created is the answer to creating an agent, until the new agent's
+  // detail has taken it: its first detail, and the token it may carry,
+  // which AgentPanel copies into its own state as it mounts and then clears
+  // here (TKT-01M3QH3GS2). Choosing any account, or none, drops it too, so a
+  // token never waits here for a detail that is not coming.
+  const [created, setCreated] = useState<CreatedAgent | null>(null);
+  const tab = useRef<HTMLDivElement>(null);
+  const closed = useRef<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
   // list counts the lists this tab has shown: a filter change starts a new
   // one, and a More answer for an older list is dropped rather than
@@ -132,8 +142,31 @@ function UsersTab({ admin }: { admin: boolean }) {
     }
   };
 
+  const choose = (handle: string | null) => {
+    setCreated(null);
+    setSelected(handle);
+  };
+  const onCreated = (c: CreatedAgent) => {
+    reload();
+    setCreated(c);
+    setSelected(c.user.user.user.handle);
+  };
+  // Closing the detail returns focus to its row, when the list still has it.
+  const close = () => {
+    closed.current = selected;
+    choose(null);
+  };
+  useEffect(() => {
+    const h = closed.current;
+    closed.current = null;
+    if (selected === null && h !== null) {
+      tab.current?.querySelector<HTMLElement>(`[data-user="${CSS.escape(h)}"]`)?.focus();
+    }
+  }, [selected]);
+  const handover = created && created.user.user.user.handle === selected ? created : null;
+
   const pick = (u: AdminUser) => (
-    <button type="button" class="admin-link" onClick={() => setSelected(u.user.handle)} data-user={u.user.handle}>
+    <button type="button" class="admin-link" onClick={() => choose(u.user.handle)} data-user={u.user.handle}>
       {u.user.handle}
     </button>
   );
@@ -153,8 +186,9 @@ function UsersTab({ admin }: { admin: boolean }) {
   );
 
   return (
-    <div class="admin-split">
+    <div class="admin-split" ref={tab}>
       <div>
+        {admin && <NewAgentForm onCreated={onCreated} />}
         <form class="admin-filters" onSubmit={(e) => e.preventDefault()} aria-label="Filter accounts">
           <Field label="Handle starts with">
             {(c) => (
@@ -194,15 +228,50 @@ function UsersTab({ admin }: { admin: boolean }) {
         )}
         {moreError !== null && <ErrorPanel error={moreError} what="More accounts" />}
       </div>
-      {selected && <UserDetail key={selected} handle={selected} admin={admin} onRoleChanged={reload} />}
+      {selected && (
+        <UserDetail
+          key={selected}
+          handle={selected}
+          admin={admin}
+          onRoleChanged={reload}
+          onClose={close}
+          initial={handover?.user ?? null}
+          issued={handover?.credential ?? null}
+          onIssuedTaken={() => setCreated(null)}
+        />
+      )}
     </div>
   );
 }
 
-function UserDetail({ handle, admin, onRoleChanged }: { handle: string; admin: boolean; onRoleChanged: () => void }) {
+function UserDetail({
+  handle,
+  admin,
+  onRoleChanged,
+  onClose,
+  initial,
+  issued,
+  onIssuedTaken,
+}: {
+  handle: string;
+  admin: boolean;
+  onRoleChanged: () => void;
+  onClose: () => void;
+  // initial is a detail already in hand, the creation answer's; issued is
+  // the token that came with it, for AgentPanel. Both are read on mount.
+  initial: AdminUserDetail | null;
+  issued: IssuedCredential | null;
+  onIssuedTaken: () => void;
+}) {
   const url = `/api/v1/admin/users/${encodeURIComponent(handle)}`;
   const res = useResource(url, (signal) => apiGet<AdminUserDetail>(url, { signal }));
-  const [fresh, setFresh] = useState<AdminUserDetail | null>(null);
+  const [fresh, setFresh] = useState<AdminUserDetail | null>(initial);
+  const title = useRef<HTMLHeadingElement>(null);
+  useEffect(() => {
+    // A new agent's detail takes focus from the form that made it; with a
+    // token, the token panel takes it instead.
+    if (initial && !issued) title.current?.focus();
+  }, []);
   const [role, setRole] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const d = fresh ?? res.data;
@@ -235,9 +304,14 @@ function UserDetail({ handle, admin, onRoleChanged }: { handle: string; admin: b
 
   return (
     <section class="admin-detail" aria-label={`Account ${u.user.handle}`} data-detail={u.user.handle}>
-      <h2>
-        {u.user.display_name || u.user.handle} <span class="admin-muted">@{u.user.handle}</span>
-      </h2>
+      <div class="admin-detail-head">
+        <h2 ref={title} tabIndex={-1}>
+          {u.user.display_name || u.user.handle} <span class="admin-muted">@{u.user.handle}</span>
+        </h2>
+        <button type="button" class="admin-button" onClick={onClose}>
+          Close
+        </button>
+      </div>
       <dl class="admin-facts">
         <dt>Status</dt>
         <dd data-status={u.status}>{u.status}</dd>
@@ -281,6 +355,16 @@ function UserDetail({ handle, admin, onRoleChanged }: { handle: string; admin: b
         <p class="admin-error" role="alert">
           {failed}
         </p>
+      )}
+
+      {admin && d.agent !== null && (
+        <AgentPanel
+          d={d as AdminUserDetail & { agent: AgentInfo }}
+          url={url}
+          onDetail={setFresh}
+          issued={issued}
+          onIssuedTaken={onIssuedTaken}
+        />
       )}
 
       <h3>Groups</h3>
