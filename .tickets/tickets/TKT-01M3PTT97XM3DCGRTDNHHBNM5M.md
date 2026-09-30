@@ -18,17 +18,18 @@ origin: null
 dependencies:
   - TKT-01M29CKRHSMCRM9T440314D2Q8
   - TKT-01M3QJYV4ZYJ24B0V9F0WA2W8H
+  - TKT-01M3R33SR5DFV94SHH7P5M92QZ
 blocks_on: none
 references: []
 claim: null
 archive: null
 created_at: 2026-09-29T14:59:02Z
-updated_at: 2026-09-29T22:49:17Z
+updated_at: 2026-09-30T09:21:43Z
 created_by:
   id: agent:claude-code/phase2-run-ckrhs
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -50,14 +51,18 @@ The windows are open for their first N seconds and closed from N on, so a window
 - [ ] The controls disappear when the window passes with no other input (fake timers), and edit, delete and restore send the routes' requests and refetch the page (PostControls.test.tsx)
 - [ ] A refusal with edit-window-closed or delete-window-closed shows its sentence beside the control (PostControls.test.tsx)
 - [ ] The DTO goldens and dto-contract.ts are updated, the thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
+- [ ] author_windows carries the seconds the server enforces, int(secondsDuration(n)/time.Second): with both settings at 10000000000 the page carries 9223372036 and a delete 30 days after posting is allowed (TestAuthorWindowsFollowTheClamp)
+- [ ] useWindowClock sets its timer through delayUntil, never longer than 2147483647 ms, so a 40-day window neither fires at once nor loops (deadline.test.ts, PostControls.test.tsx 'a long window sets no immediate timer')
+- [ ] Ownership compares handles without case through one isOwn helper that mayFlag also uses, and Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author (postControls.test.ts 'ownership ignores case', PostControls.test.tsx)
+- [ ] On a phone, edit and delete are under PostMore and not in the footer, and closing the delete confirmation returns focus to the More button (PostControls.test.tsx 'on a phone edit and delete are under More')
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at f04a476.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at f04a476. Refreshed on 2026-09-30 against main at a660ae5 (5124209 plus the run's tracking commits).
 
-**The description assumes controls that do not exist.** On main, `web/client/src/components/thread/Post.tsx` offers quote, reply, link and history, and `Tombstone.tsx` offers nothing. No client code calls `PATCH`, `DELETE` or `POST …/restore` on a post. TKT-01M29CKRHS (Implement author edit and delete windows with grace edits) lists "the client controls" as this ticket's, so this ticket builds Edit, Delete and Restore on the viewer's own posts and gates them by the windows. The effort is M, not S.
+**The description assumes controls that do not exist.** On main, `web/client/src/components/thread/Post.tsx` offers quote, reply, link, flag and history. `Tombstone.tsx` offers only the reply expander. No client code calls `PATCH`, `DELETE` or `POST …/restore` on a post. TKT-01M29CKRHS (Implement author edit and delete windows with grace edits, PR #146) lists "the client controls" as this ticket's, so this ticket builds Edit, Delete and Restore on the viewer's own posts and gates them by the windows. The effort is M, not S.
 
-An author cannot edit without the post's current source, and `GET …/history`, the only route that carries it, is closed to members when `public_edit_history` is off (docs/08 "Post history"). That route is filed as TKT-01M3QJYV4Z (Serve a post's current source to its author for editing), and this ticket depends on it.
+An author cannot edit without the post's current source, and `GET …/history`, the only route that carried it, is closed to members when `public_edit_history` is off (docs/08 "Post history"). TKT-01M3QJYV4Z (Serve a post's current source to its author for editing) has since landed in PR #205: `GET /api/v1/threads/{id}/posts/{ordinal}/source` answers `dto.PostSource` `{ordinal, revision, source}` to the post's author and to a moderator of its forum, `no-store` with no ETag (`threads.Service.Source`, `sourceRefusal` in `internal/service/threads/posts.go`). The client type `PostSource` is in `web/client/src/api/dto.ts`.
 
 ### Settled in grooming
 
@@ -79,56 +84,74 @@ Engineering choices made here, each with the alternative that lost:
 - **Inline editing** in the post's place, with the composer's preview. `components/thread/PostEditor.tsx` replaces the post body while open. `usePreview` in `composer/Composer.tsx` is exported for it. Loading the post into the reply composer lost: the composer is one per thread and carries a reply in progress, which an edit would overwrite.
 - **One timer per page** re-renders when the soonest open window on the page closes, so a control disappears on time without polling. A per-post interval lost: a long page would run one per post.
 
+
+Added in the refresh of 2026-09-30:
+- **The source route is built** (TKT-01M3QJYV4Z, PR #205). It does not check the windows, a lock or an archive, because those refuse the edit and not the reading. So the editor may open on a post whose edit the server will then refuse, and the refusal's words show. `apiGet` holds no body for an answer without an ETag, so the source is never kept on the client. `PATCH` takes no revision, so the editor sends only `{source}`, and `PostSource.revision` is unused.
+- **`removal` is on `dto.Post`, and removed posts are drawn by who may see them** (TKT-01M29CKRJ9, PRs #170 and #174). `revealRemoved` in `view.go` serves a moderator every removed post's body except a moved or redacted one. It serves an author their own post while a moderator's removal or a review hide holds it, and not a post they deleted themselves. `ThreadBody` draws a removed post served with its body as `Post`, with the class `removed` and `removedMark`, and any other as `Tombstone` (`isTombstone` in `components/thread/removal.tsx`). So an author's own deleted post reaches them as a `Tombstone`, and Restore goes in the tombstone's footer. A moderator's own deleted post reaches them as a removed `Post`, and Restore goes in that post's footer. Restore is drawn in whichever of the two the post is drawn as (engineering choice). The rule decides whether to offer it. This settles, for both tickets, the placement that TKT-01M3QHKD21's plan left to "whichever lands second".
+- **Ownership compares handles without case** (refines "Ownership by handle" above). `mayFlag` in `Post.tsx` (PR #202) compares `me.handle.toLowerCase()` with the author's, "as the server compares them". The rule does the same through one exported helper, `isOwn(post)`, and `mayFlag` calls it. Two comparisons that could drift lost.
+- **The windows follow TKT-01M3R33SR5's clamp** (engineering choice, depends on TKT-01M3R33SR5 (Bound the post edit and delete windows before making Durations)). The server enforces a window as `secondsDuration(n)`, so the longest window is `math.MaxInt64` ns, about 292 years. `author_windows` carries `int(secondsDuration(n) / time.Second)`, the seconds the server enforces, never the raw setting. So a setting of 10000000000 reaches the client as 9223372036. The client and the server then agree to the second, and `created_at + s * 1000` stays an exact number, under 2^53. Sending the raw setting lost: past 2^53 a JSON number loses precision, and the client would hold a window the server does not.
+- **Long timers** (engineering choice). A browser fires a `setTimeout` longer than 2^31 − 1 ms (about 24.8 days) at once. With a window of 30 days, one timer set to the soonest `closesAt` would fire at once, re-render, and set itself again, without end. `useWindowClock` sets its timer through `delayUntil(at, now)` from `web/client/src/components/thread/deadline.ts`, bounded at `maxTimeout = 2_147_483_647`. When it fires early it finds the next `closesAt` and sets itself again. Whichever of this ticket and TKT-01M3QXV399 (Add rename and move to the thread screen) lands first adds `deadline.ts`, and the second imports it.
+- **On a phone, edit and delete go under `PostMore`** (engineering choice, following PR #202). docs/06 "Mobile" collapses the footer at 390 px, and `PostMore` already holds link, flag and history. It gains edit and delete when the post hands them over, after flag. Choosing one closes the list, and the delete confirmation or the editor then opens in the post. When either closes, focus returns to the post's More button, as `FlagDialog` returns it (Terva review 1525 on PR #181). Restore on a tombstone stays inline, since a tombstone has no other controls.
+- **An archived forum is not on the page** (a known limit, engineering choice). In an archived forum `authorize` refuses a non-admin's edit, delete and restore of their own post with `conflict` (`readOnlyForum`), a moderator's own post included. The page knows the edit case, because `can_reply` is false there. It does not know the delete and restore cases, since `dto.ForumRef` carries no archived flag. The client therefore offers them, and the `conflict` answer's words show beside the control. Adding `archived` to `ThreadHeader.forum` lost: it changes every thread golden for a state that archives rarely enter.
+- **The reader bundle is 47415 B of 60000 B gzip** on main after PR #202. The editor with its preview is the largest client addition planned for Phase 2, so the PR records the new figure.
+
 ### Approach
 
-1. **DTO** (`internal/dto/dto.go`): `ThreadViewer` gains `AuthorWindows *AuthorWindows json:"author_windows"`, with `type AuthorWindows struct { EditSeconds int json:"edit_seconds"; DeleteSeconds int json:"delete_seconds" }`. The doc comment says when it is null. Regenerate the goldens (`thread.member.json` gains the defaults, `thread.moderator.json` and `thread.anon.json` gain null). Add both types to `web/client/src/api/dto.ts`; `dto-contract.ts` fails the type check otherwise.
-2. **Server** (`internal/service/threads/view.go`, `View`): inside the existing `s.DB.Read`, when `v.Member() && !canModerate`, read the two settings and set `viewer.AuthorWindows`. Nothing else in the view changes, and the posts are built as before.
-3. **Docs**: docs/07 "Thread response shape" gains `author_windows` in the viewer block and when it is null; "Edit, delete and restore" says the client reads the windows there.
-4. **Offer rule** (`components/thread/postControls.ts`): for a post `p`, the viewer's handle `me`, the page's `viewer` and `now` in ms from `Date.now()`:
+1. **DTO** (`internal/dto/dto.go`): `ThreadViewer` gains `AuthorWindows *AuthorWindows json:"author_windows"`, with `type AuthorWindows struct { EditSeconds int json:"edit_seconds"; DeleteSeconds int json:"delete_seconds" }`. The doc comment says when it is null, and that the seconds are the ones the server enforces. Regenerate the goldens with `go test ./internal/dto -update` and `go test ./internal/web/api -update`. In `internal/web/api/testdata/golden`, `thread.member.json` and `thread.author.json` gain the defaults, and `thread.moderator.json` and `thread.anon.json` gain null. In `internal/dto/fixtures_test.go` the `tMember` viewer gains the defaults, and `tAnon` and `tModerator` gain null, which regenerates `thread.member.json`, `thread-locked.member.json`, `thread.moderator.json` and `thread.anon.json` in `internal/dto/testdata/golden`. Add both types to `web/client/src/api/dto.ts`; `dto-contract.ts` fails the type check otherwise.
+2. **Server** (`internal/service/threads/view.go`, `View`): inside the existing `s.DB.Read`, when `v.Member() && !canModerate`, read `settings.EditWindowSeconds` and `settings.DeleteWindowSeconds`, and set `viewer.AuthorWindows` to `int(secondsDuration(n) / time.Second)` of each. Nothing else in the view changes, and the posts are built as before.
+3. **Docs**: docs/07 "Thread response shape" gains `author_windows` in the viewer block, when it is null, and that a window past what a `time.Duration` holds is sent as the longest one. "Edit, delete and restore" says the client reads the windows there.
+4. **Offer rule** (`components/thread/postControls.ts`): for a post `p`, the page's `viewer` and `now` in ms from `Date.now()`:
    - `created = p.created_at`. It is `Millis`, a JSON number of milliseconds since the epoch (`web/client/src/api/dto.ts`, `dto.Millis` in Go, for example `1757500300000` in `created-post.member.json`), not a date string. The rule still guards it: when a window applies, a `created` that is not a finite number offers nothing rather than comparing `NaN`. Terva review 1488 (PR #167, head f5a4206), finding 2, read it as a string. The shape says otherwise, and the guard and its test make the type part of the rule. `created` is used for both `open` and `closesAt`;
-   - own: `me !== null && p.author.handle === me`;
+   - own: `isOwn(p)`, the viewer's handle equal to the author's without case;
    - `open(s) = windows === null || (s > 0 && now - created < s * 1000)`;
    - edit: own, not deleted, `moved_to` null, `viewer.can_reply`, and `open(edit_seconds)`;
    - delete: own, not deleted, `moved_to` null, and `open(delete_seconds)`;
-   - restore: own, deleted, `removal` absent or `"author"` (TKT-01M29CKRJ9 adds `removal`), and `open(delete_seconds)`;
+   - restore: own, deleted, `moved_to` null, `removal` null or `"author"`, and `open(delete_seconds)`;
    - `closesAt`: the soonest time at which one of these goes from true to false, or null.
 5. **Controls**:
-   - `Post.tsx` gains an optional `controls` prop. The page passes it; the reply expander and the popover do not. The footer shows "edit" and "delete" buttons after reply, with `data-post-action="edit"` and `"delete"`.
-   - Delete asks inline, "Delete this post? You can restore it until {time}.", with Delete and Cancel, then sends `DELETE /api/v1/threads/{id}/posts/{ordinal}` with no body. The time is the post's creation plus the delete window, and the second sentence is left out when `author_windows` is null.
-   - `Tombstone.tsx` takes the post and a `restore` control. It shows "restore" (`data-post-action="restore"`), which sends `POST …/restore` with no body.
-   - Edit opens `PostEditor`: `GET /api/v1/threads/{id}/posts/{ordinal}/source` (TKT-01M3QJYV4Z), a textarea with the source, the preview from `usePreview`, and Save and Cancel. Save sends `PATCH …` with `{source}`. The editor is not saved as a draft.
+   - `Post.tsx` gains an optional `controls` prop, beside `onFlag`. `ThreadBody` passes it; the reply expander and the popover do not. On desktop the footer shows "edit" and "delete" buttons after flag, with `data-post-action="edit"` and `"delete"`. On a phone they go under `PostMore`, whose props gain `controls`. On a removed `Post` (a moderator-author's own deleted post) the footer shows "restore" when the rule offers it.
+   - Delete asks inline, "Delete this post? You can restore it until {time}.", with Delete and Cancel. It then sends `apiSend<CreatedPost>('DELETE', `/api/v1/threads/${id}/posts/${ordinal}`)` with no body. The time is the post's creation plus the delete window, and the second sentence is left out when `author_windows` is null.
+   - `Tombstone.tsx` takes a `restore` control. Its footer shows "restore" (`data-post-action="restore"`), which sends `POST …/restore` with no body. The footer is drawn when the expander or restore is shown.
+   - Edit opens `PostEditor`. It loads `apiGet<PostSource>(`/api/v1/threads/${id}/posts/${ordinal}/source`)`, and shows a textarea with the source, the preview from `usePreview` (exported from `composer/Composer.tsx` for it), and Save and Cancel. Save sends `PATCH …` with `{source}`. The editor is not saved as a draft. A source that fails to load shows `problemMessage` with a Retry.
    - Every refusal shows beside the control that sent it, in `problemMessage`'s words, which include the two window codes. After a success, `ThreadBody` calls the `onChanged` it receives from `ThreadScreen`, which is `res.retry`.
-6. **The clock** (`components/thread/useWindowClock.ts`): given the page's posts, finds the smallest `closesAt` after now and sets one `setTimeout` to re-render then. It is cleared on unmount and reset when the page changes.
+6. **The clock** (`components/thread/useWindowClock.ts`): given the page's posts, it finds the smallest `closesAt` after now and sets one `setTimeout` with `delayUntil(closesAt, Date.now())` to re-render then. It is cleared on unmount and reset when the page changes.
 7. **CSS** in `components/thread/thread.css` for the editor and the inline confirmation, following the composer's styles.
-8. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`.
+8. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Record the change from 47415 B in the PR.
 
 ### Tests
 
-- Go, `internal/web/api/windows_test.go` (exists for TKT-01M29CKRHS):
-  - `TestThreadViewerCarriesAuthorWindows`: a member's page has `author_windows` equal to the two settings. After an admin changes `posts.edit_window_seconds`, the next page carries the new value. A moderator of the forum and an anonymous viewer get null. A member who moderates a different forum gets the windows.
+- Go, `internal/web/api/windows_test.go` (exists for TKT-01M29CKRHS, with `TestAuthorWindows`):
+  - `TestThreadViewerCarriesAuthorWindows`: a member's page has `author_windows` equal to the two settings. After an admin changes `posts.edit_window_seconds`, the next page carries the new value. A moderator of the forum, by role or through a group, gets null, and so does an anonymous viewer. A member who moderates a different forum through a group gets the windows.
+  - `TestAuthorWindowsFollowTheClamp`: with both settings at 10000000000, the page carries 9223372036 for each, and the post's delete is still allowed 30 days after posting.
   - `TestAuthorWindowsAreNotCached` (response cache invariant): two members' requests share one cached posts entry (the second is a hit on the posts), and each answer's viewer block is built for that request. A settings change moves the ETag although the log length did not change.
-- Goldens: `thread.member.json`, `thread.moderator.json` and `thread.anon.json` are regenerated, and `dto-contract.ts` passes.
+- Goldens: the thread goldens in `internal/web/api` and `internal/dto` named in Approach step 1 are regenerated, and `dto-contract.ts` passes.
 - Client, `components/thread/postControls.test.ts`:
   - `offers edit and delete on one's own post inside the windows`, and nothing on another member's post.
+  - `ownership ignores case`: a post by `Alice` is the own post of a viewer whose handle is `alice`.
   - `edit closes at edit_seconds and delete at delete_seconds`: at `created_at + s*1000 - 1` it is offered and at `created_at + s*1000` it is not. A window of 0 is never open.
   - `null windows bind nothing`: with `author_windows` null, edit, delete and restore are offered on one's own post at any age.
   - `no edit without can_reply`: in a locked thread a member is offered delete and not edit.
-  - `restore only one's own delete`: offered on one's own deleted post inside the delete window, and not when `removal` is `"moderator"`.
-  - `created_at is Millis` (review 1488, finding 2): a post whose `created_at` is the number `now - 1000` is inside a 15-minute window, and one whose `created_at` is not a finite number is offered nothing a window bounds. `closesAt` is `created_at + s * 1000` as a number.
+  - `restore only one's own delete`: offered on one's own deleted post inside the delete window, and not when `removal` is `"moderator"` or `"review"`.
+  - `created_at is Millis` (review 1488, finding 2): a post whose `created_at` is the number `now - 1000` is inside a 15-minute window. One whose `created_at` is not a finite number is offered nothing a window bounds. `closesAt` is `created_at + s * 1000` as a number.
+- Client, `components/thread/deadline.test.ts` (whichever ticket adds it): `delayUntil` returns `at - now` below the bound, the bound for a deadline 30 days ahead, and 0 for one already passed.
 - Client, `components/thread/PostControls.test.tsx` (fake timers):
   - `the controls disappear when the window passes`: a post 14 minutes old shows delete. After `vi.advanceTimersByTime` past 15 minutes, with no other input, it does not.
-  - `edit loads the source and sends the new one`: the editor shows the source route's answer. Save sends `PATCH` with `{source}` and then the page is requested again.
-  - `delete asks first` and `restore sends POST …/restore`.
+  - `a long window sets no immediate timer`: with `edit_seconds` of 40 days, advancing 2147483647 ms leaves edit shown and runs the timer once, not in a loop.
+  - `edit loads the source and sends the new one`: the editor shows the source route's answer. Save sends `PATCH` with `{source}`, and then the page is requested again.
+  - `delete asks first` and `restore sends POST …/restore`, the latter from a tombstone for an author and from a removed post for a moderator-author.
+  - `on a phone edit and delete are under More`: with the phone layout, the footer has no edit or delete button, and the More list does. Closing the delete confirmation returns focus to the More button.
   - `a window refusal shows its words`: a 403 `edit-window-closed` shows "The time for editing this post has passed.", and `delete-window-closed` shows its sentence.
 - The thread-view budget (`npm run build`) passes.
 
 ### Out of scope
 
-- The source route: TKT-01M3QJYV4Z.
+- The source route: TKT-01M3QJYV4Z, done in PR #205.
+- The `secondsDuration` helper and the server's clamps: TKT-01M3R33SR5.
 - A moderator's Edit, Delete and Restore on other members' posts, and "(edited by a moderator)": TKT-01M3QHKD21, which builds on these controls. The server side is TKT-01M29CRJ5J, merged in PR #165.
-- Tombstone wording and the author's view of a post a moderator hid: TKT-01M29CKRJ9.
+- Tombstone wording and the author's view of a post a moderator hid: TKT-01M29CKRJ9, done.
 - The post history screen.
 - An edit reason field. The route takes `reason`, but docs/08 asks the author for none, and an empty reason is valid.
+- Saying on the page that a forum is archived, as above.
 
 ## Notes
 
@@ -139,3 +162,7 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. The description assume
 **agent:claude-code/phase2-groom** at 2026-09-29T22:25:28Z
 
 Terva review 1488 on PR #167, head f5a4206, finding 2 (medium): answered, and the plan is clarified. created_at is Millis, a JSON number of milliseconds (web/client/src/api/dto.ts, dto.Millis; 1757500300000 in the goldens), not a date string, so the subtraction did not produce NaN. The plan now says the type, guards a non-finite value when a window applies, and names the test 'created_at is Millis'. Also, per the coordinator on 2026-09-30, TKT-01M3QHKD21 (Show moderators' post controls and the edited-by-a-moderator marker) now depends on this ticket and widens the same controls. This ticket builds the only set.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:21:43Z
+
+Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) The source route landed in PR #205. The editor reads GET .../posts/{ordinal}/source (dto.PostSource), which apiGet never holds, and sends {source} only. (2) Honouring TKT-01M3R33SR5's clamp, now a dependency: author_windows carries int(secondsDuration(n)/time.Second), so a setting past a Duration arrives as 9223372036 and client and server agree. useWindowClock bounds its timer with delayUntil (components/thread/deadline.ts, added by this ticket or TKT-01M3QXV399, whichever lands first), because a setTimeout over 2^31-1 ms fires at once. New criteria 6 and 7. (3) TKT-01M29CKRJ9 landed, so removal exists, and a moderator sees removed posts as a removed Post. Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author, which settles the placement TKT-01M3QHKD21 left open. (4) After #202, ownership compares handles without case through isOwn, which mayFlag shares, and on a phone edit and delete go under PostMore with focus returned to its button. New criteria 8 and 9. (5) Known limit recorded: in an archived forum the page cannot tell delete and restore will be refused, so conflict's words show. (6) Goldens corrected: thread.author.json is an api golden, and thread-locked.member.json a dto one. Bundle 47415 of 60000 B.

@@ -23,12 +23,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T21:37:14Z
-updated_at: 2026-09-29T22:49:17Z
+updated_at: 2026-09-30T09:22:29Z
 created_by:
   id: agent:claude-code/phase2-run-crj5j
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -46,16 +46,16 @@ The tombstone wording and the author's view of their own hidden post are TKT-01M
 
 ## Acceptance criteria
 
-- [ ] With viewer.can_moderate, the shared postControls rule from TKT-01M3PTT97X offers Edit and Delete on every visible, unmoved post and Restore on every deleted or hidden, unmoved post, at any age, and a member still gets only their own (postControls.test.ts)
 - [ ] A moderator's delete of another member's post says that members will see it removed by a moderator and only a moderator can restore it, and delete and restore call the existing endpoints (PostControls.test.tsx)
 - [ ] A post with edited_by_moderator true shows (edited by a moderator) in place of (edited), naming nobody (ThreadPage.test.tsx)
 - [ ] The thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
+- [ ] With viewer.can_moderate, by role or through a group, the shared postControls rule from TKT-01M3PTT97X offers Edit and Delete on every visible post with moved_to null, and Restore on every removed post served with its body, at any age; nothing on a moved post, no Restore on a redacted post (deleted with empty html), and a member still gets only their own (postControls.test.ts)
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 1dd6ed9. The server half is merged: TKT-01M29CRJ5J (Allow moderators to edit and delete any post), PR #165. This ticket is its plan step 8.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 1dd6ed9. Refreshed on 2026-09-30 against main at a660ae5 (5124209 plus the run's tracking commits). The server half is merged: TKT-01M29CRJ5J (Allow moderators to edit and delete any post), PR #165. This ticket is its plan step 8.
 
-**It shares one set of controls with TKT-01M3PTT97X** (Offer edit and delete only inside the author windows in the client). On main no client code offers Edit, Delete or Restore on any post. That ticket builds them: the offer rule `postControls` in `components/thread/postControls.ts`, the footer buttons in `Post.tsx`, Restore on `Tombstone.tsx`, `PostEditor.tsx`, and the refetch after a change. This ticket depends on it, widens the rule to moderators, and adds the marker.
+**It shares one set of controls with TKT-01M3PTT97X** (Offer edit and delete only inside the author windows in the client). On main no client code offers Edit, Delete or Restore on any post. That ticket builds them: the offer rule `postControls` in `components/thread/postControls.ts`, the footer buttons in `Post.tsx` and under `PostMore` on a phone, Restore on `Tombstone.tsx` and on a removed `Post`, `PostEditor.tsx` on the source route (PR #205), and the refetch after a change. This ticket depends on it, widens the rule to moderators, and adds the marker.
 
 ### Settled in grooming
 
@@ -73,36 +73,49 @@ Engineering choices made here, each with the alternative that lost:
 - **The delete prompt says who will see what.** For a moderator deleting someone else's post: "Remove this post? Members will see that a moderator removed it. Only a moderator can restore it." For one's own post, TKT-01M3PTT97X's words stay. These sentences follow docs/08 and decide nothing new.
 - **No reason field.** The routes take an optional `reason`, and docs/08 does not require one for a moderator's edit or delete. A required reason would be a product rule. The history shows the actor either way.
 
+
+Added in the refresh of 2026-09-30:
+- **TKT-01M29CKRJ9 has landed** (Render tombstones for deleted and moved posts, PRs #170 and #174), so the question "Where a moderator's controls go on a removed post" is settled. This supersedes that item's placement. `ThreadBody` draws a removed post served with its body as `Post`, with the class `removed` and `removedMark`, and any other as `Tombstone` (`isTombstone` in `components/thread/removal.tsx`). After its refresh of 2026-09-30, TKT-01M3PTT97X draws Restore in whichever of the two a post is drawn as. So this ticket places nothing and only widens the rule.
+- **A moderator's Restore is offered on a removed post served with its body** (engineering choice, refining "Widen the shared rule" above). `revealRemoved` in `internal/service/threads/view.go` serves a moderator the body of every removed post except a moved or a redacted one. `restoreRecord(true, …)` in `mutate.go` takes a post that is deleted or hidden, and refuses exactly those two: `Refuse: EntryMoved|EntryRedacted`. So for a moderator the rule offers restore when `p.deleted && !isTombstone(p)`. A redacted post is `deleted`, and its `moved_to` is null. Offering restore on "deleted and `moved_to` null" alone would offer it there, and the answer would be `conflict`.
+- **Group moderators are included, with no dependency on TKT-01M3RQP0TG.** The post routes are thread routes, not admin routes, and `authorize` checks `a.canModerate`, which a group grant sets. So `viewer.can_moderate` is the whole test, as it is on the server.
+- **The thread screen as it stands now.** PR #202 (TKT-01M3QQWA5Z) put flag in the footer and `PostMore` on a phone. A moderator's controls reach the phone through TKT-01M3PTT97X's `PostMore` `controls`, with nothing added here. The header still renders `(edited)` as `<span class="edited">` when `post.edited_at !== null`. The reader bundle is 47415 B of 60000 B gzip on main.
+
 ### Approach
 
-1. **Rule** (`components/thread/postControls.ts`): the moderator branch above. It still answers `closesAt: null` for a moderator, so `useWindowClock` sets no timer.
+1. **Rule** (`components/thread/postControls.ts`), the moderator branch: when `viewer.can_moderate`, the own-post condition is dropped and no window applies (`author_windows` is null for such a viewer). Edit and delete are offered on a post that is not `deleted` and has `moved_to` null. Restore is offered on a post that is `deleted` and not a tombstone (`!isTombstone(p)`), whoever removed it. It still answers `closesAt: null` for a moderator, so `useWindowClock` sets no timer.
 2. **Marker** (`components/thread/Post.tsx`): where the header renders `(edited)` when `post.edited_at !== null`, render `(edited by a moderator)` when `post.edited_by_moderator` is also true. Keep the class `edited` and add `data-edited-by="moderator"`.
-3. **Delete prompt** in the shared inline confirmation: the moderator's words when the post is not the viewer's own.
-4. **Restore on a moderator-hidden post**: offered by the rule, and sent as `POST …/restore` with no body, as TKT-01M3PTT97X sends it.
-5. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`.
+3. **Delete prompt** in the shared inline confirmation: the moderator's words when `!isOwn(p)`. They match `removedText`'s "Post removed by a moderator", which is what members will then see.
+4. **Restore on a removed post**: offered by the rule and drawn where TKT-01M3PTT97X draws it, in the removed `Post`'s footer. It is sent as `POST …/restore` with no body, as TKT-01M3PTT97X sends it.
+5. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Record the change from main's figure in the PR.
 
 ### Tests
 
 - `components/thread/postControls.test.ts`:
-  - `a moderator may act on every post`: with `can_moderate: true` and `author_windows: null`, edit and delete are offered on another member's visible post at any age, and restore on another member's deleted post.
-  - `nothing on a moved post`: no control on a post with `moved_to` set, for a moderator or an author.
+  - `a moderator may act on every post`: with `can_moderate: true` and `author_windows: null`, edit and delete are offered on another member's visible post at any age. Restore is offered on another member's removed post served with its body, whether its `removal` is `author`, `moderator` or `review`.
+  - `nothing on a moved or redacted post`: no control on a post with `moved_to` set, for a moderator or an author. No restore for a moderator on a deleted post with empty `html`, which is how a redacted post is served.
   - `a member still gets only their own`: with `can_moderate: false`, another member's post offers nothing (TKT-01M3PTT97X's case, kept).
 - `components/thread/PostControls.test.tsx`:
-  - `a moderator's delete of another's post says who sees what` and sends `DELETE` with no body.
-  - `a moderator restores a hidden post`: `POST …/restore`, then the page is requested again.
+  - `a moderator's delete of another's post says who sees what`, and sends `DELETE` with no body.
+  - `a moderator restores a hidden post`: from the removed post's footer, `POST …/restore`, then the page is requested again.
+  - `a group moderator gets the same controls`: role `member` with `can_moderate: true`.
 - `screens/ThreadPage.test.tsx`, `the edited marker`: `edited_by_moderator: true` with `edited_at` set shows "(edited by a moderator)" and no handle other than the author's. `edited_by_moderator: false` shows "(edited)".
 - The thread-view budget passes.
 
 ### Out of scope
 
-- The author's controls, the editor, and the window rule: TKT-01M3PTT97X.
-- The post source route that the editor reads: TKT-01M3QJYV4Z.
-- Tombstone wording, `removal`, the author's view of their own hidden post, and the moderator's inline view: TKT-01M29CKRJ9.
+- The author's controls, the editor, the window rule, where the controls are drawn, and the phone layout: TKT-01M3PTT97X.
+- The post source route that the editor reads: TKT-01M3QJYV4Z, done in PR #205.
+- Tombstone wording, `removal`, the author's view of their own hidden post, and the moderator's inline view: TKT-01M29CKRJ9, done.
 - Naming the moderator on the page, which the response cache design rules out (TKT-01M29CRJ5J).
 - Suspension's bulk hide: TKT-01M29CP2QK.
+- Who may use the thread moderation routes: TKT-01M3RQP0TG. This ticket uses none of them.
 
 ## Notes
 
 **agent:claude-code/phase2-groom** at 2026-09-29T22:25:28Z
 
 Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30, on main 1dd6ed9 after PR #165. It depends on TKT-01M3PTT97X, which builds the shared post controls (none exist on main). This ticket widens the offer rule for viewer.can_moderate and adds the marker. Restore on a moderator's inline view of a removed post is placed by whichever of this ticket and TKT-01M29CKRJ9 lands second.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:22:29Z
+
+Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) TKT-01M29CKRJ9 landed first (PRs #170, #174), so a moderator sees removed posts as a removed Post. TKT-01M3PTT97X's refresh now draws Restore wherever the post is drawn, and this ticket places nothing. The earlier placement item is carried verbatim and marked superseded. (2) Engineering choice: a moderator's Restore is offered on a removed post served with its body (!isTombstone). revealRemoved withholds exactly the moved and redacted posts, and restoreRecord refuses exactly those, so a redacted post (deleted, moved_to null) no longer gets a Restore that would answer conflict. Criterion 1 was replaced by criterion 4. (3) Group moderators get the controls through can_moderate. The post routes are not admin routes, so there is no dependency on TKT-01M3RQP0TG. (4) The phone layout comes from TKT-01M3PTT97X's PostMore controls after #202, and the bundle figure is 47415 of 60000 B.

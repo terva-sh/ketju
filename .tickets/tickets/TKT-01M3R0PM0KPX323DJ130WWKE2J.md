@@ -24,12 +24,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T08:42:52Z
+updated_at: 2026-09-30T09:19:52Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -63,15 +63,16 @@ Tests: the notice text, the disabled Send and the countdown under fake timers, t
 - [ ] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
 - [ ] A rate-limited answer keeps the draft, says the wait from Retry-After, and holds Send until it passes, under fake timers (Post.test.tsx)
 - [ ] A successful post starts the wait for a viewer without can_moderate when slow_mode_seconds > 0, and a moderator is never held (Composer.test.tsx)
-- [ ] 'Slow mode…' is offered only with can_moderate and a role of moderator or admin; it is prefilled from slow_mode_seconds, sends one PUT /api/v1/admin/threads/{id}/slow-mode {seconds}, asks for the page again, and shows conflict and validation-failed beside the field (ThreadScreen.test.tsx)
 - [ ] Mounting the composer keeps the later of its local deadline and the page's next_post_at, and null or an earlier value never shortens it: closing and reopening the phone sheet during the wait after a successful post keeps Send disabled until the wait ends (ComposerSheet.test.tsx 'reopening the sheet keeps the wait', Composer.test.tsx 'the page never shortens the wait')
+- [ ] 'Slow mode…' is offered whenever viewer.can_moderate is true, whatever the role, and never when it is false; it is prefilled from slow_mode_seconds, sends one PUT /api/v1/admin/threads/{id}/slow-mode {seconds}, asks for the page again, and shows conflict, validation-failed and forbidden beside the field (ThreadScreen.test.tsx 'a moderator sets slow mode', 'a group moderator sets slow mode', 'a member is not offered slow mode')
+- [ ] The countdown ticks with one-second timeouts, so a next_post_at 40 days ahead still holds Send after 2147483647 ms (Composer.test.tsx 'a far wait holds Send')
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The server half is TKT-01M29CRJ50 (Implement per-thread slow mode), PR #188 at a827aef, with migration 0017 `thread_slow_mode`. Its summary and notes 1 to 3 were read for this plan.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. Refreshed on 2026-09-30 against main at a660ae5 (5124209 plus the run's tracking commits). The server half is TKT-01M29CRJ50 (Implement per-thread slow mode), PR #188 at a827aef, with migration 0017 `thread_slow_mode`. Its summary and notes 1 to 3 were read for this plan. This ticket also depends on TKT-01M3RQP0TG (Let forum moderators by grant lock, pin, move and set slow mode), which moves the slow mode route to the `moderates` gate.
 
-Two corrections to the description, read from main:
-- **There is no moderator dialog on the thread screen to extend.** TKT-01M29CKRGS shipped lock and pin without a client. Its client half is TKT-01M3QGH66W (Add lock, unlock, pin and unpin to the thread screen, ready), which builds the `moderate` option of `shell/threadActions.ts`, the inline panel `components/thread/ModerateDialog.tsx`, and the `mayModerate` test. This ticket depends on it.
+Two corrections to the description, read from main, both still true at a660ae5:
+- **There is no moderator dialog on the thread screen to extend.** TKT-01M29CKRGS shipped lock and pin without a client. Its client half is TKT-01M3QGH66W (Add lock, unlock, pin and unpin to the thread screen, ready), which builds the `moderate` option of `shell/threadActions.ts`, the inline panel `components/thread/ModerateDialog.tsx`, and the `mayModerate` test. After its refresh of 2026-09-30, `mayModerate` is `viewer.can_moderate` alone. This ticket depends on it.
 - **The `Retry-After` path is already built.** `postFailure` in `web/client/src/composer/Composer.tsx` says "This thread is in slow mode. You can post again in N seconds." from `ProblemError.retryAfter` (`api/problem.ts`). `postReply` in `state/composer.ts` keeps the source on any refusal. `composer/Post.test.tsx` ("a refused post", the 429 row with `Retry-After: 30`) tests both. This ticket adds the countdown after such an answer.
 
 ### Settled in grooming
@@ -99,6 +100,12 @@ Two corrections to the description, read from main:
   - The dialog's words are in Approach step 4.
 - **The built client is committed.** Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Only one lane may have a PR open that changes the dist (docs/13 "Running two lanes").
 
+
+Added in the refresh of 2026-09-30:
+- **Who sets slow mode, from 2026-09-30. This supersedes "Only staff set slow mode" above.** The maintainer decided that thread moderation follows the forum grant: "Anyone holding `moderate` in a thread's forum, by role or through a group, may lock, unlock, pin, unpin and set slow mode there" (docs/08 "Decided 2026-09-30"). TKT-01M3RQP0TG puts `PUT /api/v1/admin/threads/{id}/slow-mode` behind `moderatesGate`, and the service decides `moderate` in the thread's forum. So "Slow mode…" is offered on `viewer.can_moderate` alone, the same check. The asymmetry noted above is gone: whoever is exempt from slow mode may also set it.
+- **Long waits** (from TKT-01M3R33SR5 (Bound the post edit and delete windows before making Durations)). A thread's own value is at most 86400. `slow_mode.default_seconds` has no upper bound, though, and after TKT-01M3R33SR5 a huge default yields a `next_post_at` far in the future rather than null. `useCountdown` ticks with one-second `setTimeout`s and never sets one timer for the whole wait, because a browser fires a delay over 2^31 − 1 ms at once. `waitText` writes hours without an upper bound ("h:mm:ss").
+- **The thread screen as it stands now.** PR #202 (TKT-01M3QQWA5Z) added `onFlag`, `mayFlag`, `PostMore` and `FlagDialog` to the posts, and `init.status` to `apiSend`. None of them touches the composer. `Composer` takes `{thread, authorOf, onPosted}` and `PostButton` takes `{thread, onPosted, label}`, as the approach assumes. The reader bundle is 47415 B of 60000 B gzip on main.
+
 ### Approach
 
 1. **`state/composer.ts`**:
@@ -108,30 +115,32 @@ Two corrections to the description, read from main:
 2. **`composer/Composer.tsx`**:
    - `Composer` and `PostButton` take `slow?: { seconds: number; nextPostAt: number | null; exempt: boolean }`.
    - An effect on mount and on `slow.nextPostAt` reconciles, and never simply assigns: `c.slowUntil.value = later(c.slowUntil.value, slow.nextPostAt)`. `later` returns the larger of the two, and treats null as "no deadline". A deadline in the past counts as null. So a page value never replaces a later local deadline, and null never clears one. The page may be one fetched before the viewer's own post, whose viewer block still says null. Without this rule, closing and reopening the phone sheet remounts `Composer` and clears the wait (review 1540 on PR #203). A successful post and a `rate-limited` answer set the deadline directly (step 1). Both can happen only while Send is enabled, which means no local deadline is in force.
-   - A hook `useCountdown(until: number | null)` in `composer/countdown.ts` (new) re-renders once a second with `setTimeout` until `until` passes, and returns the seconds left, or 0.
+   - A hook `useCountdown(until: number | null)` in `composer/countdown.ts` (new) re-renders once a second with `setTimeout(…, 1000)` until `until` passes, and returns the seconds left, or 0.
    - `PostButton` is disabled while `posting || !source.trim() || left > 0`, and passes `slow` to `postReply`.
    - Above the toolbar, when `slow.seconds > 0`, a `<p class="slow-mode" data-slow-mode>` shows the notice. When `left > 0`, a `<span id="slow-wait-{thread}" data-slow-wait>` shows the countdown.
    - `postFailure`'s `rate-limited` words stay as they are.
    - Two helpers, `slowModeText(seconds)` and `waitText(left)`, are exported for the tests.
 3. **`composer/ComposerSheet.tsx`** passes `slow` through to `Composer` and to the `PostButton` it renders. **`screens/ThreadScreen.tsx`** `ThreadBody` builds `slow` from `page.viewer`: `{seconds: slow_mode_seconds, nextPostAt: next_post_at, exempt: can_moderate}`, and passes it to both.
 4. **Moderator action.**
-   - `shell/threadActions.ts`: TKT-01M3QGH66W's `moderate` option gains `slowMode: () => void`, which adds "Slow mode…" (id `slow-mode`).
+   - `shell/threadActions.ts`: TKT-01M3QGH66W's `moderate` option gains `slowMode: () => void`, which adds "Slow mode…" (id `slow-mode`). It is set whenever `moderate` is, which is whenever `viewer.can_moderate`.
    - `components/thread/ModerateDialog.tsx` gains the kind `slow-mode`. It is a radio group, "Slow mode", with Off (0), 10 seconds, 30 seconds, 1 minute, 5 minutes, and Custom. Custom shows a text field with `inputMode="numeric"`, labelled "Seconds between posts", taking a whole number from 0 to 86400 (`slowModeMax`, a constant commented as `threads.MaxSlowModeSeconds`).
-   - The group is prefilled from `slow_mode_seconds`: the matching choice, or Custom with the value.
-   - Save sends one `apiSend<SlowMode>('PUT', `/api/v1/admin/threads/${id}/slow-mode`, {seconds})`. On 200 the panel closes. The thread's held GETs are forgotten (`forgetGets((u) => u.startsWith(`/api/v1/threads/${id}`))`), and the page is asked for again with `res.retry()`, so the viewer block shows the new value.
+   - The group is prefilled from `slow_mode_seconds`: the matching choice, or Custom with the value. A site default above 86400 prefills Custom with that value, and Save refuses it before sending, as below.
+   - Save sends one `apiSend<SlowMode>('PUT', `/api/v1/admin/threads/${id}/slow-mode`, {seconds}, { status: 200 })`. On 200 the panel closes. The thread's held GETs are forgotten (`forgetGets((u) => u.startsWith(`/api/v1/threads/${id}`))`), and the page is asked for again with `res.retry()`, so the viewer block shows the new value.
    - Errors appear beside the field, with the panel left open:
      - `conflict`: "Slow mode is already set to that, or the thread is archived."
      - `validation-failed`: "Enter a whole number of seconds from 0 to 86400."
-     - A Custom value that is not a whole number in range is refused before sending, with the same words.
+     - `forbidden`: "You can no longer moderate this thread.", and the page is asked for again.
+     - A Custom value that is not a whole number in range is refused before sending, with the `validation-failed` words.
      - Anything else gets `problemMessage`.
 5. **CSS** in `composer/composer.css` for the notice and the countdown, and TKT-01M3QGH66W's panel styles for the dialog.
-6. Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and check that `npm run build`'s budget line is under 60000 B.
+6. Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and check that `npm run build`'s budget line is under 60000 B. Record the change from 47415 B in the PR.
 
 ### Tests
 
 - **`composer/Composer.test.tsx`**, with `vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] })` for the countdown cases:
   - `shows the slow mode notice`: 30 gives "Slow mode: one post every 30 seconds", 300 gives "every 5 minutes", 60 gives "every minute", 7200 gives "every 2 hours", 90 gives "every 90 seconds", and 0 shows no `[data-slow-mode]`.
   - `holds Send until next_post_at`: with `nextPostAt` 42 s ahead and a draft typed, Send is disabled and the countdown reads "0:42". After 41 s it is still disabled. After 42 s it is enabled and the countdown is gone, and no request was made.
+  - `a far wait holds Send`: with `nextPostAt` 40 days ahead, Send is still disabled after `vi.advanceTimersByTime(2_147_483_647)`, and the countdown shows hours.
   - `a moderator is never held`: with `exempt: true` and `seconds: 30`, a successful post leaves Send enabled for the next draft.
   - `a post starts the wait`: with `seconds: 30` and `exempt: false`, a successful post disables Send for the next draft for 30 s.
 - **`composer/Post.test.tsx`** ("a refused post"): the `rate-limited` row with `Retry-After: 30` still keeps the source and says "post again in 30 seconds". It now expects Send to be disabled, and enabled again 30 s later under fake timers. The other rows are unchanged.
@@ -139,14 +148,15 @@ Two corrections to the description, read from main:
 - **`composer/Composer.test.tsx`**, `the page never shortens the wait`: `slowUntil` 30 s ahead, then a rerender with `nextPostAt` 5 s ahead, then with null. Send stays disabled until 30 s. A later `nextPostAt` of 60 s moves the wait to 60 s.
 - **`screens/ThreadScreen.test.tsx`**:
   - `a moderator sets slow mode`: role `moderator` with `can_moderate`. "Slow mode…" opens the panel prefilled from `slow_mode_seconds: 30` with "30 seconds" chosen. Choosing 5 minutes sends exactly one `PUT /api/v1/admin/threads/{id}/slow-mode` with `{"seconds":300}`, then asks for the page again, and the notice then reads "every 5 minutes".
-  - `slow mode refusals stay beside the field`: 409 and 422 each show their words, and the panel stays open with the choice kept. A Custom value of 86401 sends nothing.
-  - `a member is not offered slow mode`: no "Slow mode…" with role `member`, whether `can_moderate` is true (a group grant) or false.
+  - `a group moderator sets slow mode`: role `member` with `can_moderate: true` is offered "Slow mode…" and sends the same PUT.
+  - `slow mode refusals stay beside the field`: 409, 422 and 403 each show their words, and the panel stays open with the choice kept. A Custom value of 86401 sends nothing.
+  - `a member is not offered slow mode`: no "Slow mode…" with `can_moderate: false`, whatever the role.
 - The thread-view bundle stays within 60000 B gzip (`npm run build`), and `TestTheAdminBundleIsSeparate` passes.
-- **Server invariants** are TKT-01M29CRJ50's and stay green, because this ticket changes no server code. They include `TestSlowModeIsInTheViewerBlockNotTheCache`, which is the response-cache test for the per-viewer fields.
+- **Server invariants** are TKT-01M29CRJ50's and TKT-01M3RQP0TG's and stay green, because this ticket changes no server code. They include `TestSlowModeIsInTheViewerBlockNotTheCache`, which is the response-cache test for the per-viewer fields, and `TestThreadModerationGate`.
 
 ### Out of scope
 
-- Any server change, including letting group-granted moderators set slow mode.
+- Any server change. Who may set slow mode is TKT-01M3RQP0TG's.
 - The site-wide default's editor (TKT-01M29CXK2, Build the admin site settings screen).
 - The overflow of a huge `slow_mode.default_seconds` (TKT-01M3R33SR5).
 - Lock and pin, and the panel itself (TKT-01M3QGH66W). Rename and move (TKT-01M3QXV399).
@@ -160,3 +170,7 @@ Groomed 2026-09-30 (TKT-01M3M9RR26). Now depends on TKT-01M3QGH66W (Add lock, un
 **agent:claude-code/phase2-groom** at 2026-09-30T04:21:39Z
 
 Review 1540 on PR #203 (head 22de825), medium, accepted: the composer overwrote slowUntil with the page's next_post_at on mount, so after a post the held page's null cleared the wait when the phone sheet reopened. The plan now keeps the later of the two and never lets null or an earlier value shorten the wait. New criterion 7, with the tests 'reopening the sheet keeps the wait' and 'the page never shortens the wait'.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:19:52Z
+
+Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) 'Slow mode…' is offered on viewer.can_moderate alone, by the maintainer decision of 2026-09-30 (docs/08) and TKT-01M3RQP0TG, which puts the route behind the moderates gate. The 'Only staff set slow mode' item is carried verbatim and marked superseded. Criterion 6 was replaced by criterion 7. The tests now include 'a group moderator sets slow mode', and 403 gets its own words. (2) For TKT-01M3R33SR5, a huge site default gives a far next_post_at. The countdown keeps one-second ticks, never one long timeout. New criterion 8 and test 'a far wait holds Send'. A default above 86400 prefills Custom, and Save refuses it before sending. (3) The two corrections to the description still hold at a660ae5. #202 did not touch the composer, the Composer and PostButton props are as the plan assumes, apiSend is called with status 200, and the bundle figure is 47415 of 60000 B.

@@ -22,12 +22,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-30T08:42:51Z
+updated_at: 2026-09-30T09:17:52Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -47,14 +47,15 @@ What the groomed plan asked of the client:
 
 ## Acceptance criteria
 
-- [ ] The thread actions offer Lock or Unlock, and Pin or Unpin, by the header's state, only when viewer.can_moderate and the viewer's role is moderator or admin (threadActions.test.ts, ThreadScreen.test.tsx)
 - [ ] Each action sends the body its route takes ({reason} or {}, {scope, until}, {scope} of the active pin), and the answer's header shows at once and invalidates the cached pages at the old log length (ThreadScreen.test.tsx, threads.test.ts)
 - [ ] The thread head shows a locked thread's notice and an active pin's scope and end, a 409 keeps the panel open and refetches, and a member's composer is absent when can_reply is false (ThreadScreen.test.tsx)
 - [ ] Nothing imports from screens/admin, the thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
+- [ ] The thread actions offer Lock or Unlock, and Pin or Unpin, by the header's state, whenever viewer.can_moderate is true, whatever the role, and never when it is false (threadActions.test.ts, ThreadScreen.test.tsx 'a moderator sees the moderation actions')
+- [ ] The global scope, Unpin of a global pin, and Pin over a global pin are offered only when the viewer's role is moderator or admin (threadActions.test.ts 'a global pin is staff's', ThreadScreen.test.tsx 'a group moderator is not offered a global pin')
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at f04a476. The server half is merged: TKT-01M29CKRGS (Implement thread lock, unlock, pin, and unpin), PR #161. This ticket is its plan step 6.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at f04a476. Refreshed on 2026-09-30 against main at a660ae5 (5124209 plus the run's tracking commits). The server half is merged: TKT-01M29CKRGS (Implement thread lock, unlock, pin, and unpin), PR #161. This ticket is its plan step 6. It now also depends on TKT-01M3RQP0TG (Let forum moderators by grant lock, pin, move and set slow mode), which moves the routes to the `moderates` gate.
 
 ### Settled in grooming
 
@@ -73,46 +74,55 @@ Engineering choices made here, each with the alternative that lost:
 - **Unpin needs no fields.** It sends the active pin's `scope` from the header. The panel only confirms.
 - **The expiry is a `datetime-local` input** read as local time and sent as Unix ms. Empty sends `until: null`. Preset durations lost: docs/08 says "optional expiry", nothing more, and one input covers every case.
 
+
+Added in the refresh of 2026-09-30:
+- **Who may act, from 2026-09-30. This supersedes "Who may act" above.** Thread moderation follows the forum grant (maintainer decision 2026-09-30, docs/08 "Decided 2026-09-30"). After TKT-01M3RQP0TG the routes are behind `moderatesGate`, and the service decides `moderate` in the thread's forum at the log length the record lands at. So the client offers the actions on `viewer.can_moderate` alone, which is the same `perm.Can(moderate)` on the same forum, and a member granted `moderate` through a group is offered them. The role no longer enters the offer except for a global pin, below. docs/07 is corrected by TKT-01M3RQP0TG.
+- **A global pin stays staff's by role** (TKT-01M3RQP0TG, engineering choice under the security rule, because a global pin heads every forum's list). The server refuses a viewer who is not a moderator or admin by role on three requests: a pin with scope `global`, an unpin of a global pin, and a pin that would replace an active global pin. The client offers each only when `viewer.value.user?.role` is `moderator` or `admin` (`staff` below), so it offers exactly what the server allows.
+- **The thread screen as it stands now.** PR #202 (TKT-01M3QQWA5Z) added the flag item: `Post` takes `onFlag`, `mayFlag` decides who is offered it, a phone collapses link, flag and history under `PostMore`, and `ThreadBody` renders `FlagDialog`. `FlagDialog` is a modal built without `showModal`, using `trapTab` from `components/focus.ts`, and it returns focus to the control the post handed over. `apiSend` takes `init.status`, the one success status the caller accepts. The inline panel settled above still stands. It needs no focus trap, and it keeps the thread head, where the lock and pin notes change, in view.
+- **The reader bundle is 47415 B of 60000 B gzip** on main after PR #202 (TKT-01M3NTSCJQ's merge log).
+
 ### Approach
 
-1. **Actions** (`web/client/src/shell/threadActions.ts`): the options gain `moderate?: { locked: boolean; pinned: Pinned | null; open: (kind: ModerateKind) => void }`, where `ModerateKind` is `'lock' | 'unlock' | 'pin' | 'unpin'`. When set, the list gains Lock or Unlock by `locked`, and Pin, or Unpin plus Pin (to change the pin), by `pinned`. The ids are `lock`, `unlock`, `pin` and `unpin`, after Reply and First unread. The desktop toolbar and the phone's more menu both render the list.
+1. **Actions** (`web/client/src/shell/threadActions.ts`): the options gain `moderate?: { locked: boolean; pinned: Pinned | null; staff: boolean; open: (kind: ModerateKind) => void }`, where `ModerateKind` is `'lock' | 'unlock' | 'pin' | 'unpin'`. When set, the list gains Lock or Unlock by `locked`. It gains Pin, or Unpin plus Pin (to change the pin), by `pinned`, except that when `pinned.scope` is `global` Unpin and Pin are offered only with `staff`. The ids are `lock`, `unlock`, `pin` and `unpin`, after Reply and First unread. The desktop toolbar and the phone's more menu both render the list. Rewrite the file comment's "/me carries no permission to gate the moderator ones on yet": the page's `viewer.can_moderate` gates them.
 2. **ThreadScreen** (`web/client/src/screens/ThreadScreen.tsx`):
-   - `mayModerate = res.data?.viewer.can_moderate && (role is moderator or admin)`, with the role read from `viewer.value.user?.role`.
-   - A `moderating` state holds the open kind. `threadActions` gets `moderate` when `mayModerate` and the history route is not showing.
-   - `head` is the newer header, as above.
-   - The thread head shows "This thread is locked." (exists), and for an active pin a note: "Pinned in this forum" or "Pinned on every forum", followed by "until {date and time}" when `until` is set. Both notes are `<p>` elements with `data-thread-state`.
-   - `ModerateDialog` renders under the head when `moderating` is set.
+   - `mayModerate = !history && (res.data?.viewer.can_moderate ?? false)`, and `staff` is `viewer.value.user?.role` being `moderator` or `admin`.
+   - A `moderating` state holds the open kind. `threadActions` gets `moderate` when `mayModerate`. The `useMemo` dependency list gains `mayModerate`, `staff`, `head.locked` and `head.pinned`.
+   - `head` is the newer header, as settled above. Today it is `res.data?.thread ?? cachedThread(params.id)?.header`.
+   - The thread head already shows `<p class="locked">This thread is locked.</p>`; it gains `data-thread-state="locked"`. For an active pin it gains a note: "Pinned in this forum" or "Pinned on every forum", followed by "until {date and time}" when `until` is set, as a `<p data-thread-state="pinned">`.
+   - `ModerateDialog` renders under the head, above `ErrorPanel`, when `moderating` is set.
 3. **`components/thread/ModerateDialog.tsx`**:
    - Lock and Unlock: an optional reason `<textarea maxlength=500>`, and the action's button.
-   - Pin: a scope choice (radio, `forum` checked) and an optional expiry.
+   - Pin: a scope choice (radio, `forum` checked) and an optional expiry. The `global` radio is rendered only with `staff`.
    - Unpin: "Unpin this thread?" and the button.
-   - Each sends `apiSend<ThreadHeader>('POST', `/api/v1/admin/threads/${id}/${kind}`, body)`, where a lock or unlock with an empty reason sends `{}`. On success it calls `storeThreadHeader`, closes, and asks the page again.
-   - A `conflict` says "This thread changed while you were working." It stores nothing, asks for the page again, and stays open so the moderator sees the new state. Other refusals show `problemMessage`'s words. While a request is in flight the buttons are disabled.
-4. **`state/threads.ts`**: `storeThreadHeader(id, header)`, as above. It stores nothing for a header shorter than the entry, the same rule as `storeThreadPage`.
+   - Each sends `apiSend<ThreadHeader>('POST', `/api/v1/admin/threads/${id}/${kind}`, body, { status: 200 })`, where a lock or unlock with an empty reason sends `{}`. On success it calls `storeThreadHeader`, closes, and asks the page again.
+   - A `conflict` says "This thread changed while you were working." It stores nothing, asks for the page again, and stays open so the moderator sees the new state. A `forbidden` says "You can no longer moderate this thread." and asks for the page again, because a grant revoked or a move since the page loaded is the likely cause. Other refusals show `problemMessage`'s words. While a request is in flight the buttons are disabled, and a synchronous in-flight ref stops a second press, as `FlagDialog` does.
+4. **`state/threads.ts`**: `storeThreadHeader(id, header)`, as settled above. It stores nothing for a header shorter than the entry, the same rule as `storeThreadPage`.
 5. **CSS** in `components/thread/thread.css`, beside `.thread-head`.
-6. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. `npm run build` checks the budget.
+6. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. `npm run build` checks the budget. Record the new figure against 47415 B in the PR.
 
 ### Tests
 
 - `shell/threadActions.test.ts` (new):
   - `offers no moderation without moderate`: without `moderate`, no lock, unlock, pin or unpin.
   - `lock or unlock by state`, and `pin, or unpin and pin, by state`.
+  - `a global pin is staff's`: with `pinned.scope` `global` and `staff: false`, neither Unpin nor Pin is offered. With `staff: true`, both are.
 - `screens/ThreadScreen.test.tsx`:
-  - `a moderator sees the moderation actions`: `can_moderate: true` with role `moderator`. A member with `can_moderate: true` (a group grant) sees none, and neither does a member with `can_moderate: false`.
+  - `a moderator sees the moderation actions`: `can_moderate: true` with role `moderator`. A member with `can_moderate: true` (a group grant) sees them too, and a member with `can_moderate: false` sees none.
+  - `a group moderator is not offered a global pin`: a member with `can_moderate: true` opens Pin and sees no `global` radio. A moderator by role sees it.
   - `lock sends the body and shows the lock at once`: Lock with the reason "off topic" sends `POST /api/v1/admin/threads/{id}/lock` with `{"reason":"off topic"}`. The answer's header (`locked: true`, a longer `log_length`) shows "This thread is locked." before the page is answered again, and the page is requested again.
   - `pin sends scope and until`: `{"scope":"global","until":<ms>}`, and `{"scope":"forum","until":null}` with no expiry. The pinned note shows the scope and the end.
-  - `unpin sends the active scope`: `{"scope":"global"}` for a global pin.
-  - `a conflict keeps the panel open`: a 409 shows the changed-meanwhile words and asks for the page again.
+  - `unpin sends the active scope`: `{"scope":"global"}` for a global pin, as a moderator by role.
+  - `a conflict keeps the panel open`: a 409 shows the changed-meanwhile words and asks for the page again. A 403 shows the no-longer words and asks for the page again.
   - `a locked thread closes a member's composer`: a page with `locked: true` and `can_reply: false` renders no composer, and one with `can_moderate: true` and `can_reply: true` renders it.
 - `state/threads.test.ts`: `storeThreadHeader` with a longer log length drops the entry's pages and forgets the held GETs. With a shorter one it changes nothing.
 - The thread-view budget (`npm run build`) passes, and `TestTheAdminBundleIsSeparate` passes, because nothing imports from `screens/admin`.
-- Server invariants are TKT-01M29CKRGS's and unchanged: `TestLockMovesTheResponseCacheKey`, `TestAuditRowsComeFromTheLog`.
+- Server invariants are TKT-01M29CKRGS's and TKT-01M3RQP0TG's and unchanged here: `TestLockMovesTheResponseCacheKey`, `TestAuditRowsComeFromTheLog`, `TestThreadModerationGate` and `TestGlobalPinStaysStaffs`.
 
 ### Out of scope
 
-- Any server change, including whether a group-granted moderator may use these routes.
+- Any server change. Who may use these routes, and the global-pin rule, are TKT-01M3RQP0TG's.
 - Pinned threads in the thread list, which `ThreadRow.pinned` already carries: the thread list screen.
-- Rename and move: TKT-01M29CKRH9.
+- Rename and move: TKT-01M3QXV399. Slow mode's dialog: TKT-01M3R0PM0K.
 - Archiving a thread.
 
 ## Notes
@@ -120,3 +130,7 @@ Engineering choices made here, each with the alternative that lost:
 **agent:claude-code/phase2-groom** at 2026-09-29T22:07:20Z
 
 Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. The routes are behind the staff gate, by role, before the service checks moderate in the forum. viewer.can_moderate is also true for a member granted moderate through a group, whom the gate refuses. The plan offers the actions only when can_moderate and the role is moderator or admin, which mirrors docs/07. Whether a group-granted moderator should be able to lock and pin is left to the design; the grooming report raises it.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:17:52Z
+
+Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) By the maintainer decision of 2026-09-30 (docs/08) and TKT-01M3RQP0TG, the actions are offered on viewer.can_moderate alone. A group-granted moderator now gets them, and the role test is gone. Criterion 1 was replaced by criterion 4. The 'Who may act' item is carried verbatim and marked superseded. (2) A global pin stays staff's by role (TKT-01M3RQP0TG), so the global radio, and Unpin and Pin over a global pin, need a role of moderator or admin. New criterion 5. (3) The plan now names what #202 put on the thread screen (onFlag, mayFlag, PostMore, FlagDialog with trapTab, apiSend's status option), uses apiSend with status 200, adds the forbidden words, and uses the bundle figure of 47415 of 60000 B. (4) Out of scope no longer defers who may act to the design: that is TKT-01M3RQP0TG's.
