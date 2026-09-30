@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-30T10:56:50Z
+updated_at: 2026-09-30T10:59:06Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
@@ -131,6 +131,15 @@ Added in the refresh of 2026-09-30:
 - Pinned threads in the thread list, which `ThreadRow.pinned` already carries: the thread list screen.
 - Rename and move: TKT-01M3QXV399. Slow mode's dialog: TKT-01M3R0PM0K.
 - Archiving a thread.
+
+
+### Revised on claim (2026-09-30, main at f388921)
+
+Read against main after #214 (moderatesGate, `staffPin`) and #218. The approach above stands, with these additions:
+- **The panel never offers what the state no longer allows.** `threadActions.ts` exports `moderateKinds(state)`, the kinds offered for a header state, and both the actions and the panel read it. After a `conflict` or `forbidden` the page is asked for again. If the open kind is no longer among the kinds offered, for example Lock once another moderator has locked, Pin once a global pin is active for a group moderator, or any kind once `can_moderate` is false, the panel keeps its words and a Close button and drops its form. Keeping the form lost: its button would send a request the server refuses.
+- **Order of the actions:** Reply, First unread, Lock or Unlock, Pin, Unpin, Copy link. Pin keeps its label when a pin is active, because it replaces the pin.
+- **Focus:** the panel's first control takes focus when it opens. When it closes, focus goes to the thread's `h1`, which gets `tabIndex=-1`, because on a phone the item that opened the panel is gone. Escape closes the panel.
+- **An e2e spec**, `e2e/thread-moderation.spec.ts`: mona, a moderator by role, locks and unlocks a side thread in the garden forum, then pins it in its forum and unpins it, against the real server at both widths. Each project leaves the thread as it found it, and no other spec reads that thread.
 
 ## Notes
 
