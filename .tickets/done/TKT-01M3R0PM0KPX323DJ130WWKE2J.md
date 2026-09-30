@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R0PM0KPX323DJ130WWKE2J
 title: Show slow mode in the composer and add the moderator's slow mode dialog
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,17 +21,10 @@ dependencies:
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-r0pm0k
-  branch: run/r0pm0k-slow-mode
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a68dd040db7ab7f66
-  commit: 1ae02c57ee7d2a8b741ff68b2af57e2339f6a77f
-  session: null
-  claimed_at: 2026-09-30T12:58:08Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T13:15:47Z
+updated_at: 2026-09-30T14:36:29Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
@@ -67,7 +60,7 @@ Tests: the notice text, the disabled Send and the countdown under fake timers, t
 
 - [x] With slow_mode_seconds > 0 the composer shows 'Slow mode: one post every N seconds', and with 0 it shows nothing (Composer.test.tsx)
 - [x] While viewer.next_post_at is in the future Send is disabled with a countdown that re-enables it at next_post_at without a refetch, under fake timers (Composer.test.tsx)
-- [ ] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
+- [x] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
 - [x] A rate-limited answer keeps the draft, says the wait from Retry-After, and holds Send until it passes, under fake timers (Post.test.tsx)
 - [x] A successful post starts the wait for a viewer without can_moderate when slow_mode_seconds > 0, and a moderator is never held (Composer.test.tsx)
 - [x] Mounting the composer keeps the later of its local deadline and the page's next_post_at, and null or an earlier value never shortens it: closing and reopening the phone sheet during the wait after a successful post keeps Send disabled until the wait ends (ComposerSheet.test.tsx 'reopening the sheet keeps the wait', Composer.test.tsx 'the page never shortens the wait')
@@ -201,3 +194,30 @@ Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) 'Slow mo
 **agent:claude-code/phase2-groom** at 2026-09-30T09:37:16Z
 
 Review 1564 on PR #211 (head eea67a7), medium, accepted. 'a far wait holds Send' advanced fake timers by 2147483647 ms, and useCountdown's one-second reschedule would run about 2.1 million callbacks. Instead, the test now checks the mount reading (960:00:00), three ticks, and then vi.setSystemTime to 5 s before the deadline, with release exactly at it: at most ten callbacks. It still proves that a huge deadline neither fires at once nor overflows. This note supersedes the refresh note's description of the test. Criterion 8 was rewritten to match.
+
+**agent:claude-code/phase2-run-r0pm0k** at 2026-09-30T14:33:23Z
+
+Replayed onto main at f2eac74 before pushing (nothing had been pushed). This note supersedes two details in the plan's "Revised at claim" section.
+
+- **The panel kind.** #231 had added `PanelKind = ModerateKind | 'rename' | 'move'`. Slow mode joins it as `'slow-mode'`, so `ModeratePanel` is gone. In the actions, Slow mode… comes after Move… and before Copy link.
+- **The composer.** #235 moved the body into `composer/ComposerBody.tsx`. The notice, the countdown and any refusal now go into its `notice` slot. `Composer` and `PostButton` keep the `slow` prop. The new-thread composer is untouched: it has no thread, so it has no slow mode. The reply autosave from #227 is unchanged.
+- **The timer.** `deadline.ts` (`delayUntil`, `maxTimeout`) arrived with #231. It is not used: the countdown never sets a timer longer than one second (`ms % 1000 || 1000`), so it never needs the cap.
+- **The e2e tests.** The slow mode tests use mona's stored session and call no `/auth/*` route, so `e2e/session.ts` needs no `paceAuth` row for them.
+- **The bundle.** The reader bundle went from 53877 B to 54811 B (+934 B), against the 70000 B budget from #234.
+
+## Summary
+
+Slow mode is now visible in the thread page's composer, and moderators can set it from the thread's moderation panel. Client only. No server change.
+
+- **The composer** (`composer/Composer.tsx`, `state/composer.ts`):
+  - It shows "Slow mode: one post every N seconds", with N in minutes or hours when they divide it evenly.
+  - While the viewer must wait, Post is disabled and a countdown reads "You can post again in m:ss", or h:mm:ss for waits of an hour or more.
+  - Each composer has one deadline. Three things set it: the page's `next_post_at`, where the later deadline always wins and null never shortens it; a `rate-limited` answer's `Retry-After`; and the viewer's own post, when they do not moderate the thread.
+  - One timer per composer ticks each second, aligned to the deadline. So the wait survives the phone sheet closing, and a wait weeks long neither fires at once nor needs one long timeout.
+- **The moderator action:**
+  - "Slow mode…" is offered whenever `viewer.can_moderate` is true, in the same `ModerateDialog` panel as lock, pin, rename and move.
+  - The panel offers Off, 10 s, 30 s, 1 min, 5 min or Custom, prefilled from `slow_mode_seconds`.
+  - Saving sends one `PUT /api/v1/admin/threads/{id}/slow-mode` and then asks for the page again. The ETag covers the viewer block, so the new value shows.
+  - `conflict`, `validation-failed` and `forbidden` are shown next to the field. A Custom value outside 0 to 86400 is refused before anything is sent.
+- **Tests:** unit tests in Composer, Post, ComposerSheet, ThreadScreen and threadActions. The e2e spec `e2e/thread-moderation.spec.ts` has "a moderator sets slow mode and turns it off", plus one axe scan per theme of the slow mode panel, at 390 px and 1440 px.
+- **Bundle:** the reader bundle went from 53877 B to 54811 B (+934 B) of 70000 B, and the regenerated dist is committed.
