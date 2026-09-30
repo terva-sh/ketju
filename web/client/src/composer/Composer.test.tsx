@@ -526,6 +526,11 @@ describe('slow mode', () => {
   const day = 86_400_000;
   let host: HTMLElement | null = null;
   let posts: number;
+  // created is the answer to a post the server made at createdAt.
+  const created = (createdAt: number) => {
+    const c: CreatedPost = { post: { ...page().posts[0], created_at: createdAt }, ordinal: 4, revision: 1, log_length: 2000 };
+    return new Response(JSON.stringify(c), { status: 201 });
+  };
   // answer, when set, answers the next POST in its own time.
   let answer: (() => Promise<Response>) | null;
   beforeEach(async () => {
@@ -537,8 +542,7 @@ describe('slow mode', () => {
       if (init.method === 'POST' && url.endsWith('/posts')) {
         posts++;
         if (answer) return answer();
-        const created: CreatedPost = { post: page().posts[0], ordinal: 4, revision: 1, log_length: 2000 };
-        return new Response(JSON.stringify(created), { status: 201 });
+        return created(Date.now());
       }
       throw new Error(`unexpected request ${url}`);
     });
@@ -692,9 +696,10 @@ describe('slow mode', () => {
 
   // Terva review 1593, finding 1: a page that arrives while a post is in
   // flight may bring a later next_post_at, and neither the post's own wait
-  // nor a shorter Retry-After shortens it.
+  // nor a shorter Retry-After shortens it. A refusal says the wait in force,
+  // not its own shorter one (review 1594, finding 2).
   it.each([
-    ['a post', () => new Response(JSON.stringify({ post: page().posts[0], ordinal: 4, revision: 1, log_length: 2000 }), { status: 201 })],
+    ['a post', () => created(T0), null],
     [
       'a Retry-After',
       () =>
@@ -702,8 +707,9 @@ describe('slow mode', () => {
           status: 429,
           headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '5' },
         }),
+      'You can post again in 120 seconds.',
     ],
-  ])('%s never shortens a later wait', async (_, respond) => {
+  ])('%s never shortens a later wait', async (_, respond, says) => {
     let release!: () => void;
     answer = () => new Promise<Response>((r) => (release = () => r(respond())));
     await mount(slow({ seconds: 30 }));
@@ -714,9 +720,39 @@ describe('slow mode', () => {
     await run(0);
     await draft('second');
     expect(wait()).toBe('You can post again in 2:00');
+    const refusal = () => host!.querySelector('.post-failure')?.textContent ?? null;
+    if (says) expect(refusal()).toContain(says);
+    else expect(refusal()).toBeNull();
     await run(119_999);
     expect(send().disabled).toBe(true);
     await run(1);
     expect(send().disabled).toBe(false);
+    expect(refusal()).toBeNull();
+  });
+
+  // Review 1594, finding 1: the wait runs from when the post was made.
+  it('a slow answer does not lengthen the wait', async () => {
+    let release!: () => void;
+    answer = () => new Promise<Response>((r) => (release = () => r(created(T0))));
+    await mount(slow({ seconds: 30 }));
+    await draft('first');
+    await act(() => send().click());
+    await run(20_000);
+    await act(async () => release());
+    await run(0);
+    await draft('second');
+    expect(wait()).toBe('You can post again in 0:10');
+    await run(10_000);
+    expect(send().disabled).toBe(false);
+  });
+
+  it('a server clock ahead of this one does not lengthen the wait', async () => {
+    answer = async () => created(T0 + 60_000);
+    await mount(slow({ seconds: 30 }));
+    await draft('first');
+    await act(() => send().click());
+    await run(0);
+    await draft('second');
+    expect(wait()).toBe('You can post again in 0:30');
   });
 });

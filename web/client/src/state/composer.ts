@@ -1,7 +1,7 @@
 import { batch, signal, type Signal } from '@preact/signals';
 import { apiSend } from '../api/client';
 import type { CreatedPost, Draft, Millis } from '../api/dto';
-import { asProblem } from '../api/problem';
+import { asProblem, ProblemError } from '../api/problem';
 import { insertBlock, quoteMarkdown } from '../composer/quote';
 import { drop, load, resetDrafts, watch, type DraftKey } from './drafts';
 import { isPhone } from './layout';
@@ -207,8 +207,12 @@ export function replyToThread(thread: string) {
 //
 // In slow mode a post starts the viewer's wait, unless they are exempt: the
 // page is not fetched again after a post, and would otherwise leave Send on
-// into a certain refusal. A rate-limited refusal starts the wait its
-// Retry-After names.
+// into a certain refusal. The wait runs from when the post was made, the
+// earlier of its created_at and this clock's now, so a slow answer does
+// not lengthen it, and a server clock ahead of this one does not either
+// (Terva review 1594, finding 1). A rate-limited refusal starts the wait its
+// Retry-After names, and says the wait in force, which a later next_post_at
+// may make longer than its own (finding 2).
 export async function postReply(thread: string, slow?: Slow): Promise<CreatedPost | null> {
   const c = composerFor(thread);
   const source = c.source.value;
@@ -229,12 +233,15 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
     c.replyTo.value = null;
     c.caret.value = 0;
     c.open.value = false;
-    if (slow && slow.seconds > 0 && !slow.exempt) extend(c, Date.now() + slow.seconds * 1000);
+    if (slow && slow.seconds > 0 && !slow.exempt) extend(c, Math.min(res.post.created_at, Date.now()) + slow.seconds * 1000);
     return res;
   } catch (err) {
-    c.failure.value = err;
     const p = asProblem(err);
-    if (p.type === 'rate-limited' && p.retryAfter) extend(c, Date.now() + p.retryAfter * 1000);
+    if (p.type === 'rate-limited' && p.retryAfter) {
+      extend(c, Date.now() + p.retryAfter * 1000);
+      if (c.left.value > p.retryAfter) err = new ProblemError('rate-limited', p.status, c.left.value);
+    }
+    c.failure.value = err;
     return null;
   } finally {
     c.posting.value = false;

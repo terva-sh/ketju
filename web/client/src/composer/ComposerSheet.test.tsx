@@ -245,7 +245,8 @@ describe('closing the sheet', () => {
       if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
       if (init.method === 'POST' && url.endsWith('/posts')) {
         posts++;
-        return new Response(JSON.stringify({ post: p.posts[0], ordinal: 2, revision: 1, log_length: p.thread.log_length }), { status: 201 });
+        const post = { ...p.posts[0], created_at: Date.now() };
+        return new Response(JSON.stringify({ post, ordinal: 2, revision: 1, log_length: p.thread.log_length }), { status: 201 });
       }
       return new Response(JSON.stringify(p), { status: 200 });
     });

@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T14:42:52Z
+updated_at: 2026-09-30T14:50:09Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
@@ -216,6 +216,15 @@ Review 1593 on PR #236 (head a274566, base f2eac74, Actions run #1534). Both fin
 
 The reader bundle is now 54842 B (+31 B for the fix).
 
+**agent:claude-code/phase2-run-r0pm0k** at 2026-09-30T14:50:05Z
+
+Review 1594 on PR #236 (head 5592e57, base f2eac74, Actions run #1536). It marks both review 1593 findings resolved. Both of its own findings are accepted and fixed.
+
+- **Finding 1 (medium): "Start the post-success wait from the post time, not the response time."** The wait after a post now runs from the earlier of the created post's `created_at` and the client's own now. A slow answer no longer lengthens it. A server clock ahead of the client's never makes it longer than one full interval from receipt. A server clock behind the client's can shorten it, and the resulting refusal's `Retry-After` starts the wait again, which is the settled clock rule. The later-deadline rule still applies. New tests in Composer.test.tsx: "a slow answer does not lengthen the wait" (answer 20 s late, 0:10 left) and "a server clock ahead of this one does not lengthen the wait". Mutants that use receipt time alone, or `created_at` alone, are each caught.
+- **Finding 2 (low): "Do not display an expired Retry-After for a longer page wait."** When the wait in force is longer than the refusal's own `Retry-After`, the stored refusal now names the wait in force ("in 120 seconds" beside a 2:00 countdown). It clears when that wait ends. "%s never shortens a later wait" checks the words, and removing the fix fails it.
+
+The reader bundle is now 54880 B.
+
 ## Summary
 
 Slow mode is now visible in the thread page's composer, and moderators can set it from the thread's moderation panel. Client only. No server change.
@@ -223,7 +232,7 @@ Slow mode is now visible in the thread page's composer, and moderators can set i
 - **The composer** (`composer/Composer.tsx`, `state/composer.ts`):
   - It shows "Slow mode: one post every N seconds", with N in minutes or hours when they divide it evenly.
   - While the viewer must wait, Post is disabled and a countdown reads "You can post again in m:ss", or h:mm:ss for waits of an hour or more.
-  - Each composer has one deadline. Three things set it: the page's `next_post_at`, where the later deadline always wins and null never shortens it; a `rate-limited` answer's `Retry-After`; and the viewer's own post, when they do not moderate the thread.
+  - Each composer has one deadline. Three things set it: the page's `next_post_at`, where the later deadline always wins and null never shortens it; a `rate-limited` answer's `Retry-After`; and the viewer's own post, counted from when it was made, when they do not moderate the thread.
   - One timer per composer ticks each second, aligned to the deadline. So the wait survives the phone sheet closing, and a wait weeks long neither fires at once nor needs one long timeout.
 - **The moderator action:**
   - "Slow mode…" is offered whenever `viewer.can_moderate` is true, in the same `ModerateDialog` panel as lock, pin, rename and move.
@@ -231,4 +240,4 @@ Slow mode is now visible in the thread page's composer, and moderators can set i
   - Saving sends one `PUT /api/v1/admin/threads/{id}/slow-mode` and then asks for the page again. The ETag covers the viewer block, so the new value shows.
   - `conflict`, `validation-failed` and `forbidden` are shown next to the field. A Custom value outside 0 to 86400 is refused before anything is sent.
 - **Tests:** unit tests in Composer, Post, ComposerSheet, ThreadScreen and threadActions. The e2e spec `e2e/thread-moderation.spec.ts` has "a moderator sets slow mode and turns it off", plus one axe scan per theme of the slow mode panel, at 390 px and 1440 px.
-- **Bundle:** the reader bundle went from 53877 B to 54842 B (+965 B) of 70000 B, and the regenerated dist is committed.
+- **Bundle:** the reader bundle went from 53877 B to 54880 B (+1003 B) of 70000 B, and the regenerated dist is committed.
