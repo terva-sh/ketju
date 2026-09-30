@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S1TVPD1MV96KCAHRJSRQVG
 title: Stop the full Playwright run spending more /auth calls than it refills
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -26,15 +26,22 @@ references:
     path: null
   - ref: ticket:TKT-01M3QVWKAGAG6H77VNE0WEC3SH
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-s1tvpd
+  branch: run/s1tvpd-pace-auth
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a21af6e5d9afb939c
+  commit: fa867110fcd71f5e008e88e0ebcf291ade4d94fa
+  session: null
+  claimed_at: 2026-09-30T12:47:02Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T11:40:10Z
-updated_at: 2026-09-30T12:23:08Z
+updated_at: 2026-09-30T12:47:03Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-s1tvpd
   name: ""
 extensions: {}
 ---
