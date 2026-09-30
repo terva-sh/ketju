@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS16VHMVXZW0TG41KVTNSV
 title: Build the new-thread screen with draft autosave
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -19,15 +19,22 @@ dependencies:
   - TKT-01M3NS19315QTWBKNZN782VRF1
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ns16vh
+  branch: run/ns16vh-new-thread-screen
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a39b42604a9c0f5bf
+  commit: 1ae02c57ee7d2a8b741ff68b2af57e2339f6a77f
+  session: null
+  claimed_at: 2026-09-30T12:58:03Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-30T09:23:50Z
+updated_at: 2026-09-30T12:58:04Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-ns16vh
   name: ""
 extensions: {}
 ---
