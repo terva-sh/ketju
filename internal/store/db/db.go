@@ -150,6 +150,53 @@ func Open(ctx context.Context, opts Options) (*DB, error) {
 	return &DB{path: opts.Path, read: read, write: write}, nil
 }
 
+// ErrReadOnly is Write on a database opened with OpenReadOnly.
+var ErrReadOnly = errors.New("db: the database was opened read-only")
+
+// readOnlyQuery opens the file read-only and keeps every statement a query.
+// It sets no journal_mode, synchronous or foreign_keys pragma: setting a
+// journal mode is a write, and the other two govern writes this handle never
+// makes.
+var readOnlyQuery = fmt.Sprintf("?mode=ro&_pragma=busy_timeout(%d)", busyTimeoutMS) + readQuery
+
+// OpenReadOnly opens an existing database for reading only, for a tool such
+// as `ketju fsck` whose contract is that it writes nothing (TKT-01M3A054TR).
+//
+// Unlike Open it creates no directory and no file, fsyncs nothing, has no
+// write connection, and does not checkpoint when closed. A path that does
+// not exist is refused rather than created. It runs no migrations and does
+// not check the schema: a query against a table the file lacks fails.
+//
+// ketju.db itself is never written. SQLite may create the -wal and -shm files
+// beside a database that has none, because it cannot read a WAL database
+// without them; they hold no data. Write on the result returns ErrReadOnly.
+func OpenReadOnly(ctx context.Context, path string) (*DB, error) {
+	if path == "" {
+		return nil, errors.New("db: OpenReadOnly: the path is empty")
+	}
+	fi, err := os.Stat(path)
+	if err != nil {
+		return nil, fmt.Errorf("db: opening %s read-only: %w", path, err)
+	}
+	if !fi.Mode().IsRegular() {
+		return nil, fmt.Errorf("db: opening %s read-only: not a regular file", path)
+	}
+	read, err := openPool(path, readOnlyQuery, nil)
+	if err != nil {
+		return nil, fmt.Errorf("db: opening %s read-only: %w", path, err)
+	}
+	read.SetMaxOpenConns(defaultReadConns)
+	read.SetMaxIdleConns(defaultReadConns)
+	d := &DB{path: path, read: read}
+	// Opening a pool connects nothing; this is where a file that is not a
+	// database says so.
+	if err := d.Ping(ctx); err != nil {
+		read.Close()
+		return nil, fmt.Errorf("db: opening %s read-only: %w", path, err)
+	}
+	return d, nil
+}
+
 // makeDirDurable creates dir and any missing parents, then fsyncs the parent
 // of each directory it created, so the new directory entries survive a power
 // loss along with whatever is later written inside them. A directory that
@@ -232,6 +279,9 @@ func (d *DB) Ping(ctx context.Context) error {
 // Write runs fn in a write transaction on the single write connection. The
 // transaction starts with BEGIN IMMEDIATE and commits if fn returns nil.
 func (d *DB) Write(ctx context.Context, fn func(q *dbq.Queries, tx *sql.Tx) error) error {
+	if d.write == nil {
+		return ErrReadOnly
+	}
 	tx, err := d.write.BeginTx(ctx, nil)
 	if err != nil {
 		return wrap(err)
@@ -251,8 +301,14 @@ func (d *DB) Write(ctx context.Context, fn func(q *dbq.Queries, tx *sql.Tx) erro
 // in the checkpoint's result row rather than as an error, and Close returns
 // it as ErrBusy. The pools are closed either way, and nothing is lost: the
 // WAL is replayed on the next open.
+//
+// A database from OpenReadOnly has no write connection and is not
+// checkpointed: Close only closes its read pool.
 func (d *DB) Close() error {
 	readErr := d.read.Close()
+	if d.write == nil {
+		return readErr
+	}
 	var busy, logFrames, checkpointed int64
 	err := d.write.QueryRow("PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed)
 	if err == nil && busy != 0 {

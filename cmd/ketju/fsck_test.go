@@ -346,26 +346,6 @@ func TestFsckReportsAMisplacedLog(t *testing.T) {
 	}
 }
 
-// The drift check is not implemented, and a clean run must not be mistakable
-// for a run that checked. projection_state arrives with TKT-01M29BYYJ8.
-func TestFsckSaysTheDriftCheckDidNotRun(t *testing.T) {
-	root := t.TempDir()
-	threadAt(t, root, threadid.ID(0x3f7a9c21e0000001), 2)
-
-	sum, _, err := fsckJSON(t, "--root", root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if sum.DriftChecked {
-		t.Error("fsck claims to have checked drift; there is no database to check against")
-	}
-
-	text, _ := fsckText(t, "--root", root)
-	if !strings.Contains(text, "drift not checked") {
-		t.Errorf("text output does not say the drift check was skipped:\n%s", text)
-	}
-}
-
 func TestFsckUsageErrors(t *testing.T) {
 	if _, err := fsckText(t, "--root", filepath.Join(t.TempDir(), "nope")); err == nil {
 		t.Error("a missing root was accepted")

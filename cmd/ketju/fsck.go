@@ -1,6 +1,8 @@
 package main
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -10,7 +12,11 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
+	"github.com/terva-sh/ketju/internal/events/projection"
+	"github.com/terva-sh/ketju/internal/store/db"
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
@@ -32,9 +38,28 @@ type threadReport struct {
 	IndexRebuilt bool   `json:"index_rebuilt,omitempty"`
 	Error        string `json:"error,omitempty"`
 
-	// DriftBytes is how far a projection is behind this log. Not yet
-	// measurable: projection_state arrives with TKT-01M29BYYJ8 in Phase 1.
-	DriftBytes *int64 `json:"drift_bytes,omitempty"`
+	// Projection is how the log stands against its projection_state row,
+	// by projection.Classify, the rule serve's catch-up acts on: "current",
+	// "drift" (the log is longer), "unprojected" (frames and no row, which is
+	// drift of the whole log), "unfinished" (only a file header and no row),
+	// or "corrupt" (the log is shorter, or there is no log: serve quarantines
+	// the thread). Empty when drift was not checked, and for a log reported
+	// damaged, whose damage is the finding.
+	Projection string `json:"projection,omitempty"`
+
+	// Projected is the projection_state row's length, when there is a row.
+	Projected *int64 `json:"projected_bytes,omitempty"`
+
+	// DriftBytes is how far the projection is behind this log's last whole
+	// record, for drift and unprojected.
+	DriftBytes int64 `json:"drift_bytes,omitempty"`
+
+	// id is the thread the path names, when it names one at the right
+	// shard, and whole the length to the last whole frame: what serve's
+	// catch-up projects to once an open has cut a torn tail.
+	id    threadid.ID
+	hasID bool
+	whole int64
 }
 
 func (r threadReport) clean() bool {
@@ -50,9 +75,24 @@ type fsckSummary struct {
 	Rebuilt   int            `json:"indexes_rebuilt"`
 	Reports   []threadReport `json:"threads_detail"`
 
-	// DriftChecked is false until there is a database to compare against, and
-	// is reported so a clean run cannot be mistaken for a run that checked.
-	DriftChecked bool `json:"drift_checked"`
+	// DriftChecked is whether the projection was compared with the logs. It
+	// is false when there is no database or it could not be read, and
+	// DriftNote says which, so a clean run cannot be mistaken for a run that
+	// checked.
+	DriftChecked bool   `json:"drift_checked"`
+	DriftNote    string `json:"drift_note,omitempty"`
+
+	// DriftThreads are the threads whose log is ahead of their projection,
+	// and DriftBytes the sum of how far. Quarantined are those whose log is
+	// shorter than their projection, or missing: serve quarantines each.
+	DriftThreads int   `json:"drift_threads"`
+	DriftBytes   int64 `json:"drift_bytes"`
+	Quarantined  int   `json:"quarantined_threads"`
+
+	// Unfinished are logs holding only their file header, with no row:
+	// a thread whose creation never finished. Not an error, and not
+	// current either; catch-up reports them the same way.
+	Unfinished int `json:"unfinished_threads"`
 }
 
 func runFsck(args []string) error { return fsckMain(os.Stdout, args) }
@@ -69,17 +109,26 @@ func fsckMain(w io.Writer, args []string) error {
 Walks every thread log under DIR, verifies every checksum, and reports what it
 found. Reads only, unless --rebuild is given.
 
-Safe against a live data directory. The log is never written, and fsck scans
-each log to the size it had when opened, so an append arriving mid-scan is
-simply not counted yet. --rebuild writes only the index, which is derived and
-disposable: the worst a concurrent server can do to it is leave one that needs
-rebuilding again.
+When DIR/db/ketju.db exists, fsck also opens it read-only and compares each
+log with the length the database has projected it to. A log longer than its
+projection is drift: a crash between the two writes leaves it, and ketju serve
+closes it at startup. A log shorter than its projection, or a projection with
+no log, cannot come from a crash. Serve quarantines that thread and answers
+503 for it until an operator repairs it, and fsck marks it QUARANT.
+
+Safe against a live data directory, and takes no lock. Neither the logs nor
+the database are written, and fsck scans each log to the size it had when
+opened, so an append arriving mid-scan is simply not counted yet. It reads the
+database before the logs, so a live write can show as drift, which catch-up is
+closing, but never as a quarantined thread. --rebuild writes only the index,
+which is derived and disposable: the worst a concurrent server can do to it is
+leave one that needs rebuilding again.
 
 exit codes:
   0  clean
-  1  corruption found
+  1  corruption found: a damaged log, or a thread serve would quarantine
   2  usage
-  3  drift found between a log and its projection
+  3  drift found between a log and its projection, and no corruption
 
 `)
 		fs_.PrintDefaults()
@@ -92,12 +141,19 @@ exit codes:
 		return errUsage{errors.New("fsck takes no positional arguments")}
 	}
 
+	// The projection is read before the logs are listed or sized. Logs only
+	// grow and the projection is written after the log, so in this order a
+	// write landing mid-run can make a thread look behind its log, never
+	// ahead of it, and a new thread's row never looks like one whose log is
+	// gone.
+	projected, driftNote := readProjection(context.Background(), *root)
+
 	paths, err := findLogs(*root)
 	if err != nil {
 		return err
 	}
 
-	sum := fsckSummary{DriftChecked: false}
+	sum := fsckSummary{DriftChecked: projected != nil, DriftNote: driftNote}
 	for _, p := range paths {
 		rep := checkThread(p, *rebuild)
 		sum.Reports = append(sum.Reports, rep)
@@ -114,6 +170,9 @@ exit codes:
 			sum.Rebuilt++
 		}
 	}
+	if projected != nil {
+		compareProjection(&sum, projected)
+	}
 
 	if *asJSON {
 		enc := json.NewEncoder(w)
@@ -125,24 +184,134 @@ exit codes:
 		writeFsckText(w, sum, *quiet)
 	}
 
-	if sum.Damaged > 0 {
-		return errCorrupt{fmt.Errorf("%d of %d thread(s) damaged", sum.Damaged, sum.Threads)}
+	switch {
+	case sum.Damaged > 0 || sum.Quarantined > 0:
+		var found []string
+		if sum.Damaged > 0 {
+			found = append(found, fmt.Sprintf("%d of %d thread(s) damaged", sum.Damaged, sum.Threads))
+		}
+		if sum.Quarantined > 0 {
+			found = append(found, fmt.Sprintf("%d thread(s) shorter than their projection, or missing", sum.Quarantined))
+		}
+		return errCorrupt{errors.New(strings.Join(found, "; "))}
+	case sum.DriftThreads > 0:
+		return errDrift{fmt.Errorf("%d thread(s) ahead of their projection by %d byte(s)", sum.DriftThreads, sum.DriftBytes)}
 	}
 	return nil
 }
 
+// readProjection reads every thread's projected length from the data
+// directory's database, opened read-only. It returns nil, with the reason,
+// when there is no database or it cannot be read: checking the logs is fsck's
+// first job and does not depend on the database.
+func readProjection(ctx context.Context, root string) (map[threadid.ID]int64, string) {
+	path := adminDBPath(root)
+	if _, err := os.Stat(path); errors.Is(err, fs.ErrNotExist) {
+		return nil, "no database at " + path
+	}
+	d, err := db.OpenReadOnly(ctx, path)
+	if err != nil {
+		return nil, err.Error()
+	}
+	defer d.Close()
+	out := map[threadid.ID]int64{}
+	err = d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		rows, err := q.ListProjectionLengths(ctx)
+		for _, r := range rows {
+			out[threadid.ID(r.ThreadID)] = r.LogLength
+		}
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Sprintf("reading projection_state from %s: %v", path, err)
+	}
+	return out, ""
+}
+
+// compareProjection classifies each log fsck walked against its projection,
+// by the rule serve's catch-up acts on, and reports every projection whose
+// log is not at the path its id names.
+func compareProjection(sum *fsckSummary, projected map[threadid.ID]int64) {
+	seen := map[threadid.ID]bool{}
+	for i := range sum.Reports {
+		r := &sum.Reports[i]
+		if !r.hasID {
+			continue
+		}
+		seen[r.id] = true
+		if !r.clean() {
+			continue
+		}
+		at, ok := projected[r.id]
+		if ok {
+			r.Projected = &at
+		} else {
+			at = projection.Missing
+		}
+		switch projection.Classify(r.whole, at) {
+		case projection.ClassCurrent:
+			r.Projection = "current"
+		case projection.ClassUnfinished:
+			r.Projection = "unfinished"
+			sum.Unfinished++
+		case projection.ClassCorrupt:
+			r.Projection = "corrupt"
+			sum.Quarantined++
+		case projection.ClassDrift:
+			r.Projection = "drift"
+			if !ok {
+				r.Projection = "unprojected"
+				at = threadlog.FileHeaderSize
+			}
+			r.DriftBytes = r.whole - at
+			sum.DriftThreads++
+			sum.DriftBytes += r.DriftBytes
+		}
+	}
+
+	var gone []threadReport
+	for id, at := range projected {
+		if seen[id] || projection.Classify(projection.Missing, at) != projection.ClassCorrupt {
+			continue
+		}
+		gone = append(gone, threadReport{ID: id.String(), Projection: "corrupt", Projected: &at, id: id, hasID: true})
+		sum.Quarantined++
+	}
+	sort.Slice(gone, func(i, j int) bool { return gone[i].id < gone[j].id })
+	sum.Reports = append(sum.Reports, gone...)
+}
+
 func writeFsckText(w io.Writer, sum fsckSummary, quiet bool) {
 	for _, r := range sum.Reports {
+		found := true
 		switch {
 		case r.Error != "":
 			fmt.Fprintf(w, "DAMAGED  %s  %s\n", r.ID, r.Error)
 		case r.Damaged > 0:
 			fmt.Fprintf(w, "DAMAGED  %s  %d record(s) failed their checksum, %d record(s) readable\n",
 				r.ID, r.Damaged, r.Records)
-		case r.Truncated > 0:
+		case r.Projection == "corrupt" && r.Path == "":
+			fmt.Fprintf(w, "QUARANT  %s  projected to %d bytes, but the thread has no log\n", r.ID, *r.Projected)
+		case r.Projection == "corrupt":
+			fmt.Fprintf(w, "QUARANT  %s  the log is %d bytes to its last whole record, shorter than its projection of %d\n",
+				r.ID, r.whole, *r.Projected)
+		default:
+			found = false
+		}
+		if r.Truncated > 0 {
+			found = true
 			fmt.Fprintf(w, "TORN     %s  %d byte(s) past the last complete record; an interrupted write\n",
 				r.ID, r.Truncated)
-		case !quiet:
+		}
+		switch r.Projection {
+		case "drift":
+			found = true
+			fmt.Fprintf(w, "DRIFT    %s  the log is %d byte(s) ahead of its projection\n", r.ID, r.DriftBytes)
+		case "unprojected":
+			found = true
+			fmt.Fprintf(w, "DRIFT    %s  never projected: %d byte(s) of records\n", r.ID, r.DriftBytes)
+		}
+		if !found && !quiet {
 			fmt.Fprintf(w, "ok       %s  %d record(s), %d post(s), %d bytes\n",
 				r.ID, r.Records, r.Posts, r.Bytes)
 		}
@@ -160,11 +329,34 @@ func writeFsckText(w io.Writer, sum fsckSummary, quiet bool) {
 	}
 	if sum.Damaged > 0 {
 		fmt.Fprintf(w, "%d thread(s) DAMAGED\n", sum.Damaged)
-	} else {
+	}
+	if sum.Quarantined > 0 {
+		fmt.Fprintf(w, "%d thread(s) QUARANTINED: the log is shorter than its projection, or missing; "+
+			"serve answers 503 for each until it is repaired\n", sum.Quarantined)
+	}
+	if sum.Damaged == 0 && sum.Quarantined == 0 {
 		fmt.Fprintf(w, "no corruption found\n")
 	}
-	if !sum.DriftChecked {
-		fmt.Fprintf(w, "projection drift not checked: there is no database yet (TKT-01M29BYYJ8)\n")
+	if sum.Unfinished > 0 {
+		fmt.Fprintf(w, "%d thread(s) unfinished: the log holds only its header and nothing projected it; "+
+			"its creation never finished, and there is nothing to project\n", sum.Unfinished)
+	}
+	switch {
+	case !sum.DriftChecked:
+		fmt.Fprintf(w, "projection drift not checked: %s\n", sum.DriftNote)
+	case sum.DriftThreads > 0:
+		fmt.Fprintf(w, "%d thread(s) with projection drift, %d byte(s) behind\n", sum.DriftThreads, sum.DriftBytes)
+		fmt.Fprintf(w, "drift found beside a running ketju serve may be lag that catch-up is closing; "+
+			"rerun with serve stopped to confirm it\n")
+	case sum.Quarantined > 0 || sum.Damaged > 0:
+		// A quarantined thread is not current, and a damaged log is not
+		// compared at all, so "every thread" would be false (review 1536).
+		fmt.Fprintf(w, "no projection drift found; the QUARANT and DAMAGED threads above are not current\n")
+	case sum.Unfinished > 0:
+		// An unfinished thread has no projection to be current (review 1537).
+		fmt.Fprintf(w, "no projection drift found; every thread but the unfinished ones is current\n")
+	default:
+		fmt.Fprintf(w, "projection current for every thread\n")
 	}
 }
 
@@ -205,7 +397,7 @@ func checkThread(path string, rebuild bool) threadReport {
 		rep.Error = err.Error()
 		return rep
 	}
-	rep.ID = id.String()
+	rep.ID, rep.id, rep.hasID = id.String(), id, true
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -254,6 +446,7 @@ func checkThread(path string, rebuild bool) threadReport {
 		rep.Error = scanErr.Error()
 		return rep
 	}
+	rep.whole = lastGood
 
 	if rebuild && rep.Damaged == 0 && rep.Error == "" {
 		if err := rebuildIndex(f, id, path, lastGood); err != nil {

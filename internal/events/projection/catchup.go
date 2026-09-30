@@ -150,20 +150,23 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 		size := logs[id]
 		at, known := projected[id]
 		if !known {
-			if size == threadlog.FileHeaderSize {
-				rep.Unfinished = append(rep.Unfinished, id)
-				w.settle(id, size) // a gap held while it still had a torn frame
-				w.log.Info("a thread log holds only its header: its creation never finished, "+
-					"and there is nothing to project", "thread", id)
-				continue
-			}
+			at = Missing
+		}
+		class := Classify(size, at)
+		if !known {
 			at = threadlog.FileHeaderSize // a thread the projection never saw
 		}
-		switch {
-		case size == at:
+		switch class {
+		case ClassUnfinished:
+			rep.Unfinished = append(rep.Unfinished, id)
+			w.settle(id, size) // a gap held while it still had a torn frame
+			w.log.Info("a thread log holds only its header: its creation never finished, "+
+				"and there is nothing to project", "thread", id)
+			continue
+		case ClassCurrent:
 			w.settle(id, size) // a gap held earlier that has since closed
 			continue
-		case size < at:
+		case ClassCorrupt:
 			quarantine(id, size, at)
 			continue
 		}
@@ -181,11 +184,11 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 				"thread", id, "log_size", size, "projected", at, "err", err)
 			continue
 		}
-		switch {
-		case length < at:
+		switch Classify(length, at) {
+		case ClassCorrupt:
 			quarantine(id, length, at)
 			continue
-		case length == at:
+		case ClassCurrent:
 			w.settle(id, length) // the gap was a torn tail, and the open removed it
 			continue
 		}
@@ -199,7 +202,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 
 	// A projection whose log is gone is the shortest log there is.
 	for id, at := range projected {
-		if _, ok := logs[id]; !ok {
+		if _, ok := logs[id]; !ok && Classify(Missing, at) == ClassCorrupt {
 			quarantine(id, 0, at)
 		}
 	}

@@ -62,6 +62,9 @@ func (d *DB) Migrate(ctx context.Context) error {
 }
 
 func (d *DB) migrate(ctx context.Context, fsys fs.FS, dir string) error {
+	if d.write == nil {
+		return ErrReadOnly
+	}
 	want, err := loadMigrations(fsys, dir)
 	if err != nil {
 		return err
