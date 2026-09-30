@@ -1008,6 +1008,7 @@ describe('marking unread from the thread screen', () => {
     const listAnswer = () => (lists.length > 1 ? lists.shift()! : (lists[0] ?? (() => ({ status: 200, body: threads, headers: { ETag: '"l"' } }))))();
     server = stubServer({
       [`GET ${url}`]: () => ({ status: 200, body: page }),
+      [`GET ${url}?ordinal=62`]: () => ({ status: 200, body: page }),
       [`DELETE ${read}`]: (b) => unread(b),
       'GET /api/v1/me': () => ({ status: 200, body: member }),
       'GET /api/v1/forums': () => ({ status: 200, body: { forums: [] }, headers: { ETag: '"f"' } }),
@@ -1141,6 +1142,24 @@ describe('marking unread from the thread screen', () => {
     await wait();
     expect(location.pathname).toBe('/f/general');
     expect(server.sent.filter((r) => r.url.startsWith(list))).toHaveLength(1);
+  });
+
+  // Review 1622: a reader who leaves the thread's posts while the DELETE is
+  // out, for a post's history or another screen, stays where they went.
+  it.each([
+    ['a post’s history', `/t/${id}/a/62/history`],
+    ['another screen', '/f/garden'],
+  ])('leaves a reader who went to %s where they are', async (_, to) => {
+    let release!: () => void;
+    unread = () => new Promise<Answer>((r) => (release = () => r({ status: 200, body: { last_read_ordinal: 61 } })));
+    const root = await renderAt(`/t/${id}/a`);
+    await press(root.querySelector('#post-62 [data-post-action=unread]'));
+    await route(to);
+    await settle(root);
+    await act(async () => release());
+    await wait();
+    expect(deletes()).toEqual([{ url: read, body: { ordinal: 61 } }]);
+    expect(location.pathname).toBe(to);
   });
 
   it('is offered to a member who may not reply, and to nobody signed out', async () => {

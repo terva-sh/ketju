@@ -479,6 +479,11 @@ function useReadTracking(id: string, list: { current: HTMLElement | null }, page
 // onThread is whether the reader is still on a page of thread id.
 const onThread = (id: string) => location.pathname.startsWith(`/t/${encodeURIComponent(id)}/`);
 
+// onThreadBody is whether the reader is still on thread id's posts: a page
+// of it, not a post's history, which is a screen of its own that a reader
+// who went there while a mark was out has chosen (Terva review 1622).
+const onThreadBody = (id: string) => onThread(id) && !location.pathname.endsWith('/history');
+
 // markAndReturn marks thread id unread after ordinal, or all of it with none
 // (state/readTracker.ts), and then returns the reader to the list they came
 // from, or the forum's (docs/06 "Read tracking"): staying would read the
@@ -488,8 +493,8 @@ const onThread = (id: string) => location.pathname.startsWith(`/t/${encodeURICom
 // for again.
 //
 // The thread's history entry is replaced, so Back does not reopen the page
-// just marked. A reader who has left the thread while it was marking stays
-// where they went. It rejects with the mark's failure, for the caller to show.
+// just marked. A reader who has left the thread's posts while it was
+// marking, for another screen or a post's history, stays where they went. It rejects with the mark's failure, for the caller to show.
 //
 // Marks of one thread run in call order, and only the last to settle leaves
 // the page: a list shown after an earlier one would hold counts a later one
@@ -500,7 +505,7 @@ async function markAndReturn(id: string, forum: string, route: (url: string, rep
   await markUnread(id, ordinal);
   forgetGets((u) => u.startsWith('/api/v1/forums'));
   void refreshViewer().catch(() => undefined);
-  if (!marking(id) && onThread(id)) route(listFor(forum), true);
+  if (!marking(id) && onThreadBody(id)) route(listFor(forum), true);
 }
 
 // useArrival scrolls once per request key, when its page first arrives:
