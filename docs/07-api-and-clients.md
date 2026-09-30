@@ -1108,11 +1108,15 @@ work stays where it is.
 
 - **Stack:** Preact 10.x, `@preact/signals`, `preact-iso` router, Vite 8,
   TypeScript. No component library; a small hand-written CSS system with
-  custom properties and light/dark themes. Target bundle: < 60 KB gzipped
-  for the thread view. CI enforces it, reading 60 KB as 60000 bytes and
+  custom properties and light/dark themes. Target bundle: < 70 KB gzipped
+  for the thread view. CI enforces it, reading 70 KB as 70000 bytes and
   counting everything the reader loads except fonts and the lazy admin
   chunk; the number is committed in `web/client/budget.json`
-  (TKT-01M29CGBYH). Hand-written CSS is decided over a utility framework
+  (TKT-01M29CGBYH). The maintainer raised it from 60 KB on 2026-09-30.
+  Phase 2 added moderation controls, drafts and thread actions to the
+  reader, putting it near 55 KB with several reader tickets still to come.
+  Lazy-loading small panels did not help, because the budget counts every
+  reader chunk and a split adds a shared chunk. Hand-written CSS is decided over a utility framework
   (10 Q21, TKT-01M29BW9NW), checked against that budget before adoption: it
   adds no runtime or build dependency, so every byte of it is a byte we wrote,
   and the mockups in `docs/mockups/` are already written that way.
@@ -1122,7 +1126,7 @@ work stays where it is.
 - **Fonts:** IBM Plex Sans, IBM Plex Mono and Newsreader, as in the
   mockups, self-hosted as subset WOFF2 files embedded in the binary and
   served from the same origin. The CSP allows no third-party font host.
-  They are cached apart from the code and do not count toward the 60 KB
+  They are cached apart from the code and do not count toward the 70 KB
   budget, which measures the thread view's JavaScript and CSS. Two
   alternatives lost. A system font stack would drift from every mockup, and
   counting fonts inside the budget would force dropping Newsreader.

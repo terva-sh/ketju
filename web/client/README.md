@@ -29,7 +29,7 @@ attribute. The policy blocks them, and `internal/web`'s
 
 ## Size budget
 
-The thread view's JavaScript and CSS must stay under 60 KB gzipped (docs/07).
+The thread view's JavaScript and CSS must stay under 70 KB gzipped (docs/07).
 `npm run build` ends by measuring the build, and `npm run budget` measures it
 again on its own. It prints each file's gzipped size and the total, and fails
 when the total is over the budget. CI runs it as its own step.
@@ -39,8 +39,9 @@ they import statically, every lazy chunk except the admin screens, and the CSS
 of each. Fonts do not count, and neither does the admin bundle
 (`scripts/bundle.mjs`).
 
-The budget is `threadViewGzipBytes` in `budget.json`: 60000 bytes, the
-stricter reading of 60 KB. No flag or environment variable overrides it. To
+The budget is `threadViewGzipBytes` in `budget.json`: 70000 bytes, the
+stricter reading of 70 KB. It was 60000 until the maintainer raised it on
+2026-09-30 (docs/07). No flag or environment variable overrides it. To
 raise it, edit that file, and say why in the pull request.
 
 ## Developing

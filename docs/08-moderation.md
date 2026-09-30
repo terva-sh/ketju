@@ -112,6 +112,9 @@ writes it.
 - The CI race step keeps its default timeout. The slow `internal/perm`
   fixture is fixed by a migrated template database instead
   (TKT-01M3R5P3CN).
+- The client's reader bundle budget rises from 60000 to 70000 B gzip
+  (docs/07). The reader was near 55 KB, with several Phase 2 reader tickets
+  still to land.
 
 Author edit/delete window: default 24 h for edits, 15 min for delete, both
 site settings. After the window, edits leave the visible "edited" marker and
