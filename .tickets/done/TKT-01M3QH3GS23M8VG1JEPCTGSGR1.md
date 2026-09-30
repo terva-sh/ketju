@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T21:28:33Z
-updated_at: 2026-09-30T00:18:36Z
+updated_at: 2026-09-30T00:21:28Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -155,6 +155,10 @@ Terva review 1507 on PR #179, head 17d0955, base 4d793b2: both findings accepted
 **agent:claude-code/phase2-run-qh3gs2** at 2026-09-30T00:18:36Z
 
 Terva review 1508 on PR #179, head 994f044, base 4d793b2: both findings accepted and fixed. Finding 1 (medium, an issue and a revoke overlapping could show a revoked token as live, credential state): token changes now run one at a time. A ref lock refuses a second one, with words, even from a confirmation already open, and the other token buttons are disabled while one is in flight. Test: 'holds a revoke until an issue has answered', which fails without the lock. A second test covers the disabled button. Finding 2 (medium, the credential refetch could undo a concurrent role or group change): the refetch now sets only the agent's fields. The same merge-by-field applies the other way: the role answer keeps the agent's credential, and a group removal filters the groups on screen. Tests: 'does not undo a role change that answered while it was in flight' and 'a role answer that arrives after a new token does not bring the old token back'. Each fails under a full-replace mutation.
+
+**agent:claude-code/phase2-run-qh3gs2** at 2026-09-30T00:21:28Z
+
+Terva review 1509 on PR #179, head 31a1a84, base 43a844d: finding 1 (medium, the limit inputs stay stale after a credential refetch) accepted and fixed. Limits now follows the detail: a field still showing the value it was last given takes the new one, and an edited field keeps the edit, so saving a refill alone sends the burst the server has now. Test: 'follows a refetched limit into an untouched field, and keeps an edited one'. It fails when the sync is removed.
 
 ## Summary
 

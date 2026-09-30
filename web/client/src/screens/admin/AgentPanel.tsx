@@ -255,8 +255,21 @@ const refillMax = 604800; // settings.AgentRefillMaxSeconds
 
 function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }; url: string; onSaved: (d: AdminUserDetail) => void }) {
   const a = d.agent;
-  const [burst, setBurst] = useState(a.burst === null ? '' : String(a.burst));
-  const [refill, setRefill] = useState(a.refill_seconds === null ? '' : String(a.refill_seconds));
+  const [burst, setBurst] = useState(field(a.burst));
+  const [refill, setRefill] = useState(field(a.refill_seconds));
+  // The fields follow the detail when it changes under them, as a refetch
+  // after a token change can (Terva review 1509): a field still showing the
+  // value it was last given takes the new one, and a field the admin has
+  // edited keeps the edit. Saving a refill alone then sends the burst the
+  // server has now, not the one this form first read.
+  const given = useRef({ burst: field(a.burst), refill: field(a.refill_seconds) });
+  useEffect(() => {
+    const was = given.current;
+    const now = { burst: field(a.burst), refill: field(a.refill_seconds) };
+    given.current = now;
+    setBurst((cur) => (cur === was.burst ? now.burst : cur));
+    setRefill((cur) => (cur === was.refill ? now.refill : cur));
+  }, [a.burst, a.refill_seconds]);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
@@ -341,6 +354,11 @@ function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }
       )}
     </form>
   );
+}
+
+// field is a limit as its input shows it: empty for the site default.
+function field(n: number | null): string {
+  return n === null ? '' : String(n);
 }
 
 // whole reads a limit field: null when empty, the number when it is a whole

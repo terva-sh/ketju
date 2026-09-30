@@ -589,6 +589,33 @@ describe('an agent’s write limits', () => {
     expect(sent.at(-1)!.body).toStrictEqual({ burst: 5, refill_seconds: 120 });
   });
 
+  // Terva review 1509: a refetch that brings another admin's limits updates
+  // the fields the admin has not touched, and keeps an edit in progress.
+  it('follows a refetched limit into an untouched field, and keeps an edited one', async () => {
+    const elsewhere = structuredClone(agentDetail) as AdminUserDetail;
+    elsewhere.agent!.credential = { created_at: issuedGolden.created_at, last_used_at: null };
+    elsewhere.agent!.burst = 10;
+    elsewhere.agent!.refill_seconds = 90;
+    routes['POST /api/v1/admin/users/scribe/credential'] = () => {
+      routes['GET /api/v1/admin/users/scribe'] = () => ({ status: 200, body: elsewhere });
+      return { status: 201, body: issuedGolden };
+    };
+    routes['PUT /api/v1/admin/users/scribe/agent-limits'] = () => ({ status: 200, body: elsewhere });
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const { burst, refill } = limitInputs(root);
+    await type(refill, '45');
+    const panel = root.querySelector('[data-agent-panel]')!;
+    await press(root, panel, 'Issue new token');
+    await press(root, panel, 'Confirm');
+    await settle(root);
+    expect(burst.value).toBe('10');
+    expect(refill.value).toBe('45');
+
+    await submit(root, root.querySelector('form.admin-limits')!);
+    expect(sent.at(-1)!.body).toStrictEqual({ burst: 10, refill_seconds: 45 });
+  });
+
   it('sends nothing the server would refuse', async () => {
     const root = await renderAt('/admin/users');
     await open(root, 'scribe');
