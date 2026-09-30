@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T21:28:33Z
-updated_at: 2026-09-30T00:07:15Z
+updated_at: 2026-09-30T00:12:25Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -147,6 +147,10 @@ Built on main at 4d793b2. Three choices differ from the plan's letter, and one s
 Other mutations tried: removing `setToken(null)` from Done and from revoke fails three tests. Removing the confirmation step fails the issue and revoke tests.
 
 e2e: `e2e/admin-agents.spec.ts` runs as ada at 390 and 1440 px. It creates an agent with a token, checks the token is accepted as a bearer (200) and gone from the page after Done, saves a limit, issues a new token (the old one is then 401), revokes (the new one is then 401), and closes. axe finds no violations in either theme at five states. The probe reads only the status, because GET /me answers an agent as anonymous; TKT-01M3QH3X (Answer GET /me for an agent authenticated by its credential) owns that. Full suite: 65 passed, 9 skipped, on port 5181. Reader bundle 45575 of 60000 B.
+
+**agent:claude-code/phase2-run-qh3gs2** at 2026-09-30T00:12:25Z
+
+Terva review 1507 on PR #179, head 17d0955, base 4d793b2: both findings accepted and fixed. Finding 1 (medium, overlapping saves replace newer agent details, credential state): AgentPanel now applies each answer to the detail on screen when it arrives, by the fields its change made. An issue or revoke sets only agent.credential, and a limits save sets only the four limit fields, through a functional update in UserDetail. The refetch after issuing or revoking is the one full replacement, and it applies only if no change answered while it was in flight. New test: 'a limits answer that arrives after a new token does not bring the old token back'. It fails when the limits answer replaces the whole detail. Finding 2 (low, Close missing when a detail fails to load): UserDetail now draws its head and Close while loading and beside the error panel. New test: 'offers Close beside the error'.
 
 ## Summary
 

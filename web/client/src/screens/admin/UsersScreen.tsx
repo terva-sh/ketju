@@ -275,9 +275,33 @@ function UserDetail({
   const [role, setRole] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const d = fresh ?? res.data;
+  // shown is the detail on screen now, for a change that answers after the
+  // render that started it (AgentPanel's update, Terva review 1507).
+  const shown = useRef(d);
+  shown.current = d;
+  const update = (change: (d: AdminUserDetail) => AdminUserDetail) =>
+    setFresh((prev) => {
+      const now = prev ?? shown.current;
+      return now ? change(now) : prev;
+    });
+  const close = (
+    <button type="button" class="admin-button" onClick={onClose}>
+      Close
+    </button>
+  );
 
+  // An account that has not loaded, or could not be, can still be closed
+  // (Terva review 1507, finding 2).
   if (!d) {
-    return res.error ? <ErrorPanel error={res.error} what="The account" onRetry={res.retry} /> : null;
+    return (
+      <section class="admin-detail" aria-label={`Account ${handle}`} aria-busy={!res.error} data-detail-pending={handle}>
+        <div class="admin-detail-head">
+          <h2>@{handle}</h2>
+          {close}
+        </div>
+        {res.error && <ErrorPanel error={res.error} what="The account" onRetry={res.retry} />}
+      </section>
+    );
   }
   const u = d.user;
   const chosen = role ?? u.user.role;
@@ -308,9 +332,7 @@ function UserDetail({
         <h2 ref={title} tabIndex={-1}>
           {u.user.display_name || u.user.handle} <span class="admin-muted">@{u.user.handle}</span>
         </h2>
-        <button type="button" class="admin-button" onClick={onClose}>
-          Close
-        </button>
+        {close}
       </div>
       <dl class="admin-facts">
         <dt>Status</dt>
@@ -361,7 +383,7 @@ function UserDetail({
         <AgentPanel
           d={d as AdminUserDetail & { agent: AgentInfo }}
           url={url}
-          onDetail={setFresh}
+          onDetail={update}
           issued={issued}
           onIssuedTaken={onIssuedTaken}
         />

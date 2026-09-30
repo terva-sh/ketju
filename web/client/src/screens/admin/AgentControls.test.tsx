@@ -397,6 +397,38 @@ describe('an agent’s credential', () => {
   });
 });
 
+// Terva review 1507: a limits save and a token issue in flight together each
+// change only their own fields when they answer, in whichever order.
+describe('changes in flight together', () => {
+  it('a limits answer that arrives after a new token does not bring the old token back', async () => {
+    const replaced = structuredClone(agentDetail) as AdminUserDetail;
+    replaced.agent!.credential = { created_at: issuedGolden.created_at, last_used_at: null };
+    const limitsAnswer = structuredClone(agentDetail) as AdminUserDetail; // the old credential
+    limitsAnswer.agent!.burst = 7;
+    let answerLimits!: (a: Answer) => void;
+    routes['PUT /api/v1/admin/users/scribe/agent-limits'] = () => new Promise<Answer>((r) => (answerLimits = r));
+    routes['POST /api/v1/admin/users/scribe/credential'] = () => {
+      routes['GET /api/v1/admin/users/scribe'] = () => ({ status: 200, body: replaced });
+      return { status: 201, body: { ...issuedGolden, token: issuedToken } };
+    };
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const panel = root.querySelector('[data-agent-panel]')!;
+    await type(root.querySelector<HTMLInputElement>('[data-burst]')!, '7');
+    await submit(root, root.querySelector('form.admin-limits')!);
+
+    await press(root, panel, 'Issue new token');
+    await press(root, panel, 'Confirm');
+    expect(panel.querySelector('[data-last-used]')!.textContent).toBe('never');
+
+    await act(async () => answerLimits({ status: 200, body: limitsAnswer }));
+    await settle(root);
+    expect(panel.textContent).toContain('Saved.');
+    expect(panel.querySelector('[data-last-used]')!.textContent).toBe('never');
+    expect(root.querySelector<HTMLInputElement>('[data-burst]')!.value).toBe('7');
+  });
+});
+
 describe('an agent’s write limits', () => {
   const limitInputs = (root: HTMLElement) => ({
     burst: root.querySelector<HTMLInputElement>('[data-burst]')!,
@@ -463,6 +495,20 @@ describe('an agent’s write limits', () => {
     const form = root.querySelector('form.admin-limits')!;
     await submit(root, form);
     expect(form.querySelector('[role="alert"]')!.textContent).toContain('The server refused those limits');
+  });
+});
+
+// Terva review 1507, finding 2.
+describe('closing an account that did not load', () => {
+  it('offers Close beside the error', async () => {
+    routes['GET /api/v1/admin/users/scribe'] = () => refusal('internal', 500);
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const pending = root.querySelector('[data-detail-pending="scribe"]')!;
+    expect(pending.textContent).toContain('Something went wrong on the server.');
+    await press(root, pending, 'Close');
+    expect(root.querySelector('[data-detail-pending]')).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('[data-user="scribe"]'));
   });
 });
 

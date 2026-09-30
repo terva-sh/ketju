@@ -29,8 +29,9 @@ export function AgentPanel({
   d: AdminUserDetail & { agent: AgentInfo };
   // url is the account's detail: /api/v1/admin/users/{handle}.
   url: string;
-  // onDetail shows a newer detail in place of d.
-  onDetail: (d: AdminUserDetail) => void;
+  // onDetail applies a change to the detail on screen when it answers,
+  // which may be newer than d was when the change was sent.
+  onDetail: (change: (d: AdminUserDetail) => AdminUserDetail) => void;
   // issued is the creation answer's token, handed over once. It is read on
   // mount only, and onIssuedTaken tells the holder to drop its copy.
   issued: IssuedCredential | null;
@@ -48,27 +49,34 @@ export function AgentPanel({
     // Mount only: issued is a handover, not a value to follow.
   }, []);
 
-  // version orders what this panel shows: a refetch answers only if nothing
-  // newer was shown while it was in flight.
+  // Each change's answer is applied to the detail on screen when it
+  // arrives, by the fields that change made: a token issued while a limits
+  // save is in flight is not undone by the save's answer, nor the limits by
+  // the issue's (Terva review 1507). version orders the one full
+  // replacement, the refetch after issuing or revoking: it applies only if
+  // no change answered while it was in flight.
   const version = useRef(0);
-  const show = (next: AdminUserDetail) => {
+  const apply = (change: (a: AgentInfo) => AgentInfo) => {
     version.current++;
-    onDetail(next);
+    onDetail((now) => (now.agent ? { ...now, agent: change(now.agent) } : now));
   };
   const refresh = async () => {
     const mine = ++version.current;
     try {
       const next = await apiGet<AdminUserDetail>(url);
-      if (mine === version.current) onDetail(next);
+      if (mine === version.current) onDetail(() => next);
     } catch {
       // The change was made and is already shown; a failed refetch leaves
       // that in place rather than replacing it with an error.
     }
   };
-  const withCredential = (credential: AgentInfo['credential']): AdminUserDetail => ({
-    ...d,
-    agent: { ...agent, credential },
-  });
+  const withCredential = (credential: AgentInfo['credential']) => apply((a) => ({ ...a, credential }));
+  const withLimits = (answer: AdminUserDetail) => {
+    const l = answer.agent;
+    if (!l) return;
+    const { burst, refill_seconds, default_burst, default_refill_seconds } = l;
+    apply((a) => ({ ...a, burst, refill_seconds, default_burst, default_refill_seconds }));
+  };
 
   const issue = async () => {
     const r = await send<IssuedCredential>('POST', `${url}/credential`);
@@ -79,7 +87,7 @@ export function AgentPanel({
     setFailed(null);
     setNotice(null);
     setToken(r.value);
-    show(withCredential({ created_at: r.value.created_at, last_used_at: null }));
+    withCredential({ created_at: r.value.created_at, last_used_at: null });
     void refresh();
   };
   const issueFirst = async () => {
@@ -102,7 +110,7 @@ export function AgentPanel({
     setFailed(null);
     setToken(null);
     setNotice(gone ? 'This agent has no live token.' : null);
-    show(withCredential(null));
+    withCredential(null);
     heading.current?.focus();
     void refresh();
   };
@@ -161,7 +169,7 @@ export function AgentPanel({
           {failed}
         </p>
       )}
-      <Limits d={d} url={url} onSaved={show} />
+      <Limits d={d} url={url} onSaved={withLimits} />
     </div>
   );
 }
