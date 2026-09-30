@@ -21,6 +21,8 @@ blocks_on: none
 references:
   - ref: design:moderation
     path: docs/08-moderation.md
+  - ref: pr:220
+    path: null
 claim:
   actor: agent:claude-code/phase2-run-cp2r4
   branch: run/cp2r4-audit-log
@@ -31,7 +33,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T10:59:40Z
+updated_at: 2026-09-30T11:02:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
