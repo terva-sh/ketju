@@ -21,10 +21,12 @@ blocks_on: none
 references:
   - ref: design:flags
     path: docs/08-moderation.md
+  - ref: pr:202
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T03:47:45Z
+updated_at: 2026-09-30T03:52:16Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
