@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS16VHMVXZW0TG41KVTNSV
 title: Build the new-thread screen with draft autosave
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -19,17 +19,10 @@ dependencies:
   - TKT-01M3NS19315QTWBKNZN782VRF1
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-ns16vh
-  branch: run/ns16vh-new-thread-screen
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a39b42604a9c0f5bf
-  commit: 1ae02c57ee7d2a8b741ff68b2af57e2339f6a77f
-  session: null
-  claimed_at: 2026-09-30T12:58:03Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-30T13:28:07Z
+updated_at: 2026-09-30T13:57:43Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -182,3 +175,7 @@ Checks run here: gofmt, go build, go vet, go test -race ./... all pass; tsc --no
 Bundle: eager 52903 B gzip of 60000 B, up 1689 B from 51214 B. Lazy measured at 55381 B, since Vite splits a shared chunk off and bundle.mjs counts every reader chunk, so the route stays eager.
 
 One unit test, ApplicationDetail.test.tsx 'shows the answers through the form renderer, against the version they answered', failed twice in six full vitest runs here, at about 1.4 s, and passes alone and in the other runs. It is the lazy admin chunk's transform under a parallel run, which this change does not touch. Recorded here in case CI shows it.
+
+## Summary
+
+/f/{forum}/new is the new-thread screen: a title and the shared composer body (composer/ComposerBody.tsx, extracted from the reply composer, whose tests pass unchanged), with Post thread in the footer on a desktop and, on a phone, the composer sheet's column with Post in the top bar (ShellContext.primary) and no tab bar (ShellContext.composing). Title and body autosave as the forum draft through state/drafts.ts keyed new:<forum> (state/newThread.ts); creating the thread drops the draft and its local copy and opens the thread. An archived forum shows a notice and leaves Post on; only the create route's own forbidden or conflict disables Post, and a refused draft save only turns autosave off ('Draft not saved'). drafts.ts gains draftStatus(key); composer.ts exports checkOwner(). The route is eager: 53786 B gzip of 60000 B on main at a56ad61, up 1679 B; lazy measured 2478 B larger. All ten criteria are met.
