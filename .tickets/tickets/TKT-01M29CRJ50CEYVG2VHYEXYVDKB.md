@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ50CEYVG2VHYEXYVDKB
 title: Implement per-thread slow mode
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: design:moderation-primitives
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-crj50
+  branch: run/crj50-slow-mode
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1fea6a8b3dd4de89
+  commit: 2fc352f4a76c324d96b907c02cc2d0bb77155807
+  session: null
+  claimed_at: 2026-09-30T01:48:36Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-30T01:50:08Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-crj50
   name: ""
 extensions: {}
 ---
@@ -65,23 +72,45 @@ Groomed 2026-09-29 against main at 7af2c5a.
 
 ### Approach
 
-1. **Migration** (the next free number): `thread_slow_mode (thread_id INTEGER PRIMARY KEY, seconds INTEGER NOT NULL CHECK (seconds >= 0 AND seconds <= 86400), set_by INTEGER REFERENCES users (id), set_at INTEGER NOT NULL)`. It is authoritative, not a projection: no `PROJECTION` marker, and not in `db.ProjectionTables`, so `ketju reindex` keeps it. `TestProjectionTablesAreMarked` holds that. Queries in `queries/moderation.sql`: `GetThreadSlowMode` and `PutThreadSlowMode` (upsert). Regenerate dbq. The upper bound of a day is an engineering guard against a typo, not a policy.
-2. **Service** in `internal/service/threads/moderate.go`: `SetSlowMode(ctx, v, id, seconds int)`. It requires `canModerate` (`forbidden` otherwise) and a thread that is not archived (`conflict`). Seconds outside 0 to 86400 is `validation-failed`. In one `db.Write` it upserts the row and appends an audit row through `internal/audit` (TKT-01M3NRYCP5): `audit.Append` with action `thread.slow_mode`, target `audit.Thread(id)`, and details `{from, to}`, where `from` is the previous row's value or null. Setting the value the thread already has is `conflict`. There is no log append, so TKT-01M29CKRGS's helpers are not used. The pattern is `settings.SetBy`'s once that moves onto `internal/audit`.
-3. **Reply**: `effectiveSlowMode(ctx, id)` reads the row, or `settings.SlowModeDefaultSeconds` when there is none. It replaces the bare setting read in `Reply`. It is read on every reply, so turning slow mode off applies to the next request. Moderators stay exempt through `a.canModerate`, as now.
-4. **Viewer block**: `dto.ThreadViewer` gains `slow_mode_seconds int` (0 when off) and `next_post_at *Millis`, the viewer's newest post in the thread plus the interval, or null when they may post now or are exempt. Both are computed in `View` beside `can_reply`. Update the dto golden.
-5. **Route**: `PUT /api/v1/admin/threads/{id}/slow-mode` with `{seconds}`, answering 200 `{seconds}` with `no-store`, charged to the write limiter.
-6. **Client**: `Composer.tsx` shows "Slow mode: one post every N seconds" when `slow_mode_seconds > 0`. While `next_post_at` is in the future it disables Send with a countdown, and it still handles a `rate-limited` answer by showing `Retry-After`. The thread's moderator actions (TKT-01M29CKRGS's dialog pattern) gain "Slow mode…" with a seconds field. Regenerate `dist/`.
-7. **Docs**: docs/04 gets the table under the authoritative tables. docs/07 gets the route, and the `POST /threads/{id}/posts` row names the per-thread value. docs/08 needs no change.
+Revised 2026-09-30 by agent:claude-code/phase2-run-crj50 against main at 2fc352f. The settled items above are unchanged. This PR is the server half. The composer notice, the countdown and the moderator's "Slow mode…" dialog go to a draft filed against this ticket.
+
+1. **Migration 0016**, or the next free number when this merges. #186 also takes 0016, and whichever PR merges second renumbers (`migrate.go`). The table is `thread_slow_mode (thread_id INTEGER PRIMARY KEY, seconds INTEGER NOT NULL CHECK (seconds BETWEEN 0 AND 86400), set_by INTEGER REFERENCES users (id), set_at INTEGER NOT NULL)`. It is authoritative. It has no PROJECTION marker, it is not in `db.ProjectionTables`, and it has no foreign key to `threads`, so `ClearThreads` and its triggers cannot reach it. The queries go in `queries/moderation.sql`: `GetThreadSlowMode` and `PutThreadSlowMode` (an upsert). Regenerate dbq.
+2. **Service**: a new file, `internal/service/threads/slowmode.go`. It stays out of moderate.go so that it cannot collide with the rename/move lane. `SetSlowMode(ctx, v, ip, id, seconds)` checks in the order moderate() does:
+   1. MayWrite.
+   2. access: not-found, unauthenticated, or forbidden to read.
+   3. `canModerate`, or `forbidden`.
+   4. An archived thread is `conflict`, read from the thread cache as moderate() reads it. An archived forum is allowed.
+   5. Seconds outside 0..86400 are `validation-failed`.
+   6. One `db.Write` reads the row. The value the row already holds is `conflict`. Otherwise it upserts the row and appends one audit row through `audit.Append`: action `thread.slow_mode`, target `audit.Thread(id)`, details `{from, to}`. `from` is null when there was no row. The actor is v and the IP is the request's.
+
+   A write with no row is a change even when it equals the site default, because it pins the thread against a later change of the default. The audit row comes from the service's own transaction, not from the projection writer, because there is no record to project (docs/04 "audit_log": "A service writes it from its own write transaction").
+3. **Reply**: `effectiveSlowMode` reads the row. When there is none, it reads `settings.SlowModeDefaultSeconds.In` in the same read. It replaces the bare setting read. `slowMode` itself and the `canModerate` exemption do not change.
+4. **Viewer block**: `dto.ThreadViewer` gains two fields.
+   - `slow_mode_seconds` is the effective interval, 0 when off, served to every viewer.
+   - `next_post_at` (`*Millis`) is the viewer's newest post plus the interval, read from the index inside the page's Stable snapshot. It is null for an anonymous viewer, for a moderator, and when the viewer may post now.
+
+   Update the dto fixtures and goldens. `web/client/src/api/dto.ts` and `dto-contract.ts` carry the types. The built client does not change: the orchestrator approved type-only edits, with dist byte-identical.
+5. **Route**: `PUT /api/v1/admin/threads/{id}/slow-mode` with `{seconds}`. It sits behind the staff gate, as lock and pin do, and the service then checks moderate in the thread's forum. A missing `seconds` is `bad-request` (strict decode). The answer is 200 `dto.SlowMode{seconds}` with no-store. `adminRoute` charges it to the write limiter.
+6. **Docs**:
+   - docs/04 gets `thread_slow_mode` under the authoritative tables, and the `thread.slow_mode` action under audit_log.
+   - docs/07 gets the route. Its `POST /threads/{id}/posts` row names the per-thread value and the two viewer fields.
 
 ### Tests
 
-- `TestSlowModePerThread`: with a fixed clock and the thread at 30 s, a member's second reply 10 s after the first is `rate-limited` with `Retry-After: 20`. At 30 s it succeeds. An agent account is refused the same way, and a moderator is not.
-- `TestSlowModeOverridesDefault`: site default 60 and thread row 0 lets the member reply at once. No row falls back to 60.
-- `TestSlowModeOffIsImmediate`: set 30, reply, set 0, and reply again at once succeeds.
-- `TestSlowModeSurvivesRestartAndReindex`: the row is still there after reopening the database and after `ketju reindex`.
-- `TestSetSlowModeRefusals`: a member is `forbidden`, an archived thread is `conflict`, 86401 is `validation-failed`, and an unchanged value is `conflict`. The audit row names the actor with from and to.
-- **Response cache invariant**, `TestSlowModeIsInTheViewerBlockNotTheCache`: with the cache on, a page is cached. Setting slow mode leaves the posts' cache key unchanged (a hit), while the same response's `viewer.slow_mode_seconds` and `next_post_at` reflect the new value.
-- Client: the composer notice and the disabled Send with a countdown, under fake timers.
+- `TestSlowModePerThread` (api): the thread is at 30 s. A member's second reply 10 s after the first is `rate-limited` with `Retry-After: 20` and appends nothing. At 30 s it succeeds. The agent (scribe) is refused the same way. The moderator (bob) is not.
+- `TestSlowModeOverridesDefault`: with a site default of 60 and a thread row of 0, the member replies at once. With no row, the default of 60 applies.
+- `TestSlowModeOffIsImmediate`: set 30, reply, then set 0. An immediate second reply succeeds.
+- `TestSlowModeSurvivesRestartAndReindex` (cmd/ketju): the row is still there after the database is reopened and after `ketju reindex`.
+- `TestSetSlowModeRefusals`: none of these cases writes a row or an audit row.
+  - Anonymous is unauthenticated.
+  - A member is forbidden, at the gate and through the service.
+  - An archived thread is `conflict`.
+  - 86401 and -1 are `validation-failed`.
+  - A missing seconds is `bad-request`.
+  - An unchanged value is `conflict`.
+
+  A success writes one audit row naming bob, with from and to. A thread in an archived forum accepts the change.
+- `TestSlowModeIsInTheViewerBlockNotTheCache`: with the cache on, the page is cached for each class. Setting slow mode leaves the posts under the same key, so the next GET is a hit. The same response's `viewer.slow_mode_seconds` and `next_post_at` show the new value, and its ETag differs.
 
 ### Out of scope
 
