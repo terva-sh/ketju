@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T11:06:39Z
-updated_at: 2026-09-30T12:09:35Z
+updated_at: 2026-09-30T12:36:01Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
@@ -56,9 +56,9 @@ The a11y thread page took 5-9s on green runs and still reached 30 s under load. 
 - [ ] Both files keep the rule tags wcag2a, wcag2aa, wcag21a and wcag21aa, the zero-violation assertion with its "${what}, ${colorScheme}" message, the horizontal-overflow check for each state, and every other assertion of the test they replace
 - [ ] Each file runs under test.describe.configure({ mode: 'serial' }) with one context made in beforeAll from stateFile('ada') and info.project.use, and closed in afterAll
 - [ ] playwright.config.ts is unchanged, and neither file adds test.setTimeout, test.slow or a test.step timeout
-- [ ] A note records the contention run (14 busy loops pinned with the run to two cores, --repeat-each=5) on main and on the branch, with the command and each test's min, median and max duration per project, and every test passes on the branch
 - [ ] A note records the mutation check: a dark-only image-alt violation fails only that state's dark test in each file, and the note says whether the failing test kept a trace
 - [ ] CI's Playwright step passes on the PR, and a note records both files' per-test durations from that run
+- [ ] A note records the contention run (14 busy loops pinned with the run to two cores, --repeat-each=5) on main and on the branch, with the command and each test's min, median and max duration per project. The loops are killed by the subshell's EXIT trap after each measurement, and pgrep -c -x yes shows 0 before the next one. Every test passes on the branch
 
 ## Implementation plan
 
@@ -136,10 +136,15 @@ Groomed 2026-09-30 against main at 4918f90 (TKT-01M3M9RR26, Phase 2 grooming).
   - That is 46 tests across the two projects, where there were 4.
 - **Contention run**, the same way TKT-01M3MTQG5A measured it (its note of 2026-09-30):
   ```
-  for i in $(seq 14); do taskset -c 0,1 yes >/dev/null & done
-  KETJU_E2E_PORT=8843 taskset -c 0,1 npx playwright test e2e/admin-forms.spec.ts e2e/admin-agents.spec.ts --repeat-each=5
+  (
+    pids=''
+    trap 'kill $pids 2>/dev/null; wait $pids 2>/dev/null' EXIT
+    for i in $(seq 14); do taskset -c 0,1 yes >/dev/null & pids="$pids $!"; done
+    KETJU_E2E_PORT=8843 taskset -c 0,1 npx playwright test e2e/admin-forms.spec.ts e2e/admin-agents.spec.ts --repeat-each=5
+  )
+  pgrep -c -x yes || echo 'load gone'
   ```
-  Run it before the change (main) and after (the branch). Record the command, the load, and each test's min, median and max duration per project. admin-forms restores the form at the end of each repeat, and admin-agents names each agent for the moment it was created, so both can repeat.
+  The subshell records each load process's PID. Its `EXIT` trap kills them and waits for them when Playwright finishes, whether it passes, fails or is interrupted. Before the next measurement, `pgrep -c -x yes` must print 0 and exit 1, which the `|| echo` reports as `load gone`. If any `yes` is still running, stop it before measuring again, because leftover load would skew the next run's numbers. Run the measurement before the change (main) and after (the branch). Record the command, the load, and each test's min, median and max duration per project. admin-forms restores the form at the end of each repeat, and admin-agents names each agent for the moment it was created, so both can repeat.
 - **Mutation check**, one state in each file:
   - Inject an `<img>` with no alt text that appears only while `prefers-color-scheme: dark` matches. Use the saved form in admin-forms and the agent detail in admin-agents.
   - Confirm that only that state's dark test fails, with `image-alt` under its message, and that the rest of that project's file is reported as skipped.
@@ -152,3 +157,9 @@ Groomed 2026-09-30 against main at 4918f90 (TKT-01M3M9RR26, Phase 2 grooming).
 - Restoring the registration form when an admin-forms test fails partway. Today the restore is skipped on failure, and it still is. Moving it to `afterAll` would change what a failed run leaves, and no failure has needed it.
 - Timeouts, the config and the CI image. They are held by the Settled items above and by TKT-01M3MTQG5A.
 - The `/auth/*` budget. That is TKT-01M3S1TVPD (Stop the full Playwright run spending more /auth calls than it refills). These two specs start from `stateFile('ada')` and spend no `/auth/*` requests.
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-30T12:36:01Z
+
+Revised for Terva review 1582 on PR #225 (head f424f92, medium finding at line 137). The contention command started 14 background yes processes and never stopped them. It now runs inside a subshell that records their PIDs, and an EXIT trap kills and reaps them when Playwright finishes, whether it passes, fails or is interrupted. pgrep -c -x yes must show 0 before the next measurement. The contention criterion, which was number 6 and is now number 8, supersedes the old one and says the same.
