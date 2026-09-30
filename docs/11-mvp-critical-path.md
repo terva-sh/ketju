@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-238 tickets: 12 epics and 226 children. Every ticket carries an `area:` label,
+239 tickets: 12 epics and 227 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -42,7 +42,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 87 in Phase 1, 70 in Phase 2, 21 in
-Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 19 carrying no
+Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 20 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-161 done, 30 ready, 0 in progress, 2 blocked, 42 draft, 3 archived (counted 2026-09-30 with
+161 done, 30 ready, 0 in progress, 2 blocked, 43 draft, 3 archived (counted 2026-09-30 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
