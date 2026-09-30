@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S1TVPD1MV96KCAHRJSRQVG
 title: Stop the full Playwright run spending more /auth calls than it refills
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -26,17 +26,10 @@ references:
     path: null
   - ref: ticket:TKT-01M3QVWKAGAG6H77VNE0WEC3SH
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-s1tvpd
-  branch: run/s1tvpd-pace-auth
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a21af6e5d9afb939c
-  commit: fa867110fcd71f5e008e88e0ebcf291ade4d94fa
-  session: null
-  claimed_at: 2026-09-30T12:47:02Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T11:40:10Z
-updated_at: 2026-09-30T13:29:03Z
+updated_at: 2026-09-30T13:38:33Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
@@ -215,3 +208,15 @@ Worst case for speed: the /auth/* spenders alone, back to back (`npx playwright 
 Base (fa86711), one run: FAILED, 4 failed and 10 passed. sign-in.spec.ts got a 429 from /auth/signin in both projects ("Received: 429"), and smoke's sign-in timed out at 30 s in both projects after /auth/fake/start was refused. 31 /auth/* requests, 9 answered 429.
 
 Branch (298e972), five runs, all passed, 14 passed in each, 89-95 s. Every 429 in them (4, 4, 5, 3 and 4) fell inside phase2-exit.spec.ts, between apply's callback and sign-in.spec.ts's /auth/signin, and through() waited it out as before. apply.spec.ts, sign-in.spec.ts and smoke.spec.ts saw none: any 429 would have failed apply's landing on /apply or sign-in.spec's 302 check. This is the case the pacing is for: phase2-exit leaves the bucket near 0, and paceAuth refills what the next spend needs.
+
+**agent:claude-code/phase2-run-s1tvpd** at 2026-09-30T13:38:21Z
+
+The runs in the three notes above were measured on base fa86711 and branch 298e972. Before the PR opened, main moved to 6d1e9ab (TKT-01M3NS1931, TKT-01M3R1WPNS and TKT-01M3QMRE47), and the unpushed branch was rebased onto it, so 6d1e9ab is the PR's base. The commits between add two specs, drafts.spec.ts and admin-suspension.spec.ts. Both start from a stored session and spend no /auth/*, so the budget table is unchanged. To check the rebase, one more run of each, same machine and port:
+- full run on base 6d1e9ab: passed, 101 passed and 11 skipped, 28 /auth/* requests and no 429;
+- full run on the rebased branch: passed, 101 passed and 11 skipped, 24 /auth/* requests and no 429;
+- spenders alone on base 6d1e9ab: FAILED as on fa86711, with a 429 in sign-in.spec.ts and smoke's sign-in timing out, in both projects;
+- spenders alone on the rebased branch: passed, 14 passed, all 5 of its 429s inside phase2-exit.spec.ts.
+
+## Summary
+
+Every /auth/* spend in the Playwright run now holds by itself at any speed. smoke.spec.ts starts from alice's stored session, asserts /api/v1/me answers alice, and spends no /auth/*; its header names phase2-exit.spec.ts and sign-in.spec.ts as the run's sign-in at 390 px and 1440 px (noted on TKT-01M29CGBY1). e2e/session.ts exports paceAuth(n): it asserts one worker and no parallel tests, records a paced annotation, grows the test's timeout by its wait, and waits n x 6 s + 0.5 s before any request, never reading a 429. apply.spec.ts calls paceAuth(2) and sign-in.spec.ts paceAuth(1). The comment above stateFile holds the budget table and the rule for a new spender. A full run spends 24 requests instead of 28 and takes about 38 s longer. The limiter, the e2e server, playwright.config.ts and signIn are unchanged. Locally, five full runs and five spenders-only runs passed on the branch; the spenders alone fail on the base with 429s in sign-in.spec.ts and smoke. The CI criterion is ticked once CI passes on the PR.
