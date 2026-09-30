@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-29, after the reserved-types decision in Phase 2 grooming, against the store. They are written by hand, so
+Counts last read 2026-09-30, after the Phase 2 run closed its exit gate, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-207 tickets: 12 epics and 195 children. Every ticket carries an `area:` label,
+238 tickets: 12 epics and 226 children. Every ticket carries an `area:` label,
 an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
 to the document section it came from. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
@@ -41,8 +41,8 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 87 in Phase 1, 34 in Phase 2, 20 in
-Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 25 carrying no
+Distribution by phase: 25 in Phase 0, 87 in Phase 1, 70 in Phase 2, 21 in
+Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 19 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -52,7 +52,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-121 done, 7 ready, 1 in progress, 2 blocked, 75 draft, 3 archived (counted 2026-09-29 with
+161 done, 30 ready, 0 in progress, 2 blocked, 42 draft, 3 archived (counted 2026-09-30 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -205,6 +205,23 @@ Phase 1 to 87 tickets:
 
 Phase 1 now stands at 78 done, 7 ready (the six epics and the tracking
 ticket), 1 blocked (the ncruces report) and 1 draft (the real-device check).
+
+**Phase 2 closed its exit gate on 2026-09-30.** The run under docs/13, which
+the maintainer granted on 2026-09-29, merged every ticket the exit gate
+depends on, the server work the run picked up next, and the run's grooming.
+Each merge passed the docs/12 gate, and none carried a recorded disagreement. `TKT-01M3NTSCMN` (PR #194) proves the exit criterion
+end to end through the real `serve`: a stranger applies, a moderator approves,
+and the applicant signs in again as a member. A denied applicant gets no
+session, a suspended member is signed out and refused, and an agent posts with
+its credential until the credential is revoked. Playwright covers the same
+flow at 390 and 1440 px with axe. The run summary on `TKT-01M3NTSCJQ` lists
+the criteria merged unticked and the questions left for the maintainer.
+
+Phase 2 now carries 70 tickets: 44 done, 23 ready and 3 draft. The drafts are
+the two Phase 2 epics and `TKT-01M3R5P3CN`, which waits on one maintainer
+decision. The 23 ready are mostly client screens and follow-ups, several
+filed by the run's own lanes. None of them gates the exit criterion, and the
+run stopped at the gate as docs/13 says rather than start them.
 
 ## The critical path
 

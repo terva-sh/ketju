@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3M9RR265XKRH6H97GS9VQYG
 title: Groom Phase 2 for an autonomous run
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -20,22 +20,15 @@ dependencies:
   - TKT-01M29BSPEXA023NH3DRMWKW9HB
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase1-run-438e26c1
-  branch: groom/phase2-decision-spikes
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-438e26c1
-  commit: 5d0fa1a51b491c476bc977f392e0b847fb6a412a
-  session: null
-  claimed_at: 2026-09-28T21:32:46Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T15:22:37Z
-updated_at: 2026-09-29T07:04:34Z
+updated_at: 2026-09-30T04:51:17Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-438e26c1
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -78,10 +71,10 @@ The handoff for this grooming is in `~/.local/state/agent-handoffs/ketju/`, outs
 ## Acceptance criteria
 
 - [x] The three Phase 2 decision spikes are decided and recorded in docs/10 or their design documents
-- [ ] Every open Phase 2 ticket has an implementation plan with a Settled in grooming section and checkable criteria
+- [x] Every open Phase 2 ticket has an implementation plan with a Settled in grooming section and checkable criteria
 - [ ] Every session-creating or role-changing ticket names the test that proves a pending or suspended user cannot reach member endpoints
-- [ ] A run procedure and a tracking ticket with the user's merge authority exist, or the user chose not to run Phase 2 autonomously
-- [ ] docs/11 is refreshed with the groomed counts
+- [x] A run procedure and a tracking ticket with the user's merge authority exist, or the user chose not to run Phase 2 autonomously
+- [x] docs/11 is refreshed with the groomed counts
 
 ## Notes
 
@@ -143,3 +136,23 @@ Later rounds on the plan PRs; every finding was fixed in the plans unless stated
 - #138 (moderation): 1352, the audit row is written by the projection writer in the projection transaction, the content rule applies only to removed posts, and the auto-hide lock is shared with restore; 1359, a hidden post's author reads its history; 1365, flags reopen only when the Restore append fails; 1368, grace edits only before the first visible edit. Round 6 was allowed past the cap by the orchestrator. Clean at 21784df; merged.
 - #139 (follow-ups, redaction): 1351, 1360 and 1366 cover the whole-log marker check, the attachments of every revision, a blob row deleted in the transaction with the file removed after commit, the journal checked first, and dry-run and --resume specified. Clean at d0c5057; merged.
 - #140 (admin): 1356, 1362, 1367 and 1370 cover the late flag, post-state conflicts, restoring a kept post, the queue count for forum-scoped moderators, audit recovery aligned with #138, the author link, and credential issuance refused unless the agent is active (security, fixed). Review 1371, a medium on audit recovery, came in round 7, past the cap. It was carried into TKT-01M29CRJ4E as a requirement and recorded on the PR, and the PR merged at 4aafbf4 under the grant. It is not a disagreement: the finding is accepted, and its fix is required at implementation.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T04:50:27Z
+
+Closing note by the Phase 2 run orchestrator, 2026-09-30.
+- **Criterion 2:** every open phase-2 ticket other than the tracking ticket carries a `### Settled in grooming` plan. This was checked against the store on 2026-09-30, after #203.
+- **Criterion 4:** met by docs/13 (PR #141) and TKT-01M3NTSCJQ.
+- **Criterion 5:** met by the docs/11 refresh in this PR.
+- **Criterion 3 is left unticked.** Most session-creating or role-changing tickets name such a test:
+  - TKT-01M29CKRG9: TestAPreUserCannotBecomeAMember
+  - TKT-01M29CKRFS: TestEachTransitionSignsOutAtOnce
+  - TKT-01M29CP2QK: TestChokepointRefusesSuspended
+  - TKT-01M29P9RSW: TestIssueRefusedUnlessActive
+  - TKT-01M29CKRF9: TestGroupMapNeverSignsInAnInactiveUser
+  - TKT-01M29CKRE9: TestNoProviderLetsAnInactiveUserIn
+
+  TKT-01M29CP2KZ and TKT-01M29CKRES issue no session and prove it with TestOneDoorIntoSessions. TKT-01M29CXK1X (admin users, groups and permissions), which changes roles, does not name a test showing that a role change cannot let a pending or suspended user reach member endpoints. It relies on member.Require refusing every inactive account, which TestPhase2ExitSuspendedMember (TKT-01M3NTSCMN) exercises end to end. Whether that is enough is the maintainer's call.
+
+## Summary
+
+Phase 2 was groomed on 2026-09-28 and 2026-09-29, and again during the run for the drafts that lanes filed: PRs #167, #181 and #203. The decision spikes are closed, with decisions in docs/03, 04, 05, 07, 08 and 10. Every open phase-2 ticket carries a Settled in grooming plan. docs/13 and TKT-01M3NTSCJQ carried the maintainer's grant, and the run closed the Phase 2 exit gate with TKT-01M3NTSCMN on 2026-09-30. Criterion 3 is left unticked for TKT-01M29CXK1X; see the closing note.

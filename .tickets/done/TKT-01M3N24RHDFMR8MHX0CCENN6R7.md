@@ -22,12 +22,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-30T01:11:19Z
+updated_at: 2026-09-30T04:49:40Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-krh9
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -46,7 +46,7 @@ An archived forum is read-only (docs/04 "permissions", decided 2026-09-28 in TKT
 - [x] docs/04 and docs/07 describe the behaviour as built
 - [x] POST /forums/{slug}/threads and POST /threads/{id}/posts in an archived forum answer conflict to every signed-in non-admin and succeed for an admin; a restricted archived forum stays not-found to a viewer without read
 - [x] The posting refusal reads forums.archived on every request, so an archive written outside SetForumArchived refuses the next post at once (TestArchivedRefusalIgnoresAStaleCache)
-- [ ] In an archived forum a moderator can still hide, restore, lock, pin and move a thread out, and moving a thread in is conflict to everyone but an admin
+- [x] In an archived forum a moderator can still hide, restore, lock, pin and move a thread out, and moving a thread in is conflict to everyone but an admin
 
 ## Implementation plan
 
@@ -116,6 +116,10 @@ Correction to the previous note: the draft route is PUT /api/v1/drafts/{thread_i
 **agent:claude-code/phase2-run-krh9** at 2026-09-30T01:11:19Z
 
 TKT-01M29CKRH9 (Implement thread rename and move) completes this ticket's seventh criterion, the move half it left open. POST /api/v1/admin/threads/{id}/move lets a moderator move a thread out of an archived forum, and moving one into an archived forum is conflict to everyone but an admin. The destination's flag is read from its forum row on the request; the move does not call readOnlyForum. TestMoveNeedsModerateInBothForums in internal/web/api/rename_test.go covers both directions. The box here is left as it was, since this ticket is done; this note records where the criterion was met.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T04:49:40Z
+
+Criterion 7 ticked by the Phase 2 run orchestrator on 2026-09-30. The move half landed with TKT-01M29CKRH9 (Implement thread rename and move), PR #193 at 052db1d. Moving a thread out of an archived forum works for a moderator, and moving one in is conflict except for an admin. The archived-forum moderation paths (hide, restore, lock, pin) were already unguarded here. The rename lane noted the same on this ticket.
 
 ## Summary
 

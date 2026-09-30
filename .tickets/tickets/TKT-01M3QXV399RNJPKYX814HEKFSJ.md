@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QXV399RNJPKYX814HEKFSJ
 title: Add rename and move to the thread screen
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -22,12 +22,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T04:04:40Z
+updated_at: 2026-09-30T04:49:40Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

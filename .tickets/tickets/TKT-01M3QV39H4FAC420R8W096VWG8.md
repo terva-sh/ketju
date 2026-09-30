@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QV39H4FAC420R8W096VWG8
 title: Clear the agent limits form's Saved status when a field is edited
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: low
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T00:23:12Z
-updated_at: 2026-09-30T03:54:29Z
+updated_at: 2026-09-30T04:49:40Z
 created_by:
   id: agent:claude-code/phase2-run-qh3gs2
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

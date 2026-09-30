@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NTSCJQ8XSYGTEZ6RXG29FM
 title: Drive Phase 2 to its exit gate autonomously
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -16,17 +16,10 @@ dependencies:
   - TKT-01M3NTSCMN7YYA0M8TMMQX6H6E
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-orchestrator
-  branch: run/phase2-promote
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-438e26c1
-  commit: 5fe97ee57b566857e001d7195a9b4a6d1adbb476
-  session: null
-  claimed_at: 2026-09-29T07:18:23Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-30T03:34:51Z
+updated_at: 2026-09-30T04:51:17Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -62,9 +55,9 @@ One note per merged PR goes here, written by the orchestrator in batches.
 
 ## Acceptance criteria
 
-- [ ] The Phase 2 exit ticket is done
-- [ ] Every recorded disagreement is listed in the summary for the maintainer
-- [ ] docs/11 counts are refreshed when the gate closes
+- [x] The Phase 2 exit ticket is done
+- [x] Every recorded disagreement is listed in the summary for the maintainer
+- [x] docs/11 counts are refreshed when the gate closes
 
 ## Notes
 
@@ -140,3 +133,34 @@ More merges, recorded by the orchestrator in one batch:
 - TKT-01M29CKRH9 (Implement thread rename and move): PR #193 at 052db1d, carried from #190. Review 1535's two mediums were fixed. All 8 criteria are ticked, which completes TKT-01M3N24RHD's criterion 7. The client controls are draft TKT-01M3QXV399, and the post-window overflow is draft TKT-01M3R33SR5.
 - TKT-01M3N24RM0 (Render remote markdown images as links rather than broken images): PR #195 at e425323. Reviewed clean. render.Version is 5.
 None of these recorded a disagreement. CI runs 1240 and 1242 timed out in internal/perm under runner load and passed on re-run; draft TKT-01M3R5P3CN covers that.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T04:49:52Z
+
+Final merges, written by the orchestrator in one batch:
+- TKT-01M3NTSCMN (Prove Phase 2's exit: approval registration and agent credentials e2e): PR #194 at 790b6dc. The review was clean; CI run 1270 passed on 6381d4d. The step-log lines for TestPhase2Exit* and phase2-exit.spec.ts are quoted in PR comments 19728 and 19796. All six criteria are ticked, and the tests found no product failure. The PR adds one CI step, "Phase 2 exit tests, by name", which docs/12 "Changing CI" allows. **The Phase 2 exit gate is closed.**
+- TKT-01M3A054TR (Report projection drift and quarantined threads in ketju fsck): PR #200 at 23f4cc8. It was carried from #196, whose test helper clashed with #192. Reviews 1536 and 1537 each raised a medium, and both were fixed. The final run was clean, and all six criteria are ticked. Adds db.OpenReadOnly and projection.Classify.
+- TKT-01M3QJYV4Z (Serve a post's current source to its author for editing): PR #205 at 7580e73, carried from #197, #199, #201 and #204. The review was clean and all three criteria are ticked. GET .../posts/{ordinal}/source is no-store. Main moved during CI by ticket files only (#203), and I agree with merging without a further carry.
+- TKT-01M3QQWA5Z (Add the flag item and dialog to the post menu): PR #202 at 8037b2e. Review 1538's medium and 1544's two mediums were fixed; the self-flag one was treated as security. The third run was clean, and all nine criteria are ticked. The thread view grew 1691 B, to 47415 of 60000 B gzip. **Behaviour change from TKT-01M29CP2PJ:** a kept flag whose auto-hide fails now answers the 200 receipt and logs ErrHideDeferred; `unavailable` now means nothing was kept. docs/07 and 08 say so.
+- Grooming PR #203 at a08a152: plans for seven run-filed drafts. Review 1540's two mediums were fixed, and the second run was clean. Six were promoted here: TKT-01M3QV39H4, 3QXV399, 3R0PM0K, 3R10VP3, 3R1WPNS and 3R33SR5. TKT-01M3R5P3CN (Keep the Go race tests inside their timeout under CI runner load) stays in draft on one open decision for the maintainer: whether the race step gets an explicit `-timeout`. The recommendation is no, because docs/12 does not let a run edit an existing step, and the planned template database removes the cause.
+- TKT-01M3N24RHD criterion 7 is ticked here, now that #193 delivered the move half.
+Main was green after each merge.
+
+## Summary
+
+The Phase 2 run closed its exit gate on 2026-09-30. TKT-01M3NTSCMN merged in PR #194, proving approval registration, denial, suspension and agent credentials end to end through the real serve, plus Playwright at 390 and 1440 px with axe. The run merged every ticket the gate depends on, the server work it picked up next, and its grooming, each on the docs/12 gate. It stopped at the gate as docs/13 says, leaving 23 Phase 2 tickets ready, mostly client screens. The merge log is in this ticket's notes.
+
+**Recorded disagreements: none.** A note on TKT-01M29CP2KZ from #154's branch once marked a finding "disagreement: pending maintainer". It was superseded when the maintainer decided TKT-01M3Q2V25E (an approved applicant signs in again).
+
+**Merged with a criterion unticked or met only approximately, for the maintainer to accept or reword:**
+- TKT-01M29CP2MG criterion 7: a suspended moderator gets 401, not 403, because member.Require answers 401 to every inactive account.
+- TKT-01M29CRJ50 criterion 3: the composer half is left to TKT-01M3R0PM0K, which is now ready.
+- TKT-01M29CRJ5J criterion 2: the client half is left to TKT-01M3QHKD21.
+- TKT-01M3NRYCP5 criterion 4: the reader bundle grew 116 B. TKT-01M3NRX2NN (+111 B) and TKT-01M29CP2P1 (+6 B) similarly meet "reader total unchanged" only approximately.
+- TKT-01M3M9RR26 criterion 3: TKT-01M29CXK1X names no test of its own for a pending or suspended user.
+
+**Open questions for the maintainer:**
+- A member who moderates a forum through a group grant has can_moderate, but the role-based staff gate refuses them lock, pin, move and slow mode (docs/07 "by role").
+- TKT-01M3R5P3CN: should the CI race step get an explicit -timeout? It stays in draft on this; the recommendation is no.
+- The flag route's answer changed in #202: a kept flag whose auto-hide fails now returns the 200 receipt rather than unavailable.
+
+**For the maintainer to delete:** remote branches of PRs closed without merging that are still on the server, for example run/crj4e-moderator-queue (#183). The run deletes a branch only after its PR merged.

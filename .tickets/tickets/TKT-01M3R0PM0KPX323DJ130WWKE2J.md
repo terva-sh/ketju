@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R0PM0KPX323DJ130WWKE2J
 title: Show slow mode in the composer and add the moderator's slow mode dialog
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -23,12 +23,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T04:21:39Z
+updated_at: 2026-09-30T04:49:40Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

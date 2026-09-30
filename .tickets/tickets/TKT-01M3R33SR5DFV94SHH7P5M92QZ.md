@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R33SR5DFV94SHH7P5M92QZ
 title: Bound the post edit and delete windows before making Durations
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: low
 due_on: null
@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:43:17Z
-updated_at: 2026-09-30T04:04:45Z
+updated_at: 2026-09-30T04:49:40Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
