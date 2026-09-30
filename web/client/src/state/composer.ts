@@ -1,6 +1,7 @@
 import { batch, signal, type Signal } from '@preact/signals';
 import { apiSend } from '../api/client';
-import type { CreatedPost, Draft } from '../api/dto';
+import type { CreatedPost, Draft, Millis } from '../api/dto';
+import { asProblem } from '../api/problem';
 import { insertBlock, quoteMarkdown } from '../composer/quote';
 import { drop, load, resetDrafts, watch, type DraftKey } from './drafts';
 import { isPhone } from './layout';
@@ -30,9 +31,34 @@ export interface Composer {
   // failure is why the last one was refused, until the next attempt.
   posting: Signal<boolean>;
   failure: Signal<unknown>;
+  // slowUntil is when slow mode next lets the viewer post from here, in
+  // Unix ms, or null (TKT-01M3R0PM0K); left is the whole seconds until then,
+  // 0 once it has passed, which one timer per composer counts down (hold).
+  // They are here, not in the component, because the phone's sheet unmounts
+  // the composer when it closes and the wait has to outlast that, as the
+  // draft does.
+  slowUntil: Signal<Millis | null>;
+  left: Signal<number>;
+  timer?: ReturnType<typeof setTimeout>;
+}
+
+// Slow is what the thread page says about slow mode for this viewer
+// (docs/07 "Slow mode"): the thread's interval, 0 for off; when the page
+// says they may next post; and whether they are exempt, as whoever
+// moderates the thread is (can_moderate).
+export interface Slow {
+  seconds: number;
+  nextPostAt: Millis | null;
+  exempt: boolean;
 }
 
 const composers = new Map<string, Composer>();
+
+function forget() {
+  for (const c of composers.values()) clearTimeout(c.timer);
+  composers.clear();
+  resetDrafts();
+}
 
 // owner is whose composers these are. A different viewer, signed in in the
 // same tab, starts with none: what one person wrote is not shown to the next
@@ -50,8 +76,7 @@ const draftKey = (thread: string): DraftKey => ({ kind: 'reply', thread });
 export function checkOwner() {
   const who = viewer.value.user?.handle ?? '';
   if (who !== owner) {
-    composers.clear();
-    resetDrafts();
+    forget();
     owner = who;
   }
 }
@@ -61,7 +86,7 @@ export function composerFor(thread: string): Composer {
   let c = composers.get(thread);
   if (!c) {
     const n: Composer = { source: signal(''), replyTo: signal(null), caret: signal(0), summoned: signal(0), open: signal(false),
-      posting: signal(false), failure: signal(null) };
+      posting: signal(false), failure: signal(null), slowUntil: signal(null), left: signal(0) };
     composers.set(thread, n);
     // Disarmed until loadReplyDraft answers, so a thread the reader may not
     // reply in, which is never loaded, never saves.
@@ -108,6 +133,28 @@ function summon(c: Composer) {
   if (isPhone.value) c.open.value = true;
 }
 
+// hold sets c's wait to until and counts it down. The count ticks on the
+// second boundaries of until, with one timer a second rather than one for
+// the whole wait: a browser fires a delay over 2^31 - 1 ms at once, and a
+// huge site default gives a next_post_at weeks away (TKT-01M3R33SR5). Each
+// tick reads the clock again, so a clock that jumps is followed.
+function hold(c: Composer, until: Millis | null) {
+  clearTimeout(c.timer);
+  c.slowUntil.value = until;
+  const ms = until === null ? 0 : until - Date.now();
+  c.left.value = ms > 0 ? Math.ceil(ms / 1000) : 0;
+  if (ms > 0) c.timer = setTimeout(() => hold(c, until), ms % 1000 || 1000);
+}
+
+// holdAtLeast keeps the later of thread's wait and at, the page's
+// next_post_at. A page never shortens the wait: it may be one fetched before
+// the viewer's own post, which still says null (review 1540 on PR #203).
+export function holdAtLeast(thread: string, at: Millis | null) {
+  const c = composerFor(thread);
+  const until = c.slowUntil.value;
+  if (at !== null && (until === null || at > until)) hold(c, at);
+}
+
 // quotePost inserts a quotation of post ordinal at the caret and brings the
 // composer up with the caret after it.
 export function quotePost(thread: string, ordinal: number, text: string) {
@@ -146,7 +193,12 @@ export function replyToThread(thread: string) {
 // It lives here rather than in the component because the sheet may close,
 // and the composer unmount, while the post is in flight; the answer still
 // has to clear the composer it came from.
-export async function postReply(thread: string): Promise<CreatedPost | null> {
+//
+// In slow mode a post starts the viewer's wait, unless they are exempt: the
+// page is not fetched again after a post, and would otherwise leave Send on
+// into a certain refusal. A rate-limited refusal starts the wait its
+// Retry-After names.
+export async function postReply(thread: string, slow?: Slow): Promise<CreatedPost | null> {
   const c = composerFor(thread);
   const source = c.source.value;
   if (c.posting.value || !source.trim()) return null;
@@ -166,9 +218,12 @@ export async function postReply(thread: string): Promise<CreatedPost | null> {
     c.replyTo.value = null;
     c.caret.value = 0;
     c.open.value = false;
+    if (slow && slow.seconds > 0 && !slow.exempt) hold(c, Date.now() + slow.seconds * 1000);
     return res;
   } catch (err) {
     c.failure.value = err;
+    const p = asProblem(err);
+    if (p.type === 'rate-limited' && p.retryAfter) hold(c, Date.now() + p.retryAfter * 1000);
     return null;
   } finally {
     c.posting.value = false;
@@ -176,7 +231,8 @@ export async function postReply(thread: string): Promise<CreatedPost | null> {
 }
 
 // discardReply empties thread's composer: the text, the chip and any
-// refusal, and deletes the draft.
+// refusal, and deletes the draft. The wait stays: it is the viewer's, not
+// the draft's.
 export function discardReply(thread: string) {
   const c = composerFor(thread);
   drop(draftKey(thread));
@@ -188,7 +244,6 @@ export function discardReply(thread: string) {
 
 // resetComposers forgets every composer, for tests.
 export function resetComposers() {
-  composers.clear();
-  resetDrafts();
+  forget();
   owner = null;
 }

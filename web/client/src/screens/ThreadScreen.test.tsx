@@ -369,6 +369,7 @@ describe('moderating from the thread screen', () => {
     };
     for (const kind of ['lock', 'unlock', 'pin', 'unpin', 'move'])
       routes[`POST /api/v1/admin/threads/${id}/${kind}`] = (b) => moderate[kind]?.(b) ?? problemAnswer('internal', 500);
+    routes[`PUT /api/v1/admin/threads/${id}/slow-mode`] = (b) => moderate['slow-mode']?.(b) ?? problemAnswer('internal', 500);
     server = stubServer(routes);
     as('moderator');
   });
@@ -639,6 +640,7 @@ describe('moderating from the thread screen', () => {
     const root = await renderAt(`/t/${id}/a/61/history`);
     expect(screenOf(root)).toBe('post-history');
     expect(offered(root)).toEqual([]);
+    expect(root.querySelector('[data-action=slow-mode]')).toBeNull();
     expect(named(root)).toEqual([]);
   });
 
@@ -848,5 +850,129 @@ describe('moderating from the thread screen', () => {
     expect(sendDisabled()).toBe(true);
     expect(document.activeElement).toBe(panel()!.querySelector('[data-moderate-close]'));
     expect(panel()!.querySelector('[data-moderate-close]')?.textContent).toBe('Close');
+  });
+
+  // TKT-01M3R0PM0K: slow mode, PUT …/slow-mode, in the same panel.
+  const puts = () => server.sent.filter((r) => r.method === 'PUT').map((r) => ({ url: r.url, body: r.body }));
+  const slowUrl = `/api/v1/admin/threads/${id}/slow-mode`;
+  const checked = () => panel()!.querySelector<HTMLInputElement>('input[type=radio]:checked')?.value;
+  const pick = (v: string) => act(async () => panel()!.querySelector<HTMLInputElement>(`input[value="${v}"]`)!.click());
+  async function custom(v: string) {
+    const f = panel()!.querySelector<HTMLInputElement>('input[inputmode=numeric]')!;
+    f.value = v;
+    await act(async () => void f.dispatchEvent(new Event('input', { bubbles: true })));
+  }
+  const notice = (root: HTMLElement) => root.querySelector('[data-slow-mode]')?.textContent ?? null;
+
+  it('a moderator sets slow mode', async () => {
+    pages = [at({ viewer: { slow_mode_seconds: 30 } }), at({ viewer: { slow_mode_seconds: 300 } })];
+    moderate['slow-mode'] = (b) => ({ status: 200, body: b, headers: { 'Cache-Control': 'no-store' } });
+    const root = await renderAt(`/t/${id}/a`);
+    expect(notice(root)).toBe('Slow mode: one post every 30 seconds');
+    const item = root.querySelector('[data-shell=toolbar] [data-action=slow-mode]')!;
+    expect(item.textContent).toBe('Slow mode…');
+    const before = gets();
+    await open(root, 'slow-mode');
+    expect(checked()).toBe('30');
+    expect([...panel()!.querySelectorAll('label')].map((l) => l.textContent)).toEqual([
+      'Off',
+      '10 seconds',
+      '30 seconds',
+      '1 minute',
+      '5 minutes',
+      'Custom',
+    ]);
+    await pick('300');
+    await submit();
+    await settle(root);
+    expect(puts()).toEqual([{ url: slowUrl, body: { seconds: 300 } }]);
+    expect(posts()).toEqual([]);
+    expect(gets()).toBe(before + 1);
+    expect(panel()).toBeNull();
+    expect(notice(root)).toBe('Slow mode: one post every 5 minutes');
+    expect(document.activeElement).toBe(root.querySelector('h1'));
+  });
+
+  it('a group moderator sets slow mode', async () => {
+    as('member');
+    pages = [at({ thread: { locked: true, pinned: { scope: 'global', until: null } }, viewer: { slow_mode_seconds: 0 } })];
+    moderate['slow-mode'] = (b) => ({ status: 200, body: b });
+    const root = await renderAt(`/t/${id}/a`);
+    // Offered whatever the thread's state, where lock and pin are not all.
+    expect(offered(root)).toEqual(['unlock']);
+    await open(root, 'slow-mode');
+    expect(checked()).toBe('0');
+    await pick('custom');
+    expect(panel()!.querySelector<HTMLInputElement>('input[inputmode=numeric]')!.value).toBe('0');
+    await custom('45');
+    await submit();
+    expect(puts()).toEqual([{ url: slowUrl, body: { seconds: 45 } }]);
+    expect(panel()).toBeNull();
+
+    // And from a phone's more menu.
+    server.sent.length = 0;
+    isPhone.value = true;
+    const phone = await renderAt(`/t/${id}/a`);
+    await act(async () => phone.querySelector<HTMLButtonElement>('.more > button')!.click());
+    await act(async () => phone.querySelector<HTMLButtonElement>('[data-shell=more-menu] [data-action=slow-mode]')!.click());
+    expect(panel()?.getAttribute('data-moderate')).toBe('slow-mode');
+    await pick('10');
+    await submit();
+    expect(puts()).toEqual([{ url: slowUrl, body: { seconds: 10 } }]);
+  });
+
+  it('a member is not offered slow mode', async () => {
+    for (const role of ['member', 'moderator', 'admin'] as const) {
+      as(role);
+      pages = [at({ viewer: { can_moderate: false, slow_mode_seconds: 30 } })];
+      const root = await renderAt(`/t/${id}/a`);
+      expect(root.querySelector('[data-action=slow-mode]'), role).toBeNull();
+      // The notice is every reader's.
+      expect(notice(root), role).toBe('Slow mode: one post every 30 seconds');
+    }
+  });
+
+  it('slow mode refusals stay beside the field', async () => {
+    let answer: Answer = problemAnswer('conflict', 409);
+    moderate['slow-mode'] = () => answer;
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'slow-mode');
+    await pick('300');
+    for (const [a, says] of [
+      [problemAnswer('conflict', 409), 'Slow mode is already set to that, or the thread is archived.'],
+      [problemAnswer('validation-failed', 422), 'Enter a whole number of seconds from 0 to 86400.'],
+      [problemAnswer('forbidden', 403), 'You can no longer moderate this thread.'],
+    ] as const) {
+      answer = a;
+      await submit();
+      await settle(root);
+      expect(panel()?.querySelector('[role=alert]')?.textContent, says).toBe(says);
+      expect(checked()).toBe('300');
+    }
+    expect(puts()).toHaveLength(3);
+
+    // A Custom value the server would refuse is refused here.
+    await pick('custom');
+    for (const v of ['86401', '-1', '1.5', 'ten', '']) {
+      await custom(v);
+      await submit();
+      expect(panel()?.querySelector('[role=alert]')?.textContent, v).toBe('Enter a whole number of seconds from 0 to 86400.');
+    }
+    expect(puts()).toHaveLength(3);
+  });
+
+  it('prefills Custom with a site default past what a thread takes, and refuses it', async () => {
+    pages = [at({ viewer: { slow_mode_seconds: 100_000 } })];
+    moderate['slow-mode'] = (b) => ({ status: 200, body: b });
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'slow-mode');
+    expect(checked()).toBe('custom');
+    expect(panel()!.querySelector<HTMLInputElement>('input[inputmode=numeric]')!.value).toBe('100000');
+    await submit();
+    expect(puts()).toEqual([]);
+    expect(panel()?.querySelector('[role=alert]')?.textContent).toBe('Enter a whole number of seconds from 0 to 86400.');
+    await custom('86400');
+    await submit();
+    expect(puts()).toEqual([{ url: slowUrl, body: { seconds: 86400 } }]);
   });
 });

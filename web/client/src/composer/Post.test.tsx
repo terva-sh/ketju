@@ -212,7 +212,35 @@ describe('a refused post', () => {
     expect(area(root).readOnly).toBe(false);
     expect(root.querySelector('.composer .reply-chip')?.getAttribute('data-reply-chip')).toBe('1');
     expect(location.pathname).toBe(`/t/${thread.id}/${thread.slug}`);
-    expect(postButton(root).disabled).toBe(false);
+    // Only a rate limit holds Post, until its Retry-After (below).
+    expect(postButton(root).disabled).toBe(type_ === 'rate-limited');
+  });
+
+  // TKT-01M3R0PM0K: another tab posted, or the clock is skewed.
+  it('rate-limited holds Post until Retry-After has passed', async () => {
+    serve(async () => problem('rate-limited', 429, { 'Retry-After': '30' }));
+    const root = await renderAt(path);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const run = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+    try {
+      await type(root, 'my reply');
+      await click(postButton(root));
+      await run(0);
+      expect(root.querySelector('[role=alert].post-failure')?.textContent).toContain('post again in 30 seconds');
+      expect(area(root).value).toBe('my reply');
+      expect(postButton(root).disabled).toBe(true);
+      expect(root.querySelector('[data-slow-wait]')?.textContent).toBe('You can post again in 0:30');
+      expect(postButton(root).getAttribute('aria-describedby')).toBe(root.querySelector('[data-slow-wait]')!.id);
+      await run(29_999);
+      expect(postButton(root).disabled).toBe(true);
+      expect(root.querySelector('[data-slow-wait]')?.textContent).toBe('You can post again in 0:01');
+      await run(1);
+      expect(postButton(root).disabled).toBe(false);
+      expect(root.querySelector('[data-slow-wait]')).toBeNull();
+      expect(area(root).value).toBe('my reply');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('forgets why on the next attempt', async () => {

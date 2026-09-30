@@ -24,7 +24,7 @@ import { isStaff, moderateKinds, threadActions, type PanelKind } from '../shell/
 import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
-import { composerFor, loadReplyDraft, quotePost, replyToPost } from '../state/composer';
+import { composerFor, loadReplyDraft, quotePost, replyToPost, type Slow } from '../state/composer';
 import { trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
@@ -112,7 +112,8 @@ export function ThreadScreen() {
   // Lock, unlock, pin and unpin are offered to a viewer the page says
   // moderates this thread's forum (can_moderate), on the thread body. A
   // global pin is staff's by role, which the viewer's own role says
-  // (moderateKinds). The panel is for the thread it was opened on, so moving
+  // (moderateKinds). Slow mode is offered to the same viewers whatever the
+  // thread's state. The panel is for the thread it was opened on, so moving
   // to another thread leaves it behind.
   const mayModerate = !history && (res.data?.viewer.can_moderate ?? false);
   const staff = isStaff(viewer.value.user?.role);
@@ -197,10 +198,12 @@ export function ThreadScreen() {
           kind={panel.kind}
           pinned={head.pinned}
           staff={staff}
+          slowSeconds={res.data?.viewer.slow_mode_seconds}
           offered={
             panel.kind === 'rename'
               ? offerRename
-              : mayModerate && (panel.kind === 'move' || moderateKinds({ locked, pinned, staff }).includes(panel.kind))
+              : mayModerate &&
+                (panel.kind === 'move' || panel.kind === 'slow-mode' || moderateKinds({ locked, pinned, staff }).includes(panel.kind))
           }
           returnTo={() => title.current}
           onChanged={res.retry}
@@ -295,6 +298,12 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   // On a phone the composer is a sheet the reply bar opens (Shell), and
   // the inline one is not drawn.
   const sheetOpen = composerFor(thread.id).open.value;
+  // Slow mode as the page says it; whoever moderates the thread is exempt.
+  const slow: Slow = {
+    seconds: page.viewer.slow_mode_seconds,
+    nextPostAt: page.viewer.next_post_at,
+    exempt: page.viewer.can_moderate,
+  };
   // A posted reply is shown where it landed: its permalink, which asks for
   // the page holding it at the log length the post made, and scrolls to it.
   // Nothing moves a reader who has left the thread while it was posting.
@@ -357,9 +366,9 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
       <ThreadFoot page={page} route={route} />
       {canReply &&
         (isPhone.value ? (
-          sheetOpen && <ComposerSheet thread={thread.id} authorOf={authorOf} postOf={postOf} onPosted={posted} />
+          sheetOpen && <ComposerSheet thread={thread.id} authorOf={authorOf} postOf={postOf} onPosted={posted} slow={slow} />
         ) : (
-          <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} />
+          <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} slow={slow} />
         ))}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
       {flagging && (

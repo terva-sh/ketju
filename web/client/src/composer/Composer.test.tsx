@@ -1,10 +1,11 @@
+import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Post, RenderResult, ThreadPage, UserSuggestions } from '../api/dto';
-import { composerFor, resetComposers } from '../state/composer';
+import type { CreatedPost, Post, RenderResult, ThreadPage, UserSuggestions } from '../api/dto';
+import { composerFor, resetComposers, type Slow } from '../state/composer';
 import { viewer } from '../state/viewer';
-import { renderAt, threadPage } from '../testing';
-import { mentionDelay, previewDelay } from './Composer';
+import { renderAt, threadPage, unmount } from '../testing';
+import { Composer, mentionDelay, previewDelay, slowModeText, waitText } from './Composer';
 import { draftDelay } from '../state/drafts';
 
 const thread = { id: '3yymw47g00001', slug: 'why-we-left-slack', title: 'Why we left Slack' };
@@ -514,5 +515,174 @@ describe('the toolbar', () => {
     await click(root.querySelector('[data-edit=bold]'));
     expect(area(root).value).toBe('make **this** bold');
     expect([area(root).selectionStart, area(root).selectionEnd]).toEqual([7, 11]);
+  });
+});
+
+// TKT-01M3R0PM0K: slow mode in the composer. The countdown cases render the
+// composer alone, so the clock and every timer are the fake ones from the
+// start, and a page's slow block is whatever the test hands it.
+describe('slow mode', () => {
+  const T0 = Date.UTC(2026, 8, 30, 12);
+  const day = 86_400_000;
+  let host: HTMLElement | null = null;
+  let posts: number;
+  beforeEach(async () => {
+    await unmount();
+    posts = 0;
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
+      if (init.method === 'POST' && url.endsWith('/posts')) {
+        posts++;
+        const created: CreatedPost = { post: page().posts[0], ordinal: 4, revision: 1, log_length: 2000 };
+        return new Response(JSON.stringify(created), { status: 201 });
+      }
+      throw new Error(`unexpected request ${url}`);
+    });
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(T0);
+  });
+  afterEach(async () => {
+    if (host) await act(() => render(null, host!));
+    host?.remove();
+    host = null;
+  });
+
+  const slow = (o: Partial<Slow> = {}): Slow => ({ seconds: 30, nextPostAt: null, exempt: false, ...o });
+  async function mount(s: Slow) {
+    host ??= document.body.appendChild(document.createElement('div'));
+    await act(() => render(<Composer thread={thread.id} authorOf={() => undefined} onPosted={() => {}} slow={s} />, host!));
+  }
+  const run = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+  const draft = (text: string) => act(() => void (composerFor(thread.id).source.value = text));
+  const send = () => host!.querySelector<HTMLButtonElement>('[data-post-reply]')!;
+  const wait = () => host!.querySelector('[data-slow-wait]')?.textContent ?? null;
+
+  it('shows the slow mode notice', async () => {
+    await mount(slow({ seconds: 30 }));
+    expect(host!.querySelector('[data-slow-mode]')?.textContent).toBe('Slow mode: one post every 30 seconds');
+    await mount(slow({ seconds: 0 }));
+    expect(host!.querySelector('[data-slow-mode]')).toBeNull();
+    expect(
+      [300, 60, 7200, 90, 3600, 1, 86400].map(slowModeText),
+    ).toEqual([
+      'Slow mode: one post every 5 minutes',
+      'Slow mode: one post every minute',
+      'Slow mode: one post every 2 hours',
+      'Slow mode: one post every 90 seconds',
+      'Slow mode: one post every hour',
+      'Slow mode: one post every second',
+      'Slow mode: one post every 24 hours',
+    ]);
+    expect([0, 4, 42, 60, 599, 3600, 3661, 3_456_000].map(waitText)).toEqual([
+      '0:00', '0:04', '0:42', '1:00', '9:59', '1:00:00', '1:01:01', '960:00:00',
+    ]);
+  });
+
+  it('holds Send until next_post_at', async () => {
+    await mount(slow({ nextPostAt: T0 + 42_000 }));
+    await draft('my reply');
+    expect(send().disabled).toBe(true);
+    expect(wait()).toBe('You can post again in 0:42');
+    expect(send().getAttribute('aria-describedby')).toBe(host!.querySelector('[data-slow-wait]')!.id);
+    await run(41_000);
+    expect(send().disabled).toBe(true);
+    expect(wait()).toBe('You can post again in 0:01');
+    await run(1_000);
+    expect(send().disabled).toBe(false);
+    expect(send().hasAttribute('aria-describedby')).toBe(false);
+    expect(wait()).toBeNull();
+    // It came back on the clock alone: the page was not asked for again.
+    expect(posts).toBe(0);
+  });
+
+  // Review 1564 on PR #211: a wait weeks long, from a huge site default,
+  // neither fires at once, as one timer that long would, nor runs a timer a
+  // second across the whole of it in the test.
+  it('a far wait holds Send', async () => {
+    const fake = globalThis.setTimeout;
+    let fired = 0;
+    globalThis.setTimeout = ((fn: () => void, ms?: number) =>
+      fake(() => {
+        fired++;
+        fn();
+      }, ms)) as typeof setTimeout;
+    try {
+      await mount(slow({ nextPostAt: T0 + 40 * day }));
+      await draft('my reply');
+      expect(send().disabled).toBe(true);
+      expect(wait()).toBe('You can post again in 960:00:00');
+      await run(3_000);
+      expect(wait()).toBe('You can post again in 959:59:57');
+      expect(send().disabled).toBe(true);
+
+      vi.setSystemTime(T0 + 40 * day - 5_000);
+      await run(1_000);
+      expect(wait()).toBe('You can post again in 0:04');
+      expect(send().disabled).toBe(true);
+      await run(3_999);
+      expect(send().disabled).toBe(true);
+      await run(1);
+      expect(Date.now()).toBe(T0 + 40 * day);
+      expect(send().disabled).toBe(false);
+      expect(wait()).toBeNull();
+      expect(fired).toBeLessThanOrEqual(10);
+    } finally {
+      globalThis.setTimeout = fake;
+    }
+  });
+
+  it('a post starts the wait', async () => {
+    await mount(slow({ seconds: 30 }));
+    await draft('first');
+    expect(send().disabled).toBe(false);
+    await act(() => send().click());
+    await run(0);
+    expect(posts).toBe(1);
+    await draft('second');
+    expect(send().disabled).toBe(true);
+    expect(wait()).toBe('You can post again in 0:30');
+    await run(29_999);
+    expect(send().disabled).toBe(true);
+    await run(1);
+    expect(send().disabled).toBe(false);
+  });
+
+  it('a moderator is never held', async () => {
+    await mount(slow({ seconds: 30, exempt: true }));
+    await draft('first');
+    await act(() => send().click());
+    await run(0);
+    expect(posts).toBe(1);
+    await draft('second');
+    expect(send().disabled).toBe(false);
+    expect(wait()).toBeNull();
+    // The notice still says the thread is in slow mode.
+    expect(host!.querySelector('[data-slow-mode]')).not.toBeNull();
+  });
+
+  // Review 1540 on PR #203: the page may be one fetched before the viewer's
+  // own post, so its next_post_at is later only when it is later.
+  it('the page never shortens the wait', async () => {
+    await mount(slow());
+    await draft('first');
+    await act(() => send().click());
+    await run(0);
+    await draft('second');
+    expect(wait()).toBe('You can post again in 0:30');
+    await mount(slow({ nextPostAt: T0 + 5_000 }));
+    expect(wait()).toBe('You can post again in 0:30');
+    await mount(slow({ nextPostAt: null }));
+    expect(wait()).toBe('You can post again in 0:30');
+    await run(29_999);
+    expect(send().disabled).toBe(true);
+    await run(1);
+    expect(send().disabled).toBe(false);
+
+    // A later one moves it.
+    await mount(slow({ nextPostAt: Date.now() + 60_000 }));
+    expect(send().disabled).toBe(true);
+    expect(wait()).toBe('You can post again in 1:00');
+    await mount(slow({ nextPostAt: null }));
+    expect(send().disabled).toBe(true);
   });
 });

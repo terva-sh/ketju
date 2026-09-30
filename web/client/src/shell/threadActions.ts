@@ -12,8 +12,9 @@ export interface ThreadActionTarget {
 export type ModerateKind = 'lock' | 'unlock' | 'pin' | 'unpin';
 
 // PanelKind is what the panel under the thread head can be open for: the
-// four above, and rename and move (docs/07 "Renaming and moving threads").
-export type PanelKind = ModerateKind | 'rename' | 'move';
+// four above, rename and move (docs/07 "Renaming and moving threads"), and
+// slow mode, PUT /api/v1/admin/threads/{id}/slow-mode (TKT-01M3R0PM0K).
+export type PanelKind = ModerateKind | 'rename' | 'move' | 'slow-mode';
 
 // ModerateState is what decides which moderation actions a thread offers:
 // its header's lock and pin, and whether the viewer is a moderator or admin
@@ -75,7 +76,9 @@ export interface ThreadActionOptions {
 // moderation follows the forum grant (docs/08 "Decided 2026-09-30"), so a
 // member who moderates the forum through a group is offered them too, and
 // Move with them: its route needs moderate in the thread's forum and the
-// destination, and the destination is the server's to judge.
+// destination, and the destination is the server's to judge. Slow mode is
+// offered with them too, whatever the thread's state: its route is on the
+// same gate and decides moderate in the same forum (TKT-01M3RQP0TG).
 //
 // Rename is offered when the page hands over rename (see ThreadScreen).
 export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions = {}): ShellAction[] {
@@ -85,7 +88,12 @@ export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions =
     ...(opts.firstUnread ? [{ id: 'first-unread', label: 'First unread', run: opts.firstUnread }] : []),
     ...(opts.rename ? [{ id: 'rename', label: 'Rename…', run: opts.rename }] : []),
     ...(m ? moderateKinds(m).map((k) => ({ id: k, label: moderateLabels[k], run: () => m.open(k) })) : []),
-    ...(m ? [{ id: 'move', label: 'Move…', run: () => m.open('move') }] : []),
+    ...(m
+      ? [
+          { id: 'move', label: 'Move…', run: () => m.open('move') },
+          { id: 'slow-mode', label: 'Slow mode…', run: () => m.open('slow-mode') },
+        ]
+      : []),
     {
       id: 'copy-link',
       label: 'Copy link',

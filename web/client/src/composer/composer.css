@@ -202,6 +202,20 @@
   color: var(--ink);
   font-size: 14px;
 }
+/* Slow mode: the thread's interval, and the viewer's wait, which counts
+   down beside the Post it holds (TKT-01M3R0PM0K). */
+.slow-mode,
+.slow-wait {
+  margin: 0;
+  padding: 8px 20px;
+  border-bottom: 1px solid var(--rule);
+  font-size: 13px;
+  color: var(--muted);
+}
+.slow-wait {
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
 .post-footer button {
   font: inherit;
   color: var(--muted);

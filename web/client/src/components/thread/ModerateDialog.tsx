@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
 import { apiGet, apiSend, forgetGets, peekGet } from '../../api/client';
-import type { Forum, ForumTree, Pinned, ThreadHeader } from '../../api/dto';
+import type { Forum, ForumTree, Pinned, SlowMode, ThreadHeader } from '../../api/dto';
 import { asProblem, isProblem, problemMessage, revokesAccess } from '../../api/problem';
 import { forumsUrl } from '../../screens/ForumIndex';
 import type { PanelKind } from '../../shell/threadActions';
@@ -18,6 +18,20 @@ export const maxModerateReason = 500;
 // (threads.MaxTitle).
 export const maxTitle = 200;
 
+// slowModeMax is the longest slow mode a thread takes, in seconds, as
+// threads.MaxSlowModeSeconds is on the server.
+export const slowModeMax = 86400;
+
+// The slow mode choices, by seconds, and Custom, which takes any.
+const slowChoices = [
+  ['0', 'Off'],
+  ['10', '10 seconds'],
+  ['30', '30 seconds'],
+  ['60', '1 minute'],
+  ['300', '5 minutes'],
+  ['custom', 'Custom'],
+];
+
 const titles: Record<PanelKind, string> = {
   lock: 'Lock this thread',
   unlock: 'Unlock this thread',
@@ -25,6 +39,7 @@ const titles: Record<PanelKind, string> = {
   unpin: 'Unpin this thread?',
   rename: 'Rename this thread',
   move: 'Move this thread',
+  'slow-mode': 'Slow mode for this thread',
 };
 const buttons: Record<PanelKind, string> = {
   lock: 'Lock',
@@ -33,10 +48,13 @@ const buttons: Record<PanelKind, string> = {
   unpin: 'Unpin',
   rename: 'Rename',
   move: 'Move',
+  'slow-mode': 'Save',
 };
 
 export const moderateChanged = 'This thread changed while you were working.';
 export const moderateForbidden = 'You can no longer moderate this thread.';
+export const slowModeConflict = 'Slow mode is already set to that, or the thread is archived.';
+export const slowModeInvalid = `Enter a whole number of seconds from 0 to ${slowModeMax}.`;
 
 // moderateRefusal is what a refused action says. A conflict is another
 // moderator, or an archive, getting there first; forbidden is a grant
@@ -48,12 +66,16 @@ export const moderateForbidden = 'You can no longer moderate this thread.';
 // does not moderate, since the list is every forum they can read
 // (destinations), and its not-found a destination gone since the list
 // loaded.
+//
+// Slow mode is conflict for the value the thread already has too, which the
+// client cannot foresee: a thread with no value of its own takes any.
 export function moderateRefusal(kind: PanelKind, err: unknown): string {
   const p = asProblem(err);
   const named = kind === 'rename' || kind === 'move';
+  const slow = kind === 'slow-mode';
   switch (p.type) {
     case 'conflict':
-      return named ? 'This thread changed while you were working, or is already there.' : moderateChanged;
+      return named ? 'This thread changed while you were working, or is already there.' : slow ? slowModeConflict : moderateChanged;
     case 'forbidden':
       return kind === 'move' ? 'You cannot move this thread there.' : named ? problemMessage(p).text : moderateForbidden;
     case 'validation-failed':
@@ -61,7 +83,9 @@ export function moderateRefusal(kind: PanelKind, err: unknown): string {
         ? 'Choose an end after now, or leave it empty.'
         : kind === 'rename'
           ? `Enter a title of 1 to ${maxTitle} characters.`
-          : problemMessage(p).text;
+          : slow
+            ? slowModeInvalid
+            : problemMessage(p).text;
     case 'not-found':
       return kind === 'move' ? 'That forum is no longer there.' : problemMessage(p).text;
     default:
@@ -100,6 +124,12 @@ export function destinations(forums: Forum[], current: string, admin: boolean): 
 // rename or move keeps what was typed or chosen, and onWindowClosed hears a
 // rename-window-closed.
 //
+// Slow mode is a choice of intervals, or Custom's seconds, prefilled from
+// the page's slow_mode_seconds (slowSeconds). It is a PUT that answers the
+// value rather than a header and appends no record, so the page is asked
+// for again, and its viewer block, whose change changes the ETag, shows
+// the new value.
+//
 // It is inline, not modal: it keeps the thread head, where the lock and pin
 // notes change, in view, and needs no focus trap. Focus goes to its first
 // control when it opens, and to returnTo, the thread's title, when it closes
@@ -117,6 +147,7 @@ export function ModerateDialog({
   kind,
   pinned,
   staff,
+  slowSeconds = 0,
   offered,
   returnTo,
   onChanged,
@@ -129,6 +160,7 @@ export function ModerateDialog({
   kind: PanelKind;
   pinned: Pinned | null;
   staff: boolean;
+  slowSeconds?: number;
   offered: boolean;
   returnTo: () => HTMLElement | null;
   onChanged: () => void;
@@ -147,6 +179,8 @@ export function ModerateDialog({
   const [loadError, setLoadError] = useState<unknown>(null);
   const [scope, setScope] = useState<'forum' | 'global'>('forum');
   const [until, setUntil] = useState('');
+  const [choice, setChoice] = useState(slowChoices.some(([v]) => v === String(slowSeconds)) ? String(slowSeconds) : 'custom');
+  const [custom, setCustom] = useState(String(slowSeconds));
   const [sending, setSending] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   // Set synchronously, so a second press before the render that disables
@@ -180,6 +214,9 @@ export function ModerateDialog({
   const length = [...trimmed].length;
   const unready =
     (kind === 'rename' && (length === 0 || length > maxTitle || trimmed === current.title)) || (kind === 'move' && !dest);
+  // The seconds chosen: NaN for a Custom value that is not a whole number.
+  const typed = custom.trim();
+  const seconds = choice === 'custom' ? (/^\d+$/.test(typed) ? Number(typed) : NaN) : Number(choice);
 
   const body = (): unknown => {
     switch (kind) {
@@ -194,6 +231,8 @@ export function ModerateDialog({
         return { title: trimmed };
       case 'move':
         return { forum: dest };
+      case 'slow-mode':
+        return { seconds };
     }
   };
 
@@ -201,11 +240,19 @@ export function ModerateDialog({
     e.preventDefault();
     if (!offered || badUntil || unready || inFlight.current) return;
     if (kind === 'unpin' && !pinned) return;
+    // A value the server would refuse is refused here, in its words.
+    if (kind === 'slow-mode' && !(seconds <= slowModeMax)) return setRefused(slowModeInvalid);
     inFlight.current = true;
     setSending(true);
     setRefused(null);
     try {
       const t = encodeURIComponent(thread);
+      if (kind === 'slow-mode') {
+        await apiSend<SlowMode>('PUT', `/api/v1/admin/threads/${t}/slow-mode`, body(), { status: 200 });
+        onChanged();
+        onClose();
+        return;
+      }
       const header = await apiSend<ThreadHeader>(
         kind === 'rename' ? 'PATCH' : 'POST',
         kind === 'rename' ? `/api/v1/threads/${t}` : `/api/v1/admin/threads/${t}/${kind}`,
@@ -342,6 +389,31 @@ export function ModerateDialog({
                   ))}
               </select>
             </label>
+          )}
+          {kind === 'slow-mode' && (
+            <>
+              <fieldset>
+                <legend>Time between posts</legend>
+                {slowChoices.map(([v, label]) => (
+                  <label key={v}>
+                    <input
+                      type="radio"
+                      name={`moderate-slow-${thread}`}
+                      value={v}
+                      checked={choice === v}
+                      onChange={() => setChoice(v)}
+                    />
+                    {label}
+                  </label>
+                ))}
+              </fieldset>
+              {choice === 'custom' && (
+                <label class="moderate-field">
+                  Seconds between posts
+                  <input inputMode="numeric" value={custom} onInput={(e) => setCustom(e.currentTarget.value)} />
+                </label>
+              )}
+            </>
           )}
           {kind === 'move' && loadError !== null && (
             <p class="moderate-refused" role="alert">

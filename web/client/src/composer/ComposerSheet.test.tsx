@@ -233,6 +233,50 @@ describe('closing the sheet', () => {
     tool.dispatchEvent(mid);
     expect(mid.defaultPrevented).toBe(false);
   });
+
+  // TKT-01M3R0PM0K, review 1540 on PR #203: closing the sheet unmounts the
+  // composer, and the page it is given again still says next_post_at null,
+  // since it was fetched before the post. The wait the post started holds.
+  it('reopening the sheet keeps the wait', async () => {
+    const p = page();
+    p.viewer = { ...p.viewer, slow_mode_seconds: 30, next_post_at: null, can_moderate: false };
+    let posts = 0;
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
+      if (init.method === 'POST' && url.endsWith('/posts')) {
+        posts++;
+        return new Response(JSON.stringify({ post: p.posts[0], ordinal: 2, revision: 1, log_length: p.thread.log_length }), { status: 201 });
+      }
+      return new Response(JSON.stringify(p), { status: 200 });
+    });
+    const root = await renderAt(path);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'Date'] });
+    const run = (ms: number) => act(async () => void (await vi.advanceTimersByTimeAsync(ms)));
+    const post = () => root.querySelector<HTMLButtonElement>('.sheet-head [data-post-reply]')!;
+    try {
+      await click(root.querySelector('.replybar-open'));
+      expect(root.querySelector('.composer-sheet [data-slow-mode]')?.textContent).toBe('Slow mode: one post every 30 seconds');
+      await type(root, 'first');
+      expect(post().disabled).toBe(false);
+      await click(post());
+      await run(0);
+      expect(posts).toBe(1);
+      expect(sheet(root)).toBeNull();
+
+      await run(10_000);
+      await click(root.querySelector('.replybar-open'));
+      await type(root, 'second');
+      expect(post().disabled).toBe(true);
+      expect(root.querySelector('.composer-sheet [data-slow-wait]')?.textContent).toBe('You can post again in 0:20');
+      await run(19_999);
+      expect(post().disabled).toBe(true);
+      await run(1);
+      expect(post().disabled).toBe(false);
+      expect(root.querySelector('[data-slow-wait]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 // AC4, as far as a DOM without layout can see it: the sheet follows the

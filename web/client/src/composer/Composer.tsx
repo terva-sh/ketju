@@ -1,7 +1,8 @@
+import { useLayoutEffect } from 'preact/hooks';
 import type { CreatedPost } from '../api/dto';
 import { asProblem, problemMessage } from '../api/problem';
 import { Icon } from '../components/Icon';
-import { composerFor, discardReply, postReply } from '../state/composer';
+import { composerFor, discardReply, holdAtLeast, postReply, type Slow } from '../state/composer';
 import { draftNote } from '../state/drafts';
 import { ComposerBody } from './ComposerBody';
 
@@ -19,6 +20,14 @@ export { mentionDelay, previewDelay } from './ComposerBody';
 // text, which stays. The source and the chip are autosaved as the viewer's
 // draft (state/drafts.ts), and the footer says how that stands.
 //
+// In slow mode (slow, from the thread page) it says the thread's interval,
+// and while the viewer must wait, Post is off with a countdown beside it
+// (TKT-01M3R0PM0K). The wait is the later of the page's next_post_at and
+// what this composer has seen since: the viewer's own post, or a refusal's
+// Retry-After (state/composer.ts). The client's clock decides when Post
+// comes back; one that runs fast is refused, and the Retry-After starts the
+// wait again.
+//
 // In the phone's sheet (ComposerSheet, sheet set) it is the same composer
 // laid out as a column that fills the sheet, toolbar last, and it takes
 // focus when it opens, since the sheet opens because someone asked to write.
@@ -26,14 +35,20 @@ export function Composer({
   thread,
   authorOf,
   onPosted,
+  slow,
   sheet = false,
 }: {
   thread: string;
   authorOf: (ordinal: number) => string | undefined;
   onPosted: (res: CreatedPost) => void;
+  slow?: Slow;
   sheet?: boolean;
 }) {
   const c = composerFor(thread);
+  const nextPostAt = slow?.nextPostAt ?? null;
+  // A layout effect, so Post is never shown on before the page's wait.
+  useLayoutEffect(() => holdAtLeast(thread, nextPostAt), [thread, nextPostAt]);
+  const left = c.left.value;
   const source = c.source.value;
   const posting = c.posting.value;
   const failure = c.failure.value;
@@ -63,11 +78,23 @@ export function Composer({
         </>
       }
       notice={
-        failure !== null && (
-          <p class="post-failure" role="alert">
-            {postFailure(failure)}
-          </p>
-        )
+        <>
+          {!!slow?.seconds && (
+            <p class="slow-mode" data-slow-mode>
+              {slowModeText(slow.seconds)}
+            </p>
+          )}
+          {left > 0 && (
+            <p class="slow-wait" id={`slow-wait-${thread}`} data-slow-wait>
+              You can post again in {waitText(left)}
+            </p>
+          )}
+          {failure !== null && (
+            <p class="post-failure" role="alert">
+              {postFailure(failure)}
+            </p>
+          )}
+        </>
       }
       foot={
         <footer class="composer-foot">
@@ -78,7 +105,7 @@ export function Composer({
           <button type="button" class="discard" disabled={posting || (!source && replyTo === null)} onClick={() => discardReply(thread)}>
             Discard
           </button>
-          <PostButton thread={thread} onPosted={onPosted} />
+          <PostButton thread={thread} onPosted={onPosted} slow={slow} />
         </footer>
       }
     />
@@ -86,19 +113,32 @@ export function Composer({
 }
 
 // PostButton posts thread's composer. It is off while there is nothing to
-// post and while a post is in flight, and postReply refuses a second post
-// then too, so a double click posts once.
-export function PostButton({ thread, onPosted, label = 'Post reply' }: { thread: string; onPosted: (res: CreatedPost) => void; label?: string }) {
+// post, while a post is in flight, and while slow mode holds the viewer,
+// when it points to the countdown. postReply refuses a second post while
+// one is in flight, so a double click posts once.
+export function PostButton({
+  thread,
+  onPosted,
+  slow,
+  label = 'Post reply',
+}: {
+  thread: string;
+  onPosted: (res: CreatedPost) => void;
+  slow?: Slow;
+  label?: string;
+}) {
   const c = composerFor(thread);
   const posting = c.posting.value;
+  const held = c.left.value > 0;
   return (
     <button
       type="button"
       class="post-reply"
       data-post-reply
-      disabled={posting || !c.source.value.trim()}
+      disabled={posting || held || !c.source.value.trim()}
       aria-busy={posting}
-      onClick={() => void postReply(thread).then((res) => res && onPosted(res))}
+      aria-describedby={held ? `slow-wait-${thread}` : undefined}
+      onClick={() => void postReply(thread, slow).then((res) => res && onPosted(res))}
     >
       {posting ? 'Posting…' : label}
     </button>
@@ -126,4 +166,20 @@ export function postFailure(err: unknown): string {
     default:
       return problemMessage(err).text;
   }
+}
+
+// slowModeText says a slow mode of seconds, in minutes or hours when they
+// divide it evenly: "every 30 seconds", "every 5 minutes", "every hour".
+export function slowModeText(seconds: number): string {
+  const [n, unit] = seconds % 3600 ? (seconds % 60 ? [seconds, 'second'] : [seconds / 60, 'minute']) : [seconds / 3600, 'hour'];
+  return `Slow mode: one post every ${n === 1 ? unit : `${n} ${unit}s`}`;
+}
+
+// waitText writes a wait of left seconds as m:ss, or as h:mm:ss from an hour
+// up, with no upper bound on the hours.
+export function waitText(left: number): string {
+  const two = (n: number) => String(n).padStart(2, '0');
+  const h = Math.floor(left / 3600);
+  const m = Math.floor(left / 60) % 60;
+  return `${h ? `${h}:${two(m)}` : m}:${two(left % 60)}`;
 }

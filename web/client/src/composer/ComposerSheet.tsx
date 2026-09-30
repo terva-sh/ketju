@@ -2,7 +2,7 @@ import { useLayoutEffect, useRef } from 'preact/hooks';
 import type { CreatedPost, Post } from '../api/dto';
 import { Icon } from '../components/Icon';
 import { isControl, trapTab } from '../components/focus';
-import { composerFor } from '../state/composer';
+import { composerFor, type Slow } from '../state/composer';
 import { Composer, PostButton } from './Composer';
 
 // ComposerSheet is the phone's composer (docs/06 "Mobile", TKT-01M29CGBVN):
@@ -31,11 +31,13 @@ export function ComposerSheet({
   authorOf,
   postOf,
   onPosted,
+  slow,
 }: {
   thread: string;
   authorOf: (ordinal: number) => string | undefined;
   postOf: (ordinal: number) => Post | undefined;
   onPosted: (res: CreatedPost) => void;
+  slow?: Slow;
 }) {
   const c = composerFor(thread);
   const root = useRef<HTMLDivElement>(null);
@@ -87,7 +89,7 @@ export function ComposerSheet({
           <Icon name="back" size={18} />
         </button>
         <h2 id="composer-sheet-title">Reply</h2>
-        <PostButton thread={thread} onPosted={onPosted} label="Post" />
+        <PostButton thread={thread} onPosted={onPosted} slow={slow} label="Post" />
       </header>
       {answered && answered.html && (
         <figure class="sheet-context" data-answering={answered.ordinal}>
@@ -97,7 +99,7 @@ export function ComposerSheet({
           <div class="post-body" dangerouslySetInnerHTML={{ __html: answered.html }} />
         </figure>
       )}
-      <Composer thread={thread} authorOf={authorOf} onPosted={onPosted} sheet />
+      <Composer thread={thread} authorOf={authorOf} onPosted={onPosted} slow={slow} sheet />
     </div>
   );
 }
