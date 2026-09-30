@@ -19,11 +19,13 @@ dependencies:
   - TKT-01M29CEE4KNQBFP49FVSCRNZA4
   - TKT-01M29CCC0FVTZ2YXNXB2EK4R4Q
 blocks_on: none
-references: []
+references:
+  - ref: pr:226
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-30T12:21:27Z
+updated_at: 2026-09-30T12:21:32Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
