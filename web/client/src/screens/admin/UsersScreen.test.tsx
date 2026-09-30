@@ -78,6 +78,22 @@ describe('the users tab', () => {
     expect(detail.querySelector('select')).not.toBeNull();
   });
 
+  // TKT-01M3P0CYR3: the open account is in the address, so it can be
+  // linked to and replaced after a rename.
+  it('opens an account into the address, and closing takes it out and returns focus to its row', async () => {
+    viewer.value = asAdmin();
+    const root = await renderAt('/admin/users');
+    const depth = history.length;
+    await open(root, 'alice');
+    expect(location.pathname + location.search).toBe('/admin/users?user=alice');
+    expect(history.length).toBe(depth + 1);
+    await act(async () => [...root.querySelectorAll<HTMLButtonElement>('[data-detail] button')].find((b) => b.textContent === 'Close')!.click());
+    await settle(root);
+    expect(location.pathname + location.search).toBe('/admin/users');
+    expect(root.querySelector('[data-detail]')).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('[data-user="alice"]'));
+  });
+
   it('marks an identity provider membership, and offers no remove for it', async () => {
     viewer.value = asAdmin();
     const root = await renderAt('/admin/users');

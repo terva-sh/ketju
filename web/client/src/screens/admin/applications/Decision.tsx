@@ -5,6 +5,7 @@ import { isAbort, isProblem, type ProblemError } from '../../../api/problem';
 import { fieldMessage } from '../../../forms/messages';
 import { ConfirmButton } from '../common/ConfirmButton';
 import { Field } from '../common/Field';
+import { handleMessage } from '../common/handle';
 import { send } from '../common/send';
 import { hasStatus } from './ApplicationList';
 
@@ -22,19 +23,6 @@ import { hasStatus } from './ApplicationList';
 // now is and a sentence saying what happened.
 
 export const noteMax = 2000;
-
-// The approval's own handle codes (docs/07 "Applications"). They are not
-// form field codes, because a handle is no form's field.
-const handleWords: Record<string, string> = {
-  invalid_handle:
-    'A handle is 3 to 30 characters: lowercase letters, digits, _ and -. It starts with a letter or digit and does not end with -.',
-  reserved: 'That handle is kept for the site itself. Choose another.',
-  taken: 'That handle is in use, or was given up too recently to reuse. Choose another.',
-};
-
-export function handleMessage(code: string): string {
-  return Object.hasOwn(handleWords, code) ? handleWords[code] : 'That handle was not accepted. Choose another.';
-}
 
 // A note's codes are form field codes, said for a note, which may hold line
 // breaks and has its own limit.

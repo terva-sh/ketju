@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminUserDetail, AdminUserList, CreatedAgent, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
-import { renderAt, settle, unmount } from '../../testing';
+import { renderAt, route, settle, unmount } from '../../testing';
 import moderatorMe from '../../../../../internal/dto/testdata/golden/me.moderator.json';
 import userList from '../../../../../internal/dto/testdata/golden/admin-users.admin.json';
 import userAdmin from '../../../../../internal/dto/testdata/golden/admin-user.admin.json';
@@ -264,6 +264,23 @@ describe('the one-time token', () => {
     expect(anywhere()).not.toContain(token);
 
     await open(root, 'indexer');
+    expect(root.querySelector('[data-token-panel]')).toBeNull();
+    expect(anywhere()).not.toContain(token);
+  });
+
+  // TKT-01M3P0CYR3: the open account is the address's ?user=, so it also
+  // changes by history, not only by a click here.
+  it('is in the address only as the handle, and does not come back when the agent is reached through history', async () => {
+    const root = await createdWithToken();
+    expect(location.pathname + location.search).toBe('/admin/users?user=indexer');
+    await route('/admin/users');
+    await settle(root);
+    expect(root.querySelector('[data-detail]')).toBeNull();
+    expect(anywhere()).not.toContain(token);
+
+    await route('/admin/users?user=indexer');
+    await settle(root);
+    expect(root.querySelector('[data-detail="indexer"]')).not.toBeNull();
     expect(root.querySelector('[data-token-panel]')).toBeNull();
     expect(anywhere()).not.toContain(token);
   });

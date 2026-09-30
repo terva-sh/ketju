@@ -1,10 +1,18 @@
 import { useLocation } from 'preact-iso';
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { apiGet } from '../../api/client';
-import type { AdminUser, AdminUserDetail, AdminUserList, AgentInfo, CreatedAgent, IssuedCredential } from '../../api/dto';
+import type {
+  AdminUser,
+  AdminUserDetail,
+  AdminUserList,
+  AgentInfo,
+  CreatedAgent,
+  HandleChange,
+  IssuedCredential,
+} from '../../api/dto';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../../components/ErrorPanel';
-import { viewer } from '../../state/viewer';
+import { refreshViewer, viewer } from '../../state/viewer';
 import { AgentPanel } from './AgentPanel';
 import { ConfirmButton } from './common/ConfirmButton';
 import { Field } from './common/Field';
@@ -13,6 +21,7 @@ import { Table } from './common/Table';
 import { GroupsTab } from './GroupsTab';
 import { NewAgentForm } from './NewAgentForm';
 import { PermissionsTab } from './PermissionsTab';
+import { RenameControl } from './RenameControl';
 import { SuspensionPanel } from './SuspensionPanel';
 
 // UsersScreen is /admin/users (TKT-01M29CXK1X): the accounts, and for an
@@ -74,6 +83,17 @@ function listUrl(f: Filters, cursor = ''): string {
   return '/api/v1/admin/users' + (s ? '?' + s : '');
 }
 
+// userHref is the users tab with handle's detail open, or with none: the
+// other parameters of the address, such as the prefix the queue's author
+// link filtered by, are kept as they are (TKT-01M3P0CYR3).
+export function userHref(query: Record<string, string>, handle: string | null): string {
+  const q = new URLSearchParams(query);
+  if (handle === null) q.delete('user');
+  else q.set('user', handle);
+  const s = q.toString();
+  return '/admin/users' + (s ? '?' + s : '');
+}
+
 interface Filters {
   prefix: string;
   role: string;
@@ -82,16 +102,28 @@ interface Filters {
 }
 
 function UsersTab({ admin }: { admin: boolean }) {
-  const [filters, setFilters] = useState<Filters>({ prefix: '', role: '', status: '', kind: '' });
+  const { query, route } = useLocation();
+  // The prefix starts from the address, so a link to /admin/users?prefix=
+  // opens a filtered list; after that the filters live here, and typing does
+  // not rewrite the address.
+  const [filters, setFilters] = useState<Filters>(() => ({ prefix: query.prefix ?? '', role: '', status: '', kind: '' }));
   const [more, setMore] = useState<AdminUserList[]>([]);
   const [moreError, setMoreError] = useState<unknown>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  // The account whose detail is open is the address's ?user=, so a detail
+  // can be linked to and survives a reload, and a rename can replace it
+  // (TKT-01M3P0CYR3).
+  const selected = query.user || null;
   // created is the answer to creating an agent, until the new agent's
   // detail has taken it: its first detail, and the token it may carry,
   // which AgentPanel copies into its own state as it mounts and then clears
   // here (TKT-01M3QH3GS2). Choosing any account, or none, drops it too, so a
-  // token never waits here for a detail that is not coming.
+  // token never waits here for a detail that is not coming; and since the
+  // detail takes it as it mounts, Back and Forward find nothing to bring
+  // back.
   const [created, setCreated] = useState<CreatedAgent | null>(null);
+  // renamed is the handle the open account had before an admin renamed it
+  // here, for the detail under the new one to say so.
+  const [renamed, setRenamed] = useState<{ from: string; to: string } | null>(null);
   const tab = useRef<HTMLDivElement>(null);
   const closed = useRef<string | null>(null);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -143,14 +175,34 @@ function UsersTab({ admin }: { admin: boolean }) {
     }
   };
 
-  const choose = (handle: string | null) => {
+  const choose = (handle: string | null, replace = false) => {
+    if (handle === selected) return;
     setCreated(null);
-    setSelected(handle);
+    route(userHref(query, handle), replace);
   };
   const onCreated = (c: CreatedAgent) => {
     reload();
     setCreated(c);
-    setSelected(c.user.user.user.handle);
+    route(userHref(query, c.user.user.user.handle));
+  };
+  // A rename asks for the list again, so the row shows the new handle, and
+  // replaces the address, so Back does not return to a handle that now
+  // redirects.
+  //
+  // An admin who renamed their own account is still that account: the
+  // viewer takes the new handle at once, before the detail under it loads,
+  // so nothing that tells the viewer's own account by its handle (as
+  // SuspensionPanel's mayAct does) takes it for someone else's; then /me
+  // is asked for again.
+  const onRenamed = (change: HandleChange) => {
+    const me = viewer.value;
+    if (me.user && me.user.handle.toLowerCase() === change.previous.toLowerCase()) {
+      viewer.value = { ...me, user: { ...me.user, handle: change.handle } };
+      refreshViewer().catch(() => {});
+    }
+    reload();
+    setRenamed({ from: change.previous, to: change.handle });
+    choose(change.handle, true);
   };
   // Closing the detail returns focus to its row, when the list still has it.
   const close = () => {
@@ -158,6 +210,7 @@ function UsersTab({ admin }: { admin: boolean }) {
     choose(null);
   };
   useEffect(() => {
+    if (renamed && renamed.to !== selected) setRenamed(null);
     const h = closed.current;
     closed.current = null;
     if (selected === null && h !== null) {
@@ -239,6 +292,8 @@ function UsersTab({ admin }: { admin: boolean }) {
           initial={handover?.user ?? null}
           issued={handover?.credential ?? null}
           onIssuedTaken={() => setCreated(null)}
+          renamedFrom={renamed && renamed.to === selected ? renamed.from : null}
+          onRenamed={onRenamed}
         />
       )}
     </div>
@@ -253,6 +308,8 @@ function UserDetail({
   initial,
   issued,
   onIssuedTaken,
+  renamedFrom,
+  onRenamed,
 }: {
   handle: string;
   admin: boolean;
@@ -263,6 +320,10 @@ function UserDetail({
   initial: AdminUserDetail | null;
   issued: IssuedCredential | null;
   onIssuedTaken: () => void;
+  // renamedFrom is the handle this account had until an admin renamed it
+  // here: the detail says so and takes focus once it has loaded.
+  renamedFrom: string | null;
+  onRenamed: (change: HandleChange) => void;
 }) {
   const url = `/api/v1/admin/users/${encodeURIComponent(handle)}`;
   const res = useResource(url, (signal) => apiGet<AdminUserDetail>(url, { signal }));
@@ -276,6 +337,15 @@ function UserDetail({
   const [role, setRole] = useState<string | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
   const d = fresh ?? res.data;
+  // After a rename the Rename button focus was on has gone with the old
+  // detail, so the new one's heading takes focus once it is there.
+  const focusTitle = useRef(renamedFrom !== null);
+  useEffect(() => {
+    if (d && focusTitle.current) {
+      focusTitle.current = false;
+      title.current?.focus();
+    }
+  }, [!!d]);
   // shown is the detail on screen now, for a change that answers after the
   // render that started it. Every change applies its answer to that, by the
   // fields it made, so changes in flight together do not undo each other on
@@ -351,6 +421,11 @@ function UserDetail({
         </h2>
         {close}
       </div>
+      {renamedFrom && (
+        <p class="admin-muted" role="status" data-renamed>
+          Renamed from @{renamedFrom}. The old handle is kept for 90 days and sends visitors here.
+        </p>
+      )}
       <dl class="admin-facts">
         <dt>Status</dt>
         <dd data-status={u.status}>{u.status}</dd>
@@ -391,6 +466,7 @@ function UserDetail({
           )}
         </div>
       )}
+      {admin && <RenameControl handle={u.user.handle} url={url} onRenamed={onRenamed} />}
       {failed && (
         <p class="admin-error" role="alert">
           {failed}
