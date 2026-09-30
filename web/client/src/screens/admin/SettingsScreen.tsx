@@ -69,11 +69,18 @@ function shown(v: SettingValue): string {
 }
 
 // valueOf is a control's text as the key's JSON, or undefined when an
-// integer field holds something that is not a whole number. The range is
-// the server's to judge, and its allowed words to say.
+// integer field holds something that is not a whole number a JSON number
+// carries exactly. Past 2^53 Number rounds, and far past it gives Infinity,
+// which JSON writes as null, so either would save a value nobody typed
+// (Terva review 1595). The range is otherwise the server's to judge, and
+// its allowed words to say.
 function valueOf(s: SiteSetting, draft: string): SettingValue | undefined {
   if (s.kind === 'boolean') return draft === 'true';
-  if (s.kind === 'integer') return /^-?\d+$/.test(draft.trim()) ? Number(draft.trim()) : undefined;
+  if (s.kind === 'integer') {
+    const t = draft.trim();
+    const n = Number(t);
+    return /^-?\d+$/.test(t) && Number.isSafeInteger(n) ? n : undefined;
+  }
   return draft;
 }
 
@@ -98,9 +105,11 @@ function SettingField({ setting }: { setting: SiteSetting }) {
   const [failed, setFailed] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
 
+  // An edit clears both answers: neither says anything about the new text.
   const edit = (v: string) => {
     setDraft(v);
     setSaved(false);
+    setFailed(null);
   };
 
   const save = async (sent: string) => {
@@ -115,7 +124,11 @@ function SettingField({ setting }: { setting: SiteSetting }) {
     try {
       const res = await send<SiteSetting>('PUT', `${settingsUrl}/${encodeURIComponent(s.key)}`, { value });
       if (!res.ok) {
-        setFailed(isProblem(res.error, 'validation-failed') ? `That was not accepted. It takes ${s.allowed}.` : res.message);
+        // A refusal is of what was sent; the field may hold something else
+        // by now, which it would wrongly mark (Terva review 1595).
+        if (current.current === sent) {
+          setFailed(isProblem(res.error, 'validation-failed') ? `That was not accepted. It takes ${s.allowed}.` : res.message);
+        }
         return;
       }
       setFailed(null);

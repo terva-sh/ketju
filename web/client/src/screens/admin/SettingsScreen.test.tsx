@@ -227,10 +227,39 @@ describe('the site settings screen', () => {
     expect(control<HTMLInputElement>(root, 'flags.auto_hide_threshold').getAttribute('aria-invalid')).toBe('true');
     expect(status(root, 'flags.auto_hide_threshold')).toBeNull();
 
-    await type(root, 'flags.auto_hide_threshold', '1e3');
-    await submit(root, 'flags.auto_hide_threshold');
+    // Correcting the field clears the refusal, which was of the old value
+    // (Terva review 1595).
+    await type(root, 'flags.auto_hide_threshold', '4');
+    expect(error(root, 'flags.auto_hide_threshold')).toBeNull();
+    expect(control<HTMLInputElement>(root, 'flags.auto_hide_threshold').getAttribute('aria-invalid')).toBeNull();
+
+    // Not a whole number, or one a JSON number cannot carry exactly: past
+    // 2^53 Number rounds, and far past it JSON would send null. None is
+    // sent (Terva review 1595).
+    for (const bad of ['1e3', '9007199254740993', '9'.repeat(400)]) {
+      await type(root, 'flags.auto_hide_threshold', bad);
+      await submit(root, 'flags.auto_hide_threshold');
+      expect(error(root, 'flags.auto_hide_threshold')).toBe('Enter a whole number. It takes a whole number, 1 or more.');
+    }
     expect(writes()).toHaveLength(1);
-    expect(error(root, 'flags.auto_hide_threshold')).toBe('Enter a whole number. It takes a whole number, 1 or more.');
+  });
+
+  it('does not show a refusal for a value the field no longer holds', async () => {
+    let release!: () => void;
+    routes['PUT /api/v1/admin/settings/flags.auto_hide_threshold'] = () =>
+      new Promise((resolve) => {
+        release = () => resolve({ status: 422, body: { type: 'validation-failed', title: 'Validation failed', status: 422 } });
+      });
+    const root = await open();
+    await type(root, 'flags.auto_hide_threshold', '0');
+    await act(async () => {
+      form(root, 'flags.auto_hide_threshold').requestSubmit();
+    });
+    await type(root, 'flags.auto_hide_threshold', '4');
+    await act(async () => release());
+    await settle(root);
+    expect(error(root, 'flags.auto_hide_threshold')).toBeNull();
+    expect(control<HTMLInputElement>(root, 'flags.auto_hide_threshold').value).toBe('4');
   });
 
   it('clears Saved on an edit, and shows it for an answer only while the field holds what was sent', async () => {
