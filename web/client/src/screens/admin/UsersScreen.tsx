@@ -126,6 +126,16 @@ function UsersTab({ admin }: { admin: boolean }) {
   const [renamed, setRenamed] = useState<{ from: string; to: string } | null>(null);
   const tab = useRef<HTMLDivElement>(null);
   const closed = useRef<string | null>(null);
+  // now is the address as this tab last rendered it, and whether it is
+  // still mounted, for an answer that arrives after the render that asked.
+  const now = useRef({ live: true, query, selected });
+  now.current = { live: true, query, selected };
+  useEffect(
+    () => () => {
+      now.current.live = false;
+    },
+    [],
+  );
   const [loadingMore, setLoadingMore] = useState(false);
   // list counts the lists this tab has shown: a filter change starts a new
   // one, and a More answer for an older list is dropped rather than
@@ -183,10 +193,10 @@ function UsersTab({ admin }: { admin: boolean }) {
     }
   };
 
-  const choose = (handle: string | null, replace = false) => {
+  const choose = (handle: string | null) => {
     if (handle === selected) return;
     setCreated(null);
-    route(userHref(query, handle), replace);
+    route(userHref(query, handle));
   };
   const onCreated = (c: CreatedAgent) => {
     reload();
@@ -202,15 +212,24 @@ function UsersTab({ admin }: { admin: boolean }) {
   // so nothing that tells the viewer's own account by its handle (as
   // SuspensionPanel's mayAct does) takes it for someone else's; then /me
   // is asked for again.
+  //
+  // A rename that answers after the admin has left the tab, or opened
+  // another account, moves nobody (Terva review 1597): the list is fetched
+  // afresh when the tab is next shown, and one still shown is asked for
+  // again. The viewer's own handle is corrected either way.
   const onRenamed = (change: HandleChange) => {
     const me = viewer.value;
     if (me.user && me.user.handle.toLowerCase() === change.previous.toLowerCase()) {
       viewer.value = { ...me, user: { ...me.user, handle: change.handle } };
       refreshViewer().catch(() => {});
     }
+    const { live, query: q, selected: open } = now.current;
+    if (!live) return;
     reload();
+    if (open?.toLowerCase() !== change.previous.toLowerCase()) return;
     setRenamed({ from: change.previous, to: change.handle });
-    choose(change.handle, true);
+    setCreated(null);
+    route(userHref(q, change.handle), true);
   };
   // Closing the detail returns focus to its row, when the list still has it.
   const close = () => {

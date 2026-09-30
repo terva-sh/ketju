@@ -158,6 +158,42 @@ describe('renaming an account', () => {
     expect(server.sent.some((s) => s.url === '/api/v1/me')).toBe(false);
   });
 
+  // Terva review 1597: an answer that arrives after the admin moved on
+  // moves nobody back.
+  it('leaves the admin where they went when the rename answers after they left the screen', async () => {
+    let answer!: () => void;
+    server.routes['POST /api/v1/admin/users/alice/rename'] = () =>
+      new Promise((r) => (answer = () => r({ status: 200, body: renamed('alicia', 'alice') })));
+    server.routes['GET /api/v1/admin/audit'] = () => ({ status: 200, body: { entries: [], next_cursor: '' } });
+    const root = await renderAt('/admin/users?user=alice');
+    await attempt(root, 'alicia');
+    await route('/admin/audit');
+    await settle(root);
+    await act(async () => answer());
+    await settle(root);
+    expect(location.pathname + location.search).toBe('/admin/audit');
+    expect(server.sent.some((s) => s.url === '/api/v1/admin/users/alicia')).toBe(false);
+  });
+
+  it('keeps the account the admin opened when the rename of another answers', async () => {
+    let answer!: () => void;
+    server.routes['POST /api/v1/admin/users/alice/rename'] = () =>
+      new Promise((r) => (answer = () => r({ status: 200, body: renamed('alicia', 'alice') })));
+    const root = await renderAt('/admin/users?user=alice');
+    await attempt(root, 'alicia');
+    await open(root, 'bob');
+    server.routes['GET /api/v1/admin/users'] = () => ({ status: 200, body: list('alicia', 'bob') });
+    await act(async () => answer());
+    await settle(root);
+    expect(location.search).toBe('?user=bob');
+    expect(root.querySelector('[data-detail="bob"]')).not.toBeNull();
+    expect(root.querySelector('[data-renamed]')).toBeNull();
+    // The list is still asked for again, and shows the new handle.
+    await settle(root);
+    expect(server.sent.filter((s) => s.url === '/api/v1/admin/users')).toHaveLength(2);
+    expect(root.querySelector('[data-user="alicia"]')).not.toBeNull();
+  });
+
   it('says on the field that the old handle is kept and redirects', async () => {
     const root = await renderAt('/admin/users?user=alice');
     const input = field(root)!;
