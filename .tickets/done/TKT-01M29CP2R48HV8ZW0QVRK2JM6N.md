@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2R48HV8ZW0QVRK2JM6N
 title: Build the audit log query and admin view
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,17 +23,10 @@ references:
     path: docs/08-moderation.md
   - ref: pr:220
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-cp2r4
-  branch: run/cp2r4-audit-log
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa80f4148362320ca
-  commit: 94ce6d89dad22d6baaeef0a790ec8e75ab87ba42
-  session: null
-  claimed_at: 2026-09-30T10:42:43Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T11:07:26Z
+updated_at: 2026-09-30T11:43:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -53,9 +46,9 @@ The log is only worth writing if somebody can read it. In a small community the 
 
 - [x] GET /api/v1/admin/audit filters by actor handle or system, action or action prefix, target type and id, and a time range, alone and combined, and pages newest first by an opaque keyset cursor (TestAuditPageFilters, TestAuditPageKeyset)
 - [x] No code path in the application updates or deletes an entry, and this ticket adds no write path (TestAuditLogAppendOnly, TestOneWayIntoAuditLog)
-- [ ] Each entry whose target is a user, forum, thread, post, setting, flag, application, group, permission or form carries an href and the screen renders it as a link; a blob or identity target has none; an absent user draws as deleted-user-<id>; a thread.moved entry carries both forums in related (TestAuditTargetsLink)
-- [ ] The endpoint and /admin/audit answer 401 to anonymous and 403 to pre-user, member and moderator viewers, forum-scoped moderators and members who moderate through a group included, and 200 to admins, and docs/08 records that the log is admin-only (TestAuditIsAdminOnly)
-- [ ] audit.Actions lists every action written today, post.redacted, blob.deleted, thread.title_redacted, thread.renamed, thread.moved, thread.slow_mode, user.renamed, flag.resolved and flag.dismissed included; it matches docs/04 audit_log in both directions; and the answer's actions fill the screen's action filter (TestActionsDocumented, AuditScreen.test.tsx)
+- [x] Each entry whose target is a user, forum, thread, post, setting, flag, application, group, permission or form carries an href and the screen renders it as a link; a blob or identity target has none; an absent user draws as deleted-user-<id>; a thread.moved entry carries both forums in related (TestAuditTargetsLink)
+- [x] The endpoint and /admin/audit answer 401 to anonymous and 403 to pre-user, member and moderator viewers, forum-scoped moderators and members who moderate through a group included, and 200 to admins, and docs/08 records that the log is admin-only (TestAuditIsAdminOnly)
+- [x] audit.Actions lists every action written today, post.redacted, blob.deleted, thread.title_redacted, thread.renamed, thread.moved, thread.slow_mode, user.renamed, flag.resolved and flag.dismissed included; it matches docs/04 audit_log in both directions; and the answer's actions fill the screen's action filter (TestActionsDocumented, AuditScreen.test.tsx)
 - [ ] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total stays at 47415 B, and the dist from go generate ./internal/web/spa is committed
 
 ## Implementation plan
@@ -216,3 +209,24 @@ Criteria: AC1 and AC2 are ticked. AC3, AC4 and AC5 each name the screen, and AC6
 **agent:claude-code/phase2-run-cp2r4** at 2026-09-30T11:07:26Z
 
 Review 1577 (PR #220, head 48e3da2, base 0ece891, run 1683f9a2, Actions run #1417), medium, "Treat to=0 as an active upper bound": fixed in be7071c. views.AuditFilter's From and To are now *int64, nil for no bound, so 0 bounds like any other value and ?to=0 answers nothing. TestAuditPageFilters (to the epoch, from the epoch) and TestAuditQueryParameters (?to=0, ?from=0) cover it; the view treating To of 0 as no bound again fails both. docs/07 says 0 is a bound. An earlier run on the same head (request ready-review-48e3da2, run 48641825) was superseded when PR #217 moved main, and published no result.
+
+**agent:claude-code/phase2-run-cp2r4** at 2026-09-30T11:43:33Z
+
+Screen built (PR 2 of 2), on main at 163c33a, after PR #221 released the dist and added the six `forum.*` actions to `audit.Actions` and docs/04.
+
+Criteria 3, 4 and 5 are now ticked. Their screen halves are in `AuditScreen.test.tsx`:
+- AC3: targets and `related` render as links, a blob and an absent account render as text, and an href that is not a path on this site is never drawn as a link.
+- AC4: `/admin/audit` for a moderator, a member and an anonymous reader says they have no access, offers no link, and asks the server nothing. The endpoint itself answers them 401 or 403 (`TestAuditIsAdminOnly`). A pre-user never reaches `/admin`: `ApplicantShell` sends them from any address to the application flow.
+- AC5: the answer's actions fill the action filter's datalist, each noun's prefix first.
+
+**AC6 is left unticked.** Three of its four parts hold: the screen is `src/screens/admin/AuditScreen.tsx`, `TestTheAdminBundleIsSeparate` passes, and the regenerated dist is committed. The fourth, "the reader total stays at 47415 B", does not. The reader is 47420 B gzip, 5 B more. Those 5 B are the one `{ path: '/admin/audit', ... }` entry in `routes.tsx`, the reader's route table, which every admin section needs. Building without that line gives exactly 47415 B, so none of the screen is in the reader. The budget is 60000 B, and 47420 B is 79.0% of it. The alternatives lost:
+- A wildcard `/admin/*` route would save the entry, but `routes.test.tsx` requires `/admin/nope` to be not-found.
+- Deriving the admin routes from a list only moves the bytes around.
+
+The 47415 B figure was written at grooming as "the reader does not grow". It did grow, by the route entry alone, so the box stays empty rather than ticked on a reading the words do not support.
+
+Admin chunk (gzip -9): JavaScript 19843 B to 21404 B, CSS 2215 B to 2235 B.
+
+## Summary
+
+Landed in two PRs. #220 (server half, main ff2e95a): GET /api/v1/admin/audit, admin only, with the service asking again. It filters by actor handle or system=1, action or prefix, target type and id, and from/to in Unix ms, and pages by an opaque keyset cursor on id. Migration 0019 adds the actor and action indexes. audit.Actions and the docs/04 audit-actions table are held together by TestActionsDocumented and to the writers by TestActionsCoverTheWriters; #221 then added the six forum.* actions. Every target type is labelled and linked, and thread.moved carries both forums in related. The second PR adds the /admin/audit screen in the lazy admin chunk: filters in the address, the answer's actions in the action filter, details as text, and Older by cursor. AC6 is unticked: the reader went from 47415 B to 47420 B gzip, and those 5 B are the /admin/audit route-table entry in routes.tsx (see the note). The disagreement record is empty; review 1577's medium finding (to=0) was fixed in #220.
