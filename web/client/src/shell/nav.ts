@@ -22,6 +22,26 @@ export function meHref(url: string): string {
   return u ? `/u/${encodeURIComponent(u.handle)}` : `/auth/signin?return_to=${encodeURIComponent(url)}`;
 }
 
+// linkSignInHref is the server's "link a sign-in" page (TKT-01M29CKRES,
+// docs/05 "Login flow" step 3), which comes back to url, the path and
+// query the reader is at, once the member has linked, or chosen not to. It
+// is outside clientScope too, so the link is a full page load. The entry
+// is on the member's own profile until the settings screens
+// (TKT-01M29CXK4) build /settings/identities, whose "add" is this link.
+export function linkSignInHref(url: string): string {
+  return `/auth/link?return_to=${encodeURIComponent(url)}`;
+}
+
+// sameHandle says whether two spellings name one handle. Handles are stored
+// with ASCII letters lowercased and compared without case (NormalizeHandle
+// in internal/service/identity/handle.go), so only A-Z fold here:
+// toLowerCase would fold more than the server does, the Kelvin sign to a
+// "k" among others.
+export function sameHandle(a: string, b: string): boolean {
+  const fold = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+  return fold(a) === fold(b);
+}
+
 // tabs are the phone's five (docs/06 "Mobile", mockup mtabbar()), from
 // url, the address the reader is at. Alerts routes to /notifications
 // (decided at claim for TKT-01M29CEE4K).

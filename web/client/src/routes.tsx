@@ -5,6 +5,7 @@ import { ForumIndex } from './screens/ForumIndex';
 import { NewThreadScreen } from './screens/NewThreadScreen';
 import { ThreadListScreen } from './screens/ThreadListScreen';
 import { NotFound, Placeholder } from './screens/Placeholder';
+import { ProfilePlaceholder } from './screens/ProfilePlaceholder';
 import { ThreadScreen } from './screens/ThreadScreen';
 
 // The admin screens are their own chunk, fetched the first time an /admin
@@ -127,7 +128,7 @@ export const routes: RouteEntry[] = [
   { path: '/watching', screen: 'watching', component: placeholder('watching', 'Watching') },
   { path: '/notifications', screen: 'notifications', component: placeholder('notifications', 'Alerts') },
   { path: '/search', screen: 'search', component: placeholder('search', 'Search') },
-  { path: '/u/:handle', screen: 'profile', component: placeholder('profile', 'Profile') },
+  { path: '/u/:handle', screen: 'profile', component: ProfilePlaceholder },
   { path: '/u/:handle/posts', screen: 'profile-posts', component: placeholder('profile-posts', 'Posts') },
   { path: '/settings', screen: 'settings', component: placeholder('settings', 'Settings') },
   { path: '/settings/sessions', screen: 'settings-sessions', component: placeholder('settings-sessions', 'Sessions') },

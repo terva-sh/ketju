@@ -207,6 +207,10 @@ describe('the route table', () => {
     ['/API/v1/me', true],
     ['https://ketju.test/auth/github/start', false],
     ['//ketju.test/auth/logout', false],
+    // The "link a sign-in" page (TKT-01M3QS0TMV) is the server's.
+    ['/auth/link', false],
+    ['/auth/link?return_to=%2F', false],
+    ['/auth/link?return_to=%2Fu%2Falice', false],
     ['/events?x=1', false],
     ['/events/x', true],
     ['/eventsource', true],

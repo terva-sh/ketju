@@ -34,6 +34,8 @@ export async function signIn(page: Page, who: string) {
 //   phase2-exit.spec.ts, per       5  waits out each 429 through through()
 //     project
 //   sign-in.spec.ts, per project   1  paceAuth(1) first
+//   link-sign-in.spec.ts, per      1  paceAuth(1) first
+//     project
 //   smoke.spec.ts, per project     0  starts from alice's stored session
 //
 // The rule for a new spec: one that spends /auth/* either calls paceAuth
