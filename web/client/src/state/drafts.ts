@@ -20,11 +20,13 @@ import { viewer } from './viewer';
 //
 // Leaving the page never waits on a promise (Terva review 1372). On pagehide
 // a key with nothing in flight has its save started inside the handler, with
-// keepalive. Any non-empty draft not yet seen saved is also kept in
-// localStorage with the server revision it was based on and the requests
-// that were in flight, and the next load in this browser decides by the
-// server's revision, never the client's clock, whether the copy or the
-// server's draft wins (restoreLocal).
+// keepalive. Any draft not yet seen saved is also kept in localStorage with
+// the server revision it was based on and the requests that were in flight,
+// and the next load in this browser decides by the server's revision, never
+// the client's clock, whether the copy or the server's draft wins
+// (restoreLocal). An empty copy is kept too while the server may still hold
+// a draft, so a post or a blanking that pagehide could not send is deleted
+// on the next load (Terva review 1580).
 
 export type DraftKey = { kind: 'reply'; thread: string } | { kind: 'new'; forum: string };
 
@@ -65,6 +67,10 @@ interface Entry {
   armed: boolean;
   loading: boolean;
   off: boolean;
+  // waiting is set from a rate-limited answer until its Retry-After has
+  // passed. Nothing is sent meanwhile, whatever changes or the page does:
+  // the timer then sends what is waiting (Terva review 1580).
+  waiting: boolean;
   // gen moves on drop, so a load answered after a post or discard does not
   // fill the composer, or take the queued DELETE's place as the server state.
   gen: number;
@@ -137,6 +143,7 @@ export function watch(key: DraftKey, read: () => Snapshot) {
     armed: false,
     loading: false,
     off: false,
+    waiting: false,
     gen: 0,
     sent: null,
     confirmed: null,
@@ -168,6 +175,7 @@ export function watch(key: DraftKey, read: () => Snapshot) {
 function changed(e: Entry, j: string) {
   if (!e.armed || e.off) return;
   if (j !== e.restoredJson) e.restored.value = false;
+  if (e.waiting) return;
   e.status.value = 'saving';
   schedule(e, draftDelay);
 }
@@ -186,6 +194,7 @@ function settled(e: Entry) {
 // a PUT, or a DELETE for an empty one the server is known to hold. An empty
 // draft the server is not known to hold sends nothing.
 function flush(e: Entry) {
+  if (e.waiting) return;
   clearTimeout(e.timer);
   e.timer = undefined;
   if (!e.armed || e.off) return;
@@ -202,7 +211,7 @@ function flush(e: Entry) {
 function enqueue(e: Entry, r: Req) {
   e.sent = r.json;
   e.held = !r.del;
-  if (e.current) e.next = r;
+  if (e.current || e.waiting) e.next = r;
   else start(e, r);
 }
 
@@ -246,7 +255,15 @@ function failed(e: Entry, r: Req, err: unknown) {
   e.held = unanswered ? null : r.prior;
   e.sent = null;
   e.status.value = 'failed';
-  if (isProblem(err, 'rate-limited')) schedule(e, ((err as ProblemError).retryAfter ?? draftDelay / 1000) * 1000);
+  if (isProblem(err, 'rate-limited')) {
+    e.waiting = true;
+    clearTimeout(e.timer);
+    e.timer = setTimeout(() => {
+      e.timer = undefined;
+      e.waiting = false;
+      if (!next(e)) flush(e);
+    }, ((err as ProblemError).retryAfter ?? draftDelay / 1000) * 1000);
+  }
 }
 
 function next(e: Entry): boolean {
@@ -335,7 +352,8 @@ interface Copy {
 // A copy with no base, whose load failed and none of whose saves were
 // answered, loses to a 200 and is restored on a 204, with a notice: it is
 // then the only record of what was written. So is one whose answer carried
-// no revision.
+// no revision. An empty copy that wins clears the composer's draft, which
+// the load then deletes; one that cannot be ordered is dropped.
 function restoreLocal(e: Entry, found: Snapshot | null, rev: number | null): { snapshot: Snapshot; notice: boolean } | null {
   const raw = storage(() => localStorage.getItem(copyKey(e)));
   if (!raw) return null;
@@ -347,7 +365,7 @@ function restoreLocal(e: Entry, found: Snapshot | null, rev: number | null): { s
     return null;
   }
   if (!c || typeof c.snapshot !== 'object' || !c.snapshot) return null;
-  if (c.base === null || rev === null) return found ? null : { snapshot: c.snapshot, notice: true };
+  if (c.base === null || rev === null) return found || isEmpty(c.snapshot) ? null : { snapshot: c.snapshot, notice: true };
   return rev <= c.base + (found ? c.inflight : c.deletes) ? { snapshot: c.snapshot, notice: false } : null;
 }
 
@@ -359,8 +377,11 @@ export function drop(key: DraftKey) {
   if (!e) return;
   removeCopy(e);
   if (e.off) return;
-  clearTimeout(e.timer);
-  e.timer = undefined;
+  // A Retry-After still running sends the DELETE when it has passed.
+  if (!e.waiting) {
+    clearTimeout(e.timer);
+    e.timer = undefined;
+  }
   e.gen++;
   e.next = null;
   e.restored.value = false;
@@ -370,13 +391,18 @@ export function drop(key: DraftKey) {
 
 // unload is pagehide. It awaits nothing and starts at most one request per
 // key: with a request for the key in flight a second could overtake it, and
-// the older text would win. A request queued behind one in flight is dropped,
-// since it would start only if the page lived. Every non-empty draft not seen
-// saved is kept locally, counting what is in flight.
+// the older text would win. Nothing starts while a Retry-After runs. A
+// request queued behind one in flight is dropped, since it would start only
+// if the page lived; the copy stands in for it, counting what is in flight.
+// Every non-empty draft not seen saved is kept, and an empty one while the
+// server may hold a draft: a post's DELETE queued behind a save in flight is
+// then sent by the next load, if nothing but that save reached the draft.
 function unload() {
   for (const e of entries.values()) {
-    clearTimeout(e.timer);
-    e.timer = undefined;
+    if (!e.waiting) {
+      clearTimeout(e.timer);
+      e.timer = undefined;
+    }
     if (!e.armed || e.off) continue;
     if (e.next) {
       e.held = e.next.prior;
@@ -388,7 +414,7 @@ function unload() {
     e.sent = e.current ? e.current.json : e.confirmed;
     const empty = isEmpty(snap);
     if (!e.current && (empty || new TextEncoder().encode(j).length < keepaliveLimit)) flush(e);
-    if (empty || !e.owner) continue;
+    if (!e.owner || (empty && !e.current && !e.held)) continue;
     const c: Copy = {
       snapshot: snap,
       base: e.known,
@@ -404,7 +430,7 @@ function unload() {
 // pagehide: what unload held back is saved as usual.
 function resume(ev: PageTransitionEvent) {
   if (!ev.persisted) return;
-  for (const e of entries.values()) if (e.armed && !e.off && JSON.stringify(e.read()) !== e.sent) schedule(e, 0);
+  for (const e of entries.values()) if (e.armed && !e.off && !e.waiting && JSON.stringify(e.read()) !== e.sent) schedule(e, 0);
 }
 
 // hidden saves what is waiting at once: on a phone a hidden page is often

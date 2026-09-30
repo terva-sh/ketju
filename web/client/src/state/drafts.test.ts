@@ -368,6 +368,50 @@ describe('refusals', () => {
     expect(draftNote(key)).toBe('Draft saved');
   });
 
+  // Terva review 1580, finding 2.
+  it('neither an edit, a hidden page nor pagehide shortens a Retry-After', async () => {
+    await loadReplyDraft(T);
+    let once = true;
+    refuse = (c) => {
+      if (c.method !== 'PUT' || !once) return undefined;
+      once = false;
+      return problem('rate-limited', 429, { 'Retry-After': '5' });
+    };
+    const c = composerFor(T);
+    c.source.value = 'a';
+    await wait(draftDelay);
+    await wait(1000);
+    c.source.value = 'ab';
+    await wait(draftDelay + 500);
+    Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true });
+    document.dispatchEvent(new Event('visibilitychange'));
+    delete (document as { visibilityState?: string }).visibilityState;
+    pagehide();
+    expect(writes()).toEqual(['PUT a']);
+    expect(copy()).toEqual({ snapshot: { source: 'ab', reply_to: null }, base: 0, inflight: 0, deletes: 0 });
+    await wait(1900);
+    expect(writes()).toEqual(['PUT a']);
+    await wait(100);
+    expect(writes()).toEqual(['PUT a', 'PUT ab']);
+  });
+
+  it('a post during a Retry-After deletes once it has passed', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'x';
+    await wait(draftDelay);
+    refuse = (c) => (c.method === 'PUT' ? problem('rate-limited', 429, { 'Retry-After': '5' }) : undefined);
+    c.source.value = 'the reply';
+    await wait(draftDelay);
+    refuse = () => undefined;
+    expect(await postReply(T)).not.toBeNull();
+    await wait(4900);
+    expect(writes()).toEqual(['PUT x', 'PUT the reply']);
+    await wait(100);
+    expect(writes()).toEqual(['PUT x', 'PUT the reply', 'DELETE']);
+    expect(server.live).toBeNull();
+  });
+
   it('another failure says so, and the next change retries', async () => {
     await loadReplyDraft(T);
     refuse = (c) => (c.method === 'PUT' ? problem('internal', 500) : undefined);
@@ -642,6 +686,86 @@ describe('the local copy', () => {
     const before = calls.filter((c) => c.body?.source === 'new text');
     expect(before).toEqual([]);
     expect(await restoredText()).toBe('new text');
+  });
+
+  // Terva review 1580, finding 1: pagehide drops the DELETE a post queued
+  // behind a save in flight, so the empty copy stands in for it.
+  it('a post while a save is in flight is deleted by the next load when the page goes', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'the reply';
+    await wait(draftDelay);
+    expect(await postReply(T)).not.toBeNull();
+    await tick();
+    pagehide();
+    expect(writes()).toEqual(['PUT the reply']);
+    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null }, base: 0, inflight: 1, deletes: 0 });
+    // The save lands after the post, and its answer is lost with the page.
+    lose(put);
+    expect(server.live).toEqual({ source: 'the reply', reply_to: null });
+    expect(await restoredText()).toBe('');
+    await tick();
+    expect(writes()).toEqual(['DELETE']);
+    expect(server.live).toBeNull();
+    expect(copy()).toBeNull();
+    expect(await restoredText()).toBe('');
+  });
+
+  it('a draft saved elsewhere after this tab’s post is kept', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'the reply';
+    await wait(draftDelay);
+    await postReply(T);
+    await tick();
+    pagehide();
+    lose(put);
+    apply({ method: 'PUT', url, body: { source: 'from the phone', reply_to: null }, keepalive: false });
+    expect(await restoredText()).toBe('from the phone');
+    await wait(draftDelay);
+    expect(writes()).toEqual([]);
+    expect(copy()).toBeNull();
+  });
+
+  it('blanking while a save is in flight is deleted by the next load when the page goes', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'a';
+    await wait(draftDelay);
+    c.source.value = '';
+    await wait(draftDelay);
+    pagehide();
+    lose(put);
+    expect(await restoredText()).toBe('');
+    await tick();
+    expect(writes()).toEqual(['DELETE']);
+    expect(server.live).toBeNull();
+  });
+
+  it('a DELETE sent on pagehide keeps an empty copy until it is answered', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'a';
+    await wait(draftDelay);
+    c.source.value = '';
+    const del = hold('DELETE');
+    pagehide();
+    expect(writes()).toEqual(['PUT a', 'DELETE']);
+    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null }, base: 1, inflight: 1, deletes: 1 });
+    await land(del);
+    expect(copy()).toBeNull();
+  });
+
+  it('an empty copy that cannot be ordered is dropped', async () => {
+    server = { revision: 0, live: null };
+    store({ source: '', reply_to: null }, null, 1, 0);
+    expect(await restoredText()).toBe('');
+    await tick();
+    expect(draftNote(key)).toBe('');
+    expect(copy()).toBeNull();
   });
 
   it('a delete elsewhere after a save of the copy’s text discards it', async () => {
