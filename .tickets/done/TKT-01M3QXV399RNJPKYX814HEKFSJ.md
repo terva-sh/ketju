@@ -19,11 +19,13 @@ dependencies:
   - TKT-01M3QGH66WA5X7DBGZS8662S5T
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
-references: []
+references:
+  - ref: pr:231
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T13:26:53Z
+updated_at: 2026-09-30T13:27:19Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
