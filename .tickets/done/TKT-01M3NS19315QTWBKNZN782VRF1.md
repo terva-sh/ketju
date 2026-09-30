@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T12:27:57Z
+updated_at: 2026-09-30T12:34:45Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -241,6 +241,10 @@ e2e: drafts.spec.ts replies to post 10, not post 2, because replies.spec.ts asse
 **agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:27:57Z
 
 Terva review 1580 on PR #227 (head 59c1641, base de1771d), both findings fixed in 9ee874f. Finding 1 (high), 'Keep a queued post DELETE when pagehide interrupts an in-flight save': pagehide now keeps an empty copy while the server may hold a draft. The next load deletes the draft when the revision is at most base + inflight, and keeps another device's draft otherwise. Tests: 'a post while a save is in flight is deleted by the next load when the page goes', 'a draft saved elsewhere after this tab's post is kept', 'blanking while a save is in flight is deleted by the next load when the page goes', 'a DELETE sent on pagehide keeps an empty copy until it is answered', and 'an empty copy that cannot be ordered is dropped'. Finding 2 (medium), 'Do not bypass Retry-After when the draft changes': after a 429 the key waits, and no edit, hidden page, pagehide or post sends before Retry-After has passed. Tests: 'neither an edit, a hidden page nor pagehide shortens a Retry-After' and 'a post during a Retry-After deletes once it has passed'. Bundle: 51188 B gzip.
+
+**agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:34:45Z
+
+Terva review 1583 on PR #227 (head 4617cce, base de1771d). It reports review 1580's finding 1 resolved. Finding 1 (high), 'Keep text typed before the initial GET completes on pagehide', is fixed. A disarmed key still sends nothing on pagehide, but its text is kept with base null. The next load restores it on a 204 with 'Restored from this browser'. On a 200 the server's draft wins, as settled on 2026-09-30 for every copy with no base: nothing orders the two, and restoring would overwrite a draft another device may have saved. Tests: 'text typed before the load answers is kept on pagehide, and restored on a 204' and 'text typed before the load answers loses to a server draft on the next load'. Finding 2 (medium), 'Honor Retry-After when a replacement was queued before the 429', is fixed: the 429 holds the queued request until Retry-After has passed. Test: 'a save queued before the 429 waits for Retry-After too'. Bundle: 51200 B gzip.
 
 ## Summary
 
