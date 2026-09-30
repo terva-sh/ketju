@@ -328,6 +328,14 @@ func TestMeShapes(t *testing.T) {
 				t.Fatalf("%d, Cache-Control %q: %s", rec.Code, rec.Header().Get("Cache-Control"), rec.Body)
 			}
 			got := decodeMe(t, rec.Body.Bytes())
+			// A pre-user's tag is the session's own, which is random here;
+			// TestMeTagsEachPreUserSession holds what it is.
+			if got.PreUser != nil {
+				if !regexp.MustCompile(`^[0-9a-f]{24}$`).MatchString(got.PreUser.Tag) {
+					t.Fatalf("pre_user.tag %q", got.PreUser.Tag)
+				}
+				got.PreUser.Tag = ""
+			}
 			gb, _ := json.Marshal(got)
 			wb, _ := json.Marshal(c.want)
 			if !bytes.Equal(gb, wb) {
@@ -350,6 +358,36 @@ func TestMeShapes(t *testing.T) {
 // too, so a member who moderates nothing pays nothing for the queue
 // (TKT-01M29CRJ4E). A viewer who moderates somewhere pays one count
 // statement more: four cold, three warm.
+// TestMeTagsEachPreUserSession: /me's pre_user.tag is the same on every
+// request of one applicant's session and differs for another session with
+// the same provider, which is all /me otherwise says about an applicant, so
+// the client can tell the two apart (TKT-01M3QVWKAG).
+func TestMeTagsEachPreUserSession(t *testing.T) {
+	w := newMeWorld(t)
+	tag := func(token string) string {
+		rec := w.get("/api/v1/me", token)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%d: %s", rec.Code, rec.Body)
+		}
+		me := decodeMe(t, rec.Body.Bytes())
+		if me.User != nil || me.PreUser == nil || me.PreUser.Provider != "github" {
+			t.Fatalf("not a pre-user of github: %+v", me)
+		}
+		return me.PreUser.Tag
+	}
+	a, b := sessiontest.PreUser(t, w.db, 1, w.now), sessiontest.PreUser(t, w.db, 1, w.now)
+	ta := tag(a)
+	if ta == "" || tag(a) != ta {
+		t.Fatalf("one session's tag is %q, then %q", ta, tag(a))
+	}
+	if tb := tag(b); tb == ta {
+		t.Fatalf("two sessions share the tag %q", ta)
+	}
+	if strings.Contains(ta, a) || strings.Contains(a, ta) {
+		t.Fatal("the tag is the cookie")
+	}
+}
+
 func TestMeBudget(t *testing.T) {
 	w := newMeWorld(t)
 	// The first request this process serves, from a brand-new perm cache.

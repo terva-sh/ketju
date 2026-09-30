@@ -344,7 +344,7 @@ func me(class string) Me {
 	case tPreUser:
 		return Me{
 			User:          nil,
-			PreUser:       &PreUser{Provider: "github"},
+			PreUser:       &PreUser{Provider: "github", Tag: "5b0e2c9d71a4f38e6c1d0b27"},
 			Unread:        UnreadCounts{},
 			Notifications: 0,
 			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25},

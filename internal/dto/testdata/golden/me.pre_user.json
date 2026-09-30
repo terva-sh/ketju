@@ -1,7 +1,8 @@
 {
   "user": null,
   "pre_user": {
-    "provider": "github"
+    "provider": "github",
+    "tag": "5b0e2c9d71a4f38e6c1d0b27"
   },
   "unread": {
     "threads": 0,

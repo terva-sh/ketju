@@ -75,7 +75,7 @@ describe('another tab', () => {
   it.each([
     ['signed out', ''],
     ['someone else', 'u:carol'],
-    ['an applicant', 'p:github'],
+    ['an applicant', `p:github:${preUser.pre_user.tag}`],
   ])('reloads a member’s page when a tab loads %s', (_, seen) => {
     tab(as(member));
     another().postMessage(seen);
@@ -98,6 +98,26 @@ describe('another tab', () => {
     tab(as(preUser));
     another().postMessage('');
     expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  // Terva review 1627: two applicants who signed in through one provider
+  // differ only by their session's tag.
+  it('reloads an applicant’s page when a tab loads another applicant of the same provider', () => {
+    const peer = another();
+    const heard: unknown[] = [];
+    peer.onmessage = (e) => heard.push(e.data);
+    tab(as(preUser));
+    expect(heard).toEqual([`p:github:${preUser.pre_user.tag}`]);
+    const other = as(preUser);
+    other.pre_user!.tag = 'a'.repeat(24);
+    peer.postMessage(`p:github:${other.pre_user!.tag}`);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('leaves an applicant’s page alone when a tab loads the same session', () => {
+    tab(as(preUser));
+    another().postMessage(`p:github:${preUser.pre_user.tag}`);
+    expect(reload).not.toHaveBeenCalled();
   });
 
   it('compares with the viewer as it is now, not as it loaded', () => {
@@ -151,6 +171,16 @@ describe('a restored page', () => {
     show(true);
     await settle();
     expect(urls).toEqual(['/api/v1/me']);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
+
+  it('reloads an applicant’s page when /me says another applicant of the same provider', async () => {
+    const other = as(preUser);
+    other.pre_user!.tag = 'a'.repeat(24);
+    answering(other);
+    tab(as(preUser));
+    show(true);
+    await settle();
     expect(reload).toHaveBeenCalledTimes(1);
   });
 

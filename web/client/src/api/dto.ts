@@ -221,7 +221,7 @@ export interface Settings {
 export interface Me {
   user: Author | null;
   // Set only for an approval-mode applicant, whose user is still null.
-  pre_user: { provider: string } | null;
+  pre_user: { provider: string; tag: string } | null;
   unread: UnreadCounts;
   notifications: number;
   // The moderator queue's item count, the top bar's badge; null for a viewer

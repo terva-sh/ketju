@@ -78,7 +78,7 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	sess, ok := session.From(ctx)
 	if v.PreUser && ok && sess.Kind == session.KindPreUser {
 		me := anonymousMe()
-		me.PreUser = &dto.PreUser{Provider: sess.Provider}
+		me.PreUser = &dto.PreUser{Provider: sess.Provider, Tag: sess.Tag()}
 		return s.withSiteName(ctx, me)
 	}
 	u, ok := accountOf(ctx, v)

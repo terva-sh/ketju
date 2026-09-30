@@ -21,9 +21,10 @@ import { viewer } from './viewer';
 // for the changes a page cannot learn of, and a reload also drops what
 // module memory holds, such as the last thread list (state/lists.ts).
 
-// who names a viewer: a member by handle, an applicant by provider, and ''
-// for nobody.
-const who = (m: Me) => (m.user ? `u:${m.user.handle}` : m.pre_user ? `p:${m.pre_user.provider}` : '');
+// who names a viewer: a member by handle, an applicant by provider and the
+// session's tag, which differs between two applicants of one provider (Terva
+// review 1627), and '' for nobody.
+const who = (m: Me) => (m.user ? `u:${m.user.handle}` : m.pre_user ? `p:${m.pre_user.provider}:${m.pre_user.tag}` : '');
 
 const channelName = 'ketju.viewer';
 

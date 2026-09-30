@@ -478,6 +478,11 @@ type PreUser struct {
 	// Provider is the configured key of the identity provider they signed in
 	// with, so the status page can say which account the application is for.
 	Provider string `json:"provider"`
+	// Tag is opaque and differs from one pre-user session to the next, so
+	// the client can tell two applicants who signed in with one provider
+	// apart (TKT-01M3QVWKAG): a page left open for one reloads when the
+	// browser is signed in as another. It grants nothing.
+	Tag string `json:"tag"`
 }
 
 // RenderResult is what one render of a post's source says: the HTML, and the

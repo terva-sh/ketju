@@ -136,6 +136,16 @@ func key(h sqltypes.SessionHash) string {
 	return hex.EncodeToString(sum[:12])
 }
 
+// Tag names the session to the browser that holds it, so the client can
+// tell one applicant's session from another's where /me says nothing else
+// that differs (TKT-01M3QVWKAG). It is a hash of the stored hash under its
+// own prefix, so it is neither the cookie, the row, nor the SessionKey a
+// cache is keyed by, and nothing can be signed in with it.
+func (s Session) Tag() string {
+	sum := sha256.Sum256(append([]byte("ketju session tag\x00"), s.hash[:]...))
+	return hex.EncodeToString(sum[:12])
+}
+
 // Store reads and writes sessions.
 type Store struct {
 	DB *db.DB
