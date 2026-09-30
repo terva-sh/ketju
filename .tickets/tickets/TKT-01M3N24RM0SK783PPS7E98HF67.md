@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3N24RM0SK783PPS7E98HF67
 title: Render remote markdown images as links rather than broken images
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-n24rm0
+  branch: run/n24rm0-remote-images-as-links
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a6a066913edb55bf4
+  commit: c158b5f351a4fd17dfcbbfbc800f98e554bf0e7e
+  session: null
+  claimed_at: 2026-09-30T02:25:05Z
+  expires_at: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-29T07:18:13Z
+updated_at: 2026-09-30T02:25:06Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-n24rm0
   name: ""
 extensions: {}
 ---
