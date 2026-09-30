@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3RQP0TGP43KRWGW11XSN2T7
 title: Let forum moderators by grant lock, pin, move and set slow mode
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -19,15 +19,22 @@ blocks_on: none
 references:
   - ref: design:moderation
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-rqp0tg
+  branch: run/rqp0tg-moderator-grants
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a676793a476736961
+  commit: 1a9d140280e9708b00de3939c0454859b7998107
+  session: null
+  claimed_at: 2026-09-30T09:50:15Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T08:42:45Z
-updated_at: 2026-09-30T09:37:16Z
+updated_at: 2026-09-30T09:50:16Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-rqp0tg
   name: ""
 extensions: {}
 ---
