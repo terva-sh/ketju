@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QGH66WA5X7DBGZS8662S5T
 title: Add lock, unlock, pin and unpin to the thread screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -19,15 +19,22 @@ dependencies:
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qgh66w
+  branch: run/qgh66w-thread-moderation
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a7b5563de795ba7ca
+  commit: f388921469800497b3e8496ea4a023e3d41a7296
+  session: null
+  claimed_at: 2026-09-30T10:56:47Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-30T09:17:52Z
+updated_at: 2026-09-30T10:56:50Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-qgh66w
   name: ""
 extensions: {}
 ---
