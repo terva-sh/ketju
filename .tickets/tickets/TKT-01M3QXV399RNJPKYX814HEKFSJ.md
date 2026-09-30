@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T12:36:08Z
+updated_at: 2026-09-30T12:36:53Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
@@ -163,3 +163,7 @@ Groomed 2026-09-30 (TKT-01M3M9RR26). Now depends on TKT-01M3QGH66W (Add lock, un
 **agent:claude-code/phase2-groom** at 2026-09-30T09:18:54Z
 
 Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) Move is offered on viewer.can_moderate alone, by the maintainer decision of 2026-09-30 (docs/08) and TKT-01M3RQP0TG, which puts the move route behind the moderates gate. The Move half of 'Who is offered what' is carried verbatim and marked superseded. Criterion 2 was replaced by criterion 8, and the test is now 'a group moderator is offered rename and move'. (2) Engineering choice: the destination list stays built from GET /api/v1/forums. It is exact for staff, and a group moderator gets 'You cannot move this thread there.' for a forum they do not moderate. Carrying moderated slugs in /me lost as a change to every page load for one picker. (3) For TKT-01M3R33SR5's clamp, rename_until can be about 292 years ahead, and a setTimeout past 2^31-1 ms fires at once. So the timer goes through delayUntil in components/thread/deadline.ts, which this ticket or TKT-01M3PTT97X adds, whichever lands first. New criterion 9. (4) Corrected names: the contract test is web/client/src/api/contract.test.ts, the golden list names all five thread goldens, forumsUrl comes from screens/ForumIndex.tsx, apiSend is called with status 200, and the bundle figure is 47415 of 60000 B.
+
+**agent:claude-code/phase2-run-qxv399** at 2026-09-30T12:36:53Z
+
+Built and tested on a local branch, run/qxv399-rename-move, from main at de1771d, without the dist: two client lanes (reply autosave, then suspension controls) hold it first (docs/13 'Running two lanes'). Green locally: gofmt, go build, go vet, go test -race ./..., npx tsc --noEmit, vitest (52 files, 1577 tests), and the full Playwright suite (102 passed, 10 skipped) on the regenerated client. The reader bundle measured 49887 B gzip against 49019 B on de1771d, +868 B. Nothing is pushed. When the dist is free the commits are replayed onto origin/main, the client regenerated, and every check run again before the PR opens; the criteria are ticked then.
