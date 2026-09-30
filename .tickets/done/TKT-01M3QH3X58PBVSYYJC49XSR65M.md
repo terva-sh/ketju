@@ -17,11 +17,13 @@ origin: null
 dependencies:
   - TKT-01M29P9RSW21SCES335WERTBSF
 blocks_on: none
-references: []
+references:
+  - ref: pr:189
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T21:28:46Z
-updated_at: 2026-09-30T02:07:23Z
+updated_at: 2026-09-30T02:11:27Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
