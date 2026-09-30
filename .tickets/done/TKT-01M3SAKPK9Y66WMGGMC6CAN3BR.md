@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3SAKPK9Y66WMGGMC6CAN3BR
 title: Guard a reply post answered after the viewer changed
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-sakpk9
-  branch: run/sakpk9-reply-viewer-guard
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a15b02551a2d15e12
-  commit: 387c401689a9ca53acdbb432c90b0da348f601f2
-  session: null
-  claimed_at: 2026-09-30T19:56:04Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T14:13:32Z
-updated_at: 2026-09-30T23:48:49Z
+updated_at: 2026-09-30T23:49:04Z
 created_by:
   id: agent:claude-code/phase2-run-ns16vh
   name: ""
@@ -142,3 +135,9 @@ Checked against the changes that landed beside this one:
 - #250's `renderAt` preload does not affect the Post.test.tsx test.
 
 On the new base the mutation results are unchanged from the first note: viewer, identity, catch and success guards are each caught; the owner check is not, for the reason given there. Checks: typecheck, 2030 client tests, budget, gofmt, build, vet, `go test -race ./...`, Playwright on port 18981 (193 passed, 11 skipped). Reader bundle 60438 B gzip of 70000 B, +43 B over main's 60395 B.
+
+## Summary
+
+`postReply` in `web/client/src/state/composer.ts` now captures the owner before the POST. After the POST, a private `current(thread, c, who)` checks `viewer.peek()`'s handle, `owner`, and `composers.get(thread) === c`, the same checks as `createThread`'s. When the check fails, both the answer and the refusal return null. Nothing is dropped, cleared, held or recorded, so a stale answer cannot delete the next viewer's draft under their session, and cannot move their screen to the previous viewer's post. A change away and back with no lookup between is accepted and clears the draft as usual (review 1609). `state/drafts.ts` is unchanged (review 1585, accepted by the maintainer).
+
+Six tests were added: five in state/drafts.test.ts and one in composer/Post.test.tsx. Every criterion is ticked. Mutations catch the viewer, identity, catch and success guards. The owner check is implied by the identity check and kept as the plan requires (see the notes). Reader bundle +43 B, at 60438 B of 70000 B.
