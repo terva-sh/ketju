@@ -14,14 +14,32 @@ import { stateFile } from './session';
 // zero violations, with no exceptions. (A quote's source link once sat inside
 // the <summary> that collapses it, which nested-interactive reported; it is
 // now the quotation's first line, TKT-01M3BFSBPJ.)
+//
+// Each test runs one scan. Up to four scans once shared one test's 30 s
+// budget. While another CI run loaded the runner they used it up, and the
+// timeout fell on whichever scan or click was running at the time (runs 728,
+// 751 and 950, TKT-01M3MTQG5A). The page comes from the page fixture, so its
+// context is closed when a test fails as well as when it passes.
+
+test.use({ storageState: stateFile('alice') });
 
 const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
 
-const screens: { name: string; path: string; ready: string; open?: (page: Page, phone: boolean) => Promise<string | null> }[] = [
+// open puts a screen in its second state and says what it opened. opened
+// names that state in the test's title, which is fixed before the project,
+// and so the width, is known.
+const screens: {
+  name: string;
+  path: string;
+  ready: string;
+  opened?: string;
+  open?: (page: Page, phone: boolean) => Promise<string>;
+}[] = [
   {
     name: 'forum index',
     path: '/',
     ready: '[data-screen="forum-index"] [data-forum]',
+    opened: 'the forum picker open',
     open: async (page, phone) => {
       await page.locator(phone ? '[data-fab]' : '.forum-index .new-thread').click();
       await expect(page.getByRole('dialog')).toBeVisible();
@@ -34,6 +52,7 @@ const screens: { name: string; path: string; ready: string; open?: (page: Page, 
     // Page 1, where post 2 quotes post 1 (cmd/ketju e2e.go).
     path: `${seed.thread}?page=1`,
     ready: '#post-2 details.quote .quote-source',
+    opened: '#1’s replies or the composer sheet open',
     open: async (page, phone) => {
       // The desktop scans the reply expander open (TKT-01M29CGBW6); the
       // phone, its composer sheet, which would cover it.
@@ -55,23 +74,18 @@ async function scan(page: Page) {
   return violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`);
 }
 
+// One test per screen, state and theme: each loads the page in its theme,
+// opens the state if the test is for it, and runs one scan.
 for (const s of screens) {
-  test(`the ${s.name} passes the scan in both themes`, async ({ browser, isMobile }, info) => {
-    const ctx = await browser.newContext({ ...info.project.use, storageState: stateFile('alice') });
-    const page = await ctx.newPage();
-    await page.goto(s.path);
-    await expect(page.locator(s.ready).first()).toBeVisible();
+  for (const open of s.open ? [false, true] : [false]) {
     for (const colorScheme of ['light', 'dark'] as const) {
-      await page.emulateMedia({ colorScheme });
-      expect(await scan(page), `${s.name}, ${colorScheme}`).toEqual([]);
-    }
-    const open = await s.open?.(page, isMobile);
-    if (open) {
-      for (const colorScheme of ['light', 'dark'] as const) {
+      test(`the ${s.name}${open ? ` with ${s.opened}` : ''} passes the scan in the ${colorScheme} theme`, async ({ page, isMobile }) => {
         await page.emulateMedia({ colorScheme });
-        expect(await scan(page), `${s.name} with ${open}, ${colorScheme}`).toEqual([]);
-      }
+        await page.goto(s.path);
+        await expect(page.locator(s.ready).first()).toBeVisible();
+        const what = open ? `${s.name} with ${await s.open!(page, isMobile)}` : s.name;
+        expect(await scan(page), `${what}, ${colorScheme}`).toEqual([]);
+      });
     }
-    await ctx.close();
-  });
+  }
 }
