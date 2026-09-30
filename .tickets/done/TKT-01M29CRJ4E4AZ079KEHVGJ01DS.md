@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-30T01:37:46Z
+updated_at: 2026-09-30T01:48:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -296,6 +296,14 @@ Every 409 now goes to the handled notice ("Another moderator has already handled
 A flag item now renders the post's files with the thread view's `Attachments` component (components/thread/Post.tsx), as links to their blobs. An attachment-only post no longer says it has nothing to show. New test: "shows the files of a post with no words".
 
 The built client is regenerated. The thread-view bundle is 45708 B gzip against a 60000 B budget. All 1433 client tests pass.
+
+**agent:claude-code/phase2-run-crj4e** at 2026-09-30T01:48:40Z
+
+PR #185 passed a clean Terva review: run `2e8e6684-de66-40ab-b752-88c7b66bf17a` for `request:ready-review-e2dd240`, in [Actions run #1199](https://git.local.sothr.com/terva-sh/ketju/actions/runs/1199). It reviewed head e2dd2406e0e36b78ac8cfe944706eb4d0309bdc4 against base 034053c032f67c6252e9a7567d20d6319a55b334, and said both findings from review 1526 were resolved.
+
+CI on that head was `ci / Build and Test (pull_request)` [run 1198](https://git.local.sothr.com/terva-sh/ketju/actions/runs/1198). I read the step log: every step succeeded, including the Playwright smoke, go test (race), "built client is current" and the bundle budget.
+
+Main moved to 2fc352f in the meantime. That commit only changed TKT-01M3M9RR26's draft plans, other tickets' files, so the rebase merge replays this branch without conflict. This note is a ticket-only commit, so it takes a carried review.
 
 ## Summary
 
