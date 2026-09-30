@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3KFFFJRNQD0F5N6XN966V8T
 title: Add the mark-unread control to the thread page
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-kfffjr
+  branch: run/kfffjr-mark-unread
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae815ef097eb2996b
+  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
+  session: null
+  claimed_at: 2026-09-30T18:42:33Z
+  expires_at: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T08:51:44Z
+updated_at: 2026-09-30T18:42:36Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-kfffjr
   name: ""
 extensions: {}
 ---
