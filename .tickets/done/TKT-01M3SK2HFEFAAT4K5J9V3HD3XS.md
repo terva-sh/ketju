@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3SK2HFEFAAT4K5J9V3HD3XS
 title: Restore the registration form after a failed admin-forms e2e test
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-sk2hfe
-  branch: run/sk2hfe-restore-form
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a4ec715680bfd3cb3
-  commit: 387c401689a9ca53acdbb432c90b0da348f601f2
-  session: null
-  claimed_at: 2026-09-30T19:56:47Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T16:41:27Z
-updated_at: 2026-09-30T19:56:48Z
+updated_at: 2026-09-30T20:10:13Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -49,10 +42,10 @@ Reported by the Phase 2 run orchestrator on 2026-09-30.
 
 ## Acceptance criteria
 
-- [ ] admin-forms.spec.ts afterAll reads GET /api/v1/admin/forms/registration through context.request and, when its schema is not deep-equal to start.schema, posts start.schema to /api/v1/admin/forms/registration/versions with base_version set to the active version it read, expecting 201, all inside a try whose finally closes the context, so a failed request or expectation still closes it and its failure still reaches the report
-- [ ] The spec makes no /auth/* request, keeps serial mode, the one context from stateFile('ada') and info.project.use, the workers and fullyParallel checks, and its 10 tests with their names and assertions; playwright.config.ts is unchanged
-- [ ] The header comment says afterAll restores the seeded fields whatever happened, and cites this ticket
-- [ ] A note records a mutation run of e2e/admin-forms.spec.ts and e2e/apply.spec.ts on both projects with one admin-forms test broken after the save: only that test fails in each project, desktop's 'the corrected form saves as a new version' passes, and apply.spec.ts passes; the break is not committed
+- [x] admin-forms.spec.ts afterAll reads GET /api/v1/admin/forms/registration through context.request and, when its schema is not deep-equal to start.schema, posts start.schema to /api/v1/admin/forms/registration/versions with base_version set to the active version it read, expecting 201, all inside a try whose finally closes the context, so a failed request or expectation still closes it and its failure still reaches the report
+- [x] The spec makes no /auth/* request, keeps serial mode, the one context from stateFile('ada') and info.project.use, the workers and fullyParallel checks, and its 10 tests with their names and assertions; playwright.config.ts is unchanged
+- [x] The header comment says afterAll restores the seeded fields whatever happened, and cites this ticket
+- [x] A note records a mutation run of e2e/admin-forms.spec.ts and e2e/apply.spec.ts on both projects with one admin-forms test broken after the save: only that test fails in each project, desktop's 'the corrected form saves as a new version' passes, and apply.spec.ts passes; the break is not committed
 - [ ] CI's Playwright step passes on the PR, and its step log shows admin-forms' tests passing on both projects
 
 ## Implementation plan
@@ -110,3 +103,37 @@ Engineering decision taken here, with the alternative that lost:
 - A second form, a form-creation route, or a key parameter for `FormEditor.tsx`: the alternative that lost, above.
 - Restoring state in other specs. `admin-settings.spec.ts` already restores in `afterAll`. If another spec is found to leave shared state behind after a failure, file it as its own ticket.
 - `playwright.config.ts`, timeouts, retries and the CI image.
+
+## Notes
+
+**agent:claude-code/phase2-run-sk2hfe** at 2026-09-30T20:06:44Z
+
+Claimed against main at 387c401. Nothing under web/client/e2e, internal/web/api/forms.go, internal/service/forms or web/client/playwright.config.ts changed between the grooming base 13709f0 and 387c401 (`git log 13709f0..origin/main -- …` is empty), so the groomed plan stands as written and was not replaced; its `### Settled in grooming` items are untouched.
+
+Built to it in 9d10fdf: `afterAll` reads the form with `context.request.get(formUrl)` (expects 200) when `context` and `start` are both set; if `isDeepStrictEqual(now.schema, start.schema)` (node:util) is false it POSTs `{ base_version: now.active_version, schema: start.schema }` to `${formUrl}/versions`, expects 201, reads again and expects `schema` to equal `start.schema`. All inside `try`; `await context?.close()` in `finally` (review 1608). The header comment now says the last test restores in the editor and afterAll restores through the API whatever happened, citing this ticket. The spec makes no /auth/* request; serial mode, the one context from stateFile('ada') and info.project.use, the workers/fullyParallel checks and the 10 tests are unchanged; playwright.config.ts is unchanged.
+
+Dist: `go generate ./internal/web/spa` after the change leaves internal/web/spa/dist unchanged (`git add -N` then `git diff --stat` empty); reader bundle 56988 B / 70000 B.
+
+**agent:claude-code/phase2-run-sk2hfe** at 2026-09-30T20:06:45Z
+
+Clean run and version counts. Full suite, both projects, at 9d10fdf on port 18941 (`KETJU_E2E_PORT=18941 npx playwright test` from web/client): 175 passed, 11 skipped (the existing per-width skips in focus, shortcuts, targets and thread), exit 0. All 20 admin-forms tests passed, 10 per project.
+
+To show afterAll makes no POST on a clean run, a temporary probe (console.log of `start.active_version` in beforeAll, and of the active version and the deep-equal result in afterAll; never committed) was run on `e2e/admin-forms.spec.ts e2e/apply.spec.ts`, both projects: 28 passed. Phone started at version 1 and its afterAll saw version 3 with equal=true; desktop started at version 3, the number phone left, and its afterAll saw version 5 with equal=true. No restore version was added in between.
+
+**agent:claude-code/phase2-run-sk2hfe** at 2026-09-30T20:06:47Z
+
+Mutation run (criterion 4). The break, never committed: in 'version 1 opens read-only, and passes the scan in the light theme' (after the save, before the last test) the heading name `'Version 1, read-only'` was changed to `'Version 1, not there'`, so its `toBeFocused()` times out. The same temporary probe logging as the clean run was in place. Reverted afterwards by restoring the committed file; `git status` clean.
+
+- Both projects, no load: `KETJU_E2E_PORT=18941 npx playwright test e2e/admin-forms.spec.ts e2e/apply.spec.ts` gave 2 failed, 4 did not run, 22 passed. The only failures were phone's and desktop's 'version 1 opens read-only, and passes the scan in the light theme' (`Error: expect(locator).toBeFocused() failed`, element not found). In each project the two tests after it ('version 1, read-only passes the scan in the dark theme', 'the fields it started with are saved back') did not run. Phone's afterAll found version 2 with equal=false and restored the starting fields as version 3. Desktop started at version 3 and passed 'the corrected form saves as a new version, and passes the scan in the light theme' before reaching the broken test; its afterAll restored version 4 to version 5. apply.spec.ts passed both its tests on both projects.
+- Desktop alone (`--project=desktop`, same files, same break): 1 failed (the broken test), 2 did not run, 13 passed; afterAll restored version 2 as version 3.
+- Hook failure path, desktop alone, admin-forms only, with the break and afterAll's `toBe(201)` also changed to `toBe(299)`: the run finished (exit 1; 1 failed, 2 did not run, 11 passed) and the report carried both the test's error and the hook's `Error: save the starting fields back / Expected: 299 / Received: 201`. So a failed restore expectation still reaches the report, and finally still closed the context (the run did not hang).
+
+Before the change, for comparison: the same shape of mutation on main is TKT-01M3RZXGBA note 4 (2026-09-30), where desktop admin-forms failed earlier, at 'the corrected form saves as a new version', on the 5 s toContainText for `[data-preview] [data-field="pronouns"]`. Not re-run, as the plan allows.
+
+## Summary
+
+`web/client/e2e/admin-forms.spec.ts` now restores the registration form in `afterAll` whatever happened. It reads the form through `context.request` and, when the schema differs from the one the run started from, saves the starting schema back as a new version based on the version active now (201), then checks it. The read, the POST and the checks run in a `try`, and the context closes in `finally` (review 1608). When the last test passed there is nothing to restore, so a clean run adds no version: phone leaves version 3 and desktop starts from it.
+
+A deliberate break after the save ('version 1 opens read-only') now fails only that test in each project. Desktop's 'the corrected form saves as a new version' passes after phone's failure, and apply.spec.ts passes on both projects. Before this change, desktop failed earlier, at that save (TKT-01M3RZXGBA note 4). A broken restore still fails the hook in the report. The notes of 2026-10-01 give the commands and results. The break was never committed.
+
+#232's serial, shared-page structure, the stored session, the ten tests and playwright.config.ts are unchanged. The client dist is unchanged. Criterion 5 (CI's Playwright step on the PR) is ticked in a ticket-only commit once CI has run on the PR.
