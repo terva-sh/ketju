@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2R48HV8ZW0QVRK2JM6N
 title: Build the audit log query and admin view
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:moderation
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-cp2r4
+  branch: run/cp2r4-audit-log
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa80f4148362320ca
+  commit: 94ce6d89dad22d6baaeef0a790ec8e75ab87ba42
+  session: null
+  claimed_at: 2026-09-30T10:42:43Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T08:53:56Z
+updated_at: 2026-09-30T10:42:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-cp2r4
   name: ""
 extensions: {}
 ---
