@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T11:06:39Z
-updated_at: 2026-09-30T12:47:09Z
+updated_at: 2026-09-30T13:26:55Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
@@ -170,3 +170,77 @@ Groomed 2026-09-30 against main at 4918f90 (TKT-01M3M9RR26, Phase 2 grooming).
 **agent:claude-code/phase2-groom** at 2026-09-30T12:36:01Z
 
 Revised for Terva review 1582 on PR #225 (head f424f92, medium finding at line 137). The contention command started 14 background yes processes and never stopped them. It now runs inside a subshell that records their PIDs, and an EXIT trap kills and reaps them when Playwright finishes, whether it passes, fails or is interrupted. pgrep -c -x yes must show 0 before the next measurement. The contention criterion, which was number 6 and is now number 8, supersedes the old one and says the same.
+
+**agent:claude-code/phase2-run-rzxgba** at 2026-09-30T13:26:49Z
+
+Claimed against main at fa86711. The plan groomed at 4918f90 (PR #225) stands unrevised. Since 4918f90 main has not touched `admin-forms.spec.ts`, `admin-agents.spec.ts` or `playwright.config.ts`, so every line reference in the plan still holds. The `### Settled in grooming` items are therefore untouched.
+
+Built as the plan says, in commit "Bound the axe scans in the admin forms and agents Playwright tests" on branch `run/rzxgba-bound-admin-scans`:
+- Both files run under `test.describe.configure({ mode: 'serial' })`. `beforeAll({ browser }, info)` makes `browser.newContext({ ...info.project.use, storageState: stateFile('ada') })` and a page, and `afterAll` closes the context. The file-level `test.use({ storageState })` is gone.
+- `overflow(page, what)` and `scan(page, what, colorScheme)` replace the old `scan`. A small `dark(what)` registers each state's dark test. That test runs `scan(page, what, 'dark')` and then sets `light` back, so the plan's dark tests are written once per file.
+- admin-forms has 10 tests with 8 scans, and admin-agents 13 with 10, in the plan's order and with its titles. Each dark test is titled "<what> passes the scan in the dark theme".
+- admin-forms' two config guards and the read of `start` are in `beforeAll`, so they fail the file before anything is saved.
+- Only those two files changed: no helper, no config, nothing under `web/client/src`. `go generate ./internal/web/spa` left dist unchanged, and the reader bundle is 49019 B of 60000 B, as on main.
+
+Without load, both projects: 50 passed (46 plus 4 setup) in 41.2 s. The slowest test took 2.3 s (desktop, the editor, light).
+
+**agent:claude-code/phase2-run-rzxgba** at 2026-09-30T13:26:53Z
+
+Contention run, criterion 8. It was run on main at fa86711, where the specs are unchanged, and then on the branch, on a 12-core machine, from `web/client`:
+
+```
+(
+  pids=''
+  trap 'kill $pids 2>/dev/null; wait $pids 2>/dev/null' EXIT
+  for i in $(seq 14); do taskset -c 0,1 yes >/dev/null & pids="$pids $!"; done
+  TMPDIR=<scratch> GOROOT=<go 1.27.1> PLAYWRIGHT_JSON_OUTPUT_NAME=<scratch>/<label>.json KETJU_E2E_PORT=8843 \
+    taskset -c 0,1 npx playwright test e2e/admin-forms.spec.ts e2e/admin-agents.spec.ts --repeat-each=5 --reporter=list,json
+)
+pgrep -c -x yes || echo 'load gone'
+```
+
+The load was 14 `yes` loops pinned to cores 0 and 1 with the run. After each measurement `pgrep -c -x yes` printed 0 and `load gone`, and it printed 0 again before the branch run started. The only additions to the plan's command are the JSON reporter, which the durations below come from, and TMPDIR, so the run directory stays in agent scratch. Another lane (TKT-01M3S1TVPD) was running its own Playwright suite on the machine at the same time. Both measurements share that noise.
+
+Durations are in seconds, as min/median/max over five repeats.
+
+### main: 20 of 20 failed (12.9 min)
+- `admin-agents.spec.ts` "an admin provisions an agent and manages its token and limits": phone 32.7/33.1/33.7 | desktop 32.3/32.7/33.9 (10 of 10 timed out at 30 s)
+- `admin-forms.spec.ts` "an admin edits the registration form and saves a new version": phone 29.8/31.4/33.9 | desktop 28.2/31.7/32.2 (7 timed out at 30 s. 3 failed on the 5 s `toContainText` for `[data-preview] [data-field="pronouns"]`. Each of those came after an earlier repeat had timed out after saving and skipped the restore, which the mutation note shows to be the cause.)
+
+### branch: 230 of 230 passed, plus setup (17.1 min)
+- `admin-agents.spec.ts` "the new agent form passes the scan in the light theme": phone 2.5/4.8/5.9 | desktop 6.0/6.1/7.8
+- `admin-agents.spec.ts` "the new agent form passes the scan in the dark theme": phone 2.4/3.9/4.5 | desktop 2.8/4.1/4.4
+- `admin-agents.spec.ts` "a new agent's token is shown once, and the token panel passes the scan in the light theme": phone 2.1/5.5/5.8 | desktop 2.7/5.3/6.0
+- `admin-agents.spec.ts` "the token panel passes the scan in the dark theme": phone 2.5/4.0/4.5 | desktop 2.4/5.2/6.4
+- `admin-agents.spec.ts` "once Done is pressed, the token is nowhere on the page": phone 0.1/0.2/0.3 | desktop 0.2/0.3/0.4
+- `admin-agents.spec.ts` "the write limits save, and the agent detail passes the scan in the light theme": phone 2.8/3.1/4.5 | desktop 2.0/4.8/5.3
+- `admin-agents.spec.ts` "the agent detail passes the scan in the dark theme": phone 1.7/3.7/5.4 | desktop 2.0/4.4/5.1
+- `admin-agents.spec.ts` "the issue confirmation passes the scan in the light theme": phone 3.0/3.7/4.9 | desktop 3.9/4.3/5.8
+- `admin-agents.spec.ts` "the issue confirmation passes the scan in the dark theme": phone 2.2/3.8/5.1 | desktop 3.1/4.1/5.3
+- `admin-agents.spec.ts` "a new token replaces the old one": phone 0.3/0.4/0.7 | desktop 0.4/0.5/0.6
+- `admin-agents.spec.ts` "revoking stops the token, and the agent without a token passes the scan in the light theme": phone 3.1/3.6/5.1 | desktop 2.8/3.9/4.8
+- `admin-agents.spec.ts` "the agent without a token passes the scan in the dark theme": phone 2.4/4.5/4.8 | desktop 2.8/4.1/4.4
+- `admin-agents.spec.ts` "closing the detail": phone 0.1/0.2/0.2 | desktop 0.2/0.2/0.3
+- `admin-forms.spec.ts` "the editor passes the scan in the light theme": phone 5.0/6.2/7.5 | desktop 3.4/6.5/12.7
+- `admin-forms.spec.ts` "the editor passes the scan in the dark theme": phone 4.2/5.2/5.4 | desktop 3.2/6.0/6.5
+- `admin-forms.spec.ts` "the editor's phone frame is 390 px across": phone 0.3/0.4/0.7 | desktop 0.2/0.5/0.5
+- `admin-forms.spec.ts` "a key the server refuses is marked on its field, and passes the scan in the light theme": phone 6.5/6.9/7.7 | desktop 6.1/7.5/8.4
+- `admin-forms.spec.ts` "the refused draft passes the scan in the dark theme": phone 3.8/4.2/5.8 | desktop 2.5/6.0/7.5
+- `admin-forms.spec.ts` "the corrected form saves as a new version, and passes the scan in the light theme": phone 5.6/6.4/7.6 | desktop 5.4/7.1/8.0
+- `admin-forms.spec.ts` "the saved form passes the scan in the dark theme": phone 4.5/5.4/7.2 | desktop 3.5/5.2/6.0
+- `admin-forms.spec.ts` "version 1 opens read-only, and passes the scan in the light theme": phone 3.9/5.5/6.9 | desktop 3.3/4.6/5.9
+- `admin-forms.spec.ts` "version 1, read-only passes the scan in the dark theme": phone 4.9/5.6/6.3 | desktop 5.8/6.5/8.5
+- `admin-forms.spec.ts` "the fields it started with are saved back": phone 1.5/1.5/1.6 | desktop 1.5/1.6/2.1
+
+The slowest branch test took 12.7 s, against a 30 s budget that every main run used up. Each repeat of admin-agents made its own agent, because `beforeAll` runs once per repeat, and each repeat of admin-forms restored the form.
+
+**agent:claude-code/phase2-run-rzxgba** at 2026-09-30T13:26:55Z
+
+Mutation check, criterion 6. After the light scan of one state in each file, a temporary edit appended `<style>#mutant{display:none}@media (prefers-color-scheme: dark){#mutant{display:block}}</style>` and a 20 px `<img id="mutant">` with no alt. The state was the saved form in admin-forms and the agent detail in admin-agents. The edit was reverted afterwards and never committed.
+
+- Both projects, both files, without load: only "the agent detail passes the scan in the dark theme" failed, on both projects, with `Error: the agent detail, dark` and `image-alt (critical): Images must have alternative text`. On phone, admin-forms failed only "the saved form passes the scan in the dark theme", with `Error: the saved form, dark` and the same image-alt. In each case the rest of that project's file was reported as skipped (`-`, "did not run").
+- The same run showed a knock-on. Desktop admin-forms then failed earlier, at "the corrected form saves as a new version", on the 5 s `toContainText` for `[data-preview] [data-field="pronouns"]`. The phone run had failed after saving version n+1 with `pronouns`, so its restore was skipped. This is the behaviour the plan's Out of scope keeps as today's, and it explains the three such failures in the main contention run.
+- Desktop alone (`--project=desktop`), for a clean desktop admin-forms: exactly "the agent detail passes the scan in the dark theme" and "the saved form passes the scan in the dark theme" failed, with the same messages and image-alt. The result was 2 failed, 9 did not run, 16 passed.
+- The light test of each mutated state passed, which shows the image is hidden in light. The dark failure shows that `emulateMedia({ colorScheme: 'dark' })` on the live page takes effect before the dark scan.
+
+Traces: each failing test kept a `trace.zip` under `trace: 'retain-on-failure'`, although its context comes from `beforeAll`. Each holds only that test's actions, about 40 of them: the `emulateMedia`, the axe evaluation and the context close, with 3 or 4 screenshot frames. It does not hold the steps that built the state, because those belonged to earlier tests.
