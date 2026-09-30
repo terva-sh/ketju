@@ -3,7 +3,7 @@ import type { Post as PostDTO, PostReplies } from '../../api/dto';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../ErrorPanel';
 import { Avatar } from './Avatar';
-import { Attachments, permalink, type ThreadRef } from './Post';
+import { Attachments, Edited, permalink, type ThreadRef } from './Post';
 import { PostTime } from './PostTime';
 import { isTombstone, removedMark, TombstoneText } from './removal';
 import { RoleBadge } from './RoleBadge';
@@ -77,7 +77,7 @@ export function Replies({ thread, ordinal }: { thread: ThreadRef; ordinal: numbe
                 <span class="author">{p.author.display_name || p.author.handle}</span>
                 <RoleBadge author={p.author} />
                 <PostTime at={p.created_at} />
-                {p.edited_at !== null && <span class="edited">(edited)</span>}
+                <Edited post={p} />
                 {p.deleted && <span class="deleted-mark">{removedMark(p)}</span>}
               </header>
               <div class="post-body" dangerouslySetInnerHTML={{ __html: p.html }} />

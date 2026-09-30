@@ -20,7 +20,7 @@ import {
   type ThreadRef,
   type UnreadHandler,
 } from '../components/thread/Post';
-import { isOwn, postControls } from '../components/thread/postControls';
+import { isOwn, noControls, postControls } from '../components/thread/postControls';
 import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
 import { isTombstone } from '../components/thread/removal';
@@ -77,6 +77,20 @@ export function ThreadScreen() {
     (signal) => loadThreadPage(params.id, q, signal),
     () => peekGet<ThreadPage>(key),
   );
+  // The page's viewer block is for whoever was signed in when it was asked
+  // for. When someone else signs in in this tab, the page is asked for again,
+  // and until it answers the posts offer no edit, delete or restore: the old
+  // block's can_moderate and author windows are not the new viewer's
+  // (TKT-01M3QHKD21, Terva review 1626). A failed answer leaves them
+  // withheld, since the data kept beside it is still the old viewer's.
+  const me = viewer.value.user?.handle ?? null;
+  const [pageFor, setPageFor] = useState(me);
+  useEffect(() => {
+    if (me !== pageFor) res.retry();
+  }, [me]);
+  useEffect(() => {
+    if (!res.loading && !res.error) setPageFor(me);
+  }, [res.loading]);
   // The header shown is the newer of the page's and the cache's, by log
   // length: a moderation action's answer is stored as the cache's header
   // (storeThreadHeader) before the page is asked for again, so a lock or pin
@@ -272,7 +286,7 @@ export function ThreadScreen() {
         <PostHistory thread={head ?? { id: params.id, slug: params.slug }} ordinal={params.ordinal} />
       ) : (
         <>
-          {page && <ThreadBody key={key} page={page} lens={view.lens} onChanged={res.retry} />}
+          {page && <ThreadBody key={key} page={page} lens={view.lens} onChanged={res.retry} current={pageFor === me} />}
           {!page && !res.error && <p class="loading">Loading…</p>}
         </>
       )}
@@ -306,7 +320,18 @@ function PinnedNote({ pinned }: { pinned: Pinned }) {
   );
 }
 
-function ThreadBody({ page, lens, onChanged }: { page: ThreadPage; lens: string; onChanged: () => void }) {
+function ThreadBody({
+  page,
+  lens,
+  onChanged,
+  current,
+}: {
+  page: ThreadPage;
+  lens: string;
+  onChanged: () => void;
+  // current is whether page was asked for by the viewer signed in now.
+  current: boolean;
+}) {
   const thread: ThreadRef = { id: page.thread.id, slug: page.thread.slug };
   const lastRead = page.viewer.last_read_ordinal;
   const divider = dividerBefore(
@@ -334,14 +359,15 @@ function ThreadBody({ page, lens, onChanged }: { page: ThreadPage; lens: string;
   // a viewer who moderates the forum, offered by one rule at this render's
   // now (postControls). The clock renders the page again when the soonest
   // offer ends, and a change asks for the page again (TKT-01M3PTT97X,
-  // TKT-01M3QHKD21).
+  // TKT-01M3QHKD21). Nothing is offered while the page is another viewer's
+  // (current false), until the page asked for again answers.
   const now = Date.now();
-  const offers = page.posts.map((p) => postControls(p, page.viewer, now));
+  const offers = page.posts.map((p) => (current ? postControls(p, page.viewer, now) : noControls));
   useWindowClock(offers.map((c) => c.closesAt));
   const windows = page.viewer.author_windows;
   const moderates = page.viewer.can_moderate && !!viewer.value.user;
   const ownOf = (p: PostDTO, i: number): Own | undefined =>
-    moderates || isOwn(p)
+    current && (moderates || isOwn(p))
       ? {
           thread: thread.id,
           offer: offers[i],

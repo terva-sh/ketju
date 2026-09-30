@@ -175,6 +175,23 @@ describe('the reply expander', () => {
     expect(r.textContent).toContain('still here');
   });
 
+  // Terva review 1626, finding 2: a reply says who edited it as the thread
+  // page does (TKT-01M3QHKD21).
+  it('marks a reply a moderator edited as the page does', async () => {
+    serve(page([post(1, { reply_count: 2 })]), {
+      1: [
+        post(4, { reply_to: 1, edited_at: 1757500200000, edited_by_moderator: true }),
+        post(5, { reply_to: 1, edited_at: 1757500200000, edited_by_moderator: false }),
+      ],
+    });
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    await click(root, toggle(root, 1)!);
+    const mark = (o: number) => root.querySelector(`.replies [data-reply="${o}"] .edited`)!;
+    expect(mark(4).textContent).toBe('(edited by a moderator)');
+    expect(mark(4).getAttribute('data-edited-by')).toBe('moderator');
+    expect(mark(5).textContent).toBe('(edited)');
+  });
+
   // TKT-01M29CKRJ9 AC1: replies to a removed post keep reply_to, so its
   // tombstone still offers them.
   it('opens under a tombstone', async () => {

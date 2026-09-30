@@ -545,12 +545,51 @@ describe("a moderator's controls", () => {
     const root = await renderAt(`/t/${id}/a`);
     await click(control(root, 'edit'));
     expect(area(root).value).toBe('my **words**');
-    // Someone else signs in in this tab. The page, not yet fetched again,
-    // still says can_moderate; the source bob loaded goes all the same.
+    // Someone else signs in in this tab. The page on screen still says
+    // can_moderate; the source bob loaded goes all the same.
     const dana = structuredClone(moderator) as Me;
     dana.user!.handle = 'dana';
     await act(async () => void (viewer.value = dana));
     expect(editor(root)).toBeNull();
     expect(root.textContent).not.toContain('my **words**');
+  });
+
+  // Terva review 1626, finding 1: the old page's can_moderate is not the new
+  // viewer's. Nothing is offered until the page asked for again answers, and
+  // then what that page says is offered.
+  it("a new viewer is offered nothing from the last viewer's page", async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag', 'edit', 'delete']);
+    let arrive!: (p: ThreadPage) => void;
+    pages = [new Promise<ThreadPage>((r) => (arrive = r))];
+    const dana = structuredClone(member) as Me;
+    dana.user!.handle = 'dana';
+    await act(async () => void (viewer.value = dana));
+    await wait();
+    expect(gets()).toBe(2);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag']);
+    expect(footer(root, 62)).toEqual(['quote', 'reply', 'flag']);
+    // dana's page says she does not moderate: still nothing.
+    await act(async () => arrive(page(carols(), { edit_seconds: 600, delete_seconds: 300 })));
+    await settle(root);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag']);
+    // bob again: his page is asked for, and once it answers his controls
+    // are back.
+    pages = [moderating()];
+    await act(async () => void (viewer.value = structuredClone(moderator) as Me));
+    await settle(root);
+    expect(gets()).toBe(3);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag', 'edit', 'delete']);
+  });
+
+  it('a failed page for the new viewer keeps the offers withheld', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    server.routes[`GET ${url}`] = () => problemAnswer('unavailable', 503);
+    const dana = structuredClone(moderator) as Me;
+    dana.user!.handle = 'dana';
+    await act(async () => void (viewer.value = dana));
+    await settle(root);
+    expect(gets()).toBe(2);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag']);
   });
 });

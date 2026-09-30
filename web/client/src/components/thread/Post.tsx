@@ -103,11 +103,7 @@ export function Post({
           <span class="author">{post.author.display_name || post.author.handle}</span>
           <RoleBadge author={post.author} />
           <PostTime at={post.created_at} />
-          {post.edited_at !== null && (
-            <span class="edited" data-edited-by={post.edited_by_moderator ? 'moderator' : undefined}>
-              {post.edited_by_moderator ? '(edited by a moderator)' : '(edited)'}
-            </span>
-          )}
+          <Edited post={post} />
           {post.deleted && <span class="deleted-mark">{removedMark(post)}</span>}
           <ReplyTo post={post} />
         </header>
@@ -288,6 +284,19 @@ export function ReplyTo({ post }: { post: PostDTO }) {
     <a class="reply-to hit" href={`#post-${post.reply_to}`} data-reply-to={post.reply_to}>
       ↩ #{post.reply_to}
     </a>
+  );
+}
+
+// Edited is a post's edited marker, on the thread page and in the reply
+// expander alike: "(edited by a moderator)" when its current revision is a
+// moderator's edit, naming nobody, and "(edited)" otherwise (TKT-01M3QHKD21,
+// Terva review 1626).
+export function Edited({ post }: { post: Pick<PostDTO, 'edited_at' | 'edited_by_moderator'> }) {
+  if (post.edited_at === null) return null;
+  return (
+    <span class="edited" data-edited-by={post.edited_by_moderator ? 'moderator' : undefined}>
+      {post.edited_by_moderator ? '(edited by a moderator)' : '(edited)'}
+    </span>
   );
 }
 
