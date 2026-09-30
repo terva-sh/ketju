@@ -22,12 +22,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:21:56Z
-updated_at: 2026-09-30T02:22:05Z
+updated_at: 2026-09-30T03:59:49Z
 created_by:
   id: agent:claude-code/phase2-run-cxjz9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-cxjz9
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -43,3 +43,70 @@ Adding `redacted` to `internal/dto` was tried in that lane and reverted: `web/cl
 - `dto.Post` and `dto.HistoryPost` gain `redacted bool` (omitempty), set from `EntryRedacted` in `internal/service/threads/view.go` and `posts.go`.
 - Goldens under `internal/dto/testdata` and `internal/web/api/testdata` regenerated; `dto.ts` and the contract test updated.
 - The client shows a redacted post as removed permanently and offers no restore or edit on it; `go generate ./internal/web/spa` rebuilds the dist.
+
+## Acceptance criteria
+
+- [ ] dto.Post and dto.PostHistory carry redacted (bool, no omitempty), set from threadlog.EntryRedacted in postsDeps and History; the dto and api goldens, dto.ts and the fixtures follow, and contract.test.ts passes
+- [ ] removedText and removedMark say 'Post removed permanently' and 'removed permanently' for a redacted post whatever its removal (removal.test.tsx)
+- [ ] The moderator queue shows a redacted post as 'Removed permanently' with no Remove and no Keep, and Dismiss still sends dismiss (QueueScreen.test.tsx)
+- [ ] docs/07 Removed posts and the thread response shape name the redacted field
+- [ ] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
+- [ ] A redacted post answers redacted: true to every reader admitted to each route (anon, member, author, moderator): the page, the single post, /users/{handle}/posts, the moderator queue and history; a visible or moderator-hidden post answers false (redact_test.go)
+
+## Implementation plan
+
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The server half is TKT-01M29CXJZ9 (Build the offline hard-redaction tool), PR #192 at 5c2ba25. Its summary says: "The API serves a redacted post as a moderator removal with no reason to everyone and refuses edit, delete and restore with conflict." Its note 6, gap 1, records that a `redacted` DTO field was tried and reverted because `web/client/src/dto-contract.ts` pins the goldens to `dto.ts` and that lane could not touch the client.
+
+The description needs three corrections, read from main:
+- The history DTO is `dto.PostHistory` (`internal/dto/dto.go`), not `dto.HistoryPost`.
+- The flag is `threadlog.EntryRedacted` (bit 7) in `internal/store/threadlog/flags.go`.
+- `internal/dto` forbids `omitempty` (the package comment: "no field here carries omitempty"), so the field is a plain `bool` present on every post.
+
+### Settled in grooming
+
+- **What the reader shows is the maintainer's** (decided 2026-09-28, docs/10 item 4 and docs/03 "Hard redaction"): "A redacted post renders as a tombstone saying it was removed, to every reader, moderators included, since nothing of it is left; its edit history lists the revisions with no content, to a moderator." The thread actor refuses any `Edit`, `Delete` or `Restore` of it, and the API answers `conflict` (docs/07 "Removed posts": "No response field yet tells it from a moderator's hide", which this ticket closes).
+- **`redacted` is served to every reader** (engineering choice, made in the maintainer's absence because the docs answer it). docs/03 gives every reader, moderators included, the same tombstone. The flag comes from the index, so it is the same in every viewer class, and it reveals nothing that any reader can see beyond "this cannot come back". Serving it to moderators only lost: the words would differ by class for a post whose content is gone for every class, and the class split would buy nothing.
+- **`redacted` sits beside `removal`, and `removal` is unchanged** (engineering choice). A redacted post still reads `deleted: true` with `removal` from its other flags, which is `"moderator"`, or `"author"` if its author had deleted it before the redaction (`removal` in `internal/service/threads/view.go`). A fourth `removal` value `"redacted"` lost for two reasons. `removal` says who took the post down, and a redaction is a separate fact about whether it can come back. And every client that switches on `removal` would read an unknown value as a plain "Post removed", which loses nothing but also says nothing.
+- **The field goes on `dto.PostHistory` as well.** A moderator's history of a redacted post is its revisions with empty `source` and `reason`. Without the flag the history screen (TKT-01M29CP2Q3) cannot tell "removed permanently" from "edited to nothing".
+- **The response cache needs no new key.** `redacted` is the same for every viewer class, and a redaction appends a `Redacted` marker, which moves the log length in `respcache.Key`. `ketju redact` also runs with serve stopped, and both caches are in memory.
+- **The words** (engineering choice). A tombstone reads "Post removed permanently", and a shown-removed mark reads "removed permanently". The ticket already asks for "removed permanently", and it is the one thing the reader needs to know: nobody can restore it. The redaction's reason is never served; `Redacted.reason` is in the log for the operator.
+- **The built client is committed.** Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Only one lane may have a PR open that changes the dist (docs/13 "Running two lanes").
+
+### Approach
+
+1. **DTO** (`internal/dto/dto.go`):
+   - `Post` gains `Redacted bool` with `json:"redacted"`, after `Removal`. Its comment says: set for a hard-redacted post (docs/03 "Hard redaction"), which is also `deleted` and is never restorable.
+   - `PostHistory` gains `Redacted bool` with `json:"redacted"`.
+2. **Service** (`internal/service/threads`):
+   - `postsDeps` in `view.go`: set `d.Redacted = p.Flags.Has(threadlog.EntryRedacted)`. Every post DTO is built here: the page, the single post, replies, `/users/{handle}/posts` (`userposts.go`) and the moderator queue (`QueueFlag.Post`). So all of them carry it with no other change. Update the comment above the `removal` call.
+   - `History` in `posts.go`: set `Redacted: redacted` on `res.Body` for every reader, the tombstone case included.
+3. **Goldens.**
+   - `internal/dto/fixtures_test.go`: one post fixture (in the `thread.moderator` case) becomes a redacted post: `deleted: true`, `removal: "moderator"`, `redacted: true`, `html: ""`, no attachments. One `PostHistory` fixture sets `redacted: true`. This satisfies the rule that every field is set non-zero by some case.
+   - Regenerate with `go test ./internal/dto -update` and `go test ./internal/web/api -update`, and check each diff is only the new key.
+4. **Client types**: `web/client/src/api/dto.ts` gains `redacted: boolean` on `Post` and on `PostHistory`. `dto-contract.ts` needs no new import, since it already matches those goldens. Test fixtures that build a `Post` by hand gain `redacted: false`, which `tsc` will list.
+5. **Client words** (`web/client/src/components/thread/removal.tsx`):
+   - `removedText` and `removedMark` take `Pick<PostDTO, 'removal' | 'redacted'>`. `redacted` is checked first and answers "Post removed permanently" or "removed permanently".
+   - `TombstoneText` passes it through.
+   - `Tombstone.tsx`, `Post.tsx`, `ReplyExpander.tsx`, `PostPopover.tsx` and the queue draw from here, so every screen that draws a removed post through them follows with no change of its own.
+6. **Moderator queue** (`web/client/src/screens/admin/queue/QueueScreen.tsx`):
+   - `postState` gains `'redacted'`, checked before `removal`, with `stateWords.redacted` "Removed permanently".
+   - For a redacted post the item offers neither Remove nor Keep, and shows "This post was removed permanently and cannot be shown again." in place of `data-keep-refused`. Dismiss stays, so its flags can be closed.
+   - This is the only place in the client that offers a restore today. The thread page has no post edit, delete or restore controls on main.
+7. **docs/07** "Removed posts": replace "No response field yet tells it from a moderator's hide" with the `redacted` field, and add `redacted` to the post in "Thread response shape".
+8. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`.
+
+### Tests
+
+- `TestRedactedPostIsATombstoneToEveryone` (`internal/web/api/redact_test.go`) also asserts `redacted: true` on #5 for anon, member, author and moderator, on the page and the single post. It asserts `redacted: false` on a visible post (#6) and on a post a moderator hid in the same world.
+- `TestRedactedHistoryHasNoContent` asserts `redacted: true` in the moderator's history and in the author's and member's tombstone history.
+- `TestRedactedIsFlaggedEverywhere` (new, `redact_test.go`): `redacted: true` on the post in `/api/v1/users/alice/posts` for the author and a moderator, and in the moderator queue's `QueueFlag.Post` for a post flagged before its redaction.
+- `internal/dto` golden and fixture tests pass with the regenerated goldens. `web/client/src/contract.test.ts` and `tsc` pass with the new fields.
+- `components/thread/removal.test.tsx` (new): `removedText` and `removedMark` say "permanently" for `redacted: true` whatever `removal` is, and are unchanged for `redacted: false`.
+- `screens/admin/queue/QueueScreen.test.tsx`: a redacted flagged post shows "Removed permanently", no Remove and no Keep button, and a Dismiss that sends `dismiss`.
+- The thread-view bundle stays within the 60000 B gzip budget (`npm run build`).
+
+### Out of scope
+
+- The history screen's handling of a redacted post (TKT-01M29CP2Q3, Build the post history view with word-level diffs), which reads the new `PostHistory.redacted`.
+- Post edit, delete and restore controls on the thread page, which no client ticket has built yet.
+- Title text in older `thread.renamed` audit rows (TKT-01M29CKRH9, done).
