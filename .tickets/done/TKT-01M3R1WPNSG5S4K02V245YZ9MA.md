@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R1WPNSG5S4K02V245YZ9MA
 title: Expose hard redaction in the post DTO and client
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: pr:228
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-r1wpns
-  branch: run/r1wpns-redacted-dto
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa597c6d00d557379
-  commit: de1771d531b909bb2b8bcc2dc3c3650d8aae749c
-  session: null
-  claimed_at: 2026-09-30T12:37:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T02:21:56Z
-updated_at: 2026-09-30T12:47:11Z
+updated_at: 2026-09-30T15:18:46Z
 created_by:
   id: agent:claude-code/phase2-run-cxjz9
   name: ""
@@ -56,10 +49,10 @@ Adding `redacted` to `internal/dto` was tried in that lane and reverted: `web/cl
 ## Acceptance criteria
 
 - [x] dto.Post and dto.PostHistory carry redacted (bool, no omitempty), set from threadlog.EntryRedacted in postsDeps and History; the dto and api goldens, dto.ts and the fixtures follow, and contract.test.ts passes
-- [ ] removedText and removedMark say 'Post removed permanently' and 'removed permanently' for a redacted post whatever its removal (removal.test.tsx)
-- [ ] The moderator queue shows a redacted post as 'Removed permanently' with no Remove and no Keep, and Dismiss still sends dismiss (QueueScreen.test.tsx)
+- [x] removedText and removedMark say 'Post removed permanently' and 'removed permanently' for a redacted post whatever its removal (removal.test.tsx)
+- [x] The moderator queue shows a redacted post as 'Removed permanently' with no Remove and no Keep, and Dismiss still sends dismiss (QueueScreen.test.tsx)
 - [x] docs/07 Removed posts and the thread response shape name the redacted field
-- [ ] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
+- [x] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
 - [x] A redacted post answers redacted: true to every reader admitted to each route (anon, member, author, moderator): the page, the single post, /users/{handle}/posts, the moderator queue and history; a visible or moderator-hidden post answers false (redact_test.go)
 
 ## Implementation plan
@@ -140,3 +133,27 @@ The plan stands as written. Details settled while building, all internal:
 - The redacted fixture post (#65) goes on the moderator's thread page only, as the plan says. web/client tests import thread.member.json and one counts its posts (ThreadScreen.test.tsx), so adding the post to every class would have forced a client test edit in the server half. The member history golden's tombstone is now the redacted post's (ordinal 65, redacted: true).
 - dto-contract.ts needed no change. No client test fixture needed `redacted` either: tsc --noEmit passes over src with the new required field.
 - Security check, as the orchestrator asked: the post source route (PR #205) refuses a redacted post to everyone. redact_test.go TestRedactedIsFlaggedEverywhere asserts 401 for an anonymous reader, 403 for another member, and 409 for the author and a moderator, and that no answer carries the text. The same test asserts that no route (page, single post, parent's replies, history, source, /users/alice/posts, moderator queue) serves the redacted text to anon, member, author or moderator. Every route but the source serves `redacted: true` to each reader it admits.
+
+**agent:claude-code/phase2-run-r1wpns** at 2026-09-30T15:18:29Z
+
+Client half, on main at 3fb7d5a, after the orchestrator released the dist lane (the server half is PR #228, merged at 6b5dc9a).
+
+Built as the plan says: removedText and removedMark answer "Post removed permanently" and "removed permanently" for a redacted post whatever its removal. TombstoneText passes `redacted` through, so the thread page, the reply expander, the popover and the queue follow. The queue's postState gains 'redacted', checked before `deleted`, reading "Removed permanently", with no Remove and no Keep, and "This post was removed permanently and cannot be shown again." in place of the Keep.
+
+A server defect found while building, fixed in this PR because the criterion's Dismiss depends on it. The queue's stateOf (internal/service/threads/queue.go) took a redacted post by its other bits. A post hidden pending review and then redacted read as stateAutoHidden, so dismiss and Keep each tried a Restore. The log refuses every record naming a redacted post, so both answered conflict, and the flags could never close. A shown post that was then redacted read as stateVisible, so Remove answered conflict too. stateOf now counts EntryRedacted as stateGone. Every action then only closes the flags, answering "already hidden", and writes nothing to the log. TestRedactedPostLeavesTheQueue holds the six cases (shown or hidden pending review, times dismiss, Keep or remove). docs/08 "Flags" and docs/07's queue screen say so. Nothing here reveals content: the actor refused the writes before and still does.
+
+Scope, stated so nobody looks for it here:
+- History: the client has no post history screen yet; TKT-01M29CP2Q3 (Build the post history view with word-level diffs) builds it and reads PostHistory.redacted, which the server half serves.
+- A quote of a redacted post: the server renders "This post was deleted." for a quote of any removed post (internal/render/quote.go). That text has never said who removed a post, and it carries none of the post's text. Saying "permanently" there would need the quote resolver to know about redaction, plus a renderer version bump. That is out of this ticket's scope and leaks nothing.
+
+Checks run on this head: gofmt; go build and go vet; go test -race ./...; the Phase 2 exit tests; go generate ./internal/web/spa with the dist committed (thread view 54912 B of 70000 B); tsc; vitest (1790 passed); and the full Playwright suite on port 8931 (161 passed; 11 skipped by the specs themselves, such as the safe-area check on desktop).
+
+## Summary
+
+A hard-redacted post is now marked as one in the API and reads as one in the client. It landed in two PRs.
+
+- Server (PR #228, merged at 6b5dc9a): dto.Post and dto.PostHistory carry `redacted`, set from threadlog.EntryRedacted, and served to every reader alike. The goldens, dto.ts and docs/07 follow. redact_test.go holds that no route (page, single post, replies, history, source, /users/{handle}/posts, moderator queue) serves a redacted post's text to anon, member, author or moderator. It also holds that the source route refuses a redacted post to everyone.
+- Client (this PR): a redacted post reads "Post removed permanently" as a tombstone and "removed permanently" as a mark, wherever removal.tsx draws a removed post. The moderator queue names it "Removed permanently" and offers only Dismiss flags.
+- Server fix found on the way: the queue's stateOf now counts a redacted post as already down. Before this, a post hidden pending review and then redacted kept its flags open for good, because every action on it tried a Restore that the log refuses.
+
+Left to others: the post history screen, which reads PostHistory.redacted (TKT-01M29CP2Q3). A quote of a redacted post still renders the server's generic "This post was deleted.", as a quote of any removed post does.
