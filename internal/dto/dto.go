@@ -279,6 +279,16 @@ type PostRevision struct {
 	Source string `json:"source"`
 }
 
+// PostSource is the response to GET /threads/{id}/posts/{ordinal}/source:
+// the post's current revision as markdown, for its author or a moderator to
+// edit (TKT-01M3QJYV4Z). Revision is the one the source is, so a client
+// can tell an answer from before a later edit.
+type PostSource struct {
+	Ordinal  int    `json:"ordinal"`
+	Revision int    `json:"revision"`
+	Source   string `json:"source"`
+}
+
 // ThreadRow is one row in a thread list, with the columns docs/06 names.
 type ThreadRow struct {
 	ID    string   `json:"id"`

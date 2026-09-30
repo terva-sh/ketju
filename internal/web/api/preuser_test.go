@@ -53,7 +53,7 @@ func TestAPreUserNeverReachesTheResponseCache(t *testing.T) {
 	thread := "/api/v1/threads/" + id.String()
 	before := w.svc.Responses.Stats()
 	for _, path := range []string{thread, thread + "?page=1", postPathN(id, 1),
-		postPathN(id, 1) + "/replies", postPathN(id, 1) + "/history"} {
+		postPathN(id, 1) + "/replies", postPathN(id, 1) + "/history", postPathN(id, 1) + "/source"} {
 		rec := get(path, pre)
 		var pr problem.Problem
 		if rec.Code != http.StatusForbidden || json.Unmarshal(rec.Body.Bytes(), &pr) != nil || pr.Type != problem.CodeForbidden {

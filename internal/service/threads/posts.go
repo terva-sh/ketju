@@ -212,6 +212,95 @@ func (s *Service) History(ctx context.Context, v domain.Viewer, id threadid.ID, 
 	return res, err
 }
 
+// Source serves a post's current revision as markdown, for editing
+// (TKT-01M3QJYV4Z): GET /threads/{id}/posts/{ordinal}/source.
+//
+// Access to the thread is the thread page's, and a member session is
+// required. Who may read the source is sourceRefusal's to say. The author
+// windows, a lock and an archive are not checked: they refuse the edit, not
+// the reading of words the reader could edit now or later, and PATCH
+// refuses the edit itself.
+//
+// It never touches the response cache and carries no ETag; the handler
+// answers no-store, so no answer is kept for anyone.
+func (s *Service) Source(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32) (dto.PostSource, error) {
+	var out dto.PostSource
+	a, err := s.access(ctx, v, id)
+	if err != nil {
+		return out, err
+	}
+	if !a.viewer.Member() {
+		return out, problem.Coded(problem.CodeUnauthenticated, fmt.Errorf("threads: a post's source needs a signed-in reader"))
+	}
+	err = s.Threads.With(id, func(th *threadcache.Thread) error {
+		snap, err := s.stable(th, func(ix *threadlog.Index, logLength int64) ([]uint32, error) {
+			return []uint32{ordinal}, nil
+		})
+		if err != nil {
+			return err
+		}
+		e := snap.entries[0]
+		if err := sourceRefusal(a, e); err != nil {
+			return err
+		}
+		revs, err := th.Reader.History(ordinal, snap.logLength)
+		if err != nil {
+			return err
+		}
+		if len(revs) == 0 || revs[len(revs)-1].Revision != uint32(e.Revision) {
+			// The index points at a revision the log does not end on. Serving
+			// an older source would have the edit overwrite a revision the
+			// editor never saw.
+			return fmt.Errorf("threads: post %d of %s is at revision %d, and its log holds %d revisions",
+				ordinal, id, e.Revision, len(revs))
+		}
+		cur := revs[len(revs)-1]
+		out = dto.PostSource{Ordinal: int(ordinal), Revision: int(cur.Revision), Source: cur.Source}
+		return nil
+	})
+	return out, err
+}
+
+// sourceRefusal says why a, already admitted to the thread as a member, may
+// not read the source of the post e describes, or nil when they may
+// (TKT-01M3QJYV4Z). The readers are whoever may edit the post now or later,
+// as authorize has it:
+//   - a moderator of the forum, of a post that is visible or whose content
+//     revealRemoved serves them, which is every removed post but a moved or
+//     a hard-redacted one (TKT-01M29CXJZ9); anything else is conflict,
+//     having nothing to edit;
+//   - anyone else who did not write the post is forbidden, before any
+//     removal is looked at, so the refusal says nothing of the post's state;
+//   - the author is forbidden a post a moderator hid, a hide pending review
+//     included, as authorize refuses their edit of it, although
+//     revealRemoved shows them its body; and conflict for any other post
+//     that is not visible, deleted by them, moved or redacted, having
+//     nothing to edit.
+//
+// A removed post's source therefore goes only to a viewer revealRemoved
+// gives its content to, and of those only to a moderator. A redacted post's
+// goes to nobody: revealRemoved refuses it to everyone, and it is not
+// visible.
+func sourceRefusal(a access, e threadlog.IndexEntry) error {
+	if a.canModerate {
+		if e.Flags.Visible() || revealRemoved(a, e) {
+			return nil
+		}
+		return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: this post has no source here to edit"))
+	}
+	switch {
+	case !a.viewer.Member() || e.Author != uint64(a.viewer.UserID):
+		return problem.Coded(problem.CodeForbidden,
+			fmt.Errorf("threads: only its author or a moderator may read a post's source"))
+	case e.Flags.Has(threadlog.EntryHiddenByMod):
+		return problem.Coded(problem.CodeForbidden,
+			fmt.Errorf("threads: a post hidden by a moderator is not its author's to edit"))
+	case !e.Flags.Visible():
+		return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: this post has no source here to edit"))
+	}
+	return nil
+}
+
 // stable takes a snapshot of the ordinals pick chooses, inside one
 // Actor.Stable pass so the ordinals, their entries and the length agree.
 func (s *Service) stable(th *threadcache.Thread, pick func(ix *threadlog.Index, logLength int64) ([]uint32, error)) (snapshot, error) {

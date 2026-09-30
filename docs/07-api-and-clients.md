@@ -123,6 +123,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /threads/{id}/posts/{ordinal}` | single post (popover, permalink) |
 | `GET  /threads/{id}/posts/{ordinal}/replies` | direct replies (inline expander) |
 | `GET  /threads/{id}/posts/{ordinal}/history` | revisions, each with actor, time, reason and source; the client diffs them |
+| `GET  /threads/{id}/posts/{ordinal}/source` | the current revision's source, `{ordinal, revision, source}`, `internal/dto` `PostSource`, for its author or a moderator to edit, whatever `public_edit_history` says. `no-store`, no ETag. See "Edit, delete and restore" below (TKT-01M3QJYV4Z) |
 | `PATCH /threads/{id}/posts/{ordinal}` | edit `{source, reason?}` |
 | `DELETE /threads/{id}/posts/{ordinal}` | soft delete; `POST …/restore` to undo |
 | `PUT  /threads/{id}/read` | `{ordinal}` advance read position; `DELETE` marks unread. Both answer 200 `internal/dto` `ReadPosition`; see "Read position" below |
@@ -718,6 +719,34 @@ charged to the write limiter. The optional reason body is read to at most
   record is written, so a delete racing an edit cannot be undone by it.
   Deleting twice is `conflict` rather than a quiet success, so the log keeps
   no records that change nothing.
+
+`GET /threads/{id}/posts/{ordinal}/source` answers the post's current
+revision as `internal/dto` `PostSource`, `{ordinal, revision, source}`, so an
+author can edit a post whatever `public_edit_history` says (TKT-01M3QJYV4Z).
+History is not widened: it still follows the rules above.
+
+- A member session is required (anonymous and an inactive session
+  `unauthenticated`, pre-user `forbidden`), and access to the thread is the
+  thread page's: a thread hidden from the viewer is `not-found`, their own
+  post included. An ordinal past the end is `not-found`.
+- The readers are whoever may edit the post now or later. A viewer with
+  `moderate` in the thread's forum reads any post that is visible or whose
+  content "Removed posts" serves them, which is every removed post but a
+  moved or a hard-redacted one; those are `conflict`. The post's author
+  reads their own visible post. Anyone else is `forbidden`, whatever state
+  the post is in, so the refusal says nothing about it.
+- A post a moderator hid, or one hidden pending review, is `forbidden` to
+  its author, as the edit would be, although the thread page shows them its
+  body. A post the author deleted, a moved one, or a redacted one is
+  `conflict` to them: there is nothing to edit.
+- A hard-redacted post (03 "Hard redaction", TKT-01M29CXJZ9) serves its
+  source to nobody, moderators and admins included.
+- The windows, a lock and an archive, of the thread or of its forum, are not
+  checked: they refuse the edit, and `PATCH` answers that refusal. Reading
+  one's own words gives nothing away.
+- `no-store` with no ETag, and the response cache is not used, so no
+  reader's source is kept for another, and an edit starts from the
+  revision the server holds now.
 
 #### Read position (TKT-01M29CA9CE)
 

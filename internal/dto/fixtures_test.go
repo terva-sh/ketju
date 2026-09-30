@@ -448,6 +448,9 @@ var corpus = map[string]any{
 	"history." + tMember:    postHistory(tMember),
 	"history." + tModerator: postHistory(tModerator),
 
+	"post-source." + tMember: PostSource{Ordinal: 61, Revision: 2,
+		Source: "The bill was the **smaller** half of it."},
+
 	"thread-locked." + tMember: lockedThread(),
 
 	"slow-mode." + tModerator: SlowMode{Seconds: 30},

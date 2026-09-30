@@ -122,6 +122,15 @@ export interface PostHistory {
   revisions: PostRevision[];
 }
 
+// PostSource is GET /threads/{id}/posts/{ordinal}/source: the post's current
+// revision as markdown, for its author or a moderator to edit (internal/dto
+// PostSource).
+export interface PostSource {
+  ordinal: number;
+  revision: number;
+  source: string;
+}
+
 export interface ThreadRow {
   id: string;
   slug: string;

@@ -38,6 +38,7 @@ import type {
   Post,
   PostHistory,
   PostReplies,
+  PostSource,
   Profile,
   Queue,
   QueueResolution,
@@ -92,6 +93,7 @@ import meModerator from '../../../../internal/dto/testdata/golden/me.moderator.j
 import mePreUser from '../../../../internal/dto/testdata/golden/me.pre_user.json';
 import postMember from '../../../../internal/dto/testdata/golden/post.member.json';
 import postModerator from '../../../../internal/dto/testdata/golden/post.moderator.json';
+import postSourceMember from '../../../../internal/dto/testdata/golden/post-source.member.json';
 import profileMember from '../../../../internal/dto/testdata/golden/profile.member.json';
 import profileModerator from '../../../../internal/dto/testdata/golden/profile.moderator.json';
 import profileAnonymizedMember from '../../../../internal/dto/testdata/golden/profile-anonymized.member.json';
@@ -183,6 +185,7 @@ export const contract = [
   matches<Me>()(mePreUser),
   matches<Post>()(postMember),
   matches<Post>()(postModerator),
+  matches<PostSource>()(postSourceMember),
   matches<PostReplies>()(repliesMember),
   matches<PostReplies>()(repliesModerator),
   matches<Profile>()(profileMember),

@@ -115,6 +115,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}", Handler: h.post},
 		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}/replies", Handler: h.replies},
 		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}/history", Handler: h.history},
+		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}/source", Handler: h.postSource},
 		{Method: post, Path: "/api/v1/render", Handler: h.render},
 		{Method: post, Path: "/api/v1/threads/{id}/posts", Handler: h.reply},
 		{Method: patch, Path: "/api/v1/threads/{id}/posts/{ordinal}", Handler: h.editPost},
@@ -233,6 +234,26 @@ func (h *handlers) history(w http.ResponseWriter, r *http.Request) {
 	}
 	res, err := h.threads.History(r.Context(), domain.ViewerFrom(r.Context()), id, ordinal, r.Header.Get("If-None-Match"))
 	respond(h, w, r, res, err)
+}
+
+// postSource is GET /api/v1/threads/{id}/posts/{ordinal}/source
+// (TKT-01M3QJYV4Z): the post's current source, for its author or a
+// moderator to edit. It is no-store with no ETag, so neither the response
+// cache nor a browser or proxy keeps one reader's source to hand to anyone,
+// and an edit always starts from the revision the server holds now.
+func (h *handlers) postSource(w http.ResponseWriter, r *http.Request) {
+	id, ordinal, err := postPath(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.threads.Source(r.Context(), domain.ViewerFrom(r.Context()), id, ordinal)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
 }
 
 // respond writes a served body, a 304, or the error.
