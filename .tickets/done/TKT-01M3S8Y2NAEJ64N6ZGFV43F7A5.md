@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T13:44:15Z
-updated_at: 2026-09-30T21:54:43Z
+updated_at: 2026-09-30T22:15:58Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -154,6 +154,17 @@ Each mutation ran 10 times, with the file alone under the same load:
 - `go generate ./internal/web/spa` leaves `internal/web/spa/dist` unchanged: `git status` is clean after it. The thread-view bundle is 56988 B gzip, unchanged.
 - `npx tsc --noEmit -p .` passes. So do gofmt, `go build ./...`, `go vet ./...` and `go test -race ./...`.
 - The diff is testing.tsx only. ApplicationDetail.test.tsx is unchanged, so its 16 tests keep their assertions. There is no retry and no new or raised timeout, `settle`'s 200 × 5 ms loop is byte for byte the same, and there is no skip, todo or only.
+
+**agent:claude-code/phase2-run-s8y2na** at 2026-09-30T22:15:58Z
+
+The proof held after the branch was carried onto the current main. Main moved 34 commits while the proof ran (TKT-01M3KFFFJR, TKT-01M3SK2HFE, TKT-01M3QV39H4 and TKT-01M3QS0TMV). None of them touches testing.tsx or the lazy chunks in routes.tsx. The branch had not been pushed yet, so it was rebased onto origin/main 4471ea6. The change the earlier notes call 2f7e300 is now 507b946, with the same diff, and the head is 363d093.
+
+On 363d093, under the same 48 unpinned busy loops, with load average 62 to 71:
+- 20 consecutive unseeded `npx vitest run`: 20 green, 1940 of 1940 tests passing in each, and ApplicationDetail.test.tsx passing in each.
+- 20 consecutive seeded runs (ApplicationDetail.test.tsx marked failed in the results cache before each run): 20 green on the same terms.
+- 0 unhandled errors in any run.
+
+Other checks on this head: `npx tsc --noEmit -p .` passes. `go generate ./internal/web/spa` leaves `internal/web/spa/dist` unchanged. The thread-view bundle is 58151 B gzip, which is main's figure.
 
 ## Summary
 
