@@ -9,9 +9,10 @@
 // again, so a caller that forgot the gate is still refused. Holding
 // moderate somewhere opens nothing here (08 "Decided 2026-09-30").
 //
-// A change goes through settings.SetBy, which refuses an unknown key or a
+// A change goes through settings.SetIn, which refuses an unknown key or a
 // value the key does not take and writes setting.changed with the admin,
-// the address and the old and new values in the same transaction. Nothing
+// the address and the old and new values in the same transaction, which is
+// also the one the answer is read in. Nothing
 // here caches a value: every reader asks the table, so a change applies from
 // the next request.
 package sitesettings
@@ -86,17 +87,14 @@ func (s *Service) Set(ctx context.Context, v domain.Viewer, ip, key string, valu
 	if err := member.RequireAdmin(v, "change a site setting"); err != nil {
 		return dto.SiteSetting{}, err
 	}
-	err := settings.SetBy(ctx, s.DB, key, value, settings.Change{Actor: v.UserID, IP: ip, At: s.now()})
-	switch {
-	case errors.Is(err, settings.ErrUnknownKey):
-		return dto.SiteSetting{}, problem.Coded(problem.CodeNotFound, err)
-	case errors.Is(err, settings.ErrInvalidValue):
-		return dto.SiteSetting{}, problem.Coded(problem.CodeValidationFailed, err)
-	case err != nil:
-		return dto.SiteSetting{}, err
-	}
+	// The answer is read in the write's transaction, so a failure building
+	// it rolls the change back rather than reporting failure for a change
+	// that committed, which a caller would retry (Terva review 1587).
 	var out dto.SiteSetting
-	err = s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		if err := settings.SetIn(ctx, q, key, value, settings.Change{Actor: v.UserID, IP: ip, At: s.now()}); err != nil {
+			return err
+		}
 		val, err := settings.LookupIn(ctx, q, key)
 		if err != nil {
 			return err
@@ -108,7 +106,15 @@ func (s *Service) Set(ctx context.Context, v domain.Viewer, ip, key string, valu
 		out = siteSetting(val, authors)
 		return nil
 	})
-	return out, err
+	switch {
+	case errors.Is(err, settings.ErrUnknownKey):
+		return dto.SiteSetting{}, problem.Coded(problem.CodeNotFound, err)
+	case errors.Is(err, settings.ErrInvalidValue):
+		return dto.SiteSetting{}, problem.Coded(problem.CodeValidationFailed, err)
+	case err != nil:
+		return dto.SiteSetting{}, err
+	}
+	return out, nil
 }
 
 // updaters is the account behind each value that one set, once each.

@@ -269,42 +269,70 @@ type Change struct {
 
 // SetBy is Set with more to say in the audit row.
 func SetBy(ctx context.Context, d *db.DB, name string, value json.RawMessage, c Change) error {
+	// Refused before the write lock is taken, as SetIn would refuse it.
+	s, canonical, err := prepare(name, value)
+	if err != nil {
+		return err
+	}
+	return d.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		return s.put(ctx, q, canonical, c)
+	})
+}
+
+// SetIn is SetBy inside a write transaction the caller holds, for a caller
+// that must answer from the same transaction: the admin settings screen
+// reads the key back before the change commits, so a failure after the
+// write cannot report a change that has in fact been made (Terva review
+// 1587 on PR #230).
+func SetIn(ctx context.Context, q *dbq.Queries, name string, value json.RawMessage, c Change) error {
+	s, canonical, err := prepare(name, value)
+	if err != nil {
+		return err
+	}
+	return s.put(ctx, q, canonical, c)
+}
+
+// prepare finds name's key and validates value, returning the value in
+// canonical form, so the table and the audit row say the same thing however
+// the caller spaced it.
+func prepare(name string, value json.RawMessage) (spec, string, error) {
 	s, ok := registry[name]
 	if !ok {
-		return unknown(name)
+		return spec{}, "", unknown(name)
 	}
 	v, err := s.decode(value)
 	if err != nil {
-		return err
+		return spec{}, "", err
 	}
-	// Stored in canonical form, so the table and the audit row say the
-	// same thing however the caller spaced it.
 	canonical, err := json.Marshal(v)
 	if err != nil {
-		return err
+		return spec{}, "", err
 	}
+	return s, string(canonical), nil
+}
+
+// put stores canonical and appends the audit row, through q.
+func (s spec) put(ctx context.Context, q *dbq.Queries, canonical string, c Change) error {
 	by := sql.NullInt64{Int64: c.Actor, Valid: c.Actor != 0}
 	at := c.At.UnixMilli()
-	return d.Write(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
-		from := s.encoded
-		switch old, err := q.GetSetting(ctx, name); {
-		case err == nil:
-			from = old.ValueJson
-		case !errors.Is(err, sql.ErrNoRows):
-			return err
-		}
-		if err := q.PutSetting(ctx, dbq.PutSettingParams{Key: name, ValueJson: string(canonical),
-			UpdatedAt: at, UpdatedBy: by}); err != nil {
-			return err
-		}
-		fields := make(map[string]any, len(c.Details)+2)
-		for k, v := range c.Details {
-			fields[k] = v
-		}
-		fields["from"], fields["to"] = json.RawMessage(from), json.RawMessage(canonical)
-		_, err := audit.Append(ctx, q, time.UnixMilli(at), audit.By{Actor: c.Actor, IP: c.IP}, ActionChanged, audit.Setting(name), fields)
+	from := s.encoded
+	switch old, err := q.GetSetting(ctx, s.name); {
+	case err == nil:
+		from = old.ValueJson
+	case !errors.Is(err, sql.ErrNoRows):
 		return err
-	})
+	}
+	if err := q.PutSetting(ctx, dbq.PutSettingParams{Key: s.name, ValueJson: canonical,
+		UpdatedAt: at, UpdatedBy: by}); err != nil {
+		return err
+	}
+	fields := make(map[string]any, len(c.Details)+2)
+	for k, v := range c.Details {
+		fields[k] = v
+	}
+	fields["from"], fields["to"] = json.RawMessage(from), json.RawMessage(canonical)
+	_, err := audit.Append(ctx, q, time.UnixMilli(at), audit.By{Actor: c.Actor, IP: c.IP}, ActionChanged, audit.Setting(s.name), fields)
+	return err
 }
 
 // ActionChanged is the audit_log action SetBy writes.
