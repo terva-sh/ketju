@@ -43,14 +43,19 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // a phone link, flag, edit, delete, unread from here and history collapse
 // under PostMore (docs/06 "Mobile").
 //
-// own is handed over on the viewer's own post, on the thread page only.
-// Edit and delete follow flag, under PostMore on a phone, while the page
-// offers them (postControls); edit opens the editor in the body's place, and
-// delete asks first, below the body. Restore is in the footer of a removed
-// post drawn with its body, which is how a moderator's own deleted post
-// reaches them (TKT-01M3PTT97X). Unread from here follows them, and is not
-// offered while the editor or the confirmation is open, since it leaves the
-// page and would drop what is being edited.
+// own is handed over on the viewer's own post, and on every post to a
+// viewer who moderates the forum, on the thread page only. Edit and delete
+// follow flag, under PostMore on a phone, while the page offers them
+// (postControls); edit opens the editor in the body's place, and delete asks
+// first, below the body. Restore is in the footer of a removed post drawn
+// with its body, which is how a removed post reaches a moderator
+// (TKT-01M3PTT97X, TKT-01M3QHKD21). Unread from here follows them, and is
+// not offered while the editor or the confirmation is open, since it leaves
+// the page and would drop what is being edited.
+//
+// A post whose current revision is a moderator's edit says so in place of
+// "(edited)", naming nobody: the post's history names them (docs/08 "Post
+// history").
 export function Post({
   post,
   thread,
@@ -98,7 +103,11 @@ export function Post({
           <span class="author">{post.author.display_name || post.author.handle}</span>
           <RoleBadge author={post.author} />
           <PostTime at={post.created_at} />
-          {post.edited_at !== null && <span class="edited">(edited)</span>}
+          {post.edited_at !== null && (
+            <span class="edited" data-edited-by={post.edited_by_moderator ? 'moderator' : undefined}>
+              {post.edited_by_moderator ? '(edited by a moderator)' : '(edited)'}
+            </span>
+          )}
           {post.deleted && <span class="deleted-mark">{removedMark(post)}</span>}
           <ReplyTo post={post} />
         </header>

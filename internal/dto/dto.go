@@ -177,6 +177,14 @@ type ThreadViewer struct {
 	// thread's forum, whom neither window binds, and for a viewer who is not
 	// a member, who has no posts to act on (TKT-01M3PTT97X).
 	AuthorWindows *AuthorWindows `json:"author_windows"`
+	// ForumReadOnly is true when the thread's forum is archived and the
+	// viewer is not an admin: the viewer may not post here, nor edit, delete
+	// or restore their own posts, a moderator's own included. A moderator's
+	// action on somebody else's post stays open (docs/07 "Edit, delete and
+	// restore", docs/08 "Decided 2026-09-29"). It is what the server's
+	// refusal reads, so the client offers nothing on the viewer's own post
+	// that the server would refuse (TKT-01M3QHKD21).
+	ForumReadOnly bool `json:"forum_read_only"`
 }
 
 // AuthorWindows is the two author windows in whole seconds, the ones the

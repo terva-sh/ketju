@@ -293,6 +293,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		CanModerate:     canModerate,
 		SlowModeSeconds: slow,
 		AuthorWindows:   authorW,
+		ForumReadOnly:   readOnlyForum(a) != nil,
 	}
 	now := s.now()
 	// The rename window is read only for the one viewer it can matter to,

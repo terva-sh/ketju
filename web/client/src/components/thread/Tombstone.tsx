@@ -10,9 +10,12 @@ import { Replies, ReplyToggle } from './ReplyExpander';
 // link into it still hold (docs/06, docs/08 "Tombstones"). Replies to it
 // keep their reply_to, so its expander still opens them.
 //
-// own is handed over on the viewer's own post, on the thread page only. A
-// member's own deleted post reaches them as a tombstone, and while the page
-// offers it (postControls), Restore is in its footer (TKT-01M3PTT97X).
+// own is handed over on the viewer's own post, and on every post to a
+// viewer who moderates the forum, on the thread page only. A member's own
+// deleted post reaches them as a tombstone, and while the page offers it
+// (postControls), Restore is in its footer (TKT-01M3PTT97X). A moderator is
+// offered nothing here: every removed post they may restore is served to
+// them with its body, as a Post.
 export function Tombstone({
   post,
   thread,

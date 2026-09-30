@@ -652,7 +652,8 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
   "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205},
   "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_moderate": false,
              "slow_mode_seconds": 30, "next_post_at": null, "rename_until": null,
-             "author_windows": {"edit_seconds": 86400, "delete_seconds": 900}},
+             "author_windows": {"edit_seconds": 86400, "delete_seconds": 900},
+             "forum_read_only": false},
   "posts": [
     {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,
@@ -878,7 +879,11 @@ charged to the write limiter. The optional reason body is read to at most
   act on. Like `rename_until` it moves no response cache key, and the ETag
   changes when it does. The client offers Edit, Delete and Restore on the
   viewer's own post only while the window is open, and shows a refusal's
-  words when its clock and the server's disagree (TKT-01M3PTT97X).
+  words when its clock and the server's disagree (TKT-01M3PTT97X). A viewer
+  whose page says `can_moderate`, by role or through a group, is offered
+  Edit and Delete on every post that is not removed, moved or redacted, and
+  Restore on every removed post served with its body, at any age and without
+  `reply` (TKT-01M3QHKD21).
 - An author's edit within `posts.grace_edit_seconds` of posting, of a post
   with no visible edit, is written as a grace edit (`grace: true` on the
   `Edit`, docs/03). It is a revision, and history lists it, but the post is
@@ -891,7 +896,12 @@ charged to the write limiter. The optional reason body is read to at most
   author's edit, delete or restore of their own post is `conflict` to
   everyone but an admin, a moderator's own post included, since only an
   admin may post there (04). A moderator's action on somebody else's post is
-  moderation and is not refused. A locked thread is
+  moderation and is not refused. The thread page's viewer block carries
+  `forum_read_only`, true exactly when that refusal applies to the viewer's
+  own posts: the forum is archived and the viewer is not an admin. Like
+  `author_windows` it moves no response cache key, and the ETag changes when
+  it does. The client offers nothing on the viewer's own post while it is
+  true (TKT-01M3QHKD21). A locked thread is
   `conflict` for a member's edit only, since a lock refuses posts and edits
   (08).
 - The source is checked and rendered as a reply's is, against the thread and

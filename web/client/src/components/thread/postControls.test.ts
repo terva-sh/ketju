@@ -28,8 +28,17 @@ function post(over: Partial<Post> = {}): Post {
   };
 }
 
-type V = Pick<ThreadViewer, 'can_reply' | 'author_windows'>;
-const bound = (over: Partial<V> = {}): V => ({ can_reply: true, author_windows: { edit_seconds: 600, delete_seconds: 300 }, ...over });
+type V = Pick<ThreadViewer, 'can_reply' | 'can_moderate' | 'author_windows' | 'forum_read_only'>;
+const bound = (over: Partial<V> = {}): V => ({
+  can_reply: true,
+  can_moderate: false,
+  author_windows: { edit_seconds: 600, delete_seconds: 300 },
+  forum_read_only: false,
+  ...over,
+});
+// A viewer who moderates the forum, as the page sends one: no windows. The
+// member golden's role is member, so this is a moderator through a group.
+const moderating = (over: Partial<V> = {}): V => bound({ can_moderate: true, author_windows: null, ...over });
 const offered = (p: Post, v: V = bound(), at = now) => {
   const c = postControls(p, v, at);
   return { edit: c.edit, delete: c.delete, restore: c.restore };
@@ -146,5 +155,62 @@ describe('postControls', () => {
     const c = postControls(post(), w, created + 30 * 86_400_000);
     expect(c).toEqual({ edit: true, delete: true, restore: false, closesAt: created + 9_223_372_036_000 });
     expect(Number.isSafeInteger(c.closesAt)).toBe(true);
+  });
+});
+
+// A viewer who moderates the forum (TKT-01M3QHKD21): can_moderate on the
+// page, by role or through a group, is the whole test, as it is on the
+// server (authorize in internal/service/threads/mutate.go).
+describe('postControls for a moderator', () => {
+  const carol = (over: Partial<Post> = {}) => post({ author: { ...base.author, handle: 'carol' }, ...over });
+  const old = now + 365 * 86_400_000;
+
+  it('a moderator may act on every post', () => {
+    // Another member's visible post and their own, at any age, with no reply
+    // needed.
+    for (const v of [moderating(), moderating({ can_reply: false })]) {
+      expect(postControls(carol(), v, old)).toEqual({ edit: true, delete: true, restore: false, closesAt: null });
+      expect(postControls(post(), v, old)).toEqual({ edit: true, delete: true, restore: false, closesAt: null });
+    }
+    // Restore on a removed post served with its body, whoever removed it.
+    for (const removal of ['author', 'moderator', 'review', null]) {
+      expect(offered(carol({ deleted: true, removal, html: '<p>kept</p>' }), moderating(), old), String(removal)).toEqual({
+        edit: false,
+        delete: false,
+        restore: true,
+      });
+    }
+    // A post created at a time that is not a number binds no window here.
+    expect(offered(carol({ created_at: NaN }), moderating())).toEqual({ edit: true, delete: true, restore: false });
+  });
+
+  it('nothing on a moved or redacted post', () => {
+    const redacted = carol({ deleted: true, removal: 'moderator', redacted: true, html: '' });
+    expect(postControls(redacted, moderating(), now)).toEqual(noControls);
+    // A removed post served without its body is a tombstone, not restorable
+    // from here, even if nothing else says redacted.
+    expect(postControls({ ...redacted, redacted: false }, moderating(), now)).toEqual(noControls);
+    expect(postControls(carol({ deleted: true, moved_to: '3yymw47g00099', html: '' }), moderating(), now)).toEqual(noControls);
+    expect(postControls(carol({ moved_to: '3yymw47g00099' }), moderating(), now)).toEqual(noControls);
+  });
+
+  it('a member still gets only their own', () => {
+    expect(postControls(carol(), bound(), now)).toEqual(noControls);
+    expect(postControls(carol({ deleted: true, removal: 'moderator', html: '<p>kept</p>' }), bound(), now)).toEqual(noControls);
+    expect(postControls(carol(), bound({ author_windows: null }), now)).toEqual(noControls);
+  });
+
+  it("nothing on one's own post in a read-only forum", () => {
+    for (const v of [bound({ forum_read_only: true }), moderating({ forum_read_only: true })]) {
+      expect(postControls(post(), v, now)).toEqual(noControls);
+      expect(postControls(post({ deleted: true, removal: 'author' }), v, now)).toEqual(noControls);
+    }
+    // A moderator still acts on somebody else's post there.
+    expect(offered(carol(), moderating({ forum_read_only: true }))).toEqual({ edit: true, delete: true, restore: false });
+    expect(offered(carol({ deleted: true, removal: 'review' }), moderating({ forum_read_only: true }))).toEqual({
+      edit: false,
+      delete: false,
+      restore: true,
+    });
   });
 });

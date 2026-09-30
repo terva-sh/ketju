@@ -330,19 +330,22 @@ function ThreadBody({ page, lens, onChanged }: { page: ThreadPage; lens: string;
   const onFlag: FlagHandler | undefined = viewer.value.user
     ? (ordinal, returnTo) => setFlagging({ ordinal, returnTo })
     : undefined;
-  // Edit, delete and restore on the viewer's own posts, offered by one rule
-  // at this render's now (postControls). The clock renders the page again
-  // when the soonest offer ends, and a change asks for the page again
-  // (TKT-01M3PTT97X).
+  // Edit, delete and restore on the viewer's own posts, and on every post for
+  // a viewer who moderates the forum, offered by one rule at this render's
+  // now (postControls). The clock renders the page again when the soonest
+  // offer ends, and a change asks for the page again (TKT-01M3PTT97X,
+  // TKT-01M3QHKD21).
   const now = Date.now();
   const offers = page.posts.map((p) => postControls(p, page.viewer, now));
   useWindowClock(offers.map((c) => c.closesAt));
   const windows = page.viewer.author_windows;
+  const moderates = page.viewer.can_moderate && !!viewer.value.user;
   const ownOf = (p: PostDTO, i: number): Own | undefined =>
-    isOwn(p)
+    moderates || isOwn(p)
       ? {
           thread: thread.id,
           offer: offers[i],
+          hides: !isOwn(p),
           deleteUntil: windows ? p.created_at + windows.delete_seconds * 1000 : null,
           logLength: page.thread.log_length,
           onChanged,

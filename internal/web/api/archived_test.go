@@ -187,3 +187,49 @@ func TestModeratorsStillModerateInArchivedForums(t *testing.T) {
 	// And the member still may not.
 	w.refused(t, id, h, "carol", http.MethodPost, postsPath(id), `{"source":"late"}`, "conflict")
 }
+
+// TestThreadViewerSaysTheForumIsReadOnly is the page's side of the refusal
+// above (TKT-01M3QHKD21): forum_read_only is false in an open forum, and in
+// an archived one true for a member, a moderator by role and a moderator by
+// group, and false for an admin. It agrees with the server for each of them:
+// a viewer told true has their own post's delete refused as conflict, and a
+// viewer told false has it taken. A moderator told true still hides
+// somebody else's post, which the flag does not cover.
+func TestThreadViewerSaysTheForumIsReadOnly(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	gina := w.groupModerator(w.forum)
+	admin := w.newAdmin()
+	viewers := map[string]domain.Viewer{"carol": w.viewer("carol"), "bob": w.viewer("bob"), "gina": gina, "dora": admin}
+	own := map[string]int{}
+	for who := range viewers {
+		own[who], _ = w.fresh(id, who)
+	}
+	readOnly := func(v domain.Viewer) bool {
+		t.Helper()
+		return page(t, w.get(v, threadPath(id))).Viewer.ForumReadOnly
+	}
+	for who, v := range viewers {
+		if readOnly(v) {
+			t.Errorf("%s: forum_read_only in an open forum", who)
+		}
+	}
+
+	w.archive()
+	for who, want := range map[string]bool{"carol": true, "bob": true, "gina": true, "dora": false} {
+		v := viewers[who]
+		if got := readOnly(v); got != want {
+			t.Errorf("%s: forum_read_only %v in an archived forum, want %v", who, got, want)
+		}
+		rec := w.sendAs(v, http.MethodDelete, postPathN(id, own[who]), "")
+		switch {
+		case want && problemCode(t, rec) != "conflict":
+			t.Errorf("%s, told read-only, deleted their own post: %d %s, want conflict", who, rec.Code, rec.Body)
+		case !want && rec.Code != http.StatusOK:
+			t.Errorf("%s, told not read-only, deleting their own post: %d %s, want 200", who, rec.Code, rec.Body)
+		}
+	}
+	if rec := w.sendAs(gina, http.MethodDelete, postPathN(id, own["carol"]), ""); rec.Code != http.StatusOK {
+		t.Errorf("gina hiding carol's post in an archived forum: %d %s, want 200", rec.Code, rec.Body)
+	}
+}

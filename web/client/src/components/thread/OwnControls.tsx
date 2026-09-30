@@ -9,16 +9,21 @@ import { viewer } from '../../state/viewer';
 import type { Controls } from './postControls';
 
 // Edit, Delete and Restore on the viewer's own posts (TKT-01M3PTT97X; docs/07
-// "Edit, delete and restore"). postControls decides what is offered, and
-// ThreadBody hands each of the viewer's own posts an Own; the requests, the
+// "Edit, delete and restore"), and on every post for a viewer who moderates
+// the forum (TKT-01M3QHKD21). postControls decides what is offered, and
+// ThreadBody hands each post the viewer may act on an Own; the requests, the
 // editor, the inline confirmation and the words for a refusal are here, once,
-// for Post and Tombstone alike. TKT-01M3QHKD21 widens the same controls to a
-// moderator's reach over every post.
+// for Post and Tombstone alike.
 
-// Own is what the thread page hands a post that is the viewer's own.
+// Own is what the thread page hands a post that is the viewer's own, or any
+// post when the viewer moderates the forum.
 export interface Own {
   thread: string;
   offer: Controls;
+  // A delete here is a moderator's of somebody else's post, which hides it:
+  // members see that a moderator removed it, and only a moderator restores
+  // it (docs/08 "Restoring a moderator's delete").
+  hides: boolean;
   // When the delete window closes, for the confirmation; null when no window
   // binds the viewer.
   deleteUntil: number | null;
@@ -91,15 +96,20 @@ export function useOwn(own: Own | undefined, ordinal: number) {
     (to ?? post)?.focus({ preventScroll: true });
   }, [refocus]);
 
-  // A post that stops being the viewer's own, because someone else signed in
-  // in this tab, closes what was open on it for good: the editor holds the
-  // author's source, and is drawn only while the post is theirs.
-  const mine = !!own;
-  useEffect(() => {
-    if (mine) return;
-    setMode(null);
-    setFailure(null);
-  }, [mine]);
+  // A post that stops being the viewer's to act on, or a change of who is
+  // signed in in this tab, closes what was open on it for good: the editor
+  // holds a source only its author or a moderator may read. A moderator's
+  // Own rests on the page's can_moderate, which a sign-in as someone else
+  // does not change until the page is fetched again, so the handle counts
+  // too (TKT-01M3QHKD21).
+  const who = own ? (viewer.value.user?.handle ?? '') : null;
+  useEffect(
+    () => () => {
+      setMode(null);
+      setFailure(null);
+    },
+    [who],
+  );
 
   const live = !!own && own.logLength >= waitFor;
   const offer = {
@@ -139,7 +149,7 @@ export function useOwn(own: Own | undefined, ordinal: number) {
   };
   // refresh asks for the page again, for a refusal that says it is stale.
   const refresh = () => own?.onChanged();
-  return { mode: own ? mode : null, offer, failure, busy, open, close, send, refresh, deleteUntil: own?.deleteUntil ?? null };
+  return { mode: own ? mode : null, offer, failure, busy, open, close, send, refresh, deleteUntil: own?.deleteUntil ?? null, hides: !!own?.hides };
 }
 
 // withdrawn is what an open editor or confirmation says once its control is
@@ -154,7 +164,9 @@ function note(o: OwnState, kind: 'edit' | 'delete'): string | null {
 }
 
 // DeleteConfirm asks before a delete, inline in the post, and says until when
-// the author can restore it. Cancel has focus when it opens, so a second
+// the author can restore it; or, for a moderator's delete of somebody else's
+// post, what members will see and who can restore it, in removedText's words
+// for it (TKT-01M3QHKD21). Cancel has focus when it opens, so a second
 // Enter does not delete; Escape cancels. Neither closes it while the delete
 // is in flight, since a refusal is said here and would have nowhere to go
 // (Terva review 1610).
@@ -175,7 +187,7 @@ export function DeleteConfirm({ o, ordinal }: { o: OwnState; ordinal: number }) 
       }}
     >
       <p>
-        Delete this post?
+        {o.hides ? 'Remove this post? Members will see that a moderator removed it. Only a moderator can restore it.' : 'Delete this post?'}
         {o.deleteUntil !== null && (
           <>
             {' '}You can restore it until <Until at={o.deleteUntil} />.
@@ -208,7 +220,8 @@ function Until({ at }: { at: number }) {
   );
 }
 
-// PostEditor edits the viewer's own post in its place, with the composer
+// PostEditor edits a post in its place, the viewer's own or, for a
+// moderator, anyone's, with the composer
 // every writing screen shares, previewed in the thread as the post's reply.
 // It loads the post's current source from GET …/source, which answers only
 // the author or a moderator and is never held on the client (no ETag), and
@@ -330,9 +343,10 @@ export function PostEditor({
   );
 }
 
-// Restore is the control that takes back one's own delete, in a tombstone's
-// footer or, for a moderator who is its author, a removed post's. A refusal
-// is said beside it.
+// Restore is the control that takes back a delete: an author's own, in a
+// tombstone's footer, or any a moderator may restore, in the footer of the
+// removed post the page serves them with its body. A refusal is said beside
+// it.
 export function Restore({ o }: { o: OwnState }) {
   return (
     <>

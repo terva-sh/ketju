@@ -76,6 +76,9 @@ export interface ThreadViewer {
   // enforces. null for a viewer who may moderate the forum, whom neither
   // binds, and for one who is not a member.
   author_windows: AuthorWindows | null;
+  // forum_read_only: the forum is archived and this viewer is not an admin,
+  // so their own posts take no edit, delete or restore.
+  forum_read_only: boolean;
 }
 
 export interface AuthorWindows {

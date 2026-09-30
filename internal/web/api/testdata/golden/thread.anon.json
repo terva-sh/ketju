@@ -34,7 +34,8 @@
     "slow_mode_seconds": 0,
     "next_post_at": null,
     "rename_until": null,
-    "author_windows": null
+    "author_windows": null,
+    "forum_read_only": false
   },
   "posts": [
     {

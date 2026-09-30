@@ -463,3 +463,94 @@ describe("the viewer's own post", () => {
     expect(footer(root)).toEqual(['quote', 'reply', 'edit', 'delete']);
   });
 });
+
+// A moderator's controls on everybody's posts (TKT-01M3QHKD21). The viewer is
+// the moderator golden's, bob, unless a test says otherwise, and post #61 is
+// carol's, a month old: no window binds a moderator, and the page sends none.
+describe("a moderator's controls", () => {
+  const carols = (over: Partial<Post> = {}) =>
+    post({ author: { ...base.posts[0].author, handle: 'carol' }, created_at: Date.now() - 30 * day, ...over });
+  const moderating = (p: Post = carols()) => page(p, null, { can_moderate: true });
+  beforeEach(() => {
+    viewer.value = structuredClone(moderator) as Me;
+    pages = [moderating()];
+  });
+
+  it("a moderator's delete of another's post says who sees what", async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag', 'edit', 'delete']);
+    expect(footer(root, 62)).toEqual(['quote', 'reply', 'flag', 'edit', 'delete']);
+    await click(control(root, 'delete'));
+    expect(confirmOf(root)!.querySelector('p')!.textContent).toBe(
+      'Remove this post? Members will see that a moderator removed it. Only a moderator can restore it.',
+    );
+    pages = [{ ...moderating(carols({ deleted: true, removal: 'moderator' })), thread: { ...base.thread, log_length: len + 1 } }];
+    await click(confirmButton(root, 'Delete'));
+    expect(sent('DELETE')).toEqual([{ method: 'DELETE', url: postUrl, body: undefined }]);
+    await settle(root);
+    expect(gets()).toBe(2);
+    // The moderator is served the post with its body, marked, and may put it
+    // back from its footer.
+    expect(at(root).classList.contains('removed')).toBe(true);
+    expect(footer(root)).toEqual(['quote', 'reply', 'restore']);
+  });
+
+  it('a moderator restores a hidden post', async () => {
+    for (const removal of ['moderator', 'review', 'author']) {
+      server.sent.length = 0;
+      pages = [moderating(carols({ deleted: true, removal })), { ...moderating(), thread: { ...base.thread, log_length: len + 1 } }];
+      const root = await renderAt(`/t/${id}/a`);
+      expect(footer(root), removal).toEqual(['quote', 'reply', 'restore']);
+      await click(control(root, 'restore'));
+      expect(sent('POST'), removal).toEqual([{ method: 'POST', url: `${postUrl}/restore`, body: undefined }]);
+      await settle(root);
+      expect(gets(), removal).toBe(2);
+      expect(footer(root), removal).toEqual(['quote', 'reply', 'flag', 'edit', 'delete']);
+      await unmount();
+    }
+  });
+
+  it('nothing on a redacted post, and no restore on a tombstone', async () => {
+    pages = [moderating(carols({ deleted: true, removal: 'moderator', redacted: true, html: '' }))];
+    const root = await renderAt(`/t/${id}/a`);
+    expect(at(root).classList.contains('tombstone')).toBe(true);
+    expect(at(root).querySelector('[data-post-action]')).toBeNull();
+  });
+
+  it('a group moderator gets the same controls', async () => {
+    // alice's role is member; the page says she moderates this forum, as a
+    // group grant makes it say.
+    viewer.value = structuredClone(member) as Me;
+    const root = await renderAt(`/t/${id}/a`);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag', 'edit', 'delete']);
+    await click(control(root, 'edit'));
+    expect(area(root).value).toBe('my **words**');
+    await type(root, "carol's words, tidied");
+    pages = [{ ...moderating(carols({ edited_at: Date.now(), edited_by_moderator: true })), thread: { ...base.thread, log_length: len + 1 } }];
+    await click(save(root));
+    expect(sent('PATCH')).toEqual([{ method: 'PATCH', url: postUrl, body: { source: "carol's words, tidied" } }]);
+    await settle(root);
+    expect(editor(root)).toBeNull();
+    expect(at(root).querySelector('.edited')?.textContent).toBe('(edited by a moderator)');
+  });
+
+  it('a member without moderate gets nothing on it', async () => {
+    viewer.value = structuredClone(member) as Me;
+    pages = [page(carols(), { edit_seconds: 600, delete_seconds: 300 })];
+    const root = await renderAt(`/t/${id}/a`);
+    expect(footer(root)).toEqual(['quote', 'reply', 'flag']);
+  });
+
+  it('the editor goes when the signed-in viewer changes', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    await click(control(root, 'edit'));
+    expect(area(root).value).toBe('my **words**');
+    // Someone else signs in in this tab. The page, not yet fetched again,
+    // still says can_moderate; the source bob loaded goes all the same.
+    const dana = structuredClone(moderator) as Me;
+    dana.user!.handle = 'dana';
+    await act(async () => void (viewer.value = dana));
+    expect(editor(root)).toBeNull();
+    expect(root.textContent).not.toContain('my **words**');
+  });
+});

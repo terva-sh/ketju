@@ -31,7 +31,8 @@
     "author_windows": {
       "edit_seconds": 86400,
       "delete_seconds": 900
-    }
+    },
+    "forum_read_only": false
   },
   "posts": [
     {

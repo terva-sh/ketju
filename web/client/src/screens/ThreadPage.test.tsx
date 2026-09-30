@@ -426,6 +426,28 @@ describe('a post', () => {
     expect(links).toEqual([`/t/${id}/why-we-left-slack/7`, `/t/${id}/why-we-left-slack/7/history`]);
   });
 
+  // TKT-01M3QHKD21: a moderator's edit says so, naming nobody; the post's
+  // history names them (docs/08 "Post history").
+  it('the edited marker', async () => {
+    serve(
+      page([
+        post(7, { edited_at: 1757500200000, edited_by_moderator: true }),
+        post(8, { edited_at: 1757500200000, edited_by_moderator: false }),
+      ]),
+    );
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    const mark = at(root, '#post-7 .edited')!;
+    expect(mark.textContent).toBe('(edited by a moderator)');
+    expect(mark.getAttribute('data-edited-by')).toBe('moderator');
+    // The header names the author and nobody else.
+    const author = base.posts[0].author;
+    expect(at(root, '#post-7 .post-header')!.textContent).toBe(
+      `#7${author.display_name || author.handle}${at(root, '#post-7 .post-header time')!.textContent}(edited by a moderator)`,
+    );
+    expect(at(root, '#post-8 .edited')!.textContent).toBe('(edited)');
+    expect(at(root, '#post-8 .edited')!.hasAttribute('data-edited-by')).toBe(false);
+  });
+
   it('draws an uploaded avatar, or the initial', async () => {
     const author = base.posts[0].author;
     serve(page([post(1, { author: { ...author, avatar: 'abc' } }), post(2, { author: { ...author, avatar: '', display_name: 'zed' } })]));
