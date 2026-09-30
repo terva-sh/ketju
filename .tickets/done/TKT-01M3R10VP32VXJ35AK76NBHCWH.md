@@ -21,7 +21,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T02:06:43Z
-updated_at: 2026-09-30T10:44:06Z
+updated_at: 2026-09-30T10:47:03Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -130,6 +130,10 @@ Where the build differs from the plan's wording, and why:
 - The no-stripe proof is a 10 s guard around each call from afterQueueRead (a deadlock guard, not a wait): sync.Mutex is not reentrant, so a hide that took the stripe would never return. Mutation 3 in the commit body confirms it fires.
 
 Timing under -race, locally: TestSuspensionHideRacesTheQueueRestore about 11 s (0.55 s per fresh world, mostly the migrated DB), the whole internal/service/threads package 58 s. It uses no sleeps; the goroutines start from one closed channel.
+
+**agent:claude-code/phase2-run-r10vp3** at 2026-09-30T10:47:03Z
+
+Review 1573 on PR #217 (head 4ded7ec, base 94ce6d8), medium, fixed: 'Wait for either the Restore hook or an early Keep result'. The forced order (a) in TestSuspensionHideWhileTheQueueRestores waited on holding alone, so a Keep that answered before its Restore would hang the test. It now selects on holding, the Keep's answer and a 10 s guard. Checked by mutation: with the Keep made to answer conflict before its Restore, the test fails in 1 s naming the Keep's answer instead of hanging.
 
 ## Summary
 

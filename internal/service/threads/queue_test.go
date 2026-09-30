@@ -1489,7 +1489,16 @@ func TestSuspensionHideWhileTheQueueRestores(t *testing.T) {
 			_, err := w.svc.ResolvePost(t.Context(), w.as("mod"), w.id, 1, Resolution{Action: QueueResolve})
 			kept <- err
 		}()
-		<-holding
+		// A Keep that answers before it reaches its Restore never closes
+		// holding, so wait for either, with a guard against neither (Terva
+		// review 1573 on PR #217).
+		select {
+		case <-holding:
+		case err := <-kept:
+			t.Fatalf("the Keep answered %v before it reached its Restore", err)
+		case <-time.After(10 * time.Second):
+			t.Fatal("the Keep never reached its Restore")
+		}
 		before := w.logLength()
 		type answer struct {
 			n   int
