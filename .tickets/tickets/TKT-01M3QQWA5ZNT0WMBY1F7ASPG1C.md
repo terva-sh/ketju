@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T03:28:25Z
+updated_at: 2026-09-30T03:47:06Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
@@ -72,6 +72,8 @@ The tombstone text for `removal: "review"` ("Post hidden pending review", and "h
 ## Implementation plan
 
 Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 43a844d. The server half is merged: TKT-01M29CP2PJ (Implement flags with the auto-hide threshold), PR #176. The tombstone words for `removal: "review"` are already in `components/thread/removal.tsx` (TKT-01M29CKRJ9).
+
+Revised 2026-09-30 at claim (agent:claude-code/phase2-run-qqwa5z), against main at 052db1d. Of the files the plan names, only `internal/service/threads/flags.go` changed since grooming, in the flag-lock comment and the moderator queue's locked restore (TKT-01M29CRJ4E), not in `Flag`, so the approach stands; three details below change with what building it found, each marked "Revised at claim". The settled items are carried unchanged.
 
 ### Settled in grooming
 
@@ -114,7 +116,7 @@ Engineering choices made here, each with the alternative that lost:
    - On desktop, the footer renders `<button type="button" class="hit" data-post-action="flag">flag</button>` between link and history when `onFlag && mayFlag(post)`.
    - On a phone, it renders the reply expander, quote and reply, then `PostMore`, holding link, flag (under the same condition) and history.
    - The comment above `Post` that says flag arrives with its own ticket is replaced.
-4. **`components/thread/PostMore.tsx`**: a "more" button (`aria-label="More actions for post #N"`, `aria-expanded`, `aria-controls`, `data-post-more`) and a list. Escape, a press outside, or choosing an item closes it. Escape returns focus to the button. Every item carries `.hit`. The flag item closes the list and calls `onFlag(ordinal, moreButton)` with the button's ref, so the dialog returns focus to the button, which stays on screen.
+4. **`components/thread/PostMore.tsx`**: a "more" button (`aria-label="More actions for post #N"`, `aria-expanded`, `aria-controls`, `data-post-more`) and a list. Escape, a press outside, or choosing an item closes it. Escape returns focus to the button. Every item is a full target (Revised at claim: each list item is drawn at least `var(--target)` high and the list's width, so `.hit`'s padding would add nothing; the button itself carries `.hit`). The flag item closes the list and calls `onFlag(ordinal, moreButton)` with the button's ref, so the dialog returns focus to the button, which stays on screen.
 5. **`components/thread/FlagDialog.tsx`**, with props `{thread: string, ordinal: number, returnTo: HTMLElement, onClose: () => void}`. On unmount, focus goes to `returnTo` when it is connected and visible, or else to `#post-{ordinal}`.
    - The title is "Flag post #N".
    - A radio group "Why?" offers Spam, Abuse, Off-topic and Other, with values `spam`, `abuse`, `off-topic` and `other`. None is chosen at first.
@@ -125,7 +127,7 @@ Engineering choices made here, each with the alternative that lost:
    - `unavailable` says "Your report could not be sent. Try again shortly." and keeps the form filled, because the server wrote nothing.
    - `validation-failed` says "Choose a reason, and say what is wrong when it is Other."
    - `conflict` says "This post can no longer be flagged. It may have been removed or moved, or its thread archived."
-   - `forbidden` says "You cannot flag your own post." The client does not offer it, so this is reached only by a race such as a rename.
+   - `forbidden` says "You cannot flag this post. It is your own, or you no longer have access to it." The client does not offer flag on the viewer's own post, so this is reached only by a race such as a rename. Revised at claim: `threads.access` also answers `forbidden` when read access to the thread was withdrawn after the page loaded, so "You cannot flag your own post." alone would be untrue there.
    - `not-found` says "This post is no longer here."
    - Anything else (`rate-limited`, `unauthenticated` and the rest) gets `problemMessage` from `api/problem.ts`.
    - On a refusal the form stays as filled.
@@ -162,7 +164,7 @@ Engineering choices made here, each with the alternative that lost:
   - `flags a post from the page`: a signed-in viewer presses flag on post 3, the dialog opens titled "Flag post #3", and the request goes to `/api/v1/threads/{id}/flags`. After the receipt, no second request for the thread page is made. When the dialog closes, focus is back on post 3's flag control (desktop).
   - `flags a post from the phone's More` (review 1525): with `isPhone` true, the viewer opens post 3's More, presses flag, and the list closes. The dialog opens, and when it is closed with Close and, separately, with Escape, focus is on post 3's More button (`[data-post-more]`, `aria-expanded="false"`), not on `document.body`.
   - `a signed-out reader has no flag`.
-- **e2e:** `e2e/targets.spec.ts` covers the phone's "more" control and its items at 390 px. `e2e/replies.spec.ts`, or a new `e2e/flag.spec.ts`, flags a post at 390 px and 1440 px and sees the thanks.
+- **e2e:** `e2e/targets.spec.ts` covers the phone's "more" control and its items at 390 px. `e2e/replies.spec.ts`, or a new `e2e/flag.spec.ts`, flags a post at 390 px and 1440 px and sees the thanks. Revised at claim: a new `e2e/flag.spec.ts`, so that the Phase 2 exit lane's edits to existing specs do not collide; and the open list covers the post below it, so `targets.spec.ts`'s `small` takes an optional root and measures only the list while it is open. On the phone a radio is drawn in a 44 px box, because the check presses 21 px beside each input and the label is not the input's hit area.
 - **Invariants held by the server's tests, which stay green:**
   - Only the acknowledgement reaches the reporter: `TestReporterSeesOnlyTheReceipt`.
   - A repeat adds no row: `TestDuplicateFlagDoesNotCount`.
