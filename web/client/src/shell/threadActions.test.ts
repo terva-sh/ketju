@@ -22,8 +22,8 @@ describe('the thread actions', () => {
   it('lock or unlock by state', () => {
     expect(kinds({ locked: false, pinned: null, staff: false })).toEqual(['lock', 'pin']);
     expect(kinds({ locked: true, pinned: null, staff: false })).toEqual(['unlock', 'pin']);
-    // After Reply and First unread, before Copy link.
-    expect(ids({ locked: false, pinned: null, staff: true })).toEqual(['reply', 'lock', 'pin', 'copy-link']);
+    // After Reply and First unread, with Move after them, before Copy link.
+    expect(ids({ locked: false, pinned: null, staff: true })).toEqual(['reply', 'lock', 'pin', 'move', 'copy-link']);
   });
 
   it('pin, or unpin and pin, by state', () => {
@@ -43,8 +43,22 @@ describe('the thread actions', () => {
     const open = vi.fn();
     const actions = threadActions(t, { moderate: { locked: true, pinned: forumPin, staff: false, open } });
     for (const a of actions.filter((a) => a.id !== 'copy-link')) a.run();
-    expect(open.mock.calls).toEqual([['unlock'], ['pin'], ['unpin']]);
-    expect(actions.map((a) => a.label)).toEqual(['Unlock', 'Pin', 'Unpin', 'Copy link']);
+    expect(open.mock.calls).toEqual([['unlock'], ['pin'], ['unpin'], ['move']]);
+    expect(actions.map((a) => a.label)).toEqual(['Unlock', 'Pin', 'Unpin', 'Move…', 'Copy link']);
+  });
+
+  // TKT-01M3QXV399: Rename comes with the rename option, which the page sets
+  // for a moderator and for the author inside their window, and Move with
+  // moderate, whatever the role.
+  it('offers Rename with rename and Move with moderate', () => {
+    const rename = vi.fn();
+    expect(threadActions(t, { rename }).map((a) => a.id)).toEqual(['rename', 'copy-link']);
+    const actions = threadActions(t, { canReply: true, rename, moderate: { locked: false, pinned: null, staff: false, open() {} } });
+    expect(actions.map((a) => a.id)).toEqual(['reply', 'rename', 'lock', 'pin', 'move', 'copy-link']);
+    expect(actions[1].label).toBe('Rename…');
+    actions[1].run();
+    expect(rename).toHaveBeenCalledOnce();
+    expect(threadActions(t, { canReply: true }).map((a) => a.id)).not.toContain('move');
   });
 
   it('counts only moderators and admins by role as staff', () => {

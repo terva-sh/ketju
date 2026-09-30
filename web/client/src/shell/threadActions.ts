@@ -11,6 +11,10 @@ export interface ThreadActionTarget {
 // /api/v1/admin/threads/{id}/{kind} (docs/07 "Locking and pinning threads").
 export type ModerateKind = 'lock' | 'unlock' | 'pin' | 'unpin';
 
+// PanelKind is what the panel under the thread head can be open for: the
+// four above, and rename and move (docs/07 "Renaming and moving threads").
+export type PanelKind = ModerateKind | 'rename' | 'move';
+
 // ModerateState is what decides which moderation actions a thread offers:
 // its header's lock and pin, and whether the viewer is a moderator or admin
 // by role (staff).
@@ -47,7 +51,10 @@ export interface ThreadActionOptions {
   firstUnread?: () => void;
   // moderate is set only for a viewer the thread page says moderates the
   // thread (viewer.can_moderate), and open brings up the panel for a kind.
-  moderate?: ModerateState & { open: (kind: ModerateKind) => void };
+  moderate?: ModerateState & { open: (kind: PanelKind) => void };
+  // rename brings up the rename panel; the thread page sets it for a viewer
+  // who moderates the thread, and for its author inside their window.
+  rename?: () => void;
 }
 
 // threadActions is every action on a thread, the one list the desktop
@@ -66,13 +73,19 @@ export interface ThreadActionOptions {
 // Lock or Unlock, Pin and Unpin are offered when the page says the viewer
 // moderates the thread (viewer.can_moderate), by moderateKinds. Thread
 // moderation follows the forum grant (docs/08 "Decided 2026-09-30"), so a
-// member who moderates the forum through a group is offered them too.
+// member who moderates the forum through a group is offered them too, and
+// Move with them: its route needs moderate in the thread's forum and the
+// destination, and the destination is the server's to judge.
+//
+// Rename is offered when the page hands over rename (see ThreadScreen).
 export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions = {}): ShellAction[] {
   const m = opts.moderate;
   return [
     ...(opts.canReply ? [{ id: 'reply', label: 'Reply', run: () => replyToThread(t.id) }] : []),
     ...(opts.firstUnread ? [{ id: 'first-unread', label: 'First unread', run: opts.firstUnread }] : []),
+    ...(opts.rename ? [{ id: 'rename', label: 'Rename…', run: opts.rename }] : []),
     ...(m ? moderateKinds(m).map((k) => ({ id: k, label: moderateLabels[k], run: () => m.open(k) })) : []),
+    ...(m ? [{ id: 'move', label: 'Move…', run: () => m.open('move') }] : []),
     {
       id: 'copy-link',
       label: 'Copy link',

@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { apiSend } from '../../api/client';
-import type { Pinned, ThreadHeader } from '../../api/dto';
+import { useLocation } from 'preact-iso';
+import { apiGet, apiSend, forgetGets, peekGet } from '../../api/client';
+import type { Forum, ForumTree, Pinned, ThreadHeader } from '../../api/dto';
 import { asProblem, isProblem, problemMessage, revokesAccess } from '../../api/problem';
-import type { ModerateKind } from '../../shell/threadActions';
+import { forumsUrl } from '../../screens/ForumIndex';
+import type { PanelKind } from '../../shell/threadActions';
 import { storeThreadHeader } from '../../state/threads';
+import { canonicalThreadUrl } from '../../view';
 
 // The longest reason a lock or unlock takes, in characters, as the server
 // counts them (docs/07). maxlength counts UTF-16 code units, never fewer
@@ -11,13 +14,26 @@ import { storeThreadHeader } from '../../state/threads';
 // long.
 export const maxModerateReason = 500;
 
-const titles: Record<ModerateKind, string> = {
+// The longest title, in characters, as the server counts them
+// (threads.MaxTitle).
+export const maxTitle = 200;
+
+const titles: Record<PanelKind, string> = {
   lock: 'Lock this thread',
   unlock: 'Unlock this thread',
   pin: 'Pin this thread',
   unpin: 'Unpin this thread?',
+  rename: 'Rename this thread',
+  move: 'Move this thread',
 };
-const buttons: Record<ModerateKind, string> = { lock: 'Lock', unlock: 'Unlock', pin: 'Pin', unpin: 'Unpin' };
+const buttons: Record<PanelKind, string> = {
+  lock: 'Lock',
+  unlock: 'Unlock',
+  pin: 'Pin',
+  unpin: 'Unpin',
+  rename: 'Rename',
+  move: 'Move',
+};
 
 export const moderateChanged = 'This thread changed while you were working.';
 export const moderateForbidden = 'You can no longer moderate this thread.';
@@ -26,18 +42,46 @@ export const moderateForbidden = 'You can no longer moderate this thread.';
 // moderator, or an archive, getting there first; forbidden is a grant
 // withdrawn or a move since the page loaded. Either way the page is asked
 // for again, so the thread head shows the state that caused it.
-export function moderateRefusal(kind: ModerateKind, err: unknown): string {
+//
+// For a rename or a move, a conflict may also be the title or the forum the
+// thread already has. A move's forbidden is usually a destination the viewer
+// does not moderate, since the list is every forum they can read
+// (destinations), and its not-found a destination gone since the list
+// loaded.
+export function moderateRefusal(kind: PanelKind, err: unknown): string {
   const p = asProblem(err);
+  const named = kind === 'rename' || kind === 'move';
   switch (p.type) {
     case 'conflict':
-      return moderateChanged;
+      return named ? 'This thread changed while you were working, or is already there.' : moderateChanged;
     case 'forbidden':
-      return moderateForbidden;
+      return kind === 'move' ? 'You cannot move this thread there.' : named ? problemMessage(p).text : moderateForbidden;
     case 'validation-failed':
-      return kind === 'pin' ? 'Choose an end after now, or leave it empty.' : problemMessage(p).text;
+      return kind === 'pin'
+        ? 'Choose an end after now, or leave it empty.'
+        : kind === 'rename'
+          ? `Enter a title of 1 to ${maxTitle} characters.`
+          : problemMessage(p).text;
+    case 'not-found':
+      return kind === 'move' ? 'That forum is no longer there.' : problemMessage(p).text;
     default:
       return problemMessage(p).text;
   }
+}
+
+// destinations is where a move may take a thread, from the forum tree the
+// viewer is served (GET /api/v1/forums, which lists only the forums they may
+// read): every forum but the thread's own, each child after its parent, and
+// marked as one. An archived forum is listed only to an admin, since the
+// server refuses a move into one to anyone else (docs/08, TKT-01M3N24RHD).
+export function destinations(forums: Forum[], current: string, admin: boolean): [Forum, boolean][] {
+  const out: [Forum, boolean][] = [];
+  const ok = (f: Forum) => f.slug !== current && (admin || !f.archived);
+  for (const f of forums) {
+    if (ok(f)) out.push([f, false]);
+    for (const c of f.children) if (ok(c)) out.push([c, true]);
+  }
+  return out;
 }
 
 // ModerateDialog is the panel under the thread head for one of the thread
@@ -46,6 +90,15 @@ export function moderateRefusal(kind: ModerateKind, err: unknown): string {
 // asks, since it sends the active pin's scope. The answer is the thread's
 // header as it now reads, which replaces the cached one (storeThreadHeader),
 // and the page is then asked for again (onChanged).
+//
+// Rename takes a title and sends PATCH /api/v1/threads/{id}; move takes a
+// forum from destinations and sends POST /api/v1/admin/threads/{id}/move.
+// Their answer is stored the same way, and the address is replaced at once
+// with the header's canonical one (canonicalThreadUrl), which keeps the
+// ordinal, /history, the page, the lens and the hash. A move also drops the
+// held forum index and thread lists, whose counts it changed. A refused
+// rename or move keeps what was typed or chosen, and onWindowClosed hears a
+// rename-window-closed.
 //
 // It is inline, not modal: it keeps the thread head, where the lock and pin
 // notes change, in view, and needs no focus trap. Focus goes to its first
@@ -66,18 +119,30 @@ export function ModerateDialog({
   returnTo,
   onChanged,
   onClose,
+  current = { title: '', forum: '' },
+  admin = false,
+  onWindowClosed,
 }: {
   thread: string;
-  kind: ModerateKind;
+  kind: PanelKind;
   pinned: Pinned | null;
   staff: boolean;
   offered: boolean;
   returnTo: () => HTMLElement | null;
   onChanged: () => void;
   onClose: () => void;
+  // current is the thread's title and forum slug, for rename and move.
+  current?: { title: string; forum: string };
+  admin?: boolean;
+  onWindowClosed?: () => void;
 }) {
   const root = useRef<HTMLElement>(null);
+  const { route } = useLocation();
   const [reason, setReason] = useState('');
+  const [title, setTitle] = useState(current.title);
+  const [dest, setDest] = useState('');
+  const [forums, setForums] = useState(() => peekGet<ForumTree>(forumsUrl)?.forums);
+  const [loadError, setLoadError] = useState<unknown>(null);
   const [scope, setScope] = useState<'forum' | 'global'>('forum');
   const [until, setUntil] = useState('');
   const [sending, setSending] = useState(false);
@@ -86,8 +151,13 @@ export function ModerateDialog({
   // the button sends nothing.
   const inFlight = useRef(false);
 
+  const load = () => {
+    setLoadError(null);
+    apiGet<ForumTree>(forumsUrl).then((t) => setForums(t.forums), setLoadError);
+  };
   useEffect(() => {
-    root.current?.querySelector<HTMLElement>('textarea, input, button')?.focus();
+    if (kind === 'move') load();
+    root.current?.querySelector<HTMLElement>('textarea, input, select, button')?.focus();
     const panel = root.current;
     return () => {
       const at = document.activeElement;
@@ -103,6 +173,11 @@ export function ModerateDialog({
 
   const untilMs = until ? new Date(until).getTime() : null;
   const badUntil = untilMs !== null && !Number.isFinite(untilMs);
+  // A title's length in code points, as the server counts runes.
+  const trimmed = title.trim();
+  const length = [...trimmed].length;
+  const unready =
+    (kind === 'rename' && (length === 0 || length > maxTitle || trimmed === current.title)) || (kind === 'move' && !dest);
 
   const body = (): unknown => {
     switch (kind) {
@@ -113,28 +188,37 @@ export function ModerateDialog({
         return { scope: staff ? scope : 'forum', until: untilMs };
       case 'unpin':
         return { scope: pinned?.scope };
+      case 'rename':
+        return { title: trimmed };
+      case 'move':
+        return { forum: dest };
     }
   };
 
   const send = async (e: Event) => {
     e.preventDefault();
-    if (!offered || badUntil || inFlight.current) return;
+    if (!offered || badUntil || unready || inFlight.current) return;
     if (kind === 'unpin' && !pinned) return;
     inFlight.current = true;
     setSending(true);
     setRefused(null);
     try {
+      const t = encodeURIComponent(thread);
       const header = await apiSend<ThreadHeader>(
-        'POST',
-        `/api/v1/admin/threads/${encodeURIComponent(thread)}/${kind}`,
+        kind === 'rename' ? 'PATCH' : 'POST',
+        kind === 'rename' ? `/api/v1/threads/${t}` : `/api/v1/admin/threads/${t}/${kind}`,
         body(),
         { status: 200 },
       );
       storeThreadHeader(thread, header);
+      if (kind === 'move') forgetGets((u) => u.startsWith(forumsUrl));
+      const to = canonicalThreadUrl(location, header);
+      if (to) route(to, true);
       onChanged();
       onClose();
     } catch (err) {
       setRefused(moderateRefusal(kind, err));
+      if (isProblem(err, 'rename-window-closed')) onWindowClosed?.();
       if (isProblem(err, 'conflict') || revokesAccess(err)) onChanged();
     } finally {
       inFlight.current = false;
@@ -148,7 +232,7 @@ export function ModerateDialog({
     }
   };
 
-  const title = `moderate-title-${thread}`;
+  const heading = `moderate-title-${thread}`;
   const hint = `moderate-hint-${thread}`;
   const cancel = (
     <button type="button" data-moderate-close onClick={onClose}>
@@ -166,11 +250,11 @@ export function ModerateDialog({
       ref={root}
       class="moderate-panel"
       role="group"
-      aria-labelledby={title}
+      aria-labelledby={heading}
       data-moderate={kind}
       onKeyDown={onKeyDown}
     >
-      <h2 id={title}>{titles[kind]}</h2>
+      <h2 id={heading}>{titles[kind]}</h2>
       {offered ? (
         <form onSubmit={send}>
           {(kind === 'lock' || kind === 'unlock') && (
@@ -226,10 +310,49 @@ export function ModerateDialog({
               </p>
             </>
           )}
+          {kind === 'rename' && (
+            <>
+              <label class="moderate-field">
+                Title
+                <input
+                  type="text"
+                  value={title}
+                  aria-describedby={hint}
+                  aria-invalid={length > maxTitle}
+                  onInput={(e) => setTitle(e.currentTarget.value)}
+                />
+              </label>
+              <p id={hint} class="moderate-hint">
+                Up to {maxTitle} characters.
+              </p>
+            </>
+          )}
+          {kind === 'move' && (
+            <label class="moderate-field">
+              Move to
+              <select value={dest} disabled={!forums} onChange={(e) => setDest(e.currentTarget.value)}>
+                <option value="">{forums ? 'Choose a forum' : 'Loading…'}</option>
+                {forums &&
+                  destinations(forums, current.forum, admin).map(([f, child]) => (
+                    <option key={f.slug} value={f.slug}>
+                      {child ? `\u2003${f.name}` : f.name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+          )}
+          {kind === 'move' && loadError !== null && (
+            <p class="moderate-refused" role="alert">
+              {problemMessage(loadError).text}{' '}
+              <button type="button" onClick={load}>
+                Retry
+              </button>
+            </p>
+          )}
           {alert}
           <div class="moderate-buttons">
             {cancel}
-            <button type="submit" class="moderate-send" disabled={sending || badUntil}>
+            <button type="submit" class="moderate-send" disabled={sending || badUntil || unready}>
               {buttons[kind]}
             </button>
           </div>

@@ -523,7 +523,8 @@
 }
 .flag-note textarea,
 .moderate-field textarea,
-.moderate-field input {
+.moderate-field input,
+.moderate-field select {
   font: inherit;
   font-weight: 400;
   padding: 8px;

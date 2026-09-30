@@ -1,6 +1,7 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Me, ThreadHeader, ThreadPage } from '../api/dto';
+import { peekGet } from '../api/client';
+import type { Forum, Me, ThreadHeader, ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
 import { dwellMs, resetReadTracker } from '../state/readTracker';
 import { viewer } from '../state/viewer';
@@ -346,6 +347,7 @@ describe('moderating from the thread screen', () => {
   // request; a Promise holds its answer until it settles.
   let pages: (ThreadPage | Promise<ThreadPage>)[];
   let moderate: Record<string, (body: unknown) => Answer>;
+  let forums: Forum[];
   let server: StubServer;
   beforeEach(() => {
     vi.stubGlobal(
@@ -357,10 +359,15 @@ describe('moderating from the thread screen', () => {
     );
     pages = [at()];
     moderate = {};
+    forums = [];
+    const page = async () => ({ status: 200, body: await (pages.length > 1 ? pages.shift()! : pages[0]) });
     const routes: StubServer['routes'] = {
-      [`GET ${url}`]: async () => ({ status: 200, body: await (pages.length > 1 ? pages.shift()! : pages[0]) }),
+      [`GET ${url}`]: page,
+      [`GET ${url}?lens=x&ordinal=61`]: page,
+      [`PATCH ${url}`]: (b) => moderate.rename?.(b) ?? problemAnswer('internal', 500),
+      'GET /api/v1/forums': () => ({ status: 200, body: { forums }, headers: { ETag: '"f1"' } }),
     };
-    for (const kind of ['lock', 'unlock', 'pin', 'unpin'])
+    for (const kind of ['lock', 'unlock', 'pin', 'unpin', 'move'])
       routes[`POST /api/v1/admin/threads/${id}/${kind}`] = (b) => moderate[kind]?.(b) ?? problemAnswer('internal', 500);
     server = stubServer(routes);
     as('moderator');
@@ -632,5 +639,188 @@ describe('moderating from the thread screen', () => {
     const root = await renderAt(`/t/${id}/a/61/history`);
     expect(screenOf(root)).toBe('post-history');
     expect(offered(root)).toEqual([]);
+    expect(named(root)).toEqual([]);
+  });
+
+  // TKT-01M3QXV399: rename and move. Rename is offered on can_moderate and
+  // to the author inside rename_until; Move on can_moderate, whatever the
+  // role.
+  const named = (root: HTMLElement) =>
+    [...root.querySelectorAll('[data-shell=toolbar] [data-action]')]
+      .map((b) => b.getAttribute('data-action'))
+      .filter((a) => a === 'rename' || a === 'move');
+  const field = () => panel()!.querySelector<HTMLInputElement>('input[type=text]')!;
+  const select = () => panel()!.querySelector<HTMLSelectElement>('select')!;
+  const alert = () => panel()?.querySelector('[role=alert]')?.textContent;
+  const sendDisabled = () => panel()!.querySelector<HTMLButtonElement>('.moderate-send')!.disabled;
+  async function type(value: string) {
+    field().value = value;
+    await act(async () => void field().dispatchEvent(new Event('input', { bubbles: true })));
+  }
+  async function choose(slug: string) {
+    select().value = slug;
+    await act(async () => void select().dispatchEvent(new Event('change', { bubbles: true })));
+  }
+  const forum = (slug: string, o: Partial<Forum> = {}): Forum => ({
+    slug,
+    name: slug[0].toUpperCase() + slug.slice(1),
+    description: '',
+    visibility: 'public',
+    archived: false,
+    thread_count: 0,
+    post_count: 0,
+    unread: 0,
+    last_post: null,
+    children: [],
+    ...o,
+  });
+  const tree = () => [
+    forum('general', { children: [forum('introductions'), forum('attic', { archived: true })] }),
+    forum('lounge'),
+    forum('archive', { archived: true, children: [forum('reading')] }),
+  ];
+  const listed = () => [...select().options].slice(1).map((o) => o.value);
+
+  it('a moderator is offered rename and move', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    expect(named(root)).toEqual(['rename', 'move']);
+  });
+
+  it('a group moderator is offered rename and move', async () => {
+    as('member');
+    let root = await renderAt(`/t/${id}/a`);
+    expect(named(root)).toEqual(['rename', 'move']);
+    // A member who does not moderate the forum is offered neither, outside
+    // an author's window.
+    pages = [at({ viewer: { can_moderate: false, rename_until: null } })];
+    root = await renderAt(`/t/${id}/a`);
+    expect(named(root)).toEqual([]);
+  });
+
+  it('the author is offered rename while the window is open', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      as('member');
+      pages = [at({ viewer: { can_moderate: false, rename_until: Date.now() + 60_000 } })];
+      let root = await renderAt(`/t/${id}/a`);
+      expect(named(root)).toEqual(['rename']);
+      await act(async () => void vi.advanceTimersByTime(60_000));
+      expect(named(root)).toEqual([]);
+
+      pages = [at({ viewer: { can_moderate: false, rename_until: null } })];
+      root = await renderAt(`/t/${id}/a`);
+      expect(named(root)).toEqual([]);
+
+      // Forty days ahead is past what setTimeout keeps, which a browser fires
+      // at once: no timer is set for longer, and the one set fires early, is
+      // set again, and does not withdraw Rename.
+      const timers = vi.spyOn(globalThis, 'setTimeout');
+      pages = [at({ viewer: { can_moderate: false, rename_until: Date.now() + 40 * 86_400_000 } })];
+      root = await renderAt(`/t/${id}/a`);
+      await act(async () => void vi.advanceTimersByTime(2_147_483_647));
+      expect(named(root)).toEqual(['rename']);
+      const delays = timers.mock.calls.map(([, d]) => d ?? 0);
+      expect(delays).toContain(2_147_483_647);
+      expect(delays.filter((d) => d > 2_147_483_647)).toEqual([]);
+      timers.mockRestore();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rename sends the title and follows the new slug', async () => {
+    const renamed = { title: 'New title', slug: 'new-title' };
+    pages = [at(), at({ thread: { ...renamed, log_length: len + 1 } })];
+    moderate.rename = () => ({ status: 200, body: header(renamed), headers: { 'Cache-Control': 'no-store' } });
+    const root = await renderAt(`/t/${id}/a/61?lens=x#post-61`);
+    await open(root, 'rename');
+    expect(document.activeElement).toBe(field());
+    expect(field().value).toBe('Moderated');
+    // The title it already has, an empty one, and one over 200 characters
+    // are not sent.
+    expect(sendDisabled()).toBe(true);
+    await type('   ');
+    expect(sendDisabled()).toBe(true);
+    await type('é'.repeat(201));
+    expect(sendDisabled()).toBe(true);
+    await type('😀'.repeat(200));
+    expect(sendDisabled()).toBe(false);
+    await type('  New title ');
+    await submit();
+    expect(server.sent.filter((r) => r.method === 'PATCH')).toEqual([{ method: 'PATCH', url, body: { title: 'New title' } }]);
+    expect(root.querySelector('h1')?.textContent).toBe('New title');
+    expect(location.pathname + location.search + location.hash).toBe(`/t/${id}/new-title/61?lens=x#post-61`);
+    expect(panel()).toBeNull();
+    await settle(root);
+    expect(location.pathname).toBe(`/t/${id}/new-title/61`);
+  });
+
+  it('move lists the forums and follows the header', async () => {
+    forums = tree();
+    const lounge = { slug: 'lounge', name: 'Lounge' };
+    moderate.move = () => ({ status: 200, body: header({ forum: lounge }) });
+    const root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('.thread-head .forum')?.textContent).toBe('General');
+    await open(root, 'move');
+    await settle(root);
+    // Not the thread's own forum, and no archived forum to a moderator; an
+    // archived forum's open child is still listed.
+    expect(listed()).toEqual(['introductions', 'lounge', 'reading']);
+    expect(select().options[1].textContent).toBe('\u2003Introductions');
+    expect(sendDisabled()).toBe(true);
+    expect(peekGet('/api/v1/forums')).toBeDefined();
+    await choose('lounge');
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/move`, body: { forum: 'lounge' } }]);
+    expect(root.querySelector('.thread-head .forum')?.textContent).toBe('Lounge');
+    expect(panel()).toBeNull();
+    // The forum index and thread lists it changed are asked for again.
+    expect(peekGet('/api/v1/forums')).toBeUndefined();
+  });
+
+  it('an admin may move into an archived forum', async () => {
+    forums = tree();
+    as('admin');
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'move');
+    await settle(root);
+    expect(listed()).toEqual(['introductions', 'attic', 'lounge', 'archive', 'reading']);
+  });
+
+  it('refusals keep the panel open', async () => {
+    forums = tree();
+    const renameWith = async (type_: string, status: number, words: string) => {
+      moderate.rename = () => problemAnswer(type_, status);
+      await type(`Retitled ${type_}`);
+      await submit();
+      expect(alert(), type_).toBe(words);
+      expect(field().value).toBe(`Retitled ${type_}`);
+    };
+    let root = await renderAt(`/t/${id}/a`);
+    await open(root, 'rename');
+    await renameWith('conflict', 409, 'This thread changed while you were working, or is already there.');
+    await renameWith('validation-failed', 422, 'Enter a title of 1 to 200 characters.');
+
+    await act(async () => panel()!.querySelector<HTMLButtonElement>('[data-moderate-close]')!.click());
+    await open(root, 'move');
+    await settle(root);
+    moderate.move = () => problemAnswer('forbidden', 403);
+    await choose('lounge');
+    await submit();
+    await settle(root);
+    expect(alert()).toBe('You cannot move this thread there.');
+    expect(select().value).toBe('lounge');
+    moderate.move = () => problemAnswer('not-found', 404);
+    await submit();
+    expect(alert()).toBe('That forum is no longer there.');
+
+    // The author past a window this clock thinks is open: the catalogue's
+    // words, and Rename is withdrawn from the actions.
+    as('member');
+    pages = [at({ viewer: { can_moderate: false, rename_until: Date.now() + 60_000 } })];
+    root = await renderAt(`/t/${id}/a`);
+    await open(root, 'rename');
+    await renameWith('rename-window-closed', 403, 'The time for renaming this thread has passed.');
+    expect(named(root)).toEqual([]);
   });
 });

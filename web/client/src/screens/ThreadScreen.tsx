@@ -8,6 +8,7 @@ import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Composer } from '../composer/Composer';
 import { ComposerSheet } from '../composer/ComposerSheet';
+import { delayUntil } from '../components/thread/deadline';
 import { FlagDialog } from '../components/thread/FlagDialog';
 import { ModerateDialog } from '../components/thread/ModerateDialog';
 import { Pager } from '../components/thread/Pager';
@@ -19,7 +20,7 @@ import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
 import '../components/thread/thread.css';
 import { Toolbar } from '../shell/Toolbar';
-import { isStaff, moderateKinds, threadActions, type ModerateKind } from '../shell/threadActions';
+import { isStaff, moderateKinds, threadActions, type PanelKind } from '../shell/threadActions';
 import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
@@ -75,11 +76,13 @@ export function ThreadScreen() {
   // The slug is checked whenever the address or the answer changes, not only
   // when a request comes back: moving to an old slug of the thread already on
   // screen asks for nothing new, and must still land on the canonical URL.
+  // It is checked against the header shown, so a rename's answer, stored
+  // before the page is answered again, is not undone by the older page.
   useEffect(() => {
-    if (!res.data) return;
-    const to = canonicalThreadUrl(location, res.data.thread);
+    if (!res.data || !head) return;
+    const to = canonicalThreadUrl(location, head);
     if (to) route(to, true);
-  }, [res.data, url]);
+  }, [res.data, url, head?.slug]);
 
   const landing = !view.hasPage && !params.ordinal;
   useArrival(key, res.data, params.ordinal, landing);
@@ -113,9 +116,26 @@ export function ThreadScreen() {
   // to another thread leaves it behind.
   const mayModerate = !history && (res.data?.viewer.can_moderate ?? false);
   const staff = isStaff(viewer.value.user?.role);
-  const [moderating, setModerating] = useState<{ thread: string; kind: ModerateKind } | null>(null);
+  const [moderating, setModerating] = useState<{ thread: string; kind: PanelKind } | null>(null);
   const locked = head?.locked ?? false;
   const pinned = head?.pinned ?? null;
+  // Rename is offered to a viewer who moderates the thread's forum, and to
+  // its author while the server's rename_until has not passed (docs/07
+  // "Renaming and moving threads"). A timer withdraws it when the window
+  // closes, set for at most maxTimeout and set again when it fires early
+  // (delayUntil). A rename-window-closed answer withdraws it for this thread
+  // at once (closedOn), whatever this clock says.
+  const renameUntil = history ? null : (res.data?.viewer.rename_until ?? null);
+  const windowOpen = renameUntil !== null && Date.now() < renameUntil;
+  const [tick, setTick] = useState(0);
+  useEffect(() => {
+    if (!windowOpen) return;
+    const t = setTimeout(() => setTick((n) => n + 1), delayUntil(renameUntil!, Date.now()));
+    return () => clearTimeout(t);
+  }, [renameUntil, windowOpen, tick]);
+  const [closedOn, setClosedOn] = useState<string | null>(null);
+  const renameOpen = mayModerate || windowOpen;
+  const offerRename = renameOpen && (mayModerate || closedOn !== known?.id);
   const actions = useMemo(
     () =>
       known
@@ -125,9 +145,10 @@ export function ThreadScreen() {
             moderate: mayModerate
               ? { locked, pinned, staff, open: (kind) => setModerating({ thread: known.id, kind }) }
               : undefined,
+            rename: offerRename ? () => setModerating({ thread: known.id, kind: 'rename' }) : undefined,
           })
         : [],
-    [known?.id, known?.slug, canReply, unread, lastRead, postCount, mayModerate, staff, locked, pinned?.scope, pinned?.until],
+    [known?.id, known?.slug, canReply, unread, lastRead, postCount, mayModerate, staff, locked, pinned?.scope, pinned?.until, offerRename],
   );
   const title = useRef<HTMLHeadingElement>(null);
   const panel = moderating && head && moderating.thread === head.id && !history ? moderating : null;
@@ -176,10 +197,17 @@ export function ThreadScreen() {
           kind={panel.kind}
           pinned={head.pinned}
           staff={staff}
-          offered={mayModerate && moderateKinds({ locked, pinned, staff }).includes(panel.kind)}
+          offered={
+            panel.kind === 'rename'
+              ? renameOpen
+              : mayModerate && (panel.kind === 'move' || moderateKinds({ locked, pinned, staff }).includes(panel.kind))
+          }
           returnTo={() => title.current}
           onChanged={res.retry}
           onClose={() => setModerating(null)}
+          current={{ title: head.title, forum: head.forum.slug }}
+          admin={viewer.value.user?.role === 'admin'}
+          onWindowClosed={() => setClosedOn(head.id)}
         />
       )}
       {res.error && <ErrorPanel error={res.error} what="This thread" onRetry={res.retry} />}

@@ -67,6 +67,10 @@ export interface ThreadViewer {
   slow_mode_seconds: number;
   // next_post_at is when slow mode next lets this viewer post, or null.
   next_post_at: Millis | null;
+  // rename_until is when this viewer's rename window closes: set only for
+  // the thread's author without moderate while the server would let them
+  // rename it, and null otherwise, a moderator's included.
+  rename_until: Millis | null;
 }
 
 // SlowMode is PUT /admin/threads/{id}/slow-mode's answer.
