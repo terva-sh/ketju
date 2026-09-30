@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M39WBN4QAMNRBXCGD85CDJF0
 title: Commit Playwright screenshots and the safe-area check for the mockups
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ dependencies:
   - TKT-01M29CCC0FVTZ2YXNXB2EK4R4Q
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-39wbn4q
+  branch: run/39wbn4q-screenshots-safe-area
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae6a5be0267f09de1
+  commit: 4918f907efd36aac88f588786a67b84e1a2137df
+  session: null
+  claimed_at: 2026-09-30T12:01:35Z
+  expires_at: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-30T08:52:14Z
+updated_at: 2026-09-30T12:01:36Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 extensions: {}
 ---
