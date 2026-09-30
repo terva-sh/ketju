@@ -823,4 +823,27 @@ describe('moderating from the thread screen', () => {
     await renameWith('rename-window-closed', 403, 'The time for renaming this thread has passed.');
     expect(named(root)).toEqual([]);
   });
+
+  // Terva review 1588: a refusal whose fresh page withdraws the author's
+  // window (reply taken away, or the thread locked) keeps the typed title,
+  // with Send disabled, rather than dropping the form.
+  it("a refused author's rename keeps the title when the window is withdrawn", async () => {
+    as('member');
+    pages = [
+      at({ viewer: { can_moderate: false, rename_until: Date.now() + 60_000 } }),
+      at({ viewer: { can_moderate: false, rename_until: null } }),
+    ];
+    moderate.rename = () => problemAnswer('forbidden', 403);
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'rename');
+    await type('Mine, retitled');
+    await submit();
+    await settle(root);
+    expect(named(root)).toEqual([]);
+    expect(alert()).toBeTruthy();
+    expect(field().value).toBe('Mine, retitled');
+    expect(sendDisabled()).toBe(true);
+    expect(document.activeElement).toBe(panel()!.querySelector('[data-moderate-close]'));
+    expect(panel()!.querySelector('[data-moderate-close]')?.textContent).toBe('Close');
+  });
 });

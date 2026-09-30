@@ -109,7 +109,9 @@ export function destinations(forums: Forum[], current: string, admin: boolean): 
 // (moderateKinds). After a conflict or a refusal the page is asked for
 // again, and once the kind is no longer offered, the panel keeps its words
 // and a Close button and drops the form, whose button would only be
-// refused.
+// refused. A refused rename or move keeps its form instead, with its button
+// disabled, so the title typed or the forum chosen is still there to copy
+// (Terva review 1588).
 export function ModerateDialog({
   thread,
   kind,
@@ -255,7 +257,7 @@ export function ModerateDialog({
       onKeyDown={onKeyDown}
     >
       <h2 id={heading}>{titles[kind]}</h2>
-      {offered ? (
+      {offered || ((kind === 'rename' || kind === 'move') && refused) ? (
         <form onSubmit={send}>
           {(kind === 'lock' || kind === 'unlock') && (
             <label class="moderate-field">
@@ -352,7 +354,7 @@ export function ModerateDialog({
           {alert}
           <div class="moderate-buttons">
             {cancel}
-            <button type="submit" class="moderate-send" disabled={sending || badUntil || unready}>
+            <button type="submit" class="moderate-send" disabled={!offered || sending || badUntil || unready}>
               {buttons[kind]}
             </button>
           </div>
