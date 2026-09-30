@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3PTT97XM3DCGRTDNHHBNM5M
 title: Offer edit and delete only inside the author windows in the client
 type: task
-status: ready
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -24,12 +24,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T14:59:02Z
-updated_at: 2026-09-30T09:21:43Z
+updated_at: 2026-09-30T19:05:55Z
 created_by:
   id: agent:claude-code/phase2-run-ckrhs
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-ptt97x
   name: ""
 extensions: {}
 ---
@@ -46,15 +46,15 @@ The windows are open for their first N seconds and closed from N on, so a window
 
 ## Acceptance criteria
 
-- [ ] The thread page's viewer block carries author_windows {edit_seconds, delete_seconds} from the two settings for a member, null for a viewer who may moderate the forum or is not a member, outside the cached posts (TestThreadViewerCarriesAuthorWindows, TestAuthorWindowsAreNotCached)
-- [ ] The client offers Edit and Delete on the viewer's own visible post and Restore on their own deleted post only inside the windows, Edit only with can_reply, and all three at any age when author_windows is null (postControls.test.ts)
-- [ ] The controls disappear when the window passes with no other input (fake timers), and edit, delete and restore send the routes' requests and refetch the page (PostControls.test.tsx)
-- [ ] A refusal with edit-window-closed or delete-window-closed shows its sentence beside the control (PostControls.test.tsx)
-- [ ] The DTO goldens and dto-contract.ts are updated, the thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
-- [ ] author_windows carries the seconds the server enforces, int(secondsDuration(n)/time.Second): with both settings at 10000000000 the page carries 9223372036 and a delete 30 days after posting is allowed (TestAuthorWindowsFollowTheClamp)
-- [ ] useWindowClock sets its timer through delayUntil, never longer than 2147483647 ms, so a 40-day window neither fires at once nor loops (deadline.test.ts, PostControls.test.tsx 'a long window sets no immediate timer')
-- [ ] Ownership compares handles without case through one isOwn helper that mayFlag also uses, and Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author (postControls.test.ts 'ownership ignores case', PostControls.test.tsx)
-- [ ] On a phone, edit and delete are under PostMore and not in the footer, and closing the delete confirmation returns focus to the More button (PostControls.test.tsx 'on a phone edit and delete are under More')
+- [x] The thread page's viewer block carries author_windows {edit_seconds, delete_seconds} from the two settings for a member, null for a viewer who may moderate the forum or is not a member, outside the cached posts (TestThreadViewerCarriesAuthorWindows, TestAuthorWindowsAreNotCached)
+- [x] The client offers Edit and Delete on the viewer's own visible post and Restore on their own deleted post only inside the windows, Edit only with can_reply, and all three at any age when author_windows is null (postControls.test.ts)
+- [x] The controls disappear when the window passes with no other input (fake timers), and edit, delete and restore send the routes' requests and refetch the page (PostControls.test.tsx)
+- [x] A refusal with edit-window-closed or delete-window-closed shows its sentence beside the control (PostControls.test.tsx)
+- [x] The DTO goldens and dto-contract.ts are updated, the thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
+- [x] author_windows carries the seconds the server enforces, int(secondsDuration(n)/time.Second): with both settings at 10000000000 the page carries 9223372036 and a delete 30 days after posting is allowed (TestAuthorWindowsFollowTheClamp)
+- [x] useWindowClock sets its timer through delayUntil, never longer than 2147483647 ms, so a 40-day window neither fires at once nor loops (deadline.test.ts, PostControls.test.tsx 'a long window sets no immediate timer')
+- [x] Ownership compares handles without case through one isOwn helper that mayFlag also uses, and Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author (postControls.test.ts 'ownership ignores case', PostControls.test.tsx)
+- [x] On a phone, edit and delete are under PostMore and not in the footer, and closing the delete confirmation returns focus to the More button (PostControls.test.tsx 'on a phone edit and delete are under More')
 
 ## Implementation plan
 
@@ -153,6 +153,20 @@ Added in the refresh of 2026-09-30:
 - An edit reason field. The route takes `reason`, but docs/08 asks the author for none, and an empty reason is valid.
 - Saying on the page that a forum is archived, as above.
 
+### Revised at claim, 2026-09-30, against main at 13709f0
+
+Everything above stands. What the code on main changed, and what was built differently, with the reason for each:
+
+- **`deadline.ts` exists** (TKT-01M3QXV399, PR #231). `useWindowClock` imports `delayUntil` from it, and `deadline.test.ts` is already there, so this ticket adds no copy.
+- **Redacted posts are offered nothing** (PRs #228 and #237). A hard-redacted post is deleted, has no body, and can never be edited or restored, so the rule returns no controls for `redacted` before anything else, as it does for `moved_to`.
+- **Restore needs `removal === "author"`**, not "null or author". This server always sets `removal` on a deleted post, and the client ships in the same binary. A deleted post with a null removal is one whose remover the page does not know, and offering Restore there could offer what the server refuses. The stricter test loses nothing.
+- **The editor is the shared `ComposerBody`** (PRs #227 and #235 made it the one composer every writing screen uses), not a bare textarea with `usePreview`. It gains an `editing` prop: its tab and panel ids are `edit-N-…`, so it can sit beside the reply composer without duplicate ids, and it is marked `data-editing` rather than `data-composer`, which names the reply composer. Its fields are local signals, never watched by `state/drafts.ts`, so nothing of an edit is saved as a draft, and `checkOwner` has nothing to forget. Save is off for unchanged or empty source.
+- **The editor closes when the viewer changes.** It is drawn only while the post is the viewer's own (`isOwn`), so a sign-in as someone else in the same tab unmounts it and drops the source it held. The source route answers without an ETag, so `apiGet` never holds it.
+- **Component module `OwnControls.tsx`**, not `PostControls.tsx`: the rule is `postControls.ts`, and two modules whose names differ only by case resolve wrongly on a case-insensitive filesystem. It holds `useOwn` (one post's state), `PostEditor`, `DeleteConfirm`, `Restore` and `ownFailure`. The tests keep the names the criteria give.
+- **Refusals.** Every refusal is said beside the control that sent it. `edit-window-closed` and `delete-window-closed` also withdraw what they name from that post while it is on screen, whatever the client's clock says: the server's clock is the one that counts, and a control that is only refused again is worse than none (as rename does after Terva review 1589). `conflict`, `forbidden`, `not-found` and `gone` ask for the page again, so the offers follow the server. After a success the post offers nothing until a page at least as long as the answer's `log_length` arrives, so a second delete is never offered while the refetch is in flight.
+- **Focus.** The delete confirmation takes focus on Cancel, so a second Enter does not delete; Escape cancels. When the editor or the confirmation closes, focus goes to the control that opened it, on a phone the post's More button, and to the post when that control is gone. While the source loads, focus is on the editor's Cancel.
+- **Server.** `readWindows` in `mutate.go` reads the windows for both `authorize` and the page, so the keys and `secondsDuration` cannot drift apart; `viewerWindows` converts to whole seconds. The locked-thread DTO fixture carries the windows too, since a lock leaves delete and restore open.
+
 ## Notes
 
 **agent:claude-code/phase2-groom** at 2026-09-29T22:07:20Z
@@ -166,3 +180,13 @@ Terva review 1488 on PR #167, head f5a4206, finding 2 (medium): answered, and th
 **agent:claude-code/phase2-groom** at 2026-09-30T09:21:43Z
 
 Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) The source route landed in PR #205. The editor reads GET .../posts/{ordinal}/source (dto.PostSource), which apiGet never holds, and sends {source} only. (2) Honouring TKT-01M3R33SR5's clamp, now a dependency: author_windows carries int(secondsDuration(n)/time.Second), so a setting past a Duration arrives as 9223372036 and client and server agree. useWindowClock bounds its timer with delayUntil (components/thread/deadline.ts, added by this ticket or TKT-01M3QXV399, whichever lands first), because a setTimeout over 2^31-1 ms fires at once. New criteria 6 and 7. (3) TKT-01M29CKRJ9 landed, so removal exists, and a moderator sees removed posts as a removed Post. Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author, which settles the placement TKT-01M3QHKD21 left open. (4) After #202, ownership compares handles without case through isOwn, which mayFlag shares, and on a phone edit and delete go under PostMore with focus returned to its button. New criteria 8 and 9. (5) Known limit recorded: in an archived forum the page cannot tell delete and restore will be refused, so conflict's words show. (6) Goldens corrected: thread.author.json is an api golden, and thread-locked.member.json a dto one. Bundle 47415 of 60000 B.
+
+## Summary
+
+The thread page now carries `viewer.author_windows` and the client offers Edit, Delete and Restore on the viewer's own posts only while the server would accept them.
+
+Server: `dto.ThreadViewer.AuthorWindows` (`{edit_seconds, delete_seconds}`), read in `View`'s existing read transaction for a member who does not moderate the forum, through `readWindows` and `secondsDuration`, the same path `authorize` uses. It is null for a forum moderator and for anyone who is not a member. It is in the viewer block, so the response cache is untouched and the ETag moves with a setting. docs/07 records it. Tests: TestThreadViewerCarriesAuthorWindows, TestAuthorWindowsFollowTheClamp, TestAuthorWindowsAreNotCached; the thread goldens in internal/dto and internal/web/api are regenerated.
+
+Client: `postControls.ts` is the one offer rule, and `isOwn` is its ownership check, shared with `mayFlag`. `OwnControls.tsx` holds the per-post state (`useOwn`), the inline editor on the shared `ComposerBody` (which gains an `editing` prop for its own ids), the delete confirmation and Restore. `useWindowClock` sets one page timer through `delayUntil`. On desktop, edit and delete follow flag in the footer. On a phone they are under PostMore, and focus returns to its button. Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author. Nothing is offered on a moved or redacted post, or on a post a moderator removed. Window refusals withdraw the control locally, stale refusals refetch the page, and after a change nothing is offered until the page shows it. The reader bundle went from 54924 B to 56959 B of 70000 B.
+
+Follow-on: TKT-01M3QHKD21 widens `postControls` and `useOwn` to a moderator's reach over every post; the placement of Restore is settled here.
