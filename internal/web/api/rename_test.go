@@ -20,6 +20,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/applications"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
+	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -237,7 +238,8 @@ func TestMoveNeedsModerateInBothForums(t *testing.T) {
 	lounge := w.forumAt("lounge", domain.VisibilityPublic, false)
 	w.forumAt("staff", domain.VisibilityRestricted, false)
 	attic := w.forumAt("attic", domain.VisibilityPublic, true)
-	gina := w.groupModerator(w.forum)
+	den := w.forumAt("den", domain.VisibilityPublic, false)
+	gina := w.groupModerator(w.forum, den)
 	admin := w.newAdmin()
 	h := w.chain()
 	move := func(who, body string) func() string {
@@ -257,10 +259,21 @@ func TestMoveNeedsModerateInBothForums(t *testing.T) {
 	} {
 		w.unchanged(t, id, c.name, c.want, move(c.who, c.body))
 	}
-	// gina moderates general through a group, which the staff gate does not
-	// admit; the service still holds her to moderate in the destination.
+	// gina moderates general and den through a group. The moderates gate
+	// admits her (TKT-01M3RQP0TG), and the service holds her to moderate in
+	// the destination, so general to lounge is forbidden.
 	w.unchanged(t, id, "gina through the gate", "forbidden", func() string {
 		return problemCode(t, w.sendAs(gina, http.MethodPost, modPath(id, "move"), moveTo("lounge")))
+	})
+	// From general to den, both hers, she moves; from lounge, which is not
+	// hers, to general, she does not.
+	mine := w.threadIn(20, w.forum, "Gina moves this", "alice")
+	if got := header(t, w.sendAs(gina, http.MethodPost, modPath(mine, "move"), moveTo("den"))); got.Forum.Slug != "den" {
+		t.Fatalf("gina's move from general to den answered %+v", got)
+	}
+	notMine := w.threadIn(21, lounge, "In the lounge", "alice")
+	w.unchanged(t, notMine, "gina from lounge to general", "forbidden", func() string {
+		return problemCode(t, w.sendAs(gina, http.MethodPost, modPath(notMine, "move"), moveTo("general")))
 	})
 	w.unchanged(t, id, "without moderate in the destination", "forbidden", func() string {
 		_, err := w.svc.Move(t.Context(), gina, id, "lounge")
@@ -374,6 +387,137 @@ func TestRenameJudgesAnUnprojectedMove(t *testing.T) {
 	if h.Forum.Slug != "general" || h.Title != "Now in general" {
 		t.Fatalf("the rename answered %+v", h)
 	}
+}
+
+// appendUnprojected appends a ThreadMoved to forum by bob to id's log and
+// does not project it, and fails unless the row is still in from.
+func (w *world) appendUnprojected(id threadid.ID, from, forum int64) {
+	w.t.Helper()
+	if err := w.cache.With(id, func(th *threadcache.Thread) error {
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadMoved, Author: uint64(w.users["bob"]),
+			TimeMS: w.clock, Body: &threadlog.ThreadMovedBody{ForumID: uint64(forum)}})
+		return err
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	if row := w.threadRow(id); row.ForumID != from {
+		w.t.Fatalf("the move was projected already: the row is in forum %d", row.ForumID)
+	}
+}
+
+// TestThreadModerationJudgesAnUnprojectedMove is TKT-01M3RQP0TG's seventh
+// criterion, first half: a thread in general, which gina moderates, has a
+// move to lounge, which she does not, in its log and not projected. Each of
+// her six actions is judged against the forum the log puts the thread in,
+// so each is forbidden and writes nothing. Judged from the row as it stood,
+// in general, each would have passed.
+func TestThreadModerationJudgesAnUnprojectedMove(t *testing.T) {
+	for _, a := range threadActions {
+		t.Run(a.name, func(t *testing.T) {
+			w, _, lounge, _, _ := forumModWorld(t)
+			id := w.threadIn(60, w.forum, "About to move", "alice")
+			bob := w.viewer("bob")
+			switch a.action {
+			case "unlock":
+				if _, err := w.svc.Lock(t.Context(), bob, id, ""); err != nil {
+					t.Fatal(err)
+				}
+			case "unpin":
+				if _, err := w.svc.Pin(t.Context(), bob, id, threads.PinForum, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			w.appendUnprojected(id, w.forum, lounge)
+			// Deciding projects bob's move, which writes its own audit row,
+			// so what must not appear is a row of gina's.
+			before, slow := w.logState(id), w.slowModeRow(id)
+			if got := problemCode(t, send(w.chain(), "gina", a.method, modPath(id, a.action), a.body)); got != "forbidden" {
+				t.Errorf("gina's %s: %s, want forbidden", a.name, got)
+			}
+			if after := w.logState(id); after != before {
+				t.Errorf("gina's %s changed the log: %+v then %+v", a.name, before, after)
+			}
+			if got := w.slowModeRow(id); got != slow {
+				t.Errorf("gina's %s changed the slow mode row: %s then %s", a.name, slow, got)
+			}
+			for _, r := range w.auditLog() {
+				if r.actor.Int64 == w.users["gina"] {
+					t.Errorf("gina's %s wrote the audit row %+v", a.name, r)
+				}
+			}
+			if row := w.threadRow(id); row.ForumID != lounge {
+				t.Errorf("after deciding, the row is in forum %d, want lounge %d", row.ForumID, lounge)
+			}
+		})
+	}
+}
+
+// logHeaders is the frame header of every record in id's log, in log order.
+func (w *world) logHeaders(id threadid.ID) []threadlog.FrameHeader {
+	w.t.Helper()
+	f, err := os.ReadFile(id.LogPath(w.root))
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	var out []threadlog.FrameHeader
+	if err := threadlog.ScanFrames(bytes.NewReader(f), int64(len(f)), func(r threadlog.ScanRecord) bool {
+		if r.Err != nil {
+			w.t.Fatal(r.Err)
+		}
+		out = append(out, r.Header)
+		return true
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return out
+}
+
+// TestConcurrentLocksAreDecidedOnTheLog is TKT-01M3RQP0TG's seventh
+// criterion, second half: each round bob moves a thread from general to
+// lounge while gina, who moderates general and not lounge, locks it, at
+// once. Whichever lands first, no ThreadLocked of hers follows the
+// ThreadMoved in the log. Before lock decided at a log length, her lock
+// could pass on general and land after bob's move.
+func TestConcurrentLocksAreDecidedOnTheLog(t *testing.T) {
+	w, gina, _, _, _ := forumModWorld(t)
+	bob := w.viewer("bob")
+	const rounds = 50
+	ids := make([]threadid.ID, rounds)
+	for round := range rounds {
+		id := w.threadIn(uint64(100+round), w.forum, fmt.Sprintf("Round %d", round), "alice")
+		ids[round] = id
+		var wg sync.WaitGroup
+		errs := make([]error, 2)
+		wg.Add(2)
+		go func() { defer wg.Done(); _, errs[0] = w.svc.Move(t.Context(), bob, id, "lounge") }()
+		go func() { defer wg.Done(); _, errs[1] = w.svc.Lock(t.Context(), gina, id, "") }()
+		wg.Wait()
+		if errs[0] != nil {
+			t.Fatalf("round %d: bob's move: %v", round, errs[0])
+		}
+		if c := problem.FromError(errs[1]); errs[1] != nil && c != problem.CodeForbidden {
+			t.Fatalf("round %d: gina's lock: %v", round, errs[1])
+		}
+	}
+	locked := 0
+	for round, id := range ids {
+		moved := false
+		for _, hd := range w.logHeaders(id) {
+			switch {
+			case hd.Type == threadlog.TypeThreadMoved:
+				moved = true
+			case hd.Type == threadlog.TypeThreadLocked && hd.Actor == uint64(w.users["gina"]):
+				locked++
+				if moved {
+					t.Errorf("round %d: gina's lock of %s landed after the move to lounge", round, id)
+				}
+			}
+		}
+		if !moved {
+			t.Errorf("round %d: %s has no move in its log", round, id)
+		}
+	}
+	t.Logf("gina's lock landed first in %d of %d rounds", locked, rounds)
 }
 
 // TestRenameWindowTooLargeForADuration (Terva review 1535, finding 2): a

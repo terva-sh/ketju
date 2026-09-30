@@ -46,60 +46,81 @@ const ActionSlowMode = "thread.slow_mode"
 // row is the service's to write, not the projection writer's, because no
 // record is appended (docs/04 "audit_log"). ip is the request's address.
 //
-// The archived check reads the thread cache before the write rather than
-// holding the thread through it, so an archive landing between the two
-// leaves a slow mode on an archived thread. Nothing can post there, so it
-// governs nothing.
+// The route is behind the moderates gate, which admits a member who
+// moderates any forum, so the forum is decided here, at a log length, as
+// moderate decides lock and pin (TKT-01M3RQP0TG). No record is appended, so
+// the length cannot be an append's precondition. Instead, holding the
+// thread, SetSlowMode reads the length L, projects the thread to L, and
+// admits v from that row (admitAt). The transaction that writes the row
+// checks that the log is still L before it commits, and otherwise rolls back
+// and decides again. A move, or an archive, that lands before that check is
+// judged; one that lands after it is ordered after the change. A thread
+// written to without pause for threadAttempts decisions is conflict.
 func (s *Service) SetSlowMode(ctx context.Context, v domain.Viewer, ip string, id threadid.ID, seconds int) (dto.SlowMode, error) {
 	var out dto.SlowMode
 	if err := s.MayWrite(v); err != nil {
 		return out, err
 	}
-	a, err := s.access(ctx, v, id)
-	if err != nil {
+	// As appendDecided: only whether the thread exists is asked before it is
+	// opened, and nothing about v is judged from a row not yet projected.
+	if err := s.threadExists(ctx, id); err != nil {
 		return out, err
 	}
-	if !a.canModerate {
-		return out, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id))
-	}
-	if err := s.Threads.With(id, func(th *threadcache.Thread) error {
-		if th.Archived() {
-			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+	for range threadAttempts {
+		err := s.Threads.With(id, func(th *threadcache.Thread) error {
+			a, at, err := s.admitAt(ctx, v, id, th)
+			if err != nil {
+				return err
+			}
+			if !a.canModerate {
+				return problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id))
+			}
+			if th.Archived() {
+				return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+			}
+			if seconds < 0 || seconds > MaxSlowModeSeconds {
+				return problem.Coded(problem.CodeValidationFailed,
+					fmt.Errorf("threads: slow mode is 0 to %d seconds, not %d", MaxSlowModeSeconds, seconds))
+			}
+			now := s.now()
+			return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+				var from any // null: the thread had no value of its own
+				switch row, err := q.GetThreadSlowMode(ctx, int64(id)); {
+				case err == nil && row.Seconds == int64(seconds):
+					return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s's slow mode is already %d seconds", id, seconds))
+				case err == nil:
+					from = row.Seconds
+				case !errors.Is(err, sql.ErrNoRows):
+					return err
+				}
+				if err := q.PutThreadSlowMode(ctx, dbq.PutThreadSlowModeParams{
+					ThreadID: int64(id), Seconds: int64(seconds),
+					SetBy: sql.NullInt64{Int64: v.UserID, Valid: true}, SetAt: now.UnixMilli(),
+				}); err != nil {
+					return err
+				}
+				if _, err := audit.Append(ctx, q, now, audit.By{Actor: v.UserID, IP: ip}, ActionSlowMode, audit.Thread(id),
+					map[string]any{"from": from, "to": seconds}); err != nil {
+					return err
+				}
+				// Last, so the window in which a record can land unjudged is
+				// only the commit.
+				if th.Actor.LogLength() != at {
+					return threadlog.ErrLogMoved
+				}
+				return nil
+			})
+		})
+		if errors.Is(err, threadlog.ErrLogMoved) {
+			continue
 		}
-		return nil
-	}); err != nil {
-		return out, err
-	}
-	if seconds < 0 || seconds > MaxSlowModeSeconds {
-		return out, problem.Coded(problem.CodeValidationFailed,
-			fmt.Errorf("threads: slow mode is 0 to %d seconds, not %d", MaxSlowModeSeconds, seconds))
-	}
-	now := s.now()
-	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		var from any // null: the thread had no value of its own
-		switch row, err := q.GetThreadSlowMode(ctx, int64(id)); {
-		case err == nil && row.Seconds == int64(seconds):
-			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s's slow mode is already %d seconds", id, seconds))
-		case err == nil:
-			from = row.Seconds
-		case !errors.Is(err, sql.ErrNoRows):
-			return err
+		if err != nil {
+			return out, err
 		}
-		if err := q.PutThreadSlowMode(ctx, dbq.PutThreadSlowModeParams{
-			ThreadID: int64(id), Seconds: int64(seconds),
-			SetBy: sql.NullInt64{Int64: v.UserID, Valid: true}, SetAt: now.UnixMilli(),
-		}); err != nil {
-			return err
-		}
-		_, err := audit.Append(ctx, q, now, audit.By{Actor: v.UserID, IP: ip}, ActionSlowMode, audit.Thread(id),
-			map[string]any{"from": from, "to": seconds})
-		return err
-	})
-	if err != nil {
-		return out, err
+		out.Seconds = seconds
+		return out, nil
 	}
-	out.Seconds = seconds
-	return out, nil
+	return out, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s kept changing while this request was decided", id))
 }
 
 // effectiveSlowMode is thread id's slow mode in seconds: its own row, or

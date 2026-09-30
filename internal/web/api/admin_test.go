@@ -218,6 +218,88 @@ func TestModeratesGate(t *testing.T) {
 	}
 }
 
+// adminRouteGates is the gate each admin route is registered with. Only the
+// moderator queue and the six thread moderation routes are behind moderates:
+// thread moderation follows the forum grant, and admin screens and account
+// actions keep their role gates (docs/08 "Decided 2026-09-30").
+var adminRouteGates = map[string]string{
+	"GET /api/v1/admin/queue":                           "moderates",
+	"POST /api/v1/admin/queue/posts/{id}/{ordinal}":     "moderates",
+	"POST /api/v1/admin/threads/{id}/lock":              "moderates",
+	"POST /api/v1/admin/threads/{id}/unlock":            "moderates",
+	"POST /api/v1/admin/threads/{id}/pin":               "moderates",
+	"POST /api/v1/admin/threads/{id}/unpin":             "moderates",
+	"POST /api/v1/admin/threads/{id}/move":              "moderates",
+	"PUT /api/v1/admin/threads/{id}/slow-mode":          "moderates",
+	"GET /api/v1/admin/applications":                    "staff",
+	"GET /api/v1/admin/applications/{id}":               "staff",
+	"POST /api/v1/admin/applications/{id}/approve":      "staff",
+	"POST /api/v1/admin/applications/{id}/deny":         "staff",
+	"POST /api/v1/admin/applications/{id}/notes":        "staff",
+	"POST /api/v1/admin/applications/{id}/unblock":      "staff",
+	"GET /api/v1/admin/users":                           "staff",
+	"GET /api/v1/admin/users/{handle}":                  "staff",
+	"POST /api/v1/admin/users/{handle}/suspend":         "staff",
+	"POST /api/v1/admin/users/{handle}/unsuspend":       "staff",
+	"POST /api/v1/admin/users/{handle}/posts/hide":      "staff",
+	"POST /api/v1/admin/users/{handle}/posts/restore":   "staff",
+	"POST /api/v1/admin/users/{handle}/anonymize":       "admin",
+	"POST /api/v1/admin/users/{handle}/rename":          "admin",
+	"PUT /api/v1/admin/users/{handle}/role":             "admin",
+	"POST /api/v1/admin/users":                          "admin",
+	"POST /api/v1/admin/users/{handle}/credential":      "admin",
+	"DELETE /api/v1/admin/users/{handle}/credential":    "admin",
+	"PUT /api/v1/admin/users/{handle}/agent-limits":     "admin",
+	"GET /api/v1/admin/groups":                          "admin",
+	"POST /api/v1/admin/groups":                         "admin",
+	"GET /api/v1/admin/groups/{id}":                     "admin",
+	"PATCH /api/v1/admin/groups/{id}":                   "admin",
+	"DELETE /api/v1/admin/groups/{id}":                  "admin",
+	"POST /api/v1/admin/groups/{id}/members":            "admin",
+	"DELETE /api/v1/admin/groups/{id}/members/{handle}": "admin",
+	"GET /api/v1/admin/permissions":                     "admin",
+	"POST /api/v1/admin/permissions":                    "admin",
+	"POST /api/v1/admin/permissions/preview":            "admin",
+	"GET /api/v1/admin/forms/{key}":                     "admin",
+	"GET /api/v1/admin/forms/{key}/versions/{version}":  "admin",
+	"POST /api/v1/admin/forms/{key}/versions":           "admin",
+	"POST /api/v1/admin/forms/{key}/preview":            "admin",
+}
+
+// TestThreadModerationRoutesUseTheModeratesGate is TKT-01M3RQP0TG's first
+// criterion: lock, unlock, pin, unpin, move and slow mode are registered
+// with the moderates gate, and every other admin route keeps the gate the
+// table gives it. A route missing from the table fails, so a new route is
+// given a gate on purpose, and widening any route's gate fails too.
+func TestThreadModerationRoutesUseTheModeratesGate(t *testing.T) {
+	w := newAdminWorld(t)
+	registered := map[string]bool{}
+	for _, route := range w.h.adminRoutes {
+		registered[route.pattern] = true
+		want, ok := adminRouteGates[route.pattern]
+		switch {
+		case !ok:
+			t.Errorf("%s (gate %s) is not in the table; give it a gate here on purpose", route.pattern, route.gate.name)
+		case route.gate.name != want:
+			t.Errorf("%s has the %s gate, want %s", route.pattern, route.gate.name, want)
+		}
+	}
+	for pattern := range adminRouteGates {
+		if !registered[pattern] {
+			t.Errorf("%s is in the table and not registered", pattern)
+		}
+	}
+	moderates := 0
+	for _, g := range adminRouteGates {
+		if g == "moderates" {
+			moderates++
+		}
+	}
+	if moderates != 8 {
+		t.Errorf("%d routes in the table are behind moderates, want the queue's two and the six thread routes", moderates)
+	}
+}
+
 // TestAdminRouteRefusesAPathOutsideAdmin: adminRoute is for admin routes
 // only, so the list the walk reads cannot hold anything else, and a route
 // with no method or gate is a wiring mistake that stops the server starting.

@@ -63,9 +63,14 @@ func (s *Service) Unlock(ctx context.Context, v domain.Viewer, id threadid.ID, r
 // forum or global, until nil for no end. A pin replaces whatever pin the
 // thread has. Pinning with the scope and end of the active pin is conflict,
 // so the log keeps no record that changes nothing; an end that is not after
-// now is validation-failed.
+// now is validation-failed. Before those, a pin with scope global, or one
+// that would replace an active global pin, is forbidden to a viewer who is
+// not a moderator or admin by role (staffPin).
 func (s *Service) Pin(ctx context.Context, v domain.Viewer, id threadid.ID, scope string, until *time.Time) (dto.ThreadHeader, error) {
 	return s.moderate(ctx, v, id, func(a access, now time.Time) (threadlog.Append, error) {
+		if err := staffPin(a, scope, now); err != nil {
+			return threadlog.Append{}, err
+		}
 		var ms int64 // zero is indefinitely, in the log
 		if until != nil {
 			ms = until.UnixMilli()
@@ -89,9 +94,14 @@ func (s *Service) Pin(ctx context.Context, v domain.Viewer, id threadid.ID, scop
 // Unpin is POST /admin/threads/{id}/unpin: a ThreadUnpinned record naming
 // the scope removed, so clearing a forum pin cannot clear a global one
 // (docs/03). A scope that is not the active pin's is conflict, an expired
-// pin included: it is no pin.
+// pin included: it is no pin. Before that, an unpin with scope global, or
+// any unpin while a global pin is active, is forbidden to a viewer who is
+// not a moderator or admin by role (staffPin).
 func (s *Service) Unpin(ctx context.Context, v domain.Viewer, id threadid.ID, scope string) (dto.ThreadHeader, error) {
 	return s.moderate(ctx, v, id, func(a access, now time.Time) (threadlog.Append, error) {
+		if err := staffPin(a, scope, now); err != nil {
+			return threadlog.Append{}, err
+		}
 		if !pinActive(a.row, now) || a.row.PinnedScope.String != scope {
 			return threadlog.Append{}, problem.Coded(problem.CodeConflict,
 				fmt.Errorf("threads: %s has no active %q pin", id, scope))
@@ -288,16 +298,7 @@ func (s *Service) appendDecided(ctx context.Context, v domain.Viewer, id threadi
 	for range threadAttempts {
 		var res threadlog.Result
 		err := s.Threads.With(id, func(th *threadcache.Thread) error {
-			at := th.Actor.LogLength()
-			// A quarantined thread's log is shorter than its projection
-			// and cannot be projected; access answers it from the row,
-			// unavailable to a reader and not-found to anyone else.
-			if s.Quarantined == nil || !s.Quarantined(id) {
-				if err := s.projectNow(ctx, id, at); err != nil {
-					return err
-				}
-			}
-			a, err := s.access(ctx, v, id)
+			a, at, err := s.admitAt(ctx, v, id, th)
 			if err != nil {
 				return err
 			}
@@ -324,53 +325,78 @@ func (s *Service) appendDecided(ctx context.Context, v domain.Viewer, id threadi
 	return out, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s kept changing while this request was decided", id))
 }
 
-// moderate is the four thread actions: the checks every one of them makes,
-// then the record decide builds, appended with the viewer as its actor and
-// projected before the answer. The refusals come in this order, all before
-// the append, so a refusal writes nothing, to the log or to audit_log:
-// forbidden without moderate in the thread's forum; conflict on an archived
-// thread; then decide's own, conflict for an action that would change
-// nothing and validation-failed for a bad request.
+// admitAt reads the log length L of the open thread th, projects thread id
+// up to L, and admits v from the row that gives. Whatever the caller decides
+// from the answer is decided at L: appendDecided appends at L
+// (threadlog.Append.AtLength), and SetSlowMode, which appends nothing,
+// checks the length again inside its transaction.
+func (s *Service) admitAt(ctx context.Context, v domain.Viewer, id threadid.ID, th *threadcache.Thread) (access, int64, error) {
+	at := th.Actor.LogLength()
+	// A quarantined thread's log is shorter than its projection and cannot
+	// be projected; access answers it from the row, unavailable to a reader
+	// and not-found to anyone else.
+	if s.Quarantined == nil || !s.Quarantined(id) {
+		if err := s.projectNow(ctx, id, at); err != nil {
+			return access{}, 0, err
+		}
+	}
+	a, err := s.access(ctx, v, id)
+	return a, at, err
+}
+
+// moderate is the four thread actions, lock, unlock, pin and unpin: the
+// checks every one of them makes, then the record decide builds, appended
+// with the viewer as its actor and projected before the answer. The
+// refusals come in this order, all before the append, so a refusal writes
+// nothing, to the log or to audit_log: forbidden without moderate in the
+// thread's forum; conflict on an archived thread; then decide's own:
+// forbidden for a global pin to a viewer who is not staff by role
+// (staffPin), conflict for an action that would change nothing, and
+// validation-failed for a bad request.
 //
-// decide reads the thread's state from the projection row. Two moderators
-// locking at the same instant can both append; the projection is idempotent,
-// so the cost is one redundant record, and that is accepted (settled in the
-// plan for TKT-01M29CKRGS).
+// The routes are behind the moderates gate, which admits a member who
+// moderates any forum, so the forum is decided here, at a log length,
+// through appendDecided. A move that lands between the decision and the
+// append fails the append, and the request is decided again against the
+// forum the move took the thread to, so a moderator of one forum cannot lock
+// or pin a thread that has just left it (docs/08 "Decided 2026-09-30",
+// TKT-01M3RQP0TG). Two moderators locking at the same instant are decided
+// one after the other, and the second answers conflict.
 //
 // Locking and pinning in an archived forum stay open to moderators (docs/08,
 // TKT-01M3N24RHD): only the archived thread is refused.
 func (s *Service) moderate(ctx context.Context, v domain.Viewer, id threadid.ID,
 	decide func(a access, now time.Time) (threadlog.Append, error)) (dto.ThreadHeader, error) {
-	var out dto.ThreadHeader
 	if err := s.MayWrite(v); err != nil {
-		return out, err
+		return dto.ThreadHeader{}, err
 	}
-	a, err := s.access(ctx, v, id)
-	if err != nil {
-		return out, err
-	}
-	if !a.canModerate {
-		return out, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id))
-	}
-	flags, err := s.authorFlags(ctx, v)
-	if err != nil {
-		return out, err
-	}
-	if _, err := s.appendEvent(ctx, id, func(th *threadcache.Thread) (threadlog.Append, error) {
+	return s.appendDecided(ctx, v, id, func(a access, th *threadcache.Thread, now time.Time) (threadlog.Append, error) {
+		if !a.canModerate {
+			return threadlog.Append{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id))
+		}
 		if th.Archived() {
 			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
 		}
-		now := s.now()
-		rec, err := decide(a, now)
-		if err != nil {
-			return rec, err
-		}
-		rec.Flags, rec.Author, rec.TimeMS = flags, uint64(v.UserID), now.UnixMilli()
-		return rec, nil
-	}); err != nil {
-		return out, err
+		return decide(a, now)
+	})
+}
+
+// staffPin refuses a global pin to a viewer who is not a moderator or admin
+// by role: pinning with scope global, and any pin or unpin while a global pin
+// is active, which would take it down or replace it. A global pin heads the
+// thread list of every forum whose readers can read the thread
+// (views.PinnedThreads), so it changes forums other than the thread's, and
+// moderating the thread's forum is not moderating those (TKT-01M3RQP0TG). A
+// forum moderator by grant still pins and unpins with scope forum.
+func staffPin(a access, scope string, now time.Time) error {
+	if a.viewer.Staff() {
+		return nil
 	}
-	return s.threadHeader(ctx, v, id)
+	if scope == PinGlobal || (pinActive(a.row, now) && a.row.PinnedScope.String == PinGlobal) {
+		return problem.Coded(problem.CodeForbidden,
+			fmt.Errorf("threads: only a moderator or admin by role may change a global pin on %s", threadid.ID(a.row.ID)))
+	}
+	return nil
 }
 
 // appendEvent appends the record build returns to thread id, under the
@@ -386,9 +412,10 @@ func (s *Service) moderate(ctx context.Context, v domain.Viewer, id threadid.ID,
 // delivers the same event to the projection writer, which retries until the
 // record and its row are projected together.
 //
-// The flag auto-hide (TKT-01M29CP2PJ) shares it. Rename and move
-// (TKT-01M29CKRH9) decide at a log length instead, through appendDecided,
-// because a move's refusal depends on the forum the thread is in. A moderator's
+// The flag auto-hide (TKT-01M29CP2PJ) uses it. Lock, unlock, pin, unpin,
+// rename and move decide at a log length instead, through appendDecided,
+// because who may take them depends on the forum the thread is in, and a
+// move changes that (TKT-01M29CKRH9, TKT-01M3RQP0TG). A moderator's
 // edit, delete and restore of another's post (TKT-01M29CRJ5J) append through
 // changePost, which reads the answer back first, and project through
 // projectNow as this does.

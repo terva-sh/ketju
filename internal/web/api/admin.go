@@ -19,8 +19,10 @@ import (
 //   - staff admits an active moderator or admin, by role;
 //   - moderates admits an active member who may moderate somewhere: staff by
 //     role, or a member whose groups grant moderate in at least one forum
-//     (perm.ModeratesAny). Only the moderator queue uses it, and its
-//     handlers still filter what they show by per-forum moderate.
+//     (perm.ModeratesAny). The moderator queue uses it, and its handlers
+//     still filter what they show by per-forum moderate. So do the thread
+//     moderation routes, lock, unlock, pin, unpin, move and slow mode, whose
+//     threads service decides the forum at the log length (TKT-01M3RQP0TG).
 //
 // Each gate answers unauthenticated to a viewer with no member session and
 // forbidden to a pre-user session, as member.Require does, and forbidden to

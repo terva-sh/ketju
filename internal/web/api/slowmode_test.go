@@ -269,6 +269,14 @@ func TestSlowModeIsInTheViewerBlockNotTheCache(t *testing.T) {
 	h := w.chain()
 	created[dto.CreatedPost](t, replyAs(h, "carol", id, "just now"))
 	posted := w.clock
+	// This world runs no projection writer, so carol's reply is in the log
+	// and not yet projected. Setting slow mode projects the thread to its
+	// log first (SetSlowMode decides at a log length, TKT-01M3RQP0TG), and
+	// the projected length is in the key. Catch up here, as the projection
+	// writer would, so what the test sees is slow mode's own effect.
+	if _, err := w.proj.ProjectThread(t.Context(), id, w.logState(id).size); err != nil {
+		t.Fatal(err)
+	}
 	path := "/api/v1/threads/" + id.String()
 	classes := []string{"", "carol", "bob"}
 

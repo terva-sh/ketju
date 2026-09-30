@@ -11,11 +11,12 @@ import (
 )
 
 // registerSlowMode is the thread's slow mode route (docs/07 "Moderation and
-// admin", TKT-01M29CRJ50). Like lock and pin it is staff's by role, and the
-// threads service then checks moderate in the thread's own forum. It writes
-// no record: the value is kept in the database (docs/08 "Primitives").
+// admin", TKT-01M29CRJ50). Like lock and pin it is behind the moderates gate,
+// and the threads service then decides moderate in the thread's own forum at
+// a log length (TKT-01M3RQP0TG). It writes no record: the value is kept in
+// the database (docs/08 "Primitives").
 func (h *handlers) registerSlowMode(mux *http.ServeMux) {
-	h.adminRoute(mux, "PUT /api/v1/admin/threads/{id}/slow-mode", staffGate, h.setSlowMode)
+	h.adminRoute(mux, "PUT /api/v1/admin/threads/{id}/slow-mode", moderatesGate, h.setSlowMode)
 }
 
 // slowModeRequest is the body of PUT …/slow-mode: seconds, 0 for off.

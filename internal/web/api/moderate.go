@@ -13,21 +13,26 @@ import (
 )
 
 // The thread moderation routes (docs/07 "Moderation and admin",
-// TKT-01M29CKRGS). Each is staff's by role, as docs/08's "Primitives" names
-// the moderator for locking, pinning and moving, and the threads service then
-// checks moderate in the thread's own forum, and for a move in the
-// destination too (TKT-01M29CKRH9). Each appends one record, answers 200
-// with the thread's header as its page now serves it, and is no-store.
+// TKT-01M29CKRGS). Thread moderation follows the forum grant (docs/08
+// "Decided 2026-09-30", TKT-01M3RQP0TG), so each is behind the moderates
+// gate, which admits a member who moderates any forum, by role or through a
+// group. The threads service then decides the forum at the log length the
+// record is appended at: moderate in the thread's own forum, and for a move
+// in the destination too (TKT-01M29CKRH9). A global pin stays a moderator's
+// or admin's by role. Past the gate the handlers only parse the path and the
+// body, so a bad-request says nothing about the thread. Each appends one
+// record, answers 200 with the thread's header as its page now serves it,
+// and is no-store.
 //
 // Renaming is not here: an author may rename their own thread, so it is
 // PATCH /api/v1/threads/{id} (renameThread), and the service decides who
 // may.
 func (h *handlers) registerModeration(mux *http.ServeMux) {
-	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/lock", staffGate, h.lockThread)
-	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unlock", staffGate, h.unlockThread)
-	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/pin", staffGate, h.pinThread)
-	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unpin", staffGate, h.unpinThread)
-	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/move", staffGate, h.moveThread)
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/lock", moderatesGate, h.lockThread)
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unlock", moderatesGate, h.unlockThread)
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/pin", moderatesGate, h.pinThread)
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unpin", moderatesGate, h.unpinThread)
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/move", moderatesGate, h.moveThread)
 }
 
 // renameRequest is the body of PATCH /threads/{id}.
