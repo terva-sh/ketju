@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T11:39:38Z
+updated_at: 2026-09-30T12:01:44Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
@@ -64,14 +64,14 @@ Tests: the dialog's validation and the badge text. `TestTheAdminBundleIsSeparate
 
 ## Acceptance criteria
 
-- [ ] GET /api/v1/admin/users/{handle} answers suspension {reason, until} for a suspended account and null otherwise, to admins and moderators, no-store, with a DTO golden matched in dto-contract.ts (TestAdminDetailCarriesTheSuspension)
-- [ ] Suspend sends exactly {reason, until, hide_posts} only after confirmation: until is now plus 1, 7 or 30 days, null for until lifted, or the chosen local moment, and hide_posts is unchecked by default (SuspensionControls.test.tsx)
-- [ ] An empty or blank reason, one over 500 code points, one with a control character, and a past end are refused beside the field with nothing sent (SuspensionControls.test.tsx)
-- [ ] Unsuspend sends {restore_posts} from an unchecked checkbox; Hide their posts (suspended accounts only) and Restore hidden posts each send one bodiless POST after confirmation (SuspensionControls.test.tsx)
-- [ ] A moderator sees the controls only on members, an admin on anyone but themselves, and nobody on a pending or deleted-user- account (SuspensionControls.test.tsx)
+- [x] GET /api/v1/admin/users/{handle} answers suspension {reason, until} for a suspended account and null otherwise, to admins and moderators, no-store, with a DTO golden matched in dto-contract.ts (TestAdminDetailCarriesTheSuspension)
+- [x] Suspend sends exactly {reason, until, hide_posts} only after confirmation: until is now plus 1, 7 or 30 days, null for until lifted, or the chosen local moment, and hide_posts is unchecked by default (SuspensionControls.test.tsx)
+- [x] An empty or blank reason, one over 500 code points, one with a control character, and a past end are refused beside the field with nothing sent (SuspensionControls.test.tsx)
+- [x] Unsuspend sends {restore_posts} from an unchecked checkbox; Hide their posts (suspended accounts only) and Restore hidden posts each send one bodiless POST after confirmation (SuspensionControls.test.tsx)
+- [x] A moderator sees the controls only on members, an admin on anyone but themselves, and nobody on a pending or deleted-user- account (SuspensionControls.test.tsx)
 - [ ] The controls live in screens/admin/SuspensionPanel.tsx, UserDetail gains only its import, refetch and one element, TestTheAdminBundleIsSeparate passes, and the dist from go generate ./internal/web/spa is committed
-- [ ] A suspended account shows its reason as text and its end, or until lifted; after every answer, success or failure, both the detail and the users list are fetched again, so a suspend whose hide failed leaves the row saying suspended (SuspensionControls.test.tsx)
-- [ ] The panel awaits refetch; the finish-the-hide words show only for a 503 or 500 to a suspend with hide_posts when the account went from not suspended to suspended; a 409 with the refreshed account suspended says it is already suspended; a 409, 503 or 500 leaving it active, or a failed refetch, never mentions a hide; a 409 on unsuspend has its own sentence (a hide that stopped, already suspended is not a partial hide, a refused suspend is not a partial hide, a busy database is not a partial hide, a refetch that fails)
+- [x] A suspended account shows its reason as text and its end, or until lifted; after every answer, success or failure, both the detail and the users list are fetched again, so a suspend whose hide failed leaves the row saying suspended (SuspensionControls.test.tsx)
+- [x] The panel awaits refetch; the finish-the-hide words show only for a 503 or 500 to a suspend with hide_posts when the account went from not suspended to suspended; a 409 with the refreshed account suspended says it is already suspended; a 409, 503 or 500 leaving it active, or a failed refetch, never mentions a hide; a 409 on unsuspend has its own sentence (a hide that stopped, already suspended is not a partial hide, a refused suspend is not a partial hide, a busy database is not a partial hide, a refetch that fails)
 
 ## Implementation plan
 
@@ -198,6 +198,20 @@ Read from main at 5124209:
 - Who may lock, pin, move and set slow mode by forum grant: TKT-01M3RQP0TG. Suspension is not among them.
 - A count of hidden or restored posts. The routes answer 204, and the count is in the admin-only audit row.
 
+### Revised at claim (2026-09-30, against main at 163c33a)
+
+Built to the plan above. What the code as it stands asked for, each with the alternative that lost:
+- **ConfirmButton gains an optional `beforeAsk`.** The plan checks the form "beside the field before asking", and ConfirmButton had no hook between the first press and the question. `beforeAsk` is asked on the first press, and the question opens only when it answers true. The form checks again at Confirm, for a field changed while the question was open. A disabled Suspend lost because it cannot say which field is wrong. A confirmation of the panel's own lost because it would repeat ConfirmButton's focus handling.
+- **"Ends" has no default.** A missing choice is refused beside the group. A 7-day default lost for the reason both checkboxes start unchecked: it would choose a length nobody picked.
+- **An unsuspend whose restore stops gets words of its own.** Read from main: `Unsuspend` commits through `perm.ChangeStatusID` and then calls `s.restore`, which answers `unavailable` from `threads.ErrSomeThreadsUnavailable`, as the hide does. So the same two signs apply. The answer is 503 or 500 to an unsuspend sent with `restore_posts`, and the account went from suspended to not suspended. Then the panel says "…is no longer suspended, but the request did not finish, so some posts may still be hidden. Press Restore hidden posts to finish." A standalone Restore hidden posts that answers `unavailable` says to press it again, as Hide their posts does.
+- **One change at a time.** A ref lock, as in AgentPanel, keeps a second change from starting while one is in flight, so the refreshed detail the words come from answers one change only.
+- **`refetch` passes no signal and catches every failure as null.** `isAbort` is not needed, so UserDetail gains no import beyond the panel.
+- **The panel reads the account's status through `isStatus`.** `src/api/one-path.test.ts` refuses `.status ===` in screens, to keep problems out of them. The guard stays as it is.
+- **The panel renders nothing** for a viewer who may not act on an account that is not suspended.
+- **A second golden, `admin-user-suspended.admin`**, with `until` null. `TestEveryPointerFieldIsSeenBothWays` requires every pointer field to be null somewhere in the corpus. `dto-contract.ts` matches both goldens.
+- **`e2e/admin-suspension.spec.ts`**, with axe at 390 and 1440 px, in the light and dark themes. ada suspends and then lifts an agent she creates without a token, so no seeded reader the other specs sign in as is touched.
+- `AgentControls.test.tsx`, "a moderator sees none of them", now expects the suspension controls too. A moderator acts on a member agent as on a member human (`mayActOn`).
+
 ## Notes
 
 **agent:claude-code/phase2-groom** at 2026-09-30T00:29:01Z
@@ -219,3 +233,11 @@ Terva review 1523 on PR #181 (head f0c1913), one medium finding, accepted. A 409
 **agent:claude-code/phase2-groom** at 2026-09-30T08:58:23Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The plan is current in substance. The Settled items, the Approach and the criteria stand as written. Changes: (1) The maintainer's decision of 2026-09-30 is added to Settled: account actions keep their role gates, so a member who moderates through a group gets no suspension controls, and mayAct reads the role only. The test 'no controls for a moderator by grant' is added. (2) TKT-01M3QH3GS2 has merged, so step 3 no longer says 'if'. refetch sits beside UserDetail's update helper. (3) Checked on main: AdminUserDetail still has no suspension, so the server step stands. Every server symbol and invariant test the plan names exists. (4) The docs/13 section the Settled item cites is now titled 'Running two lanes, changed', with the same rule. (5) TKT-01M3P0CYR3 (rename, ?user= in the address), TKT-01M3QV39H4 (AgentPanel) and TKT-01M3R10VP3 (the server's hide lock) are noted. None changes this panel's routes, codes or files.
+
+**agent:claude-code/phase2-run-qmre47** at 2026-09-30T12:00:51Z
+
+Built on run/qmre47-suspension-controls against main at 163c33a, locally and unpushed while another lane holds the dist (docs/13 'Running two lanes, changed'). Local checks pass: gofmt, go build, go vet, go test -race ./..., tsc --noEmit, and vitest (1542 tests, 33 of them in SuspensionControls.test.tsx). e2e/admin-suspension.spec.ts and admin-agents.spec.ts pass at 390 and 1440 px with axe. A full local Playwright run fails smoke.spec.ts at sign-in with a 429 from the /auth limiter. It fails the same way on main at 163c33a, so this branch did not cause it. Filed as draft TKT-01M3S2VDCK (Keep the e2e sign-ins inside the auth rate limit on a fast machine). Bundle, from a local go generate that was not committed: the reader entry is byte-identical to main's apart from the admin CSS file name it maps, so the thread-view bundle is 47416 of 60000 B gzip. The admin chunk grows from 19843 to 22079 B gzip. Criterion 6 stays unticked until the dist is regenerated on current main and committed.
+
+**agent:claude-code/phase2-run-qmre47** at 2026-09-30T12:01:44Z
+
+Corrects note 6 on one point only. The draft it names, TKT-01M3S2VDCK, duplicated TKT-01M3S1TVPD (Stop the full Playwright run spending more /auth calls than it refills), which the Playwright lane filed on main in #223. It has been removed. The smoke.spec.ts 429 from the /auth limiter is TKT-01M3S1TVPD's. The rest of note 6 stands.
