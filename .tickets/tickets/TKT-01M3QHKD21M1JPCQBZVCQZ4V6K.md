@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QHKD21M1JPCQBZVCQZ4V6K
 title: Show moderators' post controls and the edited-by-a-moderator marker
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ dependencies:
   - TKT-01M3PTT97XM3DCGRTDNHHBNM5M
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qhkd21
+  branch: run/qhkd21-moderator-post-controls
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a47cb5a9abe40b5c1
+  commit: cd485ef61b5ba49f092e902ae26cce1d79eee501
+  session: null
+  claimed_at: 2026-09-30T19:31:09Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T21:37:14Z
-updated_at: 2026-09-30T09:22:29Z
+updated_at: 2026-09-30T19:36:03Z
 created_by:
   id: agent:claude-code/phase2-run-crj5j
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-qhkd21
   name: ""
 extensions: {}
 ---
@@ -109,6 +116,26 @@ Added in the refresh of 2026-09-30:
 - Naming the moderator on the page, which the response cache design rules out (TKT-01M29CRJ5J).
 - Suspension's bulk hide: TKT-01M29CP2QK.
 - Who may use the thread moderation routes: TKT-01M3RQP0TG. This ticket uses none of them.
+
+### Revised at claim, 2026-10-01, against main at cd485ef
+
+Everything above stands, `### Settled in grooming` included. What the code on main changed since the refresh, and what is built differently, with the reason for each:
+
+- **TKT-01M3PTT97X has landed** (PR #243). The rule is `postControls` in `components/thread/postControls.ts`, and its ownership check `isOwn` is shared with `mayFlag`. The per-post state is `useOwn` in `OwnControls.tsx` (not `PostControls.tsx`: two module names differing only by case), with `PostEditor`, `DeleteConfirm` and `Restore`. `ThreadBody` hands an `Own` only for `isOwn(p)`. It already draws Restore in a removed `Post`'s footer and on a `Tombstone`, so this ticket places nothing.
+- **The moderator branch** (engineering choice, the server's `authorize` and `restoreRecord` as merged). When `viewer.can_moderate`, the rule drops `isOwn`, applies no window, and does not ask for `can_reply`, on any post: Edit and Delete on a post that is not `deleted`, with `moved_to` null and not `redacted`; Restore on a post that is `deleted`, not `redacted`, with `moved_to` null, and served with its body (`!isTombstone(p)`), whatever its `removal`. The redacted and moved guards come first, as #243 built them. A moderator is offered Edit on their own post without `reply`, because `authorize` returns before the reply check for a moderator (a forum where members may only read, and a group that grants `moderate` without `reply`, both reach it). `ThreadBody` hands every post an `Own` when the page says `can_moderate` and someone is signed in.
+- **The page says when the forum is read-only to this viewer** (fixing a control the server would refuse). In an archived forum `authorize` refuses a non-admin's edit, delete and restore of their own post, a moderator's own post included, with `conflict` (`readOnlyForum`), and leaves a moderator's action on somebody else's post open. #243 recorded that the page could not tell, and relied on `can_reply` for the author's edit. The moderator branch cannot: `can_reply` false does not tell an archived forum from a moderator without `reply`, and guessing either way offers a refused control or hides an allowed one. So `dto.ThreadViewer` gains `forum_read_only`, which is `readOnlyForum(a) != nil`: true in an archived forum for everyone but an admin. It is in the viewer block, which is never cached, so no cache key changes, and the ETag moves with it. The rule offers nothing on the viewer's own post when it is true, which also closes #243's known limit for an author's delete and restore. Adding `archived` to `ThreadHeader.forum` lost again, for #243's reason: it is cached and changes the header for every viewer, while only the viewer's own relation to it matters here.
+- **The delete prompt.** For a post that is not the viewer's own: "Remove this post? Members will see that a moderator removed it. Only a moderator can restore it." For one's own post, #243's words stay.
+- **The editor and confirmation close when the viewer changes.** #243 closed them when the post stopped being the viewer's own. A moderator's `Own` depends on the page's `can_moderate`, which a sign-in as someone else in the tab does not change until the page is fetched again, so `useOwn` also closes them when the signed-in handle changes.
+- **The marker** as planned: `(edited by a moderator)` in place of `(edited)`, class `edited`, `data-edited-by="moderator"`.
+- **Bundle.** The reader bundle is 56988 B of 70000 B on main. The additions are a branch in the rule, one sentence and one attribute, far smaller than a lazy chunk's loader, so nothing moves to a lazy chunk. The PR records the delta.
+
+### Tests, revised
+
+- `postControls.test.ts`: `a moderator may act on every post` (another member's visible post at any age; Restore on a removed post served with its body for `removal` author, moderator and review; no `can_reply` needed); `nothing on a moved or redacted post` for a moderator; `a member still gets only their own`; `nothing on one's own post in a read-only forum`, for a member and a moderator, while a moderator keeps every control on another's post there.
+- `PostControls.test.tsx`: `a moderator's delete of another's post says who sees what` (`DELETE` with no body); `a moderator restores a hidden post` (`POST …/restore` from the removed post's footer, then the page again); `a group moderator gets the same controls` (role `member` with `can_moderate: true`); the editor closes when the signed-in viewer changes.
+- `ThreadPage.test.tsx`, `the edited marker`: `edited_by_moderator: true` shows `(edited by a moderator)` and names nobody; false shows `(edited)`.
+- Go: `TestThreadViewerSaysTheForumIsReadOnly` in `internal/web/api` (archived forum: member, moderator by role and by group get true, admin false; open forum false), and the thread goldens regenerated.
+- The thread-view budget passes, and the dist is regenerated with `go generate ./internal/web/spa`.
 
 ## Notes
 
