@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T22:01:28Z
+updated_at: 2026-09-30T22:06:07Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -178,6 +178,10 @@ Replayed onto main at 4471ea6 (after #243, #245 to #248), and the dist was regen
 **agent:claude-code/phase2-run-cp2q3** at 2026-09-30T22:01:28Z
 
 Terva review 1625 (run 66ce509f, Actions run 1632) on head 1d9a93e, base 4471ea6: one medium finding, 'Avoid spreading the full rewrite into push'. Fixed. wordDiff's rewrite fallback, and the path that copies a successful script, spread up to about 65,536 tokens into one push, which threw a RangeError for 64 KB of one-character words. Both now append in a loop. The new wordDiff.test.ts case reproduced the RangeError before the fix. The reader bundle is now 59923 B.
+
+**agent:claude-code/phase2-run-cp2q3** at 2026-09-30T22:06:07Z
+
+CI run 1633 on head 90d4bad failed 'client tests' with two unhandled errors: Composer.test.tsx and ComposerSheet.test.tsx stubbed every URL with a thread page, so on the history route the screen threw on revisions after its test ended. Both stubs now answer the history endpoint. Terva review of 90d4bad passed (comment 20726). This change needs a fresh review.
 
 ## Summary
 
