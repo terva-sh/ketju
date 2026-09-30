@@ -20,7 +20,9 @@ dependencies:
   - TKT-01M29CP2QKKZSK4PDB40EJHC3P
   - TKT-01M29P9RSW21SCES335WERTBSF
 blocks_on: none
-references: []
+references:
+  - ref: pr:194
+    path: null
 claim:
   actor: agent:claude-code/phase2-run-exit
   branch: run/3ntscmn-phase2-exit
@@ -31,7 +33,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-30T02:39:00Z
+updated_at: 2026-09-30T03:10:56Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -156,3 +158,14 @@ Mutations tried against the tests, each caught:
 - a credential revoke that writes nothing: Agent fails on the 201 and on log_length;
 - a suspension that deletes no sessions: Suspended fails;
 - a denied status carrying the note's text: Denied fails.
+
+**agent:claude-code/phase2-run-exit** at 2026-09-30T03:10:56Z
+
+PR #194, head db08a7f, base a827aef. CI run 1236 is attempt 1 of 3 under docs/12, and it failed.
+
+- Playwright passed, with both projects' phase2-exit lines in the step log.
+- `go test (race)` failed after 18m55s: `panic: test timed out after 10m0s`, `FAIL github.com/terva-sh/ketju/internal/perm 600.093s`. The test running at the time was `TestSyncIdPGroupsInvalidates`.
+
+This PR changes nothing under `internal/perm`. The timeout dump shows that test runnable, inside a SQLite prepare under `Grant`, not blocked. PR runs 1240, 1242 and 1249 and main's push run 1253 were running at the same time, so the runner was contended. PR #195's run 1251, on the same base, passed in 9 minutes.
+
+The follow-up commit that links the PR reruns CI.
