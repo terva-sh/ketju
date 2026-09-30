@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QHKD21M1JPCQBZVCQZ4V6K
 title: Show moderators' post controls and the edited-by-a-moderator marker
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ dependencies:
   - TKT-01M3PTT97XM3DCGRTDNHHBNM5M
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qhkd21
-  branch: run/qhkd21-moderator-post-controls
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a47cb5a9abe40b5c1
-  commit: cd485ef61b5ba49f092e902ae26cce1d79eee501
-  session: null
-  claimed_at: 2026-09-30T19:31:09Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T21:37:14Z
-updated_at: 2026-09-30T19:48:58Z
+updated_at: 2026-09-30T22:20:51Z
 created_by:
   id: agent:claude-code/phase2-run-crj5j
   name: ""
@@ -53,10 +46,10 @@ The tombstone wording and the author's view of their own hidden post are TKT-01M
 
 ## Acceptance criteria
 
-- [ ] A moderator's delete of another member's post says that members will see it removed by a moderator and only a moderator can restore it, and delete and restore call the existing endpoints (PostControls.test.tsx)
-- [ ] A post with edited_by_moderator true shows (edited by a moderator) in place of (edited), naming nobody (ThreadPage.test.tsx)
-- [ ] The thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
-- [ ] With viewer.can_moderate, by role or through a group, the shared postControls rule from TKT-01M3PTT97X offers Edit and Delete on every visible post with moved_to null, and Restore on every removed post served with its body, at any age; nothing on a moved post, no Restore on a redacted post (deleted with empty html), and a member still gets only their own (postControls.test.ts)
+- [x] A moderator's delete of another member's post says that members will see it removed by a moderator and only a moderator can restore it, and delete and restore call the existing endpoints (PostControls.test.tsx)
+- [x] A post with edited_by_moderator true shows (edited by a moderator) in place of (edited), naming nobody (ThreadPage.test.tsx)
+- [x] The thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
+- [x] With viewer.can_moderate, by role or through a group, the shared postControls rule from TKT-01M3PTT97X offers Edit and Delete on every visible post with moved_to null, and Restore on every removed post served with its body, at any age; nothing on a moved post, no Restore on a redacted post (deleted with empty html), and a member still gets only their own (postControls.test.ts)
 
 ## Implementation plan
 
@@ -164,3 +157,25 @@ Mutations tried against the tests, each caught:
 - `ForumReadOnly` always false in `view.go`: `TestThreadViewerSaysTheForumIsReadOnly` failed for carol, bob and gina.
 
 Checks run: gofmt, `go build`, `go vet`, `go test -race ./...` (exit 0), `tsc --noEmit`, vitest (63 files, 1889 tests), and Playwright on port 18931 (175 passed, 11 skipped). The reader bundle went from 56988 B to 57153 B of 70000 B, +165 B. There is no lazy chunk: the moderator-only code is one branch in the rule and one sentence, which is smaller than a chunk's loader.
+
+## Summary
+
+A viewer whose thread page says `can_moderate`, whether by role or through a group grant, is now offered Edit and Delete on every post that is not removed, moved or redacted, and Restore on every removed post served with its body. No window applies and no `reply` is needed, which is exactly what `authorize` and `restoreRecord` accept. A moderator's edit shows as "(edited by a moderator)" and names nobody.
+
+Client:
+- `postControls` gains the moderator branch.
+- `ThreadBody` hands every post an `Own` for a signed-in viewer whose page says `can_moderate`.
+- `Own.hides` gives a moderator's delete of someone else's post its own prompt: "Remove this post? Members will see that a moderator removed it. Only a moderator can restore it."
+- `useOwn` closes the editor and the confirmation when the signed-in handle changes.
+- `Post` shows `(edited by a moderator)` with `data-edited-by="moderator"`.
+
+Server: `dto.ThreadViewer.forum_read_only` is `readOnlyForum(a) != nil`. In an archived forum it is true for everyone but an admin, and there the server refuses an edit, delete or restore of the viewer's own post. The rule offers nothing on the viewer's own post while the field is true. That covers a moderator's own post, and it closes the known limit TKT-01M3PTT97X recorded for an author's delete and restore. The field is in the viewer block, which is never cached. The thread goldens gain the field, and the new golden `thread-archived.member.json` sets it. docs/07 records the field and the moderator's offers.
+
+Tests:
+- `TestThreadViewerSaysTheForumIsReadOnly`: a member, a moderator by role, a moderator by group and an admin, each checked against the server's answer.
+- `postControls.test.ts`: 'postControls for a moderator'.
+- `PostControls.test.tsx`: "a moderator's controls", including a group moderator's edit and a change of viewer.
+- `ThreadPage.test.tsx`: 'the edited marker'.
+- Eight mutations were tried against the tests, and every one was caught.
+
+The reader bundle went from 59923 B to 60080 B of 70000 B (+157 B), with no lazy chunk.
