@@ -99,7 +99,7 @@ func TestServeSignsInThroughAProvider(t *testing.T) {
 		}
 		b, _ := io.ReadAll(resp.Body)
 		resp.Body.Close()
-		if resp.StatusCode != want || (target == "/api/v1/me" && !strings.Contains(string(b), `"pre_user":{"provider":"fake"}`)) {
+		if resp.StatusCode != want || (target == "/api/v1/me" && !strings.Contains(string(b), `"pre_user":{"provider":"fake","tag":"`)) {
 			t.Errorf("%s as the applicant answered %d, want %d:\n%s", target, resp.StatusCode, want, b)
 		}
 	}

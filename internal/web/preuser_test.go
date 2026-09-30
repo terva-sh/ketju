@@ -347,7 +347,7 @@ func TestPreUserRoutesAreExactlyTheAllowlist(t *testing.T) {
 		// client who they are.
 		for _, path := range []string{"/apply", web.ApplyStatusPath} {
 			rec := send(h, probe{method: http.MethodGet, path: path}, w.preUser)
-			if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"pre_user":{"provider":"github"}`) {
+			if rec.Code != http.StatusOK || !strings.Contains(rec.Body.String(), `"pre_user":{"provider":"github","tag":"`) {
 				t.Errorf("GET %s as a pre-user: %d, and the bootstrap does not name the applicant", path, rec.Code)
 			}
 		}
