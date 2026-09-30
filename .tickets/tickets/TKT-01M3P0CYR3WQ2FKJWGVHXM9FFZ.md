@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T13:20:39Z
+updated_at: 2026-09-30T13:23:59Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -65,7 +65,7 @@ Found while planning TKT-01M3NRP3W9 in Phase 2 grooming (TKT-01M3M9RR26).
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26) against main at f04a476. Refreshed 2026-09-30 against main at 5124209. The route is TKT-01M3NRP3W9's, merged in PR #186. The screen is TKT-01M29CXK1X's UsersScreen, merged.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26) against main at f04a476. Refreshed 2026-09-30 against main at 5124209. Revised at claim on 2026-09-30 against main at 6d1e9ab. The route is TKT-01M3NRP3W9's, merged in PR #186. The screen is TKT-01M29CXK1X's UsersScreen, merged.
 
 ### Settled in grooming
 
@@ -91,53 +91,45 @@ Engineering choices made in the refresh, each with the alternative that lost:
 - **The users tab also reads `?prefix=` from the address into its filter.** The moderator queue's author link for staff is `/admin/users?prefix={handle}` (`authorHref` in `screens/admin/queue/QueueScreen.tsx`, PR #185), but `UsersTab` keeps its filters in state and ignores the address, so the link opens an unfiltered list. This ticket moves the selection into the address anyway, and reading the filter's starting value there is one more line of the same change. Filing a separate ticket lost: it would change the same lines of `UsersTab` in another PR on the client lane. The filters still live in state after the first render, so typing in the field does not rewrite the address.
 - **The agent handover and the focus return survive the move.** `UsersTab` carries a new agent's detail and token to `UserDetail` through `created` (TKT-01M3QH3GS2), and closing the detail returns focus to the account's row. With the selection in the address, `onCreated` routes to `?user={handle}` and keeps `created`. `close` routes to `/admin/users`, keeping any other query parameter, and the focus effect keys on the handle read from the address.
 
-### What changed since the plan was written
+### Revised at claim
 
-Read from main at 5124209:
-- **TKT-01M3NRP3W9 is done** (PR #186). `POST /api/v1/admin/users/{handle}/rename` is `adminRename` in `internal/web/api/handle.go`, registered through `adminRoute` with `adminGate` in `account.go`, and answers 200 `dto.HandleChange` with `no-store`.
-- **The cross-ticket question about `taken` is closed.** The earlier plan's section "Cross-ticket dependency on how `taken` is answered" worried that `taken` would come as `conflict`. On main every handle code is `validation-failed`, as approval's are, so the section is removed.
-- **`HandleChange` is in `web/client/src/api/dto.ts`, and `dto-contract.ts` matches both goldens** (`handleChangeAdmin`, `handleChangeMember`). The earlier step 4 is removed.
-- **`handleWords` and `handleMessage` are still in `screens/admin/applications/Decision.tsx`**, with `invalid_handle`, `reserved` and `taken`. `screens/admin/common/` has `ConfirmButton`, `Field`, `send` and `Table`, and no `handle.ts` yet.
-- **The users tab still keeps the selected account in state** (`selected` in `UsersTab`), now with the agent handover and focus return described above. `UserDetail` renders `AgentPanel` (TKT-01M3QH3GS2, done). TKT-01M3QMRE47 (suspension controls) also changes `UserDetail`, through `SuspensionPanel.tsx`.
+Read from main at 6d1e9ab, after PR #229 (TKT-01M3QMRE47, suspension controls):
+- `UserDetail` now has a `refetch` helper and renders `<SuspensionPanel>` after the facts list. `ConfirmButton` has an optional `beforeAsk`. `AgentPanel` (#179) is still rendered for an agent. The rename control goes between the role control and the agent panel and changes none of them.
+- The server is as the refresh read it. `RenameMember` calls `members.RequireAdmin`, and the route is `adminRoute(…, adminGate, h.adminRename)`. `rename` answers `validation-failed` with `{field: "handle", code}` for `invalid_handle`, `reserved`, `taken` and `same`; `conflict` for an anonymized account or a lost race; `not-found` for a handle nobody holds. `available_at` rides only on the member's own cooldown conflict (`own && next != nil`), which the admin route never reaches. A conflict that carried one would still read as the cannot-be-renamed sentence.
+- preact-iso keeps the matched component mounted when only the query changes (`routeChanged` compares the component), so `UsersTab`'s state, `created` included, survives routing to `?user=`.
+- `CheckHandle` normalises (trim, lower case) before `same` is decided. The button is disabled while the trimmed field is empty or equals the current handle in any case, and `same` still has words for a race.
+
+Engineering choices made at claim, each with the alternative that lost:
+- **A field error closes the question and focuses the field.** The refresh says the confirmation closes on a field error. `ConfirmButton` closes only when `onConfirm` does not answer `false`, so the control answers `true` after setting the field's error and moving focus to the field. Keeping the question open, as approval's `Decision` does, lost: its prompt would name a handle the admin now has to change.
+- **`created` is dropped by an effect on the address, not only by `choose`.** With the selection in the address, Back and Forward change it without `choose`, and a creation token waiting in `created` could come back to a re-selected agent. The effect drops it whenever the selected handle is not the new agent's.
+- **After a rename the new detail says what happened and takes focus.** The detail remounts under the new handle, so the Rename button that had focus is gone. `UsersTab` keeps the old handle for the new detail, which shows "Renamed from @{old}. The old handle is kept for 90 days and sends visitors here." as a status line and focuses its heading once it loads. Leaving focus on the page's body lost: a keyboard user would start again from the top.
+- **`isAnonymizedHandle` joins the words in `common/handle.ts`.** `SuspensionPanel` keeps its own inline check; changing it is not this ticket's.
+- **The `invalid` alias is not added.** The groomed choice read `invalid` and `invalid_handle` as one; the refresh found the server sends only `invalid_handle`, so an unknown code keeps the generic words.
 
 ### Approach
 
-1. **Address** (`screens/admin/UsersScreen.tsx`):
-   - `UsersTab` reads the selection from `useLocation().query.user` in place of `useState`.
-   - `choose` and `pick` route to `/admin/users?user={encodeURIComponent(handle)}`.
-   - `onCreated` sets `created` and routes to the new agent's handle.
-   - `close` routes to `/admin/users` and keeps the focus return.
-   - The first render seeds `filters.prefix` from `query.prefix`. The other filters stay in state as now.
-   - `UserDetail` stays keyed by the handle.
-2. **Handle words** (`screens/admin/common/handle.ts`): `handleWords` and `handleMessage` move here from `Decision.tsx`, and gain `same`: "That is already this account's handle." `taken` keeps its words: "That handle is in use, or was given up too recently to reuse. Choose another." `Decision.tsx` imports them.
-3. **`screens/admin/RenameControl.tsx`**, rendered by `UserDetail` when `admin`, below the role control:
-   - A `Field` "Change handle", with the hint "The old handle is kept for 90 days and sends visitors to the new one. Nobody else can take it until then."
-   - A `ConfirmButton` "Rename", disabled while the field is empty or equal to the current handle, prompting "Rename @{old} to @{new}?".
-   - On confirm, `send<HandleChange>('POST', `${url}/rename`, {handle})`.
-   - `validation-failed` with `fieldErrors.handle` shows `handleMessage(code)` as the field's `error`, and the confirmation closes by resolving `false`.
-   - `conflict` shows "This account cannot be renamed. It may have been anonymized, or renamed by someone else. Reload to see it as it is now."
-   - `not-found` shows "No account has this handle now. It may have been renamed. Reload the list."
-   - Anything else shows `send`'s sentence.
-   - On success, `route('/admin/users?user=' + encodeURIComponent(answer.handle), true)`, and the tab's `reload` asks for the list again, so the row shows the new handle.
-   - For a `deleted-user-` handle, the line "An anonymized account cannot be renamed." and no field.
-4. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`.
+1. **Address** (`screens/admin/UsersScreen.tsx`, `UsersTab`):
+   - `selected` is `useLocation().query.user`, or null.
+   - `userHref(query, handle)` keeps every other query parameter and sets or drops `user`.
+   - A row click routes to `userHref(query, handle)`, a push as a link would. `close` sets the focus-return ref and routes to `userHref(query, null)`.
+   - `onCreated` reloads the list, sets `created` and routes to the new agent's handle.
+   - An effect on `selected` drops `created` when it is not the selected handle's, and returns focus to the closed row as before.
+   - `filters.prefix` starts from `query.prefix`.
+2. **Handle words** (`screens/admin/common/handle.ts`): `handleWords`, `handleMessage` and `isAnonymizedHandle`, moved from `applications/Decision.tsx` with `same` added: "That is already this account's handle." `Decision.tsx` imports them.
+3. **`screens/admin/RenameControl.tsx`**, rendered by `UserDetail` for an admin below the role control:
+   - An anonymized handle gets "An anonymized account cannot be renamed." and no field.
+   - Otherwise a `Field` "Change handle" with the hint "The old handle is kept for 90 days and sends visitors to the new one. Nobody else can take it until then.", and a `ConfirmButton` "Rename" asking "Rename @{old} to @{new}?".
+   - `send<HandleChange>('POST', `${url}/rename`, {handle})`. A field code goes on the field in `handleMessage`'s words; `conflict` and `not-found` get their sentences beside the control; anything else gets `send`'s sentence.
+   - On success, `onRenamed(answer.previous, answer.handle)`: `UsersTab` reloads the list, remembers the old handle and routes to `userHref(query, answer.handle)` with replace.
+4. `go generate ./internal/web/spa` and commit `internal/web/spa/dist`.
 
 ### Tests
 
-- `screens/admin/AdminUserRename.test.tsx`, with `fetch` stubbed as `UsersScreen.test.tsx` does:
-  - `an admin renames a member`: the request is `POST /api/v1/admin/users/alice/rename` with `{"handle":"alicia"}`. Afterwards the address is `/admin/users?user=alicia` by replacement (`history.length` unchanged), the detail shows `@alicia`, and the list is requested again.
-  - `a moderator sees no rename control`: with `role: 'moderator'`, there is no "Change handle" field.
-  - `each field code attaches to the field`: for `invalid_handle`, `reserved`, `taken` and `same` in a `validation-failed` body, the words appear as the handle field's error, tied by `aria-describedby`, and the field keeps what was typed.
-  - `a released handle reads as taken`: the `taken` words say the handle may have been given up recently, and no word says "released".
-  - `a conflict is said in words`: a 409 shows the cannot-be-renamed sentence. A 404 shows the no-account sentence.
-  - `an anonymized account offers no rename`: a `deleted-user-7` detail shows the line and no field.
-  - `the address opens the account`: loading `/admin/users?user=bob` shows bob's detail.
-  - `the address seeds the filter`: loading `/admin/users?prefix=bo` requests `/api/v1/admin/users?prefix=bo` and shows `bo` in the field, which is what the queue's author link needs.
-- `UsersScreen.test.tsx` and `AgentControls.test.tsx` still pass, including closing a detail returning focus to its row and a new agent's token handover.
-- `screens/admin/applications/Decision.test.tsx` still passes with the moved words.
-- `screens/admin/queue/QueueScreen.test.tsx` still passes. Its `authorHref` is unchanged.
-- `TestTheAdminBundleIsSeparate` passes.
-- The server's rename tests are TKT-01M3NRP3W9's, and the audit row and the transaction boundary are held there by `TestRenameWritesOneAuditRow` and `TestRenameIsOneTransaction`. No session is issued by a rename.
+- `screens/admin/AdminUserRename.test.tsx`: an admin renames a member (confirmation first, the request, the address replaced with `history.length` unchanged, the detail and its notice, the list asked again); a moderator sees no control; each of `invalid_handle`, `reserved`, `taken` and `same` on the field through `aria-describedby`, keeping what was typed; `taken` says recently given up and no word says released; 409 and 404 in words; an anonymized account; `?user=bob` opens bob; `?prefix=bo` requests and shows the filter, which is where the queue's `authorHref` lands.
+- `UsersScreen.test.tsx`: a row click puts `?user=` in the address, and Close takes it out with focus back on the row.
+- `AgentControls.test.tsx`: the token does not come back when the agent is reached again through history.
+- `Decision.test.tsx`, `SuspensionControls.test.tsx`, `QueueScreen.test.tsx` and `TestTheAdminBundleIsSeparate` pass unchanged.
+- `e2e/admin-rename.spec.ts`: ada renames a fresh agent against the real server and the address and the detail follow, with one axe scan per test and the stored session.
 
 ### Out of scope
 
