@@ -1,5 +1,6 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type BrowserContext, type Locator, type Page } from '@playwright/test';
+import { isDeepStrictEqual } from 'node:util';
 import { stateFile } from './session';
 
 // The form editor (TKT-01M29CP2P1), at 390 px and 1440 px: the seeded
@@ -12,9 +13,12 @@ import { stateFile } from './session';
 //
 // Both projects run against one server, one after the other (beforeAll
 // checks that the config still says so), and apply.spec.ts fills in the
-// form after them, so each run ends by saving the fields it started with
-// back as the newest version. The version numbers are read from the screen,
-// not assumed.
+// form after them. So the last test saves the fields it started with back
+// as the newest version in the editor, and afterAll restores the seeded
+// fields through the admin API whatever happened: when an earlier test
+// failed and the rest were skipped, the next project and apply.spec.ts
+// still start from the form this run started from (TKT-01M3SK2HFE). The
+// version numbers are read from the screen, not assumed.
 //
 // Each test runs one scan. Several scans in one test share its 30 s budget,
 // and while another CI run loaded the runner that budget ran out in
@@ -76,7 +80,32 @@ test.beforeAll(async ({ browser }, info) => {
 });
 
 test.afterAll(async () => {
-  await context?.close();
+  // A test that fails partway leaves the form changed and skips the last
+  // test, which would have put it back. So when the form's fields are not
+  // the ones this run started from, save those as a new version, based on
+  // whichever version is active now: the failure may have come before the
+  // save, after it, or between the save and its notice. When the last test
+  // passed there is nothing to do. context.request rather than page.request,
+  // because the failing test may have crashed or closed the page. finally
+  // closes the context and does not catch, so a failed restore still fails
+  // this hook in the report (Terva review 1608).
+  try {
+    if (context && start) {
+      const read = await context.request.get(formUrl);
+      expect(read.status(), 'read the form to restore it').toBe(200);
+      const now = (await read.json()) as typeof start;
+      if (!isDeepStrictEqual(now.schema, start.schema)) {
+        const saved = await context.request.post(`${formUrl}/versions`, {
+          data: { base_version: now.active_version, schema: start.schema },
+        });
+        expect(saved.status(), 'save the starting fields back').toBe(201);
+        const after = (await (await context.request.get(formUrl)).json()) as typeof start;
+        expect(after.schema, 'the starting fields are back').toEqual(start.schema);
+      }
+    }
+  } finally {
+    await context?.close();
+  }
 });
 
 test('the editor passes the scan in the light theme', async () => {

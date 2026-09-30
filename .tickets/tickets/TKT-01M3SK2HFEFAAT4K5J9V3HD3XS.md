@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3SK2HFEFAAT4K5J9V3HD3XS
 title: Restore the registration form after a failed admin-forms e2e test
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-sk2hfe
+  branch: run/sk2hfe-restore-form
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a4ec715680bfd3cb3
+  commit: 387c401689a9ca53acdbb432c90b0da348f601f2
+  session: null
+  claimed_at: 2026-09-30T19:56:47Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T16:41:27Z
-updated_at: 2026-09-30T19:35:26Z
+updated_at: 2026-09-30T19:56:48Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-sk2hfe
   name: ""
 extensions: {}
 ---
