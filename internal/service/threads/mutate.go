@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
@@ -59,11 +60,32 @@ func (s *Service) authorWindows(ctx context.Context) (windows, error) {
 			if err != nil {
 				return err
 			}
-			*r.to = time.Duration(n) * time.Second
+			*r.to = secondsDuration(n)
 		}
 		return nil
 	})
 	return w, err
+}
+
+// secondsDuration is a count of seconds from a setting as a Duration. The
+// settings take any count from 0 up, and one past what a Duration holds
+// would overflow into a negative window, closed at once, or a negative slow
+// mode wait, which is off. Such a count is the longest Duration there is,
+// a window that does not close in practice (Terva review 1535, finding 2;
+// TKT-01M3R33SR5). A negative count, which no setting's rule admits, is 0:
+// closed, or off, as every caller already reads 0, and never a product that
+// wrapped round to an open window.
+//
+// Every seconds setting this package turns into a Duration goes through
+// here, so the next one cannot repeat the overflow.
+func secondsDuration(n int) time.Duration {
+	switch {
+	case n <= 0:
+		return 0
+	case int64(n) > int64(math.MaxInt64/time.Second):
+		return time.Duration(math.MaxInt64)
+	}
+	return time.Duration(n) * time.Second
 }
 
 // within reports whether a post created at createdMS is still inside a

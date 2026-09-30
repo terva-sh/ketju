@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math"
 	"time"
 	"unicode/utf8"
 
@@ -229,7 +228,8 @@ func (s *Service) Move(ctx context.Context, v domain.Viewer, id threadid.ID, for
 	})
 }
 
-// renameWindow is threads.rename_window_seconds.
+// renameWindow is threads.rename_window_seconds, through secondsDuration,
+// so a count too large for a Duration is the longest window there is.
 func (s *Service) renameWindow(ctx context.Context) (time.Duration, error) {
 	var n int
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
@@ -240,14 +240,7 @@ func (s *Service) renameWindow(ctx context.Context) (time.Duration, error) {
 	if err != nil {
 		return 0, err
 	}
-	// The setting takes any count of seconds from 0 up. One past what a
-	// Duration holds would overflow into a negative window, closed at once,
-	// so such a count is the longest window there is (Terva review 1535,
-	// finding 2).
-	if int64(n) > int64(math.MaxInt64/time.Second) {
-		return time.Duration(math.MaxInt64), nil
-	}
-	return time.Duration(n) * time.Second, nil
+	return secondsDuration(n), nil
 }
 
 // threadExists answers not-found for a thread with no projection row, as

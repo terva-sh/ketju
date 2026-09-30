@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -158,6 +159,46 @@ func TestSlowModeOffIsImmediate(t *testing.T) {
 	w.wantWait(h, "carol", id, "30")
 	w.setSlowMode(h, id, 0)
 	created[dto.CreatedPost](t, replyAs(h, "carol", id, "two"))
+}
+
+// TestSlowModeDefaultTooLargeForADuration: slow_mode.default_seconds past
+// what a Duration holds is the longest wait there is, not a negative one
+// that turns slow mode off (TKT-01M3R33SR5). A thread with no row of its own
+// takes the default, so a member's second reply is rate-limited with a
+// Retry-After, at once and a month on, and the viewer block says when they
+// may post next. At once, the wait is within a second of the longest
+// Duration, where rounding it up to whole seconds would overflow.
+func TestSlowModeDefaultTooLargeForADuration(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	h := w.chain()
+	// carol's first reply, before the default is set: under it the seed's
+	// posts of hers would already be too recent.
+	created[dto.CreatedPost](t, replyAs(h, "carol", id, "one"))
+	if err := settings.Set(t.Context(), w.db, settings.SlowModeDefaultSeconds.Name, json.RawMessage(`10000000000`), 0, time.UnixMilli(1)); err != nil {
+		t.Fatal(err)
+	}
+	if row := w.slowModeRow(id); row != "none" {
+		t.Fatalf("the thread has a slow mode row %s, want none", row)
+	}
+	for _, after := range []time.Duration{0, 30 * 24 * time.Hour} {
+		w.clock += after.Milliseconds()
+		before := w.logState(id)
+		rec := replyAs(h, "carol", id, "too soon")
+		if got := problemCode(t, rec); got != "rate-limited" {
+			t.Errorf("+%s: the second reply is %s (%d) %s, want rate-limited", after, got, rec.Code, rec.Body)
+		}
+		if n, err := strconv.ParseInt(rec.Header().Get("Retry-After"), 10, 64); err != nil || n <= 0 {
+			t.Errorf("+%s: Retry-After %q, want a positive count of seconds", after, rec.Header().Get("Retry-After"))
+		}
+		if got := w.logState(id); got != before {
+			t.Errorf("+%s: a refused reply changed the log: %+v then %+v", after, before, got)
+		}
+		p := page(t, w.get(w.viewer("carol"), "/api/v1/threads/"+id.String()))
+		if p.Viewer.NextPostAt == nil || int64(*p.Viewer.NextPostAt) <= w.clock {
+			t.Errorf("+%s: carol's viewer block is %+v, want a next_post_at after %d", after, p.Viewer, w.clock)
+		}
+	}
 }
 
 // TestSetSlowModeRefusals is the fifth criterion: without moderate the

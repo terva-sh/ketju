@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"time"
 	"unicode"
@@ -311,8 +312,16 @@ func slowMode(ix *threadlog.Index, author int64, seconds int, now time.Time) err
 		return err
 	}
 	// Retry-After is whole seconds; rounding up means trying again when it
-	// says to is never early.
-	wait = (wait + time.Second - 1).Truncate(time.Second)
+	// says to is never early. A wait within a second of the longest
+	// Duration, which a slow mode default too large for one gives
+	// (secondsDuration), would overflow into a negative wait and lose the
+	// header, so it is truncated instead: at most a second early out of
+	// 292 years.
+	if wait > time.Duration(math.MaxInt64)-(time.Second-1) {
+		wait = wait.Truncate(time.Second)
+	} else {
+		wait = (wait + time.Second - 1).Truncate(time.Second)
+	}
 	return problem.RetryAfter(problem.CodeRateLimited, wait,
 		fmt.Errorf("threads: slow mode: %s until this author may post again", wait))
 }

@@ -224,6 +224,63 @@ func TestAuthorWindows(t *testing.T) {
 	})
 }
 
+// TestAuthorWindowsTooLargeForADuration: each window's setting at a count of
+// seconds past what a Duration holds is the longest window there is, still
+// open 30 days after posting, rather than one that overflowed to negative
+// and closed at once (TKT-01M3R33SR5, following Terva review 1535 finding 2
+// on the rename window). The grace period only matters inside the edit
+// window, so its subtest opens that too.
+func TestAuthorWindowsTooLargeForADuration(t *testing.T) {
+	const tooLarge = 10_000_000_000
+	const month = 30 * 24 * time.Hour
+
+	t.Run("posts.edit_window_seconds", func(t *testing.T) {
+		w := newWorld(t)
+		id, _ := w.seed()
+		w.setting("posts.edit_window_seconds", tooLarge)
+		n, created := w.fresh(id, "carol")
+		w.clock = created + month.Milliseconds()
+		res := changed(t, send(w.chain(), "carol", http.MethodPatch, postPathN(id, n), `{"source":"a month on"}`))
+		// Grace is still its default of seconds, so the edit is visible.
+		if res.Post.EditedAt == nil || int64(*res.Post.EditedAt) != w.clock {
+			t.Errorf("the edit a month on answered edited_at %v, want %d", show(res.Post.EditedAt), w.clock)
+		}
+	})
+
+	t.Run("posts.delete_window_seconds", func(t *testing.T) {
+		w := newWorld(t)
+		id, _ := w.seed()
+		w.setting("posts.delete_window_seconds", tooLarge)
+		n, created := w.fresh(id, "carol")
+		w.clock = created + month.Milliseconds()
+		if rec := send(w.chain(), "carol", http.MethodDelete, postPathN(id, n), ""); rec.Code != http.StatusOK {
+			t.Fatalf("the delete a month on: %d %s, want 200", rec.Code, rec.Body)
+		}
+		if e := w.entry(id, uint32(n)); !e.Flags.Has(threadlog.EntryDeleted) {
+			t.Errorf("entry %+v: want deleted", e)
+		}
+	})
+
+	t.Run("posts.grace_edit_seconds", func(t *testing.T) {
+		w := newWorld(t)
+		id, _ := w.seed()
+		w.setting("posts.edit_window_seconds", tooLarge)
+		w.setting("posts.grace_edit_seconds", tooLarge)
+		n, created := w.fresh(id, "carol")
+		w.clock = created + month.Milliseconds()
+		res := changed(t, send(w.chain(), "carol", http.MethodPatch, postPathN(id, n), `{"source":"still a grace edit"}`))
+		if res.Post.EditedAt != nil {
+			t.Errorf("the grace edit a month on answered edited_at %d, want null", *res.Post.EditedAt)
+		}
+		if b := w.editBodies(id, uint32(n)); len(b) != 1 || !b[0].Grace {
+			t.Fatalf("the log holds %+v, want one grace Edit", b)
+		}
+		if at := w.servedEditedAt(id, n); at != nil {
+			t.Errorf("a grace-edited post is served with edited_at %d", *at)
+		}
+	})
+}
+
 // TestGraceEdit is AC2 and AC3: an author's edit ten seconds after posting
 // is stored as revision 2 with grace, served with edited_at null, and listed
 // in history. An edit past the grace period sets edited_at, and a later edit

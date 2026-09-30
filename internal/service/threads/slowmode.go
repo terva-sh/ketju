@@ -150,7 +150,10 @@ func (s *Service) effectiveSlowMode(ctx context.Context, id threadid.ID) (int, e
 
 // slowModeWait is how long author must still wait to post in the thread
 // whose index is ix, under a slow mode of seconds, at now: zero when they
-// may post. The newest post is the index's, which is the log's.
+// may post. The newest post is the index's, which is the log's. seconds
+// past what a Duration holds is the longest wait there is (secondsDuration),
+// and Time.Add and Time.Sub saturate rather than wrap, so the wait stays
+// positive.
 func slowModeWait(ix *threadlog.Index, author int64, seconds int, now time.Time) (time.Duration, error) {
 	if seconds <= 0 {
 		return 0, nil
@@ -163,7 +166,7 @@ func slowModeWait(ix *threadlog.Index, author int64, seconds int, now time.Time)
 	if err != nil {
 		return 0, err
 	}
-	return max(0, time.UnixMilli(last.CreatedMS).Add(time.Duration(seconds)*time.Second).Sub(now)), nil
+	return max(0, time.UnixMilli(last.CreatedMS).Add(secondsDuration(seconds)).Sub(now)), nil
 }
 
 // nextPostAt is the viewer block's next_post_at: when slow mode next lets
