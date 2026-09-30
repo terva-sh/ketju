@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QVWKAGAG6H77VNE0WEC3SH
 title: Give signed-in members a Sign out control
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ dependencies:
   - TKT-01M3QS0TMVM2XWYTAPB7ZRJZZG
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qvwkag
-  branch: run/qvwkag-sign-out
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a2ed4c58477392165
-  commit: d28aead0ecb27a6c9ae6cfff81984ed52d718648
-  session: null
-  claimed_at: 2026-09-30T20:11:41Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T00:37:01Z
-updated_at: 2026-09-30T20:14:51Z
+updated_at: 2026-09-30T23:02:22Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -48,10 +41,10 @@ The server route exists: `POST /auth/logout` revokes this browser's session, cle
 
 ## Acceptance criteria
 
-- [ ] On their own profile page a signed-in member finds a form posting to /auth/logout with a Sign out button, and it is absent on another member's profile and for a signed-out reader (component test)
-- [ ] At 390 px and 1440 px a member reaches their profile in one press, presses Sign out, and lands on / signed out, with /api/v1/me answering user null and a reload not restoring the session (e2e/sign-out.spec.ts)
-- [ ] ApplicantShell and the profile page render the same SignOutForm from shell/SignOut.tsx, and routes.test.tsx's applicant sign-out test still passes
-- [ ] The dist from go generate ./internal/web/spa is committed and the thread-view bundle stays under threadViewGzipBytes in budget.json
+- [x] On their own profile page a signed-in member finds a form posting to /auth/logout with a Sign out button, and it is absent on another member's profile and for a signed-out reader (component test)
+- [x] At 390 px and 1440 px a member reaches their profile in one press, presses Sign out, and lands on / signed out, with /api/v1/me answering user null and a reload not restoring the session (e2e/sign-out.spec.ts)
+- [x] ApplicantShell and the profile page render the same SignOutForm from shell/SignOut.tsx, and routes.test.tsx's applicant sign-out test still passes
+- [x] The dist from go generate ./internal/web/spa is committed and the thread-view bundle stays under threadViewGzipBytes in budget.json
 
 ## Implementation plan
 
@@ -114,3 +107,23 @@ Plan refreshed against main at 5124209 on 2026-09-30. Nothing it builds has land
 **agent:claude-code/phase2-run-orchestrator** at 2026-09-30T12:10:14Z
 
 Carried from grooming of TKT-01M3S1TVPD (2026-09-30). That ticket forbids retrying around the /auth limit inside the shared e2e signIn helper. This ticket's plan changes signIn to wait out a 429. Put any such wait in this ticket's own sign-out spec and leave e2e/session.ts signIn unchanged, so the two tickets do not collide.
+
+**agent:claude-code/phase2-run-qvwkag** at 2026-09-30T23:01:57Z
+
+Built on main at 0f8efbe (replayed from d28aead after #246-#251 merged).
+
+- Reader bundle (the budget's thread-view figure): 60162 B before, 60392 B after, +230 B of the 70000 B budget. On d28aead the same change measured 57204 to 57432 B (+228 B).
+- `/auth/*` worst case, meaning setup, apply, phase2-exit, sign-in, link-sign-in and sign-out alone and back to back on port 18951: 20 of 20 passed. The server logged five 429s, all inside phase2-exit.spec.ts, which waits each one out through `through()` as its budget row says. The sign-out spec's three requests (the sign-in's start and callback, and `POST /auth/logout`) met none in either project, because `paceAuth(3)` runs first.
+- Viewer change, checked against #251 (TKT-01M3QHKD21) and #248 (TKT-01M3KFFFJR). The guard never sets the viewer signal. It reloads a page whose viewer changed somewhere it cannot see: another tab, or while the page sat in the back/forward cache. #251's refetch of a thread page fetched for another user handles a change the page sees itself, from `/me`. The two never act on the same event. `state/lists.ts` keeps the last thread list in module memory only, so the sign-out's page load and the guard's reload both drop it. Nothing of it survives in storage.
+- Mutations: each of six mutations to `state/viewerGuard.ts` fails `viewerGuard.test.ts` (listed in the code commit). With `guardViewer()` left out of `main.tsx`, `e2e/sign-out.spec.ts` fails at the step that checks the other tab has reloaded signed out.
+- Full checks on the replayed head: gofmt, build, vet, `go test -race ./...`, tsc, vitest (2021 tests), and the whole Playwright suite (193 passed, 11 skipped, none of them this spec).
+
+## Summary
+
+A signed-in member can sign out from the client. The Account block on their own profile (`/u/{handle}`, one press from the top bar's handle or the phone's Me tab) holds a Sign out button. It is a plain form post to `POST /auth/logout`, which revokes this browser's session on the server, clears the cookie and answers 303 to `/`. `ApplicantShell` and the profile render the same `SignOutForm` from `shell/SignOut.tsx`, with the class on the button. The `.sign-out` rule now styles both at a 44 px target.
+
+A new `state/viewerGuard.ts`, started in `main.tsx`, covers what the form post's page load does not reach. Another tab of the same browser reloads when a page load announces a different viewer on a `BroadcastChannel`. A page restored from the back/forward cache asks `/me` and reloads when the answer is someone else or the request fails. A signed-out page does neither. The guard never sets the viewer signal, so it and #251's in-place refetch never act on the same event.
+
+`e2e/sign-out.spec.ts` covers 390 px and 1440 px. It calls `paceAuth(3)` first and has its row in the `e2e/session.ts` budget; `signIn` is unchanged. It signs carol in on a session of its own and checks the 303, `/me` null, the cookie gone, the old cookie value refused by the server, a second tab reloaded signed out, her local draft copy removed, and Back and reload restoring nothing.
+
+The reader bundle went from 60162 B to 60392 B (+230 B). Every criterion is ticked. No server code changed.
