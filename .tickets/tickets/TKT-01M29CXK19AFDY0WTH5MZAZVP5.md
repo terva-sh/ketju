@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T08:55:04Z
+updated_at: 2026-09-30T09:12:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,9 +51,9 @@ Archiving a forum must not orphan its threads, and what happens to them needs de
 - [ ] A move writes only the moved forum's row while its neighbours leave a gap, and otherwise renumbers only its siblings in their existing order (TestMoveWritesOnlyTheMovedRow, TestMoveKeepsOrderUnderRandomMoves)
 - [ ] A visibility change goes through perm, applies on the viewer's next request (TestVisibilityChangeAppliesOnNextRequest), and the screen says it takes effect within a minute
 - [ ] Every forum write appends its audit_log row in the same transaction, and a failed audit insert leaves the forum unchanged (TestForumWritesAuditInTheSameTransaction)
-- [ ] Archiving leaves every thread in place and readable to whoever could read it, refuses new threads and replies to everyone but admins, moderators included, while a moderator may still lock, pin, hide and move threads out, and docs/04 and the screen say so (TestArchivedForumEffect)
 - [ ] Every /api/v1/admin/forums route is admin-only: a moderator by role and a member who holds moderate through a group are 403 (TestAdminForumsAreAdminOnly, TestAdminRoutesAreGated)
 - [ ] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total stays at 47415 B, and the dist from go generate ./internal/web/spa is committed (ForumsScreen.test.tsx)
+- [ ] Archiving leaves every thread in place and read access unchanged, so whoever could read the forum still can, whatever its visibility. It refuses new threads and replies to everyone but admins, moderators included, while a moderator may still lock, pin, hide and move threads out. docs/04 says so, and the screen says 'Anyone who could read it still can. Only posting stops, except for admins.' for every visibility (TestArchivedForumEffect, ForumsScreen.test.tsx 'the archive text says read access is unchanged')
 
 ## Implementation plan
 
@@ -117,7 +117,7 @@ Read from main at 5124209:
    - Move up and Move down;
    - a "Place under" select listing the roots;
    - a visibility select, with the line "Takes effect within a minute" (the permission cache's lifetime, AC3);
-   - an Archive toggle, with the effect in words: "Members and moderators can still read it. Moderators can still hide, lock, pin and move threads out. Only admins can start threads, reply or move threads in."
+   - an Archive toggle, with the effect in words: "Anyone who could read it still can. Only posting stops, except for admins. Moderators can still hide, lock, pin and move threads out, and only admins can move threads in." The text is the same for every visibility, because archiving changes no read access (review 1558 on PR #209). Text that depends on visibility lost: listing who can read a `restricted` forum would mean restating its grants, and "unchanged" is the whole of what archiving does to reading.
 
    Controls go through `screens/admin/common/` (`Field`, `ConfirmButton`, `send`, `Table`).
 7. **Docs**: a new `####` subsection under docs/07 "Moderation and admin", "Forums (TKT-01M29CXK19)", documents the endpoints. docs/04 "forums" records sparse positions, the fixed slug and reversible archiving. docs/04 "audit_log" gains the six `forum.*` actions, against the forum, with their details.
@@ -139,7 +139,7 @@ Read from main at 5124209:
 - `TestAdminForumsAreAdminOnly`, beside `TestAdminRoutesAreGated`: a moderator by role is 403, and so is a member who holds `moderate` in the forum through a group.
 - `TestMutationsGoThroughPerm` passes unchanged. `SetForumArchived` is already listed.
 - `TestArchivedForumIsReadOnly`, `TestArchivedForumConflicts` and the perm cache tests pass with the new signatures.
-- Goldens. Client: `ForumsScreen.test.tsx` covers create, the move buttons, the visibility note and the archive text. `TestTheAdminBundleIsSeparate` stays green.
+- Goldens. Client: `ForumsScreen.test.tsx` covers create, the move buttons and the visibility note. Its case `the archive text says read access is unchanged` checks that the archive toggle's words are exactly the text in step 6 for a `public`, a `members` and a `restricted` forum, and that no words name who can read it. `TestTheAdminBundleIsSeparate` stays green.
 
 ### Out of scope
 
@@ -154,3 +154,7 @@ Read from main at 5124209:
 **agent:claude-code/phase2-groom** at 2026-09-30T08:54:55Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The Settled items are carried verbatim; new ones follow them. Changes: (1) perm.Evaluator.SetForumArchived, its query and its decisionWrites entry landed with TKT-01M3N24RHD, so the steps that created them are removed. This ticket adds by audit.By and the audit row to SetForumArchived and SetVisibility, as ChangeRole and Grant do in perm/admin.go, and updates the four perm test files that call them. (2) The maintainer's decision of 2026-09-29 that moderators may still hide, lock, pin and move threads out of an archived forum is now in the archive words and in TestArchivedForumEffect. Criterion 4 is rewritten. (3) The maintainer's decision of 2026-09-30 keeps admin screens on their role gates. A new criterion covers a member who moderates through a group. (4) docs/04 audit_log gains the six forum.* actions. TKT-01M29CP2R4's audit.Actions list must carry them too, and whichever ticket lands second adds them. (5) docs/07 now has one #### subsection per admin area, and this ticket adds one. (6) The admin chunk criterion is added. The reader total is 47415 B. No migration is needed.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:12:41Z
+
+Terva review 1558 on PR #209 (head 608a468), one medium finding, accepted. The planned archive words 'Members and moderators can still read it.' promised more than a restricted forum gives. The screen now says 'Anyone who could read it still can. Only posting stops, except for admins.', followed by what moderators keep. The words are the same for every visibility, because archiving changes no read access. Words that depend on visibility lost, because they would have to restate a restricted forum's grants. The archive criterion is rewritten to quote that text. It names ForumsScreen.test.tsx 'the archive text says read access is unchanged', which checks the text for public, members and restricted forums.
