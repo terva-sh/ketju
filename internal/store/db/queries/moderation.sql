@@ -22,6 +22,14 @@ SELECT * FROM flags WHERE id = ?;
 -- name: OpenFlags :many
 SELECT * FROM flags WHERE status = 'open' ORDER BY created_at DESC, id DESC LIMIT ?;
 
+-- Whether a reporter has an open flag on a post: a repeat after the post
+-- went down answers the same receipt as any other repeat (TKT-01M29CP2PJ,
+-- Terva review 1506).
+-- name: HasOpenFlag :one
+SELECT EXISTS (
+	SELECT 1 FROM flags WHERE thread_id = ? AND ordinal = ? AND reporter_id = ? AND status = 'open'
+);
+
 -- A post's open flags, for the auto-hide threshold (docs/08).
 -- name: OpenFlagCount :one
 SELECT count(*) FROM flags WHERE thread_id = ? AND ordinal = ? AND status = 'open';

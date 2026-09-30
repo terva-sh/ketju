@@ -226,7 +226,8 @@ awake.
 
 How it runs (TKT-01M29CP2PJ):
 - A member has one open flag per post. A repeat adds no row, so N counts
-  reporters. After a moderator closes their flag, they may flag the post
+  reporters. It gets the same receipt even after the post is hidden, so a
+  repeat does not reveal the hide. After a moderator closes their flag, they may flag the post
   again, and the new flag counts from zero.
 - The flag is committed first. The hide reads only committed flags and runs on
   every flag at or over N, not only the one that crosses it. It is a `Delete`

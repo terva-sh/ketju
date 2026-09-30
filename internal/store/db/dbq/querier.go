@@ -236,6 +236,10 @@ type Querier interface {
 	// HandleReserved reports whether a release still reserves the handle at now,
 	// in any case.
 	HandleReserved(ctx context.Context, arg HandleReservedParams) (bool, error)
+	// Whether a reporter has an open flag on a post: a repeat after the post
+	// went down answers the same receipt as any other repeat (TKT-01M29CP2PJ,
+	// Terva review 1506).
+	HasOpenFlag(ctx context.Context, arg HasOpenFlagParams) (bool, error)
 	// The user's IdP-sourced memberships, which sign-in re-evaluation compares
 	// with what the claims say now (perm.SyncIdPGroups).
 	IdPMembershipsForUser(ctx context.Context, userID int64) ([]IdPMembershipsForUserRow, error)

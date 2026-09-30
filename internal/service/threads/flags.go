@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 	"unicode/utf8"
 
 	"github.com/terva-sh/ketju/internal/domain"
@@ -73,6 +74,10 @@ type FlagRequest struct {
 // down or its thread takes no records.
 var errNothingToHide = errors.New("threads: nothing to hide")
 
+// reopenTimeout bounds the reopen of a failed restore's flags, which runs
+// on after the request's context is gone.
+const reopenTimeout = 10 * time.Second
+
 // errNoOpenFlags is a resolve that found no open flag on the post.
 var errNoOpenFlags = errors.New("threads: the post has no open flag")
 
@@ -87,7 +92,11 @@ var errNoOpenFlags = errors.New("threads: the post has no open flag")
 // (flags_one_open_per_reporter), so the open count is a count of reporters.
 //
 // The answer is the same receipt for a new flag, a repeat and the flag that
-// hid the post: a reporter learns no count, no reporter and no outcome.
+// hid the post: a reporter learns no count, no reporter and no outcome. A
+// repeat from a reporter whose flag is still open gets the receipt even
+// after the post went down, so that it does not say the post is hidden
+// (Terva review 1506); only a member with no open flag on a post that is not
+// shown gets conflict.
 //
 // The flag is committed before the hide is tried, and the hide reads only
 // committed flags. If the hide fails, the answer is unavailable with the
@@ -114,20 +123,30 @@ func (s *Service) Flag(ctx context.Context, v domain.Viewer, id threadid.ID, req
 	if s.beforeFlagCheck != nil {
 		s.beforeFlagCheck(id, req.Ordinal)
 	}
+	shown := false
 	if err := s.Threads.With(id, func(th *threadcache.Thread) error {
 		if th.Archived() {
 			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
 		}
 		e, err := th.Index.Entry(req.Ordinal)
-		if err != nil {
-			return err
-		}
-		if !e.Flags.Visible() {
-			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: post %d of %s is not shown", req.Ordinal, id))
-		}
-		return nil
+		shown = err == nil && e.Flags.Visible()
+		return err
 	}); err != nil {
 		return dto.FlagReceipt{}, err
+	}
+	if !shown {
+		var repeat bool
+		if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			var err error
+			repeat, err = q.HasOpenFlag(ctx, dbq.HasOpenFlagParams{ThreadID: int64(id), Ordinal: int64(req.Ordinal), ReporterID: v.UserID})
+			return err
+		}); err != nil {
+			return dto.FlagReceipt{}, err
+		}
+		if repeat {
+			return dto.FlagReceipt{Received: true}, nil
+		}
+		return dto.FlagReceipt{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: post %d of %s is not shown", req.Ordinal, id))
 	}
 	if err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		_, err := q.CreateFlag(ctx, dbq.CreateFlagParams{ThreadID: int64(id), Ordinal: int64(req.Ordinal),
@@ -315,8 +334,13 @@ func (s *Service) restoreDismissingFlags(ctx context.Context, v domain.Viewer, i
 	}
 	out, appended, err := run()
 	if !appended && len(dismissed) > 0 {
-		if rerr := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-			_, err := q.ReopenFlags(ctx, dismissed)
+		// Not the request's context: an append that failed because the
+		// request was cancelled must still have its flags reopened (Terva
+		// review 1506). Bounded, so a stuck database cannot hold the lock.
+		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reopenTimeout)
+		defer cancel()
+		if rerr := s.DB.Write(rctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			_, err := q.ReopenFlags(rctx, dismissed)
 			return err
 		}); rerr != nil {
 			err = errors.Join(err, fmt.Errorf("threads: reopening the flags a failed restore of post %d of %s dismissed: %w",
@@ -382,6 +406,11 @@ func (s *Service) ConfirmHide(ctx context.Context, v domain.Viewer, id threadid.
 		out    dto.CreatedPost
 	)
 	if err := s.Threads.With(id, func(th *threadcache.Thread) error {
+		// An archived thread is read-only, flags included (Terva review
+		// 1506), whichever branch the confirmation would take.
+		if th.Archived() {
+			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+		}
 		e, err := th.Index.Entry(ordinal)
 		if err != nil {
 			return err

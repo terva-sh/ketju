@@ -386,6 +386,11 @@ func TestAutoHideAtThreshold(t *testing.T) {
 	if _, err := w.flag("rep4", 1); codeOf(err) != problem.CodeConflict {
 		t.Errorf("a flag on the hidden post: %v, want conflict", err)
 	}
+	// A reporter's repeat after the hide is a repeat like any other: the
+	// same receipt, so it does not say the post went down (review 1506).
+	if r, err := w.flag("rep1", 1); err != nil || r != (dto.FlagReceipt{Received: true}) {
+		t.Errorf("rep1's repeat after the hide: %+v, %v; want the receipt", r, err)
+	}
 	if w.logLength() != before || len(w.audit()) != 1 {
 		t.Error("a flag on the hidden post changed the log or the audit log")
 	}
@@ -731,6 +736,31 @@ func TestSweepCannotReHideDuringRestore(t *testing.T) {
 		}
 	})
 
+	t.Run("restore cancelled at its append", func(t *testing.T) {
+		// The request goes away during the append (review 1506): the
+		// reopen still runs, on a context of its own.
+		w := newFlagWorld(t)
+		w.hide(1)
+		ctx, cancel := context.WithCancel(t.Context())
+		w.writer.set(nil, func(a threadlog.Append) error {
+			if a.Type == threadlog.TypeRestore {
+				cancel()
+				return context.Canceled
+			}
+			return nil
+		})
+		w.clock += 1000
+		if _, err := w.svc.Restore(ctx, w.viewer("mod"), w.id, 1, "looked fine"); !errors.Is(err, context.Canceled) {
+			t.Fatalf("the cancelled restore: %v", err)
+		}
+		if n := w.openFlags(1); n != 3 {
+			t.Errorf("%d open flags after the cancelled restore, want 3 reopened", n)
+		}
+		if e := w.entry(1); !e.Flags.Has(threadlog.EntryAutoHidden) {
+			t.Errorf("the cancelled restore left the post %#x", e.Flags)
+		}
+	})
+
 	t.Run("restore durable, projection fails", func(t *testing.T) {
 		w := newFlagWorld(t)
 		w.hide(1)
@@ -927,5 +957,27 @@ func TestConfirmHideRecoversAFailedResolve(t *testing.T) {
 	}
 	if _, err := w.svc.ConfirmHide(t.Context(), w.viewer("mod"), w.id, 1, "spam"); codeOf(err) != problem.CodeConflict {
 		t.Errorf("a third confirmation: %v, want conflict", err)
+	}
+}
+
+// TestConfirmHideRefusesAnArchivedThread (review 1506): an archived thread
+// is read-only, so a confirmation is conflict and changes no flag, whether
+// the post is pending review or already a moderator's hide with flags open.
+func TestConfirmHideRefusesAnArchivedThread(t *testing.T) {
+	w := newFlagWorld(t)
+	second := w.post("another post")
+	w.hide(1)
+	w.hide(second)
+	// #1 becomes a moderator's hide with its flags still open.
+	w.append(threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["mod"]), Ordinal: 1,
+		Body: &threadlog.DeleteBody{ByModerator: true}})
+	w.cache.MarkArchived(w.id)
+	for _, ord := range []uint32{1, second} {
+		if _, err := w.svc.ConfirmHide(t.Context(), w.viewer("mod"), w.id, ord, "spam"); codeOf(err) != problem.CodeConflict {
+			t.Errorf("confirming #%d in an archived thread: %v, want conflict", ord, err)
+		}
+		if n := w.openFlags(ord); n != 3 {
+			t.Errorf("#%d has %d open flags after the refused confirmation, want 3", ord, n)
+		}
 	}
 }

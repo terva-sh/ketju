@@ -38,6 +38,7 @@ func TestReporterSeesOnlyTheReceipt(t *testing.T) {
 		{"dave", `{"ordinal":4,"reason":"abuse","note":"again"}`}, // a repeat: no row
 		{"erin", `{"ordinal":4,"reason":"off-topic"}`},
 		{"fay", `{"ordinal":4,"reason":"other","note":"a scam link"}`}, // the third reporter: hides it
+		{"dave", `{"ordinal":4,"reason":"spam"}`},                      // a repeat after the hide
 	} {
 		rec := send(h, c.who, http.MethodPost, flagsPath(id), c.body)
 		if rec.Code != http.StatusOK {

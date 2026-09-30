@@ -491,6 +491,28 @@ func (q *Queries) GetFlag(ctx context.Context, id int64) (Flag, error) {
 	return i, err
 }
 
+const hasOpenFlag = `-- name: HasOpenFlag :one
+SELECT EXISTS (
+	SELECT 1 FROM flags WHERE thread_id = ? AND ordinal = ? AND reporter_id = ? AND status = 'open'
+)
+`
+
+type HasOpenFlagParams struct {
+	ThreadID   int64
+	Ordinal    int64
+	ReporterID int64
+}
+
+// Whether a reporter has an open flag on a post: a repeat after the post
+// went down answers the same receipt as any other repeat (TKT-01M29CP2PJ,
+// Terva review 1506).
+func (q *Queries) HasOpenFlag(ctx context.Context, arg HasOpenFlagParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, hasOpenFlag, arg.ThreadID, arg.Ordinal, arg.ReporterID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const openFlagCount = `-- name: OpenFlagCount :one
 SELECT count(*) FROM flags WHERE thread_id = ? AND ordinal = ? AND status = 'open'
 `
