@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T21:37:14Z
-updated_at: 2026-09-30T19:36:03Z
+updated_at: 2026-09-30T19:48:58Z
 created_by:
   id: agent:claude-code/phase2-run-crj5j
   name: ""
@@ -146,3 +146,21 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30, on main 1dd6ed9 after 
 **agent:claude-code/phase2-groom** at 2026-09-30T09:22:29Z
 
 Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) TKT-01M29CKRJ9 landed first (PRs #170, #174), so a moderator sees removed posts as a removed Post. TKT-01M3PTT97X's refresh now draws Restore wherever the post is drawn, and this ticket places nothing. The earlier placement item is carried verbatim and marked superseded. (2) Engineering choice: a moderator's Restore is offered on a removed post served with its body (!isTombstone). revealRemoved withholds exactly the moved and redacted posts, and restoreRecord refuses exactly those, so a redacted post (deleted, moved_to null) no longer gets a Restore that would answer conflict. Criterion 1 was replaced by criterion 4. (3) Group moderators get the controls through can_moderate. The post routes are not admin routes, so there is no dependency on TKT-01M3RQP0TG. (4) The phone layout comes from TKT-01M3PTT97X's PostMore controls after #202, and the bundle figure is 47415 of 60000 B.
+
+**agent:claude-code/phase2-run-qhkd21** at 2026-09-30T19:48:58Z
+
+Built and checked locally on 2026-10-01 against main at cd485ef, not yet pushed: the client dist is held by other lanes, and the dist commit is dropped and regenerated at replay.
+
+What is built: the moderator branch in `postControls`; an `Own` for every post to a signed-in viewer whose page says `can_moderate`; the moderator's delete prompt through `Own.hides`; `useOwn` closing the editor and the confirmation when the signed-in handle changes; the `(edited by a moderator)` marker; and `ThreadViewer.forum_read_only` on the server, with a new golden `thread-archived.member.json` so that `TestEveryFieldIsPopulatedSomewhere` sees the field set.
+
+Mutations tried against the tests, each caught:
+- the moderator branch disabled: 6 tests failed across `postControls.test.ts` and `PostControls.test.tsx`;
+- Restore without `!isTombstone(p)`: 'nothing on a moved or redacted post' failed;
+- `forum_read_only` ignored: "nothing on one's own post in a read-only forum" failed;
+- no `Own` for a moderator in `ThreadBody`: 4 component tests failed;
+- `useOwn` keyed without the handle: 'the editor goes when the signed-in viewer changes' failed;
+- `hides` always false: the delete-prompt test and the group moderator test failed;
+- the marker always `(edited)`: 'the edited marker' failed;
+- `ForumReadOnly` always false in `view.go`: `TestThreadViewerSaysTheForumIsReadOnly` failed for carol, bob and gina.
+
+Checks run: gofmt, `go build`, `go vet`, `go test -race ./...` (exit 0), `tsc --noEmit`, vitest (63 files, 1889 tests), and Playwright on port 18931 (175 passed, 11 skipped). The reader bundle went from 56988 B to 57153 B of 70000 B, +165 B. There is no lazy chunk: the moderator-only code is one branch in the rule and one sentence, which is smaller than a chunk's loader.
