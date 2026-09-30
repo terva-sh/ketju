@@ -17,11 +17,13 @@ origin: TKT-01M29CKRES18SZSCQRV8XSNBT2
 dependencies:
   - TKT-01M29CKRES18SZSCQRV8XSNBT2
 blocks_on: none
-references: []
+references:
+  - ref: pr:245
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T23:46:54Z
-updated_at: 2026-09-30T19:39:42Z
+updated_at: 2026-09-30T19:40:43Z
 created_by:
   id: agent:claude-code/phase2-run-KRES
   name: ""
