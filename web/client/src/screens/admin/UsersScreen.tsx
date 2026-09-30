@@ -149,6 +149,14 @@ function UsersTab({ admin }: { admin: boolean }) {
     restart();
     setFilters((f) => ({ ...f, [k]: v }));
   };
+  // A new ?prefix= in the address, by a link or by Back and Forward while
+  // this tab stays mounted, becomes the filter too (Terva review 1596).
+  // Only a change of the address's prefix does: opening or closing an
+  // account keeps it, so what was typed in the field stays.
+  const addressPrefix = query.prefix ?? '';
+  useEffect(() => {
+    if (filters.prefix !== addressPrefix) setFilter('prefix', addressPrefix);
+  }, [addressPrefix]);
   // reload asks for the list again after a change it shows, a role, so the
   // row is not left with the old one or under a filter it no longer
   // matches (Terva review 1419).

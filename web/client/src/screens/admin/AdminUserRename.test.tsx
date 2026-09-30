@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminUserDetail, AdminUserList, HandleChange, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
-import { problemAnswer, renderAt, settle, stubServer, unmount, type StubServer } from '../../testing';
+import { problemAnswer, renderAt, route, settle, stubServer, unmount, type StubServer } from '../../testing';
 import moderatorMe from '../../../../../internal/dto/testdata/golden/me.moderator.json';
 import userList from '../../../../../internal/dto/testdata/golden/admin-users.admin.json';
 import userAdmin from '../../../../../internal/dto/testdata/golden/admin-user.admin.json';
@@ -256,6 +256,42 @@ describe('the users tab address', () => {
     expect(server.sent.map((s) => s.url)).not.toContain('/api/v1/admin/users');
     expect(root.querySelector<HTMLInputElement>('.admin-filters input[type="search"]')!.value).toBe('bo');
     expect([...root.querySelectorAll('[data-user]')].map((b) => b.textContent)).toEqual(['bob']);
+  });
+
+  // Terva review 1596: the address's prefix is followed while the tab stays
+  // mounted, not only read as it mounts.
+  it('follows a new ?prefix= in the address, going back included, and keeps what was typed otherwise', async () => {
+    server.routes['GET /api/v1/admin/users?prefix=bo'] = () => ({ status: 200, body: list('bob') });
+    server.routes['GET /api/v1/admin/users?prefix=al'] = () => ({ status: 200, body: list('alice') });
+    server.routes['GET /api/v1/admin/users?prefix=a'] = () => ({ status: 200, body: list('alice') });
+    const root = await renderAt('/admin/users?prefix=bo');
+    const search = () => root.querySelector<HTMLInputElement>('.admin-filters input[type="search"]')!;
+    const rows = () => [...root.querySelectorAll('[data-user]')].map((b) => b.textContent);
+
+    await route('/admin/users?prefix=al');
+    await settle(root);
+    expect(search().value).toBe('al');
+    expect(server.sent.at(-1)?.url).toBe('/api/v1/admin/users?prefix=al');
+    expect(rows()).toEqual(['alice']);
+
+    // Back is a popstate to the earlier address, as route() makes one.
+    await route('/admin/users?prefix=bo');
+    await settle(root);
+    expect(location.search).toBe('?prefix=bo');
+    expect(search().value).toBe('bo');
+    expect(rows()).toEqual(['bob']);
+
+    // Typing is not undone by opening an account, whose address keeps the
+    // same prefix.
+    await act(async () => {
+      search().value = 'a';
+      search().dispatchEvent(new Event('input'));
+    });
+    await settle(root);
+    await open(root, 'alice');
+    expect(location.search).toBe('?prefix=bo&user=alice');
+    expect(search().value).toBe('a');
+    expect(server.sent.at(-1)?.url).not.toBe('/api/v1/admin/users?prefix=bo');
   });
 
   it('keeps the prefix in the address when an account is opened and closed', async () => {
