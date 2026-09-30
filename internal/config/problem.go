@@ -94,6 +94,7 @@ var movedKeys = map[string]string{
 	"posts":                              "the edit and delete windows are runtime settings: they live in the settings table and are changed in the admin UI",
 	"flags":                              "the flag threshold is a runtime setting: it lives in the settings table and is changed in the admin UI",
 	"public_edit_history":                "whether members may read edit history is a runtime setting: it lives in the settings table and is changed in the admin UI",
+	"threads":                            "the thread rename window is a runtime setting: it lives in the settings table and is changed in the admin UI",
 }
 
 // decodeError turns a TOML decoding failure into something that names a key.

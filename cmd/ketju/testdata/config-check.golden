@@ -62,3 +62,4 @@ limits.attachment_mb = 10                                        # default
 #   registration.mode = "approval"              # How a new visitor becomes a member: "open" or "approval".
 #   site_name = "Ketju"                         # The site's name, shown in the header and page titles.
 #   slow_mode.default_seconds = 0               # Minimum seconds between one member's posts in a thread; 0 is off.
+#   threads.rename_window_seconds = 86400       # How long after starting a thread its author may rename it.

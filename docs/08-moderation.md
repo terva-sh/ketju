@@ -83,7 +83,8 @@ writes it.
   being the truth.
 
 **Decided 2026-09-29** (maintainer, on grooming's recommendations):
-- An author may rename their own thread within 24 h (TKT-01M29CKRH9).
+- An author may rename their own thread within 24 h (TKT-01M29CKRH9), the
+  default of `threads.rename_window_seconds` (04).
 - In an archived forum, moderators may still hide, lock, pin and move
   threads out. Posting is refused to everyone but admins, and moving a thread
   in stays admin-only (TKT-01M3N24RHD).

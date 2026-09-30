@@ -107,6 +107,15 @@
       "status": 429
     }
   },
+  "rename-window-closed": {
+    "status": 403,
+    "content_type": "application/problem+json",
+    "body": {
+      "type": "rename-window-closed",
+      "title": "The time for renaming this thread has passed.",
+      "status": 403
+    }
+  },
   "unauthenticated": {
     "status": 401,
     "content_type": "application/problem+json",

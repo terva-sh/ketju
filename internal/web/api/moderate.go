@@ -14,14 +14,77 @@ import (
 
 // The thread moderation routes (docs/07 "Moderation and admin",
 // TKT-01M29CKRGS). Each is staff's by role, as docs/08's "Primitives" names
-// the moderator for locking and pinning, and the threads service then checks
-// moderate in the thread's own forum. Each appends one record, answers 200
+// the moderator for locking, pinning and moving, and the threads service then
+// checks moderate in the thread's own forum, and for a move in the
+// destination too (TKT-01M29CKRH9). Each appends one record, answers 200
 // with the thread's header as its page now serves it, and is no-store.
+//
+// Renaming is not here: an author may rename their own thread, so it is
+// PATCH /api/v1/threads/{id} (renameThread), and the service decides who
+// may.
 func (h *handlers) registerModeration(mux *http.ServeMux) {
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/lock", staffGate, h.lockThread)
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unlock", staffGate, h.unlockThread)
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/pin", staffGate, h.pinThread)
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unpin", staffGate, h.unpinThread)
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/move", staffGate, h.moveThread)
+}
+
+// renameRequest is the body of PATCH /threads/{id}.
+type renameRequest struct {
+	Title *string `json:"title"`
+}
+
+// moveRequest is the body of POST …/move: the destination forum's slug.
+type moveRequest struct {
+	Forum *string `json:"forum"`
+}
+
+// renameThread is PATCH /api/v1/threads/{id} with {title}, for the thread's
+// author within threads.rename_window_seconds and for a moderator at any
+// time (docs/07, TKT-01M29CKRH9). A stranger is refused as one before the
+// body is read, as for an edit.
+func (h *handlers) renameThread(w http.ResponseWriter, r *http.Request) {
+	v := domain.ViewerFrom(r.Context())
+	if err := h.threads.MayWrite(v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	id, err := threadid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var in renameRequest
+	if err := optionalJSON(r.Body, maxReasonBody, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if in.Title == nil {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: the rename has no title")))
+		return
+	}
+	res, err := h.threads.Rename(r.Context(), v, id, *in.Title)
+	h.answerHeader(w, r, res, err)
+}
+
+func (h *handlers) moveThread(w http.ResponseWriter, r *http.Request) {
+	id, err := threadid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var in moveRequest
+	if err := optionalJSON(r.Body, maxReasonBody, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if in.Forum == nil {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: the move has no forum")))
+		return
+	}
+	res, err := h.threads.Move(r.Context(), domain.ViewerFrom(r.Context()), id, *in.Forum)
+	h.answerHeader(w, r, res, err)
 }
 
 // pinRequest is the body of POST …/pin. Until is Unix ms, null for no end.

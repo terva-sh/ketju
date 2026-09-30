@@ -127,6 +127,12 @@ var (
 	DeleteWindowSeconds = define("posts.delete_window_seconds", 15*60,
 		"How long after posting an author may delete a post.", atLeast(0))
 
+	// docs/08 "Primitives": an author may rename their own thread within a
+	// window. Maintainer decision 2026-09-29 (TKT-01M29CKRH9): 24 hours, the
+	// post edit window, since the title is the opening post's headline.
+	RenameWindowSeconds = define("threads.rename_window_seconds", 24*60*60,
+		"How long after starting a thread its author may rename it.", atLeast(0))
+
 	// docs/08: "the first N minutes (default 5) of edits are collapsed".
 	GraceEditSeconds = define("posts.grace_edit_seconds", 5*60,
 		"Edits within this many seconds of posting are shown as the original revision.", atLeast(0))

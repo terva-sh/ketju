@@ -12,6 +12,7 @@ export type ProblemType =
   | 'forbidden'
   | 'edit-window-closed'
   | 'delete-window-closed'
+  | 'rename-window-closed'
   | 'not-found'
   | 'method-not-allowed'
   | 'conflict'
@@ -34,6 +35,7 @@ const messages: Record<ProblemType, { text: string; signIn: boolean }> = {
   forbidden: { text: 'Your account does not have access to this.', signIn: false },
   'edit-window-closed': { text: 'The time for editing this post has passed.', signIn: false },
   'delete-window-closed': { text: 'The time for deleting or restoring this post has passed.', signIn: false },
+  'rename-window-closed': { text: 'The time for renaming this thread has passed.', signIn: false },
   'not-found': { text: 'There is nothing here. It may never have existed, or you may not be able to see it.', signIn: false },
   'method-not-allowed': { text: 'That action is not available here.', signIn: false },
   conflict: { text: 'Something changed while you were working. Reload and try again.', signIn: false },

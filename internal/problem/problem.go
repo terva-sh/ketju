@@ -77,6 +77,11 @@ const (
 	CodeEditWindowClosed   Code = "edit-window-closed"
 	CodeDeleteWindowClosed Code = "delete-window-closed"
 
+	// CodeRenameWindowClosed is forbidden, named, for a thread: the viewer
+	// started it, and threads.rename_window_seconds has passed, so only a
+	// moderator may rename it now (docs/08 "Primitives", TKT-01M29CKRH9).
+	CodeRenameWindowClosed Code = "rename-window-closed"
+
 	// CodeNotFound covers both "no such route" and "no such object". They are
 	// deliberately the same code: telling an unauthorized reader which thread
 	// ids exist is a disclosure, and the cheapest way not to do that is to
@@ -145,6 +150,7 @@ var catalogue = map[Code]entry{
 	CodeForbidden:            {http.StatusForbidden, "You may not do that."},
 	CodeEditWindowClosed:     {http.StatusForbidden, "The time for editing this post has passed."},
 	CodeDeleteWindowClosed:   {http.StatusForbidden, "The time for deleting or restoring this post has passed."},
+	CodeRenameWindowClosed:   {http.StatusForbidden, "The time for renaming this thread has passed."},
 	CodeNotFound:             {http.StatusNotFound, "No such endpoint or object."},
 	CodeMethodNotAllowed:     {http.StatusMethodNotAllowed, "That method is not allowed here."},
 	CodeConflict:             {http.StatusConflict, "That conflicts with the current state."},

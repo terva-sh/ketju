@@ -22,12 +22,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-30T00:30:38Z
+updated_at: 2026-09-30T01:11:19Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-n24rhd
+  id: agent:claude-code/phase2-run-krh9
   name: ""
 extensions: {}
 ---
@@ -112,6 +112,10 @@ Decisions taken inside the settled rules, for the record:
 **agent:claude-code/phase2-run-n24rhd** at 2026-09-30T00:29:50Z
 
 Correction to the previous note: the draft route is PUT /api/v1/drafts/{thread_id}, not PUT …/draft. The behaviour described is unchanged.
+
+**agent:claude-code/phase2-run-krh9** at 2026-09-30T01:11:19Z
+
+TKT-01M29CKRH9 (Implement thread rename and move) completes this ticket's seventh criterion, the move half it left open. POST /api/v1/admin/threads/{id}/move lets a moderator move a thread out of an archived forum, and moving one into an archived forum is conflict to everyone but an admin. The destination's flag is read from its forum row on the request; the move does not call readOnlyForum. TestMoveNeedsModerateInBothForums in internal/web/api/rename_test.go covers both directions. The box here is left as it was, since this ticket is done; this note records where the criterion was met.
 
 ## Summary
 

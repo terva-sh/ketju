@@ -502,9 +502,14 @@ transaction that projects the record, with the frame's timestamp as `at`.
   - always, against the thread: `thread.locked` and `thread.unlocked` with
     `"reason"`; `thread.pinned` and `thread.unpinned` with `"scope"` and
     `"until"` (Unix ms, or null for no end); `thread.moved` with
-    `"forum_id"`;
+    `"from_forum"` and `"to_forum"`, both forum ids, the first read from
+    the thread row before the move is applied (TKT-01M29CKRH9);
   - when the actor is not the thread's author: `thread.renamed`, against
-    the thread, with `"title"` and `"slug"`;
+    the thread, with nothing beyond `"thread"` and `"log_offset"`. It
+    carries no title, old or new: the log is the record of what the title
+    was, and a title copied into this append-only table could never be
+    removed by a hard redaction (03 "Hard redaction", maintainer decision
+    2026-09-29 on TKT-01M3NS147C);
   - when the actor is not the post's author: `post.edited` with `"reason"`
     and `"revision"`, `post.hidden` (a `Delete` with `by_moderator`, 03,
     with `"suspension"` when the `Delete` has one), `post.auto_hidden` (a
@@ -680,13 +685,16 @@ the code by `TestKeysDocumented`:
 | `registration.mode` | `"approval"` | `"open"` or `"approval"`; invite is a later phase and is refused until then (05) |
 | `site_name` | `"Ketju"` | Shown in the header and page titles |
 | `slow_mode.default_seconds` | `0` | Minimum seconds between one member's posts in a thread; 0 is off (08) |
+| `threads.rename_window_seconds` | `86400` | How long after starting a thread its author may rename it; moderators may at any time (08) |
 <!-- settings:end -->
 
 Two defaults are not stated in 05 and 08 and were chosen in TKT-01M29BYYJ0.
 `registration.mode` defaults to `approval`, the v1 mode and the one that
 admits nobody unreviewed. `site_name` defaults to the product's name. The
 agent token-bucket defaults were the maintainer's decision of 2026-09-29
-(TKT-01M29P9RSW, 08 "Rate limits").
+(TKT-01M29P9RSW, 08 "Rate limits"), and so was the rename window's 24 hours,
+the post edit window, since a title is the opening post's headline
+(TKT-01M29CKRH9).
 
 ### thread_slow_mode
 ```

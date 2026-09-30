@@ -11,6 +11,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -101,6 +102,196 @@ func (s *Service) Unpin(ctx context.Context, v domain.Viewer, id threadid.ID, sc
 	})
 }
 
+// Rename is PATCH /threads/{id} (docs/07): a ThreadRenamed record with the
+// new title and the slug Slug makes of it. The old slug keeps working,
+// because a thread is found by its id and a client corrects a stale slug
+// (docs/07 "a stale slug redirects").
+//
+// A viewer with moderate in the thread's forum may rename it at any time.
+// The thread's author, without moderate, may rename it for
+// threads.rename_window_seconds after starting it, as they may edit their
+// own post (docs/08 "Primitives", TKT-01M29CKRH9). Refusals come in this
+// order, all before the append:
+//   - forbidden to anyone else;
+//   - conflict on an archived thread;
+//   - for the author: conflict in an archived forum (readOnlyForum) and in
+//     a locked thread, forbidden without reply in the forum, and
+//     rename-window-closed once the window has passed;
+//   - validation-failed for a title checkTitle refuses, and conflict for
+//     the title the thread already has, so the log keeps no record that
+//     changes nothing.
+//
+// Only a moderator's rename of somebody else's thread is audited, and its
+// row names no title; the projection decides both (internal/events/
+// projection audit.go).
+func (s *Service) Rename(ctx context.Context, v domain.Viewer, id threadid.ID, title string) (dto.ThreadHeader, error) {
+	if err := s.MayWrite(v); err != nil {
+		return dto.ThreadHeader{}, err
+	}
+	window, err := s.renameWindow(ctx)
+	if err != nil {
+		return dto.ThreadHeader{}, err
+	}
+	return s.appendDecided(ctx, v, id, func(a access, th *threadcache.Thread, now time.Time) (threadlog.Append, error) {
+		author := a.row.AuthorID == v.UserID
+		if !a.canModerate && !author {
+			return threadlog.Append{}, problem.Coded(problem.CodeForbidden,
+				fmt.Errorf("threads: only its author or a moderator may rename %s", id))
+		}
+		if th.Archived() {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+		}
+		if !a.canModerate {
+			if err := readOnlyForum(a); err != nil {
+				return threadlog.Append{}, err
+			}
+			if a.row.Locked != 0 {
+				return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is locked", id))
+			}
+			if !a.canReply {
+				return threadlog.Append{}, problem.Coded(problem.CodeForbidden,
+					fmt.Errorf("threads: this viewer may not write in %s's forum", id))
+			}
+			if !within(a.row.CreatedAt, now, window) {
+				return threadlog.Append{}, problem.Coded(problem.CodeRenameWindowClosed,
+					fmt.Errorf("threads: the rename window of %s has passed", window))
+			}
+		}
+		t, err := checkTitle(title)
+		if err != nil {
+			return threadlog.Append{}, err
+		}
+		if t == a.row.Title {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s already has this title", id))
+		}
+		return threadlog.Append{Type: threadlog.TypeThreadRenamed, Body: &threadlog.ThreadRenamedBody{Title: t, Slug: Slug(t)}}, nil
+	})
+}
+
+// Move is POST /admin/threads/{id}/move (docs/07): a ThreadMoved record
+// naming the forum whose slug is forumSlug. It needs moderate in both
+// forums, so a moderator of one forum cannot push a thread into a forum
+// they could not move it back out of (settled in grooming for
+// TKT-01M29CKRH9). Refusals come in this order, all before the append:
+//   - forbidden without moderate in the thread's forum;
+//   - conflict on an archived thread;
+//   - not-found for a destination that does not exist or is hidden from v,
+//     and forbidden for one v cannot read, as readForum answers;
+//   - forbidden without moderate in the destination;
+//   - conflict for an archived destination, to everyone but an admin. The
+//     flag is read from the destination's row on this request, not from the
+//     decision cache. Moving a thread out of an archived forum is open to
+//     its moderators (maintainer decision 2026-09-29 on TKT-01M3N24RHD);
+//   - conflict for the forum the thread is already in.
+//
+// Every move is audited with the forum the thread left and the one it went
+// to, by the projection.
+func (s *Service) Move(ctx context.Context, v domain.Viewer, id threadid.ID, forumSlug string) (dto.ThreadHeader, error) {
+	if err := s.MayWrite(v); err != nil {
+		return dto.ThreadHeader{}, err
+	}
+	return s.appendDecided(ctx, v, id, func(a access, th *threadcache.Thread, _ time.Time) (threadlog.Append, error) {
+		if !a.canModerate {
+			return threadlog.Append{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate %s's forum", id))
+		}
+		if th.Archived() {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+		}
+		dest, err := s.readForum(ctx, v, forumSlug)
+		if err != nil {
+			return threadlog.Append{}, err
+		}
+		can, err := s.Perm.Can(ctx, v, dest.ID, domain.PermModerate)
+		if err != nil {
+			return threadlog.Append{}, err
+		}
+		if !can {
+			return threadlog.Append{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not moderate forum %q", forumSlug))
+		}
+		if dest.Archived != 0 && v.Role != domain.RoleAdmin {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: forum %q is archived", forumSlug))
+		}
+		if dest.ID == a.row.ForumID {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is already in %q", id, forumSlug))
+		}
+		return threadlog.Append{Type: threadlog.TypeThreadMoved, Body: &threadlog.ThreadMovedBody{ForumID: uint64(dest.ID)}}, nil
+	})
+}
+
+// renameWindow is threads.rename_window_seconds.
+func (s *Service) renameWindow(ctx context.Context) (time.Duration, error) {
+	var n int
+	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		n, err = settings.RenameWindowSeconds.In(ctx, q)
+		return err
+	})
+	return time.Duration(n) * time.Second, err
+}
+
+// appendDecided appends the record decide builds, deciding on the log the
+// record lands in: under the thread it reads the log's length L, projects
+// the thread up to L, admits v from the row that gives, and appends at L
+// (threadlog.Append.AtLength), with v as the actor. A record that lands
+// between the decision and the append fails it with ErrLogMoved, and the
+// request is decided again, so a move is always judged against the forum
+// the thread is in when its record lands: two moderators moving one thread
+// at once cannot both pass on a forum the first move just took it out of.
+// The suspension decides the same way (authorThread).
+//
+// decide may refuse, and then nothing is appended. The answer is the
+// thread's header as its page now serves it, once the record is projected,
+// which is also what writes its audit row.
+//
+// A thread written to without pause for threadAttempts decisions is
+// conflict: it lost the race every time.
+func (s *Service) appendDecided(ctx context.Context, v domain.Viewer, id threadid.ID,
+	decide func(a access, th *threadcache.Thread, now time.Time) (threadlog.Append, error)) (dto.ThreadHeader, error) {
+	var out dto.ThreadHeader
+	// Admitted once from the row as it stands, so a thread that does not
+	// exist, or is hidden from v or quarantined, is answered as access
+	// answers it before the thread is opened.
+	if _, err := s.access(ctx, v, id); err != nil {
+		return out, err
+	}
+	flags, err := s.authorFlags(ctx, v)
+	if err != nil {
+		return out, err
+	}
+	for range threadAttempts {
+		var res threadlog.Result
+		err := s.Threads.With(id, func(th *threadcache.Thread) error {
+			at := th.Actor.LogLength()
+			if err := s.projectNow(ctx, id, at); err != nil {
+				return err
+			}
+			a, err := s.access(ctx, v, id)
+			if err != nil {
+				return err
+			}
+			now := s.now()
+			rec, err := decide(a, th, now)
+			if err != nil {
+				return err
+			}
+			rec.Flags, rec.Author, rec.TimeMS, rec.AtLength = flags, uint64(v.UserID), now.UnixMilli(), at
+			res, err = s.Writer.Append(th, rec)
+			return err
+		})
+		if errors.Is(err, threadlog.ErrLogMoved) {
+			continue
+		}
+		if err != nil {
+			return out, err
+		}
+		if err := s.projectNow(ctx, id, res.LogLength); err != nil {
+			return out, err
+		}
+		return s.threadHeader(ctx, v, id)
+	}
+	return out, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s kept changing while this request was decided", id))
+}
+
 // moderate is the four thread actions: the checks every one of them makes,
 // then the record decide builds, appended with the viewer as its actor and
 // projected before the answer. The refusals come in this order, all before
@@ -163,8 +354,9 @@ func (s *Service) moderate(ctx context.Context, v domain.Viewer, id threadid.ID,
 // delivers the same event to the projection writer, which retries until the
 // record and its row are projected together.
 //
-// The moderation tickets that write thread records share it: rename and move
-// (TKT-01M29CKRH9) and the flag auto-hide (TKT-01M29CP2PJ). A moderator's
+// The flag auto-hide (TKT-01M29CP2PJ) shares it. Rename and move
+// (TKT-01M29CKRH9) decide at a log length instead, through appendDecided,
+// because a move's refusal depends on the forum the thread is in. A moderator's
 // edit, delete and restore of another's post (TKT-01M29CRJ5J) append through
 // changePost, which reads the answer back first, and project through
 // projectNow as this does.

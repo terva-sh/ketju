@@ -35,8 +35,31 @@ const (
 // which is no account.
 const viaLog = "thread-log"
 
+// prior is what a record's audit row needs from the rows as they stood
+// before the record was applied: for a ThreadMoved, the forum the thread
+// left, which the move then overwrites.
+type prior struct {
+	forum int64
+}
+
+// readPrior reads prior for f through q, ahead of f's apply and in the same
+// transaction. The row is the log's fold up to f, on a live projection and
+// on a reindex alike, so the forum it names is the one the log had put the
+// thread in before this move. A missing row is left to apply to report.
+func readPrior(ctx context.Context, q *dbq.Queries, f frame) (prior, error) {
+	if _, ok := f.body.(*threadlog.ThreadMovedBody); !ok {
+		return prior{}, nil
+	}
+	t, err := q.GetThread(ctx, int64(f.thread))
+	if errors.Is(err, sql.ErrNoRows) {
+		return prior{}, nil
+	}
+	return prior{forum: t.ForumID}, err
+}
+
 // auditFor says whether f, already projected through q, is a moderation
-// action, and if so the row's action, target and details.
+// action, and if so the row's action, target and details. p is what the
+// rows held before f was applied.
 //
 // Which records are audited is decided from the record and the rows it was
 // projected against, never by the caller that appended it, so an author's
@@ -48,7 +71,14 @@ const viaLog = "thread-log"
 //     whose actor is 0, the system, post.auto_hidden (TKT-01M29CP2PJ);
 //   - never: ThreadCreated, Post, ThreadTagged, and ThreadArchived until its
 //     own ticket decides.
-func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, target audit.Target, details map[string]any, ok bool, err error) {
+//
+// A rename's row carries no title, old or new: only the thread and the
+// record's offset, which writeAudit adds. The log is the record of what the
+// title was, and audit_log is append-only, so a title copied into it could
+// never be removed by a hard redaction (docs/03 "Hard redaction", maintainer
+// decision 2026-09-29 on TKT-01M3NS147C). A move's row names both forums by
+// id, which are not user text.
+func auditFor(ctx context.Context, q *dbq.Queries, f frame, p prior) (action string, target audit.Target, details map[string]any, ok bool, err error) {
 	thread := audit.Thread(f.thread)
 	switch b := f.body.(type) {
 	case *threadlog.ThreadLockedBody:
@@ -60,13 +90,13 @@ func auditFor(ctx context.Context, q *dbq.Queries, f frame) (action string, targ
 	case *threadlog.ThreadUnpinnedBody:
 		return ActionThreadUnpinned, thread, map[string]any{"scope": b.Scope, "until": until(b.Until)}, true, nil
 	case *threadlog.ThreadMovedBody:
-		return ActionThreadMoved, thread, map[string]any{"forum_id": b.ForumID}, true, nil
+		return ActionThreadMoved, thread, map[string]any{"from_forum": p.forum, "to_forum": int64(b.ForumID)}, true, nil
 	case *threadlog.ThreadRenamedBody:
 		t, err := q.GetThread(ctx, int64(f.thread))
 		if err != nil || t.AuthorID == int64(f.h.Actor) {
 			return "", target, nil, false, err
 		}
-		return ActionThreadRenamed, thread, map[string]any{"title": b.Title, "slug": b.Slug}, true, nil
+		return ActionThreadRenamed, thread, map[string]any{}, true, nil
 	case *threadlog.EditBody:
 		return postAction(ctx, q, f, ActionPostEdited, map[string]any{"reason": b.Reason, "revision": revision(f.h)})
 	case *threadlog.DeleteBody:
@@ -128,8 +158,8 @@ func until(ms int64) any {
 // references users, so such an actor is written as NULL with the log's id
 // in the details as "log_actor", rather than failing the projection on a
 // foreign key. Actor 0 is no account, named as the thread log.
-func writeAudit(ctx context.Context, q *dbq.Queries, f frame) error {
-	action, target, details, ok, err := auditFor(ctx, q, f)
+func writeAudit(ctx context.Context, q *dbq.Queries, f frame, p prior) error {
+	action, target, details, ok, err := auditFor(ctx, q, f, p)
 	if err != nil || !ok {
 		return err
 	}

@@ -111,6 +111,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/me", Handler: h.me},
 		{Method: get, Path: "/api/v1/forums", Handler: h.forumTree},
 		{Method: get, Path: "/api/v1/threads/{id}", Handler: h.thread},
+		{Method: patch, Path: "/api/v1/threads/{id}", Handler: h.renameThread},
 		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}", Handler: h.post},
 		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}/replies", Handler: h.replies},
 		{Method: get, Path: "/api/v1/threads/{id}/posts/{ordinal}/history", Handler: h.history},

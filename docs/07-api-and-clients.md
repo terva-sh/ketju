@@ -118,6 +118,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /forums/{slug}/threads?cursor=&sort=` | thread list rows → `internal/dto` `ThreadList`, answered from projections alone. The first page opens with the pins: global pins from every forum the viewer may read, then this forum's own, each by latest activity, at most 50; a pin past its `pinned_until` is no pin, and pins past the 50 sort with the rest. Then 25 threads with a post, newest `last_post_at` first, or newest `created_at` first for `sort=created`; the pins are not counted. `next_cursor` is opaque, bound to its forum and sort, and empty at the end; paging is keyset, so a thread bumped between pages moves up rather than appearing twice. Every page leaves out exactly the forum's threads the first page showed as pins, which the cursor carries, so a pin that ends between pages is not shown again. A cursor is a position, not a credential: one that is malformed or was made for another forum or sort, or any other `sort`, is `bad-request`. `unread` is the viewer's unread posts by the per-post rule (read position and `mark_all_read_at`) and `last_read_ordinal` their position, both 0 for an anonymous viewer. Access answers as the thread page does: an unknown or hidden forum is `not-found`, a signed-in-only one `unauthenticated` to an anonymous viewer, `forbidden` to a member without read. `no-store` |
 | `POST /forums/{slug}/threads` | create thread `{title, source, tags}` → 201 `{thread, post}`, `internal/dto` `CreatedThread`: the thread page's header and a `CreatedPost` for post 1, each as a later read serves it. A member session is required (anonymous `unauthenticated`, pre-user `forbidden`); a forum hidden from the viewer is `not-found`, an archived one is `conflict` except to an admin (04, checked before `create_thread`, so the refusal says why), and one without `create_thread` is `forbidden`. The title is trimmed and must be 1–200 characters with no control characters; the slug is derived from it (an ASCII fold, at most 60 characters). `tags` must be absent or empty until tag rules exist. The source is checked as a reply's is. The thread is projected before the response, so it can be opened at once |
 | `GET  /threads/{id}?page=&ordinal=&lens=&after_log_length=` | thread header + page of rendered posts + lens meta + viewer read position |
+| `PATCH /threads/{id}` | rename `{title}` → 200 `internal/dto` `ThreadHeader`, `no-store`: a `ThreadRenamed` record with the title and the slug derived from it, as on create. The thread's author may rename it for `threads.rename_window_seconds` (04, default 24 h), and a moderator at any time; see "Renaming and moving threads" below. Charged to the per-address write limiter |
 | `POST /threads/{id}/posts` | `{source, reply_to?, attachments?}` → 201 `{post, ordinal, revision, log_length}`, `internal/dto` `CreatedPost`: the post as `GET /threads/{id}/posts/{ordinal}` serves it, written after the record is durable. A member session is required; without `reply` it is `forbidden`, and not-found or unauthenticated as for any read of the thread. A locked thread is `conflict` except to a moderator; an archived one is `conflict` to everyone, and a thread in an archived forum is `conflict` to everyone but an admin (04), before `reply` is checked. Slow mode is the thread's own value (`PUT /admin/threads/{id}/slow-mode`), or `slow_mode.default_seconds` when it has none, off by default. Moderators are exempt, and agent accounts are not. A reply too soon after the author's last post in the thread is `rate-limited`, with `Retry-After` set to the seconds left, rounded up. The page's `viewer.next_post_at` says the same in advance. An empty source, a `reply_to` naming no post, and any attachment (nothing uploads yet) are `validation-failed`; an over-long source is `payload-too-large`. Every refusal comes before anything is appended. Charged to the per-address write limiter |
 | `GET  /threads/{id}/posts/{ordinal}` | single post (popover, permalink) |
 | `GET  /threads/{id}/posts/{ordinal}/replies` | direct replies (inline expander) |
@@ -154,6 +155,7 @@ fixed text and never interpolate anything from the request.
 | `forbidden` | 403 | There is a viewer and they may not do this. The client says so, and does not offer a sign-in |
 | `edit-window-closed` | 403 | The post is the viewer's, and `posts.edit_window_seconds` has passed since it was written (08) |
 | `delete-window-closed` | 403 | The post is the viewer's, and `posts.delete_window_seconds` has passed since it was written, so it can no longer be deleted or restored (08) |
+| `rename-window-closed` | 403 | The thread is the viewer's, and `threads.rename_window_seconds` has passed since it was started, so only a moderator may rename it (08) |
 | `not-found` | 404 | No such endpoint *or* no such object — deliberately one code, so the API does not disclose which thread ids exist |
 | `method-not-allowed` | 405 | Right route, wrong verb |
 | `conflict` | 409 | Lost a race, or met the object's state: posting to a closed thread |
@@ -223,7 +225,7 @@ RFC 9457 extension member. No other body has it.
 ### Moderation and admin (`/api/v1/admin/*`, role-gated)
 
 Queue (flags + applications), application approve/deny, thread
-lock/pin/move/rename/tag, split/merge, user suspend/anonymize, thread
+lock/pin/move/tag, split/merge, user suspend/anonymize, thread
 archive, forum CRUD and ordering, group and permission editing, form
 versions, settings, audit log query, `reindex` and `fsck` triggers with
 progress via SSE.
@@ -231,7 +233,9 @@ progress via SSE.
 Each route is gated on the role docs/08's "Primitives" table names for its
 action, which is the one place authority is stated. Archiving a thread is
 admin-only there; locking, pinning, moving, renaming, retagging, splitting
-and merging are moderator actions.
+and merging are moderator actions. Renaming is the exception to the prefix:
+an author may rename their own thread, so it is `PATCH /threads/{id}`
+rather than an admin route (TKT-01M29CKRH9).
 
 #### Users, groups and permissions (TKT-01M29CXK1X)
 
@@ -385,6 +389,67 @@ in the thread plus the interval, in Unix ms. It is null while they may post,
 for a moderator, who is exempt, and for an anonymous viewer. Setting slow
 mode moves no response cache key, because the cached posts do not depend on
 it. The page's ETag changes, because it hashes the viewer block.
+
+#### Renaming and moving threads (TKT-01M29CKRH9)
+
+Renaming lives on the thread resource, `PATCH /threads/{id}` with
+`{title}`, because an author may rename their own thread; the service
+decides who may. Moving is a moderator's, behind the staff gate, as lock
+and pin are:
+
+| Route | Body | What it does |
+|---|---|---|
+| `PATCH /threads/{id}` | `{title}` | `ThreadRenamed` with the title, trimmed, and the slug derived from it |
+| `POST /admin/threads/{id}/move` | `{forum}`, the destination's slug | `ThreadMoved` to that forum |
+
+Both answer 200 with the thread's `ThreadHeader` as its page now serves it,
+`no-store`, after projecting the record. Bodies are decoded strictly and
+bounded at 4 KiB. Each request is decided on the log its record lands in:
+the thread is projected up to the log's length, the viewer admitted from
+that row, and the record appended at that length, so a record landing in
+between makes the request decide again. Two moves at once cannot both pass
+on a forum the first one took the thread out of.
+
+The old slug keeps working after a rename: a thread is found by its id, and
+the client replaces a stale slug in the address, keeping the ordinal,
+`/history`, the page, the lens and the hash (`canonicalThreadUrl`).
+
+A rename is refused in this order, and each refusal writes nothing:
+- `unauthenticated` or `forbidden` for a viewer with no member session,
+  then `bad-request` for a body with no `title`;
+- `not-found`, `unauthenticated` or `forbidden` as for any read of the
+  thread;
+- `forbidden` to anyone but the thread's author or a viewer with
+  `moderate` in its forum;
+- `conflict` on an archived thread;
+- for the author without `moderate`: `conflict` in an archived forum (04)
+  and in a locked thread, `forbidden` without `reply`, and
+  `rename-window-closed` once `threads.rename_window_seconds` has passed
+  since the thread was started. A moderator is bound by none of these;
+- `validation-failed` for a title refused as on create, and `conflict` for
+  the title the thread already has.
+
+A move is refused in this order, and each refusal writes nothing:
+- `unauthenticated`, or `forbidden`, from the gate, then `bad-request` for
+  a body with no `forum`;
+- `not-found`, `unauthenticated` or `forbidden` as for any read of the
+  thread;
+- `forbidden` without `moderate` in the thread's forum;
+- `conflict` on an archived thread;
+- `not-found` for a destination that does not exist or is hidden from the
+  mover, and `forbidden` for one they cannot read;
+- `forbidden` without `moderate` in the destination;
+- `conflict` for an archived destination, except to an admin. Moving a
+  thread out of an archived forum is open to its moderators (08,
+  TKT-01M3N24RHD);
+- `conflict` for the forum the thread is already in.
+
+The projection writes the audit rows (04 "audit_log"): a moderator's rename
+of somebody else's thread writes `thread.renamed` with no title, and every
+move writes `thread.moved` with the two forum ids. An author's rename of
+their own thread writes none. Both records move the log length, and so the
+response cache key; the header, forum included, is drawn from the
+projection row on every request.
 
 #### Form versions (TKT-01M29CP2KE)
 

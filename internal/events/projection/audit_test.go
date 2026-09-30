@@ -129,8 +129,16 @@ func TestAuditRowsComeFromTheLog(t *testing.T) {
 
 	o, _ = f.at(id, 1_700_000_202_000, threadlog.Append{Type: threadlog.TypeThreadRenamed, Author: moderator,
 		Body: &threadlog.ThreadRenamedBody{Title: "Renamed", Slug: "renamed"}})
+	// A rename's row carries no title, old or new (TKT-01M29CKRH9).
 	expect(o, auditRow{At: 1_700_000_202_000, Actor: actor(moderator), Action: ActionThreadRenamed, Type: "thread", ID: th,
-		Details: map[string]any{"title": "Renamed", "slug": "renamed"}})
+		Details: map[string]any{}})
+
+	// A move names the forum the thread left, read before the record is
+	// applied, and the one it went to.
+	o, _ = f.at(id, 1_700_000_202_500, threadlog.Append{Type: threadlog.TypeThreadMoved, Author: moderator,
+		Body: &threadlog.ThreadMovedBody{ForumID: 12}})
+	expect(o, auditRow{At: 1_700_000_202_500, Actor: actor(moderator), Action: ActionThreadMoved, Type: "thread", ID: th,
+		Details: map[string]any{"from_forum": float64(7), "to_forum": float64(12)}})
 
 	// The author's own rename, edit, delete and restore write nothing.
 	f.at(id, 1_700_000_203_000, threadlog.Append{Type: threadlog.TypeThreadRenamed, Author: author,

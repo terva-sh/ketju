@@ -480,6 +480,12 @@ func (w *Writer) apply(ctx context.Context, q *dbq.Queries, id threadid.ID, rec 
 		return logFault{fmt.Errorf("frame at offset %d: %s has no projection", rec.Offset, rec.Header.Type)}
 	}
 	f := frame{thread: id, offset: rec.Offset, end: rec.Offset + int64(rec.Size), h: rec.Header, body: body}
+	// What the audit row needs from before the record, read before apply
+	// overwrites it (a move's source forum, audit.go).
+	p, err := readPrior(ctx, q, f)
+	if err != nil {
+		return fmt.Errorf("auditing %s at offset %d: %w", rec.Header.Type, rec.Offset, err)
+	}
 	if err := d.apply(ctx, q, f); err != nil {
 		err = fmt.Errorf("projecting %s at offset %d: %w", rec.Header.Type, rec.Offset, err)
 		if IsLogFault(err) {
@@ -490,7 +496,7 @@ func (w *Writer) apply(ctx context.Context, q *dbq.Queries, id threadid.ID, rec 
 	// In the same transaction, so the row exists exactly when the record's
 	// projection commits (audit.go). A failure here is the database's, not
 	// the log's, and the thread is held and retried.
-	if err := writeAudit(ctx, q, f); err != nil {
+	if err := writeAudit(ctx, q, f, p); err != nil {
 		return fmt.Errorf("auditing %s at offset %d: %w", rec.Header.Type, rec.Offset, err)
 	}
 	if w.applied != nil {
