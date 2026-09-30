@@ -35,7 +35,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T13:16:47Z
+updated_at: 2026-09-30T13:22:42Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -197,3 +197,17 @@ Departures from the plan, each with the alternative that lost:
 Unticked here and why: AC1, AC2, AC3, AC5, AC6 and AC7 each name the screen, the wordmarks or a client test (SettingsScreen.test.tsx, Shell.test.tsx), which the client PR delivers. Their server tests are in and passing: TestSettingsScreenListsEveryKey, TestSettingTakesEffectWithoutRestart (public_edit_history, slow_mode.default_seconds on a thread with no thread_slow_mode row, registration.mode, site_name in /me and the title), TestEverySectionHasAReason, TestInvalidSettingRefused, TestShellInlinesMe, TestMeBudget, TestSettingChangeAudited, TestSettingLastChanged. AC4 is server-only and is ticked.
 
 No new audit action: setting.changed is already in audit.Actions and docs/04.
+
+**agent:claude-code/phase2-run-cxk2h** at 2026-09-30T13:22:42Z
+
+Terva review 1587 on PR #230, run 1492 (request ready-review-32efb1d), head 32efb1d, base 6b5dc9a. One medium finding, "Do not return a failed PUT after its setting change has committed", accepted and fixed in f889feb.
+
+The finding was right. sitesettings.Set committed through settings.SetBy, then read its answer in a second transaction. A failure there, such as a cancelled request or a failed query, reported failure for a change that had been made and audited, and a retry would change the setting and audit it again.
+
+The fix is settings.SetIn, which is SetBy's body run in a transaction the caller holds. Set now writes the change, reads the key back and resolves the admin in one DB.Write, so a failure at any step rolls back the change and its audit row. SetBy still validates before it takes the write lock.
+
+Alternative that lost: answering 200 with no body, or the listing read after commit. Either still separates the answer from the write, and the screen needs the key's new updated_at and updated_by to draw "Last changed".
+
+TestSetAnswersFromTheWritesTransaction cancels the request as the answer's read of the key starts, after the audit row is written. It then requires the key and the audit log to be as they were. With the service put back to two transactions, it fails: the setting and one audit row committed.
+
+docs/07 "Site settings" now says the answer is read in the write's transaction.
