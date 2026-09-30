@@ -550,6 +550,21 @@ func TestFlagRefusesTheAuthor(t *testing.T) {
 	if got := w.flagStatuses(1); !reflect.DeepEqual(got, map[string]string{"rep1": "open", "rep2": "open"}) {
 		t.Errorf("flags on the hidden post %v: want only rep1's and rep2's", got)
 	}
+
+	// An archived thread (Terva review 1544): the author's own post is still
+	// forbidden, and anyone else's flag is conflict, whatever the ordinal.
+	w.cache.MarkArchived(w.id)
+	if err := byAuthor(second); codeOf(err) != problem.CodeForbidden {
+		t.Errorf("the author's flag on their post in an archived thread: %v, want forbidden", err)
+	}
+	for _, ord := range []uint32{second, 99} {
+		if _, err := w.flag("rep3", ord); codeOf(err) != problem.CodeConflict {
+			t.Errorf("a member's flag on #%d in an archived thread: %v, want conflict", ord, err)
+		}
+	}
+	if n := w.openFlags(second); n != 0 {
+		t.Errorf("refused flags in the archived thread left %d open", n)
+	}
 }
 
 // TestAutoHideRecoversFromAFailedAppend is AC7: with the hide's append made

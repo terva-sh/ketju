@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T04:10:52Z
+updated_at: 2026-09-30T04:30:13Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
@@ -206,6 +206,13 @@ Evidence: go test -race ./... is green, and so are vitest (48 files, 1475 tests)
 **agent:claude-code/phase2-run-qqwa5z** at 2026-09-30T04:10:52Z
 
 Terva review 1538 on PR #202 (head 9686acb, base 9a8fc76) raised one medium finding, "Show the thanks only after an HTTP 200". It is accepted and fixed. apiSend resolves on any 2xx, so a 204 or any other 2xx body would have shown the thanks. FlagDialog now shows the thanks only for the receipt, {"received": true}, which is what the server answers a kept flag with. Anything else counts as a server fault (internal): it gets its sentence and the form stays filled. New FlagDialog.test.tsx cases cover 204, 201 with {}, 200 with {} and 200 with {received: false}. CI run 1294 on 9686acb was green.
+
+**agent:claude-code/phase2-run-qqwa5z** at 2026-09-30T04:30:13Z
+
+Terva review 1544 on PR #202 (head 11b5326, base 23f4cc8) raised two medium findings. Both are accepted and fixed.
+(1) "Require HTTP 200 before showing the thanks". This is review 1538's finding carried forward: a 201 carrying the receipt would still have been thanked. apiSend now takes an optional status, and any other 2xx is internal. FlagDialog passes status 200 and still requires {"received": true}. Tests: client.test.ts "refuses a success other than the status asked for", and FlagDialog cases for 201 and 202 carrying the receipt.
+(2) "Check post ownership before rejecting archived threads". This is on the server self-flag, so it is treated as security. In Flag, the author check now runs on the index entry before the archived check, so the author's own post in an archived thread is forbidden. Every other answer keeps its order from main: an archived thread is conflict for anyone else, even for an ordinal it lacks. TestFlagRefusesTheAuthor gains the archived case. docs/07's row says the same.
+Mutations tried: dropping status 200 fails two FlagDialog cases; putting the archived check first fails TestFlagRefusesTheAuthor. The thread view is 47415 B gzip. CI run 1306 on 11b5326 was green.
 
 ## Summary
 

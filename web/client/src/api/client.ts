@@ -93,11 +93,14 @@ export function forgetHeld(url: string, body: unknown) {
 // for 204. An aborted request rejects with the abort, as apiGet's does.
 // keepalive lets the request outlive the page that sent it, as the read
 // beacon's must when the page is going away (state/readTracker.ts).
+// status, when given, is the one success the caller accepts: any other 2xx
+// is the server's fault, internal, as the flag dialog needs to say its
+// thanks only for the 200 receipt (TKT-01M3QQWA5Z, Terva review 1544).
 export async function apiSend<T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   body?: unknown,
-  init: { signal?: AbortSignal; keepalive?: boolean } = {},
+  init: { signal?: AbortSignal; keepalive?: boolean; status?: number } = {},
 ): Promise<T> {
   let payload: string | undefined;
   try {
@@ -115,6 +118,7 @@ export async function apiSend<T>(
     ...(init.keepalive ? { keepalive: true } : {}),
   });
   if (!r.ok) throw await toProblem(r);
+  if (init.status !== undefined && r.status !== init.status) throw new ProblemError('internal', r.status);
   if (r.status === 204) return undefined as T;
   return json<T>(r);
 }

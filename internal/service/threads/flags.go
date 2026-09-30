@@ -96,7 +96,8 @@ var errNoOpenFlags = errors.New("threads: the post has no open flag")
 // outside the four, other without a note, or a note over MaxFlagNote is
 // validation-failed; an ordinal the thread does not have is not-found; the
 // viewer's own post is forbidden, whether it is shown, hidden or already
-// flagged (maintainer decision 2026-09-29, TKT-01M3QQWA5Z); a post already
+// flagged, and in an archived thread too (maintainer decision 2026-09-29,
+// TKT-01M3QQWA5Z); a post already
 // removed or moved, or any post of an archived thread, is conflict. A member's second open flag on a post adds no row
 // (flags_one_open_per_reporter), so the open count is a count of reporters.
 //
@@ -137,17 +138,19 @@ func (s *Service) Flag(ctx context.Context, v domain.Viewer, id threadid.ID, req
 	}
 	shown := false
 	if err := s.Threads.With(id, func(th *threadcache.Thread) error {
+		e, err := th.Index.Entry(req.Ordinal)
+		// Before the archived check and the shown and repeat logic, so the
+		// author's own post is refused however it and its thread stand
+		// (Terva review 1544). Every other answer keeps its order: an
+		// archived thread is conflict before its ordinal is looked at.
+		if err == nil && e.Author == uint64(v.UserID) {
+			return problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: post %d of %s is the viewer's own", req.Ordinal, id))
+		}
 		if th.Archived() {
 			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
 		}
-		e, err := th.Index.Entry(req.Ordinal)
 		if err != nil {
 			return err
-		}
-		// Before the shown and repeat logic, so the author's own post is
-		// refused however it stands.
-		if e.Author == uint64(v.UserID) {
-			return problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: post %d of %s is the viewer's own", req.Ordinal, id))
 		}
 		shown = e.Flags.Visible()
 		return nil

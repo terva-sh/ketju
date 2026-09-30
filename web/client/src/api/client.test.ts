@@ -306,6 +306,15 @@ describe('apiSend', () => {
     expect(await apiSend('DELETE', '/api/v1/x')).toBeUndefined();
   });
 
+  // TKT-01M3QQWA5Z: a caller that names its status accepts no other 2xx.
+  it('refuses a success other than the status asked for', async () => {
+    stub(json({ ok: true }, { status: 201 }));
+    const err = await apiSend('POST', '/api/v1/x', {}, { status: 200 }).catch((e) => e);
+    expect(isProblem(err, 'internal')).toBe(true);
+    stub(json({ ok: true }, { status: 200 }));
+    expect(await apiSend('POST', '/api/v1/x', {}, { status: 200 })).toEqual({ ok: true });
+  });
+
   // Review 417: every failure is a ProblemError, one that happens before
   // any request is made included.
   it.each([

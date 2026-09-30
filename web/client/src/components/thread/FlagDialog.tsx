@@ -97,16 +97,17 @@ export function FlagDialog({
     setSending(true);
     setRefused(null);
     try {
-      const r = await apiSend<FlagReceipt | undefined>('POST', `/api/v1/threads/${encodeURIComponent(thread)}/flags`, {
-        ordinal,
-        reason,
-        note,
-      });
-      // The thanks is for the receipt and nothing else (Terva review 1538):
-      // apiSend resolves on any 2xx, and a 204, or a body that is not
-      // {"received": true}, is not the 200 the server answers a kept flag
-      // with, so it is the server's fault and the form stays.
-      if (r?.received !== true) throw new ProblemError('internal', 0);
+      // The thanks is for the receipt and nothing else (Terva reviews 1538
+      // and 1544): a 200 whose body is {"received": true}, which the server
+      // answers a kept flag with. Any other status or body is the server's
+      // fault, internal, and the form stays.
+      const r = await apiSend<FlagReceipt | undefined>(
+        'POST',
+        `/api/v1/threads/${encodeURIComponent(thread)}/flags`,
+        { ordinal, reason, note },
+        { status: 200 },
+      );
+      if (r?.received !== true) throw new ProblemError('internal', 200);
       setReceived(true);
     } catch (err) {
       setRefused(flagRefusal(err));

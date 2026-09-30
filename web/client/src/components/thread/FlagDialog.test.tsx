@@ -121,6 +121,8 @@ describe('the flag dialog', () => {
   it.each([
     [{ status: 204 }],
     [{ status: 201, body: {} }],
+    [{ status: 201, body: { received: true } }],
+    [{ status: 202, body: { received: true } }],
     [{ status: 200, body: {} }],
     [{ status: 200, body: { received: false } }],
   ] as [Answer][])('a success that is not the receipt is not thanked: %j', async (answer) => {
