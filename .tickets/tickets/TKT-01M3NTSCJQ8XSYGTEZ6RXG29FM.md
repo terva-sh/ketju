@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-29T22:49:17Z
+updated_at: 2026-09-30T01:44:28Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -109,3 +109,22 @@ More merges, written by the orchestrator in one batch:
 - Grooming PR #167: plans for seven run-filed drafts, all promoted here. The high finding on agent-token handling was fixed. A medium on timestamps was answered as a false positive, since created_at is Millis, and the plan was clarified.
 Main was green after each merge.
 Open question for the maintainer's report: a member who moderates a forum through a group grant has can_moderate, but the role-based staff gate refuses them lock and pin (docs/07 "by role"). Kept for Phase 2.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T01:44:28Z
+
+More merges, written by the orchestrator in one batch:
+- TKT-01M29CP2P1 (Build the admin form editor): PR #168 at 3655731. Admin-only /admin/forms in the lazy admin chunk, with the server's preview gating Save. The reader total grew 6 B of export names, to 45336 B.
+- TKT-01M29CKRJ9 (Render tombstones for deleted and moved posts): the server half is PR #170 at 2826208 (dto.Post.removal and threads.revealRemoved, with the cache class author:<id>), and the client half is PR #174 at 4d793b2.
+- TKT-01M29CP2QK (Implement user suspension from the moderator tools): PR #172 at 5c9da6d, carried from #169 after main moved. Adds hide_posts and restore_posts with the maintainer's authority rule (mayActOn), plus threadlog.Append.AtLength. The UI is TKT-01M3QMRE47.
+- TKT-01M29CP2N0 (Notify moderators and applicants about applications): PR #173 at 2e2fe7c. Adds internal/service/notify; notification rows are written in the transaction of the act that causes them.
+- TKT-01M29CP2PJ (Implement flags with the auto-hide threshold): PR #176 at 3e1ff35, carried from #175. Adds migration 0014, index bit 6 EntryAutoHidden, removal 'review', and jobs.AutoHideSweep. The client item is TKT-01M3QQWA5Z.
+- TKT-01M29CKRES (Implement account linking): PR #178 at 43a844d, carried from #177. Linking happens only through the explicit action. identity.Link calls no issuer, so the chokepoint lists are unchanged. The client entry point is TKT-01M3QS0TMV.
+- TKT-01M3QH3GS2 (Add agent provisioning controls to the admin users screen): PR #179 at d512bd3. One-time tokens live only in AgentPanel state. The reader bundle is 45575 of 60000 B.
+- TKT-01M3N24RHD (Make archived forums read-only in permission evaluation): PR #182 at b41b6db. AC7's move half is left unticked for TKT-01M29CKRH9, which owns the move route; that agent reports the move rule built.
+- TKT-01M29CRJ4E (Build the moderator queue), server half: PR #184 at 034053c, carried from #183. The ticket stays in progress for the client half.
+- Grooming PR #181 at 2fc352f: plans for TKT-01M3QMRE47, 3QQWA5Z, 3QS0TMV and 3QVWKAG. It ran the full five review rounds, and every finding was fixed; none was disagreed with. The last run was clean.
+Main was green after each merge. PR #180 (TKT-01M3NRP3W9) was closed in favour of a carried branch that is still in flight.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T01:44:28Z
+
+Promoted to ready after #181 merged: TKT-01M3QMRE47 (Add the suspension controls to the admin users screen), 3QQWA5Z (Add the flag item and dialog to the post menu), 3QS0TMV (Link to the link-a-sign-in page from the client), and 3QVWKAG (Give signed-in members a Sign out control), which waits on 3QS0TMV.

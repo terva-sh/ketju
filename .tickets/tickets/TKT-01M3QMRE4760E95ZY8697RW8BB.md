@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QMRE4760E95ZY8697RW8BB
 title: Add the suspension controls to the admin users screen
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -23,12 +23,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T01:18:10Z
+updated_at: 2026-09-30T01:44:28Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

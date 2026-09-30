@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QVWKAGAG6H77VNE0WEC3SH
 title: Give signed-in members a Sign out control
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T00:37:01Z
-updated_at: 2026-09-30T00:37:19Z
+updated_at: 2026-09-30T01:44:28Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

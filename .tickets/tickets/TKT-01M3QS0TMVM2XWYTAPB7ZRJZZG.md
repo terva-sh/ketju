@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QS0TMVM2XWYTAPB7ZRJZZG
 title: Link to the link-a-sign-in page from the client
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T23:46:54Z
-updated_at: 2026-09-30T00:52:13Z
+updated_at: 2026-09-30T01:44:28Z
 created_by:
   id: agent:claude-code/phase2-run-KRES
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

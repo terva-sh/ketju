@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QQWA5ZNT0WMBY1F7ASPG1C
 title: Add the flag item and dialog to the post menu
 type: task
-status: draft
+status: ready
 status_reason: null
 priority: high
 due_on: null
@@ -24,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T01:34:38Z
+updated_at: 2026-09-30T01:44:28Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
