@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AuditPage, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
 import { renderAt, screenOf, settle, stubServer, type StubServer, unmount } from '../../testing';
-import { dateOf, startOf, stamp } from './AuditScreen';
+import { dateOf, safeHref, startOf, stamp } from './AuditScreen';
 import anonMe from '../../../../../internal/dto/testdata/golden/me.anon.json';
 import memberMe from '../../../../../internal/dto/testdata/golden/me.member.json';
 import moderatorMe from '../../../../../internal/dto/testdata/golden/me.moderator.json';
@@ -55,6 +55,41 @@ async function submit(root: HTMLElement) {
   });
   await settle(root);
 }
+
+describe('safeHref', () => {
+  // Terva review 1578: a leading slash alone does not keep a link on this
+  // site, since a browser reads a backslash as a slash.
+  it.each([
+    '/\\example.com/path',
+    '/\\/example.com',
+    '//example.com',
+    '/\t/example.com',
+    'https://example.com/',
+    'javascript:alert(1)',
+    '',
+    'u/alice',
+  ])('draws %j as text', (href) => {
+    expect(safeHref(href)).toBe('');
+  });
+
+  it.each(['/u/alice', '/t/3yymw47g00001/the-dinner-bill/63', '/admin/applications?id=5', '/f/general'])(
+    'keeps %s',
+    (href) => {
+      expect(safeHref(href)).toBe(href);
+    },
+  );
+});
+
+describe('the date filters', () => {
+  // Terva review 1578: the Date constructor reads years 0 to 99 as 19xx.
+  it('keeps a year below 100, and round-trips every date through the form', () => {
+    expect(new Date(startOf('0099-01-01')).getFullYear()).toBe(99);
+    for (const d of ['0099-01-01', '0001-12-31', '1999-01-01', '2026-09-30', '2024-02-29']) {
+      expect(dateOf(startOf(d))).toBe(d);
+      expect(dateOf(startOf(d, 1) - 1)).toBe(d);
+    }
+  });
+});
 
 describe('the audit log screen', () => {
   it('lists the entries newest first, with targets and related forums as links', async () => {

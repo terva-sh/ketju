@@ -60,14 +60,18 @@ const pad = (n: number) => String(n).padStart(2, '0');
 // dateOf is ms as a local date, as a date input spells it.
 export function dateOf(ms: number): string {
   const d = new Date(ms);
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  return `${String(d.getFullYear()).padStart(4, '0')}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 }
 
 // startOf is the first local millisecond of a date input's value, days
 // later: 0 for the day itself, 1 for the first millisecond after it.
 export function startOf(date: string, days = 0): number {
   const [y, m, d] = date.split('-').map(Number);
-  return new Date(y, m - 1, d + days).getTime();
+  // setFullYear, because the Date constructor reads a year from 0 to 99
+  // as 1900 to 1999 (Terva review 1578).
+  const t = new Date(2000, 0, 1);
+  t.setFullYear(y, m - 1, d + days);
+  return t.getTime();
 }
 
 // stamp is ms as a local date and time, to the minute.
@@ -77,8 +81,18 @@ export function stamp(ms: number): string {
 }
 
 // safeHref is href when it is a path on this site, and nothing otherwise,
-// so a link is only ever drawn to one of our own pages.
-const safeHref = (href: string) => (href.startsWith('/') && !href.startsWith('//') ? href : '');
+// so a link is only ever drawn to one of our own pages. A leading slash is
+// not enough: a browser reads a backslash as a slash, so "/\host" is
+// another site (Terva review 1578). The href must hold no backslash or
+// control character, and must resolve to this origin.
+export function safeHref(href: string): string {
+  if (!href.startsWith('/') || /[\\\u0000-\u001f\u007f]/.test(href)) return '';
+  try {
+    return new URL(href, location.origin).origin === location.origin ? href : '';
+  } catch {
+    return '';
+  }
+}
 
 function TargetLink({ target }: { target: AuditTarget }) {
   const href = safeHref(target.href);
