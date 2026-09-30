@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXK2HYBSGKYBBRHJ5NA0T
 title: Build the admin site settings screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -23,15 +23,22 @@ blocks_on: none
 references:
   - ref: design:config
     path: docs/02-architecture.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-cxk2h
+  branch: run/cxk2h-site-settings
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adeb69a63636042cb
+  commit: 6b5dc9a68919b1eeabafbdf8eb716803487aff2d
+  session: null
+  claimed_at: 2026-09-30T12:59:04Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T09:29:11Z
+updated_at: 2026-09-30T13:16:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-cxk2h
   name: ""
 extensions: {}
 ---
@@ -47,7 +54,7 @@ The screen also has to explain the split. An admin looking for the OIDC client s
 - [ ] The screen lists every key in settings.All() and edits each one, and a change applies to the next request without a restart, site_name included (TestSettingsScreenListsEveryKey, TestSettingTakesEffectWithoutRestart)
 - [ ] The screen names each config.toml section with the reason it is not editable here, and shows no values (TestEverySectionHasAReason)
 - [ ] An invalid value is validation-failed, and the screen shows the key's allowed range or choices from the registry (TestInvalidSettingRefused)
-- [ ] GET and PUT /api/v1/admin/settings are admin-only: a moderator by role and a member who holds moderate through a group are 403 (TestSettingsAreAdminOnly)
+- [x] GET and PUT /api/v1/admin/settings are admin-only: a moderator by role and a member who holds moderate through a group are 403 (TestSettingsAreAdminOnly)
 - [ ] site_name reaches /me for every viewer, the shell title and the three wordmarks (TopBar, PhoneTopBar, ApplicantShell) at the cost of one /me statement, and TestMeBudget says so (TestShellInlinesMe, TestMeBudget, Shell.test.tsx)
 - [ ] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total is recorded against 47415 B within 60000 B, and the dist from go generate ./internal/web/spa is committed (SettingsScreen.test.tsx)
 - [ ] Each change writes setting.changed with the admin, the IP and the old and new values in the same transaction. Who last changed a key follows three rules: set from the screen, updated_by is the admin and updated_at the time; set from the command line, updated_by is null and updated_at the time; never set, both are null. The screen says 'from the command line' only for the second (TestSettingChangeAudited, TestSettingLastChanged, SettingsScreen.test.tsx)
@@ -171,3 +178,20 @@ Plan refreshed against main at 5124209 on 2026-09-30. The Settled items are carr
 **agent:claude-code/phase2-groom** at 2026-09-30T09:29:11Z
 
 Terva review 1560 on PR #209 (head 95c690b), one medium finding, accepted. The plan made both updated_at and updated_by null for a setting changed from the command line, while the screen told a command-line change by updated_by null with updated_at set. I checked the code. ketju admin setting set (settingSet in cmd/ketju/admin_setting.go) calls settings.SetBy with no Actor, Details via=cli, and At = time.Now(). SetBy writes updated_by as NULL when Actor is 0 and always writes updated_at, which migration 0006 declares NOT NULL. So the rules are now these. Set from the screen: both set. Set from the command line: updated_by null, updated_at set. Never set (no row): both null. The DTO rule, Value, the screen's 'Last changed' line and criterion 2 all state these rules. TestSettingLastChanged and SettingsScreen.test.tsx name one case for each.
+
+**agent:claude-code/phase2-run-cxk2h** at 2026-09-30T13:16:14Z
+
+Server half, claimed against main at 6b5dc9a. The plan refreshed on 2026-09-30 still fits the code, so it stands, Settled items included; this note records where the build departs from it. The work lands in two PRs at the orchestrator's direction, because another lane holds the client dist: this one is the server half and changes no bundled code, and the client screen follows once the dist is free.
+
+What landed here: GET and PUT /api/v1/admin/settings behind adminGate, both in adminRouteGates; internal/service/sitesettings, which asks for an admin again; the SiteSettings, SiteSetting and ConfigSection DTOs with the settings.admin golden; settings.Value.UpdatedAt and UpdatedBy; Setting.Choices from oneOf; config.Sections(); site_name on /me for every viewer and in the shell title; docs/07 "Site settings" and the GET /me row; the docs/04 note that the page size is a constant.
+
+Departures from the plan, each with the alternative that lost:
+- config.Sections() walks the Config type, not Entries' value. Entries lists a provider's keys only when one is configured, so a server with none would have shown oidc with no keys. The type walk keys a list of tables as oidc.providers[].issuer. TestEverySectionHasAReason loads testdata/full.toml and maps every Entries key onto a section, so the two walks cannot drift.
+- A PUT body with no value is bad-request; {"value": null} is validation-failed, as SetBy refuses null. Reading a missing value as a value lost because the admin sent nothing to validate.
+- settings gains CurrentIn and LookupIn, so the listing resolves updated_by in the same read as the values. Two reads lost because a change between them could name an admin beside a value they did not set.
+- TestMeBudget pins the middleware's statement count per case instead of excluding every GetSetting by name, because the site name read is a GetSetting too and the old rule would have hidden it from the budget. Every viewer pays one statement more: anonymous 0 to 1, member warm 1 to 2 handler statements, moderator cold 3 to 4.
+- dto.ts declares site_name as optional on Me. Making it required now would force a change to bootstrap.ts's bundled anonymous viewer, which would change the dist this PR must leave alone. The client half makes it required when it adds site_name there.
+
+Unticked here and why: AC1, AC2, AC3, AC5, AC6 and AC7 each name the screen, the wordmarks or a client test (SettingsScreen.test.tsx, Shell.test.tsx), which the client PR delivers. Their server tests are in and passing: TestSettingsScreenListsEveryKey, TestSettingTakesEffectWithoutRestart (public_edit_history, slow_mode.default_seconds on a thread with no thread_slow_mode row, registration.mode, site_name in /me and the title), TestEverySectionHasAReason, TestInvalidSettingRefused, TestShellInlinesMe, TestMeBudget, TestSettingChangeAudited, TestSettingLastChanged. AC4 is server-only and is ticked.
+
+No new audit action: setting.changed is already in audit.Actions and docs/04.
