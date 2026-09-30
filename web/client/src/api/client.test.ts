@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, apiSend, forgetGets, heldLimit, peekGet, resetApiCache } from './client';
+import { apiGet, apiGetOptional, apiSend, forgetGets, heldLimit, peekGet, resetApiCache } from './client';
 import { isProblem, ProblemError } from './problem';
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -306,6 +306,20 @@ describe('apiSend', () => {
     expect(await apiSend('DELETE', '/api/v1/x')).toBeUndefined();
   });
 
+  // TKT-01M3NS1931: a draft's DELETE hands over the revision its 204 carries.
+  it('hands a 204’s headers to onHeaders', async () => {
+    stub(new Response(null, { status: 204, headers: { 'Draft-Revision': '7' } }));
+    let seen: string | null = null;
+    await apiSend('DELETE', '/api/v1/x', undefined, { onHeaders: (h) => (seen = h.get('Draft-Revision')) });
+    expect(seen).toBe('7');
+  });
+
+  it('calls fetch before it returns, so a pagehide handler starts the request', () => {
+    const calls = stub(new Response(null, { status: 204 }));
+    void apiSend('PUT', '/api/v1/x', { a: 1 }, { keepalive: true });
+    expect(calls).toHaveLength(1);
+  });
+
   // TKT-01M3QQWA5Z: a caller that names its status accepts no other 2xx.
   it('refuses a success other than the status asked for', async () => {
     stub(json({ ok: true }, { status: 201 }));
@@ -341,5 +355,33 @@ describe('apiSend', () => {
     );
     const err = await apiSend('PUT', '/api/v1/x', {}).catch((e) => e);
     expect(isProblem(err, 'validation-failed')).toBe(true);
+  });
+});
+
+// TKT-01M3NS1931: the drafts routes answer 204 for "there is none", with the
+// draft's revision in a header.
+describe('apiGetOptional', () => {
+  it('answers a null body and the headers for 204', async () => {
+    stub(new Response(null, { status: 204, headers: { 'Draft-Revision': '3' } }));
+    const r = await apiGetOptional('/api/v1/drafts/t');
+    expect(r.body).toBeNull();
+    expect(r.headers.get('Draft-Revision')).toBe('3');
+  });
+
+  it('answers the body for 200, and holds nothing', async () => {
+    const calls = stub(json({ n: 1 }, { headers: { ETag: '"a-1"' } }), json({ n: 2 }, { headers: { ETag: '"a-2"' } }));
+    expect((await apiGetOptional('/api/v1/drafts/t')).body).toEqual({ n: 1 });
+    expect((await apiGetOptional('/api/v1/drafts/t')).body).toEqual({ n: 2 });
+    expect(calls[1].headers['If-None-Match']).toBeUndefined();
+    expect(peekGet('/api/v1/drafts/t')).toBeUndefined();
+  });
+
+  it('throws a problem for an error', async () => {
+    stub(new Response(JSON.stringify({ type: 'forbidden', title: 't', status: 403 }), {
+      status: 403,
+      headers: { 'Content-Type': 'application/problem+json' },
+    }));
+    const err = await apiGetOptional('/api/v1/drafts/t').catch((e) => e);
+    expect(isProblem(err, 'forbidden')).toBe(true);
   });
 });

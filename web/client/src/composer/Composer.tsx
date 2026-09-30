@@ -4,6 +4,7 @@ import type { Author, CreatedPost, RenderResult, UserSuggestions } from '../api/
 import { asProblem, isAbort, problemMessage } from '../api/problem';
 import { Icon, type IconName } from '../components/Icon';
 import { composerFor, discardReply, postReply, type Composer as ComposerState } from '../state/composer';
+import { draftNote } from '../state/drafts';
 import { applyEdit, type EditKind } from './edit';
 import { insertMention, mentionAt, type MentionAt } from './mention';
 import './composer.css';
@@ -30,8 +31,8 @@ const mentionLimit = 8;
 //
 // Post reply sends the source (postReply) and, once it is posted, hands the
 // answer to onPosted, which shows the new post; a refusal is said above the
-// text, which stays. Saving the draft is TKT-01M29CA9CE's; the source lasts
-// the session.
+// text, which stays. The source and the chip are autosaved as the viewer's
+// draft (state/drafts.ts), and the footer says how that stands.
 //
 // In the phone's sheet (ComposerSheet, sheet set) it is the same composer
 // laid out as a column that fills the sheet, toolbar last, and it takes
@@ -226,6 +227,9 @@ export function Composer({
       </div>
       <footer class="composer-foot">
         <span>Markdown supported</span>
+        <span class="draft-note" role="status">
+          {draftNote({ kind: 'reply', thread })}
+        </span>
         <button type="button" class="discard" disabled={posting || (!source && replyTo === null)} onClick={() => discardReply(thread)}>
           Discard
         </button>

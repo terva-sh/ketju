@@ -5,6 +5,7 @@ import { composerFor, resetComposers } from '../state/composer';
 import { viewer } from '../state/viewer';
 import { renderAt, threadPage } from '../testing';
 import { mentionDelay, previewDelay } from './Composer';
+import { draftDelay } from '../state/drafts';
 
 const thread = { id: '3yymw47g00001', slug: 'why-we-left-slack', title: 'Why we left Slack' };
 const path = `/t/${thread.id}/${thread.slug}?page=1`;
@@ -467,6 +468,40 @@ describe('whose composer it is', () => {
     } finally {
       viewer.value = me;
     }
+  });
+});
+
+// TKT-01M3NS1931: the footer says how the autosaved draft stands.
+describe('the draft', () => {
+  it('says whether the draft is saving, saved, or not saved', async () => {
+    let refuse = false;
+    const drafts: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      if (url === `/api/v1/drafts/${thread.id}`) {
+        const method = init.method ?? 'GET';
+        drafts.push(method);
+        if (method === 'GET') return new Response(null, { status: 204, headers: { 'Draft-Revision': '0' } });
+        if (refuse) return new Response('{}', { status: 500, headers: { 'Content-Type': 'application/problem+json' } });
+        const body = JSON.parse(String(init.body));
+        return new Response(JSON.stringify({ thread_id: thread.id, ...body, updated_at: 0, revision: drafts.length }), { status: 200 });
+      }
+      if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
+      return new Response(JSON.stringify(page()), { status: 200 });
+    });
+    const root = await renderAt(path);
+    const note = () => root.querySelector('.composer-foot [role=status]')!.textContent;
+    expect(drafts).toEqual(['GET']);
+    expect(note()).toBe('');
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    await type(root, 'Hello');
+    expect(note()).toBe('Saving…');
+    await act(async () => void (await vi.advanceTimersByTimeAsync(draftDelay)));
+    expect(drafts).toEqual(['GET', 'PUT']);
+    expect(note()).toBe('Draft saved');
+    refuse = true;
+    await type(root, ' again');
+    await act(async () => void (await vi.advanceTimersByTimeAsync(draftDelay)));
+    expect(note()).toBe('Draft not saved');
   });
 });
 

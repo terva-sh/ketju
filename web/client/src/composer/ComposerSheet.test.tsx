@@ -156,6 +156,28 @@ describe('opening the sheet', () => {
   });
 });
 
+// TKT-01M3NS1931: a saved draft is in the bar before the sheet is opened.
+describe('a saved draft', () => {
+  it('shows in the bar with its chip once the thread loads', async () => {
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url === `/api/v1/drafts/${thread.id}`) {
+        return new Response(
+          JSON.stringify({ thread_id: thread.id, source: '\nFrom the other device.\nMore.', reply_to: 2, updated_at: 0, revision: 4 }),
+          { status: 200 },
+        );
+      }
+      return new Response(JSON.stringify(page()), { status: 200 });
+    });
+    const root = await renderAt(path);
+    // The draft is asked for once the thread has arrived.
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    const b = bar(root)!;
+    expect(b.querySelector('.replybar-text')?.textContent).toBe('From the other device.');
+    expect(b.querySelector('.reply-chip')?.getAttribute('data-reply-chip')).toBe('2');
+    expect(sheet(root)).toBeNull();
+  });
+});
+
 // AC3: a draft shows in the bar and survives closing the sheet.
 describe('closing the sheet', () => {
   it('keeps the draft and the chip, which the bar then shows, and gives focus back', async () => {

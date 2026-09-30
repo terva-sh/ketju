@@ -88,6 +88,17 @@ export function forgetHeld(url: string, body: unknown) {
   if (held.get(url)?.body === body) held.delete(url);
 }
 
+// apiGetOptional fetches url as JSON where the server may answer 204 for
+// "there is none", as the drafts routes do (docs/07 "Drafts"). It answers
+// the body, null for 204, with the headers, since a draft's 204 carries its
+// revision in one (Draft-Revision). Nothing is held: those answers are
+// no-store.
+export async function apiGetOptional<T>(url: string, init: { signal?: AbortSignal } = {}): Promise<{ body: T | null; headers: Headers }> {
+  const r = await request(url, { headers: { Accept: 'application/json' }, signal: init.signal });
+  if (!r.ok) throw await toProblem(r);
+  return { body: r.status === 204 ? null : await json<T>(r), headers: r.headers };
+}
+
 // apiSend sends body as JSON, the only type the API accepts on a mutating
 // request (docs/07 CSRF rule 1), and returns the JSON answer, or undefined
 // for 204. An aborted request rejects with the abort, as apiGet's does.
@@ -96,11 +107,16 @@ export function forgetHeld(url: string, body: unknown) {
 // status, when given, is the one success the caller accepts: any other 2xx
 // is the server's fault, internal, as the flag dialog needs to say its
 // thanks only for the 200 receipt (TKT-01M3QQWA5Z, Terva review 1544).
+// onHeaders is handed the headers of a successful answer, which is how a
+// draft's DELETE hands over the Draft-Revision its 204 carries.
+//
+// fetch is called before the first await, so a request made from a pagehide
+// handler starts inside it (state/drafts.ts).
 export async function apiSend<T>(
   method: 'POST' | 'PUT' | 'PATCH' | 'DELETE',
   url: string,
   body?: unknown,
-  init: { signal?: AbortSignal; keepalive?: boolean; status?: number } = {},
+  init: { signal?: AbortSignal; keepalive?: boolean; status?: number; onHeaders?: (h: Headers) => void } = {},
 ): Promise<T> {
   let payload: string | undefined;
   try {
@@ -119,6 +135,7 @@ export async function apiSend<T>(
   });
   if (!r.ok) throw await toProblem(r);
   if (init.status !== undefined && r.status !== init.status) throw new ProblemError('internal', r.status);
+  init.onHeaders?.(r.headers);
   if (r.status === 204) return undefined as T;
   return json<T>(r);
 }

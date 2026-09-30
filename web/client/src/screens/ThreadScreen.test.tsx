@@ -32,7 +32,9 @@ afterEach(() => vi.unstubAllGlobals());
 describe('the thread screen', () => {
   it('recovers from a failure through Retry', async () => {
     let calls = 0;
-    vi.stubGlobal('fetch', async () => {
+    vi.stubGlobal('fetch', async (url: string) => {
+      // The reader's draft is asked for once the thread arrives, and is none.
+      if (url.startsWith('/api/v1/drafts/')) return new Response(null, { status: 204, headers: { 'Draft-Revision': '0' } });
       if (calls++ === 0) throw new TypeError('network down');
       return new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'a', title: 'Arrived' }), { status: 200 });
     });

@@ -23,7 +23,7 @@ import { isStaff, moderateKinds, threadActions, type ModerateKind } from '../she
 import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
-import { composerFor, quotePost, replyToPost } from '../state/composer';
+import { composerFor, loadReplyDraft, quotePost, replyToPost } from '../state/composer';
 import { trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
@@ -95,6 +95,12 @@ export function ThreadScreen() {
   // offered only where there is one: not on the post history route, which
   // shows no body (review 543).
   const canReply = !history && (res.data?.viewer.can_reply ?? false);
+  // The reader's draft for the thread is loaded once they may reply, here
+  // rather than in the composer, so the phone's reply bar shows it before
+  // the sheet opens. loadReplyDraft asks once per thread per session.
+  useEffect(() => {
+    if (canReply) void loadReplyDraft(params.id);
+  }, [params.id, canReply]);
   // First unread is offered to a signed-in reader with posts they have not
   // read, on the thread body, where there are posts to go to.
   const lastRead = res.data?.viewer.last_read_ordinal ?? 0;
