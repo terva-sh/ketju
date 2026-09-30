@@ -54,8 +54,10 @@ func Open(t testing.TB, opts db.Options) *db.DB {
 }
 
 // writeImage creates path with the template's bytes. The directory mode
-// matches what db.Open would create.
-func writeImage(path string, image []byte) error {
+// matches what db.Open would create. A failed write removes the file it
+// created, so a partial database is never left where a later Open would
+// refuse it (review 1572).
+func writeImage(path string, image []byte) (err error) {
 	if _, err := os.Lstat(path + "-wal"); err == nil {
 		return fmt.Errorf("%s-wal already exists; a stale WAL would be replayed onto the new database", path)
 	} else if !errors.Is(err, fs.ErrNotExist) {
@@ -68,11 +70,18 @@ func writeImage(path string, image []byte) error {
 	if err != nil {
 		return fmt.Errorf("creating the database: %w", err)
 	}
+	defer func() {
+		if err != nil {
+			err = errors.Join(err, os.Remove(path))
+		}
+	}()
 	if _, err := f.Write(image); err != nil {
-		f.Close()
+		return errors.Join(fmt.Errorf("writing %s: %w", path, err), f.Close())
+	}
+	if err := f.Close(); err != nil {
 		return fmt.Errorf("writing %s: %w", path, err)
 	}
-	return f.Close()
+	return nil
 }
 
 var template struct {

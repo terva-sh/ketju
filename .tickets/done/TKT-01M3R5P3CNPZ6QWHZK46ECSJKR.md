@@ -20,7 +20,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T03:28:14Z
-updated_at: 2026-09-30T10:18:14Z
+updated_at: 2026-09-30T10:29:58Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -206,6 +206,10 @@ internal/perm takes 30% of its before time, and internal/web/api takes 33%.
 | total package time | 1209.1 | 485.1 |
 
 Packages with no test files are left out. In the full suite, internal/perm takes 26% of its before time and internal/web/api 30%. cmd/ketju and internal/store/db still run their own migrations, as settled, so their figures move only with machine load. internal/store/db/dbtest grows by the new template and guard tests. The whole suite took 233 s of wall time before and 99 s after, compilation included.
+
+**agent:claude-code/phase2-run-r5p3cn** at 2026-09-30T10:29:58Z
+
+Review 1572 (run 1383, head 011a63c29cfafbbe3301410590b30304c5787409, base 53623117f3d0bf68f6f4043ebc63791773139d58), low 'Remove an incomplete database copy when writing fails': fixed. writeImage now removes the file it created when the write or the close fails, so a partial database is never left where a later Open would refuse it. No test forces the failure, because a write to a new regular file cannot be made to fail portably without adding a seam to a test helper; the change is a deferred os.Remove on the error path. Main moved to ae1839e (PR #212, a seal test only) while this was open; no conflict and no new .Migrate( fixture.
 
 ## Summary
 
