@@ -40,6 +40,17 @@ type AdminUserDetail struct {
 	// Agent is an agent account's credential and rate limits: admins only,
 	// and null for a moderator and for a human (TKT-01M29P9RSW).
 	Agent *AgentInfo `json:"agent"`
+	// Suspension is the account's suspension, to moderators and admins
+	// alike, since both suspend and the member is shown the same reason at
+	// sign-in (TKT-01M3QMRE47). It is null unless the account is suspended.
+	Suspension *AdminSuspension `json:"suspension"`
+}
+
+// AdminSuspension is a suspension in force: the reason the member is shown,
+// and when it ends, null for a suspension with no end.
+type AdminSuspension struct {
+	Reason string  `json:"reason"`
+	Until  *Millis `json:"until"`
 }
 
 // AgentInfo is an agent account as the users screen shows it to an admin.

@@ -55,5 +55,6 @@
     }
   ],
   "sessions": 2,
-  "agent": null
+  "agent": null,
+  "suspension": null
 }

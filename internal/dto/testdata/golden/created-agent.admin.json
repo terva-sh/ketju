@@ -25,7 +25,8 @@
       "refill_seconds": 60,
       "default_burst": 20,
       "default_refill_seconds": 30
-    }
+    },
+    "suspension": null
   },
   "credential": {
     "token": "ketju_agent_3q2-7wAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",

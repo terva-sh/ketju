@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/domain"
@@ -368,6 +369,51 @@ func TestPermissionChangeAppliesOnNextRequest(t *testing.T) {
 	} {
 		if rec := w.call("admin", "POST", "/api/v1/admin/permissions", bad); rec.Code != http.StatusUnprocessableEntity {
 			t.Errorf("%s: %d, want 422", bad, rec.Code)
+		}
+	}
+}
+
+// TestAdminDetailCarriesTheSuspension (TKT-01M3QMRE47): a suspended
+// account's detail carries the suspension's reason and end, to a moderator
+// and to an admin alike, no-store. A suspension with no end has until null,
+// and the account's detail has suspension null once it is lifted, as an
+// account never suspended has.
+func TestAdminDetailCarriesTheSuspension(t *testing.T) {
+	w := newWorld(t)
+	bob := w.viewer("bob")
+	admin := domain.Viewer{UserID: w.users["alice"], Role: domain.RoleAdmin, Active: true, SessionKey: "s-admin"}
+	const path = "/api/v1/admin/users/carol"
+	read := func(v domain.Viewer) dto.AdminUserDetail {
+		t.Helper()
+		return decodeAs[dto.AdminUserDetail](t, w.get(v, path))
+	}
+
+	for _, v := range []domain.Viewer{bob, admin} {
+		if s := read(v).Suspension; s != nil {
+			t.Errorf("%s reads an active account's suspension as %+v, want null", v.Role, *s)
+		}
+	}
+
+	end := time.Now().Add(7 * 24 * time.Hour).UnixMilli()
+	w.admin(bob, http.MethodPost, carolPosts+"suspend", fmt.Sprintf(`{"reason":"  spam, again ","until":%d}`, end))
+	for _, v := range []domain.Viewer{bob, admin} {
+		d := read(v)
+		if d.User.Status != domain.StatusSuspended || d.Suspension == nil || d.Suspension.Reason != "spam, again" ||
+			d.Suspension.Until == nil || int64(*d.Suspension.Until) != end {
+			t.Errorf("%s reads the suspension as %+v (status %s), want the trimmed reason until %d", v.Role, d.Suspension,
+				d.User.Status, end)
+		}
+	}
+
+	w.admin(bob, http.MethodPost, carolPosts+"unsuspend", `{}`)
+	if s := read(admin).Suspension; s != nil {
+		t.Errorf("after the unsuspension the suspension is %+v, want null", *s)
+	}
+
+	w.admin(bob, http.MethodPost, carolPosts+"suspend", `{"reason":"until we talk","until":null}`)
+	for _, v := range []domain.Viewer{bob, admin} {
+		if s := read(v).Suspension; s == nil || s.Reason != "until we talk" || s.Until != nil {
+			t.Errorf("%s reads a suspension with no end as %+v, want until null", v.Role, s)
 		}
 	}
 }

@@ -8,6 +8,20 @@ func init() {
 	corpus["admin-users."+tAdmin] = adminUserList()
 	corpus["admin-user."+tAdmin] = adminUserDetail(tAdmin)
 	corpus["admin-user."+tModerator] = adminUserDetail(tModerator)
+	// A suspended account (TKT-01M3QMRE47): as a moderator reads one with an
+	// end, and as an admin reads one suspended until lifted.
+	corpus["admin-user-suspended."+tModerator] = AdminUserDetail{
+		User:       adminScribe,
+		Groups:     []Membership{},
+		Suspension: &AdminSuspension{Reason: "Posting the same link in every thread.", Until: ptr(Millis(1760292000000))},
+	}
+	corpus["admin-user-suspended."+tAdmin] = AdminUserDetail{
+		User:       AdminUser{ID: 12, User: alice, Status: "suspended", CreatedAt: 1757000000000},
+		Groups:     []Membership{},
+		Identities: []AdminIdentity{},
+		Sessions:   ptr(0),
+		Suspension: &AdminSuspension{Reason: "Until we have talked."},
+	}
 	corpus["admin-groups."+tAdmin] = GroupList{Groups: []Group{moderatorsGroup, bookClub}}
 	corpus["admin-group."+tAdmin] = bookClubDetail()
 	corpus["permissions."+tAdmin] = permissionGrid()

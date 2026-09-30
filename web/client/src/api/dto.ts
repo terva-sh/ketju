@@ -367,6 +367,16 @@ export interface AdminUserDetail {
   // agent is an agent account's credential and limits: admins only, null
   // for a moderator and for a human.
   agent: AgentInfo | null;
+  // suspension is the suspension in force, to moderators and admins alike;
+  // null unless the account is suspended (TKT-01M3QMRE47).
+  suspension: AdminSuspension | null;
+}
+
+// AdminSuspension is a suspension's reason, which the member is shown at
+// sign-in, and its end, null for one with no end.
+export interface AdminSuspension {
+  reason: string;
+  until: Millis | null;
 }
 
 export interface AgentInfo {

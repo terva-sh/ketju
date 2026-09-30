@@ -13,6 +13,7 @@ import { Table } from './common/Table';
 import { GroupsTab } from './GroupsTab';
 import { NewAgentForm } from './NewAgentForm';
 import { PermissionsTab } from './PermissionsTab';
+import { SuspensionPanel } from './SuspensionPanel';
 
 // UsersScreen is /admin/users (TKT-01M29CXK1X): the accounts, and for an
 // admin the groups and the permission grid as its ?tab=groups and
@@ -287,6 +288,19 @@ function UserDetail({
       const now = prev ?? shown.current;
       return now ? change(now) : prev;
     });
+  // refetch fetches the detail again, shows it, and resolves to it, or to
+  // null when the fetch fails: SuspensionPanel chooses its words from the
+  // account as it is after a change (TKT-01M3QMRE47). No signal is passed,
+  // so nothing aborts it.
+  const refetch = async () => {
+    try {
+      const next = await apiGet<AdminUserDetail>(url);
+      setFresh(next);
+      return next;
+    } catch {
+      return null;
+    }
+  };
   const close = (
     <button type="button" class="admin-button" onClick={onClose}>
       Close
@@ -353,6 +367,7 @@ function UserDetail({
           </>
         )}
       </dl>
+      <SuspensionPanel d={d} url={url} refetch={refetch} onListChanged={onRoleChanged} />
 
       {admin && (
         <div class="admin-role">

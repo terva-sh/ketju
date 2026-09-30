@@ -180,7 +180,9 @@ describe('the users tab', () => {
     expect(detail.querySelector('select')).toBeNull();
     expect(detail.querySelector('[data-sessions]')).toBeNull();
     expect(detail.textContent).not.toContain('Identities');
-    expect(buttons(detail)).toEqual(['Close']);
+    // Suspension is the moderator's, on a member (TKT-01M3QMRE47).
+    expect(detail.querySelector('[data-suspension-panel]')).not.toBeNull();
+    expect(buttons(detail)).toEqual(['Close', 'Suspend', 'Restore hidden posts']);
   });
 
   // Terva review 1414, finding 3: a page asked for under one filter is not

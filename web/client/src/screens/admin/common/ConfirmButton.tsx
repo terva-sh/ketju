@@ -24,6 +24,7 @@ export function ConfirmButton({
   confirmLabel = 'Confirm',
   danger = false,
   disabled = false,
+  beforeAsk,
   onConfirm,
 }: {
   label: string;
@@ -34,6 +35,10 @@ export function ConfirmButton({
   // disabled keeps the action from being asked for at all, as when a
   // required note is still empty.
   disabled?: boolean;
+  // beforeAsk is asked on the first press, and the question opens only when
+  // it answers true: a form checks its fields here, and shows beside them
+  // what is wrong, before anyone is asked to confirm it.
+  beforeAsk?: () => boolean;
   onConfirm: () => Promise<boolean | void> | boolean | void;
 }) {
   const [asking, setAsking] = useState(false);
@@ -53,7 +58,7 @@ export function ConfirmButton({
 
   if (!asking) {
     return (
-      <button type="button" class={cls} ref={action} disabled={disabled} onClick={() => setAsking(true)}>
+      <button type="button" class={cls} ref={action} disabled={disabled} onClick={() => setAsking(!beforeAsk || beforeAsk())}>
         {label}
       </button>
     );

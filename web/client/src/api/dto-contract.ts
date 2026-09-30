@@ -66,6 +66,8 @@ import adminForumsAdmin from '../../../../internal/dto/testdata/golden/admin-for
 import adminGroupAdmin from '../../../../internal/dto/testdata/golden/admin-group.admin.json';
 import adminGroupsAdmin from '../../../../internal/dto/testdata/golden/admin-groups.admin.json';
 import adminUserAgentAdmin from '../../../../internal/dto/testdata/golden/admin-user-agent.admin.json';
+import adminUserSuspendedAdmin from '../../../../internal/dto/testdata/golden/admin-user-suspended.admin.json';
+import adminUserSuspendedModerator from '../../../../internal/dto/testdata/golden/admin-user-suspended.moderator.json';
 import adminUserAdmin from '../../../../internal/dto/testdata/golden/admin-user.admin.json';
 import adminUserModerator from '../../../../internal/dto/testdata/golden/admin-user.moderator.json';
 import adminUsersAdmin from '../../../../internal/dto/testdata/golden/admin-users.admin.json';
@@ -163,6 +165,8 @@ export const contract = [
   matches<AdminUserDetail>()(adminUserAgentAdmin),
   matches<AdminUserDetail>()(adminUserAdmin),
   matches<AdminUserDetail>()(adminUserModerator),
+  matches<AdminUserDetail>()(adminUserSuspendedAdmin),
+  matches<AdminUserDetail>()(adminUserSuspendedModerator),
   matches<AdminUserList>()(adminUsersAdmin),
   matches<PermissionPreview>()(permissionPreviewAdmin),
   matches<PermissionGrid>()(permissionsAdmin),

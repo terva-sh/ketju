@@ -42,5 +42,6 @@
   ],
   "identities": null,
   "sessions": null,
-  "agent": null
+  "agent": null,
+  "suspension": null
 }

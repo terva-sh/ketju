@@ -310,6 +310,41 @@
   width: 8em;
 }
 
+/* Suspension (TKT-01M3QMRE47): the status line and the suspend form on an
+   account's detail. The reason is the member's to read, so it wraps
+   wherever it must rather than widening the panel. */
+.admin-suspension {
+  margin: 16px 0;
+  padding-top: 8px;
+  border-top: 1px solid var(--rule);
+}
+.admin-suspension p {
+  margin: 0 0 4px;
+}
+.admin-suspension-reason {
+  overflow-wrap: anywhere;
+}
+.admin-suspension .admin-form {
+  margin-top: 8px;
+}
+.admin-suspend .admin-field input[type='text'] {
+  width: 100%;
+  box-sizing: border-box;
+}
+.admin-suspend [data-reason-count] {
+  margin: -12px 0 16px;
+}
+.admin-ends {
+  margin: 0 0 16px;
+  padding: 0;
+  border: 0;
+}
+.admin-ends legend {
+  padding: 0;
+  font-weight: 500;
+  color: var(--ink);
+}
+
 /* The phone: the section list becomes a row above the section, and the
    section links and the buttons are drawn at the full 44 px (docs/06
    "Targets and gestures"). */

@@ -24,5 +24,6 @@
     "refill_seconds": null,
     "default_burst": 20,
     "default_refill_seconds": 30
-  }
+  },
+  "suspension": null
 }

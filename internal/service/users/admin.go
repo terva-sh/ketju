@@ -110,6 +110,14 @@ func (s *Service) adminDetail(ctx context.Context, q *dbq.Queries, handle string
 		return err
 	}
 	*out = dto.AdminUserDetail{User: member.AdminUser(u), Groups: []dto.Membership{}}
+	// The suspension is staff's, moderators included, so it is set before
+	// the admin-only fields below (TKT-01M3QMRE47).
+	if u.Status == domain.StatusSuspended {
+		out.Suspension = &dto.AdminSuspension{Reason: u.StatusReason}
+		if u.StatusUntil.Valid {
+			out.Suspension.Until = new(dto.Millis(u.StatusUntil.Int64))
+		}
+	}
 	ms, err := q.MembershipsForUser(ctx, u.ID)
 	if err != nil {
 		return err

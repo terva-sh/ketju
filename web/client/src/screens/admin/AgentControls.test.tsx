@@ -681,7 +681,9 @@ describe('who sees the agent controls', () => {
     await open(root, 'scribe');
     const detail = root.querySelector('[data-detail="scribe"]')!;
     expect(detail.querySelector('[data-agent-panel]')).toBeNull();
-    expect(buttons(detail)).toEqual(['Close']);
+    // The rest are the suspension controls, a moderator's on a member
+    // agent as on a member human (TKT-01M3QMRE47).
+    expect(buttons(detail)).toEqual(['Close', 'Suspend', 'Restore hidden posts']);
   });
 
   it('an admin viewing a human sees no agent panel', async () => {
