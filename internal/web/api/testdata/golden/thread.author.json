@@ -32,7 +32,8 @@
     "can_reply": true,
     "can_moderate": false,
     "slow_mode_seconds": 0,
-    "next_post_at": null
+    "next_post_at": null,
+    "rename_until": 1757586500000
   },
   "posts": [
     {

@@ -164,6 +164,13 @@ type ThreadViewer struct {
 	// now, when they are exempt, and for an anonymous viewer. It is per
 	// viewer, which is why slow mode is in this block and not the header.
 	NextPostAt *Millis `json:"next_post_at"`
+	// RenameUntil is when this viewer's rename window for the thread closes:
+	// set only for the thread's author, without moderate, while the author's
+	// rename checks pass (not archived, the forum not read-only, not locked,
+	// reply held, and threads.rename_window_seconds not yet passed). It is
+	// null otherwise, and so always null for a moderator, who may rename at
+	// any time (TKT-01M3QXV399).
+	RenameUntil *Millis `json:"rename_until"`
 }
 
 // SlowMode answers PUT /admin/threads/{id}/slow-mode: the thread's slow mode

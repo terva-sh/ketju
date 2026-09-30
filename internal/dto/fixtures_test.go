@@ -205,9 +205,11 @@ func threadPage(class string) ThreadPage {
 			SlowModeSeconds: 30, NextPostAt: nil}
 	case tMember:
 		// In slow mode, and waiting: the member's last post was at
-		// 1757500500000, and the thread asks 30 s between posts.
+		// 1757500500000, and the thread asks 30 s between posts. The member
+		// started the thread, so their rename window runs to a day after
+		// its start.
 		p.Viewer = ThreadViewer{LastReadOrdinal: 60, Watch: "watch", CanReply: true, CanModerate: false,
-			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000))}
+			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000)), RenameUntil: ptr(Millis(1757586400000))}
 	case tModerator:
 		// Exempt: the interval is shown, and there is nothing to wait for.
 		p.Viewer = ThreadViewer{LastReadOrdinal: 42, Watch: "mute", CanReply: true, CanModerate: true,

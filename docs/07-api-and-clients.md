@@ -482,6 +482,16 @@ A rename is refused in this order, and each refusal writes nothing:
 - `validation-failed` for a title refused as on create, and `conflict` for
   the title the thread already has.
 
+The thread page tells the author in advance. Its viewer block carries
+`rename_until`, the end of the viewer's rename window in Unix ms: the
+thread's start plus `threads.rename_window_seconds`. It is set only for the
+thread's author without `moderate`, while every check above that binds the
+author passes, and one helper makes those checks for both the rename and the
+page, so the offer and the refusal agree. It is null for everyone else, and
+so always null for a moderator, who may rename at any time. Like
+`next_post_at` it moves no response cache key, and the ETag changes when it
+does (TKT-01M3QXV399).
+
 A move is refused in this order, and each refusal writes nothing:
 - `unauthenticated`, or `forbidden`, from the gate, then `bad-request` for
   a body with no `forum`;
@@ -623,7 +633,7 @@ table, so a change applies from the next request, and `site_name` reaches
   "page": {"number": 3, "size": 25, "total_pages": 9},
   "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205},
   "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_moderate": false,
-             "slow_mode_seconds": 30, "next_post_at": null},
+             "slow_mode_seconds": 30, "next_post_at": null, "rename_until": null},
   "posts": [
     {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,

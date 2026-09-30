@@ -285,9 +285,20 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		SlowModeSeconds: slow,
 	}
 	now := s.now()
+	// The rename window is read only for the one viewer it can matter to,
+	// so no other page view pays for the read (TKT-01M3QXV399).
+	var window time.Duration
+	if mayOwnRename(a) {
+		if window, err = s.renameWindow(ctx); err != nil {
+			return Result{}, err
+		}
+	}
 
 	var res Result
 	err = s.Threads.With(id, func(th *threadcache.Thread) error {
+		// Per viewer, so in the viewer block, which is never cached. The
+		// ETag hashes it, so a page whose window has closed revalidates.
+		viewer.RenameUntil = renameUntil(a, th.Archived(), window, now)
 		// One snapshot: the length the ETag names and the entries and reply
 		// counts the page is built from describe the same log. Without it an
 		// append landing between the two could be answered with a 304 for the

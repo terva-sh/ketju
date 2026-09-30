@@ -148,24 +148,12 @@ func (s *Service) Rename(ctx context.Context, v domain.Viewer, id threadid.ID, t
 			return threadlog.Append{}, problem.Coded(problem.CodeForbidden,
 				fmt.Errorf("threads: only its author or a moderator may rename %s", id))
 		}
-		if th.Archived() {
-			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
-		}
-		if !a.canModerate {
-			if err := readOnlyForum(a); err != nil {
-				return threadlog.Append{}, err
+		if a.canModerate {
+			if th.Archived() {
+				return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
 			}
-			if a.row.Locked != 0 {
-				return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is locked", id))
-			}
-			if !a.canReply {
-				return threadlog.Append{}, problem.Coded(problem.CodeForbidden,
-					fmt.Errorf("threads: this viewer may not write in %s's forum", id))
-			}
-			if !within(a.row.CreatedAt, now, window) {
-				return threadlog.Append{}, problem.Coded(problem.CodeRenameWindowClosed,
-					fmt.Errorf("threads: the rename window of %s has passed", window))
-			}
+		} else if err := authorRenameCheck(a, th.Archived(), window, now); err != nil {
+			return threadlog.Append{}, err
 		}
 		t, err := checkTitle(title)
 		if err != nil {
@@ -176,6 +164,53 @@ func (s *Service) Rename(ctx context.Context, v domain.Viewer, id threadid.ID, t
 		}
 		return threadlog.Append{Type: threadlog.TypeThreadRenamed, Body: &threadlog.ThreadRenamedBody{Title: t, Slug: Slug(t)}}, nil
 	})
+}
+
+// authorRenameCheck is what a thread's author, without moderate, must pass
+// to rename it at now, in Rename's order: conflict on an archived thread, in
+// an archived forum (readOnlyForum) and in a locked thread; forbidden
+// without reply in the forum; and rename-window-closed once window has
+// passed since the thread was started. Rename and the viewer block's
+// rename_until (renameUntil) both call it, so the offer and the refusal
+// cannot disagree (TKT-01M3QXV399).
+func authorRenameCheck(a access, archived bool, window time.Duration, now time.Time) error {
+	id := threadid.ID(a.row.ID)
+	if archived {
+		return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
+	}
+	if err := readOnlyForum(a); err != nil {
+		return err
+	}
+	if a.row.Locked != 0 {
+		return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is locked", id))
+	}
+	if !a.canReply {
+		return problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not write in %s's forum", id))
+	}
+	if !within(a.row.CreatedAt, now, window) {
+		return problem.Coded(problem.CodeRenameWindowClosed, fmt.Errorf("threads: the rename window of %s has passed", window))
+	}
+	return nil
+}
+
+// renameUntil is the viewer block's rename_until: the end of a's rename
+// window, when a renames as the thread's author (mayOwnRename) and passes
+// authorRenameCheck at now. It is nil for everyone else, and so always nil
+// for a moderator, who may rename at any time. window is renameWindow's,
+// clamped to the longest Duration, so the end is at most about 292 years
+// after the thread was started and never overflows.
+func renameUntil(a access, archived bool, window time.Duration, now time.Time) *dto.Millis {
+	if !mayOwnRename(a) || authorRenameCheck(a, archived, window, now) != nil {
+		return nil
+	}
+	at := dto.Millis(a.row.CreatedAt + window.Milliseconds())
+	return &at
+}
+
+// mayOwnRename reports whether a renames as the thread's author: a member
+// who started it and does not moderate its forum.
+func mayOwnRename(a access) bool {
+	return a.viewer.Member() && !a.canModerate && a.row.AuthorID == a.viewer.UserID
 }
 
 // Move is POST /admin/threads/{id}/move (docs/07): a ThreadMoved record
