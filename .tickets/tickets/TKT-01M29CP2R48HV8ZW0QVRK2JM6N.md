@@ -33,7 +33,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T11:02:11Z
+updated_at: 2026-09-30T11:07:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -212,3 +212,7 @@ Criteria: AC1 and AC2 are ticked. AC3, AC4 and AC5 each name the screen, and AC6
 - AC5: the list half, through `TestActionsDocumented` and `TestActionsCoverTheWriters`.
 
 **For TKT-01M29CXK19 (PR #213):** it writes `forum.created`, `forum.updated`, `forum.moved`, `forum.visibility_changed`, `forum.archived` and `forum.unarchived`. If this PR lands first, #213 must add all six to `audit.Actions` and to the docs/04 `audit-actions` table, each against `forum`. Otherwise `TestActionsCoverTheWriters` and `TestActionsDocumented` fail on main once it merges. If #213 lands first, this PR adds them before it merges.
+
+**agent:claude-code/phase2-run-cp2r4** at 2026-09-30T11:07:26Z
+
+Review 1577 (PR #220, head 48e3da2, base 0ece891, run 1683f9a2, Actions run #1417), medium, "Treat to=0 as an active upper bound": fixed in be7071c. views.AuditFilter's From and To are now *int64, nil for no bound, so 0 bounds like any other value and ?to=0 answers nothing. TestAuditPageFilters (to the epoch, from the epoch) and TestAuditQueryParameters (?to=0, ?from=0) cover it; the view treating To of 0 as no bound again fails both. docs/07 says 0 is a bound. An earlier run on the same head (request ready-review-48e3da2, run 48641825) was superseded when PR #217 moved main, and published no result.
