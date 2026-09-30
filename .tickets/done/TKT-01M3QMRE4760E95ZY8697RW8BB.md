@@ -19,11 +19,13 @@ dependencies:
   - TKT-01M29CP2QKKZSK4PDB40EJHC3P
   - TKT-01M3QH3GS23M8VG1JEPCTGSGR1
 blocks_on: none
-references: []
+references:
+  - ref: pr:229
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T13:03:13Z
+updated_at: 2026-09-30T13:03:41Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
