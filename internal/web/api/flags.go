@@ -21,7 +21,9 @@ type flagRequest struct {
 // report of a post. The rules, and the auto-hide a report may cause, are
 // the threads service's (Flag). The answer is dto.FlagReceipt and nothing
 // else, the same for every accepted report, and like every answer about the
-// viewer's own action it is not cached.
+// viewer's own action it is not cached. A kept flag whose auto-hide failed
+// (threads.ErrHideDeferred) is accepted too: it is logged at warn and gets
+// the same receipt, since other words would reveal the threshold.
 func (h *handlers) flag(w http.ResponseWriter, r *http.Request) {
 	v := domain.ViewerFrom(r.Context())
 	if err := h.threads.MayWrite(v); err != nil {
@@ -43,7 +45,11 @@ func (h *handlers) flag(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := h.threads.Flag(r.Context(), v, id, threads.FlagRequest{Ordinal: *in.Ordinal, Reason: in.Reason, Note: in.Note})
-	if err != nil {
+	switch {
+	case errors.Is(err, threads.ErrHideDeferred):
+		h.log.WarnContext(r.Context(), "flag kept, its auto-hide is left to the sweep",
+			"thread", id.String(), "ordinal", *in.Ordinal, "err", err)
+	case err != nil:
 		h.fail(w, r, err)
 		return
 	}

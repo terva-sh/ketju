@@ -498,11 +498,67 @@ func TestFlagRefusals(t *testing.T) {
 	}
 }
 
+// TestFlagRefusesTheAuthor: a member may not flag their own post
+// (maintainer decision 2026-09-29, TKT-01M3QQWA5Z). The author's flag is
+// forbidden and writes no row, on their shown post and on their own post
+// once it is hidden, so it never counts toward the auto-hide. On the shown
+// post another member's flag is still accepted. On the hidden post another
+// member with no open flag gets conflict and no row, as on main.
+func TestFlagRefusesTheAuthor(t *testing.T) {
+	w := newFlagWorld(t)
+	byAuthor := func(ordinal uint32) error {
+		w.clock += 1000
+		_, err := w.svc.Flag(t.Context(), w.viewer("author"), w.id, FlagRequest{Ordinal: ordinal, Reason: FlagOther, Note: "mine"})
+		return err
+	}
+
+	// The shown post.
+	if err := byAuthor(1); codeOf(err) != problem.CodeForbidden {
+		t.Fatalf("the author's flag on their shown post: %v, want forbidden", err)
+	}
+	if got := w.flagStatuses(1); len(got) != 0 {
+		t.Fatalf("the refused self-flag left rows %v", got)
+	}
+	w.mustFlag("rep1", 1)
+	if got := w.flagStatuses(1); !reflect.DeepEqual(got, map[string]string{"rep1": "open"}) {
+		t.Fatalf("flags %v: want rep1's flag accepted beside the refused self-flag", got)
+	}
+	// The author's refusals do not count: two more reporters are needed.
+	w.setThreshold(2)
+	second := w.post("another of the author's")
+	for range 3 {
+		if err := byAuthor(second); codeOf(err) != problem.CodeForbidden {
+			t.Fatalf("the author's flag on post %d: %v, want forbidden", second, err)
+		}
+	}
+	if !w.entry(second).Flags.Visible() || w.openFlags(second) != 0 {
+		t.Fatalf("the author's own flags hid post %d or counted toward it", second)
+	}
+
+	// The hidden post: post 1 now has rep1's flag; rep2's is the second at
+	// threshold 2, which hides it.
+	w.mustFlag("rep2", 1)
+	if e := w.entry(1); !e.Flags.Has(threadlog.EntryAutoHidden) {
+		t.Fatalf("post 1 is %#x: want hidden pending review", e.Flags)
+	}
+	if err := byAuthor(1); codeOf(err) != problem.CodeForbidden {
+		t.Errorf("the author's flag on their hidden post: %v, want forbidden", err)
+	}
+	if _, err := w.flag("rep3", 1); codeOf(err) != problem.CodeConflict {
+		t.Errorf("a member with no open flag on the hidden post: %v, want conflict", err)
+	}
+	if got := w.flagStatuses(1); !reflect.DeepEqual(got, map[string]string{"rep1": "open", "rep2": "open"}) {
+		t.Errorf("flags on the hidden post %v: want only rep1's and rep2's", got)
+	}
+}
+
 // TestAutoHideRecoversFromAFailedAppend is AC7: with the hide's append made
-// to fail, the threshold-crossing flag answers unavailable and stays
-// committed. One sweep then hides the post and a second appends nothing. A
-// threshold lowered to 2 is enforced by the next sweep on a post with two
-// open flags.
+// to fail, the threshold-crossing flag stays committed and answers the
+// receipt, beside an error wrapping ErrHideDeferred and the append's own
+// (TKT-01M3QQWA5Z: a kept flag is never unavailable, which would tell the
+// reporter the threshold was reached). One sweep then hides the post and a
+// second appends nothing. A threshold lowered to 2 is enforced by the next
+// sweep on a post with two open flags.
 func TestAutoHideRecoversFromAFailedAppend(t *testing.T) {
 	w := newFlagWorld(t)
 	w.mustFlag("rep1", 1)
@@ -515,8 +571,12 @@ func TestAutoHideRecoversFromAFailedAppend(t *testing.T) {
 		}
 		return nil
 	})
-	if _, err := w.flag("rep3", 1); codeOf(err) != problem.CodeUnavailable {
-		t.Fatalf("the threshold-crossing flag with its hide failing: %v, want unavailable", err)
+	r, err := w.flag("rep3", 1)
+	if !errors.Is(err, ErrHideDeferred) || !errors.Is(err, errInjected) || r != (dto.FlagReceipt{Received: true}) {
+		t.Fatalf("the threshold-crossing flag with its hide failing: %+v, %v; want the receipt and ErrHideDeferred", r, err)
+	}
+	if code := codeOf(err); code == problem.CodeUnavailable {
+		t.Errorf("the deferred hide's error carries the code %s", code)
 	}
 	if n := w.openFlags(1); n != 3 {
 		t.Fatalf("%d open flags after the failed hide, want 3: the flag is committed", n)

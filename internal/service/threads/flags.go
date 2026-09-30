@@ -71,6 +71,13 @@ type FlagRequest struct {
 	Note    string
 }
 
+// ErrHideDeferred wraps the error of an auto-hide that failed after the flag
+// that owed it was committed. Flag answers the receipt beside it, because the
+// flag was kept, and AutoHideSweep hides the post within a minute. The
+// handler logs it and answers 200 like any other kept flag (TKT-01M3QQWA5Z):
+// a different answer would tell the reporter the post reached the threshold.
+var ErrHideDeferred = errors.New("threads: the flag is kept and its hide is left to the sweep")
+
 // errNothingToHide stops an auto-hide's append when the post is already
 // down or its thread takes no records.
 var errNothingToHide = errors.New("threads: nothing to hide")
@@ -87,9 +94,10 @@ var errNoOpenFlags = errors.New("threads: the post has no open flag")
 //
 // The viewer needs a member session and read access to the thread. A reason
 // outside the four, other without a note, or a note over MaxFlagNote is
-// validation-failed; an ordinal the thread does not have is not-found; a
-// post already removed or moved, or any post of an archived thread, is
-// conflict. A member's second open flag on a post adds no row
+// validation-failed; an ordinal the thread does not have is not-found; the
+// viewer's own post is forbidden, whether it is shown, hidden or already
+// flagged (maintainer decision 2026-09-29, TKT-01M3QQWA5Z); a post already
+// removed or moved, or any post of an archived thread, is conflict. A member's second open flag on a post adds no row
 // (flags_one_open_per_reporter), so the open count is a count of reporters.
 //
 // The answer is the same receipt for a new flag, a repeat and the flag that
@@ -100,8 +108,11 @@ var errNoOpenFlags = errors.New("threads: the post has no open flag")
 // shown gets conflict.
 //
 // The flag is committed before the hide is tried, and the hide reads only
-// committed flags. If the hide fails, the answer is unavailable with the
-// flag kept, and AutoHideSweep hides the post within a minute.
+// committed flags. If the hide fails, the flag is kept and the answer is
+// still the receipt, beside an error wrapping ErrHideDeferred for the
+// caller to log; AutoHideSweep hides the post within a minute. So
+// unavailable means nothing was written: it comes only from a quarantined
+// thread, before the insert.
 //
 // The check that the post is shown, the insert and the hide all hold the
 // post's flag lock (Terva review 1504 on PR #176). A flag checked against
@@ -130,8 +141,16 @@ func (s *Service) Flag(ctx context.Context, v domain.Viewer, id threadid.ID, req
 			return problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is archived", id))
 		}
 		e, err := th.Index.Entry(req.Ordinal)
-		shown = err == nil && e.Flags.Visible()
-		return err
+		if err != nil {
+			return err
+		}
+		// Before the shown and repeat logic, so the author's own post is
+		// refused however it stands.
+		if e.Author == uint64(v.UserID) {
+			return problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: post %d of %s is the viewer's own", req.Ordinal, id))
+		}
+		shown = e.Flags.Visible()
+		return nil
 	}); err != nil {
 		return dto.FlagReceipt{}, err
 	}
@@ -160,9 +179,7 @@ func (s *Service) Flag(ctx context.Context, v domain.Viewer, id threadid.ID, req
 		return dto.FlagReceipt{}, err
 	}
 	if _, err := s.enforceAutoHide(ctx, id, req.Ordinal); err != nil {
-		return dto.FlagReceipt{}, problem.Coded(problem.CodeUnavailable,
-			fmt.Errorf("threads: the flag on post %d of %s is kept, and the hide it owes is left to the sweep: %w",
-				req.Ordinal, id, err))
+		return dto.FlagReceipt{Received: true}, fmt.Errorf("%w: post %d of %s: %w", ErrHideDeferred, req.Ordinal, id, err)
 	}
 	return dto.FlagReceipt{Received: true}, nil
 }

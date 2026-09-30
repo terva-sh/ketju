@@ -235,10 +235,14 @@ How it runs (TKT-01M29CP2PJ):
   every flag at or over N, not only the one that crosses it. It is a `Delete`
   with `auto` and actor 0, the system, so the log names no reporter. Its audit
   row, `post.auto_hidden`, is the system's and carries no count.
-- If the hide cannot be appended, the reporter's request answers `unavailable`
-  and the flag stays. A sweep runs every minute and once at startup, and hides
-  every shown post with at least N open flags. The same sweep enforces a
-  lowered N.
+- A member cannot flag their own post: the request is `forbidden` and writes
+  no row, whether the post is shown or hidden (maintainer decision 2026-09-29,
+  TKT-01M3QQWA5Z). The client does not offer flag on the viewer's own posts.
+- If the hide cannot be appended, the flag stays and the reporter gets the
+  same receipt as any other kept flag, and the failure is logged. A distinct
+  answer would tell the reporter that the post reached N (TKT-01M3QQWA5Z). A
+  sweep runs every minute and once at startup, and hides every shown post
+  with at least N open flags. The same sweep enforces a lowered N.
 - A moderator's restore of any post dismisses its open flags in place first,
   and reopens them only if the `Restore` was never appended. After a durable
   `Restore` they stay dismissed, so the sweep cannot hide the post again. A

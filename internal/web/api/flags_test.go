@@ -1,13 +1,25 @@
 package api
 
 import (
+	"bytes"
 	"database/sql"
+	"errors"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/terva-sh/ketju/internal/dto"
+	"github.com/terva-sh/ketju/internal/perm"
+	"github.com/terva-sh/ketju/internal/render"
+	"github.com/terva-sh/ketju/internal/service/applications"
+	formsvc "github.com/terva-sh/ketju/internal/service/forms"
+	"github.com/terva-sh/ketju/internal/service/forums"
+	"github.com/terva-sh/ketju/internal/service/respcache"
+	"github.com/terva-sh/ketju/internal/service/threads"
+	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
@@ -85,6 +97,8 @@ func TestFlagRouteRefusals(t *testing.T) {
 		{"unknown reason", "dave", `{"ordinal":4,"reason":"rude"}`, http.StatusUnprocessableEntity},
 		{"other without a note", "dave", `{"ordinal":4,"reason":"other"}`, http.StatusUnprocessableEntity},
 		{"no such post", "dave", `{"ordinal":40,"reason":"spam"}`, http.StatusNotFound},
+		// #4 is carol's own (TKT-01M3QQWA5Z).
+		{"a self-flag", "carol", `{"ordinal":4,"reason":"spam"}`, http.StatusForbidden},
 		{"a deleted post", "dave", `{"ordinal":3,"reason":"spam"}`, http.StatusConflict},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -109,6 +123,109 @@ func TestFlagRouteRefusals(t *testing.T) {
 	}
 	if n != 0 {
 		t.Errorf("refused flags wrote %d rows", n)
+	}
+}
+
+// flagCount is how many flags rows there are, of any status.
+func (w *world) flagCount() int {
+	w.t.Helper()
+	var n int
+	if err := w.db.Read(w.t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(w.t.Context(), `SELECT count(*) FROM flags`).Scan(&n)
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return n
+}
+
+// withService is w with its handler over svc, which w.writes has equipped,
+// logging to log.
+func (w *world) withService(svc *threads.Service, log *slog.Logger) *world {
+	c := *w
+	c.svc = svc
+	c.handler = New(Deps{Threads: svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)}, Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)},
+		Forms: &formsvc.Service{DB: w.db}, Applications: &applications.Service{DB: w.db}, Perm: perm.New(w.db), Logger: log})
+	return &c
+}
+
+// failDeletes is a Writer that refuses every Delete, so an auto-hide fails
+// after the flag that owed it was committed.
+type failDeletes struct{ inner threads.Appender }
+
+func (f failDeletes) Append(th *threadcache.Thread, a threadlog.Append) (threadlog.Result, error) {
+	if a.Type == threadlog.TypeDelete {
+		return threadlog.Result{}, errors.New("injected: the hide's append fails")
+	}
+	return f.inner.Append(th, a)
+}
+
+// TestAFailedHideAnswersTheReceipt (TKT-01M3QQWA5Z): with the hide's append
+// failing, the flag that reaches the threshold is kept and answers 200 with
+// exactly the body a first flag gets, so a reporter cannot tell that their
+// flag was the one that should have hidden the post. The failure is logged
+// at warn, and the sweep then hides the post.
+func TestAFailedHideAnswersTheReceipt(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.flagWorld()
+	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20),
+		Responses: respcache.New(1 << 20)}
+	w.writes(svc)
+	writer := svc.Writer
+	svc.Writer = failDeletes{writer}
+	var logged bytes.Buffer
+	h := w.withService(svc, slog.New(slog.NewTextHandler(&logged, nil))).chain()
+
+	var bodies []string
+	for _, who := range []string{"dave", "erin", "fay"} {
+		rec := send(h, who, http.MethodPost, flagsPath(id), `{"ordinal":4,"reason":"spam","note":""}`)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s's flag: status %d: %s", who, rec.Code, rec.Body)
+		}
+		if cc := rec.Header().Get("Cache-Control"); cc != "no-store" {
+			t.Errorf("%s's flag: Cache-Control %q, want no-store", who, cc)
+		}
+		bodies = append(bodies, rec.Body.String())
+	}
+	for i, b := range bodies {
+		if b != bodies[0] || strings.TrimSpace(b) != `{"received":true}` {
+			t.Errorf("answer %d is %q: want every answer the bare receipt", i, b)
+		}
+	}
+	if !w.entry(id, 4).Flags.Visible() {
+		t.Fatal("#4 is down though its hide's append failed")
+	}
+	if n := w.flagCount(); n != 3 {
+		t.Fatalf("%d flags rows, want the 3 kept", n)
+	}
+	if log := logged.String(); !strings.Contains(log, "level=WARN") || !strings.Contains(log, "auto-hide") ||
+		!strings.Contains(log, id.String()) || !strings.Contains(log, "injected") {
+		t.Errorf("the deferred hide was not logged at warn with its thread and cause: %q", log)
+	}
+
+	svc.Writer = writer
+	if n, err := svc.SweepAutoHide(t.Context()); err != nil || n != 1 {
+		t.Fatalf("the sweep hid %d, %v: want 1", n, err)
+	}
+	if e := w.entry(id, 4); !e.Flags.Has(threadlog.EntryAutoHidden) {
+		t.Errorf("after the sweep #4 is %#x: want hidden pending review", e.Flags)
+	}
+}
+
+// TestAQuarantinedThreadKeepsNoFlag (TKT-01M3QQWA5Z): unavailable means
+// nothing was kept. A flag on a quarantined thread answers 503 unavailable
+// and writes no flags row.
+func TestAQuarantinedThreadKeepsNoFlag(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.flagWorld()
+	svc := &threads.Service{DB: w.db, Perm: perm.New(w.db), Threads: w.cache, Render: render.NewCache(1 << 20),
+		Quarantined: func(q threadid.ID) bool { return q == id }}
+	w.writes(svc)
+	rec := send(w.withService(svc, nil).chain(), "dave", http.MethodPost, flagsPath(id), `{"ordinal":4,"reason":"spam"}`)
+	if rec.Code != http.StatusServiceUnavailable || !strings.Contains(rec.Body.String(), `"unavailable"`) {
+		t.Errorf("a flag on a quarantined thread: %d %s, want 503 unavailable", rec.Code, rec.Body)
+	}
+	if n := w.flagCount(); n != 0 {
+		t.Errorf("a flag on a quarantined thread wrote %d rows", n)
 	}
 }
 
