@@ -798,6 +798,71 @@ describe('the local copy', () => {
     expect(server.live).toBeNull();
   });
 
+  // Terva review 1584: a save that landed with its answer lost, then a
+  // cleared composer.
+  it('a cleared composer after an unanswered save deletes', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'a';
+    await wait(draftDelay);
+    apply(put.call!);
+    await fail(put);
+    c.source.value = '';
+    await wait(draftDelay);
+    expect(writes()).toEqual(['PUT a', 'DELETE']);
+    expect(server.live).toBeNull();
+  });
+
+  it('a cleared composer after an unanswered save is deleted by the next load when the page goes', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'a';
+    await wait(draftDelay);
+    apply(put.call!);
+    await fail(put);
+    c.source.value = '';
+    const del = hold('DELETE');
+    pagehide();
+    expect(writes()).toEqual(['PUT a', 'DELETE']);
+    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null }, base: 0, inflight: 2, deletes: 1 });
+    // The DELETE never arrives.
+    del.reject!(new TypeError('network'));
+    expect(server.live).toEqual({ source: 'a', reply_to: null });
+    expect(await restoredText()).toBe('');
+    await tick();
+    expect(writes()).toEqual(['DELETE']);
+    expect(server.live).toBeNull();
+  });
+
+  it('after a failed load, an unanswered save does not make a cleared composer delete', async () => {
+    server = { revision: 1, live: { source: 'never loaded', reply_to: null } };
+    refuse = (c) => (c.method === 'GET' ? problem('internal', 500) : undefined);
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'a';
+    await wait(draftDelay);
+    await fail(put);
+    c.source.value = '';
+    await wait(draftDelay);
+    pagehide();
+    expect(writes()).toEqual(['PUT a']);
+    expect(server.live).toEqual({ source: 'never loaded', reply_to: null });
+  });
+
+  it('an unanswered save is sent again on pagehide', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    const put = hold('PUT');
+    c.source.value = 'a';
+    await wait(draftDelay);
+    await fail(put);
+    pagehide();
+    expect(writes()).toEqual(['PUT a', 'PUT a']);
+  });
+
   it('a DELETE sent on pagehide keeps an empty copy until it is answered', async () => {
     await loadReplyDraft(T);
     const c = composerFor(T);

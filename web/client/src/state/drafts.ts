@@ -264,8 +264,13 @@ function failed(e: Entry, r: Req, err: unknown) {
   } else if (next(e)) return;
   // Not saved: the next change, pagehide or the Retry-After sends the draft
   // again, unless a newer request is already waiting to.
+  // A refused request changed nothing. One that went unanswered may have
+  // landed, so the server may hold a draft: an empty composer is then a
+  // DELETE, which is harmless if it did not (Terva review 1584). Where the
+  // state was unknown before, it stays unknown, so a failed load still never
+  // deletes.
   if (!e.next) {
-    e.held = unanswered ? null : r.prior;
+    e.held = unanswered && r.prior !== null ? true : r.prior;
     e.sent = null;
   }
   e.status.value = 'failed';
@@ -423,8 +428,10 @@ function unload() {
     const j = JSON.stringify(snap);
     const empty = isEmpty(snap);
     if (e.armed) {
-      if (!e.current && j === e.confirmed) continue;
-      e.sent = e.current ? e.current.json : e.confirmed;
+      // After an unanswered request what the server holds is not known, so
+      // nothing counts as seen saved and the draft is sent again.
+      if (!e.current && !e.unsure && j === e.confirmed) continue;
+      e.sent = e.current ? e.current.json : e.unsure ? null : e.confirmed;
       if (!e.current && (empty || new TextEncoder().encode(j).length < keepaliveLimit)) flush(e);
     }
     if (!e.owner || (empty && !e.current && !e.held)) continue;
