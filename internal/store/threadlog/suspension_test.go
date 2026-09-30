@@ -200,3 +200,44 @@ func TestRemovals(t *testing.T) {
 		t.Error("a damaged frame was walked over")
 	}
 }
+
+// Restored finds one Restore by its post, its actor and its millisecond, and
+// nothing that differs in any of them (TKT-01M29CRJ4E).
+func TestRestored(t *testing.T) {
+	a, lg, _, _ := newThread(t, SyncNever)
+	mustAppend(t, a, post("one"))
+	mustAppend(t, a, post("two"))
+	mustAppend(t, a, Append{Type: TypeDelete, Author: 7, Ordinal: 1, TimeMS: 900, Body: &DeleteBody{ByModerator: true}})
+	mustAppend(t, a, Append{Type: TypeRestore, Author: 8, Ordinal: 1, TimeMS: 1000, Body: &RestoreBody{}})
+	mustAppend(t, a, Append{Type: TypeDelete, Author: 7, Ordinal: 1, TimeMS: 1100, Body: &DeleteBody{ByModerator: true}})
+	end := a.LogLength()
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewReader(bytes.NewReader(lg.bytes()), a.Index())
+	for _, c := range []struct {
+		name    string
+		ordinal uint32
+		actor   uint64
+		ms      int64
+		want    bool
+	}{
+		{"that restore", 1, 8, 1000, true},
+		{"another moderator", 1, 7, 1000, false},
+		{"another time", 1, 8, 1001, false},
+		{"another post", 2, 8, 1000, false},
+		{"a Delete's actor and time", 1, 7, 900, false},
+	} {
+		got, err := r.Restored(FileHeaderSize, end, c.ordinal, c.actor, c.ms)
+		if err != nil || got != c.want {
+			t.Errorf("%s: %t, %v; want %t", c.name, got, err, c.want)
+		}
+	}
+
+	b := lg.bytes()
+	b[len(b)-2] ^= 0xff
+	bad := NewReader(bytes.NewReader(b), a.Index())
+	if got, err := bad.Restored(FileHeaderSize, end, 1, 9, 1); err == nil || got {
+		t.Errorf("a damaged frame: %t, %v", got, err)
+	}
+}

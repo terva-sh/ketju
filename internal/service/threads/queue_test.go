@@ -843,27 +843,93 @@ func TestFailedActionStaysInQueue(t *testing.T) {
 	}
 }
 
-// TestStateChangeIsConflictNotSuccess is AC9's state rule: a moderator's
-// delete from the thread page lands between the queue's read and its
-// append. The queue answers conflict, the flags stay open, and no row
-// claims the queue hid the post.
+// TestStateChangeIsConflictNotSuccess: a change to the post that lands
+// between the queue's read and its write is conflict, with the flags left
+// open and no flag row, for every action on a shown post (Terva review 1522
+// on PR #184). The change is a moderator's Delete appended straight to the
+// log, as a suspension's hide of an author's posts writes it, since that is
+// the one hide that does not take the post's flag lock. A remove meets it as
+// its append's precondition; dismiss and resolve, which append nothing,
+// meet it when they read the state again before their write.
 func TestStateChangeIsConflictNotSuccess(t *testing.T) {
+	for _, action := range []string{QueueRemove, QueueDismiss, QueueResolve} {
+		t.Run(action, func(t *testing.T) {
+			w := newQueueWorld(t)
+			w.mustFlag("rep1", 1)
+			w.svc.afterQueueRead = func(id threadid.ID, ordinal uint32) {
+				w.appendTo(id, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["mod2"]), Ordinal: ordinal,
+					Body: &threadlog.DeleteBody{Reason: "suspended", ByModerator: true}})
+			}
+			if _, err := w.resolve("mod", w.id, 1, action); codeOf(err) != problem.CodeConflict {
+				t.Fatalf("the %s after a hide: %v, want conflict", action, err)
+			}
+			w.svc.afterQueueRead = nil
+			if w.openFlags(1) != 1 || len(w.flagRows()) != 0 {
+				t.Errorf("after the conflict: %d open flags, rows %v", w.openFlags(1), w.flagRows())
+			}
+			if got, want := w.audit(), []string{"post.hidden by mod2"}; !reflect.DeepEqual(got, want) {
+				t.Errorf("audit %v, want %v", got, want)
+			}
+		})
+	}
+}
+
+// TestThreadPageDeleteWaitsForTheQueue: the thread page's delete of one post
+// holds the post's flag lock, so a delete arriving while a queue action
+// holds it waits, and lands after the action, which recorded the post as it
+// decided on it (Terva review 1522 on PR #184).
+func TestThreadPageDeleteWaitsForTheQueue(t *testing.T) {
 	w := newQueueWorld(t)
 	w.mustFlag("rep1", 1)
-	w.svc.afterQueueRead = func(id threadid.ID, ordinal uint32) {
-		if _, err := w.svc.Delete(t.Context(), w.as("mod2"), id, ordinal, "spam"); err != nil {
-			t.Error(err)
+	holding, release := make(chan struct{}), make(chan struct{})
+	w.svc.afterQueueRead = func(threadid.ID, uint32) { close(holding); <-release }
+	queued := make(chan error, 1)
+	go func() {
+		res, err := w.svc.ResolvePost(t.Context(), w.as("mod"), w.id, 1, Resolution{Action: QueueDismiss})
+		if err == nil && res.Post != dto.QueuePostUnchanged {
+			err = fmt.Errorf("the dismissal says the post %q", res.Post)
 		}
+		queued <- err
+	}()
+	<-holding
+	deleted := make(chan error, 1)
+	go func() {
+		_, err := w.svc.Delete(t.Context(), w.as("mod2"), w.id, 1, "spam")
+		deleted <- err
+	}()
+	select {
+	case err := <-deleted:
+		t.Fatalf("the delete did not wait for the queue: %v", err)
+	case <-time.After(50 * time.Millisecond):
 	}
-	if _, err := w.resolve("mod", w.id, 1, QueueRemove); codeOf(err) != problem.CodeConflict {
-		t.Fatalf("the remove after a thread-page delete: %v, want conflict", err)
+	close(release)
+	if err := <-queued; err != nil {
+		t.Fatalf("the dismissal: %v", err)
+	}
+	if err := <-deleted; err != nil {
+		t.Fatalf("the delete after it: %v", err)
 	}
 	w.svc.afterQueueRead = nil
-	if w.openFlags(1) != 1 || len(w.flagRows()) != 0 {
-		t.Errorf("after the conflict: %d open flags, rows %v", w.openFlags(1), w.flagRows())
+	if f := w.entry(1).Flags; !f.Has(threadlog.EntryHiddenByMod) {
+		t.Errorf("the post after the delete: flags %v", f)
 	}
-	if got, want := w.audit(), []string{"post.hidden by mod2"}; !reflect.DeepEqual(got, want) {
+	if got, want := w.audit(), []string{"flag.dismissed by mod", "post.hidden by mod2"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("audit %v, want %v", got, want)
+	}
+}
+
+// TestQueueRemoveOfOwnPostIsAModeratorsHide: the queue's remove is a
+// moderation decision whoever wrote the post, so a moderator removing their
+// own flagged post hides it as a moderator, as the auto-hidden case does
+// (Terva review 1522 on PR #184). Only a moderator may restore it.
+func TestQueueRemoveOfOwnPostIsAModeratorsHide(t *testing.T) {
+	w := newQueueWorld(t)
+	w.append(threadlog.Append{Type: threadlog.TypePost, Author: uint64(w.users["mod"]), Body: &threadlog.PostBody{Source: "mine"}})
+	own := uint32(w.entries())
+	w.mustFlag("rep1", own)
+	w.mustResolve("mod", w.id, own, QueueRemove, dto.QueuePostHidden)
+	if f := w.entry(own).Flags; !f.Has(threadlog.EntryHiddenByMod) || f.Has(threadlog.EntryDeleted) {
+		t.Errorf("the removed post's flags %v, want hidden by a moderator", f)
 	}
 }
 
@@ -941,11 +1007,22 @@ func TestRestoredButUnauditedIsRecovered(t *testing.T) {
 		}
 	}
 
+	t.Run("another moderator's request", func(t *testing.T) {
+		// The row is written, crediting mod, and mod2 is told somebody
+		// handled it: the restore recovered was not theirs.
+		w := newQueueWorld(t)
+		w.hide(1)
+		at, _ := owed(w, 1, QueueDismiss)
+		if _, err := w.resolve("mod2", w.id, 1, QueueDismiss); codeOf(err) != problem.CodeConflict {
+			t.Fatalf("mod2's request: %v, want conflict", err)
+		}
+		check(w, at, QueueDismiss, 1)
+	})
 	t.Run("a retry", func(t *testing.T) {
 		w := newQueueWorld(t)
 		w.hide(1)
 		at, ids := owed(w, 1, QueueDismiss)
-		res, err := w.resolve("mod2", w.id, 1, QueueDismiss)
+		res, err := w.resolve("mod", w.id, 1, QueueDismiss)
 		if err != nil || res.Post != dto.QueuePostRestored || !reflect.DeepEqual(res.Flags, ids) {
 			t.Fatalf("the retry: %+v, %v", res, err)
 		}
@@ -1063,6 +1140,56 @@ func TestOnlyPendingFlagsAreRecovered(t *testing.T) {
 	}
 	if rows := w.flagRows(); len(rows) != 0 {
 		t.Errorf("a row for a restore that never landed: %+v", rows)
+	}
+}
+
+// TestRecoveryIgnoresSomebodyElsesRestore: a marked flag whose own Restore
+// never landed is reopened even when the post is shown, because another
+// moderator restored it from the thread page since (Terva review 1522 on PR
+// #184). No row credits the first moderator with a restore they did not
+// make, and their retry is not told it restored anything.
+func TestRecoveryIgnoresSomebodyElsesRestore(t *testing.T) {
+	for _, via := range []string{"the catch-up", "a retry"} {
+		t.Run(via, func(t *testing.T) {
+			w := newQueueWorld(t)
+			w.hide(1)
+			// What a failed Restore leaves when the reopen after it failed
+			// too: the flags dismissed by mod and marked, the post hidden.
+			w.exec(fmt.Sprintf(`UPDATE flags SET status = 'dismissed', resolved_by = %d, resolved_at = %d, audit_pending = 'dismiss'
+				WHERE thread_id = %d AND ordinal = 1`, w.users["mod"], w.clock, int64(w.id)))
+			if _, err := w.svc.Restore(t.Context(), w.as("mod2"), w.id, 1, "not spam"); err != nil {
+				t.Fatal(err)
+			}
+			if !w.entry(1).Flags.Visible() {
+				t.Fatal("mod2's restore did not show the post")
+			}
+			w.clock += int64(2 * FlagAuditGrace / time.Millisecond)
+			if via == "the catch-up" {
+				if n, err := w.svc.FlagAuditCatchUp(t.Context()); n != 0 || err != nil {
+					t.Errorf("the catch-up wrote %d, %v", n, err)
+				}
+				for id, s := range w.flagState(w.id, 1) {
+					if s != "open pending=- linked=false" {
+						t.Errorf("flag %d: %s, want reopened", id, s)
+					}
+				}
+				if rows := w.flagRows(); len(rows) != 0 {
+					t.Errorf("rows for a restore mod never made: %+v", rows)
+				}
+				return
+			}
+			// The retry finds the flags reopened, and dismisses them on the
+			// post as it is now: shown, and unchanged by this request.
+			res := w.mustResolve("mod", w.id, 1, QueueDismiss, dto.QueuePostUnchanged)
+			if len(res.Flags) != 3 {
+				t.Errorf("the retry closed %v", res.Flags)
+			}
+			for _, r := range w.flagRows() {
+				if r.details["recovered"] == true || r.details["post"] == dto.QueuePostRestored {
+					t.Errorf("a row credits mod with the restore: %+v", r)
+				}
+			}
+		})
 	}
 }
 

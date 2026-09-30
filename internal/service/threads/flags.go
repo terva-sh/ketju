@@ -40,7 +40,8 @@ const flagLockStripes = 256
 
 // flagLocks is the one per-post lock the auto-hide, a moderator's restore
 // and ConfirmHide hold (docs/08 "Flags", TKT-01M29CP2PJ; the moderator
-// queue, TKT-01M29CRJ4E, holds it too). Without it the sweep could read a
+// queue, TKT-01M29CRJ4E, holds it too, and so does every other delete or
+// restore of one post, so that no queue action's state changes under it). Without it the sweep could read a
 // post's open flags just before a restore dismissed them and append its hide
 // just after the Restore landed, hiding the post the moderator had just
 // restored.
@@ -320,24 +321,26 @@ func (s *Service) restoreDismissingFlags(ctx context.Context, v domain.Viewer, i
 	run func() (dto.CreatedPost, bool, error)) (dto.CreatedPost, error) {
 	unlock := s.flagLocks.lock(id, ordinal)
 	defer unlock()
-	out, _, _, err := s.restoreDismissingFlagsLocked(ctx, v, id, ordinal, note, sql.NullString{}, run)
+	out, _, _, err := s.restoreDismissingFlagsLocked(ctx, v, id, ordinal, note, s.now().UnixMilli(), sql.NullString{}, run)
 	return out, err
 }
 
 // restoreDismissingFlagsLocked is restoreDismissingFlags for a caller that
 // already holds the post's flag lock: the moderator queue (TKT-01M29CRJ4E).
-// pending is the audit_pending marker the dismissed flags carry until their
-// audit row is written. It is null from the thread page, whose restore
-// writes no flag row. It also answers the ids it dismissed and whether run
-// appended.
+// at is the dismissal's time, in unix ms. The queue stamps its Restore with
+// the same millisecond, which is how recovery later finds that Restore in
+// the log (recoverFlagAudit). pending is the audit_pending marker the
+// dismissed flags carry until their audit row is written. It is null from
+// the thread page, whose restore writes no flag row. It also answers the
+// ids it dismissed and whether run appended.
 func (s *Service) restoreDismissingFlagsLocked(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, note string,
-	pending sql.NullString, run func() (dto.CreatedPost, bool, error)) (dto.CreatedPost, []int64, bool, error) {
+	at int64, pending sql.NullString, run func() (dto.CreatedPost, bool, error)) (dto.CreatedPost, []int64, bool, error) {
 	var dismissed []int64
 	if err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
 		dismissed, err = q.DismissOpenFlagsForPost(ctx, dbq.DismissOpenFlagsForPostParams{
 			ResolvedBy:     sql.NullInt64{Int64: v.UserID, Valid: true},
-			ResolvedAt:     sql.NullInt64{Int64: s.now().UnixMilli(), Valid: true},
+			ResolvedAt:     sql.NullInt64{Int64: at, Valid: true},
 			ResolutionNote: note, AuditPending: pending, ThreadID: int64(id), Ordinal: int64(ordinal),
 		})
 		return err

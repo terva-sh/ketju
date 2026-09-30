@@ -268,15 +268,17 @@ The queue (TKT-01M29CRJ4E):
   the thread is read-only, its flags included, and no action could clear
   them.
 - **One lock.** Every queue action holds the same per-post lock as the
-  flag, the hide, the restore and the confirmation. Under it the action
-  reads the post's open flags and its state, and decides from them. A
-  second moderator waits on the lock, finds no open flag, and gets
-  `conflict` before touching the log.
+  flag, the hide, the restore, the confirmation, and every delete or
+  restore of one post from the thread page. Under it the action reads the
+  post's open flags and its state, and decides from them. A second
+  moderator waits on the lock, finds no open flag, and gets `conflict`
+  before touching the log.
 - **State decides, errors do not.** Each append carries the state it was
-  decided on as its precondition. If something outside the lock changed
-  the post first, such as a moderator's delete from the thread page, the
-  answer is `conflict` with the flags left open, never success. A failed
-  append leaves the flags open too.
+  decided on as its precondition, and an action that appends nothing reads
+  the state again just before its write. If something outside the lock
+  changed the post first, which is a suspension's hide or restore of every
+  post by one author, the answer is `conflict` with the flags left open,
+  never success. A failed append leaves the flags open too.
 - **The actions.** Dismissing every flag on a post hidden pending review
   restores it, through the moderator's restore path, because a review that
   dismisses the flags has found nothing to hide (maintainer decision,
@@ -285,8 +287,9 @@ The queue (TKT-01M29CRJ4E):
   the post stays hidden, and keeping it is `conflict`, because it is a
   restore of that moderator's decision, for the thread page. Remove hides a
   shown post as a moderator's hide, or makes a hide pending review the
-  moderator's, and then resolves the flags. On a post already down it only
-  resolves them.
+  moderator's, and then resolves the flags. It is a moderator's hide even
+  of the moderator's own post, since removing it from the queue is a
+  moderation decision. On a post already down it only resolves them.
 - **Audit.** The log records a queue action appends get their `post.*` rows
   from the projection. The queue writes one `flag.resolved` or
   `flag.dismissed` row against the post, with the flags it closed, what was
@@ -298,9 +301,12 @@ The queue (TKT-01M29CRJ4E):
   The flags carry `audit_pending` (04 "flags"), and the row is written with
   the original moderator and time, marked `recovered`, on the next request
   for the post or by a job within a minute or two. Only a flag with the
-  marker set is ever owed a row. A marked flag whose `Restore` never landed
-  (its append failed and so did the reopen after it) is reopened instead,
-  with no row.
+  marker set is ever owed a row. Whether the `Restore` landed is read from
+  the post's log: the queue stamps its `Restore` with the dismissing
+  moderator and the dismissal's millisecond, and looks for that record.
+  The post being shown proves nothing, since another moderator's restore
+  shows it too. A marked flag whose `Restore` never landed (its append
+  failed and so did the reopen after it) is reopened instead, with no row.
 - **A reporter learns nothing** from a resolution: no notification, and
   the same receipt for their next report.
 

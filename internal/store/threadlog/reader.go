@@ -270,6 +270,34 @@ func (r *Reader) Removals(from, upTo int64, fn func(ordinal uint32, del *DeleteB
 	return err
 }
 
+// Restored reports whether the log, from from to upTo bytes, holds a Restore
+// of post ordinal by actor stamped at ms: one particular restore, named by
+// who wrote it and the millisecond it carries. The moderator queue asks it
+// whether its own Restore landed, when the flags it dismissed for that
+// Restore are still owed their audit row (TKT-01M29CRJ4E): the post being
+// shown is not enough, since somebody else's restore shows it too. from is
+// a frame boundary, as for Removals. A damaged frame stops the walk with its
+// error.
+func (r *Reader) Restored(from, upTo int64, ordinal uint32, actor uint64, ms int64) (bool, error) {
+	var (
+		found   bool
+		scanErr error
+	)
+	err := ScanFramesFrom(r.log, from, upTo, func(rec ScanRecord) bool {
+		h := rec.Header
+		if rec.Err != nil {
+			scanErr = &ReadError{Ordinal: h.Ordinal, Offset: uint64(rec.Offset), Err: rec.Err}
+			return false
+		}
+		found = h.Type == TypeRestore && h.Ordinal == ordinal && h.Actor == actor && h.TimestampMS == ms
+		return !found
+	})
+	if err == nil {
+		err = scanErr
+	}
+	return found && err == nil, err
+}
+
 // History returns every revision of a post in log order, reading the log up
 // to upTo bytes.
 //

@@ -37,7 +37,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-30T00:57:01Z
+updated_at: 2026-09-30T01:12:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -216,3 +216,50 @@ Where the build differs from the plan, and why:
 **agent:claude-code/phase2-run-crj4e** at 2026-09-30T00:57:01Z
 
 PR #184 replaces PR #183, which main moved under (PR #182, archived forums). The same server half is carried onto main at b41b6db as one commit. ForumAccessRowsAll now selects forums.archived, as ForumAccessRows does, so the decisions perm.ModeratedForums caches keep an archived forum read-only (TestModeratedForumsCachesWhatCheckDecides). PR #183 was closed unmerged, before any review completed: its review run was superseded when main moved.
+
+**agent:claude-code/phase2-run-crj4e** at 2026-09-30T01:12:44Z
+
+Terva review 1522 on PR #184 (review of the server half), with profile code and model gpt-6-sol. It ran as [Actions run #1173](https://git.local.sothr.com/terva-sh/ketju/actions/runs/1173) with request `ready-review-c779429`. It reviewed head c7794292f6b7a772f25f404718341aa8daf41b85 against base b41b6dbe0966ecb9a507d852d3070e8707c7deec. The result was failure, with three medium findings. All three are fixed; none was declined.
+
+### finding-1: Resolve and dismiss can report a stale post state (fixed)
+
+A dismiss or resolve on a shown post, or on a post already down, closed the flags from the state read under the lock. Nothing was appended, so the post state was never checked again.
+
+Fix, in two parts:
+- `setDeleted`, the thread page's Delete and Restore of one post, now holds the post's flag lock. The moderator's restore already held it through `restoreDismissingFlags`.
+- `closeFlags` now takes the state the action was decided on. It reads the entry again while holding the thread, just before the write, and a changed state answers conflict with the flags left open.
+
+What can still land outside the lock is a suspension's `HidePostsOf` or `RestorePostsOf`. Those walk an author's threads inside `Threads.With`, where the flag lock may not be taken, because the rule is flag lock before thread. The re-read narrows that case to the write itself.
+
+`stateAny` skips the re-read for the close after the queue's own Delete. That Delete is durable, and the row says `hidden`.
+
+Tests:
+- `TestStateChangeIsConflictNotSuccess` now covers all three actions. The intervening change is a raw moderator Delete appended to the log, as a suspension writes it. The previous `svc.Delete` in the hook would now wait on the lock the queue holds.
+- New `TestThreadPageDeleteWaitsForTheQueue`.
+
+### finding-2: A moderator removing their own flagged post is recorded as an author deletion (fixed)
+
+The queue's remove on a shown post now always writes `ByModerator: true`, as the auto-hidden case already did. The thread page's delete of one's own post is still an author's delete. I updated the `DeleteBody.ByModerator` comment and docs/08 to match.
+
+New test: `TestQueueRemoveOfOwnPostIsAModeratorsHide`.
+
+### finding-3: Recovery can attribute someone else's restore to a failed queue action (fixed)
+
+Recovery no longer takes "the post is shown" as proof, and the post.restored audit-row check is gone. That row was never enough anyway: the projection writes no post.restored for a moderator restoring their own post.
+
+Each queue Restore is now stamped with the dismissal's millisecond (`resolved_at`) and the moderator as its actor. Recovery looks for exactly that record in the post's log with the new `threadlog.Reader.Restored(from, upTo, ordinal, actor, ms)`, which walks the log the way `Removals` does. Recovery is rare, so the walk is acceptable. `AuditExistsSince` is removed.
+
+Recovery now returns the ids it wrote, grouped by moderator. A request gets 200 `restored` only if the recovered restore was its own moderator's; any other request is conflict. The row is still written, crediting the moderator who made the restore.
+
+Tests:
+- New `TestRecoveryIgnoresSomebodyElsesRestore`, covering the catch-up and a retry.
+- New "another moderator's request" subtest in `TestRestoredButUnauditedIsRecovered`. Its "a retry" subtest now retries as the same moderator.
+- New `TestRestored` in threadlog.
+
+### Mutations tried, all caught
+
+- The re-read removed.
+- The lock in `setDeleted` removed.
+- `ByModerator` back to `author != viewer`.
+- Visibility taken as proof of landing.
+- The retry answer taken from any moderator's recovered restore.

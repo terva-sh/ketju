@@ -112,37 +112,6 @@ func (q *Queries) AuditExistsForRecord(ctx context.Context, arg AuditExistsForRe
 	return exists, err
 }
 
-const auditExistsSince = `-- name: AuditExistsSince :one
-SELECT EXISTS (
-	SELECT 1 FROM audit_log
-	WHERE target_type = ? AND target_id = ? AND action = ? AND actor_id = ? AND at >= ?
-)
-`
-
-type AuditExistsSinceParams struct {
-	TargetType string
-	TargetID   string
-	Action     string
-	ActorID    sql.NullInt64
-	At         int64
-}
-
-// Whether actor wrote action on target at or after at: the queue's audit
-// recovery asks whether the projection recorded the Restore a pending
-// dismissal was for (TKT-01M29CRJ4E), through the audit_log_target index.
-func (q *Queries) AuditExistsSince(ctx context.Context, arg AuditExistsSinceParams) (bool, error) {
-	row := q.db.QueryRowContext(ctx, auditExistsSince,
-		arg.TargetType,
-		arg.TargetID,
-		arg.Action,
-		arg.ActorID,
-		arg.At,
-	)
-	var exists bool
-	err := row.Scan(&exists)
-	return exists, err
-}
-
 const auditIDs = `-- name: AuditIDs :many
 SELECT id FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ? ORDER BY id
 `

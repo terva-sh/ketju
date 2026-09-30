@@ -25,7 +25,6 @@ import (
 	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
-	"github.com/terva-sh/ketju/internal/events/projection"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -265,6 +264,10 @@ const (
 	stateAutoHidden           // hidden pending review
 	stateHandHidden           // hidden by a moderator
 	stateGone                 // deleted by its author, or moved
+
+	// stateAny is no state, for closeFlags: close whatever the post's
+	// state is now.
+	stateAny postState = -1
 )
 
 func stateOf(f threadlog.EntryFlags) postState {
@@ -307,11 +310,14 @@ func stateOf(f threadlog.EntryFlags) postState {
 //     resolved. On a post already down it resolves the flags and appends
 //     nothing.
 //
-// Each append carries the state it was decided on as its precondition, so
-// a change that lands outside the lock, such as a moderator's delete from
-// the thread page, is ErrPostState, which answers conflict with the flags
-// left open. A failed append leaves the flags open too. Where the flags are
-// closed without a Restore, the close and the audit row are one write.
+// Each append carries the state it was decided on as its precondition, and
+// a close with no append reads the state again before its write
+// (closeFlags). A delete or restore of one post from the thread page holds
+// the lock too, so what can still land outside it is a suspension's hide
+// or restore of an author's posts; that is ErrPostState, or closeFlags'
+// conflict, with the flags left open. A failed append leaves the flags open
+// too. Where the flags are closed without a Restore, the close and the
+// audit row are one write.
 //
 // The restore path writes its row only once the Restore append succeeded,
 // since audit_log is append-only and a row cannot be withdrawn. The flags
@@ -360,7 +366,7 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 	}); err != nil {
 		return out, err
 	}
-	recovered, err := s.recoverFlagAudit(ctx, id, ordinal, entry.Flags.Visible())
+	recovered, err := s.recoverFlagAudit(ctx, id, ordinal)
 	if err != nil {
 		return out, err
 	}
@@ -373,11 +379,13 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 		return out, err
 	}
 	if open == 0 {
-		// The restore this request would have made is the one that
-		// happened, and its row is written now: the retry of a request
-		// whose row failed. Any other request did not happen.
-		if len(recovered) > 0 && r.Action != QueueRemove && entry.Flags.Visible() {
-			return dto.QueueResolution{Action: r.Action, Post: dto.QueuePostRestored, Flags: recovered}, nil
+		// The retry of a request whose Restore landed and whose row
+		// failed: this moderator's Restore is in the log, its row is
+		// written now, and the post is still shown. Any other request did
+		// not happen, and neither did one whose recovered restore was
+		// somebody else's.
+		if mine := recovered[v.UserID]; len(mine) > 0 && r.Action != QueueRemove && entry.Flags.Visible() {
+			return dto.QueueResolution{Action: r.Action, Post: dto.QueuePostRestored, Flags: mine}, nil
 		}
 		return out, problem.Coded(problem.CodeConflict, errHandled)
 	}
@@ -396,9 +404,9 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 		case stateAutoHidden:
 			return s.queueRestore(ctx, v, a, frame, id, ordinal, r)
 		case stateVisible:
-			return s.closeFlags(ctx, by, id, ordinal, r, dto.QueuePostUnchanged)
+			return s.closeFlags(ctx, by, id, ordinal, r, state, dto.QueuePostUnchanged)
 		default:
-			return s.closeFlags(ctx, by, id, ordinal, r, dto.QueuePostAlreadyHidden)
+			return s.closeFlags(ctx, by, id, ordinal, r, state, dto.QueuePostAlreadyHidden)
 		}
 	case QueueResolve:
 		switch state {
@@ -408,9 +416,9 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 			return out, problem.Coded(problem.CodeConflict,
 				fmt.Errorf("threads: post %d of %s was hidden by a moderator: restore it from the thread page first", ordinal, id))
 		case stateVisible:
-			return s.closeFlags(ctx, by, id, ordinal, r, dto.QueuePostUnchanged)
+			return s.closeFlags(ctx, by, id, ordinal, r, state, dto.QueuePostUnchanged)
 		default:
-			return s.closeFlags(ctx, by, id, ordinal, r, dto.QueuePostAlreadyHidden)
+			return s.closeFlags(ctx, by, id, ordinal, r, state, dto.QueuePostAlreadyHidden)
 		}
 	default: // QueueRemove
 		var rec threadlog.Append
@@ -422,12 +430,17 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 				Refuse:  threadlog.EntryDeleted | threadlog.EntryMoved,
 			}
 		case stateVisible:
+			// A moderator's hide whoever wrote the post, the remover
+			// included: the queue's remove is a moderation decision, and
+			// its record says so, as the auto-hidden case's does (Terva
+			// review 1522 on PR #184). The thread page's delete of one's
+			// own post stays an author's delete.
 			rec = threadlog.Append{
-				Body:   &threadlog.DeleteBody{Reason: r.Note, ByModerator: entry.Author != uint64(v.UserID)},
+				Body:   &threadlog.DeleteBody{Reason: r.Note, ByModerator: true},
 				Refuse: gone,
 			}
 		default:
-			return s.closeFlags(ctx, by, id, ordinal, r, dto.QueuePostAlreadyHidden)
+			return s.closeFlags(ctx, by, id, ordinal, r, state, dto.QueuePostAlreadyHidden)
 		}
 		rec.Type, rec.Flags, rec.Author, rec.Ordinal = threadlog.TypeDelete, frame, uint64(v.UserID), ordinal
 		_, appended, err := s.changePostAppended(ctx, id, ordinal, a, func(th *threadcache.Thread, _ threadlog.IndexEntry) (threadlog.Append, error) {
@@ -444,7 +457,7 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 		// projection failed, so the item says what is true; if the resolve
 		// fails, the item stays, showing the post hidden, and the next
 		// remove resolves it as already hidden, with no second Delete.
-		res, rerr := s.closeFlags(ctx, by, id, ordinal, r, dto.QueuePostHidden)
+		res, rerr := s.closeFlags(ctx, by, id, ordinal, r, stateAny, dto.QueuePostHidden)
 		if err = errors.Join(err, rerr); err != nil {
 			return out, err
 		}
@@ -456,14 +469,47 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 // action says, and writes the row that records it, in one write. The flags
 // found are those open now, under the lock, so none reported since the read
 // is left out. No open flag at all is conflict.
-func (s *Service) closeFlags(ctx context.Context, by audit.By, id threadid.ID, ordinal uint32, r Resolution, post string) (dto.QueueResolution, error) {
+//
+// decided is the post state the action was decided on, and post what the
+// row says about the post from it. The state is read again with the thread
+// held, just before the write, and a change is conflict with the flags left
+// open (Terva review 1522 on PR #184). A delete or restore of one post holds
+// the flag lock, so none lands in between; what is left is a suspension's
+// hide or restore of every post by one author, which walks threads without
+// the per-post lock and which this check narrows to the write itself.
+// stateAny skips the check, for the close after the queue's own Delete.
+func (s *Service) closeFlags(ctx context.Context, by audit.By, id threadid.ID, ordinal uint32, r Resolution,
+	decided postState, post string) (dto.QueueResolution, error) {
 	now := s.now().UnixMilli()
 	action := ActionFlagResolved
 	if r.Action == QueueDismiss {
 		action = ActionFlagDismissed
 	}
 	out := dto.QueueResolution{Action: r.Action, Post: post}
-	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+	err := s.Threads.With(id, func(th *threadcache.Thread) error {
+		if decided == stateAny {
+			return s.closeFlagsWrite(ctx, by, id, ordinal, r, action, now, post, &out)
+		}
+		e, err := th.Index.Entry(ordinal)
+		if err != nil {
+			return err
+		}
+		if stateOf(e.Flags) != decided {
+			return problem.Coded(problem.CodeConflict,
+				fmt.Errorf("threads: post %d of %s changed while the queue decided on it", ordinal, id))
+		}
+		return s.closeFlagsWrite(ctx, by, id, ordinal, r, action, now, post, &out)
+	})
+	if err != nil {
+		return dto.QueueResolution{}, err
+	}
+	return out, nil
+}
+
+// closeFlagsWrite is closeFlags' write.
+func (s *Service) closeFlagsWrite(ctx context.Context, by audit.By, id threadid.ID, ordinal uint32, r Resolution,
+	action string, now int64, post string, out *dto.QueueResolution) error {
+	return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var (
 			ids []int64
 			err error
@@ -485,10 +531,6 @@ func (s *Service) closeFlags(ctx context.Context, by audit.By, id threadid.ID, o
 		out.Flags = ids
 		return flagAudit(ctx, q, time.UnixMilli(now), by, action, id, ordinal, ids, r.Action, r.Note, post, false)
 	})
-	if err != nil {
-		return dto.QueueResolution{}, err
-	}
-	return out, nil
 }
 
 // queueRestore is dismiss and resolve on a post hidden pending review: the
@@ -499,6 +541,9 @@ func (s *Service) closeFlags(ctx context.Context, by audit.By, id threadid.ID, o
 // sweep; the row's action says which it was.
 func (s *Service) queueRestore(ctx context.Context, v domain.Viewer, a access, frame threadlog.FrameFlags,
 	id threadid.ID, ordinal uint32, r Resolution) (dto.QueueResolution, error) {
+	// The Restore carries the dismissal's millisecond, so that recovery can
+	// tell this Restore from anybody else's (recoverFlagAudit).
+	at := s.now().UnixMilli()
 	run := func() (dto.CreatedPost, bool, error) {
 		return s.changePostAppended(ctx, id, ordinal, a, func(th *threadcache.Thread, _ threadlog.IndexEntry) (threadlog.Append, error) {
 			if th.Archived() {
@@ -506,14 +551,14 @@ func (s *Service) queueRestore(ctx context.Context, v domain.Viewer, a access, f
 			}
 			return threadlog.Append{
 				Type: threadlog.TypeRestore, Flags: frame, Author: uint64(v.UserID), Ordinal: ordinal,
-				TimeMS:  s.now().UnixMilli(),
+				TimeMS:  at,
 				Body:    &threadlog.RestoreBody{Reason: r.Note},
 				Require: threadlog.EntryAutoHidden,
 				Refuse:  threadlog.EntryMoved,
 			}, nil
 		})
 	}
-	_, ids, appended, err := s.restoreDismissingFlagsLocked(ctx, v, id, ordinal, r.Note,
+	_, ids, appended, err := s.restoreDismissingFlagsLocked(ctx, v, id, ordinal, r.Note, at,
 		sql.NullString{String: r.Action, Valid: true}, run)
 	if !appended {
 		return dto.QueueResolution{}, err // the flags were reopened
@@ -558,18 +603,22 @@ func flagAudit(ctx context.Context, q *dbq.Queries, at time.Time, by audit.By, a
 
 // recoverFlagAudit settles the post's flags that are owed their row, for a
 // caller holding the post's flag lock, and answers the ids whose row it
-// wrote. Only a flag with audit_pending set is owed one (Terva review
-// 1371); a null audit_id alone means nothing, since every flag closed any
-// other way, or before migration 0015, has one.
+// wrote, by the moderator the row names. Only a flag with audit_pending set
+// is owed one (Terva review 1371); a null audit_id alone means nothing,
+// since every flag closed any other way, or before migration 0015, has one.
 //
 // A pending flag was dismissed by the queue's restore path before its
-// Restore append. If the Restore landed, which the post shown now or the
-// projection's post.restored row by the same moderator since the dismissal
-// says, the row is written as the moderator would have written it: their
-// id, the dismissal's time, the note, and "recovered": true. If it did not
-// land, the append failed and so did the reopen after it, so the flags are
-// reopened now and no row is written, because nothing happened.
-func (s *Service) recoverFlagAudit(ctx context.Context, id threadid.ID, ordinal uint32, visible bool) ([]int64, error) {
+// Restore append, which carries the dismissal's moderator as its actor and
+// the dismissal's millisecond as its time. If that Restore is in the post's
+// log, it landed, and the row is written as the moderator would have
+// written it: their id, the dismissal's time, the note, and "recovered":
+// true. If it is not, the append failed and so did the reopen after it, so
+// the flags are reopened now and no row is written, because nothing
+// happened. The post being shown proves nothing, since another moderator's
+// restore shows it too, and neither does a post.restored row, which the
+// projection does not write for a moderator restoring their own post (Terva
+// review 1522 on PR #184).
+func (s *Service) recoverFlagAudit(ctx context.Context, id threadid.ID, ordinal uint32) (map[int64][]int64, error) {
 	var owed []dbq.FlagsOwedAuditRow
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
@@ -594,20 +643,16 @@ func (s *Service) recoverFlagAudit(ctx context.Context, id threadid.ID, ordinal 
 		}
 		groups[k] = append(groups[k], f.ID)
 	}
-	var written []int64
-	target := audit.Post(id, ordinal)
+	written := map[int64][]int64{}
 	for _, k := range order {
 		ids := groups[k]
-		landed := visible
-		if !landed {
-			if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-				var err error
-				landed, err = q.AuditExistsSince(ctx, dbq.AuditExistsSinceParams{TargetType: target.Type, TargetID: target.ID,
-					Action: projection.ActionPostRestored, ActorID: sql.NullInt64{Int64: k.by, Valid: true}, At: k.at})
-				return err
-			}); err != nil {
-				return written, err
-			}
+		var landed bool
+		if err := s.Threads.With(id, func(th *threadcache.Thread) error {
+			var err error
+			landed, err = th.Reader.Restored(threadlog.FileHeaderSize, th.Actor.LogLength(), ordinal, uint64(k.by), k.at)
+			return err
+		}); err != nil {
+			return written, err
 		}
 		if !landed {
 			s.logger().Warn("moderator queue: reopening flags a failed restore left dismissed",
@@ -623,7 +668,7 @@ func (s *Service) recoverFlagAudit(ctx context.Context, id threadid.ID, ordinal 
 		}); err != nil {
 			return written, err
 		}
-		written = append(written, ids...)
+		written[k.by] = append(written[k.by], ids...)
 	}
 	return written, nil
 }
@@ -665,14 +710,10 @@ func (s *Service) FlagAuditCatchUp(ctx context.Context) (int, error) {
 func (s *Service) catchUpPost(ctx context.Context, id threadid.ID, ordinal uint32) (int, error) {
 	unlock := s.flagLocks.lock(id, ordinal)
 	defer unlock()
-	var visible bool
-	if err := s.Threads.With(id, func(th *threadcache.Thread) error {
-		e, err := th.Index.Entry(ordinal)
-		visible = err == nil && e.Flags.Visible()
-		return err
-	}); err != nil {
-		return 0, err
+	written, err := s.recoverFlagAudit(ctx, id, ordinal)
+	n := 0
+	for _, ids := range written {
+		n += len(ids)
 	}
-	written, err := s.recoverFlagAudit(ctx, id, ordinal, visible)
-	return len(written), err
+	return n, err
 }

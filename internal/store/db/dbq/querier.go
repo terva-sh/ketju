@@ -50,10 +50,6 @@ type Querier interface {
 	// adds no second row (TKT-01M29CKRGS). The record is named by its target,
 	// its action and its log offset, which the row's details carry.
 	AuditExistsForRecord(ctx context.Context, arg AuditExistsForRecordParams) (bool, error)
-	// Whether actor wrote action on target at or after at: the queue's audit
-	// recovery asks whether the projection recorded the Restore a pending
-	// dismissal was for (TKT-01M29CRJ4E), through the audit_log_target index.
-	AuditExistsSince(ctx context.Context, arg AuditExistsSinceParams) (bool, error)
 	// The ids of the audit rows of an action on a target, oldest first, through
 	// the audit_log_target index. A suspension's hidden posts carry the id of
 	// its user.suspended row, so these are the suspensions whose hidden posts

@@ -333,6 +333,12 @@ func (s *Service) setDeleted(ctx context.Context, v domain.Viewer, id threadid.I
 	if action == actionRestore && a.canModerate {
 		return s.restoreDismissingFlags(ctx, v, id, ordinal, reason, run)
 	}
+	// Every other delete or restore of one post holds its flag lock too, so
+	// that a moderator queue action, which decides from the post's state
+	// under the lock, sees no change to that state until it is done (Terva
+	// review 1522 on PR #184).
+	unlock := s.flagLocks.lock(id, ordinal)
+	defer unlock()
 	out, _, err := run()
 	return out, err
 }

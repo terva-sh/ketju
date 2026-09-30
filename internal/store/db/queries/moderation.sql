@@ -95,15 +95,6 @@ ORDER BY id;
 UPDATE flags SET audit_pending = NULL
 WHERE flags.id IN (sqlc.slice(ids)) AND flags.audit_pending IS NOT NULL;
 
--- Whether actor wrote action on target at or after at: the queue's audit
--- recovery asks whether the projection recorded the Restore a pending
--- dismissal was for (TKT-01M29CRJ4E), through the audit_log_target index.
--- name: AuditExistsSince :one
-SELECT EXISTS (
-	SELECT 1 FROM audit_log
-	WHERE target_type = ? AND target_id = ? AND action = ? AND actor_id = ? AND at >= ?
-);
-
 -- The posts with a flag owed its audit row since before cutoff, for
 -- jobs.FlagAuditCatchUp, through the partial index flags_audit_pending.
 -- name: PostsOwedFlagAudit :many

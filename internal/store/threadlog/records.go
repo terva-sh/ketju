@@ -154,8 +154,9 @@ type (
 	// somebody else's post, which hides the post (hidden-by-mod) rather than
 	// deleting it, so that only a moderator may restore it (docs/08
 	// "Restoring a moderator's delete"). The service writes it when the actor
-	// is not the post's author; the index reads the key, not the actor, so
-	// the record says what it does. An older build ignores the key and shows
+	// is not the post's author, and for every removal from the moderator
+	// queue, the remover's own post included (TKT-01M29CRJ4E); the index
+	// reads the key, not the actor, so the record says what it does. An older build ignores the key and shows
 	// a tombstone to everyone, which fails closed.
 	//
 	// Suspension was added the same way, on 2026-09-29 (TKT-01M29CP2QK). It
