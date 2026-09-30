@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R33SR5DFV94SHH7P5M92QZ
 title: Bound the post edit and delete windows before making Durations
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -16,15 +16,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-r33sr5
+  branch: run/r33sr5-duration-windows
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad4b5a4cffef4a74a
+  commit: a9e7b8dcad315433e974e6d96f8d7e52c10d956f
+  session: null
+  claimed_at: 2026-09-30T10:32:11Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T02:43:17Z
-updated_at: 2026-09-30T08:49:22Z
+updated_at: 2026-09-30T10:33:42Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-r33sr5
   name: ""
 extensions: {}
 ---
@@ -42,7 +49,7 @@ Found in Terva review 1535 on PR #193 (TKT-01M29CKRH9). authorWindows in interna
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The fix to follow is `renameWindow` in `internal/service/threads/moderate.go` (PR #193, TKT-01M29CKRH9, Terva review 1535 finding 2). A count of seconds past `math.MaxInt64/time.Second` becomes `time.Duration(math.MaxInt64)`, the longest window there is. `TestRenameWindowTooLargeForADuration` in `internal/web/api/rename_test.go` proves it.
+Revised 2026-09-30 at claim, against main at a9e7b8d (after PR #214, daec9af, which reworked `SetSlowMode` with `admitAt` and `stillAt`; this plan does not touch `SetSlowMode`). Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The fix to follow is `renameWindow` in `internal/service/threads/moderate.go` (PR #193, TKT-01M29CKRH9, Terva review 1535 finding 2). A count of seconds past `math.MaxInt64/time.Second` becomes `time.Duration(math.MaxInt64)`, the longest window there is. `TestRenameWindowTooLargeForADuration` in `internal/web/api/rename_test.go` proves it.
 
 ### Settled in grooming
 
@@ -53,22 +60,23 @@ Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The fi
 
 ### Approach
 
-1. `internal/service/threads/mutate.go`: add
-   `func secondsDuration(n int) time.Duration`. It returns `time.Duration(math.MaxInt64)` when `int64(n) > int64(math.MaxInt64/time.Second)`, and otherwise `time.Duration(n) * time.Second`. Its comment cites Terva reviews 1535 and this ticket. A negative `n` cannot come from a setting, since every rule is `atLeast(0)`; the helper returns it unchanged, and `within` already treats `d <= 0` as closed.
+1. `internal/service/threads/mutate.go`: add `func secondsDuration(n int) time.Duration`. It returns `time.Duration(math.MaxInt64)` when `int64(n) > int64(math.MaxInt64/time.Second)`, and otherwise `time.Duration(n) * time.Second`. Its comment cites Terva review 1535 and this ticket. Revised at claim: a negative `n` returns 0 rather than passing through. No setting can hold one (every rule is `atLeast(0)`), and 0 is what every caller already reads as closed or off (`within` treats `d <= 0` as closed, `slowModeWait` treats `seconds <= 0` as off). But a very negative count multiplied by `time.Second` wraps to a positive Duration, an open window, and the helper should not have that edge at all.
 2. `authorWindows`: replace `time.Duration(n) * time.Second` with `secondsDuration(n)`.
-3. `renameWindow` in `moderate.go`: replace its inline clamp with `secondsDuration(n)`, keeping behaviour identical.
+3. `renameWindow` in `moderate.go`: replace its inline clamp with `secondsDuration(n)`, keeping behaviour identical for every count from 0 up.
 4. `slowModeWait` in `slowmode.go`: use `secondsDuration(seconds)`. `time.Time.Add` and `Time.Sub` saturate, so a wait of the longest Duration does not overflow further, and `nextPostAt` reports a `next_post_at` far in the future rather than null.
-5. No migration, no settings change, no DTO change.
+5. Found at claim: `slowMode` in `create.go` rounds the wait up to whole seconds with `(wait + time.Second - 1).Truncate(time.Second)`. A wait within a second of the longest Duration overflows there into a negative wait, so the refusal is still `rate-limited` but `WriteRetryAfter` drops the `Retry-After` header. Round up only when that cannot overflow, and otherwise truncate, which is at most a second early out of 292 years.
+6. No migration, no settings change, no DTO change.
 
 ### Tests
 
-- `TestSecondsDuration` (new, `internal/service/threads/windows_test.go`, package `threads`): 0, 1, 86400, `math.MaxInt64/int(time.Second)` exactly, one more, and 10000000000. The first four convert exactly; the last two give `time.Duration(math.MaxInt64)`, never a negative value.
+- `TestSecondsDuration` (new, `internal/service/threads/windows_test.go`, package `threads`): 0, 1, 86400, `math.MaxInt64/int(time.Second)` exactly, one more, 10000000000 and `math.MaxInt`. The first four convert exactly; the rest give `time.Duration(math.MaxInt64)`. No count from 0 up gives a negative Duration, and a negative count gives 0.
 - `TestAuthorWindowsTooLargeForADuration` (new, `internal/web/api/windows_test.go`), one subtest per setting, each after `w.setting(name, 10_000_000_000)` and a fresh post of carol's with the clock moved 30 days on:
   - `posts.edit_window_seconds`: carol's edit answers 200.
   - `posts.delete_window_seconds`: carol's delete answers 200.
   - `posts.grace_edit_seconds`: carol's edit is stored as a grace Edit (`w.editBodies` shows `Grace: true`) and is served with `edited_at` null.
-- `TestSlowModeDefaultTooLargeForADuration` (new, `internal/web/api/slowmode_test.go`): with `slow_mode.default_seconds` at 10000000000 and no thread row, a member's second reply is `rate-limited` with a `Retry-After`, and the page's `viewer.next_post_at` is not null.
+- `TestSlowModeDefaultTooLargeForADuration` (new, in the existing `internal/web/api/slowmode_test.go`): with `slow_mode.default_seconds` at 10000000000 and no thread row, a member's second reply is `rate-limited` with a `Retry-After`, and the page's `viewer.next_post_at` is not null.
 - `TestRenameWindowTooLargeForADuration` keeps passing through the shared helper.
+- Tests reuse the existing `newWorld` fixture; no new `.Migrate(` call.
 
 ### Out of scope
 
