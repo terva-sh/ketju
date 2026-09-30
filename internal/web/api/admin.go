@@ -65,6 +65,7 @@ func (h *handlers) registerAdmin(mux *http.ServeMux) {
 	h.registerApplications(mux) // applications.go, TKT-01M29CP2MG
 	h.registerModeration(mux)   // moderate.go, TKT-01M29CKRGS
 	h.registerAgents(mux)       // agents.go, TKT-01M29P9RSW
+	h.registerQueue(mux)        // admin_queue.go, TKT-01M29CRJ4E
 }
 
 // adminRoute registers handler for pattern behind g, and records the route.

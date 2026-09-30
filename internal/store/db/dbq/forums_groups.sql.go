@@ -219,6 +219,71 @@ func (q *Queries) ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams
 	return items, nil
 }
 
+const forumAccessRowsAll = `-- name: ForumAccessRowsAll :many
+SELECT f.id AS forum_id, f.visibility, f.archived, p.forum_id AS grant_forum_id, p.group_id, g.slug AS group_slug,
+       p.permission
+FROM forums AS f
+LEFT JOIN permissions AS p
+	ON (p.forum_id = f.id OR p.forum_id IS NULL)
+	AND (p.group_id IN (SELECT gm.group_id FROM group_members AS gm WHERE gm.user_id = ?1)
+	     OR p.group_id IN (SELECT ig.id FROM groups AS ig
+	                       WHERE ig.slug = ?2 OR ig.slug = ?3))
+LEFT JOIN groups AS g ON g.id = p.group_id
+ORDER BY f.id, p.forum_id IS NULL, p.group_id, p.permission
+`
+
+type ForumAccessRowsAllParams struct {
+	UserID       int64
+	EveryoneSlug string
+	MembersSlug  string
+}
+
+type ForumAccessRowsAllRow struct {
+	ForumID      int64
+	Visibility   string
+	Archived     int64
+	GrantForumID sql.NullInt64
+	GroupID      sql.NullInt64
+	GroupSlug    sql.NullString
+	Permission   sql.NullString
+}
+
+// ForumAccessRowsAll is ForumAccessRows for every forum there is, for
+// perm.ModeratedForums, which has to ask about them all: one statement,
+// rather than listing the forums and then asking about them. The two must
+// stay the same apart from the WHERE clause, since decide reads the rows of
+// both (TestForumAccessRowsAllMatches).
+func (q *Queries) ForumAccessRowsAll(ctx context.Context, arg ForumAccessRowsAllParams) ([]ForumAccessRowsAllRow, error) {
+	rows, err := q.db.QueryContext(ctx, forumAccessRowsAll, arg.UserID, arg.EveryoneSlug, arg.MembersSlug)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ForumAccessRowsAllRow
+	for rows.Next() {
+		var i ForumAccessRowsAllRow
+		if err := rows.Scan(
+			&i.ForumID,
+			&i.Visibility,
+			&i.Archived,
+			&i.GrantForumID,
+			&i.GroupID,
+			&i.GroupSlug,
+			&i.Permission,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const forumLastPosts = `-- name: ForumLastPosts :many
 SELECT f.id AS forum_id, t.id AS thread_id, t.slug, t.title, t.last_post_at, t.last_post_author_id
 FROM forums AS f

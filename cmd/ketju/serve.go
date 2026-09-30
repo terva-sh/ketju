@@ -423,6 +423,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 			_, err := proj.ProjectThread(ctx, id, logLength)
 			return err
 		},
+		Logger: log,
 	}
 	gc := &jobs.BlobGC{DB: d, Root: cfg.DataDir, Hold: func() string {
 		if n := proj.QuarantinedCount(); n > 0 {
@@ -434,7 +435,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	// use, so the lifted account's cached decisions clear with it.
 	autoHide := jobs.AutoHideSweep(threadSvc)
 	background := []jobs.Job{jobs.SessionSweep(sessions), gc.Job(),
-		jobs.SuspensionExpiry(&account.Service{DB: d, Perm: perms}), autoHide}
+		jobs.SuspensionExpiry(&account.Service{DB: d, Perm: perms}), autoHide, jobs.FlagAuditCatchUp(threadSvc)}
 	if o.job != nil {
 		background = append(background, *o.job)
 	}
@@ -462,7 +463,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	})
 
 	step("listener")
-	userSvc := &users.Service{DB: d, Perm: perms}
+	userSvc := &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount}
 	forumSvc := &forums.Service{DB: d, Perm: perms, Logger: log}
 	tmpl, err := spa.Shell()
 	if err != nil {

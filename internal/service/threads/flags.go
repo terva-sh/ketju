@@ -320,34 +320,58 @@ func (s *Service) restoreDismissingFlags(ctx context.Context, v domain.Viewer, i
 	run func() (dto.CreatedPost, bool, error)) (dto.CreatedPost, error) {
 	unlock := s.flagLocks.lock(id, ordinal)
 	defer unlock()
+	out, _, _, err := s.restoreDismissingFlagsLocked(ctx, v, id, ordinal, note, sql.NullString{}, run)
+	return out, err
+}
+
+// restoreDismissingFlagsLocked is restoreDismissingFlags for a caller that
+// already holds the post's flag lock: the moderator queue (TKT-01M29CRJ4E).
+// pending is the audit_pending marker the dismissed flags carry until their
+// audit row is written. It is null from the thread page, whose restore
+// writes no flag row. It also answers the ids it dismissed and whether run
+// appended.
+func (s *Service) restoreDismissingFlagsLocked(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32, note string,
+	pending sql.NullString, run func() (dto.CreatedPost, bool, error)) (dto.CreatedPost, []int64, bool, error) {
 	var dismissed []int64
 	if err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
 		dismissed, err = q.DismissOpenFlagsForPost(ctx, dbq.DismissOpenFlagsForPostParams{
 			ResolvedBy:     sql.NullInt64{Int64: v.UserID, Valid: true},
 			ResolvedAt:     sql.NullInt64{Int64: s.now().UnixMilli(), Valid: true},
-			ResolutionNote: note, ThreadID: int64(id), Ordinal: int64(ordinal),
+			ResolutionNote: note, AuditPending: pending, ThreadID: int64(id), Ordinal: int64(ordinal),
 		})
 		return err
 	}); err != nil {
-		return dto.CreatedPost{}, err
+		return dto.CreatedPost{}, nil, false, err
 	}
 	out, appended, err := run()
 	if !appended && len(dismissed) > 0 {
-		// Not the request's context: an append that failed because the
-		// request was cancelled must still have its flags reopened (Terva
-		// review 1506). Bounded, so a stuck database cannot hold the lock.
-		rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reopenTimeout)
-		defer cancel()
-		if rerr := s.DB.Write(rctx, func(q *dbq.Queries, _ *sql.Tx) error {
-			_, err := q.ReopenFlags(rctx, dismissed)
-			return err
-		}); rerr != nil {
+		if rerr := s.reopenFlags(ctx, dismissed); rerr != nil {
 			err = errors.Join(err, fmt.Errorf("threads: reopening the flags a failed restore of post %d of %s dismissed: %w",
 				ordinal, id, rerr))
 		}
 	}
-	return out, err
+	return out, dismissed, appended, err
+}
+
+// reopenFlags reopens flags a restore dismissed and then did not append,
+// and clears the audit marker of any it could not reopen: no restore
+// happened, so no row is owed.
+//
+// It does not run on the request's context: an append that failed because
+// the request was cancelled must still have its flags reopened (Terva
+// review 1506). It is bounded by reopenTimeout, so a stuck database cannot
+// hold the lock.
+func (s *Service) reopenFlags(ctx context.Context, ids []int64) error {
+	rctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), reopenTimeout)
+	defer cancel()
+	return s.DB.Write(rctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		if _, err := q.ReopenFlags(rctx, ids); err != nil {
+			return err
+		}
+		_, err := q.ClearFlagsAuditPending(rctx, ids)
+		return err
+	})
 }
 
 // ConfirmHide is a moderator's review of a post hidden pending review that

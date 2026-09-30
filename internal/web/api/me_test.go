@@ -88,7 +88,11 @@ func newMeWorld(t *testing.T) *meWorld {
 		t.Fatal(err)
 	}
 	w := &meWorld{t: t, db: d, stmts: st, now: time.UnixMilli(1_757_500_000_000), id: map[string]int64{}}
-	w.users = &users.Service{DB: d, Perm: perm.New(d)}
+	// One evaluator, as serve shares one: the queue's scope warms the read
+	// decisions /me makes next (perm.ModeratedForums).
+	perms := perm.New(d)
+	threadSvc := &threads.Service{DB: d, Perm: perms}
+	w.users = &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount}
 	store := &session.Store{DB: d, Now: func() time.Time { return w.now }}
 	shell, err := web.NewShell(mustShell(t), nil)
 	if err != nil {
@@ -96,7 +100,7 @@ func newMeWorld(t *testing.T) *meWorld {
 	}
 	shell.SetPage(ShellPage(w.users))
 	pass := func(h http.Handler) http.Handler { return h }
-	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: &threads.Service{DB: d, Perm: perm.New(d)}, Forums: &forums.Service{DB: d, Perm: perm.New(d)}, Forms: &formsvc.Service{DB: d}, Applications: &applications.Service{DB: d}, Perm: perm.New(d)}), SPA: shell},
+	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: threadSvc, Forums: &forums.Service{DB: d, Perm: perms}, Forms: &formsvc.Service{DB: d}, Applications: &applications.Service{DB: d}, Perm: perms}), SPA: shell},
 		web.Options{Session: session.Middleware(store, nil), RateLimit: pass, CSRF: pass})
 	w.seed()
 	return w
@@ -171,8 +175,20 @@ func (w *meWorld) seed() {
 		`INSERT INTO notifications (user_id, kind, thread_id, ordinal, at, read_at) VALUES
 		 (1, 'mention', 1, 4, 1, NULL), (1, 'reply_to_you', 1, 5, 1, NULL), (1, 'quoted', 1, 3, 1, 5),
 		 (2, 'mention', 1, 4, 1, NULL)`,
+		// The moderator queue (TKT-01M29CRJ4E): dave moderates the general
+		// forum through a group; one post there is flagged, twice, and one
+		// flag in the staff forum only an admin sees. One application is
+		// pending, which staff see and dave does not.
+		`INSERT INTO users (id, handle, display_name, status, role, kind, created_at, updated_at)
+		 VALUES (4, 'dave', 'Dave', 'active', 'member', 'human', 1, 1)`,
+		`INSERT INTO groups (id, name, slug, created_at, updated_at) VALUES (100, 'Forum mods', 'forum-mods', 1, 1)`,
+		`INSERT INTO group_members (group_id, user_id, source, added_at) VALUES (100, 4, 'admin', 1)`,
+		`INSERT INTO permissions (forum_id, group_id, permission, created_at) VALUES (1, 100, 'moderate', 1)`,
+		`INSERT INTO flags (thread_id, ordinal, reporter_id, reason, created_at) VALUES
+		 (1, 2, 2, 'spam', 1), (1, 2, 4, 'abuse', 2), (7, 1, 1, 'spam', 3)`,
+		`INSERT INTO applications (form_id, form_version, answers_json, created_at) VALUES (1, 1, '{}', 4)`,
 	)
-	w.id["alice"], w.id["bob"], w.id["carol"] = 1, 2, 3
+	w.id["alice"], w.id["bob"], w.id["carol"], w.id["dave"] = 1, 2, 3, 4
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
@@ -226,7 +242,18 @@ func TestMeShapes(t *testing.T) {
 			// thread 7: a moderator is not an admin.
 			Unread:        dto.UnreadCounts{Threads: 6},
 			Notifications: 1,
-			Settings:      dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			// The flagged post in the general forum, as one item, and the
+			// application; not the staff forum's flag.
+			Queue:    new(2),
+			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+		}},
+		// A member granted moderate on one forum through a group has a
+		// queue: that forum's items, and no applications (TKT-01M29CRJ4E).
+		{"forum moderator", sessiontest.SignIn(t, w.db, w.id["dave"], w.now), dto.Me{
+			User:     &dto.Author{Handle: "dave", DisplayName: "Dave", Role: "member", Kind: "human"},
+			Unread:   dto.UnreadCounts{Threads: 6},
+			Queue:    new(1),
+			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
 		}},
 		{"suspended admin", sessiontest.SignIn(t, w.db, w.id["carol"], w.now), anonMe},
 		{"pre-user", sessiontest.PreUser(t, w.db, 1, w.now), dto.Me{PreUser: &dto.PreUser{Provider: "github"},
@@ -249,22 +276,35 @@ func TestMeShapes(t *testing.T) {
 
 // TestMeBudget is AC3, as settled in grooming: the handler runs at most two
 // statements, with the session middleware's one lookup outside that budget.
-// Cold, the two are the counts and perm's batch; warm, the counts alone. An
+// Cold, the two are perm's batch and the counts; warm, the counts alone. An
 // anonymous viewer costs nothing. The shell, which inlines /me, costs the
 // same.
+//
+// The batch is the queue's scope, every forum at once
+// (perm.ModeratedForums), which answers the read checks the counts need
+// too, so a member who moderates nothing pays nothing for the queue
+// (TKT-01M29CRJ4E). A viewer who moderates somewhere pays one count
+// statement more: three cold, two warm.
 func TestMeBudget(t *testing.T) {
 	w := newMeWorld(t)
 	// The first request this process serves, from a brand-new perm cache.
 	alice := sessiontest.SignIn(t, w.db, w.id["alice"], w.now)
+	bob := sessiontest.SignIn(t, w.db, w.id["bob"], w.now)
+	dave := sessiontest.SignIn(t, w.db, w.id["dave"], w.now)
 	for _, c := range []struct {
 		name, path, token string
 		want              []string // statement names, in order
+		budget            int
 	}{
-		{"member /me, cold", "/api/v1/me", alice, []string{"LookupSession", "MeCounts", "ForumAccessRows"}},
-		{"member /me, warm", "/api/v1/me", alice, []string{"LookupSession", "MeCounts"}},
-		{"member shell", "/", alice, []string{"LookupSession", "MeCounts"}},
-		{"anonymous /me", "/api/v1/me", "", nil},
-		{"anonymous shell", "/", "", nil},
+		{"member /me, cold", "/api/v1/me", alice, []string{"LookupSession", "ForumAccessRowsAll", "MeCounts"}, 2},
+		{"member /me, warm", "/api/v1/me", alice, []string{"LookupSession", "MeCounts"}, 2},
+		{"member shell", "/", alice, []string{"LookupSession", "MeCounts"}, 2},
+		{"anonymous /me", "/api/v1/me", "", nil, 0},
+		{"anonymous shell", "/", "", nil, 0},
+		{"moderator /me, cold", "/api/v1/me", bob, []string{"LookupSession", "ForumAccessRowsAll", "QueueCount", "MeCounts"}, 3},
+		{"moderator /me, warm", "/api/v1/me", bob, []string{"LookupSession", "QueueCount", "MeCounts"}, 2},
+		{"forum moderator /me, cold", "/api/v1/me", dave, []string{"LookupSession", "ForumAccessRowsAll", "QueueCount", "MeCounts"}, 3},
+		{"forum moderator shell", "/", dave, []string{"LookupSession", "QueueCount", "MeCounts"}, 2},
 	} {
 		var rec *httptest.ResponseRecorder
 		ran := w.stmts.during(func() { rec = w.get(c.path, c.token) })
@@ -279,8 +319,8 @@ func TestMeBudget(t *testing.T) {
 			t.Errorf("%s ran %v, want %v:\n  %s", c.name, names, c.want, strings.Join(ran, "\n  "))
 		}
 		// The budget proper: everything after the middleware's lookup.
-		if handler := len(names) - count(names, "LookupSession"); handler > 2 {
-			t.Errorf("%s: the handler ran %d statements, budget 2", c.name, handler)
+		if handler := len(names) - count(names, "LookupSession"); handler > c.budget {
+			t.Errorf("%s: the handler ran %d statements, budget %d", c.name, handler, c.budget)
 		}
 	}
 }

@@ -311,6 +311,7 @@ func me(class string) Me {
 			User:          &bob,
 			Unread:        UnreadCounts{Threads: 3, Participated: 1, Watching: 2},
 			Notifications: 9,
+			Queue:         ptr(4),
 			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50},
 		}
 	default:

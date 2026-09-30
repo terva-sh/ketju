@@ -22,3 +22,19 @@ func AutoHideSweep(s *threads.Service) Job {
 		return Result{Attrs: []any{"hidden", n}}, err
 	}}
 }
+
+// FlagAuditCatchUpEvery is the flag audit catch-up's interval.
+const FlagAuditCatchUpEvery = time.Minute
+
+// FlagAuditCatchUp is the job that writes the flag.dismissed row a
+// moderator queue restore still owes (threads.Service.FlagAuditCatchUp,
+// TKT-01M29CRJ4E). A restore's row is written after its append, and if that
+// write fails the request answers 200 with the flags marked as owed it, so
+// this finds them within a minute or two and nothing waits on a moderator
+// retrying.
+func FlagAuditCatchUp(s *threads.Service) Job {
+	return Job{Name: "flag audit catch-up", Every: FlagAuditCatchUpEvery, Run: func(ctx context.Context) (Result, error) {
+		n, err := s.FlagAuditCatchUp(ctx)
+		return Result{Attrs: []any{"written", n}}, err
+	}}
+}

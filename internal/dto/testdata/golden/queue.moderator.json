@@ -1,0 +1,124 @@
+{
+  "items": [
+    {
+      "kind": "flag",
+      "created_at": 1757610000000,
+      "flag": {
+        "thread": {
+          "id": "3yymw47g00001",
+          "slug": "the-dinner-bill",
+          "title": "The dinner bill"
+        },
+        "ordinal": 63,
+        "post": {
+          "ordinal": 63,
+          "revision": 1,
+          "author": {
+            "handle": "bob",
+            "display_name": "Bob Iyer",
+            "avatar": "",
+            "role": "moderator",
+            "kind": "human"
+          },
+          "created_at": 1757500400000,
+          "edited_at": null,
+          "edited_by_moderator": false,
+          "reply_to": null,
+          "reply_to_suppressed": false,
+          "reply_count": 0,
+          "html": "<p>the text a moderator still needs to read</p>",
+          "attachments": [],
+          "deleted": true,
+          "removal": "review",
+          "moved_to": null,
+          "machine_authored": false
+        },
+        "flags": [
+          {
+            "id": 9,
+            "reason": "other",
+            "note": "Posts our home address",
+            "reporter": {
+              "handle": "alice",
+              "display_name": "Alice Nakamura",
+              "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+              "role": "member",
+              "kind": "human"
+            },
+            "created_at": 1757610000000
+          },
+          {
+            "id": 8,
+            "reason": "abuse",
+            "note": "",
+            "reporter": {
+              "handle": "scribe",
+              "display_name": "Scribe",
+              "avatar": "",
+              "role": "member",
+              "kind": "agent"
+            },
+            "created_at": 1757609000000
+          },
+          {
+            "id": 7,
+            "reason": "spam",
+            "note": "",
+            "reporter": {
+              "handle": "bob",
+              "display_name": "Bob Iyer",
+              "avatar": "",
+              "role": "moderator",
+              "kind": "human"
+            },
+            "created_at": 1757608000000
+          }
+        ]
+      },
+      "application": null
+    },
+    {
+      "kind": "application",
+      "created_at": 1757600000000,
+      "flag": null,
+      "application": {
+        "id": 42,
+        "status": "pending",
+        "created_at": 1757600000000,
+        "provider": "github",
+        "email": "carol@example.com",
+        "email_verified": true
+      }
+    },
+    {
+      "kind": "flag",
+      "created_at": 1757590000000,
+      "flag": {
+        "thread": {
+          "id": "3yymw47g00002",
+          "slug": "quarantined",
+          "title": "Quarantined"
+        },
+        "ordinal": 2,
+        "post": null,
+        "flags": [
+          {
+            "id": 5,
+            "reason": "off-topic",
+            "note": "",
+            "reporter": {
+              "handle": "alice",
+              "display_name": "Alice Nakamura",
+              "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+              "role": "member",
+              "kind": "human"
+            },
+            "created_at": 1757590000000
+          }
+        ]
+      },
+      "application": null
+    }
+  ],
+  "next_cursor": "MTc1NzU5MDAwMDAwMDoxOjE6Mg"
+}

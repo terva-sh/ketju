@@ -36,10 +36,12 @@ SELECT count(*) FROM flags WHERE thread_id = ? AND ordinal = ? AND status = 'ope
 
 -- A post's open flags, dismissed in place by a moderator's restore
 -- (TKT-01M29CP2PJ). The ids come back so that the restore can reopen
--- exactly these if its append fails.
+-- exactly these if its append fails. audit_pending is null, except from the
+-- moderator queue's restore, which owes the flags their audit row once its
+-- append succeeds (migration 0015, TKT-01M29CRJ4E).
 -- name: DismissOpenFlagsForPost :many
 UPDATE flags SET status = 'dismissed', resolved_by = sqlc.arg(resolved_by), resolved_at = sqlc.arg(resolved_at),
-	resolution_note = sqlc.arg(resolution_note)
+	resolution_note = sqlc.arg(resolution_note), audit_pending = sqlc.narg(audit_pending)
 WHERE thread_id = sqlc.arg(thread_id) AND ordinal = sqlc.arg(ordinal) AND status = 'open'
 RETURNING id;
 
@@ -57,14 +59,57 @@ RETURNING id;
 -- service's per-post lock prevents but a hand-written insert could make,
 -- their newer flag stands for them, and the old one stays dismissed rather
 -- than breaking flags_one_open_per_reporter and failing the whole reopen.
+--
+-- A reopened flag is owed no audit row, since nothing it recorded happened,
+-- so its audit_pending marker goes with its resolution.
 -- name: ReopenFlags :execrows
-UPDATE flags SET status = 'open', resolved_by = NULL, resolved_at = NULL, resolution_note = ''
+UPDATE flags SET status = 'open', resolved_by = NULL, resolved_at = NULL, resolution_note = '', audit_pending = NULL
 WHERE flags.id IN (sqlc.slice(ids)) AND flags.status = 'dismissed'
   AND NOT EXISTS (
 	SELECT 1 FROM flags o
 	WHERE o.thread_id = flags.thread_id AND o.ordinal = flags.ordinal
 	  AND o.reporter_id = flags.reporter_id AND o.status = 'open'
   );
+
+-- Links closed flags to the audit row that records their closing, in the
+-- transaction that writes the row, and clears the marker of any that were
+-- owed it (TKT-01M29CRJ4E). A flag that already has a row keeps it.
+-- name: SetFlagsAudit :execrows
+UPDATE flags SET audit_id = sqlc.arg(audit_id), audit_pending = NULL
+WHERE flags.id IN (sqlc.slice(ids)) AND flags.status <> 'open' AND flags.audit_id IS NULL;
+
+-- A post's flags that the queue's restore dismissed and that are still owed
+-- their audit row. Only the marker says a row is owed: a null audit_id alone
+-- never does (Terva review 1371), since every flag closed by another path,
+-- or before migration 0015, has one.
+-- name: FlagsOwedAudit :many
+SELECT id, CAST(resolved_by AS INTEGER) AS resolved_by, CAST(resolved_at AS INTEGER) AS resolved_at,
+	resolution_note, CAST(audit_pending AS TEXT) AS owed_action
+FROM flags
+WHERE thread_id = ? AND ordinal = ? AND audit_pending IS NOT NULL
+ORDER BY id;
+
+-- Clears the marker of flags a failed restore left dismissed that ReopenFlags
+-- did not reopen: no restore happened, so no row is owed (TKT-01M29CRJ4E).
+-- name: ClearFlagsAuditPending :execrows
+UPDATE flags SET audit_pending = NULL
+WHERE flags.id IN (sqlc.slice(ids)) AND flags.audit_pending IS NOT NULL;
+
+-- Whether actor wrote action on target at or after at: the queue's audit
+-- recovery asks whether the projection recorded the Restore a pending
+-- dismissal was for (TKT-01M29CRJ4E), through the audit_log_target index.
+-- name: AuditExistsSince :one
+SELECT EXISTS (
+	SELECT 1 FROM audit_log
+	WHERE target_type = ? AND target_id = ? AND action = ? AND actor_id = ? AND at >= ?
+);
+
+-- The posts with a flag owed its audit row since before cutoff, for
+-- jobs.FlagAuditCatchUp, through the partial index flags_audit_pending.
+-- name: PostsOwedFlagAudit :many
+SELECT DISTINCT thread_id, ordinal FROM flags
+WHERE audit_pending IS NOT NULL AND resolved_at <= sqlc.arg(cutoff)
+ORDER BY thread_id, ordinal;
 
 -- The posts the auto-hide owes a hide: at least threshold open flags, and
 -- not already down in the projection. The sweep asks the index again for

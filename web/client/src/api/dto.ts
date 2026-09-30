@@ -181,6 +181,11 @@ export interface Me {
   pre_user: { provider: string } | null;
   unread: UnreadCounts;
   notifications: number;
+  // The moderator queue's item count, the top bar's badge; null for a viewer
+  // with no queue (TKT-01M29CRJ4E). The server always sends it. It is optional
+  // only until the client reads it, so the anonymous default in bootstrap.ts
+  // needs no change in the server's PR.
+  queue?: number | null;
   settings: Settings;
 }
 
@@ -519,6 +524,57 @@ export interface AdminApplicationRow {
 export interface AdminApplicationList {
   applications: AdminApplicationRow[];
   next_cursor: string;
+}
+
+// The moderator queue (internal/dto queue.go, TKT-01M29CRJ4E): open flags,
+// one item per flagged post, and pending applications, newest first. A flag
+// item appears only in a forum the viewer moderates, and an application only
+// to staff.
+
+// QueueReport is one open flag on a post. Reporters are shown to moderators
+// only.
+export interface QueueReport {
+  id: number;
+  // spam, abuse, off-topic or other.
+  reason: string;
+  note: string;
+  reporter: Author;
+  created_at: Millis;
+}
+
+// QueueFlag is a flagged post and every flag open on it. post is as a
+// moderator reads it, and null when the thread cannot be read just now.
+export interface QueueFlag {
+  thread: { id: string; slug: string; title: string };
+  ordinal: number;
+  post: Post | null;
+  flags: QueueReport[];
+}
+
+// QueueItem is one thing to decide: flag is set for kind "flag", and
+// application for kind "application".
+export interface QueueItem {
+  // flag or application.
+  kind: string;
+  created_at: Millis;
+  flag: QueueFlag | null;
+  application: AdminApplicationRow | null;
+}
+
+// Queue is GET /admin/queue: one page. next_cursor is empty at the end.
+export interface Queue {
+  items: QueueItem[];
+  next_cursor: string;
+}
+
+// QueueResolution is POST /admin/queue/posts/{id}/{ordinal}'s answer: the
+// action asked (resolve, which is "Keep post", dismiss or remove), what
+// happened to the post (hidden, restored, already hidden or unchanged), and
+// the flags it closed.
+export interface QueueResolution {
+  action: string;
+  post: string;
+  flags: number[];
 }
 
 // AdminApplication is GET /admin/applications/{id}, and the answer to

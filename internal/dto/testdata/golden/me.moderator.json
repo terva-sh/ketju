@@ -13,6 +13,7 @@
     "watching": 2
   },
   "notifications": 9,
+  "queue": 4,
   "settings": {
     "timezone": "Asia/Tokyo",
     "locale": "ja",

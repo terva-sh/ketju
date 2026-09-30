@@ -113,6 +113,23 @@ LEFT JOIN groups AS g ON g.id = p.group_id
 WHERE f.id IN (sqlc.slice('forum_ids'))
 ORDER BY f.id, p.forum_id IS NULL, p.group_id, p.permission;
 
+-- ForumAccessRowsAll is ForumAccessRows for every forum there is, for
+-- perm.ModeratedForums, which has to ask about them all: one statement,
+-- rather than listing the forums and then asking about them. The two must
+-- stay the same apart from the WHERE clause, since decide reads the rows of
+-- both (TestForumAccessRowsAllMatches).
+-- name: ForumAccessRowsAll :many
+SELECT f.id AS forum_id, f.visibility, f.archived, p.forum_id AS grant_forum_id, p.group_id, g.slug AS group_slug,
+       p.permission
+FROM forums AS f
+LEFT JOIN permissions AS p
+	ON (p.forum_id = f.id OR p.forum_id IS NULL)
+	AND (p.group_id IN (SELECT gm.group_id FROM group_members AS gm WHERE gm.user_id = sqlc.arg('user_id'))
+	     OR p.group_id IN (SELECT ig.id FROM groups AS ig
+	                       WHERE ig.slug = sqlc.arg('everyone_slug') OR ig.slug = sqlc.arg('members_slug')))
+LEFT JOIN groups AS g ON g.id = p.group_id
+ORDER BY f.id, p.forum_id IS NULL, p.group_id, p.permission;
+
 -- name: RemoveMembership :exec
 DELETE FROM group_members WHERE group_id = ? AND user_id = ?;
 

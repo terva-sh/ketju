@@ -112,6 +112,37 @@ func (q *Queries) AuditExistsForRecord(ctx context.Context, arg AuditExistsForRe
 	return exists, err
 }
 
+const auditExistsSince = `-- name: AuditExistsSince :one
+SELECT EXISTS (
+	SELECT 1 FROM audit_log
+	WHERE target_type = ? AND target_id = ? AND action = ? AND actor_id = ? AND at >= ?
+)
+`
+
+type AuditExistsSinceParams struct {
+	TargetType string
+	TargetID   string
+	Action     string
+	ActorID    sql.NullInt64
+	At         int64
+}
+
+// Whether actor wrote action on target at or after at: the queue's audit
+// recovery asks whether the projection recorded the Restore a pending
+// dismissal was for (TKT-01M29CRJ4E), through the audit_log_target index.
+func (q *Queries) AuditExistsSince(ctx context.Context, arg AuditExistsSinceParams) (bool, error) {
+	row := q.db.QueryRowContext(ctx, auditExistsSince,
+		arg.TargetType,
+		arg.TargetID,
+		arg.Action,
+		arg.ActorID,
+		arg.At,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const auditIDs = `-- name: AuditIDs :many
 SELECT id FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ? ORDER BY id
 `
@@ -279,6 +310,31 @@ func (q *Queries) BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesPara
 	return items, nil
 }
 
+const clearFlagsAuditPending = `-- name: ClearFlagsAuditPending :execrows
+UPDATE flags SET audit_pending = NULL
+WHERE flags.id IN (/*SLICE:ids*/?) AND flags.audit_pending IS NOT NULL
+`
+
+// Clears the marker of flags a failed restore left dismissed that ReopenFlags
+// did not reopen: no restore happened, so no row is owed (TKT-01M29CRJ4E).
+func (q *Queries) ClearFlagsAuditPending(ctx context.Context, ids []int64) (int64, error) {
+	query := clearFlagsAuditPending
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	result, err := q.db.ExecContext(ctx, query, queryParams...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const closeFlag = `-- name: CloseFlag :execrows
 UPDATE flags SET status = ?, resolved_by = ?, resolved_at = ?, resolution_note = ?
 WHERE id = ? AND status = 'open'
@@ -404,8 +460,8 @@ func (q *Queries) DeleteCollectableBlob(ctx context.Context, arg DeleteCollectab
 
 const dismissOpenFlagsForPost = `-- name: DismissOpenFlagsForPost :many
 UPDATE flags SET status = 'dismissed', resolved_by = ?1, resolved_at = ?2,
-	resolution_note = ?3
-WHERE thread_id = ?4 AND ordinal = ?5 AND status = 'open'
+	resolution_note = ?3, audit_pending = ?4
+WHERE thread_id = ?5 AND ordinal = ?6 AND status = 'open'
 RETURNING id
 `
 
@@ -413,18 +469,22 @@ type DismissOpenFlagsForPostParams struct {
 	ResolvedBy     sql.NullInt64
 	ResolvedAt     sql.NullInt64
 	ResolutionNote string
+	AuditPending   sql.NullString
 	ThreadID       int64
 	Ordinal        int64
 }
 
 // A post's open flags, dismissed in place by a moderator's restore
 // (TKT-01M29CP2PJ). The ids come back so that the restore can reopen
-// exactly these if its append fails.
+// exactly these if its append fails. audit_pending is null, except from the
+// moderator queue's restore, which owes the flags their audit row once its
+// append succeeds (migration 0015, TKT-01M29CRJ4E).
 func (q *Queries) DismissOpenFlagsForPost(ctx context.Context, arg DismissOpenFlagsForPostParams) ([]int64, error) {
 	rows, err := q.db.QueryContext(ctx, dismissOpenFlagsForPost,
 		arg.ResolvedBy,
 		arg.ResolvedAt,
 		arg.ResolutionNote,
+		arg.AuditPending,
 		arg.ThreadID,
 		arg.Ordinal,
 	)
@@ -468,8 +528,62 @@ func (q *Queries) DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64
 	return result.RowsAffected()
 }
 
+const flagsOwedAudit = `-- name: FlagsOwedAudit :many
+SELECT id, CAST(resolved_by AS INTEGER) AS resolved_by, CAST(resolved_at AS INTEGER) AS resolved_at,
+	resolution_note, CAST(audit_pending AS TEXT) AS owed_action
+FROM flags
+WHERE thread_id = ? AND ordinal = ? AND audit_pending IS NOT NULL
+ORDER BY id
+`
+
+type FlagsOwedAuditParams struct {
+	ThreadID int64
+	Ordinal  int64
+}
+
+type FlagsOwedAuditRow struct {
+	ID             int64
+	ResolvedBy     int64
+	ResolvedAt     int64
+	ResolutionNote string
+	OwedAction     string
+}
+
+// A post's flags that the queue's restore dismissed and that are still owed
+// their audit row. Only the marker says a row is owed: a null audit_id alone
+// never does (Terva review 1371), since every flag closed by another path,
+// or before migration 0015, has one.
+func (q *Queries) FlagsOwedAudit(ctx context.Context, arg FlagsOwedAuditParams) ([]FlagsOwedAuditRow, error) {
+	rows, err := q.db.QueryContext(ctx, flagsOwedAudit, arg.ThreadID, arg.Ordinal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []FlagsOwedAuditRow
+	for rows.Next() {
+		var i FlagsOwedAuditRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.ResolvedBy,
+			&i.ResolvedAt,
+			&i.ResolutionNote,
+			&i.OwedAction,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getFlag = `-- name: GetFlag :one
-SELECT id, thread_id, ordinal, reporter_id, reason, note, created_at, status, resolved_by, resolved_at, resolution_note FROM flags WHERE id = ?
+SELECT id, thread_id, ordinal, reporter_id, reason, note, created_at, status, resolved_by, resolved_at, resolution_note, audit_id, audit_pending FROM flags WHERE id = ?
 `
 
 func (q *Queries) GetFlag(ctx context.Context, id int64) (Flag, error) {
@@ -487,6 +601,8 @@ func (q *Queries) GetFlag(ctx context.Context, id int64) (Flag, error) {
 		&i.ResolvedBy,
 		&i.ResolvedAt,
 		&i.ResolutionNote,
+		&i.AuditID,
+		&i.AuditPending,
 	)
 	return i, err
 }
@@ -531,7 +647,7 @@ func (q *Queries) OpenFlagCount(ctx context.Context, arg OpenFlagCountParams) (i
 }
 
 const openFlags = `-- name: OpenFlags :many
-SELECT id, thread_id, ordinal, reporter_id, reason, note, created_at, status, resolved_by, resolved_at, resolution_note FROM flags WHERE status = 'open' ORDER BY created_at DESC, id DESC LIMIT ?
+SELECT id, thread_id, ordinal, reporter_id, reason, note, created_at, status, resolved_by, resolved_at, resolution_note, audit_id, audit_pending FROM flags WHERE status = 'open' ORDER BY created_at DESC, id DESC LIMIT ?
 `
 
 // The moderator queue: open flags, newest first (docs/08).
@@ -556,6 +672,8 @@ func (q *Queries) OpenFlags(ctx context.Context, limit int64) ([]Flag, error) {
 			&i.ResolvedBy,
 			&i.ResolvedAt,
 			&i.ResolutionNote,
+			&i.AuditID,
+			&i.AuditPending,
 		); err != nil {
 			return nil, err
 		}
@@ -611,8 +729,44 @@ func (q *Queries) PostsAtFlagThreshold(ctx context.Context, threshold int64) ([]
 	return items, nil
 }
 
+const postsOwedFlagAudit = `-- name: PostsOwedFlagAudit :many
+SELECT DISTINCT thread_id, ordinal FROM flags
+WHERE audit_pending IS NOT NULL AND resolved_at <= ?1
+ORDER BY thread_id, ordinal
+`
+
+type PostsOwedFlagAuditRow struct {
+	ThreadID int64
+	Ordinal  int64
+}
+
+// The posts with a flag owed its audit row since before cutoff, for
+// jobs.FlagAuditCatchUp, through the partial index flags_audit_pending.
+func (q *Queries) PostsOwedFlagAudit(ctx context.Context, cutoff sql.NullInt64) ([]PostsOwedFlagAuditRow, error) {
+	rows, err := q.db.QueryContext(ctx, postsOwedFlagAudit, cutoff)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PostsOwedFlagAuditRow
+	for rows.Next() {
+		var i PostsOwedFlagAuditRow
+		if err := rows.Scan(&i.ThreadID, &i.Ordinal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const reopenFlags = `-- name: ReopenFlags :execrows
-UPDATE flags SET status = 'open', resolved_by = NULL, resolved_at = NULL, resolution_note = ''
+UPDATE flags SET status = 'open', resolved_by = NULL, resolved_at = NULL, resolution_note = '', audit_pending = NULL
 WHERE flags.id IN (/*SLICE:ids*/?) AND flags.status = 'dismissed'
   AND NOT EXISTS (
 	SELECT 1 FROM flags o
@@ -627,6 +781,9 @@ WHERE flags.id IN (/*SLICE:ids*/?) AND flags.status = 'dismissed'
 // service's per-post lock prevents but a hand-written insert could make,
 // their newer flag stands for them, and the old one stays dismissed rather
 // than breaking flags_one_open_per_reporter and failing the whole reopen.
+//
+// A reopened flag is owed no audit row, since nothing it recorded happened,
+// so its audit_pending marker goes with its resolution.
 func (q *Queries) ReopenFlags(ctx context.Context, ids []int64) (int64, error) {
 	query := reopenFlags
 	var queryParams []interface{}
@@ -702,6 +859,38 @@ type SetBlobStatusParams struct {
 
 func (q *Queries) SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setBlobStatus, arg.Status, arg.Hash)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setFlagsAudit = `-- name: SetFlagsAudit :execrows
+UPDATE flags SET audit_id = ?1, audit_pending = NULL
+WHERE flags.id IN (/*SLICE:ids*/?) AND flags.status <> 'open' AND flags.audit_id IS NULL
+`
+
+type SetFlagsAuditParams struct {
+	AuditID sql.NullInt64
+	Ids     []int64
+}
+
+// Links closed flags to the audit row that records their closing, in the
+// transaction that writes the row, and clears the marker of any that were
+// owed it (TKT-01M29CRJ4E). A flag that already has a row keeps it.
+func (q *Queries) SetFlagsAudit(ctx context.Context, arg SetFlagsAuditParams) (int64, error) {
+	query := setFlagsAudit
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.AuditID)
+	if len(arg.Ids) > 0 {
+		for _, v := range arg.Ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(arg.Ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	result, err := q.db.ExecContext(ctx, query, queryParams...)
 	if err != nil {
 		return 0, err
 	}

@@ -200,7 +200,8 @@ Any member can flag a post with a reason (`spam`, `abuse`, `off-topic`,
 
 ```
 id, thread_id, ordinal, reporter_id, reason, note, created_at,
-status ('open'|'resolved'|'dismissed'), resolved_by, resolved_at, resolution_note
+status ('open'|'resolved'|'dismissed'), resolved_by, resolved_at, resolution_note,
+audit_id, audit_pending
 ```
 
 The moderator queue (`/admin/queue`) shows open flags and pending applications
@@ -253,6 +254,55 @@ How it runs (TKT-01M29CP2PJ):
   appends nothing. The moderator queue (TKT-01M29CRJ4E) gives this a
   button.
 - An archived thread is read-only, so it takes no flags.
+
+The queue (TKT-01M29CRJ4E):
+- **One item per flagged post**, holding every flag open on it. Three
+  reports of one spam post are one decision, and the badge counts work, not
+  reports. An item's time is its newest open flag. The routes are in 07
+  "The moderator queue".
+- **Scope follows `moderate`.** Flags appear for the forums where the
+  viewer may moderate (`perm.ModeratedForums`). A member granted `moderate`
+  on one forum through a group sees that forum's flags. A moderator by role
+  sees every forum they can read, and an admin every forum. Applications
+  appear to staff only. Flags in an archived thread are not listed, because
+  the thread is read-only, its flags included, and no action could clear
+  them.
+- **One lock.** Every queue action holds the same per-post lock as the
+  flag, the hide, the restore and the confirmation. Under it the action
+  reads the post's open flags and its state, and decides from them. A
+  second moderator waits on the lock, finds no open flag, and gets
+  `conflict` before touching the log.
+- **State decides, errors do not.** Each append carries the state it was
+  decided on as its precondition. If something outside the lock changed
+  the post first, such as a moderator's delete from the thread page, the
+  answer is `conflict` with the flags left open, never success. A failed
+  append leaves the flags open too.
+- **The actions.** Dismissing every flag on a post hidden pending review
+  restores it, through the moderator's restore path, because a review that
+  dismisses the flags has found nothing to hide (maintainer decision,
+  2026-09-29). "Keep post" (`resolve`) on such a post restores it the same
+  way. On a post a moderator hid by hand, dismissing closes the flags and
+  the post stays hidden, and keeping it is `conflict`, because it is a
+  restore of that moderator's decision, for the thread page. Remove hides a
+  shown post as a moderator's hide, or makes a hide pending review the
+  moderator's, and then resolves the flags. On a post already down it only
+  resolves them.
+- **Audit.** The log records a queue action appends get their `post.*` rows
+  from the projection. The queue writes one `flag.resolved` or
+  `flag.dismissed` row against the post, with the flags it closed, what was
+  asked, the note, and what happened to the post. Where no `Restore` is
+  involved, the row is written with the close, in one transaction. The
+  restore path writes it only after the `Restore` append succeeds, because
+  `audit_log` is append-only and a failed restore reopens its flags. If
+  that write fails, the answer is still 200, because the restore happened.
+  The flags carry `audit_pending` (04 "flags"), and the row is written with
+  the original moderator and time, marked `recovered`, on the next request
+  for the post or by a job within a minute or two. Only a flag with the
+  marker set is ever owed a row. A marked flag whose `Restore` never landed
+  (its append failed and so did the reopen after it) is reopened instead,
+  with no row.
+- **A reporter learns nothing** from a resolution: no notification, and
+  the same receipt for their next report.
 
 ## Post history
 

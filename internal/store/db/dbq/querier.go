@@ -50,6 +50,10 @@ type Querier interface {
 	// adds no second row (TKT-01M29CKRGS). The record is named by its target,
 	// its action and its log offset, which the row's details carry.
 	AuditExistsForRecord(ctx context.Context, arg AuditExistsForRecordParams) (bool, error)
+	// Whether actor wrote action on target at or after at: the queue's audit
+	// recovery asks whether the projection recorded the Restore a pending
+	// dismissal was for (TKT-01M29CRJ4E), through the audit_log_target index.
+	AuditExistsSince(ctx context.Context, arg AuditExistsSinceParams) (bool, error)
 	// The ids of the audit rows of an action on a target, oldest first, through
 	// the audit_log_target index. A suspension's hidden posts carry the id of
 	// its user.suspended row, so these are the suspensions whose hidden posts
@@ -70,6 +74,9 @@ type Querier interface {
 	// BlockIdentity marks an identity so its re-applications are refused
 	// (docs/05 step 5). Zero rows means it is gone or has a user.
 	BlockIdentity(ctx context.Context, arg BlockIdentityParams) (int64, error)
+	// Clears the marker of flags a failed restore left dismissed that ReopenFlags
+	// did not reopen: no restore happened, so no row is owed (TKT-01M29CRJ4E).
+	ClearFlagsAuditPending(ctx context.Context, ids []int64) (int64, error)
 	ClearForumThreadCounts(ctx context.Context) error
 	ClearMentions(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
@@ -151,7 +158,9 @@ type Querier interface {
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
 	// A post's open flags, dismissed in place by a moderator's restore
 	// (TKT-01M29CP2PJ). The ids come back so that the restore can reopen
-	// exactly these if its append fails.
+	// exactly these if its append fails. audit_pending is null, except from the
+	// moderator queue's restore, which owes the flags their audit row once its
+	// append succeeds (migration 0015, TKT-01M29CRJ4E).
 	DismissOpenFlagsForPost(ctx context.Context, arg DismissOpenFlagsForPostParams) ([]int64, error)
 	DropBlobRef(ctx context.Context, arg DropBlobRefParams) (int64, error)
 	// LowerReadPosition is mark-unread (DELETE /threads/{id}/read), the only
@@ -170,6 +179,11 @@ type Querier interface {
 	// before now: the suspension expiry job's work (TKT-01M29CP2QK). A
 	// suspension with no end is never here.
 	ExpiredSuspensions(ctx context.Context, now int64) ([]int64, error)
+	// A post's flags that the queue's restore dismissed and that are still owed
+	// their audit row. Only the marker says a row is owed: a null audit_id alone
+	// never does (Terva review 1371), since every flag closed by another path,
+	// or before migration 0015, has one.
+	FlagsOwedAudit(ctx context.Context, arg FlagsOwedAuditParams) ([]FlagsOwedAuditRow, error)
 	// ForumAccessRows is everything perm needs to evaluate a set of forums for
 	// one viewer, in one statement: each forum's visibility and archived flag,
 	// with every permission row, local to it or global, held by a group the
@@ -183,6 +197,12 @@ type Querier interface {
 	// argument (?1), and a number after an expanded slice would point at the
 	// wrong value.
 	ForumAccessRows(ctx context.Context, arg ForumAccessRowsParams) ([]ForumAccessRowsRow, error)
+	// ForumAccessRowsAll is ForumAccessRows for every forum there is, for
+	// perm.ModeratedForums, which has to ask about them all: one statement,
+	// rather than listing the forums and then asking about them. The two must
+	// stay the same apart from the WHERE clause, since decide reads the rows of
+	// both (TestForumAccessRowsAllMatches).
+	ForumAccessRowsAll(ctx context.Context, arg ForumAccessRowsAllParams) ([]ForumAccessRowsAllRow, error)
 	// ForumLastPosts is each listed forum's most recently active thread, for the
 	// forum index's last-post column: one seek per forum on
 	// threads_forum_activity rather than a scan. A forum with no thread that has
@@ -382,6 +402,9 @@ type Querier interface {
 	// each before it appends anything, so a projection that lags costs at most
 	// one wasted look (TKT-01M29CP2PJ AutoHideSweep).
 	PostsAtFlagThreshold(ctx context.Context, threshold int64) ([]PostsAtFlagThresholdRow, error)
+	// The posts with a flag owed its audit row since before cutoff, for
+	// jobs.FlagAuditCatchUp, through the partial index flags_audit_pending.
+	PostsOwedFlagAudit(ctx context.Context, cutoff sql.NullInt64) ([]PostsOwedFlagAuditRow, error)
 	// PriorApplicationsForIdentity is every application the same identity
 	// submitted before the one at (before_at, before_id), newest first, in the
 	// list's order: the prior applications the review screen shows. One
@@ -402,6 +425,9 @@ type Querier interface {
 	// service's per-post lock prevents but a hand-written insert could make,
 	// their newer flag stands for them, and the old one stays dismissed rather
 	// than breaking flags_one_open_per_reporter and failing the whole reopen.
+	//
+	// A reopened flag is owed no audit row, since nothing it recorded happened,
+	// so its audit_pending marker goes with its resolution.
 	ReopenFlags(ctx context.Context, ids []int64) (int64, error)
 	// A post's direct replies when its thread is not open (post_meta_reply_to),
 	// in ordinal order as the index would give them. The replies endpoint uses it
@@ -420,6 +446,10 @@ type Querier interface {
 	// A null override means the site default.
 	SetAgentLimits(ctx context.Context, arg SetAgentLimitsParams) (int64, error)
 	SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (int64, error)
+	// Links closed flags to the audit row that records their closing, in the
+	// transaction that writes the row, and clears the marker of any that were
+	// owed it (TKT-01M29CRJ4E). A flag that already has a row keeps it.
+	SetFlagsAudit(ctx context.Context, arg SetFlagsAuditParams) (int64, error)
 	// An archived forum is read-only to everyone but admins (docs/04
 	// "permissions"). Only perm.Evaluator.SetForumArchived calls this, so the
 	// decision cache is cleared when it commits.

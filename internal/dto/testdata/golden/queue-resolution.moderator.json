@@ -1,0 +1,9 @@
+{
+  "action": "dismiss",
+  "post": "restored",
+  "flags": [
+    7,
+    8,
+    9
+  ]
+}

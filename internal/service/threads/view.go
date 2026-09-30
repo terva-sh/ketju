@@ -15,6 +15,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strconv"
 	"strings"
 	"time"
@@ -144,6 +145,9 @@ type Service struct {
 	// UserPostsPage is the posts on one page of a user's history; zero is
 	// UserPostsPageSize. Tests set it to page through a few posts.
 	UserPostsPage int
+	// QueuePage is the items on one page of the moderator queue; zero is
+	// QueuePageSize. Tests set it to page through a few items.
+	QueuePage int
 
 	// trace, when set, is told which path Replies answered from. Tests use it
 	// to prove both paths ran.
@@ -160,6 +164,14 @@ type Service struct {
 	// flag lock, before it checks the post. Tests use it to hold a flag
 	// there.
 	beforeFlagCheck func(id threadid.ID, ordinal uint32)
+	// afterQueueRead, when set, is called by ResolvePost once it has read
+	// the post's state under the flag lock, before it acts on it. Tests use
+	// it to change the post there.
+	afterQueueRead func(id threadid.ID, ordinal uint32)
+
+	// Logger reports what a request cannot answer with: an audit row owed
+	// after an action that happened (queue.go). Nil is slog.Default().
+	Logger *slog.Logger
 }
 
 // Appender is what the service appends through: *posts.Writer, the one

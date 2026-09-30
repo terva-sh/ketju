@@ -13,6 +13,7 @@
     "watching": 4
   },
   "notifications": 2,
+  "queue": null,
   "settings": {
     "timezone": "Europe/Helsinki",
     "locale": "fi",

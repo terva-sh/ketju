@@ -97,6 +97,8 @@ type Flag struct {
 	ResolvedBy     sql.NullInt64
 	ResolvedAt     sql.NullInt64
 	ResolutionNote string
+	AuditID        sql.NullInt64
+	AuditPending   sql.NullString
 }
 
 type Form struct {

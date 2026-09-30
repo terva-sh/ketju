@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ4E4AZ079KEHVGJ01DS
 title: Build the moderator queue
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -23,15 +23,24 @@ blocks_on: none
 references:
   - ref: design:flags
     path: docs/08-moderation.md
-claim: null
+  - ref: pr:183
+    path: null
+claim:
+  actor: agent:claude-code/phase2-run-crj4e
+  branch: run/crj4e-moderator-queue
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a935565c76ee99577
+  commit: 3e1ff35cbb5dcc704606d0b013471fcdad3f950a
+  session: null
+  claimed_at: 2026-09-30T00:23:19Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-29T07:18:13Z
+updated_at: 2026-09-30T00:49:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-crj4e
   name: ""
 extensions: {}
 ---
@@ -46,19 +55,19 @@ Actions resolve in place, and a resolved item leaves the queue while staying in 
 
 ## Acceptance criteria
 
-- [ ] GET /api/v1/admin/queue lists open flags, one item per flagged post, and pending applications in one list by newest time first, scoped to forums where the viewer has moderate (TestQueueOneListNewestFirst, TestQueueGroupsFlagsByPost, TestQueueScopesFlagsToModeratedForums)
-- [ ] Resolving, dismissing or removing an item closes its flags in place with resolver, time and note, drops it from the queue, and GetFlag and audit_log still return it (TestResolvedItemLeavesQueueAndStaysQueryable)
+- [x] GET /api/v1/admin/queue lists open flags, one item per flagged post, and pending applications in one list by newest time first, scoped to forums where the viewer has moderate (TestQueueOneListNewestFirst, TestQueueGroupsFlagsByPost, TestQueueScopesFlagsToModeratedForums)
+- [x] Resolving, dismissing or removing an item closes its flags in place with resolver, time and note, drops it from the queue, and GetFlag and audit_log still return it (TestResolvedItemLeavesQueueAndStaysQueryable)
 - [ ] GET /me's queue equals the number of items the queue lists for the same viewer and is null for a viewer with no queue, and the top bar shows it as a badge (TestQueueCountMatchesList, Shell.test.tsx)
-- [ ] A reporter learns nothing from a resolution: no notification and no change to what their flag request answered (TestReporterLearnsNothing)
-- [ ] Dismissing every flag on an auto-hidden post restores it, and a post a moderator hid by hand stays hidden (TestDismissRestoresOnlyAnAutoHide)
+- [x] A reporter learns nothing from a resolution: no notification and no change to what their flag request answered (TestReporterLearnsNothing)
+- [x] Dismissing every flag on an auto-hidden post restores it, and a post a moderator hid by hand stays hidden (TestDismissRestoresOnlyAnAutoHide)
 - [ ] A member granted moderate on one forum through a group can open and work the queue for that forum (TestForumScopedModeratorUsesQueue)
-- [ ] Queue actions hold TKT-01M29CP2PJ's per-post flag lock; two moderators acting on one item produce one closure, one flag audit row and at most one Delete, and the second gets conflict before touching the log (TestConcurrentResolveOneOutcome, TestQueueSharesTheFlagLock)
-- [ ] A dismissal restores an auto-hidden post only by dismissing every flag open under the lock, and a flag reported afterwards counts from zero and hides the post again only at the threshold (TestLateFlagAfterDismiss)
-- [ ] A failed log step leaves the post's flags open (the restore path reopens those it dismissed), an ErrPostState is conflict and never success, and the audit row records what the request did, including already hidden (TestFailedActionStaysInQueue, TestStateChangeIsConflictNotSuccess)
-- [ ] A dismissal's flag.dismissed row is written only after its Restore append succeeds, so a failed restore leaves reopened flags and no dismissal row (TestFailedRestoreWritesNoDismissal)
-- [ ] Keeping an auto-hidden post restores it through the same restore path as a dismissal, and keeping a post a moderator hid by hand is conflict (TestKeepAutoHiddenPostRestoresIt)
-- [ ] A forum-scoped moderator's /me queue is a number, computed through perm.ModeratesAny, and a member with no grant gets null at no extra statement (TestForumScopedMemberGetsQueueCount)
-- [ ] A Restore that is durable but whose flag.dismissed write failed answers 200, keeps its flags dismissed as PR #138 specifies, and has its row written on a retry or by FlagAuditCatchUp, exactly once (TestRestoredButUnauditedIsRecovered)
+- [x] Queue actions hold TKT-01M29CP2PJ's per-post flag lock; two moderators acting on one item produce one closure, one flag audit row and at most one Delete, and the second gets conflict before touching the log (TestConcurrentResolveOneOutcome, TestQueueSharesTheFlagLock)
+- [x] A dismissal restores an auto-hidden post only by dismissing every flag open under the lock, and a flag reported afterwards counts from zero and hides the post again only at the threshold (TestLateFlagAfterDismiss)
+- [x] A failed log step leaves the post's flags open (the restore path reopens those it dismissed), an ErrPostState is conflict and never success, and the audit row records what the request did, including already hidden (TestFailedActionStaysInQueue, TestStateChangeIsConflictNotSuccess)
+- [x] A dismissal's flag.dismissed row is written only after its Restore append succeeds, so a failed restore leaves reopened flags and no dismissal row (TestFailedRestoreWritesNoDismissal)
+- [x] Keeping an auto-hidden post restores it through the same restore path as a dismissal, and keeping a post a moderator hid by hand is conflict (TestKeepAutoHiddenPostRestoresIt)
+- [x] A forum-scoped moderator's /me queue is a number, computed through perm.ModeratesAny, and a member with no grant gets null at no extra statement (TestForumScopedMemberGetsQueueCount)
+- [x] A Restore that is durable but whose flag.dismissed write failed answers 200, keeps its flags dismissed as PR #138 specifies, and has its row written on a retry or by FlagAuditCatchUp, exactly once (TestRestoredButUnauditedIsRecovered)
 
 ## Implementation plan
 
@@ -82,7 +91,38 @@ Engineering choices made here:
 - **Audit rows.** The records the queue appends (a `Delete` with `by_moderator`, a `Restore`) get their `post.hidden` and `post.restored` rows from the projection writer (TKT-01M29CKRGS step 1 on PR #138), through `appendEvent`'s synchronous projection. The queue writes only the flag row, `flag.resolved` or `flag.dismissed` with `{flags, action, note, post}`, through `internal/audit`, and only once the action has succeeded, because `audit_log` is append-only and a row cannot be withdrawn. Where no reopen can follow, the row is written in the `db.Write` that closes the flags: resolve, a dismissal that restores nothing, and remove, whose flags close after the append. For that, this ticket gives TKT-01M29CP2PJ's `DismissOpenFlagsForPost` and `ResolveOpenFlagsForPost` an optional audit entry. The restore path is the exception, and it follows TKT-01M29CP2PJ as revised on PR #138 (head b75e369). The flags are dismissed before the `Restore`, and they are reopened only if `s.Writer.Append` itself fails. Once the append returns, the Restore is durable and the flags stay dismissed, even if the synchronous projection then fails, because catch-up applies the rest. The durable record of the action is the projection writer's `post.restored` row, written whenever the Restore is projected, together with the flags' own `resolved_by`, `resolved_at` and `resolution_note`. The `flag.dismissed` row is best-effort. It is written after the append succeeds, still under the per-post lock, and never before, so a failed append leaves no row (Terva review on PR #140, head 1c78b85). Recovery (Terva review on PR #140, head 075aff1): each flag gains a nullable `audit_id`, set in the same `db.Write` that writes the row naming it. Every close path sets it with its row, so only this path can leave closed flags with `audit_id` null. If that write fails after a durable Restore, the request answers 200 with the restored post, because the action happened, and logs a warning. The row is then written again on retry: a `ResolvePost` that finds no open flags first checks for closed flags on the post with `audit_id` null. If there are any, it writes their row with the original `resolved_by` and `resolved_at` and `"recovered": true`, and sets `audit_id`, whatever the request asked. It answers 200 only when the request's action is one the completed restore satisfies: `dismiss`, or `resolve` (Keep post), on the now-visible post. Any other action, such as `remove`, gets `conflict` as usual, so a request is never reported as having done what another did (Terva review on PR #140, head bed9b58). The job `jobs.FlagAuditCatchUp` (every minute, in `serve`'s background list) does the same for any such flags older than a minute, so nothing depends on a moderator retrying. Writing the row with the dismissal and then a compensating `flag.reopened` row lost, because the log would read as a dismissal that was undone when nothing happened. A pending-operation table lost to one nullable column, which marks exactly what is owed.
 - **Counts ride on `/me`**, as `queue`, because the shell already reads `/me` on every page, and a second request per page would cost more than the one count query it carries.
 
+
+### Settled at claim (2026-09-30, phase 2 run)
+
+Carried requirements, from the notes and the orchestrator's brief:
+- **Terva review 1371 (PR #140, head 4aafbf4), carried as a requirement.** Audit recovery uses an explicit pending marker, `flags.audit_pending`, set only in the queue's restore transaction, the one that dismisses the flags before the `Restore` append. A NULL `audit_id` alone never means a row is owed. `ResolvePost`'s retry and `FlagAuditCatchUp` consider only rows with the marker set. A test proves that a flag closed by any other path, or before the migration, is never swept.
+- Dismissing every flag on an auto-hidden post restores it. "Keep post" restores an auto-hidden post, and answers conflict on a manual hide.
+- The queue count on /me is for anyone `perm.ModeratesAny` admits.
+- Forum-scoped moderators use the moderates gate, and the author link goes to /u/{handle} for them.
+- A post-state error is a conflict, with the flags left open.
+- A dismissal's audit row is written only after the Restore append succeeds.
+- `Flag`, `EnforceAutoHide`, `SweepAutoHide`, a moderator's `Restore` and `ConfirmHide` hold `s.flagLocks` (PR #176). The queue takes the same lock and adds no second mechanism.
+- Two PRs. PR 1 is the server half with no dist change; a types-only `dto.ts` or `dto-contract.ts` edit is allowed if the dist is unchanged. PR 2 is the client, opened only when the dist is free, and it closes the ticket.
+
+Revisions to the plan below, made on reading main at 3e1ff35:
+- **The queue lives in `internal/service/threads/queue.go`, not a new `moderation` package.** Its actions need the thread service's private flag lock, `access`, `changePostAppended` and `readBack`. The queue methods are therefore the exported wrapper around the lock, and nothing else can reach the lock. `users.Service` gets an optional `QueueCount` hook that `serve` wires to `threads.Service.QueueCount`, so `users` imports nothing new.
+- **The pending marker holds the owed action.** `flags.audit_pending` is `NULL`, `'dismiss'` or `'resolve'`. A `CHECK` allows it only on a dismissed flag with no `audit_id`. `ReopenFlags` clears it, and so does the write of the row. The thread page's restore passes `NULL`, so its dismissals are never owed a queue row.
+- **Recovery checks that the Restore landed.** A pending flag whose post is visible gets its `flag.dismissed` row with the original `resolved_by`, `resolved_at` and `"recovered": true`. A pending flag whose post is still hidden is left from a restore whose append failed and whose reopen also failed. Recovery reopens those flags instead, because no restore happened and the item belongs back in the queue.
+- **Archived threads are not in the queue.** An archived thread is read-only, flags included (Terva review 1506, ConfirmHide). Its flags are left out of the list and the count, and a queue action on one is conflict. Nobody's queue holds an item that no action can clear.
+- **One statement for all forums in perm.** `perm.ModeratedForums(v)` lists the forums v may moderate. It evaluates every forum in one statement (`ForumAccessRowsAll`), caches each forum's access and the list, and `ModeratesAny` uses it for a member. /me asks it before it counts. A member with no grant then pays one statement cold, and that statement also warms the read check /me makes next. So the cold budget stays at two, and warm costs nothing extra.
+- **Items carry a thread reference** `{id, slug, title}` and a nullable post, which is null when the thread cannot be read now, such as when it is quarantined. `Queue` has no `counts` field: /me's `queue` is the count.
+- **Migration 0015** (`0015_flag_audit.sql`). If another lane lands a 0015 first, this PR renumbers.
+
+### Additional tests
+
+- `TestOnlyPendingFlagsAreRecovered` (review 1371): flags closed by `ConfirmHide`, by the thread page's restore, and by a hand-written pre-migration close all have a null `audit_id`, and neither `ResolvePost` nor `FlagAuditCatchUp` writes a row for them or changes them.
+- `TestModeratedForums`: the list follows role, grants and hidden forums, costs one statement cold and none warm, and a revoked grant applies on the next call.
+- `TestMeBudget`, revised: a member with no grant still runs two handler statements cold (`ForumAccessRowsAll` and `MeCounts`) and one warm. A moderator adds `QueueCount`.
+- `TestLateFlagAfterDismiss` inserts its late flag directly, because `Flag` holds the lock from check to insert (PR #176).
+
 ### Approach
+
+This is grooming's approach. Where "Settled at claim" above revises it, the revision holds: the service is in `threads`, the marker is `audit_pending`, and the migration is 0015.
 
 1. `internal/store/db/views/queue.go` (hand-written, since the forum list varies): `QueueItems(ctx, tx, forumIDs []int64, applications bool, before Cursor, limit)`. It is a `UNION ALL` of open flags grouped by `(thread_id, ordinal)` and joined to `threads` for `forum_id IN (…)`, taking `max(created_at)`, `count(*)` and `group_concat(id)`, with pending `applications`. The result is ordered by `created_at DESC, kind, key DESC`, and the keyset cursor is `(created_at, kind, key)`. `QueueCounts` uses the same WHERE clauses, so the badge and the list cannot disagree. The `flags_status` and `flags_post` indexes serve it.
 2. Migration (next free number): `ALTER TABLE flags ADD COLUMN audit_id INTEGER REFERENCES audit_log (id)`, and the query `FlagsOwedAudit`. docs/04 "flags" gains the column. Otherwise there is no new table or query for actions: the flag closes are TKT-01M29CP2PJ's `DismissOpenFlagsForPost`, `ResolveOpenFlagsForPost` and `ReopenFlags`, and the lock is its `flagLocks`.
@@ -159,3 +199,14 @@ Terva review on PR #140, head bed9b58: two medium findings, both accepted and fi
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-29T07:04:34Z
 
 Carried from Terva review 1371 on PR #140 (head 4aafbf4), medium, 'Do not treat existing closed flags as audit rows owed by recovery'. The plan's round cap was reached, so this is carried here as a requirement, not by another plan revision. Audit recovery must use an explicit pending marker, for example a flags.audit_pending column set only in the restore transaction that closes the flags. A NULL audit_id alone never means an audit row is owed. ResolvePost's retry and FlagAuditCatchUp consider only rows with the marker set. Add a test that a flag closed by any other path, or before the migration, is never swept.
+
+**agent:claude-code/phase2-run-crj4e** at 2026-09-30T00:49:11Z
+
+Server half built as PR 1, with no change to the built client (go generate ./internal/web/spa leaves internal/web/spa/dist identical). The criteria it earns are ticked. AC3 waits for the top bar badge and Shell.test.tsx, and AC6 for the queue screen, both in PR 2.
+
+Where the build differs from the plan, and why:
+- The service is `threads.Service.Queue`, `QueueCount`, `ResolvePost` and `FlagAuditCatchUp` in internal/service/threads/queue.go, not a new moderation package. The actions need the private flag lock and the append helpers, and making the queue the only exported way to take the lock keeps it one mechanism.
+- The requirement carried from Terva review 1371 is met with `flags.audit_pending` (migration 0015). It is NULL, 'dismiss' or 'resolve', and set only in the queue's restore transaction. A CHECK allows it only on a dismissed flag with no audit_id. TestOnlyPendingFlagsAreRecovered covers flags closed by ConfirmHide, by the thread page's restore, and by hand before the migration, and none is swept. If a pending flag's Restore never landed (its append failed, and so did the reopen), recovery reopens the flag instead of writing a row. It tells a landed Restore by the post being shown now, or by the projection's post.restored row from the same moderator since the dismissal.
+- AC12's "computed through perm.ModeratesAny" is `perm.ModeratedForums`, which ModeratesAny now answers from for members (len > 0), so the predicate is the same. It reads every forum in one statement (ForumAccessRowsAll), and /me asks it first, so that one statement also warms the read checks. A member with no grant runs two handler statements cold and one warm, as before. A moderator runs one QueueCount statement more (TestMeBudget).
+- Archived threads are left out of the list and the count, and a queue action on one is conflict. This follows the rule from Terva review 1506 (an archived thread is read-only, flags included), and it keeps an item no action can clear out of the queue. Recorded in docs/08.
+- `Me.queue` is optional in dto.ts until PR 2 reads it, so bootstrap.ts's anonymous default, which is bundled source, does not change in PR 1.

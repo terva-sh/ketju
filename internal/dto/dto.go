@@ -391,7 +391,11 @@ type Me struct {
 	PreUser       *PreUser     `json:"pre_user"`
 	Unread        UnreadCounts `json:"unread"`
 	Notifications int          `json:"notifications"`
-	Settings      Settings     `json:"settings"`
+	// Queue is how many items the moderator queue lists for this viewer,
+	// the top bar's badge (TKT-01M29CRJ4E). Null for a viewer with no queue:
+	// anyone perm.ModeratesAny does not admit.
+	Queue    *int     `json:"queue"`
+	Settings Settings `json:"settings"`
 }
 
 // PreUser is what /me says about an applicant's session.

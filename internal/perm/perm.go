@@ -46,6 +46,7 @@ import (
 	"database/sql"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -135,9 +136,12 @@ type entry struct {
 	expires time.Time
 	forums  map[int64]access
 
-	// moderates is ModeratesAny's answer, once known: set is false until it
-	// has been asked.
-	moderates struct{ set, any bool }
+	// moderated is ModeratedForums' answer, once known: set is false until
+	// it has been asked. ModeratesAny reads it too.
+	moderated struct {
+		set    bool
+		forums []int64
+	}
 }
 
 // access is the evaluated state of one forum for one viewer.
@@ -288,11 +292,8 @@ func (e *Evaluator) ReadableForums(ctx context.Context, v domain.Viewer) ([]int6
 // asks it, so a member who moderates one forum through a group reaches the
 // queue, whose handlers then filter by forum.
 //
-// The answer is cached with v's other decisions and cleared by the same
-// writes, so revoking the grant applies on the next request. A forum created
-// since is taken into account within TTL, since creating a forum clears
-// nothing: that matters only for a global grant with no forum to apply to
-// yet.
+// Staff by role are answered at no cost. For anyone else it is whether
+// ModeratedForums lists a forum, and it is cached with it.
 func (e *Evaluator) ModeratesAny(ctx context.Context, v domain.Viewer) (bool, error) {
 	if !v.Member() {
 		return false, nil
@@ -300,40 +301,76 @@ func (e *Evaluator) ModeratesAny(ctx context.Context, v domain.Viewer) (bool, er
 	if v.Role == domain.RoleAdmin || v.Role == domain.RoleModerator {
 		return true, nil
 	}
+	forums, err := e.ModeratedForums(ctx, v)
+	return len(forums) > 0, err
+}
+
+// ModeratedForums lists, in id order, the forums where Check would Allow v
+// to moderate: every forum for an active admin, every forum an active
+// moderator can see, and for a member each forum where a group of theirs
+// grants moderate and that is not hidden from them. It is the moderator
+// queue's scope (TKT-01M29CRJ4E). A viewer who is not an active member
+// moderates nothing.
+//
+// It evaluates every forum in one statement (ForumAccessRowsAll), whatever
+// the cache already holds, and caches each forum's access as Check would, as
+// well as the list and ModeratesAny's answer. So GET /me, which asks it
+// first, finds the read decisions it needs next already made, and a member
+// who moderates nothing pays that one statement on a cold cache and nothing
+// on a warm one.
+//
+// The answer is cleared by the same writes as v's other decisions, so a
+// revoked grant applies on the next request. A forum created since is taken
+// into account within TTL, since creating a forum clears nothing: it can
+// only be missing from the list, never wrongly in it.
+func (e *Evaluator) ModeratedForums(ctx context.Context, v domain.Viewer) ([]int64, error) {
+	if !v.Member() {
+		return nil, nil
+	}
 	key := cacheKey{session: v.SessionKey, user: v.UserID, role: v.Role, active: v.Active}
 	gen := e.gen.Load()
 	now := e.now()
 	e.mu.Lock()
-	if ent := e.entries[key]; ent != nil && ent.gen == gen && now.Before(ent.expires) && ent.moderates.set {
+	if ent := e.entries[key]; ent != nil && ent.gen == gen && now.Before(ent.expires) && ent.moderated.set {
+		out := slices.Clone(ent.moderated.forums)
 		e.mu.Unlock()
-		return ent.moderates.any, nil
+		return out, nil
 	}
 	e.mu.Unlock()
 
-	var ids []int64
-	err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
-		forums, err := q.ListForums(ctx)
-		for _, f := range forums {
-			ids = append(ids, f.ID)
-		}
+	var rows []dbq.ForumAccessRowsAllRow
+	if err := e.db.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
+		p := accessParams(v, nil)
+		var err error
+		rows, err = q.ForumAccessRowsAll(ctx, dbq.ForumAccessRowsAllParams{
+			UserID: p.UserID, EveryoneSlug: p.EveryoneSlug, MembersSlug: p.MembersSlug})
 		return err
-	})
-	if err != nil {
-		return false, err
+	}); err != nil {
+		return nil, err
 	}
-	may, err := e.CanEach(ctx, v, ids, domain.PermModerate)
-	if err != nil {
-		return false, err
+	same := make([]dbq.ForumAccessRowsRow, len(rows))
+	for i, r := range rows {
+		same[i] = dbq.ForumAccessRowsRow(r)
 	}
-	answer := false
-	for _, ok := range may {
-		answer = answer || ok
+	forums, order := collect(same)
+	evaluated := make(map[int64]access, len(order))
+	moderated := []int64{}
+	for _, id := range order {
+		a, err := decide(id, forums[id], v)
+		if err != nil {
+			return nil, err
+		}
+		evaluated[id] = a
+		if decision(v, a, domain.PermModerate) == Allow {
+			moderated = append(moderated, id)
+		}
 	}
+	slices.Sort(moderated)
 
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	if gen != e.gen.Load() {
-		return answer, nil // invalidated while evaluating: answer, but do not cache
+		return moderated, nil // invalidated while evaluating: answer, but do not cache
 	}
 	ent := e.entries[key]
 	if ent == nil || ent.gen != gen || !now.Before(ent.expires) {
@@ -341,8 +378,11 @@ func (e *Evaluator) ModeratesAny(ctx context.Context, v domain.Viewer) (bool, er
 		ent = &entry{gen: gen, expires: now.Add(TTL), forums: make(map[int64]access)}
 		e.entries[key] = ent
 	}
-	ent.moderates.set, ent.moderates.any = true, answer
-	return answer, nil
+	for id, a := range evaluated {
+		ent.forums[id] = a
+	}
+	ent.moderated.set, ent.moderated.forums = true, slices.Clone(moderated)
+	return moderated, nil
 }
 
 // Invalidate drops every cached decision, in this Evaluator and in every other

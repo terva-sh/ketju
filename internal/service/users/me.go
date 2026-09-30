@@ -23,6 +23,10 @@ type Service struct {
 	// Now is the clock the admin detail counts live sessions by; nil is
 	// time.Now.
 	Now func() time.Time
+	// QueueCount is /me's queue: the moderator queue's item count for the
+	// viewer, or nil for one with no queue (threads.Service.QueueCount,
+	// TKT-01M29CRJ4E). Nil here answers null for everyone.
+	QueueCount func(ctx context.Context, v domain.Viewer) (*int, error)
 }
 
 // The settings a viewer has not chosen (docs/06 "Paged, not infinite" for the
@@ -44,10 +48,13 @@ func anonymousMe() dto.Me {
 // The shell inlines it on every page load, so it has a budget, settled in
 // grooming: two statements for the handler, with the middleware's session
 // lookup, which already returned every user field shown here, outside it.
-// One statement is the counts, grouped by forum. The other is perm deciding
-// which of those forums the viewer may read, in one batch (CanEach), and only
-// when perm's cache does not already know. Nothing opens a thread log; the
-// counts are projections.
+// One statement is the counts, grouped by forum. The other is perm's batch,
+// only when its cache does not already know: the moderator queue's scope,
+// every forum at once (perm.ModeratedForums), which also decides which of the
+// counted forums the viewer may read (CanEach), so a member who moderates
+// nothing pays nothing for the queue. A viewer who moderates somewhere pays
+// one queue count statement more (TKT-01M29CRJ4E). Nothing opens a thread
+// log; the counts are projections.
 //
 // An approval-mode applicant gets the anonymous shape with pre_user set: a
 // null user stays the one signed-out signal (settled in grooming). Anyone
@@ -69,6 +76,17 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 		User: &dto.Author{Handle: u.Handle, DisplayName: u.DisplayName, Avatar: u.AvatarBlob, Role: u.Role, Kind: u.Kind},
 		Settings: dto.Settings{Timezone: orDefault(u.Timezone, defaultTimezone), Locale: orDefault(u.Locale, defaultLocale),
 			PageSize: pageSize(u.PrefsJSON)},
+	}
+
+	// First, because the queue's scope evaluates every forum in one
+	// statement on a cold permission cache (perm.ModeratedForums), which
+	// also answers the read checks below, so a member who moderates nothing
+	// adds no statement to the budget.
+	if s.QueueCount != nil {
+		var err error
+		if me.Queue, err = s.QueueCount(ctx, v); err != nil {
+			return dto.Me{}, err
+		}
 	}
 
 	var rows []dbq.MeCountsRow

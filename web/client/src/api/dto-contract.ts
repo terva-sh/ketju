@@ -38,6 +38,8 @@ import type {
   PostHistory,
   PostReplies,
   Profile,
+  Queue,
+  QueueResolution,
   ReadPosition,
   RenderResult,
   ThreadList,
@@ -88,6 +90,8 @@ import postModerator from '../../../../internal/dto/testdata/golden/post.moderat
 import profileMember from '../../../../internal/dto/testdata/golden/profile.member.json';
 import profileModerator from '../../../../internal/dto/testdata/golden/profile.moderator.json';
 import profileAnonymizedMember from '../../../../internal/dto/testdata/golden/profile-anonymized.member.json';
+import queueModerator from '../../../../internal/dto/testdata/golden/queue.moderator.json';
+import queueResolutionModerator from '../../../../internal/dto/testdata/golden/queue-resolution.moderator.json';
 import readMember from '../../../../internal/dto/testdata/golden/read.member.json';
 import renderMember from '../../../../internal/dto/testdata/golden/render.member.json';
 import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
@@ -175,6 +179,8 @@ export const contract = [
   matches<Profile>()(profileMember),
   matches<Profile>()(profileModerator),
   matches<Profile>()(profileAnonymizedMember),
+  matches<Queue>()(queueModerator),
+  matches<QueueResolution>()(queueResolutionModerator),
   matches<ReadPosition>()(readMember),
   matches<RenderResult>()(renderMember),
   matches<RenderResult>()(renderPlainMember),

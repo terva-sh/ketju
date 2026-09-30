@@ -567,7 +567,8 @@ an old post unread, and a read position only moves forward.
 ### flags
 ```
 id, thread_id, ordinal, reporter_id, reason, note, created_at,
-status ('open'|'resolved'|'dismissed'), resolved_by, resolved_at, resolution_note
+status ('open'|'resolved'|'dismissed'), resolved_by, resolved_at, resolution_note,
+audit_id, audit_pending
 ```
 Reports on posts; feeds the moderator queue (08). A flag is resolved or
 dismissed in place and never deleted (a trigger refuses it). `other` requires
@@ -577,6 +578,17 @@ reporter_id) WHERE status = 'open'` (migration 0014, TKT-01M29CP2PJ), keeps a
 member to one open flag per post. A repeat adds no row, so the open count the
 auto-hide threshold reads is a count of reporters. Once a moderator closes
 their flag, a member may flag the post again.
+
+Migration 0015 (TKT-01M29CRJ4E) adds two columns for the moderator queue.
+`audit_id` names the `audit_log` row that records the flag's closing, and
+the queue sets it in the transaction that writes that row. A flag closed any
+other way, or before the migration, keeps it null, and a null `audit_id`
+means nothing on its own. `audit_pending` is null, `dismiss` or `resolve`.
+It is set only by the queue's restore, in the transaction that dismisses the
+flags before the `Restore` append, because the row may be written only once
+the append succeeds. Writing the row clears it, and so does reopening the
+flag. A `CHECK` allows it only on a dismissed flag with no `audit_id`.
+Recovery reads only flags with the marker set (08 "Flags").
 
 ### drafts
 ```
