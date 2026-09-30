@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T20:19:02Z
-updated_at: 2026-09-30T11:44:26Z
+updated_at: 2026-09-30T11:52:32Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -180,6 +180,10 @@ It is left out of this ticket. The ticket covers checks that time out because th
 **agent:claude-code/phase2-run-mtqg5a** at 2026-09-30T11:43:34Z
 
 Correction to the previous note: TKT-01M3S1TVPD is now titled 'Stop the full Playwright run spending more /auth calls than it refills', shortened to pass check's 72-character title limit.
+
+**agent:claude-code/phase2-run-mtqg5a** at 2026-09-30T11:52:32Z
+
+CI on PR #223, run 1435, head 7ad9fa0 on base 163c33a: the Playwright step took 2m19s and reported 86 passed and 10 skipped, where it had 72 passed before (run 1407: 2m46s; runs 1396 and 1403: 2.8m and 3.3m inside the step). That is 14 more tests, from 6 to 20 in a11y.spec.ts. The 20 a11y tests took 0.72-1.8s each, 24.3s together, against 23.3s for the 6 in run 1407. Terva review run 8e8a6ad1 (Actions run 1436) on that head and base was clean, with no findings. Nothing measured the other load on the runner during run 1435, so the step times compare runs, not the change alone.
 
 ## Summary
 
