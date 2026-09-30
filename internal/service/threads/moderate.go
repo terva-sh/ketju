@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 	"unicode/utf8"
 
@@ -226,7 +227,30 @@ func (s *Service) renameWindow(ctx context.Context) (time.Duration, error) {
 		n, err = settings.RenameWindowSeconds.In(ctx, q)
 		return err
 	})
-	return time.Duration(n) * time.Second, err
+	if err != nil {
+		return 0, err
+	}
+	// The setting takes any count of seconds from 0 up. One past what a
+	// Duration holds would overflow into a negative window, closed at once,
+	// so such a count is the longest window there is (Terva review 1535,
+	// finding 2).
+	if int64(n) > int64(math.MaxInt64/time.Second) {
+		return time.Duration(math.MaxInt64), nil
+	}
+	return time.Duration(n) * time.Second, nil
+}
+
+// threadExists answers not-found for a thread with no projection row, as
+// access does, and asks nothing about the viewer.
+func (s *Service) threadExists(ctx context.Context, id threadid.ID) error {
+	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		_, err := q.GetThread(ctx, int64(id))
+		return err
+	})
+	if errors.Is(err, sql.ErrNoRows) {
+		return problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: %s has no projection row", id))
+	}
+	return err
 }
 
 // appendDecided appends the record decide builds, deciding on the log the
@@ -248,10 +272,13 @@ func (s *Service) renameWindow(ctx context.Context) (time.Duration, error) {
 func (s *Service) appendDecided(ctx context.Context, v domain.Viewer, id threadid.ID,
 	decide func(a access, th *threadcache.Thread, now time.Time) (threadlog.Append, error)) (dto.ThreadHeader, error) {
 	var out dto.ThreadHeader
-	// Admitted once from the row as it stands, so a thread that does not
-	// exist, or is hidden from v or quarantined, is answered as access
-	// answers it before the thread is opened.
-	if _, err := s.access(ctx, v, id); err != nil {
+	// Only whether the thread exists is asked before it is opened, so a
+	// thread id that names nothing is not-found, as access answers it,
+	// rather than a failure to open a log. Whether v may act is never
+	// judged from the row before it is projected: a move already in the
+	// log may have taken the thread into a forum v can read, or out of one
+	// (Terva review 1535, finding 1).
+	if err := s.threadExists(ctx, id); err != nil {
 		return out, err
 	}
 	flags, err := s.authorFlags(ctx, v)
@@ -262,8 +289,13 @@ func (s *Service) appendDecided(ctx context.Context, v domain.Viewer, id threadi
 		var res threadlog.Result
 		err := s.Threads.With(id, func(th *threadcache.Thread) error {
 			at := th.Actor.LogLength()
-			if err := s.projectNow(ctx, id, at); err != nil {
-				return err
+			// A quarantined thread's log is shorter than its projection
+			// and cannot be projected; access answers it from the row,
+			// unavailable to a reader and not-found to anyone else.
+			if s.Quarantined == nil || !s.Quarantined(id) {
+				if err := s.projectNow(ctx, id, at); err != nil {
+					return err
+				}
 			}
 			a, err := s.access(ctx, v, id)
 			if err != nil {

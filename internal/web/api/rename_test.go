@@ -22,6 +22,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
@@ -345,6 +346,44 @@ func TestConcurrentMovesAreDecidedOnTheLog(t *testing.T) {
 		}
 	}
 	t.Logf("gina's move landed first in %d of %d rounds", moved, rounds)
+}
+
+// TestRenameJudgesAnUnprojectedMove (Terva review 1535, finding 1): alice's
+// thread starts in a restricted forum she cannot read, and a move into
+// general is in its log but not yet projected. Her rename is judged against
+// the forum the log puts the thread in, so it succeeds, and the answer is in
+// general. Judged from the row as it stood, it would be not-found.
+func TestRenameJudgesAnUnprojectedMove(t *testing.T) {
+	w := newWorld(t)
+	staff := w.forumAt("staff", domain.VisibilityRestricted, false)
+	id := w.threadIn(5, staff, "Started in staff", "alice")
+	if got := problemCode(t, w.get(w.viewer("alice"), threadPath(id))); got != "not-found" {
+		t.Fatalf("alice reads the thread in staff as %s; the test needs it hidden from her", got)
+	}
+	if err := w.cache.With(id, func(th *threadcache.Thread) error {
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadMoved, Author: uint64(w.users["bob"]),
+			TimeMS: w.clock, Body: &threadlog.ThreadMovedBody{ForumID: uint64(w.forum)}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if row := w.threadRow(id); row.ForumID != staff {
+		t.Fatalf("the move was projected already: the row is in forum %d", row.ForumID)
+	}
+	h := header(t, w.sendAs(w.viewer("alice"), http.MethodPatch, threadPath(id), rename("Now in general")))
+	if h.Forum.Slug != "general" || h.Title != "Now in general" {
+		t.Fatalf("the rename answered %+v", h)
+	}
+}
+
+// TestRenameWindowTooLargeForADuration (Terva review 1535, finding 2): a
+// count of seconds past what a time.Duration holds is the longest window,
+// not a negative one that is closed at once.
+func TestRenameWindowTooLargeForADuration(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	w.setting("threads.rename_window_seconds", 10_000_000_000)
+	header(t, w.sendAs(w.viewer("alice"), http.MethodPatch, threadPath(id), rename("Still mine to rename")))
 }
 
 // TestRenameAndMoveSurviveReindex is the fourth criterion: after a reindex
