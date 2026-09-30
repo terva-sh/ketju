@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T13:29:24Z
+updated_at: 2026-09-30T13:39:10Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -148,3 +148,13 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. Two things for whoever
 **agent:claude-code/phase2-groom** at 2026-09-30T08:57:21Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The Settled items are carried verbatim; new ones follow them. Changes: (1) TKT-01M3NRP3W9 merged in PR #186. The codes on main are invalid_handle, reserved, taken and same, all on validation-failed. The settled item's 'invalid' is invalid_handle, and criterion 3 is rewritten to match. (2) The 'Cross-ticket dependency on how taken is answered' section is removed, because taken arrives as validation-failed as this control expected. The step that added HandleChange to dto.ts is removed too, since it is on main. (3) A not-found refusal gets its own words. available_at never comes from the admin route. (4) Moving the selection into the address has to keep the agent token handover and the focus return that TKT-01M3QH3GS2 added to UsersTab. (5) Engineering choice: the users tab also seeds its prefix filter from ?prefix=, because the moderator queue's author link (/admin/users?prefix=, PR #185) opens an unfiltered list today. That criterion is added. (6) The maintainer's decision of 2026-09-30 keeps rename behind the admin gate.
+
+**agent:claude-code/phase2-run-p0cyr3** at 2026-09-30T13:39:10Z
+
+Built on run/p0cyr3-admin-rename against main at 6d1e9ab; held locally until the client dist is free.
+
+Engineering choice added while building, with the alternative that lost: **an admin who renames their own account gets the new handle in the viewer at once.** The admin route allows a self-rename (`RenameMember` checks only `RequireAdmin`). `SuspensionPanel`'s `mayAct` tells the viewer's own account by its handle, so with the viewer left on the old handle, the detail under the new one would offer Suspend on the admin's own account, a control the server refuses (`account.mayActOn`). `onRenamed` therefore sets the viewer's handle before the detail under the new one loads, then asks for `/me` again. Waiting for `/me` alone lost: the detail can load first, and the controls would show until it answered. Hiding the rename control on the admin's own account lost: the server allows it, and docs/05 lets an admin rename any member.
+
+Checks run locally: gofmt, build, vet, `go test -race ./...`, `npx tsc --noEmit -p .`, `npm test` (1712 tests), `go generate ./internal/web/spa`, `TestTheAdminBundleIsSeparate`, and the full Playwright suite on port 8931 (105 passed, 11 skipped by project), including the new `e2e/admin-rename.spec.ts`.
+
+Bundle: the reader bundle is 51211 B gzip at the base and 51212 B with this change, of the 60000 B budget; only the lazy chunks' hashed names changed in it. The admin chunk is 24.69 kB gzip as vite reports it, about 0.6 kB more than the base.
