@@ -14,7 +14,9 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:241
+    path: null
 claim:
   actor: agent:claude-code/phase2-run-orchestrator
   branch: groom/phase2-continue
@@ -25,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T08:42:46Z
-updated_at: 2026-09-30T18:45:03Z
+updated_at: 2026-09-30T18:45:15Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
