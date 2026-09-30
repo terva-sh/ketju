@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T21:55:11Z
+updated_at: 2026-09-30T22:01:28Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -174,6 +174,10 @@ Replayed onto main at 4471ea6 (after #243, #245 to #248), and the dist was regen
 **Bundle (criterion 7).** The reader bundle is 59919 B of 70000 B. That is +1768 B over main at 4471ea6 (58151 B), and +12504 B over the 47415 B the criterion names, which was main at 5124209, before the Phase 2 reader tickets landed. A lazy route chunk was measured on 13709f0: 57551 B lazy against 56686 B static. `bundle.mjs` counts reader lazy chunks, and two gzip streams compress worse than one, so the screen is a static import.
 
 **e2e.** `e2e/post-history.spec.ts` passes at 390 px and 1440 px on alice's stored session, with one axe scan per test in each theme. The full suite had 191 passed and 11 skipped on port 18971.
+
+**agent:claude-code/phase2-run-cp2q3** at 2026-09-30T22:01:28Z
+
+Terva review 1625 (run 66ce509f, Actions run 1632) on head 1d9a93e, base 4471ea6: one medium finding, 'Avoid spreading the full rewrite into push'. Fixed. wordDiff's rewrite fallback, and the path that copies a successful script, spread up to about 65,536 tokens into one push, which threw a RangeError for 64 KB of one-character words. Both now append in a loop. The new wordDiff.test.ts case reproduced the RangeError before the fix. The reader bundle is now 59923 B.
 
 ## Summary
 
