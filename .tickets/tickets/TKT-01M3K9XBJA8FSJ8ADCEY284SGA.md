@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3K9XBJA8FSJ8ADCEY284SGA
 title: Autosave new-thread drafts with their title
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-k9xbja
+  branch: run/k9xbja-forum-drafts
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a306a09e0acdd2f97
+  commit: 53623117f3d0bf68f6f4043ebc63791773139d58
+  session: null
+  claimed_at: 2026-09-30T09:57:40Z
+  expires_at: null
 archive: null
 created_at: 2026-09-28T06:05:54Z
-updated_at: 2026-09-30T09:23:42Z
+updated_at: 2026-09-30T09:59:02Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-k9xbja
   name: ""
 extensions: {}
 ---
@@ -53,7 +60,7 @@ The form-post table in docs/07 "Form posts for viewer state" needs a row for wha
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Refreshed against main at 5124209 on 2026-09-30: the migration takes the next free number, TKT-01M3N24RHD's admin exemption has landed, the route table and the agent bucket are new since, and this ticket now also carries the server half of the draft revision that TKT-01M3NS1931's note of 2026-09-29 requires. Revised on 2026-09-30 for Terva review 1559 on PR #210: the revision is a per-key count kept across deletion by a tombstone, with no clock in it.
+Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Refreshed against main at 5124209 on 2026-09-30: the migration takes the next free number, TKT-01M3N24RHD's admin exemption has landed, the route table and the agent bucket are new since, and this ticket now also carries the server half of the draft revision that TKT-01M3NS1931's note of 2026-09-29 requires. Revised on 2026-09-30 for Terva review 1559 on PR #210: the revision is a per-key count kept across deletion by a tombstone, with no clock in it. Checked on claim against main at 5362311 on 2026-09-30 (agent:claude-code/phase2-run-k9xbja): nothing the plan names has changed since 5124209, so it stands as written, with the migration at 0018 unless main has taken it by push time.
 
 ### Settled in grooming
 - **The title is saved.** Maintainer decision of 2026-09-28, recorded in this ticket's note and in docs/04 `drafts`: "a new-thread draft saves its title as well as its body ... a draft restored on another device should come back whole. The `title` column is added by that ticket's migration, and a reply draft leaves it null. That ticket also adds the route."
