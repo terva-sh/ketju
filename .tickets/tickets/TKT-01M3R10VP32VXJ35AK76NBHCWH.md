@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R10VP32VXJ35AK76NBHCWH
 title: Prove a suspension's bulk hide cannot race the queue's restore
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -16,15 +16,22 @@ dependencies:
   - TKT-01M29CRJ4E4AZ079KEHVGJ01DS
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-r10vp3
+  branch: run/r10vp3-suspension-hide-race
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a29067fc06146fffd
+  commit: ae1839e4af4edf46f5b93577f535aea33da16565
+  session: null
+  claimed_at: 2026-09-30T10:29:19Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T02:06:43Z
-updated_at: 2026-09-30T08:49:22Z
+updated_at: 2026-09-30T10:29:22Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-r10vp3
   name: ""
 extensions: {}
 ---
