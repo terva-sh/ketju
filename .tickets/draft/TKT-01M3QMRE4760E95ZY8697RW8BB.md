@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T01:05:58Z
+updated_at: 2026-09-30T01:18:10Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
@@ -64,7 +64,7 @@ Tests: the dialog's validation and the badge text. `TestTheAdminBundleIsSeparate
 - [ ] A moderator sees the controls only on members, an admin on anyone but themselves, and nobody on a pending or deleted-user- account (SuspensionControls.test.tsx)
 - [ ] The controls live in screens/admin/SuspensionPanel.tsx, UserDetail gains only its import, refetch and one element, TestTheAdminBundleIsSeparate passes, and the dist from go generate ./internal/web/spa is committed
 - [ ] A suspended account shows its reason as text and its end, or until lifted; after every answer, success or failure, both the detail and the users list are fetched again, so a suspend whose hide failed leaves the row saying suspended (SuspensionControls.test.tsx)
-- [ ] refetch resolves to the refreshed detail and the panel awaits it: a failed suspend whose refreshed status is suspended shows the finish words and offers Hide their posts, one still active shows only the refusal sentence, a failed refetch says to reload, and 409 on unsuspend has its own sentence (a hide that stopped, a refused suspend is not a partial hide, a refetch that fails)
+- [ ] The panel awaits refetch; the finish-the-hide words show only for a 503 or 500 to a suspend with hide_posts when the account went from not suspended to suspended; a 409 with the refreshed account suspended says it is already suspended; a 409, 503 or 500 leaving it active, or a failed refetch, never mentions a hide; a 409 on unsuspend has its own sentence (a hide that stopped, already suspended is not a partial hide, a refused suspend is not a partial hide, a busy database is not a partial hide, a refetch that fails)
 
 ## Implementation plan
 
@@ -117,11 +117,13 @@ Engineering choices made here, each with the alternative that lost:
    - **Hide their posts** (status `suspended`): `ConfirmButton` "Hide their posts", prompt "Hide every visible post by @{handle} in forums you moderate?", sending `POST …/posts/hide` with no body.
    - **Restore hidden posts** (whenever `mayAct`): `ConfirmButton` "Restore hidden posts", prompt "Restore the posts a suspension of @{handle} hid, in forums you moderate?", sending `POST …/posts/restore` with no body. On success it says "Posts a suspension hid are restored, where you moderate." It says no count, because the server gives none.
    - **Answers.** After every answer, success or failure, the panel calls `onListChanged()` and awaits `refetch()`, so the row's status follows the account, including after a failed request that changed it. It chooses its words from what `refetch` resolved to:
-     - A failed suspend with `hide_posts`, when the refreshed detail's status is `suspended`, says "@{handle} is suspended, but not every post could be hidden. Press Hide their posts to finish."
-     - A failed suspend, when the refreshed detail is not suspended, says the refusal's words (below) and does not mention a hide, because nothing was suspended.
-     - When `refetch` resolves to `null`, the refusal's words are followed by "Reload to see the account as it is now.", and the panel does not guess at the status.
-     - `unavailable` from hide says "Some threads could not be reached. Press Hide their posts again to finish them."
-     - `conflict` on suspend says "This account cannot be suspended now. It may already be suspended, or be the last active admin." On unsuspend it says "This account is no longer suspended."
+     - **Which failures come after the commit** (read from main, Terva review 1523 on PR #181). `account.Service.Suspend` checks the reason and the end, looks the account up, and commits the status in `perm.ChangeStatusID`. What it refuses up to there leaves the account as it was: `validation-failed`, `not-found`, `forbidden` (`mayActOn`), and `conflict`, which covers `perm.ErrBadTransition` (already suspended, or pending), `perm.ErrLastAdmin` and `perm.ErrAnonymized` (`internal/problem/domain.go`). Only after the commit, with `hide_posts`, does it call `s.hide` and so `threads.Service.HidePostsOf`. That step fails in one of two ways. It answers 503 `unavailable`, coded from `threads.ErrSomeThreadsUnavailable` in `eachAuthorThread`, when some threads could not be reached after the rest were done. Or it answers 500 `internal` for an uncoded failure, such as an append error. Neither code is unique to the hide, though. `db.ErrBusy` and `context.DeadlineExceeded` map to `unavailable` and can come from the lookup or the commit, and a database failure in the commit is `internal`. So the code is necessary but not enough on its own.
+     - **The finish words need both signs.** The answer is `unavailable` or `internal` to a suspend sent with `hide_posts`, the detail the panel rendered was not `suspended`, and the refreshed detail is `suspended`. Then the panel says "@{handle} is now suspended, but the request did not finish, so some posts may not be hidden. Press Hide their posts to finish." and offers Hide their posts. The words are true whichever step failed, and Hide their posts is idempotent, so pressing it is safe either way. A new problem code on the suspend route for "suspended, hide unfinished" lost: it is a server change for a case these words already cover.
+     - **`conflict` never gets the finish words**, because a refused suspend committed nothing and hid nothing. When the refreshed detail is `suspended`, it says "@{handle} is already suspended, perhaps by someone else. What is shown now is current." Otherwise it says "This account cannot be suspended. It may be pending, anonymized, or the last active admin."
+     - Any other failure, including `unavailable` or `internal` when the refreshed detail is not suspended, says the refusal's words (`send`'s sentence) and never mentions a hide.
+     - When `refetch` resolves to `null`, the panel cannot tell what happened. It says the refusal's words and "Reload to see the account as it is now.", and never the finish words.
+     - `unavailable` from Hide their posts on its own says "Some threads could not be reached. Press Hide their posts again to finish them."
+     - `conflict` on unsuspend says "This account is no longer suspended."
      - Anything else gets `send`'s sentence.
 3. **`screens/admin/UsersScreen.tsx`**:
    - Import `SuspensionPanel`.
@@ -147,10 +149,12 @@ Engineering choices made here, each with the alternative that lost:
   - `a moderator acts on members only`: a moderator sees the controls on a member, and none on a moderator, an admin, or their own account.
   - `an admin acts on anyone but themselves`: an admin sees the controls on another admin, and none on their own account.
   - `no controls on a pending or anonymized account`: none for status `pending` or a `deleted-user-7` handle.
-  - `a hide that stopped`: a suspend with `hide_posts` answers 503, and the refetched detail is suspended. The finish words show only after the refetch has resolved, Hide their posts is offered, and the list's row says `suspended`.
-  - `a refused suspend is not a partial hide`: a suspend with `hide_posts` answers 409, and the refetched detail is still `active`. The conflict sentence shows, with no finish words and no Hide their posts.
+  - `a hide that stopped`: a suspend with `hide_posts`, from an `active` detail, answers 503 `unavailable`, and the refetched detail is `suspended`. The finish words show only after the refetch has resolved, Hide their posts is offered, and the list's row says `suspended`. The same holds for a 500 `internal`.
+  - `already suspended is not a partial hide` (review 1523): a suspend with `hide_posts` answers 409, and the refetched detail is `suspended`, as when another moderator got there first. The already-suspended words show, with no finish words.
+  - `a refused suspend is not a partial hide`: a suspend with `hide_posts` answers 409, and the refetched detail is still `active`, as for the last active admin. The cannot-be-suspended sentence shows, with no finish words and no Hide their posts.
+  - `a busy database is not a partial hide`: a suspend with `hide_posts` answers 503, and the refetched detail is still `active`. Only `send`'s sentence shows.
   - `a refetch that fails`: the suspend answers 503 and the detail refetch fails. The refusal's words and "Reload to see the account as it is now." show, with no finish words.
-  - `conflict words`: a 409 on suspend and a 409 on unsuspend show their sentences.
+  - `conflict on unsuspend`: a 409 on unsuspend shows "This account is no longer suspended."
   - `refetches and reloads`: after a success, and after a failure, the detail and the list are each requested again. `refetch` resolves to the detail it stored.
   - `an agent is warned`: the prompt for a `kind: 'agent'` account names the token.
 - `UsersScreen.test.tsx` still passes, including `shows a moderator the list and the detail read-only…`, extended to find the suspension controls on a member.
@@ -183,3 +187,7 @@ Terva review 1516 on PR #181 (head 9fc6307), finding 2 (medium), accepted. The p
 **agent:claude-code/phase2-groom** at 2026-09-30T01:05:58Z
 
 Terva review 1520 on PR #181 (head 3395e26), one medium finding, accepted. The failed-hide words depended on a refreshed status that the planned refetch (res.retry, returning void) never gave back. refetch now fetches with apiGet, stores the detail, and resolves to it, or to null if the fetch fails. The panel awaits it before choosing its words. Tests are named for both failure cases, 'a hide that stopped' and 'a refused suspend is not a partial hide', plus 'a refetch that fails'. Criterion 6 is rewritten to match.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T01:18:10Z
+
+Terva review 1523 on PR #181 (head f0c1913), one medium finding, accepted. A 409 can mean the account was already suspended, and the refreshed status is then suspended, so status alone no longer picks the finish-the-hide words. Read from main: every refusal before perm.ChangeStatusID commits leaves the account unchanged (validation-failed, not-found, forbidden, and conflict from ErrBadTransition, ErrLastAdmin or ErrAnonymized). The hide step after the commit answers 503 unavailable (threads.ErrSomeThreadsUnavailable) or 500 internal (an uncoded append failure). Neither code is unique to the hide: db.ErrBusy and context.DeadlineExceeded are also unavailable before the commit. So the finish words need both signs, a 503 or 500 and a change from not suspended to suspended, and they are worded to be true whichever step failed. A 409 with the account now suspended gets its own already-suspended words. New tests: 'already suspended is not a partial hide' and 'a busy database is not a partial hide'. Criterion 8 is rewritten.
