@@ -312,6 +312,58 @@ func TestRedactedPostTakesNoChange(t *testing.T) {
 	}
 }
 
+// TestRedactedPostLeavesTheQueue: the flags on a redacted post can be
+// closed from the moderator queue, whatever state the post was in when it
+// was redacted, and closing them writes nothing to the log
+// (TKT-01M3R1WPNS). The queue takes a redacted post as one already down, so
+// no action tries the Restore or Delete the log refuses. A post hidden
+// pending review, then redacted, would otherwise be restored by a dismiss,
+// be refused, and stay in the queue for good.
+func TestRedactedPostLeavesTheQueue(t *testing.T) {
+	for _, c := range []struct {
+		name      string
+		reporters []string
+		action    string
+	}{
+		{"shown, then dismissed", []string{"dave"}, "dismiss"},
+		{"shown, then kept", []string{"dave"}, "resolve"},
+		{"shown, then removed", []string{"dave"}, "remove"},
+		{"hidden pending review, then dismissed", []string{"dave", "erin", "fay"}, "dismiss"},
+		{"hidden pending review, then kept", []string{"dave", "erin", "fay"}, "resolve"},
+		{"hidden pending review, then removed", []string{"dave", "erin", "fay"}, "remove"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			w := newWorld(t)
+			id, h := w.flagWorld()
+			for _, who := range c.reporters {
+				if rec := send(h, who, http.MethodPost, flagsPath(id), `{"ordinal":4,"reason":"spam"}`); rec.Code != http.StatusOK {
+					t.Fatalf("%s's flag: %d %s", who, rec.Code, rec.Body)
+				}
+			}
+			if hidden := w.entry(id, 4).Flags.Has(threadlog.EntryAutoHidden); hidden != (len(c.reporters) == 3) {
+				t.Fatalf("#4 auto-hidden %v with %d reporters", hidden, len(c.reporters))
+			}
+			w.redactOffline(id, 4)
+			h = w.chain()
+
+			before := w.logState(id)
+			rec := send(h, "bob", http.MethodPost, queuePostPath(id, 4), `{"action":"`+c.action+`"}`)
+			if rec.Code != http.StatusOK {
+				t.Fatalf("bob's %s: %d %s", c.action, rec.Code, rec.Body)
+			}
+			if res := decode[dto.QueueResolution](t, rec); res.Post != dto.QueuePostAlreadyHidden || len(res.Flags) != len(c.reporters) {
+				t.Errorf("bob's %s answered %s", c.action, rec.Body)
+			}
+			if after := w.logState(id); after != before {
+				t.Errorf("bob's %s changed the log: %+v then %+v", c.action, before, after)
+			}
+			if rec := send(h, "bob", http.MethodGet, "/api/v1/admin/queue", ""); len(decode[dto.Queue](t, rec).Items) != 0 {
+				t.Errorf("the queue after bob's %s: %s", c.action, rec.Body)
+			}
+		})
+	}
+}
+
 // TestOldSlugRedirectsAfterTitleRedaction and the API half of
 // TestRedactTitleShowsTheReplacement: after a title redaction the thread is
 // served by its id with the replacement's title and slug, in the page header

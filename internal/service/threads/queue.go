@@ -263,16 +263,21 @@ const (
 	stateVisible    postState = iota
 	stateAutoHidden           // hidden pending review
 	stateHandHidden           // hidden by a moderator
-	stateGone                 // deleted by its author, or moved
+	stateGone                 // deleted by its author, moved, or redacted
 
 	// stateAny is no state, for closeFlags: close whatever the post's
 	// state is now.
 	stateAny postState = -1
 )
 
+// A redacted post is gone whatever bits it carried before the redaction:
+// the log refuses every record naming it, so a dismiss or Keep that would
+// restore a post hidden pending review, or a remove that would hide a shown
+// one, could only be conflict, and its flags would never close
+// (TKT-01M3R1WPNS).
 func stateOf(f threadlog.EntryFlags) postState {
 	switch {
-	case f&(threadlog.EntryDeleted|threadlog.EntryMoved) != 0:
+	case f&(threadlog.EntryDeleted|threadlog.EntryMoved|threadlog.EntryRedacted) != 0:
 		return stateGone
 	case f.Has(threadlog.EntryHiddenByMod | threadlog.EntryAutoHidden):
 		return stateAutoHidden

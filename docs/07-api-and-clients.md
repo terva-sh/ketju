@@ -356,7 +356,9 @@ moderator reads it, its state, and its reports, with an optional note and
 Remove post, Keep post and Dismiss flags, each confirmed first. Keep post
 is not offered on a post a moderator hid by hand, which the screen says is
 the thread page's to restore, and Remove post is not offered on one
-already down. A success takes the item out and fetches `/me` again for
+already down. A redacted post (`redacted: true`) reads "Removed
+permanently" and is offered neither Remove post nor Keep post, only
+Dismiss flags, since nobody can show it again (TKT-01M3R1WPNS). A success takes the item out and fetches `/me` again for
 the badge; `conflict` says another moderator has already handled it and
 fetches the queue again, as any other failure does. An application item
 opens the applications screen's approve and deny controls in place. The

@@ -193,6 +193,37 @@ describe('acting on a flagged post', () => {
     expect(it.querySelector('[data-keep-refused]')!.textContent).toContain('restore it from the thread page');
     expect(button(it, 'Dismiss flags')).not.toBeNull();
   });
+
+  // TKT-01M3R1WPNS. The golden's post was hidden pending review; redacted
+  // since, it keeps that removal, and the screen must not offer the restore
+  // a review's dismiss would be, nor a Remove or Keep of it.
+  it('offers only to dismiss the flags on a redacted post, whatever its removal', async () => {
+    const q = onePage();
+    const p = q.items[0].flag!.post!;
+    Object.assign(p, { redacted: true, deleted: true, removal: 'review', html: '', attachments: [] });
+    server.routes[`GET ${queueUrl}`] = () => ({ status: 200, body: q });
+    server.routes[`POST ${postUrl}`] = () => ({
+      status: 200,
+      body: { action: 'dismiss', post: 'already hidden', flags: [7, 8, 9] },
+    });
+    const root = await renderAt('/admin/queue');
+    const it = item(root, hidden)!;
+    expect(it.querySelector('[data-post-state]')!.textContent).toBe('Removed permanently');
+    expect(it.querySelector('.queue-author')!.textContent).toContain('removed permanently');
+    expect(button(it, 'Remove post')).toBeNull();
+    expect(button(it, 'Keep post')).toBeNull();
+    expect(it.querySelector('[data-keep-refused]')).toBeNull();
+    expect(it.querySelector('[data-redacted]')!.textContent).toBe(
+      'This post was removed permanently and cannot be shown again.',
+    );
+    expect(it.textContent).not.toContain('This post has no words to show.');
+    await click(root, button(it, 'Dismiss flags'));
+    expect(it.textContent).toContain('Dismiss the flags as unfounded?');
+    expect(it.textContent).not.toContain('show this post again');
+    await click(root, button(it, 'Dismiss'));
+    expect(server.sent.find((s) => s.method === 'POST')!.body).toEqual({ action: 'dismiss', note: '' });
+    expect(item(root, hidden)).toBeNull();
+  });
 });
 
 describe("the author's link", () => {

@@ -157,11 +157,15 @@ export function QueueScreen() {
   );
 }
 
-// PostState is how a flagged post stands, as the screen names it.
-type PostState = 'visible' | 'review' | 'moderator' | 'author' | 'unknown';
+// PostState is how a flagged post stands, as the screen names it. A
+// hard-redacted post is 'redacted' whatever its removal says: nobody can
+// show it again or hide it further, so only its flags are left to close
+// (TKT-01M3R1WPNS).
+type PostState = 'visible' | 'review' | 'moderator' | 'author' | 'redacted' | 'unknown';
 
 export function postState(p: Post | null): PostState {
   if (!p) return 'unknown';
+  if (p.redacted) return 'redacted';
   if (!p.deleted) return 'visible';
   switch (p.removal) {
     case 'review':
@@ -178,6 +182,7 @@ const stateWords: Record<PostState, string> = {
   review: 'Hidden pending review',
   moderator: 'Hidden by a moderator',
   author: 'Removed',
+  redacted: 'Removed permanently',
   unknown: 'Cannot be shown just now',
 };
 
@@ -267,7 +272,7 @@ function FlagItem({
           </p>
           {p.html ? (
             <div class="post-body" dangerouslySetInnerHTML={{ __html: p.html }} />
-          ) : p.attachments.length === 0 ? (
+          ) : p.attachments.length === 0 && state !== 'redacted' ? (
             <p class="admin-muted">This post has no words to show.</p>
           ) : null}
           {/* The files are part of what was reported (Terva review 1526). */}
@@ -299,7 +304,7 @@ function FlagItem({
         )}
       </Field>
       <div class="queue-actions" data-queue-actions>
-        {state !== 'moderator' && state !== 'author' && (
+        {state !== 'moderator' && state !== 'author' && state !== 'redacted' && (
           <ConfirmButton
             label="Remove post"
             prompt="Hide this post as a moderator's removal and close its flags?"
@@ -308,7 +313,11 @@ function FlagItem({
             onConfirm={() => act('remove')}
           />
         )}
-        {state === 'moderator' ? (
+        {state === 'redacted' ? (
+          <span class="admin-muted" data-redacted>
+            This post was removed permanently and cannot be shown again.
+          </span>
+        ) : state === 'moderator' ? (
           <span class="admin-muted" data-keep-refused>
             A moderator hid this post. To show it again, restore it from the thread page.
           </span>

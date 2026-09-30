@@ -319,6 +319,12 @@ The queue (TKT-01M29CRJ4E):
   moderator's, and then resolves the flags. It is a moderator's hide even
   of the moderator's own post, since removing it from the queue is a
   moderation decision. On a post already down it only resolves them.
+- **A redacted post is down for good.** The log refuses every record naming
+  a hard-redacted post (03 "Hard redaction"), so the queue takes one as
+  already down, whatever it was before the redaction: dismiss, Keep post
+  and Remove only close its flags, answering `already hidden`, and none
+  tries a restore or a hide (TKT-01M3R1WPNS). Its flags would otherwise
+  stay open for good once a post hidden pending review was redacted.
 - **Audit.** The log records a queue action appends get their `post.*` rows
   from the projection. The queue writes one `flag.resolved` or
   `flag.dismissed` row against the post, with the flags it closed, what was
