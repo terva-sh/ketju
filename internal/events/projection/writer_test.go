@@ -32,14 +32,7 @@ type fixture struct {
 
 func newFixture(t testing.TB) *fixture {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
 	root := filepath.Join(t.TempDir(), "threads")
 	c, err := threadcache.New(root, threadcache.Options{Sync: threadlog.SyncNever})
 	if err != nil {

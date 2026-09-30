@@ -11,6 +11,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 )
 
 // TestMeReadsNoLogs is AC2's structural half: this package does not import
@@ -47,14 +48,7 @@ func TestMeReadsNoLogs(t *testing.T) {
 // ForumUnread, the forum index's column (TKT-01M29CA9A5), is held to the same
 // threads count here, so the index and the /me badge cannot disagree.
 func TestThreadRuleMatchesPostRule(t *testing.T) {
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	for seed := range uint64(60) {
 		rng := rand.New(rand.NewPCG(seed, 7))
 		var mark sql.NullInt64
@@ -230,14 +224,7 @@ func BenchmarkMeCounts(b *testing.B) {
 }
 
 func seedBench(b *testing.B) *db.DB {
-	d, err := db.Open(b.Context(), db.Options{Path: filepath.Join(b.TempDir(), "ketju.db")})
-	if err != nil {
-		b.Fatal(err)
-	}
-	b.Cleanup(func() { d.Close() })
-	if err := d.Migrate(b.Context()); err != nil {
-		b.Fatal(err)
-	}
+	d := dbtest.Open(b, db.Options{Path: filepath.Join(b.TempDir(), "ketju.db")})
 	rng := rand.New(rand.NewPCG(1, 1))
 	const threads, forums = 10_000, 20
 	if err := d.Write(b.Context(), func(q *dbq.Queries, tx *sql.Tx) error {

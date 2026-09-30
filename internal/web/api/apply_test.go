@@ -27,6 +27,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/web"
 )
 
@@ -47,14 +48,7 @@ type applyWorld struct {
 
 func newApplyWorld(t *testing.T) *applyWorld {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	w := &applyWorld{t: t, db: d, now: time.UnixMilli(1_757_600_000_000)}
 	clock := func() time.Time { return w.now }
 	p := perm.New(d)
@@ -66,6 +60,7 @@ func newApplyWorld(t *testing.T) *applyWorld {
 		RateLimit: web.RateLimit(clock), SiteURL: "https://forum.example", Logger: deps.Logger})
 	var member int64
 	w.write(func(q *dbq.Queries) error {
+		var err error
 		member, err = q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "alice", DisplayName: "Alice",
 			Status: "active", Role: domain.RoleMember, Kind: "human", CreatedAt: 1, UpdatedAt: 1})
 		return err

@@ -25,6 +25,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/web"
 )
 
@@ -55,14 +56,7 @@ type world struct {
 // IdP, through the real middleware chain. configure adjusts the provider.
 func newWorld(t *testing.T, configure ...func(*config.Provider)) *world {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	w := &world{t: t, db: d, idp: oidctest.New(t), log: &logBuf{}, now: time.Now()}
 	log := slog.New(slog.NewTextHandler(w.log, nil))
 	w.store = &session.Store{DB: d}

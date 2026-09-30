@@ -27,6 +27,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/web"
 	"github.com/terva-sh/ketju/internal/web/spa"
 )
@@ -81,14 +82,7 @@ type meWorld struct {
 func newMeWorld(t *testing.T) *meWorld {
 	t.Helper()
 	st := &statements{}
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db"), Trace: st.trace})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db"), Trace: st.trace})
 	w := &meWorld{t: t, db: d, stmts: st, now: time.UnixMilli(1_757_500_000_000), id: map[string]int64{}}
 	// One evaluator, as serve shares one: the queue's scope warms the read
 	// decisions /me makes next (perm.ModeratedForums).

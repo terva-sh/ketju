@@ -22,6 +22,7 @@ import (
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/web"
 )
 
@@ -51,14 +52,7 @@ type world struct {
 
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	w := &world{t: t, db: d, clock: &clock{t: time.UnixMilli(1_757_500_000_000)}}
 	w.store = &Store{DB: d, Now: w.clock.now}
 	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {

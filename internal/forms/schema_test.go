@@ -12,6 +12,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 )
 
 // TestSchemaRules is AC6's rules half: each broken rule is refused with its
@@ -145,14 +146,7 @@ func TestAValidSchemaParsesAndRoundTrips(t *testing.T) {
 // TestSeededRegistrationFormParses is AC7's first half: version 1 of the
 // registration form, as migration 0011 seeds it, parses under the rules.
 func TestSeededRegistrationFormParses(t *testing.T) {
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer d.Close()
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	var raw string
 	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
 		return tx.QueryRowContext(t.Context(), `SELECT schema_json FROM form_versions fv JOIN forms f ON f.id = fv.form_id

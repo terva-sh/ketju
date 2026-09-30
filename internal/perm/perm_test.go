@@ -13,6 +13,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 )
 
 // fixture is a migrated database with the seeded grants removed, so every
@@ -57,14 +58,7 @@ func newFixture(t testing.TB) *fixture {
 func newFixtureWith(t testing.TB, trace func(string)) *fixture {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "db", "ketju.db")
-	d, err := db.Open(t.Context(), db.Options{Path: path, Trace: trace})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: path, Trace: trace})
 	f := &fixture{t: t, db: d, path: path, clock: &fakeClock{t: time.UnixMilli(1_790_000_000_000)}}
 	f.exec("DELETE FROM permissions")
 	f.ev = New(d)

@@ -16,19 +16,13 @@ import (
 
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 )
 
 func openDB(t *testing.T) *db.DB {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	if err := d.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
 		_, err := tx.ExecContext(t.Context(), `INSERT INTO users (id, handle, display_name, status, role, kind,
 			prefs_json, created_at, updated_at) VALUES (7, 'alice', 'Alice', 'active', 'admin', 'human', '{}', 1, 1)`)

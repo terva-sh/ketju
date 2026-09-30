@@ -26,6 +26,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/web"
 )
 
@@ -57,14 +58,7 @@ var adminUsers = []struct {
 
 func newAdminWorld(t *testing.T) *adminWorld {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	w := &adminWorld{t: t, db: d, perm: perm.New(d), now: time.UnixMilli(1_757_500_000_000), tokens: map[string]string{}}
 	if err := d.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
 		for _, u := range adminUsers {
@@ -78,6 +72,7 @@ func newAdminWorld(t *testing.T) *adminWorld {
 			updated_at) VALUES (1, 'github', 'applicant', 'https://github.com', 1, 1)`); err != nil {
 			return err
 		}
+		var err error
 		w.forum, err = q.CreateForum(t.Context(), dbq.CreateForumParams{Slug: "general", Name: "General",
 			Visibility: domain.VisibilityPublic, CreatedAt: 1, UpdatedAt: 1})
 		return err

@@ -12,6 +12,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 )
 
 // cancelling is a session store whose request is cancelled while the old
@@ -51,14 +52,7 @@ func (c *cancelling) Revoke(ctx context.Context, token string) error {
 // A sign-in cancelled while it replaces a session still ends the session it
 // issued, and records nothing (review 513).
 func TestACancelledSignInLeavesNoSessionBehind(t *testing.T) {
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
 		u, err := q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "alice", DisplayName: "Alice",
 			Status: "active", Role: "member", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
@@ -75,7 +69,7 @@ func TestACancelledSignInLeavesNoSessionBehind(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	sessions := &cancelling{cancel: cancel}
 	s := &Service{DB: d, Sessions: sessions}
-	_, err = s.Login(ctx, &oidc.Identity{Provider: "fake", Subject: "user-1"}, domain.Viewer{}, 0, session.Meta{}, "old")
+	_, err := s.Login(ctx, &oidc.Identity{Provider: "fake", Subject: "user-1"}, domain.Viewer{}, 0, session.Meta{}, "old")
 	if !errors.Is(err, context.Canceled) {
 		t.Fatalf("Login = %v, want the cancellation", err)
 	}

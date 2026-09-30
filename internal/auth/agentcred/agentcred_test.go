@@ -18,6 +18,7 @@ import (
 	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 )
 
 type world struct {
@@ -33,14 +34,7 @@ type world struct {
 // status.
 func newWorld(t *testing.T) *world {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	w := &world{t: t, db: d, perm: perm.New(d), now: time.UnixMilli(1_757_500_000_000), users: map[string]int64{}}
 	w.store = &Store{DB: d, Now: func() time.Time { return w.now }}
 	for _, u := range []struct{ handle, role, kind, status string }{

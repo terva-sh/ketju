@@ -21,6 +21,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/store/db"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/web"
 )
 
@@ -58,20 +59,13 @@ type fixture struct {
 func newFixture(t testing.TB) *fixture {
 	t.Helper()
 	f := &fixture{dir: t.TempDir(), log: &logBuf{}}
-	d, err := db.Open(t.Context(), db.Options{
+	d := dbtest.Open(t, db.Options{
 		Path: filepath.Join(f.dir, "db", "ketju.db"),
 		Trace: func(sql string) {
 			f.stmts.Add(1)
 			f.sqls.Store(sql, struct{}{})
 		},
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
 	f.db = d
 	log := slog.New(slog.NewTextHandler(f.log, nil))
 	f.probe = NewDirProbe(f.dir, log)

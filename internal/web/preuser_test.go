@@ -28,6 +28,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/web"
 	"github.com/terva-sh/ketju/internal/web/api"
 	"github.com/terva-sh/ketju/internal/web/auth"
@@ -73,14 +74,7 @@ type gateWorld struct {
 
 func newGateWorld(t *testing.T) *gateWorld {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	var applicant, member int64
 	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error

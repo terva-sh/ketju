@@ -17,6 +17,7 @@ import (
 	"github.com/terva-sh/ketju/internal/store/blob"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
@@ -36,14 +37,7 @@ type gcWorld struct {
 func newGCWorld(t *testing.T) *gcWorld {
 	t.Helper()
 	root := t.TempDir()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(root, "db", "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(root, "db", "ketju.db")})
 	if err := os.MkdirAll(filepath.Join(root, threadid.ThreadsDir), 0o750); err != nil {
 		t.Fatal(err)
 	}

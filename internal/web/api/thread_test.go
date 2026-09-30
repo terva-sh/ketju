@@ -32,6 +32,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
@@ -84,14 +85,7 @@ func newWorld(t *testing.T) *world {
 // newWorldSync is newWorld with the thread logs synced under policy.
 func newWorldSync(t *testing.T, policy threadlog.SyncPolicy) *world {
 	t.Helper()
-	d, err := db.Open(t.Context(), db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { d.Close() })
-	if err := d.Migrate(t.Context()); err != nil {
-		t.Fatal(err)
-	}
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
 	root := filepath.Join(t.TempDir(), "threads")
 	c, err := threadcache.New(root, threadcache.Options{Sync: policy})
 	if err != nil {
