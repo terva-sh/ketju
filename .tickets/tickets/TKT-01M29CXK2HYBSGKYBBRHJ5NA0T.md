@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T08:56:23Z
+updated_at: 2026-09-30T09:29:11Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,12 +45,12 @@ The screen also has to explain the split. An admin looking for the OIDC client s
 ## Acceptance criteria
 
 - [ ] The screen lists every key in settings.All() and edits each one, and a change applies to the next request without a restart, site_name included (TestSettingsScreenListsEveryKey, TestSettingTakesEffectWithoutRestart)
-- [ ] Each change writes setting.changed with the admin, the IP and the old and new values in the same transaction, and the screen shows who last changed a key and when (TestSettingChangeAudited)
 - [ ] The screen names each config.toml section with the reason it is not editable here, and shows no values (TestEverySectionHasAReason)
 - [ ] An invalid value is validation-failed, and the screen shows the key's allowed range or choices from the registry (TestInvalidSettingRefused)
 - [ ] GET and PUT /api/v1/admin/settings are admin-only: a moderator by role and a member who holds moderate through a group are 403 (TestSettingsAreAdminOnly)
 - [ ] site_name reaches /me for every viewer, the shell title and the three wordmarks (TopBar, PhoneTopBar, ApplicantShell) at the cost of one /me statement, and TestMeBudget says so (TestShellInlinesMe, TestMeBudget, Shell.test.tsx)
 - [ ] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total is recorded against 47415 B within 60000 B, and the dist from go generate ./internal/web/spa is committed (SettingsScreen.test.tsx)
+- [ ] Each change writes setting.changed with the admin, the IP and the old and new values in the same transaction. Who last changed a key follows three rules: set from the screen, updated_by is the admin and updated_at the time; set from the command line, updated_by is null and updated_at the time; never set, both are null. The screen says 'from the command line' only for the second (TestSettingChangeAudited, TestSettingLastChanged, SettingsScreen.test.tsx)
 
 ## Implementation plan
 
@@ -94,7 +94,7 @@ Read from main at 5124209:
 
 1. **`internal/settings`**:
    - `Setting` gains `Choices []string`, set by `oneOf`, so the client can draw a select.
-   - `Value` gains `UpdatedAt int64` and `UpdatedBy int64`, zero when the key has no row, filled by `current`.
+   - `Value` gains `UpdatedAt int64` and `UpdatedBy int64`, filled by `current` from the row. `UpdatedAt` is zero only when the key has no row. `UpdatedBy` is zero when the key has no row, and also when no account wrote the row.
 2. **`internal/config`**: `Sections() []Section{Name, Reason string; Keys []string}`, a fixed table over the top-level sections of `Config`. Suggested reasons:
    - `oidc` holds provider secrets and is needed before anyone can sign in.
    - `bootstrap` decides who is admin before any admin exists.
@@ -108,7 +108,12 @@ Read from main at 5124209:
 4. **Routes** in `internal/web/api/admin_settings.go`, registered from `registerAdmin`, each through `adminRoute` with `adminGate`: `GET /api/v1/admin/settings`, and `PUT /api/v1/admin/settings/{key}` with `{value}`. The PUT is JSON-only and write-limited. Both answers are `no-store`.
 5. **`internal/dto`**:
    - `SiteSettings{Settings []SiteSetting; Config []ConfigSection}`.
-   - `SiteSetting{Key, Doc, Kind, Allowed string; Choices []string; Default, Value json.RawMessage; IsDefault bool; UpdatedAt *Millis; UpdatedBy *Author}`, with `UpdatedAt` and `UpdatedBy` null for a key with no row, or one the command line changed.
+   - `SiteSetting{Key, Doc, Kind, Allowed string; Choices []string; Default, Value json.RawMessage; IsDefault bool; UpdatedAt *Millis; UpdatedBy *Author}`, with these rules, read from what the writers store:
+     - **Never set** (no row): `UpdatedAt` and `UpdatedBy` are both null.
+     - **Set from the screen**: both are set, the admin and the time.
+     - **Set from the command line**: `UpdatedBy` is null and `UpdatedAt` holds the time. `ketju admin setting set` (`settingSet` in `cmd/ketju/admin_setting.go`) calls `settings.SetBy` with `Change{Details: {"via": "cli"}, At: time.Now()}` and no `Actor`. `SetBy` writes `updated_by` as NULL when `Actor` is 0 and always writes `updated_at`, which migration 0006 declares `NOT NULL`. The `setting.changed` row carries `"via": "cli"`.
+
+     The earlier wording, which made both fields null for a command-line change, was wrong (review 1560 on PR #209).
    - `ConfigSection{Name, Reason string; Keys []string}`.
    - The golden `settings.admin.json` has one key changed by an admin, one at its default, and one changed from the command line, so the nullable fields appear both null and set.
    - `dto.Me` gains `SiteName string` (`site_name`), and the `me.*.json` goldens gain it.
@@ -121,7 +126,7 @@ Read from main at 5124209:
    - Each field saves itself: Save, then an inline "Saved" or the refusal with the `allowed` text.
    - "Saved" follows the rule settled for the agent limits form (TKT-01M3QV39H4): editing the field clears it, and an answer shows it only when the field still holds what was sent.
    - A reset link restores the default.
-   - "Last changed" shows who and when, or "from the command line" when `UpdatedBy` is null and `UpdatedAt` is set.
+   - "Last changed" shows who and when for a screen change. It shows "from the command line" with the time when `UpdatedBy` is null and `UpdatedAt` is set. It shows nothing when both are null, because the key has never been set.
    - Below the fields, a "Set in config.toml" section lists each section with its reason and the line "Change these in config.toml and restart ketju".
 8. **Docs**:
    - A new `####` subsection under docs/07 "Moderation and admin", "Site settings (TKT-01M29CXK2H)", documents both endpoints.
@@ -137,12 +142,18 @@ Read from main at 5124209:
   - `registration.mode`: registration switches.
   - `slow_mode.default_seconds`: a post in a thread with no `thread_slow_mode` row is slowed.
   - `site_name`: the shell title and `/me` change.
-- `TestSettingChangeAudited`: the row names the admin, the IP and the old and new values. A failing audit insert leaves the setting unchanged. The listing shows the admin and time as last changed.
+- `TestSettingChangeAudited`: the row names the admin, the IP and the old and new values. A failing audit insert leaves the setting unchanged.
+- `TestSettingLastChanged` (`internal/web/api/admin_settings_test.go`), one case for each way a key can stand:
+  - `set from the screen`: after a PUT, the listing has `updated_by` as the admin and `updated_at` as the PUT's time.
+  - `set from the command line`: after `settings.SetBy` with `Change{Details: {"via": "cli"}, At: t}` (what `settingSet` sends), `updated_by` is null and `updated_at` is `t`.
+  - `never set`: a key with no row has both null, and `is_default` true.
+
+  A `settings` case beside it checks that `Value.UpdatedAt` and `Value.UpdatedBy` come from the row in the same three cases.
 - `TestInvalidSettingRefused`: an out-of-range integer, an unknown choice, the wrong type, `invite`, and an `agents.write_refill_seconds` over 604800 are each `validation-failed`, and the listing's `allowed` names the range. An unknown key is `not-found`.
 - `TestEverySectionHasAReason`: every top-level key in `Config.Entries()` belongs to a section with a reason.
 - `TestSettingsAreAdminOnly`: a moderator by role is 403, and so is a member who holds `moderate` through a group.
 - `TestMeBudget` and `TestMeBudgetWhenTouchIsDue` count one more statement. `TestShellInlinesMe` sees `site_name` in the inlined `/me` and in the title.
-- Goldens. Client: `SettingsScreen.test.tsx` covers rendering by kind, a select for a key with choices, the refusal message, the saved status clearing on edit, and the config section. `Shell.test.tsx` checks that the wordmark shows `site_name`. `TestTheAdminBundleIsSeparate` stays green.
+- Goldens. Client: `SettingsScreen.test.tsx` covers the three "Last changed" lines (`last changed from the screen`, `last changed from the command line`, `never changed`), rendering by kind, a select for a key with choices, the refusal message, the saved status clearing on edit, and the config section. `Shell.test.tsx` checks that the wordmark shows `site_name`. `TestTheAdminBundleIsSeparate` stays green.
 
 ### Out of scope
 
@@ -156,3 +167,7 @@ Read from main at 5124209:
 **agent:claude-code/phase2-groom** at 2026-09-30T08:56:23Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The Settled items are carried verbatim; new ones follow them. Changes: (1) The registry now holds twelve keys. threads.rename_window_seconds (#193) and agents.write_burst and agents.write_refill_seconds are new, and the screen lists them with no client change. (2) settings.Change already carries the IP, so the old step 1 about the audit helper is resolved. settings.Value gains UpdatedAt and UpdatedBy, which current() used to drop. (3) site_name rides on /me: ShellPage already calls Me, so the title costs nothing more, and /me pays one statement (TestMeBudget). An in-process cache lost because a CLI setting change could not clear it. It reaches agents' /me (#189) too. (4) ApplicantShell has a third hard-coded wordmark. (5) The slow_mode default test uses a thread with no thread_slow_mode row (#188). (6) The field saves itself, and 'Saved' follows TKT-01M3QV39H4's rule. (7) The PUT's refusal stays plain validation-failed, because docs/07 reserves field errors for forms, schemas, applications and handles. (8) The maintainer's decision of 2026-09-30 keeps admin screens on their role gates. Three criteria are added: admin-only, site_name, and the admin chunk and dist.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:29:11Z
+
+Terva review 1560 on PR #209 (head 95c690b), one medium finding, accepted. The plan made both updated_at and updated_by null for a setting changed from the command line, while the screen told a command-line change by updated_by null with updated_at set. I checked the code. ketju admin setting set (settingSet in cmd/ketju/admin_setting.go) calls settings.SetBy with no Actor, Details via=cli, and At = time.Now(). SetBy writes updated_by as NULL when Actor is 0 and always writes updated_at, which migration 0006 declares NOT NULL. So the rules are now these. Set from the screen: both set. Set from the command line: updated_by null, updated_at set. Never set (no row): both null. The DTO rule, Value, the screen's 'Last changed' line and criterion 2 all state these rules. TestSettingLastChanged and SettingsScreen.test.tsx name one case for each.
