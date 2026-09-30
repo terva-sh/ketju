@@ -4,6 +4,7 @@ import type { Me, Queue } from '../../../api/dto';
 import { viewer } from '../../../state/viewer';
 import { problemAnswer, renderAt, screenOf, settle, stubServer, unmount, type StubServer } from '../../../testing';
 import { approvedApp, appUrl, asModerator, pendingApp } from '../applications/fixtures';
+import { handled } from './QueueScreen';
 import golden from '../../../../../../internal/dto/testdata/golden/queue.moderator.json';
 import resolution from '../../../../../../internal/dto/testdata/golden/queue-resolution.moderator.json';
 
@@ -153,6 +154,31 @@ describe('acting on a flagged post', () => {
     expect(root.querySelector('[data-queue-failure]')!.getAttribute('role')).toBe('alert');
     expect(item(root, hidden)).not.toBeNull();
     expect(server.sent.filter((s) => s.method === 'GET' && s.url === queueUrl)).toHaveLength(2);
+  });
+
+  it('says another moderator got there first on a post a moderator hid, too', async () => {
+    const q = onePage();
+    q.items[0].flag!.post!.removal = 'moderator';
+    server.routes[`GET ${queueUrl}`] = () => ({ status: 200, body: q });
+    server.routes[`POST ${postUrl}`] = () => problemAnswer('conflict', 409);
+    const root = await renderAt('/admin/queue');
+    await confirm(root, item(root, hidden)!, 'Dismiss flags', 'Dismiss');
+    expect(root.querySelector('[data-queue-notice]')!.textContent).toBe(handled);
+    expect(root.querySelector('[data-queue-failure]')).toBeNull();
+  });
+
+  it('shows the files of a post with no words', async () => {
+    const q = onePage();
+    const p = q.items[0].flag!.post!;
+    p.html = '';
+    p.attachments = [{ hash: 'abc123', original_name: 'receipt.png', size: 2048, mime: 'image/png' }];
+    server.routes[`GET ${queueUrl}`] = () => ({ status: 200, body: q });
+    const root = await renderAt('/admin/queue');
+    const it = item(root, hidden)!;
+    const file = it.querySelector<HTMLAnchorElement>('.attachments a')!;
+    expect(file.getAttribute('href')).toBe('/blobs/abc123');
+    expect(file.textContent).toBe('receipt.png');
+    expect(it.textContent).not.toContain('This post has no words to show.');
   });
 
   it('does not offer to keep a post a moderator hid by hand', async () => {

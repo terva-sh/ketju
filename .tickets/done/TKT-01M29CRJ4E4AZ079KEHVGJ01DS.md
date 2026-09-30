@@ -32,7 +32,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-30T01:26:41Z
+updated_at: 2026-09-30T01:37:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -282,6 +282,20 @@ PR #184, the server half, merged at 034053c032f67c6252e9a7567d20d6319a55b334 by 
 - `run/crj4e-moderator-queue`, the branch of the closed #183, is left on the remote, because #183 never merged.
 
 The client half follows as PR 2 on `run/crj4e-queue-screen-2`, built directly on 034053c.
+
+**agent:claude-code/phase2-run-crj4e** at 2026-09-30T01:37:46Z
+
+Terva review 1526 on PR #185 (the client half) ran as [Actions run #1189](https://git.local.sothr.com/terva-sh/ketju/actions/runs/1189) with request `ready-review-4410f31`. It reviewed head 4410f31b83957220c716f11bda092f84c232da71 against base 034053c032f67c6252e9a7567d20d6319a55b334. The result was failure, with two medium findings. Both are fixed.
+
+### finding-1: Handle conflicts on moderator-hidden posts as conflicts (fixed)
+
+Every 409 now goes to the handled notice ("Another moderator has already handled this.") and reloads the queue. The old `state !== 'moderator'` exception was meant for Keep's conflict on a hand-hidden post, but the screen never offers Keep there, so the exception only swallowed real conflicts from Dismiss. New test: "says another moderator got there first on a post a moderator hid, too".
+
+### finding-2: Show post attachments in flag items (fixed)
+
+A flag item now renders the post's files with the thread view's `Attachments` component (components/thread/Post.tsx), as links to their blobs. An attachment-only post no longer says it has nothing to show. New test: "shows the files of a post with no words".
+
+The built client is regenerated. The thread-view bundle is 45708 B gzip against a 60000 B budget. All 1433 client tests pass.
 
 ## Summary
 

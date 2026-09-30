@@ -4,6 +4,7 @@ import type { AdminApplication, Post, Queue, QueueFlag, QueueItem, QueueResoluti
 import { isAbort, isProblem } from '../../../api/problem';
 import { useResource } from '../../../api/resource';
 import { ErrorPanel } from '../../../components/ErrorPanel';
+import { Attachments } from '../../../components/thread/Post';
 import { removedMark } from '../../../components/thread/removal';
 import { refreshViewer, viewer } from '../../../state/viewer';
 import { when } from '../../apply/when';
@@ -226,7 +227,10 @@ function FlagItem({
       onDone(item, resolvedWords(r.value));
       return true;
     }
-    if (isProblem(r.error, 'conflict') && state !== 'moderator') {
+    // Every conflict is somebody else's action, or a change to the post,
+    // since the read: none of the actions offered is refused for the state
+    // the item shows (Terva review 1526 on PR #185).
+    if (isProblem(r.error, 'conflict')) {
       onConflict();
       return true;
     }
@@ -263,9 +267,11 @@ function FlagItem({
           </p>
           {p.html ? (
             <div class="post-body" dangerouslySetInnerHTML={{ __html: p.html }} />
-          ) : (
+          ) : p.attachments.length === 0 ? (
             <p class="admin-muted">This post has no words to show.</p>
-          )}
+          ) : null}
+          {/* The files are part of what was reported (Terva review 1526). */}
+          <Attachments post={p} />
         </div>
       ) : (
         <p class="admin-muted">This post cannot be shown just now. Open the thread to see it.</p>
