@@ -259,6 +259,7 @@ var adminRouteGates = map[string]string{
 	"GET /api/v1/admin/forms/{key}/versions/{version}":  "admin",
 	"POST /api/v1/admin/forms/{key}/versions":           "admin",
 	"POST /api/v1/admin/forms/{key}/preview":            "admin",
+	"GET /api/v1/admin/audit":                           "admin",
 }
 
 // TestThreadModerationRoutesUseTheModeratesGate is TKT-01M3RQP0TG's first

@@ -151,6 +151,29 @@ SELECT * FROM audit_log WHERE id < ? ORDER BY id DESC LIMIT ?;
 -- name: AuditIDs :many
 SELECT id FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ? ORDER BY id;
 
+-- The next four are what the admin audit view names its targets by, one
+-- statement per kind for a whole page of rows (TKT-01M29CP2R4). A target
+-- a row names but the table no longer holds is absent from the answer,
+-- and the view draws it by its raw id.
+--
+-- AuditThreads is the title and slug of thread and post targets, and of
+-- the posts flag targets are on.
+-- name: AuditThreads :many
+SELECT id, slug, title FROM threads WHERE id IN (sqlc.slice('ids'));
+
+-- AuditForums is the name and slug of forum targets, and of the forums a
+-- thread.moved row names.
+-- name: AuditForums :many
+SELECT id, slug, name FROM forums WHERE id IN (sqlc.slice('ids'));
+
+-- AuditGroups is the name of group targets.
+-- name: AuditGroups :many
+SELECT id, name FROM groups WHERE id IN (sqlc.slice('ids'));
+
+-- AuditFlags is the post each flag target is on.
+-- name: AuditFlags :many
+SELECT id, thread_id, ordinal FROM flags WHERE id IN (sqlc.slice('ids'));
+
 -- The threads holding a post by the user, from the projection: every
 -- thread a suspension's hide or restore has to look in (TKT-01M29CP2QK).
 -- The thread's own author is taken too, since CreateThread projects its

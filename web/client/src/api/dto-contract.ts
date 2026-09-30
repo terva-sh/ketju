@@ -20,6 +20,7 @@ import type {
   ApplicationForm,
   ApplicationNote,
   ApplicationStatus,
+  AuditPage,
   CreatedAgent,
   CreatedPost,
   CreatedThread,
@@ -58,6 +59,8 @@ import adminApplicationPendingModerator from '../../../../internal/dto/testdata/
 import adminApplicationWithdrawnModerator from '../../../../internal/dto/testdata/golden/admin-application-withdrawn.moderator.json';
 import adminApplicationsModerator from '../../../../internal/dto/testdata/golden/admin-applications.moderator.json';
 import applicationNoteModerator from '../../../../internal/dto/testdata/golden/application-note.moderator.json';
+import auditAdmin from '../../../../internal/dto/testdata/golden/audit.admin.json';
+import auditFilteredAdmin from '../../../../internal/dto/testdata/golden/audit-filtered.admin.json';
 import adminGroupAdmin from '../../../../internal/dto/testdata/golden/admin-group.admin.json';
 import adminGroupsAdmin from '../../../../internal/dto/testdata/golden/admin-groups.admin.json';
 import adminUserAgentAdmin from '../../../../internal/dto/testdata/golden/admin-user-agent.admin.json';
@@ -165,6 +168,8 @@ export const contract = [
   matches<ApplicationStatus>()(applyStatusNonePreUser),
   matches<ApplicationStatus>()(applyStatusPendingPreUser),
   matches<ApplicationStatus>()(applyStatusWithdrawnPreUser),
+  matches<AuditPage>()(auditAdmin),
+  matches<AuditPage>()(auditFilteredAdmin),
   matches<CreatedAgent>()(createdAgentAdmin),
   matches<CreatedAgent>()(createdAgentTokenlessAdmin),
   matches<CreatedPost>()(createdPostMember),

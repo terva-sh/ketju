@@ -1,0 +1,119 @@
+{
+  "entries": [
+    {
+      "id": 412,
+      "at": 1757610000000,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "action": "thread.moved",
+      "target": {
+        "type": "thread",
+        "id": "3yymw47g00001",
+        "label": "The dinner bill",
+        "href": "/t/3yymw47g00001/the-dinner-bill"
+      },
+      "related": [
+        {
+          "type": "forum",
+          "id": "1",
+          "label": "General",
+          "href": "/f/general"
+        },
+        {
+          "type": "forum",
+          "id": "2",
+          "label": "Money",
+          "href": "/f/money"
+        }
+      ],
+      "details": {
+        "from_forum": 1,
+        "log_offset": 4096,
+        "thread": "3yymw47g00001",
+        "to_forum": 2
+      },
+      "ip": ""
+    },
+    {
+      "id": 411,
+      "at": 1757609000000,
+      "actor": null,
+      "action": "post.auto_hidden",
+      "target": {
+        "type": "post",
+        "id": "3yymw47g00001/63",
+        "label": "The dinner bill #63",
+        "href": "/t/3yymw47g00001/the-dinner-bill/63"
+      },
+      "related": [],
+      "details": {
+        "log_offset": 3968,
+        "thread": "3yymw47g00001",
+        "via": "thread-log"
+      },
+      "ip": ""
+    },
+    {
+      "id": 410,
+      "at": 1757608000000,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "action": "blob.deleted",
+      "target": {
+        "type": "blob",
+        "id": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "label": "9f86d081884c",
+        "href": ""
+      },
+      "related": [],
+      "details": {
+        "journal": "redaction.journal",
+        "via": "cli"
+      },
+      "ip": ""
+    },
+    {
+      "id": 409,
+      "at": 1757607000000,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "action": "setting.changed",
+      "target": {
+        "type": "setting",
+        "id": "registration.mode",
+        "label": "registration.mode",
+        "href": "/admin/settings"
+      },
+      "related": [],
+      "details": {
+        "from": "open",
+        "to": "approval"
+      },
+      "ip": "203.0.113.7"
+    }
+  ],
+  "actions": [
+    "blob.deleted",
+    "post.auto_hidden",
+    "setting.changed",
+    "thread.moved",
+    "user.renamed",
+    "user.suspended"
+  ],
+  "next_cursor": "NDA5"
+}

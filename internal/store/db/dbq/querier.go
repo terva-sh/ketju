@@ -55,12 +55,27 @@ type Querier interface {
 	// adds no second row (TKT-01M29CKRGS). The record is named by its target,
 	// its action and its log offset, which the row's details carry.
 	AuditExistsForRecord(ctx context.Context, arg AuditExistsForRecordParams) (bool, error)
+	// AuditFlags is the post each flag target is on.
+	AuditFlags(ctx context.Context, ids []int64) ([]AuditFlagsRow, error)
+	// AuditForums is the name and slug of forum targets, and of the forums a
+	// thread.moved row names.
+	AuditForums(ctx context.Context, ids []int64) ([]AuditForumsRow, error)
+	// AuditGroups is the name of group targets.
+	AuditGroups(ctx context.Context, ids []int64) ([]AuditGroupsRow, error)
 	// The ids of the audit rows of an action on a target, oldest first, through
 	// the audit_log_target index. A suspension's hidden posts carry the id of
 	// its user.suspended row, so these are the suspensions whose hidden posts
 	// a restore may put back (TKT-01M29CP2QK).
 	AuditIDs(ctx context.Context, arg AuditIDsParams) ([]int64, error)
 	AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) ([]AuditLog, error)
+	// The next four are what the admin audit view names its targets by, one
+	// statement per kind for a whole page of rows (TKT-01M29CP2R4). A target
+	// a row names but the table no longer holds is absent from the answer,
+	// and the view draws it by its raw id.
+	//
+	// AuditThreads is the title and slug of thread and post targets, and of
+	// the posts flag targets are on.
+	AuditThreads(ctx context.Context, ids []int64) ([]AuditThreadsRow, error)
 	// Whether a blob has a row, for the collector's recovery of a removal that
 	// a failed commit or a crash interrupted.
 	BlobExists(ctx context.Context, hash string) (bool, error)

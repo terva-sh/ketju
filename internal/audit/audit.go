@@ -77,6 +77,62 @@ const (
 var Types = []string{TypeUser, TypeForum, TypeGroup, TypeFlag, TypeApplication, TypeThread, TypePost, TypeSetting,
 	TypePermission, TypeForm, TypeIdentity, TypeBlob}
 
+// Actions lists every action a row is written with today, sorted: the
+// closed list the admin audit view offers as its action filter
+// (TKT-01M29CP2R4). docs/04 "audit_log" lists the same actions, and
+// TestActionsDocumented holds the two together; TestActionsCoverTheWriters
+// fails on an action constant or an Append literal that is missing here.
+//
+// Append does not refuse an action that is not listed. A missed action then
+// costs the filter one entry rather than failing a moderator's action.
+var Actions = []string{
+	"agent.credential_issued",
+	"agent.credential_revoked",
+	"agent.limits_changed",
+	"application.approved",
+	"application.denied",
+	"blob.deleted",
+	"flag.dismissed",
+	"flag.resolved",
+	"form.version_created",
+	"group.created",
+	"group.deleted",
+	"group.member_added",
+	"group.member_removed",
+	"group.updated",
+	"identity.linked",
+	"identity.unblocked",
+	"permission.granted",
+	"permission.revoked",
+	"post.auto_hidden",
+	"post.deleted",
+	"post.edited",
+	"post.hidden",
+	"post.redacted",
+	"post.restored",
+	"setting.changed",
+	"thread.locked",
+	"thread.moved",
+	"thread.pinned",
+	"thread.renamed",
+	"thread.slow_mode",
+	"thread.title_redacted",
+	"thread.unlocked",
+	"thread.unpinned",
+	"user.anonymized",
+	"user.created",
+	"user.deactivated",
+	"user.demoted",
+	"user.posts_hidden",
+	"user.posts_restored",
+	"user.promoted",
+	"user.reactivated",
+	"user.renamed",
+	"user.role_changed",
+	"user.suspended",
+	"user.unsuspended",
+}
+
 func decimal(typ string, id int64) Target { return Target{Type: typ, ID: strconv.FormatInt(id, 10)} }
 
 // User is a user, by id.

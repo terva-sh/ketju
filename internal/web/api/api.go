@@ -20,6 +20,7 @@ import (
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/account"
 	"github.com/terva-sh/ketju/internal/service/applications"
+	"github.com/terva-sh/ketju/internal/service/auditlog"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/groups"
@@ -87,7 +88,9 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Threads: d.Threads, Now: d.Users.Now},
 		// Handle changes likewise (TKT-01M3NRP3W9): a rename needs only the
 		// database and the clock.
-		identity: &identity.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now}}
+		identity: &identity.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now},
+		// The audit log likewise (TKT-01M29CP2R4): it only reads.
+		auditlog: &auditlog.Service{DB: d.Users.DB}}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
 		mux.HandleFunc(rt.Pattern(), h.charged(rt.Method, rt.Path, rt.Handler))
@@ -163,6 +166,7 @@ type handlers struct {
 	groups       *groups.Service
 	account      *account.Service
 	identity     *identity.Service
+	auditlog     *auditlog.Service
 	log          *slog.Logger
 	// applyLimit is the per-identity stage the application writes share
 	// (apply.go). There is one per handler set, so every route it wraps

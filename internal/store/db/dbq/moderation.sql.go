@@ -112,6 +112,138 @@ func (q *Queries) AuditExistsForRecord(ctx context.Context, arg AuditExistsForRe
 	return exists, err
 }
 
+const auditFlags = `-- name: AuditFlags :many
+SELECT id, thread_id, ordinal FROM flags WHERE id IN (/*SLICE:ids*/?)
+`
+
+type AuditFlagsRow struct {
+	ID       int64
+	ThreadID int64
+	Ordinal  int64
+}
+
+// AuditFlags is the post each flag target is on.
+func (q *Queries) AuditFlags(ctx context.Context, ids []int64) ([]AuditFlagsRow, error) {
+	query := auditFlags
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuditFlagsRow
+	for rows.Next() {
+		var i AuditFlagsRow
+		if err := rows.Scan(&i.ID, &i.ThreadID, &i.Ordinal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const auditForums = `-- name: AuditForums :many
+SELECT id, slug, name FROM forums WHERE id IN (/*SLICE:ids*/?)
+`
+
+type AuditForumsRow struct {
+	ID   int64
+	Slug string
+	Name string
+}
+
+// AuditForums is the name and slug of forum targets, and of the forums a
+// thread.moved row names.
+func (q *Queries) AuditForums(ctx context.Context, ids []int64) ([]AuditForumsRow, error) {
+	query := auditForums
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuditForumsRow
+	for rows.Next() {
+		var i AuditForumsRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const auditGroups = `-- name: AuditGroups :many
+SELECT id, name FROM groups WHERE id IN (/*SLICE:ids*/?)
+`
+
+type AuditGroupsRow struct {
+	ID   int64
+	Name string
+}
+
+// AuditGroups is the name of group targets.
+func (q *Queries) AuditGroups(ctx context.Context, ids []int64) ([]AuditGroupsRow, error) {
+	query := auditGroups
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuditGroupsRow
+	for rows.Next() {
+		var i AuditGroupsRow
+		if err := rows.Scan(&i.ID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const auditIDs = `-- name: AuditIDs :many
 SELECT id FROM audit_log WHERE target_type = ? AND target_id = ? AND action = ? ORDER BY id
 `
@@ -177,6 +309,56 @@ func (q *Queries) AuditLogBefore(ctx context.Context, arg AuditLogBeforeParams) 
 			&i.DetailsJson,
 			&i.Ip,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const auditThreads = `-- name: AuditThreads :many
+SELECT id, slug, title FROM threads WHERE id IN (/*SLICE:ids*/?)
+`
+
+type AuditThreadsRow struct {
+	ID    int64
+	Slug  string
+	Title string
+}
+
+// The next four are what the admin audit view names its targets by, one
+// statement per kind for a whole page of rows (TKT-01M29CP2R4). A target
+// a row names but the table no longer holds is absent from the answer,
+// and the view draws it by its raw id.
+//
+// AuditThreads is the title and slug of thread and post targets, and of
+// the posts flag targets are on.
+func (q *Queries) AuditThreads(ctx context.Context, ids []int64) ([]AuditThreadsRow, error) {
+	query := auditThreads
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AuditThreadsRow
+	for rows.Next() {
+		var i AuditThreadsRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.Title); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

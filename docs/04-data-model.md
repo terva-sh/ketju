@@ -556,6 +556,67 @@ transaction that projects the record, with the frame's timestamp as `at`.
   actor, `"from"` (the thread's previous value, or null when it had none)
   and `"to"`. The service writes this row, not the projection, because
   slow mode appends no record.
+- The moderator queue (TKT-01M29CRJ4E, 08 "Flags") writes `flag.resolved`
+  or `flag.dismissed` against the post, one row per queue action, with
+  `"flags"`, the ids it closed, `"action"`, `"note"` and `"post"`, what
+  happened to the post.
+
+Every action written today is in this table, with the target type it is
+written against and the ticket that writes it. `audit.Actions` is the same
+list, and the admin audit view offers it as its action filter
+(TKT-01M29CP2R4, 07 "The audit log"). `TestActionsDocumented` holds the
+two together, and `TestActionsCoverTheWriters` fails on an action a writer
+names that the list lacks.
+
+<!-- audit-actions:begin -->
+| action | target_type | written by |
+|---|---|---|
+| `agent.credential_issued` | `user` | TKT-01M29P9RSW |
+| `agent.credential_revoked` | `user` | TKT-01M29P9RSW |
+| `agent.limits_changed` | `user` | TKT-01M29P9RSW |
+| `application.approved` | `application` | TKT-01M29CP2MG |
+| `application.denied` | `application` | TKT-01M29CP2MG |
+| `blob.deleted` | `blob` | TKT-01M29CXJZ9 |
+| `flag.dismissed` | `post` | TKT-01M29CRJ4E |
+| `flag.resolved` | `post` | TKT-01M29CRJ4E |
+| `form.version_created` | `form` | TKT-01M29CP2KE |
+| `group.created` | `group` | TKT-01M29CXK1X |
+| `group.deleted` | `group` | TKT-01M29CXK1X |
+| `group.member_added` | `user` | TKT-01M29CKRF9, TKT-01M29CXK1X |
+| `group.member_removed` | `user` | TKT-01M29CKRF9, TKT-01M29CXK1X |
+| `group.updated` | `group` | TKT-01M29CXK1X |
+| `identity.linked` | `user` | TKT-01M29CKRES |
+| `identity.unblocked` | `identity` | TKT-01M29CP2MG |
+| `permission.granted` | `permission` | TKT-01M29CXK1X |
+| `permission.revoked` | `permission` | TKT-01M29CXK1X |
+| `post.auto_hidden` | `post` | TKT-01M29CP2PJ |
+| `post.deleted` | `post` | TKT-01M29CKRGS |
+| `post.edited` | `post` | TKT-01M29CKRGS |
+| `post.hidden` | `post` | TKT-01M29CKRGS |
+| `post.redacted` | `post` | TKT-01M29CXJZ9 |
+| `post.restored` | `post` | TKT-01M29CKRGS |
+| `setting.changed` | `setting` | TKT-01M29BYYJ0 |
+| `thread.locked` | `thread` | TKT-01M29CKRGS |
+| `thread.moved` | `thread` | TKT-01M29CKRH9 |
+| `thread.pinned` | `thread` | TKT-01M29CKRGS |
+| `thread.renamed` | `thread` | TKT-01M29CKRH9 |
+| `thread.slow_mode` | `thread` | TKT-01M29CRJ50 |
+| `thread.title_redacted` | `thread` | TKT-01M29CXJZ9 |
+| `thread.unlocked` | `thread` | TKT-01M29CKRGS |
+| `thread.unpinned` | `thread` | TKT-01M29CKRGS |
+| `user.anonymized` | `user` | TKT-01M29CKRFS |
+| `user.created` | `user` | TKT-01M29P9RSW |
+| `user.deactivated` | `user` | TKT-01M29CKRFS |
+| `user.demoted` | `user` | TKT-01M29CXK1X |
+| `user.posts_hidden` | `user` | TKT-01M29CP2QK |
+| `user.posts_restored` | `user` | TKT-01M29CP2QK |
+| `user.promoted` | `user` | TKT-01M29C800G |
+| `user.reactivated` | `user` | TKT-01M29CKRFS |
+| `user.renamed` | `user` | TKT-01M3NRP3W9 |
+| `user.role_changed` | `user` | TKT-01M29CXK1X |
+| `user.suspended` | `user` | TKT-01M29CKRFS |
+| `user.unsuspended` | `user` | TKT-01M29CKRFS |
+<!-- audit-actions:end -->
 
 ### notifications
 ```

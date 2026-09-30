@@ -495,6 +495,60 @@ is a `markdown_notice`'s rendered body. `intro_html` is the rendered
 `intro_markdown`. A stored version that no longer parses is `internal`
 (05 "Forms").
 
+#### The audit log (TKT-01M29CP2R4)
+
+The log says who did what, and from which address, so it is an admin's
+alone. Moderators see none of it, by role or through a group (08 "Decided
+2026-09-29", "Decided 2026-09-30"). Anonymous and inactive viewers are
+`unauthenticated`, and a pre-user, member or moderator is `forbidden`. The
+route is behind the admin gate, and the service asks again. The answer is
+`no-store`. Nothing in the API changes or removes a row (04 "audit_log").
+
+`GET /admin/audit?actor=&system=&action=&target_type=&target_id=&from=&to=&cursor=`
+answers `AuditPage`: 50 rows per page, newest first by id. Every parameter
+is optional, and the ones given are combined:
+
+| Parameter | Selects |
+|---|---|
+| `actor` | the rows a member did, by handle in any case. A handle nobody has is an empty page, not an error |
+| `system` | `1`: the rows no account did (the command line, a job, the auto-hide, a thread-log record with no actor). It is not a value of `actor`, because a member may hold any handle. With `actor` it is `bad-request` |
+| `action` | one action, or every action starting with it when it ends in `.`, such as `user.` |
+| `target_type` | one of the target types in 04 "audit_log"; anything else is `bad-request` |
+| `target_id` | one thing of `target_type`, in that type's id format. Without `target_type` it is `bad-request` |
+| `from`, `to` | Unix ms: `from` the first included, `to` the first not. Anything but a non-negative integer is `bad-request` |
+| `cursor` | the previous page's `next_cursor`. A cursor the server did not issue is `bad-request` |
+
+Each entry carries the row's `id`, `at`, `action`, `details` (the row's
+`details_json` as written, to be shown as text and never as markup) and
+`ip` (empty when there was no request). `actor` is the member drawn as a
+post's author is, a deleted member's placeholder for an account the
+database lacks, or null when no account did it. `target` is the row's
+`type` and `id` as written, with the `label` it reads as now and an `href`:
+
+| Type | `label` | `href` |
+|---|---|---|
+| `user` | the handle; `deleted-user-<id>` for an account the database lacks | `/u/{handle}`, none for an account the database lacks |
+| `thread` | the current title | `/t/{id}/{slug}` |
+| `post` | the thread's title and `#{ordinal}` | `/t/{id}/{slug}/{ordinal}` |
+| `forum` | the name | `/f/{slug}` |
+| `group` | the name | `/admin/users?tab=groups` |
+| `flag` | `flag {id} on {title} #{ordinal}` | the flagged post's link |
+| `setting` | the key | `/admin/settings` |
+| `application` | `application {id}` | `/admin/applications?id={id}` |
+| `permission` | the id as written | `/admin/users?tab=permissions` |
+| `form` | the key | `/admin/forms` |
+| `identity` | `identity {id}` | none |
+| `blob` | the first 12 hex digits of the hash | none: a deleted blob has no page |
+
+A thing that no longer resolves has its raw id as its `label` and no
+`href`. `related` is empty for every row but `thread.moved`, where it holds
+the forum the thread left and then the forum it went to, resolved as a
+`forum` target is. `actions` is every action written today (04
+"audit_log"), for the screen's action filter. `next_cursor` is empty on the
+last page. Each kind of thing a page names is read in one statement for
+the whole page, and each filter searches an index (migrations 0006 and
+0019).
+
 ### Thread response shape (abridged)
 
 ```json

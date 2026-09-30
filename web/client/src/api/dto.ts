@@ -618,6 +618,39 @@ export interface QueueResolution {
   flags: number[];
 }
 
+// AuditPage is GET /admin/audit, an admin's alone: one page of the audit
+// log, newest first. actions is every action a row is written with today,
+// for the action filter. next_cursor is empty at the end.
+export interface AuditPage {
+  entries: AuditEntry[];
+  actions: string[];
+  next_cursor: string;
+}
+
+// AuditEntry is one row. actor is null when no account did it, and details
+// then say what did, as "via". related is a thread.moved row's forums, the
+// one it left first, and empty for every other row. details is data to
+// show as text, never markup; ip is empty when there was no request.
+export interface AuditEntry {
+  id: number;
+  at: Millis;
+  actor: Author | null;
+  action: string;
+  target: AuditTarget;
+  related: AuditTarget[];
+  details: Record<string, unknown>;
+  ip: string;
+}
+
+// AuditTarget is what a row names: type and id as written, the label it
+// reads as now, and href, empty when it has no page.
+export interface AuditTarget {
+  type: string;
+  id: string;
+  label: string;
+  href: string;
+}
+
 // AdminApplication is GET /admin/applications/{id}, and the answer to
 // approve, deny and unblock. form is the version the application answered,
 // and prior the identity's applications submitted before it. identity is

@@ -1,0 +1,62 @@
+{
+  "entries": [
+    {
+      "id": 388,
+      "at": 1757500000000,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "action": "user.renamed",
+      "target": {
+        "type": "user",
+        "id": "17",
+        "label": "alice",
+        "href": "/u/alice"
+      },
+      "related": [],
+      "details": {
+        "from": "alice-",
+        "to": "alice"
+      },
+      "ip": "198.51.100.4"
+    },
+    {
+      "id": 204,
+      "at": 1757400000000,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "action": "user.suspended",
+      "target": {
+        "type": "user",
+        "id": "23",
+        "label": "deleted-user-23",
+        "href": ""
+      },
+      "related": [],
+      "details": {
+        "from": "active",
+        "reason": "spam",
+        "until": null
+      },
+      "ip": "198.51.100.9"
+    }
+  ],
+  "actions": [
+    "blob.deleted",
+    "post.auto_hidden",
+    "setting.changed",
+    "thread.moved",
+    "user.renamed",
+    "user.suspended"
+  ],
+  "next_cursor": ""
+}
