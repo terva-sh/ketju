@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T13:12:26Z
+updated_at: 2026-09-30T13:15:47Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
@@ -65,14 +65,14 @@ Tests: the notice text, the disabled Send and the countdown under fake timers, t
 
 ## Acceptance criteria
 
-- [ ] With slow_mode_seconds > 0 the composer shows 'Slow mode: one post every N seconds', and with 0 it shows nothing (Composer.test.tsx)
-- [ ] While viewer.next_post_at is in the future Send is disabled with a countdown that re-enables it at next_post_at without a refetch, under fake timers (Composer.test.tsx)
+- [x] With slow_mode_seconds > 0 the composer shows 'Slow mode: one post every N seconds', and with 0 it shows nothing (Composer.test.tsx)
+- [x] While viewer.next_post_at is in the future Send is disabled with a countdown that re-enables it at next_post_at without a refetch, under fake timers (Composer.test.tsx)
 - [ ] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
-- [ ] A rate-limited answer keeps the draft, says the wait from Retry-After, and holds Send until it passes, under fake timers (Post.test.tsx)
-- [ ] A successful post starts the wait for a viewer without can_moderate when slow_mode_seconds > 0, and a moderator is never held (Composer.test.tsx)
-- [ ] Mounting the composer keeps the later of its local deadline and the page's next_post_at, and null or an earlier value never shortens it: closing and reopening the phone sheet during the wait after a successful post keeps Send disabled until the wait ends (ComposerSheet.test.tsx 'reopening the sheet keeps the wait', Composer.test.tsx 'the page never shortens the wait')
-- [ ] 'Slow mode…' is offered whenever viewer.can_moderate is true, whatever the role, and never when it is false; it is prefilled from slow_mode_seconds, sends one PUT /api/v1/admin/threads/{id}/slow-mode {seconds}, asks for the page again, and shows conflict, validation-failed and forbidden beside the field (ThreadScreen.test.tsx 'a moderator sets slow mode', 'a group moderator sets slow mode', 'a member is not offered slow mode')
-- [ ] A next_post_at 40 days ahead holds Send from mount with the countdown reading 960:00:00, ticks once a second, and releases Send exactly at the deadline after vi.setSystemTime moves the clock near it, in at most ten timer callbacks (Composer.test.tsx 'a far wait holds Send')
+- [x] A rate-limited answer keeps the draft, says the wait from Retry-After, and holds Send until it passes, under fake timers (Post.test.tsx)
+- [x] A successful post starts the wait for a viewer without can_moderate when slow_mode_seconds > 0, and a moderator is never held (Composer.test.tsx)
+- [x] Mounting the composer keeps the later of its local deadline and the page's next_post_at, and null or an earlier value never shortens it: closing and reopening the phone sheet during the wait after a successful post keeps Send disabled until the wait ends (ComposerSheet.test.tsx 'reopening the sheet keeps the wait', Composer.test.tsx 'the page never shortens the wait')
+- [x] 'Slow mode…' is offered whenever viewer.can_moderate is true, whatever the role, and never when it is false; it is prefilled from slow_mode_seconds, sends one PUT /api/v1/admin/threads/{id}/slow-mode {seconds}, asks for the page again, and shows conflict, validation-failed and forbidden beside the field (ThreadScreen.test.tsx 'a moderator sets slow mode', 'a group moderator sets slow mode', 'a member is not offered slow mode')
+- [x] A next_post_at 40 days ahead holds Send from mount with the countdown reading 960:00:00, ticks once a second, and releases Send exactly at the deadline after vi.setSystemTime moves the clock near it, in at most ten timer callbacks (Composer.test.tsx 'a far wait holds Send')
 
 ## Implementation plan
 
