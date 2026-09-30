@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-30T12:21:32Z
+updated_at: 2026-09-30T12:34:47Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -147,6 +147,10 @@ Divergences of the committed screenshots (web/client/e2e/screenshots/forum-index
 - P3 Phone footer "quote reply"; docs/06 "Mobile" says reply, quote. Filed as TKT-01M3S3Z9GT (Order the phone post footer reply, quote as docs/06 says).
 - P4 Phone pager uses text steps and no picker. The picker is TKT-01M29CGBZ (Add the page picker and lens sheets on phones); the icon steps are filed in TKT-01M3S3ZZSZ.
 - P6 Reply bar has no round compose button. Intended: posting is in the sheet's head (ReplyBar.tsx, TKT-01M3ART992). The chip exists; nothing is being replied to.
+
+**agent:claude-code/phase2-run-39wbn4q** at 2026-09-30T12:34:47Z
+
+Review 1581 (run 1458, head 024ac72, base de1771d), medium, 'Safe-area fallback misses padding shorthand overrides': fixed in the next commit. The fallback now counts the padding shorthand as well as the longhand. Chromium's CDP already listed a shorthand's longhands, so a later padding: 5px read as 5px and failed; the fix removes the dependence on that. The same commit corrects the first mutation account: page.addStyleTag was refused by the page's CSP, so those runs failed before asserting. Constructed-stylesheet mutations (padding-bottom: 5px and padding: 5px) and an inline padding fail under both methods, and the clean spec passes under both.
 
 ## Summary
 
