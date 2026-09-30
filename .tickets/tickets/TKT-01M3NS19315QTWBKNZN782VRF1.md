@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T10:57:07Z
+updated_at: 2026-09-30T11:26:21Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -53,16 +53,16 @@ No ticket covers the client half. Found while planning TKT-01M3K9XBJA (Autosave 
 
 ## Acceptance criteria
 
-- [ ] A reply and its reply target typed in one browser context are restored in a second context signed in as the same member, in the composer at 1440 px and in the reply bar at 390 px (e2e/drafts.spec.ts)
-- [ ] A loaded draft fills only an empty composer with no reply target and no post in flight, and loading sends no PUT (state/composer.test.ts)
-- [ ] Saves are debounced to one PUT per 1500 ms pause, nothing is sent unchanged, a blank composer is a DELETE, and requests for one draft reach the server in order (state/drafts.test.ts)
+- [x] A reply and its reply target typed in one browser context are restored in a second context signed in as the same member, in the composer at 1440 px and in the reply bar at 390 px (e2e/drafts.spec.ts)
+- [x] A loaded draft fills only an empty composer with no reply target and no post in flight, and loading sends no PUT (state/composer.test.ts)
+- [x] Saves are debounced to one PUT per 1500 ms pause, nothing is sent unchanged, a blank composer is a DELETE, and requests for one draft reach the server in order (state/drafts.test.ts)
 - [ ] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget stays within 60000 B gzip
-- [ ] A forbidden or conflict answer turns autosave off for that thread (state/drafts.test.ts)
-- [ ] Autosave for a draft is disarmed until its GET answers, so a load slower than the debounce never deletes the server draft; an empty composer sends DELETE only when the server is known to hold a non-empty draft, and a failed load never deletes (state/drafts.test.ts)
-- [ ] A successful post deletes the draft, cancels any pending save and removes this browser's local copy, and afterwards GET /api/v1/drafts/{id} is 204 and a reload restores nothing (state/drafts.test.ts, e2e/drafts.spec.ts)
-- [ ] At startup and on an owner change, localStorage draft copies under any handle but the signed-in viewer's are removed, and every one is removed when nobody is signed in (state/drafts.test.ts)
-- [ ] On pagehide the save starts inside the handler when no request for that draft is in flight, and with one in flight no second request starts; either way a non-empty unsaved snapshot is kept in localStorage with its base revision, requests in flight and deletes in flight, and no decision reads the client's clock (state/drafts.ts tests)
-- [ ] On the next load the copy wins a 200 only when the revision is at most base plus requests in flight, and a 204 only when the Draft-Revision is at most base plus deletes in flight: an unacknowledged first draft comes back, text a delete removed on any device never comes back, text typed after this tab's own delete comes back even when another device's delete landed first, and a copy with no base is restored on a 204 with a notice (state/drafts.test.ts, named in the plan)
+- [x] A forbidden or conflict answer turns autosave off for that thread (state/drafts.test.ts)
+- [x] Autosave for a draft is disarmed until its GET answers, so a load slower than the debounce never deletes the server draft; an empty composer sends DELETE only when the server is known to hold a non-empty draft, and a failed load never deletes (state/drafts.test.ts)
+- [x] A successful post deletes the draft, cancels any pending save and removes this browser's local copy, and afterwards GET /api/v1/drafts/{id} is 204 and a reload restores nothing (state/drafts.test.ts, e2e/drafts.spec.ts)
+- [x] At startup and on an owner change, localStorage draft copies under any handle but the signed-in viewer's are removed, and every one is removed when nobody is signed in (state/drafts.test.ts)
+- [x] On pagehide the save starts inside the handler when no request for that draft is in flight, and with one in flight no second request starts; either way a non-empty unsaved snapshot is kept in localStorage with its base revision, requests in flight and deletes in flight, and no decision reads the client's clock (state/drafts.ts tests)
+- [x] On the next load the copy wins a 200 only when the revision is at most base plus requests in flight, and a 204 only when the Draft-Revision is at most base plus deletes in flight: an unacknowledged first draft comes back, text a delete removed on any device never comes back, text typed after this tab's own delete comes back even when another device's delete landed first, and a copy with no base is restored on a 204 with a notice (state/drafts.test.ts, named in the plan)
 
 ## Implementation plan
 
@@ -224,3 +224,21 @@ Terva review 1559 on PR #210 (head 922a23c), finding 2 (medium), accepted. A fir
 **agent:claude-code/phase2-groom** at 2026-09-30T09:40:18Z
 
 Terva review 1565 on PR #210 (head 8c111f4), medium, accepted. The 204 rule R <= base + deletes cannot tell whose delete moved the key. Settled as an engineering choice: the trade-off is stated, not removed. A key has at most one request in flight (one chain per key; pagehide starts none while one is out), so deletes is 0 or 1, and on a 204 a restored copy's text has never been sent to the server. Text a delete removed, here or on another device, never comes back. In the review's interleaving (this tab blanks and sends DELETE, types new text, another device's delete lands first, ours lands on the tombstone, GET answers 204 at base + 1), the text typed after this tab's own delete is restored; that is the chosen behaviour, since it exists nowhere else and the other device deleted only the draft this tab had already blanked. The plan's claim that a remotely deleted draft cannot return is replaced by that guarantee. Lost: exact accounting, where DELETE answers whether it applied and the client counts only applied deletes. The copy exists because that answer may never arrive, so it would need a client-chosen request id remembered by the server and read back by GET, widening TKT-01M29CA9CE's API to tell apart two outcomes that restore the same never-sent text. Tests: 'another device's delete landing first still restores the text typed after this tab's delete' (the interleaving) and 'a delete elsewhere after a save of the copy's text discards it'; the existing own-delete test now uses inflight 1, since inflight cannot be 2. Criterion 10 is rewritten to match.
+
+**agent:claude-code/phase2-run-ns1931** at 2026-09-30T11:26:10Z
+
+Built against main at f388921 as the plan settles it. The plan's Implementation plan section is left as groomed, since every settled item holds. The engineering choices below are the implementation's, each with the alternative that lost.
+
+- **One request in flight, and only the newest waiting request is kept**, rather than a promise chain of every save. Each PUT and DELETE replaces the whole draft, so an older request still waiting would only be overwritten. A key still has at most one request in flight, so `deletes` is 0 or 1 as the plan's guarantee needs.
+- **pagehide drops a request waiting behind the one in flight.** It would start only if the page lived, and if it landed it would move the revision past `base + inflight` and discard the copy that holds newer text. Test: 'drops a request queued behind one in flight, and counts only what started'.
+- **A request that failed without an answer (network) counts as in flight in the copy until the next answer.** The server may have applied it, so leaving it out would let a landed save discard the copy. Lost: counting only requests still open, which the plan's wording allows but which loses the last edit after a network failure.
+- **A load refused as forbidden, not-found, unauthenticated or conflict turns autosave off**, as a refused save does. Lost: arming with the state unknown, which would save into a thread the reader cannot keep a draft in.
+- **An answer with no readable revision restores the copy on a 204 with the notice**, as a null base does. The server always sends one, so this happens only if it does not, and keeping writing wins over discarding it.
+- **A post or discard during the load moves a generation counter**, so the load's answer neither fills the composer nor replaces the queued DELETE as the server state. Test: 'a post during the load deletes, and the load does not bring the draft back'.
+- **visibilitychange to hidden sends a pending save at once, and pageshow from the back/forward cache reschedules what pagehide held back.** On a phone a hidden page is often never shown again. Both use the normal queue.
+- **The status line says "Saving…" from the first change until the answer**, "Draft saved" once the server holds a non-empty draft, "Draft not saved" after a failure, and nothing when the draft is empty or autosave is off. On a phone the sheet hides the composer footer (composer.css), so the line, "Restored from this browser" included, shows on the desktop composer only; the restored text itself shows in the bar and the sheet.
+- A copy that wins while the reader has already typed into the composer is not shown: what they typed wins and is saved, as settled for a loaded draft.
+
+Bundle: the thread view is 49521 B gzip of the 60000 B budget, up 2106 B from 47415 B at f388921.
+
+e2e: drafts.spec.ts replies to post 10, not post 2, because replies.spec.ts asserts that post 2 has no reply expander. Locally, the desktop smoke sign-in hits the /auth burst limit (429) on main at f388921 as well as on this branch, so it is not caused by this change; every other spec passes here.
