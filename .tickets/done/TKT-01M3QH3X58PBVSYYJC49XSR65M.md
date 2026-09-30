@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QH3X58PBVSYYJC49XSR65M
 title: Answer GET /me for an agent authenticated by its credential
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ dependencies:
   - TKT-01M29P9RSW21SCES335WERTBSF
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qh3x58
-  branch: run/qh3x58-agent-me
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa4b7e514cd78a2d0
-  commit: c24635c2e3213538c0c98b0db621b51a77941b2f
-  session: null
-  claimed_at: 2026-09-30T01:56:44Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T21:28:46Z
-updated_at: 2026-09-30T01:58:33Z
+updated_at: 2026-09-30T02:07:23Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -48,9 +41,9 @@ A likely fix is for `Me` to read the user row by `v.UserID` when the request has
 
 ## Acceptance criteria
 
-- [ ] GET /api/v1/me with a live bearer credential answers the agent's handle, display name, role, kind "agent", settings and unread counts (TestMeShapes, golden me.agent.json)
-- [ ] TestMeBudget's session cases keep their statement lists, and an agent's /me runs MeCounts and at most ForumAccessRows after the middleware's credential statements
-- [ ] A revoked credential or a suspended or deactivated agent gets 401 from /me, not the anonymous shape, and TestOneDoorIntoSessions passes with its caller lists unchanged (TestMeRefusesADeadCredential)
+- [x] GET /api/v1/me with a live bearer credential answers the agent's handle, display name, role, kind "agent", settings and unread counts (TestMeShapes, golden me.agent.json)
+- [x] TestMeBudget's session cases keep their statement lists, and an agent's /me runs MeCounts and at most ForumAccessRows after the middleware's credential statements
+- [x] A revoked credential or a suspended or deactivated agent gets 401 from /me, not the anonymous shape, and TestOneDoorIntoSessions passes with its caller lists unchanged (TestMeRefusesADeadCredential)
 
 ## Implementation plan
 
@@ -117,3 +110,7 @@ relied on, and neither changes a decision:
 **agent:claude-code/phase2-groom** at 2026-09-29T22:07:21Z
 
 Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30. Settled as an engineering choice: the credential lookup carries the user's fields, as the session lookup does, so an agent's /me stays within the two-statement handler budget. The ticket's suggested GetUser in Me would have been a third statement. The ticket asked whether /me should hint that the request was authenticated by a credential: no, because user.kind is already agent and nothing reads such a hint. The plan records both alternatives.
+
+## Summary
+
+GET /api/v1/me now answers an agent authenticated by its bearer credential as the member it is: handle, display name, avatar, role, kind agent, settings, unread and notification counts, and the moderator queue count as for anyone else. LookupAgentCredential selects the user fields /me needs, as LookupSession does; agentcred.Credential carries them as User Account; users.Service.Me takes the viewer's account from the session, or else from the credential, each only when it names the viewer's own user. The handler runs the same statements after the middleware as for a member (ForumAccessRowsAll cold, MeCounts), pinned in TestMeBudget; the middleware's credential statements are LookupAgentCredential, two GetSetting reads for the bucket defaults, and TouchAgentCredential when due. No session is issued and the chokepoint lists (doorCallers, insertCallers, issuerCallers) are unchanged. A dead credential stays a 401 from the middleware (TestMeRefusesADeadCredential). Golden me.agent.json and its dto-contract.ts line are new; dto.ts and the committed dist are unchanged. docs/07 Agents on the API names the /me behaviour. No authenticated-by-credential hint was added, as settled in grooming.

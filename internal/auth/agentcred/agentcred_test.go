@@ -406,6 +406,28 @@ func TestLookupRefusesAllButALiveActiveAgent(t *testing.T) {
 
 // TestLimitsOverrideTheDefaults: an agent's own burst and refill win over
 // the site's, and a changed site default applies on the next lookup.
+// TestLookupCarriesTheAccount: the lookup returns the agent's own fields from
+// its users row, which GET /me answers with (TKT-01M3QH3X58), and reads
+// unset nullable ones as empty.
+func TestLookupCarriesTheAccount(t *testing.T) {
+	w := newWorld(t)
+	w.exec(`UPDATE users SET display_name = 'The Scribe', avatar_blob = 'a1b2c3', timezone = 'Europe/Oslo',
+	        locale = 'nb', prefs_json = '{"page_size": 20}' WHERE handle = 'scribe'`)
+	for handle, want := range map[string]Account{
+		"scribe": {Handle: "scribe", DisplayName: "The Scribe", AvatarBlob: "a1b2c3", Kind: domain.KindAgent,
+			Timezone: "Europe/Oslo", Locale: "nb", PrefsJSON: `{"page_size": 20}`},
+		"indexer": {Handle: "indexer", DisplayName: "indexer", Kind: domain.KindAgent, PrefsJSON: "{}"},
+	} {
+		c, err := w.store.Lookup(t.Context(), w.mustIssue(handle))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.User != want {
+			t.Errorf("%s: lookup carries %+v, want %+v", handle, c.User, want)
+		}
+	}
+}
+
 func TestLimitsOverrideTheDefaults(t *testing.T) {
 	w := newWorld(t)
 	token := w.mustIssue("scribe")

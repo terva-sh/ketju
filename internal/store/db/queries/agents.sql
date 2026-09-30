@@ -26,8 +26,13 @@ WHERE user_id = sqlc.arg(user_id) AND revoked_at IS NULL;
 -- revoked, on an agent account that is active. Anything else is no row, so
 -- a credential stops working the moment its account leaves active, whatever
 -- revoked it or failed to.
+--
+-- The user fields are the ones GET /me needs, as LookupSession's are, so an
+-- agent's /me answers from the row the middleware already read
+-- (TKT-01M3QH3X58).
 -- name: LookupAgentCredential :one
-SELECT c.id, c.user_id, c.last_used_at, u.role, a.bucket_burst, a.bucket_refill_seconds
+SELECT c.id, c.user_id, c.last_used_at, u.role, a.bucket_burst, a.bucket_refill_seconds,
+       u.handle, u.display_name, u.avatar_blob, u.kind, u.timezone, u.locale, u.prefs_json
 FROM agent_credentials c
 JOIN users u ON u.id = c.user_id
 LEFT JOIN agents a ON a.user_id = c.user_id

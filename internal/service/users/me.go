@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/auth/agentcred"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
@@ -60,6 +61,13 @@ func anonymousMe() dto.Me {
 // null user stays the one signed-out signal (settled in grooming). Anyone
 // else who is not a member, a suspended user above all, gets the anonymous
 // shape outright: their account is not theirs to read once suspended.
+//
+// An agent authenticated by its credential (agentcred) has no session. Its
+// fields come from the credential lookup, which read them from the users row
+// as the session lookup does, so its /me runs the same statements after the
+// middleware's as a member's (TKT-01M3QH3X58). The credential middleware
+// lets through only a live credential of an active agent, and answers
+// anything else 401 before this runs; v.Member() is still the guard here.
 func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	v := domain.ViewerFrom(ctx)
 	sess, ok := session.From(ctx)
@@ -68,10 +76,10 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 		me.PreUser = &dto.PreUser{Provider: sess.Provider}
 		return me, nil
 	}
-	if !v.Member() || !ok || sess.User == nil {
+	u, ok := accountOf(ctx, v)
+	if !v.Member() || !ok {
 		return anonymousMe(), nil
 	}
-	u := sess.User
 	me := dto.Me{
 		User: &dto.Author{Handle: u.Handle, DisplayName: u.DisplayName, Avatar: u.AvatarBlob, Role: u.Role, Kind: u.Kind},
 		Settings: dto.Settings{Timezone: orDefault(u.Timezone, defaultTimezone), Locale: orDefault(u.Locale, defaultLocale),
@@ -120,6 +128,32 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 		me.Unread.Watching += int(r.Watching.Int64)
 	}
 	return me, nil
+}
+
+// viewerAccount is the viewer's own fields /me shows, from whichever way
+// the request authenticated.
+type viewerAccount struct {
+	Handle, DisplayName, AvatarBlob, Role, Kind, Timezone, Locale, PrefsJSON string
+}
+
+// accountOf is the viewer's account: from its session when it has one with
+// a user, or else from its agent credential. Each is taken only when it
+// names the viewer's own user, so a context whose viewer and credential
+// disagree reads as nobody rather than as either.
+func accountOf(ctx context.Context, v domain.Viewer) (viewerAccount, bool) {
+	if sess, ok := session.From(ctx); ok {
+		if u := sess.User; u != nil && u.ID == v.UserID {
+			return viewerAccount{Handle: u.Handle, DisplayName: u.DisplayName, AvatarBlob: u.AvatarBlob, Role: u.Role,
+				Kind: u.Kind, Timezone: u.Timezone, Locale: u.Locale, PrefsJSON: u.PrefsJSON}, true
+		}
+		return viewerAccount{}, false
+	}
+	if c, ok := agentcred.From(ctx); ok && c.UserID == v.UserID {
+		a := c.User
+		return viewerAccount{Handle: a.Handle, DisplayName: a.DisplayName, AvatarBlob: a.AvatarBlob, Role: c.Role,
+			Kind: a.Kind, Timezone: a.Timezone, Locale: a.Locale, PrefsJSON: a.PrefsJSON}, true
+	}
+	return viewerAccount{}, false
 }
 
 func orDefault(s, def string) string {

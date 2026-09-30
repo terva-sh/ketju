@@ -88,7 +88,8 @@ func (q *Queries) LiveAgentCredential(ctx context.Context, userID int64) (LiveAg
 }
 
 const lookupAgentCredential = `-- name: LookupAgentCredential :one
-SELECT c.id, c.user_id, c.last_used_at, u.role, a.bucket_burst, a.bucket_refill_seconds
+SELECT c.id, c.user_id, c.last_used_at, u.role, a.bucket_burst, a.bucket_refill_seconds,
+       u.handle, u.display_name, u.avatar_blob, u.kind, u.timezone, u.locale, u.prefs_json
 FROM agent_credentials c
 JOIN users u ON u.id = c.user_id
 LEFT JOIN agents a ON a.user_id = c.user_id
@@ -106,12 +107,23 @@ type LookupAgentCredentialRow struct {
 	Role                string
 	BucketBurst         sql.NullInt64
 	BucketRefillSeconds sql.NullInt64
+	Handle              string
+	DisplayName         string
+	AvatarBlob          sql.NullString
+	Kind                string
+	Timezone            sql.NullString
+	Locale              sql.NullString
+	PrefsJson           string
 }
 
 // LookupAgentCredential resolves a token's hash to a live credential: not
 // revoked, on an agent account that is active. Anything else is no row, so
 // a credential stops working the moment its account leaves active, whatever
 // revoked it or failed to.
+//
+// The user fields are the ones GET /me needs, as LookupSession's are, so an
+// agent's /me answers from the row the middleware already read
+// (TKT-01M3QH3X58).
 func (q *Queries) LookupAgentCredential(ctx context.Context, tokenHash sqltypes.SessionHash) (LookupAgentCredentialRow, error) {
 	row := q.db.QueryRowContext(ctx, lookupAgentCredential, tokenHash)
 	var i LookupAgentCredentialRow
@@ -122,6 +134,13 @@ func (q *Queries) LookupAgentCredential(ctx context.Context, tokenHash sqltypes.
 		&i.Role,
 		&i.BucketBurst,
 		&i.BucketRefillSeconds,
+		&i.Handle,
+		&i.DisplayName,
+		&i.AvatarBlob,
+		&i.Kind,
+		&i.Timezone,
+		&i.Locale,
+		&i.PrefsJson,
 	)
 	return i, err
 }

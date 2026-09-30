@@ -329,6 +329,10 @@ type Querier interface {
 	// revoked, on an agent account that is active. Anything else is no row, so
 	// a credential stops working the moment its account leaves active, whatever
 	// revoked it or failed to.
+	//
+	// The user fields are the ones GET /me needs, as LookupSession's are, so an
+	// agent's /me answers from the row the middleware already read
+	// (TKT-01M3QH3X58).
 	LookupAgentCredential(ctx context.Context, tokenHash sqltypes.SessionHash) (LookupAgentCredentialRow, error)
 	// LookupSession is the whole of session resolution in one statement: the
 	// session, alive by both expiry rules, and the user it belongs to (none for a

@@ -84,7 +84,22 @@ type Credential struct {
 	// Rate is the agent's bucket: its overrides, or the site defaults.
 	Rate       Rate
 	LastUsedAt time.Time
-	hash       sqltypes.SessionHash
+	// User is the agent's account, as GET /me shows it (TKT-01M3QH3X58).
+	User Account
+	hash sqltypes.SessionHash
+}
+
+// Account is the agent's own fields, read in the lookup that resolves its
+// credential, as session.User is for a session: the ones GET /me answers
+// with, so /me reads no second row. Empty strings are unset.
+type Account struct {
+	Handle      string
+	DisplayName string
+	AvatarBlob  string
+	Kind        string
+	Timezone    string
+	Locale      string
+	PrefsJSON   string
 }
 
 // Viewer is the credential as the rest of the server sees it: an active
@@ -190,10 +205,11 @@ func (s *Store) now() time.Time {
 	return time.Now()
 }
 
-// Lookup resolves a token to its live credential, with the agent's role and
-// bucket, in one read transaction: the credential joined to its account and
-// overrides, and the two site defaults beside it. It returns ErrNoCredential
-// for any token that is not a live credential of an active agent.
+// Lookup resolves a token to its live credential, with the agent's role,
+// bucket and account fields, in one read transaction: the credential joined
+// to its account and overrides, and the two site defaults beside it. It
+// returns ErrNoCredential for any token that is not a live credential of an
+// active agent.
 func (s *Store) Lookup(ctx context.Context, token string) (Credential, error) {
 	h, ok := hashToken(token)
 	if !ok {
@@ -205,7 +221,9 @@ func (s *Store) Lookup(ctx context.Context, token string) (Credential, error) {
 		if err != nil {
 			return err
 		}
-		out = Credential{ID: row.ID, UserID: row.UserID, Role: row.Role, hash: h}
+		out = Credential{ID: row.ID, UserID: row.UserID, Role: row.Role, hash: h,
+			User: Account{Handle: row.Handle, DisplayName: row.DisplayName, AvatarBlob: row.AvatarBlob.String,
+				Kind: row.Kind, Timezone: row.Timezone.String, Locale: row.Locale.String, PrefsJSON: row.PrefsJson}}
 		if row.LastUsedAt.Valid {
 			out.LastUsedAt = time.UnixMilli(row.LastUsedAt.Int64)
 		}

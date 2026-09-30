@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/audit"
+	"github.com/terva-sh/ketju/internal/auth/agentcred"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/dto"
@@ -99,9 +101,13 @@ func newMeWorld(t *testing.T) *meWorld {
 		t.Fatal(err)
 	}
 	shell.SetPage(ShellPage(w.users))
+	creds := &agentcred.Store{DB: d, Now: func() time.Time { return w.now }}
 	pass := func(h http.Handler) http.Handler { return h }
+	// The bearer middleware in front of the session middleware, as serve
+	// composes them: a request with no Authorization header goes straight to
+	// the session middleware, so the session cases see what they always did.
 	w.handler = web.New(web.Groups{API: New(Deps{Users: w.users, Threads: threadSvc, Forums: &forums.Service{DB: d, Perm: perms}, Forms: &formsvc.Service{DB: d}, Applications: &applications.Service{DB: d}, Perm: perms}), SPA: shell},
-		web.Options{Session: session.Middleware(store, nil), RateLimit: pass, CSRF: pass})
+		web.Options{Session: agentcred.Middleware(creds, session.Middleware(store, nil), nil), RateLimit: pass, CSRF: pass})
 	w.seed()
 	return w
 }
@@ -187,8 +193,44 @@ func (w *meWorld) seed() {
 		`INSERT INTO flags (thread_id, ordinal, reporter_id, reason, created_at) VALUES
 		 (1, 2, 2, 'spam', 1), (1, 2, 4, 'abuse', 2), (7, 1, 1, 'spam', 3)`,
 		`INSERT INTO applications (form_id, form_version, answers_json, created_at) VALUES (1, 1, '{}', 4)`,
+		// scribe is an agent that authenticates by its credential, never a
+		// session (TKT-01M3QH3X58). It has read thread 1 to the end, watches
+		// thread 2, wrote in thread 3, and has one unread mention.
+		`INSERT INTO users (id, handle, display_name, avatar_blob, status, role, kind, timezone, locale, prefs_json,
+		                    created_at, updated_at)
+		 VALUES (5, 'scribe', 'Scribe', 'e5f6a7', 'active', 'member', 'agent', 'America/Toronto', 'fr',
+		         '{"page_size": 40}', 1, 1)`,
+		`INSERT INTO agents (user_id, created_at) VALUES (5, 1)`,
+		`INSERT INTO post_meta (thread_id, ordinal, author_id, created_at, log_offset) VALUES (3, 3, 5, `+itoa(later-10)+`, 0)`,
+		`INSERT INTO read_positions (user_id, thread_id, last_read_ordinal, last_read_at) VALUES (5, 1, 5, 1)`,
+		`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at) VALUES (5, 2, 'watch', 1, 1)`,
+		`INSERT INTO notifications (user_id, kind, thread_id, ordinal, at, read_at) VALUES (5, 'mention', 2, 1, 1, NULL)`,
 	)
-	w.id["alice"], w.id["bob"], w.id["carol"], w.id["dave"] = 1, 2, 3, 4
+	w.id["alice"], w.id["bob"], w.id["carol"], w.id["dave"], w.id["scribe"] = 1, 2, 3, 4, 5
+}
+
+// issue gives the agent handle a credential, as an admin would, and returns
+// its token.
+func (w *meWorld) issue(handle string) string {
+	w.t.Helper()
+	var token string
+	if err := w.db.Write(w.t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		out, err := agentcred.Issue(w.t.Context(), q, w.now, audit.By{}, w.id[handle])
+		token = out.Token
+		return err
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	return token
+}
+
+// bearer is a GET authenticated by an agent's credential.
+func (w *meWorld) bearer(path, token string) *httptest.ResponseRecorder {
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	w.handler.ServeHTTP(rec, req)
+	return rec
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }
@@ -217,8 +259,8 @@ func decodeMe(t *testing.T, b []byte) dto.Me {
 var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25}}
 
 // TestMeShapes is AC1: the documented shape for an anonymous viewer, a member,
-// a moderator and a pre-user session, from seeded data. A suspended user gets
-// the anonymous shape.
+// a moderator, a pre-user session and an agent by its credential, from seeded
+// data. A suspended user gets the anonymous shape.
 func TestMeShapes(t *testing.T) {
 	w := newMeWorld(t)
 	for _, c := range []struct {
@@ -258,9 +300,23 @@ func TestMeShapes(t *testing.T) {
 		{"suspended admin", sessiontest.SignIn(t, w.db, w.id["carol"], w.now), anonMe},
 		{"pre-user", sessiontest.PreUser(t, w.db, 1, w.now), dto.Me{PreUser: &dto.PreUser{Provider: "github"},
 			Settings: anonMe.Settings}},
+		// An agent by its credential, with no session: the member it is
+		// (TKT-01M3QH3X58). Threads 2 to 6 are unread; 1 it read to the end.
+		// 3 it wrote in; 2 it watches.
+		{"agent by credential", "bearer:" + w.issue("scribe"), dto.Me{
+			User:          &dto.Author{Handle: "scribe", DisplayName: "Scribe", Avatar: "e5f6a7", Role: "member", Kind: "agent"},
+			Unread:        dto.UnreadCounts{Threads: 5, Participated: 1, Watching: 1},
+			Notifications: 1,
+			Settings:      dto.Settings{Timezone: "America/Toronto", Locale: "fr", PageSize: 40},
+		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
-			rec := w.get("/api/v1/me", c.token)
+			var rec *httptest.ResponseRecorder
+			if token, ok := strings.CutPrefix(c.token, "bearer:"); ok {
+				rec = w.bearer("/api/v1/me", token)
+			} else {
+				rec = w.get("/api/v1/me", c.token)
+			}
 			if rec.Code != http.StatusOK || rec.Header().Get("Cache-Control") != "no-store" {
 				t.Fatalf("%d, Cache-Control %q: %s", rec.Code, rec.Header().Get("Cache-Control"), rec.Body)
 			}
@@ -291,6 +347,7 @@ func TestMeBudget(t *testing.T) {
 	alice := sessiontest.SignIn(t, w.db, w.id["alice"], w.now)
 	bob := sessiontest.SignIn(t, w.db, w.id["bob"], w.now)
 	dave := sessiontest.SignIn(t, w.db, w.id["dave"], w.now)
+	scribe := "bearer:" + w.issue("scribe")
 	for _, c := range []struct {
 		name, path, token string
 		want              []string // statement names, in order
@@ -305,9 +362,24 @@ func TestMeBudget(t *testing.T) {
 		{"moderator /me, warm", "/api/v1/me", bob, []string{"LookupSession", "QueueCount", "MeCounts"}, 2},
 		{"forum moderator /me, cold", "/api/v1/me", dave, []string{"LookupSession", "ForumAccessRowsAll", "QueueCount", "MeCounts"}, 3},
 		{"forum moderator shell", "/", dave, []string{"LookupSession", "QueueCount", "MeCounts"}, 2},
+		// An agent by its credential (TKT-01M3QH3X58). The middleware
+		// resolves the credential with the site's two bucket defaults, and
+		// touches it on first use because last_used_at is null; the clock
+		// does not move, so the second request does not touch. After the
+		// middleware, the agent costs what a member does.
+		{"agent /me, cold", "/api/v1/me", scribe, []string{"LookupAgentCredential", "GetSetting", "GetSetting",
+			"TouchAgentCredential", "ForumAccessRowsAll", "MeCounts"}, 2},
+		{"agent /me, warm", "/api/v1/me", scribe, []string{"LookupAgentCredential", "GetSetting", "GetSetting",
+			"MeCounts"}, 2},
 	} {
 		var rec *httptest.ResponseRecorder
-		ran := w.stmts.during(func() { rec = w.get(c.path, c.token) })
+		ran := w.stmts.during(func() {
+			if token, ok := strings.CutPrefix(c.token, "bearer:"); ok {
+				rec = w.bearer(c.path, token)
+			} else {
+				rec = w.get(c.path, c.token)
+			}
+		})
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s: %d", c.name, rec.Code)
 		}
@@ -318,8 +390,13 @@ func TestMeBudget(t *testing.T) {
 		if strings.Join(names, " ") != strings.Join(c.want, " ") {
 			t.Errorf("%s ran %v, want %v:\n  %s", c.name, names, c.want, strings.Join(ran, "\n  "))
 		}
-		// The budget proper: everything after the middleware's lookup.
-		if handler := len(names) - count(names, "LookupSession"); handler > c.budget {
+		// The budget proper: everything after the middleware's lookup, and
+		// for an agent after the middleware's credential statements.
+		middleware := 0
+		for _, m := range []string{"LookupSession", "LookupAgentCredential", "GetSetting", "TouchAgentCredential"} {
+			middleware += count(names, m)
+		}
+		if handler := len(names) - middleware; handler > c.budget {
 			t.Errorf("%s: the handler ran %d statements, budget %d", c.name, handler, c.budget)
 		}
 	}
@@ -361,6 +438,66 @@ func TestMeBudgetWhenTouchIsDue(t *testing.T) {
 	}
 	if ran := w.stmts.during(func() { w.get("/api/v1/me", alice) }); len(ran) != 2 {
 		t.Fatalf("the request after the touch ran %d statements", len(ran))
+	}
+}
+
+// TestMeRefusesADeadCredential is AC3 of TKT-01M3QH3X58: a credential that
+// no longer authenticates gets 401 from /me, not the anonymous shape, so an
+// agent learns its token is dead rather than reading as a stranger. Each
+// agent answers as itself first, so the refusal is the kill's doing. None of
+// it, the live answers included, writes a session or sets a cookie.
+func TestMeRefusesADeadCredential(t *testing.T) {
+	w := newMeWorld(t)
+	sessions := func() int {
+		var n int
+		if err := w.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			return tx.QueryRowContext(t.Context(), `SELECT count(*) FROM sessions`).Scan(&n)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := sessions()
+	for i, c := range []struct{ name, kill string }{
+		{"revoked", `UPDATE agent_credentials SET revoked_at = 1 WHERE user_id = %d`},
+		{"suspended", `UPDATE users SET status = 'suspended' WHERE id = %d`},
+		{"deactivated", `UPDATE users SET status = 'deactivated' WHERE id = %d`},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			id := int64(10 + i)
+			handle := "agent" + itoa(id)
+			w.exec(`INSERT INTO users (id, handle, display_name, status, role, kind, created_at, updated_at)
+			        VALUES (`+itoa(id)+`, '`+handle+`', 'Agent', 'active', 'member', 'agent', 1, 1)`,
+				`INSERT INTO agents (user_id, created_at) VALUES (`+itoa(id)+`, 1)`)
+			w.id[handle] = id
+			token := w.issue(handle)
+			live := w.bearer("/api/v1/me", token)
+			if live.Code != http.StatusOK {
+				t.Fatalf("the live credential: %d %s", live.Code, live.Body)
+			}
+			if me := decodeMe(t, live.Body.Bytes()); me.User == nil || me.User.Handle != handle {
+				t.Fatalf("the live credential answered %s", live.Body)
+			}
+			w.exec(strings.ReplaceAll(c.kill, "%d", itoa(id)))
+			rec := w.bearer("/api/v1/me", token)
+			if rec.Code != http.StatusUnauthorized {
+				t.Fatalf("%d, want 401: %s", rec.Code, rec.Body)
+			}
+			if got := rec.Header().Get("WWW-Authenticate"); !strings.HasPrefix(got, "Bearer") {
+				t.Errorf("WWW-Authenticate %q", got)
+			}
+			if strings.Contains(rec.Body.String(), `"settings"`) {
+				t.Errorf("the refusal carries a /me shape: %s", rec.Body)
+			}
+			for _, r := range []*httptest.ResponseRecorder{live, rec} {
+				if cookies := r.Header().Values("Set-Cookie"); len(cookies) != 0 {
+					t.Errorf("a bearer /me set cookies %q", cookies)
+				}
+			}
+		})
+	}
+	if after := sessions(); after != before {
+		t.Errorf("bearer requests to /me took sessions from %d to %d", before, after)
 	}
 }
 

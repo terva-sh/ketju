@@ -31,6 +31,10 @@ const (
 	tPreUser = "pre_user"
 	// tAdmin is an admin; the admin routes have a shape for no one else.
 	tAdmin = "admin"
+	// tAgent is an agent authenticated by its credential, not a session
+	// (TKT-01M3QH3X58). It reads every route as the member it is, so only
+	// /me, where it checks who it is signed in as, has a golden for it.
+	tAgent = "agent"
 )
 
 // alice is an ordinary human member.
@@ -314,6 +318,13 @@ func me(class string) Me {
 			Queue:         ptr(4),
 			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50},
 		}
+	case tAgent:
+		return Me{
+			User:          &scribe,
+			Unread:        UnreadCounts{Threads: 7, Participated: 3, Watching: 1},
+			Notifications: 4,
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 40},
+		}
 	default:
 		return Me{
 			User:          &alice,
@@ -420,6 +431,7 @@ var corpus = map[string]any{
 	"me." + tMember:    me(tMember),
 	"me." + tModerator: me(tModerator),
 	"me." + tPreUser:   me(tPreUser),
+	"me." + tAgent:     me(tAgent),
 
 	"post." + tMember:    singlePost(tMember),
 	"post." + tModerator: singlePost(tModerator),

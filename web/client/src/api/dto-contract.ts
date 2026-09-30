@@ -84,6 +84,7 @@ import historyModerator from '../../../../internal/dto/testdata/golden/history.m
 import handleChangeAdmin from '../../../../internal/dto/testdata/golden/handle-change.admin.json';
 import handleChangeMember from '../../../../internal/dto/testdata/golden/handle-change.member.json';
 import issuedCredentialAdmin from '../../../../internal/dto/testdata/golden/issued-credential.admin.json';
+import meAgent from '../../../../internal/dto/testdata/golden/me.agent.json';
 import meAnon from '../../../../internal/dto/testdata/golden/me.anon.json';
 import meMember from '../../../../internal/dto/testdata/golden/me.member.json';
 import meModerator from '../../../../internal/dto/testdata/golden/me.moderator.json';
@@ -173,6 +174,7 @@ export const contract = [
   matches<HandleChange>()(handleChangeAdmin),
   matches<HandleChange>()(handleChangeMember),
   matches<IssuedCredential>()(issuedCredentialAdmin),
+  matches<Me>()(meAgent),
   matches<Me>()(meAnon),
   matches<Me>()(meMember),
   matches<Me>()(meModerator),
