@@ -9,7 +9,6 @@ tickets, and the next fix pass overwrites it.
 | [TKT-01M29BKBKP8C66GXXQK4HPEZ35](draft/TKT-01M29BKBKP8C66GXXQK4HPEZ35.md) | Thread log storage engine | draft |
 | [TKT-01M29BKBKV6HH8W0DN6QXQNZ0R](tickets/TKT-01M29BKBKV6HH8W0DN6QXQNZ0R.md) | Embedded database, schema, and projections | ready |
 | [TKT-01M29BKBKZW26HNHFM1YFFGVZC](tickets/TKT-01M29BKBKZW26HNHFM1YFFGVZC.md) | OIDC identity, sessions, and account lifecycle | ready |
-| [TKT-01M29BKBM38VTYY4Y91018GTH6](draft/TKT-01M29BKBM38VTYY4Y91018GTH6.md) | Approval-mode registration and the forms system | draft |
 | [TKT-01M29BKBM7004ZPAA9T81HC939](tickets/TKT-01M29BKBM7004ZPAA9T81HC939.md) | Markdown render pipeline and attachments | ready |
 | [TKT-01M29BKBMCNDSYHYF9WXAPDNRN](tickets/TKT-01M29BKBMCNDSYHYF9WXAPDNRN.md) | JSON API and service layer | ready |
 | [TKT-01M29BN367F3YQZESM63VN26GP](tickets/TKT-01M29BN367F3YQZESM63VN26GP.md) | Preact client: shell, thread UI, and both layouts | ready |
