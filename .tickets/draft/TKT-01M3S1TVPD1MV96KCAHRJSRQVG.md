@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T11:40:10Z
-updated_at: 2026-09-30T12:09:43Z
+updated_at: 2026-09-30T12:23:08Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
@@ -68,11 +68,13 @@ The server's log from that run (`serve.log`, /auth requests only, the bucket mod
 - [ ] web/client/e2e/smoke.spec.ts sets test.use({ storageState: stateFile("alice") }), calls neither signIn nor any /auth/* URL, and asserts that GET /api/v1/me answers alice before it reads the thread
 - [ ] smoke.spec.ts's read, reply and unread-divider steps keep every assertion they had, in both projects
 - [ ] smoke.spec.ts's header comment names phase2-exit.spec.ts's member sign-in and sign-in.spec.ts as where the run covers sign-in at 390 px and 1440 px, and a note on TKT-01M29CGBY1 says the same
-- [ ] e2e/session.ts states the run's /auth/* budget (setup 8; per project apply 2, phase2-exit 5, sign-in.spec 1; 24 in all), and sign-in.spec.ts no longer says the smoke spec draws on the burst
-- [ ] The diff leaves internal/web/ratelimit.go, cmd/ketju/e2e.go, cmd/ketju/serve.go and web/client/playwright.config.ts unchanged, and adds no wait or retry on a 429 to any spec
 - [ ] A note records five full local runs of npx playwright test on the PR's base and five on the branch, on the same machine, with each run's result, and all five on the branch pass
 - [ ] A note lists one passing run's /auth/* requests from serve.log with time, path, status and the modelled bucket, and shows no 429 outside phase2-exit.spec.ts
 - [ ] CI's Playwright step passes on the PR, with the smoke test passing in both projects
+- [ ] e2e/session.ts exports paceAuth(n), which asserts one worker with fullyParallel false, records a paced annotation and waits n x 6 s + 0.5 s before any request, and apply.spec.ts calls paceAuth(2) and sign-in.spec.ts calls paceAuth(1) before their first /auth/* request
+- [ ] e2e/session.ts's comment holds the per-spend budget table (setup 8 from a full bucket; per project apply 2 and sign-in.spec 1 after paceAuth, phase2-exit 5 through through(), smoke 0) and the rule that every /auth/* spender either calls paceAuth or waits out a 429 through through()
+- [ ] The diff leaves internal/web/ratelimit.go, cmd/ketju/e2e.go, cmd/ketju/serve.go, web/client/playwright.config.ts and signIn unchanged, and no new code waits on or retries after a 429 response
+- [ ] A note records five passing branch runs of the spenders alone (npx playwright test e2e/apply.spec.ts e2e/phase2-exit.spec.ts e2e/sign-in.spec.ts e2e/smoke.spec.ts) and the result of one such run on the PR's base
 
 ## Implementation plan
 
@@ -94,16 +96,21 @@ Groomed 2026-09-30 against main at 4918f90 (TKT-01M3M9RR26, Phase 2 grooming).
   - `apply.spec.ts` signs an applicant in at each width. The setup project signs the four seeded readers in once, at the default viewport.
   - smoke.spec.ts keeps read, reply and the unread divider at each width.
   smoke.spec.ts's header says this, and a note on TKT-01M29CGBY1 records it.
-- **The run's arithmetic after the change** (24 requests). The table lists each spend that does not wait out a 429:
+- **Engineering choice, added after Terva review 1579 on PR #225: each spend that does not wait out a 429 first waits for its own refill.** Option (a) alone left desktop apply's two requests with no fixed floor. They held only if 9.2 s of other work came before them, and one observed run is not a guarantee. A new helper, `paceAuth(n)` in `e2e/session.ts`, waits `n × 6 s + 0.5 s` before a spec spends `n` requests. It runs at the start of the test, before any request, and whatever answers came before, so it is pacing, not a retry of a 429. `apply.spec.ts` calls `paceAuth(2)` and `sign-in.spec.ts` calls `paceAuth(1)`. Every row of the table below then holds with no assumption about how fast anything runs. It adds about 38 s to a full run (2 × 12.5 s + 2 × 6.5 s), against a Playwright step of 2m19s in CI run 1435. The alternatives lost:
+  - **A stored or pre-seeded session for apply.** A session stored by the setup project moves apply's 4 requests into setup. Setup already spends 8 of the burst of 10, so it would need the same wait. A session seeded by `cmd/ketju/e2e.go` would mint a pre-user session outside the sign-in flow. That is a new session-issuing path to keep honest, even if only the e2e build compiles it. It would also drop apply.spec.ts's check that a first sign-in lands on the form (docs/05 "mode = approval" step 1). TKT-01M29CP2NG's criteria would allow it, but it saves 26 s by adding a Go path.
+  - **Ordering, so that a guaranteed refill comes first.** No spec before desktop apply has a fixed wait. Playwright `dependencies` order projects, not files, and do not add refill time. Every ordering therefore comes down to a wait. A wait in another file, such as the one read-tracking.spec.ts gives sign-in.spec.ts today, stops protecting the spend as soon as that file changes or a new spec sorts between them. `paceAuth` puts the wait in the spec that spends.
+  - **Cutting apply's requests.** A sign-in is `/auth/fake/start` and `/auth/fake/callback`, and that is already the fewest it can make.
+- **The run's arithmetic after the change** (24 requests). The limiter never takes a bucket below 0 (`allowAt`, `internal/web/ratelimit.go:153-182`). `playwright.config.ts` runs one worker with `fullyParallel: false`, so no two specs spend at once. `paceAuth` asserts both, as `admin-forms.spec.ts:42-43` does. Each row holds by itself:
 
-  | spend | cost | what makes it hold |
+  | spend | cost | what makes it hold, at any speed |
   |---|---|---|
-  | setup | 8 | A full bucket of 10. It leaves 2. |
-  | phone apply | 2 | The 2 that setup left. Holds at any speed. |
-  | sign-in.spec, each project | 1 | It follows phase2-exit, which can leave the bucket empty. Between them, read-tracking.spec.ts sleeps a fixed 7.15 s (`:75`, `:80`, `:104`, `:122`, `:132`, `:136`), and on the phone shortcuts.spec.ts sleeps another 1.7 s (`:130`). 7.15 s refills 1.19 tokens, so this holds at any speed. |
-  | desktop apply | 2 | This spend has no fixed floor. After the phone's sign-in.spec, the bucket holds at least 0.47, so 9.2 s of work must come between them: the phone's smoke, targets and thread-list, then desktop a11y (10 tests) and the four admin specs. The failing run took 29.3 s over that stretch (48.1 s to 77.4 s). |
+  | setup | 8 | Setup runs first, against a fresh server (`reuseExistingServer: false`), because both width projects depend on it. It starts from a full bucket of 10. |
+  | apply, each project | 2 | `paceAuth(2)`: from a bucket of 0 or more, 12.5 s refills more than 2 tokens. |
+  | phase2-exit, each project | 5 | `through()` waits out each 429 as `Retry-After` says (`phase2-exit.spec.ts:52-67`). This is unchanged. |
+  | sign-in.spec, each project | 1 | `paceAuth(1)`: 6.5 s refills more than 1 token. |
+  | smoke, each project | 0 | Option (a): it starts from alice's stored session. |
 
-  This holds while Playwright runs a project's files in today's alphabetical order, one worker, one file at a time (`playwright.config.ts`). The verification below records the timeline.
+  The only rule a new spec must follow: a spec that spends `/auth/*` either calls `paceAuth` with its count first, or waits out a 429 through `through()`.
 
 ### Approach
 1. `web/client/e2e/smoke.spec.ts`:
@@ -113,24 +120,28 @@ Groomed 2026-09-30 against main at 4918f90 (TKT-01M3M9RR26, Phase 2 grooming).
    - Rewrite the header comment (`:6-8`) to say three things: what the spec covers; why it starts from a stored session, which is the `/auth/*` budget; and where the run covers sign-in at each width, as listed under Settled.
    - carol's context comment (`:51-52`) says "the sign-in flow is alice's step above", which is no longer true. Point it at phase2-exit.spec.ts and sign-in.spec.ts.
    - The read, reply and unread-divider steps and their assertions stay as they are.
-2. `web/client/e2e/sign-in.spec.ts:10-11`: "which the setup project and the smoke spec already draw on" becomes "which the setup project, apply.spec.ts and phase2-exit.spec.ts already draw on".
-3. `web/client/e2e/session.ts`: the comment above `stateFile` gets the run's `/auth/*` budget. Setup spends 8. Each project spends 2 in apply.spec.ts, 5 in phase2-exit.spec.ts, which waits out a 429 with `through()`, and 1 in sign-in.spec.ts. That is 24 in all, against a burst of 10 and one token every 6 s. It also states the rule. A spec that spends `/auth/*` without waiting out a 429 must sit where the refill before it covers the spend. A spec that waits leaves the bucket empty for whatever follows it. `session.setup.ts:4-5`'s "four leave two over" stays true.
-4. These files do not change: `internal/web/ratelimit.go`, `cmd/ketju/e2e.go`, `cmd/ketju/serve.go`, `web/client/playwright.config.ts`, `phase2-exit.spec.ts`, `apply.spec.ts` and docs/08. The config's header describes the suite, and the suite still covers sign-in.
-5. Add a note on TKT-01M29CGBY1 that says how its third criterion is met now, as listed under Settled, and names this ticket.
-6. There is no `web/client/src` change, so the committed dist and the bundle budget are untouched.
+2. `web/client/e2e/session.ts`:
+   - Add `export async function paceAuth(n: number)`. It first asserts `test.info().config.workers === 1` and `test.info().config.fullyParallel === false`, with messages saying the `/auth/*` budget depends on them. It then records a `paced` annotation (`${n} /auth/* requests: waited ${ms} ms`) on the test, and waits `n * authEveryMs + 500` ms. The wait uses `setTimeout` in Node, so no page is needed. `authEveryMs = 6_000` is a named constant, and its comment points to `authRate` in `internal/web/ratelimit.go` and to docs/08. The comment above the helper says that it paces before any request and never answers a 429.
+   - In the comment above `stateFile`, write down the run's `/auth/*` budget: the table under Settled and the one rule. `session.setup.ts:4-5`'s "four leave two over" stays true.
+   - `signIn` does not change.
+3. `web/client/e2e/apply.spec.ts`: add `await paceAuth(2)` as the first line of the step "sign in, and land on the form" (`:33`). The header comment (`:12-13`) says why.
+4. `web/client/e2e/sign-in.spec.ts`: add `await paceAuth(1)` as the first line of the test, before `page.route`. In the comment at `:10-11`, "which the setup project and the smoke spec already draw on" becomes "which the setup project, apply.spec.ts and phase2-exit.spec.ts also draw on". The comment also says why the test paces.
+5. These files do not change: `internal/web/ratelimit.go`, `cmd/ketju/e2e.go`, `cmd/ketju/serve.go`, `web/client/playwright.config.ts`, `phase2-exit.spec.ts` and docs/08. The config's header describes the suite, and the suite still covers sign-in.
+6. Add a note on TKT-01M29CGBY1 that says how its third criterion is met now, as listed under Settled, and names this ticket.
+7. There is no `web/client/src` change, so the committed dist and the bundle budget are untouched.
 
 ### Tests
 - Before the change: on a machine where the failure reproduces, run the full suite (`npx playwright test` from `web/client`) five times on the PR's base. Each run starts a fresh server and so a full bucket. Record how many runs failed, and the desktop smoke's 429 in each failed run.
 - After the change: five full runs on the branch on the same machine, all passing.
-- From one passing run's `serve.log`, found at `$KETJU_E2E_DIR/serve.log` beside the seed: for every `/auth/*` request, list its time, path and status, and the bucket modelled from them, as this ticket's description does. It shows no 429 outside phase2-exit.spec.ts, and the bucket just before desktop apply.
+- From one passing run's `serve.log`, found at `$KETJU_E2E_DIR/serve.log` beside the seed: for every `/auth/*` request, list its time, path and status, and the bucket modelled from them, as this ticket's description does. It shows no 429 outside phase2-exit.spec.ts, and the `paced` annotations of apply.spec.ts and sign-in.spec.ts in both projects.
+- **Worst case for speed:** run the `/auth/*` spenders back to back with nothing between them to refill the bucket: `npx playwright test e2e/apply.spec.ts e2e/phase2-exit.spec.ts e2e/sign-in.spec.ts e2e/smoke.spec.ts`. The setup project runs first as their dependency. Run it five times on the branch, and every run must pass. Run it once on the PR's base and record the result, which is expected to be a 429 in sign-in.spec.ts or apply.spec.ts. That run shows the pacing is what holds the budget.
 - CI's Playwright step passes on the PR, with the renamed smoke test passing in both projects.
 
 ### Out of scope
 - An e2e-only `/auth/*` rate, which is option (b). It lost for the reasons under Settled.
-- The `/auth/*` spends that two other tickets will add. TKT-01M3QS0TMV adds `link-sign-in.spec.ts`, one `GET /auth/link` per project. TKT-01M3QVWKAG (Give signed-in members a Sign out control) adds `sign-out.spec.ts`, a sign-in and a logout per project. Both wait out a 429 through `through()`, and each ticket updates the budget in `e2e/session.ts` when it lands. `sign-out.spec.ts` sorts just before `smoke.spec.ts`. That order is harmless once smoke spends nothing.
-- `signIn` itself. TKT-01M3QVWKAG's plan changes it to go through `through()`. After this ticket, `signIn`'s only callers are the setup project and that ticket's spec.
+- The `/auth/*` spends that two other tickets will add. TKT-01M3QS0TMV adds `link-sign-in.spec.ts`, one `GET /auth/link` per project. TKT-01M3QVWKAG (Give signed-in members a Sign out control) adds `sign-out.spec.ts`, a sign-in and a logout per project. Both wait out a 429 through `through()`, which satisfies the rule, and each ticket adds its row to the budget in `e2e/session.ts` when it lands. `sign-out.spec.ts` sorts just before `smoke.spec.ts`. That order is harmless once smoke spends nothing.
+- `signIn` itself, which stays as it is. The coordinator's note of 2026-09-30 on TKT-01M3QVWKAG puts that ticket's wait in its own sign-out spec and leaves `signIn` alone.
 - Runner contention. That is TKT-01M3MTQG5A (done) and TKT-01M3RZXGBA (Bound the axe scans in the admin forms and agents Playwright tests).
-- Making desktop apply's spend hold at any speed. It had a margin of about three times in the failing run. If it ever fails, file it with the run's timeline.
 
 ## Notes
 
@@ -139,3 +150,7 @@ Groomed 2026-09-30 against main at 4918f90 (TKT-01M3M9RR26, Phase 2 grooming).
 Groomed 2026-09-30 against main at 4918f90. The plan chooses option (a): smoke.spec.ts starts from alice's stored session. The Settled section says why the e2e-only rate lost, and it follows TKT-01M3QS0TMV's settled choice that the e2e server keeps production's limiter. TKT-01M29CGBY1's "The run covers sign in..." criterion stays met by phase2-exit.spec.ts's member sign-in and sign-in.spec.ts at each width.
 
 One tension in the record for whoever picks this up. This ticket says "Not this: retrying around the limit in `signIn`". TKT-01M3QVWKAG (Give signed-in members a Sign out control) settled, in its refresh of 2026-09-30, that `signIn` itself goes through `through()`, which waits out a 429. Once this ticket lands, smoke no longer calls `signIn`, so that wait cannot hide smoke's budget. `signIn`'s callers are then the setup project and `sign-out.spec.ts`. This plan leaves `signIn` alone either way.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T12:23:08Z
+
+Plan revised for Terva review 1579 on PR #225 (head f55e8f5, medium finding at line 104). Desktop apply's two /auth/* requests had no fixed refill floor, and the plan held only if 9.2 s of other work came first. Now every spend that does not wait out a 429 calls paceAuth(n) in e2e/session.ts first. paceAuth is an unconditional wait of n x 6 s + 0.5 s at the start of the test, before any request: apply.spec.ts waits for 2 requests and sign-in.spec.ts for 1. With it, every row of the budget table holds at any speed. This supersedes the table in the earlier plan, and the criterion that allowed no new wait of any kind. The cost is about 38 s per full run. Three alternatives lost. A stored session moves the spend into setup, which would need the same wait. A session seeded in e2e.go adds a session-issuing path. Ordering comes down to a wait kept in another file. Smoke still starts from alice's stored session (option a). A new criterion runs the /auth/* spenders back to back as the worst case for speed.
