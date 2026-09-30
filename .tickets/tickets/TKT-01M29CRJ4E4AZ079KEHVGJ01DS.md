@@ -37,7 +37,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-30T01:12:44Z
+updated_at: 2026-09-30T01:15:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -263,3 +263,16 @@ Tests:
 - `ByModerator` back to `author != viewer`.
 - Visibility taken as proof of landing.
 - The retry answer taken from any moderator's recovered restore.
+
+**agent:claude-code/phase2-run-crj4e** at 2026-09-30T01:15:53Z
+
+Terva review 1524 on PR #184 ran as [Actions run #1180](https://git.local.sothr.com/terva-sh/ketju/actions/runs/1180) with request `ready-review-2baf5fd`. It reviewed head 2baf5fde6384429d4a211b0d0b207bba2e7b2927 against base b41b6dbe0966ecb9a507d852d3070e8707c7deec. The result was failure. It called all three findings from review 1522 resolved and raised one new medium finding.
+
+### finding-1: Require the visible state for a queue removal (fixed)
+
+The model read the visible-post remove's `Refuse: gone` as refusing only deleted or moved posts. That reading was wrong. `gone` (mutate.go:37) is `EntryDeleted | EntryHiddenByMod | EntryMoved`, so any hide already made the append ErrPostState. `TestStateChangeIsConflictNotSuccess/remove` showed this, with a moderator's hide landing between the read and the append.
+
+The definition sits outside the diff, so I spelled the precondition out instead of arguing:
+- It is now `EntryDeleted | EntryHiddenByMod | EntryAutoHidden | EntryMoved`, with a comment tying it to the shown state the remove was decided on.
+- `TestStateChangeIsConflictNotSuccess` now also covers the system's auto-hide as the intervening change, for every action. It also checks that the only Delete is the hide's.
+- Mutation tried: `Refuse: EntryDeleted | EntryMoved`. It was caught.

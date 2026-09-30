@@ -435,9 +435,17 @@ func (s *Service) ResolvePost(ctx context.Context, v domain.Viewer, id threadid.
 			// its record says so, as the auto-hidden case's does (Terva
 			// review 1522 on PR #184). The thread page's delete of one's
 			// own post stays an author's delete.
+			//
+			// The precondition is the shown state it was decided on: every
+			// bit that takes a post down is refused, so a hide that landed
+			// outside the lock since, a suspension's or the auto-hide's
+			// (hidden-by-mod, with auto-hidden), is ErrPostState, which is
+			// conflict with the flags open (Terva review 1524;
+			// TestStateChangeIsConflictNotSuccess). This is gone, spelled out.
 			rec = threadlog.Append{
-				Body:   &threadlog.DeleteBody{Reason: r.Note, ByModerator: true},
-				Refuse: gone,
+				Body: &threadlog.DeleteBody{Reason: r.Note, ByModerator: true},
+				Refuse: threadlog.EntryDeleted | threadlog.EntryHiddenByMod | threadlog.EntryAutoHidden |
+					threadlog.EntryMoved,
 			}
 		default:
 			return s.closeFlags(ctx, by, id, ordinal, r, state, dto.QueuePostAlreadyHidden)

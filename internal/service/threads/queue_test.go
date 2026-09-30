@@ -845,32 +845,52 @@ func TestFailedActionStaysInQueue(t *testing.T) {
 
 // TestStateChangeIsConflictNotSuccess: a change to the post that lands
 // between the queue's read and its write is conflict, with the flags left
-// open and no flag row, for every action on a shown post (Terva review 1522
-// on PR #184). The change is a moderator's Delete appended straight to the
-// log, as a suspension's hide of an author's posts writes it, since that is
-// the one hide that does not take the post's flag lock. A remove meets it as
-// its append's precondition; dismiss and resolve, which append nothing,
-// meet it when they read the state again before their write.
+// open and no flag row, for every action on a shown post (Terva reviews
+// 1522 and 1524 on PR #184). The change is appended straight to the log,
+// bypassing the post's flag lock: a moderator's Delete, as a suspension's
+// hide of an author's posts writes it, and the system's auto-hide. A remove
+// meets it as its append's precondition; dismiss and resolve, which append
+// nothing, meet it when they read the state again before their write.
 func TestStateChangeIsConflictNotSuccess(t *testing.T) {
-	for _, action := range []string{QueueRemove, QueueDismiss, QueueResolve} {
-		t.Run(action, func(t *testing.T) {
-			w := newQueueWorld(t)
-			w.mustFlag("rep1", 1)
-			w.svc.afterQueueRead = func(id threadid.ID, ordinal uint32) {
-				w.appendTo(id, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["mod2"]), Ordinal: ordinal,
-					Body: &threadlog.DeleteBody{Reason: "suspended", ByModerator: true}})
-			}
-			if _, err := w.resolve("mod", w.id, 1, action); codeOf(err) != problem.CodeConflict {
-				t.Fatalf("the %s after a hide: %v, want conflict", action, err)
-			}
-			w.svc.afterQueueRead = nil
-			if w.openFlags(1) != 1 || len(w.flagRows()) != 0 {
-				t.Errorf("after the conflict: %d open flags, rows %v", w.openFlags(1), w.flagRows())
-			}
-			if got, want := w.audit(), []string{"post.hidden by mod2"}; !reflect.DeepEqual(got, want) {
-				t.Errorf("audit %v, want %v", got, want)
-			}
-		})
+	hides := []struct {
+		name  string
+		rec   func(w *queueWorld) threadlog.Append
+		audit string
+	}{
+		{"a suspension's hide", func(w *queueWorld) threadlog.Append {
+			return threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["mod2"]),
+				Body: &threadlog.DeleteBody{Reason: "suspended", ByModerator: true}}
+		}, "post.hidden by mod2"},
+		{"the auto-hide", func(w *queueWorld) threadlog.Append {
+			return threadlog.Append{Type: threadlog.TypeDelete, Body: &threadlog.DeleteBody{Reason: AutoHideReason, Auto: true}}
+		}, "post.auto_hidden by system"},
+	}
+	for _, hide := range hides {
+		for _, action := range []string{QueueRemove, QueueDismiss, QueueResolve} {
+			t.Run(hide.name+"/"+action, func(t *testing.T) {
+				w := newQueueWorld(t)
+				w.mustFlag("rep1", 1)
+				before := w.logLength()
+				w.svc.afterQueueRead = func(id threadid.ID, ordinal uint32) {
+					rec := hide.rec(w)
+					rec.Ordinal = ordinal
+					w.appendTo(id, rec)
+				}
+				if _, err := w.resolve("mod", w.id, 1, action); codeOf(err) != problem.CodeConflict {
+					t.Fatalf("the %s after %s: %v, want conflict", action, hide.name, err)
+				}
+				w.svc.afterQueueRead = nil
+				if w.openFlags(1) != 1 || len(w.flagRows()) != 0 {
+					t.Errorf("after the conflict: %d open flags, rows %v", w.openFlags(1), w.flagRows())
+				}
+				if n := w.deletes(before); n != 1 {
+					t.Errorf("%d Deletes, want only the hide's", n)
+				}
+				if got, want := w.audit(), []string{hide.audit}; !reflect.DeepEqual(got, want) {
+					t.Errorf("audit %v, want %v", got, want)
+				}
+			})
+		}
 	}
 }
 
