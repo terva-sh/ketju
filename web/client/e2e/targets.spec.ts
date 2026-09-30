@@ -21,11 +21,12 @@ test.skip(({ isMobile }) => !isMobile, 'the 44 px rule is the phone layout’s')
 // is hit at its centre and 21 px either side of it, across and down. That
 // counts a .hit link's padded area, and fails one clipped by an overflow or
 // overlapped by a neighbour's. Within an open dialog only the dialog's
-// controls are counted; the rest are behind it.
-function small(page: Page) {
-  return page.evaluate(() => {
+// controls are counted; the rest are behind it. within names a popup whose
+// controls alone are counted, because it covers what is under it.
+function small(page: Page, within?: string) {
+  return page.evaluate((within) => {
     const controls = 'a[href], button, [role=button], input:not([type=hidden]), select, textarea, summary, [tabindex="0"]';
-    const root = document.querySelector('[role=dialog], .composer-sheet') ?? document;
+    const root = (within ? document.querySelector(within) : document.querySelector('[role=dialog], .composer-sheet')) ?? document;
     const out: string[] = [];
     for (const el of root.querySelectorAll<HTMLElement>(controls)) {
       if (el.closest('.post-body') && !el.matches('details.quote > summary, details.quote .quote-source')) continue;
@@ -46,7 +47,7 @@ function small(page: Page) {
       }
     }
     return out;
-  });
+  }, within);
 }
 
 async function signedIn(browser: import('@playwright/test').Browser, info: import('@playwright/test').TestInfo) {
@@ -102,5 +103,24 @@ test('the thread page, and its composer sheet', async ({ browser }, info) => {
   await page.locator('.replybar-open').click();
   await expect(page.locator('.composer-sheet')).toBeVisible();
   expect(await small(page), 'with the sheet open').toEqual([]);
+  await ctx.close();
+});
+
+// A post's "more" control on the phone, its items, and the flag dialog
+// (TKT-01M3QQWA5Z; docs/06 "Mobile"). #3 is carol's, so alice may flag it.
+// The open list covers the post below it, so only the list is measured.
+test('a post’s more control, its items, and the flag dialog', async ({ browser }, info) => {
+  const { ctx, page } = await signedIn(browser, info);
+  await page.goto(`${seed.thread}?page=1`);
+  const more = page.locator('#post-3 [data-post-more]');
+  await expect(more).toBeVisible();
+  await more.click();
+  const list = page.locator('#post-3 .post-more-list');
+  await expect(list).toBeVisible();
+  await expect(list.locator('a, button')).toHaveText(['link', 'flag', 'history']);
+  expect(await small(page, '#post-3 .post-more-list'), 'with #3’s more open').toEqual([]);
+  await page.locator('#post-3 [data-post-action=flag]').click();
+  await expect(page.getByRole('dialog')).toBeVisible();
+  expect(await small(page), 'with the flag dialog open').toEqual([]);
   await ctx.close();
 });

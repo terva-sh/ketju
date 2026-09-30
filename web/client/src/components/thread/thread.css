@@ -395,8 +395,184 @@
   cursor: pointer;
 }
 
+/* A post's "more" on a phone (PostMore): link, flag and history, in a list
+   under the button. Each item is a full target. */
+.post-more {
+  position: relative;
+  margin-left: auto;
+}
+.post-more > button {
+  display: flex;
+  color: var(--muted);
+}
+.post-more-list {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 12px);
+  z-index: 5;
+  min-width: 140px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  background: var(--surface);
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(27, 33, 48, 0.18);
+}
+.post-more-list[hidden] {
+  display: none;
+}
+/* Over .post-footer's own rules for its links and buttons (composer.css). */
+.post-footer .post-more-list a,
+.post-footer .post-more-list button {
+  display: flex;
+  align-items: center;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--target);
+  padding: 0 16px;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+/* The flag dialog (FlagDialog), drawn as the shortcut list is. */
+.flag-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 16px 16px;
+  background: rgba(15, 22, 34, 0.35);
+}
+.flag-dialog {
+  width: min(480px, 100%);
+  max-height: calc(100dvh - 120px);
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 16px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+  font-size: 14px;
+}
+.flag-dialog h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.flag-dialog fieldset {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+.flag-dialog legend {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.flag-dialog fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
+}
+.flag-note {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-weight: 600;
+}
+.flag-note textarea {
+  font: inherit;
+  font-weight: 400;
+  padding: 8px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  resize: vertical;
+}
+.flag-hint {
+  margin: 4px 0 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.flag-long,
+.flag-refused {
+  color: var(--ink);
+  font-weight: 600;
+}
+.flag-refused {
+  margin: 0 0 12px;
+}
+.flag-thanks {
+  margin: 0 0 12px;
+}
+.flag-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.flag-buttons button {
+  height: 32px;
+  padding: 0 14px;
+  font: inherit;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.flag-buttons .flag-send {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.flag-buttons .flag-send:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 /* Phone (docs/06 "Mobile"): below 720 px. */
 @media (max-width: 719.98px) {
+  .flag-backdrop {
+    padding: 16px;
+  }
+  .flag-dialog fieldset label,
+  .flag-buttons button {
+    min-height: var(--target);
+  }
+  .flag-buttons button {
+    height: auto;
+    min-width: var(--target);
+  }
+  /* A radio is a full target: a 44 px box with the circle drawn in its
+     middle, since the label beside it is not the input's own hit area. */
+  .flag-dialog input[type='radio'] {
+    appearance: none;
+    flex: none;
+    width: var(--target);
+    height: var(--target);
+    margin: 0 -8px 0 -12px;
+    border-radius: 50%;
+    background: radial-gradient(circle, var(--surface) 0 7px, var(--ink2) 7.5px 9px, transparent 9.5px);
+  }
+  .flag-dialog input[type='radio']:checked {
+    background: radial-gradient(
+      circle,
+      var(--accent) 0 4px,
+      var(--surface) 4.5px 6.5px,
+      var(--accent) 7px 9px,
+      transparent 9.5px
+    );
+  }
+  .flag-dialog input[type='radio']:focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: -10px;
+  }
   .thread-page {
     padding: 12px 0 96px;
   }

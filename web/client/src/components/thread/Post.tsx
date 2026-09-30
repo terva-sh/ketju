@@ -1,7 +1,10 @@
 import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Post as PostDTO } from '../../api/dto';
 import { bodyText, selectionIn } from '../../composer/quote';
+import { isPhone } from '../../state/layout';
+import { viewer } from '../../state/viewer';
 import { Avatar } from './Avatar';
+import { PostMore } from './PostMore';
 import { PostTime } from './PostTime';
 import { removedMark } from './removal';
 import { Replies, ReplyToggle } from './ReplyExpander';
@@ -28,22 +31,28 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 //
 // The footer carries only what works today. Quote and reply are there when
 // the page offers them, which is when the reader may reply and a composer is
-// on the page to take them (TKT-01M29CEE79); flag arrives with its own
-// ticket (TKT-01M29CA9CE) rather than as a button that does nothing. The
-// reply expander leads the footer when the page offers it (expanderShown).
+// on the page to take them (TKT-01M29CEE79). Flag is there when the page
+// offers it, to a signed-in member, and the post may be flagged (mayFlag);
+// it does not depend on replying, since a locked thread still takes flags
+// (TKT-01M3QQWA5Z). The reply expander leads the footer when the page
+// offers it (expanderShown). On a phone link, flag and history collapse
+// under PostMore (docs/06 "Mobile").
 export function Post({
   post,
   thread,
   unread,
   actions,
+  onFlag,
   expander = false,
 }: {
   post: PostDTO;
   thread: ThreadRef;
   unread: boolean;
   actions?: PostActions;
+  onFlag?: FlagHandler;
   expander?: boolean;
 }) {
+  const flag = onFlag && mayFlag(post) ? onFlag : undefined;
   // What was selected in this post when the pointer went down on quote:
   // a click can clear a selection before its handler runs.
   const selected = useRef<string | null>(null);
@@ -95,12 +104,28 @@ export function Post({
               </button>
             </>
           )}
-          <a class="hit" href={permalink(thread, post.ordinal)}>
-            link
-          </a>
-          <a class="hit" href={`${permalink(thread, post.ordinal)}/history`}>
-            history
-          </a>
+          {isPhone.value ? (
+            <PostMore thread={thread} ordinal={post.ordinal} onFlag={flag} />
+          ) : (
+            <>
+              <a class="hit" href={permalink(thread, post.ordinal)}>
+                link
+              </a>
+              {flag && (
+                <button
+                  type="button"
+                  class="hit"
+                  data-post-action="flag"
+                  onClick={(e) => flag(post.ordinal, e.currentTarget)}
+                >
+                  flag
+                </button>
+              )}
+              <a class="hit" href={`${permalink(thread, post.ordinal)}/history`}>
+                history
+              </a>
+            </>
+          )}
         </footer>
         {expander && open && <Replies thread={thread} ordinal={post.ordinal} />}
       </div>
@@ -113,6 +138,21 @@ export function Post({
 export interface PostActions {
   quote: (ordinal: number, text: string) => void;
   reply: (ordinal: number) => void;
+}
+
+// FlagHandler opens the flag dialog for a post. returnTo is the control
+// focus goes back to when the dialog closes: the flag button on desktop, and
+// on a phone the post's More button, since the flag item inside it is gone
+// by then.
+export type FlagHandler = (ordinal: number, returnTo: HTMLElement) => void;
+
+// mayFlag is whether the viewer is offered flag on post: a signed-in member,
+// on a post that is shown (not removed, not moved) and is not their own
+// (maintainer decision 2026-09-29; the server refuses a self-flag too).
+// Handles are compared without case, as the server compares them.
+export function mayFlag(post: PostDTO): boolean {
+  const me = viewer.value.user;
+  return !!me && !post.deleted && post.moved_to === null && me.handle.toLowerCase() !== post.author.handle.toLowerCase();
 }
 
 // useHeldStill wraps change, a toggle's handler, so the toggle keeps its

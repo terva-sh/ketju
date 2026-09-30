@@ -1,9 +1,10 @@
 import { act } from 'preact/test-utils';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me } from '../api/dto';
+import { isPhone } from '../state/layout';
 import { dwellMs, resetReadTracker } from '../state/readTracker';
 import { viewer } from '../state/viewer';
-import { renderAt, route, screenOf, settle, threadJSON } from '../testing';
+import { renderAt, route, screenOf, settle, threadJSON, unmount } from '../testing';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 
 const problem = (type: string, status: number, headers: Record<string, string> = {}) =>
@@ -210,5 +211,95 @@ describe('read tracking on the thread screen', () => {
     await route('/f/general');
     await act(() => new Promise((r) => setTimeout(r, 5)));
     expect(puts).toEqual([{ url: '/api/v1/threads/01k4z3j0w8x2c/read', keepalive: true, body: { ordinal: 62 } }]);
+  });
+});
+
+// TKT-01M3QQWA5Z: flag, from the thread page. The member golden's viewer is
+// alice, and of its posts only #62, scribe's, is another member's and shown.
+describe('flagging from the thread screen', () => {
+  const saved = viewer.value;
+  const id = '01k4z3j0w8x2c';
+  let sent: { method: string; url: string; body: unknown }[];
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    sent = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      const method = init.method ?? 'GET';
+      sent.push({ method, url, body: init.body ? JSON.parse(String(init.body)) : undefined });
+      if (method === 'POST' && url === `/api/v1/threads/${id}/flags`)
+        return new Response('{"received":true}', { status: 200, headers: { 'Cache-Control': 'no-store' } });
+      if (method === 'GET' && url.startsWith(`/api/v1/threads/${id}`))
+        return new Response(threadJSON({ id, slug: 'a', title: 'Flagged' }), { status: 200 });
+      return new Promise<Response>(() => {});
+    });
+    viewer.value = structuredClone(member) as Me;
+  });
+  afterEach(async () => {
+    await unmount();
+    viewer.value = saved;
+    isPhone.value = false;
+  });
+
+  const threadGets = () => sent.filter((r) => r.method === 'GET' && r.url.startsWith(`/api/v1/threads/${id}`)).length;
+  const dialog = () => document.querySelector<HTMLElement>('[role=dialog]');
+  async function report(d: HTMLElement) {
+    await act(async () => d.querySelector<HTMLInputElement>('input[value=spam]')!.click());
+    await act(async () => d.querySelector<HTMLButtonElement>('.flag-send')!.click());
+    await act(() => new Promise((r) => setTimeout(r, 5)));
+  }
+
+  it('flags a post from the page', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    expect([...root.querySelectorAll('[data-post-action=flag]')].map((b) => b.closest('article')?.id)).toEqual(['post-62']);
+    const gets = threadGets();
+    const flag = root.querySelector<HTMLButtonElement>('#post-62 [data-post-action=flag]')!;
+    flag.focus();
+    await act(async () => flag.click());
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Flag post #62');
+    await report(dialog()!);
+    expect(sent.filter((r) => r.method === 'POST')).toEqual([
+      { method: 'POST', url: `/api/v1/threads/${id}/flags`, body: { ordinal: 62, reason: 'spam', note: '' } },
+    ]);
+    expect(dialog()?.textContent).toContain('Thanks, a moderator will look.');
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    expect(threadGets(), 'the thread page is not asked for again').toBe(gets);
+    await act(async () => dialog()!.querySelector<HTMLButtonElement>('[data-flag-close]')!.click());
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('#post-62 [data-post-action=flag]'));
+  });
+
+  it.each(['Close', 'Escape'])("flags a post from the phone's More, closed with %s", async (how) => {
+    isPhone.value = true;
+    const root = await renderAt(`/t/${id}/a`);
+    const more = root.querySelector<HTMLButtonElement>('#post-62 [data-post-more]')!;
+    await act(async () => more.click());
+    expect(more.getAttribute('aria-expanded')).toBe('true');
+    await act(async () => root.querySelector<HTMLButtonElement>('#post-62 [data-post-action=flag]')!.click());
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+    expect(dialog()?.querySelector('h2')?.textContent).toBe('Flag post #62');
+    expect(dialog()!.contains(document.activeElement)).toBe(true);
+    if (how === 'Close') await act(async () => dialog()!.querySelector<HTMLButtonElement>('[data-flag-close]')!.click());
+    else
+      await act(async () =>
+        void document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+      );
+    expect(dialog()).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('#post-62 [data-post-more]'));
+    expect(document.activeElement).not.toBe(document.body);
+    expect(more.getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('a signed-out reader has no flag', async () => {
+    viewer.value = { ...structuredClone(member), user: null } as Me;
+    const root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('#post-62')).not.toBeNull();
+    expect(root.querySelector('[data-post-action=flag]')).toBeNull();
   });
 });

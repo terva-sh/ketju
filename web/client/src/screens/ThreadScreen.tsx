@@ -8,8 +8,9 @@ import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Composer } from '../composer/Composer';
 import { ComposerSheet } from '../composer/ComposerSheet';
+import { FlagDialog } from '../components/thread/FlagDialog';
 import { Pager } from '../components/thread/Pager';
-import { permalink, Post, type PostActions, type ThreadRef } from '../components/thread/Post';
+import { permalink, Post, type FlagHandler, type PostActions, type ThreadRef } from '../components/thread/Post';
 import { PostPopover } from '../components/thread/PostPopover';
 import { isTombstone } from '../components/thread/removal';
 import { expanderShown } from '../components/thread/ReplyExpander';
@@ -179,6 +180,13 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   const actions: PostActions | undefined = canReply
     ? { quote: (o, text) => quotePost(thread.id, o, text), reply: (o) => replyToPost(thread.id, o) }
     : undefined;
+  // Flag is offered to a signed-in member (a pre-user's viewer has no
+  // user), on the posts Post allows (mayFlag). The dialog is told where
+  // focus goes back to, because on a phone the item that opened it is gone.
+  const [flagging, setFlagging] = useState<{ ordinal: number; returnTo: HTMLElement } | null>(null);
+  const onFlag: FlagHandler | undefined = viewer.value.user
+    ? (ordinal, returnTo) => setFlagging({ ordinal, returnTo })
+    : undefined;
   const postOf = (o: number) => page.posts.find((p) => p.ordinal === o);
   const authorOf = (o: number) => postOf(o)?.author.handle;
   // On a phone the composer is a sheet the reply bar opens (Shell), and
@@ -235,6 +243,7 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
                 thread={thread}
                 unread={lastRead > 0 && p.ordinal > lastRead}
                 actions={actions}
+                onFlag={onFlag}
                 expander={expanderShown(p, page.posts[i + 1])}
               />
             )}
@@ -250,6 +259,14 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
           <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} />
         ))}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
+      {flagging && (
+        <FlagDialog
+          thread={thread.id}
+          ordinal={flagging.ordinal}
+          returnTo={flagging.returnTo}
+          onClose={() => setFlagging(null)}
+        />
+      )}
     </>
   );
 }
