@@ -19,11 +19,13 @@ dependencies:
   - TKT-01M29CRJ5J9XMJZ30FMZX4D473
   - TKT-01M3PTT97XM3DCGRTDNHHBNM5M
 blocks_on: none
-references: []
+references:
+  - ref: pr:251
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T21:37:14Z
-updated_at: 2026-09-30T22:20:51Z
+updated_at: 2026-09-30T22:24:39Z
 created_by:
   id: agent:claude-code/phase2-run-crj5j
   name: ""
