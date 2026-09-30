@@ -22,12 +22,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T21:14:11Z
+updated_at: 2026-09-30T22:01:31Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-kfffjr
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -236,6 +236,10 @@ Terva review 1624 (run 1624) on PR #248, head caf6dbe, base 9b142b7. It marks re
 - A screen-level test could not tell the option from none. Every forum GET in the app is aborted when its screen unmounts, and an aborted answer is never held. So the option guards only the window between the mark landing and that unmount, for example the `n` shortcut's paged list search.
 
 Reader bundle: 58151 B gzip of 70000 B, up 948 B from 57203 B. This is review round 4 of the five the run allows.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T22:01:31Z
+
+Review coverage gap, 2026-10-01 (orchestrator). The clean Terva review of PR #248 (Actions run 1626, head 4471ea6, base 9b142b7) said its supplied diff ended partway through web/client/src/state/threads.ts and that the remaining changes could not be judged. That review was taken as clean and #248 merged. A follow-up requested on the PR (comment 20714) was refused by Terva with pr_not_open (Actions run 1629), because the PR had merged. The orchestrator then read the whole threads.ts diff (+21/-2 between 9b142b7 and 4471ea6): the WeakMap requested and its max-of-load-numbers update on a successful answer, which records a 304's reuse of the held body under the newer load; loadCount and pageRequestedAt, which are read-only; and the rename of forgetThread to forgetThreadPages at every call site, with tsc passing. No finding. forgetGets' inFlight option is in api/, which the review did cover. This is an orchestrator reading, not a Terva review, and the run's final report says so. From now on the run brief requires a follow-up before merging when a review reports a truncated diff.
 
 ## Summary
 
