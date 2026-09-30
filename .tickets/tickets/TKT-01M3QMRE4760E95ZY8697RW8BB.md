@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QMRE4760E95ZY8697RW8BB
 title: Add the suspension controls to the admin users screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ dependencies:
   - TKT-01M3QH3GS23M8VG1JEPCTGSGR1
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qmre47
+  branch: run/qmre47-suspension-controls
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a828ad4c69983ea0c
+  commit: 163c33a2288ad89a6c7ef7c04d034519c76b6693
+  session: null
+  claimed_at: 2026-09-30T11:39:36Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T08:58:23Z
+updated_at: 2026-09-30T11:39:38Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-qmre47
   name: ""
 extensions: {}
 ---
