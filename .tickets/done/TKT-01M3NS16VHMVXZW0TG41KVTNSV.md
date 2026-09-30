@@ -18,11 +18,13 @@ dependencies:
   - TKT-01M3K9XBJA8FSJ8ADCEY284SGA
   - TKT-01M3NS19315QTWBKNZN782VRF1
 blocks_on: none
-references: []
+references:
+  - ref: pr:235
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-30T13:57:43Z
+updated_at: 2026-09-30T13:58:11Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
