@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T13:23:59Z
+updated_at: 2026-09-30T13:29:24Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -101,7 +101,7 @@ Read from main at 6d1e9ab, after PR #229 (TKT-01M3QMRE47, suspension controls):
 
 Engineering choices made at claim, each with the alternative that lost:
 - **A field error closes the question and focuses the field.** The refresh says the confirmation closes on a field error. `ConfirmButton` closes only when `onConfirm` does not answer `false`, so the control answers `true` after setting the field's error and moving focus to the field. Keeping the question open, as approval's `Decision` does, lost: its prompt would name a handle the admin now has to change.
-- **`created` is dropped by an effect on the address, not only by `choose`.** With the selection in the address, Back and Forward change it without `choose`, and a creation token waiting in `created` could come back to a re-selected agent. The effect drops it whenever the selected handle is not the new agent's.
+- **`created` needs no new effect for Back and Forward.** With the selection in the address, history changes it without `choose`. `AgentPanel` takes the token into its own state as it mounts and clears `created` at once, so there is nothing left for history to bring back; `AgentControls.test.tsx` holds that. An effect dropping `created` whenever the address moved was tried and removed: no test could fail without it, because the state it guarded is already empty.
 - **After a rename the new detail says what happened and takes focus.** The detail remounts under the new handle, so the Rename button that had focus is gone. `UsersTab` keeps the old handle for the new detail, which shows "Renamed from @{old}. The old handle is kept for 90 days and sends visitors here." as a status line and focuses its heading once it loads. Leaving focus on the page's body lost: a keyboard user would start again from the top.
 - **`isAnonymizedHandle` joins the words in `common/handle.ts`.** `SuspensionPanel` keeps its own inline check; changing it is not this ticket's.
 - **The `invalid` alias is not added.** The groomed choice read `invalid` and `invalid_handle` as one; the refresh found the server sends only `invalid_handle`, so an unknown code keeps the generic words.
@@ -113,7 +113,7 @@ Engineering choices made at claim, each with the alternative that lost:
    - `userHref(query, handle)` keeps every other query parameter and sets or drops `user`.
    - A row click routes to `userHref(query, handle)`, a push as a link would. `close` sets the focus-return ref and routes to `userHref(query, null)`.
    - `onCreated` reloads the list, sets `created` and routes to the new agent's handle.
-   - An effect on `selected` drops `created` when it is not the selected handle's, and returns focus to the closed row as before.
+   - The effect on `selected` returns focus to the closed row as before, and drops the rename notice once another account is open.
    - `filters.prefix` starts from `query.prefix`.
 2. **Handle words** (`screens/admin/common/handle.ts`): `handleWords`, `handleMessage` and `isAnonymizedHandle`, moved from `applications/Decision.tsx` with `same` added: "That is already this account's handle." `Decision.tsx` imports them.
 3. **`screens/admin/RenameControl.tsx`**, rendered by `UserDetail` for an admin below the role control:
