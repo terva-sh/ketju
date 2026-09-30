@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T09:00:06Z
+updated_at: 2026-09-30T09:23:50Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -53,12 +53,13 @@ No ticket covers the client half. Found while planning TKT-01M3K9XBJA (Autosave 
 - [ ] A forbidden or conflict answer turns autosave off for that thread (state/drafts.test.ts)
 - [ ] Autosave for a draft is disarmed until its GET answers, so a load slower than the debounce never deletes the server draft; an empty composer sends DELETE only when the server is known to hold a non-empty draft, and a failed load never deletes (state/drafts.test.ts)
 - [ ] A successful post deletes the draft, cancels any pending save and removes this browser's local copy, and afterwards GET /api/v1/drafts/{id} is 204 and a reload restores nothing (state/drafts.test.ts, e2e/drafts.spec.ts)
-- [ ] On pagehide the save starts inside the handler when no request for that draft is in flight; with one in flight no second request starts and the snapshot is kept in localStorage with its base revision, and the next load sends it only when the server's revision is at most that base plus the requests then in flight, discarding it on any other answer or a 204, with no decision read from the client's clock (state/drafts.test.ts)
 - [ ] At startup and on an owner change, localStorage draft copies under any handle but the signed-in viewer's are removed, and every one is removed when nobody is signed in (state/drafts.test.ts)
+- [ ] On pagehide the save starts inside the handler when no request for that draft is in flight, and with one in flight no second request starts; either way a non-empty unsaved snapshot is kept in localStorage with its base revision, requests in flight and deletes in flight, and no decision reads the client's clock (state/drafts.ts tests)
+- [ ] On the next load the copy wins a 200 only when the revision is at most base plus requests in flight, and a 204 only when the Draft-Revision is at most base plus deletes in flight: an unacknowledged first draft comes back, a draft posted or discarded on another device does not, and a copy with no base is restored on a 204 with a notice (state/drafts.test.ts, named in the plan)
 
 ## Implementation plan
 
-Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 9425310. Refreshed against main at 5124209 on 2026-09-30: the two requirements from the round-5 review of PR #143 (the note of 2026-09-29) are now in the plan, the local copy is ordered by the server's revision from TKT-01M3K9XBJA, on which this ticket now depends, and names and paths are corrected.
+Groomed 2026-09-29 for the Phase 2 autonomous run (TKT-01M3M9RR26), against main at 9425310. Refreshed against main at 5124209 on 2026-09-30: the two requirements from the round-5 review of PR #143 (the note of 2026-09-29) are now in the plan, the local copy is ordered by the server's revision from TKT-01M3K9XBJA, on which this ticket now depends, and names and paths are corrected. Revised on 2026-09-30 for Terva review 1559 on PR #210: a 204 now carries the revision too, so an unacknowledged first draft comes back, and one posted elsewhere does not.
 
 What exists at 5124209 (the composer files are unchanged since 9425310; PRs #188 and #205 changed only client types, and PR #202 changed `api/client.ts`, `ThreadScreen.tsx`, `Post.tsx` and `PostMore.tsx`):
 - `GET/PUT/DELETE /api/v1/drafts/{thread_id}` (TKT-01M29CA9CE), answering `dto.Draft{thread_id, source, reply_to, updated_at}` or 204. The type is in `web/client/src/api/dto.ts:296-299`. TKT-01M3K9XBJA adds `revision` to it.
@@ -100,27 +101,33 @@ Settled in the refresh of 2026-09-30:
   2. "The local backup and the server draft are ordered by a revision counter shared by both sides, carried in the draft body and bumped on every save, never by comparing the client's clock with the server's updated_at."
 
   So in rule 3, "with the time" and "compares it with the server draft's `updated_at`" no longer hold, and the loser "a client revision the server compares" is taken up in a different form: the server issues the revision, and the client only compares it. The rest of rules 1 to 3 stands.
-- **How the revision orders the local copy** (engineering choice). TKT-01M3K9XBJA gives every draft a `revision`. A `PUT` that updates a row adds one, and a `PUT` that inserts one starts it at the server's time in milliseconds, so a draft deleted and started again is newer than any copy of the old one. Per key, `state/drafts.ts` keeps `known`, the revision in the last answer this tab had (null after a 204 or a failure), and `inflight`, the number of requests sent and not yet answered. The local copy stores the snapshot with `base = known` and `inflight`. When the thread next loads in this browser:
-  - a 200 with `revision <= base + inflight`, where `base` is not null, means nothing but this tab's own requests reached the server since the copy was made, so the local copy wins. It fills the composer, is sent through the queue, and is removed;
-  - any other 200, or a copy whose `base` is null, means the server's draft may be newer, so the server's copy wins and the local copy is removed;
-  - a 204 removes the local copy, because the draft was posted or discarded, perhaps on another device, and bringing it back would bring back a reply already posted.
+- **How the revision orders the local copy** (engineering choice; revised for Terva review 1559 on PR #210, finding 2). TKT-01M3K9XBJA gives every draft key a revision that only grows. Each `PUT` adds one. A `DELETE` of a live draft adds one and leaves a tombstone. Every answer carries the revision: the body's `revision` on a 200, and the `Draft-Revision` header on a 204, which is 0 for a key that has never been saved. Per key, `state/drafts.ts` keeps `known`, the revision in the last answer this tab had, which is null only while no request for the key has been answered. It also keeps `inflight`, the requests sent and not yet answered, and `deletes`, how many of those are `DELETE`s. The local copy stores `{snapshot, base: known, inflight, deletes}`. When the thread next loads in this browser, with `R` the revision the load answers:
+  - **A 200 with `base` known and `R <= base + inflight`.** Nothing but this tab's own requests reached the key since the copy was made, so the copy wins. It fills the composer, is sent through the queue, and is removed.
+  - **A 204 with `base` known and `R <= base + deletes`.** The key holds no draft, and nothing but this tab's own deletes moved it. So this tab's unsent writing never reached the server, and nothing posted anywhere can have held it. The copy wins, as above. This is the first draft that was never acknowledged: its load answered 204 with `R0` (0, or an old tombstone's revision), so `base` is `R0`. If its save never landed, the next load answers 204 with `R0` again, and the copy comes back.
+  - **Any other answer with `base` known.** Another device wrote to the key since the copy was made, so the server's state wins and the copy is removed. On a 204 this is the case of a draft posted or discarded elsewhere, settled here as an engineering choice. That device's `DELETE` found a live draft, so it moved the revision past `base + deletes`, and bringing the copy back would bring back a reply already posted. If the other device posted without ever saving a draft, its `DELETE` found nothing to delete and the revision did not move, so the copy comes back. That is right, because this browser's text was never on the server and cannot be what was posted.
+  - **`base` null, because the load failed and no request for the key was ever answered.** On a 200 the server's draft wins and the copy is removed. On a 204 the copy is restored and saved like typed text, and the status line says "Restored from this browser" until the next change. The copy is then the only record of the member's writing. A reply posted elsewhere coming back needs a failed load, a failed save and a post on another device together, and the member sees the text before anything posts it. Discarding the copy lost, because it throws writing away in the one case the copy exists for.
 
-  Every error goes the safe way: the worst case loses the edit made while a save was in flight, the bound rule 3 already accepts. The one case the counter cannot tell apart is a save from this tab that failed during the unload, together with exactly as many saves from another device before this browser reopens the thread. Then this tab's last edit wins over the other device's. Lost: a per-tab writer id stored beside the revision, which widens the API again for a case that needs a failed request and another device's save together.
+  **A copy never comes back after this client posted or discarded it.** `drop`, which a successful post and a discard both call, removes the copy before it queues the `DELETE` (round-5 requirement 1).
+
+  **`pagehide` keeps a copy of every non-empty draft it has not seen saved.** This is an addition to rule 2: when it sends the save at once, it also writes the copy, counting that request in `inflight`. So a save that fails during the unload is not lost. If the save did land, the next load answers 200 with `R = base + 1`, and the copy fills the composer with the text the server already holds and is removed.
+
+  The one case the counter still cannot tell apart is a 200 after a save from this tab failed during the unload, together with exactly as many saves from another device. Then this tab's last edit wins over the other device's. Lost: a per-tab writer id stored beside the revision, which widens the API again for a case that needs a failed request and another device's save together.
 - **Local copies belong to the signed-in handle, and are cleared at load** (engineering choice). Rule 3's "Signing out ... clear every `ketju.draft.*` entry" cannot run in the sign-out itself: TKT-01M3QVWKAG (Give signed-in members a Sign out control) signs out with a plain form post, which runs no client code. So `state/drafts.ts` removes, at startup and whenever the viewer's handle changes, every `ketju.draft.*` entry whose handle is not the current viewer's, and every one when nobody is signed in. The page after sign-out loads with no viewer, and that load clears them. Lost: a hook in the sign-out form, which ties the shell to this module and misses a session that ends on the server.
 - **Refusals match the server as it is.** A reply-draft save answers `forbidden` when the reader may not reply, and never `conflict` (see "What exists"). Autosave turns off for a key on `forbidden`, `conflict`, `not-found` and `unauthenticated`. `conflict` stays in that list for the forum draft of TKT-01M3NS16VH, whose save in an archived forum answers it to a member.
+- **The 204's revision reaches `state/drafts.ts`** (engineering choice, review 1559). `apiGetOptional` answers `{body: T | null, headers: Headers}` rather than `T | null`, which supersedes the signature in the settled item above; it still lives in `client.ts` and holds nothing. `apiSend` gains an optional `init.onHeaders(headers)`, called when the answer arrives, so a `DELETE`'s 204 hands over its `Draft-Revision`. Both stay generic. A drafts-only request function in `client.ts` lost, because `readTracker.ts` and the drafts would then reach `fetch` by two routes.
 - **Requests go through `apiSend`**, not `fetch`, because `one-path.test.ts` allows `fetch(` only under `src/api/`. Rule 2's "calls `fetch` with `keepalive` at once" is met by `apiSend(…, {keepalive: true})`, as `readTracker.ts` does, since `apiSend` calls `fetch` before it awaits anything.
 
 ### Approach
 
-1. `api/client.ts`: `apiGetOptional<T>(url, init)`, through `request` and `toProblem` like the rest, answering `null` for 204 and holding nothing.
+1. `api/client.ts`: `apiGetOptional<T>(url, init)`, through `request` and `toProblem` like the rest, answering `{body, headers}`, with `body` null for 204, and holding nothing; and `apiSend`'s `init.onHeaders`.
 2. `state/drafts.ts`:
    - `type DraftKey = { kind: 'reply'; thread: string } | { kind: 'new'; forum: string }` and the URL for each (`/api/v1/drafts/{thread}`, `/api/v1/forums/{slug}/draft`).
-   - Per key: the last saved snapshot, a timer, a `status` signal (`idle | saving | saved | failed | off`), `known` and `inflight` as settled, the armed flag, and one promise chain, so a `PUT` in flight is always followed, never overtaken, by a later `PUT` or `DELETE`.
+   - Per key: the last saved snapshot, a timer, a `status` signal (`idle | saving | saved | failed | off`), `known`, `inflight` and `deletes` as settled, the armed flag, and one promise chain, so a `PUT` in flight is always followed, never overtaken, by a later `PUT` or `DELETE`.
    - `watch(key, read: () => Snapshot)`: the `effect` that schedules a save `draftDelay` (1500) ms after the snapshot last changed, once the key is armed. It sends nothing when the snapshot equals the last saved one.
    - `arm(key, found)`: records what the load found as the saved snapshot and `known`, and arms the key.
    - `drop(key)`: cancels the timer, marks the empty snapshot as saved, removes the key's local copy, and queues a `DELETE`.
-   - `unload()` on `pagehide`, registered once, applies rules 1 to 3 synchronously. It starts at most one `keepalive` request per key and awaits nothing. The local copy is `{snapshot, base, inflight}` under `ketju.draft.<handle>.<key>`.
-   - `restoreLocal(key, answer)`: the load-time half, deciding as settled.
+   - `unload()` on `pagehide`, registered once, applies rules 1 to 3 synchronously. It starts at most one `keepalive` request per key and awaits nothing. The local copy is `{snapshot, base, inflight, deletes}` under `ketju.draft.<handle>.<key>`, written for every non-empty draft not yet seen saved, as settled.
+   - `restoreLocal(key, status, revision)`: the load-time half, deciding by the four cases settled above. `revision` is the body's on a 200 and `Draft-Revision` on a 204.
    - `clearForeignCopies(handle)`: removes entries that are not `handle`'s, as settled. It runs at startup and on an owner change.
    - Refusals: `forbidden`, `conflict`, `not-found` and `unauthenticated` turn autosave off for the key; `rate-limited` waits for `Retry-After`; anything else is `failed`, and the next change retries.
    - `resetDrafts()` for tests. An owner change in `composerFor` calls it, so one person's pending save never goes out under the next person's session.
@@ -135,7 +142,7 @@ Settled in the refresh of 2026-09-30:
 
 ### Tests
 
-- `api/client.test.ts`: `apiGetOptional` returns `null` for 204, the body for 200, and a problem for an error.
+- `api/client.test.ts`: `apiGetOptional` returns a null body and the headers for 204, the body for 200, and a problem for an error; `apiSend` calls `onHeaders` with a 204's headers.
 - `state/drafts.test.ts`, with fake timers and a fetch mock:
   - `saves once after typing stops`: ten changes inside the delay send one `PUT`.
   - `sends nothing unchanged`.
@@ -154,9 +161,15 @@ Settled in the refresh of 2026-09-30:
   - `the revision orders the local copy` (round-5 requirement 2), with the clock mocked so that it disagrees with the server's `updated_at`:
     - a load answering `revision` equal to `base + inflight` restores the local copy, sends it, and removes it;
     - a load answering more than that keeps the server's draft and removes the local copy;
-    - a load answering 204 removes the local copy and fills nothing;
-    - a copy whose `base` is null never wins;
+    - a copy whose `base` is null loses to a 200;
     - nothing in `state/drafts.ts` reads `Date.now()` to decide.
+  - `an unacknowledged first draft comes back after a 204` (review 1559): the load answers 204 with `Draft-Revision: 0`; alice types; the `pagehide` save is sent and rejects. The next load answers 204 with `Draft-Revision: 0`, and the copy fills the composer, is sent, and is removed. The same holds when the key's old tombstone answers `Draft-Revision: 7` both times.
+  - `a draft posted on another device does not come back after a 204`: a copy with `base` 4, `inflight` 1 and `deletes` 0, and a load answering 204 with `Draft-Revision: 5`, the other device's delete of the live draft. The copy is removed, and the composer stays empty.
+  - `a reply posted elsewhere without a saved draft leaves the copy`: a copy with `base` 0, and a load answering 204 with `Draft-Revision: 0`. The copy comes back.
+  - `this tab's own delete in flight does not discard its copy`: a copy with `base` 2, `inflight` 2 and `deletes` 1, and a load answering 204 with `Draft-Revision: 3`. The copy comes back.
+  - `a copy with no base is restored on a 204 and says so`: after a failed load and a failed save, a load answering 204 restores the copy with "Restored from this browser" in the status line.
+  - `a discard clears the local copy`: with a copy stored for the key, `discardReply` removes it, and a later load answering 204 with an unchanged revision restores nothing.
+  - `pagehide keeps a copy of a save it sends`: with nothing in flight, the handler sends the `PUT` and writes the copy with `inflight` 1. After the `PUT` lands, the next load answers 200 with `base + 1`, and the composer shows the text once.
   - `a source of 64 KiB or more is kept locally on pagehide`.
   - `a load clears copies that are not the viewer's`: entries under another handle are removed at startup, and every entry is removed when nobody is signed in.
   - `an owner change drops pending saves`.
@@ -186,3 +199,7 @@ Plan refreshed against main at 5124209 on 2026-09-30. The plan had not taken in 
 **agent:claude-code/phase2-groom** at 2026-09-30T09:00:06Z
 
 Correction to the previous note's criterion numbers, which it supersedes on that point: rewriting two criteria moved them to the end. The post-clears-the-local-copy criterion is now 7, the revision-ordering one 8, and the clear-foreign-copies one 9.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:23:50Z
+
+Terva review 1559 on PR #210 (head 922a23c), finding 2 (medium), accepted. A first draft never acknowledged had base null, and a 204 deleted its only copy. Now a 204 carries Draft-Revision (TKT-01M3K9XBJA), so a load that answers 204 still sets base, and the copy records base, requests in flight and deletes in flight. On a 204 the copy comes back only when Draft-Revision <= base + deletes: nothing but this tab's own deletes moved the key, so its writing never reached the server. That restores an unacknowledged first draft. Settled as an engineering choice for the cross-device case: a draft posted or discarded on another device moved the revision when that device deleted the live draft, so the copy is removed and a posted reply never comes back; a reply posted elsewhere without ever saving a draft leaves the revision where it was, and the copy, which was never on the server, comes back. A copy with no base, after a failed load, is restored on a 204 with 'Restored from this browser' rather than thrown away. pagehide now also writes a copy when it sends a save at once, so a save lost in the unload is recoverable. Posting and discarding call drop, which removes the copy before the DELETE, so it never returns after this client posted or discarded it. apiGetOptional answers {body, headers} and apiSend gains onHeaders, superseding the settled signature. Criterion 9 replaces the old pagehide criterion (now 8 is the foreign-copies one), and new criterion 10 covers the load cases, with tests named in the plan: an unacknowledged first draft comes back after a 204; a draft posted on another device does not come back after a 204; a reply posted elsewhere without a saved draft leaves the copy; this tab's own delete in flight does not discard its copy; a copy with no base is restored on a 204 and says so; a discard clears the local copy.

@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T06:05:54Z
-updated_at: 2026-09-30T08:58:36Z
+updated_at: 2026-09-30T09:23:42Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -45,15 +45,15 @@ The form-post table in docs/07 "Form posts for viewer state" needs a row for wha
 
 - [ ] GET, PUT and DELETE /api/v1/forums/{slug}/draft save, read back and delete a member's title and source per user and per forum, answering 204 when there is none, and a PUT without title clears it (TestForumDraftRoundTrip, TestForumDraftIsPerUserAndForum, TestForumDraftPutReplacesTheTitle)
 - [ ] docs/07 Drafts and its resources table describe the routes, its Form posts for viewer state table has a row for each, and TestEveryViewerStateRouteHasAFormPost lists them
-- [ ] Migration 0018 adds drafts.title, nullable, with a CHECK that keeps it null on reply drafts, and drafts.revision, and docs/04 drafts matches the schema and names both draft routes (TestDraftUniqueness)
 - [ ] Saving needs create_thread (forbidden otherwise), an archived forum is conflict to a member and saves for an admin, a hidden forum is not-found, anonymous is unauthenticated, and a title over MaxTitle or with a control character is validation-failed
 - [ ] dto.ForumDraft has a golden fixture and an entry in the client contract, and dto.Draft's goldens carry revision
-- [ ] Every PUT of either kind of draft answers a revision: the save's server time in ms for a new row and one more than before for an existing one, so a draft deleted and started again is newer (TestDraftRevisionIsBumpedOnEverySave, TestADraftStartedAgainIsNewer)
 - [ ] PUT and DELETE on /api/v1/forums/{slug}/draft are in unchargedPaths and TestAgentBucket shows an agent's bucket is not charged for them
+- [ ] The migration, at the next free number, adds drafts.title, nullable with a CHECK that keeps it null on reply drafts, and drafts.revision and drafts.deleted, and docs/04 drafts matches the schema and names both draft routes (TestDraftUniqueness)
+- [ ] A draft's revision only grows and reads no clock: with the service clock fixed and then stepped back, PUT, PUT, DELETE, PUT answer 1, 2, 3 in Draft-Revision on the 204, and 4, for each kind of draft (TestDraftRevisionSurvivesDeletion, TestDraftRevisionIsPerKey, TestDeletingNothingKeepsTheRevision)
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Refreshed against main at 5124209 on 2026-09-30: the migration is renumbered to 0018, TKT-01M3N24RHD's admin exemption has landed, the route table and the agent bucket are new since, and this ticket now also carries the server half of the draft revision that TKT-01M3NS1931's note of 2026-09-29 requires.
+Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). Refreshed against main at 5124209 on 2026-09-30: the migration takes the next free number, TKT-01M3N24RHD's admin exemption has landed, the route table and the agent bucket are new since, and this ticket now also carries the server half of the draft revision that TKT-01M3NS1931's note of 2026-09-29 requires. Revised on 2026-09-30 for Terva review 1559 on PR #210: the revision is a per-key count kept across deletion by a tombstone, with no clock in it.
 
 ### Settled in grooming
 - **The title is saved.** Maintainer decision of 2026-09-28, recorded in this ticket's note and in docs/04 `drafts`: "a new-thread draft saves its title as well as its body ... a draft restored on another device should come back whole. The `title` column is added by that ticket's migration, and a reply draft leaves it null. That ticket also adds the route."
@@ -69,52 +69,64 @@ Settled here as engineering choices, to be written into docs/07 "Drafts":
 
 Settled in the refresh of 2026-09-30:
 - **The admin exemption has landed.** TKT-01M3N24RHD is done (PR #182). `forumForThread` now answers `conflict` for an archived forum to everyone but an admin (`create.go:222`), before it checks `create_thread`. So a member's draft save in an archived forum is `conflict`, and an admin's is saved, with no code here for either.
-- **Drafts carry a server revision** (engineering choice, taken for TKT-01M3NS1931). That ticket's note of 2026-09-29, from the round-5 review of PR #143, makes it a requirement: "The local backup and the server draft are ordered by a revision counter shared by both sides, carried in the draft body and bumped on every save, never by comparing the client's clock with the server's updated_at." The counter is the server's, so this ticket's migration adds it and both draft routes answer it:
-  - `drafts.revision INTEGER NOT NULL DEFAULT 0`;
-  - a `PUT` that updates a row sets `revision = drafts.revision + 1`, and a `PUT` that inserts one sets it to the save's time in milliseconds on the server's clock. A new row therefore starts above any revision an earlier row for the same key reached, because a row gains one per save and the write limiter allows a burst of 60 and then two a second (`internal/web/ratelimit.go:50`), while the clock gains a thousand a second. A client comparing an old copy with a draft that was deleted and started again sees the new one as newer;
-  - `dto.Draft` and `dto.ForumDraft` gain `revision`, a JSON number below 2^53;
-  - `DELETE` still removes the row, and `GET` still answers 204 when there is none.
+- **Drafts carry a server revision that only grows** (engineering choice, taken for TKT-01M3NS1931; revised for Terva review 1559 on PR #210, finding 1). That ticket's note of 2026-09-29, from the round-5 review of PR #143, makes it a requirement: "The local backup and the server draft are ordered by a revision counter shared by both sides, carried in the draft body and bumped on every save, never by comparing the client's clock with the server's updated_at." The counter is the server's, so this ticket's migration adds it and both draft routes answer it. It is a count per draft key that survives the draft's deletion, and no clock enters it:
+  - `drafts.revision INTEGER NOT NULL DEFAULT 0`, and `drafts.deleted INTEGER NOT NULL DEFAULT 0`, 0 or 1;
+  - `DELETE` no longer removes the row. It turns a live row into a tombstone: `deleted = 1`, `source = ''`, `reply_to` and `title` null, and `revision + 1`. On a tombstone, or a key with no row, it changes nothing;
+  - `PUT` inserts a new row at `revision = 1`, and otherwise sets `deleted = 0` with `revision + 1`, a tombstone included. Each is one statement in one write transaction;
+  - `GET` answers 204 for a tombstone as for no row;
+  - every answer carries the key's revision: the body's `revision` on a 200, and a `Draft-Revision` response header on a 204 from `GET` or `DELETE`, which is 0 when the key has never had a row. `dto.Draft` and `dto.ForumDraft` gain `revision`.
 
-  The client's use of it is TKT-01M3NS1931's plan. Three alternatives lost:
-  - A separate ticket for the column. It would land in draft and block TKT-01M3NS1931 until someone promoted it, and it would add a second migration to the same table.
-  - A counter that restarts at 1 for a new row. A draft deleted and started again on another device could then compare as older than a stale local copy, and the stale copy would overwrite it.
-  - Keeping a deleted draft as an empty row, so the counter never restarts. It changes `DELETE` and `GET` 204 for TKT-01M29CA9CE's route, which the millisecond start avoids.
+  A draft deleted and started again therefore always answers a higher revision than any copy of the old one, whatever the server's clock does. The partial unique indexes `drafts_thread` and `drafts_new_thread` keep one row per key, tombstone or live, so the upsert revives it. Tombstones are never swept: a sweep would restart the count. They number at most one per thread or forum a member has ever drafted in, and blob GC (`DeleteCollectableBlob`) finds no hash in their empty source.
+
+  The client's use of it is TKT-01M3NS1931's plan. Five alternatives lost:
+  - A new row starting at the server's time in milliseconds (this plan's first revision). A delete and recreate within one millisecond, or across a clock stepped back, answers a revision equal to or lower than the old one, and a stale local copy then wins (review 1559).
+  - A per-user counter row incremented in the same transaction as every draft write. It is monotonic, but it counts every key's writes, so a save in another thread moves this key's revision too. The client's test that nothing but its own requests reached the key since the copy was made (`revision <= base + inflight`, TKT-01M3NS1931) would then fail after any other draft was saved, and the local copy would lose where it should win.
+  - A separate per-key counter table. It repeats the draft's key and both partial unique indexes, and every write touches two tables where the tombstone touches one.
+  - A counter that restarts at 1 for a new row. A draft deleted and started again could compare as older than a stale local copy.
+  - Answering a tombstone as 200 with an empty draft instead of 204 with a header. It changes "204 when there is none", which the reply-draft route (TKT-01M29CA9CE), its tests and docs/07 promise.
+- **Migrations are numbered when they are pushed.** This ticket's migration takes the next free number when it lands. At 5124209 that is 0018, and TKT-01M29CP2R4 also plans 0018, so whichever lands second renumbers (`migrate.go:28-29`).
 - **Agents are not charged for drafts.** `unchargedPaths` in `internal/web/api/agents.go:47-51` lists `/api/v1/drafts/{thread_id}`, as docs/07 says ("The read position and drafts are not charged", `:870-872`). `/api/v1/forums/{slug}/draft` joins it.
 
 ### Approach
-1. **Migration** `internal/store/db/migrations/0018_draft_title_revision.sql`, the next free number after `0017_thread_slow_mode.sql`:
+1. **Migration** `internal/store/db/migrations/NNNN_draft_title_revision.sql`, at the next free number when it is pushed (0018 at 5124209, which TKT-01M29CP2R4 also plans). Its header comment says why the columns exist and why tombstones are never swept, as `0017_thread_slow_mode.sql`'s does:
    - `ALTER TABLE drafts ADD COLUMN title TEXT CHECK (title IS NULL OR thread_id IS NULL);`
    - `ALTER TABLE drafts ADD COLUMN revision INTEGER NOT NULL DEFAULT 0 CHECK (revision >= 0);`
+   - `ALTER TABLE drafts ADD COLUMN deleted INTEGER NOT NULL DEFAULT 0 CHECK (deleted = 0 OR (deleted = 1 AND source = '' AND reply_to IS NULL AND title IS NULL));`
 
-   Regenerate `dbq` with `go generate ./internal/store/db`, so `dbq.Draft` gains `Title sql.NullString` and `Revision int64`. If another branch lands 0018 first, this one renumbers on rebase (`migrate.go:28-29`).
+   Regenerate `dbq` with `go generate ./internal/store/db`, so `dbq.Draft` gains `Title sql.NullString`, `Revision int64` and `Deleted int64`. If another branch lands the same number first, this one renumbers on rebase (`migrate.go:28-29`).
 2. **Queries** in `internal/store/db/queries/viewer_state.sql`:
-   - `UpsertThreadDraft` (`:196-203`) inserts `revision` as `sqlc.arg(now)` and sets `revision = drafts.revision + 1` on conflict;
-   - beside `GetThreadDraft` (`:190-191`): `GetForumDraft :one` (`WHERE user_id = ? AND forum_id = ? AND thread_id IS NULL`), `UpsertForumDraft :one` (`ON CONFLICT (user_id, forum_id) WHERE thread_id IS NULL DO UPDATE SET title, source, updated_at, revision = drafts.revision + 1 ... RETURNING *`), and `DeleteForumDraft :execrows`.
+   - `UpsertThreadDraft` (`:196-203`) inserts `revision = 1` and, on conflict, sets `deleted = 0` and `revision = drafts.revision + 1`;
+   - `DeleteThreadDraft` (`:205-206`) becomes an `UPDATE ... SET deleted = 1, source = '', reply_to = NULL, revision = revision + 1, updated_at = sqlc.arg(now) WHERE user_id = ? AND thread_id = ? AND deleted = 0`, `:execrows`;
+   - `GetThreadDraft` (`:190-191`) keeps returning the row, tombstone or not, so the service reads the revision from it;
+   - beside them: `GetForumDraft :one` (`WHERE user_id = ? AND forum_id = ? AND thread_id IS NULL`), `UpsertForumDraft :one` (`ON CONFLICT (user_id, forum_id) WHERE thread_id IS NULL DO UPDATE SET title, source, updated_at, deleted = 0, revision = drafts.revision + 1 ... RETURNING *`), and `DeleteForumDraft :execrows`, the same tombstoning `UPDATE`.
+
+   Every revision is written by SQL from the stored value. No query takes it from Go.
 
    Drop the comment at `:188-189` that says new-thread drafts have no endpoint.
 3. **Service** in `internal/service/threads/viewerstate.go`:
    - `ForumDraft(ctx, v, slug) (dto.ForumDraft, bool, error)`, `SaveForumDraft(ctx, v, slug, ForumDraftRequest{Title *string; Source string})` and `DeleteForumDraft(ctx, v, slug) error`;
    - each starts with `MayKeepState(v)` (`:31`), before any forum lookup, so an anonymous request is `unauthenticated` whatever the slug;
    - save uses `forumForThread`; get and delete use `readForum` (`list.go:210-234`), so a hidden forum is `not-found`;
-   - `draftDTO` (`:233`) fills `Revision`, and a `forumDraftDTO` beside it builds the new type.
-4. **Handlers** in `internal/web/api/viewerstate.go`: `getForumDraft`, `putForumDraft` and `deleteForumDraft`, beside `getDraft`, `putDraft` and `deleteDraft` (`:94`, `:118`, `:147`). They follow those handlers: `decodeStrict` (`create.go:99`) into `forumDraftRequest{Title *string "title"; Source *string "source"}`, a nil source is `bad-request`, the answers are 200, 204 and 204, and every one is `no-store`. Register the three in `routes()` in `api.go`, as `{Method, Path, Handler}` entries beside the reply draft's (`:127-129`) and the create route (`:131`). Add `/api/v1/forums/{slug}/draft` to `unchargedPaths` (`agents.go:47-51`).
+   - `draftDTO` (`:233`) fills `Revision`, and a `forumDraftDTO` beside it builds the new type;
+   - `Draft` and `ForumDraft` answer `false` for a tombstone as for no row, with the revision beside it (0 for no row). `DeleteDraft` and `DeleteForumDraft` tombstone the row and answer the revision they leave, read back in the same write transaction.
+4. **Handlers** in `internal/web/api/viewerstate.go`: `getForumDraft`, `putForumDraft` and `deleteForumDraft`, beside `getDraft`, `putDraft` and `deleteDraft` (`:94`, `:118`, `:147`). They follow those handlers: `decodeStrict` (`create.go:99`) into `forumDraftRequest{Title *string "title"; Source *string "source"}`, a nil source is `bad-request`, the answers are 200, 204 and 204, and every one is `no-store`. Every 204 from a draft route, the reply draft's `getDraft` and `deleteDraft` included, sets `Draft-Revision`. Register the three in `routes()` in `api.go`, as `{Method, Path, Handler}` entries beside the reply draft's (`:127-129`) and the create route (`:131`). Add `/api/v1/forums/{slug}/draft` to `unchargedPaths` (`agents.go:47-51`).
 5. **DTO** in `internal/dto/dto.go`:
    - `Draft` (`:536-541`) gains `Revision int64 "revision"`, and the goldens `draft.member.json` and `draft-plain.member.json` are regenerated;
    - a new `ForumDraft`, with a golden `internal/dto/testdata/golden/forum-draft.member.json` built in `fixtures_test.go` beside the draft builders (`:466-467`, `:621-630`).
 
    Add both to the client contract `web/client/src/api/dto-contract.ts` and the types to `web/client/src/api/dto.ts` (`Draft` is at `:296-299`), so the contract test covers them. No screen uses them yet. A type-only change leaves the dist byte-identical, as it did for PR #205. If it does not, run `go generate ./internal/web/spa` and keep the dist committed.
 6. **docs/07**:
-   - "Drafts" (`:786-812`): replace the "has no route yet" bullet (`:810-812`) with the three routes and the rules above, and say what `revision` is and that a client orders a local copy by it.
+   - "Drafts" (`:786-812`): replace the "has no route yet" bullet (`:810-812`) with the three routes and the rules above, and say what `revision` is, that it only grows because a deleted draft is kept as a tombstone, that a 204 carries it as `Draft-Revision`, and that a client orders a local copy by it.
    - The resources table's drafts row (`:133`): add the routes.
    - "Form posts for viewer state" (`:994`): add three rows after the reply draft's (`:1010-1012`), whose HTML-client routes mirror the reply draft's:
      - `GET /api/v1/forums/{slug}/draft`: none (the new-thread page fills its form from the draft), `ForumDraft`;
      - `PUT`: `POST /f/{slug}/draft` (the new-thread form's "Save draft" button), fields `title`, `source`, `SaveForumDraft`;
      - `DELETE`: `POST /f/{slug}/draft/delete`, `DeleteForumDraft`.
    - The section's sentence "The routes live under the HTML client's `/t/{id}` paths" (`:1001-1002`) becomes "under the HTML client's `/t/{id}` and `/f/{slug}` paths".
-7. **docs/04** `drafts` (`04-data-model.md:640-653`) already shows `title`. Add `revision` to the column list, and change "The API serves reply drafts only (07 "Drafts")" to name both routes.
+7. **docs/04** `drafts` (`04-data-model.md:640-653`) already shows `title`. Add `revision` and `deleted` to the column list, with a sentence on the tombstone, and change "The API serves reply drafts only (07 "Drafts")" to name both routes.
 
 ### Tests
-- `TestDraftUniqueness` (`internal/store/db/viewer_state_test.go:70`): add a reply draft with a title (refused by the CHECK), and a new-thread draft with a title and one without.
+- `TestDraftUniqueness` (`internal/store/db/viewer_state_test.go:70`): add a reply draft with a title (refused by the CHECK), and a new-thread draft with a title and one without; a tombstone with a source is refused, and a tombstone holds its key's slot in `drafts_thread` and `drafts_new_thread`.
 - Service and API, in `internal/web/api/viewerstate_test.go`:
   - `TestForumDraftRoundTrip`: PUT, then GET returns the same title and source, then DELETE, then GET answers 204;
   - `TestForumDraftIsPerUserAndForum`: alice's draft in `general` is not carol's, and not alice's in another forum;
@@ -124,8 +136,9 @@ Settled in the refresh of 2026-09-30:
   - `TestForumDraftTitleRules`: over `MaxTitle` or with a control character is `validation-failed`, empty is accepted, and whitespace is kept;
   - `TestForumDraftNeedsAMemberSession`: anonymous is `unauthenticated`, and pre-user is refused as for reply drafts;
   - `TestForumDraftPutReplacesTheTitle`: a PUT without `title` clears it;
-  - `TestDraftRevisionIsBumpedOnEverySave`: for each kind of draft, the first PUT answers the server's time in milliseconds as `revision`, each later PUT answers one more, and GET answers what the last PUT did;
-  - `TestADraftStartedAgainIsNewer`: after a DELETE, a new PUT for the same key answers a revision above the one the deleted draft reached.
+  - `TestDraftRevisionSurvivesDeletion`: for each kind of draft, with the service clock fixed at one instant and then stepped back an hour between requests, PUT answers `revision` 1, a second PUT 2, DELETE answers 204 with `Draft-Revision: 3`, GET answers 204 with `Draft-Revision: 3`, and a new PUT answers 4. No wall clock is read.
+  - `TestDraftRevisionIsPerKey`: a save to another thread's or forum's draft leaves this key's revision where it was.
+  - `TestDeletingNothingKeepsTheRevision`: DELETE on a key with no row answers 204 with `Draft-Revision: 0` and writes no row; DELETE on a tombstone answers its revision unchanged.
 - `TestEveryViewerStateRouteHasAFormPost` (`viewerstate_test.go:363-412`): add the three routes to `served`, and extend the `strings.NewReplacer` at `:375` with `{slug}`.
 - `TestAgentBucket` (`internal/web/api/agents_test.go:318`): add `PUT` and `DELETE` on `/api/v1/forums/general/draft` to its uncharged requests (`:343-346`).
 - `TestPreUserRoutesAreExactlyTheAllowlist` (`internal/web/preuser_test.go:284`) walks every route in the table, so it covers the new ones unchanged.
@@ -145,3 +158,7 @@ Maintainer decision, 2026-09-28: a new-thread draft saves the title. Add a nulla
 **agent:claude-code/phase2-groom** at 2026-09-30T08:58:36Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. Changed: the migration is 0018 (0011 to 0017 are taken; 0017_thread_slow_mode.sql is the latest). TKT-01M3N24RHD is done, so forumForThread already answers conflict for an archived forum to everyone but an admin: a member's draft save there is conflict and an admin's saves, and criterion 4 (was 3) says so. Routes are now a table in api.go's routes(). New since the plan: unchargedPaths in internal/web/api/agents.go exempts drafts from an agent's bucket, and the forum draft path must join it (new criterion, TestAgentBucket). Widened as an engineering choice: this ticket's migration also adds drafts.revision, the server half of the revision counter that TKT-01M3NS1931's note of 2026-09-29 (round-5 review of PR #143) requires. A new row starts at the save's server time in ms and each update adds one, so a draft deleted and started again is newer than any stale local copy. Both DTOs carry it. A separate ticket lost because it would land in draft and block TKT-01M3NS1931, and would add a second migration to drafts; a counter restarting at 1 and keeping deleted rows as empty tombstones lost for the reasons in the plan. Line references corrected throughout (forumForThread create.go:217-233, DeleteCollectableBlob moderation.sql:214-220, viewer_state.sql :188-203, readForum list.go:210-234, TestDraftUniqueness :70, the replacer :375, docs/07 :133, :786-812, :994-1012, routes.tsx:119); docs/07's 'routes live under /t/{id}' sentence (:1001-1002) is added to the doc step. The Settled items are carried verbatim except their corrected line numbers.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:23:42Z
+
+Terva review 1559 on PR #210 (head 922a23c), finding 1 (high), accepted. A revision started from server milliseconds could repeat or fall after a delete and recreate within one millisecond or across a clock step back, letting a stale local copy win. Settled as an engineering choice: the revision is a per-key count that survives deletion. DELETE turns a live draft into a tombstone (deleted = 1, empty source, revision + 1) instead of removing the row; PUT inserts at 1 or revives with revision + 1; GET answers 204 for a tombstone; every 204 from a draft route carries Draft-Revision (0 for a key never saved). Every revision is computed in SQL from the stored value, in the write's own transaction, and no clock enters it. Lost, with reasons in the plan: server milliseconds (this finding); a per-user counter row, which is monotonic but counts other keys' writes and so breaks TKT-01M3NS1931's base + inflight test; a separate per-key counter table, which repeats the key and both partial unique indexes; restarting at 1; and a 200 tombstone body, which breaks '204 when there is none'. Tombstones are never swept, since a sweep would restart the count. Tests: TestDraftRevisionSurvivesDeletion (insert, update, delete, insert with the service clock fixed and then stepped back), TestDraftRevisionIsPerKey, TestDeletingNothingKeepsTheRevision. The migration is now named by the next free number, since TKT-01M29CP2R4 also plans 0018. Criteria 6 and 7 replace the old migration and millisecond criteria.
