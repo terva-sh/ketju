@@ -822,6 +822,9 @@ describe('moderating from the thread screen', () => {
     await open(root, 'rename');
     await renameWith('rename-window-closed', 403, 'The time for renaming this thread has passed.');
     expect(named(root)).toEqual([]);
+    // The open panel is withdrawn too (Terva review 1589): the title stays,
+    // and Send, which would only be refused again, is disabled.
+    expect(sendDisabled()).toBe(true);
   });
 
   // Terva review 1588: a refusal whose fresh page withdraws the author's

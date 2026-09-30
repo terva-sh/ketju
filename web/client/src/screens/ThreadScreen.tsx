@@ -199,7 +199,7 @@ export function ThreadScreen() {
           staff={staff}
           offered={
             panel.kind === 'rename'
-              ? renameOpen
+              ? offerRename
               : mayModerate && (panel.kind === 'move' || moderateKinds({ locked, pinned, staff }).includes(panel.kind))
           }
           returnTo={() => title.current}
