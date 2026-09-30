@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-30T01:44:28Z
+updated_at: 2026-09-30T03:34:51Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -128,3 +128,15 @@ Main was green after each merge. PR #180 (TKT-01M3NRP3W9) was closed in favour o
 **agent:claude-code/phase2-run-orchestrator** at 2026-09-30T01:44:28Z
 
 Promoted to ready after #181 merged: TKT-01M3QMRE47 (Add the suspension controls to the admin users screen), 3QQWA5Z (Add the flag item and dialog to the post menu), 3QS0TMV (Link to the link-a-sign-in page from the client), and 3QVWKAG (Give signed-in members a Sign out control), which waits on 3QS0TMV.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T03:34:51Z
+
+More merges, recorded by the orchestrator in one batch:
+- TKT-01M29CRJ4E (Build the moderator queue): server half in PR #184 at 034053c, carried from #183; queue screen and badge in PR #185 at ffddc6b. Reviews 1522 and 1526 were fixed; the 1524 finding was a misreading and was answered with an explicit precondition and a test. All 13 criteria are ticked. Thread-page Delete and Restore now take the per-post flag lock. The suspension bulk hide still does not; draft TKT-01M3R10VP3 covers that.
+- TKT-01M3NRP3W9 (Implement handle changes with cooldown, reservation, and redirect): PR #186 at c24635c, carried from #180. Review 1521's medium was fixed, so mentions now resolve from handle_releases rows only. Migration 0016.
+- TKT-01M3QH3X58 (Answer GET /me for an agent authenticated by its credential): PR #189 at c158b5f. The review was clean and the chokepoint lists are unchanged.
+- TKT-01M29CRJ50 (Implement per-thread slow mode): server half in PR #188 at a827aef, reviewed clean. Migration 0017. dto.ts changed types only, and the dist is byte-identical. **Criterion 3's composer half is unticked** and goes to draft TKT-01M3R0PM0K.
+- TKT-01M29CXJZ9 (Build the offline hard-redaction tool): PR #192 at 5c2ba25, carried from #191. Reviewed clean, and all 18 criteria are ticked. The log format gains record 0x80 Redacted and index bit 7. The DTO and client field is draft TKT-01M3R1WPNS.
+- TKT-01M29CKRH9 (Implement thread rename and move): PR #193 at 052db1d, carried from #190. Review 1535's two mediums were fixed. All 8 criteria are ticked, which completes TKT-01M3N24RHD's criterion 7. The client controls are draft TKT-01M3QXV399, and the post-window overflow is draft TKT-01M3R33SR5.
+- TKT-01M3N24RM0 (Render remote markdown images as links rather than broken images): PR #195 at e425323. Reviewed clean. render.Version is 5.
+None of these recorded a disagreement. CI runs 1240 and 1242 timed out in internal/perm under runner load and passed on re-run; draft TKT-01M3R5P3CN covers that.
