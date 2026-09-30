@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T15:48:07Z
+updated_at: 2026-09-30T15:51:21Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -238,6 +238,10 @@ Runs:
 Nine mutations are listed in cd72c2d's body, and each was caught.
 
 A duplicate accessible name, the form's aria-label repeating its control's label, was found by the e2e locator and removed before commit.
+
+**agent:claude-code/phase2-run-cxk2h** at 2026-09-30T15:51:21Z
+
+Terva review 1595 on PR #238, run 1548 (request ready-review-517ae3e), head 517ae3e, base 78755e8. Two findings, both accepted and fixed in 838ce1a. Medium, 'Reject integers that cannot be represented exactly before saving': the integer field sent Number() of any digit string, so 9007199254740993 saved as 9007199254740992, and a long enough string became Infinity, which JSON sends as null. valueOf now also requires Number.isSafeInteger and refuses anything else before sending. Low, 'Clear a field's refusal when its value changes': an edit now clears the refusal, and a refusal answered after the field changed is not shown, the same rule 'Saved.' follows. SettingsScreen.test.tsx covers both, and reverting either fix fails its test. After the regeneration the reader is 54921 B gzip; this supersedes the 54925 B in the previous note, and the difference is the changed admin chunk's hash in the reader's import.
 
 ## Summary
 
