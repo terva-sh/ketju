@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-30T11:15:20Z
+updated_at: 2026-09-30T11:34:09Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
@@ -162,3 +162,7 @@ Mutations tried against the tests are listed in the commit body. Every one was c
 Two choices made beyond the plan and its "Revised on claim", recorded here:
 - The pin panel sends scope `forum` whenever the viewer is not staff, even if the global radio was chosen before the role went. The test 'pins in the forum once the viewer is no longer staff' covers it.
 - A refusal of type not-found, gone or unauthenticated also asks for the page again, as conflict and forbidden do, because each changes what the page may show.
+
+**agent:claude-code/phase2-run-qgh66w** at 2026-09-30T11:34:09Z
+
+The panel was tried as a lazy chunk and then dropped. At the coordinator's request, `ModerateDialog` was moved to `src/moderate/` and imported dynamically once `can_moderate` was true, and `scripts/bundle.mjs` stopped counting that chunk, as it already skips the admin screens. The reader bundle then measured 48872 B gzip, against 49007 B with the panel bundled statically and 47415 B on main, a saving of 135 B. The saving was small because Rolldown moved the modules the panel shares with the entry (preact, hooks, signals, the API client) into a chunk of their own, and the second gzip stream cost about 700 B. Rolldown's chunkOptimization variants, `preserveEntrySignatures: false`, and a codeSplitting group for the panel measured the same or larger. The coordinator judged 135 B not worth an extra chunk plus a change to what the budget counts. The unpushed commits were removed, and the panel stays eagerly loaded at +1592 B. `scripts/bundle.mjs` and docs/07 are as on main.
