@@ -53,6 +53,13 @@ var seedUsers = []struct{ handle, name string }{{"alice", "Alice Nakamura"}, {"c
 // (e2e/apply.spec.ts).
 var seedApplicants = []string{"dana", "erin"}
 
+// seedStrangers are Phase 2's exit applicants (TKT-01M3NTSCMN,
+// e2e/phase2-exit.spec.ts), one per Playwright project: each applies, a
+// moderator approves them from the queue, and they sign in as the member
+// the approval made. Like seedApplicants they have no account and no
+// identity until they sign in.
+var seedStrangers = []string{"stranger-phone", "stranger-desktop"}
+
 // seedModerator reviews applications (e2e/admin-applications.spec.ts). The
 // fake provider signs them in like the members.
 const seedModerator = "mona"
@@ -94,6 +101,7 @@ func runE2E(args []string) error {
 	}
 	idp.Users = append(idp.Users, seedModerator, seedAdmin)
 	idp.Users = append(idp.Users, seedApplicants...)
+	idp.Users = append(idp.Users, seedStrangers...)
 
 	site := "http://localhost:" + strconv.Itoa(*port)
 	data := filepath.Join(*dir, "data")

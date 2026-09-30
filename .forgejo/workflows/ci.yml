@@ -145,6 +145,13 @@ jobs:
         # exactly the kind that pass locally and fail on another filesystem.
         run: go test -race ./...
 
+      - name: Phase 2 exit tests, by name
+        # TKT-01M3NTSCMN. The step above runs these with the rest of the
+        # suite, where a package that passes prints one line and names none
+        # of its tests. docs/13's gate is proven by reading this log, so they
+        # run again here, verbose, and nothing else does.
+        run: go test -race ./cmd/ketju/ -run '^TestPhase2Exit' -count=1 -v
+
       - name: fuzz the frame parser, body decoder and id parser (bounded)
         # TKT-01M29C2WTV. The parser reads a length off disk and sizes work
         # from it, so a hostile or corrupt length must be refused before it is
