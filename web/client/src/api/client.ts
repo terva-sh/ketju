@@ -76,9 +76,13 @@ export function peekGet<T>(url: string): T | undefined {
 }
 
 // forgetGets drops every held body whose URL matches: the held copies of
-// something the caller knows to be out of date.
-export function forgetGets(matches: (url: string) => boolean) {
+// something the caller knows to be out of date. With inFlight, a request to
+// a matching URL still out is superseded too: it started before whatever
+// made the copies stale, so its answer is returned to its caller and not
+// held (Terva review 1624 on PR #248, after a mark-unread).
+export function forgetGets(matches: (url: string) => boolean, opts: { inFlight?: boolean } = {}) {
   for (const url of [...held.keys()]) if (matches(url)) held.delete(url);
+  if (opts.inFlight) for (const url of [...latest.keys()]) if (matches(url)) latest.delete(url);
 }
 
 // forgetHeld drops the body held for url, but only if it is body itself: a

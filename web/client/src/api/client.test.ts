@@ -168,6 +168,31 @@ describe('apiGet', () => {
     expect(peekGet('/api/v1/b')).toEqual({ n: 2 });
   });
 
+  // Terva review 1624 on PR #248: with inFlight, a request still out to a
+  // matching URL is superseded, and its answer is returned but not held;
+  // without it, and for a URL that does not match, the answer is held.
+  it('supersedes matching requests still out when asked to', async () => {
+    const releases: (() => void)[] = [];
+    vi.stubGlobal(
+      'fetch',
+      (url: string) =>
+        new Promise<Response>((r) => releases.push(() => r(json({ url }, { headers: { ETag: `"${url}"` } })))),
+    );
+    const a = apiGet('/api/v1/forums/a/threads');
+    const b = apiGet('/api/v1/other');
+    const c = apiGet('/api/v1/forums/c/threads');
+    await Promise.resolve();
+    forgetGets((u) => u.startsWith('/api/v1/forums/a'), { inFlight: true });
+    forgetGets((u) => u.startsWith('/api/v1/forums/c'));
+    for (const r of releases) r();
+    expect(await a).toEqual({ url: '/api/v1/forums/a/threads' });
+    await b;
+    await c;
+    expect(peekGet('/api/v1/forums/a/threads')).toBeUndefined();
+    expect(peekGet('/api/v1/other')).toEqual({ url: '/api/v1/other' });
+    expect(peekGet('/api/v1/forums/c/threads')).toEqual({ url: '/api/v1/forums/c/threads' });
+  });
+
   // Review 412: an aborted request's answer is late, and is not held.
   it('does not hold the answer to an aborted request', async () => {
     stub(json({ n: 'old' }, { headers: { ETag: '"old"' } }));

@@ -515,7 +515,9 @@ async function markAndReturn(id: string, forum: string, route: (url: string, rep
   try {
     await markUnread(id, ordinal);
     landed.add(id);
-    forgetGets((u) => u.startsWith('/api/v1/forums'));
+    // A forum GET still out began before the DELETE answered, and is not
+    // held when it lands (Terva review 1624).
+    forgetGets((u) => u.startsWith('/api/v1/forums'), { inFlight: true });
     void refreshViewer().catch(() => undefined);
   } finally {
     if (!marking(id) && landed.delete(id) && onThreadBody(id)) route(listFor(forum), true);
