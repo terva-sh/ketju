@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T11:40:10Z
-updated_at: 2026-09-30T13:39:05Z
+updated_at: 2026-09-30T13:53:07Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
@@ -72,7 +72,7 @@ The server's log from that run (`serve.log`, /auth requests only, the bucket mod
 - [x] smoke.spec.ts's header comment names phase2-exit.spec.ts's member sign-in and sign-in.spec.ts as where the run covers sign-in at 390 px and 1440 px, and a note on TKT-01M29CGBY1 says the same
 - [x] A note records five full local runs of npx playwright test on the PR's base and five on the branch, on the same machine, with each run's result, and all five on the branch pass
 - [x] A note lists one passing run's /auth/* requests from serve.log with time, path, status and the modelled bucket, and shows no 429 outside phase2-exit.spec.ts
-- [ ] CI's Playwright step passes on the PR, with the smoke test passing in both projects
+- [x] CI's Playwright step passes on the PR, with the smoke test passing in both projects
 - [x] e2e/session.ts exports paceAuth(n), which asserts one worker with fullyParallel false, records a paced annotation and waits n x 6 s + 0.5 s before any request, and apply.spec.ts calls paceAuth(2) and sign-in.spec.ts calls paceAuth(1) before their first /auth/* request
 - [x] e2e/session.ts's comment holds the per-spend budget table (setup 8 from a full bucket; per project apply 2 and sign-in.spec 1 after paceAuth, phase2-exit 5 through through(), smoke 0) and the rule that every /auth/* spender either calls paceAuth or waits out a 429 through through()
 - [x] The diff leaves internal/web/ratelimit.go, cmd/ketju/e2e.go, cmd/ketju/serve.go, web/client/playwright.config.ts and signIn unchanged, and no new code waits on or retries after a 429 response
@@ -219,6 +219,10 @@ The runs in the three notes above were measured on base fa86711 and branch 298e9
 - spenders alone on base 6d1e9ab: FAILED as on fa86711, with a 429 in sign-in.spec.ts and smoke's sign-in timing out, in both projects;
 - spenders alone on the rebased branch: passed, 14 passed, all 5 of its 429s inside phase2-exit.spec.ts.
 
+**agent:claude-code/phase2-run-s1tvpd** at 2026-09-30T13:53:00Z
+
+CI run 1508 on PR #233 head 1304d9e passed (all steps success). Its Playwright step: 101 passed, 11 skipped, 4.7 min; 'read a thread, reply, and see the unread divider' passed in phone (807 ms) and desktop (1.8 s); apply.spec.ts (17.4 s, 17.8 s) and sign-in.spec.ts (7.3 s, 7.1 s) passed after their paceAuth waits. Terva review run b0b0758c (Actions run 1509) on head 1304d9e, base c751a8b: clean, no findings. Main has since moved to a56ad61; the commits between add thread-rename-move.spec.ts, which starts from mona's stored session and spends no /auth/*, so the budget table is unchanged.
+
 ## Summary
 
-Every /auth/* spend in the Playwright run now holds by itself at any speed. smoke.spec.ts starts from alice's stored session, asserts /api/v1/me answers alice, and spends no /auth/*; its header names phase2-exit.spec.ts and sign-in.spec.ts as the run's sign-in at 390 px and 1440 px (noted on TKT-01M29CGBY1). e2e/session.ts exports paceAuth(n): it asserts one worker and no parallel tests, records a paced annotation, grows the test's timeout by its wait, and waits n x 6 s + 0.5 s before any request, never reading a 429. apply.spec.ts calls paceAuth(2) and sign-in.spec.ts paceAuth(1). The comment above stateFile holds the budget table and the rule for a new spender. A full run spends 24 requests instead of 28 and takes about 38 s longer. The limiter, the e2e server, playwright.config.ts and signIn are unchanged. Locally, five full runs and five spenders-only runs passed on the branch; the spenders alone fail on the base with 429s in sign-in.spec.ts and smoke. The CI criterion is ticked once CI passes on the PR.
+Every /auth/* spend in the Playwright run now holds by itself at any speed. smoke.spec.ts starts from alice's stored session, asserts /api/v1/me answers alice, and spends no /auth/*; its header names phase2-exit.spec.ts and sign-in.spec.ts as the run's sign-in at 390 px and 1440 px (noted on TKT-01M29CGBY1). e2e/session.ts exports paceAuth(n): it asserts one worker and no parallel tests, records a paced annotation, grows the test's timeout by its wait, and waits n x 6 s + 0.5 s before any request, never reading a 429. apply.spec.ts calls paceAuth(2) and sign-in.spec.ts paceAuth(1). The comment above stateFile holds the budget table and the rule for a new spender. A full run spends 24 requests instead of 28 and takes about 38 s longer. The limiter, the e2e server, playwright.config.ts and signIn are unchanged. Locally, five full runs and five spenders-only runs passed on the branch; the spenders alone fail on the base with 429s in sign-in.spec.ts and smoke. CI run 1508 passed on PR #233, with the smoke test passing in both projects.
