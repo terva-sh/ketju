@@ -251,6 +251,11 @@ function TokenPanel({ handle, token, onDone }: { handle: string; token: IssuedCr
 // holds them to the server's bounds before anything is sent. A number input
 // reports what it cannot parse, "1e" or "12-", as an empty value, which this
 // form would send as null and so reset the limit to the default unasked.
+//
+// "Saved." means the fields show what the server holds (Terva review 1510,
+// TKT-01M3QV39H4). An edit to either field clears it, and a save's answer
+// shows it only when both fields still hold the text that was sent, so an
+// edit made while the save was in flight is not labelled saved.
 const refillMax = 604800; // settings.AgentRefillMaxSeconds
 
 function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }; url: string; onSaved: (d: AdminUserDetail) => void }) {
@@ -273,6 +278,11 @@ function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  // current is the fields as this render shows them. save reads it when
+  // its answer arrives, because its own burst and refill are the ones it
+  // sent, from the render that submitted.
+  const current = useRef({ burst, refill });
+  current.current = { burst, refill };
 
   const save = async (e: Event) => {
     e.preventDefault();
@@ -285,6 +295,7 @@ function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }
     }
     setBusy(true);
     setSaved(false);
+    const sent = { burst, refill };
     try {
       const res = await send<AdminUserDetail>('PUT', `${url}/agent-limits`, { burst: b, refill_seconds: r });
       if (!res.ok) {
@@ -296,8 +307,8 @@ function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }
         return;
       }
       setFailed(null);
-      setSaved(true);
       onSaved(res.value);
+      setSaved(current.current.burst === sent.burst && current.current.refill === sent.refill);
     } finally {
       setBusy(false);
     }
@@ -316,7 +327,10 @@ function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }
               autocomplete="off"
               placeholder={String(a.default_burst)}
               value={burst}
-              onInput={(e) => setBurst((e.target as HTMLInputElement).value)}
+              onInput={(e) => {
+                setBurst((e.target as HTMLInputElement).value);
+                setSaved(false);
+              }}
               data-burst
             />
           )}
@@ -333,7 +347,10 @@ function Limits({ d, url, onSaved }: { d: AdminUserDetail & { agent: AgentInfo }
               autocomplete="off"
               placeholder={String(a.default_refill_seconds)}
               value={refill}
-              onInput={(e) => setRefill((e.target as HTMLInputElement).value)}
+              onInput={(e) => {
+                setRefill((e.target as HTMLInputElement).value);
+                setSaved(false);
+              }}
               data-refill
             />
           )}

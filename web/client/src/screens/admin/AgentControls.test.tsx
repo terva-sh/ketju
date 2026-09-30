@@ -671,6 +671,109 @@ describe('an agent’s write limits', () => {
   });
 });
 
+// Terva review 1510 (TKT-01M3QV39H4): "Saved." means the fields show what
+// the server holds. An edit clears it, and an answer shows it only when both
+// fields still hold the text that was sent.
+describe('the saved status', () => {
+  const fields = (root: HTMLElement) => ({
+    burst: root.querySelector<HTMLInputElement>('[data-burst]')!,
+    refill: root.querySelector<HTMLInputElement>('[data-refill]')!,
+  });
+  const form = (root: HTMLElement) => root.querySelector('form.admin-limits')!;
+  const isSaved = (root: HTMLElement) => (form(root).textContent ?? '').includes('Saved.');
+  const puts = () => sent.filter((s) => s.method === 'PUT');
+  // echo is the server's answer to a save: the detail with the limits sent.
+  const echo = (body: unknown): Answer => {
+    const d = structuredClone(agentDetail) as AdminUserDetail;
+    const { burst, refill_seconds } = body as { burst: number | null; refill_seconds: number | null };
+    d.agent!.burst = burst;
+    d.agent!.refill_seconds = refill_seconds;
+    return { status: 200, body: d };
+  };
+  // held holds each save's answer until the test gives it.
+  const held = () => {
+    const answers: (() => void)[] = [];
+    routes['PUT /api/v1/admin/users/scribe/agent-limits'] = (body) =>
+      new Promise<Answer>((r) => answers.push(() => r(echo(body))));
+    return async (root: HTMLElement) => {
+      await act(async () => answers.shift()!());
+      await settle(root);
+    };
+  };
+
+  it('clears when either field is edited after a save', async () => {
+    routes['PUT /api/v1/admin/users/scribe/agent-limits'] = echo;
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const { burst, refill } = fields(root);
+
+    await type(burst, '7');
+    await submit(root, form(root));
+    expect(isSaved(root)).toBe(true);
+    await type(burst, '8');
+    expect(isSaved(root)).toBe(false);
+
+    await submit(root, form(root));
+    expect(isSaved(root)).toBe(true);
+    await type(refill, '60');
+    expect(isSaved(root)).toBe(false);
+    expect(puts().map((s) => s.body)).toStrictEqual([
+      { burst: 7, refill_seconds: null },
+      { burst: 8, refill_seconds: null },
+    ]);
+  });
+
+  for (const edited of ['burst', 'refill'] as const) {
+    it(`does not show for an answer to a save whose ${edited} field was edited in flight`, async () => {
+      const answer = held();
+      const root = await renderAt('/admin/users');
+      await open(root, 'scribe');
+      const f = fields(root);
+      await type(f.burst, '7');
+      await submit(root, form(root));
+
+      await type(f[edited], '8');
+      await answer(root);
+      expect(isSaved(root)).toBe(false);
+      expect(f[edited].value).toBe('8');
+      expect(puts()).toHaveLength(1);
+      expect(puts()[0].body).toStrictEqual({ burst: 7, refill_seconds: null });
+    });
+  }
+
+  it('shows when the fields still hold what was sent', async () => {
+    const answer = held();
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const { burst, refill } = fields(root);
+    await type(burst, '7');
+    await type(refill, '60');
+    await submit(root, form(root));
+    expect(isSaved(root)).toBe(false);
+
+    await answer(root);
+    expect(isSaved(root)).toBe(true);
+    expect(burst.value).toBe('7');
+    expect(refill.value).toBe('60');
+  });
+
+  // The rule is on the field text, not on whether an input happened: an
+  // edit undone before the answer leaves the fields as sent.
+  it('shows when an edit in flight was undone before the answer', async () => {
+    const answer = held();
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const { burst } = fields(root);
+    await type(burst, '7');
+    await submit(root, form(root));
+    await type(burst, '78');
+    await type(burst, '7');
+
+    await answer(root);
+    expect(isSaved(root)).toBe(true);
+  });
+});
+
 // Terva review 1507, finding 2.
 describe('closing an account that did not load', () => {
   it('offers Close beside the error', async () => {
