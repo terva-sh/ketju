@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NTSCMN7YYA0M8TMMQX6H6E
 title: "Prove Phase 2's exit: approval registration and agent credentials e2e"
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -23,17 +23,10 @@ blocks_on: none
 references:
   - ref: pr:194
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-exit
-  branch: run/3ntscmn-phase2-exit
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aef3cbe4563cf9a02
-  commit: ffddc6b760ea4cef9e33c9b86acc7932904ca6e7
-  session: null
-  claimed_at: 2026-09-30T02:07:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T05:39:18Z
-updated_at: 2026-09-30T03:10:56Z
+updated_at: 2026-09-30T03:30:20Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -67,7 +60,7 @@ Phase 2's exit criterion (docs/09): "a club can open registration to strangers s
 - [x] TestPhase2ExitSuspendedMember: a suspended member's cookie loses access on the next request, signing in shows account unavailable with the reason and sets no session cookie, and after unsuspend signing in gives a member session
 - [x] TestPhase2ExitAgentCredential: an admin provisions an agent with a credential; its bearer post is 201, sets no cookie, and is served with machine_authored true and author.kind agent; after revocation the same request is 401 and log_length is unchanged
 - [x] e2e/phase2-exit.spec.ts at 390 px and 1440 px: a stranger applies, sees pending, a seeded moderator approves from /admin/queue, the stranger sees approved and signs in as a member, with axe reporting no violations on the form, status and queue screens
-- [ ] TestOneDoorIntoSessions passes with its caller lists unchanged, and the PR quotes the CI step log lines showing TestPhase2Exit and phase2-exit.spec.ts ran and passed on the head
+- [x] TestOneDoorIntoSessions passes with its caller lists unchanged, and the PR quotes the CI step log lines showing TestPhase2Exit and phase2-exit.spec.ts ran and passed on the head
 
 ## Implementation plan
 
@@ -169,3 +162,32 @@ PR #194, head db08a7f, base a827aef. CI run 1236 is attempt 1 of 3 under docs/12
 This PR changes nothing under `internal/perm`. The timeout dump shows that test runnable, inside a SQLite prepare under `Grant`, not blocked. PR runs 1240, 1242 and 1249 and main's push run 1253 were running at the same time, so the runner was contended. PR #195's run 1251, on the same base, passed in 9 minutes.
 
 The follow-up commit that links the PR reruns CI.
+
+**agent:claude-code/phase2-run-exit** at 2026-09-30T03:29:57Z
+
+PR #194, head a9c8af4, base e425323.
+
+Terva review run a6c2e23b-298a-4acc-86d3-1f895b8089da (request `ready-review-a9c8af4`, Actions run 1255) is clean. It has no findings at any severity, so nothing needs a disposition. `terva-review/code` is success on a9c8af4.
+
+CI run 1254 on a9c8af4 is success, attempt 2. I read the step logs:
+- "Phase 2 exit tests, by name" shows `--- PASS` for all four TestPhase2Exit tests.
+- "Playwright smoke at 390 px and 1440 px" shows `phase2-exit.spec.ts` passing in both the phone and desktop projects, with 69 passed.
+- "go test (race)" shows `ok` for `internal/auth/session`, whose TestOneDoorIntoSessions caller lists this PR does not touch.
+
+The lines are quoted on the PR in comment 19728. Criterion 6 is ticked on that. The commit that follows touches only `.tickets/`, and it carries the review.
+
+## Summary
+
+Phase 2's exit is proven end to end in PR #194, on the assembled server and the real client, with no production code changed. The exit criterion is "a club can open registration to strangers safely, and an admin can give an agent an account and a credential".
+
+- `cmd/ketju/phase2_exit_test.go` has four tests over the real `serve` and the fake OpenID provider, one server each:
+  - approval registration: the pre-user session is refused on member and admin routes and reaches the apply routes; after approval its cookie is signed out, the next sign-in is a member session that posts, and the old cookie is refused;
+  - a denied applicant, who never sees the moderator's note, and a blocked one;
+  - a suspended member, then unsuspended;
+  - an agent's credential, then revoked.
+- `cmd/ketju/flow_test.go` holds the shared helpers: an actor carrying its own cookies, a sign-in through `oidctest` by `login_as`, and people seeded through `perm.ChangeRole`.
+- `web/client/e2e/phase2-exit.spec.ts` runs at 390 px and 1440 px. A stranger applies, mona approves from `/admin/queue`, and the stranger signs in as a member with the approval notification waiting. Axe scans the form, the status page and the queue. A 429 on `/auth/*` is waited out as `Retry-After` says.
+- `cmd/ketju/e2e.go` gains `seedStrangers`: `stranger-phone` and `stranger-desktop`.
+- `ci.yml` gains the step "Phase 2 exit tests, by name", so the log names the Go tests.
+
+Criteria 1 and 5 are read under the maintainer decision on TKT-01M3Q2V25E, which retires the pre-user session on approval (see the first note). All six criteria are ticked. CI run 1254 and Terva review run a6c2e23b passed on head a9c8af4, and the step log lines are quoted on the PR.
