@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3P0CYR3WQ2FKJWGVHXM9FFZ
 title: Add a rename control to the admin users screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ dependencies:
   - TKT-01M29CXK1X0EF4CPPN11KVGC2Z
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-p0cyr3
-  branch: run/p0cyr3-admin-rename
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a8acab4e0d1b65acf
-  commit: 6d1e9ab3ede0d38a86da5e615755621d9ddadafc
-  session: null
-  claimed_at: 2026-09-30T13:20:39Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T13:39:10Z
+updated_at: 2026-09-30T16:08:32Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -56,12 +49,12 @@ Found while planning TKT-01M3NRP3W9 in Phase 2 grooming (TKT-01M3M9RR26).
 
 ## Acceptance criteria
 
-- [ ] An admin renames a member from the user detail through POST /api/v1/admin/users/{handle}/rename with {handle}, only after confirmation, and a moderator sees no rename control (AdminUserRename.test.tsx)
-- [ ] The selected account is in the address as /admin/users?user={handle}, and after a rename the address is replaced with the new handle, the detail shows it, and the list is requested again (AdminUserRename.test.tsx)
-- [ ] A deleted-user- account shows that it cannot be renamed and offers no field (AdminUserRename.test.tsx)
-- [ ] The control lives under src/screens/admin, Decision.test.tsx and TestTheAdminBundleIsSeparate pass, and the dist regenerated with go generate ./internal/web/spa is committed
-- [ ] invalid_handle, reserved, taken and same on a validation-failed body attach to the handle field in the shared words of screens/admin/common/handle.ts, taken says the handle may have been given up recently, a conflict says the account cannot be renamed, and a not-found says no account has the handle now (AdminUserRename.test.tsx)
-- [ ] Loading /admin/users?prefix={p} filters the list by that prefix, so the moderator queue's author link lands on a filtered list, and closing a detail and a new agent's token handover behave as before (AdminUserRename.test.tsx, UsersScreen.test.tsx, AgentControls.test.tsx)
+- [x] An admin renames a member from the user detail through POST /api/v1/admin/users/{handle}/rename with {handle}, only after confirmation, and a moderator sees no rename control (AdminUserRename.test.tsx)
+- [x] The selected account is in the address as /admin/users?user={handle}, and after a rename the address is replaced with the new handle, the detail shows it, and the list is requested again (AdminUserRename.test.tsx)
+- [x] A deleted-user- account shows that it cannot be renamed and offers no field (AdminUserRename.test.tsx)
+- [x] The control lives under src/screens/admin, Decision.test.tsx and TestTheAdminBundleIsSeparate pass, and the dist regenerated with go generate ./internal/web/spa is committed
+- [x] invalid_handle, reserved, taken and same on a validation-failed body attach to the handle field in the shared words of screens/admin/common/handle.ts, taken says the handle may have been given up recently, a conflict says the account cannot be renamed, and a not-found says no account has the handle now (AdminUserRename.test.tsx)
+- [x] Loading /admin/users?prefix={p} filters the list by that prefix, so the moderator queue's author link lands on a filtered list, and closing a detail and a new agent's token handover behave as before (AdminUserRename.test.tsx, UsersScreen.test.tsx, AgentControls.test.tsx)
 
 ## Implementation plan
 
@@ -158,3 +151,13 @@ Engineering choice added while building, with the alternative that lost: **an ad
 Checks run locally: gofmt, build, vet, `go test -race ./...`, `npx tsc --noEmit -p .`, `npm test` (1712 tests), `go generate ./internal/web/spa`, `TestTheAdminBundleIsSeparate`, and the full Playwright suite on port 8931 (105 passed, 11 skipped by project), including the new `e2e/admin-rename.spec.ts`.
 
 Bundle: the reader bundle is 51211 B gzip at the base and 51212 B with this change, of the 60000 B budget; only the lazy chunks' hashed names changed in it. The admin chunk is 24.69 kB gzip as vite reports it, about 0.6 kB more than the base.
+
+## Summary
+
+An admin renames an account from its detail on /admin/users, after a confirmation, through `POST /api/v1/admin/users/{handle}/rename` (TKT-01M3NRP3W9). The control is `screens/admin/RenameControl.tsx`, rendered by `UserDetail` for an admin only, below the role control. A moderator sees none. An account with a `deleted-user-` handle gets "An anonymized account cannot be renamed." instead of a field.
+
+The open account is now the address's `?user={handle}`. A row click pushes it, Close takes it out and returns focus to the row, a new agent's detail and token are handed over as before, and a rename replaces the address with the new handle. `userHref` keeps any other query parameter. The users tab seeds its prefix filter from `?prefix=`, so the moderator queue's author link (`authorHref`) lands on a filtered list.
+
+The handle words moved from `applications/Decision.tsx` to `screens/admin/common/handle.ts`, with `same` added, and `isAnonymizedHandle` beside them. `invalid_handle`, `reserved`, `taken` and `same` go on the field, and the question closes with focus on the field; `conflict` and `not-found` get sentences of their own. After a rename the detail under the new handle says "Renamed from @{old}…" and takes focus, and the list is asked for again. An admin who renames their own account gets the new handle in the viewer at once and `/me` again, so the suspension controls are never offered on their own account.
+
+Tests: `AdminUserRename.test.tsx` (12), additions to `UsersScreen.test.tsx` and `AgentControls.test.tsx`, and `e2e/admin-rename.spec.ts` (two tests per project, one axe scan each, ada's stored session, no `/auth/*` spend). Replayed onto main at 2ffd8d9. The reader bundle is 54921 B gzip at that base and 54929 B with this change, of the 70000 B budget; only lazy-chunk hashes changed in it. The admin chunk grows from 24952 B to 25647 B gzip.
