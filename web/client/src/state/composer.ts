@@ -138,21 +138,32 @@ function summon(c: Composer) {
 // the whole wait: a browser fires a delay over 2^31 - 1 ms at once, and a
 // huge site default gives a next_post_at weeks away (TKT-01M3R33SR5). Each
 // tick reads the clock again, so a clock that jumps is followed.
-function hold(c: Composer, until: Millis | null) {
+//
+// When a countdown ends, a rate-limited refusal goes with it: its words name
+// a wait that has passed (Terva review 1593, finding 2).
+function hold(c: Composer, until: Millis, ticking = false) {
   clearTimeout(c.timer);
   c.slowUntil.value = until;
-  const ms = until === null ? 0 : until - Date.now();
+  const ms = until - Date.now();
   c.left.value = ms > 0 ? Math.ceil(ms / 1000) : 0;
-  if (ms > 0) c.timer = setTimeout(() => hold(c, until), ms % 1000 || 1000);
+  if (ms > 0) c.timer = setTimeout(() => hold(c, until, true), ms % 1000 || 1000);
+  else if (ticking && asProblem(c.failure.value).type === 'rate-limited') c.failure.value = null;
+}
+
+// extend keeps the later of c's wait and until. Nothing shortens a wait:
+// not a page fetched before the viewer's own post, which still says null
+// (review 1540 on PR #203), nor a post's answer or a Retry-After shorter
+// than a later next_post_at a page brought while the post was in flight
+// (Terva review 1593, finding 1).
+function extend(c: Composer, until: Millis | null) {
+  const now = c.slowUntil.value;
+  if (until !== null && (now === null || until > now)) hold(c, until);
 }
 
 // holdAtLeast keeps the later of thread's wait and at, the page's
-// next_post_at. A page never shortens the wait: it may be one fetched before
-// the viewer's own post, which still says null (review 1540 on PR #203).
+// next_post_at.
 export function holdAtLeast(thread: string, at: Millis | null) {
-  const c = composerFor(thread);
-  const until = c.slowUntil.value;
-  if (at !== null && (until === null || at > until)) hold(c, at);
+  extend(composerFor(thread), at);
 }
 
 // quotePost inserts a quotation of post ordinal at the caret and brings the
@@ -218,12 +229,12 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
     c.replyTo.value = null;
     c.caret.value = 0;
     c.open.value = false;
-    if (slow && slow.seconds > 0 && !slow.exempt) hold(c, Date.now() + slow.seconds * 1000);
+    if (slow && slow.seconds > 0 && !slow.exempt) extend(c, Date.now() + slow.seconds * 1000);
     return res;
   } catch (err) {
     c.failure.value = err;
     const p = asProblem(err);
-    if (p.type === 'rate-limited' && p.retryAfter) hold(c, Date.now() + p.retryAfter * 1000);
+    if (p.type === 'rate-limited' && p.retryAfter) extend(c, Date.now() + p.retryAfter * 1000);
     return null;
   } finally {
     c.posting.value = false;

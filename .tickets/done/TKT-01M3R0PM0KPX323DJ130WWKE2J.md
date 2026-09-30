@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T14:38:22Z
+updated_at: 2026-09-30T14:42:52Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
@@ -207,6 +207,15 @@ Replayed onto main at f2eac74 before pushing (nothing had been pushed). This not
 - **The e2e tests.** The slow mode tests use mona's stored session and call no `/auth/*` route, so `e2e/session.ts` needs no `paceAuth` row for them.
 - **The bundle.** The reader bundle went from 53877 B to 54811 B (+934 B), against the 70000 B budget from #234.
 
+**agent:claude-code/phase2-run-r0pm0k** at 2026-09-30T14:42:45Z
+
+Review 1593 on PR #236 (head a274566, base f2eac74, Actions run #1534). Both findings are accepted and fixed.
+
+- **Finding 1 (medium): "Preserve the later deadline after a post or rate-limit response."** A post's own wait and a `Retry-After` called `hold` directly, which replaced the deadline. So a later `next_post_at`, brought by a page that arrived while the post was in flight, could be shortened. Both paths now go through `extend`, the rule `holdAtLeast` already used: the later deadline wins. New test: Composer.test.tsx "%s never shortens a later wait", for a post and for a `Retry-After`. Reverting either path to `hold` fails it.
+- **Finding 2 (low): "Clear the expired rate-limit message when the countdown ends."** When a running countdown reaches zero, a `rate-limited` refusal is cleared, because its words name a wait that has passed. Only the countdown's own last tick clears it, so a page's past `next_post_at` on mount never clears an unrelated refusal. Post.test.tsx "rate-limited holds Post until Retry-After has passed" now expects the refusal gone at release. Removing the clearing fails it.
+
+The reader bundle is now 54842 B (+31 B for the fix).
+
 ## Summary
 
 Slow mode is now visible in the thread page's composer, and moderators can set it from the thread's moderation panel. Client only. No server change.
@@ -222,4 +231,4 @@ Slow mode is now visible in the thread page's composer, and moderators can set i
   - Saving sends one `PUT /api/v1/admin/threads/{id}/slow-mode` and then asks for the page again. The ETag covers the viewer block, so the new value shows.
   - `conflict`, `validation-failed` and `forbidden` are shown next to the field. A Custom value outside 0 to 86400 is refused before anything is sent.
 - **Tests:** unit tests in Composer, Post, ComposerSheet, ThreadScreen and threadActions. The e2e spec `e2e/thread-moderation.spec.ts` has "a moderator sets slow mode and turns it off", plus one axe scan per theme of the slow mode panel, at 390 px and 1440 px.
-- **Bundle:** the reader bundle went from 53877 B to 54811 B (+934 B) of 70000 B, and the regenerated dist is committed.
+- **Bundle:** the reader bundle went from 53877 B to 54842 B (+965 B) of 70000 B, and the regenerated dist is committed.

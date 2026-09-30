@@ -526,13 +526,17 @@ describe('slow mode', () => {
   const day = 86_400_000;
   let host: HTMLElement | null = null;
   let posts: number;
+  // answer, when set, answers the next POST in its own time.
+  let answer: (() => Promise<Response>) | null;
   beforeEach(async () => {
     await unmount();
     posts = 0;
+    answer = null;
     vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
       if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
       if (init.method === 'POST' && url.endsWith('/posts')) {
         posts++;
+        if (answer) return answer();
         const created: CreatedPost = { post: page().posts[0], ordinal: 4, revision: 1, log_length: 2000 };
         return new Response(JSON.stringify(created), { status: 201 });
       }
@@ -684,5 +688,35 @@ describe('slow mode', () => {
     expect(wait()).toBe('You can post again in 1:00');
     await mount(slow({ nextPostAt: null }));
     expect(send().disabled).toBe(true);
+  });
+
+  // Terva review 1593, finding 1: a page that arrives while a post is in
+  // flight may bring a later next_post_at, and neither the post's own wait
+  // nor a shorter Retry-After shortens it.
+  it.each([
+    ['a post', () => new Response(JSON.stringify({ post: page().posts[0], ordinal: 4, revision: 1, log_length: 2000 }), { status: 201 })],
+    [
+      'a Retry-After',
+      () =>
+        new Response(JSON.stringify({ type: 'rate-limited', title: 't', status: 429 }), {
+          status: 429,
+          headers: { 'Content-Type': 'application/problem+json', 'Retry-After': '5' },
+        }),
+    ],
+  ])('%s never shortens a later wait', async (_, respond) => {
+    let release!: () => void;
+    answer = () => new Promise<Response>((r) => (release = () => r(respond())));
+    await mount(slow({ seconds: 30 }));
+    await draft('first');
+    await act(() => send().click());
+    await mount(slow({ seconds: 30, nextPostAt: T0 + 120_000 }));
+    await act(async () => release());
+    await run(0);
+    await draft('second');
+    expect(wait()).toBe('You can post again in 2:00');
+    await run(119_999);
+    expect(send().disabled).toBe(true);
+    await run(1);
+    expect(send().disabled).toBe(false);
   });
 });

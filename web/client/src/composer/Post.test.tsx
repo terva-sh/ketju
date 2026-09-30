@@ -237,6 +237,8 @@ describe('a refused post', () => {
       await run(1);
       expect(postButton(root).disabled).toBe(false);
       expect(root.querySelector('[data-slow-wait]')).toBeNull();
+      // The refusal named a wait that has passed (Terva review 1593).
+      expect(root.querySelector('.post-failure')).toBeNull();
       expect(area(root).value).toBe('my reply');
     } finally {
       vi.useRealTimers();
