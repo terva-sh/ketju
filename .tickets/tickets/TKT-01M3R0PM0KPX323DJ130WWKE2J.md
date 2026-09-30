@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T12:58:11Z
+updated_at: 2026-09-30T13:12:26Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
@@ -168,6 +168,21 @@ Added in the refresh of 2026-09-30:
 - The site-wide default's editor (TKT-01M29CXK2, Build the admin site settings screen).
 - The overflow of a huge `slow_mode.default_seconds` (TKT-01M3R33SR5).
 - Lock and pin, and the panel itself (TKT-01M3QGH66W). Rename and move (TKT-01M3QXV399).
+
+
+### Revised at claim (2026-09-30)
+
+Read against main at 1ae02c5, which has #214 (the slow mode route on `moderatesGate`, re-checked at log length), #218 (the `secondsDuration` clamp: a huge setting keeps slow mode on), #224 (the lock and pin panel, `components/thread/ModerateDialog.tsx`, and the `moderate` option of `shell/threadActions.ts`), and #227 (reply autosave through `state/drafts.ts`). Everything above stands. Where the build departs from the Approach, this section says how and why.
+
+- **The countdown lives in `state/composer.ts`, not in a component hook.** `Composer` gains `slowUntil` and `left` signals. `hold(c, until)` sets `slowUntil` and counts `left` down with one `setTimeout` a second, aligned to the deadline's second boundaries (`ms % 1000 || 1000`), and re-reads the clock on each tick. `holdAtLeast(thread, at)` is the page's path, and keeps the later deadline. Why: the phone's sheet renders two Post buttons for one composer (its head and the hidden footer), and a hook per button would run two timers. One timer per composer is "one countdown per composer" literally. Lost: `useCountdown` in `composer/countdown.ts`.
+- **Reconciling with the page** is a layout effect in `Composer` on `[thread, nextPostAt]`, so Post is never painted enabled before the page's wait applies.
+- **`Slow`** is `{seconds, nextPostAt, exempt}`, exported from `state/composer.ts`, and `postReply(thread, slow?)` takes it as planned. `discardReply` leaves the wait alone. `resetComposers` and a change of viewer clear the timers.
+- **"Slow mode…" is an item of the existing `moderate` option.** `ModeratePanel = ModerateKind | 'slow-mode'`, and `open('slow-mode')` opens the same `ModerateDialog`. No `slowMode` callback and no second panel. The item follows the moderation kinds and comes before Copy link. It is offered whenever `moderate` is, meaning whenever `viewer.can_moderate`, whatever the lock, the pin or the role.
+- **No `forgetGets` before asking for the page again.** The thread page's ETag hashes the body, viewer block included (`internal/service/threads/view.go` `finish`), so a changed `slow_mode_seconds` makes the revalidation a 200 with the new value, and `res.retry()` alone shows it. `useResource` keeps the page on screen while it is asked for.
+- **Refusals follow the panel's existing rule.** A conflict or a refusal that withdraws access asks for the page again, as for lock and pin. A slow mode conflict leaves the form, because slow mode stays offered.
+- **Words** (engineering choice): the panel's title is "Slow mode for this thread", the radio group's legend is "Time between posts", and the button is "Save". The countdown is a `<p class="slow-wait">`, not a span, and reads "You can post again in m:ss".
+- **e2e** (#223's pattern: short tests, one axe scan each, stored sessions only): `e2e/thread-moderation.spec.ts` gains "a moderator sets slow mode and turns it off" and "the slow-mode panel passes the scan" in each theme. Turning slow mode off leaves a row at 0, which reads the same as the seed's default of 0, and the next run's 10 s is still a change from it.
+- **Bundle**: 51214 B before, 52160 B after (+946 B). The panel stays in the reader bundle, where #224 put it; moving it into a lazy chunk is out of scope.
 
 ## Notes
 
