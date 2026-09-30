@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3SAKPK9Y66WMGGMC6CAN3BR
 title: Guard a reply post answered after the viewer changed
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -20,12 +20,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T14:13:32Z
-updated_at: 2026-09-30T18:48:56Z
+updated_at: 2026-09-30T19:35:26Z
 created_by:
   id: agent:claude-code/phase2-run-ns16vh
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3SK2HFEFAAT4K5J9V3HD3XS
 title: Restore the registration form after a failed admin-forms e2e test
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -20,12 +20,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T16:41:27Z
-updated_at: 2026-09-30T18:49:05Z
+updated_at: 2026-09-30T19:35:26Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---

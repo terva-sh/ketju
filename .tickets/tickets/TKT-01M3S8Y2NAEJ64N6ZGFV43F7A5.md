@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S8Y2NAEJ64N6ZGFV43F7A5
 title: Stop ApplicationDetail.test.tsx failing in full vitest runs
 type: bug
-status: draft
+status: ready
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T13:44:15Z
-updated_at: 2026-09-30T18:49:00Z
+updated_at: 2026-09-30T19:35:26Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
