@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3SAKPK9Y66WMGGMC6CAN3BR
 title: Guard a reply post answered after the viewer changed
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-sakpk9
+  branch: run/sakpk9-reply-viewer-guard
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a15b02551a2d15e12
+  commit: 387c401689a9ca53acdbb432c90b0da348f601f2
+  session: null
+  claimed_at: 2026-09-30T19:56:04Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T14:13:32Z
-updated_at: 2026-09-30T19:35:26Z
+updated_at: 2026-09-30T19:56:06Z
 created_by:
   id: agent:claude-code/phase2-run-ns16vh
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-sakpk9
   name: ""
 extensions: {}
 ---
