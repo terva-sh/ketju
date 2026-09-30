@@ -35,10 +35,16 @@ export function wordDiff(a: string, b: string): DiffRun[] {
   const xs = x.slice(head, x.length - tail);
   const ys = y.slice(head, y.length - tail);
 
+  // Appended one at a time, never spread into a call: a 64 KB source can be
+  // about 65,536 tokens, past what one call takes as arguments (Terva review
+  // 1625).
   const ops: [DiffOp, string][] = x.slice(0, head).map((t) => ['same', t]);
   const middle = myers(xs, ys);
-  if (middle) ops.push(...middle);
-  else ops.push(...xs.map((t): [DiffOp, string] => ['del', t]), ...ys.map((t): [DiffOp, string] => ['ins', t]));
+  if (middle) for (const op of middle) ops.push(op);
+  else {
+    for (const t of xs) ops.push(['del', t]);
+    for (const t of ys) ops.push(['ins', t]);
+  }
   for (const t of x.slice(x.length - tail)) ops.push(['same', t]);
   return runs(ops);
 }

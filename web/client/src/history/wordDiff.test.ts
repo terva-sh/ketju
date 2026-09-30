@@ -105,6 +105,18 @@ describe('wordDiff', () => {
     expect(runs.map((r) => r.op)).toEqual(['same', 'del', 'ins', 'same']);
   });
 
+  // The most tokens a 64 KB source can hold is one-character words between
+  // single spaces, about 65,536. A rewrite of one into another, and an edit
+  // at each end of one, must not hand that many tokens to a single call as
+  // arguments, which throws a RangeError (Terva review 1625).
+  it('compares 64 KB sources of one-character words, rewritten or edited at both ends', () => {
+    const rewrite = ['a '.repeat(32768), 'b '.repeat(32768)] as const;
+    expectFaithful(...rewrite);
+    const same = 'x '.repeat(32000);
+    const ends = expectFaithful(`A ${same}B`, `C ${same}D`);
+    expect(ends.filter((r) => r.op !== 'same').map((r) => r.text)).toEqual(['A', 'C', 'B', 'D']);
+  });
+
   // Sources are at most 64 KB (docs/07). Two of them, edited in scattered
   // places or rewritten outright, compare within half a second.
   it('compares two 64 KB sources in under half a second', () => {
