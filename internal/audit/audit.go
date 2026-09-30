@@ -70,11 +70,12 @@ const (
 	TypePermission  = "permission"
 	TypeForm        = "form"
 	TypeIdentity    = "identity"
+	TypeBlob        = "blob"
 )
 
 // Types lists every target type, for the documentation test.
 var Types = []string{TypeUser, TypeForum, TypeGroup, TypeFlag, TypeApplication, TypeThread, TypePost, TypeSetting,
-	TypePermission, TypeForm, TypeIdentity}
+	TypePermission, TypeForm, TypeIdentity, TypeBlob}
 
 func decimal(typ string, id int64) Target { return Target{Type: typ, ID: strconv.FormatInt(id, 10)} }
 
@@ -104,6 +105,10 @@ func Thread(id threadid.ID) Target { return Target{Type: TypeThread, ID: id.Stri
 func Post(thread threadid.ID, ordinal uint32) Target {
 	return Target{Type: TypePost, ID: thread.String() + "/" + strconv.FormatUint(uint64(ordinal), 10)}
 }
+
+// Blob is an attachment blob, by its SHA-256 in lower-case hex: the one a
+// hard redaction deleted (TKT-01M29CXJZ9).
+func Blob(hash string) Target { return Target{Type: TypeBlob, ID: hash} }
 
 // Setting is a runtime setting, by its key.
 func Setting(key string) Target { return Target{Type: TypeSetting, ID: key} }

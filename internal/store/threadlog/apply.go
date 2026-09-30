@@ -45,6 +45,17 @@ func (ix *Index) Apply(h FrameHeader, body []byte, offset uint64, frameSize int)
 	case *DeleteBody, *RestoreBody:
 		set, clear := postFlagEffect(h.Type, v)
 		return ix.setFlags(h.Ordinal, set, clear)
+	case *RedactedBody:
+		if err := checkMarker(h, b); err != nil {
+			return err
+		}
+		if b.Title {
+			// A title marker: every title frame before it was blanked, and
+			// the ThreadRenamed after it sets the title. No post changes.
+			return nil
+		}
+		set, clear := postFlagEffect(h.Type, v)
+		return ix.setFlags(h.Ordinal, set, clear)
 	default:
 		// ThreadCreated and the thread events. No per-post effect.
 		return nil
@@ -162,8 +173,39 @@ func postFlagEffect(t RecordType, body any) (set, clear EntryFlags) {
 		return EntryDeleted, 0
 	case TypeRestore:
 		return 0, EntryDeleted | EntryHiddenByMod | EntryAutoHidden
+	case TypeRedacted:
+		if isTitleMarker(body) {
+			return 0, 0
+		}
+		// The bodies no longer list attachments, so an index rebuilt from
+		// the rewritten log has no paperclip; the extended one must agree.
+		return EntryRedacted, EntryHasAttachments
 	}
 	return 0, 0
+}
+
+// isTitleMarker reports whether body is a Redacted record's for a title.
+func isTitleMarker(body any) bool {
+	switch b := body.(type) {
+	case *RedactedBody:
+		return b != nil && b.Title
+	case RedactedBody:
+		return b.Title
+	}
+	return false
+}
+
+// checkMarker holds a Redacted record to its one shape: a post marker names
+// its post in the frame and the body alike, and a title marker is ordinal 0.
+// Anything else is a log that disagrees with itself.
+func checkMarker(h FrameHeader, b *RedactedBody) error {
+	switch {
+	case b.Title && (h.Ordinal != 0 || b.Ordinal != 0):
+		return fmt.Errorf("%w: a title Redacted names ordinal %d (frame %d)", ErrMalformed, b.Ordinal, h.Ordinal)
+	case !b.Title && (h.Ordinal == 0 || b.Ordinal != h.Ordinal):
+		return fmt.Errorf("%w: a Redacted names ordinal %d in its body and %d in its frame", ErrMalformed, b.Ordinal, h.Ordinal)
+	}
+	return nil
 }
 
 // isGrace reports whether body is a grace Edit's. Apply hands over the

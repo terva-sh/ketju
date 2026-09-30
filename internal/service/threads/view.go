@@ -62,7 +62,13 @@ const (
 // removed by a moderator"), and while the post is hidden pending review
 // (docs/08 "Flags", TKT-01M29CP2PJ), and not one they deleted themselves.
 // Anyone else gets nothing.
+//
+// A redacted post goes to nobody, moderators included: a hard redaction
+// left nothing of it in the log (docs/03 "Hard redaction", TKT-01M29CXJZ9).
 func revealRemoved(a access, e threadlog.IndexEntry) bool {
+	if e.Flags.Has(threadlog.EntryRedacted) {
+		return false
+	}
 	switch removal(e.Flags) {
 	case "":
 		return false
@@ -535,9 +541,11 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			CreatedAt:       dto.Millis(p.CreatedMS),
 			ReplyCount:      snap.replies[p.Ordinal],
 			Attachments:     []dto.Attachment{},
-			Deleted:         p.Flags.Has(threadlog.EntryDeleted) || p.Flags.Has(threadlog.EntryHiddenByMod),
+			Deleted:         p.Flags&(threadlog.EntryDeleted|threadlog.EntryHiddenByMod|threadlog.EntryRedacted) != 0,
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
 		}
+		// A hard-redacted post is deleted above, and removal names it the
+		// moderator's: an admin took it down (TKT-01M29CXJZ9).
 		if r := removal(p.Flags); r != "" {
 			d.Removal = &r
 		}

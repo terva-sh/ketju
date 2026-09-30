@@ -203,6 +203,11 @@ func TestReplayIsIdempotentPerRecordType(t *testing.T) {
 		{threadlog.TypeThreadArchived, func(f *fixture, id threadid.ID) int64 {
 			return f.append(id, threadlog.Append{Type: threadlog.TypeThreadArchived, Author: 1, Body: &threadlog.ThreadArchivedBody{}})
 		}, []string{"archived=1"}},
+		{threadlog.TypeRedacted, func(f *fixture, id threadid.ID) int64 {
+			f.post(id, 5, 0, 9)
+			f.post(id, 6, 1, 8)
+			return f.redact(id, 1)
+		}, []string{"ordinal=1 author_id=5", "deleted=1", "mentioned_user_id=8", "mentions: 1 rows"}},
 	}
 	covered := map[threadlog.RecordType]bool{}
 	for _, c := range cases {
@@ -461,13 +466,25 @@ func (f *fixture) agreesWithIndex(id threadid.ID) {
 			want := row{ordinal: r.ordinal, author: int64(e.Author), created: e.CreatedMS,
 				revision: int64(e.Revision), offset: int64(e.Offset),
 				replyTo: sql.NullInt64{Int64: int64(e.ReplyTo), Valid: e.ReplyTo != 0},
-				deleted: e.Flags.Has(threadlog.EntryDeleted)}
+				deleted: e.Flags&(threadlog.EntryDeleted|threadlog.EntryHiddenByMod|threadlog.EntryRedacted) != 0}
 			if e.Flags.Has(threadlog.EntryEdited) {
-				p, err := th.Reader.HiddenEntry(uint32(r.ordinal), e)
+				// The current revision's time, from its frame header: the
+				// reader will not read a redacted post's frame at all.
+				b := make([]byte, threadlog.FrameFixedSize)
+				lf, err := os.Open(id.LogPath(f.root))
 				if err != nil {
 					return err
 				}
-				want.editedAt = sql.NullInt64{Int64: p.RevisionMS, Valid: true}
+				_, err = lf.ReadAt(b, int64(e.Offset))
+				lf.Close()
+				if err != nil {
+					return err
+				}
+				h, _, err := threadlog.ParseFrameHeader(b)
+				if err != nil {
+					return err
+				}
+				want.editedAt = sql.NullInt64{Int64: h.TimestampMS, Valid: true}
 			}
 			if r != want {
 				f.t.Errorf("ordinal %d: post_meta %+v, index %+v", r.ordinal, r, want)

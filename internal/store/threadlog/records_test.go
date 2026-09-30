@@ -23,6 +23,7 @@ var everyType = []struct {
 	{2, "Post", TypePost, &PostBody{
 		Source: "The thing nobody mentions is the *export*.", ReplyTo: 3,
 		Mentions: []uint64{11, 12}, Attachments: []string{"sha256:abcd"},
+		Origin: &PostOrigin{ThreadID: 1 << 40, Ordinal: 4},
 	}},
 	{3, "Edit", TypeEdit, &EditBody{Source: "fixed a typo", Reason: "typo", ReplyTo: 3}},
 	{4, "Delete", TypeDelete, &DeleteBody{Reason: "spam", Hard: false}},
@@ -35,6 +36,10 @@ var everyType = []struct {
 	{15, "ThreadUnpinned", TypeThreadUnpinned, &ThreadUnpinnedBody{Scope: "global"}},
 	{16, "ThreadTagged", TypeThreadTagged, &ThreadTaggedBody{Tags: []string{"a", "b", "c"}}},
 	{30, "ThreadArchived", TypeThreadArchived, &ThreadArchivedBody{Reason: "dormant"}},
+	{0x80, "Redacted", TypeRedacted, &RedactedBody{
+		Ordinal: 4, Revisions: []uint32{1, 2}, Reason: "court order 12", Operator: 3,
+		Journal: "01K6DHZ3Q8N6T2V4X9B7M5C1RE",
+	}},
 }
 
 // Criterion: every record type in docs/03 round-trips through encode and

@@ -232,6 +232,10 @@ func (s *Service) forumForThread(ctx context.Context, v domain.Viewer, slug stri
 	return forum, nil
 }
 
+// CheckTitle is checkTitle for a title written outside the service: ketju
+// redact's --title, which replaces a redacted title (TKT-01M29CXJZ9).
+func CheckTitle(title string) (string, error) { return checkTitle(title) }
+
 // checkTitle returns the title as it will be stored, trimmed, or why it is
 // refused: holding a control character anywhere, which no title needs and a
 // log would keep forever, then empty or over MaxTitle characters once

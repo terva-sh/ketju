@@ -172,7 +172,11 @@ func (s *Service) History(ctx context.Context, v domain.Viewer, id threadid.ID, 
 		}
 		e := snap.entries[0]
 		removed := !e.Flags.Visible()
-		reveal := removed && revealRemoved(a, e)
+		// A redacted post's history is its revisions with no content, and
+		// only a moderator is served even that; to anyone else it is the
+		// tombstone a deleted post's is (TKT-01M29CXJZ9).
+		redacted := e.Flags.Has(threadlog.EntryRedacted)
+		reveal := removed && (revealRemoved(a, e) || redacted && a.canModerate)
 		if !public && !reveal {
 			return refused
 		}
@@ -194,6 +198,11 @@ func (s *Service) History(ctx context.Context, v domain.Viewer, id threadid.ID, 
 			return err
 		}
 		for _, r := range revs {
+			if redacted {
+				// Blank in the log already; said here too, so no reader
+				// depends on the rewrite having been complete.
+				r.Source, r.Reason = "", ""
+			}
 			res.Body.Revisions = append(res.Body.Revisions, dto.PostRevision{
 				Revision: int(r.Revision), Actor: actors[int64(r.Actor)],
 				At: dto.Millis(r.TimeMS), Reason: r.Reason, Source: r.Source})

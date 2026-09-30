@@ -262,7 +262,7 @@ func TestStartupOrderAndShutdown(t *testing.T) {
 	if err := r.shutdown(t); err != nil {
 		t.Fatalf("shutdown: %v\n%s", err, r.log)
 	}
-	want := []string{"config", "lock", "database", "stores", "subscribers", "catch-up", "sign-in", "jobs", "listener",
+	want := []string{"config", "lock", "redaction", "database", "stores", "subscribers", "catch-up", "sign-in", "jobs", "listener",
 		"drain", "stop health probe", "stop jobs", "close bus", "stop projection", "close threads", "close database",
 		"release lock"}
 	if got := r.steps(); !slices.Equal(got, want) {

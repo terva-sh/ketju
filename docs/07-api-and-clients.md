@@ -639,6 +639,13 @@ Who is served a removed post's body is one rule, `revealRemoved` in
   a post they deleted themselves;
 - nobody else gets it, and nobody gets a moved post's body here.
 
+A hard-redacted post (03 "Hard redaction", TKT-01M29CXJZ9) is served to
+nobody, moderators included: its log holds no text. It reads as
+`deleted: true, removal: "moderator"` with no body, and its history is
+the tombstone to everyone but a moderator, who is served its revisions
+with no source and no reason. An edit, delete or restore of it is
+`conflict`. No response field yet tells it from a moderator's hide.
+
 The rule answers only for removed posts. A visible post keeps the path it
 had: its body goes to everyone admitted to the thread, and its history to
 whoever the setting admits. A quote of any removed post renders as a

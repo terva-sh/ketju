@@ -271,7 +271,8 @@ body has to be settled before the format freeze, and that is one bit.
 
 ### Record types
 
-Every number below is in the advisory range (`0x01`–`0x7F`); see
+Every number below but `Redacted` (`0x80`, critical) is in the advisory
+range (`0x01`–`0x7F`); see
 "Unrecognised record types" for what that means and how a new number is
 claimed. The constants are in `internal/store/threadlog/records.go` and code
 uses the name, never the literal.
@@ -279,7 +280,7 @@ uses the name, never the literal.
 | Type | Name | Body fields | Effect on projection |
 |-----:|------|-------------|----------------------|
 | 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
-| 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[] | new post_meta row, ordinal = thread.post_count+1 |
+| 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[], origin (`{thread_id, ordinal}`, optional: a copy made by split or merge) | new post_meta row, ordinal = thread.post_count+1 |
 | 3 | `Edit` | source, reason, reply_to, mentions[] (optional), grace (optional bool) | post_meta.current_revision++, edited flag unless `grace`; when `mentions` is present it replaces the post's mention rows |
 | 4 | `Delete` | reason, hard (bool, always false in v1), by_moderator (optional bool), suspension (optional uint), auto (optional bool) | post_meta.deleted, tombstone shown; the entry's hidden-by-mod and auto-hidden flags when `auto`, its hidden-by-mod flag (clearing auto-hidden) when `by_moderator`, otherwise its deleted flag |
 | 5 | `Restore` | reason | clears deleted, hidden-by-mod and auto-hidden |
@@ -291,7 +292,7 @@ uses the name, never the literal.
 | 20 | `PostsSplitOut` | ordinals[], target_thread_id | ordinals marked moved; new thread's log gets `Post` records with `origin` |
 | 21 | `PostsMergedIn` | source_thread_id, ordinals[] | mirror of the above |
 | 30 | `ThreadArchived` | reason | thread read-only for everyone, moderators included; index may be dropped from memory permanently. An admin action (08) |
-| 0x80 | `Redacted` | ordinal, revisions[] cleared, reason | post shown as a removed tombstone; history lists revisions with no content. **Critical.** Written only by the offline redaction command ("Hard redaction" above). Claimed 2026-09-28 (TKT-01M29BSPE2); the catalogue entry lands with the tool (TKT-01M29CXJZ9), and until then a build refuses a log containing it |
+| 0x80 | `Redacted` | ordinal, revisions[] cleared, reason, operator, title (bool, optional), journal (ULID) | for a post: post_meta.deleted, its mentions removed, and the entry's redacted flag set and has-attachments cleared; the post is a tombstone to everyone and its history lists revisions with no content. For a title (`title` true, ordinal 0): no effect, since the `ThreadRenamed` written after it sets the title. **Critical.** Written only by the offline `ketju redact` ("Hard redaction" above). Claimed 2026-09-28 (TKT-01M29BSPE2); in the catalogue since TKT-01M29CXJZ9, and a build before that refuses a log containing it |
 
 `Edit.mentions` was added after the version 1 freeze, on 2026-09-24. It is an
 optional key in the CBOR body map, which is the kind of change the freeze
@@ -369,39 +370,93 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
 - **What is removed.** Every frame that carries the post's text: its `Post` and
   every `Edit` revision. Each frame keeps its record type, ordinal, revision,
   timestamp and actor, but its body is replaced by the empty body of that
-  type: no source and no mentions. Every frame is re-checksummed, so
-  "a CRC failure means corruption" stays true without exception. Attachment
-  blobs referenced only by that post are deleted. A blob another post still
-  references stays.
+  type: no source, no mentions, no attachments and no edit reason. It keeps
+  only what is structure rather than text: a `Post`'s `reply_to` and
+  `origin`, an `Edit`'s `reply_to` and `grace`. Every frame is
+  re-checksummed, so "a CRC failure means corruption" stays true without
+  exception. Attachment blobs referenced only by that post are deleted. A
+  blob another post still references stays.
+- **The log never gets shorter** (settled 2026-09-29 in grooming,
+  TKT-01M29CXJZ9). The log length is the thread's version number ("Caching"
+  below): the ETag, the response cache key, the live-update offset, and what
+  the client compares before it replaces a page it holds. So each blanked
+  body is padded to its frame's **original length** with a `pad` key: a CBOR
+  byte string of zeros, whose header is always the five-byte form (`0x5a` and
+  a uint32) so any length fits, or in a JSON body a string of `0` characters.
+  No body type has a field of that name, so every reader ignores it. The
+  smallest body a writer produces, `{source:"x"}`, is 10 bytes, which is
+  exactly what the padding of an empty map needs. The new log is the old
+  one plus the appended records, so every offset an index, `post_meta` or
+  `projection_state` holds stays valid, and each catches up by replaying
+  only what was appended. Compacting and padding only the marker lost, since
+  a post with many long revisions would need a pad past `MaxFrameSize`; not
+  padding at all lost, since catch-up quarantines a log shorter than its
+  projection and the client refuses an older-looking page.
 - **The marker.** A `Redacted` record is appended, naming the ordinal, the
   revisions cleared, the reason, and the operator. It takes a number from the
   **critical** range (`0x80`–`0xFF`), claimed by the procedure below, so an
   older build that does not know it refuses the log rather than rendering
   content that was legally required to be removed.
 - **What the reader shows.** A redacted post renders as a tombstone saying it
-  was removed; its edit history lists the revisions with no content.
+  was removed, to every reader, moderators included, since nothing of it is
+  left; its edit history lists the revisions with no content, to a
+  moderator. The index entry's redacted flag (bit 7) marks it, and no
+  record may name the post again: the thread actor refuses an `Edit`,
+  `Delete` or `Restore` of it, and never writes a `Redacted` itself.
 - **Copies from split and merge.** A split or merge copies a post into
   another thread's log as a new `Post` with an `origin` (below), so the same
   text lives in two logs. The command follows `origin` in both directions,
-  from a copy back to its source and from a source to every copy, and redacts
-  each one the same way, rewriting each log it touches. A redaction that
-  cleared only one of them would leave the text readable through the other.
+  from a copy back to its source and from a source to every copy,
+  transitively, to a fixed point: it builds the origin graph over every post
+  in every log and takes the whole connected component holding the named
+  post, so a copy of a copy goes too (Terva review 1345). It redacts each one
+  the same way, rewriting each log it touches. A redaction that cleared only
+  one of them would leave the text readable through the other.
 - **Several logs, one redaction.** Each log's swap is atomic, but a redaction
   that spans several logs is not. So before touching any log, the command
   writes a redaction journal to the data directory, fsyncs the journal, and
   then fsyncs the directory, so the journal's directory entry survives a
   power cut as well as its contents. The journal lists every (thread,
-  ordinal) to clear. While a journal exists, `ketju serve` refuses to start.
-  Running the command again finishes the job from the journal. A log that
-  already ends in the `Redacted` record for that ordinal was swapped
-  successfully: resuming skips it and never appends a second marker. The journal is deleted only after every
-  log is swapped and the audit row is written, so an interruption never lets
-  a half-redacted data directory be served.
+  ordinal) to clear, and each one's attachment hashes, read from every `Post`
+  and `Edit` frame of it before any rewrite: once a log is swapped its bodies
+  no longer list them, so from then on the journal is the only source
+  (Terva reviews 1345 and 1351). While a journal exists, `ketju serve`
+  refuses to start. Running the command again, or `ketju redact --resume`,
+  finishes the job from the journal, and a pending journal is looked for
+  before any check on the post's state, since right after its swap the post
+  already reads as redacted (Terva review 1360). The resume points are three:
+  - **The log.** The targets are grouped by thread and each log is rewritten
+    once, blanking every target ordinal in it and appending one `Redacted`
+    record per ordinal, in ordinal order. A log that carries the `Redacted`
+    records for every ordinal the journal lists for it was swapped: resuming
+    skips it and never appends a second marker. One with some of them and not
+    all is damage, since one atomic swap writes all of them, and the run
+    stops with the journal in place (Terva review 1351). A title's marker is
+    recognised by the journal id it carries.
+  - **The audit row.** Every blob reference the redaction drops, and the
+    `post.redacted` row, are written in one transaction, which first looks
+    for that row and does nothing if it is there. The row is the marker
+    that the drops happened, so each is dropped exactly once (Terva review
+    1345). It lists the blobs *planned* for deletion, never ones deleted.
+  - **Each blob.** A blob is deleted when no log, avatar or draft names it,
+    in its own transaction, which deletes its row and writes its own
+    `blob.deleted` row and touches no file. The file is removed only after
+    that commits, and a resumed run removes any journaled blob's file whose
+    row is gone (Terva review 1360). The lock and the journal keep uploads
+    out, so this shorter sequence is safe here where the blob collector,
+    which runs beside uploads, needs its move-aside.
+
+  The journal is deleted only after every log is swapped and the audit row
+  and blob deletions are written, so an interruption never lets a
+  half-redacted data directory be served. `--dry-run` writes nothing, and
+  with a journal pending it reports the work left instead of resuming (Terva
+  review 1366).
 - **Quotes elsewhere.** Quotes of the post in other posts are other people's
   posts. The command lists them for the operator, who redacts them separately
   if the takedown covers them. It never edits them silently.
-- **Audit.** The action is written to `audit_log`, and the index and
-  projections for the thread are rebuilt.
+- **Audit.** The action is written to `audit_log` (04 "audit_log"), and the
+  index and projections for each thread are brought current by the appended
+  records. The operator must be an active admin.
 - **Titles.** Decided 2026-09-29 (TKT-01M3NS147C): the command also redacts
   a thread's title, because a takedown or an erasure can cover a title as
   easily as a post, and a rename leaves every earlier title in the log. It
@@ -468,11 +523,11 @@ skipping those leaves posts rendering as text instead of as pointers, which is
 stale and duplicated rather than disclosed, so advisory is the correct class for
 them.
 
-The first critical type is already foreseeable: docs/10 item 4 chose a
-`Redacted` record for hard redaction (see "Hard redaction" above), needed
-before Phase 2. An older build that
+The first critical type is `Redacted`, `0x80`, the record hard redaction
+appends (see "Hard redaction" above; docs/10 item 4). An older build that
 skipped one would render content that was legally required to be removed, so it
-gets a `0x80`-range number.
+has a `0x80`-range number, and a build from before TKT-01M29CXJZ9 refuses a
+log that carries one.
 
 ### Claiming a new record type
 
@@ -523,7 +578,7 @@ entry per post ordinal, so entry for ordinal `n` lives at `32 + 40*(n-1)`.
 | 16 | 8 | Author user id | author filter lens without the DB |
 | 24 | 8 | Created at (unix ms, of revision 1) | jump-to-date, "since last visit" |
 | 32 | 2 | Current revision number | cache keys, history |
-| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4, a visible edit: not set by a grace `Edit`), machine-authored (5), auto-hidden (6, hidden pending review, only beside hidden-by-mod) — `EntryFlags` in `flags.go`, reserved bits 7–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
+| 34 | 2 | Flags: deleted (0), moved (1), hidden-by-mod (2), has-attachments (3), edited (4, a visible edit: not set by a grace `Edit`), machine-authored (5), auto-hidden (6, hidden pending review, only beside hidden-by-mod), redacted (7, set by a `Redacted` record, which clears has-attachments: a tombstone to every reader) — `EntryFlags` in `flags.go`, reserved bits 8–15 as `EntryFlagsReserved` | tombstones and the agent lens without a read |
 | 36 | 4 | Reserved | segment rollover, see below |
 
 `machine-authored` mirrors frame flag bit 0, so filtering a thread by whether a
@@ -537,7 +592,9 @@ constant from one set into the other would compile and be wrong.
 The reserved 4 bytes at offset 36 are not general slack. They are held for the
 segment number that segment rollover would add to the offset field, described at
 the end of this document. Spare capacity for anything else is the unused bits
-of the flags field: 9 since auto-hidden took bit 6 (TKT-01M29CP2PJ).
+of the flags field: 8 since auto-hidden took bit 6 (TKT-01M29CP2PJ) and
+redacted bit 7 (TKT-01M29CXJZ9). The index is derived and rebuilt from the
+log, so assigning a bit here changes no file that outlives a rebuild.
 
 The width is settled at 40 bytes. Measured in Phase 0 on a 50 000 post thread,
 filtering by author takes 15 us from the in-memory entries against 19.8 ms when

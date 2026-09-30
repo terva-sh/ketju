@@ -42,6 +42,16 @@ const (
 	TypePostsMergedIn RecordType = 21
 
 	TypeThreadArchived RecordType = 30
+
+	// TypeRedacted marks a hard redaction: the offline `ketju redact`
+	// blanked every revision of a post, or every title of the thread, and
+	// appended this record naming what it cleared (docs/03 "Hard
+	// redaction"). It is the first number in the CRITICAL range, claimed
+	// 2026-09-28 (TKT-01M29BSPE2) and landed with the tool (TKT-01M29CXJZ9):
+	// a build that skipped it would serve the post from an index that still
+	// calls it visible. So an older build refuses a log carrying one. Only
+	// the command writes it, never the actor.
+	TypeRedacted RecordType = 0x80
 )
 
 // CriticalTypeBit partitions the type space by what a reader that does NOT
@@ -109,11 +119,25 @@ type (
 	// re-derived on every read. Their element shapes are the least settled
 	// thing in this file, and they are also the cheapest to change: a
 	// self-describing body means a new field can arrive beside an old one.
+	//
+	// Origin names the post this one was copied from by a split or merge
+	// (docs/03 "Split and merge are the hardest events"), and is nil for a
+	// post written here. This build writes none: split and merge are
+	// TKT-01M29CXJZZ's. It is read now because hard redaction follows it,
+	// so that a copy's text goes with its source's (TKT-01M29CXJZ9).
 	PostBody struct {
-		Source      string   `cbor:"source,omitempty" json:"source,omitempty"`
-		ReplyTo     uint32   `cbor:"reply_to,omitempty" json:"reply_to,omitempty"`
-		Mentions    []uint64 `cbor:"mentions,omitempty" json:"mentions,omitempty"`
-		Attachments []string `cbor:"attachments,omitempty" json:"attachments,omitempty"`
+		Source      string      `cbor:"source,omitempty" json:"source,omitempty"`
+		ReplyTo     uint32      `cbor:"reply_to,omitempty" json:"reply_to,omitempty"`
+		Mentions    []uint64    `cbor:"mentions,omitempty" json:"mentions,omitempty"`
+		Attachments []string    `cbor:"attachments,omitempty" json:"attachments,omitempty"`
+		Origin      *PostOrigin `cbor:"origin,omitempty" json:"origin,omitempty"`
+	}
+
+	// PostOrigin is where a copied post came from: the thread and ordinal
+	// of the post a split or merge copied.
+	PostOrigin struct {
+		ThreadID uint64 `cbor:"thread_id,omitempty" json:"thread_id,omitempty"`
+		Ordinal  uint32 `cbor:"ordinal,omitempty" json:"ordinal,omitempty"`
 	}
 
 	// EditBody replaces the source of an existing post. The original Post
@@ -238,6 +262,24 @@ type (
 	ThreadArchivedBody struct {
 		Reason string `cbor:"reason,omitempty" json:"reason,omitempty"`
 	}
+
+	// RedactedBody is the marker a hard redaction appends (docs/03 "Hard
+	// redaction"). For a post, Ordinal is the post, equal to the frame's
+	// ordinal, and Revisions are the revisions whose bodies were blanked.
+	// For a title, Title is true and Ordinal is 0: every ThreadCreated and
+	// ThreadRenamed before the marker lost its title and slug. Operator is
+	// the admin who ran the command, and the frame's actor. Journal is the
+	// ULID of the redaction journal that wrote the marker, which is how a
+	// resumed run tells its own marker from an earlier redaction's (Terva
+	// review 1375).
+	RedactedBody struct {
+		Ordinal   uint32   `cbor:"ordinal,omitempty" json:"ordinal,omitempty"`
+		Revisions []uint32 `cbor:"revisions,omitempty" json:"revisions,omitempty"`
+		Reason    string   `cbor:"reason,omitempty" json:"reason,omitempty"`
+		Operator  uint64   `cbor:"operator,omitempty" json:"operator,omitempty"`
+		Title     bool     `cbor:"title,omitempty" json:"title,omitempty"`
+		Journal   string   `cbor:"journal,omitempty" json:"journal,omitempty"`
+	}
 )
 
 // catalogue maps a record type to a constructor for its body.
@@ -260,6 +302,7 @@ var catalogue = map[RecordType]func() any{
 	TypeThreadUnpinned: func() any { return new(ThreadUnpinnedBody) },
 	TypeThreadTagged:   func() any { return new(ThreadTaggedBody) },
 	TypeThreadArchived: func() any { return new(ThreadArchivedBody) },
+	TypeRedacted:       func() any { return new(RedactedBody) },
 }
 
 // typeNames is for errors and `ketju dump`. Reserved types are named here
@@ -281,6 +324,7 @@ var typeNames = map[RecordType]string{
 	TypePostsSplitOut:  "PostsSplitOut",
 	TypePostsMergedIn:  "PostsMergedIn",
 	TypeThreadArchived: "ThreadArchived",
+	TypeRedacted:       "Redacted",
 }
 
 // String names a record type, falling back to the number for one this build

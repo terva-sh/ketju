@@ -176,7 +176,18 @@ func (r *Reader) Hidden(ordinal uint32) (Post, error) {
 }
 
 // HiddenEntry is Hidden for an entry the caller already holds.
+//
+// A redacted post is the exception: it is a tombstone to every reader,
+// moderators included, and is returned as one without reading the log,
+// since its bytes on disk are padding (docs/03 "Hard redaction").
 func (r *Reader) HiddenEntry(ordinal uint32, e IndexEntry) (Post, error) {
+	if e.Flags.Has(EntryRedacted) {
+		return Post{
+			Ordinal: ordinal, Revision: e.Revision, Author: e.Author,
+			CreatedMS: e.CreatedMS, ReplyTo: e.ReplyTo, Flags: e.Flags,
+			Tombstone: true,
+		}, nil
+	}
 	buf := make([]byte, e.FrameLength)
 	if _, err := r.log.ReadAt(buf, int64(e.Offset)); err != nil {
 		return Post{}, &ReadError{Ordinal: ordinal, Offset: e.Offset, Err: err}

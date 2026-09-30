@@ -22,6 +22,7 @@ commands:
   dump     print a thread log as JSON lines, one object per record
   fsck     walk every log, verify every checksum, rebuild every index
   reindex  rebuild the database's projection tables from the thread logs
+  redact   hard-redact a post or a thread title, with the server stopped
   admin    administer members and settings from the command line
   config   check the config file and print the effective configuration
 
@@ -50,6 +51,8 @@ func main() {
 		err = runAdmin(os.Args[2:])
 	case "reindex":
 		err = runReindex(os.Args[2:])
+	case "redact":
+		err = runRedact(os.Args[2:])
 	case "config":
 		err = runConfig(os.Args[2:])
 	case "-h", "--help", "help":

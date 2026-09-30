@@ -434,7 +434,20 @@ transaction that projects the record, with the frame's timestamp as `at`.
 | `permission` | `<forum id>:<group id>:<permission>`, or `global:<group id>:<permission>` for a site-wide row |
 | `form` | the form's key, such as `registration` |
 | `identity` | the identity's id, in decimal |
+| `blob` | the blob's SHA-256, 64 lower-case hex digits |
 <!-- audit-targets:end -->
+
+- Hard redaction (`ketju redact`, TKT-01M29CXJZ9, 03 "Hard redaction")
+  writes, with the operator as actor and `"via": "cli"`: `post.redacted`
+  against the post the operator named, with `"reason"`, `"journal"`,
+  `"targets"` (every `{thread, ordinal, revisions}` cleared, copies
+  included), `"references_dropped"`, `"blobs_planned"` and `"quotes"`, in
+  the transaction that drops the redacted posts' blob references;
+  `blob.deleted` against each blob it deletes, with `"journal"`, in the
+  transaction that deletes the blob's row; and `thread.title_redacted`
+  against the thread for a title, with `"reason"`, `"journal"`,
+  `"frames_blanked"` and `"replacement_by_operator"`, and never any title
+  text.
 
 - `action` names what was done, such as `user.promoted` or
   `setting.changed`. The IdP group mapping writes `group.member_added` and

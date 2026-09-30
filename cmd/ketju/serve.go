@@ -7,6 +7,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"io/fs"
 	"log/slog"
 	"net"
 	"net/http"
@@ -225,6 +226,17 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		step("release lock")
 		return lk.Release()
 	})
+
+	// A hard redaction that did not finish may have rewritten some logs and
+	// not others, and serving that would show a copy of text another log has
+	// lost (docs/03 "Hard redaction"). Only redact finishes it.
+	step("redaction")
+	if _, err := os.Stat(journalPath(cfg.DataDir)); err == nil {
+		return fail("a hard redaction is pending", fmt.Errorf("%s exists; finish it with ketju redact --root %s --resume, "+
+			"then start ketju serve", journalPath(cfg.DataDir), cfg.DataDir))
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fail("looking for a pending hard redaction", err)
+	}
 
 	step("database")
 	for _, sub := range []string{threadid.ThreadsDir, "blobs"} {

@@ -422,9 +422,14 @@ func TestPostFlagEffectIsWhatApplyDoes(t *testing.T) {
 			continue // creates an entry rather than changing one
 		}
 		body, _ := NewBody(ty)
+		if ty == TypeRedacted {
+			// A post marker names its post in the body as in the frame.
+			body = &RedactedBody{Ordinal: 1}
+		}
 		tries = append(tries, try{ty.String(), ty, body})
 	}
 	tries = append(tries,
+		try{"Redacted by value", TypeRedacted, RedactedBody{Ordinal: 1, Revisions: []uint32{1}}},
 		try{"grace Edit", TypeEdit, &EditBody{Source: "x", Grace: true}},
 		try{"grace Edit by value", TypeEdit, EditBody{Source: "x", Grace: true}},
 		try{"Edit by value", TypeEdit, EditBody{Source: "x"}},

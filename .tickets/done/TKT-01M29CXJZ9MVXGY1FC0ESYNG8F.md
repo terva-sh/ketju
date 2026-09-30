@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXJZ9MVXGY1FC0ESYNG8F
 title: Build the offline hard-redaction tool
 type: task
-status: ready
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,17 @@ blocks_on: none
 references:
   - ref: design:storage-records
     path: docs/03-thread-storage.md
+  - ref: pr:191
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-29T15:11:41Z
+updated_at: 2026-09-30T02:27:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-cxjz9
   name: ""
 extensions: {}
 ---
@@ -45,24 +47,24 @@ The rendered-post cache and the search index both hold copies of the text, so re
 
 ## Acceptance criteria
 
-- [ ] The post keeps its ordinal and permalink and is served as a tombstone to members, its author and moderators; its history lists the revisions with no content; edit, delete and restore of it are conflict
-- [ ] The command holds the data-directory lock for its whole run and refuses beside a running serve, and serve refuses to start while redaction.journal exists (TestRedactRefusesBesideServe, TestServeRefusesWhileAJournalExists)
-- [ ] After the run post_meta marks the post deleted and it has no mentions rows, and a projection caught up from the new log equals one rebuilt by ketju reindex (TestRedactedCatchUpEqualsReindex); there is no search index in this build, and clearing it is TKT-01M3NS122F
-- [ ] After ketju redact, no byte of any revision's source, mentions, edit reason or attachment list remains in any log that held the post or a copy of it, where the copies are the whole origin component found to a fixed point in both directions, and every frame still passes its CRC (TestRedactBlanksEveryRevision, TestRedactFollowsOriginBothWays, TestCopySetIsTransitive)
-- [ ] Blobs only the redacted posts named are deleted and a blob another post still names stays (TestRedactDeletesOnlyUnsharedBlobs); quotes of the post are listed in the command's output and left unedited (TestRedactListsQuotes)
-- [ ] Each log is rewritten once, and its new length is its old length plus exactly one 0x80 Redacted frame per target ordinal in it, so the thread's log_length and ETag afterwards exceed every earlier value (TestRedactKeepsEveryFrameLength, TestRedactTwoOrdinalsInOneLog, TestRedactedThreadPageIsNewer)
-- [ ] An interruption after any step is finished by rerunning the command: a log already carrying the markers for all its journaled ordinals is skipped wherever those markers sit, one with only some is refused as damage, and the run ends with one Redacted record per target ordinal, one post.redacted row, and no journal (TestRedactResumesAfterEachStep, TestRedactTwoOrdinalsInOneLog)
-- [ ] The journal records, before the first swap, each target's attachment hashes read from every Post and Edit frame of it, and all reference drops commit in one transaction with the post.redacted row, so a resumed run drops each reference exactly once and still deletes an unshared blob (TestAttachmentInventoryReadsEveryRevision, TestRedactResumeDropsEachReferenceOnce, TestRedactResumeAfterSwapStillDeletesTheBlob)
-- [ ] The post.redacted audit row names the operator, who must be an active admin, the reason, every (thread, ordinal, revisions) cleared, the references dropped and blobs_planned; each blob actually deleted gets its own blob.deleted row in the transaction that deletes it, and no row claims a deletion that did not commit (TestRedactAuditsOnlyCommittedDeletes)
-- [ ] A blob file is removed only after the transaction deleting its row and writing its blob.deleted row commits; a failure before that commit leaves the row and the file in place, and a resumed run removes any journaled blob file whose row is gone (TestRedactBlobDeleteFailureKeepsTheFile, TestRedactResumeRemovesAFileWhoseRowIsGone)
-- [ ] A pending redaction.journal is resumed before any already-redacted check, so a rerun right after the named post's swap finishes, while naming a redacted post with no journal pending is refused (TestRedactResumeRightAfterTheSwap)
-- [ ] ketju redact has two forms, the redaction and ketju redact --root DIR --resume [--dry-run], its usage text lists both, and the serve refusal names the --resume form; any other combination exits 2 (TestRedactUsage)
-- [ ] --dry-run writes nothing in either form, and with a journal pending it reports the remaining work instead of resuming (TestRedactDryRunWritesNothing)
-- [ ] ketju redact THREAD title blanks title and slug in ThreadCreated and every earlier ThreadRenamed, keeping forum_id and tags, each frame at its original length with a valid CRC, and no byte of an earlier title or slug remains (TestRedactTitleBlanksEveryTitleFrame)
-- [ ] A title redaction appends Redacted {ordinal 0, title true} and then a ThreadRenamed to Title removed, or the operator's --title, so the thread shows the replacement after catch-up and after reindex, and log_length only grows (TestRedactTitleShowsTheReplacement, TestRedactedTitleCatchUpEqualsReindex)
-- [ ] A title marker touches no index entry or post_meta row, and an old slug still redirects by id to the replacement's slug (TestTitleMarkerTouchesNoPost, TestOldSlugRedirectsAfterTitleRedaction)
-- [ ] A title redaction writes one thread.title_redacted audit row with no title text, resumes from its journal after any step, and a later title redaction of the same thread is allowed (TestRedactTitleAuditHasNoTitle, TestRedactTitleResumes, TestRedactTitleUsage)
-- [ ] Every Redacted marker carries the ULID of the journal that wrote it, and a resumed title redaction skips a log only when a title marker carries its own journal's id, so a second redaction by the same operator for the same reason is never skipped (TestASecondTitleRedactionIsNotSkipped)
+- [x] The post keeps its ordinal and permalink and is served as a tombstone to members, its author and moderators; its history lists the revisions with no content; edit, delete and restore of it are conflict
+- [x] The command holds the data-directory lock for its whole run and refuses beside a running serve, and serve refuses to start while redaction.journal exists (TestRedactRefusesBesideServe, TestServeRefusesWhileAJournalExists)
+- [x] After the run post_meta marks the post deleted and it has no mentions rows, and a projection caught up from the new log equals one rebuilt by ketju reindex (TestRedactedCatchUpEqualsReindex); there is no search index in this build, and clearing it is TKT-01M3NS122F
+- [x] After ketju redact, no byte of any revision's source, mentions, edit reason or attachment list remains in any log that held the post or a copy of it, where the copies are the whole origin component found to a fixed point in both directions, and every frame still passes its CRC (TestRedactBlanksEveryRevision, TestRedactFollowsOriginBothWays, TestCopySetIsTransitive)
+- [x] Blobs only the redacted posts named are deleted and a blob another post still names stays (TestRedactDeletesOnlyUnsharedBlobs); quotes of the post are listed in the command's output and left unedited (TestRedactListsQuotes)
+- [x] Each log is rewritten once, and its new length is its old length plus exactly one 0x80 Redacted frame per target ordinal in it, so the thread's log_length and ETag afterwards exceed every earlier value (TestRedactKeepsEveryFrameLength, TestRedactTwoOrdinalsInOneLog, TestRedactedThreadPageIsNewer)
+- [x] An interruption after any step is finished by rerunning the command: a log already carrying the markers for all its journaled ordinals is skipped wherever those markers sit, one with only some is refused as damage, and the run ends with one Redacted record per target ordinal, one post.redacted row, and no journal (TestRedactResumesAfterEachStep, TestRedactTwoOrdinalsInOneLog)
+- [x] The journal records, before the first swap, each target's attachment hashes read from every Post and Edit frame of it, and all reference drops commit in one transaction with the post.redacted row, so a resumed run drops each reference exactly once and still deletes an unshared blob (TestAttachmentInventoryReadsEveryRevision, TestRedactResumeDropsEachReferenceOnce, TestRedactResumeAfterSwapStillDeletesTheBlob)
+- [x] The post.redacted audit row names the operator, who must be an active admin, the reason, every (thread, ordinal, revisions) cleared, the references dropped and blobs_planned; each blob actually deleted gets its own blob.deleted row in the transaction that deletes it, and no row claims a deletion that did not commit (TestRedactAuditsOnlyCommittedDeletes)
+- [x] A blob file is removed only after the transaction deleting its row and writing its blob.deleted row commits; a failure before that commit leaves the row and the file in place, and a resumed run removes any journaled blob file whose row is gone (TestRedactBlobDeleteFailureKeepsTheFile, TestRedactResumeRemovesAFileWhoseRowIsGone)
+- [x] A pending redaction.journal is resumed before any already-redacted check, so a rerun right after the named post's swap finishes, while naming a redacted post with no journal pending is refused (TestRedactResumeRightAfterTheSwap)
+- [x] ketju redact has two forms, the redaction and ketju redact --root DIR --resume [--dry-run], its usage text lists both, and the serve refusal names the --resume form; any other combination exits 2 (TestRedactUsage)
+- [x] --dry-run writes nothing in either form, and with a journal pending it reports the remaining work instead of resuming (TestRedactDryRunWritesNothing)
+- [x] ketju redact THREAD title blanks title and slug in ThreadCreated and every earlier ThreadRenamed, keeping forum_id and tags, each frame at its original length with a valid CRC, and no byte of an earlier title or slug remains (TestRedactTitleBlanksEveryTitleFrame)
+- [x] A title redaction appends Redacted {ordinal 0, title true} and then a ThreadRenamed to Title removed, or the operator's --title, so the thread shows the replacement after catch-up and after reindex, and log_length only grows (TestRedactTitleShowsTheReplacement, TestRedactedTitleCatchUpEqualsReindex)
+- [x] A title marker touches no index entry or post_meta row, and an old slug still redirects by id to the replacement's slug (TestTitleMarkerTouchesNoPost, TestOldSlugRedirectsAfterTitleRedaction)
+- [x] A title redaction writes one thread.title_redacted audit row with no title text, resumes from its journal after any step, and a later title redaction of the same thread is allowed (TestRedactTitleAuditHasNoTitle, TestRedactTitleResumes, TestRedactTitleUsage)
+- [x] Every Redacted marker carries the ULID of the journal that wrote it, and a resumed title redaction skips a log only when a title marker carries its own journal's id, so a second redaction by the same operator for the same reason is never skipped (TestASecondTitleRedactionIsNotSkipped)
 
 ## Implementation plan
 
@@ -116,6 +118,17 @@ Settled here as engineering choices, to be written into docs/03 in the same PR:
   - *A dry run never resumes.* (medium) `--dry-run` is checked before the journal is acted on, and it writes nothing in any form. With a journal pending, `--dry-run` (with `--resume`, or naming the pending post) reads the journal and the logs and prints the remaining work: each log swapped or not, from its markers; whether the reference-and-audit transaction has committed, from `AuditExists`; and each blob's row and file state. It changes nothing and exits 0. `--dry-run` naming a different post with a journal pending is refused as the real run would be. The alternative, refusing every dry run while a journal is pending, lost because inspecting the remaining work is exactly what an operator needs before resuming.
 - **The audit row** is `action = "post.redacted"`, `target_type = "post"`, `target_id = "<thread base32>/<ordinal>"` of the post the operator named, with `actor_id` set to the operator. `details_json` holds the reason, the journal id, every (thread, ordinal, revisions) cleared, the references dropped, the blobs planned for deletion (`blobs_planned`), the quotes listed, and `via: "cli"`. A post can be redacted only once, so `AuditExists` on that target and action is the resume marker.
 - **The operator** is named with `--operator HANDLE`, which must be an active admin (docs/08: "admin, CLI only"). The reason is required.
+
+### Revised at claim, 2026-09-30 (agent:claude-code/phase2-run-cxjz9), against main at 2fc352f
+Read against the code as it stands. Everything above stands. These points change the Approach below, which is otherwise kept as groomed:
+- **Index flag bit 7, not 6, is `EntryRedacted`.** TKT-01M29CP2PJ took bit 6 for auto-hidden after grooming. The index is derived and rebuilt from the log, so the bit is an internal assignment; docs/03's index-entry table records it in this PR.
+- **A blanked `Edit` keeps `grace`, and a blanked `Post` keeps `origin`, beside `reply_to`.** Neither is text. Dropping `grace` would make an index rebuilt from the new log mark a grace-edited post edited while the index extended by the marker does not, which breaks `TestRedactedIndexExtendedEqualsRebuilt`. Dropping `origin` would cut the copy graph a later redaction of another copy walks.
+- **`dto.Post.redacted` and `dto.PostHistory.redacted` are plain `bool`, not omitempty.** `internal/dto` carries no omitempty by rule (dto.go package comment). Goldens gain the key. `removal` stays as it is for a redacted post; showing "removed" rather than "removed by a moderator" is client work, filed as a draft.
+- **The actor refuses to append a `Redacted` record**, and refuses any record naming a redacted post (Edit, Delete, Restore, from any caller, with `ErrPostState`). Only `ketju redact` writes the marker, and it never goes through the actor. The service's `gone` and restore `Refuse` sets gain the bit too, so the refusal is `conflict` before the actor is reached.
+- **Quotes are found with `render.Render(source).Quotes`** (a nil resolver reports every attributed quote). No new export from `internal/render`.
+- **`audit` gains the target type `blob`**, `audit.Blob(hash)`, documented in docs/04 beside the others, for the `blob.deleted` rows.
+- **The journal id is a ULID generated in `cmd/ketju`** (48-bit ms time plus 80 random bits, Crockford base32). The module has no ULID library, and adding one for one id lost.
+- **The appended rename's `thread.renamed` row** is written by the projection as for any rename, and today carries the replacement title. Removing title text from those rows is TKT-01M29CKRH9's (rename and move, open in another lane). This PR's own `thread.title_redacted` row carries no title, old or new.
 
 ### Approach
 1. **Catalogue** (`internal/store/threadlog/records.go`): `TypeRedacted RecordType = 0x80`, and `RedactedBody{Ordinal uint32 "ordinal"; Revisions []uint32 "revisions"; Reason string "reason"; Operator uint64 "operator"; Title bool "title,omitempty"; Journal string "journal"}`. `Title` true means the thread's title frames, and `Ordinal` is then 0. `Journal` is the ULID of the journal that wrote the marker, on post and title markers alike, so a marker names its run, added to `catalogue` and `typeNames`. Add `PostBody.Origin *PostOrigin` (`origin`, `{thread_id uint64, ordinal uint32}`), the shape docs/03 gives for split and merge. This ticket reads it and TKT-01M29CXJZZ writes it. Update the docs/03 type table row, the frame-flags/index-entry table (bit 6), and "Hard redaction" with the padding and log-length rule above.
@@ -235,3 +248,35 @@ Terva review 1360 on PR #139 (head 630a3a3, base 7af2c5a) raised two findings, b
 **agent:claude-code/phase2-groom** at 2026-09-29T06:32:13Z
 
 Terva review 1366 on PR #139 (head a9bfd8c, base 7af2c5a) raised two medium findings, both accepted and fixed in the plan. finding-1: --dry-run is checked before the journal is acted on. With a journal pending, it reports the remaining work (logs swapped or not, whether the audit transaction committed, the state of each blob) and writes nothing. Refusing every dry run lost, because inspecting the remaining work is what an operator needs before resuming. finding-2: the command has two specified forms, and the second is 'ketju redact --root DIR --resume [--dry-run]', which takes no other flag or argument. Invalid combinations exit 2, and the serve refusal names that form. Criteria 12 and 13 were added.
+
+**agent:claude-code/phase2-run-cxjz9** at 2026-09-30T02:22:05Z
+
+Implementation landed on run/cxjz9-hard-redaction. Where each part sits and what differs from the plan:
+
+- Log: `threadlog/redact.go` (RedactPosts, RedactTitle, BlankBody, Markers, AttachmentsOf). Every blanked frame keeps its exact length: the kept structure (Post: reply_to, origin; Edit: reply_to, grace; ThreadCreated: forum_id, tags; ThreadRenamed: nothing) is re-encoded and padded with a `pad` key of zeros (CBOR byte string or JSON string), so offsets in the index and projection stay valid and the log only grows by the markers.
+- Index flag Redacted is bit 7, not bit 6 (bit 6 is auto-hidden, taken since grooming). It sets redacted, clears has-attachments, and is never Visible. The actor refuses a TypeRedacted append and refuses any non-Post record naming a redacted post (conflict).
+- Command: `cmd/ketju/redact.go`. Journal `redaction.journal` is written with fsync and a directory fsync (`internal/fsutil`) before any log is touched. Resume points: log markers (all/none/some = skip/rewrite/damage), title markers by journal ULID, the post.redacted row for reference drops (one transaction), and per blob its own transaction deleting the row and writing blob.deleted, with the file removed after commit.
+- Audit gained target type `blob` (docs/04 updated).
+- Caches: the render and response caches are in-memory and the command runs with serve stopped, so a restart clears both; TestRedactedPostIsATombstoneToEveryone rebuilds them as serve does.
+
+Gaps, stated rather than ticked around:
+1. No `redacted` field in the post DTO. Adding one broke `web/client/src/dto-contract.ts`, which pins the goldens to dto.ts, and this lane may not touch web/client. A redacted post is served as a moderator removal with no reason (deleted=true, removal=moderator). Filed as a draft for the client lane.
+2. Older `thread.renamed` audit rows written by renames through the API still carry earlier titles in details_json; the audit log is append-only by trigger and outside the log criteria. Title text in rename audit rows is TKT-01M29CKRH9's (rename/move lane, open). Likewise moderator `post.edited` rows keep edit reasons.
+3. History: a moderator gets the revision list with no source and no reason; the author and members get the deleted-post tombstone, as for any removed post.
+4. TestRedactResumesAfterEachStep's last case starts and stops a real serve after the resume and checks the index tombstone; the HTTP view of the tombstone is covered by the internal/web/api redact tests instead.
+
+**agent:claude-code/phase2-run-cxjz9** at 2026-09-30T02:22:09Z
+
+Gap 1 above is filed as draft TKT-01M3R1WPNS (Expose hard redaction in the post DTO and client), depending on this ticket.
+
+## Summary
+
+`ketju redact` removes a post's text, or a thread's titles, from the thread logs with the server stopped.
+
+- Log format: record 0x80 Redacted (critical, so an older build refuses the log) and index flag bit 7. Every blanked frame keeps its length and CRC; the log grows by one marker per target, so log_length and ETag stay monotonic and no offset moves.
+- Posts: every revision of the named post and of every copy in its origin component is blanked; references drop in one transaction with the post.redacted row; each unshared blob is deleted in its own transaction with a blob.deleted row and its file removed after commit; quotes are listed, not edited.
+- Titles: ThreadCreated and every ThreadRenamed blanked, then a title marker and a rename to "Title removed" or `--title`; one thread.title_redacted row with no title text.
+- Crash safety: `redaction.journal` (fsynced, with a ULID every marker carries) is written first; `ketju redact --root DIR --resume` finishes after any step, and serve refuses to start while it exists. `--dry-run` writes nothing.
+- The API serves a redacted post as a moderator removal with no reason to everyone and refuses edit, delete and restore with conflict.
+
+Left for others: a `redacted` field in the post DTO and the client (draft TKT-01M3R1WPNS), and title text in older thread.renamed audit rows (TKT-01M29CKRH9's lane). README, docs/03, docs/04 and docs/07 describe the command.

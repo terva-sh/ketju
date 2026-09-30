@@ -473,6 +473,12 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 		}
 		h.Revision = rev + 1
 
+	case TypeRedacted:
+		// Written only by the offline ketju redact, which rewrites the log
+		// with no actor running (docs/03 "Hard redaction"). A marker
+		// appended here would tombstone a post whose text is still on disk.
+		return h, nil, fmt.Errorf("%w: a Redacted record is written only by ketju redact", ErrMalformed)
+
 	default:
 		h.Ordinal = req.Ordinal
 		h.Revision = 1
@@ -483,6 +489,13 @@ func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, err
 		}
 	}
 
+	// A redacted post takes no further record, whoever asks: an Edit would
+	// give it a source again, and a Delete or Restore would change the
+	// state of a post there is nothing left of (TKT-01M29CXJZ9). A caller's
+	// own Refuse says so too; this holds for the callers that forget.
+	if req.Type != TypePost && h.Ordinal != 0 {
+		req.Refuse |= EntryRedacted
+	}
 	if req.Require != 0 || req.Refuse != 0 || req.RequireAny != 0 {
 		if err := a.checkState(req, staging); err != nil {
 			return h, nil, err

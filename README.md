@@ -109,6 +109,36 @@ no members, and reindex warns about this. Every post shows as written by a
 deleted member. Members who sign up again get new ids above every id the logs
 name.
 
+## Removing a post or a title for good
+
+Deleting a post, or a moderator hiding it, leaves its text in the thread log.
+For a legal takedown or an erasure request, an admin removes the text itself
+with `ketju redact`, with the server stopped:
+
+```sh
+ketju redact --root . --operator HANDLE --reason "court order 17" THREAD ORDINAL
+ketju redact --root . --operator HANDLE --reason "erasure request" [--title TEXT] THREAD title
+```
+
+THREAD is the thread's id as its URL spells it. The first form removes every
+revision of the post, and of every copy a split or merge made of it, and
+deletes any attachment no other post names. The post stays at its number as
+a tombstone, to moderators too. The second form removes every title the
+thread has had and renames it to "Title removed", or to `--title`. Quotes of
+the post in other posts are listed and left alone; redact them separately if
+the takedown covers them. Add `--dry-run` to see the plan first.
+
+The command writes `redaction.journal` in the data directory before it
+changes anything, and `ketju serve` will not start while that file exists. If
+the command is interrupted, finish it with:
+
+```sh
+ketju redact --root . --resume
+```
+
+Backups and filesystem snapshots taken before the redaction still hold the
+text. The command cannot reach them. `ketju redact -h` lists the exit codes.
+
 ## The name, and where this lives
 
 *Ketju* is Finnish for "chain", and it is the ordinary Finnish word for a forum

@@ -68,7 +68,7 @@ func (f FrameFlags) Unknown() FrameFlags { return f &^ FrameFlagsKnown }
 // EntryFlags are the per-post bits an index entry carries so that a lens can
 // answer without reading the log (docs/03, "Index entry").
 //
-// Seven bits used, nine spare. docs/03 names those as the spare capacity for
+// Eight bits used, eight spare. docs/03 names those as the spare capacity for
 // this format — the four reserved bytes at offset 36 are NOT general slack,
 // they are held for the segment number that segment rollover would add to the
 // offset field.
@@ -122,13 +122,22 @@ const (
 	// older build does not know it and still sees hidden-by-mod.
 	EntryAutoHidden EntryFlags = 1 << 6
 
-	// EntryFlagsReserved is every bit not yet assigned: 7 through 15, written
-	// zero. The next bit to hand out is bit 7.
+	// EntryRedacted marks a post a hard redaction cleared: a Redacted
+	// record names it, and every revision's body in the log is blank
+	// (docs/03 "Hard redaction", TKT-01M29CXJZ9). It is a tombstone to
+	// every reader, moderators included, since there is nothing left to
+	// show, and no record may name the post again. The Redacted record
+	// sets it and clears [EntryHasAttachments], so an index extended by
+	// the marker equals one rebuilt from the rewritten log.
+	EntryRedacted EntryFlags = 1 << 7
+
+	// EntryFlagsReserved is every bit not yet assigned: 8 through 15, written
+	// zero. The next bit to hand out is bit 8.
 	EntryFlagsReserved EntryFlags = ^EntryFlagsKnown
 
 	// EntryFlagsKnown is every bit this build assigns meaning to.
 	EntryFlagsKnown EntryFlags = EntryDeleted | EntryMoved | EntryHiddenByMod |
-		EntryHasAttachments | EntryEdited | EntryMachineAuthored | EntryAutoHidden
+		EntryHasAttachments | EntryEdited | EntryMachineAuthored | EntryAutoHidden | EntryRedacted
 )
 
 // Has reports whether every bit in want is set.
@@ -140,7 +149,7 @@ func (f EntryFlags) Has(want EntryFlags) bool { return f&want == want }
 // One place, so that a lens cannot answer this question differently from the
 // read path by forgetting a bit.
 func (f EntryFlags) Visible() bool {
-	return f&(EntryDeleted|EntryMoved|EntryHiddenByMod) == 0
+	return f&(EntryDeleted|EntryMoved|EntryHiddenByMod|EntryRedacted) == 0
 }
 
 // ToEntryFlags carries the bits a frame and an index entry share across the

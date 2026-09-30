@@ -308,6 +308,13 @@ func (g *BlobGC) recoverTrash(ctx context.Context) (int64, error) {
 	return restored, nil
 }
 
+// ReferencedInLogs is referencedInLogs for ketju redact, which deletes a
+// blob only when no log names it, by the same rule as a GC pass
+// (TKT-01M29CXJZ9).
+func ReferencedInLogs(ctx context.Context, root string, want map[string]bool) (map[string]bool, error) {
+	return referencedInLogs(ctx, root, want)
+}
+
 // referencedInLogs reports which of want appear in any record of any thread
 // log under root. Every file named *.log under threads/ is read, whatever
 // shard it sits in, so a log someone moved still counts. Any frame that

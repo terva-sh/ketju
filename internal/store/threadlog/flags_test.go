@@ -40,24 +40,37 @@ func TestFrameReservedBitsAreEveryBitButZero(t *testing.T) {
 		t.Errorf("next free frame flag is %#b, want bit 1", next)
 	}
 	er := EntryFlagsReserved
-	if next := er & -er; next != 1<<7 {
-		t.Errorf("next free entry flag is %#b, want bit 7", next)
+	if next := er & -er; next != 1<<8 {
+		t.Errorf("next free entry flag is %#b, want bit 8", next)
 	}
 }
 
-// Auto-hidden took bit 6 (TKT-01M29CP2PJ), leaving nine.
-func TestEntryReservedBitsAreTheNineDocumented(t *testing.T) {
+// Auto-hidden took bit 6 (TKT-01M29CP2PJ) and redacted bit 7
+// (TKT-01M29CXJZ9), leaving eight.
+func TestEntryReservedBitsAreTheEightDocumented(t *testing.T) {
 	if EntryAutoHidden != 1<<6 {
 		t.Errorf("EntryAutoHidden = %#b, docs/03 assigns it bit 6", EntryAutoHidden)
 	}
-	if EntryFlagsReserved != 0xff80 {
-		t.Errorf("EntryFlagsReserved = %#x, want 0xff80 (bits 7 through 15)", EntryFlagsReserved)
+	if EntryRedacted != 1<<7 {
+		t.Errorf("EntryRedacted = %#b, docs/03 assigns it bit 7", EntryRedacted)
+	}
+	if EntryFlagsReserved != 0xff00 {
+		t.Errorf("EntryFlagsReserved = %#x, want 0xff00 (bits 8 through 15)", EntryFlagsReserved)
 	}
 	if EntryFlagsReserved&EntryFlagsKnown != 0 {
 		t.Error("reserved and assigned entry bits overlap")
 	}
-	if n := popcount(uint16(EntryFlagsReserved)); n != 9 {
-		t.Errorf("%d reserved entry bits, docs/03 names 9 as the spare capacity", n)
+	if n := popcount(uint16(EntryFlagsReserved)); n != 8 {
+		t.Errorf("%d reserved entry bits, docs/03 names 8 as the spare capacity", n)
+	}
+}
+
+// A redacted post is a tombstone, whatever else its entry says.
+func TestRedactedIsNeverVisible(t *testing.T) {
+	for f := range EntryFlagsKnown + 1 {
+		if f&^EntryFlagsKnown == 0 && f.Has(EntryRedacted) && f.Visible() {
+			t.Errorf("flags %#x are redacted and visible", f)
+		}
 	}
 }
 

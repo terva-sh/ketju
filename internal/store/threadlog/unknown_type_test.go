@@ -47,9 +47,16 @@ func TestTypeSpaceIsPartitionedByTheHighBit(t *testing.T) {
 // harmless to ignore — skipping a Delete or an Edit would be a disclosure —
 // but because the partition only governs a reader that does NOT know the type,
 // and every build knows these.
+//
+// The one exception is Redacted, the first critical type, claimed by docs/03's
+// procedure on 2026-09-28 (TKT-01M29BSPE2) and landed with the redaction tool
+// (TKT-01M29CXJZ9): builds before it do not know it, and must refuse it.
 func TestEveryCatalogueTypeIsAdvisory(t *testing.T) {
+	if !TypeRedacted.Critical() {
+		t.Errorf("Redacted is %#02x; docs/03 puts it in the critical range", uint8(TypeRedacted))
+	}
 	for typ := range catalogue {
-		if typ.Critical() {
+		if typ.Critical() && typ != TypeRedacted {
 			t.Errorf("%s is %#02x, in the critical range; the v1 catalogue is known to every build",
 				typ, uint8(typ))
 		}

@@ -49,6 +49,7 @@ var decisions = map[threadlog.RecordType]decision{
 	threadlog.TypeThreadUnpinned: {apply: applyUnpinned},
 	threadlog.TypeThreadTagged:   {apply: applyTagged},
 	threadlog.TypeThreadArchived: {apply: applyArchived},
+	threadlog.TypeRedacted:       {apply: applyRedacted},
 
 	// Held for Phase 4 (docs/03 "Reserved record type numbers"). This build
 	// has no body for them and skips them, as the index does (apply.go uses
@@ -208,6 +209,32 @@ func applyTagged(ctx context.Context, q *dbq.Queries, f frame) error {
 
 func applyArchived(ctx context.Context, q *dbq.Queries, f frame) error {
 	return one(q.SetThreadArchived(ctx, int64(f.thread)))(f, "thread")
+}
+
+// applyRedacted is a hard redaction's marker (docs/03 "Hard redaction",
+// TKT-01M29CXJZ9). For a post, the post is deleted and has no mentions, which
+// is what a reindex of the rewritten log leaves: its blanked Post names no
+// one. So catching up by this one frame and reindexing the new log agree.
+// A title marker changes no row: the ThreadRenamed the command appends after
+// it sets the title, through applyRenamed.
+func applyRedacted(ctx context.Context, q *dbq.Queries, f frame) error {
+	b := f.body.(*threadlog.RedactedBody)
+	if b.Title {
+		if f.h.Ordinal != 0 || b.Ordinal != 0 {
+			return logFault{fmt.Errorf("a title Redacted at offset %d names ordinal %d", f.offset, f.h.Ordinal)}
+		}
+		return nil
+	}
+	if f.h.Ordinal == 0 || b.Ordinal != f.h.Ordinal {
+		return logFault{fmt.Errorf("a Redacted at offset %d names ordinal %d in its body and %d in its frame",
+			f.offset, b.Ordinal, f.h.Ordinal)}
+	}
+	if err := one(q.SetPostDeleted(ctx, dbq.SetPostDeletedParams{
+		Deleted: 1, ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal),
+	}))(f, "post"); err != nil {
+		return err
+	}
+	return q.DeleteMentions(ctx, dbq.DeleteMentionsParams{ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)})
 }
 
 // replaceTags sets the tag set wholesale, as ThreadTagged means (docs/03).

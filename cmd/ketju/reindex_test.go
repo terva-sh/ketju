@@ -99,7 +99,12 @@ var everyType = []threadlog.RecordType{
 }
 
 func TestPopulateWritesEveryType(t *testing.T) {
-	covered := map[threadlog.RecordType]bool{threadlog.TypeThreadCreated: true}
+	covered := map[threadlog.RecordType]bool{
+		threadlog.TypeThreadCreated: true,
+		// No actor writes a Redacted: only ketju redact, which rewrites the
+		// log offline. TestRedactedCatchUpEqualsReindex reindexes it.
+		threadlog.TypeRedacted: true,
+	}
 	for _, typ := range everyType {
 		covered[typ] = true
 	}

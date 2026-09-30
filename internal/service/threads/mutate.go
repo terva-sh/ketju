@@ -33,8 +33,9 @@ const (
 )
 
 // gone is the flags a post has once it no longer shows as itself: deleted by
-// its author, hidden by a moderator, or moved to another thread.
-const gone = threadlog.EntryDeleted | threadlog.EntryHiddenByMod | threadlog.EntryMoved
+// its author, hidden by a moderator, moved to another thread, or
+// hard-redacted, which no record may touch again (TKT-01M29CXJZ9).
+const gone = threadlog.EntryDeleted | threadlog.EntryHiddenByMod | threadlog.EntryMoved | threadlog.EntryRedacted
 
 // windows is the site's author windows (docs/08 "Primitives"), read once per
 // request before the thread is opened.
@@ -283,9 +284,9 @@ func (s *Service) Restore(ctx context.Context, v domain.Viewer, id threadid.ID, 
 func restoreRecord(moderator bool, reason string) threadlog.Append {
 	rec := threadlog.Append{Type: threadlog.TypeRestore, Body: &threadlog.RestoreBody{Reason: reason}}
 	if moderator {
-		rec.RequireAny, rec.Refuse = threadlog.EntryDeleted|threadlog.EntryHiddenByMod, threadlog.EntryMoved
+		rec.RequireAny, rec.Refuse = threadlog.EntryDeleted|threadlog.EntryHiddenByMod, threadlog.EntryMoved|threadlog.EntryRedacted
 	} else {
-		rec.Require, rec.Refuse = threadlog.EntryDeleted, threadlog.EntryHiddenByMod|threadlog.EntryMoved
+		rec.Require, rec.Refuse = threadlog.EntryDeleted, threadlog.EntryHiddenByMod|threadlog.EntryMoved|threadlog.EntryRedacted
 	}
 	return rec
 }
