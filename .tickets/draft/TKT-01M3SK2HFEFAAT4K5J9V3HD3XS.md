@@ -42,7 +42,7 @@ Reported by the Phase 2 run orchestrator on 2026-09-30.
 
 ## Acceptance criteria
 
-- [ ] admin-forms.spec.ts afterAll reads GET /api/v1/admin/forms/registration through context.request and, when its schema is not deep-equal to start.schema, posts start.schema to /api/v1/admin/forms/registration/versions with base_version set to the active version it read, expecting 201, before closing the context
+- [ ] admin-forms.spec.ts afterAll reads GET /api/v1/admin/forms/registration through context.request and, when its schema is not deep-equal to start.schema, posts start.schema to /api/v1/admin/forms/registration/versions with base_version set to the active version it read, expecting 201, all inside a try whose finally closes the context, so a failed request or expectation still closes it and its failure still reaches the report
 - [ ] The spec makes no /auth/* request, keeps serial mode, the one context from stateFile('ada') and info.project.use, the workers and fullyParallel checks, and its 10 tests with their names and assertions; playwright.config.ts is unchanged
 - [ ] The header comment says afterAll restores the seeded fields whatever happened, and cites this ticket
 - [ ] A note records a mutation run of e2e/admin-forms.spec.ts and e2e/apply.spec.ts on both projects with one admin-forms test broken after the save: only that test fails in each project, desktop's 'the corrected form saves as a new version' passes, and apply.spec.ts passes; the break is not committed
@@ -69,7 +69,7 @@ What exists at 13709f0:
 - **This ticket reverses TKT-01M3RZXGBA's Out of scope item** ('Restoring the registration form when an admin-forms test fails partway … no failure has needed it'). The knock-on failures in that ticket's contention and mutation runs are the failure that now needs it.
 
 Engineering decision taken here, with the alternative that lost:
-- **An `afterAll` that restores the starting version through the admin API.** `afterAll` reads the form. If its `schema` is not deep-equal to `start.schema`, it saves `start.schema` as a new version, based on the version now active, and expects 201. Then it closes the context.
+- **An `afterAll` that restores the starting version through the admin API.** `afterAll` reads the form. If its `schema` is not deep-equal to `start.schema`, it saves `start.schema` as a new version, based on the version now active, and expects 201. It closes the context in a `finally`, so a failed restore still closes it.
   - The alternative that lost is **a form the spec owns**, seeded separately. Nothing can create a second form today. It would need a seed in `cmd/ketju/e2e.go` or a migration for a new form key, and a route or parameter so that `FormEditor.tsx`, which is fixed to `registration`, could open another key. Both are product surface added only for a test. The spec would also stop exercising the form that admins actually edit and that `apply.spec.ts` fills in. It would still share one server between the two projects, so each project would need its own form, or the phone run would again leave the desktop run a changed form.
   - The `afterAll` restore fits what already exists: the route admins use, the pattern `admin-settings.spec.ts` already follows, and a check that does nothing when the last test already restored the form.
 
@@ -78,7 +78,7 @@ Engineering decision taken here, with the alternative that lost:
 1. `web/client/e2e/admin-forms.spec.ts`, `test.afterAll`:
    - When `context` and `start` are both set (so `beforeAll` got as far as reading the form), `GET formUrl` with `context.request` and expect 200.
    - If `isDeepStrictEqual(now.schema, start.schema)` (from `node:util`) is false, `POST ${formUrl}/versions` with `{ base_version: now.active_version, schema: start.schema }` and expect 201. Then read the form again and expect its `schema` to equal `start.schema`.
-   - Then `await context?.close()`, as today.
+   - The read, the POST and the checks run inside `try`, and `await context?.close()` runs in `finally`. A failed request or expectation then still closes the context, and the failure is not swallowed: `finally` does not catch, so it still fails the hook in the report (review 1608, PR #242).
 
    `context.request` rather than `page.request`, because it shares the context's cookies and still works if the page crashed or was closed by the failing test.
 2. The restore bases its save on the version active now, read in step 1, not on `n` or `n + 1`. A failure can come before the save, after it, or between the save and its notice, so only the server knows which version is active.
