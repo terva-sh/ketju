@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S8Y2NAEJ64N6ZGFV43F7A5
 title: Stop ApplicationDetail.test.tsx failing in full vitest runs
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-s8y2na
-  branch: run/s8y2na-app-detail-test
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a2abcf406ab544ec2
-  commit: 387c401689a9ca53acdbb432c90b0da348f601f2
-  session: null
-  claimed_at: 2026-09-30T19:55:42Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T13:44:15Z
-updated_at: 2026-09-30T21:04:18Z
+updated_at: 2026-09-30T21:54:43Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -50,11 +43,11 @@ Reported by the Phase 2 run orchestrator on 2026-09-30.
 
 ## Acceptance criteria
 
-- [ ] Before any code change, a note names the failing test, its failing assertion and message, whether Vitest reported an assertion failure or an unhandled error, and the cause, with the runs that separate it from the other candidates in the plan (file alone under load, full suite with one worker, resolved isolate setting)
-- [ ] The diff fixes the named cause and adds no retry, no larger timeout or settle bound, and no skip, todo or only; the 200 x 5 ms bound in web/client/src/testing.tsx is unchanged
-- [ ] The 16 existing tests in ApplicationDetail.test.tsx keep their assertions
-- [ ] A note records 20 consecutive unfiltered npx vitest run passes in web/client with ApplicationDetail.test.tsx passing in each, with the command, the CPU load, and the commit
-- [ ] A note records that the same runs under the same load reproduce the failure on main before the fix at least once
+- [x] Before any code change, a note names the failing test, its failing assertion and message, whether Vitest reported an assertion failure or an unhandled error, and the cause, with the runs that separate it from the other candidates in the plan (file alone under load, full suite with one worker, resolved isolate setting)
+- [x] The diff fixes the named cause and adds no retry, no larger timeout or settle bound, and no skip, todo or only; the 200 x 5 ms bound in web/client/src/testing.tsx is unchanged
+- [x] The 16 existing tests in ApplicationDetail.test.tsx keep their assertions
+- [x] A note records 20 consecutive unfiltered npx vitest run passes in web/client with ApplicationDetail.test.tsx passing in each, with the command, the CPU load, and the commit
+- [x] A note records that the same runs under the same load reproduce the failure on main before the fix at least once
 
 ## Implementation plan
 
@@ -125,3 +118,55 @@ Alternatives considered:
 - A `beforeAll` import in this file only, as AgentControls and QueueScreen do. This lost because the same failure showed in three other files in the same runs, and the plan puts a general cause in testing.tsx.
 - A `beforeAll` with a 30 s hook timeout, as those files use. This lost because it adds a timeout, which the ticket rules out.
 - Preloading inside `settle`. This lost because it would add an await to every `settle` call on an admin path while an app is mounted, which changes the timing of every such test. `renderAt` imports before it mounts anything.
+
+**agent:claude-code/phase2-run-s8y2na** at 2026-09-30T21:54:19Z
+
+Proof, on commit 2f7e300 (the fix, on main 387c401) against main itself. Everything ran in web/client on the same 12-CPU host. The load was 48 unpinned busy `yes` loops, started before each batch and killed by a trap after it, with other lanes also running. Load average was 66 to 74 during the proof batches. Each run was `npx vitest run --reporter=json --outputFile=<file>`: unfiltered, and the reporter only writes the result file.
+
+This corrects the first note. It said the 10 unseeded full runs on main under 48 loops were red in 7 runs. They were red in 6: runs 4, 5, 7, 8, 9 and 10. The files and tests it named are right.
+
+### Two conditions, the same on main and on the fix
+
+- **Unseeded**: the plain command, with Vitest's results cache as the previous run left it.
+- **Seeded**: before each run, ApplicationDetail.test.tsx is marked `failed` in `node_modules/.vite/vitest/*/results.json`, which is the state one failure leaves. Vitest's sequencer then runs the file first, while every transform is still cold. This is how TKT-01M3NS16VH's lane saw it fail 2 times in 6. Unseeded, the file runs after other admin files that pay for the chunk's first import, so on main the failure lands on them instead.
+
+### Main, before the fix (387c401 plus ticket commits; the test code is main's)
+
+- Unseeded, 20 full runs: the suite was red in 7 (6 in the first 10, 1 in the second 10). In every red run, the failing test was the first test to render the admin chunk in FormEditor.test.tsx, Decision.test.tsx or routes.test.tsx. ApplicationDetail.test.tsx failed in 0.
+- Seeded, 20 full runs: ApplicationDetail.test.tsx failed in 8, and the suite was red in 8. Every time it was 'shows the answers through the form renderer, against the version they answered', with `expected null not to be null` at line 48. FormEditor and routes failed beside it in 3 of those runs.
+- The file alone, 20 runs: 7 failed.
+- 0 unhandled errors in any run.
+
+### The fix, 2f7e300
+
+- **Seeded, 20 consecutive full runs: 20 green.** 1878 of 1878 tests passed in each, ApplicationDetail.test.tsx passed in each, and there were 0 unhandled errors.
+- **Unseeded, 20 consecutive full runs: 20 green.** Again 1878 of 1878 in each, ApplicationDetail.test.tsx passing in each, and 0 unhandled errors. Every other caller of `renderAt` and `settle` passed in all 40 runs.
+- The file alone, 20 runs: 20 passed.
+
+### Mutations
+
+Each mutation ran 10 times, with the file alone under the same load:
+- The import started but not awaited (`void` for `await`): 3 of 10 failed. Caught.
+- The `/admin` entry removed from `lazyChunks`: 4 of 10 failed. Caught.
+
+### Other checks
+
+- `go generate ./internal/web/spa` leaves `internal/web/spa/dist` unchanged: `git status` is clean after it. The thread-view bundle is 56988 B gzip, unchanged.
+- `npx tsc --noEmit -p .` passes. So do gofmt, `go build ./...`, `go vet ./...` and `go test -race ./...`.
+- The diff is testing.tsx only. ApplicationDetail.test.tsx is unchanged, so its 16 tests keep their assertions. There is no retry and no new or raised timeout, `settle`'s 200 × 5 ms loop is byte for byte the same, and there is no skip, todo or only.
+
+## Summary
+
+Fixed in 2f7e300, which changes web/client/src/testing.tsx only.
+
+The cause was candidate 2. A test file's first import of the lazy admin chunk was transformed and evaluated inside `settle`'s 200 × 5 ms bound. On a loaded host the import outran the bound, and the first test found no `[data-screen]`. That test was 'shows the answers through the form renderer' at line 48, and the same failure hit the first test of FormEditor.test.tsx, Decision.test.tsx and routes.test.tsx.
+
+`renderAt` now awaits the lazy chunk its address needs (admin for /admin, apply for /apply) before it mounts anything. `settle`, its bound and every timeout are unchanged, and ApplicationDetail.test.tsx is unchanged.
+
+Proof under 48 busy loops:
+- On main: the suite was red in 7 of 20 unseeded full runs, and ApplicationDetail failed in 8 of 20 seeded full runs.
+- On the fix: 20 of 20 seeded and 20 of 20 unseeded full runs were green.
+- Both mutations were caught.
+- The dist is unchanged.
+
+The `beforeAll` preloads in AgentControls.test.tsx and QueueScreen.test.tsx, with their 30 s hook timeouts, are now redundant. They were left in place.
