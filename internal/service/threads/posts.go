@@ -205,7 +205,7 @@ func (s *Service) History(ctx context.Context, v domain.Viewer, id threadid.ID, 
 			}
 			res.Body.Revisions = append(res.Body.Revisions, dto.PostRevision{
 				Revision: int(r.Revision), Actor: actors[int64(r.Actor)],
-				At: dto.Millis(r.TimeMS), Reason: r.Reason, Source: r.Source})
+				At: dto.Millis(r.TimeMS), Reason: r.Reason, Source: r.Source, Grace: r.Grace})
 		}
 		return res.finish(id, snap.logLength, ifNoneMatch)
 	})

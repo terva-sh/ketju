@@ -212,11 +212,11 @@ func TestReadEntriesReadsTheSnapshot(t *testing.T) {
 }
 
 // TestHistoryIsBoundedAndOrdered: History returns a post's revisions in log
-// order with actor, time, reason and source, only up to the length asked for,
+// order with actor, time, reason, source and grace, only up to the length asked for,
 // and refuses an ordinal the index does not hold.
 func TestHistoryIsBoundedAndOrdered(t *testing.T) {
 	lg, ix := threadWith(t, 3,
-		Append{Type: TypeEdit, Author: 7, Ordinal: 2, TimeMS: 1_800_000_000_000, Body: &EditBody{Source: "two, again", Reason: "clarity"}},
+		Append{Type: TypeEdit, Author: 7, Ordinal: 2, TimeMS: 1_800_000_000_000, Body: &EditBody{Source: "two, again", Reason: "clarity", Grace: true}},
 		Append{Type: TypeEdit, Author: 8, Ordinal: 1, TimeMS: 1_800_000_000_001, Body: &EditBody{Source: "one, again"}},
 		Append{Type: TypeEdit, Author: 9, Ordinal: 2, TimeMS: 1_800_000_000_002, Body: &EditBody{Source: "two, third"}},
 	)
@@ -229,6 +229,11 @@ func TestHistoryIsBoundedAndOrdered(t *testing.T) {
 		all[1].Actor != 7 || all[1].Reason != "clarity" || all[1].TimeMS != 1_800_000_000_000 ||
 		all[2].Source != "two, third" || all[2].Revision != 3 {
 		t.Fatalf("history of 2: %+v", all)
+	}
+	// Grace is read from the edit's body, and only the edit that set it
+	// carries it (TKT-01M29CP2Q3).
+	if all[0].Grace || !all[1].Grace || all[2].Grace {
+		t.Fatalf("grace in the history of 2: %+v", all)
 	}
 	// Bounded just before the last edit: two revisions.
 	e, err := ix.Entry(2)

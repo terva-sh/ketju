@@ -131,6 +131,9 @@ export interface PostRevision {
   at: Millis;
   reason: string;
   source: string;
+  // An author's edit within the grace window: a stored revision that did not
+  // mark the post edited.
+  grace: boolean;
 }
 
 export interface PostHistory {

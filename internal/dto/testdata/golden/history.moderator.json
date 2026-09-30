@@ -14,7 +14,8 @@
       },
       "at": 1757500100000,
       "reason": "",
-      "source": "The bill was the *smaller* half of it."
+      "source": "The bill was the *smaller* half of it.",
+      "grace": false
     },
     {
       "revision": 2,
@@ -27,7 +28,8 @@
       },
       "at": 1757500200000,
       "reason": "fixed the emphasis",
-      "source": "The bill was the **smaller** half of it."
+      "source": "The bill was the **smaller** half of it.",
+      "grace": false
     }
   ]
 }

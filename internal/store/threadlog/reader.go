@@ -243,6 +243,10 @@ type Revision struct {
 	// Reason is the edit's stated reason; empty for revision 1 and for an
 	// edit that gave none.
 	Reason string
+	// Grace is an author's edit made within the grace window
+	// (EditBody.Grace): a revision like any other, which did not mark the
+	// post edited. A redaction keeps it (blankEdit).
+	Grace bool
 }
 
 // Removals walks the log from from to upTo bytes and calls fn for each
@@ -344,7 +348,7 @@ func (r *Reader) History(ordinal uint32, upTo int64) ([]Revision, error) {
 		case *PostBody:
 			rev.Source = b.Source
 		case *EditBody:
-			rev.Source, rev.Reason = b.Source, b.Reason
+			rev.Source, rev.Reason, rev.Grace = b.Source, b.Reason, b.Grace
 		}
 		out = append(out, rev)
 		return true

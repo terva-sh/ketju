@@ -310,6 +310,10 @@ type PostRevision struct {
 	Reason string `json:"reason"`
 	// Source is markdown, not HTML: it is what the diff is taken over.
 	Source string `json:"source"`
+	// Grace marks an author's edit made within the grace window: stored as
+	// a revision, listed here, but not marking the post edited (docs/08
+	// "Primitives", TKT-01M29CKRHS).
+	Grace bool `json:"grace"`
 }
 
 // PostSource is the response to GET /threads/{id}/posts/{ordinal}/source:
