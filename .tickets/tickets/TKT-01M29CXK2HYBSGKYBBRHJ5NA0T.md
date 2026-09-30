@@ -23,6 +23,8 @@ blocks_on: none
 references:
   - ref: design:config
     path: docs/02-architecture.md
+  - ref: pr:230
+    path: null
 claim:
   actor: agent:claude-code/phase2-run-cxk2h
   branch: run/cxk2h-site-settings
@@ -33,7 +35,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T13:16:16Z
+updated_at: 2026-09-30T13:16:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
