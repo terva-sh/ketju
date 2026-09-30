@@ -420,6 +420,17 @@ func lockedThread() ThreadPage {
 	}
 }
 
+// archivedForumThread is the same thread with its forum archived and the lock
+// lifted: reply is gone, and forum_read_only says the member's own posts
+// take no edit, delete or restore either, though the author windows are
+// still sent (TKT-01M3QHKD21).
+func archivedForumThread() ThreadPage {
+	p := lockedThread()
+	p.Thread.Locked = false
+	p.Viewer.ForumReadOnly = true
+	return p
+}
+
 // crossForumList is /unread and its siblings: the same rows with no forum,
 // which is the one field that separates "this forum" from "anywhere".
 func crossForumList() ThreadList {
@@ -498,7 +509,8 @@ var corpus = map[string]any{
 	"post-source." + tMember: PostSource{Ordinal: 61, Revision: 2,
 		Source: "The bill was the **smaller** half of it."},
 
-	"thread-locked." + tMember: lockedThread(),
+	"thread-locked." + tMember:   lockedThread(),
+	"thread-archived." + tMember: archivedForumThread(),
 
 	"slow-mode." + tModerator: SlowMode{Seconds: 30},
 
