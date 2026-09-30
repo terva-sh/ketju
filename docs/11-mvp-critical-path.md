@@ -18,9 +18,12 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-239 tickets: 12 epics and 227 children. Every ticket carries an `area:` label,
-an `effort:` label of S, M, L, or XL, a phase milestone, and a reference back
-to the document section it came from. The nine open questions in
+239 tickets: 12 epics and 227 children. Every ticket derived from the design
+documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
+phase milestone, and a reference back to the document section it came from.
+Tickets filed later, by runs, reviews and deployments, often do not: on
+2026-09-30, 16 had no `area:` label, 27 no `effort:` label, 20 no milestone,
+and 44 no reference. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
 filed as spikes that block the work they gate, so a decision like CBOR versus
 JSON blocks the frame codec rather than sitting in a document nobody rereads
