@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-30T13:58:11Z
+updated_at: 2026-09-30T14:16:56Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -177,6 +177,24 @@ Checks run here: gofmt, go build, go vet, go test -race ./... all pass; tsc --no
 Bundle: eager 52903 B gzip of 60000 B, up 1689 B from 51214 B. Lazy measured at 55381 B, since Vite splits a shared chunk off and bundle.mjs counts every reader chunk, so the route stays eager.
 
 One unit test, ApplicationDetail.test.tsx 'shows the answers through the form renderer, against the version they answered', failed twice in six full vitest runs here, at about 1.4 s, and passes alone and in the other runs. It is the lazy admin chunk's transform under a parallel run, which this change does not touch. Recorded here in case CI shows it.
+
+**agent:claude-code/phase2-run-ns16vh** at 2026-09-30T14:16:54Z
+
+Terva review 1591 on PR #235 (head 0a72954, base 7e7756f), run 1525. This supersedes the earlier review request, whose run 219ae2e7 was superseded because main moved during it.
+
+Finding 1 (high), 'Phone Discard can delete a draft before it loads': fixed in bf430bf. Discard, both the phone's more-menu action and the desktop button, is offered only once the draft's GET has answered and there is text to discard. `discardNewThread` refuses otherwise too. Tests: 'discard does nothing before the draft loads, or to an empty form' (state/newThread.test.ts) and 'offers Discard in the more menu only once the draft has loaded' (NewThreadScreen.test.tsx).
+
+Finding 2 (high), 'A completed create can delete a different viewer's draft': fixed in bf430bf. `createThread` checks, after the POST answers, that the viewer and the forum's composer are the ones that posted. Otherwise it drops nothing and answers null. Test: 'a create answered after the viewer changed drops nothing and answers null'. The reply composer's `postReply` has the same shape and is filed as TKT-01M3SAKPK9 (Guard a reply post answered after the viewer changed).
+
+Finding 3 (medium), 'The viewport e2e runs share and delete one draft': see the next note.
+
+CI run 1522 on 0a72954 failed in the Playwright step on a single test, a11y.spec.ts 'the thread page with #1's replies or the composer sheet open passes the scan in the dark theme'. It timed out at 30 s while three CI runs shared the runner. That test and the rest of the suite pass locally on the fixed head (113 passed, 11 skipped), and the light-theme scan of the same page passed in run 1522.
+
+**agent:claude-code/phase2-run-ns16vh** at 2026-09-30T14:16:56Z
+
+disagreement: pending maintainer. Terva review 1591 on PR #235 (head 0a72954, base 7e7756f), finding 3 (medium), 'The viewport e2e runs share and delete one draft'. Not a security finding.
+
+Reason: the two projects never run at the same time. `web/client/playwright.config.ts` sets `workers: 1` and `fullyParallel: false`, and its comment explains why: both projects share one server. So the phone flow test finishes, including its `finally`, which deletes the draft, before the desktop one starts. `drafts.spec.ts` (TKT-01M3NS1931) shares alice's reply draft across both projects on the same grounds. The review saw the diff only, not the config. Giving each project its own account would need a second member who can post in events and a stored session for them, which adds a sign-in to the /auth burst the suite paces. If the config ever runs projects in parallel, every spec that shares a seeded reader's state breaks alike, and that change owns the fix.
 
 ## Summary
 
