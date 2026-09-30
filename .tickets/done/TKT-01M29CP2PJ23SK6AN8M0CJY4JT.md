@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T00:06:40Z
+updated_at: 2026-09-30T00:07:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -176,6 +176,10 @@ Terva review 1504 on PR #176 (head 1a463d7, base 4d793b2, run 3b328c27, Actions 
 **agent:claude-code/phase2-run-cp2pj** at 2026-09-30T00:06:40Z
 
 Terva review 1506 on PR #176 (head 607e96a, base 4d793b2, run 4f03568f, Actions run 1124): it marks both findings of 1504 resolved and raises three, all accepted and fixed. (1) high, 'Return the receipt for a reporter's repeat after auto-hide'. Under the lock, a flag on a post that is not shown now asks HasOpenFlag. A reporter whose flag is still open gets the same receipt, so a repeat does not reveal the hide. Anyone else still gets conflict. Tests: TestAutoHideAtThreshold and TestReporterSeesOnlyTheReceipt, where a repeat after the hide is byte-identical. (2) medium, 'Use a recoverable context when reopening flags after a failed restore'. The reopen runs on context.WithoutCancel(ctx) with a 10 s timeout. Test: the subtest 'restore cancelled at its append' of TestSweepCannotReHideDuringRestore. (3) medium, 'Respect archival when resolving an already-confirmed hide'. ConfirmHide checks archival before either branch. Test: TestConfirmHideRefusesAnArchivedThread. Mutations: reverting each fix fails the named test. docs/07 and docs/08 are updated.
+
+**agent:claude-code/phase2-run-cp2pj** at 2026-09-30T00:07:47Z
+
+Terva review of PR #176 at head 39721fc, base 4d793b2, is clean: run c2895203 (Actions run 1129), request ready-review-39721fc, no findings, terva-review/code success. It marks all three findings of review 1506 resolved. Every commit after 39721fc touches only .tickets/, so the result is carried to the ticket-only head.
 
 ## Summary
 
