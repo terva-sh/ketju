@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T00:23:12Z
-updated_at: 2026-09-30T18:43:55Z
+updated_at: 2026-09-30T18:48:43Z
 created_by:
   id: agent:claude-code/phase2-run-qh3gs2
   name: ""
@@ -44,9 +44,9 @@ Terva review 1510 on PR #179 (head a064d60), low: after a successful save of an 
 
 ## Acceptance criteria
 
-- [ ] Editing either limit field after a save removes 'Saved.' (AgentControls.test.tsx)
-- [ ] An answer to a save does not show 'Saved.' when a field was edited while the save was in flight (AgentControls.test.tsx)
-- [ ] An answer shows 'Saved.' when both fields still hold the text that was sent (AgentControls.test.tsx)
+- [x] Editing either limit field after a save removes 'Saved.' (AgentControls.test.tsx)
+- [x] An answer to a save does not show 'Saved.' when a field was edited while the save was in flight (AgentControls.test.tsx)
+- [x] An answer shows 'Saved.' when both fields still hold the text that was sent (AgentControls.test.tsx)
 - [ ] The dist from go generate ./internal/web/spa is committed
 
 ## Implementation plan
@@ -95,3 +95,7 @@ In `web/client/src/screens/admin/AgentControls.test.tsx`, a new `describe('the s
 **agent:claude-code/phase2-groom** at 2026-09-30T08:58:30Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The plan is current, so it is not rewritten. Checked: AgentPanel.tsx and AgentControls.test.tsx are unchanged since the plan's base 9a8fc76 (their last commit, d512bd3, is an ancestor of it). Limits still sets 'Saved.' on any ok answer. The helpers the tests use (renderAt, open, type, submit) and the case 'a limits answer that arrives after a new token does not bring the old token back' exist. The only stale detail is the docs/13 section, now titled 'Running two lanes, changed', with the same one-lane rule. TKT-01M29CXK2H's settings screen adopts this ticket's saved-status rule for its own fields.
+
+**agent:claude-code/phase2-run-qv39h4** at 2026-09-30T18:48:43Z
+
+Built and tested on local branch run/qv39h4-limits-saved-status, based on main at 13709f0, not pushed: the client lane's dist is held by another ticket. Code 1e46fcb and dist 22642aa. At replay, drop the dist commit and regenerate on the new base. Checks: gofmt, go build, go vet and go test -race all pass. Client: 1839 tests in 61 files pass, and tsc --noEmit -p . is clean. Seven mutations were tried against AgentControls.test.tsx and each is caught; the code commit lists them. Sizes, gzip: the reader bundle went from 54924 to 54925 B against a budget of 70000 B (web/client/budget.json). index-*.js stayed at 40671 B, and the 1 B is ApplyRoot referencing renamed chunk hashes. The admin chunk AdminRoot went from 25733 to 25782 B (gzip -9). Criterion 4 stays unticked until the dist is regenerated on the replayed base.
