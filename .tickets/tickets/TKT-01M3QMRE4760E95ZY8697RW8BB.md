@@ -23,12 +23,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T01:44:28Z
+updated_at: 2026-09-30T08:58:23Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -68,7 +68,7 @@ Tests: the dialog's validation and the badge text. `TestTheAdminBundleIsSeparate
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 43a844d. The server half is merged: TKT-01M29CP2QK (Implement user suspension from the moderator tools), PR #172, on the lifecycle from TKT-01M29CKRFS. The screen is TKT-01M29CXK1X's `UsersScreen`, merged.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 43a844d. Refreshed 2026-09-30 against main at 5124209. The server half is merged: TKT-01M29CP2QK (Implement user suspension from the moderator tools), PR #172, on the lifecycle from TKT-01M29CKRFS. The screen is TKT-01M29CXK1X's `UsersScreen`, merged, with TKT-01M3QH3GS2's agent controls (PR #179).
 
 ### Settled in grooming
 
@@ -95,6 +95,20 @@ Engineering choices made here, each with the alternative that lost:
 - **One new file per control group.** The controls are `screens/admin/SuspensionPanel.tsx`, which holds the status line, the suspend form, unsuspend, hide and restore. `UserDetail` gains one import, a `refetch` helper and one element. TKT-01M3QH3GS2 (agent controls, PR #179) and TKT-01M3P0CYR3 (rename control) also change `UserDetail`, in `AgentPanel.tsx` and `RenameControl.tsx`. Adding the controls inline in `UserDetail` lost because of the merge conflicts with those two.
 - **Every answer refetches the detail and asks for the list again**, success or failure (Terva review 1516 on PR #181, finding 2). The routes answer 204 with no detail. A failure can also leave the account changed: a suspension can commit before its hide fails, and after that the list row would still say `active`. Two alternatives lost. Patching the detail locally would guess at what the server did. Reloading the list only when the refetched detail differs from the old one lost: a missed change costs more than one extra list request after a refusal.
 - **The status line lives in the panel, not in the facts list.** `UserDetail`'s `<dd data-status>` stays as it is. The panel draws its own line under the facts, so the other two tickets' hunks are left alone.
+
+Added in the 2026-09-30 refresh:
+- **Account actions keep their role gates.** The maintainer decided on 2026-09-30 that thread moderation follows the forum grant, and that "Admin screens and account actions keep their role gates" (docs/08 "Decided 2026-09-30", on PR #208's branch). TKT-01M3RQP0TG names suspension among them. A member who holds `moderate` in a forum through a group works that forum's queue, but is refused the users screen (`staffGate`, and `isStaff` in `sections.ts`) and every suspension route. `mayAct` mirrors `mayActOn`, which reads the role, and never the forum grant.
+
+### What changed since the plan was written
+
+Read from main at 5124209:
+- **TKT-01M3QH3GS2 is done** (PR #179). `UserDetail` in `screens/admin/UsersScreen.tsx` has the `update` helper, the `shown` ref, `admin-detail-head` and `AgentPanel`. Step 3's "if TKT-01M3QH3GS2 has merged" is now simply true: `refetch` sits beside `update`.
+- **`dto.AdminUserDetail` still has no suspension** (`internal/dto/admin.go`: `user`, `groups`, `identities`, `sessions`, `agent`), and `adminDetail` (`internal/service/users/admin.go`) sets none. Step 1 stands. `dbq.User` has `StatusReason` and `StatusUntil`.
+- **The server symbols the answers depend on are as the plan names them**: `mayActOn` and `perm.ChangeStatusID` in `internal/service/account/lifecycle.go`; `s.hide` in `account/suspension.go`; `threads.ErrSomeThreadsUnavailable` and `eachAuthorThread` in `internal/service/threads/suspension.go`; `perm.ErrBadTransition`, `perm.ErrLastAdmin` and `perm.ErrAnonymized` mapped to `conflict` in `internal/problem/domain.go`. The invariant tests named below exist.
+- **The docs/13 section the settled item cites is now "Running two lanes, changed"**, and it says the same thing: only one lane at a time may have an open PR that changes the committed dist.
+- **Two other open tickets change the same screen.** TKT-01M3P0CYR3 (rename control) moves the selected account into the address as `?user={handle}`, and TKT-01M3QV39H4 changes `AgentPanel.tsx`. Neither touches `SuspensionPanel.tsx`, and the lane rule serializes them. If the rename control lands first, a link to `/admin/users?user={handle}` opens the account the panel is on.
+- **TKT-01M3R10VP3** (Take the per-post flag lock in a suspension's bulk hide) changes how the server's hide takes its locks. It does not change the routes, their codes or their answers, so the panel's words are unaffected.
+- The newest migration is 0017. This ticket needs none.
 
 ### Approach
 
@@ -128,7 +142,7 @@ Engineering choices made here, each with the alternative that lost:
 3. **`screens/admin/UsersScreen.tsx`**:
    - Import `SuspensionPanel`.
    - In `UserDetail`, add `const refetch = async () => { try { const next = await apiGet<AdminUserDetail>(url); setFresh(next); return next; } catch (err) { if (isAbort(err)) throw err; return null; } };` and render `<SuspensionPanel d={d} url={url} refetch={refetch} onListChanged={onRoleChanged} />` directly after the facts `</dl>`.
-   - Nothing else in the file changes. If TKT-01M3QH3GS2 has merged, keep its `update` helper and `admin-detail-head`. `refetch` sits beside them.
+   - Nothing else in the file changes. Keep TKT-01M3QH3GS2's `update` helper, `shown` ref and `admin-detail-head`. `refetch` sits beside `update`.
 4. **CSS** in `screens/admin/admin.css`: `.admin-suspension` for the status line and the form, using the existing `admin-*` classes and tokens.
 5. Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. `npm run build` runs the budget, and the admin chunk is outside `threadViewGzipBytes`.
 
@@ -148,6 +162,7 @@ Engineering choices made here, each with the alternative that lost:
   - `the status line`: "Suspended until 2026-10-07 14:00" and "Reason: …" for a detail with `suspension`, "Suspended until lifted" for `until: null`. A reason holding `<b>` is shown as text.
   - `a moderator acts on members only`: a moderator sees the controls on a member, and none on a moderator, an admin, or their own account.
   - `an admin acts on anyone but themselves`: an admin sees the controls on another admin, and none on their own account.
+  - `no controls for a moderator by grant`: a viewer whose role is `member`, with a queue in `/me`, sees no controls on any account. The server's `staffGate` refuses them the screen too, and account actions keep their role gates (2026-09-30).
   - `no controls on a pending or anonymized account`: none for status `pending` or a `deleted-user-7` handle.
   - `a hide that stopped`: a suspend with `hide_posts`, from an `active` detail, answers 503 `unavailable`, and the refetched detail is `suspended`. The finish words show only after the refetch has resolved, Hide their posts is offered, and the list's row says `suspended`. The same holds for a 500 `internal`.
   - `already suspended is not a partial hide` (review 1523): a suspend with `hide_posts` answers 409, and the refetched detail is `suspended`, as when another moderator got there first. The already-suspended words show, with no finish words.
@@ -172,6 +187,8 @@ Engineering choices made here, each with the alternative that lost:
 - Deactivating and anonymizing from this screen: TKT-01M29CKRFS's routes, with no control ticket.
 - Suspending from the moderator queue: TKT-01M29CRJ4E links here.
 - The agent controls and the rename control: TKT-01M3QH3GS2 and TKT-01M3P0CYR3.
+- The per-post flag lock in the server's bulk hide: TKT-01M3R10VP3.
+- Who may lock, pin, move and set slow mode by forum grant: TKT-01M3RQP0TG. Suspension is not among them.
 - A count of hidden or restored posts. The routes answer 204, and the count is in the admin-only audit row.
 
 ## Notes
@@ -191,3 +208,7 @@ Terva review 1520 on PR #181 (head 3395e26), one medium finding, accepted. The f
 **agent:claude-code/phase2-groom** at 2026-09-30T01:18:10Z
 
 Terva review 1523 on PR #181 (head f0c1913), one medium finding, accepted. A 409 can mean the account was already suspended, and the refreshed status is then suspended, so status alone no longer picks the finish-the-hide words. Read from main: every refusal before perm.ChangeStatusID commits leaves the account unchanged (validation-failed, not-found, forbidden, and conflict from ErrBadTransition, ErrLastAdmin or ErrAnonymized). The hide step after the commit answers 503 unavailable (threads.ErrSomeThreadsUnavailable) or 500 internal (an uncoded append failure). Neither code is unique to the hide: db.ErrBusy and context.DeadlineExceeded are also unavailable before the commit. So the finish words need both signs, a 503 or 500 and a change from not suspended to suspended, and they are worded to be true whichever step failed. A 409 with the account now suspended gets its own already-suspended words. New tests: 'already suspended is not a partial hide' and 'a busy database is not a partial hide'. Criterion 8 is rewritten.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T08:58:23Z
+
+Plan refreshed against main at 5124209 on 2026-09-30. The plan is current in substance. The Settled items, the Approach and the criteria stand as written. Changes: (1) The maintainer's decision of 2026-09-30 is added to Settled: account actions keep their role gates, so a member who moderates through a group gets no suspension controls, and mayAct reads the role only. The test 'no controls for a moderator by grant' is added. (2) TKT-01M3QH3GS2 has merged, so step 3 no longer says 'if'. refetch sits beside UserDetail's update helper. (3) Checked on main: AdminUserDetail still has no suspension, so the server step stands. Every server symbol and invariant test the plan names exists. (4) The docs/13 section the Settled item cites is now titled 'Running two lanes, changed', with the same rule. (5) TKT-01M3P0CYR3 (rename, ?user= in the address), TKT-01M3QV39H4 (AgentPanel) and TKT-01M3R10VP3 (the server's hide lock) are noted. None changes this panel's routes, codes or files.

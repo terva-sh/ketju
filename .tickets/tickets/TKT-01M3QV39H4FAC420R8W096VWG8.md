@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T00:23:12Z
-updated_at: 2026-09-30T04:49:40Z
+updated_at: 2026-09-30T08:58:30Z
 created_by:
   id: agent:claude-code/phase2-run-qh3gs2
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -77,3 +77,9 @@ In `web/client/src/screens/admin/AgentControls.test.tsx`, a new `describe('the s
 
 - Server changes to the limits route (TKT-01M29P9RSW, done).
 - Clearing the error line on input (see Settled).
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-30T08:58:30Z
+
+Plan refreshed against main at 5124209 on 2026-09-30. The plan is current, so it is not rewritten. Checked: AgentPanel.tsx and AgentControls.test.tsx are unchanged since the plan's base 9a8fc76 (their last commit, d512bd3, is an ancestor of it). Limits still sets 'Saved.' on any ok answer. The helpers the tests use (renderAt, open, type, submit) and the case 'a limits answer that arrives after a new token does not bring the old token back' exist. The only stale detail is the docs/13 section, now titled 'Running two lanes, changed', with the same one-lane rule. TKT-01M29CXK2H's settings screen adopts this ticket's saved-status rule for its own fields.

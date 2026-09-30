@@ -22,12 +22,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:21:56Z
-updated_at: 2026-09-30T04:49:40Z
+updated_at: 2026-09-30T08:58:52Z
 created_by:
   id: agent:claude-code/phase2-run-cxjz9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -116,3 +116,7 @@ The description needs three corrections, read from main:
 **agent:claude-code/phase2-groom** at 2026-09-30T04:04:40Z
 
 Groomed 2026-09-30 (TKT-01M3M9RR26). Settled as engineering choices in the maintainer's absence, because docs/03 'Hard redaction' answers them: redacted is served to every reader (the tombstone is the same for everyone, moderators included), removal is unchanged beside it, and the words are 'Post removed permanently'. Corrections to the description: the history DTO is dto.PostHistory, not dto.HistoryPost, and internal/dto forbids omitempty, so the field is a plain bool on every post. The only restore the client offers today is the moderator queue's Keep, which the plan withdraws for a redacted post.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T08:58:52Z
+
+Plan refreshed against main at 5124209 on 2026-09-30. The plan is current, so it is not rewritten. Checked on main: dto.Post and dto.PostHistory still have no redacted field. docs/07 'Removed posts' still says no response field tells a redaction from a hide. Every post DTO is still built in one place, postsDeps in view.go (the page, the single post, replies, /users/{handle}/posts through userposts.go, and the queue through posts.go). removal.tsx, QueueScreen's postState and stateWords, and data-keep-refused are as the plan names them. Landed since, with no change to the plan: the flag menu (PR #202). mayFlag already offers no flag on a deleted post, and a redacted post is deleted, so neither PostMore nor FlagDialog changes. The post source route (PR #205) already answers a redacted post with conflict, held by internal/service/threads/source_test.go. The thread page still has no edit, delete or restore controls. Members who moderate through a group see the queue (moderatesGate) and get the same words. TKT-01M29CP2Q3 (post history view) now depends on this ticket for PostHistory.redacted. The docs/13 section the Settled item cites is now titled 'Running two lanes, changed', with the same rule.
