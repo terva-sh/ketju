@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T18:42:45Z
+updated_at: 2026-09-30T19:07:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -75,7 +75,7 @@ The diff is computed rather than stored, which costs nothing because both revisi
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a. Refreshed 2026-09-30 against main at 5124209.
+Groomed 2026-09-29 against main at 7af2c5a. Refreshed 2026-09-30 against main at 5124209. Revised at claim on 2026-09-30 against main at 13709f0.
 
 ### Settled in grooming
 
@@ -93,55 +93,72 @@ Added in the 2026-09-30 refresh:
 - **The words for a redacted post** follow TKT-01M3R1WPNS's: "This post was removed permanently." A moderator's list adds "Its revisions are listed without their content." and offers no comparison, because every source is empty.
 - **The screen is reader code and counts against the 60000 B gzip budget** (docs/07 "Preact client"). `web/client/scripts/bundle.mjs` counts every chunk a reader can load except `src/screens/admin/`, lazy ones included. The reader total on main at 5124209 is 47415 B.
 
-### What changed since the plan was written
+### Revised at claim, 2026-09-30, against main at 13709f0
 
-Read from main at 5124209:
-- The endpoint, `revealRemoved` and the author's admission to a hidden post's history are all on main (TKT-01M29CKRJ9, done). The settled item that calls this "not this ticket's work" still holds.
-- `threadlog.Revision` (`internal/store/threadlog/reader.go`) still has no `Grace`, and `Reader.History` does not read `EditBody.Grace`. Step 1 stands.
-- The phone post menu `PostMore` (`web/client/src/components/thread/PostMore.tsx`, PR #202) links to `…/history` as the desktop footer does. Neither needs a change.
-- `GET …/posts/{ordinal}/source` (PR #205) is for editing, not history. This screen does not use it.
-- The test named `TestHistoryOfARemovedPost` in the earlier plan does not exist. The removed-post rule is held by `TestTombstoneFromEveryEndpoint` and `TestHistory` (`internal/web/api/posts_test.go`), `TestHiddenPostsAuthorReadsHistoryWithSettingOff` (`tombstones_test.go`) and `TestRedactedHistoryHasNoContent` (`redact_test.go`).
+Everything under "Settled in grooming" above holds and is built to. What changed since the 2026-09-30 refresh, and how it is taken:
+
+- **TKT-01M3R1WPNS is done** (#228, #237). Its words for a redacted post are `removedText`'s in `components/thread/removal.tsx`, "Post removed permanently", on the tombstone, the popover and the moderator queue. The settled item says the words "follow TKT-01M3R1WPNS's", so the screen calls `removedText` rather than repeating the refresh's draft sentence "This post was removed permanently.": a redacted post reads the same everywhere. A moderator's list reads "Post removed permanently. Its revisions are listed without their content." The orchestrator's brief for this run says the same.
+- **Post times are absolute** (maintainer decision of 2026-10-01): revision times use `PostTime`.
+- **The budget is 70000 B**, raised by the maintainer on 2026-09-30 (docs/08 "Decided 2026-09-30"). The reader total on main at 13709f0 is 54924 B. The criterion's 47415 B is the refresh's number; the PR records the total against both.
+- **History access for a removed post follows `revealRemoved`** (TKT-01M29CKRJ9), unchanged. `TestHistoryForAForumModeratorByGrant` is added, as planned.
 
 ### Approach
 
-1. **Server.** `threadlog.Revision` gains `Grace bool`, set from `EditBody.Grace` in `Reader.History`. A redacted edit keeps `Grace` (`blankEdit` in `redact.go`), so this holds after a redaction too. `dto.PostRevision` gains `Grace bool` with `json:"grace"`, with no `omitempty` (the `internal/dto` package rule). `History` in `internal/service/threads/posts.go` copies it. Regenerate the goldens (`go test ./internal/dto -update`, `go test ./internal/web/api -update`), then update `web/client/src/api/dto.ts`. This is the only server change.
-2. **Word diff** in `web/client/src/history/wordDiff.ts`. Tokenize each source into words and whitespace runs, keeping punctuation attached to its word. Run Myers O(ND) over the two token arrays. The output is a list of `{op: 'same'|'ins'|'del', text}` runs. No dependency is added. The `diff` npm package lost: it would add to the reader bundle and to dependency review, for about 80 lines of code. Sources are capped at 64 KB (docs/07), so N+M is bounded.
-3. **Screen** `web/client/src/screens/PostHistory.tsx`, rendered by `ThreadScreen` in place of `PostHistoryPending`.
-   - It fetches `GET /api/v1/threads/{id}/posts/{ordinal}/history` with `useResource` and `apiGet`.
-   - It lists revisions newest first. Each row shows the revision number, the actor through `Avatar` and `RoleBadge`, the time through `PostTime`, the reason, and a "grace edit" note where `grace` is set.
-   - Two radio columns choose the older and the newer revision. The default compares the newest with the one before it.
-   - The diff renders as `<ins>` and `<del>` inside a `pre-wrap` block. The colours go in `thread.css`, for both themes.
-   - Refusals render through `ErrorPanel`.
-   - `deleted: true` with no revisions renders a notice. The words are "This post was removed permanently." when `redacted` is set, and "This post was removed. Its history is not shown." otherwise.
-   - A `redacted` history with revisions (a moderator's) lists them without the comparison, under "This post was removed permanently. Its revisions are listed without their content."
-   - A link goes back to the post (`permalink`).
-   - The screen is a static import in `ThreadScreen`. A lazy chunk lost: `bundle.mjs` counts it either way, and it would add a round trip to a screen reached from a link.
-4. Regenerate the dist with `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Run `npm --prefix web/client run budget` and record the reader total in the PR against 47415 B.
+1. **Server.** `threadlog.Revision.Grace`, read from `EditBody.Grace` in `Reader.History`. `dto.PostRevision.Grace` as `"grace"`, no `omitempty`, copied in `History`. The dto fixture gains the author's grace revision, because `TestEveryFieldIsPopulatedSomewhere` refuses a field no fixture sets. `dto.ts` follows. Nothing else on the server changes.
+2. **`web/client/src/history/wordDiff.ts`.** Tokens are whitespace runs and non-whitespace runs, so punctuation stays with its word. The common head and tail are set aside, then Myers O(ND) runs with its trace kept per edit count. Whitespace kept between a replacement and the next change is folded into both sides, so a rewritten phrase reads as one deletion and one insertion. The search stops at 1000 edits: past that the middle shows as one deletion and one insertion, which is still a true account. That bounds memory at about a million ints and time well under the 64 KB test's half second. No dependency is added.
+3. **`web/client/src/screens/PostHistory.tsx`**, rendered by `ThreadScreen` in place of `PostHistoryPending`.
+   - Revisions are listed newest first, each with a From and a To radio. The default is the newest against the one before it. Any two can be chosen, and the same one twice says to choose two.
+   - Each row shows Avatar, name, RoleBadge, `PostTime`, the reason, and a grace note.
+   - The diff renders as `<del>` and `<ins>` in a pre-wrap block, with a key sentence. Sources are text, never markup.
+   - Refusals go through ErrorPanel.
+   - A withheld history says "Post removed. Its history is not shown.", or `removedText`'s words when redacted.
+   - A moderator's removed-post history is compared as usual, under a note that the post is removed.
+   - The CSS goes in `thread.css` and reuses the themed soft tokens, so no token is added outside the mockups. The chosen row takes an accent edge, not a fill, so the muted role badge keeps its contrast. On a phone the radios' labels reach 44 px.
+4. **Static, not lazy.** Measured both ways with `bundle.mjs`. Static: 56686 B, +1762 B over main. Lazy, with its CSS split out: 57551 B. `bundle.mjs` counts reader lazy chunks, and two gzip streams compress worse than one.
+5. **Regenerate the dist** after replaying onto the main of the day. This lane waits for the dist.
 
 ### Tests
 
-- `wordDiff.test.ts`: one word changed inside a long line gives exactly one `del` and one `ins` of that word, with everything else `same`. That shows the diff works word by word, not line by line. Also: pure insertion, pure deletion, identical inputs giving one `same` run, whitespace-only changes, and two 64 KB sources that finish under a stated time.
+- `wordDiff.test.ts`:
+  - one word in a 60-word line gives exactly one `del` and one `ins`;
+  - punctuation stays with its word;
+  - pure insertion and pure deletion;
+  - identical and empty inputs;
+  - a whitespace-only change;
+  - a rewritten phrase folds into one deletion and one insertion;
+  - empty sides;
+  - shortest edit script against an LCS table, 300 random cases;
+  - the 1000-edit cap;
+  - two 64 KB sources, scattered edits and a rewrite, each under 500 ms.
 - `PostHistory.test.tsx`:
-  - It lists revisions with actor, time and reason.
-  - Comparing revision 1 with revision 3 shows their diff.
-  - A grace revision carries its note.
-  - `unauthenticated` and `forbidden` render through `ErrorPanel`.
-  - `deleted: true` with no revisions renders the removed notice.
-  - `deleted: true, redacted: true` with no revisions renders "removed permanently".
-  - A moderator's `redacted: true` history lists its revisions and offers no comparison.
-- `ThreadPage.test.tsx` "the post history route": the placeholder assertions are replaced by the screen's, and `/t/{id}/{old-slug}/27/history` is corrected to the current slug.
-- Server: `TestHistoryListsGraceRevisions` (`internal/web/api/posts_test.go`). After a grace edit and a later edit, history has three revisions and only the second has `grace: true`. The page shows the edited marker from the third. A reader-level case in `internal/store/threadlog` checks that `Revision.Grace` is read from the body.
-- Server: `TestHistoryForAForumModeratorByGrant` (`internal/web/api/posts_test.go`). A member whose group holds `moderate` in the thread's forum reads the history with `public_edit_history` off. The same member is `forbidden` in a forum where the group holds no grant. `TestHistory` covers moderators by role only.
-- The removed-post rule is unchanged, and these stay green: `TestTombstoneFromEveryEndpoint`, `TestHistory`, `TestHiddenPostsAuthorReadsHistoryWithSettingOff` and `TestRedactedHistoryHasNoContent`.
-- The reader bundle stays within 60000 B (`npm run build`).
+  - newest-first list with actor, role, absolute time and reason;
+  - the default diff;
+  - any two compared;
+  - a grace note on the grace revision only;
+  - a single revision offers no comparison;
+  - `unauthenticated` and `forbidden` through ErrorPanel;
+  - a withheld removed post;
+  - a redacted post with none;
+  - a moderator's redacted list with no comparison;
+  - a moderator's removed post compared;
+  - sources shown as text.
+- `ThreadPage.test.tsx`: the route renders the screen, not the placeholder, and `/t/{id}/old-slug/27/history` is corrected. `view.test.tsx`'s stale-slug stub now answers the history endpoint.
+- `e2e/post-history.spec.ts`, at 390 px and 1440 px on alice's stored session. A thread in events is edited twice. A stale slug lands on the history. The default and chosen diffs render, and the link goes back to the post. One axe scan per test, in the light and dark themes.
+- Server:
+  - `TestHistoryListsGraceRevisions`: a grace edit, then an edit past the window, give three revisions with only the second marked, and `edited_at` is the third's;
+  - `TestHistoryForAForumModeratorByGrant`;
+  - the reader-level grace case in `TestHistoryIsBoundedAndOrdered`;
+  - these stay green: `TestTombstoneFromEveryEndpoint`, `TestHistory`, `TestHiddenPostsAuthorReadsHistoryWithSettingOff` and `TestRedactedHistoryHasNoContent`.
 
 ### Out of scope
 
-- Who may read a hidden post's history beyond moderators: TKT-01M29CKRJ9, done.
-- Writing grace edits: TKT-01M29CKRHS, done. A moderator's edit shown in history as the moderator's: TKT-01M29CRJ5J, done. History already names each revision's actor.
-- The `redacted` field itself: TKT-01M3R1WPNS.
-- Who holds `moderate` by grant for the thread routes: TKT-01M3RQP0TG. This screen needs no change for it.
-- A server-computed diff for the non-JS client: Phase 5.
+Unchanged from the refresh:
+- who may read a hidden post's history (TKT-01M29CKRJ9, done);
+- writing grace edits (TKT-01M29CKRHS, done);
+- moderator edits in history (TKT-01M29CRJ5J, done);
+- the `redacted` field (TKT-01M3R1WPNS, done);
+- grant-based thread moderation (TKT-01M3RQP0TG);
+- a server-computed diff for the non-JS client (Phase 5).
 
 ## Notes
 
