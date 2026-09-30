@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T20:56:17Z
+updated_at: 2026-09-30T21:00:58Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -201,6 +201,15 @@ Terva review 1619 (run 1617) on PR #248, head b52b599, base 9b142b7. One medium 
 - Tests: "takes one press at a time while a mark is out" now asserts that the page stays on the thread and asks for no list until the second mark lands, and fails when the guard is removed. "says a later mark is still out when an earlier one settles" covers `marking`.
 
 Reader bundle after the fix: 58075 B gzip of 70000 B, up 872 B from 57203 B.
+
+**agent:claude-code/phase2-run-kfffjr** at 2026-09-30T21:00:58Z
+
+Terva review 1622 (run 1619) on PR #248, head edf2fbc, base 9b142b7. It marks review 1619's finding resolved and raises one medium finding, "Do not leave post history when an earlier mark finishes". Accepted and fixed:
+- The return check took every path under `/t/{id}/` for the thread, so a mark that answered after the reader had opened a post's history replaced that screen with the list.
+- `markAndReturn` now returns only while the reader is on the thread's posts (`onThreadBody`).
+- The test "leaves a reader who went to %s where they are" covers a post's history and another screen, and fails with the old check.
+
+Reader bundle: 58080 B gzip of 70000 B, up 877 B from 57203 B.
 
 ## Summary
 
