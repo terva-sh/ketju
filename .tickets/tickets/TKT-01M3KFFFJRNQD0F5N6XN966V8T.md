@@ -27,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T18:47:49Z
+updated_at: 2026-09-30T19:06:32Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -60,10 +60,10 @@ docs/06 "Read tracking", docs/07 "Read position".
 
 ## Acceptance criteria
 
-- [ ] markUnread flushes the beacon and waits for every PUT in flight before its DELETE, sends no PUT for the thread until the DELETE answers, lowers the floor to the answer, and runs two marks of one thread in call order (the restored readTracker.test.ts markUnread tests)
-- [ ] A page requested before the DELETE answered does not raise the floor and one requested after it does, and reads made while a DELETE is pending survive a failed DELETE and are sent after a retried mark succeeds (keeps what was read during a failed DELETE for the next mark)
+- [x] markUnread flushes the beacon and waits for every PUT in flight before its DELETE, sends no PUT for the thread until the DELETE answers, lowers the floor to the answer, and runs two marks of one thread in call order (the restored readTracker.test.ts markUnread tests)
+- [x] A page requested before the DELETE answered does not raise the floor and one requested after it does, and reads made while a DELETE is pending survive a failed DELETE and are sent after a retried mark succeeds (keeps what was read during a failed DELETE for the next mark)
 - [ ] The dist is rebuilt with go generate ./internal/web/spa and the thread-view bundle stays within the 60000 B gzip budget
-- [ ] A whole-thread Mark unread action (toolbar and phone more menu) and an Unread from here action on each post (footer on desktop, PostMore on a phone) mark the thread unread, then return to the thread list; e2e/read-tracking.spec.ts covers both at 390 px and 1440 px, the server's position stays lowered, and docs/06 Mobile lists unread from here under the post's more control
+- [x] A whole-thread Mark unread action (toolbar and phone more menu) and an Unread from here action on each post (footer on desktop, PostMore on a phone) mark the thread unread, then return to the thread list; e2e/read-tracking.spec.ts covers both at 390 px and 1440 px, the server's position stays lowered, and docs/06 Mobile lists unread from here under the post's more control
 
 ## Implementation plan
 
@@ -170,3 +170,20 @@ Maintainer decision, 2026-09-29, relayed by the Phase 2 grooming coordinator (TK
 **agent:claude-code/phase2-groom** at 2026-09-30T08:51:44Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. Changed: line references (docs/07 Read position is now :751-784 and POST /t/{id}/unread :1009; MarkUnread is viewerstate.go:101; Post.tsx's footer is :83-129; trackPosts :175; the loads counter :190; forgetThread :194). Step 4's docs/06 Read tracking paragraph has landed (docs/06-thread-views.md:64-68), so the step now only adds 'unread from here' to docs/06 Mobile's list under 'more'. The bundle figure is now 47415 B of 60000 B (after PR #202), not 38171 B. Settled as engineering choices, recorded in the plan with the alternatives that lost: on a phone, Unread from here is an item in PostMore (PR #202), passed as an optional onUnread like onFlag, because a fourth inline control does not fit at 390 px; it is gated on tracksUnread(), not on actions, which exists only when the reader may reply; ShellAction gains no disabled field, and the whole-thread action ignores a press while its mark is out; after a mark, forgetGets drops the held /api/v1/forums bodies (forum index and thread lists) and refreshViewer refreshes the badge. Criterion 4 now names the spec, both widths, and the docs/06 Mobile change in place of the Read tracking paragraph that is already there. The Settled items are carried with their decisions unchanged; only their line numbers were corrected.
+
+**agent:claude-code/phase2-run-kfffjr** at 2026-09-30T19:06:26Z
+
+Built on a local branch from main at 13709f0, and not pushed yet: the client dist is held by TKT-01M3PTT97X. The branch will be replayed onto origin/main when the dist is free, and the dist regenerated then.
+
+Engineering choices made while building, beyond the plan's settled items:
+
+- **A failed DELETE queues its reads against the unchanged floor as well as carrying them.** The settled review-1149 item says the reads "are not queued against the unchanged floor, where they would be dropped". That is read here as "not only queued there", because queueing is what the removed code did and was the whole defect. Dropping the queue as well would lose a read above the old floor, which a failed mark leaves true. So those reads are carried to the next mark that succeeds and also queued as before. The test "still sends a read past the floor when the DELETE fails" holds the second half, and "keeps what was read during a failed DELETE for the next mark" holds the first.
+- **"The list the reader came from" is `state/lists.ts`.** `ThreadListScreen` records the list address it shows, cursor and sort included, and the thread page goes there when the list is the thread's forum, and to `/f/{forum}` otherwise. Reading the previous history entry lost, because a page cannot see any entry but its current one. Remembering it in `history.state` lost too, because the reader may have paged through the thread since leaving the list.
+- **The thread's history entry is replaced (`route(href, true)`), not pushed.** Otherwise Back reopens the page just marked, which reads the posts on screen again within a second and undoes the mark, as the maintainer's decision says staying would.
+- **A failure** is a `role=alert` paragraph under the thread head for the whole-thread action, or under the post for unread from here, worded as the flag and moderation refusals are. The reader stays and can press again.
+- **Tombstones get no per-post control.** The whole-thread action covers them.
+- **The hold had no test.** A mutation removing it survived the seven restored tests, so "sends no PUT a failed one put back while the mark waits" was added. Every mutation tried is listed in the code commit's message.
+
+Security: the DELETE takes its user from the session (`internal/web/api/viewerstate.go:64`, `internal/service/threads/viewerstate.go:101`), and the client sends no user, so the control cannot move another member's position. No server change was needed.
+
+Figures: the reader bundle is 55740 B gzip of 70000 B, up 816 B from 54924 B. Tests: Vitest 1856 passed; the full Playwright suite passed at 390 px and 1440 px, apart from `e2e/targets.spec.ts`'s list of PostMore items, which now names unread from here and passes. `go test -race ./...`, gofmt, build and vet are clean.
