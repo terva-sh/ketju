@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T08:42:45Z
-updated_at: 2026-09-30T10:08:10Z
+updated_at: 2026-09-30T10:15:29Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -143,6 +143,16 @@ The code matched the groomed plan; it is built as written above, with the Settle
 **agent:claude-code/phase2-groom** at 2026-09-30T09:16:55Z
 
 Planned 2026-09-30 (TKT-01M3M9RR26) against main at a660ae5. Two findings widen the ticket beyond the gate swap, so effort is nearer M than the effort:S label. (1) Service.moderate (lock, unlock, pin, unpin) and SetSlowMode decide from the projection row before writing, so a move landing in between lets a forum moderator act on a thread that has just left their forum. The plan moves the four onto appendDecided and has slow mode decide at a log length. (2) A global pin heads every forum's thread list, so it is not moderation 'there'. As an engineering choice under the security rule, the plan keeps scope global, an unpin of a global pin, and replacing a global pin staff's by role. This keeps global pins as they are today. The maintainer may revisit it; allowing it would let a one-forum moderator put up to 50 threads above every forum's list.
+
+**agent:claude-code/phase2-run-rqp0tg** at 2026-09-30T10:15:29Z
+
+Terva review 1570 (run d206b482, Actions run 1373) on PR 214, head 3e29e32, base 5362311, reported one medium finding: "Recheck the log length before returning a slow-mode conflict". Fixed; it was treated as a security finding.
+
+SetSlowMode admitted the viewer at log length L, then read the thread's current value inside the transaction. A same-value conflict returned before the length check, so a move landing in between was answered from the old forum, as conflict instead of forbidden.
+
+The same mixed timing exists wherever appendDecided's decide refuses from state newer than L. That includes the thread cache's archived flag, and Move's destination read. So the fix is one rule in both places. `stillAt(th, at, err)` answers a refusal made after admission only if the log is still L, and otherwise returns ErrLogMoved, and the request is decided again. Access errors are not passed through it, so a thread hidden from the viewer stays not-found however busy its log is; otherwise, after threadAttempts, it would answer conflict and show that the thread exists.
+
+TestAMoveLandingMidDecisionIsJudged gains a "that changes nothing" variant for each of the six actions. Each is conflict for bob without the move and forbidden for gina with it. Making stillAt a pass-through fails all six variants.
 
 ## Summary
 

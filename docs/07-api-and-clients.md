@@ -342,7 +342,9 @@ threads service then decides the forum: it requires `moderate` in the
 thread's forum as the log stands where the record lands. It projects the
 thread up to the log's length, admits the viewer from that row, and appends
 at that length, so a move landing in between makes the request decide
-again. A moderator of one forum cannot lock or pin a thread that has just
+again. A refusal is answered only if the log is still that length, so a
+`conflict` for an action that would change nothing is never given to a
+viewer a move has just taken the thread from. A moderator of one forum cannot lock or pin a thread that has just
 left it, and of two locks at once the second is `conflict`. A global pin
 stays a moderator's or admin's by role, because it heads the thread list of
 every forum. Each appends one record to the thread log, projects it before answering,
