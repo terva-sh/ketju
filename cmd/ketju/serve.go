@@ -510,7 +510,9 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		Health: health.Handler(health.Options{
 			DB: d, Dir: probe, Quarantined: proj.QuarantinedCount, Logger: log,
 		}),
-		SPA: shell,
+		// A member opening a profile under a handle a rename released is
+		// redirected, as the API redirects (TKT-01M3NRP3W9).
+		SPA: api.ProfileRedirects(userSvc, shell),
 	}, web.Options{
 		Logger:  log,
 		Limits:  web.Limits{Upload: int64(cfg.Limits.AttachmentMB) << 20},

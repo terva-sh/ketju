@@ -85,9 +85,13 @@ func (s *Service) Preview(ctx context.Context, v domain.Viewer, req PreviewReque
 // for the reason html gives (review 392).
 func (s *Service) renderSource(ctx context.Context, th *threadcache.Thread, source string, replyTo *uint32) (render.Result, error) {
 	handles := s.handleMemo(ctx)
+	now := s.now().UnixMilli()
 	rctx := render.Context{
+		// The write-time rule (mentions.go): a handle released by a rename
+		// within 90 days mentions the member it redirects to, and the id
+		// recorded is theirs.
 		Handles: render.HandleFunc(func(h string) (int64, string, bool) {
-			l := handles.lookup(h)
+			l := handles.resolveNow(h, now)
 			return l.ID, l.Canonical, l.Found
 		}),
 		ReplyTo: replyTo,

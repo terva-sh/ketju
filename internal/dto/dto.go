@@ -533,6 +533,19 @@ type Profile struct {
 	Status *string `json:"status"`
 }
 
+// HandleChange is the answer to a handle change (docs/05 "Changing a
+// handle"): PUT /settings/handle, a member's own, and POST
+// /admin/users/{handle}/rename, an admin's. Previous is reserved for 90 days
+// and redirects members to Handle.
+type HandleChange struct {
+	Handle   string `json:"handle"`
+	Previous string `json:"previous"`
+	// NextChangeAt is when the member may next change their own handle,
+	// 30 days after their last own change; null when they may now. An
+	// admin's rename does not move it.
+	NextChangeAt *Millis `json:"next_change_at"`
+}
+
 // UserPosts is GET /users/{handle}/posts (docs/07): a page of an account's
 // posts across the forums the viewer may read, newest first.
 type UserPosts struct {

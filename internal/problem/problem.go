@@ -202,6 +202,14 @@ type Problem struct {
 	// indices, with a code from a closed list, so it echoes nothing the
 	// request sent. It is absent from every other body.
 	Errors []FieldError `json:"errors,omitempty"`
+
+	// AvailableAt is when what was refused becomes possible, in Unix ms,
+	// on a body whose error says so (AvailableAt): a member's second
+	// handle change inside the cooldown is conflict with it
+	// (TKT-01M3NRP3W9). It is an RFC 9457 extension member, a time the
+	// server computed rather than anything the request sent, and absent
+	// from every other body.
+	AvailableAt *int64 `json:"available_at,omitempty"`
 }
 
 // FieldError is one entry in a problem's errors.
@@ -216,12 +224,12 @@ type FieldError struct {
 // typo in an error path should not take down the process, and it must not
 // produce a response with an empty type that a client cannot switch on.
 func Write(w http.ResponseWriter, r *http.Request, c Code) {
-	write(w, r, c, nil)
+	write(w, r, c, nil, nil)
 }
 
-// write is Write with a problem's field errors. Only a validation-failed
-// body carries them.
-func write(w http.ResponseWriter, r *http.Request, c Code, errs []FieldError) {
+// write is Write with a problem's field errors and its available_at. Only a
+// validation-failed body carries field errors.
+func write(w http.ResponseWriter, r *http.Request, c Code, errs []FieldError, availableAt *int64) {
 	e, ok := catalogue[c]
 	if !ok {
 		c = CodeInternal
@@ -244,7 +252,8 @@ func write(w http.ResponseWriter, r *http.Request, c Code, errs []FieldError) {
 	if c != CodeValidationFailed {
 		errs = nil
 	}
-	_ = json.NewEncoder(w).Encode(Problem{Type: c, Title: e.Title, Status: e.Status, Errors: errs})
+	_ = json.NewEncoder(w).Encode(Problem{Type: c, Title: e.Title, Status: e.Status, Errors: errs,
+		AvailableAt: availableAt})
 }
 
 // WriteRetryAfter writes a problem with a Retry-After header.
@@ -287,5 +296,9 @@ func WriteError(ctx context.Context, w http.ResponseWriter, r *http.Request, log
 		WriteRetryAfter(w, r, c, after)
 		return
 	}
-	write(w, r, c, FieldErrorsOf(err))
+	var at *int64
+	if ms, ok := AvailableAtOf(err); ok {
+		at = &ms
+	}
+	write(w, r, c, FieldErrorsOf(err), at)
 }

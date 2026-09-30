@@ -575,7 +575,8 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 // holds: every post it quotes is in the state it was rendered against (a
 // quote of a post deleted since is a tombstone), and every handle it looked up
 // resolves as it did (a handle nobody had is text, and a link once somebody
-// has it). The key names this post's revision and neither of those.
+// has it; a mention follows its member through a handle change, mentions.go).
+// The key names this post's revision and neither of those.
 //
 // A render or a check during which a handle lookup failed is an error: the
 // mention would be drawn as unresolved when it may not be, and that is
@@ -586,8 +587,11 @@ func (s *Service) html(id threadid.ID, p threadlog.Post, rctx render.Context, ha
 }
 
 // htmlDeps is html, also returning what the rendering was drawn against.
+// The post's mentions resolve as of its current revision's time, which the
+// key's revision fixes (mentions.go).
 func (s *Service) htmlDeps(id threadid.ID, p threadlog.Post, rctx render.Context, handles *handleMemo) (string, render.Deps, error) {
 	k := render.Key{Thread: id, Ordinal: p.Ordinal, Revision: uint32(p.Revision)}
+	sc := mentionScope{since: p.RevisionMS}
 	if html, deps, ok := s.Render.GetDeps(k); ok && quotesCurrent(deps.Quotes, rctx.Posts) && handles.current(deps.Handles) {
 		if handles.err != nil {
 			return "", render.Deps{}, fmt.Errorf("threads: checking %s#%d: %w", id, p.Ordinal, handles.err)
@@ -596,7 +600,7 @@ func (s *Service) htmlDeps(id threadid.ID, p threadlog.Post, rctx render.Context
 	}
 	var used []render.HandleLookup
 	rctx.Handles = render.HandleFunc(func(h string) (int64, string, bool) {
-		l := handles.lookup(h)
+		l := handles.resolveAt(h, sc)
 		used = append(used, l)
 		return l.ID, l.Canonical, l.Found
 	})
@@ -653,63 +657,4 @@ func (s *Service) users(ctx context.Context, ids map[int64]bool) (map[int64]dto.
 	}
 	member.FillMissing(out, list...)
 	return out, nil
-}
-
-// handleMemo resolves mentions for one request: each handle once however
-// many posts mention it, with the first failure kept, because the renderer's
-// resolver cannot return one.
-type handleMemo struct {
-	s    *Service
-	ctx  context.Context
-	seen map[string]render.HandleLookup
-	err  error
-}
-
-func (s *Service) handleMemo(ctx context.Context) *handleMemo {
-	return &handleMemo{s: s, ctx: ctx, seen: map[string]render.HandleLookup{}}
-}
-
-func (m *handleMemo) lookup(h string) render.HandleLookup {
-	if l, ok := m.seen[h]; ok {
-		return l
-	}
-	id, canonical, ok, err := m.s.handle(m.ctx, h)
-	if err != nil {
-		if m.err == nil {
-			m.err = err
-		}
-		// Not remembered: a failure is not an answer.
-		return render.HandleLookup{Typed: h}
-	}
-	l := render.HandleLookup{Typed: h, ID: id, Canonical: canonical, Found: ok}
-	m.seen[h] = l
-	return l
-}
-
-// current reports whether every recorded lookup still has the same answer.
-func (m *handleMemo) current(lookups []render.HandleLookup) bool {
-	for _, l := range lookups {
-		if m.lookup(l.Typed) != l {
-			return false
-		}
-	}
-	return true
-}
-
-// handle resolves a mention for the renderer. No such handle is ok=false
-// with no error; anything else is an error, which is not the same answer.
-func (s *Service) handle(ctx context.Context, h string) (id int64, canonical string, ok bool, err error) {
-	var u dbq.User
-	err = s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
-		var err error
-		u, err = dq.GetUserByHandle(ctx, h)
-		return err
-	})
-	switch {
-	case errors.Is(err, sql.ErrNoRows):
-		return 0, "", false, nil
-	case err != nil:
-		return 0, "", false, fmt.Errorf("threads: resolving @%s: %w", h, err)
-	}
-	return u.ID, u.Handle, true, nil
 }

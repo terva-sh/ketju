@@ -195,7 +195,7 @@ func (c *Cache) Put(k Key, body []byte, deps render.Deps) {
 func depsSize(d render.Deps) int64 {
 	n := int64(len(d.Quotes)) * 8
 	for _, h := range d.Handles {
-		n += 32 + int64(len(h.Typed)+len(h.Canonical))
+		n += 32 + int64(len(h.Typed)+len(h.Scope)+len(h.Canonical))
 	}
 	return n
 }

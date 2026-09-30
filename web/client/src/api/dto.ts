@@ -237,6 +237,16 @@ export interface Profile {
   status: string | null;
 }
 
+// HandleChange answers PUT /settings/handle and POST
+// /admin/users/{handle}/rename (internal/dto HandleChange). previous is
+// reserved for 90 days and redirects members to handle. next_change_at is
+// when the member may next change their own handle, null when they may now.
+export interface HandleChange {
+  handle: string;
+  previous: string;
+  next_change_at: Millis | null;
+}
+
 // UserPosts is GET /users/{handle}/posts?cursor=: a page of the account's
 // posts, newest first, across the forums this viewer may read
 // (internal/dto UserPosts). next_cursor is empty at the end.

@@ -160,7 +160,9 @@ the full thread at the same ordinal, so nobody gets lost in a filter.
   correct after a rename; and a mention inside a quotation renders as plain
   text and notifies nobody, because quoting someone repeats their words rather
   than addressing the people they addressed. A handle nobody has is text, not
-  a broken link.
+  a broken link. A handle a rename released within 90 days mentions the
+  member it redirects to, so a mention typed from memory still reaches them
+  (05 "Changing a handle", TKT-01M3NRP3W9).
 - Drafts autosave to the server (`drafts` table, one per user+thread) so a
   half-written reply survives a browser crash and appears on another device.
 - Composer sits at the **bottom** of the page after the posts (Tildes'

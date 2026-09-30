@@ -62,12 +62,13 @@ const (
 )
 
 // The codes a refused handle carries in a validation-failed body's errors,
-// under the field "handle" (docs/07 "Applications"). They are the
-// approval's own, not forms.Codes: a handle is no form's field.
+// under the field "handle" (docs/07 "Applications"). They are identity's,
+// which a handle change answers with too (TKT-01M3NRP3W9), not forms.Codes:
+// a handle is no form's field.
 const (
-	CodeInvalidHandle = "invalid_handle"
-	CodeReserved      = "reserved"
-	CodeTaken         = "taken"
+	CodeInvalidHandle = identity.CodeInvalidHandle
+	CodeReserved      = identity.CodeReserved
+	CodeTaken         = identity.CodeTaken
 )
 
 // The refusals a review adds. Each is coded where it is raised.

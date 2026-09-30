@@ -23,6 +23,8 @@ func (h *handlers) registerLifecycle(mux *http.ServeMux) {
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/posts/hide", staffGate, h.adminHidePosts)
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/posts/restore", staffGate, h.adminRestorePosts)
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/anonymize", adminGate, h.adminAnonymize)
+	// A rename is an admin's (docs/05 "Changing a handle", handle.go).
+	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/rename", adminGate, h.adminRename)
 }
 
 // noContent answers 204 with no-store, or the error.

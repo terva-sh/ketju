@@ -62,7 +62,8 @@ bio_source, timezone, locale, prefs_json, mark_all_read_at (nullable),
 created_at, updated_at, last_seen_at,
 status_reason (default ''), status_until (nullable, Unix ms),
 status_version (default 0),
-anonymized (0|1, default 0)
+anonymized (0|1, default 0),
+handle_changed_at (nullable, Unix ms)
 ```
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.
@@ -86,6 +87,18 @@ handle, display name, avatar, bio, flag and status never change
 `deleted-user-<id>` handle (`users_anonymized_handle`), and no row is inserted
 anonymized. Status changes are decision writes and go through `internal/perm`
 with their audit row (see "audit_log").
+
+**Handle changes** (migration 0016, TKT-01M3NRP3W9, 05 "Changing a handle").
+`handle_changed_at` is when the member last changed their own handle, null
+until they first do; the 30-day cooldown counts from it. Only the member's
+own change writes it, so an admin's rename neither waits for the cooldown
+nor starts it. A column lost to reading `audit_log`, which would tie a rule
+to an operational record's JSON, and to `max(released_at)`, which counts
+admin renames. A rename goes through `identity.Service` alone
+(`RenameUser`, `TestOnlyIdentityRenames`), which writes the new handle, a
+`handle_releases` row for the old one and `user.renamed` in one
+transaction; the old handle in the update's `WHERE` makes two renames that
+race produce one.
 
 **Member ids are never reused.** Thread logs name members by `id`, as the
 author and actor of every record and in a post's mentions, so an id handed to
@@ -155,9 +168,14 @@ Anonymizing writes a row for the old handle with no `user_id`, reserved for
 registration answers "taken" for a handle some row still reserves
 (TKT-01M29CKRFS, Terva review 1448). A row that names no user ties the old
 handle to nothing, so nobody can learn which account it became. Renames
-write the same rows with the user they redirect to (TKT-01M3NRP3W9). Rows are
-kept after their reservation ends, because mentions need to know who held a
-handle when; nothing sweeps them. AUTHORITATIVE.
+write the same rows with the user they redirect to (TKT-01M3NRP3W9): while
+one is in force, a member asking for the old handle's profile is redirected
+to the account, and a new mention of it mentions the account. Anonymizing
+also sets `user_id` to null on the account's earlier rows, so none of its
+old handles redirects to `deleted-user-<id>`. Rows are kept after their
+reservation ends, because mentions need to know who held a handle when: an
+old post's mention is resolved against them (07 "The response cache"), so
+it never moves to the handle's next holder; nothing sweeps them. AUTHORITATIVE.
 
 ### identities
 ```
@@ -448,6 +466,10 @@ transaction that projects the record, with the frame's timestamp as `at`.
   old and new handle included, stay as they are (05 "Account lifecycle").
   An expired suspension's `user.unsuspended` has no actor and `"via":
   "expiry"` (TKT-01M29CP2QK).
+- A handle change (TKT-01M3NRP3W9) writes `user.renamed` against the user,
+  with `"from"` and `"to"`, the old and new handle, in the transaction that
+  renames; the actor is the member for their own change and the admin for
+  theirs.
 - A suspension's posts (TKT-01M29CP2QK, 08 "Suspension") write, against the
   user, after the thread records are appended and projected:
   `user.posts_hidden` with `"suspension"`, the id of the `user.suspended`

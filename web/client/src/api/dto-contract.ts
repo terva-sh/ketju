@@ -30,6 +30,7 @@ import type {
   ForumTree,
   GroupDetail,
   GroupList,
+  HandleChange,
   IssuedCredential,
   Me,
   PermissionGrid,
@@ -80,6 +81,8 @@ import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.jso
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
 import historyMember from '../../../../internal/dto/testdata/golden/history.member.json';
 import historyModerator from '../../../../internal/dto/testdata/golden/history.moderator.json';
+import handleChangeAdmin from '../../../../internal/dto/testdata/golden/handle-change.admin.json';
+import handleChangeMember from '../../../../internal/dto/testdata/golden/handle-change.member.json';
 import issuedCredentialAdmin from '../../../../internal/dto/testdata/golden/issued-credential.admin.json';
 import meAnon from '../../../../internal/dto/testdata/golden/me.anon.json';
 import meMember from '../../../../internal/dto/testdata/golden/me.member.json';
@@ -167,6 +170,8 @@ export const contract = [
   matches<ForumTree>()(forumsMember),
   matches<PostHistory>()(historyMember),
   matches<PostHistory>()(historyModerator),
+  matches<HandleChange>()(handleChangeAdmin),
+  matches<HandleChange>()(handleChangeMember),
   matches<IssuedCredential>()(issuedCredentialAdmin),
   matches<Me>()(meAnon),
   matches<Me>()(meMember),

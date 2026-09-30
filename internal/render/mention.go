@@ -93,8 +93,8 @@ func (n *mentionNode) Dump(source []byte) *ast.NodeDump {
 // The authoritative handle rule is domain.ValidateHandle (docs/04 "users").
 // A new handle may not end in '-', because the loop below reads a trailing
 // '-' as punctuation. A handle given out before that rule may still end in
-// one and cannot be mentioned; renaming it waits for the handle change policy
-// (TKT-01M29BSPEN).
+// one and cannot be mentioned until an admin renames it (TKT-01M3ANX1NF,
+// through the rename of TKT-01M3NRP3W9).
 type mentionParser struct{}
 
 func (mentionParser) Trigger() []byte { return []byte{'@'} }
@@ -257,9 +257,9 @@ func (r *mentionRenderer) renderMention(
 
 	// The link uses the canonical handle from the resolver rather than the text
 	// in the source, so a post written before a rename links to where the person
-	// is now. Cached HTML rendered before the rename still carries the old link
-	// until it is evicted; whether a rename invalidates those renderings belongs
-	// with TKT-01M29BSPEN, which owns the handle change policy.
+	// is now. Which member an old mention names through a handle change, and
+	// how a cached rendering is checked after one, is the resolver owner's
+	// rule: internal/service/threads mentions.go (TKT-01M3NRP3W9).
 	_, _ = w.WriteString(`<a href="/u/`)
 	_, _ = w.Write(util.EscapeHTML([]byte(m.Handle)))
 	_, _ = w.WriteString(`" class="mention">@`)

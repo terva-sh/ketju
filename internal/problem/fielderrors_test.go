@@ -113,3 +113,37 @@ func TestFormErrorsMapToTheirCode(t *testing.T) {
 		t.Error("ErrUnknownAnswer is ErrInvalidAnswers, which maps first")
 	}
 }
+
+// TestAvailableAtOnlyWhenCarried: an error tagged with AvailableAt answers
+// its code with available_at in the body, wrapped or not, and no other body
+// names the member (TKT-01M3NRP3W9).
+func TestAvailableAtOnlyWhenCarried(t *testing.T) {
+	tagged := AvailableAt(CodeConflict, 1760292000000, errors.New("too soon"))
+	for _, c := range []struct {
+		err  error
+		code Code
+		at   bool
+	}{
+		{tagged, CodeConflict, true},
+		{fmt.Errorf("renaming: %w", tagged), CodeConflict, true},
+		{Coded(CodeConflict, errors.New("too soon")), CodeConflict, false},
+		{&forms.Invalid{Kind: forms.ErrInvalidAnswers, Fields: []forms.FieldError{{Field: "handle", Code: "taken"}}},
+			CodeValidationFailed, false},
+	} {
+		rec := httptest.NewRecorder()
+		WriteError(context.Background(), rec, httptest.NewRequest(http.MethodPut, "/", nil), discardLogger(), c.err)
+		var p Problem
+		if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.Type != c.code || (p.AvailableAt != nil) != c.at || (c.at && *p.AvailableAt != 1760292000000) {
+			t.Errorf("%v: %s", c.err, rec.Body)
+		}
+		if !c.at && bytes.Contains(rec.Body.Bytes(), []byte(`"available_at"`)) {
+			t.Errorf("%s body names available_at: %s", p.Type, rec.Body)
+		}
+	}
+	if AvailableAt(CodeConflict, 1, nil) != nil {
+		t.Error("AvailableAt tagged a nil error")
+	}
+}

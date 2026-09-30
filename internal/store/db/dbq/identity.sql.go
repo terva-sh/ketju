@@ -13,6 +13,29 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/sqltypes"
 )
 
+const activeRelease = `-- name: ActiveRelease :one
+SELECT user_id FROM handle_releases
+WHERE handle = ?1 AND reserved_until > ?2
+ORDER BY released_at DESC, id DESC
+LIMIT 1
+`
+
+type ActiveReleaseParams struct {
+	Handle string
+	Now    int64
+}
+
+// ActiveRelease is the user the handle redirects to at now: the user of the
+// newest release still reserving it, in any case. Null when that release
+// names no user, as an anonymized account's does; no row when none reserves
+// it (docs/05 "Changing a handle", TKT-01M3NRP3W9).
+func (q *Queries) ActiveRelease(ctx context.Context, arg ActiveReleaseParams) (sql.NullInt64, error) {
+	row := q.db.QueryRowContext(ctx, activeRelease, arg.Handle, arg.Now)
+	var user_id sql.NullInt64
+	err := row.Scan(&user_id)
+	return user_id, err
+}
+
 const anonymizeUser = `-- name: AnonymizeUser :exec
 UPDATE users
 SET handle = 'deleted-user-' || id, display_name = '', avatar_blob = NULL, bio_source = '', anonymized = 1,
@@ -224,6 +247,18 @@ func (q *Queries) ExpiredSuspensions(ctx context.Context, now int64) ([]int64, e
 	return items, nil
 }
 
+const forgetReleasesOf = `-- name: ForgetReleasesOf :exec
+UPDATE handle_releases SET user_id = NULL WHERE user_id = ?1
+`
+
+// ForgetReleasesOf makes every release that names the user name nobody:
+// anonymizing does it, so no old handle of the account redirects to
+// deleted-user-<id> or links an old mention to it (TKT-01M3NRP3W9).
+func (q *Queries) ForgetReleasesOf(ctx context.Context, userID sql.NullInt64) error {
+	_, err := q.db.ExecContext(ctx, forgetReleasesOf, userID)
+	return err
+}
+
 const getIdentityBySubject = `-- name: GetIdentityBySubject :one
 SELECT id, user_id, provider_key, subject, email, email_verified, issuer, last_login_at, raw_claims_json, created_at, updated_at, blocked_at, blocked_by FROM identities WHERE provider_key = ? AND subject = ?
 `
@@ -278,7 +313,7 @@ func (q *Queries) GetSession(ctx context.Context, idHash sqltypes.SessionHash) (
 }
 
 const getUser = `-- name: GetUser :one
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized FROM users WHERE id = ?
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized, handle_changed_at FROM users WHERE id = ?
 `
 
 func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
@@ -304,12 +339,13 @@ func (q *Queries) GetUser(ctx context.Context, id int64) (User, error) {
 		&i.StatusUntil,
 		&i.StatusVersion,
 		&i.Anonymized,
+		&i.HandleChangedAt,
 	)
 	return i, err
 }
 
 const getUserByHandle = `-- name: GetUserByHandle :one
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized FROM users WHERE handle = ?
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized, handle_changed_at FROM users WHERE handle = ?
 `
 
 func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, error) {
@@ -335,8 +371,55 @@ func (q *Queries) GetUserByHandle(ctx context.Context, handle string) (User, err
 		&i.StatusUntil,
 		&i.StatusVersion,
 		&i.Anonymized,
+		&i.HandleChangedAt,
 	)
 	return i, err
+}
+
+const handleReleases = `-- name: HandleReleases :many
+SELECT r.user_id, r.released_at, r.reserved_until, u.handle AS user_handle
+FROM handle_releases r
+LEFT JOIN users u ON u.id = r.user_id
+WHERE r.handle = ?1
+ORDER BY r.released_at, r.id
+`
+
+type HandleReleasesRow struct {
+	UserID        sql.NullInt64
+	ReleasedAt    int64
+	ReservedUntil int64
+	UserHandle    sql.NullString
+}
+
+// HandleReleases is every release of one handle, in any case, oldest
+// first, with the current handle of the user each names: what a mention of
+// the handle is resolved against (internal/service/threads, TKT-01M3NRP3W9).
+func (q *Queries) HandleReleases(ctx context.Context, handle string) ([]HandleReleasesRow, error) {
+	rows, err := q.db.QueryContext(ctx, handleReleases, handle)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []HandleReleasesRow
+	for rows.Next() {
+		var i HandleReleasesRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.ReleasedAt,
+			&i.ReservedUntil,
+			&i.UserHandle,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const handleReserved = `-- name: HandleReserved :one
@@ -571,6 +654,40 @@ func (q *Queries) RecordIdentityLogin(ctx context.Context, arg RecordIdentityLog
 	return err
 }
 
+const renameUser = `-- name: RenameUser :execrows
+UPDATE users
+SET handle = ?1, handle_changed_at = COALESCE(?2, handle_changed_at),
+    updated_at = ?3
+WHERE id = ?4 AND handle = ?5 AND anonymized = 0
+`
+
+type RenameUserParams struct {
+	Handle    string
+	ChangedAt sql.NullInt64
+	UpdatedAt int64
+	ID        int64
+	OldHandle string
+}
+
+// RenameUser gives the account a new handle (internal/service/identity,
+// rename.go). The old handle in the WHERE makes two renames racing from one
+// handle produce one, and an anonymized account is never renamed, which the
+// schema's trigger also holds. handle_changed_at is set only when changed_at
+// is not null: a member's own rename passes it, an admin's does not.
+func (q *Queries) RenameUser(ctx context.Context, arg RenameUserParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, renameUser,
+		arg.Handle,
+		arg.ChangedAt,
+		arg.UpdatedAt,
+		arg.ID,
+		arg.OldHandle,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const setUserRole = `-- name: SetUserRole :exec
 UPDATE users SET role = ?, updated_at = ? WHERE id = ?
 `
@@ -732,7 +849,7 @@ func (q *Queries) UsersByHandlePrefix(ctx context.Context, arg UsersByHandlePref
 }
 
 const usersByIDs = `-- name: UsersByIDs :many
-SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+SELECT id, handle, display_name, avatar_blob, status, role, kind, bio_source, timezone, locale, prefs_json, mark_all_read_at, created_at, updated_at, last_seen_at, status_reason, status_until, status_version, anonymized, handle_changed_at FROM users WHERE id IN (/*SLICE:ids*/?) ORDER BY id
 `
 
 // The authors on one page of a thread, in one query rather than one per post.
@@ -775,6 +892,7 @@ func (q *Queries) UsersByIDs(ctx context.Context, ids []int64) ([]User, error) {
 			&i.StatusUntil,
 			&i.StatusVersion,
 			&i.Anonymized,
+			&i.HandleChangedAt,
 		); err != nil {
 			return nil, err
 		}

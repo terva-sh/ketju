@@ -18,6 +18,13 @@ func init() {
 	corpus["created-agent."+tAdmin] = CreatedAgent{User: newAgentDetail(true), Credential: &issuedToken}
 	corpus["created-agent-tokenless."+tAdmin] = CreatedAgent{User: newAgentDetail(false)}
 	corpus["issued-credential."+tAdmin] = issuedToken
+
+	// Handle changes (TKT-01M3NRP3W9): a member's own, which starts the
+	// cooldown, and an admin's, after which the member may change theirs
+	// at once.
+	corpus["handle-change."+tMember] = HandleChange{Handle: "alicia", Previous: "alice",
+		NextChangeAt: ptr(Millis(1760292000000))}
+	corpus["handle-change."+tAdmin] = HandleChange{Handle: "bob", Previous: "bob-"}
 }
 
 // issuedToken is a credential as it is issued: the one time the token is

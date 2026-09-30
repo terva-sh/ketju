@@ -23,6 +23,7 @@ import (
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/groups"
+	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -83,7 +84,10 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		// The lifecycle service likewise (TKT-01M29CKRFS), with the thread
 		// service a suspension hides and restores posts through
 		// (TKT-01M29CP2QK).
-		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Threads: d.Threads, Now: d.Users.Now}}
+		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Threads: d.Threads, Now: d.Users.Now},
+		// Handle changes likewise (TKT-01M3NRP3W9): a rename needs only the
+		// database and the clock.
+		identity: &identity.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now}}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
 		mux.HandleFunc(rt.Pattern(), h.charged(rt.Method, rt.Path, rt.Handler))
@@ -127,6 +131,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
 		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},
 		{Method: post, Path: "/api/v1/settings/deactivate", Handler: h.deactivate},
+		{Method: put, Path: "/api/v1/settings/handle", Handler: h.changeHandle},
 	}, h.applyRoutes()...)
 }
 
@@ -152,6 +157,7 @@ type handlers struct {
 	perm         *perm.Evaluator
 	groups       *groups.Service
 	account      *account.Service
+	identity     *identity.Service
 	log          *slog.Logger
 	// applyLimit is the per-identity stage the application writes share
 	// (apply.go). There is one per handler set, so every route it wraps

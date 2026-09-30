@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NRP3W9XSXYMSPNYS7JGYF4
 title: Implement handle changes with cooldown, reservation, and redirect
 type: task
-status: ready
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,17 @@ blocks_on: none
 references:
   - ref: design:identity-handle-change
     path: docs/05-identity-and-accounts.md
+  - ref: pr:180
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T05:02:34Z
-updated_at: 2026-09-29T22:49:17Z
+updated_at: 2026-09-30T01:09:29Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-p3w9
   name: ""
 extensions: {}
 ---
@@ -57,15 +59,15 @@ Filed during Phase 2 grooming (TKT-01M3M9RR26) from the plan for TKT-01M29CKRFS 
 
 ## Acceptance criteria
 
-- [ ] PUT /api/v1/settings/handle renames the viewer at most once per 30 days: a second rename inside the window is conflict with available_at, while POST /api/v1/admin/users/{handle}/rename is not limited and does not start the member's cooldown (TestRenameCooldown)
-- [ ] A new handle passes identity.CheckHandle and identity.HandleFree, and a handle released within 90 days is taken for rename, Register, the auto_approve skip and application approval (TestRenameChecksTheHandle, TestReleasedHandleIsTakenEverywhere)
-- [ ] For 90 days a member's GET of /u/{old}, /u/{old}/posts, /api/v1/users/{old} and /api/v1/users/{old}/posts answers 302 with Cache-Control: no-store to the renamed user's current handle, chains included; anonymous gets the shell or 401 with no Location; afterwards the old handle is not-found and can be registered (TestReleasedHandleRedirects, TestShellRedirectsReleasedProfiles)
-- [ ] Every rename writes one user.renamed audit row through audit.Append with {from, to} in the transaction that renames, and a failed audit insert leaves the handle, handle_changed_at and handle_releases unchanged (TestRenameWritesOneAuditRow, TestRenameIsOneTransaction)
-- [ ] An anonymized account cannot be renamed by its owner or an admin (TestAnonymizedCannotBeRenamed)
-- [ ] After a rename neither the render cache nor the response cache serves a page showing the old handle as author or mention (TestOldMentionsFollowTheRename, TestResponseCacheAfterRename)
-- [ ] An old post's mention of the old handle links the renamed member by their current handle during and after the reservation, and never a later holder of the old handle, while a mention of a handle registered after the post still links (TestOldMentionsNeverMoveToANewHolder, TestAMentionTypedBeforeRegistrationStillLinks)
-- [ ] Anonymizing reserves the old handle for 90 days with a handle_releases row naming no user, and clears the user from that account's earlier release rows, so no old handle redirects to deleted-user-<id> (TestAnonymizeReleasesWithoutRedirect)
-- [ ] docs/04 describes handle_releases and users.handle_changed_at, and docs/07 records both rename routes and the member-only 302
+- [x] PUT /api/v1/settings/handle renames the viewer at most once per 30 days: a second rename inside the window is conflict with available_at, while POST /api/v1/admin/users/{handle}/rename is not limited and does not start the member's cooldown (TestRenameCooldown)
+- [x] A new handle passes identity.CheckHandle and identity.HandleFree, and a handle released within 90 days is taken for rename, Register, the auto_approve skip and application approval (TestRenameChecksTheHandle, TestReleasedHandleIsTakenEverywhere)
+- [x] For 90 days a member's GET of /u/{old}, /u/{old}/posts, /api/v1/users/{old} and /api/v1/users/{old}/posts answers 302 with Cache-Control: no-store to the renamed user's current handle, chains included; anonymous gets the shell or 401 with no Location; afterwards the old handle is not-found and can be registered (TestReleasedHandleRedirects, TestShellRedirectsReleasedProfiles)
+- [x] Every rename writes one user.renamed audit row through audit.Append with {from, to} in the transaction that renames, and a failed audit insert leaves the handle, handle_changed_at and handle_releases unchanged (TestRenameWritesOneAuditRow, TestRenameIsOneTransaction)
+- [x] An anonymized account cannot be renamed by its owner or an admin (TestAnonymizedCannotBeRenamed)
+- [x] After a rename neither the render cache nor the response cache serves a page showing the old handle as author or mention (TestOldMentionsFollowTheRename, TestResponseCacheAfterRename)
+- [x] An old post's mention of the old handle links the renamed member by their current handle during and after the reservation, and never a later holder of the old handle, while a mention of a handle registered after the post still links (TestOldMentionsNeverMoveToANewHolder, TestAMentionTypedBeforeRegistrationStillLinks)
+- [x] Anonymizing reserves the old handle for 90 days with a handle_releases row naming no user, and clears the user from that account's earlier release rows, so no old handle redirects to deleted-user-<id> (TestAnonymizeReleasesWithoutRedirect)
+- [x] docs/04 describes handle_releases and users.handle_changed_at, and docs/07 records both rename routes and the member-only 302
 
 ## Implementation plan
 
@@ -181,6 +183,24 @@ Engineering decisions taken here, with the alternative that lost:
 - The anonymization itself and the `anonymized` column: TKT-01M29CKRFS, a dependency.
 - Fixing grandfathered handles ending in `-`: TKT-01M3ANX1NF, which uses the admin route.
 
+### Revised at claim (2026-09-30, against main 5c9da6d)
+
+Everything above stands, and `### Settled in grooming` is unchanged. What the code on main and the dated notes change:
+
+- **The table exists.** TKT-01M29CKRFS added `handle_releases`, `InsertHandleRelease`, `HandleReserved` and `identity.HandleFree` in migration 0012, and `perm.Anonymize` already writes the row that names no user. This ticket's migration adds only `users.handle_changed_at`. 0013 is on main and the flags PR (#175) takes 0014, so this one is 0015, renumbered at merge if another lane lands one first.
+- **Field codes, per the orchestrator's note of 2026-09-29.** Every handle refusal is `validation-failed` with `errors[handle]`, in approval's codes: `invalid_handle`, `reserved`, `taken`, and `same` for the account's current handle, which TKT-01M3P0CYR3 reads. The constants move to `identity` (`CodeInvalidHandle`, `CodeReserved`, `CodeTaken`, `CodeSame`) and `applications` refers to them, so one table holds them. `conflict` is left for an anonymized account, a rename that lost a race, and the cooldown. Lost: `conflict` with `errors[handle]` (step 4.4 above), which `internal/problem` never writes (TestOnlyValidationFailedCarriesErrors).
+- **`available_at`** is a new optional RFC 9457 extension member of the problem body (`problem.AvailableAt`), written only when the error carries one, as `Retry-After` is. Lost: a bare `conflict`, which leaves a client unable to say when.
+- **Service shape.** `(*identity.Service).ChangeHandle(ctx, v, ip, to)` for the member and `RenameMember(ctx, v, ip, target, to)` for the admin, both through one `rename`. The API builds an `identity.Service{DB, Perm, Now}` from its deps, as it builds `account.Service`. No per-account lock: the rename is one transaction, and its `UPDATE … WHERE id = ? AND handle = ? AND anonymized = 0` makes two concurrent renames produce one.
+- **The mention rule is reordered** so that a later rename of another mentioned member cannot take a mention. With "the holder, when in M" first, the rule fails when bob, also mentioned, renames to `alice` after alice's reservation ends: he holds `alice` and is in M. The rule asks instead whom the typed handle named at T:
+  1. the earliest release of the handle after T, when its user is in M (the holder at T left);
+  2. else a release in force at T (released_at ≤ T < reserved_until) whose user is in M (the redirect at T);
+  3. else the current holder, when in M;
+  4. else the current holder, when no release of the handle is later than T (registered after the post; this also covers every post whose mentions the projection never recorded);
+  5. else plain text.
+  An anonymized account's rows name nobody, so its old mentions fall to 5. `render.HandleLookup` gains `Scope` (T and the sorted M, as text), so the render and response caches ask the same question again on a hit.
+- **The redirect lookup.** `member.Account(ctx, d, v, handle, now)` answers `*member.Moved{Handle}` when no user holds the handle, the newest release in force names a user, and v may see that account. `Moved` unwraps to `not-found`, so a caller that does not handle it answers what it did before. `userProfile`, `userPosts` and `api.ProfileRedirects` (the shell wrapper) turn it into the 302.
+- **Where the tests live.** `TestReleasedHandleIsTakenEverywhere` is in `internal/web/api`, the one package that reaches `Register`, `AutoRegister`, rename, application approval and agent creation.
+
 ## Notes
 
 **agent:claude-code/phase2-groom** at 2026-09-29T05:38:53Z
@@ -200,3 +220,63 @@ Filed: TKT-01M3P0CYR3 (Add a rename control to the admin users screen). Linked: 
 **agent:claude-code/phase2-run-orchestrator** at 2026-09-29T22:49:17Z
 
 Orchestrator, 2026-09-29, from planning TKT-01M3P0CYR3 (PR #167): answer a taken or reserved handle as validation-failed with errors[handle], not as conflict. The server attaches field errors only to validation-failed (TestOnlyValidationFailedCarriesErrors), and application approval already answers that way. Use approval's field codes (invalid_handle, reserved, taken) so one table of wording covers both.
+
+**agent:claude-code/phase2-run-p3w9** at 2026-09-30T00:38:32Z
+
+Terva review 1515 (PR #180, head 7af5d66, base 43a844d, run 1148): two high findings, both fixed. This note replaces the five-step mention rule in the plan's "Revised at claim" section.
+
+- high, "Check the release active when the mention was written before later releases": fixed. A post written while alice redirected to alicia, mentioning @alice and @bob, sent @alice to bob once bob took alice after the reservation and renamed away. Step 1 read the earliest later release before the release in force at T.
+- high, "Do not fall back to a different mentioned current holder after anonymization": fixed. After alice was anonymized and bob, who was also mentioned, took alice, @alice linked bob through the "current holder, when in M" fallback.
+
+Both have the same cause: M is a set of users, not of typed handles, so being in M does not show that this handle named that user. The rule in `internal/service/threads/mentions.go` now lets the first case that applies decide, and asks nothing after it:
+1. A release was in force at T: its user when in M, otherwise nobody.
+2. Otherwise, the earliest release after T: its user when in M, otherwise nobody.
+3. Otherwise, the holder now.
+4. Otherwise, text.
+The "holder, when in M" step is gone.
+
+New tests: TestAMentionWrittenDuringAReservationStaysWithIt and TestAnAnonymizedMentionStaysTextBesideAnother. Both fail on head 7af5d66 and pass now. The earlier mention tests pass unchanged, TestARenameIntoAnOldHandleTakesNoMention included.
+
+One case is left as designed. A post at T mentions @zed while nobody holds it, and also mentions @bob. bob later renames to zed and then away. That post's @zed follows bob: it linked him while he held zed (docs/07: a user registering a mentioned handle is seen at once), and it keeps naming him afterwards. No account other than bob is ever named.
+
+**agent:claude-code/phase2-run-p3w9** at 2026-09-30T00:52:44Z
+
+Terva review 1517 (PR #180, head b2d131c, base b41b6db, run 1160) marked both findings from review 1515 resolved and raised one new medium, now fixed.
+
+- medium, "Keep pre-registration mentions linked after the new holder renames": fixed. A post that mentions @dora before anyone holds the handle links dora once she registers (docs/07). Step 2 required the releasing user to be in M, so the mention went back to text the moment she renamed, because her id cannot be in a post written before she existed.
+
+Step 2 now names the user of the earliest release after T whether or not they are in M, and nobody when that release names no user. That user is whoever held the handle at T or, when nobody did, whoever first took it after, and the post has linked them since. A release names only the member who left the handle, so the next holder is reached only through step 3, and only while nobody has left the handle since T. The review 1515 cases therefore still hold: TestAMentionWrittenDuringAReservationStaysWithIt and TestAnAnonymizedMentionStaysTextBesideAnother pass unchanged. Step 1, the redirect in force at T, still requires M, the one place the mentions projection pins a member: the account the post was written through.
+
+TestAMentionTypedBeforeRegistrationStillLinks now continues through dora's rename to dorothea, and through vic taking dora after the reservation ends; the post keeps linking dorothea. It fails with the M requirement put back.
+
+This supersedes step 2 of my review 1515 note.
+
+**agent:claude-code/phase2-run-p3w9** at 2026-09-30T01:09:29Z
+
+Answer to Terva review 1521 (PR #180, head 7e460ca, base b41b6db). The review raised one medium finding: "Keep reserved-handle mentions linked before projection catches up". Step 1 of the read-time rule linked a release's user only when the mentions projection had recorded them for the post. A post written during a reservation therefore rendered @alice as text until the bus projected it, even though the write-time rule had named alicia.
+
+Fixed. The read-time rule no longer reads the mentions projection at all. The release rows alone decide every step, and the write-time rule (resolveNow) reads them in the same way. The groomed plan pinned mentions "through the mentions table and the kept release rows". Each of this PR's reviews rejected one use of the table:
+- 1515: the table is a set of users, not typed handles, so it let one mentioned member take another's mention.
+- 1517: a handle registered after the post is in no post's mentions.
+- 1521: the table trails the log.
+Once 1517 removed it from step 2, its only remaining effect was the lag this finding describes. The pinning wording was the plan's engineering choice, not a line in docs/05 on main, so docs/04, 05 and 07 now name the release rows alone.
+
+Removed along with it: threads.scopes, mentionScope.ids and has, handleMemo.currentFor, and the MentionsOfPosts query, which this PR had added and nothing else uses. A cached rendering's scope is the post's revision time, which the render key already fixes, so current() is enough. The projection still records the ids for notifications and the mentions lens.
+
+Test: TestAReservedMentionLinksBeforeProjection reads a post written during the reservation before and after it is projected. It fails against 7e460ca with "<p>hi @alice</p>". The full test suite and vet pass.
+
+## Summary
+
+Handle changes are built as docs/05 "Changing a handle" decided.
+
+- `PUT /api/v1/settings/handle` (a member's own, once per 30 days) and `POST /api/v1/admin/users/{handle}/rename` (admin gate, no cooldown, does not start the member's) answer `dto.HandleChange{handle, previous, next_change_at}`. Both run `identity.Service.rename` (`internal/service/identity/rename.go`): `CheckHandle`, the account read in the transaction, anonymized is `conflict`, the cooldown is `conflict` with the new `available_at` problem member (`problem.AvailableAt`), `HandleFree`, then `RenameUser` (guarded by the old handle and `anonymized = 0`), a `handle_releases` row naming the account for 90 days, and one `user.renamed` audit row with `{from, to}`. It is one transaction.
+- Handle refusals are `validation-failed` with `errors[handle]`, as the orchestrator's note of 2026-09-29 asked: `invalid_handle`, `reserved`, `taken` and `same`. The constants live in `identity` now, and `applications` refers to them.
+- Migration 0016 (renumbered twice, after the flags PR took 0014 and the moderator queue took 0015) adds `users.handle_changed_at`, and nothing else, because `handle_releases` came with 0012. New queries: `ActiveRelease`, `HandleReleases`, `ForgetReleasesOf`, `RenameUser`.
+- Redirects: `member.Account` takes the clock and answers `*member.Moved` for a released handle whose newest reservation still in force names an account v may see. `Moved` unwraps to not-found. `userProfile` and `userPosts` answer 302 with no-store, query kept. `api.ProfileRedirects` wraps the shell in serve.go for `/u/{old}` and `/u/{old}/posts`, for members only.
+- `perm.Anonymize` now also runs `ForgetReleasesOf`, so an anonymized account's earlier handles redirect nowhere, as TKT-01M29CKRFS's plan asked.
+- Mentions are pinned by id (`internal/service/threads/mentions.go`). At read time a typed handle names whom it named when the post's current revision was written, using only the release rows kept after their reservation ends; the `mentions` projection is not read, because it trails the log (Terva review 1521). The first case that applies decides: a release in force at T, else the earliest release after T, else the holder now. A release names only the member who left the handle, and an anonymized account's name nobody, so neither a rename into an old handle nor an anonymization can hand a mention to someone else (`TestARenameIntoAnOldHandleTakesNoMention`, and Terva review 1515's `TestAMentionWrittenDuringAReservationStaysWithIt` and `TestAnAnonymizedMentionStaysTextBesideAnother`). At write time a reserved handle mentions the account it redirects to. `render.HandleLookup` gained `Scope`, so both caches ask the same question again on a hit.
+- docs/04, 05, 06 and 07 record the column, the rows, the routes, the 302, `available_at` and the mention rule.
+
+Mutations tried against the tests, and each was caught: holder-in-M first (TestARenameIntoAnOldHandleTakesNoMention), anonymize without ForgetReleasesOf (TestAnonymizeReleasesWithoutRedirect, TestAnAnonymizedMentionIsText), write-time resolution ignoring reservations (TestAMentionOfAReleasedHandleFollowsTheRedirect), cached lookups never rechecked (TestOldMentionsFollowTheRename, TestResponseCacheAfterRename and six more), and an admin rename starting the cooldown (TestRenameCooldown, TestRenameRoutes).
+
+For whoever builds next: the rename controls (TKT-01M3P0CYR3 for admins, TKT-01M29CXK4E for members) read `same` and `available_at`. The member route has no screen yet. Mention resolution no longer depends on the projection, so a post links correctly from its first read (`TestAReservedMentionLinksBeforeProjection`). PR #180 was replaced by #N after the moderator queue landed on main.

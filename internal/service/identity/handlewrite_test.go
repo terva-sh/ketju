@@ -18,6 +18,8 @@ import (
 var handleWriters = map[string]bool{
 	"CreateUser":    true,
 	"AnonymizeUser": false,
+	// A handle change (rename.go, TKT-01M3NRP3W9).
+	"RenameUser": true,
 }
 
 var (
@@ -101,5 +103,41 @@ func TestEveryHandleWriteChecksHandleFree(t *testing.T) {
 	// Not vacuous: Register is a caller today.
 	if !slices.Contains(callers["CreateUser"], filepath.Join("internal", "service", "identity", "register.go")) {
 		t.Errorf("CreateUser callers found: %v; register.go should be one", callers["CreateUser"])
+	}
+}
+
+// TestOnlyIdentityRenames: a rename writes its release row and its audit row
+// in the transaction that renames (rename.go), so RenameUser is called from
+// this package and nowhere else outside the store. A second caller would be
+// a rename with no reservation, no redirect and no record (TKT-01M3NRP3W9).
+func TestOnlyIdentityRenames(t *testing.T) {
+	root := filepath.Join("..", "..", "..")
+	var callers []string
+	err := filepath.WalkDir(filepath.Join(root, "internal"), func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() && d.Name() == "db" && filepath.Base(filepath.Dir(path)) == "store" {
+			return filepath.SkipDir
+		}
+		if d.IsDir() || !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+		b, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if strings.Contains(string(b), ".RenameUser(") {
+			rel, _ := filepath.Rel(root, path)
+			callers = append(callers, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{filepath.Join("internal", "service", "identity", "rename.go")}
+	if !slices.Equal(callers, want) {
+		t.Errorf("RenameUser is called from %v, want only %v", callers, want)
 	}
 }

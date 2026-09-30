@@ -1,0 +1,12 @@
+-- Handle changes (docs/05 "Changing a handle", docs/04 "users",
+-- TKT-01M3NRP3W9).
+--
+-- handle_changed_at is when the member last changed their own handle, in
+-- Unix ms, and null until they first do. A member may change it once every
+-- 30 days, counted from here. Only a member's own rename writes it: an
+-- admin's rename neither waits for the member's cooldown nor starts one.
+--
+-- The old handle of a rename is reserved, and redirected to the account, by a
+-- handle_releases row naming the user (migration 0012), so this migration
+-- adds no table.
+ALTER TABLE users ADD COLUMN handle_changed_at INTEGER;

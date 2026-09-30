@@ -101,7 +101,13 @@ type Deps struct {
 
 // HandleLookup is one answer a [HandleResolver] gave.
 type HandleLookup struct {
-	Typed     string
+	Typed string
+	// Scope is what else the answer was asked with, as the resolver's
+	// owner writes it: internal/service/threads records when the post's
+	// revision was written and whom its mentions name, so an old mention
+	// stays with the member it named through a handle change
+	// (TKT-01M3NRP3W9). A check on a hit asks the same question again.
+	Scope     string
 	ID        int64
 	Canonical string
 	Found     bool
@@ -115,7 +121,7 @@ func (d Deps) clone() Deps {
 func (d Deps) size() int64 {
 	n := int64(len(d.Quotes)) * 8
 	for _, h := range d.Handles {
-		n += 32 + int64(len(h.Typed)+len(h.Canonical))
+		n += 32 + int64(len(h.Typed)+len(h.Scope)+len(h.Canonical))
 	}
 	return n
 }

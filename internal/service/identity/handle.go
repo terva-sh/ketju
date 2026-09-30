@@ -17,6 +17,25 @@ import (
 // (docs/04 "users").
 var ErrHandleReserved = errors.New("identity: the handle is reserved")
 
+// The codes a refused handle carries in a validation-failed body's errors,
+// under the field "handle": application approval (docs/07 "Applications")
+// and a handle change (docs/05 "Changing a handle") answer with the same
+// ones, so a client says each in one set of words. Each has one meaning
+// (TKT-01M3NRP3W9):
+const (
+	// CodeInvalidHandle: domain.ValidateHandle refuses it.
+	CodeInvalidHandle = "invalid_handle"
+	// CodeReserved: CheckHandle refuses it as a route name or the
+	// deleted-user prefix (ErrHandleReserved). Never a released handle.
+	CodeReserved = "reserved"
+	// CodeTaken: HandleFree refuses it, because a user holds it in any case
+	// or a release still reserves it. A form says it may have been given up
+	// lately, and never which.
+	CodeTaken = "taken"
+	// CodeSame: it is the account's current handle, on a handle change.
+	CodeSame = "same"
+)
+
 // reservedHandles are the handles that collide with top-level routes (settled
 // in grooming for TKT-01M29C8005). "me" is shorter than any handle may be,
 // and is listed so the list stays the whole of the rule if the minimum

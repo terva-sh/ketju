@@ -290,25 +290,26 @@ type ThreadTag struct {
 }
 
 type User struct {
-	ID            int64
-	Handle        string
-	DisplayName   string
-	AvatarBlob    sql.NullString
-	Status        string
-	Role          string
-	Kind          string
-	BioSource     string
-	Timezone      sql.NullString
-	Locale        sql.NullString
-	PrefsJson     string
-	MarkAllReadAt sql.NullInt64
-	CreatedAt     int64
-	UpdatedAt     int64
-	LastSeenAt    sql.NullInt64
-	StatusReason  string
-	StatusUntil   sql.NullInt64
-	StatusVersion int64
-	Anonymized    int64
+	ID              int64
+	Handle          string
+	DisplayName     string
+	AvatarBlob      sql.NullString
+	Status          string
+	Role            string
+	Kind            string
+	BioSource       string
+	Timezone        sql.NullString
+	Locale          sql.NullString
+	PrefsJson       string
+	MarkAllReadAt   sql.NullInt64
+	CreatedAt       int64
+	UpdatedAt       int64
+	LastSeenAt      sql.NullInt64
+	StatusReason    string
+	StatusUntil     sql.NullInt64
+	StatusVersion   int64
+	Anonymized      int64
+	HandleChangedAt sql.NullInt64
 }
 
 type Watch struct {

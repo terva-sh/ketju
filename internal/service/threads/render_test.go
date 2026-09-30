@@ -102,25 +102,22 @@ func TestFailedLookupIsNotCached(t *testing.T) {
 	}
 }
 
-// TestHandleTellsMissingFromFailed: no such handle is ok=false with no error;
-// a database that cannot answer is an error, and the memo does not remember
-// a failure as an answer.
+// TestHandleTellsMissingFromFailed: no such handle is not found with no
+// error, at write time and at read time; a database that cannot answer is an
+// error, and the memo does not remember a failure as an answer.
 func TestHandleTellsMissingFromFailed(t *testing.T) {
 	d := openDB(t)
 	s := &Service{DB: d}
-	if _, _, ok, err := s.handle(t.Context(), "nobody"); ok || err != nil {
-		t.Fatalf("a missing handle: ok=%v err=%v", ok, err)
-	}
 	m := s.handleMemo(t.Context())
-	if l := m.lookup("nobody"); l.Found || m.err != nil {
-		t.Fatalf("a missing handle through the memo: %+v, %v", l, m.err)
+	if l := m.resolveNow("nobody", 1); l.Found || m.err != nil {
+		t.Fatalf("a missing handle at write time: %+v, %v", l, m.err)
+	}
+	if l := m.resolveAt("nobody", mentionScope{}); l.Found || m.err != nil {
+		t.Fatalf("a missing handle at read time: %+v, %v", l, m.err)
 	}
 	d.Close()
-	if _, _, ok, err := s.handle(t.Context(), "nobody"); ok || err == nil {
-		t.Fatalf("a closed database: ok=%v err=%v", ok, err)
-	}
 	m = s.handleMemo(t.Context())
-	m.lookup("nobody")
+	m.resolveNow("nobody", 1)
 	if m.err == nil {
 		t.Fatal("the memo did not record the failure")
 	}

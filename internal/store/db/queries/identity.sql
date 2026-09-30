@@ -154,6 +154,43 @@ INSERT INTO handle_releases (handle, user_id, released_at, reserved_until) VALUE
 -- name: HandleReserved :one
 SELECT EXISTS (SELECT 1 FROM handle_releases WHERE handle = sqlc.arg(handle) AND reserved_until > sqlc.arg(now));
 
+-- ActiveRelease is the user the handle redirects to at now: the user of the
+-- newest release still reserving it, in any case. Null when that release
+-- names no user, as an anonymized account's does; no row when none reserves
+-- it (docs/05 "Changing a handle", TKT-01M3NRP3W9).
+-- name: ActiveRelease :one
+SELECT user_id FROM handle_releases
+WHERE handle = sqlc.arg(handle) AND reserved_until > sqlc.arg(now)
+ORDER BY released_at DESC, id DESC
+LIMIT 1;
+
+-- HandleReleases is every release of one handle, in any case, oldest
+-- first, with the current handle of the user each names: what a mention of
+-- the handle is resolved against (internal/service/threads, TKT-01M3NRP3W9).
+-- name: HandleReleases :many
+SELECT r.user_id, r.released_at, r.reserved_until, u.handle AS user_handle
+FROM handle_releases r
+LEFT JOIN users u ON u.id = r.user_id
+WHERE r.handle = sqlc.arg(handle)
+ORDER BY r.released_at, r.id;
+
+-- ForgetReleasesOf makes every release that names the user name nobody:
+-- anonymizing does it, so no old handle of the account redirects to
+-- deleted-user-<id> or links an old mention to it (TKT-01M3NRP3W9).
+-- name: ForgetReleasesOf :exec
+UPDATE handle_releases SET user_id = NULL WHERE user_id = sqlc.arg(user_id);
+
+-- RenameUser gives the account a new handle (internal/service/identity,
+-- rename.go). The old handle in the WHERE makes two renames racing from one
+-- handle produce one, and an anonymized account is never renamed, which the
+-- schema's trigger also holds. handle_changed_at is set only when changed_at
+-- is not null: a member's own rename passes it, an admin's does not.
+-- name: RenameUser :execrows
+UPDATE users
+SET handle = sqlc.arg(handle), handle_changed_at = COALESCE(sqlc.narg(changed_at), handle_changed_at),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id) AND handle = sqlc.arg(old_handle) AND anonymized = 0;
+
 -- DeleteUserIdentities removes every identity of an anonymized account
 -- (docs/05). An application's identity_id is set to null by its foreign
 -- key. The sessions naming the identities go first (DeleteIdentitySessions).

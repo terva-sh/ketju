@@ -39,6 +39,12 @@
 /auth/link  /auth/{provider}/link (POST)
 ```
 
+`/u/{old}` and `/u/{old}/posts`, for a handle a rename released within 90
+days, answer a member `302` to `/u/{new}` with `no-store`, query kept, before
+the shell is served, as `GET /users/{old}` does (below; 05 "Changing a
+handle", `api.ProfileRedirects`). Anyone else gets the shell, as for any
+profile, so a stranger learns nothing about who renamed to what.
+
 `/auth/*` is the server's in both clients: plain HTML pages and redirects,
 not JSON. `/auth/signin` is the login page, where a signed-out reader's
 "Sign in" goes, with the address they were at as `return_to` (05 "Login
@@ -127,9 +133,10 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /search?q=&forum=&author=&after=&before=` | FTS5 results with snippets |
 | `GET  /notifications` `POST /notifications/read` | |
 | `POST /blobs` (multipart) `GET /blobs/{hash}` | attachments; GET is outside `/api` at `/blobs/…` with immutable caching |
-| `GET  /users/{handle}` `/users/{handle}/posts` | profiles. `/users/{handle}` answers `{user: author, bio_html, joined_at, post_count, status}`, `internal/dto` `Profile`: `bio_html` is the bio rendered as a post is (a quote in it links nowhere, having no thread), and `status` is null except to moderators and admins. `/users/{handle}/posts?cursor=` answers `{posts: [{thread, forum, post}], next_cursor}`, `internal/dto` `UserPosts`: each post rendered as its thread page renders it for the viewer, with a link to its thread and forum, newest first, 25 to a page. Paging is keyset on (created_at, thread, ordinal) descending, so a post written while a reader pages does not appear twice, and a page is short only at the end of the history; the cursor is opaque, names no account, and one that is malformed is `bad-request`. A moved post is left out. Whether a post is deleted is read from its thread's index rather than from `post_meta`, which trails the log, and the count reads it the same way, so the history and the count agree while the projection catches up. The handle matches case-insensitively and an unknown one is `not-found`. An anonymized account (`users.anonymized`, 04) shows its `deleted-user-<id>` handle and no display name, avatar or bio, in the profile and on every post in its history, as every author block does (`member.Author`, TKT-01M29CKRFS); its old handle is `not-found`. Both answers are `no-store`. A member session is required for both, as for `GET /users?prefix=` (anonymous `unauthenticated`, pre-user `forbidden`). The post count counts the user's non-deleted posts in forums this viewer can read, so it varies by viewer and says nothing about forums the viewer cannot read. The history spans forums and leaves out posts in forums the viewer cannot read. A deleted or hidden post is left out for other members. The author sees their own as their thread page shows them: a post they deleted is marked `removal: "author"` without a body, and a post a moderator hid is marked `removal: "moderator"` with its body (08, decided 2026-09-28; TKT-01M29CKRJ9). Moderators and admins see both marked, with the body, as the thread page's moderator view does. A deleted post never counts, even for a viewer whose history shows it, so the count equals the posts a member's history lists and is less than an author's, moderator's or admin's history by the deleted posts it shows. A pending account is `not-found` except to moderators and admins; a suspended or deactivated account's profile is served, and its status is shown only to moderators and admins (05, "Account lifecycle"). Decided by the maintainer on 2026-09-28 (TKT-01M3KJJNDC) |
+| `GET  /users/{handle}` `/users/{handle}/posts` | profiles. `/users/{handle}` answers `{user: author, bio_html, joined_at, post_count, status}`, `internal/dto` `Profile`: `bio_html` is the bio rendered as a post is (a quote in it links nowhere, having no thread), and `status` is null except to moderators and admins. `/users/{handle}/posts?cursor=` answers `{posts: [{thread, forum, post}], next_cursor}`, `internal/dto` `UserPosts`: each post rendered as its thread page renders it for the viewer, with a link to its thread and forum, newest first, 25 to a page. Paging is keyset on (created_at, thread, ordinal) descending, so a post written while a reader pages does not appear twice, and a page is short only at the end of the history; the cursor is opaque, names no account, and one that is malformed is `bad-request`. A moved post is left out. Whether a post is deleted is read from its thread's index rather than from `post_meta`, which trails the log, and the count reads it the same way, so the history and the count agree while the projection catches up. The handle matches case-insensitively and an unknown one is `not-found`. An anonymized account (`users.anonymized`, 04) shows its `deleted-user-<id>` handle and no display name, avatar or bio, in the profile and on every post in its history, as every author block does (`member.Author`, TKT-01M29CKRFS); its old handle is `not-found`. A handle a rename released within 90 days answers a member `302` to the same path under the account's handle now, query kept, with `Cache-Control: no-store`, a chain of renames included (05 "Changing a handle", TKT-01M3NRP3W9). The redirect is temporary so that no cache outlives the reservation. A stranger is refused as for any profile, with no `Location`; an old handle of a pending account is `not-found` except to moderators and admins; an anonymized account's old handles redirect nowhere; and once the 90 days end the old handle is `not-found`. Both answers are `no-store`. A member session is required for both, as for `GET /users?prefix=` (anonymous `unauthenticated`, pre-user `forbidden`). The post count counts the user's non-deleted posts in forums this viewer can read, so it varies by viewer and says nothing about forums the viewer cannot read. The history spans forums and leaves out posts in forums the viewer cannot read. A deleted or hidden post is left out for other members. The author sees their own as their thread page shows them: a post they deleted is marked `removal: "author"` without a body, and a post a moderator hid is marked `removal: "moderator"` with its body (08, decided 2026-09-28; TKT-01M29CKRJ9). Moderators and admins see both marked, with the body, as the thread page's moderator view does. A deleted post never counts, even for a viewer whose history shows it, so the count equals the posts a member's history lists and is less than an author's, moderator's or admin's history by the deleted posts it shows. A pending account is `not-found` except to moderators and admins; a suspended or deactivated account's profile is served, and its status is shown only to moderators and admins (05, "Account lifecycle"). Decided by the maintainer on 2026-09-28 (TKT-01M3KJJNDC) |
 | `GET  /users?prefix=&limit=` | `{users: [author]}`: mention autocomplete, `internal/dto` `UserSuggestions`. Up to `limit` (default 8, at most 20) active members whose handle starts with `prefix`, case-insensitively, in handle order; a prefix no handle can start with is an empty list. Every handle offered is one the renderer resolves as a mention, so a handle ending in `-`, which the mention syntax reads as punctuation, is not offered. Registration no longer gives one out, but a handle given out before that rule may still end in `-` (04 "users"), so the filter stays. A member session is required (anonymous `unauthenticated`, pre-user `forbidden`) |
 | `GET  /settings` `PATCH /settings` | prefs; `GET/DELETE /settings/sessions` ; `GET/DELETE /settings/identities/{id}` |
+| `PUT /settings/handle` `{handle}` | the viewer changes their own handle (05 "Changing a handle", TKT-01M3NRP3W9): 200 `internal/dto` `HandleChange` `{handle, previous, next_change_at}`, `no-store`. `next_change_at` is when they may change it again, 30 days on. A second change inside the 30 days is `conflict` with `available_at` (below, "Errors"), the Unix ms it becomes possible; an admin's rename neither waits for this cooldown nor starts it. A refused handle is `validation-failed` with `errors: [{field: "handle", code}]`, the code one of `invalid_handle`, `reserved` and `taken` as for an approval (below, "Applications"), where `taken` includes a handle a rename or an anonymization released within 90 days, the viewer's own old one included, or `same` for the handle they have. The old handle is reserved for 90 days, and `user.renamed` is audited with `{from, to}` in the same transaction. Anonymous is `unauthenticated`, a pre-user `forbidden`, both before the body is read. Charged to the per-address write limiter |
 | `POST /settings/deactivate` | the viewer deactivates their own account (05 "Account lifecycle"): 204 `no-store`, every session of the account deleted in the same transaction, this one included, and the session cookie cleared. The last active admin is `conflict`. Anonymous is `unauthenticated`, a pre-user `forbidden`. They come back by signing in and pressing Reactivate (05 "Login flow"). TKT-01M29CKRFS |
 | `GET  /apply/form` `POST /apply` `GET /apply/status` `POST /apply/withdraw` | approval mode, a pre-user session only (05 "mode = approval"): anonymous `unauthenticated`, a member `forbidden`. `GET /apply/form` → `internal/dto` `ApplicationForm`: the active `registration` form as `Form`, and `prefill`, the identity's claim for each `from_claim` field that has one. `POST /apply` `{version, answers}` → 201 `ApplicationStatus`; `version` must be the active version or it is `conflict` and nothing is written, and answers that break the form are `validation-failed` with field errors; a locked field stores the claim whatever is sent. `GET /apply/status` → `ApplicationStatus` `{status, provider, submitted_at, decided_at, can_withdraw, can_apply, can_apply_at, sign_in}`: `status` is none, pending, approved, denied or withdrawn, `can_apply_at` is set only when the 24-hour rule alone stands in the way, and `sign_in` only when approved, which a pre-user session sees only until the approval retires it (05 "mode = approval" step 4); it never carries a moderator's note. `POST /apply/withdraw` (empty body or `{}`) → 200 `ApplicationStatus`, `conflict` with nothing pending. The form and the submit refuse, in this order: an identity with a user `conflict`, a blocked one `forbidden` (with no reason given), `registration.mode` other than approval `forbidden`, a pending application `conflict`, and a submission within 24 hours of the last `rate-limited` with `Retry-After`. The two writes are also limited per identity (08 "The transport-level ceiling"). Every answer is `no-store` |
 | `GET  /events?threads=&forums=` | SSE (outside `/api/v1` versioning: `/events`) |
@@ -168,6 +175,13 @@ No error body ever carries the underlying error text. A database constraint
 name describes the schema to whoever provoked it and means nothing to a
 member, so the error goes to the log and the client gets the fixed title.
 
+A `conflict` whose refusal ends at a known time carries `available_at`, the
+Unix ms from which the request can succeed: a member's second handle change
+inside the 30-day cooldown (`PUT /settings/handle`, TKT-01M3NRP3W9). It is an
+RFC 9457 extension member the server computes, and no other body has it.
+`rate-limited` with `Retry-After` lost for this, because a client reads
+`Retry-After` as "try again soon", and the wait is weeks.
+
 #### Field errors on `validation-failed`
 
 A `validation-failed` body for a form's answers, a form schema (05
@@ -180,10 +194,10 @@ RFC 9457 extension member. No other body has it.
   `fields.2.options` or `title`. The whole schema is `""`. A path never
   carries a key the request sent, so the body echoes nothing. An
   application's approval or denial names its own fields, `handle` and
-  `note` (below, "Applications").
-- `code` is one of the codes below, or for an approval's `handle` one of
-  the three listed with that route. They are API surface, like the `type`s
-  above.
+  `note` (below, "Applications"), and a handle change names `handle`.
+- `code` is one of the codes below, or for a `handle` one of the three
+  listed with the approval route, plus `same` on a handle change. They are
+  API surface, like the `type`s above.
 
 <!-- form-codes:begin -->
 | Code | Meaning |
@@ -238,6 +252,7 @@ the next request.
 | `POST /admin/users/{handle}/posts/hide` | staff | 204. Hides every visible post of a suspended account with its current suspension: a moderator's `Delete` carrying the suspension's audit id (03), one per post, projected before the answer, then `user.posts_hidden`. Only threads in forums the caller may moderate are touched, so a moderator's hide passes over a forum they cannot see and says nothing about it; archived threads are passed over. Posts already deleted or hidden are passed over, so a second call changes nothing and finishes one that stopped. On the authority that suspends the account; an account that is not suspended is `conflict`; a thread that is quarantined or cannot be opened is passed over and the answer is `unavailable` once the rest are done. The forum a thread is judged by is the one its log says, moves not yet projected included (08 "Suspension", TKT-01M29CP2QK) |
 | `POST /admin/users/{handle}/posts/restore` | staff | 204. Restores exactly the posts whose `Delete` in force carries one of the suspensions the account had when the request read it, whatever the account's status, in the forums the caller may moderate, then `user.posts_restored`. A post a moderator hid for its own sake stays hidden. This is how a moderator brings back the posts of a suspension that expired. On the authority that suspends the account |
 | `POST /admin/users/{handle}/anonymize` | admin | 204, and it cannot be undone. Through `perm.Anonymize`: the handle becomes `deleted-user-<id>`, the display name, avatar and bio are cleared, the account becomes `deactivated`, and its sessions and identities are deleted, with `user.anonymized` (naming no handle), in one transaction. The thread logs are not touched. An admin cannot anonymize themselves (`forbidden`); the last active admin, and an account already anonymized, are `conflict` |
+| `POST /admin/users/{handle}/rename` `{handle}` | admin | `HandleChange`, as `PUT /settings/handle` answers, with the same field errors, reservation, redirect and `user.renamed` row, the admin as its actor. No cooldown, and the member's own is left as it was: `next_change_at` is theirs. An anonymized account is `conflict`, and a handle nobody has is `not-found`. This is how a grandfathered handle ending in `-` is fixed (TKT-01M3ANX1NF). 05 "Changing a handle", TKT-01M3NRP3W9 |
 | `GET /admin/groups` | admin | `GroupList`, each group with its member and grant counts |
 | `POST /admin/groups` `{slug, name, description}` | admin | 201 `Group`. The slug follows 04's group slug rule; a taken slug is `conflict`. The name is 1 to 80 characters, the description at most 500 |
 | `GET /admin/groups/{id}` | admin | `GroupDetail`: the group and its stored members |
@@ -441,6 +456,20 @@ above is the design's; the implementation settles four internals:
   and the state of the posts they quote. A user registering a mentioned
   handle is seen at once. A failed check is a miss, and the fresh page
   replaces the entry.
+- **A mention follows its member through a handle change**
+  (TKT-01M3NRP3W9). The typed handle is resolved against the kept
+  `handle_releases` rows, not the `mentions` projection, which trails the
+  log. It names whom it named when the post's current revision was
+  written: the account a reservation then redirected to, or whoever held
+  the handle then. When nobody did, it names
+  whoever first took the handle after. Either way it is shown by their
+  handle now and followed through their later renames. So an old `@alice`
+  links the member who renamed from alice, and never whoever takes `alice`
+  after the 90 days, and a mention of an anonymized account's old handle is
+  text. While a handle is reserved, a
+  new `@alice` mentions the member it redirects to. Each lookup is stored
+  with what it was asked against, and a hit asks again
+  (`internal/service/threads` `mentions.go`).
 
 There is no invalidation and the package exports no way to forget an entry.
 A request with `after_log_length` bypasses the cache. `Stats` reports the

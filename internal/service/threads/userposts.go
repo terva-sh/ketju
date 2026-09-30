@@ -36,7 +36,7 @@ const UserPostsPageSize = DefaultPageSize
 // bio (member.Author). Its joined date and post count stay, since neither
 // names anyone.
 func (s *Service) Profile(ctx context.Context, v domain.Viewer, handle string) (dto.Profile, error) {
-	u, err := member.Account(ctx, s.DB, v, handle)
+	u, err := member.Account(ctx, s.DB, v, handle, s.now())
 	if err != nil {
 		return dto.Profile{}, err
 	}
@@ -153,7 +153,7 @@ func (s *Service) userPostCount(ctx context.Context, userID int64, forums []int6
 // history.
 func (s *Service) UserPosts(ctx context.Context, v domain.Viewer, handle, cursorText string) (dto.UserPosts, error) {
 	out := dto.UserPosts{Posts: []dto.UserPost{}}
-	u, err := member.Account(ctx, s.DB, v, handle)
+	u, err := member.Account(ctx, s.DB, v, handle, s.now())
 	if err != nil {
 		return out, err
 	}

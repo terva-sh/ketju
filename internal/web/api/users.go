@@ -63,8 +63,15 @@ func (h *handlers) usersByPrefix(w http.ResponseWriter, r *http.Request) {
 // account, and what its post count counts, are the threads service's to decide
 // (Profile). The answer depends on the viewer and on accounts that change,
 // so no cache keeps it.
+//
+// A handle a rename released within 90 days answers a member 302 to the
+// account's handle now, with no-store (member.Moved, docs/05 "Changing a
+// handle"); userPosts does the same.
 func (h *handlers) userProfile(w http.ResponseWriter, r *http.Request) {
 	res, err := h.threads.Profile(r.Context(), domain.ViewerFrom(r.Context()), r.PathValue("handle"))
+	if moved(w, r, err, "/api/v1/users/", "") {
+		return
+	}
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -80,6 +87,9 @@ func (h *handlers) userProfile(w http.ResponseWriter, r *http.Request) {
 func (h *handlers) userPosts(w http.ResponseWriter, r *http.Request) {
 	res, err := h.threads.UserPosts(r.Context(), domain.ViewerFrom(r.Context()), r.PathValue("handle"),
 		r.URL.Query().Get("cursor"))
+	if moved(w, r, err, "/api/v1/users/", "/posts") {
+		return
+	}
 	if err != nil {
 		h.fail(w, r, err)
 		return

@@ -12,6 +12,11 @@ import (
 )
 
 type Querier interface {
+	// ActiveRelease is the user the handle redirects to at now: the user of the
+	// newest release still reserving it, in any case. Null when that release
+	// names no user, as an anonymized account's does; no row when none reserves
+	// it (docs/05 "Changing a handle", TKT-01M3NRP3W9).
+	ActiveRelease(ctx context.Context, arg ActiveReleaseParams) (sql.NullInt64, error)
 	// An admin adding a membership takes it over: a row an IdP mapping made
 	// becomes 'admin', so the next login's re-evaluation no longer removes it.
 	// A row that is already 'admin' keeps its original adder and time.
@@ -180,6 +185,10 @@ type Querier interface {
 	// never does (Terva review 1371), since every flag closed by another path,
 	// or before migration 0015, has one.
 	FlagsOwedAudit(ctx context.Context, arg FlagsOwedAuditParams) ([]FlagsOwedAuditRow, error)
+	// ForgetReleasesOf makes every release that names the user name nobody:
+	// anonymizing does it, so no old handle of the account redirects to
+	// deleted-user-<id> or links an old mention to it (TKT-01M3NRP3W9).
+	ForgetReleasesOf(ctx context.Context, userID sql.NullInt64) error
 	// ForumAccessRows is everything perm needs to evaluate a set of forums for
 	// one viewer, in one statement: each forum's visibility and archived flag,
 	// with every permission row, local to it or global, held by a group the
@@ -249,6 +258,10 @@ type Querier interface {
 	// the screen can say what stands between a group and its deletion.
 	GroupSummaries(ctx context.Context) ([]GroupSummariesRow, error)
 	GroupsForUser(ctx context.Context, userID int64) ([]GroupsForUserRow, error)
+	// HandleReleases is every release of one handle, in any case, oldest
+	// first, with the current handle of the user each names: what a mention of
+	// the handle is resolved against (internal/service/threads, TKT-01M3NRP3W9).
+	HandleReleases(ctx context.Context, handle string) ([]HandleReleasesRow, error)
 	// HandleReserved reports whether a release still reserves the handle at now,
 	// in any case.
 	HandleReserved(ctx context.Context, arg HandleReservedParams) (bool, error)
@@ -415,6 +428,12 @@ type Querier interface {
 	// Removes one IdP-sourced membership, and never one an admin holds.
 	RemoveIdPMembership(ctx context.Context, arg RemoveIdPMembershipParams) (int64, error)
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error
+	// RenameUser gives the account a new handle (internal/service/identity,
+	// rename.go). The old handle in the WHERE makes two renames racing from one
+	// handle produce one, and an anonymized account is never renamed, which the
+	// schema's trigger also holds. handle_changed_at is set only when changed_at
+	// is not null: a member's own rename passes it, an admin's does not.
+	RenameUser(ctx context.Context, arg RenameUserParams) (int64, error)
 	// Reopens flags a restore dismissed when its append wrote nothing. Only a
 	// dismissed flag reopens, so a flag some other path closed since stays
 	// closed. If a reporter has an open flag on the post again, which the

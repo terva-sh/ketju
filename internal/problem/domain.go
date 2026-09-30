@@ -168,6 +168,37 @@ func RetryAfterOf(err error) (time.Duration, bool) {
 	return 0, false
 }
 
+// availableAt is a coded error that also says when the refused thing
+// becomes possible.
+type availableAt struct {
+	coded
+	at int64
+}
+
+func (a availableAt) Unwrap() error { return a.coded }
+
+// AvailableAt tags an error with its code and with the time, in Unix ms,
+// when what it refused becomes possible, which WriteError sends as the
+// body's available_at. A member's handle change inside the 30-day cooldown
+// uses it (TKT-01M3NRP3W9): the wait is weeks, which Retry-After would tell
+// a client to spend retrying.
+func AvailableAt(c Code, at int64, err error) error {
+	if err == nil {
+		return nil
+	}
+	return availableAt{coded: coded{code: c, err: err}, at: at}
+}
+
+// AvailableAtOf returns the time an error carries, and whether it carries
+// one.
+func AvailableAtOf(err error) (int64, bool) {
+	var a availableAt
+	if errors.As(err, &a) {
+		return a.at, true
+	}
+	return 0, false
+}
+
 // FieldErrorsOf returns the field errors err carries, or nil. A form's
 // refusal (*forms.Invalid) carries them; WriteError puts them in a
 // validation-failed body and nowhere else.

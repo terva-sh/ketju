@@ -195,6 +195,8 @@ func RevokeAgentCredentialIn(ctx context.Context, q *dbq.Queries, at time.Time, 
 // handle_releases row that names no user, so nobody can take it, and the
 // links an old mention of it would give them, while nothing ties it to
 // deleted-user-<id> (maintainer decision 2026-09-29, Terva review 1448).
+// The releases of its earlier handles, from renames, stop naming it for the
+// same reason.
 // An application that named one of the identities keeps its row with a null
 // identity_id, by the column's foreign key. The ActionAnonymized row names
 // no handle. Post bodies, in the thread logs, are not touched.
@@ -212,6 +214,13 @@ func (e *Evaluator) Anonymize(ctx context.Context, userID int64, by audit.By, al
 			return err
 		}
 		if err := q.AnonymizeUser(ctx, dbq.AnonymizeUserParams{UpdatedAt: now, ID: userID}); err != nil {
+			return err
+		}
+		// The account's earlier handles, released by renames, stop naming
+		// it, so none of them redirects to deleted-user-<id> or links an old
+		// mention to it; each stays reserved until its own end
+		// (TKT-01M3NRP3W9).
+		if err := q.ForgetReleasesOf(ctx, sql.NullInt64{Int64: userID, Valid: true}); err != nil {
 			return err
 		}
 		if err := q.InsertHandleRelease(ctx, dbq.InsertHandleReleaseParams{Handle: u.Handle, ReleasedAt: now,

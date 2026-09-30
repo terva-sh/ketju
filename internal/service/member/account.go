@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
@@ -23,26 +24,64 @@ import (
 // the same so a pending account's existence does not show. The handle is
 // matched as the column's NOCASE collation matches it, so a handle typed
 // with capitals finds its account.
-func Account(ctx context.Context, d *db.DB, v domain.Viewer, handle string) (dbq.User, error) {
+//
+// A handle nobody has that a rename released within domain.HandleReservation
+// answers *Moved, naming the account's handle now, when v may see that
+// account (docs/05 "Changing a handle", TKT-01M3NRP3W9); the caller
+// redirects. A release that names no account, an anonymized account's, is
+// not-found like any unknown handle. Moved unwraps to not-found, so a caller
+// that does not redirect answers as it would without the release.
+func Account(ctx context.Context, d *db.DB, v domain.Viewer, handle string, now time.Time) (dbq.User, error) {
 	var u dbq.User
 	if err := Require(v, "read a profile"); err != nil {
 		return u, err
 	}
+	var moved sql.NullInt64
 	err := d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
 		u, err = q.GetUserByHandle(ctx, handle)
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		switch moved, err = q.ActiveRelease(ctx, dbq.ActiveReleaseParams{Handle: handle, Now: now.UnixMilli()}); {
+		case errors.Is(err, sql.ErrNoRows) || err == nil && !moved.Valid:
+			return sql.ErrNoRows
+		case err != nil:
+			return err
+		}
+		u, err = q.GetUser(ctx, moved.Int64)
 		return err
 	})
+	notFound := problem.Coded(problem.CodeNotFound, fmt.Errorf("no account has the handle %q", handle))
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return u, problem.Coded(problem.CodeNotFound, fmt.Errorf("no account has the handle %q", handle))
+		return dbq.User{}, notFound
 	case err != nil:
-		return u, err
+		return dbq.User{}, err
 	case !v.MaySeeAccount(u.Status):
 		return dbq.User{}, problem.Coded(problem.CodeNotFound, fmt.Errorf("the account %q is %s", handle, u.Status))
+	case moved.Valid && Anonymized(u):
+		return dbq.User{}, notFound
+	case moved.Valid:
+		return dbq.User{}, &Moved{Handle: u.Handle, err: notFound}
 	}
 	return u, nil
 }
+
+// Moved is Account's answer for a handle a rename released: the account is
+// under Handle now, and the caller answers a temporary redirect to it, never
+// a cached one, because the old handle is free again once the reservation
+// ends (docs/05 "Changing a handle").
+type Moved struct {
+	Handle string
+	err    error
+}
+
+func (m *Moved) Error() string { return fmt.Sprintf("the account moved to %q: %v", m.Handle, m.err) }
+
+// Unwrap is the not-found the handle answers to a caller that does not
+// redirect.
+func (m *Moved) Unwrap() error { return m.err }
 
 // Author is the one way a users row becomes the author block a post header,
 // a thread list's last poster, the forum tree, a profile and its post

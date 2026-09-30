@@ -383,6 +383,17 @@ Decided 2026-09-28 (docs/10 item 9, TKT-01M29BSPEN):
 - **Audit.** Every change is audited, with the old and new handle.
 - **Anonymized accounts** (`deleted-user-<id>`) cannot be renamed.
 
+Built in TKT-01M3NRP3W9 (`internal/service/identity` `rename.go`): the
+member's `PUT /settings/handle` and the admin's
+`POST /admin/users/{handle}/rename` (07). Two readings of the rules above:
+an admin's rename neither waits for the member's 30 days nor starts them,
+because the cooldown counts the member's own changes; and "not reserved"
+has no exception, so nobody, the former owner included, takes an old handle
+back inside its 90 days. Old mentions are pinned to the member through the
+kept `handle_releases` rows (04), and an
+anonymized account's old handles redirect nowhere and their mentions are
+text.
+
 ### Forms
 
 A minimal declarative form system, used first for registration and reusable
