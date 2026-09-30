@@ -1009,6 +1009,11 @@ describe('marking unread from the thread screen', () => {
     server = stubServer({
       [`GET ${url}`]: () => ({ status: 200, body: page }),
       [`GET ${url}?ordinal=62`]: () => ({ status: 200, body: page }),
+      // Post 62's history (TKT-01M29CP2Q3): one revision.
+      [`GET ${url}/posts/62/history`]: () => ({
+        status: 200,
+        body: { ordinal: 62, deleted: false, redacted: false, revisions: [{ revision: 1, actor: page.posts[0].author, at: 1, reason: '', source: 'x', grace: false }] },
+      }),
       [`DELETE ${read}`]: (b) => unread(b),
       'GET /api/v1/me': () => ({ status: 200, body: member }),
       'GET /api/v1/forums': () => ({ status: 200, body: { forums: [] }, headers: { ETag: '"f"' } }),
@@ -1178,6 +1183,12 @@ describe('marking unread from the thread screen', () => {
     await wait();
     expect(deletes()).toEqual([{ url: read, body: { ordinal: 61 } }]);
     expect(location.pathname).toBe(to);
+    // The history screen is still the one shown, with the post's revision,
+    // after the mark lands (TKT-01M29CP2Q3).
+    if (to.endsWith('/history')) {
+      expect(screenOf(root)).toBe('post-history');
+      expect(root.querySelectorAll('.post-history .revision')).toHaveLength(1);
+    }
   });
 
   it('is offered to a member who may not reply, and to nobody signed out', async () => {
