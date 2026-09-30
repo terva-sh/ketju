@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QV39H4FAC420R8W096VWG8
 title: Clear the agent limits form's Saved status when a field is edited
 type: bug
-status: ready
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -18,15 +18,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qv39h4
+  branch: run/qv39h4-limits-saved-status
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab684c2d5c5936692
+  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
+  session: null
+  claimed_at: 2026-09-30T18:42:52Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T00:23:12Z
-updated_at: 2026-09-30T08:58:30Z
+updated_at: 2026-09-30T18:43:55Z
 created_by:
   id: agent:claude-code/phase2-run-qh3gs2
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-qv39h4
   name: ""
 extensions: {}
 ---
@@ -44,7 +51,12 @@ Terva review 1510 on PR #179 (head a064d60), low: after a successful save of an 
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The form is `Limits` in `web/client/src/screens/admin/AgentPanel.tsx`, from TKT-01M29P9RSW's admin half (PR #179). The route is `PUT /api/v1/admin/users/{handle}/agent-limits` with `{burst, refill_seconds}`, each a number or null for the site default. It answers 200 `AdminUserDetail`. Nothing on the server changes.
+Revised 2026-09-30 on claim (agent:claude-code/phase2-run-qv39h4), against main at 13709f0. The groomed plan (written against 9a8fc76 and confirmed current at 5124209) still fits, so the approach below is unchanged. `AgentPanel.tsx` and `AgentControls.test.tsx` changed since only in tests: #239 (TKT-01M3P0CYR3) added a `?user=` history test and #229 (TKT-01M3QMRE47) changed a moderator's button list. Neither touches `Limits`. What those PRs changed around the panel, checked:
+- #239 keys `UserDetail` by the selected handle, so a rename or a `?user=` change remounts `Limits` with fresh state. A "Saved." cannot survive onto another account.
+- #229's `SuspensionPanel` refetch replaces the whole detail with `setFresh`. That reaches `Limits` through the existing `given` effect, which rewrites only unedited fields. If a refetch rewrites a field while a save is in flight, the answer's comparison fails and "Saved." stays hidden. That errs towards not claiming a save, which is the rule.
+- This is admin-chunk code only. The reader bundle should not change size; the PR reports both figures.
+
+The form is `Limits` in `web/client/src/screens/admin/AgentPanel.tsx`, from TKT-01M29P9RSW's admin half (PR #179). The route is `PUT /api/v1/admin/users/{handle}/agent-limits` with `{burst, refill_seconds}`, each a number or null for the site default. It answers 200 `AdminUserDetail`. Nothing on the server changes.
 
 ### Settled in grooming
 
