@@ -137,6 +137,8 @@ type Querier interface {
 	// between a check and the delete cannot be orphaned (docs/04 "No cascading
 	// deletes").
 	DeleteEmptyGroup(ctx context.Context, id int64) (int64, error)
+	// DELETE /forums/{slug}/draft: as DeleteThreadDraft.
+	DeleteForumDraft(ctx context.Context, arg DeleteForumDraftParams) (int64, error)
 	// Clears every IdP-sourced row of a user. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
 	// DeleteIdentitySessions ends every session bound to one of the user's
@@ -150,6 +152,8 @@ type Querier interface {
 	// removes the rows.
 	DeletePreUserSessions(ctx context.Context, identityID sql.NullInt64) error
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
+	// DELETE /drafts/{thread_id}: a live draft becomes a tombstone one revision
+	// on. A tombstone, or a key with no row, is left as it is.
 	DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error)
 	DeleteThreadTags(ctx context.Context, threadID int64) error
 	// DeleteUserIdentities removes every identity of an anonymized account
@@ -238,6 +242,7 @@ type Querier interface {
 	GetFormVersion(ctx context.Context, arg GetFormVersionParams) (FormVersion, error)
 	GetForum(ctx context.Context, id int64) (Forum, error)
 	GetForumBySlug(ctx context.Context, slug string) (Forum, error)
+	GetForumDraft(ctx context.Context, arg GetForumDraftParams) (Draft, error)
 	GetGroup(ctx context.Context, id int64) (Group, error)
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
 	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
@@ -247,8 +252,13 @@ type Querier interface {
 	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
 	GetThread(ctx context.Context, id int64) (Thread, error)
-	// A reply draft: one per user per thread (drafts_thread). New-thread drafts,
-	// keyed by forum, have no endpoint yet.
+	// Drafts (docs/07 "Drafts", TKT-01M3K9XBJA): a reply draft, one per user per
+	// thread (drafts_thread), and a new-thread draft, one per user per forum
+	// (drafts_new_thread). Each key's row is kept once it exists: a delete turns
+	// it into a tombstone, deleted = 1, so its revision survives and only grows.
+	// Every revision is computed here from the stored value, never taken from Go,
+	// so no clock reaches it. The reads return tombstones too, so the service can
+	// answer a tombstone's revision.
 	GetThreadDraft(ctx context.Context, arg GetThreadDraftParams) (Draft, error)
 	// A thread's slow mode (docs/04 "thread_slow_mode", TKT-01M29CRJ50). No row
 	// is sql.ErrNoRows, and the site default applies.
@@ -550,6 +560,10 @@ type Querier interface {
 	// A system group's slug and flag are fixed by trigger; its name and
 	// description are not.
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (int64, error)
+	// PUT /forums/{slug}/draft: as UpsertThreadDraft, for the one new-thread
+	// draft per (user, forum). The title is replaced as a whole, so a save
+	// without one clears it.
+	UpsertForumDraft(ctx context.Context, arg UpsertForumDraftParams) (Draft, error)
 	// A Post resets every column, for the same reason UpsertThread does.
 	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
 	// Reading never moves backwards: opening an older page of a thread must not
@@ -565,8 +579,10 @@ type Querier interface {
 	// it must undo whatever later records did before they are applied again.
 	UpsertThread(ctx context.Context, arg UpsertThreadParams) error
 	// PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
-	// source and reply target, keeping its created_at. The conflict target names
-	// the partial index's predicate, which SQLite requires to match it.
+	// source and reply target, keeping its created_at, and a tombstone comes back
+	// to life. A new row starts at revision 1 and each save adds one. The
+	// conflict target names the partial index's predicate, which SQLite requires
+	// to match it.
 	UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftParams) (Draft, error)
 	// Mention autocomplete (GET /api/v1/users?prefix=). lo is the prefix as
 	// typed and hi is lo with '{' appended, which sorts after every handle

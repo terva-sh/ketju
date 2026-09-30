@@ -344,6 +344,8 @@ func TestAgentBucket(t *testing.T) {
 		{http.MethodDelete, "/api/v1/threads/" + id.String() + "/read", ""},
 		{http.MethodPut, "/api/v1/drafts/" + id.String(), `{"source":"thinking","reply_to":null}`},
 		{http.MethodDelete, "/api/v1/drafts/" + id.String(), ""},
+		{http.MethodPut, "/api/v1/forums/general/draft", `{"title":"Notes","source":"thinking"}`},
+		{http.MethodDelete, "/api/v1/forums/general/draft", ""},
 	} {
 		if rec := w.bearer(token, r.method, r.path, r.body); rec.Code/100 != 2 {
 			t.Errorf("%s %s with an empty bucket: %d %s", r.method, r.path, rec.Code, rec.Body)

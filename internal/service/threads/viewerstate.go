@@ -5,6 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
@@ -129,6 +132,18 @@ func (s *Service) MarkUnread(ctx context.Context, v domain.Viewer, id threadid.I
 	return dto.ReadPosition{LastReadOrdinal: int(pos)}, nil
 }
 
+// Drafts (docs/07 "Drafts"): a reply draft keyed by thread (TKT-01M29CA9CE),
+// and a new-thread draft keyed by forum (TKT-01M3K9XBJA). Each key carries a
+// revision that only grows: a save adds one, and a delete of a live draft
+// adds one and keeps the row as a tombstone, so a draft deleted and started
+// again answers a higher revision than any copy of the old one. The queries
+// compute it from the stored value, inside the write's transaction, and no
+// clock enters it. A tombstone reads as no draft.
+//
+// When a read answers false, or a delete answers, the revision given is the
+// key's as it stands: a tombstone's, or 0 for a key that has never been
+// saved. The handlers send it as the Draft-Revision header on the 204.
+
 // DraftRequest is a draft reply as the composer holds it.
 type DraftRequest struct {
 	// Source may be empty: a draft holding only a reply target is still the
@@ -140,7 +155,8 @@ type DraftRequest struct {
 }
 
 // Draft is GET /drafts/{thread_id} (docs/07): the viewer's draft reply to the
-// thread, and false when they have none.
+// thread, and false when they have none. With false, only the Draft's
+// Revision is set: the key's revision, which a tombstone keeps.
 func (s *Service) Draft(ctx context.Context, v domain.Viewer, id threadid.ID) (dto.Draft, bool, error) {
 	var out dto.Draft
 	if err := s.MayKeepState(v); err != nil {
@@ -152,23 +168,23 @@ func (s *Service) Draft(ctx context.Context, v domain.Viewer, id threadid.ID) (d
 	var row dbq.Draft
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
-		row, err = q.GetThreadDraft(ctx, dbq.GetThreadDraftParams{
-			UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true},
-		})
+		row, err = q.GetThreadDraft(ctx, threadDraftKey(v, id))
 		return err
 	})
-	if errors.Is(err, sql.ErrNoRows) {
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
 		return out, false, nil
-	}
-	if err != nil {
+	case err != nil:
 		return out, false, err
+	case row.Deleted != 0:
+		return dto.Draft{Revision: row.Revision}, false, nil
 	}
 	return draftDTO(id, row), true, nil
 }
 
 // SaveDraft is PUT /drafts/{thread_id} (docs/06 "Composer", docs/07): the
 // viewer's one draft for the thread takes req, whichever device sent it, and
-// the answer is the draft as stored.
+// the answer is the draft as stored, one revision on.
 //
 // Saving needs reply in the thread's forum, since a draft is a reply being
 // written. A reply target must name a post the thread has; a deleted one is
@@ -212,29 +228,177 @@ func (s *Service) SaveDraft(ctx context.Context, v domain.Viewer, id threadid.ID
 }
 
 // DeleteDraft is DELETE /drafts/{thread_id} (docs/07): the viewer discards
-// their draft for the thread. Discarding a draft that is not there is not an
-// error, so a client that retries a delete, or deletes after posting, needs
-// no special case.
-func (s *Service) DeleteDraft(ctx context.Context, v domain.Viewer, id threadid.ID) error {
+// their draft for the thread, and the answer is the key's revision after it.
+// Discarding a draft that is not there is not an error and changes nothing,
+// so a client that retries a delete, or deletes after posting, needs no
+// special case.
+func (s *Service) DeleteDraft(ctx context.Context, v domain.Viewer, id threadid.ID) (int64, error) {
 	if err := s.MayKeepState(v); err != nil {
-		return err
+		return 0, err
 	}
 	if _, err := s.access(ctx, v, id); err != nil {
-		return err
+		return 0, err
 	}
-	return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		_, err := q.DeleteThreadDraft(ctx, dbq.DeleteThreadDraftParams{
-			UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true},
-		})
-		return err
+	now := s.now().UnixMilli()
+	return s.tombstone(ctx, func(q *dbq.Queries) (dbq.Draft, error) {
+		key := threadDraftKey(v, id)
+		if _, err := q.DeleteThreadDraft(ctx, dbq.DeleteThreadDraftParams{Now: now, UserID: key.UserID, ThreadID: key.ThreadID}); err != nil {
+			return dbq.Draft{}, err
+		}
+		return q.GetThreadDraft(ctx, key)
 	})
 }
 
+// ForumDraftRequest is a new thread as its form holds it.
+type ForumDraftRequest struct {
+	// Title is the title as typed, or nil for none, which clears a stored
+	// one: a save replaces the whole draft.
+	Title *string
+	// Source may be empty, as for a reply draft.
+	Source string
+}
+
+// ForumDraft is GET /forums/{slug}/draft (docs/07 "Drafts"): the viewer's
+// new-thread draft in the forum, and false when they have none. With false,
+// only the ForumDraft's Revision is set, as for Draft. Reading needs only
+// read access to the forum.
+func (s *Service) ForumDraft(ctx context.Context, v domain.Viewer, slug string) (dto.ForumDraft, bool, error) {
+	var out dto.ForumDraft
+	if err := s.MayKeepState(v); err != nil {
+		return out, false, err
+	}
+	forum, err := s.readForum(ctx, v, slug)
+	if err != nil {
+		return out, false, err
+	}
+	var row dbq.Draft
+	err = s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		row, err = q.GetForumDraft(ctx, forumDraftKey(v, forum))
+		return err
+	})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return out, false, nil
+	case err != nil:
+		return out, false, err
+	case row.Deleted != 0:
+		return dto.ForumDraft{Revision: row.Revision}, false, nil
+	}
+	return forumDraftDTO(forum, row), true, nil
+}
+
+// SaveForumDraft is PUT /forums/{slug}/draft (docs/07 "Drafts"): the viewer's
+// one new-thread draft for the forum takes req, and the answer is the draft
+// as stored, one revision on.
+//
+// Saving is refused as creating a thread there would be (forumForThread): an
+// archived forum is conflict to everyone but an admin, and it needs
+// create_thread. The title is held to a thread title's rules but two: it may
+// be empty, and it is kept as typed rather than trimmed, since it is not
+// finished.
+func (s *Service) SaveForumDraft(ctx context.Context, v domain.Viewer, slug string, req ForumDraftRequest) (dto.ForumDraft, error) {
+	var out dto.ForumDraft
+	if err := s.MayKeepState(v); err != nil {
+		return out, err
+	}
+	forum, err := s.forumForThread(ctx, v, slug)
+	if err != nil {
+		return out, err
+	}
+	title := sql.NullString{}
+	if req.Title != nil {
+		if err := checkDraftTitle(*req.Title); err != nil {
+			return out, err
+		}
+		title = sql.NullString{String: *req.Title, Valid: true}
+	}
+	var row dbq.Draft
+	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		row, err = q.UpsertForumDraft(ctx, dbq.UpsertForumDraftParams{
+			UserID: v.UserID, ForumID: sql.NullInt64{Int64: forum.ID, Valid: true},
+			Title: title, Source: req.Source, Now: s.now().UnixMilli(),
+		})
+		return err
+	})
+	if err != nil {
+		return out, err
+	}
+	return forumDraftDTO(forum, row), nil
+}
+
+// DeleteForumDraft is DELETE /forums/{slug}/draft (docs/07 "Drafts"): as
+// DeleteDraft, for the viewer's new-thread draft in the forum. It needs only
+// read access, so a member can discard a draft in a forum since archived.
+func (s *Service) DeleteForumDraft(ctx context.Context, v domain.Viewer, slug string) (int64, error) {
+	if err := s.MayKeepState(v); err != nil {
+		return 0, err
+	}
+	forum, err := s.readForum(ctx, v, slug)
+	if err != nil {
+		return 0, err
+	}
+	now := s.now().UnixMilli()
+	return s.tombstone(ctx, func(q *dbq.Queries) (dbq.Draft, error) {
+		key := forumDraftKey(v, forum)
+		if _, err := q.DeleteForumDraft(ctx, dbq.DeleteForumDraftParams{Now: now, UserID: key.UserID, ForumID: key.ForumID}); err != nil {
+			return dbq.Draft{}, err
+		}
+		return q.GetForumDraft(ctx, key)
+	})
+}
+
+// tombstone runs del, which tombstones a draft and reads its key back, in
+// one write transaction, so no other save lands between the two, and
+// answers the key's revision: 0 when it has no row.
+func (s *Service) tombstone(ctx context.Context, del func(q *dbq.Queries) (dbq.Draft, error)) (int64, error) {
+	var rev int64
+	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		row, err := del(q)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		rev = row.Revision
+		return err
+	})
+	return rev, err
+}
+
+// checkDraftTitle is checkTitle for a title still being written: a control
+// character or more than MaxTitle characters is refused, but an empty title
+// is not, and nothing is trimmed.
+func checkDraftTitle(title string) error {
+	if strings.ContainsFunc(title, unicode.IsControl) {
+		return problem.Coded(problem.CodeValidationFailed, errors.New("threads: the draft's title holds a control character"))
+	}
+	if utf8.RuneCountInString(title) > MaxTitle {
+		return problem.Coded(problem.CodeValidationFailed, fmt.Errorf("threads: the draft's title is over %d characters", MaxTitle))
+	}
+	return nil
+}
+
+func threadDraftKey(v domain.Viewer, id threadid.ID) dbq.GetThreadDraftParams {
+	return dbq.GetThreadDraftParams{UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true}}
+}
+
+func forumDraftKey(v domain.Viewer, forum dbq.Forum) dbq.GetForumDraftParams {
+	return dbq.GetForumDraftParams{UserID: v.UserID, ForumID: sql.NullInt64{Int64: forum.ID, Valid: true}}
+}
+
 func draftDTO(id threadid.ID, row dbq.Draft) dto.Draft {
-	d := dto.Draft{ThreadID: id.String(), Source: row.Source, UpdatedAt: dto.Millis(row.UpdatedAt)}
+	d := dto.Draft{ThreadID: id.String(), Source: row.Source, UpdatedAt: dto.Millis(row.UpdatedAt), Revision: row.Revision}
 	if row.ReplyTo.Valid {
 		r := uint32(row.ReplyTo.Int64)
 		d.ReplyTo = &r
+	}
+	return d
+}
+
+func forumDraftDTO(forum dbq.Forum, row dbq.Draft) dto.ForumDraft {
+	d := dto.ForumDraft{Forum: forum.Slug, Source: row.Source, UpdatedAt: dto.Millis(row.UpdatedAt), Revision: row.Revision}
+	if row.Title.Valid {
+		t := row.Title.String
+		d.Title = &t
 	}
 	return d
 }

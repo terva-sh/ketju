@@ -533,11 +533,33 @@ type FlagReceipt struct {
 // ThreadID is the thread's base32 id, as in ThreadHeader. ReplyTo is the
 // ordinal the reply chip names, or null when the draft replies to the
 // thread as a whole. UpdatedAt is when the server last stored it.
+//
+// Revision is the draft key's count of writes (TKT-01M3K9XBJA): every save
+// adds one, and so does deleting a live draft, whose row the server keeps so
+// the count survives. It only grows and reads no clock, so a client orders a
+// local copy of the draft by it (docs/07 "Drafts"). A 204 carries it as the
+// Draft-Revision header.
 type Draft struct {
 	ThreadID  string  `json:"thread_id"`
 	Source    string  `json:"source"`
 	ReplyTo   *uint32 `json:"reply_to"`
 	UpdatedAt Millis  `json:"updated_at"`
+	Revision  int64   `json:"revision"`
+}
+
+// ForumDraft is a new thread the viewer has started and not posted: GET and
+// PUT /forums/{slug}/draft (docs/07 "Drafts", TKT-01M3K9XBJA). One per user
+// per forum, kept on the server so it follows the user to another device.
+//
+// Forum is the forum's slug. Title is the title as typed, untrimmed, and is
+// omitted when the draft has none. Revision is as for Draft, counted per
+// forum.
+type ForumDraft struct {
+	Forum     string  `json:"forum"`
+	Title     *string `json:"title,omitempty"`
+	Source    string  `json:"source"`
+	UpdatedAt Millis  `json:"updated_at"`
+	Revision  int64   `json:"revision"`
 }
 
 // Profile is GET /users/{handle} (docs/07): an account as the viewer may see

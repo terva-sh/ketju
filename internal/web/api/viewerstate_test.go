@@ -217,7 +217,8 @@ func (w *world) sendAs(v domain.Viewer, method, path, body string) *httptest.Res
 
 // TestDraftFollowsTheUser is AC3: a draft saved from one session is the
 // draft another session of the same user reads, a second save replaces it
-// in the one row with a later updated_at, and another user sees none of it.
+// in the one row with a later updated_at and the next revision, and another
+// user sees none of it.
 func TestDraftFollowsTheUser(t *testing.T) {
 	w := newWorld(t)
 	id, _ := w.seed()
@@ -229,7 +230,7 @@ func TestDraftFollowsTheUser(t *testing.T) {
 	}
 
 	saved := ok[dto.Draft](t, w.sendAs(laptop, http.MethodPut, draftPath(id), `{"source":"Half a thought","reply_to":1}`))
-	want := dto.Draft{ThreadID: id.String(), Source: "Half a thought", ReplyTo: ptrU32(1), UpdatedAt: dto.Millis(w.clock)}
+	want := dto.Draft{ThreadID: id.String(), Source: "Half a thought", ReplyTo: ptrU32(1), UpdatedAt: dto.Millis(w.clock), Revision: 1}
 	if renderJSON(t, saved) != renderJSON(t, want) {
 		t.Fatalf("saved %s, want %s", renderJSON(t, saved), renderJSON(t, want))
 	}
@@ -239,7 +240,7 @@ func TestDraftFollowsTheUser(t *testing.T) {
 
 	w.clock += 5_000
 	again := ok[dto.Draft](t, w.sendAs(phone, http.MethodPut, draftPath(id), `{"source":"Half a thought, finished"}`))
-	if again.ReplyTo != nil || again.Source != "Half a thought, finished" || again.UpdatedAt <= saved.UpdatedAt {
+	if again.ReplyTo != nil || again.Source != "Half a thought, finished" || again.UpdatedAt <= saved.UpdatedAt || again.Revision != 2 {
 		t.Fatalf("second save %s after %s", renderJSON(t, again), renderJSON(t, saved))
 	}
 	if got := ok[dto.Draft](t, w.sendAs(laptop, http.MethodGet, draftPath(id), "")); renderJSON(t, got) != renderJSON(t, again) {
@@ -367,12 +368,15 @@ func TestEveryViewerStateRouteHasAFormPost(t *testing.T) {
 		"GET /api/v1/drafts/{thread_id}",
 		"PUT /api/v1/drafts/{thread_id}",
 		"DELETE /api/v1/drafts/{thread_id}",
+		"GET /api/v1/forums/{slug}/draft",
+		"PUT /api/v1/forums/{slug}/draft",
+		"DELETE /api/v1/forums/{slug}/draft",
 	}
 	w := newWorld(t)
 	id, _ := w.seed()
 	for _, route := range served {
 		method, path, _ := strings.Cut(route, " ")
-		path = strings.NewReplacer("{id}", id.String(), "{thread_id}", id.String()).Replace(path)
+		path = strings.NewReplacer("{id}", id.String(), "{thread_id}", id.String(), "{slug}", "general").Replace(path)
 		// An anonymous request reaches the handler and is refused by it;
 		// the catch-all for an unregistered route says not-found.
 		if rec := send(w.chain(), "", method, path, `{}`); problemCode(t, rec) != "unauthenticated" {

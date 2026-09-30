@@ -48,6 +48,7 @@ func agentCharge(r *http.Request) (string, web.Rate, bool) {
 var unchargedPaths = []string{
 	"/api/v1/threads/{id}/read",
 	"/api/v1/drafts/{thread_id}",
+	"/api/v1/forums/{slug}/draft",
 }
 
 // charged is fn behind the agent's bucket, unless method does not write or

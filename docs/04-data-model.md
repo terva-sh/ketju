@@ -638,7 +638,8 @@ Recovery reads only flags with the marker set (08 "Flags").
 ### drafts
 ```
 user_id, thread_id (nullable = new-thread draft, then forum_id), title
-(nullable, new-thread drafts only), source, reply_to, updated_at
+(nullable, new-thread drafts only), source, reply_to, updated_at,
+revision (0 or more), deleted (0 or 1)
 UNIQUE (user_id, thread_id) WHERE thread_id IS NOT NULL
 UNIQUE (user_id, forum_id) WHERE thread_id IS NULL
 ```
@@ -647,12 +648,26 @@ per forum. A draft holds exactly one of thread and forum, and a `reply_to`
 only with a thread. The first version of this section declared
 `PRIMARY KEY (user_id, thread_id)`, but a nullable key column does not enforce
 uniqueness in SQLite and could not key a new-thread draft by forum, so the
-two partial indexes replace it (TKT-01M29BYYHQ). The API serves reply drafts
-only (07 "Drafts"). A new-thread draft saves its title as well as its body. Decided 2026-09-28
+two partial indexes replace it (TKT-01M29BYYHQ). The API serves reply
+drafts at `/drafts/{thread_id}` and new-thread drafts at
+`/forums/{slug}/draft` (07 "Drafts"). A new-thread draft saves its title as well as its body. Decided 2026-09-28
 (TKT-01M3K9XBJA, Autosave new-thread drafts, and decide whether the title is
 saved): a draft restored on another device should come back whole. The
-`title` column is added by that ticket's migration, and a reply draft leaves
-it null. That ticket also adds the route.
+`title` column is added by that ticket's migration (0018), and a `CHECK`
+keeps it null on a reply draft.
+
+`revision` counts a key's writes and only grows: a save adds one, starting
+from 1, and so does deleting a live draft. A delete keeps the row as a
+tombstone, `deleted = 1`, whose `CHECK` requires an empty `source` and a
+null `reply_to` and `title`. The key's revision therefore survives a delete,
+and a draft started again answers a higher revision than any copy of the old
+one. The revision is computed in SQL from the stored value, so no clock
+enters it. A client orders a local copy of a draft by it (07 "Drafts",
+TKT-01M3NS1931). Tombstones are never swept, because a sweep would restart
+the count. There is at most one per thread or forum a member has ever
+drafted in, and blob GC finds no attachment in an empty source. Both columns
+come from migration 0018 (TKT-01M3K9XBJA), which sets every draft stored
+before it to revision 1.
 
 ### blobs
 ```

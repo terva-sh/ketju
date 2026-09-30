@@ -301,6 +301,21 @@ export interface Draft {
   source: string;
   reply_to: number | null;
   updated_at: Millis;
+  // revision only grows, whatever either clock does; a 204 carries it as
+  // the Draft-Revision header.
+  revision: number;
+}
+
+// ForumDraft is GET and PUT /forums/{slug}/draft: the viewer's one
+// new-thread draft for the forum. title is as typed, and absent when the
+// draft has none. GET answers 204 with no body when there is none
+// (internal/dto ForumDraft).
+export interface ForumDraft {
+  forum: string;
+  title?: string;
+  source: string;
+  updated_at: Millis;
+  revision: number;
 }
 
 // The admin users, groups and permissions screens (internal/dto admin.go,

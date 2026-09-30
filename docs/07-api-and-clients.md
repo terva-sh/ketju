@@ -131,6 +131,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `POST /threads/{id}/flags` | `{ordinal, reason, note}` report a post (08 "Flags", TKT-01M29CP2PJ). A member session and read access are required. `reason` is `spam`, `abuse`, `off-topic` or `other`, and `other` needs a `note`, at most 1000 characters (`validation-failed`); an ordinal the thread lacks is `not-found`; the member's own post is `forbidden`, shown or not and in an archived thread too (maintainer decision 2026-09-29, TKT-01M3QQWA5Z); any other post in an archived thread is `conflict`, and so is a post already removed or moved, except for a member whose flag on it is still open, whose repeat gets the receipt like any other. Answers 200 `internal/dto` `FlagReceipt`, `{"received": true}`, the same for a new flag, a member's repeat (which adds no row) and the flag that hides the post, and nothing else: no count, no reporter, no outcome. If the flag reaches `flags.auto_hide_threshold` and the hide cannot be appended, the flag is kept, the answer is the same receipt, and the failure is logged; the sweep hides the post within a minute. So `unavailable` (a quarantined thread) means nothing was kept. Charged to the write limiters. `no-store` |
 | `POST /render` | `{source, thread_id?, reply_to?}` → `{html, mentions: [{handle}], quotes: [{ordinal, deleted}], reply_to}` (composer preview; the create path records the same facts from the same render, `internal/dto` `RenderResult`). A member session is required (anonymous `unauthenticated`, pre-user `forbidden`). With `thread_id` the viewer must be able to read the thread, quotes resolve against it and `reply_to` is checked (`validation-failed` when no such post; a deleted post is accepted); without it quotes render optimistically and `reply_to` is `bad-request`. Charged to the per-address write limiter; the body limit is the post limit |
 | `GET  /drafts/{thread_id}` `PUT` `DELETE` | composer drafts, one per user per thread → `internal/dto` `Draft`; see "Drafts" below |
+| `GET  /forums/{slug}/draft` `PUT` `DELETE` | new-thread drafts with their title, one per user per forum → `internal/dto` `ForumDraft`; see "Drafts" below (TKT-01M3K9XBJA) |
 | `GET  /unread` `/new` `/participated` `/watching` | cross-forum thread lists |
 | `GET  /search?q=&forum=&author=&after=&before=` | FTS5 results with snippets |
 | `GET  /notifications` `POST /notifications/read` | |
@@ -805,16 +806,16 @@ write limiter.
   thread the viewer may not see is `not-found`. Reading is all it needs; a
   member without `reply` keeps a position.
 
-#### Drafts (TKT-01M29CA9CE)
+#### Drafts (TKT-01M29CA9CE, TKT-01M3K9XBJA)
 
 `/drafts/{thread_id}` is the composer's autosave for a reply, one per user
 per thread (04 `drafts`), kept on the server so it follows the user to
 another device.
 
 - `GET` answers 200 `internal/dto` `Draft` `{thread_id, source, reply_to,
-  updated_at}`, or 204 with no body when the viewer has no draft for the
-  thread. Having no draft is the usual state rather than an error, and
-  `not-found` stays reserved for a thread the viewer cannot see.
+  updated_at, revision}`, or 204 with no body when the viewer has no draft
+  for the thread. Having no draft is the usual state rather than an error,
+  and `not-found` stays reserved for a thread the viewer cannot see.
 - `PUT` takes `{source, reply_to?}` and answers 200 with the draft as stored.
   It replaces the viewer's one draft for the thread, whichever device sent
   it, and `updated_at` is the server's time of the save. `source` is required
@@ -829,9 +830,44 @@ another device.
 - A member session and access to the thread are required, as for the read
   position. All three are `no-store`; `PUT` and `DELETE` are charged to the
   write limiter.
-- The new-thread draft, which docs/04 keys by forum, has no route yet. That
-  is TKT-01M3K9XBJA (Autosave new-thread drafts, and decide whether the
-  title is saved).
+
+`/forums/{slug}/draft` is the new-thread form's autosave, one per user per
+forum (04 `drafts`), with the thread's title as well as its body
+(TKT-01M3K9XBJA). It follows the reply draft's rules, with these
+differences:
+
+- `GET` answers 200 `internal/dto` `ForumDraft` `{forum, title?, source,
+  updated_at, revision}`, where `forum` is the slug and `title` is left out
+  when the draft has none, or 204.
+- `PUT` takes `{title?, source}` and replaces the whole draft, so a `PUT`
+  without `title` clears a stored one. `source` is required but may be
+  empty. The title follows a thread title's rules but for two: it may be
+  empty, and it is stored as typed, not trimmed, because it is unfinished.
+  More than 200 characters (`MaxTitle`) or a control character is
+  `validation-failed`.
+- Saving is refused as starting a thread there would be: an archived forum
+  is `conflict` to everyone but an admin, and it needs `create_thread`
+  (`forbidden` otherwise). `GET` and `DELETE` need only read access to the
+  forum, so a member can still discard a draft in a forum since archived.
+- A forum that does not exist or is hidden from the viewer is `not-found`.
+
+Every draft carries a `revision`, a count per draft key that only grows,
+and a client orders a local copy of a draft by it rather than by comparing
+its clock with `updated_at` (TKT-01M3NS1931):
+
+- A `PUT` adds one, starting from 1. A `DELETE` of a live draft adds one and
+  keeps the row as a tombstone, with its text emptied, which a `GET` answers
+  as 204. So a draft deleted and started again answers a higher revision
+  than any copy of the old one, whatever the server's clock does. A `DELETE`
+  with no live draft changes nothing. Tombstones are never swept, because a
+  sweep would restart the count.
+- The server computes it in the write's own transaction from the stored
+  value. No clock enters it.
+- A 204 from any draft route, `GET` or `DELETE`, carries the key's revision
+  in a `Draft-Revision` header: the tombstone's, or 0 for a key that has
+  never been saved.
+- An agent's writes to either draft route are not charged to its bucket
+  (see "Agents on the API" below).
 
 ### Where the shapes live
 
@@ -1021,7 +1057,8 @@ post calls the same `internal/service/threads` method as its JSON route, with
 the same rules and refusals, and answers with a `303 See Other` back to the
 page it came from and a flash message instead of a body. A refusal is the
 same problem code rendered as a page. The routes live under the HTML
-client's `/t/{id}` paths; `{slug}` is advisory there as everywhere. A test in
+client's `/t/{id}` and `/f/{slug}` paths. A thread's slug is advisory there
+as everywhere, and a forum's slug is its key. A test in
 `internal/web/api` checks that every viewer-state route it serves has a row
 here.
 
@@ -1032,6 +1069,9 @@ here.
 | `GET /api/v1/drafts/{thread_id}` | none: the thread page fills its composer from the draft | | `Draft` |
 | `PUT /api/v1/drafts/{thread_id}` | `POST /t/{id}/draft`, the composer's "Save draft" button (`formaction` on the reply form) | `source`, `reply_to` (optional) | `SaveDraft` |
 | `DELETE /api/v1/drafts/{thread_id}` | `POST /t/{id}/draft/delete` | none | `DeleteDraft` |
+| `GET /api/v1/forums/{slug}/draft` | none: the new-thread page fills its form from the draft | | `ForumDraft` |
+| `PUT /api/v1/forums/{slug}/draft` | `POST /f/{slug}/draft`, the new-thread form's "Save draft" button (`formaction` on the form) | `title`, `source` | `SaveForumDraft` |
+| `DELETE /api/v1/forums/{slug}/draft` | `POST /f/{slug}/draft/delete` | none | `DeleteForumDraft` |
 | `POST /api/v1/threads/{id}/watch` | `POST /t/{id}/watch` | `level` | owned by TKT-01M29CRJ29, which builds the route |
 | `POST /api/v1/threads/{id}/flags` | `POST /t/{id}/posts/{ordinal}/flag` | `reason`, `note` | the JSON route is built (TKT-01M29CP2PJ); the form route is Phase 5 |
 

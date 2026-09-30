@@ -3,6 +3,7 @@ package api
 import (
 	"errors"
 	"net/http"
+	"strconv"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/problem"
@@ -86,11 +87,24 @@ func (h *handlers) markUnread(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, res)
 }
 
+// draftRevisionHeader carries a draft key's revision on a 204, which has no
+// body to carry it (docs/07 "Drafts", TKT-01M3K9XBJA): the revision a
+// tombstone keeps, or 0 for a key never saved.
+const draftRevisionHeader = "Draft-Revision"
+
+// noDraft answers 204 with the key's revision, not cached.
+func noDraft(w http.ResponseWriter, revision int64) {
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set(draftRevisionHeader, strconv.FormatInt(revision, 10))
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // getDraft, putDraft and deleteDraft are /api/v1/drafts/{thread_id}, the
 // composer's autosave (TKT-01M29CA9CE). A viewer with no draft for the
 // thread gets 204 rather than not-found, which the API keeps for a thread
 // that is not there: having no draft is the usual state, not an error.
-// DELETE answers 204 whether or not there was one.
+// DELETE answers 204 whether or not there was one. Every 204 carries the
+// key's revision as Draft-Revision.
 func (h *handlers) getDraft(w http.ResponseWriter, r *http.Request) {
 	v := domain.ViewerFrom(r.Context())
 	if err := h.threads.MayKeepState(v); err != nil {
@@ -107,11 +121,11 @@ func (h *handlers) getDraft(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	w.Header().Set("Cache-Control", "no-store")
 	if !ok {
-		w.WriteHeader(http.StatusNoContent)
+		noDraft(w, d.Revision)
 		return
 	}
+	w.Header().Set("Cache-Control", "no-store")
 	writeJSON(w, http.StatusOK, d)
 }
 
@@ -155,10 +169,79 @@ func (h *handlers) deleteDraft(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if err := h.threads.DeleteDraft(r.Context(), v, id); err != nil {
+	rev, err := h.threads.DeleteDraft(r.Context(), v, id)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	noDraft(w, rev)
+}
+
+// forumDraftRequest is the body of PUT /api/v1/forums/{slug}/draft (docs/07).
+type forumDraftRequest struct {
+	Title  *string `json:"title"`
+	Source *string `json:"source"`
+}
+
+// getForumDraft, putForumDraft and deleteForumDraft are
+// /api/v1/forums/{slug}/draft, the new-thread form's autosave
+// (TKT-01M3K9XBJA). They answer as the reply draft's handlers do, 204 with
+// Draft-Revision included; the rules are the threads service's (ForumDraft,
+// SaveForumDraft, DeleteForumDraft).
+func (h *handlers) getForumDraft(w http.ResponseWriter, r *http.Request) {
+	v := domain.ViewerFrom(r.Context())
+	if err := h.threads.MayKeepState(v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	d, ok, err := h.threads.ForumDraft(r.Context(), v, r.PathValue("slug"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if !ok {
+		noDraft(w, d.Revision)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *handlers) putForumDraft(w http.ResponseWriter, r *http.Request) {
+	v := domain.ViewerFrom(r.Context())
+	if err := h.threads.MayKeepState(v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var in forumDraftRequest
+	if err := decodeStrict(r.Body, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if in.Source == nil {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: the draft has no source")))
+		return
+	}
+	d, err := h.threads.SaveForumDraft(r.Context(), v, r.PathValue("slug"),
+		threads.ForumDraftRequest{Title: in.Title, Source: *in.Source})
+	if err != nil {
 		h.fail(w, r, err)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
-	w.WriteHeader(http.StatusNoContent)
+	writeJSON(w, http.StatusOK, d)
+}
+
+func (h *handlers) deleteForumDraft(w http.ResponseWriter, r *http.Request) {
+	v := domain.ViewerFrom(r.Context())
+	if err := h.threads.MayKeepState(v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	rev, err := h.threads.DeleteForumDraft(r.Context(), v, r.PathValue("slug"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	noDraft(w, rev)
 }

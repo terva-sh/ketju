@@ -466,6 +466,9 @@ var corpus = map[string]any{
 	"draft." + tMember:          draftReply(),
 	"draft-plain." + tMember:    draftPlain(),
 
+	"forum-draft." + tMember:          forumDraft(),
+	"forum-draft-untitled." + tMember: forumDraftUntitled(),
+
 	"profile." + tMember:            profile(tMember),
 	"profile." + tModerator:         profile(tModerator),
 	"profile-anonymized." + tMember: anonymizedProfile(),
@@ -623,12 +626,25 @@ func userPostsOwn() UserPosts {
 func draftReply() Draft {
 	reply := uint32(61)
 	return Draft{ThreadID: "3yymw47g00001", Source: "The bill was the smaller half, but",
-		ReplyTo: &reply, UpdatedAt: 1757500300000}
+		ReplyTo: &reply, UpdatedAt: 1757500300000, Revision: 3}
 }
 
 func draftPlain() Draft {
 	return Draft{ThreadID: "3yymw47g00001", Source: "Agreed, and",
-		ReplyTo: nil, UpdatedAt: 1757500310000}
+		ReplyTo: nil, UpdatedAt: 1757500310000, Revision: 1}
+}
+
+// forumDraft is GET /forums/{slug}/draft for a new thread whose title is
+// half typed, its trailing space kept; forumDraftUntitled is one saved
+// before any title was typed, whose title is omitted.
+func forumDraft() ForumDraft {
+	title := "Moving the book club to "
+	return ForumDraft{Forum: "social", Title: &title, Source: "We keep losing the thread in the group chat.",
+		UpdatedAt: 1757500320000, Revision: 5}
+}
+
+func forumDraftUntitled() ForumDraft {
+	return ForumDraft{Forum: "social", Source: "Something about the", UpdatedAt: 1757500330000, Revision: 1}
 }
 
 // renderReply is POST /render for a reply that quotes post 61, whose quoted

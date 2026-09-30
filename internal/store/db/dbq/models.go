@@ -83,6 +83,9 @@ type Draft struct {
 	ReplyTo   sql.NullInt64
 	CreatedAt int64
 	UpdatedAt int64
+	Title     sql.NullString
+	Revision  int64
+	Deleted   int64
 }
 
 type Flag struct {

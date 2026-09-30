@@ -27,6 +27,7 @@ import type {
   FlagReceipt,
   Form,
   FormAdmin,
+  ForumDraft,
   ForumTree,
   GroupDetail,
   GroupList,
@@ -79,6 +80,8 @@ import draftPlainMember from '../../../../internal/dto/testdata/golden/draft-pla
 import flagReceiptMember from '../../../../internal/dto/testdata/golden/flag-receipt.member.json';
 import formAdminAdmin from '../../../../internal/dto/testdata/golden/form-admin.admin.json';
 import formPreviewAdmin from '../../../../internal/dto/testdata/golden/form-preview.admin.json';
+import forumDraftMember from '../../../../internal/dto/testdata/golden/forum-draft.member.json';
+import forumDraftUntitledMember from '../../../../internal/dto/testdata/golden/forum-draft-untitled.member.json';
 import forumsAnon from '../../../../internal/dto/testdata/golden/forums.anon.json';
 import forumsMember from '../../../../internal/dto/testdata/golden/forums.member.json';
 import historyMember from '../../../../internal/dto/testdata/golden/history.member.json';
@@ -171,6 +174,8 @@ export const contract = [
   matches<FlagReceipt>()(flagReceiptMember),
   matches<FormAdmin>()(formAdminAdmin),
   matches<Form>()(formPreviewAdmin),
+  matches<ForumDraft>()(forumDraftMember),
+  matches<ForumDraft>()(forumDraftUntitledMember),
   matches<ForumTree>()(forumsAnon),
   matches<ForumTree>()(forumsMember),
   matches<PostHistory>()(historyMember),

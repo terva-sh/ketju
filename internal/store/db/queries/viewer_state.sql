@@ -185,22 +185,59 @@ SELECT a.forum_id, CAST(a.threads - coalesce(n.threads, 0) AS INTEGER) AS thread
 FROM active AS a LEFT JOIN not_unread AS n ON n.forum_id = a.forum_id
 WHERE a.threads - coalesce(n.threads, 0) > 0;
 
--- A reply draft: one per user per thread (drafts_thread). New-thread drafts,
--- keyed by forum, have no endpoint yet.
+-- Drafts (docs/07 "Drafts", TKT-01M3K9XBJA): a reply draft, one per user per
+-- thread (drafts_thread), and a new-thread draft, one per user per forum
+-- (drafts_new_thread). Each key's row is kept once it exists: a delete turns
+-- it into a tombstone, deleted = 1, so its revision survives and only grows.
+-- Every revision is computed here from the stored value, never taken from Go,
+-- so no clock reaches it. The reads return tombstones too, so the service can
+-- answer a tombstone's revision.
+
 -- name: GetThreadDraft :one
 SELECT * FROM drafts WHERE user_id = ? AND thread_id = ?;
 
 -- PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
--- source and reply target, keeping its created_at. The conflict target names
--- the partial index's predicate, which SQLite requires to match it.
+-- source and reply target, keeping its created_at, and a tombstone comes back
+-- to life. A new row starts at revision 1 and each save adds one. The
+-- conflict target names the partial index's predicate, which SQLite requires
+-- to match it.
 -- name: UpsertThreadDraft :one
-INSERT INTO drafts (user_id, thread_id, source, reply_to, created_at, updated_at)
-VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(source), sqlc.arg(reply_to), sqlc.arg(now), sqlc.arg(now))
+INSERT INTO drafts (user_id, thread_id, source, reply_to, created_at, updated_at, revision)
+VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(source), sqlc.arg(reply_to), sqlc.arg(now), sqlc.arg(now), 1)
 ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
 	source = excluded.source,
 	reply_to = excluded.reply_to,
-	updated_at = excluded.updated_at
+	updated_at = excluded.updated_at,
+	deleted = 0,
+	revision = drafts.revision + 1
 RETURNING *;
 
+-- DELETE /drafts/{thread_id}: a live draft becomes a tombstone one revision
+-- on. A tombstone, or a key with no row, is left as it is.
 -- name: DeleteThreadDraft :execrows
-DELETE FROM drafts WHERE user_id = ? AND thread_id = ?;
+UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL,
+	revision = revision + 1, updated_at = sqlc.arg(now)
+WHERE user_id = sqlc.arg(user_id) AND thread_id = sqlc.arg(thread_id) AND deleted = 0;
+
+-- name: GetForumDraft :one
+SELECT * FROM drafts WHERE user_id = ? AND forum_id = ? AND thread_id IS NULL;
+
+-- PUT /forums/{slug}/draft: as UpsertThreadDraft, for the one new-thread
+-- draft per (user, forum). The title is replaced as a whole, so a save
+-- without one clears it.
+-- name: UpsertForumDraft :one
+INSERT INTO drafts (user_id, forum_id, title, source, created_at, updated_at, revision)
+VALUES (sqlc.arg(user_id), sqlc.arg(forum_id), sqlc.arg(title), sqlc.arg(source), sqlc.arg(now), sqlc.arg(now), 1)
+ON CONFLICT (user_id, forum_id) WHERE thread_id IS NULL DO UPDATE SET
+	title = excluded.title,
+	source = excluded.source,
+	updated_at = excluded.updated_at,
+	deleted = 0,
+	revision = drafts.revision + 1
+RETURNING *;
+
+-- DELETE /forums/{slug}/draft: as DeleteThreadDraft.
+-- name: DeleteForumDraft :execrows
+UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL,
+	revision = revision + 1, updated_at = sqlc.arg(now)
+WHERE user_id = sqlc.arg(user_id) AND forum_id = sqlc.arg(forum_id) AND thread_id IS NULL AND deleted = 0;

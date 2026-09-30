@@ -109,6 +109,85 @@ func TestDraftUniqueness(t *testing.T) {
 			t.Errorf("%s: got %v, want accepted=%v", c.name, err, c.ok)
 		}
 	}
+
+	// 0018 (TKT-01M3K9XBJA): a title only on a new-thread draft; a
+	// tombstone holds no text, no reply target and no title, and keeps its
+	// key's slot, so a second row for the key is refused whether either is a
+	// tombstone; and a revision is never negative.
+	f4, err := newForum(t, d, "four", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f5, err := newForum(t, d, "five", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f6, err := newForum(t, d, "six", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	full := `INSERT INTO drafts (user_id, thread_id, forum_id, title, source, reply_to, revision, deleted, created_at, updated_at)
+	         VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1)`
+	title := sql.NullString{String: "A title", Valid: true}
+	noTitle := sql.NullString{}
+	for _, c := range []struct {
+		name          string
+		thread, forum sql.NullInt64
+		title         sql.NullString
+		source        string
+		replyTo       sql.NullInt64
+		revision      int64
+		deleted       int64
+		ok            bool
+	}{
+		{"a reply draft with a title", n(60), null, title, "text", null, 1, 0, false},
+		{"a new-thread draft with a title", null, n(f4), title, "text", null, 1, 0, true},
+		{"a new-thread draft without one", null, n(f5), noTitle, "text", null, 1, 0, true},
+		{"a reply tombstone", n(61), null, noTitle, "", null, 3, 1, true},
+		{"a live draft in the reply tombstone's slot", n(61), null, noTitle, "text", null, 1, 0, false},
+		{"a new-thread tombstone", null, n(f6), noTitle, "", null, 2, 1, true},
+		{"a live draft in the new-thread tombstone's slot", null, n(f6), noTitle, "text", null, 1, 0, false},
+		{"a second tombstone for a live draft's key", null, n(f4), noTitle, "", null, 2, 1, false},
+		{"a tombstone with a source", n(62), null, noTitle, "text", null, 1, 1, false},
+		{"a tombstone with a reply target", n(63), null, noTitle, "", n(1), 1, 1, false},
+		{"a tombstone with a title", null, n(f3), title, "", null, 1, 1, false},
+		{"deleted is neither 0 nor 1", n(64), null, noTitle, "", null, 1, 2, false},
+		{"a negative revision", n(65), null, noTitle, "text", null, -1, 0, false},
+	} {
+		err := exec(t, d, full, u, c.thread, c.forum, c.title, c.source, c.replyTo, c.revision, c.deleted)
+		if (err == nil) != c.ok {
+			t.Errorf("%s: got %v, want accepted=%v", c.name, err, c.ok)
+		}
+	}
+}
+
+// TestMigrationGivesStoredDraftsARevision: a draft stored before 0018 was
+// saved at least once, so 0018 sets its revision to 1, leaving 0 to mean a
+// key never saved; it is live, and its title is null (TKT-01M3K9XBJA).
+func TestMigrationGivesStoredDraftsARevision(t *testing.T) {
+	d, _ := openUnmigrated(t)
+	if err := d.migrate(t.Context(), migrationsBefore(t, 18), "m"); err != nil {
+		t.Fatal(err)
+	}
+	u := itoa(createUser(t, d, "writer"))
+	execAll(t, d,
+		`INSERT INTO drafts (user_id, thread_id, source, reply_to, created_at, updated_at) VALUES (`+u+`, 42, 'half', 1, 1, 1)`,
+		`INSERT INTO forums (slug, name, visibility, created_at, updated_at) VALUES ('f', 'F', 'public', 1, 1)`,
+		`INSERT INTO drafts (user_id, forum_id, source, created_at, updated_at) VALUES (`+u+`, (SELECT id FROM forums WHERE slug = 'f'), 'new', 1, 1)`,
+	)
+	if err := d.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		got = rows(t, tx, `SELECT source, title, revision, deleted FROM drafts ORDER BY id`)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"[half <nil> 1 0]", "[new <nil> 1 0]"}; !slices.Equal(got, want) {
+		t.Errorf("after 0018 the drafts are %v, want %v", got, want)
+	}
 }
 
 // TestNotificationKindsClosed is AC3: the six kinds are accepted, anything
