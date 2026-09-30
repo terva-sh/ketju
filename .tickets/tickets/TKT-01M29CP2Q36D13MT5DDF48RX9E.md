@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CP2Q36D13MT5DDF48RX9E
 title: Build the post history view with word-level diffs
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:post-history
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-cp2q3
+  branch: run/cp2q3-post-history
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac9f0ed705612d47b
+  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
+  session: null
+  claimed_at: 2026-09-30T18:42:44Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T08:52:37Z
+updated_at: 2026-09-30T18:42:45Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-cp2q3
   name: ""
 extensions: {}
 ---
