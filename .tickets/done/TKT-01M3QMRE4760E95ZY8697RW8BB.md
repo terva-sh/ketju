@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QMRE4760E95ZY8697RW8BB
 title: Add the suspension controls to the admin users screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ dependencies:
   - TKT-01M3QH3GS23M8VG1JEPCTGSGR1
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qmre47
-  branch: run/qmre47-suspension-controls
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a828ad4c69983ea0c
-  commit: 163c33a2288ad89a6c7ef7c04d034519c76b6693
-  session: null
-  claimed_at: 2026-09-30T11:39:36Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T12:01:44Z
+updated_at: 2026-09-30T13:03:13Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
@@ -69,7 +62,7 @@ Tests: the dialog's validation and the badge text. `TestTheAdminBundleIsSeparate
 - [x] An empty or blank reason, one over 500 code points, one with a control character, and a past end are refused beside the field with nothing sent (SuspensionControls.test.tsx)
 - [x] Unsuspend sends {restore_posts} from an unchecked checkbox; Hide their posts (suspended accounts only) and Restore hidden posts each send one bodiless POST after confirmation (SuspensionControls.test.tsx)
 - [x] A moderator sees the controls only on members, an admin on anyone but themselves, and nobody on a pending or deleted-user- account (SuspensionControls.test.tsx)
-- [ ] The controls live in screens/admin/SuspensionPanel.tsx, UserDetail gains only its import, refetch and one element, TestTheAdminBundleIsSeparate passes, and the dist from go generate ./internal/web/spa is committed
+- [x] The controls live in screens/admin/SuspensionPanel.tsx, UserDetail gains only its import, refetch and one element, TestTheAdminBundleIsSeparate passes, and the dist from go generate ./internal/web/spa is committed
 - [x] A suspended account shows its reason as text and its end, or until lifted; after every answer, success or failure, both the detail and the users list are fetched again, so a suspend whose hide failed leaves the row saying suspended (SuspensionControls.test.tsx)
 - [x] The panel awaits refetch; the finish-the-hide words show only for a 503 or 500 to a suspend with hide_posts when the account went from not suspended to suspended; a 409 with the refreshed account suspended says it is already suspended; a 409, 503 or 500 leaving it active, or a failed refetch, never mentions a hide; a 409 on unsuspend has its own sentence (a hide that stopped, already suspended is not a partial hide, a refused suspend is not a partial hide, a busy database is not a partial hide, a refetch that fails)
 
@@ -241,3 +234,11 @@ Built on run/qmre47-suspension-controls against main at 163c33a, locally and unp
 **agent:claude-code/phase2-run-qmre47** at 2026-09-30T12:01:44Z
 
 Corrects note 6 on one point only. The draft it names, TKT-01M3S2VDCK, duplicated TKT-01M3S1TVPD (Stop the full Playwright run spending more /auth calls than it refills), which the Playwright lane filed on main in #223. It has been removed. The smoke.spec.ts 429 from the /auth limiter is TKT-01M3S1TVPD's. The rest of note 6 stands.
+
+**agent:claude-code/phase2-run-qmre47** at 2026-09-30T13:03:03Z
+
+Replayed onto main at 1ae02c5 once the dist was free. The rebase was clean. Of this branch's files, main had changed only admin.css. The goldens regenerate unchanged. Checks on the replayed head: gofmt, go build, go vet, go test -race ./..., tsc, vitest (1680 tests), and the full Playwright suite (101 passed, 11 skipped, none failed; main's /auth pacing work now covers the 429 noted before). The brief's guards pass: TestThreadModerationRoutesUseTheModeratesGate, TestFixturesUseTheTemplate, TestActionsCoverTheWriters, TestActionsDocumented and TestTheAdminBundleIsSeparate. This branch adds no route, no audit action and no .Migrate(. Bundle from go generate: the thread-view bundle is 51213 of 60000 B gzip, against main's 51214. The reader entry is identical apart from the admin CSS file name. The admin chunk grows from 21480 to 23712 B gzip. The dist is committed, so criterion 6 is ticked.
+
+## Summary
+
+The admin users screen has suspension controls. GET /admin/users/{handle} answers suspension {reason, until} for a suspended account, to moderators and admins, and null otherwise (dto.AdminSuspension, goldens admin-user-suspended.admin and .moderator, docs/07). The controls live in screens/admin/SuspensionPanel.tsx, in the lazy admin chunk: the status line, suspend (reason, 1/7/30 days, until lifted or a chosen moment, hide their posts), unsuspend with restore posts, hide their posts, and restore hidden posts. mayAct mirrors account.mayActOn and reads the role only, so a moderator by grant gets no controls. It offers nothing on your own account, a pending account or an anonymized one. After every answer the panel reloads the list and awaits the refetched detail, then chooses its words from that. The finish-the-hide words need a 503 or 500 to a suspend with hide_posts and a change to suspended. The same two signs cover an unsuspend whose restore stopped. UserDetail gained the import, refetch and one element. ConfirmButton gained an optional beforeAsk. Tests: TestAdminDetailCarriesTheSuspension, SuspensionControls.test.tsx (33) and e2e/admin-suspension.spec.ts with axe at both widths. The reader bundle is unchanged at 51213 of 60000 B, and the admin chunk grew from 21480 to 23712 B gzip.
