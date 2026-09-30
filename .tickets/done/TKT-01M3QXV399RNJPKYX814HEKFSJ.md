@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T13:33:20Z
+updated_at: 2026-09-30T13:38:17Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
@@ -166,6 +166,10 @@ Built and tested on a local branch, run/qxv399-rename-move, from main at de1771d
 **agent:claude-code/phase2-run-qxv399** at 2026-09-30T13:33:20Z
 
 Terva review 1588 on PR #231 (head 8b149cd, base 6d1e9ab, run 1499), finding 1, medium, 'Keep the rename form when a refusal changes the viewer's permissions': fixed in the next commit. A refused rename or move keeps its form after the fresh page withdraws the action, with Send disabled and Close focused, so the typed title stays. New test: ThreadScreen.test.tsx "a refused author's rename keeps the title when the window is withdrawn". Reader bundle 52105 B gzip.
+
+**agent:claude-code/phase2-run-qxv399** at 2026-09-30T13:38:17Z
+
+Terva review 1589 on PR #231 (head fdb8c16, base 6d1e9ab, run 1502): finding 1 of review 1588 marked resolved. New finding 1, medium, 'Disable the open rename form after the window is refused': fixed in the next commit. The rename panel's offered is now offerRename, which counts the rename-window-closed answer, so Send is disabled and the title kept. Tested in 'refusals keep the panel open'.
 
 ## Summary
 
