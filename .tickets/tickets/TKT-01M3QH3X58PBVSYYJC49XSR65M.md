@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T21:28:46Z
-updated_at: 2026-09-30T01:56:47Z
+updated_at: 2026-09-30T01:58:33Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -71,26 +71,40 @@ Engineering choices made here, each with the alternative that lost:
 - **`Me` builds from one small internal type**, `viewerAccount{Handle, DisplayName, AvatarBlob, Role, Kind, Timezone, Locale, PrefsJSON}`, filled from `session.User` or from `agentcred.Account`. Importing `session` into `agentcred` to reuse `session.User` lost: it couples the credential package to the session package for one struct.
 - **No "authenticated by credential" hint in `/me`.** The ticket asks to settle it. `user.kind` is already `agent`, which is what an agent checking its identity needs, and nothing in the client or docs/07 would read a hint. Adding one is a DTO field, a golden and a client type for no reader. If a reader appears, the field can be added then.
 
+### Revised at claim (2026-09-30, against main at c24635c)
+
+The grooming plan stands. Reading the code at claim changed two facts it
+relied on, and neither changes a decision:
+
+- `agentcred.Store.Lookup` runs three statements, not one:
+  `LookupAgentCredential` and two `GetSetting` reads for the site's bucket
+  defaults. All three are the middleware's, outside the handler's budget, so
+  the budget line subtracts all of them, as it subtracts `LookupSession`.
+- On a cold permission cache, `/me` runs perm's batch before the counts, and
+  the batch is named `ForumAccessRowsAll` (the queue's scope, TKT-01M29CRJ4E).
+  The expected lists below use the real names and order.
+
 ### Approach
 
-1. **Query** `internal/store/db/queries/agents.sql`, `LookupAgentCredential`: add `u.handle, u.display_name, u.avatar_blob, u.kind, u.timezone, u.locale, u.prefs_json` to the select list. The WHERE clause is unchanged. Regenerate `dbq` with sqlc.
-2. **`internal/auth/agentcred/agentcred.go`**: `type Account struct { Handle, DisplayName, AvatarBlob, Kind, Timezone, Locale, PrefsJSON string }`, and `Credential.User Account`, filled in `Store.Lookup`. `Credential.Viewer()` is unchanged. Nothing that logs a credential logs `Account`; the logging redactor needs no change, because none of these fields is secret.
+1. **Query** `internal/store/db/queries/agents.sql`, `LookupAgentCredential`: add `u.handle, u.display_name, u.avatar_blob, u.kind, u.timezone, u.locale, u.prefs_json` to the select list. The WHERE clause is unchanged. Regenerate `dbq` with `go generate ./internal/store/db`.
+2. **`internal/auth/agentcred/agentcred.go`**: `type Account struct { Handle, DisplayName, AvatarBlob, Kind, Timezone, Locale, PrefsJSON string }`, and `Credential.User Account`, filled in `Store.Lookup`. `Credential.Viewer()` is unchanged. Nothing logs a `Credential`; none of these fields is secret.
 3. **`internal/service/users/me.go`**:
    - `viewerAccount` and two constructors, `fromSession(*session.User)` and `fromCredential(agentcred.Credential)`.
-   - `Me` keeps the pre-user branch first. Then it takes the account from the session when there is one with a user, or else from `agentcred.From(ctx)`. With neither, or with `!v.Member()`, it answers `anonymousMe()`. The rest of the function is unchanged and reads the fields from `viewerAccount`.
+   - `Me` keeps the pre-user branch first. Then it takes the account from the session when there is one with a user, or else from `agentcred.From(ctx)` when that credential's `UserID` is the viewer's. With neither, or with `!v.Member()`, it answers `anonymousMe()`. The rest of the function, the queue count included, is unchanged and reads the fields from `viewerAccount`.
    - The function comment says the agent path and its budget.
-4. **Golden** `internal/dto/testdata/golden/me.agent.json`, an agent's `/me` with `kind: "agent"`, so the shape is pinned for this viewer as for the others. `dto-contract.ts` already covers `Me`; the shape does not change.
+4. **Golden** `internal/dto/testdata/golden/me.agent.json`, from a `tAgent` class in `internal/dto/fixtures_test.go` built on the existing `scribe` author, and the matching line in `web/client/src/api/dto-contract.ts` (contract.test.ts fails on a golden the contract does not name). `dto.ts` does not change, and `go generate ./internal/web/spa` must leave `internal/web/spa/dist` byte-identical.
 5. **Docs**: docs/07 "Agents on the API" gains one line: `GET /me` answers an agent as the member it is, from its credential.
 
 ### Tests
 
-- `internal/web/api/me_test.go`:
-  - `TestMeShapes` gains a case "agent by credential": an agent's bearer answers `user` with the agent's handle, display name, `role` and `kind: "agent"`, its settings, and its unread and notification counts from seeded read positions. Built with the agent helpers that `agents_test.go` uses.
-  - `TestMeBudget` gains two cases for the agent. The first request is `LookupAgentCredential`, `TouchAgentCredential`, `MeCounts`, `ForumAccessRows`, because a new credential's `last_used_at` is null and the middleware touches it. The second is `LookupAgentCredential`, `MeCounts`, because the touch is due at most every 5 minutes and the test's clock does not move. The session cases and their expected lists are unchanged. The budget line subtracts the middleware's statements, `LookupAgentCredential` and `TouchAgentCredential` as well as `LookupSession`, so the handler's count is 2 cold and 1 warm for both kinds of viewer.
-  - `TestMeRefusesADeadCredential`: for a revoked credential, and for an agent that is suspended or deactivated, `/me` is 401 with `WWW-Authenticate: Bearer`, not the anonymous shape.
-- `internal/auth/agentcred/agentcred_test.go`, `TestLookupCarriesTheAccount`: `Lookup` returns the handle, display name, kind and settings stored on the users row.
-- `TestOneDoorIntoSessions` and `TestAgentCredentialMintsNoSession` pass unchanged: `GET /me` with a bearer leaves the `sessions` count as it was and sets no cookie.
-- The DTO golden test covers `me.agent.json`.
+- `internal/web/api/me_test.go`: the `/me` world is served through `agentcred.Middleware` in front of `session.Middleware`, as serve composes them. A request without `Authorization` passes straight to the session middleware, so every session case is unchanged.
+  - `TestMeShapes` gains "agent by credential": the agent's handle, display name, `role`, `kind: "agent"`, its settings, and its unread and notification counts from seeded read positions.
+  - `TestMeBudget` gains two agent cases. First request: `LookupAgentCredential GetSetting GetSetting TouchAgentCredential ForumAccessRowsAll MeCounts`. Second: `LookupAgentCredential GetSetting GetSetting MeCounts`. The session cases and their lists are unchanged. The handler's count subtracts the middleware's statements (`LookupSession`, `LookupAgentCredential`, `GetSetting`, `TouchAgentCredential`), so it is 2 cold and 1 warm for both kinds of viewer.
+  - `TestMeRefusesADeadCredential`: a revoked credential, and an agent suspended or deactivated, get 401 with `WWW-Authenticate: Bearer`, not the anonymous shape.
+  - A bearer `/me` leaves the `sessions` count as it was and sets no cookie.
+- `internal/auth/agentcred/agentcred_test.go`, `TestLookupCarriesTheAccount`: `Lookup` returns the handle, display name, avatar, kind and settings stored on the users row.
+- `TestOneDoorIntoSessions`, `TestTheIssuersAreKnown` and `TestAgentCredentialMintsNoSession` pass unchanged; `doorCallers`, `insertCallers` and `issuerCallers` are not edited.
+- The DTO golden test covers `me.agent.json`; the client's contract test covers its `dto-contract.ts` line.
 
 ### Out of scope
 
