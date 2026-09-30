@@ -3,7 +3,15 @@ import { peekGet, resetApiCache } from '../api/client';
 import type { ThreadPage } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { threadPage } from '../testing';
-import { cachedThread, loadThreadPage, pageKey, resetThreadCache, threadCache, threadUrl } from './threads';
+import {
+  cachedThread,
+  loadThreadPage,
+  pageKey,
+  resetThreadCache,
+  storeThreadHeader,
+  threadCache,
+  threadUrl,
+} from './threads';
 
 const id = '3yymw47g00001';
 
@@ -511,6 +519,62 @@ describe('the thread cache', () => {
     await loadThreadPage(id, { page: 1 }).catch(() => {});
     expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
     expect(peekGet(threadUrl(id, { page: 2 }))).toBeUndefined();
+  });
+
+  // TKT-01M3QGH66W: a moderation action answers with the thread's header at
+  // the log length its record made, which replaces the entry: the pages at
+  // the old length go, and so do the held GETs, which are as stale.
+  it('replaces the entry with a longer header and forgets its pages', async () => {
+    const tagged = (p: ThreadPage, tag: string) =>
+      new Response(JSON.stringify(p), { status: 200, headers: { ETag: tag } });
+    const o = page(1, 5);
+    const otherPage = { ...o, thread: { ...o.thread, id: `${id}0` } };
+    vi.stubGlobal(
+      'fetch',
+      vi
+        .fn()
+        .mockResolvedValueOnce(tagged(otherPage, '"o"'))
+        .mockResolvedValueOnce(tagged(page(1, 100), '"p1"'))
+        .mockResolvedValueOnce(tagged(page(2, 100), '"p2"'))
+        .mockResolvedValueOnce(tagged(page(1, 101), '"p1b"')),
+    );
+    await loadThreadPage(`${id}0`, { page: 1 });
+    await loadThreadPage(id, { page: 1 });
+    await loadThreadPage(id, { page: 2 });
+    const before = threadCache.value;
+    const header = { ...page(1, 101).thread, locked: true };
+    expect(storeThreadHeader(id, header)).toBe(true);
+    expect(threadCache.value).not.toBe(before);
+    const e = cachedThread(id)!;
+    expect(e.logLength).toBe(101);
+    expect(e.header).toEqual(header);
+    expect(e.pages.size).toBe(0);
+    expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
+    expect(peekGet(threadUrl(id, { page: 2 }))).toBeUndefined();
+    // Another thread's are its own.
+    expect(peekGet(threadUrl(`${id}0`, { page: 1 }))).toBeDefined();
+    // The page asked for again at the header's length joins it.
+    await loadThreadPage(id, { page: 1 });
+    expect(cachedThread(id)!.logLength).toBe(101);
+    expect([...cachedThread(id)!.pages.keys()]).toEqual(['1']);
+  });
+
+  it.each([100, 90])('changes nothing for a header at length %d, no longer than the entry', async (len) => {
+    const urls = serve(page(1, 100), page(2, 100));
+    await loadThreadPage(id, { page: 1 });
+    await loadThreadPage(id, { page: 2 });
+    const before = threadCache.value;
+    expect(storeThreadHeader(id, { ...page(1, len).thread, locked: true })).toBe(false);
+    expect(threadCache.value).toBe(before);
+    expect(cachedThread(id)!.header.locked).toBe(false);
+    expect([...cachedThread(id)!.pages.keys()].sort()).toEqual(['1', '2']);
+    expect(urls).toHaveLength(2);
+  });
+
+  it('files a header for a thread it holds nothing of', () => {
+    const header = page(1, 7).thread;
+    expect(storeThreadHeader(id, header)).toBe(true);
+    expect(cachedThread(id)).toEqual({ logLength: 7, header, pages: new Map() });
   });
 
   it('files a page under the page the server answered with, not the one asked for', async () => {

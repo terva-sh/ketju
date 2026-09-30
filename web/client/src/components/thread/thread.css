@@ -23,9 +23,44 @@
   line-height: 1.2;
   margin: 4px 0 16px;
 }
-.thread-head .locked {
+.thread-head .locked,
+.thread-head .pinned {
+  margin: 0 0 8px;
   color: var(--muted);
   font-size: 13px;
+}
+.thread-head h1:focus {
+  outline: none;
+}
+
+/* The moderation panel under the thread head (ModerateDialog): inline, not
+   modal, and drawn like the flag dialog. */
+.moderate-panel {
+  margin: 0 0 16px;
+  padding: 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.moderate-panel h2 {
+  margin: 0 0 12px;
+  font-size: 16px;
+  font-weight: 600;
+}
+.moderate-panel fieldset {
+  margin: 0 0 12px;
+  padding: 0;
+  border: 0;
+}
+.moderate-panel legend {
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.moderate-panel fieldset label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px;
 }
 
 .posts {
@@ -479,13 +514,16 @@
   gap: 8px;
   min-height: 32px;
 }
-.flag-note {
+.flag-note,
+.moderate-field {
   display: flex;
   flex-direction: column;
   gap: 4px;
   font-weight: 600;
 }
-.flag-note textarea {
+.flag-note textarea,
+.moderate-field textarea,
+.moderate-field input {
   font: inherit;
   font-weight: 400;
   padding: 8px;
@@ -495,28 +533,33 @@
   border-radius: var(--radius);
   resize: vertical;
 }
-.flag-hint {
+.flag-hint,
+.moderate-hint {
   margin: 4px 0 12px;
   font-size: 13px;
   color: var(--muted);
 }
 .flag-long,
-.flag-refused {
+.flag-refused,
+.moderate-refused {
   color: var(--ink);
   font-weight: 600;
 }
-.flag-refused {
+.flag-refused,
+.moderate-refused {
   margin: 0 0 12px;
 }
 .flag-thanks {
   margin: 0 0 12px;
 }
-.flag-buttons {
+.flag-buttons,
+.moderate-buttons {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
 }
-.flag-buttons button {
+.flag-buttons button,
+.moderate-buttons button {
   height: 32px;
   padding: 0 14px;
   font: inherit;
@@ -526,12 +569,14 @@
   border-radius: var(--radius);
   cursor: pointer;
 }
-.flag-buttons .flag-send {
+.flag-buttons .flag-send,
+.moderate-buttons .moderate-send {
   color: var(--accent-ink);
   background: var(--accent);
   border-color: var(--accent);
 }
-.flag-buttons .flag-send:disabled {
+.flag-buttons .flag-send:disabled,
+.moderate-buttons .moderate-send:disabled {
   opacity: 0.5;
   cursor: default;
 }
@@ -542,16 +587,24 @@
     padding: 16px;
   }
   .flag-dialog fieldset label,
-  .flag-buttons button {
+  .moderate-panel fieldset label,
+  .moderate-field input,
+  .flag-buttons button,
+  .moderate-buttons button {
     min-height: var(--target);
   }
-  .flag-buttons button {
+  .moderate-panel {
+    margin: 0 16px 16px;
+  }
+  .flag-buttons button,
+  .moderate-buttons button {
     height: auto;
     min-width: var(--target);
   }
   /* A radio is a full target: a 44 px box with the circle drawn in its
      middle, since the label beside it is not the input's own hit area. */
-  .flag-dialog input[type='radio'] {
+  .flag-dialog input[type='radio'],
+  .moderate-panel input[type='radio'] {
     appearance: none;
     flex: none;
     width: var(--target);
@@ -560,7 +613,8 @@
     border-radius: 50%;
     background: radial-gradient(circle, var(--surface) 0 7px, var(--ink2) 7.5px 9px, transparent 9.5px);
   }
-  .flag-dialog input[type='radio']:checked {
+  .flag-dialog input[type='radio']:checked,
+  .moderate-panel input[type='radio']:checked {
     background: radial-gradient(
       circle,
       var(--accent) 0 4px,
@@ -569,7 +623,8 @@
       transparent 9.5px
     );
   }
-  .flag-dialog input[type='radio']:focus-visible {
+  .flag-dialog input[type='radio']:focus-visible,
+  .moderate-panel input[type='radio']:focus-visible {
     outline: 2px solid var(--accent);
     outline-offset: -10px;
   }

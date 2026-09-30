@@ -155,6 +155,23 @@ export function storeThreadPage(id: string, page: ThreadPage, url?: string): boo
   return true;
 }
 
+// storeThreadHeader files header, a moderation action's answer (docs/07
+// "Locking and pinning threads"), as id's header. The action appended a
+// record, so the header's log length is longer than the entry's, and by the
+// rule above the entry's pages are from another log length: the entry
+// becomes the header with no pages, and the thread's held GETs go with them,
+// as for a longer page. A header no longer than the entry's changes nothing,
+// since it is no newer than what the entry already holds, and reports false.
+export function storeThreadHeader(id: string, header: ThreadHeader): boolean {
+  const prev = threadCache.value.get(id);
+  if (prev && header.log_length <= prev.logLength) return false;
+  const next = new Map(threadCache.value);
+  next.set(id, { logLength: header.log_length, header, pages: new Map() });
+  threadCache.value = next;
+  forgetGets((u) => isThreadUrl(u, id));
+  return true;
+}
+
 export function cachedThread(id: string): ThreadEntry | undefined {
   return threadCache.value.get(id);
 }

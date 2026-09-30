@@ -1,11 +1,24 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Me } from '../api/dto';
+import type { Me, ThreadHeader, ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
 import { dwellMs, resetReadTracker } from '../state/readTracker';
 import { viewer } from '../state/viewer';
-import { renderAt, route, screenOf, settle, threadJSON, unmount } from '../testing';
+import {
+  problemAnswer,
+  renderAt,
+  route,
+  screenOf,
+  settle,
+  stubServer,
+  threadJSON,
+  threadPage,
+  unmount,
+  type Answer,
+  type StubServer,
+} from '../testing';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
+import moderator from '../../../../internal/dto/testdata/golden/me.moderator.json';
 
 const problem = (type: string, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify({ type, title: 't', status }), {
@@ -301,5 +314,321 @@ describe('flagging from the thread screen', () => {
     const root = await renderAt(`/t/${id}/a`);
     expect(root.querySelector('#post-62')).not.toBeNull();
     expect(root.querySelector('[data-post-action=flag]')).toBeNull();
+  });
+});
+
+// TKT-01M3QGH66W: lock, unlock, pin and unpin, from the thread page. They are
+// offered on the page's viewer.can_moderate, whatever the role, and a global
+// pin only to a moderator or admin by role, so the page offers exactly what
+// the server allows (TKT-01M3RQP0TG).
+describe('moderating from the thread screen', () => {
+  const saved = viewer.value;
+  const id = '01k4z3j0w8x2c';
+  const base = threadPage({ id, slug: 'a', title: 'Moderated' });
+  const url = `/api/v1/threads/${id}`;
+  const len = base.thread.log_length;
+
+  type Over = { thread?: Partial<ThreadHeader>; viewer?: Partial<ThreadPage['viewer']> };
+  const at = (o: Over = {}): ThreadPage => ({
+    ...base,
+    thread: { ...base.thread, pinned: null, ...o.thread },
+    viewer: { ...base.viewer, can_moderate: true, ...o.viewer },
+  });
+  const as = (role: 'member' | 'moderator' | 'admin') => {
+    const me = structuredClone(role === 'member' ? member : moderator) as Me;
+    me.user!.role = role;
+    viewer.value = me;
+  };
+
+  // pages answers the thread GETs in turn, the last one again for any later
+  // request; a Promise holds its answer until it settles.
+  let pages: (ThreadPage | Promise<ThreadPage>)[];
+  let moderate: Record<string, (body: unknown) => Answer>;
+  let server: StubServer;
+  beforeEach(() => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    pages = [at()];
+    moderate = {};
+    const routes: StubServer['routes'] = {
+      [`GET ${url}`]: async () => ({ status: 200, body: await (pages.length > 1 ? pages.shift()! : pages[0]) }),
+    };
+    for (const kind of ['lock', 'unlock', 'pin', 'unpin'])
+      routes[`POST /api/v1/admin/threads/${id}/${kind}`] = (b) => moderate[kind]?.(b) ?? problemAnswer('internal', 500);
+    server = stubServer(routes);
+    as('moderator');
+  });
+  afterEach(async () => {
+    await unmount();
+    viewer.value = saved;
+    isPhone.value = false;
+  });
+
+  const gets = () => server.sent.filter((r) => r.method === 'GET' && r.url === url).length;
+  const posts = () => server.sent.filter((r) => r.method === 'POST').map((r) => ({ url: r.url, body: r.body }));
+  const offered = (root: HTMLElement) =>
+    [...root.querySelectorAll('[data-shell=toolbar] [data-action]')]
+      .map((b) => b.getAttribute('data-action'))
+      .filter((a) => ['lock', 'unlock', 'pin', 'unpin'].includes(a!));
+  const panel = () => document.querySelector<HTMLElement>('[data-moderate]');
+  async function open(root: HTMLElement, kind: string) {
+    await act(async () => root.querySelector<HTMLButtonElement>(`[data-shell=toolbar] [data-action=${kind}]`)!.click());
+    expect(panel()?.getAttribute('data-moderate')).toBe(kind);
+  }
+  async function submit() {
+    await act(async () => panel()!.querySelector<HTMLButtonElement>('.moderate-send')!.click());
+    await act(() => new Promise((r) => setTimeout(r, 5)));
+  }
+  const header = (o: Partial<ThreadHeader>): ThreadHeader => ({ ...at().thread, log_length: len + 1, ...o });
+  const pinFrom = (b: unknown) => b as { scope: string; until: number | null };
+
+  it('a moderator sees the moderation actions', async () => {
+    pages = [at({ thread: { pinned: { scope: 'forum', until: null } } })];
+    let root = await renderAt(`/t/${id}/a`);
+    expect(offered(root)).toEqual(['lock', 'pin', 'unpin']);
+
+    // A member who moderates the forum through a group sees them too.
+    as('member');
+    root = await renderAt(`/t/${id}/a`);
+    expect(offered(root)).toEqual(['lock', 'pin', 'unpin']);
+
+    // And on a phone they are in the top bar's more menu.
+    isPhone.value = true;
+    root = await renderAt(`/t/${id}/a`);
+    await act(async () => root.querySelector<HTMLButtonElement>('.more > button')!.click());
+    const items = [...root.querySelectorAll('[data-shell=more-menu] [data-action]')].map((b) => b.getAttribute('data-action'));
+    expect(items).toEqual(expect.arrayContaining(['lock', 'pin', 'unpin']));
+    isPhone.value = false;
+
+    // A member who does not moderate it sees none, nor does a moderator by
+    // role whom the page says does not moderate this forum.
+    for (const role of ['member', 'moderator'] as const) {
+      as(role);
+      pages = [at({ viewer: { can_moderate: false }, thread: { pinned: { scope: 'forum', until: null } } })];
+      root = await renderAt(`/t/${id}/a`);
+      expect(offered(root), role).toEqual([]);
+      expect(root.querySelector('[data-shell=toolbar] [data-action=copy-link]')).not.toBeNull();
+    }
+  });
+
+  it('a group moderator is not offered a global pin', async () => {
+    as('member');
+    let root = await renderAt(`/t/${id}/a`);
+    await open(root, 'pin');
+    expect(panel()!.querySelector('input[value=forum]')).not.toBeNull();
+    expect(panel()!.querySelector('input[value=global]')).toBeNull();
+
+    // Over an active global pin, neither Pin nor Unpin.
+    pages = [at({ thread: { pinned: { scope: 'global', until: null } } })];
+    root = await renderAt(`/t/${id}/a`);
+    expect(offered(root)).toEqual(['lock']);
+
+    as('moderator');
+    root = await renderAt(`/t/${id}/a`);
+    expect(offered(root)).toEqual(['lock', 'pin', 'unpin']);
+    await open(root, 'pin');
+    expect(panel()!.querySelector('input[value=global]')).not.toBeNull();
+  });
+
+  it('lock sends the body and shows the lock at once', async () => {
+    let release!: (p: ThreadPage) => void;
+    pages = [at(), new Promise<ThreadPage>((r) => (release = r))];
+    moderate.lock = () => ({ status: 200, body: header({ locked: true }), headers: { 'Cache-Control': 'no-store' } });
+    const root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-thread-state=locked]')).toBeNull();
+    const before = gets();
+    await open(root, 'lock');
+    const reason = panel()!.querySelector('textarea')!;
+    expect(document.activeElement).toBe(reason);
+    expect(reason.maxLength).toBe(500);
+    reason.value = 'off topic';
+    await act(async () => void reason.dispatchEvent(new Event('input', { bubbles: true })));
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/lock`, body: { reason: 'off topic' } }]);
+    // The answer's header shows before the page is answered again.
+    expect(gets()).toBe(before + 1);
+    expect(root.querySelector('[data-thread-state=locked]')?.textContent).toBe('This thread is locked.');
+    expect(offered(root)).toEqual(['unlock', 'pin']);
+    expect(panel()).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('h1'));
+    await act(async () => release(at({ thread: { locked: true, log_length: len + 1 } })));
+    await settle(root);
+    expect(root.querySelector('[data-thread-state=locked]')).not.toBeNull();
+    expect(root.querySelectorAll('article.post').length).toBeGreaterThan(0);
+  });
+
+  it('unlock with no reason sends an empty body', async () => {
+    pages = [at({ thread: { locked: true } })];
+    moderate.unlock = () => ({ status: 200, body: header({ locked: false }) });
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'unlock');
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/unlock`, body: {} }]);
+    expect(root.querySelector('[data-thread-state=locked]')).toBeNull();
+  });
+
+  it('pin sends scope and until', async () => {
+    const local = '2030-01-02T03:04';
+    const ms = new Date(local).getTime();
+    moderate.pin = (b) => ({ status: 200, body: header({ pinned: pinFrom(b) }) });
+    let root = await renderAt(`/t/${id}/a`);
+    await open(root, 'pin');
+    expect(panel()!.querySelector<HTMLInputElement>('input[value=forum]')!.checked).toBe(true);
+    await act(async () => panel()!.querySelector<HTMLInputElement>('input[value=global]')!.click());
+    const until = panel()!.querySelector<HTMLInputElement>('input[type=datetime-local]')!;
+    until.value = local;
+    await act(async () => void until.dispatchEvent(new Event('input', { bubbles: true })));
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/pin`, body: { scope: 'global', until: ms } }]);
+    const note = root.querySelector('[data-thread-state=pinned]')!;
+    expect(note.getAttribute('data-pin-scope')).toBe('global');
+    expect(note.textContent).toMatch(/^Pinned on every forum until .+\.$/);
+    expect(note.querySelector('time')?.getAttribute('datetime')).toBe(new Date(ms).toISOString());
+
+    server.sent.length = 0;
+    root = await renderAt(`/t/${id}/a`);
+    await open(root, 'pin');
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/pin`, body: { scope: 'forum', until: null } }]);
+    expect(root.querySelector('[data-thread-state=pinned]')?.textContent).toBe('Pinned in this forum.');
+  });
+
+  it('pins in the forum for a group moderator', async () => {
+    as('member');
+    moderate.pin = (b) => ({ status: 200, body: header({ pinned: pinFrom(b) }) });
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'pin');
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/pin`, body: { scope: 'forum', until: null } }]);
+    expect(root.querySelector('[data-thread-state=pinned]')?.textContent).toBe('Pinned in this forum.');
+  });
+
+  it('pins in the forum once the viewer is no longer staff', async () => {
+    moderate.pin = (b) => ({ status: 200, body: header({ pinned: pinFrom(b) }) });
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'pin');
+    await act(async () => panel()!.querySelector<HTMLInputElement>('input[value=global]')!.click());
+    // /me is fetched again, and the role has gone while the panel was open.
+    await act(async () => as('member'));
+    expect(panel()!.querySelector('input[value=global]')).toBeNull();
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/pin`, body: { scope: 'forum', until: null } }]);
+  });
+
+  it('leaves the panel behind on another thread', async () => {
+    const other = '01k4z3j0w8x2d';
+    server.routes[`GET /api/v1/threads/${other}`] = () => ({
+      status: 200,
+      body: { ...at(), thread: { ...at().thread, id: other, slug: 'b' } },
+    });
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'lock');
+    await route(`/t/${other}/b`);
+    await settle(root);
+    expect(root.querySelector('h1')?.textContent).toBe('Moderated');
+    expect(offered(root)).toEqual(['lock', 'pin']);
+    expect(panel()).toBeNull();
+    await route(`/t/${id}/a`);
+    await settle(root);
+    expect(panel()).toBeNull();
+  });
+
+  it('unpin sends the active scope', async () => {
+    pages = [at({ thread: { pinned: { scope: 'global', until: null } } })];
+    moderate.unpin = () => ({ status: 200, body: header({ pinned: null }) });
+    const root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-thread-state=pinned]')?.textContent).toBe('Pinned on every forum.');
+    await open(root, 'unpin');
+    expect(panel()!.querySelector('h2')?.textContent).toBe('Unpin this thread?');
+    await submit();
+    expect(posts()).toEqual([{ url: `/api/v1/admin/threads/${id}/unpin`, body: { scope: 'global' } }]);
+    expect(root.querySelector('[data-thread-state=pinned]')).toBeNull();
+  });
+
+  it('a conflict keeps the panel open', async () => {
+    // Another moderator locked it first: the page asked for again says so,
+    // and the panel keeps its words and drops its Lock.
+    pages = [at(), at({ thread: { locked: true, log_length: len + 1 } })];
+    moderate.lock = () => problemAnswer('conflict', 409);
+    const root = await renderAt(`/t/${id}/a`);
+    const before = gets();
+    await open(root, 'lock');
+    await submit();
+    await settle(root);
+    expect(gets()).toBe(before + 1);
+    expect(panel()?.querySelector('[role=alert]')?.textContent).toBe('This thread changed while you were working.');
+    expect(root.querySelector('[data-thread-state=locked]')).not.toBeNull();
+    expect(panel()!.querySelector('.moderate-send')).toBeNull();
+    expect(panel()!.querySelector('textarea')).toBeNull();
+    expect(document.activeElement).toBe(panel()!.querySelector('[data-moderate-close]'));
+    await act(async () => panel()!.querySelector<HTMLButtonElement>('[data-moderate-close]')!.click());
+    expect(panel()).toBeNull();
+    expect(document.activeElement).toBe(root.querySelector('h1'));
+  });
+
+  it('keeps the form after a conflict that leaves the action offered', async () => {
+    moderate.lock = () => problemAnswer('conflict', 409);
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'lock');
+    await submit();
+    await settle(root);
+    expect(panel()?.querySelector('[role=alert]')?.textContent).toBe('This thread changed while you were working.');
+    expect(panel()!.querySelector('.moderate-send')).not.toBeNull();
+  });
+
+  it('a refusal says the viewer can no longer moderate, and the actions go', async () => {
+    as('member');
+    pages = [at(), at({ viewer: { can_moderate: false } })];
+    moderate.lock = () => problemAnswer('forbidden', 403);
+    const root = await renderAt(`/t/${id}/a`);
+    const before = gets();
+    await open(root, 'lock');
+    await submit();
+    await settle(root);
+    expect(gets()).toBe(before + 1);
+    expect(panel()?.querySelector('[role=alert]')?.textContent).toBe('You can no longer moderate this thread.');
+    expect(panel()!.querySelector('.moderate-send')).toBeNull();
+    expect(offered(root)).toEqual([]);
+  });
+
+  it('Escape and Cancel close the panel and send nothing', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'lock');
+    await act(
+      async () =>
+        void document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+    );
+    expect(panel()).toBeNull();
+    await open(root, 'pin');
+    await act(async () => panel()!.querySelector<HTMLButtonElement>('[data-moderate-close]')!.click());
+    expect(panel()).toBeNull();
+    expect(posts()).toEqual([]);
+    expect(document.activeElement).toBe(root.querySelector('h1'));
+  });
+
+  it("a locked thread closes a member's composer", async () => {
+    as('member');
+    pages = [at({ thread: { locked: true }, viewer: { can_moderate: false, can_reply: false } })];
+    let root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-thread-state=locked]')?.textContent).toBe('This thread is locked.');
+    expect(root.querySelector('[data-composer]')).toBeNull();
+    expect(offered(root)).toEqual([]);
+
+    pages = [at({ thread: { locked: true }, viewer: { can_moderate: true, can_reply: true } })];
+    root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-composer]')).not.toBeNull();
+    expect(offered(root)).toEqual(['unlock', 'pin']);
+  });
+
+  it('offers nothing on the post history route', async () => {
+    server.routes[`GET ${url}?ordinal=61`] = () => ({ status: 200, body: at() });
+    const root = await renderAt(`/t/${id}/a/61/history`);
+    expect(screenOf(root)).toBe('post-history');
+    expect(offered(root)).toEqual([]);
   });
 });

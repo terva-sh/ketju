@@ -2,13 +2,14 @@ import { Fragment } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { peekGet } from '../api/client';
-import type { CreatedPost, ThreadPage } from '../api/dto';
+import type { CreatedPost, Pinned, ThreadPage } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Composer } from '../composer/Composer';
 import { ComposerSheet } from '../composer/ComposerSheet';
 import { FlagDialog } from '../components/thread/FlagDialog';
+import { ModerateDialog } from '../components/thread/ModerateDialog';
 import { Pager } from '../components/thread/Pager';
 import { permalink, Post, type FlagHandler, type PostActions, type ThreadRef } from '../components/thread/Post';
 import { PostPopover } from '../components/thread/PostPopover';
@@ -18,7 +19,7 @@ import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
 import '../components/thread/thread.css';
 import { Toolbar } from '../shell/Toolbar';
-import { threadActions } from '../shell/threadActions';
+import { isStaff, moderateKinds, threadActions, type ModerateKind } from '../shell/threadActions';
 import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
@@ -63,7 +64,13 @@ export function ThreadScreen() {
     (signal) => loadThreadPage(params.id, q, signal),
     () => peekGet<ThreadPage>(key),
   );
-  const head = res.data?.thread ?? cachedThread(params.id)?.header;
+  // The header shown is the newer of the page's and the cache's, by log
+  // length: a moderation action's answer is stored as the cache's header
+  // (storeThreadHeader) before the page is asked for again, so a lock or pin
+  // shows at once.
+  const cached = cachedThread(params.id)?.header;
+  const pageHead = res.data?.thread;
+  const head = pageHead && cached && cached.log_length > pageHead.log_length ? cached : (pageHead ?? cached);
 
   // The slug is checked whenever the address or the answer changes, not only
   // when a request comes back: moving to an old slug of the thread already on
@@ -93,16 +100,32 @@ export function ThreadScreen() {
   const lastRead = res.data?.viewer.last_read_ordinal ?? 0;
   const postCount = res.data?.thread.post_count ?? 0;
   const unread = !history && !!res.data && tracksUnread() && lastRead < postCount;
+  // Lock, unlock, pin and unpin are offered to a viewer the page says
+  // moderates this thread's forum (can_moderate), on the thread body. A
+  // global pin is staff's by role, which the viewer's own role says
+  // (moderateKinds). The panel is for the thread it was opened on, so moving
+  // to another thread leaves it behind.
+  const mayModerate = !history && (res.data?.viewer.can_moderate ?? false);
+  const staff = isStaff(viewer.value.user?.role);
+  const [moderating, setModerating] = useState<{ thread: string; kind: ModerateKind } | null>(null);
+  const locked = head?.locked ?? false;
+  const pinned = head?.pinned ?? null;
   const actions = useMemo(
     () =>
       known
         ? threadActions(known, {
             canReply,
             firstUnread: unread ? () => firstUnread(known, lastRead, postCount, route) : undefined,
+            moderate: mayModerate
+              ? { locked, pinned, staff, open: (kind) => setModerating({ thread: known.id, kind }) }
+              : undefined,
           })
         : [],
-    [known?.id, known?.slug, canReply, unread, lastRead, postCount],
+    [known?.id, known?.slug, canReply, unread, lastRead, postCount, mayModerate, staff, locked, pinned?.scope, pinned?.until],
   );
+  const title = useRef<HTMLHeadingElement>(null);
+  const panel = moderating && head && moderating.thread === head.id && !history ? moderating : null;
+  useEffect(() => setModerating(null), [params.id]);
   const forum = head?.forum;
   const ctx = useMemo(
     () =>
@@ -129,10 +152,30 @@ export function ThreadScreen() {
             {head.forum.name}
           </a>
         )}
-        <h1>{head?.title ?? 'Thread'}</h1>
-        {head?.locked && <p class="locked">This thread is locked.</p>}
+        <h1 ref={title} tabIndex={-1}>
+          {head?.title ?? 'Thread'}
+        </h1>
+        {head?.locked && (
+          <p class="locked" data-thread-state="locked">
+            This thread is locked.
+          </p>
+        )}
+        {head?.pinned && <PinnedNote pinned={head.pinned} />}
         {!isPhone.value && <Toolbar actions={actions} label="Thread actions" />}
       </header>
+      {panel && head && (
+        <ModerateDialog
+          key={`${panel.thread} ${panel.kind}`}
+          thread={panel.thread}
+          kind={panel.kind}
+          pinned={head.pinned}
+          staff={staff}
+          offered={mayModerate && moderateKinds({ locked, pinned, staff }).includes(panel.kind)}
+          returnTo={() => title.current}
+          onChanged={res.retry}
+          onClose={() => setModerating(null)}
+        />
+      )}
       {res.error && <ErrorPanel error={res.error} what="This thread" onRetry={res.retry} />}
       {history ? (
         <PostHistoryPending thread={head ?? { id: params.id, slug: params.slug }} ordinal={params.ordinal} />
@@ -143,6 +186,32 @@ export function ThreadScreen() {
         </>
       )}
     </main>
+  );
+}
+
+// PinnedNote says a thread is pinned, where, and until when, in the thread
+// head. The header's pin is null once its end has passed (docs/08: a pin's
+// expiry needs no job), so the client never compares the time itself.
+function PinnedNote({ pinned }: { pinned: Pinned }) {
+  const { timezone, locale } = viewer.value.settings;
+  const where = pinned.scope === 'global' ? 'Pinned on every forum' : 'Pinned in this forum';
+  return (
+    <p class="pinned" data-thread-state="pinned" data-pin-scope={pinned.scope}>
+      {where}
+      {pinned.until !== null && (
+        <>
+          {' until '}
+          <time dateTime={new Date(pinned.until).toISOString()}>
+            {new Date(pinned.until).toLocaleString(locale || undefined, {
+              dateStyle: 'medium',
+              timeStyle: 'short',
+              timeZone: timezone || undefined,
+            })}
+          </time>
+        </>
+      )}
+      .
+    </p>
   );
 }
 
