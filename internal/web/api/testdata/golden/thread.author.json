@@ -33,7 +33,11 @@
     "can_moderate": false,
     "slow_mode_seconds": 0,
     "next_post_at": null,
-    "rename_until": 1757586500000
+    "rename_until": 1757586500000,
+    "author_windows": {
+      "edit_seconds": 86400,
+      "delete_seconds": 900
+    }
   },
   "posts": [
     {

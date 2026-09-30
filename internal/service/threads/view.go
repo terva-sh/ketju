@@ -240,6 +240,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		tags     []string
 		lastRead int64
 		watch    string
+		authorW  *dto.AuthorWindows
 	)
 	err = s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
 		var err error
@@ -264,6 +265,14 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		if errors.Is(err, sql.ErrNoRows) {
 			err = nil
 		}
+		// The author windows are per viewer, so they are in the viewer block,
+		// which is never cached, and the ETag, which hashes it, moves when
+		// they change. A viewer who may moderate the forum is bound by
+		// neither, and is sent none (TKT-01M3PTT97X).
+		if err != nil || canModerate {
+			return err
+		}
+		authorW, err = viewerWindows(ctx, dq)
 		return err
 	})
 	if err != nil {
@@ -283,6 +292,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		CanReply:        a.canReply && (row.Locked == 0 || canModerate) && readOnlyForum(a) == nil,
 		CanModerate:     canModerate,
 		SlowModeSeconds: slow,
+		AuthorWindows:   authorW,
 	}
 	now := s.now()
 	// The rename window is read only for the one viewer it can matter to,

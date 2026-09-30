@@ -33,7 +33,8 @@
     "can_moderate": false,
     "slow_mode_seconds": 0,
     "next_post_at": null,
-    "rename_until": null
+    "rename_until": null,
+    "author_windows": null
   },
   "posts": [
     {

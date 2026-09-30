@@ -651,7 +651,8 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
   "page": {"number": 3, "size": 25, "total_pages": 9},
   "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205},
   "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_moderate": false,
-             "slow_mode_seconds": 30, "next_post_at": null, "rename_until": null},
+             "slow_mode_seconds": 30, "next_post_at": null, "rename_until": null,
+             "author_windows": {"edit_seconds": 86400, "delete_seconds": 900}},
   "posts": [
     {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,
@@ -867,6 +868,17 @@ charged to the write limiter. The optional reason body is read to at most
   for its first N seconds and closed from the Nth on, so a window of 0 never
   opens. A viewer who may moderate the forum is bound by neither window on
   their own post or on anyone else's.
+- The thread page tells the author the windows in advance. Its viewer block
+  carries `author_windows`, `{edit_seconds, delete_seconds}`, read through
+  the same settings and the same conversion the refusals use, so a setting
+  past what a Go `time.Duration` holds is sent as the longest one,
+  9223372036 seconds, and the client's window and the server's agree to the
+  second. It is null for a viewer who may moderate the forum, whom neither
+  window binds, and for a viewer who is not a member, who has no posts to
+  act on. Like `rename_until` it moves no response cache key, and the ETag
+  changes when it does. The client offers Edit, Delete and Restore on the
+  viewer's own post only while the window is open, and shows a refusal's
+  words when its clock and the server's disagree (TKT-01M3PTT97X).
 - An author's edit within `posts.grace_edit_seconds` of posting, of a post
   with no visible edit, is written as a grace edit (`grace: true` on the
   `Edit`, docs/03). It is a revision, and history lists it, but the post is

@@ -48,23 +48,52 @@ type windows struct {
 func (s *Service) authorWindows(ctx context.Context) (windows, error) {
 	var w windows
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		for _, r := range []struct {
-			key settings.Key[int]
-			to  *time.Duration
-		}{
-			{settings.EditWindowSeconds, &w.edit},
-			{settings.DeleteWindowSeconds, &w.delete},
-			{settings.GraceEditSeconds, &w.grace},
-		} {
-			n, err := r.key.In(ctx, q)
-			if err != nil {
-				return err
-			}
-			*r.to = secondsDuration(n)
-		}
-		return nil
+		var err error
+		w, err = readWindows(ctx, q, true)
+		return err
 	})
 	return w, err
+}
+
+// readWindows reads the edit and delete windows, and the grace period when
+// grace is set, through secondsDuration, inside a caller's transaction.
+func readWindows(ctx context.Context, q *dbq.Queries, grace bool) (windows, error) {
+	var w windows
+	keys := []struct {
+		key settings.Key[int]
+		to  *time.Duration
+	}{
+		{settings.EditWindowSeconds, &w.edit},
+		{settings.DeleteWindowSeconds, &w.delete},
+		{settings.GraceEditSeconds, &w.grace},
+	}
+	if !grace {
+		keys = keys[:2]
+	}
+	for _, r := range keys {
+		n, err := r.key.In(ctx, q)
+		if err != nil {
+			return windows{}, err
+		}
+		*r.to = secondsDuration(n)
+	}
+	return w, nil
+}
+
+// viewerWindows is the page's author_windows: the edit and delete windows
+// authorize enforces, in whole seconds. They are read through the same keys
+// and secondsDuration, so a setting past what a Duration holds reaches the
+// client as the window the server keeps, 9223372036 seconds, and never as a
+// number the server does not enforce (TKT-01M3PTT97X, TKT-01M3R33SR5).
+func viewerWindows(ctx context.Context, q *dbq.Queries) (*dto.AuthorWindows, error) {
+	w, err := readWindows(ctx, q, false)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.AuthorWindows{
+		EditSeconds:   int(w.edit / time.Second),
+		DeleteSeconds: int(w.delete / time.Second),
+	}, nil
 }
 
 // secondsDuration is a count of seconds from a setting as a Duration. The

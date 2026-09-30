@@ -207,9 +207,11 @@ func threadPage(class string) ThreadPage {
 		// In slow mode, and waiting: the member's last post was at
 		// 1757500500000, and the thread asks 30 s between posts. The member
 		// started the thread, so their rename window runs to a day after
-		// its start.
+		// its start. They moderate nothing, so the author windows bind them,
+		// at their defaults.
 		p.Viewer = ThreadViewer{LastReadOrdinal: 60, Watch: "watch", CanReply: true, CanModerate: false,
-			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000)), RenameUntil: ptr(Millis(1757586400000))}
+			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000)), RenameUntil: ptr(Millis(1757586400000)),
+			AuthorWindows: &AuthorWindows{EditSeconds: 86400, DeleteSeconds: 900}}
 	case tModerator:
 		// Exempt: the interval is shown, and there is nothing to wait for.
 		p.Viewer = ThreadViewer{LastReadOrdinal: 42, Watch: "mute", CanReply: true, CanModerate: true,
@@ -377,7 +379,8 @@ func me(class string) Me {
 }
 
 // lockedThread is the other shape a thread response takes: locked, unpinned,
-// and with no lens applied, so every pointer the main case fills is nil here.
+// and with no lens applied, so every pointer the main case fills is nil here,
+// apart from the author windows.
 //
 // It is a separate endpoint name rather than a fourth viewer class because it
 // is not one -- it is the same viewer looking at a different thread, and
@@ -397,9 +400,12 @@ func lockedThread() ThreadPage {
 			Tags:      []string{},
 			CreatedAt: 1757100000000,
 		},
-		Page:   Pagination{Number: 1, Size: 25, TotalPages: 1},
-		Lens:   nil,
-		Viewer: ThreadViewer{LastReadOrdinal: 2, Watch: "", CanReply: false, CanModerate: false, SlowModeSeconds: 0, NextPostAt: nil},
+		Page: Pagination{Number: 1, Size: 25, TotalPages: 1},
+		Lens: nil,
+		// The lock takes reply away and leaves the author windows: a member
+		// may still delete and restore their own post in a locked thread.
+		Viewer: ThreadViewer{LastReadOrdinal: 2, Watch: "", CanReply: false, CanModerate: false, SlowModeSeconds: 0, NextPostAt: nil,
+			AuthorWindows: &AuthorWindows{EditSeconds: 86400, DeleteSeconds: 900}},
 		Posts: []Post{{
 			Ordinal:     1,
 			Revision:    1,

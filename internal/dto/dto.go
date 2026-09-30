@@ -171,6 +171,22 @@ type ThreadViewer struct {
 	// null otherwise, and so always null for a moderator, who may rename at
 	// any time (TKT-01M3QXV399).
 	RenameUntil *Millis `json:"rename_until"`
+	// AuthorWindows is how long this viewer may edit, and delete or restore,
+	// their own posts, measured from each post's creation (docs/07 "Edit,
+	// delete and restore"). It is null for a viewer who may moderate the
+	// thread's forum, whom neither window binds, and for a viewer who is not
+	// a member, who has no posts to act on (TKT-01M3PTT97X).
+	AuthorWindows *AuthorWindows `json:"author_windows"`
+}
+
+// AuthorWindows is the two author windows in whole seconds, the ones the
+// server enforces: a setting longer than a time.Duration holds is sent as
+// the longest Duration, 9223372036 seconds, never as the raw setting
+// (TKT-01M3R33SR5). A window is open for its first N seconds, so 0 never
+// opens.
+type AuthorWindows struct {
+	EditSeconds   int `json:"edit_seconds"`
+	DeleteSeconds int `json:"delete_seconds"`
 }
 
 // SlowMode answers PUT /admin/threads/{id}/slow-mode: the thread's slow mode
