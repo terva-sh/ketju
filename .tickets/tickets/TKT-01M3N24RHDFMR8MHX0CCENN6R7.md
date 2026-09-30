@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3N24RHDFMR8MHX0CCENN6R7
 title: Make archived forums read-only in permission evaluation
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-n24rhd
+  branch: run/n24rhd-archived-forum-readonly
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5fbd4fb2b15bf24e
+  commit: 43a844dd4d572a6c2f4d90c6468acf6fb8061468
+  session: null
+  claimed_at: 2026-09-30T00:18:29Z
+  expires_at: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-30T00:18:32Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-n24rhd
   name: ""
 extensions: {}
 ---
