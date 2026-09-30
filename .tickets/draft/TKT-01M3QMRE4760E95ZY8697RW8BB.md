@@ -23,7 +23,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T22:32:24Z
-updated_at: 2026-09-30T00:29:01Z
+updated_at: 2026-09-30T00:52:13Z
 created_by:
   id: agent:claude-code/phase2-run-cp2qk
   name: ""
@@ -61,10 +61,10 @@ Tests: the dialog's validation and the badge text. `TestTheAdminBundleIsSeparate
 - [ ] Suspend sends exactly {reason, until, hide_posts} only after confirmation: until is now plus 1, 7 or 30 days, null for until lifted, or the chosen local moment, and hide_posts is unchecked by default (SuspensionControls.test.tsx)
 - [ ] An empty or blank reason, one over 500 code points, one with a control character, and a past end are refused beside the field with nothing sent (SuspensionControls.test.tsx)
 - [ ] Unsuspend sends {restore_posts} from an unchecked checkbox; Hide their posts (suspended accounts only) and Restore hidden posts each send one bodiless POST after confirmation (SuspensionControls.test.tsx)
-- [ ] A suspended account shows its reason as text and its end, or until lifted; after every answer the detail is fetched again, and after a success the list too (SuspensionControls.test.tsx)
 - [ ] A moderator sees the controls only on members, an admin on anyone but themselves, and nobody on a pending or deleted-user- account (SuspensionControls.test.tsx)
 - [ ] A suspend whose hide failed says the account is suspended and offers Hide their posts, and 409 on suspend and unsuspend show their own sentences (SuspensionControls.test.tsx)
 - [ ] The controls live in screens/admin/SuspensionPanel.tsx, UserDetail gains only its import, refetch and one element, TestTheAdminBundleIsSeparate passes, and the dist from go generate ./internal/web/spa is committed
+- [ ] A suspended account shows its reason as text and its end, or until lifted; after every answer, success or failure, both the detail and the users list are fetched again, so a suspend whose hide failed leaves the row saying suspended (SuspensionControls.test.tsx)
 
 ## Implementation plan
 
@@ -92,7 +92,7 @@ Engineering choices made here, each with the alternative that lost:
 - **Both checkboxes start unchecked.** Hiding and restoring the posts are judgements separate from the suspension, as the maintainer's expiry decision reasons. Checked defaults lost because they would hide or restore posts without anyone choosing to.
 - **A chosen end is a date and a time** (`<input type="datetime-local">`, `min` now), sent as that local moment in Unix ms, so the end the moderator picks is the end the status shows. A date alone lost: it leaves open when on that day the suspension ends. The presets are now plus 24 h times 1, 7 or 30.
 - **One new file per control group.** The controls are `screens/admin/SuspensionPanel.tsx`, which holds the status line, the suspend form, unsuspend, hide and restore. `UserDetail` gains one import, a `refetch` helper and one element. TKT-01M3QH3GS2 (agent controls, PR #179) and TKT-01M3P0CYR3 (rename control) also change `UserDetail`, in `AgentPanel.tsx` and `RenameControl.tsx`. Adding the controls inline in `UserDetail` lost because of the merge conflicts with those two.
-- **Every answer refetches the detail**, success or failure, and success also asks for the list again. The routes answer 204 with no detail, and a failure can leave the account changed (a suspension that committed before its hide failed). Patching the detail locally lost, because it would guess at what the server did.
+- **Every answer refetches the detail and asks for the list again**, success or failure (Terva review 1516 on PR #181, finding 2). The routes answer 204 with no detail. A failure can also leave the account changed: a suspension can commit before its hide fails, and after that the list row would still say `active`. Two alternatives lost. Patching the detail locally would guess at what the server did. Reloading the list only when the refetched detail differs from the old one would mean waiting for `useResource`'s refetch, and a missed change costs more than one extra list request after a refusal.
 - **The status line lives in the panel, not in the facts list.** `UserDetail`'s `<dd data-status>` stays as it is. The panel draws its own line under the facts, so the other two tickets' hunks are left alone.
 
 ### Approach
@@ -115,7 +115,7 @@ Engineering choices made here, each with the alternative that lost:
    - **Unsuspend** (status `suspended`): a "Restore posts hidden with this suspension" checkbox, unchecked, then `ConfirmButton` "Unsuspend", which sends `{restore_posts}`.
    - **Hide their posts** (status `suspended`): `ConfirmButton` "Hide their posts", prompt "Hide every visible post by @{handle} in forums you moderate?", sending `POST …/posts/hide` with no body.
    - **Restore hidden posts** (whenever `mayAct`): `ConfirmButton` "Restore hidden posts", prompt "Restore the posts a suspension of @{handle} hid, in forums you moderate?", sending `POST …/posts/restore` with no body. On success it says "Posts a suspension hid are restored, where you moderate." It says no count, because the server gives none.
-   - **Answers.** After every answer the panel calls `refetch()`, and after a success `onListChanged()`, so the row's status changes.
+   - **Answers.** After every answer, success or failure, the panel calls `refetch()` and `onListChanged()`, so the row's status follows the account, including after a failed request that changed it.
      - A failed suspend with `hide_posts`, whose refetched status is `suspended`, says "@{handle} is suspended, but not every post could be hidden. Press Hide their posts to finish."
      - `unavailable` from hide says "Some threads could not be reached. Press Hide their posts again to finish them."
      - `conflict` on suspend says "This account cannot be suspended now. It may already be suspended, or be the last active admin." On unsuspend it says "This account is no longer suspended."
@@ -146,7 +146,7 @@ Engineering choices made here, each with the alternative that lost:
   - `no controls on a pending or anonymized account`: none for status `pending` or a `deleted-user-7` handle.
   - `a hide that stopped`: a suspend with `hide_posts` answers 503, and the refetched detail is suspended. The finish words show, and Hide their posts is offered.
   - `conflict words`: a 409 on suspend and a 409 on unsuspend show their sentences.
-  - `refetches and reloads`: after a success, the detail and the list are each requested again. After a failure, the detail is.
+  - `refetches and reloads`: after a success, and after a failure, the detail and the list are each requested again. `a hide that stopped` also checks that the list is requested again, and that its row then says `suspended`.
   - `an agent is warned`: the prompt for a `kind: 'agent'` account names the token.
 - `UsersScreen.test.tsx` still passes, including `shows a moderator the list and the detail read-only…`, extended to find the suspension controls on a member.
 - `TestTheAdminBundleIsSeparate` passes: nothing outside `screens/admin` imports the panel.
@@ -170,3 +170,7 @@ Engineering choices made here, each with the alternative that lost:
 **agent:claude-code/phase2-groom** at 2026-09-30T00:29:01Z
 
 Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30, against main at 43a844d. Two things for whoever claims it. (1) This is not client-only: GET /admin/users/{handle} does not carry the suspension's reason or end, so the plan adds AdminUserDetail.suspension {reason, until}, read from users.status_reason and status_until, with a golden and a docs/07 line. (2) Restore hidden posts is offered on every account the viewer may act on, because a has-hidden-posts flag would have to be read from the admin-only audit log. The controls go in screens/admin/SuspensionPanel.tsx. UserDetail gains one import, a refetch helper and one element after the facts list, so this and TKT-01M3QH3GS2 (agent controls, PR #179) and TKT-01M3P0CYR3 (rename control) do not collide. It depends on TKT-01M3QH3GS2 because it builds on that PR's UserDetail, and only one lane may change the dist at a time. Effort raised to M for the server change.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T00:52:13Z
+
+Terva review 1516 on PR #181 (head 9fc6307), finding 2 (medium), accepted. The panel now asks for the users list again after every answer, success or failure, not only after a success, so a suspend that committed before its hide failed no longer leaves the row saying active. Reloading only when the refetched detail differs lost: it would mean waiting for useResource's refetch. The plan, the test 'refetches and reloads' and criterion 8 are updated.

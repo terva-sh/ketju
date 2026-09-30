@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-29T23:46:54Z
-updated_at: 2026-09-30T00:37:39Z
+updated_at: 2026-09-30T00:52:13Z
 created_by:
   id: agent:claude-code/phase2-run-KRES
   name: ""
@@ -65,7 +65,7 @@ Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 43a844d. The se
 - **The built client is committed.** Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Only one lane may have a PR open that changes the dist (docs/13 "Running two lanes").
 
 Engineering choices made here, each with the alternative that lost:
-- **One helper builds the address.** `linkSignInHref(url)` in `shell/nav.ts`, beside `meHref`, answers `/auth/link?return_to=${encodeURIComponent(url)}`. `url` is preact-iso's `useLocation().url`, the path and query the reader is at. A second hand-built string where the entry is drawn lost, because the two would drift. The fragment is not sent, as `meHref` does not send it: the server would carry it only as part of `return_to`, and `useLocation().url` does not include it.
+- **One helper builds the address.** `linkSignInHref(url)` in `shell/nav.ts`, beside `meHref`, answers `/auth/link?return_to=${encodeURIComponent(url)}`. `url` is preact-iso's `useLocation().url`, the path and query the reader is at. The entry is on the profile page, so that is `/u/{handle}`: after linking, the member comes back to the profile they left from. Carrying the page they were on before the profile (a thread, say) through the profile navigation lost (Terva review 1516 on PR #181, finding 1). It would need state threaded through the handle link and the Me tab, and the member chose to go to their profile. A second hand-built string where the entry is drawn lost, because the two would drift. The fragment is not sent, as `meHref` does not send it: the server would carry it only as part of `return_to`, and `useLocation().url` does not include it.
 - **The entry is shown only for `viewer.value.user !== null`.** Only an active member's session gives a user (the chokepoint refuses any other status). A pre-user has `user: null` and is drawn by `ApplicantShell`, which has no forum navigation, and a signed-out reader has `user: null`. No new server field is needed. A check of the account's status in the client lost, because `/me` does not answer it and the session already implies it.
 
 ### Approach
@@ -85,7 +85,7 @@ Engineering choices made here, each with the alternative that lost:
 - **`routes.test.tsx`**: `/auth/link` and `/auth/link?return_to=%2F` are outside `clientScope`, in the table that already holds `/auth/logout`.
 - **e2e, new `e2e/link-sign-in.spec.ts`**, run in both Playwright projects (390 px and 1440 px):
   - A signed-in member on a thread page presses their handle (1440 px) or the Me tab (390 px), then presses "Link a sign-in" on their profile.
-  - The browser lands on `/auth/link` with `return_to` naming the thread's path, and the server's page offers the dev provider.
+  - The browser lands on `/auth/link` with `return_to` naming their profile's path, `/u/{handle}`, and the server's page offers the dev provider.
   - A signed-out reader finds no entry, and neither does a member on someone else's profile.
 - **Invariants held by the server's tests, which stay green:**
   - A link cannot mint a member session for a pending, suspended or deactivated user: `TestLinkRefusesAnInactiveMember`, `TestLinkNeedsTheMembersSession`, `TestTheLinkStartNeedsAMember` and `TestNoLinkWithoutIntent`.
@@ -108,3 +108,7 @@ Planned in Phase 2 grooming (TKT-01M3M9RR26), 2026-09-30, against main at 43a844
 **agent:claude-code/phase2-groom** at 2026-09-30T00:37:39Z
 
 Maintainer decision 2026-09-29, relayed by the Phase 2 coordinator on PR #181. It supersedes the open decision in the previous note: the 'Link a sign-in' entry goes on the placeholder profile page, in an Account block shown only on the viewer's own profile (screens/ProfilePlaceholder.tsx). The open decision is removed from the plan, and the placement criterion is rewritten. The missing Sign out control is now TKT-01M3QVWKAG (Give signed-in members a Sign out control), which depends on this ticket and adds its form to the same block.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T00:52:13Z
+
+Terva review 1516 on PR #181 (head 9fc6307), finding 1 (medium), accepted. The entry is on the profile page, so return_to is the profile's own path, /u/{handle}, and not the thread the member came from. Carrying the earlier page through the profile navigation lost: the member chose to go to their profile. The plan and the e2e expectation are updated.
