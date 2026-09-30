@@ -213,8 +213,14 @@ export function replyToThread(thread: string) {
 // (Terva review 1594, finding 1). A rate-limited refusal starts the wait its
 // Retry-After names, and says the wait in force, which a later next_post_at
 // may make longer than its own (finding 2).
+//
+// An answer that arrives after the viewer has changed belongs to nobody on
+// screen: it drops no draft, since the key would now be the next person's,
+// clears nothing, starts no wait, and answers null, so the screen goes
+// nowhere (TKT-01M3SAKPK9, as createThread does after Terva review 1591).
 export async function postReply(thread: string, slow?: Slow): Promise<CreatedPost | null> {
   const c = composerFor(thread);
+  const who = owner;
   const source = c.source.value;
   if (c.posting.value || !source.trim()) return null;
   const replyTo = c.replyTo.value;
@@ -226,6 +232,7 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
       `/api/v1/threads/${encodeURIComponent(thread)}/posts`,
       replyTo === null ? { source } : { source, reply_to: replyTo },
     );
+    if (!current(thread, c, who)) return null;
     // The draft goes before the fields are cleared, so clearing them is not
     // a change to save (state/drafts.ts).
     drop(draftKey(thread));
@@ -236,6 +243,7 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
     if (slow && slow.seconds > 0 && !slow.exempt) extend(c, Math.min(res.post.created_at, Date.now()) + slow.seconds * 1000);
     return res;
   } catch (err) {
+    if (!current(thread, c, who)) return null;
     const p = asProblem(err);
     if (p.type === 'rate-limited' && p.retryAfter) {
       extend(c, Date.now() + p.retryAfter * 1000);
@@ -246,6 +254,16 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
   } finally {
     c.posting.value = false;
   }
+}
+
+// current is whether c is still thread's composer for the viewer who was
+// who, read without starting a new one. The viewer check catches a change no
+// lookup has followed yet, the owner check one that a lookup has, and the
+// identity check a change and back with a lookup while the other viewer was
+// current. A change and back with no lookup between leaves the composer, its
+// draft and the post all the one viewer's, and is not guarded (review 1609).
+function current(thread: string, c: Composer, who: string | null): boolean {
+  return (viewer.peek().user?.handle ?? '') === who && owner === who && composers.get(thread) === c;
 }
 
 // discardReply empties thread's composer: the text, the chip and any

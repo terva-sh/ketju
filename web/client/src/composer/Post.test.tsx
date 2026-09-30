@@ -1,10 +1,12 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CreatedPost, Post, ThreadPage } from '../api/dto';
+import type { CreatedPost, Me, Post, ThreadPage } from '../api/dto';
 import { ProblemError } from '../api/problem';
 import { composerFor, postReply, resetComposers } from '../state/composer';
 import { isPhone } from '../state/layout';
-import { renderAt, threadPage } from '../testing';
+import { viewer } from '../state/viewer';
+import { renderAt, threadPage, unmount } from '../testing';
+import member from '../../../../internal/dto/testdata/golden/me.member.json';
 import { postFailure } from './Composer';
 
 const thread = { id: '3yymw47g00001', slug: 'why-we-left-slack', title: 'Why we left Slack' };
@@ -128,6 +130,31 @@ describe('posting a reply', () => {
     expect(postButton(root).disabled).toBe(true);
     await click(postButton(root));
     expect(s.posts()).toHaveLength(0);
+  });
+
+  // TKT-01M3SAKPK9: the answer belongs to nobody on screen, so it does not
+  // route the next viewer to the post the last one made.
+  it('a reply answered after the viewer changed does not move the page', async () => {
+    let release!: () => void;
+    const s = serve(() => new Promise<Response>((r) => (release = () => r(new Response(JSON.stringify(s.ok()), { status: 201 })))));
+    const prior = viewer.value;
+    viewer.value = structuredClone(member) as Me;
+    try {
+      const root = await renderAt(path);
+      await type(root, 'my reply');
+      await click(postButton(root));
+      expect(s.posts()).toHaveLength(1);
+      await act(() => {
+        viewer.value = { ...(structuredClone(member) as Me), user: { ...(member as Me).user!, handle: 'bob' } };
+      });
+      await act(() => release());
+      await settle();
+      await settle();
+      expect(location.pathname).toBe(`/t/${thread.id}/${thread.slug}`);
+    } finally {
+      await unmount();
+      viewer.value = prior;
+    }
   });
 });
 

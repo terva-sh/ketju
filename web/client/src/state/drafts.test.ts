@@ -536,6 +536,113 @@ describe('posting and discarding', () => {
     expect(writes()).toEqual(['PUT the reply', 'DELETE']);
     expect(server.live).toBeNull();
   });
+
+  // TKT-01M3SAKPK9: an answer that arrives after the viewer changed belongs
+  // to nobody on screen. It must not delete the next viewer's draft under
+  // their session, nor clear or hold their composer.
+  const bob = () => ({ ...(member as Me), user: { ...(member as Me).user!, handle: 'bob' } });
+  const slow = { seconds: 30, nextPostAt: null, exempt: false };
+  // created answers a held POST as the server would, with the post's time,
+  // so an unguarded answer would reach the slow-mode wait.
+  const created = async (g: Gate) => {
+    g.resolve!(jsonAnswer({ post: { created_at: Date.now() }, ordinal: 5, revision: 5, log_length: 5 }, 201));
+    await tick();
+  };
+
+  it('a post answered after the viewer changed drops nothing and answers null', async () => {
+    await loadReplyDraft(T);
+    composerFor(T).source.value = 'alice’s reply';
+    const post = hold('POST');
+    const posting = postReply(T);
+    viewer.value = bob();
+    server = { revision: 7, live: { source: 'Bob’s', reply_to: null } };
+    await loadReplyDraft(T);
+    const theirs = composerFor(T);
+    expect(theirs.source.value).toBe('Bob’s');
+    await land(post);
+    expect(await posting).toBeNull();
+    await wait(draftDelay * 2);
+    expect(writes()).toEqual([]);
+    expect(server.live).toEqual({ source: 'Bob’s', reply_to: null });
+    expect(theirs.source.value).toBe('Bob’s');
+  });
+
+  it('a post answered after the viewer changed and back does not clear the new composer', async () => {
+    await loadReplyDraft(T);
+    const posted = composerFor(T);
+    posted.source.value = 'the reply';
+    const post = hold('POST');
+    const posting = postReply(T);
+    viewer.value = anon as Me;
+    composerFor(T);
+    viewer.value = member as Me;
+    const fresh = composerFor(T);
+    expect(fresh).not.toBe(posted);
+    fresh.source.value = 'another reply';
+    await loadReplyDraft(T);
+    await land(post);
+    expect(await posting).toBeNull();
+    await wait(draftDelay * 2);
+    expect(fresh.source.value).toBe('another reply');
+    expect(writes()).toEqual(['PUT another reply']);
+    expect(server.live).toEqual({ source: 'another reply', reply_to: null });
+  });
+
+  // Review 1609: nothing ran as the other viewer, so the composer, its draft
+  // and the post are all alice's, and her draft goes as for any post.
+  it('a post answered after a change and back with no lookup between clears the draft as usual', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'the reply';
+    await wait(draftDelay);
+    expect(server.live).toEqual({ source: 'the reply', reply_to: null });
+    const post = hold('POST');
+    const posting = postReply(T);
+    viewer.value = anon as Me;
+    viewer.value = member as Me;
+    await land(post);
+    expect(await posting).not.toBeNull();
+    await wait(draftDelay * 2);
+    expect(composerFor(T)).toBe(c);
+    expect(c.source.value).toBe('');
+    expect(writes()).toEqual(['PUT the reply', 'DELETE']);
+    expect(server.live).toBeNull();
+  });
+
+  it('a post answered after the viewer changed, before any composer was asked for, answers null', async () => {
+    // startDrafts is what drops alice's pending saves on the change in the
+    // app ('a viewer change drops pending saves before any composer is asked
+    // for'); postReply's own guard is what answers null and holds nothing.
+    const stop = startDrafts();
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'the reply';
+    const post = hold('POST');
+    const posting = postReply(T, slow);
+    viewer.value = bob();
+    await created(post);
+    expect(await posting).toBeNull();
+    await wait(draftDelay * 2);
+    expect(writes()).toEqual([]);
+    expect(c.source.value).toBe('the reply');
+    expect(c.slowUntil.value).toBeNull();
+    stop();
+  });
+
+  it('a refusal answered after the viewer changed sets nothing', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'the reply';
+    const post = hold('POST');
+    const posting = postReply(T, slow);
+    viewer.value = bob();
+    post.resolve!(problem('rate-limited', 429, { 'Retry-After': '30' }));
+    await tick();
+    expect(await posting).toBeNull();
+    expect(c.failure.value).toBeNull();
+    expect(c.slowUntil.value).toBeNull();
+    expect(c.posting.value).toBe(false);
+  });
 });
 
 // AC9.

@@ -27,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T14:13:32Z
-updated_at: 2026-09-30T19:56:06Z
+updated_at: 2026-09-30T20:07:05Z
 created_by:
   id: agent:claude-code/phase2-run-ns16vh
   name: ""
@@ -47,13 +47,13 @@ Signing in and out loads a page today, which empties the module state, so this o
 
 ## Acceptance criteria
 
-- [ ] postReply in web/client/src/state/composer.ts captures the owner before the POST and, after it, answers null without calling drop, clearing the composer or starting a slow-mode wait when current(thread, c, who) is false; current checks viewer.peek()'s handle, owner and composers.get(thread) === c, as createThread's current in state/newThread.ts does
-- [ ] postReply's catch answers null before extend and before setting failure when current(thread, c, who) is false
-- [ ] Security: state/drafts.test.ts 'a post answered after the viewer changed drops nothing and answers null' shows no DELETE is sent and the next viewer's server draft and composer text are unchanged
-- [ ] Security: state/drafts.test.ts 'a post answered after the viewer changed and back does not clear the new composer' covers a change and a change back to the same handle with a composerFor lookup while the other viewer is current, and 'a post answered after a change and back with no lookup between clears the draft as usual' pins the accepted case
-- [ ] state/drafts.test.ts 'a post answered after the viewer changed, before any composer was asked for, answers null' and 'a refusal answered after the viewer changed sets nothing' pass, and neither starts a slow-mode wait
-- [ ] composer/Post.test.tsx 'a reply answered after the viewer changed does not move the page' shows location.pathname unchanged after a 201
-- [ ] state/drafts.ts is unchanged in the diff, and every existing test in state/drafts.test.ts, state/composer.test.ts, composer/Post.test.tsx, composer/Composer.test.tsx and composer/ComposerSheet.test.tsx passes unchanged
+- [x] postReply in web/client/src/state/composer.ts captures the owner before the POST and, after it, answers null without calling drop, clearing the composer or starting a slow-mode wait when current(thread, c, who) is false; current checks viewer.peek()'s handle, owner and composers.get(thread) === c, as createThread's current in state/newThread.ts does
+- [x] postReply's catch answers null before extend and before setting failure when current(thread, c, who) is false
+- [x] Security: state/drafts.test.ts 'a post answered after the viewer changed drops nothing and answers null' shows no DELETE is sent and the next viewer's server draft and composer text are unchanged
+- [x] Security: state/drafts.test.ts 'a post answered after the viewer changed and back does not clear the new composer' covers a change and a change back to the same handle with a composerFor lookup while the other viewer is current, and 'a post answered after a change and back with no lookup between clears the draft as usual' pins the accepted case
+- [x] state/drafts.test.ts 'a post answered after the viewer changed, before any composer was asked for, answers null' and 'a refusal answered after the viewer changed sets nothing' pass, and neither starts a slow-mode wait
+- [x] composer/Post.test.tsx 'a reply answered after the viewer changed does not move the page' shows location.pathname unchanged after a 201
+- [x] state/drafts.ts is unchanged in the diff, and every existing test in state/drafts.test.ts, state/composer.test.ts, composer/Post.test.tsx, composer/Composer.test.tsx and composer/ComposerSheet.test.tsx passes unchanged
 - [ ] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget passes
 
 ## Implementation plan
@@ -114,3 +114,20 @@ In `web/client/src/composer/Post.test.tsx`, `describe('posting a reply')`:
 - `createThread` and `discardNewThread` in `state/newThread.ts`, already guarded by TKT-01M3NS16VH.
 - `discardReply`, `quotePost`, `replyToPost` and `replyToThread`. Each is synchronous and calls `composerFor` first, so each acts on the current viewer's composer.
 - `loadReplyDraft`. `load` in `drafts.ts` already ignores an answer whose entry was replaced (`entries.get(e.id) !== e`).
+
+## Notes
+
+**agent:claude-code/phase2-run-sakpk9** at 2026-09-30T20:07:05Z
+
+Built to the groomed plan, unchanged, on a local branch from origin/main at 387c401. `postReply` captures `who = owner` after `composerFor` and before the POST. A private `current(thread, c, who)` makes the same three checks as `newThread.ts`'s. The success path and the `catch` both answer null first when it is false. `state/drafts.ts` is not touched.
+
+Mutations, each run against state/drafts.test.ts and composer/Post.test.tsx:
+- viewer check removed: caught by 'a post answered after the viewer changed, before any composer was asked for, answers null' and 'a refusal answered after the viewer changed sets nothing'.
+- identity check removed: caught by 'a post answered after the viewer changed and back does not clear the new composer', as the plan says.
+- the catch guard removed: caught by the refusal test.
+- the success-path guard removed: caught by four tests, including the Post.test.tsx routing test.
+- owner check removed: NOT caught, and it cannot be caught while the identity check stands. Every change of `owner` runs `forget()` in `checkOwner`, which empties `composers`, so `composers.get(thread) === c` is already false whenever `owner !== who`. It is kept because AC 1 and the plan name all three checks and because it matches `createThread`'s `current`. It is defence in depth, not a tested branch.
+
+One test departs from the plan's wording. 'a post answered after the viewer changed, before any composer was asked for, answers null' runs `startDrafts()`. Without it, alice's pending autosave goes out after the change, because in the tests nothing resets the draft keys when no composer is asked for. In the app `startDrafts` resets them on every handle change, which is what 'a viewer change drops pending saves before any composer is asked for' already covers. The test therefore models the app, and it asserts `writes()` is `[]`. The guard's own effect is the null answer and the unset slow-mode wait, which the viewer-check mutation shows. The accepted change-and-back test (review 1609) runs without `startDrafts`, like the other posting tests. That pins what `postReply` does when `current` holds. With `startDrafts` running, the change to anonymous would reset the draft keys, and the DELETE would not be sent. That is `drafts.ts` behaviour, and this ticket leaves it alone.
+
+Checks on the local branch: client typecheck, 1884 client tests, go generate, budget, gofmt, build, vet, `go test -race ./...`, and Playwright on port 8796 (175 passed, 11 skipped). Reader bundle: 57041 B gzip of 70000 B, +53 B over 56988 B. AC 8 stays unticked until the dist is regenerated on the branch that is pushed.
