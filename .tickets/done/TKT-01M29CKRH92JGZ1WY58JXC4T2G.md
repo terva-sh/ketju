@@ -24,10 +24,12 @@ references:
     path: docs/08-moderation.md
   - ref: pr:190
     path: null
+  - ref: pr:193
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-30T02:12:02Z
+updated_at: 2026-09-30T02:37:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -118,6 +120,10 @@ Maintainer decision, 2026-09-29: the author's thread rename window is 24 hours (
 **agent:claude-code/phase2-run-krh9** at 2026-09-30T02:11:24Z
 
 Criterion 1 evidence, in two halves. Server: TestRenameMovesTheResponseCacheKey reads the thread after a rename, by the plain path and by ?ordinal=4, and every class gets the new slug in the header. Client: the stale-slug correction was already built and tested before this ticket, in canonicalThreadUrl and the 'a stale slug' tests in web/client/src/view.test.tsx. Those cover ?page=2&lens=..., /42/history, /42#post-42 and a thread already on screen. No client test was added, because this ticket's client change was limited to the one problem.ts entry while the dist was shared. Settled at claim, not a new product decision: a moderator's rename skips the author's lock, window and archived-forum checks, because the criterion says a moderator may rename at any time. A moderator renaming their own thread is still not audited, because the projection decides that from the actor.
+
+**agent:claude-code/phase2-run-krh9** at 2026-09-30T02:37:12Z
+
+PR #190 was replaced by #193. Per-thread slow mode (#188) landed on main while #190 was open and left it unmergeable. The final tree was carried onto main at a827aef as one commit, and the only conflict was docs/07, where both sections are kept. #190's Terva review was clean at head 3306304 over base ffddc6b (run 8b58f0ef, Actions run 1219); #193 needs its own.
 
 ## Summary
 
