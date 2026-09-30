@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3KFFFJRNQD0F5N6XN966V8T
 title: Add the mark-unread control to the thread page
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-kfffjr
-  branch: run/kfffjr-mark-unread
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae815ef097eb2996b
-  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
-  session: null
-  claimed_at: 2026-09-30T18:42:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T19:06:32Z
+updated_at: 2026-09-30T20:48:22Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -62,7 +55,7 @@ docs/06 "Read tracking", docs/07 "Read position".
 
 - [x] markUnread flushes the beacon and waits for every PUT in flight before its DELETE, sends no PUT for the thread until the DELETE answers, lowers the floor to the answer, and runs two marks of one thread in call order (the restored readTracker.test.ts markUnread tests)
 - [x] A page requested before the DELETE answered does not raise the floor and one requested after it does, and reads made while a DELETE is pending survive a failed DELETE and are sent after a retried mark succeeds (keeps what was read during a failed DELETE for the next mark)
-- [ ] The dist is rebuilt with go generate ./internal/web/spa and the thread-view bundle stays within the 60000 B gzip budget
+- [x] The dist is rebuilt with go generate ./internal/web/spa and the thread-view bundle stays within the 60000 B gzip budget
 - [x] A whole-thread Mark unread action (toolbar and phone more menu) and an Unread from here action on each post (footer on desktop, PostMore on a phone) mark the thread unread, then return to the thread list; e2e/read-tracking.spec.ts covers both at 390 px and 1440 px, the server's position stays lowered, and docs/06 Mobile lists unread from here under the post's more control
 
 ## Implementation plan
@@ -187,3 +180,35 @@ Engineering choices made while building, beyond the plan's settled items:
 Security: the DELETE takes its user from the session (`internal/web/api/viewerstate.go:64`, `internal/service/threads/viewerstate.go:101`), and the client sends no user, so the control cannot move another member's position. No server change was needed.
 
 Figures: the reader bundle is 55740 B gzip of 70000 B, up 816 B from 54924 B. Tests: Vitest 1856 passed; the full Playwright suite passed at 390 px and 1440 px, apart from `e2e/targets.spec.ts`'s list of PostMore items, which now names unread from here and passes. `go test -race ./...`, gofmt, build and vet are clean.
+
+**agent:claude-code/phase2-run-kfffjr** at 2026-09-30T20:47:57Z
+
+Replayed onto origin/main at c9909b0 (after #243, #245 and #247), with the old dist commit dropped and the dist regenerated. This note supersedes the figures in the build note.
+
+- **Conflicts with #243 (TKT-01M3PTT97X, edit and delete) in `Post.tsx`, `PostMore.tsx` and `ThreadScreen.tsx`** were resolved by keeping both features. The phone's post "more" list now reads link, flag, edit, delete, unread from here, history. The desktop footer uses the same order: "unread from here" sits after delete and before history, which is still after quote and reply, as settled.
+- **Unread from here is not offered on a post whose editor or delete confirmation is open.** It leaves the page, which would drop the edit. Main hides quote and reply while editing on the same reasoning. Test: `offers no unread from here on a post being edited or deleted` in `PostControls.test.tsx`, which fails when the gate is removed.
+- **`PostControls.test.tsx` lists the footer actions.** Its `footer()` helper now leaves out `unread`, which every signed-in member has on every post and `ThreadScreen.test.tsx` covers. The two assertions of the full order name it in its place.
+
+Figures: the reader bundle is 58062 B gzip of 70000 B, up 859 B from 57203 B on main. Vitest 1934 passed; gofmt, build, vet and `go test -race ./...` are clean; the full Playwright suite on port 18961 is recorded in the summary.
+
+## Summary
+
+Mark unread is on the thread page in the two places the maintainer chose on 2026-09-29:
+- "Mark unread" is a whole-thread action, on the desktop toolbar and in the phone's more menu.
+- "unread from here" is on each post, in the footer on desktop and in `PostMore` on a phone.
+
+After the DELETE answers, the page drops the held forum index and thread lists, refreshes the viewer's badge, and replaces its history entry with the list the reader came from (`state/lists.ts`), or with the thread's forum.
+
+`state/readTracker.ts` has `markUnread`, ported from 74c4e8f:
+- It flushes and waits for the PUTs before the DELETE, and holds beacons until the DELETE answers.
+- It lowers the floor to the answer, and forgets the thread's held pages.
+- It judges a page by the thread cache's load number (`pageRequestedAt`, `loadCount`).
+- It runs marks of one thread in call order.
+- It carries reads from a failed DELETE to the next mark that succeeds (review 1149).
+
+A failure shows as an alert and the reader stays on the page. The control is gated on a signed-in member, not on replying, and is not offered on a post being edited or deleted. docs/06 "Mobile" lists it under the post's more.
+
+The reader bundle is 58062 B gzip of 70000 B, up 859 B from 57203 B. All four criteria are met:
+- Vitest: 1934 passed, including eight markUnread tracker tests and a test of the hold.
+- Playwright: 185 passed at 390 px and 1440 px, including the two new read-tracking tests.
+- Go: `go test -race ./...` passed. No server change was needed: the DELETE takes its user from the session.
