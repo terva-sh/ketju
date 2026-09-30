@@ -246,9 +246,9 @@ arrangement.
   answered, and the sheet has room to show it.
 - **Posts.** One column, 30 px avatars, author and time stacked, reply-to
   indicator at the right of the header. Footer actions are reply, quote,
-  and the reply expander; link, flag, and history collapse under a "more"
-  control. The unread divider, tombstones, and the unread edge marker are
-  identical to desktop.
+  and the reply expander; link, flag, "unread from here", and history
+  collapse under a "more" control. The unread divider, tombstones, and the
+  unread edge marker are identical to desktop.
 - **Pages.** A "Page 3 of 9" control with previous and next; tapping the
   label opens a picker sheet with page numbers and the jump-to-unread and
   jump-to-date actions. Lenses open from a sheet as well.

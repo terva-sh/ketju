@@ -19,6 +19,24 @@ describe('the thread actions', () => {
     expect(threadActions(t).map((a) => a.id)).toEqual(['copy-link']);
   });
 
+  // TKT-01M3KFFFJR: Mark unread only when the page hands it over, after
+  // First unread and before the moderation.
+  it('offers Mark unread when handed it, and runs it', () => {
+    const mark = vi.fn();
+    const actions = threadActions(t, {
+      canReply: true,
+      firstUnread: () => {},
+      markUnread: mark,
+      moderate: { locked: false, pinned: null, staff: false, open: () => {} },
+    });
+    expect(actions.map((a) => a.id).slice(0, 4)).toEqual(['reply', 'first-unread', 'mark-unread', 'lock']);
+    const action = actions.find((a) => a.id === 'mark-unread')!;
+    expect(action.label).toBe('Mark unread');
+    action.run();
+    expect(mark).toHaveBeenCalledOnce();
+    expect(ids()).not.toContain('mark-unread');
+  });
+
   it('lock or unlock by state', () => {
     expect(kinds({ locked: false, pinned: null, staff: false })).toEqual(['lock', 'pin']);
     expect(kinds({ locked: true, pinned: null, staff: false })).toEqual(['unlock', 'pin']);

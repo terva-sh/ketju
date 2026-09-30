@@ -87,13 +87,16 @@ async function load(id: string, q: ThreadQuery, signal: AbortSignal | undefined,
   let page: ThreadPage;
   try {
     page = await apiGet<ThreadPage>(url, { signal });
+    // A 304 hands back the body held from an earlier request, and a newer
+    // request's word that it is still right is the one to go by.
+    requested.set(page, Math.max(requested.get(page) ?? 0, n));
   } catch (err) {
     // A superseded request's answer is older than whatever replaced it, a
     // refusal included: it changes nothing. Nor does a refusal older than a
     // page already stored from a request that started after it.
     if (revokesAccess(err) && !signal?.aborted && n > (stored.get(id) ?? 0)) {
       refused.set(id, { n, err });
-      forgetThread(id);
+      forgetThreadPages(id);
     }
     throw err;
   }
@@ -208,7 +211,23 @@ let loads = 0;
 const refused = new Map<string, { n: number; err: unknown }>();
 const stored = new Map<string, number>();
 
-function forgetThread(id: string) {
+// requested is the number of the newest load each page answered, so the
+// read tracker can tell a page asked for before a mark-unread answered, which
+// reports the position the mark lowered, from one asked for after it
+// (state/readTracker.ts).
+const requested = new WeakMap<ThreadPage, number>();
+
+// loadCount is the number of the newest load to have started.
+export const loadCount = () => loads;
+
+// pageRequestedAt is the number of the newest load that answered page, or 0
+// for a page no load answered.
+export const pageRequestedAt = (page: ThreadPage) => requested.get(page) ?? 0;
+
+// forgetThreadPages drops every held page of id and the cache's entry for
+// it: pages no longer the viewer's to see, or that report something the
+// caller knows has changed, as the viewer's position after a mark-unread.
+export function forgetThreadPages(id: string) {
   forgetGets((u) => isThreadUrl(u, id));
   if (!threadCache.value.has(id)) return;
   const next = new Map(threadCache.value);

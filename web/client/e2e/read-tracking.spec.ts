@@ -1,4 +1,5 @@
-import { expect, test, type Browser, type Page, type TestInfo } from '@playwright/test';
+import AxeBuilder from '@axe-core/playwright';
+import { expect, test, type APIRequestContext, type Browser, type Page, type TestInfo } from '@playwright/test';
 import { readPosition, setReadPosition, stateFile } from './session';
 
 // The read-tracking beacon (TKT-01M29CGBWN), run once per project in
@@ -136,5 +137,74 @@ test('reading an earlier page after a later one sends nothing behind it', async 
   await page.waitForTimeout(500);
   expect(sent).toHaveLength(1);
   expect(await readPosition(ctx.request, at)).toBe(sent[0]);
+  await ctx.close();
+});
+
+// Mark unread (TKT-01M3KFFFJR): the whole thread from its actions, and from
+// a post with "unread from here", then back to the list (docs/06 "Read
+// tracking"). carol starts at 25, the foot of page 1, so every post the page
+// shows is read already, and the dwell is waited out before the press, so
+// nothing is pending when the DELETE goes and nothing is read after it.
+const isDelete = (r: { method(): string; url(): string }) =>
+  r.method() === 'DELETE' && /^\/api\/v1\/threads\/[^/]+\/read$/.test(new URL(r.url()).pathname);
+
+// back checks the page is on General's list with the thread shown unread,
+// and that the position is still lowered once anything the navigation sent
+// has landed.
+async function back(page: Page, at: string, request: APIRequestContext, want: number) {
+  await expect(page).toHaveURL(/\/f\/general$/);
+  const row = page.locator('[data-thread]', { hasText: 'Minutes from the September meeting' });
+  await expect(row.locator('.thread-unread')).toBeVisible();
+  await page.waitForTimeout(500);
+  expect(await readPosition(request, at)).toBe(want);
+}
+
+test('mark unread makes the whole thread unread and returns to the list', async ({ browser }, info) => {
+  const { ctx, page } = await asCarol(browser, info);
+  const at = await minutes(page);
+  await setReadPosition(ctx.request, at, 25);
+  await page.goto(at);
+  await expect(page.locator('#post-1')).toBeVisible();
+  await page.waitForTimeout(dwell);
+
+  const del = page.waitForRequest(isDelete);
+  if (info.project.use.isMobile) {
+    await page.locator('[data-shell=phone-topbar] .more > button').click();
+    await page.locator('[data-shell=more-menu] [data-action=mark-unread]').click();
+  } else {
+    await page.locator('[data-shell=toolbar] [data-action=mark-unread]').click();
+  }
+  expect((await del).postData()).toBeNull();
+  await back(page, at, ctx.request, 0);
+  await ctx.close();
+});
+
+test('unread from here makes that post and every later one unread', async ({ browser }, info) => {
+  const { ctx, page } = await asCarol(browser, info);
+  const at = await minutes(page);
+  await setReadPosition(ctx.request, at, 25);
+  await page.goto(at);
+  const post = page.locator('#post-3');
+  await post.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(dwell);
+
+  // On a phone the control is under the post's More (docs/06 "Mobile").
+  if (info.project.use.isMobile) {
+    await expect(post.locator('.post-footer > [data-post-action=unread]')).toHaveCount(0);
+    await post.locator('[data-post-more]').click();
+  }
+  const control = post.locator('[data-post-action=unread]');
+  await expect(control).toBeVisible();
+  const { violations } = await new AxeBuilder({ page })
+    .include('#post-3')
+    .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+    .analyze();
+  const found = violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`);
+  expect(found).toEqual([]);
+
+  const del = page.waitForRequest(isDelete);
+  await control.click();
+  expect((await del).postDataJSON()).toEqual({ ordinal: 2 });
+  await back(page, at, ctx.request, 2);
   await ctx.close();
 });

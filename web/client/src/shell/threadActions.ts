@@ -50,6 +50,9 @@ const moderateLabels: Record<ModerateKind, string> = { lock: 'Lock', unlock: 'Un
 export interface ThreadActionOptions {
   canReply?: boolean;
   firstUnread?: () => void;
+  // markUnread marks the whole thread unread; the thread page sets it for a
+  // signed-in reader, who has a read position to lower.
+  markUnread?: () => void;
   // moderate is set only for a viewer the thread page says moderates the
   // thread (viewer.can_moderate), and open brings up the panel for a kind.
   moderate?: ModerateState & { open: (kind: PanelKind) => void };
@@ -71,6 +74,11 @@ export interface ThreadActionOptions {
 // which the thread page works out and hands over as firstUnread. It is the
 // visible control for the u shortcut (keyboard/shortcuts.ts).
 //
+// Mark unread is offered when the page hands it over (see ThreadScreen). It
+// makes the whole thread unread and returns to the list; each post's
+// "unread from here" does the same from that post (docs/06 "Read
+// tracking").
+//
 // Lock or Unlock, Pin and Unpin are offered when the page says the viewer
 // moderates the thread (viewer.can_moderate), by moderateKinds. Thread
 // moderation follows the forum grant (docs/08 "Decided 2026-09-30"), so a
@@ -86,6 +94,7 @@ export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions =
   return [
     ...(opts.canReply ? [{ id: 'reply', label: 'Reply', run: () => replyToThread(t.id) }] : []),
     ...(opts.firstUnread ? [{ id: 'first-unread', label: 'First unread', run: opts.firstUnread }] : []),
+    ...(opts.markUnread ? [{ id: 'mark-unread', label: 'Mark unread', run: opts.markUnread }] : []),
     ...(opts.rename ? [{ id: 'rename', label: 'Rename…', run: opts.rename }] : []),
     ...(m ? moderateKinds(m).map((k) => ({ id: k, label: moderateLabels[k], run: () => m.open(k) })) : []),
     ...(m

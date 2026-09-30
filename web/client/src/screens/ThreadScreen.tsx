@@ -1,9 +1,9 @@
 import { Fragment } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
-import { peekGet } from '../api/client';
+import { forgetGets, peekGet } from '../api/client';
 import type { CreatedPost, Pinned, Post as PostDTO, ThreadPage } from '../api/dto';
-import { isProblem } from '../api/problem';
+import { isProblem, problemMessage } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Composer } from '../composer/Composer';
@@ -12,7 +12,14 @@ import { delayUntil } from '../components/thread/deadline';
 import { FlagDialog } from '../components/thread/FlagDialog';
 import { ModerateDialog } from '../components/thread/ModerateDialog';
 import { Pager } from '../components/thread/Pager';
-import { permalink, Post, type FlagHandler, type PostActions, type ThreadRef } from '../components/thread/Post';
+import {
+  permalink,
+  Post,
+  type FlagHandler,
+  type PostActions,
+  type ThreadRef,
+  type UnreadHandler,
+} from '../components/thread/Post';
 import { isOwn, postControls } from '../components/thread/postControls';
 import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
@@ -28,9 +35,10 @@ import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
 import { composerFor, loadReplyDraft, quotePost, replyToPost, type Slow } from '../state/composer';
-import { trackPosts } from '../state/readTracker';
+import { listFor } from '../state/lists';
+import { markUnread, trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
-import { viewer } from '../state/viewer';
+import { refreshViewer, viewer } from '../state/viewer';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
 import { NotFound } from './Placeholder';
@@ -140,23 +148,60 @@ export function ThreadScreen() {
   const [closedOn, setClosedOn] = useState<string | null>(null);
   const renameOpen = mayModerate || windowOpen;
   const offerRename = renameOpen && (mayModerate || closedOn !== known?.id);
+  // Mark unread is offered to a signed-in reader on the thread body once a
+  // page is on screen, whatever else they may do there: a member who may not
+  // reply in a locked thread still has a position to lower. A press while a
+  // mark is out is ignored (marking), and a failure says so under the head
+  // and leaves the reader where they are, to press again.
+  const forumSlug = head?.forum.slug;
+  const offerMark = !history && !!res.data && tracksUnread() && !!forumSlug;
+  const marking = useRef(false);
+  const [markFailed, setMarkFailed] = useState<{ thread: string; error: unknown } | null>(null);
   const actions = useMemo(
     () =>
       known
         ? threadActions(known, {
             canReply,
             firstUnread: unread ? () => firstUnread(known, lastRead, postCount, route) : undefined,
+            markUnread: offerMark
+              ? () => {
+                  if (marking.current) return;
+                  marking.current = true;
+                  setMarkFailed(null);
+                  markAndReturn(known.id, forumSlug!, route)
+                    .catch((error: unknown) => setMarkFailed({ thread: known.id, error }))
+                    .finally(() => (marking.current = false));
+                }
+              : undefined,
             moderate: mayModerate
               ? { locked, pinned, staff, open: (kind) => setModerating({ thread: known.id, kind }) }
               : undefined,
             rename: offerRename ? () => setModerating({ thread: known.id, kind: 'rename' }) : undefined,
           })
         : [],
-    [known?.id, known?.slug, canReply, unread, lastRead, postCount, mayModerate, staff, locked, pinned?.scope, pinned?.until, offerRename],
+    [
+      known?.id,
+      known?.slug,
+      canReply,
+      unread,
+      lastRead,
+      postCount,
+      offerMark,
+      forumSlug,
+      mayModerate,
+      staff,
+      locked,
+      pinned?.scope,
+      pinned?.until,
+      offerRename,
+    ],
   );
   const title = useRef<HTMLHeadingElement>(null);
   const panel = moderating && head && moderating.thread === head.id && !history ? moderating : null;
-  useEffect(() => setModerating(null), [params.id]);
+  useEffect(() => {
+    setModerating(null);
+    setMarkFailed(null);
+  }, [params.id]);
   const forum = head?.forum;
   const ctx = useMemo(
     () =>
@@ -193,6 +238,11 @@ export function ThreadScreen() {
         )}
         {head?.pinned && <PinnedNote pinned={head.pinned} />}
         {!isPhone.value && <Toolbar actions={actions} label="Thread actions" />}
+        {markFailed && markFailed.thread === params.id && (
+          <p class="unread-refused" role="alert" data-mark-unread-refused>
+            This thread could not be marked unread. {problemMessage(markFailed.error).text}
+          </p>
+        )}
       </header>
       {panel && head && (
         <ModerateDialog
@@ -314,6 +364,13 @@ function ThreadBody({ page, lens, onChanged }: { page: ThreadPage; lens: string;
           onChanged,
         }
       : undefined;
+  // Unread from here is offered to a signed-in reader, on its own rule
+  // rather than with quote and reply, as flag is: it makes that post and
+  // every later one unread, and returns to the list.
+  const { route } = useLocation();
+  const onUnread: UnreadHandler | undefined = tracksUnread()
+    ? (ordinal) => markAndReturn(thread.id, page.thread.forum.slug, route, ordinal - 1)
+    : undefined;
   const postOf = (o: number) => page.posts.find((p) => p.ordinal === o);
   const authorOf = (o: number) => postOf(o)?.author.handle;
   // On a phone the composer is a sheet the reply bar opens (Shell), and
@@ -325,15 +382,14 @@ function ThreadBody({ page, lens, onChanged }: { page: ThreadPage; lens: string;
     nextPostAt: page.viewer.next_post_at,
     exempt: page.viewer.can_moderate,
   };
-  // A posted reply is shown where it landed: its permalink, which asks for
-  // the page holding it at the log length the post made, and scrolls to it.
-  // Nothing moves a reader who has left the thread while it was posting.
-  const { route } = useLocation();
   useThreadShortcuts(page, lens, route);
   const list = useRef<HTMLElement>(null);
   useReadTracking(thread.id, list, page, lastRead);
+  // A posted reply is shown where it landed: its permalink, which asks for
+  // the page holding it at the log length the post made, and scrolls to it.
+  // Nothing moves a reader who has left the thread while it was posting.
   const posted = (res: CreatedPost) => {
-    if (location.pathname.startsWith(`/t/${encodeURIComponent(thread.id)}/`)) route(permalink(thread, res.ordinal));
+    if (onThread(thread.id)) route(permalink(thread, res.ordinal));
   };
 
   // One handler for every link to another post in this list: a reply-to
@@ -378,6 +434,7 @@ function ThreadBody({ page, lens, onChanged }: { page: ThreadPage; lens: string;
                 unread={lastRead > 0 && p.ordinal > lastRead}
                 actions={actions}
                 onFlag={onFlag}
+                onUnread={onUnread}
                 own={ownOf(p, i)}
                 expander={expanderShown(p, page.posts[i + 1])}
               />
@@ -415,8 +472,29 @@ function useReadTracking(id: string, list: { current: HTMLElement | null }, page
   const signedIn = !!viewer.value.user;
   useEffect(() => {
     if (!signedIn || !list.current) return;
-    return trackPosts(id, list.current, lastRead);
+    return trackPosts(id, list.current, lastRead, page);
   }, [id, page, signedIn]);
+}
+
+// onThread is whether the reader is still on a page of thread id.
+const onThread = (id: string) => location.pathname.startsWith(`/t/${encodeURIComponent(id)}/`);
+
+// markAndReturn marks thread id unread after ordinal, or all of it with none
+// (state/readTracker.ts), and then returns the reader to the list they came
+// from, or the forum's (docs/06 "Read tracking"): staying would read the
+// posts on screen again within a second and undo the mark. The held forum
+// index and thread lists carry the counts the mark changed, so they are
+// dropped rather than shown on the way back, and the viewer's badge is asked
+// for again.
+//
+// The thread's history entry is replaced, so Back does not reopen the page
+// just marked. A reader who has left the thread while it was marking stays
+// where they went. It rejects with the mark's failure, for the caller to show.
+async function markAndReturn(id: string, forum: string, route: (url: string, replace?: boolean) => void, ordinal?: number) {
+  await markUnread(id, ordinal);
+  forgetGets((u) => u.startsWith('/api/v1/forums'));
+  void refreshViewer().catch(() => undefined);
+  if (onThread(id)) route(listFor(forum), true);
 }
 
 // useArrival scrolls once per request key, when its page first arrives:

@@ -276,9 +276,10 @@ describe('thread actions', () => {
     vi.stubGlobal('fetch', async () => new Response(threadJSON(thread), { status: 200 }));
     const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
     // The member golden may reply, so Reply leads the list, and has posts
-    // its reader has not read, so First unread is offered.
-    const want = threadActions(thread, { canReply: true, firstUnread: () => {} }).map((a) => a.id);
-    expect(want).toEqual(['reply', 'first-unread', 'copy-link']);
+    // its reader has not read, so First unread is offered; its reader is
+    // signed in, so Mark unread is too.
+    const want = threadActions(thread, { canReply: true, firstUnread: () => {}, markUnread: () => {} }).map((a) => a.id);
+    expect(want).toEqual(['reply', 'first-unread', 'mark-unread', 'copy-link']);
     const toolbar = [...root.querySelectorAll<HTMLElement>('[data-shell=toolbar] [data-action]')].map((b) => b.dataset.action);
     expect(toolbar).toEqual(want);
     expect(root.querySelector('[aria-label=More]')).toBeNull();

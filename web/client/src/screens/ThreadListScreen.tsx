@@ -1,3 +1,4 @@
+import { useEffect } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { apiGet, peekGet } from '../api/client';
 import type { ThreadList } from '../api/dto';
@@ -5,6 +6,7 @@ import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { ThreadRow } from '../components/ThreadRow';
+import { rememberList } from '../state/lists';
 import { useScrollMemory } from '../state/scroll';
 import { useShellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
@@ -55,6 +57,8 @@ export function ThreadListScreen() {
     [name, !!list, !!res.error],
   );
   useScrollMemory(key, !!list);
+  // A thread marked unread from here comes back to this page (state/lists.ts).
+  useEffect(() => rememberList(forum, pageHref(forum, cursor, sort)), [forum, cursor, sort]);
 
   if (isProblem(res.error, 'not-found')) return <NotFound />;
 

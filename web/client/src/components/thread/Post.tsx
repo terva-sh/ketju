@@ -1,5 +1,6 @@
-import { useLayoutEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Post as PostDTO } from '../../api/dto';
+import { problemMessage } from '../../api/problem';
 import { bodyText, selectionIn } from '../../composer/quote';
 import { isPhone } from '../../state/layout';
 import { viewer } from '../../state/viewer';
@@ -36,8 +37,10 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // on the page to take them (TKT-01M29CEE79). Flag is there when the page
 // offers it, to a signed-in member, and the post may be flagged (mayFlag);
 // it does not depend on replying, since a locked thread still takes flags
-// (TKT-01M3QQWA5Z). The reply expander leads the footer when the page
-// offers it (expanderShown). On a phone link, flag and history collapse
+// (TKT-01M3QQWA5Z). Unread from here is there when the page offers it, to a
+// signed-in member, on its own rule for the same reason (TKT-01M3KFFFJR). The
+// reply expander leads the footer when the page offers it (expanderShown). On
+// a phone link, flag, edit, delete, unread from here and history collapse
 // under PostMore (docs/06 "Mobile").
 //
 // own is handed over on the viewer's own post, on the thread page only.
@@ -45,13 +48,16 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // offers them (postControls); edit opens the editor in the body's place, and
 // delete asks first, below the body. Restore is in the footer of a removed
 // post drawn with its body, which is how a moderator's own deleted post
-// reaches them (TKT-01M3PTT97X).
+// reaches them (TKT-01M3PTT97X). Unread from here follows them, and is not
+// offered while the editor or the confirmation is open, since it leaves the
+// page and would drop what is being edited.
 export function Post({
   post,
   thread,
   unread,
   actions,
   onFlag,
+  onUnread,
   own,
   expander = false,
 }: {
@@ -60,6 +66,7 @@ export function Post({
   unread: boolean;
   actions?: PostActions;
   onFlag?: FlagHandler;
+  onUnread?: UnreadHandler;
   own?: Own;
   expander?: boolean;
 }) {
@@ -73,6 +80,8 @@ export function Post({
   const selected = useRef<string | null>(null);
   const [open, setOpen] = useState(false);
   const toggle = useHeldStill(() => setOpen((o) => !o));
+  const mark = useMarkFromHere(post.ordinal, onUnread);
+  const markHere = idle ? mark.run : undefined;
   return (
     <article
       class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' removed' : '')}
@@ -125,7 +134,15 @@ export function Post({
             </>
           )}
           {isPhone.value ? (
-            <PostMore thread={thread} ordinal={post.ordinal} onFlag={flag} onEdit={edit} onDelete={del} />
+            <PostMore
+              thread={thread}
+              ordinal={post.ordinal}
+              onFlag={flag}
+              onEdit={edit}
+              onDelete={del}
+              onUnread={markHere}
+              unreadBusy={mark.busy}
+            />
           ) : (
             <>
               <a class="hit" href={permalink(thread, post.ordinal)}>
@@ -151,6 +168,11 @@ export function Post({
                   delete
                 </button>
               )}
+              {markHere && (
+                <button type="button" class="hit" data-post-action="unread" disabled={mark.busy} onClick={markHere}>
+                  unread from here
+                </button>
+              )}
               <a class="hit" href={`${permalink(thread, post.ordinal)}/history`}>
                 history
               </a>
@@ -158,6 +180,11 @@ export function Post({
           )}
           <Restore o={o} />
         </footer>
+        {mark.failed !== null && (
+          <p class="unread-refused" role="alert" data-mark-unread-refused>
+            The thread could not be marked unread from here. {problemMessage(mark.failed).text}
+          </p>
+        )}
         {expander && open && <Replies thread={thread} ordinal={post.ordinal} />}
       </div>
     </article>
@@ -176,6 +203,38 @@ export interface PostActions {
 // on a phone the post's More button, since the flag item inside it is gone
 // by then.
 export type FlagHandler = (ordinal: number, returnTo: HTMLElement) => void;
+
+// UnreadHandler marks the thread unread from a post, that post included, and
+// settles when the mark has: it rejects with the failure, which the post
+// shows beside its control.
+export type UnreadHandler = (ordinal: number) => Promise<unknown>;
+
+// useMarkFromHere is a post's unread from here: run, when the page offers it,
+// and whether its mark is out (busy, when the control is disabled and a
+// second press does nothing) or failed. A mark that succeeds has already
+// left the page, so nothing is set on a post that is gone.
+function useMarkFromHere(ordinal: number, onUnread: UnreadHandler | undefined) {
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState<unknown>(null);
+  const out = useRef(false);
+  const gone = useRef(false);
+  useEffect(() => () => void (gone.current = true), []);
+  const run = onUnread
+    ? () => {
+        if (out.current) return;
+        out.current = true;
+        setBusy(true);
+        setFailed(null);
+        onUnread(ordinal)
+          .catch((err: unknown) => void (gone.current || setFailed(err)))
+          .finally(() => {
+            out.current = false;
+            if (!gone.current) setBusy(false);
+          });
+      }
+    : undefined;
+  return { run, busy, failed };
+}
 
 // mayFlag is whether the viewer is offered flag on post: a signed-in member,
 // on a post that is shown (not removed, not moved) and is not their own

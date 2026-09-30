@@ -542,9 +542,13 @@
 }
 .flag-long,
 .flag-refused,
-.moderate-refused {
+.moderate-refused,
+.unread-refused {
   color: var(--ink);
   font-weight: 600;
+}
+.unread-refused {
+  margin: 8px 0 0;
 }
 .flag-refused,
 .moderate-refused {

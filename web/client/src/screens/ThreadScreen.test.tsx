@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { peekGet } from '../api/client';
 import type { Forum, Me, ThreadHeader, ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
+import { resetLists } from '../state/lists';
 import { dwellMs, resetReadTracker } from '../state/readTracker';
 import { viewer } from '../state/viewer';
 import {
@@ -20,6 +21,7 @@ import {
 } from '../testing';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 import moderator from '../../../../internal/dto/testdata/golden/me.moderator.json';
+import threads from '../../../../internal/dto/testdata/golden/threads.member.json';
 
 const problem = (type: string, status: number, headers: Record<string, string> = {}) =>
   new Response(JSON.stringify({ type, title: 't', status }), {
@@ -974,5 +976,179 @@ describe('moderating from the thread screen', () => {
     await custom('86400');
     await submit();
     expect(puts()).toEqual([{ url: slowUrl, body: { seconds: 86400 } }]);
+  });
+});
+
+// TKT-01M3KFFFJR: Mark unread, for the whole thread from the thread actions
+// and from a post with unread from here, then back to the list. The golden
+// thread is in General, and the member golden's viewer, alice, has read it
+// to #60.
+describe('marking unread from the thread screen', () => {
+  const saved = viewer.value;
+  const id = '01k4z3j0w8x2c';
+  const url = `/api/v1/threads/${id}`;
+  const read = `${url}/read`;
+  const list = '/api/v1/forums/general/threads';
+  let page: ThreadPage;
+  let unread: (body: unknown) => Answer | Promise<Answer>;
+  let lists: (() => Answer | Promise<Answer>)[];
+  let server: StubServer;
+
+  beforeEach(() => {
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observe() {}
+        disconnect() {}
+      },
+    );
+    page = threadPage({ id, slug: 'a', title: 'Marked' });
+    unread = (b) => ({ status: 200, body: { last_read_ordinal: (b as { ordinal?: number } | undefined)?.ordinal ?? 0 } });
+    lists = [];
+    const listAnswer = () => (lists.length > 1 ? lists.shift()! : (lists[0] ?? (() => ({ status: 200, body: threads, headers: { ETag: '"l"' } }))))();
+    server = stubServer({
+      [`GET ${url}`]: () => ({ status: 200, body: page }),
+      [`DELETE ${read}`]: (b) => unread(b),
+      'GET /api/v1/me': () => ({ status: 200, body: member }),
+      'GET /api/v1/forums': () => ({ status: 200, body: { forums: [] }, headers: { ETag: '"f"' } }),
+      [`GET ${list}`]: listAnswer,
+      [`GET ${list}?sort=created`]: listAnswer,
+    });
+    viewer.value = structuredClone(member) as Me;
+  });
+  afterEach(async () => {
+    await unmount();
+    viewer.value = saved;
+    isPhone.value = false;
+    resetReadTracker();
+    resetLists();
+  });
+
+  const deletes = () => server.sent.filter((r) => r.method === 'DELETE').map((r) => ({ url: r.url, body: r.body }));
+  const refused = (root: HTMLElement) => root.querySelector('[data-mark-unread-refused]');
+  const wait = () => act(() => new Promise((r) => setTimeout(r, 5)));
+  async function press(el: Element | null) {
+    expect(el).not.toBeNull();
+    await act(async () => (el as HTMLElement).click());
+    await wait();
+  }
+
+  it('Mark unread sends no body, drops the held counts and goes back to the list the reader came from', async () => {
+    const root = await renderAt('/');
+    await route('/f/general?sort=created');
+    await settle(root);
+    expect(peekGet('/api/v1/forums')).toBeDefined();
+    expect(peekGet(`${list}?sort=created`)).toBeDefined();
+    await route(`/t/${id}/a`);
+    await settle(root);
+    expect(screenOf(root)).toBe('thread');
+    // The list, asked for again, is held back so the test can see that
+    // nothing was left to show in its place.
+    lists = [() => new Promise<Answer>(() => {})];
+    const mes = server.sent.filter((r) => r.url === '/api/v1/me').length;
+    const entries = history.length;
+    await press(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]'));
+    expect(deletes()).toEqual([{ url: read, body: undefined }]);
+    expect(location.pathname + location.search).toBe('/f/general?sort=created');
+    expect(history.length, 'the thread entry is replaced, so Back does not reopen it').toBe(entries);
+    expect(peekGet('/api/v1/forums')).toBeUndefined();
+    expect(peekGet(`${list}?sort=created`)).toBeUndefined();
+    expect(server.sent.filter((r) => r.url === '/api/v1/me').length).toBe(mes + 1);
+  });
+
+  it("goes to the thread's forum when the list on record is another forum's", async () => {
+    const root = await renderAt('/f/garden');
+    await route(`/t/${id}/a`);
+    await settle(root);
+    await press(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]'));
+    expect(location.pathname + location.search).toBe('/f/general');
+    expect(screenOf(root)).toBe('thread-list');
+  });
+
+  it('unread from here sends the ordinal before the post, from the footer', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    expect([...root.querySelectorAll('[data-post-action=unread]')].map((b) => b.closest('article')?.id)).toEqual([
+      'post-61',
+      'post-62',
+    ]);
+    await press(root.querySelector('#post-62 [data-post-action=unread]'));
+    expect(deletes()).toEqual([{ url: read, body: { ordinal: 61 } }]);
+    expect(location.pathname).toBe('/f/general');
+  });
+
+  it("marks unread from the phone's more menu and from a post's More", async () => {
+    isPhone.value = true;
+    let root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('.post-footer > [data-post-action=unread]')).toBeNull();
+    await press(root.querySelector('#post-62 [data-post-more]'));
+    const item = root.querySelector<HTMLButtonElement>('#post-62 .post-more-list [data-post-action=unread]');
+    await press(item);
+    expect(deletes()).toEqual([{ url: read, body: { ordinal: 61 } }]);
+    expect(location.pathname).toBe('/f/general');
+
+    root = await renderAt(`/t/${id}/a`);
+    await press(root.querySelector('[data-shell=phone-topbar] button[aria-label=More]'));
+    await press(root.querySelector('[data-shell=more-menu] [data-action=mark-unread]'));
+    expect(deletes().at(-1)).toEqual({ url: read, body: undefined });
+    expect(location.pathname).toBe('/f/general');
+  });
+
+  it('stays on the page and says so when the mark fails, and a second press marks it', async () => {
+    unread = () => problemAnswer('internal', 500);
+    const root = await renderAt(`/t/${id}/a`);
+    await press(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]'));
+    expect(screenOf(root)).toBe('thread');
+    expect(location.pathname).toBe(`/t/${id}/a`);
+    expect(refused(root)?.getAttribute('role')).toBe('alert');
+    expect(refused(root)?.textContent).toContain('This thread could not be marked unread.');
+
+    await press(root.querySelector('#post-62 [data-post-action=unread]'));
+    expect(location.pathname).toBe(`/t/${id}/a`);
+    expect(root.querySelector('#post-62 [data-mark-unread-refused]')?.textContent).toContain(
+      'could not be marked unread from here',
+    );
+    expect(root.querySelector<HTMLButtonElement>('#post-62 [data-post-action=unread]')!.disabled).toBe(false);
+
+    unread = () => ({ status: 200, body: { last_read_ordinal: 0 } });
+    await press(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]'));
+    expect(deletes()).toHaveLength(3);
+    expect(location.pathname).toBe('/f/general');
+  });
+
+  it('takes one press at a time while a mark is out', async () => {
+    let release!: () => void;
+    unread = () => new Promise<Answer>((r) => (release = () => r({ status: 200, body: { last_read_ordinal: 61 } })));
+    const root = await renderAt(`/t/${id}/a`);
+    const button = root.querySelector<HTMLButtonElement>('#post-62 [data-post-action=unread]')!;
+    await press(button);
+    expect(button.disabled).toBe(true);
+    await press(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]'));
+    await press(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]'));
+    // The post's mark is out, and the thread's waits for it (marks of a
+    // thread run in call order); its second press was ignored.
+    expect(deletes()).toEqual([{ url: read, body: { ordinal: 61 } }]);
+    await act(async () => release());
+    await wait();
+    expect(location.pathname).toBe('/f/general');
+    await act(async () => release());
+    await wait();
+    expect(deletes()).toEqual([
+      { url: read, body: { ordinal: 61 } },
+      { url: read, body: undefined },
+    ]);
+  });
+
+  it('is offered to a member who may not reply, and to nobody signed out', async () => {
+    page = threadPage({ id, slug: 'a', title: 'Marked' }, { viewer: { ...page.viewer, can_reply: false } });
+    let root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('[data-post-action=reply]')).toBeNull();
+    expect(root.querySelector('#post-62 [data-post-action=unread]')).not.toBeNull();
+    expect(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]')).not.toBeNull();
+
+    viewer.value = { ...structuredClone(member), user: null } as Me;
+    root = await renderAt(`/t/${id}/a`);
+    expect(root.querySelector('#post-62')).not.toBeNull();
+    expect(root.querySelector('[data-post-action=unread]')).toBeNull();
+    expect(root.querySelector('[data-action=mark-unread]')).toBeNull();
   });
 });

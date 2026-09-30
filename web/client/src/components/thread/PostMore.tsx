@@ -3,10 +3,11 @@ import { Icon } from '../Icon';
 import { permalink, type FlagHandler, type ThreadRef } from './Post';
 
 // PostMore is a post's "more" control on a phone (docs/06 "Mobile"): link,
-// flag and history collapse under it, since six inline controls with 44 px
-// targets do not fit the footer at 390 px. It is a disclosure, not a menu:
-// link and history stay real anchors, which a reader can open in a new tab
-// or copy. Escape, a press elsewhere, or choosing an item closes it.
+// flag, edit, delete, unread from here and history collapse under it, since
+// six inline controls with 44 px targets do not fit the footer at 390 px. It
+// is a disclosure, not a menu: link and history stay real anchors, which a
+// reader can open in a new tab or copy. Escape, a press elsewhere, or
+// choosing an item closes it.
 //
 // Flag is there only when the post hands it over (Post decides who may
 // flag). Choosing it closes the list and hands the dialog this post's More
@@ -17,18 +18,28 @@ import { permalink, type FlagHandler, type ThreadRef } from './Post';
 // viewer's own post while the page offers them (TKT-01M3PTT97X). Choosing
 // one closes the list, and the editor or the confirmation opens in the
 // post; when it closes, focus comes back to this button (useOwn).
+//
+// Unread from here is there only when the post hands it over too, and is
+// disabled while its mark is out (unreadBusy). Choosing it closes the list
+// and puts focus back on the button, as Escape does; a mark that succeeds
+// then leaves the page, and one that fails is reported beside the post
+// (TKT-01M3KFFFJR).
 export function PostMore({
   thread,
   ordinal,
   onFlag,
   onEdit,
   onDelete,
+  onUnread,
+  unreadBusy = false,
 }: {
   thread: ThreadRef;
   ordinal: number;
   onFlag?: FlagHandler;
   onEdit?: () => void;
   onDelete?: () => void;
+  onUnread?: () => void;
+  unreadBusy?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -114,6 +125,22 @@ export function PostMore({
                 </button>
               </li>
             ),
+        )}
+        {onUnread && (
+          <li>
+            <button
+              type="button"
+              data-post-action="unread"
+              disabled={unreadBusy}
+              onClick={() => {
+                setOpen(false);
+                button.current?.focus();
+                onUnread();
+              }}
+            >
+              unread from here
+            </button>
+          </li>
         )}
         <li>
           <a href={`${href}/history`} onClick={() => setOpen(false)}>

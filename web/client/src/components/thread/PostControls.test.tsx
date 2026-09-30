@@ -97,11 +97,14 @@ afterEach(async () => {
 });
 
 const at = (root: HTMLElement, ordinal = 61) => root.querySelector<HTMLElement>(`#post-${ordinal}`)!;
-// The actions in a post's footer, outside the phone's More list.
+// The actions in a post's footer, outside the phone's More list. Unread from
+// here, which every signed-in member has on every post, is left out: it is
+// TKT-01M3KFFFJR's, and ThreadScreen.test.tsx covers it.
 const footer = (root: HTMLElement, ordinal = 61) =>
   [...at(root, ordinal).querySelectorAll(':scope .post-footer [data-post-action]')]
     .filter((b) => !b.closest('.post-more-list'))
-    .map((b) => b.getAttribute('data-post-action'));
+    .map((b) => b.getAttribute('data-post-action'))
+    .filter((a) => a !== 'unread');
 const control = (root: HTMLElement, name: string, ordinal = 61) =>
   at(root, ordinal).querySelector<HTMLButtonElement>(`[data-post-action=${name}]`)!;
 const gets = () => server.sent.filter((r) => r.method === 'GET' && r.url === url).length;
@@ -127,15 +130,36 @@ describe("the viewer's own post", () => {
     const root = await renderAt(`/t/${id}/a`);
     expect(footer(root)).toEqual(['quote', 'reply', 'edit', 'delete']);
     expect(footer(root, 62)).toEqual(['quote', 'reply', 'flag']);
-    // After flag and before history, as docs/06 draws the footer.
+    // After flag and before history, as docs/06 draws the footer, with
+    // unread from here (TKT-01M3KFFFJR) between them and history.
     expect([...at(root).querySelectorAll('.post-footer > *')].map((e) => e.textContent)).toEqual([
       'quote',
       'reply',
       'link',
       'edit',
       'delete',
+      'unread from here',
       'history',
     ]);
+  });
+
+  // Unread from here leaves the page, so it is not offered on a post whose
+  // editor or delete confirmation is open, and comes back when it closes
+  // (TKT-01M3KFFFJR).
+  it('offers no unread from here on a post being edited or deleted', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    const unread = (o = 61) => at(root, o).querySelector('[data-post-action=unread]');
+    expect(unread()).not.toBeNull();
+    await click(control(root, 'edit'));
+    expect(editor(root)).not.toBeNull();
+    expect(unread()).toBeNull();
+    expect(unread(62)).not.toBeNull();
+    await click([...editor(root)!.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')!);
+    expect(unread()).not.toBeNull();
+    await click(control(root, 'delete'));
+    expect(unread()).toBeNull();
+    await click(confirmButton(root, 'Cancel'));
+    expect(unread()).not.toBeNull();
   });
 
   it('the controls disappear when the window passes', async () => {
@@ -315,7 +339,13 @@ describe("the viewer's own post", () => {
     expect(footer(root)).toEqual(['quote', 'reply']);
     const more = at(root).querySelector<HTMLButtonElement>('[data-post-more]')!;
     await click(more);
-    expect([...at(root).querySelectorAll('.post-more-list li')].map((li) => li.textContent)).toEqual(['link', 'edit', 'delete', 'history']);
+    expect([...at(root).querySelectorAll('.post-more-list li')].map((li) => li.textContent)).toEqual([
+      'link',
+      'edit',
+      'delete',
+      'unread from here',
+      'history',
+    ]);
     await click(at(root).querySelector<HTMLButtonElement>('.post-more-list [data-post-action=delete]')!);
     expect(at(root).querySelector<HTMLElement>('.post-more-list')!.hidden).toBe(true);
     expect(document.activeElement).toBe(confirmButton(root, 'Cancel'));
