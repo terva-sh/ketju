@@ -25,6 +25,8 @@ references:
     path: docs/08-moderation.md
   - ref: pr:183
     path: null
+  - ref: pr:184
+    path: null
 claim:
   actor: agent:claude-code/phase2-run-crj4e
   branch: run/crj4e-moderator-queue
@@ -35,7 +37,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-30T00:49:35Z
+updated_at: 2026-09-30T00:57:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -210,3 +212,7 @@ Where the build differs from the plan, and why:
 - AC12's "computed through perm.ModeratesAny" is `perm.ModeratedForums`, which ModeratesAny now answers from for members (len > 0), so the predicate is the same. It reads every forum in one statement (ForumAccessRowsAll), and /me asks it first, so that one statement also warms the read checks. A member with no grant runs two handler statements cold and one warm, as before. A moderator runs one QueueCount statement more (TestMeBudget).
 - Archived threads are left out of the list and the count, and a queue action on one is conflict. This follows the rule from Terva review 1506 (an archived thread is read-only, flags included), and it keeps an item no action can clear out of the queue. Recorded in docs/08.
 - `Me.queue` is optional in dto.ts until PR 2 reads it, so bootstrap.ts's anonymous default, which is bundled source, does not change in PR 1.
+
+**agent:claude-code/phase2-run-crj4e** at 2026-09-30T00:57:01Z
+
+PR #184 replaces PR #183, which main moved under (PR #182, archived forums). The same server half is carried onto main at b41b6db as one commit. ForumAccessRowsAll now selects forums.archived, as ForumAccessRows does, so the decisions perm.ModeratedForums caches keep an archived forum read-only (TestModeratedForumsCachesWhatCheckDecides). PR #183 was closed unmerged, before any review completed: its review run was superseded when main moved.
