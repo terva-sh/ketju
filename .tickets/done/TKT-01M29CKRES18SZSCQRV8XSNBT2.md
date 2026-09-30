@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:24:59Z
-updated_at: 2026-09-29T23:53:35Z
+updated_at: 2026-09-30T00:00:21Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -136,6 +136,10 @@ Implementation notes, 2026-09-29, for whoever reads the plan against the code.
 **agent:claude-code/phase2-run-KRES** at 2026-09-29T23:53:35Z
 
 PR #177 was closed unmerged before any review ran: main moved under it (the suspension lane, TKT-01M29CP2QK) and docs/04 conflicted. PR #178 carries the same tree onto main 4d793b2 as one commit, with the docs/04 audit list holding both lanes' entries. The full race suite passed on the new base.
+
+**agent:claude-code/phase2-run-KRES** at 2026-09-30T00:00:21Z
+
+Terva review 1505 (head 6bcdf6b, base 4d793b2), medium, 'Recheck the initiating session before committing a link': fixed. identity.Link now takes the browser's session token and checks it with session.HeldBy in the transaction that writes, so a sign-out or revocation after the callback read its viewer refuses the link as LinkNotYou (409, nothing written). Tests TestLinkNeedsTheMembersSession and TestASignOutMidCallbackStopsTheLink; mutations dropping the check or ignoring the session's user were caught.
 
 ## Summary
 

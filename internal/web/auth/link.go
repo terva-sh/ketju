@@ -87,11 +87,12 @@ func (h *Handler) startLink(w http.ResponseWriter, r *http.Request) {
 
 // link is the callback's answer when Login found a link: the identity is
 // attached to the member who started it, who is the member signed in, and
-// the browser goes back where the link began. The session is left as it
-// is.
-func (h *Handler) link(w http.ResponseWriter, r *http.Request, id *oidc.Identity, f Flow) {
+// the browser goes back where the link began. token is the session cookie
+// the browser holds, which identity.Link checks is still that member's in
+// the transaction that writes. The session is left as it is.
+func (h *Handler) link(w http.ResponseWriter, r *http.Request, id *oidc.Identity, f Flow, token string) {
 	ctx := r.Context()
-	why, err := h.Login.Link(ctx, f.LinkUser, h.Login.ClaimsOf(id), remoteIP(r))
+	why, err := h.Login.Link(ctx, f.LinkUser, token, h.Login.ClaimsOf(id), remoteIP(r))
 	switch {
 	case errors.Is(err, identity.ErrCannotLink):
 		h.Logger.InfoContext(ctx, "a link was refused: the account cannot link", "provider", id.Provider, "error", err)

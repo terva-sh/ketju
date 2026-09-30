@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/terva-sh/ketju/internal/audit"
+	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -101,23 +102,28 @@ func refusalFor(ident dbq.Identity, userID int64) LinkRefusal {
 }
 
 // Link attaches the identity c describes to userID, the member who started
-// the link and is signed in, and records it (TKT-01M29CKRES). ip is the
-// request's address, for the audit row.
+// the link, and records it (TKT-01M29CKRES). token is the session cookie
+// the callback's browser holds, and ip the request's address, for the audit
+// row.
 //
-// One transaction reads the account, checks the identity is still nobody's,
-// writes it with the email and email_verified the IdP asserted, and appends
-// identity.linked, so the identity and its record commit together or not at
-// all. An account that is not an active human member is ErrCannotLink, so a
-// member suspended between the start and the callback cannot link. An
-// identity someone has by now is refused with the LinkRefusal it would have
-// had at the callback. Either way nothing is written.
+// One transaction reads the account, checks the browser is still signed in
+// as it, checks the identity is still nobody's, writes it with the email
+// and email_verified the IdP asserted, and appends identity.linked, so the
+// identity and its record commit together or not at all. An account that is
+// not an active human member is ErrCannotLink, so a member suspended
+// between the start and the callback cannot link. A token that is no
+// longer a live session of userID is LinkNotYou: the callback's viewer was
+// read when the request began, and a sign-out or revocation since then
+// must stop the link rather than race it (Terva review 1505). An identity
+// someone has by now is refused with the LinkRefusal it would have had at
+// the callback. Each refusal writes nothing.
 //
 // A link is not a sign-in (review 1342, finding 2): last_login_at and
 // raw_claims_json stay empty until the identity is first used to sign in.
 // It issues no session, and the bootstrap configuration and the provider's
 // group_map are not applied here: they run at the identity's first sign-in,
 // as at any sign-in.
-func (s *Service) Link(ctx context.Context, userID int64, c Claims, ip string) (LinkRefusal, error) {
+func (s *Service) Link(ctx context.Context, userID int64, token string, c Claims, ip string) (LinkRefusal, error) {
 	now := s.now()
 	refusal := LinkRefusalNone
 	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
@@ -131,6 +137,13 @@ func (s *Service) Link(ctx context.Context, userID int64, c Claims, ip string) (
 			return fmt.Errorf("%w: the account is %s", ErrCannotLink, u.Status)
 		case u.Kind != domain.KindHuman:
 			return fmt.Errorf("%w: the account is an %s", ErrCannotLink, u.Kind)
+		}
+		switch err := session.HeldBy(ctx, q, token, userID, now); {
+		case errors.Is(err, session.ErrNoSession):
+			refusal = LinkNotYou
+			return nil
+		case err != nil:
+			return err
 		}
 		ident, err := q.GetIdentityBySubject(ctx, dbq.GetIdentityBySubjectParams{ProviderKey: c.Provider, Subject: c.Subject})
 		switch {

@@ -194,6 +194,35 @@ func (s *Store) Lookup(ctx context.Context, token string) (Session, error) {
 	return out, nil
 }
 
+// HeldBy reports, through q inside the caller's transaction, whether token
+// is a live member session of userID at now, by Lookup's expiry rule. It
+// returns ErrNoSession when it is not: no such session, expired, a pre-user
+// one, or another user's.
+//
+// A write that may happen only while the browser is still signed in as that
+// member checks it in the transaction that writes, not from the viewer the
+// request resolved at its start: a sign-out or revocation landing in
+// between is then either before the check, and refuses the write, or after
+// the commit. Account linking is the one such write (TKT-01M29CKRES). It
+// reads, and creates nothing.
+func HeldBy(ctx context.Context, q *dbq.Queries, token string, userID int64, now time.Time) error {
+	h, ok := hashToken(token)
+	if !ok {
+		return ErrNoSession
+	}
+	c := ExpiredBefore(now)
+	row, err := q.LookupSession(ctx, dbq.LookupSessionParams{IDHash: h, ExpiresAfter: c.ExpiresAt, LastUsedAfter: c.LastUsedAt})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return ErrNoSession
+	case err != nil:
+		return fmt.Errorf("session: lookup: %w", err)
+	case Kind(row.Kind) != KindUser || !row.UserID.Valid || row.UserID.Int64 != userID:
+		return ErrNoSession
+	}
+	return nil
+}
+
 // touchDue reports whether a session last used at t may be touched at now.
 func touchDue(t, now time.Time) bool { return !t.After(now.Add(-TouchInterval)) }
 

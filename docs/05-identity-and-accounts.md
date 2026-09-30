@@ -141,7 +141,8 @@ fetch and nothing afterwards.
      The action is the page `/auth/link`, whose one-button forms post to
      `POST /auth/{provider}/link` (07 "URL scheme"). That start seals the
      member's user id into the login cookie, and the callback links only
-     when the browser is still signed in as that member, active. A link
+     when the browser is still signed in as that member, active, which the
+     write checks against the session row in its own transaction. A link
      attempt never signs anyone in and never registers anyone: an identity
      that exists is refused with what it belongs to (another account, or an
      application), and is never re-attached. The link writes the identity

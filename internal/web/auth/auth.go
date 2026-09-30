@@ -67,8 +67,9 @@ type Providers interface {
 type Login interface {
 	Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, linkUser int64, meta session.Meta, replaces string) (identity.Result, error)
 	// Link attaches an identity to userID, a member who started the
-	// sign-in as a link, and issues no session (link.go).
-	Link(ctx context.Context, userID int64, c identity.Claims, ip string) (identity.LinkRefusal, error)
+	// sign-in as a link and whose session token still is, and issues no
+	// session (link.go).
+	Link(ctx context.Context, userID int64, token string, c identity.Claims, ip string) (identity.LinkRefusal, error)
 	// RegistrationOpenFor is whether someone new from provider may register
 	// rather than apply; AutoApproves whether they skip the handle screen.
 	RegistrationOpenFor(ctx context.Context, provider string) (bool, error)
@@ -262,7 +263,7 @@ func (h *Handler) callback(w http.ResponseWriter, r *http.Request) {
 	case identity.Register:
 		h.beginRegistration(w, r, id, f.ReturnTo)
 	case identity.Link:
-		h.link(w, r, id, f)
+		h.link(w, r, id, f, replaces)
 	case identity.LinkRefused:
 		h.Logger.InfoContext(ctx, "a link was refused", "provider", key, "reason", res.Refusal.String())
 		writeLinkRefused(w, res.Refusal)

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"database/sql"
 	"html"
 	"net/http"
@@ -11,9 +12,11 @@ import (
 	"testing"
 
 	"github.com/terva-sh/ketju/internal/auth/agentcred"
+	"github.com/terva-sh/ketju/internal/auth/oidc"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
 
@@ -359,6 +362,56 @@ func TestLinkRefusals(t *testing.T) {
 				t.Errorf("%d identity.linked rows", n)
 			}
 		})
+	}
+}
+
+// revokingLogin is the sign-in service with the browser's session ended the
+// moment Login has decided the callback is a link: a sign-out in another
+// tab, or a revocation, landing mid-callback, after the request's viewer
+// was read.
+type revokingLogin struct {
+	*identity.Service
+	store *session.Store
+	token string
+}
+
+func (r revokingLogin) Login(ctx context.Context, id *oidc.Identity, viewer domain.Viewer, linkUser int64,
+	meta session.Meta, replaces string) (identity.Result, error) {
+	res, err := r.Service.Login(ctx, id, viewer, linkUser, meta, replaces)
+	if err == nil && res.Outcome == identity.Link {
+		if err := r.store.Revoke(ctx, r.token); err != nil {
+			return res, err
+		}
+	}
+	return res, err
+}
+
+// A session ended after the callback read its viewer, and before the link
+// is written, stops the link: identity.Link checks the session in the
+// transaction that writes (Terva review 1505).
+func TestASignOutMidCallbackStopsTheLink(t *testing.T) {
+	w := newWorld(t)
+	w.fakeAndOther()
+	_, aliceCookie := w.signedInAlice()
+	before := w.identities()
+	w.handler.Login = revokingLogin{Service: w.handler.Login.(*identity.Service), store: w.store, token: aliceCookie.Value}
+
+	w.idp.Subject = "other-sub"
+	resp := w.linkWith("other", "/t/abc/x", aliceCookie)
+	if b := body(resp); resp.StatusCode != http.StatusConflict || !strings.Contains(b, "no longer signed in as") {
+		t.Errorf("answered %d:\n%s", resp.StatusCode, b)
+	}
+	if loc := resp.Header.Get("Location"); loc != "" {
+		t.Errorf("sent on to %q", loc)
+	}
+	if got := w.owner("other", "other-sub"); got != -1 {
+		t.Errorf("the identity was linked, to user %d, after the session ended", got)
+	}
+	if after := w.identities(); after != before {
+		t.Errorf("identities changed:\n  %s\nwas\n  %s", after, before)
+	}
+	if n := w.count("SELECT count(*) FROM audit_log WHERE action = 'identity.linked'"); n != 0 {
+		t.Errorf("%d identity.linked rows", n)
 	}
 }
 

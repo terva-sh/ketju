@@ -6,6 +6,7 @@ import (
 	"errors"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/auth/oidc"
 	"github.com/terva-sh/ketju/internal/auth/session"
@@ -19,13 +20,13 @@ import (
 
 // member registers an active member with handle through the fake provider
 // and returns their user id.
-func member(t *testing.T, s *Service, handle string) int64 {
+func member(t *testing.T, s *Service, handle string) (int64, string) {
 	t.Helper()
 	res, err := s.Register(t.Context(), claims(handle+"-sub"), handle, session.Meta{Provider: "fake"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	return userOf(t, s, res.Token)
+	return userOf(t, s, res.Token), res.Token
 }
 
 // userOf is the user a session token signs in, 0 for none.
@@ -110,10 +111,10 @@ func exec(t *testing.T, d *db.DB, query string, args ...any) {
 // finding 2).
 func TestLinkAttachesAndAudits(t *testing.T) {
 	s, d := registry(t)
-	alice := member(t, s, "alice")
+	alice, aliceTok := member(t, s, "alice")
 	u0, i0, n0 := count(t, d)
 
-	why, err := s.Link(t.Context(), alice, otherClaims("other-sub"), "192.0.2.7")
+	why, err := s.Link(t.Context(), alice, aliceTok, otherClaims("other-sub"), "192.0.2.7")
 	if err != nil || why != LinkRefusalNone {
 		t.Fatalf("Link = %v, %v", why, err)
 	}
@@ -157,10 +158,10 @@ func itoa(n int64) string { return strconv.FormatInt(n, 10) }
 // write failing, no identity is written.
 func TestLinkIsOneTransaction(t *testing.T) {
 	s, d := registry(t)
-	alice := member(t, s, "alice")
+	alice, aliceTok := member(t, s, "alice")
 	exec(t, d, `CREATE TRIGGER no_audit BEFORE INSERT ON audit_log BEGIN SELECT RAISE(ABORT, 'injected'); END`)
 	_, i0, _ := count(t, d)
-	if _, err := s.Link(t.Context(), alice, otherClaims("other-sub"), ""); err == nil {
+	if _, err := s.Link(t.Context(), alice, aliceTok, otherClaims("other-sub"), ""); err == nil {
 		t.Fatal("Link succeeded with no way to write its audit row")
 	}
 	if _, ok := identityRow(t, d, "other", "other-sub"); ok {
@@ -182,10 +183,10 @@ func TestLinkRefusesAnInactiveMember(t *testing.T) {
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			s, d := registry(t)
-			alice := member(t, s, "alice")
+			alice, aliceTok := member(t, s, "alice")
 			exec(t, d, "UPDATE users SET "+c.set+" WHERE id = ?", alice)
 			u0, i0, n0 := count(t, d)
-			why, err := s.Link(t.Context(), alice, otherClaims("other-sub"), "")
+			why, err := s.Link(t.Context(), alice, aliceTok, otherClaims("other-sub"), "")
 			if !errors.Is(err, ErrCannotLink) || why != LinkRefusalNone {
 				t.Errorf("Link = %v, %v; want ErrCannotLink", why, err)
 			}
@@ -199,8 +200,71 @@ func TestLinkRefusesAnInactiveMember(t *testing.T) {
 	}
 	t.Run("no such user", func(t *testing.T) {
 		s, _ := registry(t)
-		if _, err := s.Link(t.Context(), 999, otherClaims("other-sub"), ""); !errors.Is(err, ErrCannotLink) {
+		if _, err := s.Link(t.Context(), 999, "", otherClaims("other-sub"), ""); !errors.Is(err, ErrCannotLink) {
 			t.Errorf("Link = %v", err)
+		}
+	})
+}
+
+// Link writes only while the browser is still signed in as the member who
+// started it, which it checks in the transaction that writes (Terva review
+// 1505). A session ended after the callback read its viewer, a session of
+// another member, a pre-user's, an expired one, and none at all are each
+// LinkNotYou, and nothing is written.
+func TestLinkNeedsTheMembersSession(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		token func(t *testing.T, s *Service, d *db.DB, aliceTok, bobTok string) string
+	}{
+		{"signed out since", func(t *testing.T, s *Service, _ *db.DB, aliceTok, _ string) string {
+			if err := s.Sessions.Revoke(t.Context(), aliceTok); err != nil {
+				t.Fatal(err)
+			}
+			return aliceTok
+		}},
+		{"every session revoked", func(t *testing.T, s *Service, d *db.DB, aliceTok, _ string) string {
+			exec(t, d, "DELETE FROM sessions WHERE user_id = (SELECT id FROM users WHERE handle = 'alice')")
+			return aliceTok
+		}},
+		{"another member's session", func(_ *testing.T, _ *Service, _ *db.DB, _, bobTok string) string { return bobTok }},
+		{"expired", func(t *testing.T, s *Service, _ *db.DB, aliceTok, _ string) string {
+			s.Now = func() time.Time { return time.Now().Add(session.HardExpiry + time.Hour) }
+			return aliceTok
+		}},
+		{"no session", func(*testing.T, *Service, *db.DB, string, string) string { return "" }},
+		{"not a token", func(*testing.T, *Service, *db.DB, string, string) string { return "nonsense" }},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			s, d := registry(t)
+			alice, aliceTok := member(t, s, "alice")
+			_, bobTok := member(t, s, "bob")
+			token := c.token(t, s, d, aliceTok, bobTok)
+			_, i0, n0 := count(t, d)
+			why, err := s.Link(t.Context(), alice, token, otherClaims("other-sub"), "")
+			if err != nil || why != LinkNotYou {
+				t.Errorf("Link = %v, %v; want LinkNotYou", why, err)
+			}
+			if _, ok := identityRow(t, d, "other", "other-sub"); ok {
+				t.Error("the identity was linked without the member's session")
+			}
+			if _, i, n := count(t, d); i != i0 || n != n0 {
+				t.Errorf("%d identities and %d sessions, before %d and %d", i, n, i0, n0)
+			}
+			if got := linkedRows(t, d); len(got) != 0 {
+				t.Errorf("audit rows %q", got)
+			}
+		})
+	}
+	t.Run("a pre-user session", func(t *testing.T) {
+		s, d := registry(t)
+		alice, _ := member(t, s, "alice")
+		approval(t, d)
+		res, err := s.BeginApplication(t.Context(), claims("applicant"), session.Meta{}, "")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if why, err := s.Link(t.Context(), alice, res.Token, otherClaims("other-sub"), ""); err != nil || why != LinkNotYou {
+			t.Errorf("Link = %v, %v; want LinkNotYou", why, err)
 		}
 	})
 }
@@ -209,13 +273,13 @@ func TestLinkRefusesAnInactiveMember(t *testing.T) {
 // with what it belongs to, and no identities row changes.
 func TestLinkFindsTheIdentityTaken(t *testing.T) {
 	s, d := registry(t)
-	alice := member(t, s, "alice")
-	bob := member(t, s, "bob")
+	alice, aliceTok := member(t, s, "alice")
+	bob, bobTok := member(t, s, "bob")
 	// bob's second identity, an applicant's, and one alice already has.
-	if _, err := s.Link(t.Context(), bob, otherClaims("bob-other"), ""); err != nil {
+	if _, err := s.Link(t.Context(), bob, bobTok, otherClaims("bob-other"), ""); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := s.Link(t.Context(), alice, otherClaims("alice-other"), ""); err != nil {
+	if _, err := s.Link(t.Context(), alice, aliceTok, otherClaims("alice-other"), ""); err != nil {
 		t.Fatal(err)
 	}
 	exec(t, d, `INSERT INTO identities (provider_key, subject, issuer, created_at, updated_at)
@@ -234,7 +298,7 @@ func TestLinkFindsTheIdentityTaken(t *testing.T) {
 		"applicant":   LinkApplicant,
 		"alice-other": LinkAlready,
 	} {
-		why, err := s.Link(t.Context(), alice, otherClaims(subject), "")
+		why, err := s.Link(t.Context(), alice, aliceTok, otherClaims(subject), "")
 		if err != nil || why != want {
 			t.Errorf("%s: Link = %v, %v; want %v", subject, why, err, want)
 		}
@@ -252,8 +316,8 @@ func TestLinkFindsTheIdentityTaken(t *testing.T) {
 // answers here writes a row.
 func TestLoginDecidesLinks(t *testing.T) {
 	s, d := registry(t)
-	alice := member(t, s, "alice")
-	bob := member(t, s, "bob")
+	alice, _ := member(t, s, "alice")
+	bob, _ := member(t, s, "bob")
 	exec(t, d, `INSERT INTO identities (provider_key, subject, issuer, created_at, updated_at)
 		VALUES ('fake', 'applicant', 'https://idp.example', 1, 1)`)
 	asAlice := domain.Viewer{UserID: alice, Active: true, Role: domain.RoleMember}
