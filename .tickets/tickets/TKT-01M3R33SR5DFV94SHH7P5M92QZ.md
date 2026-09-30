@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:43:17Z
-updated_at: 2026-09-30T04:49:40Z
+updated_at: 2026-09-30T08:49:22Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -80,3 +80,7 @@ Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The fi
 **agent:claude-code/phase2-groom** at 2026-09-30T04:04:45Z
 
 Groomed 2026-09-30 (TKT-01M3M9RR26). Scope widened as an engineering choice: slow_mode.default_seconds overflows the same way in slowModeWait (internal/service/threads/slowmode.go), where a negative wait turns slow mode off, so the shared secondsDuration helper covers it too. Bounding the settings lost because Key.In validates stored values on every read, so a stored large value would fail every edit after the upgrade.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T08:49:22Z
+
+Plan refreshed against main at 5124209 on 2026-09-30. The plan is current and is not rewritten. Checked: authorWindows (internal/service/threads/mutate.go:47, the conversion at :62), within (:74), renameWindow's inline clamp (moderate.go:223-240), slowModeWait (slowmode.go:140) and effectiveSlowMode's fallback to slow_mode.default_seconds, the four settings (internal/settings/settings.go:121-137), TestRenameWindowTooLargeForADuration (internal/web/api/rename_test.go:382), and w.setting and w.editBodies (internal/web/api/windows_test.go:30, :52). internal/web/api/slowmode_test.go already exists, so TestSlowModeDefaultTooLargeForADuration goes into it; internal/service/threads/windows_test.go is still a new file. Post source (PR #205, ebe7d41) reads no window, so it adds no fourth conversion.

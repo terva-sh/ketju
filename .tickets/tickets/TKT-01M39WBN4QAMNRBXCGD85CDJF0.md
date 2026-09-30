@@ -23,12 +23,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-29T07:18:12Z
+updated_at: 2026-09-30T08:52:14Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -55,33 +55,34 @@ Once CGBY1, CEE4K and CCC0F are in, add Playwright captures of a seeded thread a
 
 ## Implementation plan
 
-Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). All three dependencies are done: TKT-01M29CGBY1 (Playwright), TKT-01M29CEE4K (the app shell) and TKT-01M29CCC0F (the CSS system).
+Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). All three dependencies are done: TKT-01M29CGBY1 (Playwright), TKT-01M29CEE4K (the app shell) and TKT-01M29CCC0F (the CSS system). Refreshed against main at 5124209 on 2026-09-30: line references corrected, and the phone top bar's no-inset fallback corrected from 8px to 0px.
 
 ### Settled in grooming
 - This ticket carries three criteria that other tickets left unticked (the note of 2026-09-24):
   - TKT-01M29CEE6V's fourth: thread-page screenshots at 390 and 1440 px, compared with the mockups;
   - TKT-01M29CCC0F's fourth: screenshots at 390 and 1440 px, light and dark, of every screen the mockups draw, meaning the front page and the thread, desktop and phone, with every divergence listed;
   - TKT-01M29CCC0F's third, as a Playwright check: at 390 px, the tab bar's and reply bar's padding comes from `env(safe-area-inset-*)`.
-- Screenshots follow the pattern already in the repo. They are written only when `KETJU_SCREENSHOTS=1`, by `page.screenshot` into `web/client/e2e/screenshots/`, and committed (`forum-index.spec.ts:40-51`, `thread-list.spec.ts:78-85`). They are evidence for review, not a pixel comparison CI runs. A `toHaveScreenshot` gate lost because the seeded times are relative and fonts render differently between the dev host and Alpine's Chromium, so it would fail on noise.
+- Screenshots follow the pattern already in the repo. They are written only when `KETJU_SCREENSHOTS=1`, by `page.screenshot` into `web/client/e2e/screenshots/`, and committed (`forum-index.spec.ts:40-51`, `thread-list.spec.ts:77-88`). They are evidence for review, not a pixel comparison CI runs. A `toHaveScreenshot` gate lost because the seeded times are relative and fonts render differently between the dev host and Alpine's Chromium, so it would fail on noise.
 - The mockups the screenshots are compared with (`docs/mockups/`):
   - front page: `Main.dc.html`, `FrontDark.dc.html`, `MobileFrontLight.dc.html`, `MobileFrontDark.dc.html`, against the committed `forum-index-{desktop,phone}-{light,dark}.png`;
   - thread: `ThreadLight.dc.html`, `ThreadDark.dc.html`, `MobileThreadLight.dc.html`, `MobileThreadDark.dc.html`.
-- Settled here, as the engineering choice: the safe-area check emulates a non-zero inset through the Chrome DevTools Protocol, because Playwright has no device descriptor that sets one. The primary method is `Emulation.setSafeAreaInsetsOverride`, followed by a computed-style assertion. If the CI Chromium (Alpine's, `ci.yml:122-137`) does not implement that method, use `CSS.getMatchedStylesForNode` instead, asserting that the winning declaration for each property is the `env(safe-area-inset-*)` one. The Vitest test (`src/styles/breakpoints.test.ts:48-66`) only reads base.css as text. Unlike it, this check proves the cascade: `.shell .replybar` (`composer/composer.css:251-265`) and `.topbar.phone` (`shell/shell.css:179-191`) override base.css's left and right padding, and the check must see what finally applies.
+- Settled here, as the engineering choice: the safe-area check emulates a non-zero inset through the Chrome DevTools Protocol, because Playwright has no device descriptor that sets one. The primary method is `Emulation.setSafeAreaInsetsOverride`, followed by a computed-style assertion. If the CI Chromium (Alpine's, `ci.yml:122-137`) does not implement that method, use `CSS.getMatchedStylesForNode` instead, asserting that the winning declaration for each property is the `env(safe-area-inset-*)` one. The Vitest test (`src/styles/breakpoints.test.ts:48-66`) only reads base.css as text. Unlike it, this check proves the cascade: `.shell .replybar` (`composer/composer.css:251-265`) and `.topbar.phone` (`shell/shell.css:208-221`) override base.css's left and right padding, and the check must see what finally applies.
 
 ### Approach
 1. **Thread screenshots.** New `web/client/e2e/thread.spec.ts`, run in both projects, signed in as alice (`test.use({ storageState: stateFile('alice') })`):
-   - open `${seed.thread}?page=1` and wait for `#post-2 details.quote .quote-source`, as `a11y.spec.ts` does;
+   - read `seed.thread` from `${KETJU_E2E_DIR}/seed.json`, as `a11y.spec.ts:18` does, since `e2e/session.ts` exports no seed;
+   - open `${seed.thread}?page=1` and wait for `#post-2 details.quote .quote-source`, as `a11y.spec.ts:35-36` does;
    - under `KETJU_SCREENSHOTS=1`, capture `thread-${project}-${theme}.png` for light and dark into `e2e/screenshots/`, using the same full-height viewport handling as `forum-index.spec.ts:40-51`;
-   - carol has read the whole seeded thread and alice has read none of it. For alice, set a read position partway with `setReadPosition` (`e2e/session.ts:38`) before the capture, so the amber "last read #N" divider and the unread edge the mockups draw are in the picture.
+   - carol has read the whole seeded thread and alice has read none of it (`cmd/ketju/e2e.go:36-38`), but other specs (flag, replies, shortcuts, a11y) open the thread as alice and move her position. So for alice, set a read position partway with `setReadPosition` (`e2e/session.ts:38`) before the capture, so the amber "last read #N" divider and the unread edge the mockups draw are in the picture.
 2. **Safe-area check.** In the same file, phone project only:
    - open a CDP session with `page.context().newCDPSession(page)` and send `Emulation.setSafeAreaInsetsOverride` with `{insets: {top: 47, bottom: 34, left: 0, right: 0}}`;
-   - on the thread list, assert the computed `padding-bottom` of `[data-shell="tabbar"]` is `34px` and the `padding-top` of the phone `.topbar` is `47px` (`max(8px, 47px)`);
+   - on the thread list, assert the computed `padding-bottom` of `[data-shell="tabbar"]` is `34px` and the `padding-top` of `[data-shell="phone-topbar"]` (`shell/PhoneTopBar.tsx:16`) is `47px`. `.topbar.phone` sets no `padding-top`, so base.css's `.topbar { padding-top: env(safe-area-inset-top, 0px) }` (`styles/base.css:53-57`) is the one that applies;
    - on the thread page, assert the `padding-bottom` of `[data-shell="replybar"]` is `34px`;
-   - then clear the override and assert the fallbacks: `0px`, `8px` and `0px`.
+   - then clear the override and assert the fallbacks: `0px` for the tab bar, `0px` for the top bar and `0px` for the reply bar. The earlier plan said `8px` for the top bar; that was wrong at 7af2c5a too, because `max(8px, …)` in `.topbar.phone` applies only to the left and right padding.
    - If the method is missing (CDP answers "method not found"), use the `CSS.getMatchedStylesForNode` fallback settled above, and say in the PR which method ran.
 3. **Run and commit.** Run `KETJU_SCREENSHOTS=1 npx playwright test e2e/thread.spec.ts e2e/forum-index.spec.ts`, commit the four new thread PNGs, and refresh the forum-index PNGs if they changed.
 4. **Divergences.** Open each mockup beside its screenshot. List every visible divergence in the PR description, one line each, grouped by screen and theme: layout, spacing, colour, type, missing or extra elements. Copy the same list into a note on this ticket, because a PR description is not in the repository. A divergence that is a real defect is filed as a draft ticket under TKT-01M29BN367 and named in the list. One that the design has since changed on purpose cites where.
-5. No `web/client/src` change is expected, so the dist and the bundle budget are untouched. If a defect is fixed here instead of being filed, rebuild the dist with `go generate ./internal/web/spa` and keep it under the 60000 B gzip budget (`web/client/budget.json`).
+5. No `web/client/src` change is expected, so the dist and the bundle budget are untouched. If a defect is fixed here instead of being filed, rebuild the dist with `go generate ./internal/web/spa` and keep it under the 60000 B gzip budget (`threadViewGzipBytes` in `web/client/budget.json`). The thread view was 47415 B after PR #202 (TKT-01M3QQWA5Z).
 
 ### Tests
 - `thread.spec.ts`: `the thread page renders the mockup's parts` (ordinal, name, badge and time header, reply-to indicator, tombstone row, divider, pager or "Page N of M") in both projects; the capture runs under `KETJU_SCREENSHOTS=1`.
@@ -98,3 +99,7 @@ Groomed 2026-09-29 against main at 7af2c5a (TKT-01M3M9RR26, Phase 2 grooming). A
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T14:41:14Z
 
 This ticket also carries two criteria from TKT-01M29CCC0F (Build the CSS system, themes, and breakpoints), left unticked there for the same reason: nothing in the repo runs Playwright until CGBY1. First, CCC0F's AC4: screenshots at 390 and 1440 px, light and dark, of every screen the mockups draw (docs/mockups/*.dc.html: the front page, the thread, and the mobile versions of each), with every divergence listed. Second, CCC0F's AC3 Playwright check: at 390 px, the tab bar's and reply bar's computed padding comes from env(safe-area-inset-*). base.css already carries the rules (.tabbar, .replybar, .topbar), and a Vitest source test holds them; the elements themselves arrive with CEE4K and CGBVN. Emulating a non-zero inset needs a device descriptor that sets one, or reading the rule through CSSOM.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T08:52:14Z
+
+Plan refreshed against main at 5124209 on 2026-09-30. Nothing it plans has landed: there is no e2e/thread.spec.ts and no thread PNG. Changed: thread-list.spec.ts's screenshot block is :77-88; .topbar.phone is shell/shell.css:208-221 (:179 is now .topbar.applicant); the phone top bar is asserted through [data-shell="phone-topbar"]. Corrected an error the plan carried from 7af2c5a: .topbar.phone sets no padding-top, so the winning rule is base.css's env(safe-area-inset-top, 0px), and the no-inset fallback is 0px, not 8px; max(8px, …) applies only to its left and right padding. The spec reads seed.thread from seed.json as a11y.spec.ts does, and sets alice's read position first because flag, replies, shortcuts and a11y specs move it. The budget reference is now 47415 of 60000 B. Confirmed unchanged: forum-index.spec.ts:40-51, a11y.spec.ts's ready selector, setReadPosition (e2e/session.ts:38), ci.yml's Chromium step :122-137 (PR #194's new step is Go only), composer.css:251-265, breakpoints.test.ts:48, the eight mockups, and TKT-01M38WTK. The criteria are unchanged and still checkable.

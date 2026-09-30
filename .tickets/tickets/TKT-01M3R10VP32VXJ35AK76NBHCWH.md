@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:06:43Z
-updated_at: 2026-09-30T04:49:40Z
+updated_at: 2026-09-30T08:49:22Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -112,3 +112,7 @@ Groomed 2026-09-30 (TKT-01M3M9RR26). Decided: the precondition already makes it 
 **agent:claude-code/phase2-groom** at 2026-09-30T04:21:39Z
 
 Review 1540 on PR #203 (head 22de825), medium, accepted: the race criterion forbade any second Delete, which outcome (b) needs. It now requires that no Delete follows a Delete without an intervening Restore, and that the post state and flag rows agree in every interleaving. The plan's race test says the same.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T08:49:22Z
+
+Plan refreshed against main at 5124209 on 2026-09-30. The plan is current and is not rewritten. Checked: HidePostsOf and RestorePostsOf (internal/service/threads/suspension.go:73, :120), threadAttempts (:48), flagLocks (flags.go:55), ResolvePost and its comment (queue.go:328, the 'suspension's hide or restore' paragraph at :313-317), closeFlags and its 'narrows to the write itself' comment (:477-489), queueRestore (:550), newQueueWorld, flagRows and TestStateChangeIsConflictNotSuccess with its hand-built 'a suspension's hide' case (queue_test.go:39, :242, :854), faultWriter.set, w.hide, w.entry and w.openFlags (flags_test.go), and docs/08 'Suspension', which does not yet say the hide passes over a post hidden pending review. Since the plan, PR #202 made Flag refuse the author's own post (5032402). The tests are unaffected: w.hide flags as rep1 to rep3 and insertFlag writes rows directly, so no fixture flags as the author. The same PR's ErrHideDeferred path touches Flag, not the queue's Keep.

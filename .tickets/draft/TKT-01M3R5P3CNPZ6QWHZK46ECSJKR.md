@@ -18,12 +18,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T03:28:14Z
-updated_at: 2026-09-30T08:43:12Z
+updated_at: 2026-09-30T09:08:00Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-groom
   name: ""
 extensions: {}
 ---
@@ -48,12 +48,12 @@ Reported by the rename/move lane on 2026-09-30.
 
 - [ ] dbtest.Open returns a database identical in schema and schema_migrations to a fresh Migrate (TestTemplateIsAFreshMigration), independent of every other (TestTemplateOpensAreIndependent), and migrates once per test binary (TestTemplateMigratesOnce)
 - [ ] Every test fixture outside internal/store/db and cmd/ketju opens its database through dbtest.Open, and TestFixturesUseTheTemplate fails on a new .Migrate( call elsewhere
-- [ ] A note records every package's go test -race -count=1 elapsed time before and after, on one named machine and commit, and internal/perm and internal/web/api each take less than half their time on 9a8fc76
-- [ ] The race step in .forgejo/workflows/ci.yml is unchanged unless the maintainer answers the open decision with (b)
+- [ ] A note records every package's go test -race -count=1 elapsed time before and after, on one named machine and base commit, and internal/perm and internal/web/api each take less than half their before time
+- [ ] The race step and every other step in .forgejo/workflows/ci.yml are unchanged (maintainer decision 2026-09-30, docs/08 Decided 2026-09-30)
 
 ## Implementation plan
 
-Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76.
+Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. Refreshed against main at 5124209 on 2026-09-30: the open decision is settled, and the fixture list was checked against every `_test.go` file that calls `.Migrate(` there. `cmd/ketju/flow_test.go` (TKT-01M3NTSCMN) is new since 9a8fc76 and stays on its own opening with the rest of `cmd/ketju`.
 
 ### What was measured
 
@@ -83,14 +83,7 @@ CI run 1240 failed in `internal/perm` at Go's default 10-minute timeout, with th
 - **The template is a file copy, not `VACUUM INTO` or the backup API** (engineering choice). `VACUUM INTO` cannot run inside the transaction that every `DB.Read` and `DB.Write` opens. The driver's `Conn.Backup` would break the rule that only `internal/store/db/driver.go` imports the driver (`TestOnlyDriverGoImportsADriver`). A database closed cleanly is whole in its main file, as `cmd/ketju/reindex_test.go` already relies on for its backup: closing checkpoints the WAL, and that test checks that the `-wal` file is empty.
 - **The helper lives in `internal/store/db/dbtest`,** which exists for "test helpers over the database that more than one package's tests need" and is imported only from `_test` files. `internal/store/db`'s own tests keep calling `Migrate`, because they test it, and they could not import `dbtest` without a cycle. `cmd/ketju` keeps its own opening, because its tests exercise serve's real startup. `dbtest/dump_test.go` keeps its fresh migration, because it is the template's reference.
 - **Workflow changes are outside this ticket.** docs/12 "Changing CI" lets a run add steps to `Build and Test` but does not list editing an existing step. The comment in `.forgejo/workflows/ci.yml` reads it the same way: "docs/12 lets a run add steps to this job and not edit the ones it has". So adding `-timeout` to `go test -race ./...` needs the maintainer. See the open decision.
-
-### Open decision
-
-Should the race step, `go test -race ./...` in `.forgejo/workflows/ci.yml`, also get an explicit `-timeout`, and its stale comment ("The suite is seconds") be corrected? Editing an existing CI step needs the maintainer under docs/12 "Changing CI".
-- (a) No. The template fix removes the cause, and the default 10 minutes then leaves several times the headroom.
-- (b) Yes, with `-timeout 20m`, as a guard against the next slow fixture.
-
-Recommendation: (a) now. Revisit (b) only if a package's race time still exceeds a third of the default after this ticket, measured as below. The plan is written for (a). Under (b) the one-line edit and the comment fix join step 5, with the maintainer's permission cited in the PR.
+- **The race step keeps its default timeout, and this ticket builds the template database** (maintainer decision 2026-09-30, docs/08 "Decided 2026-09-30": "The CI race step keeps its default timeout. The slow `internal/perm` fixture is fixed by a migrated template database instead (TKT-01M3R5P3CN)"). This settles the open decision the earlier plan carried, as its option (a). PR #208 merged it into main. So `.forgejo/workflows/ci.yml` does not change: neither `-timeout` nor the stale "The suite is seconds" comment on `go test (race)`.
 
 ### Approach
 
@@ -110,7 +103,7 @@ Recommendation: (a) now. Revisit (b) only if a package's race time still exceeds
    A fixture that migrates and then seeds keeps its seeding. The only change is the open and the migrate.
 3. **Keep new fixtures on the template.** Add `TestFixturesUseTheTemplate` in `dbtest`, in the style of `TestOnlyDriverGoImportsADriver`. It walks the module's `_test.go` files and fails on a `.Migrate(` call outside `internal/store/db` (its own package and `dbtest`) and `cmd/ketju`, naming the file and line.
 4. **Measure.** Run `go test -race -count=1 -json ./...` on the same machine before and after, and record every package's elapsed time in a note on this ticket, with the commit and the machine.
-5. No change to `.forgejo/workflows/ci.yml` under (a).
+5. No change to `.forgejo/workflows/ci.yml`, as the maintainer decided. That includes the "Phase 2 exit tests, by name" step (`go test -race ./cmd/ketju/ -run '^TestPhase2Exit' -count=1 -v`, TKT-01M3NTSCMN), which runs `cmd/ketju`'s exit tests a second time. `cmd/ketju` keeps its own opening, as settled, so that step is neither faster nor slower after this ticket.
 
 ### Tests
 
@@ -135,3 +128,7 @@ Groomed 2026-09-30 (TKT-01M3M9RR26). Open decision for the maintainer: should th
 **agent:claude-code/phase2-run-orchestrator** at 2026-09-30T08:43:12Z
 
 Open decision settled by the maintainer on 2026-09-30: the CI race step keeps its default timeout, and the template-database fix is built as planned (docs/08, "Decided 2026-09-30"). The ticket has no open decision left.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T09:08:00Z
+
+Plan refreshed against main at 5124209 on 2026-09-30. The open decision is settled as the maintainer decided on 2026-09-30 (docs/08 'Decided 2026-09-30', merged in PR #208, whose note above records the same): the CI race step keeps its default timeout and the template database is built. The Open decision section is replaced by a Settled item citing it; the earlier Settled items are carried verbatim. Step 5 now says ci.yml does not change at all, including the 'Phase 2 exit tests, by name' step added by TKT-01M3NTSCMN, which re-runs cmd/ketju's exit tests; cmd/ketju keeps its own opening, so that step's time is unaffected. The fixture list was checked against every _test.go that calls .Migrate( at 5124209 and is complete; cmd/ketju/flow_test.go is new and exempt with cmd/ketju. Criterion 4 now states the decision. Criterion 3 compares against the before run on the implementer's machine rather than 9a8fc76's figures, which were taken on a machine the implementer may not have. Re-applied onto main at a660ae5, after PR #208 merged, with its note kept.
