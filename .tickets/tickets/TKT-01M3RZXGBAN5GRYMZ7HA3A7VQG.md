@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3RZXGBAN5GRYMZ7HA3A7VQG
 title: Bound the axe scans in the admin forms and agents Playwright tests
 type: chore
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ references:
     path: null
   - ref: pr:223
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-rzxgba
+  branch: run/rzxgba-bound-admin-scans
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a31bc2251ce750563
+  commit: fa867110fcd71f5e008e88e0ebcf291ade4d94fa
+  session: null
+  claimed_at: 2026-09-30T12:47:07Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T11:06:39Z
-updated_at: 2026-09-30T12:36:01Z
+updated_at: 2026-09-30T12:47:09Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-rzxgba
   name: ""
 extensions: {}
 ---
