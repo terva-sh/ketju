@@ -30,12 +30,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-09-25T02:12:44Z
+updated_at: 2026-09-30T13:28:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase1-run-415af6aa
+  id: agent:claude-code/phase2-run-s1tvpd
   name: ""
 extensions: {}
 ---
@@ -127,6 +127,10 @@ Review 1 on PR #82 (head d96aae8, run 422) raised two findings. Both are fixed.
 - High: the oidctest import guard judged a //go:build line by setting every other tag true, so e2e || (linux && !darwin) passed although a Linux build without e2e includes it. The guard now tries every assignment of the line's other tags with e2e false, and a line naming more than 16 tags fails. TestE2EOnly gains two disjunctions with negation, both of which the old check wrongly passed, and two lines that are truly e2e-only.
 - Medium: playwright.config.ts put its paths into webServer.command unquoted. They are now single-quoted for the shell. The suite passed with KETJU_E2E_DIR under a directory named "q <time> it's; $HOME".
 CI run 423 passed on d96aae8.
+
+**agent:claude-code/phase2-run-s1tvpd** at 2026-09-30T13:28:27Z
+
+How "The run covers sign in, read, reply, and the unread divider end to end" stays met after TKT-01M3S1TVPD (Stop the full Playwright run spending more /auth calls than it refills). smoke.spec.ts now starts from alice's stored session and no longer signs in, because its sign-in spent more of the /auth/* burst than the run refilled. It still covers read, reply and the unread divider at 390 px and 1440 px. Sign-in at each width is covered by phase2-exit.spec.ts's member sign-in, which goes from the client's Sign in link through /auth/signin, the fake provider and the callback to / as a member, and by sign-in.spec.ts, which covers the client's own Sign in control (the top bar at 1440 px, the Me tab at 390 px) to the provider's start. The setup project signs the four seeded readers in once. smoke.spec.ts's header comment says the same.
 
 ## Summary
 
