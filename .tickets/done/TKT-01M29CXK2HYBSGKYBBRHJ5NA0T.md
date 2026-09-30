@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXK2HYBSGKYBBRHJ5NA0T
 title: Build the admin site settings screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -25,17 +25,10 @@ references:
     path: docs/02-architecture.md
   - ref: pr:230
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-cxk2h
-  branch: run/cxk2h-site-settings
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adeb69a63636042cb
-  commit: 6b5dc9a68919b1eeabafbdf8eb716803487aff2d
-  session: null
-  claimed_at: 2026-09-30T12:59:04Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T13:22:42Z
+updated_at: 2026-09-30T15:47:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -53,13 +46,13 @@ The screen also has to explain the split. An admin looking for the OIDC client s
 
 ## Acceptance criteria
 
-- [ ] The screen lists every key in settings.All() and edits each one, and a change applies to the next request without a restart, site_name included (TestSettingsScreenListsEveryKey, TestSettingTakesEffectWithoutRestart)
-- [ ] The screen names each config.toml section with the reason it is not editable here, and shows no values (TestEverySectionHasAReason)
-- [ ] An invalid value is validation-failed, and the screen shows the key's allowed range or choices from the registry (TestInvalidSettingRefused)
+- [x] The screen lists every key in settings.All() and edits each one, and a change applies to the next request without a restart, site_name included (TestSettingsScreenListsEveryKey, TestSettingTakesEffectWithoutRestart)
+- [x] The screen names each config.toml section with the reason it is not editable here, and shows no values (TestEverySectionHasAReason)
+- [x] An invalid value is validation-failed, and the screen shows the key's allowed range or choices from the registry (TestInvalidSettingRefused)
 - [x] GET and PUT /api/v1/admin/settings are admin-only: a moderator by role and a member who holds moderate through a group are 403 (TestSettingsAreAdminOnly)
-- [ ] site_name reaches /me for every viewer, the shell title and the three wordmarks (TopBar, PhoneTopBar, ApplicantShell) at the cost of one /me statement, and TestMeBudget says so (TestShellInlinesMe, TestMeBudget, Shell.test.tsx)
-- [ ] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total is recorded against 47415 B within 60000 B, and the dist from go generate ./internal/web/spa is committed (SettingsScreen.test.tsx)
-- [ ] Each change writes setting.changed with the admin, the IP and the old and new values in the same transaction. Who last changed a key follows three rules: set from the screen, updated_by is the admin and updated_at the time; set from the command line, updated_by is null and updated_at the time; never set, both are null. The screen says 'from the command line' only for the second (TestSettingChangeAudited, TestSettingLastChanged, SettingsScreen.test.tsx)
+- [x] site_name reaches /me for every viewer, the shell title and the three wordmarks (TopBar, PhoneTopBar, ApplicantShell) at the cost of one /me statement, and TestMeBudget says so (TestShellInlinesMe, TestMeBudget, Shell.test.tsx)
+- [x] The screen lives under src/screens/admin, TestTheAdminBundleIsSeparate passes, the reader total is recorded against 47415 B within 60000 B, and the dist from go generate ./internal/web/spa is committed (SettingsScreen.test.tsx)
+- [x] Each change writes setting.changed with the admin, the IP and the old and new values in the same transaction. Who last changed a key follows three rules: set from the screen, updated_by is the admin and updated_at the time; set from the command line, updated_by is null and updated_at the time; never set, both are null. The screen says 'from the command line' only for the second (TestSettingChangeAudited, TestSettingLastChanged, SettingsScreen.test.tsx)
 
 ## Implementation plan
 
@@ -211,3 +204,39 @@ Alternative that lost: answering 200 with no body, or the listing read after com
 TestSetAnswersFromTheWritesTransaction cancels the request as the answer's read of the key starts, after the audit row is written. It then requires the key and the audit log to be as they were. With the service put back to two transactions, it fails: the setting and one audit row committed.
 
 docs/07 "Site settings" now says the answer is read in the write's transaction.
+
+**agent:claude-code/phase2-run-cxk2h** at 2026-09-30T15:47:13Z
+
+Client half, on main at 78755e8 after the orchestrator released the client dist.
+
+SettingsScreen is in src/screens/admin, reached through AdminRoot's built map under admin-settings, so it is in the lazy admin chunk. TestTheAdminBundleIsSeparate passes.
+
+The reader total is 54925 B gzip, up from 54912 B on main at 78755e8. Against the criterion's figures, that is 54925 B recorded against the 47415 B of the plan's time, within 60000 B. web/client/budget.json on main now allows 70000 B. The whole reader delta is the three wordmarks reading one computed signal, siteName.
+
+site_name is now required in dto.ts, and bootstrap.ts's anonymous viewer carries "Ketju". The dist from go generate ./internal/web/spa is committed, and a second run reproduces it byte for byte.
+
+Tests:
+- SettingsScreen.test.tsx covers:
+  - the listing, the grouping and a control for each kind, including a select for a key with choices;
+  - the three "Last changed" lines;
+  - a typed PUT body;
+  - reset;
+  - the refusal with its allowed words;
+  - the client-side refusal of a non-number;
+  - the Saved rule, both in flight and on edit;
+  - the config sections.
+- Shell.test.tsx covers the three wordmarks, a new /me, and the empty-name fallback.
+- e2e/admin-settings.spec.ts runs at 390 px and 1440 px with axe and an overflow check. It starts from ada's stored session and spends nothing from /auth/*, so it needs no paceAuth row. Its afterAll restores the default name.
+
+Runs:
+- the full Playwright suite: 171 passed, and 11 skipped, which are per-project skips;
+- vitest: 1806 plus the new tests;
+- go test -race ./...: green.
+
+Nine mutations are listed in cd72c2d's body, and each was caught.
+
+A duplicate accessible name, the form's aria-label repeating its control's label, was found by the e2e locator and removed before commit.
+
+## Summary
+
+Landed in two PRs: the server half in PR #230 (merged at c751a8b), the client screen in the PR that closes this ticket. Server: GET and PUT /api/v1/admin/settings are behind adminGate, and the sitesettings service asks for an admin again. A PUT writes setting.changed with the admin and the IP, and reads its answer in the write's own transaction (Terva review 1587). updated_at and updated_by follow the three rules: set from the screen, both set; from the command line, updated_by null; never set, both null. config.Sections() names each config.toml section with its reason and no values. site_name is on /me for every viewer, at one statement more, which TestMeBudget pins, and the shell title reads it from /me. Client: SettingsScreen is in the lazy admin chunk and generated from the registry, so a later key needs no client change. The three wordmarks read /me's site_name through one computed signal, taking the reader from 54912 B to 54925 B. e2e/admin-settings.spec.ts runs with axe at both widths. No criterion is unticked, and no drafts were filed.
