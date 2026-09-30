@@ -572,6 +572,38 @@ describe('markUnread', () => {
     stop();
   });
 
+  // Review 1623 on PR #248: a PUT from before the call that fails is put
+  // back and dropped as what the mark undoes; if the DELETE fails too,
+  // nothing was undone, and the read goes out after all.
+  it('keeps a failed PUT from before the call when the DELETE fails too', async () => {
+    let failPut!: () => void;
+    let failDelete!: () => void;
+    let puts = 0;
+    answer = (s) => {
+      if (s.method === 'DELETE') return new Promise((_, reject) => (failDelete = () => reject(new TypeError('network down'))));
+      if (puts++ > 0) return stored(s.body!.ordinal!);
+      return new Promise((_, reject) => (failPut = () => reject(new TypeError('network down'))));
+    };
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(6), 200);
+    vi.advanceTimersByTime(dwellMs);
+    void flush();
+    await drain();
+    const marked = markUnread('t1', 2);
+    failPut();
+    await drain();
+    expect(sent.map((s) => s.method)).toEqual(['PUT', 'DELETE']);
+    failDelete();
+    await expect(marked).rejects.toMatchObject({ type: 'network' });
+    await flush();
+    expect(sent.map((s) => [s.method, s.body])).toEqual([
+      ['PUT', { ordinal: 6 }],
+      ['DELETE', { ordinal: 2 }],
+      ['PUT', { ordinal: 6 }],
+    ]);
+    stop();
+  });
+
   // Review 1144: two marks of one thread run in call order, so the later
   // one's DELETE is the one that lands last; what is read between the two
   // calls goes out between the two DELETEs.

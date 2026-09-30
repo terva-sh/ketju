@@ -160,13 +160,16 @@ export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> 
   const before = marks.get(id);
   const run = (async () => {
     let ok = false;
+    let restore: number | undefined;
     try {
       if (before) await before.catch(() => undefined);
       // Held, so no PUT for the thread starts after this one: it waits for
       // every PUT there will be before the DELETE.
       await send(id, true);
       // A read put back by a failed PUT is from before the call: what the
-      // mark undoes.
+      // mark undoes, if it succeeds. If it fails, nothing was undone, and
+      // the read goes back (Terva review 1623).
+      restore = pending.get(id);
       pending.delete(id);
       const r = await apiSend<ReadPosition>('DELETE', readUrl(id), ordinal === undefined ? undefined : { ordinal });
       floor.set(id, r.last_read_ordinal);
@@ -181,9 +184,12 @@ export function markUnread(id: string, ordinal?: number): Promise<ReadPosition> 
         const kept = Math.max(since.max, carried.get(id) ?? 0);
         carried.delete(id);
         if (kept > 0) queue(id, kept);
-      } else if (since.max > 0) {
-        carried.set(id, Math.max(since.max, carried.get(id) ?? 0));
-        queue(id, since.max);
+      } else {
+        if (restore !== undefined) queue(id, restore);
+        if (since.max > 0) {
+          carried.set(id, Math.max(since.max, carried.get(id) ?? 0));
+          queue(id, since.max);
+        }
       }
       const n = held.get(id)! - 1;
       if (n > 0) held.set(id, n);

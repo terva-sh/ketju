@@ -500,13 +500,31 @@ const onThreadBody = (id: string) => onThread(id) && !location.pathname.endsWith
 // the page: a list shown after an earlier one would hold counts a later one
 // is about to change, and nothing asks for a list already on screen again
 // (Terva review 1619 on PR #248). Each one that succeeds drops the held
-// counts, so what it changed is not shown whatever the later ones do.
+// counts, so what it changed is not shown whatever the later ones do. The
+// last leaves if any of them succeeded, even if it failed itself: the
+// position has been lowered, and staying would read it back up (Terva
+// review 1623). Its failure still rejects, for a caller that is still on
+// the page to show.
+//
+// The viewer is asked for again and not waited for: the badge is a signal
+// and follows /me whenever it answers, on whatever screen is showing, and
+// the return does not wait on a request that may be slow or fail, as the
+// admin screens' refreshes do not (Terva review 1623, disagreement
+// recorded on TKT-01M3KFFFJR).
 async function markAndReturn(id: string, forum: string, route: (url: string, replace?: boolean) => void, ordinal?: number) {
-  await markUnread(id, ordinal);
-  forgetGets((u) => u.startsWith('/api/v1/forums'));
-  void refreshViewer().catch(() => undefined);
-  if (!marking(id) && onThreadBody(id)) route(listFor(forum), true);
+  try {
+    await markUnread(id, ordinal);
+    landed.add(id);
+    forgetGets((u) => u.startsWith('/api/v1/forums'));
+    void refreshViewer().catch(() => undefined);
+  } finally {
+    if (!marking(id) && landed.delete(id) && onThreadBody(id)) route(listFor(forum), true);
+  }
 }
+
+// landed is the threads a mark has succeeded for since the last of their
+// queued marks settled.
+const landed = new Set<string>();
 
 // useArrival scrolls once per request key, when its page first arrives:
 // to the permalink's post; else to the post the address's #post-N names;

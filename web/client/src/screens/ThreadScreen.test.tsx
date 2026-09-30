@@ -1144,6 +1144,24 @@ describe('marking unread from the thread screen', () => {
     expect(server.sent.filter((r) => r.url.startsWith(list))).toHaveLength(1);
   });
 
+  // Review 1623: an earlier mark that succeeded has lowered the position, so
+  // the reader returns to the list when the last queued mark settles, even
+  // if that one failed.
+  it('returns once the last queued mark settles if an earlier one succeeded', async () => {
+    const answers: ((a: Answer) => void)[] = [];
+    unread = () => new Promise<Answer>((r) => answers.push(r));
+    const root = await renderAt(`/t/${id}/a`);
+    await press(root.querySelector('#post-62 [data-post-action=unread]'));
+    await press(root.querySelector('[data-shell=toolbar] [data-action=mark-unread]'));
+    await act(async () => answers.shift()!({ status: 200, body: { last_read_ordinal: 61 } }));
+    await wait();
+    expect(location.pathname).toBe(`/t/${id}/a`);
+    await act(async () => answers.shift()!(problemAnswer('internal', 500)));
+    await wait();
+    expect(deletes()).toHaveLength(2);
+    expect(location.pathname).toBe('/f/general');
+  });
+
   // Review 1622: a reader who leaves the thread's posts while the DELETE is
   // out, for a post's history or another screen, stays where they went.
   it.each([
