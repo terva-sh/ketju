@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T16:08:51Z
+updated_at: 2026-09-30T16:16:15Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -153,6 +153,10 @@ Engineering choice added while building, with the alternative that lost: **an ad
 Checks run locally: gofmt, build, vet, `go test -race ./...`, `npx tsc --noEmit -p .`, `npm test` (1712 tests), `go generate ./internal/web/spa`, `TestTheAdminBundleIsSeparate`, and the full Playwright suite on port 8931 (105 passed, 11 skipped by project), including the new `e2e/admin-rename.spec.ts`.
 
 Bundle: the reader bundle is 51211 B gzip at the base and 51212 B with this change, of the 60000 B budget; only the lazy chunks' hashed names changed in it. The admin chunk is 24.69 kB gzip as vite reports it, about 0.6 kB more than the base.
+
+**agent:claude-code/phase2-run-p0cyr3** at 2026-09-30T16:16:15Z
+
+Terva review 1596 on PR #239 (head 057b9c6, base 2ffd8d9), one medium finding, "Keep the prefix filter in sync with query-only navigation": fixed in 18b9f6b. The prefix filter was read from `?prefix=` only as the users tab mounted, so a new prefix in the address by a link or Back, with the tab still mounted, left the list on the old filter. An effect on the address's prefix now makes it the filter whenever it changes. Opening or closing an account keeps the prefix in the address, so what was typed in the field stays. Covered by "follows a new ?prefix= in the address" in AdminUserRename.test.tsx. The reader bundle is 54927 B gzip after the fix.
 
 ## Summary
 
