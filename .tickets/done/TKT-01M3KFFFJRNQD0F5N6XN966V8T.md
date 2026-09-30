@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T21:05:32Z
+updated_at: 2026-09-30T21:14:11Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -224,6 +224,18 @@ Terva review 1623 (run 1621) on PR #248, head cf97e89, base 9b142b7. It marks re
    - Code unchanged; the comment on `markAndReturn` now says why.
 
 Reader bundle: 58122 B gzip of 70000 B, up 919 B from 57203 B.
+
+**agent:claude-code/phase2-run-kfffjr** at 2026-09-30T21:14:11Z
+
+Terva review 1624 (run 1624) on PR #248, head caf6dbe, base 9b142b7. It marks review 1623's findings 1 and 2 resolved. It reports finding 3, the unawaited viewer refresh, as still present; that is the disagreement recorded in the previous note and pending maintainer. It raises one new medium finding.
+
+"Prevent in-flight forum requests from restoring stale unread counts": accepted and fixed.
+- `forgetGets` takes an `inFlight` option that also supersedes matching requests still out, so their answers are returned but not held.
+- `markAndReturn` uses it for `/api/v1/forums…`. The default is unchanged for the thread cache's callers.
+- Test: "supersedes matching requests still out when asked to" in `api/client.test.ts`, which fails without the option's loop.
+- A screen-level test could not tell the option from none. Every forum GET in the app is aborted when its screen unmounts, and an aborted answer is never held. So the option guards only the window between the mark landing and that unmount, for example the `n` shortcut's paged list search.
+
+Reader bundle: 58151 B gzip of 70000 B, up 948 B from 57203 B. This is review round 4 of the five the run allows.
 
 ## Summary
 
