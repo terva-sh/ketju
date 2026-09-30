@@ -27,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T14:13:32Z
-updated_at: 2026-09-30T20:07:05Z
+updated_at: 2026-09-30T23:48:49Z
 created_by:
   id: agent:claude-code/phase2-run-ns16vh
   name: ""
@@ -54,7 +54,7 @@ Signing in and out loads a page today, which empties the module state, so this o
 - [x] state/drafts.test.ts 'a post answered after the viewer changed, before any composer was asked for, answers null' and 'a refusal answered after the viewer changed sets nothing' pass, and neither starts a slow-mode wait
 - [x] composer/Post.test.tsx 'a reply answered after the viewer changed does not move the page' shows location.pathname unchanged after a 201
 - [x] state/drafts.ts is unchanged in the diff, and every existing test in state/drafts.test.ts, state/composer.test.ts, composer/Post.test.tsx, composer/Composer.test.tsx and composer/ComposerSheet.test.tsx passes unchanged
-- [ ] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget passes
+- [x] The dist is regenerated with go generate ./internal/web/spa and committed, and npm run budget passes
 
 ## Implementation plan
 
@@ -131,3 +131,14 @@ Mutations, each run against state/drafts.test.ts and composer/Post.test.tsx:
 One test departs from the plan's wording. 'a post answered after the viewer changed, before any composer was asked for, answers null' runs `startDrafts()`. Without it, alice's pending autosave goes out after the change, because in the tests nothing resets the draft keys when no composer is asked for. In the app `startDrafts` resets them on every handle change, which is what 'a viewer change drops pending saves before any composer is asked for' already covers. The test therefore models the app, and it asserts `writes()` is `[]`. The guard's own effect is the null answer and the unset slow-mode wait, which the viewer-check mutation shows. The accepted change-and-back test (review 1609) runs without `startDrafts`, like the other posting tests. That pins what `postReply` does when `current` holds. With `startDrafts` running, the change to anonymous would reset the draft keys, and the DELETE would not be sent. That is `drafts.ts` behaviour, and this ticket leaves it alone.
 
 Checks on the local branch: client typecheck, 1884 client tests, go generate, budget, gofmt, build, vet, `go test -race ./...`, and Playwright on port 8796 (175 passed, 11 skipped). Reader bundle: 57041 B gzip of 70000 B, +53 B over 56988 B. AC 8 stays unticked until the dist is regenerated on the branch that is pushed.
+
+**agent:claude-code/phase2-run-sakpk9** at 2026-09-30T23:48:49Z
+
+Replayed onto origin/main at f3ba70d, after #245, #247-#251 and #253. The replay had no conflicts, and the local dist commit was dropped.
+
+Checked against the changes that landed beside this one:
+- #251 refetches the thread page when the viewer changes (`ThreadScreen`'s `pageFor`, `res.retry()`). The refetch itself does not touch composers. `Composer.tsx`, `ReplyBar.tsx` and `ThreadScreen` (`sheetOpen`) call `composerFor` as they render. So in the app, a viewer change on the thread page is followed by a lookup as the new viewer, and that lookup runs `checkOwner` and `forget`. This decides only which case a real sequence falls into. A change followed by a render is the guarded case: the owner and identity checks fail, as the plan expects. The case accepted after review 1609 is left only for a change away and back within one tick, with no render between. What `current` checks is unchanged.
+- #253's `state/viewerGuard.ts` reloads other tabs and bfcache-restored pages, and never sets the viewer signal, so it adds no path into `postReply`.
+- #250's `renderAt` preload does not affect the Post.test.tsx test.
+
+On the new base the mutation results are unchanged from the first note: viewer, identity, catch and success guards are each caught; the owner check is not, for the reason given there. Checks: typecheck, 2030 client tests, budget, gofmt, build, vet, `go test -race ./...`, Playwright on port 18981 (193 passed, 11 skipped). Reader bundle 60438 B gzip of 70000 B, +43 B over main's 60395 B.
