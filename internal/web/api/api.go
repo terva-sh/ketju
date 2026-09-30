@@ -25,6 +25,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/groups"
 	"github.com/terva-sh/ketju/internal/service/identity"
+	"github.com/terva-sh/ketju/internal/service/sitesettings"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -90,7 +91,10 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		// database and the clock.
 		identity: &identity.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now},
 		// The audit log likewise (TKT-01M29CP2R4): it only reads.
-		auditlog: &auditlog.Service{DB: d.Users.DB}}
+		auditlog: &auditlog.Service{DB: d.Users.DB},
+		// The site settings likewise (TKT-01M29CXK2H): the database and
+		// the clock a change is stamped with.
+		sitesettings: &sitesettings.Service{DB: d.Users.DB, Now: d.Users.Now}}
 	mux := http.NewServeMux()
 	for _, rt := range h.routes() {
 		mux.HandleFunc(rt.Pattern(), h.charged(rt.Method, rt.Path, rt.Handler))
@@ -167,6 +171,7 @@ type handlers struct {
 	account      *account.Service
 	identity     *identity.Service
 	auditlog     *auditlog.Service
+	sitesettings *sitesettings.Service
 	log          *slog.Logger
 	// applyLimit is the per-identity stage the application writes share
 	// (apply.go). There is one per handler set, so every route it wraps

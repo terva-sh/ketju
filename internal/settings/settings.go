@@ -47,6 +47,10 @@ type Key[T any] struct {
 type rule[T any] struct {
 	check   func(T) error
 	allowed string
+
+	// choices is the closed list of values the key takes, when there is
+	// one: oneOf's. A screen draws it as a select.
+	choices []string
 }
 
 // The kinds of value a key can hold. The kind decides how [FromText] reads
@@ -63,6 +67,7 @@ type spec struct {
 	doc     string
 	kind    string
 	allowed string
+	choices []string
 	decode  func([]byte) (any, error)
 	encoded string // the default as JSON
 }
@@ -74,6 +79,7 @@ func define[T any](name string, def T, doc string, valid *rule[T]) Key[T] {
 		panic("settings: " + name + " defined twice")
 	}
 	var kind, allowed string
+	var choices []string
 	switch any(def).(type) {
 	case string:
 		kind, allowed = KindText, "text"
@@ -88,14 +94,14 @@ func define[T any](name string, def T, doc string, valid *rule[T]) Key[T] {
 		if err := valid.check(def); err != nil {
 			panic(fmt.Sprintf("settings: the default of %s is invalid: %v", name, err))
 		}
-		allowed = valid.allowed
+		allowed, choices = valid.allowed, valid.choices
 	}
 	k := Key[T]{Name: name, Default: def, Doc: doc, valid: valid, allowed: allowed}
 	b, err := json.Marshal(def)
 	if err != nil {
 		panic(err)
 	}
-	registry[name] = spec{name: name, doc: doc, kind: kind, allowed: allowed, encoded: string(b),
+	registry[name] = spec{name: name, doc: doc, kind: kind, allowed: allowed, choices: choices, encoded: string(b),
 		decode: func(b []byte) (any, error) { return k.decode(b) }}
 	return k
 }
@@ -342,10 +348,15 @@ type Setting struct {
 	// Allowed says in words what the key takes: one of "open", "approval";
 	// a whole number, 0 or more.
 	Allowed string
+
+	// Choices is every value a key with a closed list takes, in the order
+	// the key lists them, and nil for any other key.
+	Choices []string
 }
 
 func (s spec) setting() Setting {
-	return Setting{Name: s.name, Doc: s.doc, Default: s.encoded, Kind: s.kind, Allowed: s.allowed}
+	return Setting{Name: s.name, Doc: s.doc, Default: s.encoded, Kind: s.kind, Allowed: s.allowed,
+		Choices: slices.Clone(s.choices)}
 }
 
 // Describe is the key named, or ErrUnknownKey listing the keys there are.
@@ -378,6 +389,15 @@ type Value struct {
 	// IsDefault is whether the value is the default, with or without a row
 	// that says so.
 	IsDefault bool
+
+	// UpdatedAt is when the key was last set, in Unix ms, and 0 only when
+	// it has never been set: there is no row. Every write stores a time.
+	UpdatedAt int64
+
+	// UpdatedBy is the member who last set the key, and 0 when no account
+	// did: the command line, or the system. It is also 0 for a key that has
+	// never been set, which UpdatedAt tells apart.
+	UpdatedBy int64
 }
 
 // Text is the value as FromText reads it: a text key's string without its
@@ -396,14 +416,13 @@ func (v Value) Text() string {
 // than a Key. A stored value that no longer decodes is an error, as it is
 // for Key.Get.
 func Lookup(ctx context.Context, d *db.DB, name string) (Value, error) {
-	s, ok := registry[name]
-	if !ok {
+	if _, ok := registry[name]; !ok {
 		return Value{}, unknown(name)
 	}
 	var v Value
 	err := d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
-		v, err = s.current(ctx, q)
+		v, err = LookupIn(ctx, q, name)
 		return err
 	})
 	return v, err
@@ -411,20 +430,38 @@ func Lookup(ctx context.Context, d *db.DB, name string) (Value, error) {
 
 // Current reads every setting, sorted by name, in one transaction.
 func Current(ctx context.Context, d *db.DB) ([]Value, error) {
-	all := All()
 	var out []Value
 	err := d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		out = make([]Value, 0, len(all))
-		for _, st := range all {
-			v, err := registry[st.Name].current(ctx, q)
-			if err != nil {
-				return err
-			}
-			out = append(out, v)
-		}
-		return nil
+		var err error
+		out, err = CurrentIn(ctx, q)
+		return err
 	})
 	return out, err
+}
+
+// CurrentIn is Current inside a transaction the caller holds, for a caller
+// that reads more beside it: the admin screen resolves who last set each
+// key in the same read.
+func CurrentIn(ctx context.Context, q *dbq.Queries) ([]Value, error) {
+	all := All()
+	out := make([]Value, 0, len(all))
+	for _, st := range all {
+		v, err := registry[st.Name].current(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, nil
+}
+
+// LookupIn is Lookup inside a transaction the caller holds.
+func LookupIn(ctx context.Context, q *dbq.Queries, name string) (Value, error) {
+	s, ok := registry[name]
+	if !ok {
+		return Value{}, unknown(name)
+	}
+	return s.current(ctx, q)
 }
 
 func (s spec) current(ctx context.Context, q *dbq.Queries) (Value, error) {
@@ -446,6 +483,10 @@ func (s spec) current(ctx context.Context, q *dbq.Queries) (Value, error) {
 	}
 	v.JSON = string(canonical)
 	v.IsDefault = v.JSON == s.encoded
+	v.UpdatedAt = row.UpdatedAt
+	if row.UpdatedBy.Valid {
+		v.UpdatedBy = row.UpdatedBy.Int64
+	}
 	return v, nil
 }
 
@@ -464,7 +505,7 @@ func oneOf(allowed ...string) *rule[string] {
 	for i, a := range allowed {
 		quoted[i] = strconv.Quote(a)
 	}
-	return &rule[string]{allowed: "one of " + strings.Join(quoted, ", "),
+	return &rule[string]{allowed: "one of " + strings.Join(quoted, ", "), choices: allowed,
 		check: func(s string) error {
 			if !slices.Contains(allowed, s) {
 				return fmt.Errorf("%q is not one of them", s)

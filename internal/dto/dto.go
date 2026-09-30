@@ -432,6 +432,10 @@ type Me struct {
 	// anyone perm.ModeratesAny does not admit.
 	Queue    *int     `json:"queue"`
 	Settings Settings `json:"settings"`
+	// SiteName is the site_name setting, for every viewer, anonymous
+	// included: the shell's title and the wordmarks show it, and it changes
+	// from the next request when an admin changes it (TKT-01M29CXK2H).
+	SiteName string `json:"site_name"`
 }
 
 // PreUser is what /me says about an applicant's session.

@@ -13,6 +13,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
+	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
@@ -47,15 +48,19 @@ func anonymousMe() dto.Me {
 // Me is GET /me for the request's viewer (docs/07).
 //
 // The shell inlines it on every page load, so it has a budget, settled in
-// grooming: two statements for the handler, with the middleware's session
+// grooming: three statements for the handler, with the middleware's session
 // lookup, which already returned every user field shown here, outside it.
-// One statement is the counts, grouped by forum. The other is perm's batch,
-// only when its cache does not already know: the moderator queue's scope,
-// every forum at once (perm.ModeratedForums), which also decides which of the
-// counted forums the viewer may read (CanEach), so a member who moderates
-// nothing pays nothing for the queue. A viewer who moderates somewhere pays
-// one queue count statement more (TKT-01M29CRJ4E). Nothing opens a thread
-// log; the counts are projections.
+// One statement is the counts, grouped by forum. One is the site name
+// (TKT-01M29CXK2H), read from the settings table on every request, in the
+// counts' transaction, so an admin's change shows from the next page with no
+// cache to clear; it is the only statement an anonymous viewer or a pre-user
+// pays. The third is perm's batch, only when its cache does not already
+// know: the moderator queue's scope, every forum at once
+// (perm.ModeratedForums), which also decides which of the counted forums the
+// viewer may read (CanEach), so a member who moderates nothing pays nothing
+// for the queue. A viewer who moderates somewhere pays one queue count
+// statement more (TKT-01M29CRJ4E). Nothing opens a thread log; the counts
+// are projections.
 //
 // An approval-mode applicant gets the anonymous shape with pre_user set: a
 // null user stays the one signed-out signal (settled in grooming). Anyone
@@ -74,11 +79,11 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	if v.PreUser && ok && sess.Kind == session.KindPreUser {
 		me := anonymousMe()
 		me.PreUser = &dto.PreUser{Provider: sess.Provider}
-		return me, nil
+		return s.withSiteName(ctx, me)
 	}
 	u, ok := accountOf(ctx, v)
 	if !v.Member() || !ok {
-		return anonymousMe(), nil
+		return s.withSiteName(ctx, anonymousMe())
 	}
 	me := dto.Me{
 		User: &dto.Author{Handle: u.Handle, DisplayName: u.DisplayName, Avatar: u.AvatarBlob, Role: u.Role, Kind: u.Kind},
@@ -100,7 +105,10 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	var rows []dbq.MeCountsRow
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
-		rows, err = q.MeCounts(ctx, v.UserID)
+		if rows, err = q.MeCounts(ctx, v.UserID); err != nil {
+			return err
+		}
+		me.SiteName, err = settings.SiteName.In(ctx, q)
 		return err
 	}); err != nil {
 		return dto.Me{}, err
@@ -127,6 +135,17 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 		me.Unread.Participated += int(r.Participated.Int64)
 		me.Unread.Watching += int(r.Watching.Int64)
 	}
+	return me, nil
+}
+
+// withSiteName is me with the site name, for a viewer who is not a member:
+// the one statement their /me costs.
+func (s *Service) withSiteName(ctx context.Context, me dto.Me) (dto.Me, error) {
+	name, err := settings.SiteName.Get(ctx, s.DB)
+	if err != nil {
+		return dto.Me{}, err
+	}
+	me.SiteName = name
 	return me, nil
 }
 

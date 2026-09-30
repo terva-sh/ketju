@@ -267,6 +267,10 @@ var adminRouteGates = map[string]string{
 	"POST /api/v1/admin/forums/{id}/move":      "admin",
 	"PUT /api/v1/admin/forums/{id}/visibility": "admin",
 	"PUT /api/v1/admin/forums/{id}/archived":   "admin",
+	// The site settings (TKT-01M29CXK2H) are an admin's: they change what
+	// the site does.
+	"GET /api/v1/admin/settings":       "admin",
+	"PUT /api/v1/admin/settings/{key}": "admin",
 }
 
 // TestThreadModerationRoutesUseTheModeratesGate is TKT-01M3RQP0TG's first

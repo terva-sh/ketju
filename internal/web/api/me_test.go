@@ -25,6 +25,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
+	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/db/dbtest"
@@ -250,13 +251,21 @@ func decodeMe(t *testing.T, b []byte) dto.Me {
 	return me
 }
 
-var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25}}
+// siteName is the site_name TestMeShapes sets, so every shape shows one an
+// admin chose rather than the default.
+const siteName = "The Supper Club"
+
+var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25}, SiteName: siteName}
 
 // TestMeShapes is AC1: the documented shape for an anonymous viewer, a member,
 // a moderator, a pre-user session and an agent by its credential, from seeded
-// data. A suspended user gets the anonymous shape.
+// data. A suspended user gets the anonymous shape. Every shape carries the
+// site name (TKT-01M29CXK2H).
 func TestMeShapes(t *testing.T) {
 	w := newMeWorld(t)
+	if err := settings.Set(t.Context(), w.db, settings.SiteName.Name, json.RawMessage(strconv.Quote(siteName)), 0, w.now); err != nil {
+		t.Fatal(err)
+	}
 	for _, c := range []struct {
 		name  string
 		token string
@@ -271,6 +280,7 @@ func TestMeShapes(t *testing.T) {
 			Unread:        dto.UnreadCounts{Threads: 3, Participated: 1, Watching: 1},
 			Notifications: 2,
 			Settings:      dto.Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 30},
+			SiteName:      siteName,
 		}},
 		{"moderator", sessiontest.SignIn(t, w.db, w.id["bob"], w.now), dto.Me{
 			User: &dto.Author{Handle: "bob", DisplayName: "Bob", Role: "moderator", Kind: "agent"},
@@ -282,6 +292,7 @@ func TestMeShapes(t *testing.T) {
 			// application; not the staff forum's flag.
 			Queue:    new(2),
 			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			SiteName: siteName,
 		}},
 		// A member granted moderate on one forum through a group has a
 		// queue: that forum's items, and no applications (TKT-01M29CRJ4E).
@@ -290,10 +301,11 @@ func TestMeShapes(t *testing.T) {
 			Unread:   dto.UnreadCounts{Threads: 6},
 			Queue:    new(1),
 			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			SiteName: siteName,
 		}},
 		{"suspended admin", sessiontest.SignIn(t, w.db, w.id["carol"], w.now), anonMe},
 		{"pre-user", sessiontest.PreUser(t, w.db, 1, w.now), dto.Me{PreUser: &dto.PreUser{Provider: "github"},
-			Settings: anonMe.Settings}},
+			Settings: anonMe.Settings, SiteName: siteName}},
 		// An agent by its credential, with no session: the member it is
 		// (TKT-01M3QH3X58). Threads 2 to 6 are unread; 1 it read to the end.
 		// 3 it wrote in; 2 it watches.
@@ -302,6 +314,7 @@ func TestMeShapes(t *testing.T) {
 			Unread:        dto.UnreadCounts{Threads: 5, Participated: 1, Watching: 1},
 			Notifications: 1,
 			Settings:      dto.Settings{Timezone: "America/Toronto", Locale: "fr", PageSize: 40},
+			SiteName:      siteName,
 		}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -324,17 +337,19 @@ func TestMeShapes(t *testing.T) {
 	}
 }
 
-// TestMeBudget is AC3, as settled in grooming: the handler runs at most two
-// statements, with the session middleware's one lookup outside that budget.
-// Cold, the two are perm's batch and the counts; warm, the counts alone. An
-// anonymous viewer costs nothing. The shell, which inlines /me, costs the
-// same.
+// TestMeBudget is AC3, as settled in grooming: the handler runs at most
+// three statements, with the session middleware's one lookup outside that
+// budget. Cold, the three are perm's batch, the counts and the site name;
+// warm, the counts and the site name. The site name (TKT-01M29CXK2H) is one
+// GetSetting, read on every request so an admin's change shows on the next
+// page, and it is all an anonymous viewer costs. The shell, which inlines
+// /me, costs the same.
 //
 // The batch is the queue's scope, every forum at once
 // (perm.ModeratedForums), which answers the read checks the counts need
 // too, so a member who moderates nothing pays nothing for the queue
 // (TKT-01M29CRJ4E). A viewer who moderates somewhere pays one count
-// statement more: three cold, two warm.
+// statement more: four cold, three warm.
 func TestMeBudget(t *testing.T) {
 	w := newMeWorld(t)
 	// The first request this process serves, from a brand-new perm cache.
@@ -345,26 +360,31 @@ func TestMeBudget(t *testing.T) {
 	for _, c := range []struct {
 		name, path, token string
 		want              []string // statement names, in order
-		budget            int
+		// middleware is how many of want, from the front, the middleware
+		// ran: the session lookup, or an agent's credential statements.
+		// Counted per case rather than by name, because the handler's site
+		// name read is a GetSetting too.
+		middleware int
+		budget     int
 	}{
-		{"member /me, cold", "/api/v1/me", alice, []string{"LookupSession", "ForumAccessRowsAll", "MeCounts"}, 2},
-		{"member /me, warm", "/api/v1/me", alice, []string{"LookupSession", "MeCounts"}, 2},
-		{"member shell", "/", alice, []string{"LookupSession", "MeCounts"}, 2},
-		{"anonymous /me", "/api/v1/me", "", nil, 0},
-		{"anonymous shell", "/", "", nil, 0},
-		{"moderator /me, cold", "/api/v1/me", bob, []string{"LookupSession", "ForumAccessRowsAll", "QueueCount", "MeCounts"}, 3},
-		{"moderator /me, warm", "/api/v1/me", bob, []string{"LookupSession", "QueueCount", "MeCounts"}, 2},
-		{"forum moderator /me, cold", "/api/v1/me", dave, []string{"LookupSession", "ForumAccessRowsAll", "QueueCount", "MeCounts"}, 3},
-		{"forum moderator shell", "/", dave, []string{"LookupSession", "QueueCount", "MeCounts"}, 2},
+		{"member /me, cold", "/api/v1/me", alice, []string{"LookupSession", "ForumAccessRowsAll", "MeCounts", "GetSetting"}, 1, 3},
+		{"member /me, warm", "/api/v1/me", alice, []string{"LookupSession", "MeCounts", "GetSetting"}, 1, 2},
+		{"member shell", "/", alice, []string{"LookupSession", "MeCounts", "GetSetting"}, 1, 2},
+		{"anonymous /me", "/api/v1/me", "", []string{"GetSetting"}, 0, 1},
+		{"anonymous shell", "/", "", []string{"GetSetting"}, 0, 1},
+		{"moderator /me, cold", "/api/v1/me", bob, []string{"LookupSession", "ForumAccessRowsAll", "QueueCount", "MeCounts", "GetSetting"}, 1, 4},
+		{"moderator /me, warm", "/api/v1/me", bob, []string{"LookupSession", "QueueCount", "MeCounts", "GetSetting"}, 1, 3},
+		{"forum moderator /me, cold", "/api/v1/me", dave, []string{"LookupSession", "ForumAccessRowsAll", "QueueCount", "MeCounts", "GetSetting"}, 1, 4},
+		{"forum moderator shell", "/", dave, []string{"LookupSession", "QueueCount", "MeCounts", "GetSetting"}, 1, 3},
 		// An agent by its credential (TKT-01M3QH3X58). The middleware
 		// resolves the credential with the site's two bucket defaults, and
 		// touches it on first use because last_used_at is null; the clock
 		// does not move, so the second request does not touch. After the
 		// middleware, the agent costs what a member does.
 		{"agent /me, cold", "/api/v1/me", scribe, []string{"LookupAgentCredential", "GetSetting", "GetSetting",
-			"TouchAgentCredential", "ForumAccessRowsAll", "MeCounts"}, 2},
+			"TouchAgentCredential", "ForumAccessRowsAll", "MeCounts", "GetSetting"}, 4, 3},
 		{"agent /me, warm", "/api/v1/me", scribe, []string{"LookupAgentCredential", "GetSetting", "GetSetting",
-			"MeCounts"}, 2},
+			"MeCounts", "GetSetting"}, 3, 2},
 	} {
 		var rec *httptest.ResponseRecorder
 		ran := w.stmts.during(func() {
@@ -386,11 +406,7 @@ func TestMeBudget(t *testing.T) {
 		}
 		// The budget proper: everything after the middleware's lookup, and
 		// for an agent after the middleware's credential statements.
-		middleware := 0
-		for _, m := range []string{"LookupSession", "LookupAgentCredential", "GetSetting", "TouchAgentCredential"} {
-			middleware += count(names, m)
-		}
-		if handler := len(names) - middleware; handler > c.budget {
+		if handler := len(names) - c.middleware; handler > c.budget {
 			t.Errorf("%s: the handler ran %d statements, budget %d", c.name, handler, c.budget)
 		}
 	}
@@ -402,16 +418,6 @@ func queryName(stmt string) string {
 		return m[1]
 	}
 	return stmt
-}
-
-func count(xs []string, x string) int {
-	n := 0
-	for _, v := range xs {
-		if v == x {
-			n++
-		}
-	}
-	return n
 }
 
 // TestMeBudgetWhenTouchIsDue: once every five minutes a session's
@@ -427,10 +433,10 @@ func TestMeBudgetWhenTouchIsDue(t *testing.T) {
 	for _, s := range w.stmts.during(func() { w.get("/api/v1/me", alice) }) {
 		names = append(names, queryName(s))
 	}
-	if strings.Join(names, " ") != "LookupSession TouchSession MeCounts" {
+	if strings.Join(names, " ") != "LookupSession TouchSession MeCounts GetSetting" {
 		t.Fatalf("with a touch due: %v", names)
 	}
-	if ran := w.stmts.during(func() { w.get("/api/v1/me", alice) }); len(ran) != 2 {
+	if ran := w.stmts.during(func() { w.get("/api/v1/me", alice) }); len(ran) != 3 {
 		t.Fatalf("the request after the touch ran %d statements", len(ran))
 	}
 }
@@ -496,11 +502,19 @@ func TestMeRefusesADeadCredential(t *testing.T) {
 }
 
 // TestShellInlinesMe: the shell's bootstrap block is the member's /me,
-// escaped so the display name cannot close the element.
+// escaped so the display name cannot close the element, and the page's
+// title is the site name /me carries, escaped as text (TKT-01M29CXK2H).
 func TestShellInlinesMe(t *testing.T) {
 	w := newMeWorld(t)
 	alice := sessiontest.SignIn(t, w.db, w.id["alice"], w.now)
+	if err := settings.Set(t.Context(), w.db, settings.SiteName.Name, json.RawMessage(`"Tom & Jerry's </title>"`), 0, w.now); err != nil {
+		t.Fatal(err)
+	}
 	page := w.get("/", alice)
+	if title := regexp.MustCompile(`<title>(.*?)</title>`).FindStringSubmatch(page.Body.String()); title == nil ||
+		title[1] != "Tom &amp; Jerry&#39;s &lt;/title&gt;" {
+		t.Errorf("the title is %q, want the site name escaped", title)
+	}
 	api := w.get("/api/v1/me", alice)
 	m := regexp.MustCompile(`(?s)<script type="application/json" id="bootstrap" nonce="[^"]+">(.*?)</script>`).
 		FindStringSubmatch(page.Body.String())
@@ -515,6 +529,9 @@ func TestShellInlinesMe(t *testing.T) {
 	sb, _ := json.Marshal(served)
 	if !bytes.Equal(ib, sb) {
 		t.Fatalf("the shell inlines %s; /me serves %s", ib, sb)
+	}
+	if inlined.SiteName != "Tom & Jerry's </title>" {
+		t.Errorf("the inlined /me has the site name %q", inlined.SiteName)
 	}
 }
 

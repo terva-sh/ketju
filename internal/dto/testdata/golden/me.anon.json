@@ -12,5 +12,6 @@
     "timezone": "UTC",
     "locale": "en",
     "page_size": 25
-  }
+  },
+  "site_name": "The Supper Club"
 }

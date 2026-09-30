@@ -324,7 +324,9 @@ func forumTree(class string) ForumTree {
 }
 
 // me is the viewer. The anonymous case is the one that matters most: a null
-// user is the whole of how a client learns it is signed out.
+// user is the whole of how a client learns it is signed out. The site name
+// is the same for every class, one an admin set, since every viewer is
+// shown it.
 func me(class string) Me {
 	switch class {
 	case tAnon:
@@ -333,6 +335,7 @@ func me(class string) Me {
 			Unread:        UnreadCounts{},
 			Notifications: 0,
 			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			SiteName:      "The Supper Club",
 		}
 	case tPreUser:
 		return Me{
@@ -341,6 +344,7 @@ func me(class string) Me {
 			Unread:        UnreadCounts{},
 			Notifications: 0,
 			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			SiteName:      "The Supper Club",
 		}
 	case tModerator:
 		return Me{
@@ -349,6 +353,7 @@ func me(class string) Me {
 			Notifications: 9,
 			Queue:         ptr(4),
 			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50},
+			SiteName:      "The Supper Club",
 		}
 	case tAgent:
 		return Me{
@@ -356,6 +361,7 @@ func me(class string) Me {
 			Unread:        UnreadCounts{Threads: 7, Participated: 3, Watching: 1},
 			Notifications: 4,
 			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 40},
+			SiteName:      "The Supper Club",
 		}
 	default:
 		return Me{
@@ -363,6 +369,7 @@ func me(class string) Me {
 			Unread:        UnreadCounts{Threads: 12, Participated: 5, Watching: 4},
 			Notifications: 2,
 			Settings:      Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 25},
+			SiteName:      "The Supper Club",
 		}
 	}
 }

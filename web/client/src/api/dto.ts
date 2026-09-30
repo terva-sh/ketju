@@ -208,6 +208,10 @@ export interface Me {
   // with no queue (TKT-01M29CRJ4E).
   queue: number | null;
   settings: Settings;
+  // The site_name setting, for every viewer (TKT-01M29CXK2H). Optional here
+  // until the client reads it, so the built-in anonymous viewer, which is
+  // bundled, need not change with the server.
+  site_name?: string;
 }
 
 // RenderResult is POST /render's answer, and what the create path records
@@ -686,6 +690,43 @@ export interface AuditTarget {
   id: string;
   label: string;
   href: string;
+}
+
+// SiteSettings is GET /admin/settings, an admin's alone (TKT-01M29CXK2H):
+// every runtime setting in the registry, sorted by key, and every
+// config.toml section, named with its reason and no values.
+export interface SiteSettings {
+  settings: SiteSetting[];
+  config: ConfigSection[];
+}
+
+// SiteSetting is one key, and the answer to PUT /admin/settings/{key}.
+// default and value are of the key's kind. allowed says in words what the
+// key takes, and choices is a closed list's values, empty for any other key.
+// Set from the screen, updated_at and updated_by are both set; from the
+// command line, updated_by is null; never set, both are null.
+export interface SiteSetting {
+  key: string;
+  doc: string;
+  // "text", "integer" or "boolean".
+  kind: string;
+  allowed: string;
+  choices: string[];
+  default: SettingValue;
+  value: SettingValue;
+  is_default: boolean;
+  updated_at: Millis | null;
+  updated_by: Author | null;
+}
+
+export type SettingValue = string | number | boolean;
+
+// ConfigSection is one top-level part of config.toml: why it lives in the
+// file rather than on the settings screen, and the keys under it.
+export interface ConfigSection {
+  name: string;
+  reason: string;
+  keys: string[];
 }
 
 // AdminApplication is GET /admin/applications/{id}, and the answer to

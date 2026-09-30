@@ -18,5 +18,6 @@
     "timezone": "Asia/Tokyo",
     "locale": "ja",
     "page_size": 50
-  }
+  },
+  "site_name": "The Supper Club"
 }

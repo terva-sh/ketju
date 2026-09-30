@@ -1,0 +1,67 @@
+{
+  "settings": [
+    {
+      "key": "flags.auto_hide_threshold",
+      "doc": "Open flags on a post that hide it pending review.",
+      "kind": "integer",
+      "allowed": "a whole number, 1 or more",
+      "choices": [],
+      "default": 3,
+      "value": 3,
+      "is_default": true,
+      "updated_at": null,
+      "updated_by": null
+    },
+    {
+      "key": "registration.mode",
+      "doc": "How a new visitor becomes a member: \"open\" or \"approval\".",
+      "kind": "text",
+      "allowed": "one of \"open\", \"approval\"",
+      "choices": [
+        "open",
+        "approval"
+      ],
+      "default": "approval",
+      "value": "open",
+      "is_default": false,
+      "updated_at": 1757600000000,
+      "updated_by": null
+    },
+    {
+      "key": "site_name",
+      "doc": "The site's name, shown in the header and page titles.",
+      "kind": "text",
+      "allowed": "text of 1 to 100 characters",
+      "choices": [],
+      "default": "Ketju",
+      "value": "The Supper Club",
+      "is_default": false,
+      "updated_at": 1757610000000,
+      "updated_by": {
+        "handle": "root",
+        "display_name": "Site Admin",
+        "avatar": "",
+        "role": "admin",
+        "kind": "human"
+      }
+    }
+  ],
+  "config": [
+    {
+      "name": "listen",
+      "reason": "Read before the database opens, so it cannot be kept in the database. The server binds it at startup.",
+      "keys": [
+        "listen"
+      ]
+    },
+    {
+      "name": "oidc",
+      "reason": "It holds provider secrets, and is needed before anyone can sign in.",
+      "keys": [
+        "oidc.providers[].key",
+        "oidc.providers[].issuer",
+        "oidc.providers[].client_secret"
+      ]
+    }
+  ]
+}

@@ -821,6 +821,12 @@ agent token-bucket defaults were the maintainer's decision of 2026-09-29
 the post edit window, since a title is the opening post's headline
 (TKT-01M29CKRH9).
 
+The default page size is not a key. 25 posts a page appears in shared
+URLs, so the API and the client hold it as a constant (10 item 13, 07
+"Preact client"), and a member's own page size of 10 to 50 is their
+setting, not the site's (06). The admin settings screen lists the keys
+above and nothing else (07 "Site settings").
+
 ### thread_slow_mode
 ```
 thread_id (pk), seconds, set_by, set_at

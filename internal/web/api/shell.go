@@ -11,9 +11,10 @@ import (
 // the viewer's /me as its bootstrap block (docs/07 "Embedding"), so the
 // client's first paint needs no round trip. It costs what GET /me costs.
 //
-// The title and description stay the shell's defaults. The site name and a
-// thread's own title are for whoever wires the server together
-// (TKT-01M29CCBYX) and the thread page (TKT-01M29CEE6V).
+// The title is the site name, which /me carries (TKT-01M29CXK2H), so it
+// costs no statement of its own and follows an admin's change from the next
+// page. The description stays the shell's default, and a thread's own title
+// is the thread page's (TKT-01M29CEE6V).
 //
 // A nil service panics here, at wiring, rather than on the first page.
 func ShellPage(u *users.Service) func(*http.Request) (web.Page, error) {
@@ -25,6 +26,6 @@ func ShellPage(u *users.Service) func(*http.Request) (web.Page, error) {
 		if err != nil {
 			return web.Page{}, err
 		}
-		return web.Page{Title: "ketju", Bootstrap: me}, nil
+		return web.Page{Title: me.SiteName, Bootstrap: me}, nil
 	}
 }
