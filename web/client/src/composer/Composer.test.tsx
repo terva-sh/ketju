@@ -49,9 +49,13 @@ interface Sent {
 // serve answers the thread page, /render with a rendering that names what
 // it was sent, and /users with alice and al-x; it records every other
 // request.
+const noHistory = { ordinal: 2, deleted: false, redacted: false, revisions: [] };
+
 function serve(p: ThreadPage, users: UserSuggestions = { users: [] }) {
   const sent: Sent[] = [];
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+    // The history route's screen asks for the post's history (TKT-01M29CP2Q3).
+    if (url.endsWith('/history')) return new Response(JSON.stringify(noHistory), { status: 200 });
     if (url === '/api/v1/render') {
       const body = JSON.parse(String(init.body));
       sent.push({ url, body });

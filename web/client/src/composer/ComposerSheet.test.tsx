@@ -31,6 +31,10 @@ function page(over: { canReply?: boolean } = {}): ThreadPage {
 function serve(p: ThreadPage) {
   vi.stubGlobal('fetch', async (url: string) => {
     if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
+    // The history route's screen asks for the post's history (TKT-01M29CP2Q3).
+    if (url.endsWith('/history')) {
+      return new Response(JSON.stringify({ ordinal: 2, deleted: false, redacted: false, revisions: [] }), { status: 200 });
+    }
     return new Response(JSON.stringify(p), { status: 200 });
   });
 }
