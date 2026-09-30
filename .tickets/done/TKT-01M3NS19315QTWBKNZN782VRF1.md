@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T12:40:41Z
+updated_at: 2026-09-30T12:43:37Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -249,6 +249,10 @@ Terva review 1583 on PR #227 (head 4617cce, base de1771d). It reports review 158
 **agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:40:41Z
 
 Terva review 1584 on PR #227 (head 9e997e1, base de1771d). It reports both findings of review 1583 resolved. Its finding 1 (high), 'Keep an empty recovery copy after an unanswered PUT', is fixed. An unanswered request now leaves the server as possibly holding a draft wherever its state was known before, so a cleared composer is a DELETE. After a failed load the state stays unknown, so a failed load still never deletes. After an unanswered request pagehide treats nothing as seen saved and sends the draft again, and its empty copy lets the next load delete the draft. Tests: 'a cleared composer after an unanswered save deletes', 'a cleared composer after an unanswered save is deleted by the next load when the page goes', 'an unanswered save is sent again on pagehide' and 'after a failed load, an unanswered save does not make a cleared composer delete'. Bundle: 51214 B gzip.
+
+**agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:43:37Z
+
+disagreement: pending maintainer. Terva review 1585 on PR #227 (head 17e0994, base de1771d), finding 1 (high), 'Preserve deletion recovery when a post races the initial GET'. Not a security finding. Reason: a key is disarmed until its GET answers, and a disarmed key sends no PUT (state/drafts.ts, changed and flush; tests 'an empty composer never deletes before its draft loads' and 'a disarmed key sends nothing on pagehide'). So in this interleaving the draft on the server was not written by this tab and is not the posted text. It is an older draft that this tab never showed. The post itself is in the thread. If the DELETE is lost, that older draft is shown again on the next load, where the member can see and discard it. Nothing posted comes back and nothing is lost. The fix proposed is to let an empty copy with no base delete on a 200. With no base the copy cannot be ordered against the server, so that DELETE would also remove a draft another device saved after the post. That device's unsent text would be lost, which is the failure the settled rule for a null base exists to prevent ('On a 200 the server's draft wins'). Test in place: 'a post during the load deletes, and the load does not bring the draft back' covers the in-page half. The maintainer may choose instead to delete on an unordered empty copy.
 
 ## Summary
 
