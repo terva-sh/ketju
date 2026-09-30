@@ -22,6 +22,15 @@ export interface ShellContext {
   // a thread page whose reader may reply there. The reply bar takes the tab
   // bar's place while it is set (docs/06 "Mobile", TKT-01M29CGBVN).
   reply?: string;
+  // composing is set by a screen that is itself a composer, the new-thread
+  // screen: on a phone the tab bar gives it its room, as the reply bar's
+  // sheet takes the whole screen (docs/06 "Mobile").
+  composing?: boolean;
+  // primary is the one action such a screen exists for, Post, which the
+  // phone top bar draws as a button of its own, since the screen's footer
+  // would sit under the keyboard. The desktop draws neither: the screen's
+  // footer carries it there.
+  primary?: ShellAction & { disabled?: boolean };
 }
 
 export const shellContext = signal<ShellContext | null>(null);

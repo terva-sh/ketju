@@ -19,10 +19,12 @@ import './shell.css';
 //
 // On a thread the reader may reply to, the phone's reply bar takes the tab
 // bar's place (docs/06 "Mobile"): the screen says so through its shell
-// context.
+// context. A screen that is a composer (composing) has no bar at the foot at
+// all.
 export function Shell({ children }: { children: ComponentChildren }) {
   const phone = isPhone.value;
   const reply = phone ? shellContext.value?.reply : undefined;
+  const composing = phone && !!shellContext.value?.composing;
   const cls = `shell ${phone ? 'phone' : 'desktop'}${reply ? ' has-replybar' : ''}`;
   return (
     <div class={cls} data-layout={phone ? 'phone' : 'desktop'}>
@@ -43,7 +45,7 @@ export function Shell({ children }: { children: ComponentChildren }) {
       <div class="shell-content" id="main">
         {children}
       </div>
-      {phone && (reply ? <ReplyBar thread={reply} /> : <TabBar />)}
+      {phone && !composing && (reply ? <ReplyBar thread={reply} /> : <TabBar />)}
     </div>
   );
 }

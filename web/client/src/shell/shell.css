@@ -254,6 +254,27 @@ main h1[tabindex='-1']:focus {
   padding: 0;
   cursor: pointer;
 }
+/* A composing screen's one action, Post, as the sheet's head draws it
+   (composer.css .sheet-head .post-reply): a labelled button at full touch
+   height. */
+.tb-primary {
+  flex: none;
+  min-height: var(--target);
+  padding: 0 14px;
+  margin-left: 4px;
+  border: 0;
+  border-radius: var(--radius);
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.tb-primary:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
 
 .more {
   position: relative;

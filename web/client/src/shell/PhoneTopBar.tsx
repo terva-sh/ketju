@@ -8,7 +8,8 @@ import { MoreMenu } from './MoreMenu';
 // screen's title on one line, cut short rather than wrapped or pushing the
 // controls off screen, then search, the moderation queue for those who have
 // one, with the top bar's badge (mockup mtopbar(); it is no sixth tab, docs/10
-// item 25), and the screen's more menu.
+// item 25), the screen's primary action when it has one (the new-thread
+// screen's Post), and the screen's more menu.
 export function PhoneTopBar() {
   const ctx = shellContext.value;
   const queue = badges.value.queue;
@@ -38,6 +39,17 @@ export function PhoneTopBar() {
           <Icon name="inbox" size={20} />
           <Badge n={queue} what="items to review" />
         </a>
+      )}
+      {ctx?.primary && (
+        <button
+          type="button"
+          class="tb-primary"
+          data-shell-primary={ctx.primary.id}
+          disabled={ctx.primary.disabled}
+          onClick={ctx.primary.run}
+        >
+          {ctx.primary.label}
+        </button>
       )}
       <MoreMenu actions={ctx?.actions ?? []} />
     </header>

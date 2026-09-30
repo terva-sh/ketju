@@ -195,6 +195,51 @@ describe('the phone top bar', () => {
     expect(back.getAttribute('href')).toMatch(/^\/f\//);
   });
 
+  // TKT-01M3NS16VH: a screen that is a composer has no tab bar under it on
+  // a phone, and its one action, Post, is a labelled button in the top bar.
+  it('gives a composing screen the whole phone, with its primary action in the top bar', async () => {
+    const { shellContext } = await import('../state/shell');
+    const run = vi.fn();
+    const root = await renderAt('/unread');
+    await setPhone(true);
+    expect(shellParts(root)).toEqual(['phone-topbar', 'tabbar']);
+    expect(root.querySelector('[data-shell-primary]')).toBeNull();
+
+    const ctx = { title: 'New thread', actions: [], composing: true, primary: { id: 'post-thread', label: 'Post', run, disabled: true } };
+    await act(() => void (shellContext.value = ctx));
+    expect(shellParts(root)).toEqual(['phone-topbar']);
+    const primary = root.querySelector<HTMLButtonElement>('[data-shell=phone-topbar] button[data-shell-primary=post-thread]')!;
+    expect(primary.textContent).toBe('Post');
+    expect(primary.disabled).toBe(true);
+    // Before the more menu, and after search.
+    const bar = [...root.querySelector('[data-shell=phone-topbar]')!.children];
+    expect(bar.indexOf(primary)).toBe(bar.length - 1);
+    expect(bar.indexOf(primary)).toBeGreaterThan(bar.indexOf(root.querySelector('[aria-label=Search]')!));
+
+    await act(() => void (shellContext.value = { ...ctx, primary: { ...ctx.primary, disabled: false } }));
+    const enabled = root.querySelector<HTMLButtonElement>('[data-shell-primary=post-thread]')!;
+    expect(enabled.disabled).toBe(false);
+    await act(() => enabled.click());
+    expect(run).toHaveBeenCalledOnce();
+
+    // The desktop ignores both: its screen's footer carries Post.
+    await setPhone(false);
+    expect(shellParts(root)).toEqual(['topbar']);
+    expect(root.querySelector('[data-shell-primary]')).toBeNull();
+  });
+
+  it('keeps the more menu after the primary action', async () => {
+    const { shellContext } = await import('../state/shell');
+    isPhone.value = true;
+    const root = await renderAt('/unread');
+    const actions = [{ id: 'discard-thread', label: 'Discard draft', run: () => {} }];
+    await act(() => void (shellContext.value = { title: 'New thread', actions, composing: true, primary: { id: 'p', label: 'Post', run: () => {} } }));
+    const bar = [...root.querySelector('[data-shell=phone-topbar]')!.children];
+    const primary = root.querySelector('[data-shell-primary=p]')!;
+    const more = root.querySelector('[aria-label=More]')!.closest('.more')!;
+    expect(bar.indexOf(more)).toBe(bar.indexOf(primary) + 1);
+  });
+
   // AC2: a long forum name is cut short on one line and leaves the controls
   // their room. The real widths are checked in a browser; this holds the rule
   // that does it.

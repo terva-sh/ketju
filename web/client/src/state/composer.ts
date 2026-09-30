@@ -43,13 +43,21 @@ let owner: string | null = null;
 
 const draftKey = (thread: string): DraftKey => ({ kind: 'reply', thread });
 
-export function composerFor(thread: string): Composer {
+// checkOwner forgets every composer and every draft key when the viewer is
+// not the one they were made for. The new-thread composers (state/newThread)
+// check here first too, so whichever kind is asked for first after a change
+// resets the draft keys, and neither resets the other's fresh ones.
+export function checkOwner() {
   const who = viewer.value.user?.handle ?? '';
   if (who !== owner) {
     composers.clear();
     resetDrafts();
     owner = who;
   }
+}
+
+export function composerFor(thread: string): Composer {
+  checkOwner();
   let c = composers.get(thread);
   if (!c) {
     const n: Composer = { source: signal(''), replyTo: signal(null), caret: signal(0), summoned: signal(0), open: signal(false),

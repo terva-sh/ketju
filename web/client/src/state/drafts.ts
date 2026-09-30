@@ -515,6 +515,13 @@ export function draftNote(key: DraftKey): string {
   return s === 'saving' ? 'Saving…' : s === 'saved' ? 'Draft saved' : '';
 }
 
+// draftStatus is how key's autosave stands, for a screen that says more
+// than draftNote does: the new-thread screen says a refused save turned it
+// off.
+export function draftStatus(key: DraftKey): DraftStatus {
+  return entries.get(idOf(key))?.status.value ?? 'idle';
+}
+
 // resetDrafts forgets every key: an owner change, and tests. A request in
 // flight is answered into an entry nobody holds, and nothing follows it.
 export function resetDrafts() {
