@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T10:46:10Z
+updated_at: 2026-09-30T10:59:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,8 +49,8 @@ The log is only worth writing if somebody can read it. In a small community the 
 
 ## Acceptance criteria
 
-- [ ] GET /api/v1/admin/audit filters by actor handle or system, action or action prefix, target type and id, and a time range, alone and combined, and pages newest first by an opaque keyset cursor (TestAuditPageFilters, TestAuditPageKeyset)
-- [ ] No code path in the application updates or deletes an entry, and this ticket adds no write path (TestAuditLogAppendOnly, TestOneWayIntoAuditLog)
+- [x] GET /api/v1/admin/audit filters by actor handle or system, action or action prefix, target type and id, and a time range, alone and combined, and pages newest first by an opaque keyset cursor (TestAuditPageFilters, TestAuditPageKeyset)
+- [x] No code path in the application updates or deletes an entry, and this ticket adds no write path (TestAuditLogAppendOnly, TestOneWayIntoAuditLog)
 - [ ] Each entry whose target is a user, forum, thread, post, setting, flag, application, group, permission or form carries an href and the screen renders it as a link; a blob or identity target has none; an absent user draws as deleted-user-<id>; a thread.moved entry carries both forums in related (TestAuditTargetsLink)
 - [ ] The endpoint and /admin/audit answer 401 to anonymous and 403 to pre-user, member and moderator viewers, forum-scoped moderators and members who moderate through a group included, and 200 to admins, and docs/08 records that the log is admin-only (TestAuditIsAdminOnly)
 - [ ] audit.Actions lists every action written today, post.redacted, blob.deleted, thread.title_redacted, thread.renamed, thread.moved, thread.slow_mode, user.renamed, flag.resolved and flag.dismissed included; it matches docs/04 audit_log in both directions; and the answer's actions fill the screen's action filter (TestActionsDocumented, AuditScreen.test.tsx)
@@ -183,3 +183,30 @@ Maintainer decision 2026-09-29: the audit log is admin-only; moderators see none
 **agent:claude-code/phase2-groom** at 2026-09-30T08:53:41Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The Settled items are carried verbatim; new ones follow them. Changes: (1) The audit view now resolves all twelve target types. blob (PR #192) and identity draw with no link, and group, permission, form, flag and application now have links. It must also render the actions landed since: thread.renamed and thread.moved (#193), thread.slow_mode (#188), user.renamed (#186), post.redacted, blob.deleted and thread.title_redacted (#192), and flag.resolved and flag.dismissed (#185). (2) A closed list, audit.Actions, is held to docs/04 by TestActionsDocumented and fills the action filter. docs/04 gains the two flag actions it lacked. (3) The service package is renamed internal/service/auditlog, so that it does not share a name with internal/audit. (4) thread.moved's forum ids are resolved into related targets. (5) The migration is 0018, since 0017 is the newest. (6) docs/08 already records that the log is admin-only, so that step is removed. (7) The maintainer's decision of 2026-09-30 keeps admin screens on their role gates, so a member who moderates through a group is refused too. TestAuditIsAdminOnly covers that case. (8) User targets link to /u/{handle} until TKT-01M3P0CYR3 puts ?user= in the address. Criteria 1, 3 and 4 are rewritten, and two are added.
+
+**agent:claude-code/phase2-run-cp2r4** at 2026-09-30T10:59:40Z
+
+Server half built (PR 1 of 2), on main at 94ce6d8. The client screen, the dist and the close follow in PR 2, once the forum-admin lane (PR #213) frees the dist.
+
+What PR 1 adds:
+- Migration `0019_audit_log_filters.sql`, with `audit_log_actor (actor_id, id)` and `audit_log_action (action, id)`. 0018 went to PR #215.
+- `audit.Actions`, the 45 actions main writes today, and the docs/04 `audit-actions` table of action, target type and ticket. `TestActionsDocumented` holds the two together in both directions. `TestActionsCoverTheWriters` is new and was not in the plan. It walks the module for every `Action*` const shaped as an action, and every string literal passed to `audit.Append` as the action, and fails on one that the list lacks. It is how the list stays complete while `Append` still accepts any action.
+- `views.AuditPage`, the filter query, and the sqlc queries `AuditThreads`, `AuditForums`, `AuditGroups` and `AuditFlags`, one statement per kind for a page.
+- `internal/service/auditlog`. The service asks again (`member.RequireAdmin`), so a caller that forgot the gate is still refused.
+- `dto.AuditPage`, `AuditEntry` and `AuditTarget`, with the goldens `audit.admin` and `audit-filtered.admin`, and the matching types-only edit to `dto.ts` and `dto-contract.ts`. `go generate ./internal/web/spa` leaves the dist byte-identical, and the reader stays at 47415 B.
+- `GET /api/v1/admin/audit` behind `adminGate`, in `adminRouteGates` as `admin`.
+- docs/07 "The audit log (TKT-01M29CP2R4)".
+
+Decisions taken while building, each with the alternative that lost:
+- **`system=1` is its own parameter, not `actor=system`.** `system` is a valid handle and not a reserved one (`identity.reservedHandles`). Under the plan's `actor=system`, a member holding that handle could not be filtered for. Reserving the word lost, because that changes what a member may register, and that is a product decision. A sentinel that no handle can spell, such as `actor=-`, lost because it reads badly in a pasted link. `system=1` together with `actor` is `bad-request`.
+- **The cursor is refused unless it is exactly the form the server issues**: base64url, no padding, of the decimal id. `MDEy` ("012") and a padded form are `bad-request`, so the cursor stays opaque rather than parseable.
+- **A flag target's label names the thread**, "flag {id} on {title} #{ordinal}". The plan's "flag {id} on #{ordinal}" named no thread.
+- **An absent user as actor** draws as `member.Missing`. The foreign key on `actor_id` makes that unreachable today, but it keeps a restored database from failing the page.
+- **Details that would not encode** are carried as a JSON string rather than failing the page. The `json_valid` CHECK makes this unreachable today.
+
+Criteria: AC1 and AC2 are ticked. AC3, AC4 and AC5 each name the screen, and AC6 is the screen, so all four stay unticked until PR 2. What PR 1 proves of each:
+- AC3: `TestAuditTargetsLink` covers every href and label, the absent user, and `related`.
+- AC4: `TestAuditIsAdminOnly` and `TestAuditQueryAsksAgain` cover the endpoint. docs/08 already records that the log is admin-only.
+- AC5: the list half, through `TestActionsDocumented` and `TestActionsCoverTheWriters`.
+
+**For TKT-01M29CXK19 (PR #213):** it writes `forum.created`, `forum.updated`, `forum.moved`, `forum.visibility_changed`, `forum.archived` and `forum.unarchived`. If this PR lands first, #213 must add all six to `audit.Actions` and to the docs/04 `audit-actions` table, each against `forum`. Otherwise `TestActionsCoverTheWriters` and `TestActionsDocumented` fail on main once it merges. If #213 lands first, this PR adds them before it merges.
