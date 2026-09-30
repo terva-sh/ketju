@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R0PM0KPX323DJ130WWKE2J
 title: Show slow mode in the composer and add the moderator's slow mode dialog
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,22 @@ dependencies:
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-r0pm0k
+  branch: run/r0pm0k-slow-mode
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a68dd040db7ab7f66
+  commit: 1ae02c57ee7d2a8b741ff68b2af57e2339f6a77f
+  session: null
+  claimed_at: 2026-09-30T12:58:08Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T02:01:08Z
-updated_at: 2026-09-30T09:37:16Z
+updated_at: 2026-09-30T12:58:11Z
 created_by:
   id: agent:claude-code/phase2-run-crj50
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-r0pm0k
   name: ""
 extensions: {}
 ---
