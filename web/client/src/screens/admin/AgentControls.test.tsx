@@ -1,5 +1,5 @@
 import { act } from 'preact/test-utils';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminUserDetail, AdminUserList, CreatedAgent, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
 import { renderAt, settle, unmount } from '../../testing';
@@ -58,6 +58,14 @@ function withIndexer(): AdminUserList {
   l.users.push(created().user.user);
   return l;
 }
+
+// The first test to open /admin/users waits on the lazy admin chunk, which
+// a worker transforms on first import. On CI that has taken longer than the
+// second settle() waits (run 1144), and the first test then found no
+// screen. Importing the chunk once here moves that cost out of every test.
+beforeAll(async () => {
+  await import('./AdminRoot');
+}, 30_000);
 
 let saved: Me;
 beforeEach(() => {
