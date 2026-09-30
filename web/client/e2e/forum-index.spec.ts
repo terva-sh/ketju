@@ -36,16 +36,25 @@ test('a member sees counts, empty forums, and a new-thread button clear of the t
 
   // Before anything is focused or opened, at the page's full height: a
   // taller viewport rather than a full-page capture, so the tab bar and the
-  // floating button sit where a reader sees them, at the foot.
+  // floating button sit where a reader sees them, at the foot. The last
+  // posts' times are masked, since the seed's times are relative to when it
+  // ran (TKT-01M39WBN4Q, as e2e/thread.spec.ts does).
   if (process.env.KETJU_SCREENSHOTS === '1') {
     const dir = join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
     mkdirSync(dir, { recursive: true });
+    await page.evaluate(() => document.fonts.ready.then(() => undefined));
     const vp = page.viewportSize()!;
     const height = await page.evaluate(() => document.documentElement.scrollHeight);
     await page.setViewportSize({ width: vp.width, height: Math.max(vp.height, height) });
     for (const colorScheme of ['light', 'dark'] as const) {
       await page.emulateMedia({ colorScheme });
-      await page.screenshot({ path: join(dir, `forum-index-${info.project.name}-${colorScheme}.png`) });
+      await page.screenshot({
+        path: join(dir, `forum-index-${info.project.name}-${colorScheme}.png`),
+        animations: 'disabled',
+        caret: 'hide',
+        mask: [page.locator('[data-screen="forum-index"] time')],
+        maskColor: '#8B95A8',
+      });
     }
     await page.emulateMedia({ colorScheme: null });
     await page.setViewportSize(vp);
