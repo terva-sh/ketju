@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T00:52:13Z
+updated_at: 2026-09-30T01:34:38Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
@@ -53,14 +53,14 @@ The tombstone text for `removal: "review"` ("Post hidden pending review", and "h
 ## Acceptance criteria
 
 - [ ] The dialog offers spam, abuse, off-topic and other, needs a non-blank note for other, refuses a note over 1000 code points unsent, and sends exactly {ordinal, reason, note} to POST /api/v1/threads/{id}/flags once per press (FlagDialog.test.tsx)
-- [ ] The dialog is modal: focus starts inside, Tab wraps, Escape and Close close it, and focus returns to the post's flag control (FlagDialog.test.tsx, ThreadScreen.test.tsx)
 - [ ] At 390 px link, flag and history sit under the post footer's more control, and e2e/targets.spec.ts passes for it and its items
 - [ ] The dist from go generate ./internal/web/spa is committed and the thread-view bundle stays under threadViewGzipBytes in budget.json
 - [ ] A signed-in member sees flag in the footer of another member's shown post, and not on their own post, a deleted or moved post, nor for a signed-out reader (Post.test.tsx)
-- [ ] The server refuses a self-flag with 403 forbidden and writes no flags row, for a shown post and for the author's own hidden post, while another member's flag on it is accepted (TestFlagRefusesTheAuthor, TestFlagRouteRefusals)
 - [ ] A 422, 409, 403, 404 or 429 shows its sentence and keeps the form filled (FlagDialog.test.tsx)
 - [ ] Only a 200 shows "Thanks, a moderator will look.", with no count or outcome and no second request for the thread page; a 503 unavailable says the report could not be sent and keeps the form (FlagDialog.test.tsx, ThreadScreen.test.tsx)
 - [ ] A kept flag whose auto-hide fails answers 200 {"received":true}, the error is logged, and the sweep hides the post; a flag on a quarantined thread answers 503 with no flags row (TestAutoHideRecoversFromAFailedAppend, TestAFailedHideAnswersTheReceipt, TestAQuarantinedThreadKeepsNoFlag)
+- [ ] The dialog is modal: focus starts inside, Tab wraps, and Escape and Close close it. Focus then returns to the returnTo control the post handed over: the flag button on desktop, and the post's visible More button on a phone, never document.body (FlagDialog.test.tsx; ThreadScreen.test.tsx "flags a post from the page" and "flags a post from the phone's More")
+- [ ] The server refuses a self-flag with 403 forbidden and writes no flags row, on the author's shown post and on their own hidden post. On the shown post another member's flag is accepted, and on the hidden post another member with no open flag gets conflict, as on main (TestFlagRefusesTheAuthor, TestFlagRouteRefusals)
 
 ## Implementation plan
 
@@ -87,7 +87,8 @@ Engineering choices made here, each with the alternative that lost:
 - **A flag does not refetch the thread page.** Revalidating after a flag could show the reporter their post turning into a tombstone, which is the outcome. The page updates on the reader's next load, as it would for anyone. Refetching to show a fresh page lost for that reason.
 - **The client keeps no record of what it flagged.** The server makes a repeat harmless and answers it identically, and a member may flag again once a moderator closes their flag. A stored "already flagged" mark would be wrong after that, and it would reveal nothing the member does not know. Hiding flag after a report, in memory or in `localStorage`, lost.
 - **Flag is offered from the page's viewer, not from a new server field.** It shows when `viewer.value.user` is not null, which holds only for an active member's session (the session chokepoint refuses anyone else, and a pre-user has `user: null`). It also needs the post to be neither `deleted` nor moved. Archived threads are not known to the page, so an archived thread's `conflict` gets words. A `can_flag` on `ThreadViewer` lost: it would change a cached DTO and its viewer-class key for a case the `conflict` words already cover.
-- **The dialog is a modal in the thread view's main chunk,** `components/thread/FlagDialog.tsx`, following `HelpOverlay`: `role="dialog"`, `aria-modal`, `trapTab`, Escape, and focus back to the opener. The thread view is at 45573 B of the 60000 B gzip budget on main. A lazy chunk lost: the dialog is small, and a lazy chunk would make the first press wait on a fetch.
+- **The dialog is a modal in the thread view's main chunk,** `components/thread/FlagDialog.tsx`, following `HelpOverlay`: `role="dialog"`, `aria-modal`, `trapTab` and Escape. Focus goes back to a return target the dialog is given (next item), not to whatever was focused when it opened. The thread view is at 45573 B of the 60000 B gzip budget on main. A lazy chunk lost: the dialog is small, and a lazy chunk would make the first press wait on a fetch.
+- **The dialog is told where focus returns** (Terva review 1525 on PR #181, finding 1). On a phone, flag sits inside `PostMore`, which closes when an item is chosen, so the flag item is gone by the time the dialog closes. So `Post` passes the control that stays visible with the ordinal: `onFlag(ordinal, returnTo)`. On desktop that is the flag button itself. On a phone it is the post's More button, whose ref `PostMore` holds and hands to its flag item. `ThreadBody` keeps `{ordinal, returnTo}`, and `FlagDialog` takes `returnTo` as a prop. On unmount it focuses `returnTo` if it is still connected (`isConnected`) and visible (`offsetParent !== null`). Otherwise it focuses the post's `<article id="post-N">`, which is `tabIndex={-1}`, and otherwise nothing. Two alternatives lost. Capturing `document.activeElement` at mount, as `HelpOverlay` does, returns focus to the phone's flag item, which no longer exists, so focus falls to the body. Looking the target up by selector when the dialog closes would tie the dialog to `Post`'s markup.
 - **The phone's "more" is a disclosure**, `components/thread/PostMore.tsx`: a button with `aria-expanded` and `aria-controls` opening a short list of the real `link` and `history` anchors and the flag button. Reusing `shell/MoreMenu.tsx` lost, because it takes only `ShellAction`s run as buttons, and link and history must stay anchors so they can be opened in a new tab or copied. Adding flag to the phone footer as a sixth inline control lost: `.post-footer` does not wrap, and at 390 px it would overflow with 44 px targets. The phone layout is chosen with `isPhone` (`state/layout`), as `Shell` and `ThreadBody` choose it.
 
 ### Approach
@@ -101,13 +102,13 @@ Engineering choices made here, each with the alternative that lost:
    - No migration. Open flags written before this change are left as they are.
    - docs/07's `POST /threads/{id}/flags` row and docs/08 "Flags" say that a member cannot flag their own post (`forbidden`), citing the maintainer decision of 2026-09-29.
 3. **`components/thread/Post.tsx`**:
-   - `Post` gains `onFlag?: (ordinal: number) => void`, separate from `PostActions`, because flag does not depend on `can_reply`: a locked thread still takes flags.
+   - `Post` gains `onFlag?: (ordinal: number, returnTo: HTMLElement) => void`, separate from `PostActions`, because flag does not depend on `can_reply`: a locked thread still takes flags.
    - A helper `mayFlag(post)` is true when `!post.deleted && post.moved_to === null` and the post is not the viewer's own: `post.author.handle` differs from `viewer.value.user.handle`, compared case-insensitively as handles are.
    - On desktop, the footer renders `<button type="button" class="hit" data-post-action="flag">flag</button>` between link and history when `onFlag && mayFlag(post)`.
    - On a phone, it renders the reply expander, quote and reply, then `PostMore`, holding link, flag (under the same condition) and history.
    - The comment above `Post` that says flag arrives with its own ticket is replaced.
-4. **`components/thread/PostMore.tsx`**: a "more" button (`aria-label="More actions for post #N"`, `aria-expanded`, `aria-controls`) and a list. Escape, a press outside, or choosing an item closes it. Escape returns focus to the button. Every item carries `.hit`.
-5. **`components/thread/FlagDialog.tsx`**, with props `{thread: string, ordinal: number, onClose: () => void}`:
+4. **`components/thread/PostMore.tsx`**: a "more" button (`aria-label="More actions for post #N"`, `aria-expanded`, `aria-controls`, `data-post-more`) and a list. Escape, a press outside, or choosing an item closes it. Escape returns focus to the button. Every item carries `.hit`. The flag item closes the list and calls `onFlag(ordinal, moreButton)` with the button's ref, so the dialog returns focus to the button, which stays on screen.
+5. **`components/thread/FlagDialog.tsx`**, with props `{thread: string, ordinal: number, returnTo: HTMLElement, onClose: () => void}`. On unmount, focus goes to `returnTo` when it is connected and visible, or else to `#post-{ordinal}`.
    - The title is "Flag post #N".
    - A radio group "Why?" offers Spam, Abuse, Off-topic and Other, with values `spam`, `abuse`, `off-topic` and `other`. None is chosen at first.
    - A textarea "Note", with the hint "Required for Other. At most 1000 characters." and a live count of code points (`[...note].length`). It has no `maxlength`, which counts UTF-16 units, not what the server counts.
@@ -121,20 +122,21 @@ Engineering choices made here, each with the alternative that lost:
    - `not-found` says "This post is no longer here."
    - Anything else (`rate-limited`, `unauthenticated` and the rest) gets `problemMessage` from `api/problem.ts`.
    - On a refusal the form stays as filled.
-6. **`screens/ThreadScreen.tsx`, `ThreadBody`**: `const [flagging, setFlagging] = useState<number | null>(null)`. Pass `onFlag={viewer.value.user ? setFlagging : undefined}` to each `Post`, and render `{flagging !== null && <FlagDialog thread={thread.id} ordinal={flagging} onClose={() => setFlagging(null)} />}`. `Tombstone`, `PostPopover` and the reply expander's copies get no `onFlag`.
+6. **`screens/ThreadScreen.tsx`, `ThreadBody`**: `const [flagging, setFlagging] = useState<{ordinal: number; returnTo: HTMLElement} | null>(null)`. Pass `onFlag={viewer.value.user ? (ordinal, returnTo) => setFlagging({ordinal, returnTo}) : undefined}` to each `Post`, and render `{flagging && <FlagDialog thread={thread.id} ordinal={flagging.ordinal} returnTo={flagging.returnTo} onClose={() => setFlagging(null)} />}`. `Tombstone`, `PostPopover` and the reply expander's copies get no `onFlag`.
 7. **CSS** in `components/thread/thread.css`: the dialog and backdrop, reusing the `.help-overlay` tokens, and the `PostMore` list. Every target is at least `var(--target)`.
 8. Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and check that `npm run build`'s budget line stays under 60000 B.
 
 ### Tests
 
 - **`components/thread/Post.test.tsx`** (new):
-  - `a member sees flag on a shown post`: with `onFlag`, the footer has `[data-post-action=flag]`, and pressing it calls `onFlag(ordinal)`.
+  - `a member sees flag on a shown post`: with `onFlag`, the footer has `[data-post-action=flag]`, and pressing it calls `onFlag(ordinal, thatButton)`.
   - `no flag on a removed or moved post`: absent for `deleted: true` (the moderator's and author's view of a removed post) and for `moved_to` set.
   - `no flag without onFlag`: absent when the page passes none, as for a signed-out reader.
   - `no flag on the viewer's own post`: absent when `post.author.handle` is the viewer's, in any case.
-  - `the phone footer collapses`: with `isPhone` true, link, flag and history are inside the `PostMore` list and not in the footer row. Opening it sets `aria-expanded`, and Escape closes it and focuses the button.
+  - `the phone footer collapses`: with `isPhone` true, link, flag and history are inside the `PostMore` list and not in the footer row. Opening it sets `aria-expanded`, and Escape closes it and focuses the button. Choosing flag closes the list and calls `onFlag(ordinal, moreButton)`.
 - **Server:**
-  - `TestFlagRefusesTheAuthor` in `internal/service/threads/flags_test.go`. The author flagging their own post is `forbidden` and adds no `flags` row. This holds for a shown post and for their own post that is already hidden, and it does not count toward the auto-hide. Another member's flag on the same post is still accepted.
+  - `TestFlagRefusesTheAuthor` in `internal/service/threads/flags_test.go`. The author flagging their own post is `forbidden` and adds no `flags` row. This holds for a shown post and for their own post that is already hidden, because the check runs inside the `Threads.With` callback before the shown-and-repeat logic. It does not count toward the auto-hide. On the shown post, another member's flag is still accepted (the receipt, and one row).
+    - Read from main (Terva review 1525 on PR #181, finding 2): for a post that is not shown, `Flag` answers the receipt only to a reporter who already has an open flag on it (`HasOpenFlag`), and `conflict` to anyone else. This ticket does not change that. The test asserts it as it is: on the author's hidden post, another member with no open flag gets `conflict` and no row is written. `TestFlagRefusals` already holds the general case.
   - `TestFlagRouteRefusals` in `internal/web/api/flags_test.go` gains a row: a self-flag through the route answers 403 `forbidden`.
   - `TestAutoHideRecoversFromAFailedAppend` (`internal/service/threads/flags_test.go`) changes: the threshold-crossing flag whose hide fails returns the receipt with an error matching `ErrHideDeferred`, not `unavailable`. It still asserts that 3 flags are open and the post is visible, and that the sweep then hides it.
   - `TestAFailedHideAnswersTheReceipt` (new, `internal/web/api/flags_test.go`): the same case through the route answers 200 with the body exactly `{"received":true}`, the same body a first flag gets.
@@ -148,8 +150,10 @@ Engineering choices made here, each with the alternative that lost:
   - `refusals are said in words`: 422, 409, 403, 404 and 429 each show their sentence, with the form still filled.
   - `sends once`: two quick presses make one request.
   - `is a modal`: focus starts inside, Tab from the last control wraps to the first, and Escape and Close call `onClose`.
+  - `returns focus where it is told`: on unmount, focus goes to `returnTo`. When `returnTo` has been removed from the document, focus goes to `#post-N`.
 - **`screens/ThreadScreen.test.tsx`**:
-  - `flags a post from the page`: a signed-in viewer presses flag on post 3, the dialog opens titled "Flag post #3", and the request goes to `/api/v1/threads/{id}/flags`. After the receipt, no second request for the thread page is made. When the dialog closes, focus is back on post 3's flag control.
+  - `flags a post from the page`: a signed-in viewer presses flag on post 3, the dialog opens titled "Flag post #3", and the request goes to `/api/v1/threads/{id}/flags`. After the receipt, no second request for the thread page is made. When the dialog closes, focus is back on post 3's flag control (desktop).
+  - `flags a post from the phone's More` (review 1525): with `isPhone` true, the viewer opens post 3's More, presses flag, and the list closes. The dialog opens, and when it is closed with Close and, separately, with Escape, focus is on post 3's More button (`[data-post-more]`, `aria-expanded="false"`), not on `document.body`.
   - `a signed-out reader has no flag`.
 - **e2e:** `e2e/targets.spec.ts` covers the phone's "more" control and its items at 390 px. `e2e/replies.spec.ts`, or a new `e2e/flag.spec.ts`, flags a post at 390 px and 1440 px and sees the thanks.
 - **Invariants held by the server's tests, which stay green:**
@@ -180,3 +184,7 @@ Maintainer decision 2026-09-29, relayed by the Phase 2 coordinator on PR #181. I
 **agent:claude-code/phase2-groom** at 2026-09-30T00:52:13Z
 
 Terva review 1516 on PR #181 (head 9fc6307), finding 3 (medium), accepted. This supersedes the earlier choice that unavailable reads as the receipt. On main, Flag answers unavailable both for a kept flag whose auto-hide failed and for a quarantined thread, where nothing was written. The plan adds a server step: a kept flag whose hide fails answers 200 FlagReceipt, like any accepted flag, the error is logged through threads.ErrHideDeferred, and the sweep hides the post within a minute. So unavailable means nothing was kept, and the threshold is not revealed. The client shows the thanks only on 200, and 'Your report could not be sent. Try again shortly.' on unavailable. docs/07 and docs/08 change with it. New tests: TestAFailedHideAnswersTheReceipt and TestAQuarantinedThreadKeepsNoFlag. TestAutoHideRecoversFromAFailedAppend changes.
+
+**agent:claude-code/phase2-groom** at 2026-09-30T01:34:38Z
+
+Terva review 1525 on PR #181 (head 8bcf19f), two medium findings, both accepted. (1) On a phone, flag sits in PostMore, which closes when an item is chosen, so focus could not return to the flag item. The dialog is now told where to return: Post calls onFlag(ordinal, returnTo), with the flag button on desktop and the More button's ref on a phone. ThreadBody keeps it, and FlagDialog focuses it on unmount if it is still connected and visible, or else the post's article. Capturing document.activeElement at mount lost. New tests: 'flags a post from the phone's More' and 'returns focus where it is told'. (2) The self-flag criterion claimed another member's flag on the author's hidden post is accepted. On main, Flag answers conflict for a post that is not shown, unless that reporter already has an open flag (HasOpenFlag). The acceptance case is narrowed to the shown post, and the hidden-post case asserts conflict. No route change. Criteria 2 and 6 are replaced.
