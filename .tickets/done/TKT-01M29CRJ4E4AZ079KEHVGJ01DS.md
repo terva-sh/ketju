@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ4E4AZ079KEHVGJ01DS
 title: Build the moderator queue
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -27,17 +27,10 @@ references:
     path: null
   - ref: pr:184
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-crj4e
-  branch: run/crj4e-moderator-queue
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a935565c76ee99577
-  commit: 3e1ff35cbb5dcc704606d0b013471fcdad3f950a
-  session: null
-  claimed_at: 2026-09-30T00:23:19Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-09-30T01:15:53Z
+updated_at: 2026-09-30T01:26:16Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -59,10 +52,10 @@ Actions resolve in place, and a resolved item leaves the queue while staying in 
 
 - [x] GET /api/v1/admin/queue lists open flags, one item per flagged post, and pending applications in one list by newest time first, scoped to forums where the viewer has moderate (TestQueueOneListNewestFirst, TestQueueGroupsFlagsByPost, TestQueueScopesFlagsToModeratedForums)
 - [x] Resolving, dismissing or removing an item closes its flags in place with resolver, time and note, drops it from the queue, and GetFlag and audit_log still return it (TestResolvedItemLeavesQueueAndStaysQueryable)
-- [ ] GET /me's queue equals the number of items the queue lists for the same viewer and is null for a viewer with no queue, and the top bar shows it as a badge (TestQueueCountMatchesList, Shell.test.tsx)
+- [x] GET /me's queue equals the number of items the queue lists for the same viewer and is null for a viewer with no queue, and the top bar shows it as a badge (TestQueueCountMatchesList, Shell.test.tsx)
 - [x] A reporter learns nothing from a resolution: no notification and no change to what their flag request answered (TestReporterLearnsNothing)
 - [x] Dismissing every flag on an auto-hidden post restores it, and a post a moderator hid by hand stays hidden (TestDismissRestoresOnlyAnAutoHide)
-- [ ] A member granted moderate on one forum through a group can open and work the queue for that forum (TestForumScopedModeratorUsesQueue)
+- [x] A member granted moderate on one forum through a group can open and work the queue for that forum (TestForumScopedModeratorUsesQueue)
 - [x] Queue actions hold TKT-01M29CP2PJ's per-post flag lock; two moderators acting on one item produce one closure, one flag audit row and at most one Delete, and the second gets conflict before touching the log (TestConcurrentResolveOneOutcome, TestQueueSharesTheFlagLock)
 - [x] A dismissal restores an auto-hidden post only by dismissing every flag open under the lock, and a flag reported afterwards counts from zero and hides the post again only at the threshold (TestLateFlagAfterDismiss)
 - [x] A failed log step leaves the post's flags open (the restore path reopens those it dismissed), an ErrPostState is conflict and never success, and the audit row records what the request did, including already hidden (TestFailedActionStaysInQueue, TestStateChangeIsConflictNotSuccess)
@@ -276,3 +269,42 @@ The definition sits outside the diff, so I spelled the precondition out instead 
 - It is now `EntryDeleted | EntryHiddenByMod | EntryAutoHidden | EntryMoved`, with a comment tying it to the shown state the remove was decided on.
 - `TestStateChangeIsConflictNotSuccess` now also covers the system's auto-hide as the intervening change, for every action. It also checks that the only Delete is the hide's.
 - Mutation tried: `Refuse: EntryDeleted | EntryMoved`. It was caught.
+
+**agent:claude-code/phase2-run-crj4e** at 2026-09-30T01:25:52Z
+
+PR #184, the server half, merged at 034053c032f67c6252e9a7567d20d6319a55b334 by rebase. It went in as a fast-forward: its base, b41b6dbe0966ecb9a507d852d3070e8707c7deec, was still main's tip, so the commit SHAs are the branch's.
+
+- The clean Terva review was run `f9d48fd9-ad31-4c12-9f2c-c3825cc75358` for `request:ready-review-034053c`, in [Actions run #1182](https://git.local.sothr.com/terva-sh/ketju/actions/runs/1182). It reviewed head 034053c against base b41b6db and found nothing, saying review 1524's finding was resolved.
+- CI was `ci / Build and Test (pull_request)` [run 1181](https://git.local.sothr.com/terva-sh/ketju/actions/runs/1181). I read the step log: every step succeeded, including go test (race), the Playwright smoke and "ticket store is consistent".
+- I deleted branch `run/crj4e-moderator-queue-2` after `merged` read true.
+- `run/crj4e-moderator-queue`, the branch of the closed #183, is left on the remote, because #183 never merged.
+
+The client half follows as PR 2 on `run/crj4e-queue-screen-2`, built directly on 034053c.
+
+## Summary
+
+The moderator queue landed in two PRs.
+
+### PR #184: the server half
+
+It merged at 034053c, after Terva reviews 1522 and 1524. It replaced #183, which was superseded when main moved.
+
+- **Routes.** `GET /api/v1/admin/queue` and `POST /api/v1/admin/queue/posts/{id}/{ordinal}` sit behind the moderates gate. The threads service scopes them by `perm.ModeratedForums`.
+- **/me.** `GET /me` gains `queue`, which is null for anyone `perm.ModeratesAny` does not admit.
+- **Locking.** Every action holds the post's flag lock. So do the thread page's delete and restore of one post.
+- **State checks.** An action decides from the state it read under that lock. A change that lands anyway is conflict with the flags left open:
+  - for an append, through the append's precondition;
+  - for a close with no append, through a second read just before the write.
+- **Dismiss and Keep.** On a post hidden pending review, both restore it through the moderator's restore path. Keeping a post a moderator hid by hand is conflict.
+- **Remove.** It is always a moderator's hide.
+- **Migration 0015.** It adds `flags.audit_id` and `flags.audit_pending`.
+  - The queue's restore marks its dismissed flags pending, and writes the `flag.dismissed` row only after the Restore append succeeds.
+  - Recovery (a retry, or the `FlagAuditCatchUp` job) settles only marked flags. It finds the queue's own Restore in the post's log by moderator and millisecond (`threadlog.Reader.Restored`). If that Restore landed, it writes the row marked `recovered`. If not, it reopens the flags.
+
+### PR 2: the client half
+
+- The top bar's queue button and badge appear at both widths whenever `queue` is a number.
+- `/admin/queue` lists flag items with Remove post, Keep post and Dismiss flags, and application items with the Decision controls.
+- `e2e/admin-queue.spec.ts` covers the screen at 390 px and 1440 px.
+
+All thirteen criteria are ticked.
