@@ -2,6 +2,7 @@ package api
 
 import (
 	"bytes"
+	"context"
 	"database/sql"
 	"fmt"
 	"net/http"
@@ -470,6 +471,78 @@ func (w *world) logHeaders(id threadid.ID) []threadlog.FrameHeader {
 		w.t.Fatal(err)
 	}
 	return out
+}
+
+// TestAMoveLandingMidDecisionIsJudged: a move to lounge lands after gina's
+// request has projected the thread in general and admitted her, and before
+// her change is written. The append's length precondition (lock, unlock,
+// pin, unpin, move) or the length check in the slow mode transaction refuses
+// the stale decision, and the request is decided again against lounge, so
+// each is forbidden and writes nothing of hers. The move is landed from the
+// service's Project hook, which every decision calls once it has read the
+// length, so the timing is exact rather than raced.
+func TestAMoveLandingMidDecisionIsJudged(t *testing.T) {
+	for _, a := range threadActions {
+		t.Run(a.name, func(t *testing.T) {
+			w, _, lounge, _, _ := forumModWorld(t)
+			id := w.threadIn(70, w.forum, "Moved mid-decision", "alice")
+			bob := w.viewer("bob")
+			switch a.action {
+			case "unlock":
+				if _, err := w.svc.Lock(t.Context(), bob, id, ""); err != nil {
+					t.Fatal(err)
+				}
+			case "unpin":
+				if _, err := w.svc.Pin(t.Context(), bob, id, threads.PinForum, nil); err != nil {
+					t.Fatal(err)
+				}
+			}
+			project := w.svc.Project
+			var once sync.Once
+			w.svc.Project = func(ctx context.Context, tid threadid.ID, n int64) error {
+				err := project(ctx, tid, n)
+				if tid == id {
+					once.Do(func() {
+						if err := w.cache.With(id, func(th *threadcache.Thread) error {
+							_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadMoved,
+								Author: uint64(w.users["bob"]), TimeMS: w.clock,
+								Body: &threadlog.ThreadMovedBody{ForumID: uint64(lounge)}})
+							return err
+						}); err != nil {
+							t.Error(err)
+						}
+					})
+				}
+				return err
+			}
+			before, slow := w.logState(id), w.slowModeRow(id)
+			if got := problemCode(t, send(w.chain(), "gina", a.method, modPath(id, a.action), a.body)); got != "forbidden" {
+				t.Errorf("gina's %s: %s, want forbidden", a.name, got)
+			}
+			w.svc.Project = project
+			// The only record added is bob's move.
+			hs := w.logHeaders(id)
+			if last := hs[len(hs)-1]; last.Type != threadlog.TypeThreadMoved {
+				t.Errorf("the last record is %v, want bob's move", last.Type)
+			}
+			if after := w.logState(id); after.posts != before.posts || after.size <= before.size {
+				t.Errorf("the log went from %+v to %+v", before, after)
+			}
+			for _, hd := range hs {
+				if hd.Actor == uint64(w.users["gina"]) {
+					t.Errorf("gina's %s appended a %v", a.name, hd.Type)
+				}
+			}
+			if got := w.slowModeRow(id); got != slow {
+				t.Errorf("gina's %s changed the slow mode row: %s then %s", a.name, slow, got)
+			}
+			for _, r := range w.auditLog() {
+				if r.actor.Int64 == w.users["gina"] {
+					t.Errorf("gina's %s wrote the audit row %+v", a.name, r)
+				}
+			}
+		})
+	}
 }
 
 // TestConcurrentLocksAreDecidedOnTheLog is TKT-01M3RQP0TG's seventh
