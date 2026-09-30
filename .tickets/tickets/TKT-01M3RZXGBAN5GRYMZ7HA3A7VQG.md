@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T11:06:39Z
-updated_at: 2026-09-30T13:26:55Z
+updated_at: 2026-09-30T13:30:19Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
@@ -58,14 +58,14 @@ The a11y thread page took 5-9s on green runs and still reached 30 s under load. 
 
 ## Acceptance criteria
 
-- [ ] web/client/e2e/admin-forms.spec.ts runs its eight axe scans (the editor, the refused draft, the saved form and version 1 read-only, each in light and dark) one per test, and no test in the file runs more than one
-- [ ] web/client/e2e/admin-agents.spec.ts runs its ten axe scans (the new agent form, the token panel, the agent detail, the issue confirmation and the agent without a token, each in light and dark) one per test, and no test in the file runs more than one
-- [ ] Both files keep the rule tags wcag2a, wcag2aa, wcag21a and wcag21aa, the zero-violation assertion with its "${what}, ${colorScheme}" message, the horizontal-overflow check for each state, and every other assertion of the test they replace
-- [ ] Each file runs under test.describe.configure({ mode: 'serial' }) with one context made in beforeAll from stateFile('ada') and info.project.use, and closed in afterAll
-- [ ] playwright.config.ts is unchanged, and neither file adds test.setTimeout, test.slow or a test.step timeout
-- [ ] A note records the mutation check: a dark-only image-alt violation fails only that state's dark test in each file, and the note says whether the failing test kept a trace
+- [x] web/client/e2e/admin-forms.spec.ts runs its eight axe scans (the editor, the refused draft, the saved form and version 1 read-only, each in light and dark) one per test, and no test in the file runs more than one
+- [x] web/client/e2e/admin-agents.spec.ts runs its ten axe scans (the new agent form, the token panel, the agent detail, the issue confirmation and the agent without a token, each in light and dark) one per test, and no test in the file runs more than one
+- [x] Both files keep the rule tags wcag2a, wcag2aa, wcag21a and wcag21aa, the zero-violation assertion with its "${what}, ${colorScheme}" message, the horizontal-overflow check for each state, and every other assertion of the test they replace
+- [x] Each file runs under test.describe.configure({ mode: 'serial' }) with one context made in beforeAll from stateFile('ada') and info.project.use, and closed in afterAll
+- [x] playwright.config.ts is unchanged, and neither file adds test.setTimeout, test.slow or a test.step timeout
+- [x] A note records the mutation check: a dark-only image-alt violation fails only that state's dark test in each file, and the note says whether the failing test kept a trace
 - [ ] CI's Playwright step passes on the PR, and a note records both files' per-test durations from that run
-- [ ] A note records the contention run (14 busy loops pinned with the run to two cores, --repeat-each=5) on main and on the branch, with the command and each test's min, median and max duration per project. The loops are killed by the subshell's EXIT trap after each measurement, and pgrep -c -x yes shows 0 before the next one. Every test passes on the branch
+- [x] A note records the contention run (14 busy loops pinned with the run to two cores, --repeat-each=5) on main and on the branch, with the command and each test's min, median and max duration per project. The loops are killed by the subshell's EXIT trap after each measurement, and pgrep -c -x yes shows 0 before the next one. Every test passes on the branch
 
 ## Implementation plan
 
@@ -244,3 +244,7 @@ Mutation check, criterion 6. After the light scan of one state in each file, a t
 - The light test of each mutated state passed, which shows the image is hidden in light. The dark failure shows that `emulateMedia({ colorScheme: 'dark' })` on the live page takes effect before the dark scan.
 
 Traces: each failing test kept a `trace.zip` under `trace: 'retain-on-failure'`, although its context comes from `beforeAll`. Each holds only that test's actions, about 40 of them: the `emulateMedia`, the axe evaluation and the context close, with 3 or 4 screenshot frames. It does not hold the steps that built the state, because those belonged to earlier tests.
+
+**agent:claude-code/phase2-run-rzxgba** at 2026-09-30T13:30:19Z
+
+Rebased the unpushed branch onto main at 6d1e9ab. It now includes PR #229 (TKT-01M3QMRE47, the suspension controls on the admin users screen, which admin-agents drives) and the reply-drafts work (TKT-01M3NS1931). Nothing that landed touches the two specs or playwright.config.ts. On the rebased branch, the full Playwright suite without load passed 143, with 11 skipped, in 2.4 min. The skips are the existing per-width skips in focus, shortcuts, targets and thread, none of them in these files. The contention and mutation numbers above were measured on fa86711.
