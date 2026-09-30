@@ -25,10 +25,12 @@ references:
     path: docs/02-architecture.md
   - ref: pr:230
     path: null
+  - ref: pr:238
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-09-30T15:47:47Z
+updated_at: 2026-09-30T15:48:07Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
