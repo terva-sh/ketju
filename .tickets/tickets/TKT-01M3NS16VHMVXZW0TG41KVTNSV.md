@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-29T05:08:37Z
-updated_at: 2026-09-30T13:15:50Z
+updated_at: 2026-09-30T13:28:07Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -57,16 +57,16 @@ No ticket builds the screen. Found while planning TKT-01M3K9XBJA.
 
 ## Acceptance criteria
 
-- [ ] A member can create a thread from /f/{slug}/new at 390 px and 1440 px, and lands on it
-- [ ] The title and body typed on one device are restored from the server draft on another, and the draft is deleted once the thread is created
-- [ ] The reply composer and the new-thread screen share composer/ComposerBody.tsx, and Composer.test.tsx and ComposerSheet.test.tsx pass unchanged
-- [ ] The dist is regenerated with go generate ./internal/web/spa and committed
-- [ ] An archived forum's notice never disables Post before the API has answered, so an admin can start a thread in an archived forum from the screen (NewThreadScreen.test.tsx)
-- [ ] The forum draft's autosave is disarmed until its GET answers, so an empty form never deletes a forum draft before it loads (state/newThread.test.ts)
-- [ ] e2e/new-thread.spec.ts creates a thread in events and restores a title-and-body draft in a second context at 390 px and 1440 px, with axe reporting no violations, and npm run budget stays within 60000 B gzip
-- [ ] On a phone the screen hides the tab bar through ShellContext.composing and carries Post in the top bar through ShellContext.primary (Shell.test.tsx)
-- [ ] forbidden, conflict, validation-failed, payload-too-large and rate-limited are said in words and keep the typed text; a draft-save forbidden or conflict only turns autosave off and never disables Post, only the create route's own forbidden or conflict disables it, and an admin's draft saves and Post both succeed in an archived forum (NewThreadScreen.test.tsx)
-- [ ] Creating the thread removes the forum draft's local copy as well as the server draft, and a local copy is restored only when the server's revision says no other save came between (state/newThread.test.ts, with state/drafts.ts from TKT-01M3NS1931)
+- [x] A member can create a thread from /f/{slug}/new at 390 px and 1440 px, and lands on it
+- [x] The title and body typed on one device are restored from the server draft on another, and the draft is deleted once the thread is created
+- [x] The reply composer and the new-thread screen share composer/ComposerBody.tsx, and Composer.test.tsx and ComposerSheet.test.tsx pass unchanged
+- [x] The dist is regenerated with go generate ./internal/web/spa and committed
+- [x] An archived forum's notice never disables Post before the API has answered, so an admin can start a thread in an archived forum from the screen (NewThreadScreen.test.tsx)
+- [x] The forum draft's autosave is disarmed until its GET answers, so an empty form never deletes a forum draft before it loads (state/newThread.test.ts)
+- [x] e2e/new-thread.spec.ts creates a thread in events and restores a title-and-body draft in a second context at 390 px and 1440 px, with axe reporting no violations, and npm run budget stays within 60000 B gzip
+- [x] On a phone the screen hides the tab bar through ShellContext.composing and carries Post in the top bar through ShellContext.primary (Shell.test.tsx)
+- [x] forbidden, conflict, validation-failed, payload-too-large and rate-limited are said in words and keep the typed text; a draft-save forbidden or conflict only turns autosave off and never disables Post, only the create route's own forbidden or conflict disables it, and an admin's draft saves and Post both succeed in an archived forum (NewThreadScreen.test.tsx)
+- [x] Creating the thread removes the forum draft's local copy as well as the server draft, and a local copy is restored only when the server's revision says no other save came between (state/newThread.test.ts, with state/drafts.ts from TKT-01M3NS1931)
 
 ## Implementation plan
 
@@ -172,3 +172,13 @@ Plan refreshed against main at 5124209 on 2026-09-30. Changed: TKT-01M3N24RHD is
 **agent:claude-code/phase2-groom** at 2026-09-30T09:23:50Z
 
 Follows Terva review 1559 on PR #210: the forum draft's local copy is decided by the same four cases as a reply draft's, 204s included, reading Draft-Revision on a 204 (TKT-01M3K9XBJA, TKT-01M3NS1931). The plan's refresh item and step 2 say so; criterion 10 is unchanged.
+
+**agent:claude-code/phase2-run-ns16vh** at 2026-09-30T13:28:07Z
+
+Built on a local branch against main at 6b5dc9a, and held unpushed while the client dist belongs to another lane. The plan's "Revised at claim" subsection says what the build does beyond the approach.
+
+Checks run here: gofmt, go build, go vet, go test -race ./... all pass; tsc --noEmit and vitest (1699 tests) pass; the full Playwright suite passes on port 8796 (103 passed, 11 skipped by design), new-thread.spec.ts included at both widths.
+
+Bundle: eager 52903 B gzip of 60000 B, up 1689 B from 51214 B. Lazy measured at 55381 B, since Vite splits a shared chunk off and bundle.mjs counts every reader chunk, so the route stays eager.
+
+One unit test, ApplicationDetail.test.tsx 'shows the answers through the form renderer, against the version they answered', failed twice in six full vitest runs here, at about 1.4 s, and passes alone and in the other runs. It is the lazy admin chunk's transform under a parallel run, which this change does not touch. Recorded here in case CI shows it.
