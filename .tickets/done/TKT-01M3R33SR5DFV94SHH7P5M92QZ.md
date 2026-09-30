@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R33SR5DFV94SHH7P5M92QZ
 title: Bound the post edit and delete windows before making Durations
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-r33sr5
-  branch: run/r33sr5-duration-windows
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad4b5a4cffef4a74a
-  commit: a9e7b8dcad315433e974e6d96f8d7e52c10d956f
-  session: null
-  claimed_at: 2026-09-30T10:32:11Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T02:43:17Z
-updated_at: 2026-09-30T10:33:42Z
+updated_at: 2026-09-30T10:40:50Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
@@ -42,10 +35,10 @@ Found in Terva review 1535 on PR #193 (TKT-01M29CKRH9). authorWindows in interna
 
 ## Acceptance criteria
 
-- [ ] posts.edit_window_seconds, posts.delete_window_seconds and posts.grace_edit_seconds at 10000000000 each leave their window open 30 days after posting, one subtest per setting (TestAuthorWindowsTooLargeForADuration)
-- [ ] secondsDuration never returns a negative Duration for a count from 0 up, and renameWindow, authorWindows and slowModeWait all convert through it (TestSecondsDuration)
-- [ ] slow_mode.default_seconds at 10000000000 still refuses a member's second reply with rate-limited (TestSlowModeDefaultTooLargeForADuration)
-- [ ] No setting's validation rule changes
+- [x] posts.edit_window_seconds, posts.delete_window_seconds and posts.grace_edit_seconds at 10000000000 each leave their window open 30 days after posting, one subtest per setting (TestAuthorWindowsTooLargeForADuration)
+- [x] secondsDuration never returns a negative Duration for a count from 0 up, and renameWindow, authorWindows and slowModeWait all convert through it (TestSecondsDuration)
+- [x] slow_mode.default_seconds at 10000000000 still refuses a member's second reply with rate-limited (TestSlowModeDefaultTooLargeForADuration)
+- [x] No setting's validation rule changes
 
 ## Implementation plan
 
@@ -92,3 +85,11 @@ Groomed 2026-09-30 (TKT-01M3M9RR26). Scope widened as an engineering choice: slo
 **agent:claude-code/phase2-groom** at 2026-09-30T08:49:22Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The plan is current and is not rewritten. Checked: authorWindows (internal/service/threads/mutate.go:47, the conversion at :62), within (:74), renameWindow's inline clamp (moderate.go:223-240), slowModeWait (slowmode.go:140) and effectiveSlowMode's fallback to slow_mode.default_seconds, the four settings (internal/settings/settings.go:121-137), TestRenameWindowTooLargeForADuration (internal/web/api/rename_test.go:382), and w.setting and w.editBodies (internal/web/api/windows_test.go:30, :52). internal/web/api/slowmode_test.go already exists, so TestSlowModeDefaultTooLargeForADuration goes into it; internal/service/threads/windows_test.go is still a new file. Post source (PR #205, ebe7d41) reads no window, so it adds no fourth conversion.
+
+## Summary
+
+`secondsDuration(n int) time.Duration` in `internal/service/threads/mutate.go` is now the one conversion from a seconds setting to a Duration in the threads service. `authorWindows`, `renameWindow` (its inline clamp from PR #193 removed) and `slowModeWait` all go through it. A count past `math.MaxInt64/time.Second` is `time.Duration(math.MaxInt64)`, so `posts.edit_window_seconds`, `posts.delete_window_seconds`, `posts.grace_edit_seconds`, `threads.rename_window_seconds` and `slow_mode.default_seconds` at 10000000000 keep their window open, or their slow mode on, instead of overflowing to negative. A negative count, which no rule admits, is 0 (closed or off).
+
+Found at claim and fixed here: `slowMode` in `create.go` rounded the wait up to whole seconds with `wait + time.Second - 1`, which overflows for a wait within a second of the longest Duration and lost the `Retry-After` header. It now truncates in that one case.
+
+No setting's validation rule, migration or DTO changed; `internal/settings` is untouched. Tests: `TestSecondsDuration` (internal/service/threads/windows_test.go), `TestAuthorWindowsTooLargeForADuration` (internal/web/api/windows_test.go) and `TestSlowModeDefaultTooLargeForADuration` (internal/web/api/slowmode_test.go), with seven mutations tried and each caught (listed in the commit body). TKT-01M3PTT97X, the client, can rely on the server never treating a too-large seconds setting as closed.
