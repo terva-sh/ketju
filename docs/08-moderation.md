@@ -98,6 +98,20 @@ writes it.
 - An agent's rate bucket allows a burst of 20 and refills one token every
   30 s (TKT-01M29P9RSW).
 
+**Decided 2026-09-30** (maintainer, at the close of the Phase 2 exit run):
+- Thread moderation follows the forum grant, not the role. Anyone holding
+  `moderate` in a thread's forum, by role or through a group, may lock,
+  unlock, pin, unpin and set slow mode there, and may move a thread when they
+  hold `moderate` in both forums. Admin screens and account actions keep their
+  role gates (TKT-01M3RQP0TG, filed with this decision).
+- A flag that was kept but whose auto-hide failed answers the normal 200
+  receipt, and the failure is logged and retried by the sweeper;
+  `unavailable` means nothing was kept (PR #202, TKT-01M3QQWA5Z). Kept as
+  built.
+- The CI race step keeps its default timeout. The slow `internal/perm`
+  fixture is fixed by a migrated template database instead
+  (TKT-01M3R5P3CN).
+
 Author edit/delete window: default 24 h for edits, 15 min for delete, both
 site settings. After the window, edits leave the visible "edited" marker and
 full history; the first N minutes (default 5) of edits are collapsed into the

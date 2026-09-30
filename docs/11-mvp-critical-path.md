@@ -5,7 +5,7 @@ Status: the ticket backlog derived from documents 00 through 10 lives in
 the shortest honest route to a usable forum is, and what is deliberately not
 on that route.
 
-Counts last read 2026-09-30, after the Phase 2 run closed its exit gate, against the store. They are written by hand, so
+Counts last read 2026-09-30, after the Phase 2 run was extended to the rest of Phase 2, against the store. They are written by hand, so
 nothing checks them and they rot silently; the first version of this document
 was eight tickets and a whole phase out of date before anyone noticed. Re-read
 them with `git ticket list --all --json` rather than by counting files, which
@@ -18,12 +18,12 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-239 tickets: 12 epics and 227 children. Every ticket derived from the design
+241 tickets: 12 epics and 229 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
-2026-09-30, 16 had no `area:` label, 27 no `effort:` label, 20 no milestone,
-and 44 no reference. The nine open questions in
+2026-09-30, 17 had no `area:` label, 28 no `effort:` label, 19 no milestone,
+and 45 no reference. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
 filed as spikes that block the work they gate, so a decision like CBOR versus
 JSON blocks the frame codec rather than sitting in a document nobody rereads
@@ -44,8 +44,8 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 87 in Phase 1, 70 in Phase 2, 21 in
-Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 20 carrying no
+Distribution by phase: 25 in Phase 0, 87 in Phase 1, 73 in Phase 2, 21 in
+Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 19 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -55,7 +55,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-161 done, 30 ready, 0 in progress, 2 blocked, 43 draft, 3 archived (counted 2026-09-30 with
+161 done, 30 ready, 1 in progress, 2 blocked, 44 draft, 3 archived (counted 2026-09-30 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -220,11 +220,14 @@ its credential until the credential is revoked. Playwright covers the same
 flow at 390 and 1440 px with axe. The run summary on `TKT-01M3NTSCJQ` lists
 the criteria merged unticked and the questions left for the maintainer.
 
-Phase 2 now carries 70 tickets: 44 done, 23 ready and 3 draft. The drafts are
-the two Phase 2 epics and `TKT-01M3R5P3CN`, which waits on one maintainer
-decision. The 23 ready are mostly client screens and follow-ups, several
-filed by the run's own lanes. None of them gates the exit criterion, and the
-run stopped at the gate as docs/13 says rather than start them.
+On 2026-09-30 the maintainer extended the run to the rest of Phase 2 on the
+same terms (docs/13 "The extension of 2026-09-30"), tracked by
+`TKT-01M3RQP0VZ`. Phase 2 now carries 73 tickets: 44 done, 23 ready, 1 in
+progress (the tracking ticket) and 5 draft. The drafts are the two epics;
+`TKT-01M3R5P3CN`, whose decision the maintainer settled that day;
+`TKT-01M3RBMVMJ`, a flaky seal test; and `TKT-01M3RQP0TG`, which lets forum
+moderators by grant lock, pin, move and set slow mode, per the maintainer's
+decision of 2026-09-30. The thread-screen moderator controls wait on it.
 
 ## The critical path
 

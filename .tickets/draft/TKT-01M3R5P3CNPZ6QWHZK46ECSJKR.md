@@ -18,12 +18,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T03:28:14Z
-updated_at: 2026-09-30T04:02:57Z
+updated_at: 2026-09-30T08:43:12Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -131,3 +131,7 @@ Recommendation: (a) now. Revisit (b) only if a package's race time still exceeds
 **agent:claude-code/phase2-groom** at 2026-09-30T04:02:57Z
 
 Groomed 2026-09-30 (TKT-01M3M9RR26). Open decision for the maintainer: should the race step go test -race ./... also get an explicit -timeout (and its stale 'The suite is seconds' comment corrected)? docs/12 'Changing CI' does not let a run edit an existing step. (a) no, the template database removes the cause; (b) yes, -timeout 20m as a guard. Recommendation (a); the plan is written for it. Measured at 9a8fc76 on an idle 12-core workstation: internal/perm 119 s alone, 128 s within the full race suite; internal/web/api 154 s; the full suite 966 s of package time over 43 packages.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-09-30T08:43:12Z
+
+Open decision settled by the maintainer on 2026-09-30: the CI race step keeps its default timeout, and the template-database fix is built as planned (docs/08, "Decided 2026-09-30"). The ticket has no open decision left.

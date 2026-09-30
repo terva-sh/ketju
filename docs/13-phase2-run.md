@@ -1,8 +1,10 @@
 # 13 — The Autonomous Phase 2 Run
 
-Status: in force from the merge of this document until the Phase 2 exit gate
-closes. Like [12-autonomous-run.md](12-autonomous-run.md), it covers one run,
-not a standing policy.
+Status: in force from the merge of this document until every `phase-2`
+ticket is done. The exit gate closed on 2026-09-30, and the maintainer then
+extended the run to the rest of Phase 2 (see "The extension of 2026-09-30").
+Like [12-autonomous-run.md](12-autonomous-run.md), it covers one run, not a
+standing policy.
 
 This document takes Phase 2 from its groomed backlog to its exit gate. It is
 written as changes to docs/12, because the Phase 1 run proved that document's
@@ -56,6 +58,33 @@ admin can give an agent an account and a credential"
 registration: apply, review, approve, sign in, and a refused pre-user reaching
 member routes. It also tests an admin provisioning an agent and the agent
 posting with its credential. The run is done when that ticket is `done`.
+
+## The extension of 2026-09-30
+
+The exit gate closed on 2026-09-30 with `TKT-01M3NTSCMN` (PR #194). The
+first run's tracking ticket, `TKT-01M3NTSCJQ`, is done, and its summary is
+that run's report. The maintainer then wrote: "Let's start grooming and
+promoting the phase 2 tickets so we can continue autonomously". Asked how far
+the run should go, they chose all of Phase 2, on the same terms.
+
+So, under the extension:
+- **The grant above holds unchanged.** The run merges on the gate. It records a
+  non-security disagreement and then merges. It always fixes a security
+  finding. It caps review at five rounds, and it may promote a groomed
+  `phase-2` draft that has no open decision.
+- **The run is done when every `phase-2` ticket is done or archived.** That
+  includes tickets the run files and grooms along the way. The two Phase 2
+  epics close once their children do.
+- **The tracking ticket is `TKT-01M3RQP0VZ`** (Drive the rest of Phase 2 to
+  done autonomously). The orchestrator logs merges there, and its summary is
+  the report: every recorded disagreement, every criterion merged unticked,
+  and every open question.
+- **Plans were refreshed against `main` on 2026-09-30** before the remaining
+  tickets were promoted. As before, revise the plan when you claim a ticket,
+  and carry its `### Settled in grooming` forward.
+- The maintainer's decisions of 2026-09-30 are in docs/08 "Decided
+  2026-09-30". In short: thread moderation follows the forum grant; the flag
+  receipt stays as built in #202; and the CI race step keeps its timeout.
 
 ## What was settled before the run started
 
