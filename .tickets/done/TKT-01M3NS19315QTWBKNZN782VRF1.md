@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T12:34:45Z
+updated_at: 2026-09-30T12:40:41Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -245,6 +245,10 @@ Terva review 1580 on PR #227 (head 59c1641, base de1771d), both findings fixed i
 **agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:34:45Z
 
 Terva review 1583 on PR #227 (head 4617cce, base de1771d). It reports review 1580's finding 1 resolved. Finding 1 (high), 'Keep text typed before the initial GET completes on pagehide', is fixed. A disarmed key still sends nothing on pagehide, but its text is kept with base null. The next load restores it on a 204 with 'Restored from this browser'. On a 200 the server's draft wins, as settled on 2026-09-30 for every copy with no base: nothing orders the two, and restoring would overwrite a draft another device may have saved. Tests: 'text typed before the load answers is kept on pagehide, and restored on a 204' and 'text typed before the load answers loses to a server draft on the next load'. Finding 2 (medium), 'Honor Retry-After when a replacement was queued before the 429', is fixed: the 429 holds the queued request until Retry-After has passed. Test: 'a save queued before the 429 waits for Retry-After too'. Bundle: 51200 B gzip.
+
+**agent:claude-code/phase2-run-ns1931** at 2026-09-30T12:40:41Z
+
+Terva review 1584 on PR #227 (head 9e997e1, base de1771d). It reports both findings of review 1583 resolved. Its finding 1 (high), 'Keep an empty recovery copy after an unanswered PUT', is fixed. An unanswered request now leaves the server as possibly holding a draft wherever its state was known before, so a cleared composer is a DELETE. After a failed load the state stays unknown, so a failed load still never deletes. After an unanswered request pagehide treats nothing as seen saved and sends the draft again, and its empty copy lets the next load delete the draft. Tests: 'a cleared composer after an unanswered save deletes', 'a cleared composer after an unanswered save is deleted by the next load when the page goes', 'an unanswered save is sent again on pagehide' and 'after a failed load, an unanswered save does not make a cleared composer delete'. Bundle: 51214 B gzip.
 
 ## Summary
 
