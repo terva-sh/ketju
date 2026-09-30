@@ -8,6 +8,7 @@ import { AuditScreen } from './AuditScreen';
 import { FormEditor } from './forms/FormEditor';
 import { ForumsScreen } from './ForumsScreen';
 import { QueueScreen } from './queue/QueueScreen';
+import { SettingsScreen } from './SettingsScreen';
 import { UsersScreen } from './UsersScreen';
 import './admin.css';
 
@@ -19,6 +20,7 @@ const built: Record<string, FunctionComponent> = {
   'admin-forms': FormEditor,
   'admin-forums': ForumsScreen,
   'admin-queue': QueueScreen,
+  'admin-settings': SettingsScreen,
   'admin-users': UsersScreen,
 };
 

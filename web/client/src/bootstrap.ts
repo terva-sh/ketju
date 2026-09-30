@@ -13,6 +13,7 @@ export const anonymous: Me = {
   notifications: 0,
   queue: null,
   settings: { timezone: '', locale: '', page_size: 25 },
+  site_name: 'Ketju',
 };
 
 // readBootstrap parses the data block, and falls back to an anonymous viewer

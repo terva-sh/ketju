@@ -624,6 +624,22 @@ Never set, both are null. Nothing caches a setting: each reader asks the
 table, so a change applies from the next request, and `site_name` reaches
 `/me` and the shell's title the same way.
 
+The screen at `/admin/settings` is offered to admins only. It draws one
+field per key the listing holds, grouped by the part of the key before its
+first dot, so a key added to the registry appears with no client change: a
+checkbox for a boolean, a select for a key with `choices`, and a text field
+otherwise, with a numeric keyboard for an integer. Each field shows the key's
+`doc`, `allowed` and default, and saves itself. A refusal repeats
+`allowed` beside the field. "Saved." clears on any edit, and an answer shows
+it only while the field still holds what was sent. A key away from its
+default offers Reset to default. Below the key, "Last changed" names the
+admin and the time, says "from the command line" with the time when
+`updated_by` is null, and says nothing for a key never set. Below the
+fields, "Set in config.toml" lists each section with its reason and its
+key names, and says to change them in `config.toml` and restart. The three
+wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
+`site_name` from `/me`.
+
 ### Thread response shape (abridged)
 
 ```json

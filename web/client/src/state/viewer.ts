@@ -23,6 +23,11 @@ export const badges = computed(() => ({
   queue: viewer.value.queue ?? null,
 }));
 
+// siteName is the wordmark: the site_name setting, which /me carries for
+// every viewer (TKT-01M29CXK2H), so an admin's change shows from the next
+// /me. The product's name stands in for an empty one.
+export const siteName = computed(() => viewer.value.site_name || 'Ketju');
+
 let refreshes = 0;
 
 // refreshViewer fetches /me and replaces the viewer with it. A failure leaves

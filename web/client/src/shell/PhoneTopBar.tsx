@@ -1,6 +1,6 @@
 import { Icon } from '../components/Icon';
 import { shellContext } from '../state/shell';
-import { badges } from '../state/viewer';
+import { badges, siteName } from '../state/viewer';
 import { Badge } from './Badge';
 import { MoreMenu } from './MoreMenu';
 
@@ -28,7 +28,7 @@ export function PhoneTopBar() {
         </span>
       ) : (
         <a class="title wordmark" data-shell="title" href="/">
-          Ketju
+          {siteName}
         </a>
       )}
       <a class="tb-button" href="/search" aria-label="Search">

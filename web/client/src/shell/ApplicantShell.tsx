@@ -2,6 +2,7 @@ import { useEffect, useMemo } from 'preact/hooks';
 import { Route, Router, useLocation } from 'preact-iso';
 import { focusMainHeading, routeFocuser } from '../components/focus';
 import { routes } from '../routes';
+import { siteName } from '../state/viewer';
 import './shell.css';
 
 // ApplicantShell is everything an approval-mode applicant sees: /me says
@@ -44,7 +45,7 @@ export function ApplicantShell() {
         Skip to content
       </a>
       <header class="topbar applicant" data-shell="applicant-bar">
-        <span class="wordmark">Ketju</span>
+        <span class="wordmark">{siteName}</span>
         {/* A plain form post: the server's cross-origin check holds it to
             this site, and sign-out answers with a redirect home. */}
         <form method="post" action="/auth/logout">

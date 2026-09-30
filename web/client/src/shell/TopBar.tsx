@@ -1,6 +1,6 @@
 import { useLocation } from 'preact-iso';
 import { Icon } from '../components/Icon';
-import { badges, viewer } from '../state/viewer';
+import { badges, siteName, viewer } from '../state/viewer';
 import { Badge } from './Badge';
 import { alerts, current, links, meHref } from './nav';
 
@@ -14,7 +14,7 @@ export function TopBar() {
   return (
     <header class="topbar desktop" data-shell="topbar">
       <a class="wordmark" href="/">
-        Ketju
+        {siteName}
       </a>
       <nav aria-label="Sections">
         {links.value.map((l) => (

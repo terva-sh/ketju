@@ -212,10 +212,9 @@ export interface Me {
   // with no queue (TKT-01M29CRJ4E).
   queue: number | null;
   settings: Settings;
-  // The site_name setting, for every viewer (TKT-01M29CXK2H). Optional here
-  // until the client reads it, so the built-in anonymous viewer, which is
-  // bundled, need not change with the server.
-  site_name?: string;
+  // The site_name setting, for every viewer (TKT-01M29CXK2H): the
+  // wordmarks show it.
+  site_name: string;
 }
 
 // RenderResult is POST /render's answer, and what the create path records

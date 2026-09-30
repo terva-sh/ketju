@@ -9,6 +9,7 @@ import { threadActions } from './threadActions';
 import anon from '../../../../internal/dto/testdata/golden/me.anon.json';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 import moderator from '../../../../internal/dto/testdata/golden/me.moderator.json';
+import preUser from '../../../../internal/dto/testdata/golden/me.pre_user.json';
 
 const thread = { id: '01k4z3j0w8x2c', slug: 'a-thread', title: 'A thread' };
 
@@ -181,7 +182,7 @@ describe('the phone top bar', () => {
     await setPhone(true);
     expect(root.querySelector('[data-shell=title]')?.textContent).toBe('Unread');
     const index = await renderAt('/');
-    expect(index.querySelector('[data-shell=title]')?.textContent).toBe('Ketju');
+    expect(index.querySelector('[data-shell=title]')?.textContent).toBe('The Supper Club');
   });
 
   it("titles a thread with its forum, with back to the forum", async () => {
@@ -352,7 +353,7 @@ describe('thread actions', () => {
     expect(screenOf(root)).toBe('not-found');
     expect(root.querySelector('[aria-label=More]')).toBeNull();
     expect(root.querySelector('[aria-label^="Back to"]')).toBeNull();
-    expect(root.querySelector('[data-shell=title]')?.textContent).toBe('Ketju');
+    expect(root.querySelector('[data-shell=title]')?.textContent).toBe('The Supper Club');
     await setPhone(false);
     expect(root.querySelector('[data-shell=toolbar]')).toBeNull();
   });
@@ -407,5 +408,34 @@ describe('the current section', () => {
     expect(current('/u/alice', '/u/alice/posts')).toBe(true);
     expect(current('/u/alice', '/u/alicebob')).toBe(false);
     expect(current('/new', '/newsletter')).toBe(false);
+  });
+});
+
+// The wordmark is the site_name setting, which /me carries for every viewer
+// (TKT-01M29CXK2H): in the desktop top bar, the phone top bar on the index,
+// and the applicant's bar. A new /me changes it, and an empty one reads as
+// the product's name.
+describe('the wordmark', () => {
+  const wordmark = (root: HTMLElement) => root.querySelector('.wordmark')?.textContent;
+
+  it('shows the site name in the desktop top bar, and follows /me', async () => {
+    const root = await renderAt('/');
+    expect(root.querySelector('[data-shell=topbar] .wordmark')?.textContent).toBe('The Supper Club');
+    await act(() => void (viewer.value = { ...viewer.value, site_name: 'The Dinner Club' }));
+    expect(wordmark(root)).toBe('The Dinner Club');
+    await act(() => void (viewer.value = { ...viewer.value, site_name: '' }));
+    expect(wordmark(root)).toBe('Ketju');
+  });
+
+  it('shows the site name in the phone top bar', async () => {
+    const root = await renderAt('/');
+    await setPhone(true);
+    expect(root.querySelector('[data-shell=phone-topbar] .wordmark')?.textContent).toBe('The Supper Club');
+  });
+
+  it("shows the site name in the applicant's bar", async () => {
+    viewer.value = structuredClone(preUser) as Me;
+    const root = await renderAt('/apply/status');
+    expect(root.querySelector('[data-shell=applicant-bar] .wordmark')?.textContent).toBe('The Supper Club');
   });
 });
