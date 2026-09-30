@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T00:37:01Z
-updated_at: 2026-09-30T23:02:43Z
+updated_at: 2026-09-30T23:25:39Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -120,12 +120,41 @@ Built on main at 0f8efbe (replayed from d28aead after #246-#251 merged).
 - Mutations: each of six mutations to `state/viewerGuard.ts` fails `viewerGuard.test.ts` (listed in the code commit). With `guardViewer()` left out of `main.tsx`, `e2e/sign-out.spec.ts` fails at the step that checks the other tab has reloaded signed out.
 - Full checks on the replayed head: gofmt, build, vet, `go test -race ./...`, tsc, vitest (2021 tests), and the whole Playwright suite (193 passed, 11 skipped, none of them this spec).
 
+**agent:claude-code/phase2-run-qvwkag** at 2026-09-30T23:25:33Z
+
+Terva review 1627, run fc8000b4-7174-4f5e-804f-5afc74c3f74a (Actions run #1657), head 762313e, base 0f8efbe. One finding, high, security: "Distinguish applicants beyond their provider in viewer announcements". **Fixed, not argued.**
+
+The guard named a pre-user `p:<provider>`, so two applicants who signed in through one provider looked the same. A pre-user may sign in again as another identity while still signed in (web.PreUserRoutes: "Signing in, with this identity again or another"). A tab left open on the first applicant's form therefore stayed on screen under the second applicant's session.
+
+/me gave an applicant nothing else that differs, so the fix is on the server. `/me`'s `pre_user` now carries `tag`, which is `Session.Tag()`: a hash of the stored session hash under its own prefix. It is neither the cookie, the row, nor the SessionKey that caches are keyed by, it grants nothing, and it goes only to the session it names. The guard now names an applicant `p:<provider>:<tag>`. docs/07's `/me` row documents the field. This supersedes the plan's "The server is not changed": `POST /auth/logout` is still untouched.
+
+The alternative that lost: reload an applicant's page on any applicant announcement. That cannot tell an applicant's own second tab from another applicant, so opening a second tab would reload the first and throw away unsent answers.
+
+Tests added:
+- `TestTagNamesTheSessionAndNothingElse`;
+- `TestMeTagsEachPreUserSession`;
+- the dto golden;
+- three guard tests for the two-applicant case.
+
+Two server tests that matched pre_user's exact bytes now match the provider plus the start of the tag: `TestServeSignsInThroughAProvider` and `TestPreUserRoutesAreExactlyTheAllowlist`.
+
+Mutations, each caught:
+- /me without the tag;
+- Tag equal to the SessionKey;
+- the guard naming an applicant by provider alone.
+
+The reader bundle is now 60395 B (+233 B over main's 60162 B).
+
 ## Summary
 
 A signed-in member can sign out from the client. The Account block on their own profile (`/u/{handle}`, one press from the top bar's handle or the phone's Me tab) holds a Sign out button. It is a plain form post to `POST /auth/logout`, which revokes this browser's session on the server, clears the cookie and answers 303 to `/`. `ApplicantShell` and the profile render the same `SignOutForm` from `shell/SignOut.tsx`, with the class on the button. The `.sign-out` rule now styles both at a 44 px target.
 
-A new `state/viewerGuard.ts`, started in `main.tsx`, covers what the form post's page load does not reach. Another tab of the same browser reloads when a page load announces a different viewer on a `BroadcastChannel`. A page restored from the back/forward cache asks `/me` and reloads when the answer is someone else or the request fails. A signed-out page does neither. The guard never sets the viewer signal, so it and #251's in-place refetch never act on the same event.
+A new `state/viewerGuard.ts`, started in `main.tsx`, covers what the form post's page load does not reach:
+- Another tab of the same browser reloads when a page load announces a different viewer on a `BroadcastChannel`.
+- A page restored from the back/forward cache asks `/me` and reloads when the answer is someone else or the request fails.
+
+A signed-out page does neither. The guard never sets the viewer signal, so it and #251's in-place refetch never act on the same event. A member is named by handle. An applicant is named by provider and the new `/me` `pre_user.tag` (`Session.Tag()`, an opaque hash of the stored session hash, documented in docs/07), which review 1627 required so that two applicants of one provider differ. That is the only server change. `POST /auth/logout` is untouched.
 
 `e2e/sign-out.spec.ts` covers 390 px and 1440 px. It calls `paceAuth(3)` first and has its row in the `e2e/session.ts` budget; `signIn` is unchanged. It signs carol in on a session of its own and checks the 303, `/me` null, the cookie gone, the old cookie value refused by the server, a second tab reloaded signed out, her local draft copy removed, and Back and reload restoring nothing.
 
-The reader bundle went from 60162 B to 60392 B (+230 B). Every criterion is ticked. No server code changed.
+The reader bundle went from 60162 B to 60395 B (+233 B). Every criterion is ticked.
