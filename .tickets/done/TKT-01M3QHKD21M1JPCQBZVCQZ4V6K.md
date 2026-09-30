@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T21:37:14Z
-updated_at: 2026-09-30T22:24:39Z
+updated_at: 2026-09-30T22:38:34Z
 created_by:
   id: agent:claude-code/phase2-run-crj5j
   name: ""
@@ -160,24 +160,35 @@ Mutations tried against the tests, each caught:
 
 Checks run: gofmt, `go build`, `go vet`, `go test -race ./...` (exit 0), `tsc --noEmit`, vitest (63 files, 1889 tests), and Playwright on port 18931 (175 passed, 11 skipped). The reader bundle went from 56988 B to 57153 B of 70000 B, +165 B. There is no lazy chunk: the moderator-only code is one branch in the rule and one sentence, which is smaller than a chunk's loader.
 
+**agent:claude-code/phase2-run-qhkd21** at 2026-09-30T22:38:23Z
+
+Terva review 1626 on PR #251, head d4cd212, base 466e82e (Actions run 1645).
+
+Finding 1 (medium), "Recompute moderator offers when the signed-in viewer changes": fixed. `ThreadScreen` now records which signed-in handle the page on screen answered for. When the handle changes, it asks for the page again. Until that page answers, `ThreadBody` offers no edit, delete or restore and hands no `Own`. A failed answer keeps the offers withheld. Tests: "a new viewer is offered nothing from the last viewer's page" and "a failed page for the new viewer keeps the offers withheld". I tried three mutations and each was caught.
+
+Finding 2 (low), "Show the moderator edit marker in expanded replies too": fixed. The shared `Edited` in `Post.tsx` is now used by `Post` and by the reply expander. Test: "marks a reply a moderator edited as the page does".
+
+Reader bundle: 60162 B of 70000 B, +239 B over main's 59923 B.
+
 ## Summary
 
-A viewer whose thread page says `can_moderate`, whether by role or through a group grant, is now offered Edit and Delete on every post that is not removed, moved or redacted, and Restore on every removed post served with its body. No window applies and no `reply` is needed, which is exactly what `authorize` and `restoreRecord` accept. A moderator's edit shows as "(edited by a moderator)" and names nobody.
+A viewer whose thread page says `can_moderate`, by role or through a group grant, is now offered Edit and Delete on every post that is not removed, moved or redacted. The same viewer is offered Restore on every removed post that is served with its body. No window binds these offers and no `reply` is needed, which is what `authorize` and `restoreRecord` accept. A moderator's edit shows as "(edited by a moderator)", on the page and in the reply expander, and names nobody.
 
 Client:
-- `postControls` gains the moderator branch.
-- `ThreadBody` hands every post an `Own` for a signed-in viewer whose page says `can_moderate`.
-- `Own.hides` gives a moderator's delete of someone else's post its own prompt: "Remove this post? Members will see that a moderator removed it. Only a moderator can restore it."
+- `postControls` gains a moderator branch.
+- `ThreadBody` gives every post an `Own` when a signed-in viewer's page says `can_moderate`.
+- `Own.hides` gives a moderator's delete of somebody else's post its own prompt: "Remove this post? Members will see that a moderator removed it. Only a moderator can restore it."
 - `useOwn` closes the editor and the confirmation when the signed-in handle changes.
-- `Post` shows `(edited by a moderator)` with `data-edited-by="moderator"`.
+- `ThreadScreen` records whose page is on screen. When someone else signs in, the page is fetched again, and nothing is offered until it answers (Terva review 1626).
+- `Edited` in `Post.tsx` draws the marker.
 
-Server: `dto.ThreadViewer.forum_read_only` is `readOnlyForum(a) != nil`. In an archived forum it is true for everyone but an admin, and there the server refuses an edit, delete or restore of the viewer's own post. The rule offers nothing on the viewer's own post while the field is true. That covers a moderator's own post, and it closes the known limit TKT-01M3PTT97X recorded for an author's delete and restore. The field is in the viewer block, which is never cached. The thread goldens gain the field, and the new golden `thread-archived.member.json` sets it. docs/07 records the field and the moderator's offers.
+Server: `dto.ThreadViewer.forum_read_only` is `readOnlyForum(a) != nil`. In an archived forum it is true for everyone but an admin, and there the server refuses an edit, delete or restore of the viewer's own post. The rule offers nothing on one's own post while it is true, a moderator's own post included. This also closes the known limit TKT-01M3PTT97X recorded for an author's delete and restore. The field is in the viewer block, which is never cached. The thread goldens gain it, and the new `thread-archived.member.json` golden sets it. docs/07 records the field and the moderator's offers.
 
 Tests:
-- `TestThreadViewerSaysTheForumIsReadOnly`: a member, a moderator by role, a moderator by group and an admin, each checked against the server's answer.
+- `TestThreadViewerSaysTheForumIsReadOnly`: member, moderators by role and by group, and an admin, each checked against the server's answer.
 - `postControls.test.ts`: 'postControls for a moderator'.
-- `PostControls.test.tsx`: "a moderator's controls", including a group moderator's edit and a change of viewer.
-- `ThreadPage.test.tsx`: 'the edited marker'.
-- Eight mutations were tried against the tests, and every one was caught.
+- `PostControls.test.tsx`: "a moderator's controls", covering a group moderator's edit and changes of viewer.
+- `ThreadPage.test.tsx` and `ReplyExpander.test.tsx`: the edited marker.
+- Eleven mutations were tried, and every one was caught.
 
-The reader bundle went from 59923 B to 60080 B of 70000 B (+157 B), with no lazy chunk.
+Reader bundle: 60162 B of 70000 B, +239 B over main's 59923 B. There is no lazy chunk.
