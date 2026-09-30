@@ -22,7 +22,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:21:56Z
-updated_at: 2026-09-30T03:59:49Z
+updated_at: 2026-09-30T04:04:40Z
 created_by:
   id: agent:claude-code/phase2-run-cxjz9
   name: ""
@@ -110,3 +110,9 @@ The description needs three corrections, read from main:
 - The history screen's handling of a redacted post (TKT-01M29CP2Q3, Build the post history view with word-level diffs), which reads the new `PostHistory.redacted`.
 - Post edit, delete and restore controls on the thread page, which no client ticket has built yet.
 - Title text in older `thread.renamed` audit rows (TKT-01M29CKRH9, done).
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-30T04:04:40Z
+
+Groomed 2026-09-30 (TKT-01M3M9RR26). Settled as engineering choices in the maintainer's absence, because docs/03 'Hard redaction' answers them: redacted is served to every reader (the tombstone is the same for everyone, moderators included), removal is unchanged beside it, and the words are 'Post removed permanently'. Corrections to the description: the history DTO is dto.PostHistory, not dto.HistoryPost, and internal/dto forbids omitempty, so the field is a plain bool on every post. The only restore the client offers today is the moderator queue's Keep, which the plan withdraws for a redacted post.

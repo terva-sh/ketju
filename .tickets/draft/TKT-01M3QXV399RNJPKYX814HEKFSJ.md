@@ -22,7 +22,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T04:03:07Z
+updated_at: 2026-09-30T04:04:40Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
@@ -138,3 +138,9 @@ On main the thread screen has no moderator controls at all. TKT-01M3QGH66W (Add 
 - Slow mode's dialog (TKT-01M3R0PM0K).
 - Retagging, which is Phase 4 (TKT-01M29CYSCP).
 - Any change to who may move: the staff gate stays.
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-30T04:04:40Z
+
+Groomed 2026-09-30 (TKT-01M3M9RR26). Now depends on TKT-01M3QGH66W (Add lock, unlock, pin and unpin to the thread screen): main has no moderator controls on the thread screen, and that ticket builds the panel, the moderate actions and storeThreadHeader this one extends. Settled as engineering choices: Rename is offered on can_moderate (PATCH is not staff-gated) and Move only with a staff role; rename_until comes from one authorRenameCheck shared with Rename; the destination is a select built from GET /api/v1/forums, not ForumPicker, whose choices are new-thread links.

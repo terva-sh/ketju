@@ -19,7 +19,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T02:43:17Z
-updated_at: 2026-09-30T03:55:10Z
+updated_at: 2026-09-30T04:04:45Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
@@ -74,3 +74,9 @@ Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. The fi
 
 - Bounding any setting's stored value (see Settled).
 - The admin site settings screen's validation (TKT-01M29CXK2).
+
+## Notes
+
+**agent:claude-code/phase2-groom** at 2026-09-30T04:04:45Z
+
+Groomed 2026-09-30 (TKT-01M3M9RR26). Scope widened as an engineering choice: slow_mode.default_seconds overflows the same way in slowModeWait (internal/service/threads/slowmode.go), where a negative wait turns slow mode off, so the shared secondsDuration helper covers it too. Bounding the settings lost because Key.In validates stored values on every read, so a stored large value would fail every edit after the upgrade.
