@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T14:59:02Z
-updated_at: 2026-09-30T19:06:25Z
+updated_at: 2026-09-30T19:18:46Z
 created_by:
   id: agent:claude-code/phase2-run-ckrhs
   name: ""
@@ -183,12 +183,16 @@ Terva review 1488 on PR #167, head f5a4206, finding 2 (medium): answered, and th
 
 Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) The source route landed in PR #205. The editor reads GET .../posts/{ordinal}/source (dto.PostSource), which apiGet never holds, and sends {source} only. (2) Honouring TKT-01M3R33SR5's clamp, now a dependency: author_windows carries int(secondsDuration(n)/time.Second), so a setting past a Duration arrives as 9223372036 and client and server agree. useWindowClock bounds its timer with delayUntil (components/thread/deadline.ts, added by this ticket or TKT-01M3QXV399, whichever lands first), because a setTimeout over 2^31-1 ms fires at once. New criteria 6 and 7. (3) TKT-01M29CKRJ9 landed, so removal exists, and a moderator sees removed posts as a removed Post. Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author, which settles the placement TKT-01M3QHKD21 left open. (4) After #202, ownership compares handles without case through isOwn, which mayFlag shares, and on a phone edit and delete go under PostMore with focus returned to its button. New criteria 8 and 9. (5) Known limit recorded: in an archived forum the page cannot tell delete and restore will be refused, so conflict's words show. (6) Goldens corrected: thread.author.json is an api golden, and thread-locked.member.json a dto one. Bundle 47415 of 60000 B.
 
+**agent:claude-code/phase2-run-ptt97x** at 2026-09-30T19:18:42Z
+
+Terva review 1610 on PR #243, head be48840, base 13709f0 (run 1586). Finding 1 (high), keep the editor open while a save is in flight: fixed. The editor's Cancel is off while the PATCH is out, and so are the delete confirmation's Cancel and Escape while the DELETE is out, since both show their refusal in place. Tests: 'a save in flight keeps the editor open', 'a delete in flight keeps the confirmation open'. Finding 2 (medium), refetch the page on a stale source-load refusal: fixed. A conflict, forbidden, not-found or gone answer from GET .../source now asks for the page again, as a refused save does, and says it in ownFailure's words. Test: 'a stale refusal of the source asks for the page again'. Reader bundle now 56988 B.
+
 ## Summary
 
 The thread page now carries `viewer.author_windows` and the client offers Edit, Delete and Restore on the viewer's own posts only while the server would accept them.
 
 Server: `dto.ThreadViewer.AuthorWindows` (`{edit_seconds, delete_seconds}`), read in `View`'s existing read transaction for a member who does not moderate the forum, through `readWindows` and `secondsDuration`, the same path `authorize` uses. It is null for a forum moderator and for anyone who is not a member. It is in the viewer block, so the response cache is untouched and the ETag moves with a setting. docs/07 records it. Tests: TestThreadViewerCarriesAuthorWindows, TestAuthorWindowsFollowTheClamp, TestAuthorWindowsAreNotCached; the thread goldens in internal/dto and internal/web/api are regenerated.
 
-Client: `postControls.ts` is the one offer rule, and `isOwn` is its ownership check, shared with `mayFlag`. `OwnControls.tsx` holds the per-post state (`useOwn`), the inline editor on the shared `ComposerBody` (which gains an `editing` prop for its own ids), the delete confirmation and Restore. `useWindowClock` sets one page timer through `delayUntil`. On desktop, edit and delete follow flag in the footer. On a phone they are under PostMore, and focus returns to its button. Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author. Nothing is offered on a moved or redacted post, or on a post a moderator removed. Window refusals withdraw the control locally, stale refusals refetch the page, and after a change nothing is offered until the page shows it. The reader bundle went from 54924 B to 56959 B of 70000 B.
+Client: `postControls.ts` is the one offer rule, and `isOwn` is its ownership check, shared with `mayFlag`. `OwnControls.tsx` holds the per-post state (`useOwn`), the inline editor on the shared `ComposerBody` (which gains an `editing` prop for its own ids), the delete confirmation and Restore. `useWindowClock` sets one page timer through `delayUntil`. On desktop, edit and delete follow flag in the footer. On a phone they are under PostMore, and focus returns to its button. Restore is drawn on a tombstone for an author and in a removed post's footer for a moderator-author. Nothing is offered on a moved or redacted post, or on a post a moderator removed. Window refusals withdraw the control locally, stale refusals refetch the page, and after a change nothing is offered until the page shows it. The reader bundle went from 54924 B to 56988 B of 70000 B.
 
 Follow-on: TKT-01M3QHKD21 widens `postControls` and `useOwn` to a moderator's reach over every post; the placement of Restore is settled here.
