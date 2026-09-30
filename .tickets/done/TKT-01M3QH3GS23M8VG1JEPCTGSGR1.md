@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: pr:179
     path: null
+  - ref: ticket:TKT-01M3QV39H4
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T21:28:33Z
-updated_at: 2026-09-30T00:21:28Z
+updated_at: 2026-09-30T00:23:19Z
 created_by:
   id: agent:claude-code/phase2-run-p9rsw
   name: ""
@@ -159,6 +161,10 @@ Terva review 1508 on PR #179, head 994f044, base 4d793b2: both findings accepted
 **agent:claude-code/phase2-run-qh3gs2** at 2026-09-30T00:21:28Z
 
 Terva review 1509 on PR #179, head 31a1a84, base 43a844d: finding 1 (medium, the limit inputs stay stale after a credential refetch) accepted and fixed. Limits now follows the detail: a field still showing the value it was last given takes the new one, and an edited field keeps the edit, so saving a refill alone sends the burst the server has now. Test: 'follows a refetched limit into an untouched field, and keeps an edited one'. It fails when the sync is removed.
+
+**agent:claude-code/phase2-run-qh3gs2** at 2026-09-30T00:23:17Z
+
+Terva review 1510 on PR #179, head a064d60, base 43a844d: clean at the gate (terva-review/code success). Finding 1 (low, the limits form keeps 'Saved.' after a field is edited again) is accepted and deferred, not fixed here. It is a status line, with no effect on what is sent or on credentials. This PR has used four of its five review rounds, and each code change needs a fresh one. Filed TKT-01M3QV39H4 (Clear the agent limits form's Saved status when a field is edited), which owns the fix.
 
 ## Summary
 
