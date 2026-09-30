@@ -95,9 +95,20 @@ func within(createdMS int64, now time.Time, d time.Duration) bool {
 // edit within posts.edit_window_seconds, a delete or a restore of one's own
 // delete within posts.delete_window_seconds.
 //
-// The archived and locked refusals are the callers', since they depend on
-// the thread rather than on the post.
+// First of all, though, an author's action on their own post in an archived
+// forum is conflict to everyone but an admin, a moderator's own post
+// included: it is posting, and nobody else may post there
+// (readOnlyForum). A moderator's action on somebody else's post is
+// moderation, which an archived forum leaves open.
+//
+// The archived-thread and locked refusals are the callers', since they
+// depend on the thread rather than on the post.
 func authorize(a access, e threadlog.IndexEntry, action postAction, now time.Time, w windows) error {
+	if e.Author == uint64(a.viewer.UserID) {
+		if err := readOnlyForum(a); err != nil {
+			return err
+		}
+	}
 	if a.canModerate {
 		return nil
 	}

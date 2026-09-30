@@ -20,6 +20,10 @@
 //   - An active moderator (the role) has moderate everywhere they can see.
 //     The moderators group is separate and grants per forum. Neither implies
 //     the other.
+//   - An archived forum is read-only: create_thread, reply and upload are
+//     denied there to everyone the admin rule has not already let through,
+//     moderators included. read and moderate are unchanged, so the forum
+//     stays visible and moderators can still act in it (docs/04).
 //   - A restricted forum the viewer cannot read is Hidden, for every
 //     permission, and so is a forum that does not exist: the caller answers
 //     404 and the forum's existence does not leak. Anything else the viewer
@@ -344,7 +348,7 @@ func (e *Evaluator) ModeratesAny(ctx context.Context, v domain.Viewer) (bool, er
 // Invalidate drops every cached decision, in this Evaluator and in every other
 // over the same database. The mutation methods call it after they commit;
 // call it directly after any other write that changes groups, memberships,
-// permissions, forum visibility or roles.
+// permissions, forum visibility or archiving, or roles.
 func (e *Evaluator) Invalidate() {
 	e.gen.Add(1)
 	e.mu.Lock()
@@ -458,10 +462,12 @@ func accessParams(v domain.Viewer, forumIDs []int64) dbq.ForumAccessRowsParams {
 	return params
 }
 
-// forumRows is one forum as decide reads it: its visibility, and what each
-// of the viewer's groups is granted in it and site-wide.
+// forumRows is one forum as decide reads it: its visibility, whether it is
+// archived, and what each of the viewer's groups is granted in it and
+// site-wide.
 type forumRows struct {
 	visibility string
+	archived   bool
 	// local[group] and global[group]: what each group of v's is granted
 	// in this forum, and site-wide. A group with a key in local is governed
 	// by those rows alone, so a key is present only while it has a row.
@@ -477,7 +483,8 @@ func collect(rows []dbq.ForumAccessRowsRow) (map[int64]*forumRows, []int64) {
 	for _, r := range rows {
 		f := forums[r.ForumID]
 		if f == nil {
-			f = &forumRows{visibility: r.Visibility, local: map[int64][]domain.Permission{}, global: map[int64][]domain.Permission{}}
+			f = &forumRows{visibility: r.Visibility, archived: r.Archived != 0,
+				local: map[int64][]domain.Permission{}, global: map[int64][]domain.Permission{}}
 			forums[r.ForumID] = f
 			order = append(order, r.ForumID)
 		}
@@ -536,9 +543,20 @@ func decide(id int64, f *forumRows, v domain.Viewer) (access, error) {
 	if v.Member() && v.Role == domain.RoleModerator {
 		a.perms[domain.PermModerate] = true
 	}
+	if f.archived {
+		// Posting is closed, whatever was granted; an admin never reaches
+		// here. Reading and moderating are not posting (docs/04, docs/08).
+		for _, p := range postingPermissions {
+			delete(a.perms, p)
+		}
+	}
 	a.hidden = restricted && !a.perms[domain.PermRead]
 	return a, nil
 }
+
+// postingPermissions are what an archived forum denies to everyone but an
+// admin (docs/04 "permissions", TKT-01M3N24RHD).
+var postingPermissions = []domain.Permission{domain.PermCreateThread, domain.PermReply, domain.PermUpload}
 
 // decision is what Check answers for p, given v's access to the forum.
 func decision(v domain.Viewer, a access, p domain.Permission) Decision {

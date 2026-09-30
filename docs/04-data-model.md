@@ -349,10 +349,17 @@ and `upload` are denied to everyone except admins, moderators included. That
 matches an archived thread (03 `ThreadArchived`), except that an admin may
 still post. The alternatives lost for these reasons. Hiding the forum from
 non-moderators makes archiving a delete in disguise. A listing-only flag would
-leave "archived" meaning nothing a member can rely on. The evaluation change,
-and the admin exemption at `POST /forums/{slug}/threads` (07, which answers
-`conflict` to everyone today), are TKT-01M3N24RHD (Make archived forums read-only in permission
-evaluation).
+leave "archived" meaning nothing a member can rely on. Moderation stays open
+(08, decided 2026-09-29): `read` and `moderate` are unchanged, so moderators
+may still hide, restore, lock and pin there. Built in TKT-01M3N24RHD (Make
+archived forums read-only in permission evaluation). `internal/perm` drops the
+three posting permissions for an archived forum in the same place as every
+other rule, so `Check`, `CanEach` and the grant preview agree, and
+`Evaluator.SetForumArchived` is the one write of `forums.archived`, clearing
+every Evaluator's cache when it commits. The posting routes do not rely on the
+cache: they read `forums.archived` from the forum's row on every request and
+answer `conflict` to everyone but an admin (07), so an archive written by
+another process refuses the next post at once.
 
 Membership of `everyone` is implicit for every viewer, signed in or not, and
 membership of `members` is implicit for every active user; neither is stored

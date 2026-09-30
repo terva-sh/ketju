@@ -215,6 +215,7 @@ func TestEveryMutationInvalidates(t *testing.T) {
 			return err
 		}},
 		{"SetVisibility", func() error { return f.ev.SetVisibility(ctx, forum, domain.VisibilityMembers) }},
+		{"SetForumArchived", func() error { return f.ev.SetForumArchived(ctx, forum, true) }},
 		{"ChangeRole", func() error { return f.ev.ChangeRole(ctx, audit.By{}, v.UserID, domain.RoleModerator) }},
 	} {
 		name, mutate := m.name, m.mutate

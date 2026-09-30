@@ -70,6 +70,9 @@ func (s *Service) Reply(ctx context.Context, v domain.Viewer, id threadid.ID, re
 	if err != nil {
 		return out, err
 	}
+	if err := readOnlyForum(a); err != nil {
+		return out, err
+	}
 	if !a.canReply {
 		return out, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: %s is not open to this viewer's replies", id))
 	}
@@ -207,12 +210,18 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 
 // forumForThread finds the forum v is starting a thread in, answering the
 // way access does for a thread: a forum hidden from v is not-found, one v
-// cannot read is unauthenticated or forbidden. Then v needs create_thread,
-// and the forum must not be archived.
+// cannot read is unauthenticated or forbidden. Then an archived forum is
+// conflict to everyone but an admin, read from the row just loaded rather
+// than from the decision cache, as readOnlyForum reads it; it comes before
+// create_thread, which perm denies there, so the refusal says why. Last, v
+// needs create_thread.
 func (s *Service) forumForThread(ctx context.Context, v domain.Viewer, slug string) (dbq.Forum, error) {
 	forum, err := s.readForum(ctx, v, slug)
 	if err != nil {
 		return forum, err
+	}
+	if forum.Archived != 0 && !(v.Member() && v.Role == domain.RoleAdmin) {
+		return forum, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: forum %q is archived", slug))
 	}
 	can, err := s.Perm.Can(ctx, v, forum.ID, domain.PermCreateThread)
 	if err != nil {
@@ -220,9 +229,6 @@ func (s *Service) forumForThread(ctx context.Context, v domain.Viewer, slug stri
 	}
 	if !can {
 		return forum, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: this viewer may not start threads in %q", slug))
-	}
-	if forum.Archived != 0 {
-		return forum, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: forum %q is archived", slug))
 	}
 	return forum, nil
 }

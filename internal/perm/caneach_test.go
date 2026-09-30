@@ -17,7 +17,8 @@ import (
 
 // referenceEvaluate is evaluate as it was before the batch statement
 // (TKT-01M29CA99R): one forum at a time, the implicit groups by slug,
-// GetForum, GroupsForUser and PermissionRows. It is kept here, unused by the package, so the batch can be
+// GetForum, GroupsForUser and PermissionRows, with the archived rule
+// (TKT-01M3N24RHD) added the same way. It is kept here, unused by the package, so the batch can be
 // held to it over random worlds; a test comparing CanEach only with Check
 // would compare evaluateMany with itself.
 func referenceEvaluate(ctx context.Context, e *Evaluator, v domain.Viewer, forumID int64) (access, error) {
@@ -86,19 +87,24 @@ func referenceEvaluate(ctx context.Context, e *Evaluator, v domain.Viewer, forum
 		if v.Member() && v.Role == domain.RoleModerator {
 			a.perms[domain.PermModerate] = true
 		}
+		if forum.Archived != 0 {
+			delete(a.perms, domain.PermCreateThread)
+			delete(a.perms, domain.PermReply)
+			delete(a.perms, domain.PermUpload)
+		}
 		a.hidden = restricted && !a.perms[domain.PermRead]
 		return nil
 	})
 	return a, err
 }
 
-// TestCanEachAgreesWithCheck: over random groups, forums and grants, for
-// every kind of viewer and permission, CanEach on a cold cache, CanEach on a
-// warm one, and Check forum by forum give the same answers, and the batch
-// evaluation matches the one-forum evaluation it replaced. A forum that does
-// not exist is not allowed.
+// TestCanEachAgreesWithCheck: over random groups, forums (some archived) and
+// grants, for every kind of viewer and permission, CanEach on a cold cache,
+// CanEach on a warm one, and Check forum by forum give the same answers, and
+// the batch evaluation matches the one-forum evaluation it replaced. A forum
+// that does not exist is not allowed.
 func TestCanEachAgreesWithCheck(t *testing.T) {
-	perms := []domain.Permission{domain.PermRead, domain.PermReply, domain.PermCreateThread, domain.PermModerate}
+	perms := []domain.Permission{domain.PermRead, domain.PermReply, domain.PermCreateThread, domain.PermUpload, domain.PermModerate}
 	for seed := range uint64(8) {
 		rng := rand.New(rand.NewPCG(seed, 3))
 		f := newFixture(t)
@@ -107,6 +113,11 @@ func TestCanEachAgreesWithCheck(t *testing.T) {
 		for range 3 + rng.IntN(6) {
 			vis := []string{domain.VisibilityPublic, domain.VisibilityMembers, domain.VisibilityRestricted}[rng.IntN(3)]
 			forums = append(forums, f.forum(vis))
+			if rng.IntN(3) == 0 {
+				if err := f.ev.SetForumArchived(t.Context(), forums[len(forums)-1], true); err != nil {
+					t.Fatal(err)
+				}
+			}
 		}
 		for range rng.IntN(14) {
 			g := groups[rng.IntN(len(groups))]

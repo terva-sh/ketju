@@ -173,6 +173,25 @@ func (e *Evaluator) SetVisibility(ctx context.Context, forumID int64, visibility
 	})
 }
 
+// SetForumArchived archives or unarchives a forum. An archived forum is
+// read-only: create_thread, reply and upload are denied there to everyone
+// but admins (docs/04 "permissions"). Like every write here it clears the
+// cache of every Evaluator over the same database once it commits, so a
+// cached reply Allow is Deny on the next check.
+//
+// The posting paths do not rely on that alone: they read forums.archived on
+// every request (internal/service/threads readOnlyForum), so an archive
+// written by another process refuses the next post at once.
+func (e *Evaluator) SetForumArchived(ctx context.Context, forumID int64, archived bool) error {
+	var flag int64
+	if archived {
+		flag = 1
+	}
+	return e.write(ctx, func(q *dbq.Queries, now int64) error {
+		return q.SetForumArchived(ctx, dbq.SetForumArchivedParams{Archived: flag, UpdatedAt: now, ID: forumID})
+	})
+}
+
 // ActionPromoted is the audit_log action Promote writes. Bootstrap reads it
 // back as the mark that a user has been made admin before.
 const ActionPromoted = "user.promoted"

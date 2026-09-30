@@ -89,19 +89,19 @@ WHERE (forum_id = CAST(sqlc.arg('forum_id') AS INTEGER) OR forum_id IS NULL)
 ORDER BY forum_id IS NULL, group_id, permission;
 
 -- ForumAccessRows is everything perm needs to evaluate a set of forums for
--- one viewer, in one statement: each forum's visibility, with every
--- permission row, local to it or global, held by a group the viewer is in,
--- and that group's slug. The viewer's groups are the implicit ones, found
--- here by slug (everyone always; members when members_slug is not empty), and
--- their stored memberships; user_id 0 has none. A forum with no such rows
--- still comes back once, with a null group. perm applies the rules to these
--- rows in Go, as it always has.
+-- one viewer, in one statement: each forum's visibility and archived flag,
+-- with every permission row, local to it or global, held by a group the
+-- viewer is in, and that group's slug. The viewer's groups are the implicit
+-- ones, found here by slug (everyone always; members when members_slug is not
+-- empty), and their stored memberships; user_id 0 has none. A forum with no
+-- such rows still comes back once, with a null group. perm applies the rules
+-- to these rows in Go, as it always has.
 --
 -- The named arguments come before the slice on purpose: sqlc numbers a named
 -- argument (?1), and a number after an expanded slice would point at the
 -- wrong value.
 -- name: ForumAccessRows :many
-SELECT f.id AS forum_id, f.visibility, p.forum_id AS grant_forum_id, p.group_id, g.slug AS group_slug,
+SELECT f.id AS forum_id, f.visibility, f.archived, p.forum_id AS grant_forum_id, p.group_id, g.slug AS group_slug,
        p.permission
 FROM forums AS f
 LEFT JOIN permissions AS p
@@ -118,6 +118,12 @@ DELETE FROM group_members WHERE group_id = ? AND user_id = ?;
 
 -- name: SetForumVisibility :exec
 UPDATE forums SET visibility = ?, updated_at = ? WHERE id = ?;
+
+-- An archived forum is read-only to everyone but admins (docs/04
+-- "permissions"). Only perm.Evaluator.SetForumArchived calls this, so the
+-- decision cache is cleared when it commits.
+-- name: SetForumArchived :exec
+UPDATE forums SET archived = ?, updated_at = ? WHERE id = ?;
 
 -- ForumThreadCounts is each forum's threads with a post and their posts that
 -- are neither deleted nor moved (migrations 0007 and 0009, kept by triggers).

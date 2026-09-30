@@ -171,13 +171,13 @@ type Querier interface {
 	// suspension with no end is never here.
 	ExpiredSuspensions(ctx context.Context, now int64) ([]int64, error)
 	// ForumAccessRows is everything perm needs to evaluate a set of forums for
-	// one viewer, in one statement: each forum's visibility, with every
-	// permission row, local to it or global, held by a group the viewer is in,
-	// and that group's slug. The viewer's groups are the implicit ones, found
-	// here by slug (everyone always; members when members_slug is not empty), and
-	// their stored memberships; user_id 0 has none. A forum with no such rows
-	// still comes back once, with a null group. perm applies the rules to these
-	// rows in Go, as it always has.
+	// one viewer, in one statement: each forum's visibility and archived flag,
+	// with every permission row, local to it or global, held by a group the
+	// viewer is in, and that group's slug. The viewer's groups are the implicit
+	// ones, found here by slug (everyone always; members when members_slug is not
+	// empty), and their stored memberships; user_id 0 has none. A forum with no
+	// such rows still comes back once, with a null group. perm applies the rules
+	// to these rows in Go, as it always has.
 	//
 	// The named arguments come before the slice on purpose: sqlc numbers a named
 	// argument (?1), and a number after an expanded slice would point at the
@@ -420,6 +420,10 @@ type Querier interface {
 	// A null override means the site default.
 	SetAgentLimits(ctx context.Context, arg SetAgentLimitsParams) (int64, error)
 	SetBlobStatus(ctx context.Context, arg SetBlobStatusParams) (int64, error)
+	// An archived forum is read-only to everyone but admins (docs/04
+	// "permissions"). Only perm.Evaluator.SetForumArchived calls this, so the
+	// decision cache is cleared when it commits.
+	SetForumArchived(ctx context.Context, arg SetForumArchivedParams) error
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
 	// log_offset is the current revision's record, as the index entry's Offset

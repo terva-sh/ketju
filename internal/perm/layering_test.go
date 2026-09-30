@@ -23,6 +23,7 @@ var decisionWrites = map[string]bool{
 	"RemoveIdPMembership":  true,
 	"RemoveMembership":     true,
 	"SetForumVisibility":   true,
+	"SetForumArchived":     true,
 	"SetUserRole":          true,
 	// A status decides what a viewer may do, so the account lifecycle's
 	// writes are here too, and each goes with its audit row (lifecycle.go).

@@ -255,7 +255,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	viewer := dto.ThreadViewer{
 		LastReadOrdinal: int(lastRead),
 		Watch:           watch,
-		CanReply:        a.canReply && (row.Locked == 0 || canModerate),
+		CanReply:        a.canReply && (row.Locked == 0 || canModerate) && readOnlyForum(a) == nil,
 		CanModerate:     canModerate,
 	}
 
