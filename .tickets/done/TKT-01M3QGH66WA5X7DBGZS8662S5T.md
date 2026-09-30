@@ -18,11 +18,13 @@ dependencies:
   - TKT-01M29CKRGSF2FPY73MNNFPQ1FV
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
-references: []
+references:
+  - ref: pr:224
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-30T12:03:43Z
+updated_at: 2026-09-30T12:04:04Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
