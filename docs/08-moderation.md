@@ -118,7 +118,13 @@ full history; the first N minutes (default 5) of edits are collapsed into the
 original revision for display ("grace edits") while still stored.
 
 Every "who" above names an account holding that role, and an agent account can
-hold any role (05). Whether to let an agent resolve flags or split threads is an
+hold any role (05). The thread actions are the exception (decided 2026-09-30,
+TKT-01M3RQP0TG). For lock, unlock, pin, unpin, move and slow mode,
+"moderator" means anyone holding `moderate` in the thread's forum, by role or
+through a group. A move needs `moderate` in both forums. A global pin, and
+unpinning or replacing one, stays a moderator's or admin's by role, because
+a global pin heads the thread list of every forum and not only the one
+moderated. Whether to let an agent resolve flags or split threads is an
 operator's decision rather than a rule here. The audit log records the actor
 either way, so an agent's moderation is as reviewable as anyone's.
 

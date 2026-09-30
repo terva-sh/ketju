@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T08:42:45Z
-updated_at: 2026-09-30T09:50:16Z
+updated_at: 2026-09-30T10:02:45Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -134,6 +134,14 @@ All in `internal/web/api`, through the real chain (`w.chain()`), with gina a mem
 - A moderator's edit, delete and restore of posts, which are thread routes and not admin routes, and already follow `moderate` (TKT-01M29CRJ5J).
 - Account actions, applications, users and the audit log, which keep their role gates by the decision.
 - Letting a forum moderator pin globally. That would need a new maintainer decision.
+
+
+### Revised at claim (2026-09-30, agent:claude-code/phase2-run-rqp0tg, against main at 1a9d140)
+
+The code matched the groomed plan; it is built as written above, with the Settled in grooming items unchanged. Three additions:
+- **`TestSlowModeIsInTheViewerBlockNotTheCache` gains one setup line.** The test world runs no projection writer, so carol's reply sits in the log unprojected. `SetSlowMode` now projects the thread to its log first (`admitAt`), and `respcache.Key.Projected` is the projected length, so the key moved for a reason that is not slow mode. The test now projects the thread before its rounds, as the projection writer would; its assertions are unchanged. Leaving `projectNow` out of slow mode lost: it is what makes the forum check see an unprojected move.
+- **`TestAMoveLandingMidDecisionIsJudged`** (new, `rename_test.go`, one subtest per action) lands a move to lounge from the service's `Project` hook, after the decision has read the length and projected, before the write. It is the deterministic test of `AtLength` on the four records and of the length check inside the slow mode transaction; the concurrent test only races for it.
+- `staffPin` sits first in Pin's and Unpin's decide, so an unpin with scope `forum` under an active global pin is also `forbidden` to a forum moderator (not `conflict`); docs/07 lists it with the global-pin refusal.
 
 ## Notes
 

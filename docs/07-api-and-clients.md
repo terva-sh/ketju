@@ -234,7 +234,11 @@ progress via SSE.
 Each route is gated on the role docs/08's "Primitives" table names for its
 action, which is the one place authority is stated. Archiving a thread is
 admin-only there; locking, pinning, moving, renaming, retagging, splitting
-and merging are moderator actions. Renaming is the exception to the prefix:
+and merging are moderator actions. For lock, unlock, pin, unpin, move and
+slow mode, "moderator" means `moderate` in the thread's forum, by role or
+through a group, so those routes and the moderator queue are behind the
+`moderates` gate and every other route keeps its role gate (08 "Decided
+2026-09-30", TKT-01M3RQP0TG). Renaming is the exception to the prefix:
 an author may rename their own thread, so it is `PATCH /threads/{id}`
 rather than an admin route (TKT-01M29CKRH9).
 
@@ -297,7 +301,8 @@ A withdrawal racing an approval is decided the same way.
 #### The moderator queue (TKT-01M29CRJ4E)
 
 Both routes are behind the `moderates` gate, which admits a member granted
-`moderate` on one forum through a group as well as staff by role. The
+`moderate` on one forum through a group as well as staff by role. The thread
+moderation routes below use the same gate (TKT-01M3RQP0TG). The
 threads service then scopes what each viewer sees and does by per-forum
 `moderate` (`perm.ModeratedForums`). Every answer is `no-store`. How the
 actions decide is in 08 "Flags".
@@ -330,8 +335,17 @@ and to the profile for anyone else, whom that screen would refuse.
 
 #### Locking and pinning threads (TKT-01M29CKRGS)
 
-Each route is staff's by role, and the threads service then requires
-`moderate` in the thread's forum. Each appends one record to the thread log, projects it before answering,
+Thread moderation follows the forum grant (08 "Decided 2026-09-30",
+TKT-01M3RQP0TG). Each route is behind the `moderates` gate, which admits a
+member who holds `moderate` in any forum, by role or through a group. The
+threads service then decides the forum: it requires `moderate` in the
+thread's forum as the log stands where the record lands. It projects the
+thread up to the log's length, admits the viewer from that row, and appends
+at that length, so a move landing in between makes the request decide
+again. A moderator of one forum cannot lock or pin a thread that has just
+left it, and of two locks at once the second is `conflict`. A global pin
+stays a moderator's or admin's by role, because it heads the thread list of
+every forum. Each appends one record to the thread log, projects it before answering,
 and answers 200 with the thread's `ThreadHeader` as its page now serves it,
 `no-store`. Its `audit_log` row is written by the projection (04
 "audit_log"). The thread is read as `GET /threads/{id}` reads it: one hidden
@@ -352,6 +366,9 @@ Refusals come in this order, and each writes nothing:
 - `forbidden` without `moderate` in the thread's forum;
 - `conflict` on an archived thread. An archived forum does not refuse them
   (08, TKT-01M3N24RHD);
+- `forbidden` for a pin or unpin with scope `global`, or a pin or unpin
+  while a global pin is active, which would replace it or take it down, to a
+  viewer who is not a moderator or admin by role;
 - `conflict` for an action that would change nothing: locking a locked
   thread, unlocking an open one, unpinning a scope that is not the active
   pin's (an expired pin included), or pinning with the active pin's scope
@@ -365,7 +382,10 @@ Refusals come in this order, and each writes nothing:
 of seconds between one member's posts in the thread, 0 to 86400, where 0 is
 off. It answers 200 `internal/dto` `SlowMode`, `{seconds}`, with
 `no-store`, and it is charged to the per-address write limiter. The gate and
-the `moderate` check are the same as for locking and pinning. The value is
+the `moderate` check are the same as for locking and pinning. No record is
+appended, so the transaction that writes the value checks that the log is
+still the length the viewer was admitted at before it commits, and decides
+again otherwise. The value is
 kept in `thread_slow_mode` (04) and appends nothing to the log (08
 "Primitives"). It overrides `slow_mode.default_seconds`, and an explicit 0
 turns slow mode off under a non-zero default. The change and its
@@ -395,8 +415,8 @@ it. The page's ETag changes, because it hashes the viewer block.
 
 Renaming lives on the thread resource, `PATCH /threads/{id}` with
 `{title}`, because an author may rename their own thread; the service
-decides who may. Moving is a moderator's, behind the staff gate, as lock
-and pin are:
+decides who may. Moving is a moderator's, behind the `moderates` gate, as
+lock and pin are, and needs `moderate` in both forums:
 
 | Route | Body | What it does |
 |---|---|---|
