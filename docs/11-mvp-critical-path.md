@@ -222,7 +222,8 @@ the criteria merged unticked and the questions left for the maintainer.
 
 On 2026-09-30 the maintainer extended the run to the rest of Phase 2 on the
 same terms (docs/13 "The extension of 2026-09-30"), tracked by
-`TKT-01M3RQP0VZ`. It landed 28 PRs (#208–#239) on the gate and then paused
+`TKT-01M3RQP0VZ`. It merged 30 of the PRs numbered #208–#239 on the gate;
+the other two, #213 and #219, were closed after being carried into #221. It then paused
 at the maintainer's request. The client's reader bundle budget was raised to
 70000 B along the way. Phase 2 now carries 78 tickets: 65 done, 7 ready, 1 in
 progress (the tracking ticket) and 5 draft. The seven ready are client work:
