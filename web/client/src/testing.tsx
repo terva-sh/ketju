@@ -9,11 +9,25 @@ import golden from '../../../internal/dto/testdata/golden/thread.member.json';
 
 let mounted: HTMLElement | null = null;
 
+// lazyChunks are the chunks routes.tsx loads lazily, by the addresses that
+// load them. A test file's first import of one transforms and evaluates
+// every module in it, and on a loaded machine that has outrun settle's 200
+// turns, so the file's first test found no screen at all (TKT-01M3S8Y2NA:
+// ApplicationDetail, FormEditor, Decision and the route table). renderAt
+// awaits the chunk before it mounts anything, so the wait is on the chunk
+// and not a clock, and settle's bound is left to the screen. The route's own
+// lazy import still runs, and resolves to the module loaded here.
+const lazyChunks: [RegExp, () => Promise<unknown>][] = [
+  [/^\/admin(?:[/?#]|$)/, () => import('./screens/admin/AdminRoot')],
+  [/^\/apply(?:[/?#]|$)/, () => import('./screens/apply/ApplyRoot')],
+];
+
 // renderAt renders the whole app at url, as a reader arriving there would,
 // and waits for the screen to settle: a lazy chunk, a fetch. The previous
 // test's app is unmounted first; left mounted, it would go on following
 // history and render into this test.
 export async function renderAt(url: string): Promise<HTMLElement> {
+  await lazyChunks.find(([path]) => path.test(url))?.[1]();
   if (mounted) {
     const prev = mounted;
     await act(async () => render(null, prev));
@@ -44,7 +58,9 @@ export async function unmount() {
 // settle waits up to a second for a screen to appear, and returns as soon as
 // one has. The first import of the lazy admin chunk in a test worker
 // transforms every admin screen, and under a full parallel run that has
-// taken longer than the quarter second this once allowed (TKT-01M29CXK1X).
+// taken longer than the quarter second this once allowed (TKT-01M29CXK1X),
+// and then longer than the second; renderAt now loads a lazy chunk before
+// it renders (lazyChunks, TKT-01M3S8Y2NA).
 export async function settle(root: HTMLElement) {
   for (let i = 0; i < 200 && !root.querySelector('[data-screen]'); i++) {
     await act(() => new Promise((r) => setTimeout(r, 5)));
