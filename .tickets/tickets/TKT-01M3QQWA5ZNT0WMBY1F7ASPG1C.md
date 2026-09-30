@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QQWA5ZNT0WMBY1F7ASPG1C
 title: Add the flag item and dialog to the post menu
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:flags
     path: docs/08-moderation.md
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qqwa5z
+  branch: run/qqwa5z-flag-dialog
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a6ccc4b1ca7a420d7
+  commit: 052db1ddeecdaffe90e8ffe339f1e03eb2e9be28
+  session: null
+  claimed_at: 2026-09-30T03:28:22Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T01:44:28Z
+updated_at: 2026-09-30T03:28:25Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase2-run-qqwa5z
   name: ""
 extensions: {}
 ---
