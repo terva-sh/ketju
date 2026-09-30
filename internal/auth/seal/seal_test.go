@@ -3,6 +3,7 @@ package seal
 import (
 	"bytes"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -27,23 +28,65 @@ func sealer(t *testing.T, key byte, now *time.Time) *Sealer {
 	return s
 }
 
+// marker is the plaintext TestRoundTrip seals. It is long enough that a
+// sealed value, or its decoded bytes, cannot hold it by chance: a
+// three-character plaintext turned up in random base64 about three runs in
+// 10,000 (TKT-01M3RBMVMJ).
+const marker = "seal-must-hide-this-state-value"
+
+// reveals reports whether sealed shows marker, either in its text or in the
+// bytes the text decodes to. The decoded check is the one that catches a
+// value which was encoded but not encrypted.
+func reveals(sealed, marker string) bool {
+	if strings.Contains(sealed, marker) {
+		return true
+	}
+	b, err := base64.RawURLEncoding.DecodeString(sealed)
+	return err == nil && bytes.Contains(b, []byte(marker))
+}
+
 func TestRoundTrip(t *testing.T) {
 	now := time.Unix(1_757_500_000, 0)
 	s := sealer(t, 1, &now)
-	v, err := s.Seal("login", flow{"abc", 7})
+	v, err := s.Seal("login", flow{marker, 7})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(v, "abc") {
+	if reveals(v, marker) {
 		t.Errorf("the sealed value shows its contents: %s", v)
 	}
 	var got flow
-	if err := s.Open("login", v, time.Minute, &got); err != nil || got != (flow{"abc", 7}) {
+	if err := s.Open("login", v, time.Minute, &got); err != nil || got != (flow{marker, 7}) {
 		t.Fatalf("Open = %+v, %v", got, err)
 	}
-	again, _ := s.Seal("login", flow{"abc", 7})
+	again, _ := s.Seal("login", flow{marker, 7})
 	if again == v {
 		t.Error("two seals of one value are identical: the nonce is not fresh")
+	}
+}
+
+// The check in TestRoundTrip can fail: handed the value Seal would produce
+// if it only encoded its envelope, reveals finds the marker.
+func TestRevealsCatchesAnUnsealedValue(t *testing.T) {
+	now := time.Unix(1_757_500_000, 0)
+	s := sealer(t, 1, &now)
+	raw, err := json.Marshal(flow{marker, 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	plain, err := json.Marshal(envelope{At: now.Unix(), V: raw})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if unsealed := base64.RawURLEncoding.EncodeToString(plain); !reveals(unsealed, marker) {
+		t.Errorf("reveals missed the marker in an unencrypted envelope: %s", unsealed)
+	}
+	sealed, err := s.Seal("login", flow{marker, 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if reveals(sealed, marker) {
+		t.Errorf("reveals found the marker in a real seal: %s", sealed)
 	}
 }
 

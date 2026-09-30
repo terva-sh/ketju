@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3RBMVMJFVT3TSW49X8Z4AX7
 title: Stop the seal round-trip test failing when ciphertext contains abc
 type: bug
-status: draft
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -18,12 +18,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T05:12:24Z
-updated_at: 2026-09-30T09:07:55Z
+updated_at: 2026-09-30T10:04:20Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-rbmvmj
   name: ""
 extensions: {}
 ---
@@ -42,10 +42,10 @@ Reported by the Phase 2 run orchestrator on 2026-09-30.
 
 ## Acceptance criteria
 
-- [ ] TestRoundTrip seals a marker of at least 24 characters and fails when reveals finds it in the sealed text or in its base64url-decoded bytes (internal/auth/seal/seal_test.go)
-- [ ] TestRevealsCatchesAnUnsealedValue: reveals answers true for the base64url encoding of the unencrypted envelope and false for a real seal of the same value
-- [ ] go test -race -count=10000 -run 'TestRoundTrip|TestRevealsCatchesAnUnsealedValue' ./internal/auth/seal/ passes, and a note records the command and its time
-- [ ] internal/auth/seal/seal.go is unchanged
+- [x] TestRoundTrip seals a marker of at least 24 characters and fails when reveals finds it in the sealed text or in its base64url-decoded bytes (internal/auth/seal/seal_test.go)
+- [x] TestRevealsCatchesAnUnsealedValue: reveals answers true for the base64url encoding of the unencrypted envelope and false for a real seal of the same value
+- [x] go test -race -count=10000 -run 'TestRoundTrip|TestRevealsCatchesAnUnsealedValue' ./internal/auth/seal/ passes, and a note records the command and its time
+- [x] internal/auth/seal/seal.go is unchanged
 
 ## Implementation plan
 
@@ -88,3 +88,21 @@ What exists there:
 **agent:claude-code/phase2-groom** at 2026-09-30T09:07:55Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The ticket had no plan: this writes the first one and its four criteria, on top of the phase-2 milestone PR #208 set. Settled as engineering choices: the test seals a 31-character marker and checks both the sealed text and its base64url-decoded bytes, and a second test proves the check fires on an unencrypted envelope. The old three-character check failed by chance and also passed an unencrypted seal by chance. Retrying on a match and a fixed nonce lost; seal.go does not change. auth_test.go:243's 8-character check (about 7e-13 per run) is left alone. Re-applied onto main at a660ae5, after PR #208 merged.
+
+**agent:claude-code/phase2-run-rbmvmj** at 2026-09-30T09:59:34Z
+
+Claimed 2026-09-30 by the extended Phase 2 run. The plan was checked against main at 5362311: seal_test.go and seal.go are unchanged since 885bcac, so the plan stands as groomed and is not rewritten.
+
+Built as planned in internal/auth/seal/seal_test.go: const marker = "seal-must-hide-this-state-value" (31 characters); reveals(sealed, marker) checks the sealed text and its base64url-decoded bytes; TestRoundTrip seals flow{marker, 7}; TestRevealsCatchesAnUnsealedValue proves the check fires on base64url(json(envelope)) and stays quiet on a real seal. The other tests keep "abc". seal.go is unchanged.
+
+Mutations tried, reverted after each:
+- reveals without the decoded-bytes check: caught by TestRevealsCatchesAnUnsealedValue (the marker is not in the base64 text).
+- Seal returning base64url(plain) with no encryption: caught by TestRoundTrip.
+
+Repeat run, 2026-09-30 09:58:52-09:59:09 UTC, local amd64, Go 1.27.1:
+  go test -race -count=10000 -run 'TestRoundTrip|TestRevealsCatchesAnUnsealedValue' ./internal/auth/seal/
+  ok  github.com/terva-sh/ketju/internal/auth/seal  16.615s (17 s wall)
+
+## Summary
+
+TestRoundTrip in internal/auth/seal/seal_test.go now seals a 31-character marker and checks, through a helper named reveals, that neither the sealed text nor its base64url-decoded bytes contain it. The old three-character check failed by chance about 3 runs in 10,000 and could pass an unencrypted seal by chance; the new one does neither. TestRevealsCatchesAnUnsealedValue proves the check fires on an unencrypted envelope. seal.go is unchanged. 10,000 race runs of both tests passed in 17 s; both mutations tried (reveals without the decoded check, Seal without encryption) were caught.
