@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:26:15Z
-updated_at: 2026-09-30T18:44:31Z
+updated_at: 2026-09-30T19:04:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -239,4 +239,4 @@ Maintainer accepted AC6 on 2026-10-01: the reader grew 11 B (47415 to 47426 B gz
 
 ## Summary
 
-Landed in two PRs. #220 (server half, main ff2e95a): GET /api/v1/admin/audit, admin only, with the service asking again. It filters by actor handle or system=1, action or prefix, target type and id, and from/to in Unix ms, and pages by an opaque keyset cursor on id. Migration 0019 adds the actor and action indexes. audit.Actions and the docs/04 audit-actions table are held together by TestActionsDocumented and to the writers by TestActionsCoverTheWriters; #221 then added the six forum.* actions. Every target type is labelled and linked, and thread.moved carries both forums in related. The second PR adds the /admin/audit screen in the lazy admin chunk: filters in the address, the answer's actions in the action filter, details as text, and Older by cursor. AC6 is unticked: the reader went from 47415 B to 47420 B gzip, and those 5 B are the /admin/audit route-table entry in routes.tsx (see the note). The disagreement record is empty; review 1577's medium finding (to=0) was fixed in #220.
+Landed in two PRs. #220 (server half, main ff2e95a): GET /api/v1/admin/audit, admin only, with the service asking again. It filters by actor handle or system=1, action or prefix, target type and id, and from/to in Unix ms, and pages by an opaque keyset cursor on id. Migration 0019 adds the actor and action indexes. audit.Actions and the docs/04 audit-actions table are held together by TestActionsDocumented and to the writers by TestActionsCoverTheWriters; #221 then added the six forum.* actions. Every target type is labelled and linked, and thread.moved carries both forums in related. The second PR adds the /admin/audit screen in the lazy admin chunk: filters in the address, the answer's actions in the action filter, details as text, and Older by cursor. AC6 is ticked by exception: the reader went from 47415 B to 47426 B gzip (the /admin/audit route-table entry in routes.tsx and the lazy chunks' hashed names, see the notes), and the maintainer accepted that growth in place of the criterion on 2026-10-01. The disagreement record is empty; review 1577's medium finding (to=0) was fixed in #220.
