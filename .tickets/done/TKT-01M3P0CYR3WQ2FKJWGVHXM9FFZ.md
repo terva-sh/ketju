@@ -19,11 +19,13 @@ dependencies:
   - TKT-01M3NRP3W9XSXYMSPNYS7JGYF4
   - TKT-01M29CXK1X0EF4CPPN11KVGC2Z
 blocks_on: none
-references: []
+references:
+  - ref: pr:239
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T16:08:32Z
+updated_at: 2026-09-30T16:08:51Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
