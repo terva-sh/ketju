@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T02:21:56Z
-updated_at: 2026-09-30T12:37:36Z
+updated_at: 2026-09-30T12:46:40Z
 created_by:
   id: agent:claude-code/phase2-run-cxjz9
   name: ""
@@ -53,12 +53,12 @@ Adding `redacted` to `internal/dto` was tried in that lane and reverted: `web/cl
 
 ## Acceptance criteria
 
-- [ ] dto.Post and dto.PostHistory carry redacted (bool, no omitempty), set from threadlog.EntryRedacted in postsDeps and History; the dto and api goldens, dto.ts and the fixtures follow, and contract.test.ts passes
+- [x] dto.Post and dto.PostHistory carry redacted (bool, no omitempty), set from threadlog.EntryRedacted in postsDeps and History; the dto and api goldens, dto.ts and the fixtures follow, and contract.test.ts passes
 - [ ] removedText and removedMark say 'Post removed permanently' and 'removed permanently' for a redacted post whatever its removal (removal.test.tsx)
 - [ ] The moderator queue shows a redacted post as 'Removed permanently' with no Remove and no Keep, and Dismiss still sends dismiss (QueueScreen.test.tsx)
-- [ ] docs/07 Removed posts and the thread response shape name the redacted field
+- [x] docs/07 Removed posts and the thread response shape name the redacted field
 - [ ] The thread-view bundle stays within the 60000 B gzip budget and the dist from go generate ./internal/web/spa is committed
-- [ ] A redacted post answers redacted: true to every reader admitted to each route (anon, member, author, moderator): the page, the single post, /users/{handle}/posts, the moderator queue and history; a visible or moderator-hidden post answers false (redact_test.go)
+- [x] A redacted post answers redacted: true to every reader admitted to each route (anon, member, author, moderator): the page, the single post, /users/{handle}/posts, the moderator queue and history; a visible or moderator-hidden post answers false (redact_test.go)
 
 ## Implementation plan
 
@@ -127,3 +127,14 @@ Groomed 2026-09-30 (TKT-01M3M9RR26). Settled as engineering choices in the maint
 **agent:claude-code/phase2-groom** at 2026-09-30T08:58:52Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The plan is current, so it is not rewritten. Checked on main: dto.Post and dto.PostHistory still have no redacted field. docs/07 'Removed posts' still says no response field tells a redaction from a hide. Every post DTO is still built in one place, postsDeps in view.go (the page, the single post, replies, /users/{handle}/posts through userposts.go, and the queue through posts.go). removal.tsx, QueueScreen's postState and stateWords, and data-keep-refused are as the plan names them. Landed since, with no change to the plan: the flag menu (PR #202). mayFlag already offers no flag on a deleted post, and a redacted post is deleted, so neither PostMore nor FlagDialog changes. The post source route (PR #205) already answers a redacted post with conflict, held by internal/service/threads/source_test.go. The thread page still has no edit, delete or restore controls. Members who moderate through a group see the queue (moderatesGate) and get the same words. TKT-01M29CP2Q3 (post history view) now depends on this ticket for PostHistory.redacted. The docs/13 section the Settled item cites is now titled 'Running two lanes, changed', with the same rule.
+
+**agent:claude-code/phase2-run-r1wpns** at 2026-09-30T12:46:34Z
+
+Claimed for the extended Phase 2 run (docs/13 "The extension of 2026-09-30"). The orchestrator split this ticket into two PRs, because another lane holds the client dist:
+1. Server half (this PR): `redacted` on dto.Post and dto.PostHistory for every reader, the goldens, docs/07 and redact_test.go. dto.ts takes a types-only edit, which the goldens force. `go generate ./internal/web/spa` leaves internal/web/spa/dist byte-identical. Criteria 1, 4 and 6 are ticked. The ticket stays in-progress after it merges.
+2. Client half (a later PR, once the dist lane is free): the "Post removed permanently" words in removal.tsx, the moderator queue offering no Remove and no Keep on a redacted post, the regenerated dist, and criteria 2, 3 and 5. That PR closes the ticket.
+
+The plan stands as written. Details settled while building, all internal:
+- The redacted fixture post (#65) goes on the moderator's thread page only, as the plan says. web/client tests import thread.member.json and one counts its posts (ThreadScreen.test.tsx), so adding the post to every class would have forced a client test edit in the server half. The member history golden's tombstone is now the redacted post's (ordinal 65, redacted: true).
+- dto-contract.ts needed no change. No client test fixture needed `redacted` either: tsc --noEmit passes over src with the new required field.
+- Security check, as the orchestrator asked: the post source route (PR #205) refuses a redacted post to everyone. redact_test.go TestRedactedIsFlaggedEverywhere asserts 401 for an anonymous reader, 403 for another member, and 409 for the author and a moderator, and that no answer carries the text. The same test asserts that no route (page, single post, parent's replies, history, source, /users/alice/posts, moderator queue) serves the redacted text to anon, member, author or moderator. Every route but the source serves `redacted: true` to each reader it admits.
