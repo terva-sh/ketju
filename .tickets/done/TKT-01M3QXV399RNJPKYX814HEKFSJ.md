@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QXV399RNJPKYX814HEKFSJ
 title: Add rename and move to the thread screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,17 +20,10 @@ dependencies:
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qxv399
-  branch: run/qxv399-rename-move
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa4ee2b7db96c186d
-  commit: de1771d531b909bb2b8bcc2dc3c3650d8aae749c
-  session: null
-  claimed_at: 2026-09-30T12:16:32Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T12:36:53Z
+updated_at: 2026-09-30T13:26:53Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
@@ -57,15 +50,15 @@ What the groomed plan asked of the client:
 
 ## Acceptance criteria
 
-- [ ] The thread viewer block carries rename_until, the end of the viewer's rename window in Unix ms or null, and the page goldens and dto.ts follow
-- [ ] After a rename or a move the screen shows the answer's header and replaces the URL with the canonical one, keeping ordinal, /history, page, lens and hash
-- [ ] rename-window-closed, forbidden and conflict answers show their catalogue message and keep the dialog open
-- [ ] The thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
-- [ ] rename_until is set only for the thread's author without moderate while authorRenameCheck passes and the window is open, and is null for a moderator, another member, an anonymous reader, and a window of 0 (TestRenameUntil); Rename and the viewer block both call authorRenameCheck
-- [ ] rename_until is in the uncached viewer block: two viewers share one cached posts entry, and the window passing with no append turns it null and changes the ETag (TestRenameUntilIsInTheViewerBlock)
-- [ ] The move list leaves out the current forum and lists archived forums only to an admin, and a move forgets the cached /api/v1/forums GETs (ThreadScreen.test.tsx)
-- [ ] The thread actions offer Rename whenever viewer.can_moderate is true, and to the author while rename_until has not passed, and Move whenever viewer.can_moderate is true, whatever the role (ThreadScreen.test.tsx 'a group moderator is offered rename and move')
-- [ ] The timer that withdraws Rename is set through delayUntil, never longer than 2147483647 ms, so a rename_until 40 days ahead leaves Rename offered (deadline.test.ts, ThreadScreen.test.tsx 'the author is offered rename while the window is open'), and TestRenameUntil covers a window of 10000000000 seconds
+- [x] The thread viewer block carries rename_until, the end of the viewer's rename window in Unix ms or null, and the page goldens and dto.ts follow
+- [x] After a rename or a move the screen shows the answer's header and replaces the URL with the canonical one, keeping ordinal, /history, page, lens and hash
+- [x] rename-window-closed, forbidden and conflict answers show their catalogue message and keep the dialog open
+- [x] The thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
+- [x] rename_until is set only for the thread's author without moderate while authorRenameCheck passes and the window is open, and is null for a moderator, another member, an anonymous reader, and a window of 0 (TestRenameUntil); Rename and the viewer block both call authorRenameCheck
+- [x] rename_until is in the uncached viewer block: two viewers share one cached posts entry, and the window passing with no append turns it null and changes the ETag (TestRenameUntilIsInTheViewerBlock)
+- [x] The move list leaves out the current forum and lists archived forums only to an admin, and a move forgets the cached /api/v1/forums GETs (ThreadScreen.test.tsx)
+- [x] The thread actions offer Rename whenever viewer.can_moderate is true, and to the author while rename_until has not passed, and Move whenever viewer.can_moderate is true, whatever the role (ThreadScreen.test.tsx 'a group moderator is offered rename and move')
+- [x] The timer that withdraws Rename is set through delayUntil, never longer than 2147483647 ms, so a rename_until 40 days ahead leaves Rename offered (deadline.test.ts, ThreadScreen.test.tsx 'the author is offered rename while the window is open'), and TestRenameUntil covers a window of 10000000000 seconds
 
 ## Implementation plan
 
@@ -167,3 +160,7 @@ Plan refreshed against main at a660ae5 on 2026-09-30. What changed: (1) Move is 
 **agent:claude-code/phase2-run-qxv399** at 2026-09-30T12:36:53Z
 
 Built and tested on a local branch, run/qxv399-rename-move, from main at de1771d, without the dist: two client lanes (reply autosave, then suspension controls) hold it first (docs/13 'Running two lanes'). Green locally: gofmt, go build, go vet, go test -race ./..., npx tsc --noEmit, vitest (52 files, 1577 tests), and the full Playwright suite (102 passed, 10 skipped) on the regenerated client. The reader bundle measured 49887 B gzip against 49019 B on de1771d, +868 B. Nothing is pushed. When the dist is free the commits are replayed onto origin/main, the client regenerated, and every check run again before the PR opens; the criteria are ticked then.
+
+## Summary
+
+The thread screen renames and moves threads. The server serves rename_until in the per-viewer block: the author's window end in Unix ms while authorRenameCheck, which Rename also calls, passes, and null for everyone else. The client offers Rename on can_moderate and to the author inside that window, with the withdrawing timer bounded through delayUntil (components/thread/deadline.ts, new here), and Move on can_moderate, built on the lock and pin panel. Move lists the forums GET /api/v1/forums serves less the thread's own and, except to an admin, the archived ones. After either action the answer's header shows at once and the address takes its canonical slug; the slug check now reads the header shown, so the page answered before a rename does not undo it. Reader bundle 52095 B gzip, +884 B on main at 6d1e9ab. Tests: TestRenameUntil, TestRenameUntilIsInTheViewerBlock, ThreadScreen, threadActions and deadline unit tests, and e2e/thread-rename-move.spec.ts at both widths. All criteria met.
