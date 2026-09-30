@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T16:41:27Z
-updated_at: 2026-09-30T20:10:44Z
+updated_at: 2026-09-30T20:30:03Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -48,7 +48,7 @@ Reported by the Phase 2 run orchestrator on 2026-09-30.
 - [x] The spec makes no /auth/* request, keeps serial mode, the one context from stateFile('ada') and info.project.use, the workers and fullyParallel checks, and its 10 tests with their names and assertions; playwright.config.ts is unchanged
 - [x] The header comment says afterAll restores the seeded fields whatever happened, and cites this ticket
 - [x] A note records a mutation run of e2e/admin-forms.spec.ts and e2e/apply.spec.ts on both projects with one admin-forms test broken after the save: only that test fails in each project, desktop's 'the corrected form saves as a new version' passes, and apply.spec.ts passes; the break is not committed
-- [ ] CI's Playwright step passes on the PR, and its step log shows admin-forms' tests passing on both projects
+- [x] CI's Playwright step passes on the PR, and its step log shows admin-forms' tests passing on both projects
 
 ## Implementation plan
 
@@ -131,6 +131,12 @@ Mutation run (criterion 4). The break, never committed: in 'version 1 opens read
 - Hook failure path, desktop alone, admin-forms only, with the break and afterAll's `toBe(201)` also changed to `toBe(299)`: the run finished (exit 1; 1 failed, 2 did not run, 11 passed) and the report carried both the test's error and the hook's `Error: save the starting fields back / Expected: 299 / Received: 201`. So a failed restore expectation still reaches the report, and finally still closed the context (the run did not hang).
 
 Before the change, for comparison: the same shape of mutation on main is TKT-01M3RZXGBA note 4 (2026-09-30), where desktop admin-forms failed earlier, at 'the corrected form saves as a new version', on the 5 s toContainText for `[data-preview] [data-field="pronouns"]`. Not re-run, as the plan allows.
+
+**agent:claude-code/phase2-run-sk2hfe** at 2026-09-30T20:30:02Z
+
+CI and review on PR #246, head ba2f282, base d28aead. `ci / Build and Test (pull_request)`: success, run 1604, job 0. Every step succeeded; the step "Playwright smoke at 390 px and 1440 px" (7m32s) logged 175 passed, 11 skipped, and all ten admin-forms tests passed on phone (29-38) and on desktop (120-129), 'the fields it started with are saved back' included. Criterion 5 ticked.
+
+Terva review: clean full review, run 1605 (run id 2b01ee21-86e6-45e1-b861-5f8dcc14d853, request ready-review-ba2f282), `terva-review/code` success on ba2f282, no findings ("I found no concrete correctness bug"). Main moved from 387c401 to d28aead (#245, TKT-01M3QS0TMV) after the branch; it touches no file this PR does, and its new link-sign-in.spec.ts does not touch the form.
 
 ## Summary
 
