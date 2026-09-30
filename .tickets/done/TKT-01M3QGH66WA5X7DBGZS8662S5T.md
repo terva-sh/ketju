@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QGH66WA5X7DBGZS8662S5T
 title: Add lock, unlock, pin and unpin to the thread screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -19,17 +19,10 @@ dependencies:
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qgh66w
-  branch: run/qgh66w-thread-moderation
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a7b5563de795ba7ca
-  commit: f388921469800497b3e8496ea4a023e3d41a7296
-  session: null
-  claimed_at: 2026-09-30T10:56:47Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-29T21:18:33Z
-updated_at: 2026-09-30T11:34:09Z
+updated_at: 2026-09-30T12:03:43Z
 created_by:
   id: agent:claude-code/phase2-run-ckrgs
   name: ""
@@ -56,7 +49,7 @@ What the groomed plan asked of the client:
 
 - [x] Each action sends the body its route takes ({reason} or {}, {scope, until}, {scope} of the active pin), and the answer's header shows at once and invalidates the cached pages at the old log length (ThreadScreen.test.tsx, threads.test.ts)
 - [x] The thread head shows a locked thread's notice and an active pin's scope and end, a 409 keeps the panel open and refetches, and a member's composer is absent when can_reply is false (ThreadScreen.test.tsx)
-- [ ] Nothing imports from screens/admin, the thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
+- [x] Nothing imports from screens/admin, the thread-view budget holds, and the dist regenerated with go generate ./internal/web/spa is committed
 - [x] The thread actions offer Lock or Unlock, and Pin or Unpin, by the header's state, whenever viewer.can_moderate is true, whatever the role, and never when it is false (threadActions.test.ts, ThreadScreen.test.tsx 'a moderator sees the moderation actions')
 - [x] The global scope, Unpin of a global pin, and Pin over a global pin are offered only when the viewer's role is moderator or admin (threadActions.test.ts 'a global pin is staff's', ThreadScreen.test.tsx 'a group moderator is not offered a global pin')
 
@@ -166,3 +159,11 @@ Two choices made beyond the plan and its "Revised on claim", recorded here:
 **agent:claude-code/phase2-run-qgh66w** at 2026-09-30T11:34:09Z
 
 The panel was tried as a lazy chunk and then dropped. At the coordinator's request, `ModerateDialog` was moved to `src/moderate/` and imported dynamically once `can_moderate` was true, and `scripts/bundle.mjs` stopped counting that chunk, as it already skips the admin screens. The reader bundle then measured 48872 B gzip, against 49007 B with the panel bundled statically and 47415 B on main, a saving of 135 B. The saving was small because Rolldown moved the modules the panel shares with the entry (preact, hooks, signals, the API client) into a chunk of their own, and the second gzip stream cost about 700 B. Rolldown's chunkOptimization variants, `preserveEntrySignatures: false`, and a codeSplitting group for the panel measured the same or larger. The coordinator judged 135 B not worth an extra chunk plus a change to what the budget counts. The unpushed commits were removed, and the panel stays eagerly loaded at +1592 B. `scripts/bundle.mjs` and docs/07 are as on main.
+
+## Summary
+
+The thread screen offers Lock or Unlock, Pin and Unpin on `viewer.can_moderate`, whatever the role, so a forum moderator by grant is offered them too. A global pin stays a moderator's or admin's by role. `moderateKinds` (`web/client/src/shell/threadActions.ts`) offers neither Pin nor Unpin over one to anyone else, and the pin panel offers the global scope only to staff. So the page offers exactly what the server's `staffPin` allows.
+
+`components/thread/ModerateDialog.tsx` is an inline panel under the thread head. It sends each route's body: `{reason}` or `{}`, `{scope, until}`, and `{scope}` of the active pin. Its answer goes through `storeThreadHeader` (`state/threads.ts`), which replaces the cached entry at the new log length, drops the old pages and held GETs, and shows the header at once. The page is then asked for again. After a conflict or refusal, the panel keeps its words and asks for the page again. It drops its form once the action is no longer offered. The thread head shows the locked note and a pinned note with its scope and end.
+
+The panel is loaded eagerly. A lazy chunk was measured and dropped (see the notes). The reader bundle is 49019 B gzip of 60000 B, +1593 B over main's 47426 B. There is no server change. New tests are in `threadActions.test.ts`, `ThreadScreen.test.tsx`, `threads.test.ts`, and the e2e `thread-moderation.spec.ts` at both widths.
