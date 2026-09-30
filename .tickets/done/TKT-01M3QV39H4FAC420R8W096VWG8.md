@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QV39H4FAC420R8W096VWG8
 title: Clear the agent limits form's Saved status when a field is edited
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -18,17 +18,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-qv39h4
-  branch: run/qv39h4-limits-saved-status
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab684c2d5c5936692
-  commit: 13709f0d74ab93dbdc040da9e4bd218ed6f0a324
-  session: null
-  claimed_at: 2026-09-30T18:42:52Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T00:23:12Z
-updated_at: 2026-09-30T18:48:43Z
+updated_at: 2026-09-30T20:14:13Z
 created_by:
   id: agent:claude-code/phase2-run-qh3gs2
   name: ""
@@ -47,7 +40,7 @@ Terva review 1510 on PR #179 (head a064d60), low: after a successful save of an 
 - [x] Editing either limit field after a save removes 'Saved.' (AgentControls.test.tsx)
 - [x] An answer to a save does not show 'Saved.' when a field was edited while the save was in flight (AgentControls.test.tsx)
 - [x] An answer shows 'Saved.' when both fields still hold the text that was sent (AgentControls.test.tsx)
-- [ ] The dist from go generate ./internal/web/spa is committed
+- [x] The dist from go generate ./internal/web/spa is committed
 
 ## Implementation plan
 
@@ -99,3 +92,11 @@ Plan refreshed against main at 5124209 on 2026-09-30. The plan is current, so it
 **agent:claude-code/phase2-run-qv39h4** at 2026-09-30T18:48:43Z
 
 Built and tested on local branch run/qv39h4-limits-saved-status, based on main at 13709f0, not pushed: the client lane's dist is held by another ticket. Code 1e46fcb and dist 22642aa. At replay, drop the dist commit and regenerate on the new base. Checks: gofmt, go build, go vet and go test -race all pass. Client: 1839 tests in 61 files pass, and tsc --noEmit -p . is clean. Seven mutations were tried against AgentControls.test.tsx and each is caught; the code commit lists them. Sizes, gzip: the reader bundle went from 54924 to 54925 B against a budget of 70000 B (web/client/budget.json). index-*.js stayed at 40671 B, and the 1 B is ApplyRoot referencing renamed chunk hashes. The admin chunk AdminRoot went from 25733 to 25782 B (gzip -9). Criterion 4 stays unticked until the dist is regenerated on the replayed base.
+
+**agent:claude-code/phase2-run-qv39h4** at 2026-09-30T20:14:05Z
+
+Replayed onto main at d28aead (after #245). Dropped the old dist commit and regenerated the dist on the new base; a second go generate leaves it unchanged. This supersedes the earlier note's figures. Reader bundle, gzip: 57204 B before, 57203 B after, budget 70000 B; index-*.js holds no code from this change, and the difference is chunk hash names. Admin chunk AdminRoot, gzip -9: 25733 B before, 25782 B after. Checks on the replayed head: gofmt, go build, go vet and go test -race pass. Client: tsc --noEmit -p . is clean, and 1911 tests in 64 files pass. Guards on main: none applies (no admin route, no .Migrate( in a test, no audit action, the reader bundle does not grow).
+
+## Summary
+
+Limits in web/client/src/screens/admin/AgentPanel.tsx now clears 'Saved.' on any input to either field. A save's answer shows it only when both fields still hold the text that was sent, read through a ref set on every render. The comparison is on the field text, so an edit undone in flight still counts as saved. The error line is unchanged. Tests are in AgentControls.test.tsx under 'the saved status': five cases, and seven mutations tried against them are all caught. Client only: the dist is regenerated, the reader bundle stays at 57203 B of 70000 B, and the admin chunk grows by 49 B gzip. All four criteria are ticked.
