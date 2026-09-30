@@ -24,10 +24,12 @@ references:
     path: docs/05-identity-and-accounts.md
   - ref: pr:180
     path: null
+  - ref: pr:186
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-29T05:02:34Z
-updated_at: 2026-09-30T01:09:29Z
+updated_at: 2026-09-30T01:28:23Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -279,4 +281,4 @@ Handle changes are built as docs/05 "Changing a handle" decided.
 
 Mutations tried against the tests, and each was caught: holder-in-M first (TestARenameIntoAnOldHandleTakesNoMention), anonymize without ForgetReleasesOf (TestAnonymizeReleasesWithoutRedirect, TestAnAnonymizedMentionIsText), write-time resolution ignoring reservations (TestAMentionOfAReleasedHandleFollowsTheRedirect), cached lookups never rechecked (TestOldMentionsFollowTheRename, TestResponseCacheAfterRename and six more), and an admin rename starting the cooldown (TestRenameCooldown, TestRenameRoutes).
 
-For whoever builds next: the rename controls (TKT-01M3P0CYR3 for admins, TKT-01M29CXK4E for members) read `same` and `available_at`. The member route has no screen yet. Mention resolution no longer depends on the projection, so a post links correctly from its first read (`TestAReservedMentionLinksBeforeProjection`). PR #180 was replaced by #N after the moderator queue landed on main.
+For whoever builds next: the rename controls (TKT-01M3P0CYR3 for admins, TKT-01M29CXK4E for members) read `same` and `available_at`. The member route has no screen yet. Mention resolution no longer depends on the projection, so a post links correctly from its first read (`TestAReservedMentionLinksBeforeProjection`). PR #180 was replaced by #186 after the moderator queue landed on main.
