@@ -16,11 +16,13 @@ parent: TKT-01M29BN367F3YQZESM63VN26GP
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:248
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-28T07:43:10Z
-updated_at: 2026-09-30T20:48:22Z
+updated_at: 2026-09-30T20:48:57Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
