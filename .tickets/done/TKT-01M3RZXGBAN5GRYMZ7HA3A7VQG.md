@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3RZXGBAN5GRYMZ7HA3A7VQG
 title: Bound the axe scans in the admin forms and agents Playwright tests
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,12 @@ references:
     path: null
   - ref: pr:223
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-rzxgba
-  branch: run/rzxgba-bound-admin-scans
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a31bc2251ce750563
-  commit: fa867110fcd71f5e008e88e0ebcf291ade4d94fa
-  session: null
-  claimed_at: 2026-09-30T12:47:07Z
-  expires_at: null
+  - ref: pr:232
+    path: null
+claim: null
 archive: null
 created_at: 2026-09-30T11:06:39Z
-updated_at: 2026-09-30T13:30:19Z
+updated_at: 2026-09-30T13:41:50Z
 created_by:
   id: agent:claude-code/phase2-run-mtqg5a
   name: ""
@@ -64,7 +59,7 @@ The a11y thread page took 5-9s on green runs and still reached 30 s under load. 
 - [x] Each file runs under test.describe.configure({ mode: 'serial' }) with one context made in beforeAll from stateFile('ada') and info.project.use, and closed in afterAll
 - [x] playwright.config.ts is unchanged, and neither file adds test.setTimeout, test.slow or a test.step timeout
 - [x] A note records the mutation check: a dark-only image-alt violation fails only that state's dark test in each file, and the note says whether the failing test kept a trace
-- [ ] CI's Playwright step passes on the PR, and a note records both files' per-test durations from that run
+- [x] CI's Playwright step passes on the PR, and a note records both files' per-test durations from that run
 - [x] A note records the contention run (14 busy loops pinned with the run to two cores, --repeat-each=5) on main and on the branch, with the command and each test's min, median and max duration per project. The loops are killed by the subshell's EXIT trap after each measurement, and pgrep -c -x yes shows 0 before the next one. Every test passes on the branch
 
 ## Implementation plan
@@ -248,3 +243,39 @@ Traces: each failing test kept a `trace.zip` under `trace: 'retain-on-failure'`,
 **agent:claude-code/phase2-run-rzxgba** at 2026-09-30T13:30:19Z
 
 Rebased the unpushed branch onto main at 6d1e9ab. It now includes PR #229 (TKT-01M3QMRE47, the suspension controls on the admin users screen, which admin-agents drives) and the reply-drafts work (TKT-01M3NS1931). Nothing that landed touches the two specs or playwright.config.ts. On the rebased branch, the full Playwright suite without load passed 143, with 11 skipped, in 2.4 min. The skips are the existing per-width skips in focus, shortcuts, targets and thread, none of them in these files. The contention and mutation numbers above were measured on fa86711.
+
+**agent:claude-code/phase2-run-rzxgba** at 2026-09-30T13:41:37Z
+
+CI on PR #232, head 45fa9c5, base 6d1e9ab: run 1500, job 0. `ci / Build and Test (pull_request)` succeeded.
+I read the step log for "Playwright smoke at 390 px and 1440 px" (3m31s): 143 passed and 11 skipped in 3.4 min, and every test in these two files passed.
+
+Per-test durations in seconds (phone | desktop):
+- `admin-agents.spec.ts` "the new agent form passes the scan in the light theme": 1.60 | 1.10
+- `admin-agents.spec.ts` "the new agent form passes the scan in the dark theme": 0.94 | 0.69
+- `admin-agents.spec.ts` "a new agent's token is shown once, and the token panel passes the scan in the light theme": 1.30 | 1.20
+- `admin-agents.spec.ts` "the token panel passes the scan in the dark theme": 0.99 | 0.86
+- `admin-agents.spec.ts` "once Done is pressed, the token is nowhere on the page": 0.14 | 0.14
+- `admin-agents.spec.ts` "the write limits save, and the agent detail passes the scan in the light theme": 1.10 | 0.88
+- `admin-agents.spec.ts` "the agent detail passes the scan in the dark theme": 1.00 | 0.89
+- `admin-agents.spec.ts` "the issue confirmation passes the scan in the light theme": 1.00 | 0.97
+- `admin-agents.spec.ts` "the issue confirmation passes the scan in the dark theme": 0.91 | 0.90
+- `admin-agents.spec.ts` "a new token replaces the old one": 0.18 | 0.17
+- `admin-agents.spec.ts` "revoking stops the token, and the agent without a token passes the scan in the light theme": 0.97 | 0.84
+- `admin-agents.spec.ts` "the agent without a token passes the scan in the dark theme": 1.00 | 0.80
+- `admin-agents.spec.ts` "closing the detail": 0.07 | 0.06
+- `admin-forms.spec.ts` "the editor passes the scan in the light theme": 1.10 | 2.00
+- `admin-forms.spec.ts` "the editor passes the scan in the dark theme": 0.96 | 1.20
+- `admin-forms.spec.ts` "the editor's phone frame is 390 px across": 0.18 | 0.14
+- `admin-forms.spec.ts` "a key the server refuses is marked on its field, and passes the scan in the light theme": 2.00 | 1.80
+- `admin-forms.spec.ts` "the refused draft passes the scan in the dark theme": 1.30 | 0.92
+- `admin-forms.spec.ts` "the corrected form saves as a new version, and passes the scan in the light theme": 1.90 | 1.90
+- `admin-forms.spec.ts` "the saved form passes the scan in the dark theme": 0.82 | 0.88
+- `admin-forms.spec.ts` "version 1 opens read-only, and passes the scan in the light theme": 0.94 | 1.10
+- `admin-forms.spec.ts` "version 1, read-only passes the scan in the dark theme": 0.98 | 0.98
+- `admin-forms.spec.ts` "the fields it started with are saved back": 1.00 | 0.97
+
+That is 23 tests per project. The slowest took 2.0 s. On green runs 1396, 1403 and 1407 the single tests took 9.5-14.7 s (admin-forms) and 7.1-12.1 s (admin-agents).
+
+## Summary
+
+PR #232. The axe scans in admin-forms.spec.ts and admin-agents.spec.ts each run in their own test. Both files are serial, on one page that beforeAll opens as ada from info.project.use and afterAll closes. admin-forms has 10 tests with 8 scans, and admin-agents 13 with 10. The rule tags, the assertions, the config and the timeouts are unchanged. Under 14 busy loops on two cores with --repeat-each=5, every run on main failed near 30 s (20 of 20), and the branch passed 230 of 230 with its slowest test at 12.7 s. The dark-only image-alt mutant failed only its state's dark test in each file, and the failing test kept a trace. In CI run 1500 the slowest of the 46 tests took 2.0 s. A failed admin-forms test still leaves the registration form unrestored for later runs on the same server. The plan kept that behaviour out of scope, and it showed up as knock-on failures in the main contention run and in the mutation run.
