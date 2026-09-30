@@ -25,7 +25,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T03:28:14Z
-updated_at: 2026-09-30T09:57:50Z
+updated_at: 2026-09-30T10:02:02Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -59,6 +59,8 @@ Reported by the rename/move lane on 2026-09-30.
 - [ ] The race step and every other step in .forgejo/workflows/ci.yml are unchanged (maintainer decision 2026-09-30, docs/08 Decided 2026-09-30)
 
 ## Implementation plan
+
+Revised at claim on 2026-09-30 by agent:claude-code/phase2-run-r5p3cn, against main at 5362311. The fixture list still matches every `_test.go` that calls `.Migrate(` (25 files, 26 calls; `internal/forms/schema_test.go` closes with `defer` and is converted by hand). Changes from the refreshed plan: `Open` refuses a path where a database or its `-wal` already exists instead of overwriting it; `TestTemplateIsAFreshMigration` also compares header pragmas and every row of every table (migrations seed groups, permissions and the registration form), leaving out only `schema_migrations.created_at`; `TestTemplateHasEveryMigration` holds the template to the files in `internal/store/db/migrations`, so a migration landing on main is in the template with nothing to regenerate; `TestFixturesUseTheTemplate` skips any directory with its own `go.mod` (spikes, nested checkouts) and fails if it finds no call even in the allowed directories. Before and after are measured back to back on one machine, from an exported tree of the base commit and from the branch.
 
 Groomed 2026-09-30 for Phase 2 (TKT-01M3M9RR26), against main at 9a8fc76. Refreshed against main at 5124209 on 2026-09-30: the open decision is settled, and the fixture list was checked against every `_test.go` file that calls `.Migrate(` there. `cmd/ketju/flow_test.go` (TKT-01M3NTSCMN) is new since 9a8fc76 and stays on its own opening with the rest of `cmd/ketju`.
 
@@ -118,6 +120,8 @@ CI run 1240 failed in `internal/perm` at Go's default 10-minute timeout, with th
 - `TestTemplateOpensAreIndependent` (new): a row written through one `dbtest.Open` is absent from a second one opened afterwards, and both pass `PRAGMA integrity_check` and `PRAGMA foreign_key_check`.
 - `TestTemplateMigratesOnce` (new): with a `db.Options.Trace` counter, a second and a third `dbtest.Open` run no `CREATE TABLE` statement.
 - `TestFixturesUseTheTemplate` (step 3).
+- `TestTemplateHasEveryMigration` (new): the template's `schema_migrations` names equal the `NNNN_name.sql` files in `../migrations`.
+- `TestOpenRefusesAnExistingDatabase` (new): `Open` never overwrites a file, and never creates a database beside a stale `-wal`.
 - The whole suite passes under `go test -race ./...` with no test changed except in how it opens its database.
 
 ### Out of scope
