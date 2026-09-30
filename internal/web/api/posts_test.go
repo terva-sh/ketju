@@ -12,8 +12,8 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/settings"
-	"github.com/terva-sh/ketju/internal/store/threadlog"
 	"github.com/terva-sh/ketju/internal/store/threadid"
+	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
 // decode reads a 200 strictly into T: a field T does not have fails.
