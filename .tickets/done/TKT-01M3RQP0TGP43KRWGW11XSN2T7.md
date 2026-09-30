@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3RQP0TGP43KRWGW11XSN2T7
 title: Let forum moderators by grant lock, pin, move and set slow mode
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -19,17 +19,10 @@ blocks_on: none
 references:
   - ref: design:moderation
     path: docs/08-moderation.md
-claim:
-  actor: agent:claude-code/phase2-run-rqp0tg
-  branch: run/rqp0tg-moderator-grants
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a676793a476736961
-  commit: 1a9d140280e9708b00de3939c0454859b7998107
-  session: null
-  claimed_at: 2026-09-30T09:50:15Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T08:42:45Z
-updated_at: 2026-09-30T10:02:45Z
+updated_at: 2026-09-30T10:07:20Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -57,14 +50,14 @@ Filed by the Phase 2 run orchestrator on 2026-09-30.
 
 ## Acceptance criteria
 
-- [ ] The lock, unlock, pin, unpin, move and slow-mode routes are registered with moderatesGate, and every other /api/v1/admin/ route keeps the gate the test's table lists for it (TestThreadModerationRoutesUseTheModeratesGate)
-- [ ] A member granted moderate on forum A through a group locks, unlocks, pins and unpins with scope forum, sets slow mode, and moves to a second forum they moderate, each 200 with one record or row and one audit row naming them (TestForumModeratorActsInTheirForum)
-- [ ] The same member is forbidden all six actions on a thread in a readable forum B they do not moderate, not-found in a forum hidden from them, and forbidden again after the grant is revoked, with nothing appended or audited (TestForumModeratorIsRefusedElsewhere)
-- [ ] Move needs moderate in both forums: the member's move from A to B and from B to A is forbidden, and from A to a forum C they moderate is 200 (TestMoveNeedsModerateInBothForums)
-- [ ] A member with no grant is forbidden by the gate on all six routes before the body is read, anonymous is 401, a pre-user 403, and moderators and admins by role still pass (TestThreadModerationGate)
-- [ ] A global pin, an unpin of a global pin, and a forum pin replacing an active global pin are forbidden to a viewer who is not a moderator or admin by role and write nothing; a forum pin is allowed (TestGlobalPinStaysStaffs)
-- [ ] Lock, unlock, pin and unpin go through appendDecided, and slow mode decides at a log length: with a move to a forum the member does not moderate appended and not projected, each is forbidden (TestThreadModerationJudgesAnUnprojectedMove), and none of the member's concurrent locks lands after such a move (TestConcurrentLocksAreDecidedOnTheLog)
-- [ ] docs/07 and the comments in moderate.go, slowmode.go and admin.go describe these routes as behind the moderates gate with the forum decided by the service, docs/07 lists the global-pin refusal, and docs/08 Primitives says what moderator means for the thread actions
+- [x] The lock, unlock, pin, unpin, move and slow-mode routes are registered with moderatesGate, and every other /api/v1/admin/ route keeps the gate the test's table lists for it (TestThreadModerationRoutesUseTheModeratesGate)
+- [x] A member granted moderate on forum A through a group locks, unlocks, pins and unpins with scope forum, sets slow mode, and moves to a second forum they moderate, each 200 with one record or row and one audit row naming them (TestForumModeratorActsInTheirForum)
+- [x] The same member is forbidden all six actions on a thread in a readable forum B they do not moderate, not-found in a forum hidden from them, and forbidden again after the grant is revoked, with nothing appended or audited (TestForumModeratorIsRefusedElsewhere)
+- [x] Move needs moderate in both forums: the member's move from A to B and from B to A is forbidden, and from A to a forum C they moderate is 200 (TestMoveNeedsModerateInBothForums)
+- [x] A member with no grant is forbidden by the gate on all six routes before the body is read, anonymous is 401, a pre-user 403, and moderators and admins by role still pass (TestThreadModerationGate)
+- [x] A global pin, an unpin of a global pin, and a forum pin replacing an active global pin are forbidden to a viewer who is not a moderator or admin by role and write nothing; a forum pin is allowed (TestGlobalPinStaysStaffs)
+- [x] Lock, unlock, pin and unpin go through appendDecided, and slow mode decides at a log length: with a move to a forum the member does not moderate appended and not projected, each is forbidden (TestThreadModerationJudgesAnUnprojectedMove), and none of the member's concurrent locks lands after such a move (TestConcurrentLocksAreDecidedOnTheLog)
+- [x] docs/07 and the comments in moderate.go, slowmode.go and admin.go describe these routes as behind the moderates gate with the forum decided by the service, docs/07 lists the global-pin refusal, and docs/08 Primitives says what moderator means for the thread actions
 
 ## Implementation plan
 
@@ -148,3 +141,27 @@ The code matched the groomed plan; it is built as written above, with the Settle
 **agent:claude-code/phase2-groom** at 2026-09-30T09:16:55Z
 
 Planned 2026-09-30 (TKT-01M3M9RR26) against main at a660ae5. Two findings widen the ticket beyond the gate swap, so effort is nearer M than the effort:S label. (1) Service.moderate (lock, unlock, pin, unpin) and SetSlowMode decide from the projection row before writing, so a move landing in between lets a forum moderator act on a thread that has just left their forum. The plan moves the four onto appendDecided and has slow mode decide at a log length. (2) A global pin heads every forum's thread list, so it is not moderation 'there'. As an engineering choice under the security rule, the plan keeps scope global, an unpin of a global pin, and replacing a global pin staff's by role. This keeps global pins as they are today. The maintainer may revisit it; allowing it would let a one-forum moderator put up to 50 threads above every forum's list.
+
+## Summary
+
+Thread moderation now follows the forum grant (docs/08 "Decided 2026-09-30"). Lock, unlock, pin, unpin, move and slow mode are behind `moderatesGate`. Every other admin route keeps its role gate, and `TestThreadModerationRoutesUseTheModeratesGate` pins the whole table.
+
+In `internal/service/threads`:
+- `moderate` (lock, unlock, pin, unpin) now wraps `appendDecided`.
+- `admitAt` is extracted from `appendDecided`.
+- `SetSlowMode` decides inside `Threads.With` at a log length L. Its transaction checks the length again after writing the row and the audit row, and answers `ErrLogMoved` otherwise, which rolls it back and decides again, up to `threadAttempts`.
+- `staffPin` keeps a global pin, unpinning one, and any pin or unpin while one is active for moderators and admins by role.
+
+Mutations tried, each caught:
+- judging lock and pin from the row read before the decision;
+- slow mode admitting from access without projecting;
+- dropping the length check in the slow mode transaction;
+- dropping `AtLength` in `appendDecided`;
+- making `staffPin` a no-op;
+- putting unpin back on `staffGate`;
+- widening suspend to `moderatesGate`;
+- dropping `canModerate` in `moderate`.
+
+The two length checks are tested deterministically by `TestAMoveLandingMidDecisionIsJudged`, which lands a move from the `Project` hook.
+
+`TestSlowModeIsInTheViewerBlockNotTheCache` now projects before its rounds (see the plan's "Revised at claim"). docs/07 and docs/08 are updated. No client, dist, dto, record type or viewer class changed.
