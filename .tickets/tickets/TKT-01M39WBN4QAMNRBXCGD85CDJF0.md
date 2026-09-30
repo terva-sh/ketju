@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-24T14:15:52Z
-updated_at: 2026-09-30T12:15:13Z
+updated_at: 2026-09-30T12:19:46Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -112,3 +112,43 @@ This ticket also carries two criteria from TKT-01M29CCC0F (Build the CSS system,
 **agent:claude-code/phase2-groom** at 2026-09-30T08:52:14Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. Nothing it plans has landed: there is no e2e/thread.spec.ts and no thread PNG. Changed: thread-list.spec.ts's screenshot block is :77-88; .topbar.phone is shell/shell.css:208-221 (:179 is now .topbar.applicant); the phone top bar is asserted through [data-shell="phone-topbar"]. Corrected an error the plan carried from 7af2c5a: .topbar.phone sets no padding-top, so the winning rule is base.css's env(safe-area-inset-top, 0px), and the no-inset fallback is 0px, not 8px; max(8px, …) applies only to its left and right padding. The spec reads seed.thread from seed.json as a11y.spec.ts does, and sets alice's read position first because flag, replies, shortcuts and a11y specs move it. The budget reference is now 47415 of 60000 B. Confirmed unchanged: forum-index.spec.ts:40-51, a11y.spec.ts's ready selector, setReadPosition (e2e/session.ts:38), ci.yml's Chromium step :122-137 (PR #194's new step is Go only), composer.css:251-265, breakpoints.test.ts:48, the eight mockups, and TKT-01M38WTK. The criteria are unchanged and still checkable.
+
+**agent:claude-code/phase2-run-39wbn4q** at 2026-09-30T12:19:46Z
+
+Divergences of the committed screenshots (web/client/e2e/screenshots/forum-index-* and thread-*, refreshed in this ticket's PR) from docs/mockups/, each with its disposition. The mockups were rendered at their artboard widths in Chromium and compared by eye. The same list is in the PR.
+
+### Both screens, desktop top bar
+- D1 Search is a compact button; the mockup has a 240 px field with a "/" hint. The search screen is owned by TKT-01M29CTY8T (Build the search API and results screen); the field's look is filed in TKT-01M3S3ZZSZ (Close the small visual gaps between the client and the mockups).
+- D2 A bell and the handle as text; the mockup has an inbox with a count and an avatar. Intended for the bell: the note on TKT-01M29CEE4K ("On desktop, Alerts is a bell icon"); the inbox is the moderation queue, shown only to moderators (TopBar.tsx). The avatar is filed in TKT-01M3S3ZZSZ.
+- D3 "New" has no count. Intended: /me has no New count (state/viewer.ts, settled in grooming for TKT-01M29CEE4K).
+
+### Front page (Main, FrontDark, MobileFront{Light,Dark})
+- F1 Heading "Forums", not the community's name. The API had no site name (TKT-01M29CEE5Y note of 2026-09-25); TKT-01M29CXK2 adds site_name. Filed in TKT-01M3S3ZZYA (Head the forum index with the site name and show draft-saved status).
+- F2 Subline "67 unread threads." rather than posts, threads and since-when. Intended: the API lacks the post count and last-visit time (TKT-01M29CEE5Y note, item 1).
+- F3 No "Mark all read". Owned by TKT-01M29CTY7K (Build the cross-forum unread, new, participated, and watching lists).
+- F4 None now: the refreshed screenshots show threads and posts, as the mockup does (TKT-01M3B6A68B). The old screenshots predated it.
+- F5 Absolute short times; the mockup and docs/06 "Post anatomy" are relative. Filed as TKT-01M3S3ZF48 (Decide between relative and absolute post times), a product decision.
+- F6 No footer with counts and help links. Filed as TKT-01M3S3ZRYD (Add the front page footer with member and post counts).
+- F7 A root forum with children is a row in its own group, and childless roots sit in an unlabelled group. Intended: forums nest one level and there are no separate categories (docs/04; TKT-01M29CEE5Y note, item 2; ForumIndex.tsx).
+- F8 Different forums and counts. Seed data, grown on purpose to the mockup's shape (TKT-01M29CEE5Y plan).
+- F9 Phone: the lock icon follows the name rather than the card's right edge. Filed in TKT-01M3S3ZZSZ.
+- M1 Phone top bar: wordmark centred, no inbox. The inbox is moderator-only (PhoneTopBar.tsx); the centring is filed in TKT-01M3S3ZZSZ.
+- M2 Phone tab bar: counts only on Unread. Intended: New has no count (D3) and docs/06 "Mobile" says a badge shows only a count the API provides; alice has no alerts.
+
+### Thread (Thread{Light,Dark}, MobileThread{Light,Dark})
+- T1 No "Forums ›" breadcrumb. Filed in TKT-01M3S3ZZSZ.
+- T2/P5 No meta line under the title. The tag chip is TKT-01M29CYSCP (Implement thread tags), the pin note TKT-01M3QGH6 (Add lock, unlock, pin and unpin to the thread screen), watching TKT-01M29CRJ29 (Implement watches and mutes); "started by · age · N posts" is filed as TKT-01M3S3ZF6J (Show who started a thread, when, and its post count under the title).
+- T3/P5 Reply, First unread and Copy link above the pager, and no "Only mara" or "Lens". The lens and only-OP are TKT-01M29CTY58 and TKT-01M29CTY71. The row is intended: docs/06 "Composer" (a sticky Reply button), "Mobile" (share link), and TKT-01M29CEE4K plan 5 (the toolbar under the title).
+- T4 Pager: the current page is accent, not ink; buttons narrower; the span is sans, not mono. Filed in TKT-01M3S3ZZSZ.
+- T5 The divider has no last-read time. Filed as TKT-01M3S3ZS0H (Show the last-read time beside the unread divider's ordinal).
+- T6/P7 The foot row (Go to post, Next unread thread, Keyboard shortcuts) in place of the "j k" hint. Intended: docs/06 "Paged, not infinite" asks for a visible control for each shortcut (ThreadFoot.tsx).
+- T7 "history" in the footer. Intended: docs/06 "Post anatomy" lists quote · reply · link · flag · history.
+- T8 The reply-to arrow is the "↩" glyph, not an icon. Intended: docs/06 writes it "↩ #37".
+- T9 No attach tool, no "Draft saved" status. Attach is TKT-01M29CXK0 (the blob store); the status is filed in TKT-01M3S3ZZYA. The reply chip exists; the capture replies to no post.
+- T10 Column 880 px, not 900 px. Filed in TKT-01M3S3ZZSZ.
+- T11/P8 No role badge, tombstone, edit, quote in view, attachment or tag: the seed's data. Filed as TKT-01M3S3ZZQD (Seed a moderator post, a tombstone and an edit in the e2e thread).
+- P1 Phone title bold ink, not muted regular. Filed in TKT-01M3S3ZZSZ.
+- P2 Phone header on one line; docs/06 "Mobile" says author and time stacked. Filed as TKT-01M3S3Z9E1 (Stack author and time in the phone post header).
+- P3 Phone footer "quote reply"; docs/06 "Mobile" says reply, quote. Filed as TKT-01M3S3Z9GT (Order the phone post footer reply, quote as docs/06 says).
+- P4 Phone pager uses text steps and no picker. The picker is TKT-01M29CGBZ (Add the page picker and lens sheets on phones); the icon steps are filed in TKT-01M3S3ZZSZ.
+- P6 Reply bar has no round compose button. Intended: posting is in the sheet's head (ReplyBar.tsx, TKT-01M3ART992). The chip exists; nothing is being replied to.
