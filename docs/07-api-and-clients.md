@@ -605,8 +605,8 @@ text, and the address. Older follows `next_cursor` and appends the page.
     {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,
      "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3,
-     "html": "<p>…</p>", "attachments": [], "deleted": false, "removal": null, "moved_to": null,
-     "machine_authored": false, "edited_by_moderator": false}
+     "html": "<p>…</p>", "attachments": [], "deleted": false, "removal": null, "redacted": false,
+     "moved_to": null, "machine_authored": false, "edited_by_moderator": false}
   ]
 }
 ```
@@ -762,7 +762,13 @@ nobody, moderators included: its log holds no text. It reads as
 `deleted: true, removal: "moderator"` with no body, and its history is
 the tombstone to everyone but a moderator, who is served its revisions
 with no source and no reason. An edit, delete or restore of it is
-`conflict`. No response field yet tells it from a moderator's hide.
+`conflict`. `redacted: true` tells it from a moderator's hide, on the
+post and on its history, and is served to every reader alike, since it
+comes from the index and the tombstone is the same for all of them
+(TKT-01M3R1WPNS). `removal` beside it is unchanged: `"moderator"`, or
+`"author"` if its author had deleted it before the redaction. A client
+reads `redacted` as "removed permanently": nobody can restore or edit it.
+`redacted` is false for every other post, removed or not.
 
 The rule answers only for removed posts. A visible post keeps the path it
 had: its body goes to everyone admitted to the thread, and its history to

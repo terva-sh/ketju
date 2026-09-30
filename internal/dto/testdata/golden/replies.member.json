@@ -21,6 +21,7 @@
       "attachments": [],
       "deleted": false,
       "removal": null,
+      "redacted": false,
       "moved_to": null,
       "machine_authored": true
     },
@@ -44,6 +45,7 @@
       "attachments": [],
       "deleted": true,
       "removal": "moderator",
+      "redacted": false,
       "moved_to": null,
       "machine_authored": false
     }

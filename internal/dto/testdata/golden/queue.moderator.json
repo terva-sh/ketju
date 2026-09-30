@@ -30,6 +30,7 @@
           "attachments": [],
           "deleted": true,
           "removal": "review",
+          "redacted": false,
           "moved_to": null,
           "machine_authored": false
         },

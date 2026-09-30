@@ -91,6 +91,9 @@ export interface Post {
   // Who removed the post: 'author', 'moderator' or 'review'; null for a
   // visible or moved post (docs/07 "Removed posts").
   removal: string | null;
+  // A hard redaction cleared the post: it is deleted, has no html for anyone,
+  // and can never be restored or edited (docs/07 "Removed posts").
+  redacted: boolean;
   moved_to: string | null;
   machine_authored: boolean;
 }
@@ -119,6 +122,8 @@ export interface PostRevision {
 export interface PostHistory {
   ordinal: number;
   deleted: boolean;
+  // A hard-redacted post: a moderator's revisions have no source or reason.
+  redacted: boolean;
   revisions: PostRevision[];
 }
 

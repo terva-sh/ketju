@@ -30,6 +30,7 @@
         "attachments": [],
         "deleted": false,
         "removal": null,
+        "redacted": false,
         "moved_to": null,
         "machine_authored": false
       }
@@ -64,6 +65,7 @@
         "attachments": [],
         "deleted": true,
         "removal": "author",
+        "redacted": false,
         "moved_to": null,
         "machine_authored": false
       }
@@ -98,6 +100,7 @@
         "attachments": [],
         "deleted": false,
         "removal": null,
+        "redacted": false,
         "moved_to": null,
         "machine_authored": false
       }

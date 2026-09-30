@@ -173,6 +173,32 @@ func threadPage(class string) ThreadPage {
 		},
 	}
 
+	if class == tModerator {
+		// A hard-redacted post (TKT-01M3R1WPNS): a moderator's removal that
+		// can never come back. Every class reads it exactly so, with no body
+		// (internal/web/api redact_test.go holds that). It is on the
+		// moderator's page alone, beside #63, whose body a moderator does
+		// read, and so that the member page the client tests count stays
+		// as it was.
+		p.Posts = append(p.Posts, Post{
+			Ordinal:           65,
+			Revision:          2,
+			Author:            alice,
+			CreatedAt:         1757500600000,
+			EditedAt:          nil,
+			ReplyTo:           nil,
+			ReplyToSuppressed: false,
+			ReplyCount:        0,
+			HTML:              "",
+			Attachments:       []Attachment{},
+			Deleted:           true,
+			Removal:           ptr(RemovalModerator),
+			Redacted:          true,
+			MovedTo:           nil,
+			MachineAuthored:   false,
+		})
+	}
+
 	switch class {
 	case tAnon:
 		p.Viewer = ThreadViewer{LastReadOrdinal: 0, Watch: "", CanReply: false, CanModerate: false,
@@ -413,7 +439,10 @@ func postHistory(class string) PostHistory {
 	}}
 	if class == tMember {
 		// The member case is the tombstone, which is the shape difference.
-		h = PostHistory{Ordinal: 63, Deleted: true, Revisions: []PostRevision{}}
+		// It is the redacted post's (TKT-01M3R1WPNS), a tombstone to a
+		// member as any removed post's is, which also says it cannot come
+		// back.
+		h = PostHistory{Ordinal: 65, Deleted: true, Redacted: true, Revisions: []PostRevision{}}
 	}
 	return h
 }

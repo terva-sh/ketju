@@ -180,7 +180,7 @@ func (s *Service) History(ctx context.Context, v domain.Viewer, id threadid.ID, 
 		if !public && !reveal {
 			return refused
 		}
-		res.Body = dto.PostHistory{Ordinal: int(ordinal), Revisions: []dto.PostRevision{}, Deleted: removed}
+		res.Body = dto.PostHistory{Ordinal: int(ordinal), Revisions: []dto.PostRevision{}, Deleted: removed, Redacted: redacted}
 		if removed && !reveal {
 			return res.finish(id, snap.logLength, ifNoneMatch)
 		}

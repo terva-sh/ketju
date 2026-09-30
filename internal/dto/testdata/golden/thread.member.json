@@ -67,6 +67,7 @@
       ],
       "deleted": false,
       "removal": null,
+      "redacted": false,
       "moved_to": null,
       "machine_authored": false
     },
@@ -90,6 +91,7 @@
       "attachments": [],
       "deleted": false,
       "removal": null,
+      "redacted": false,
       "moved_to": null,
       "machine_authored": true
     },
@@ -113,6 +115,7 @@
       "attachments": [],
       "deleted": true,
       "removal": "moderator",
+      "redacted": false,
       "moved_to": null,
       "machine_authored": false
     },
@@ -136,6 +139,7 @@
       "attachments": [],
       "deleted": true,
       "removal": null,
+      "redacted": false,
       "moved_to": "3yymw47g00099",
       "machine_authored": false
     }

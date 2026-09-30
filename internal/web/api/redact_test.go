@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"strings"
 	"testing"
@@ -82,9 +83,16 @@ func (w *world) redactedThread() threadid.ID {
 // and permalink and is a tombstone to an anonymous reader, a member, its
 // author and a moderator, from the page, the single post and the author's
 // post history. A quote of it is a tombstone.
+//
+// Each of them reads it as redacted, and a visible post (#6), a post its
+// author deleted (#3) and a post a moderator hid (#7) as not redacted
+// (TKT-01M3R1WPNS).
 func TestRedactedPostIsATombstoneToEveryone(t *testing.T) {
 	w := newWorld(t)
 	id := w.redactedThread()
+	w.post(id, "alice", "hidden, not redacted", 0)
+	w.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(w.users["bob"]), Ordinal: 7,
+		Body: &threadlog.DeleteBody{Reason: "off topic", ByModerator: true}})
 	w.publicEditHistory(true)
 	base := "/api/v1/threads/" + id.String()
 	for _, who := range []string{"", "carol", "alice", "bob"} {
@@ -102,7 +110,12 @@ func TestRedactedPostIsATombstoneToEveryone(t *testing.T) {
 		}
 		p := page(t, w.get(w.viewer(who), base))
 		var found bool
+		seen := map[int]bool{}
 		for _, post := range p.Posts {
+			seen[post.Ordinal] = true
+			if post.Redacted != (post.Ordinal == 5) {
+				t.Errorf("%q's page: #%d has redacted %v", who, post.Ordinal, post.Redacted)
+			}
 			if post.Ordinal != 5 {
 				continue
 			}
@@ -115,20 +128,35 @@ func TestRedactedPostIsATombstoneToEveryone(t *testing.T) {
 		if !found {
 			t.Errorf("%q: #5 is not on the page; its ordinal must stay", who)
 		}
-		removedIs(t, fmt.Sprintf("%q's single post", who), decodePost(t, w.get(w.viewer(who), postPathN(id, 5))), 5, dto.RemovalModerator, "")
+		for _, n := range []int{3, 6, 7} {
+			if !seen[n] {
+				t.Errorf("%q: #%d is not on the page", who, n)
+			}
+		}
+		single := decodePost(t, w.get(w.viewer(who), postPathN(id, 5)))
+		removedIs(t, fmt.Sprintf("%q's single post", who), single, 5, dto.RemovalModerator, "")
+		if !single.Redacted {
+			t.Errorf("%q's single post: #5 is not redacted", who)
+		}
+		for _, n := range []int{3, 6, 7} {
+			if p := decodePost(t, w.get(w.viewer(who), postPathN(id, n))); p.Redacted {
+				t.Errorf("%q's single post: #%d is redacted", who, n)
+			}
+		}
 	}
 }
 
 // TestRedactedHistoryHasNoContent is AC1's history: a moderator is served
 // the revisions with no source and no reason; the author and a member the
-// tombstone a deleted post's history is.
+// tombstone a deleted post's history is. Every one of them reads it as
+// redacted, and a visible post's history as not (TKT-01M3R1WPNS).
 func TestRedactedHistoryHasNoContent(t *testing.T) {
 	w := newWorld(t)
 	id := w.redactedThread()
 	w.publicEditHistory(true)
 
 	code, h := w.historyOf("bob", id, 5)
-	if code != http.StatusOK || !h.Deleted || len(h.Revisions) != 2 {
+	if code != http.StatusOK || !h.Deleted || !h.Redacted || len(h.Revisions) != 2 {
 		t.Fatalf("the moderator's history: %d %+v", code, h)
 	}
 	for _, r := range h.Revisions {
@@ -137,9 +165,126 @@ func TestRedactedHistoryHasNoContent(t *testing.T) {
 		}
 	}
 	for _, who := range []string{"alice", "carol"} {
-		if code, h := w.historyOf(who, id, 5); code != http.StatusOK || !h.Deleted || len(h.Revisions) != 0 {
-			t.Errorf("%s's history: %d %+v, want the tombstone", who, code, h)
+		if code, h := w.historyOf(who, id, 5); code != http.StatusOK || !h.Deleted || !h.Redacted || len(h.Revisions) != 0 {
+			t.Errorf("%s's history: %d %+v, want the redacted tombstone", who, code, h)
 		}
+	}
+	for _, who := range []string{"alice", "carol", "bob"} {
+		if code, h := w.historyOf(who, id, 6); code != http.StatusOK || h.Redacted || h.Deleted || len(h.Revisions) != 1 {
+			t.Errorf("%s's history of visible #6: %d %+v", who, code, h)
+		}
+	}
+}
+
+// TestRedactedIsFlaggedEverywhere: a redacted post reads redacted, with no
+// body and none of its text, on every route that serves it, to every reader
+// that route admits (TKT-01M3R1WPNS): the page, the single post, its
+// parent's replies, the author's posts, its history, and the moderator
+// queue for a post flagged before its redaction. Its source is refused to
+// everyone, moderators included, and serves none of it.
+func TestRedactedIsFlaggedEverywhere(t *testing.T) {
+	w := newWorld(t)
+	id, _ := w.seed()
+	w.post(id, "alice", redactedSecret, 1)
+	h := w.chain()
+	if rec := send(h, "carol", http.MethodPost, flagsPath(id), `{"ordinal":5,"reason":"spam"}`); rec.Code != http.StatusOK {
+		t.Fatalf("carol's flag: %d %s", rec.Code, rec.Body)
+	}
+	w.redactOffline(id, 5)
+	w.publicEditHistory(true)
+	h = w.chain()
+
+	leaks := func(where string, rec *httptest.ResponseRecorder) {
+		t.Helper()
+		if strings.Contains(rec.Body.String(), "court ordered") {
+			t.Errorf("%s serves the redacted text: %s", where, rec.Body)
+		}
+	}
+	is := func(where string, p dto.Post) {
+		t.Helper()
+		if !p.Redacted || !p.Deleted || p.HTML != "" || len(p.Attachments) != 0 {
+			t.Errorf("%s: #%d is %+v, want redacted with no body", where, p.Ordinal, p)
+		}
+	}
+	base := "/api/v1/threads/" + id.String()
+	for _, who := range []string{"", "carol", "alice", "bob"} {
+		rec := send(h, who, http.MethodGet, base, "")
+		leaks(fmt.Sprintf("%q's page", who), rec)
+		for _, p := range page(t, rec).Posts {
+			if p.Ordinal == 5 {
+				is(fmt.Sprintf("%q's page", who), p)
+			}
+		}
+		rec = send(h, who, http.MethodGet, postPathN(id, 5), "")
+		leaks(fmt.Sprintf("%q's single post", who), rec)
+		is(fmt.Sprintf("%q's single post", who), decodePost(t, rec))
+
+		rec = send(h, who, http.MethodGet, postPathN(id, 1)+"/replies", "")
+		leaks(fmt.Sprintf("%q's replies", who), rec)
+		var found bool
+		for _, p := range decode[dto.PostReplies](t, rec).Posts {
+			if p.Ordinal == 5 {
+				found = true
+				is(fmt.Sprintf("%q's replies", who), p)
+			}
+		}
+		if !found {
+			t.Errorf("%q's replies to #1 lack #5", who)
+		}
+
+		rec = send(h, who, http.MethodGet, postPathN(id, 5)+"/history", "")
+		leaks(fmt.Sprintf("%q's history", who), rec)
+		if who != "" && !decode[dto.PostHistory](t, rec).Redacted {
+			t.Errorf("%q's history of #5 is not redacted: %s", who, rec.Body)
+		}
+
+		// The source goes to nobody: conflict for its author and a
+		// moderator, who might otherwise edit it, forbidden to anyone else.
+		rec = send(h, who, http.MethodGet, postPathN(id, 5)+"/source", "")
+		leaks(fmt.Sprintf("%q's source", who), rec)
+		want := map[string]int{"": http.StatusUnauthorized, "carol": http.StatusForbidden,
+			"alice": http.StatusConflict, "bob": http.StatusConflict}[who]
+		if rec.Code != want {
+			t.Errorf("%q's source of #5: %d, want %d: %s", who, rec.Code, want, rec.Body)
+		}
+	}
+
+	// The author's posts: #5 is on them for the author and a moderator,
+	// as any removed post is, and on no one else's.
+	for _, who := range []string{"carol", "alice", "bob"} {
+		rec := send(h, who, http.MethodGet, "/api/v1/users/alice/posts", "")
+		leaks(fmt.Sprintf("%q's list of alice's posts", who), rec)
+		var found bool
+		for _, up := range decode[dto.UserPosts](t, rec).Posts {
+			if up.Post.Ordinal == 5 {
+				found = true
+				is(fmt.Sprintf("%q's list of alice's posts", who), up.Post)
+			} else if up.Post.Redacted {
+				t.Errorf("%q's list of alice's posts: #%d is redacted", who, up.Post.Ordinal)
+			}
+		}
+		if found != (who != "carol") {
+			t.Errorf("%q's list of alice's posts has #5: %v", who, found)
+		}
+	}
+
+	// The moderator queue still lists the flag, and the post under it is
+	// the redacted tombstone.
+	rec := send(h, "bob", http.MethodGet, "/api/v1/admin/queue", "")
+	leaks("the moderator queue", rec)
+	var found bool
+	for _, it := range decode[dto.Queue](t, rec).Items {
+		if it.Flag == nil || it.Flag.Ordinal != 5 {
+			continue
+		}
+		found = true
+		if it.Flag.Post == nil {
+			t.Fatalf("the queue's flag on #5 has no post: %s", rec.Body)
+		}
+		is("the moderator queue", *it.Flag.Post)
+	}
+	if !found {
+		t.Errorf("the queue lacks the flag on #5: %s", rec.Body)
 	}
 }
 

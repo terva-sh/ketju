@@ -221,6 +221,12 @@ type Post struct {
 	// Removal says who removed the post: RemovalAuthor, RemovalModerator or
 	// RemovalReview. Nil for a visible post and for a moved one.
 	Removal *string `json:"removal"`
+	// Redacted marks a post a hard redaction cleared (docs/03 "Hard
+	// redaction", TKT-01M3R1WPNS). Such a post is also Deleted, with no HTML
+	// for any reader, moderators included, and it can never be restored or
+	// edited. Removal still says who took it down. It is the same for every
+	// viewer class, since it comes from the index alone.
+	Redacted bool `json:"redacted"`
 	// MovedTo is the thread id a split moved this post to, nil otherwise.
 	MovedTo *string `json:"moved_to"`
 
@@ -261,7 +267,11 @@ type PostHistory struct {
 	// Deleted is a tombstone: a deleted post's history is withheld from
 	// everyone but a moderator, and Revisions is then empty, since the old
 	// revisions are the deleted content by another route.
-	Deleted   bool           `json:"deleted"`
+	Deleted bool `json:"deleted"`
+	// Redacted marks a hard-redacted post, as Post.Redacted does, for every
+	// reader. A moderator is still served its revisions, each with no source
+	// and no reason, so this is what tells them from edits to nothing.
+	Redacted  bool           `json:"redacted"`
 	Revisions []PostRevision `json:"revisions"`
 }
 

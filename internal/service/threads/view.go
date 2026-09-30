@@ -543,9 +543,12 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			Attachments:     []dto.Attachment{},
 			Deleted:         p.Flags&(threadlog.EntryDeleted|threadlog.EntryHiddenByMod|threadlog.EntryRedacted) != 0,
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
+			Redacted:        p.Flags.Has(threadlog.EntryRedacted),
 		}
-		// A hard-redacted post is deleted above, and removal names it the
-		// moderator's: an admin took it down (TKT-01M29CXJZ9).
+		// A hard-redacted post is deleted above, and removal names who took
+		// it down: the moderator's, as an admin redacted it, or the
+		// author's if they had deleted it first (TKT-01M29CXJZ9). Redacted
+		// says it can never come back (TKT-01M3R1WPNS).
 		if r := removal(p.Flags); r != "" {
 			d.Removal = &r
 		}
