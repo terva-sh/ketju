@@ -274,6 +274,35 @@ the next request.
 | `POST /admin/permissions` `{changes: [{forum_id, group_id, permission, grant}]}` | admin | The batch in one transaction, one audit row per change, or none. A change naming no forum, group or permission, or the same row twice, is `validation-failed`; a grant of a row that exists or a revoke of one that does not is `conflict`, because the grid moved since the batch was staged. At most 500 changes. Answers with the grid |
 | `POST /admin/permissions/preview` `{handle, changes}` | admin | `PermissionPreview`: the account's `allow`, `deny` or `hidden` for each permission in every forum, before and with the batch, decided as a check decides it. Writes nothing, and refuses what applying would |
 
+#### Forums (TKT-01M29CXK19)
+
+The `/admin/forums` screen: the forum tree, with every forum's name,
+description, place and visibility, and archiving. Every route is an
+admin's. Holding `moderate` in a forum, by role or through a group, opens
+none of them, since admin screens keep their role gates (08 "Decided
+2026-09-30"). Every answer is `no-store`, and every write answers with the
+whole `ManagedForumList`, read in the write's transaction, because a move
+can renumber the siblings. Every write is audited in the transaction that
+makes it (04 "audit_log"). A forum id that names nothing is `not-found`,
+and an id that is not a positive integer is `bad-request`.
+
+| Route | What it does |
+|---|---|
+| `GET /admin/forums` | `ManagedForumList`: every forum, archived and restricted ones included, in the forum index's order, each root followed by its children, with its `parent_id` (null for a root), `position`, and thread and post counts |
+| `POST /admin/forums` `{slug, name, description, parent_id, visibility}` | 201, with the list and no `Location`, since no route reads one forum. A new forum, last among its siblings, and `forum.created`. The slug is 1 to 60 characters of a-z, 0-9 and `-`, with no `-` first or last, and a taken one is `conflict`. The name is 1 to 100 characters once trimmed, with no control characters, and the description at most 1000. `parent_id` must name a root, or it is `validation-failed`; one that is not a positive integer is `bad-request`. An empty `visibility` is `members` |
+| `PATCH /admin/forums/{id}` `{name?, description?}` | `forum.updated`, with each changed field's `from` and `to`. Neither field is `validation-failed`, and a change to what the forum has writes nothing. The slug cannot change: `/f/{slug}` is in every shared link, and nothing redirects an old one |
+| `POST /admin/forums/{id}/move` `{parent_id, before?, after?}` | `forum.moved`. Places the forum under `parent_id`, or at the top level when it is null, before or after the named sibling there, or last when neither is sent. `parent_id` is required: a body without it, or with one that is neither a positive id nor null, is `bad-request`, as is a negative `before` or `after`, so an incomplete request never reads as a move to the top level. A child of a child, a parent for a forum that has children, both `before` and `after`, and a sibling that is not under that parent are `validation-failed`. A move to where the forum already is writes nothing |
+| `PUT /admin/forums/{id}/visibility` `{visibility}` | Through `perm.SetVisibility`: `forum.visibility_changed`, and the decision cache cleared on commit, so it applies from every viewer's next request. A value other than `public`, `members` or `restricted` is `validation-failed` |
+| `PUT /admin/forums/{id}/archived` `{archived}` | Through `perm.SetForumArchived`: `forum.archived` or `forum.unarchived`, and the cache cleared. No thread moves and no thread record is written. Read access is unchanged. Posting is refused to everyone but admins, and moderators keep hiding, locking, pinning and moving threads out (04 "permissions") |
+
+The screen moves a forum with Move up and Move down buttons and a "Place
+under" select, rather than by dragging, so it works from the keyboard. It
+says a visibility change takes effect within a minute, the permission
+cache's lifetime at most. Beside each archive control it says, whatever the
+forum's visibility: "Anyone who could read it still can. Only posting stops,
+except for admins. Moderators can still hide, lock, pin and move threads
+out, and only admins can move threads in."
+
 #### Applications (TKT-01M29CP2MG)
 
 The `/admin/applications` screen, where moderators and admins decide

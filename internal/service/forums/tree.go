@@ -1,10 +1,12 @@
-// Package forums answers questions about the forum tree.
+// Package forums answers questions about the forum tree, and is the admin
+// screen that edits it (admin.go).
 package forums
 
 import (
 	"context"
 	"database/sql"
 	"log/slog"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
@@ -20,6 +22,9 @@ type Service struct {
 	DB     *db.DB
 	Perm   *perm.Evaluator
 	Logger *slog.Logger
+	// Now is the clock for the admin screen's writes and their audit rows;
+	// nil is time.Now.
+	Now func() time.Time
 }
 
 // Tree is GET /forums (docs/07): the forums v may read, roots in position

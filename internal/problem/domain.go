@@ -73,6 +73,10 @@ var mapping = []struct {
 	// status does not allow, and any change to an anonymized account.
 	{perm.ErrBadTransition, CodeConflict},
 	{perm.ErrAnonymized, CodeConflict},
+	// The admin forum screen (TKT-01M29CXK19): a forum named by id that is
+	// not there, and a visibility that is not one of the three.
+	{perm.ErrNoForum, CodeNotFound},
+	{perm.ErrInvalidVisibility, CodeValidationFailed},
 
 	// Client sent too much. render.ErrTooLarge is the post source over
 	// render.MaxSource, which docs/07 puts at 64 KB.

@@ -422,6 +422,28 @@ export interface AdminForum {
   visibility: string;
 }
 
+// ManagedForumList is GET /admin/forums (TKT-01M29CXK19), and the answer
+// to every write there: every forum, roots each followed by their children.
+export interface ManagedForumList {
+  forums: ManagedForum[];
+}
+
+// ManagedForum is a forum as the admin forum screen edits it. parent_id is
+// null for a root; position only orders siblings.
+export interface ManagedForum {
+  id: number;
+  parent_id: number | null;
+  slug: string;
+  name: string;
+  description: string;
+  position: number;
+  // public, members or restricted.
+  visibility: string;
+  archived: boolean;
+  threads: number;
+  posts: number;
+}
+
 export interface Grant {
   forum_id: number | null;
   group_id: number;

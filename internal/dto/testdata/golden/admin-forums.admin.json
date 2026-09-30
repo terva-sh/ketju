@@ -1,0 +1,40 @@
+{
+  "forums": [
+    {
+      "id": 1,
+      "parent_id": null,
+      "slug": "general",
+      "name": "General",
+      "description": "Anything that fits nowhere else.",
+      "position": 1024,
+      "visibility": "public",
+      "archived": false,
+      "threads": 12,
+      "posts": 140
+    },
+    {
+      "id": 5,
+      "parent_id": 1,
+      "slug": "books",
+      "name": "Books",
+      "description": "What we are reading.",
+      "position": 1024,
+      "visibility": "members",
+      "archived": false,
+      "threads": 3,
+      "posts": 27
+    },
+    {
+      "id": 6,
+      "parent_id": null,
+      "slug": "attic",
+      "name": "Attic",
+      "description": "",
+      "position": 2048,
+      "visibility": "restricted",
+      "archived": true,
+      "threads": 1,
+      "posts": 4
+    }
+  ]
+}

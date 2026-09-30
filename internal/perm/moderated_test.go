@@ -99,7 +99,7 @@ func TestForumAccessRowsAllMatches(t *testing.T) {
 	f.grant(0, f.members, domain.PermRead)
 	f.grant(a, g, domain.PermModerate)
 	f.grant(c, g, domain.PermRead)
-	if err := f.ev.SetForumArchived(t.Context(), b, true); err != nil {
+	if err := f.ev.SetForumArchived(t.Context(), audit.By{}, b, true); err != nil {
 		t.Fatal(err)
 	}
 	v := f.viewer(domain.RoleMember, g)
@@ -137,7 +137,7 @@ func TestModeratedForumsCachesWhatCheckDecides(t *testing.T) {
 	f.grant(0, f.members, domain.PermRead)
 	f.grant(0, f.members, domain.PermReply)
 	f.grant(0, g, domain.PermModerate)
-	if err := f.ev.SetForumArchived(t.Context(), archived, true); err != nil {
+	if err := f.ev.SetForumArchived(t.Context(), audit.By{}, archived, true); err != nil {
 		t.Fatal(err)
 	}
 	v := f.viewer(domain.RoleMember, g)

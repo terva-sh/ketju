@@ -166,30 +166,101 @@ func (e *Evaluator) SyncIdPGroups(ctx context.Context, userID int64, s IdPSync) 
 	return ch, nil
 }
 
-// SetVisibility changes a forum's visibility.
-func (e *Evaluator) SetVisibility(ctx context.Context, forumID int64, visibility string) error {
-	return e.write(ctx, func(q *dbq.Queries, now int64) error {
-		return q.SetForumVisibility(ctx, dbq.SetForumVisibilityParams{Visibility: visibility, UpdatedAt: now, ID: forumID})
-	})
+// The audit_log actions a forum's visibility and archive changes write,
+// against the forum (docs/04 "audit_log"). The forum screen's other writes,
+// which change no decision, are internal/service/forums'.
+const (
+	ActionForumVisibilityChanged = "forum.visibility_changed"
+	ActionForumArchived          = "forum.archived"
+	ActionForumUnarchived        = "forum.unarchived"
+)
+
+var (
+	// ErrNoForum is the answer for a forum id that names no forum.
+	ErrNoForum = errors.New("perm: no such forum")
+	// ErrInvalidVisibility is SetVisibility's answer for a visibility that
+	// is not public, members or restricted.
+	ErrInvalidVisibility = errors.New("perm: not a forum visibility")
+)
+
+// forumRow reads forumID in q's transaction, or ErrNoForum.
+func forumRow(ctx context.Context, q *dbq.Queries, forumID int64) (dbq.Forum, error) {
+	f, err := q.GetForum(ctx, forumID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return f, ErrNoForum
+	}
+	return f, err
 }
 
-// SetForumArchived archives or unarchives a forum. An archived forum is
-// read-only: create_thread, reply and upload are denied there to everyone
-// but admins (docs/04 "permissions"). Like every write here it clears the
-// cache of every Evaluator over the same database once it commits, so a
-// cached reply Allow is Deny on the next check.
+// SetVisibility changes a forum's visibility on by's authority, and records
+// ActionForumVisibilityChanged with "from" and "to" in the same
+// transaction. A change to the visibility the forum has writes nothing.
+func (e *Evaluator) SetVisibility(ctx context.Context, by audit.By, forumID int64, visibility string) error {
+	return e.SetVisibilityThen(ctx, by, forumID, visibility, nil)
+}
+
+// SetVisibilityThen is SetVisibility, then read in the same transaction
+// (writeThen). read runs after a change that was a no-op too.
+func (e *Evaluator) SetVisibilityThen(ctx context.Context, by audit.By, forumID int64, visibility string,
+	read func(q *dbq.Queries) error) error {
+	switch visibility {
+	case domain.VisibilityPublic, domain.VisibilityMembers, domain.VisibilityRestricted:
+	default:
+		return fmt.Errorf("%w: %q", ErrInvalidVisibility, visibility)
+	}
+	return e.writeThen(ctx, func(q *dbq.Queries, now int64) error {
+		f, err := forumRow(ctx, q, forumID)
+		if err != nil || f.Visibility == visibility {
+			return err
+		}
+		if err := q.SetForumVisibility(ctx, dbq.SetForumVisibilityParams{Visibility: visibility, UpdatedAt: now,
+			ID: forumID}); err != nil {
+			return err
+		}
+		_, err = audit.Append(ctx, q, time.UnixMilli(now), by, ActionForumVisibilityChanged, audit.Forum(forumID),
+			map[string]any{"slug": f.Slug, "from": f.Visibility, "to": visibility})
+		return err
+	}, read)
+}
+
+// SetForumArchived archives or unarchives a forum on by's authority, and
+// records ActionForumArchived or ActionForumUnarchived in the same
+// transaction. A change to the state the forum is in writes nothing.
+//
+// An archived forum is read-only: create_thread, reply and upload are
+// denied there to everyone but admins (docs/04 "permissions"). Like every
+// write here it clears the cache of every Evaluator over the same database
+// once it commits, so a cached reply Allow is Deny on the next check.
 //
 // The posting paths do not rely on that alone: they read forums.archived on
 // every request (internal/service/threads readOnlyForum), so an archive
 // written by another process refuses the next post at once.
-func (e *Evaluator) SetForumArchived(ctx context.Context, forumID int64, archived bool) error {
+func (e *Evaluator) SetForumArchived(ctx context.Context, by audit.By, forumID int64, archived bool) error {
+	return e.SetForumArchivedThen(ctx, by, forumID, archived, nil)
+}
+
+// SetForumArchivedThen is SetForumArchived, then read in the same
+// transaction (writeThen). read runs after a change that was a no-op too.
+func (e *Evaluator) SetForumArchivedThen(ctx context.Context, by audit.By, forumID int64, archived bool,
+	read func(q *dbq.Queries) error) error {
 	var flag int64
+	action := ActionForumUnarchived
 	if archived {
-		flag = 1
+		flag, action = 1, ActionForumArchived
 	}
-	return e.write(ctx, func(q *dbq.Queries, now int64) error {
-		return q.SetForumArchived(ctx, dbq.SetForumArchivedParams{Archived: flag, UpdatedAt: now, ID: forumID})
-	})
+	return e.writeThen(ctx, func(q *dbq.Queries, now int64) error {
+		f, err := forumRow(ctx, q, forumID)
+		if err != nil || f.Archived == flag {
+			return err
+		}
+		if err := q.SetForumArchived(ctx, dbq.SetForumArchivedParams{Archived: flag, UpdatedAt: now,
+			ID: forumID}); err != nil {
+			return err
+		}
+		_, err = audit.Append(ctx, q, time.UnixMilli(now), by, action, audit.Forum(forumID),
+			map[string]any{"slug": f.Slug})
+		return err
+	}, read)
 }
 
 // ActionPromoted is the audit_log action Promote writes. Bootstrap reads it

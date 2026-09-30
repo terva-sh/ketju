@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"testing"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 )
@@ -51,7 +52,7 @@ func TestArchivedForumIsReadOnly(t *testing.T) {
 		}
 	}
 
-	if err := f.ev.SetForumArchived(t.Context(), archived, true); err != nil {
+	if err := f.ev.SetForumArchived(t.Context(), audit.By{}, archived, true); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range viewers {
@@ -85,7 +86,7 @@ func TestArchivedForumIsReadOnly(t *testing.T) {
 	}
 
 	// Unarchiving gives it all back.
-	if err := f.ev.SetForumArchived(t.Context(), archived, false); err != nil {
+	if err := f.ev.SetForumArchived(t.Context(), audit.By{}, archived, false); err != nil {
 		t.Fatal(err)
 	}
 	for _, c := range viewers {
@@ -116,7 +117,7 @@ func TestSetForumArchivedInvalidates(t *testing.T) {
 		}
 	}
 
-	if err := f.ev.SetForumArchived(t.Context(), forum, true); err != nil {
+	if err := f.ev.SetForumArchived(t.Context(), audit.By{}, forum, true); err != nil {
 		t.Fatal(err)
 	}
 	var stored int64

@@ -160,3 +160,27 @@ JOIN threads AS t ON t.id = (
 	WHERE t2.forum_id = f.id AND t2.last_post_ordinal > 0
 	ORDER BY t2.last_post_at DESC, t2.id DESC LIMIT 1)
 WHERE f.id IN (sqlc.slice('forum_ids'));
+
+-- The admin forum screen (TKT-01M29CXK19). A forum's name and description;
+-- its slug is fixed at creation, since /f/{slug} is in every shared link.
+-- name: UpdateForum :exec
+UPDATE forums SET name = ?, description = ?, updated_at = ? WHERE id = ?;
+
+-- A move: the forum's parent and position in one write, so a move into a gap
+-- writes this row and no other. The depth triggers check parent_id.
+-- name: PlaceForum :exec
+UPDATE forums SET parent_id = sqlc.narg('parent_id'), position = sqlc.arg('position'),
+	updated_at = sqlc.arg('updated_at')
+WHERE id = sqlc.arg('id');
+
+-- A sibling's new position, when a move finds no gap and renumbers.
+-- name: SetForumPosition :exec
+UPDATE forums SET position = ?, updated_at = ? WHERE id = ?;
+
+-- The forums under one parent, or the roots when parent_id is null, in the
+-- order ListForums shows them. IS, so a null parent matches the roots.
+-- name: ForumSiblings :many
+SELECT id, position FROM forums WHERE parent_id IS sqlc.narg('parent_id') ORDER BY position, id;
+
+-- name: ForumChildCount :one
+SELECT count(*) FROM forums WHERE parent_id = ?;

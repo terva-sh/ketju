@@ -97,10 +97,10 @@ func TestWriteInvalidatesImmediately(t *testing.T) {
 			},
 			steps: []step{
 				{"restrict", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.SetVisibility(f.t.Context(), forum, domain.VisibilityRestricted)
+					return f.ev.SetVisibility(f.t.Context(), audit.By{}, forum, domain.VisibilityRestricted)
 				}, Hidden},
 				{"open", func(f *fixture, forum, x int64, v domain.Viewer) error {
-					return f.ev.SetVisibility(f.t.Context(), forum, domain.VisibilityPublic)
+					return f.ev.SetVisibility(f.t.Context(), audit.By{}, forum, domain.VisibilityPublic)
 				}, Allow},
 			},
 		},
@@ -214,8 +214,8 @@ func TestEveryMutationInvalidates(t *testing.T) {
 			_, err := f.ev.SyncIdPGroups(ctx, v.UserID, IdPSync{Slugs: []string{f.slug(y)}})
 			return err
 		}},
-		{"SetVisibility", func() error { return f.ev.SetVisibility(ctx, forum, domain.VisibilityMembers) }},
-		{"SetForumArchived", func() error { return f.ev.SetForumArchived(ctx, forum, true) }},
+		{"SetVisibility", func() error { return f.ev.SetVisibility(ctx, audit.By{}, forum, domain.VisibilityMembers) }},
+		{"SetForumArchived", func() error { return f.ev.SetForumArchived(ctx, audit.By{}, forum, true) }},
 		{"ChangeRole", func() error { return f.ev.ChangeRole(ctx, audit.By{}, v.UserID, domain.RoleModerator) }},
 	} {
 		name, mutate := m.name, m.mutate

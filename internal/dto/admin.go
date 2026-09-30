@@ -153,6 +153,30 @@ type AdminForum struct {
 	Visibility string `json:"visibility"`
 }
 
+// ManagedForumList is GET /admin/forums (TKT-01M29CXK19), and the answer to
+// every write there: every forum, archived and restricted ones included, in
+// the forum index's order, roots each followed by their children.
+type ManagedForumList struct {
+	Forums []ManagedForum `json:"forums"`
+}
+
+// ManagedForum is a forum as the admin forum screen edits it. ParentID is
+// null for a root. Position orders siblings and means nothing else: the
+// gaps between positions are what let a move write one row. Threads and
+// Posts are the forum index's counts.
+type ManagedForum struct {
+	ID          int64  `json:"id"`
+	ParentID    *int64 `json:"parent_id"`
+	Slug        string `json:"slug"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Position    int64  `json:"position"`
+	Visibility  string `json:"visibility"`
+	Archived    bool   `json:"archived"`
+	Threads     int    `json:"threads"`
+	Posts       int    `json:"posts"`
+}
+
 // PermissionGrid is GET /admin/permissions: the groups, the forums in the
 // forum index's order, and every permission row.
 type PermissionGrid struct {

@@ -227,11 +227,15 @@ type Querier interface {
 	// stay the same apart from the WHERE clause, since decide reads the rows of
 	// both (TestForumAccessRowsAllMatches).
 	ForumAccessRowsAll(ctx context.Context, arg ForumAccessRowsAllParams) ([]ForumAccessRowsAllRow, error)
+	ForumChildCount(ctx context.Context, parentID sql.NullInt64) (int64, error)
 	// ForumLastPosts is each listed forum's most recently active thread, for the
 	// forum index's last-post column: one seek per forum on
 	// threads_forum_activity rather than a scan. A forum with no thread that has
 	// a post has no row.
 	ForumLastPosts(ctx context.Context, forumIds []int64) ([]ForumLastPostsRow, error)
+	// The forums under one parent, or the roots when parent_id is null, in the
+	// order ListForums shows them. IS, so a null parent matches the roots.
+	ForumSiblings(ctx context.Context, parentID sql.NullInt64) ([]ForumSiblingsRow, error)
 	// ForumThreadCounts is each forum's threads with a post and their posts that
 	// are neither deleted nor moved (migrations 0007 and 0009, kept by triggers).
 	// A forum with no thread that has a post has no row.
@@ -435,6 +439,9 @@ type Querier interface {
 	// The rows permission evaluation (TKT-01M29C5Y2E) needs for one forum: the
 	// forum's own grants and the global ones, for the viewer's groups.
 	PermissionRows(ctx context.Context, arg PermissionRowsParams) ([]PermissionRowsRow, error)
+	// A move: the forum's parent and position in one write, so a move into a gap
+	// writes this row and no other. The depth triggers check parent_id.
+	PlaceForum(ctx context.Context, arg PlaceForumParams) error
 	// The post's author, for the projection writer to tell an author's own
 	// Edit, Delete or Restore from a moderator's (TKT-01M29CKRGS).
 	PostAuthor(ctx context.Context, arg PostAuthorParams) (int64, error)
@@ -503,6 +510,8 @@ type Querier interface {
 	// decision cache is cleared when it commits.
 	SetForumArchived(ctx context.Context, arg SetForumArchivedParams) error
 	SetForumParent(ctx context.Context, arg SetForumParentParams) error
+	// A sibling's new position, when a move finds no gap and renumbers.
+	SetForumPosition(ctx context.Context, arg SetForumPositionParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
 	// log_offset is the current revision's record, as the index entry's Offset
 	// is, so a Delete or Restore (which is not a revision) leaves it alone.
@@ -572,6 +581,9 @@ type Querier interface {
 	// make an old post unread. Deleted posts count, as post_count counts them; a
 	// reader decides whether a tombstone is worth a badge.
 	UnreadCount(ctx context.Context, arg UnreadCountParams) (int64, error)
+	// The admin forum screen (TKT-01M29CXK19). A forum's name and description;
+	// its slug is fixed at creation, since /f/{slug} is in every shared link.
+	UpdateForum(ctx context.Context, arg UpdateForumParams) error
 	// A system group's slug and flag are fixed by trigger; its name and
 	// description are not.
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (int64, error)

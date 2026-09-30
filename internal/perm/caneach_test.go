@@ -114,7 +114,7 @@ func TestCanEachAgreesWithCheck(t *testing.T) {
 			vis := []string{domain.VisibilityPublic, domain.VisibilityMembers, domain.VisibilityRestricted}[rng.IntN(3)]
 			forums = append(forums, f.forum(vis))
 			if rng.IntN(3) == 0 {
-				if err := f.ev.SetForumArchived(t.Context(), forums[len(forums)-1], true); err != nil {
+				if err := f.ev.SetForumArchived(t.Context(), audit.By{}, forums[len(forums)-1], true); err != nil {
 					t.Fatal(err)
 				}
 			}

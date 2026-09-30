@@ -45,7 +45,7 @@ func (w *world) forumAt(slug, visibility string, archived bool) int64 {
 		return err
 	})
 	if archived {
-		if err := perm.New(w.db).SetForumArchived(w.t.Context(), id, true); err != nil {
+		if err := perm.New(w.db).SetForumArchived(w.t.Context(), audit.By{}, id, true); err != nil {
 			w.t.Fatal(err)
 		}
 	}

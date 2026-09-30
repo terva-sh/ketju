@@ -284,6 +284,17 @@ func (q *Queries) ForumAccessRowsAll(ctx context.Context, arg ForumAccessRowsAll
 	return items, nil
 }
 
+const forumChildCount = `-- name: ForumChildCount :one
+SELECT count(*) FROM forums WHERE parent_id = ?
+`
+
+func (q *Queries) ForumChildCount(ctx context.Context, parentID sql.NullInt64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, forumChildCount, parentID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const forumLastPosts = `-- name: ForumLastPosts :many
 SELECT f.id AS forum_id, t.id AS thread_id, t.slug, t.title, t.last_post_at, t.last_post_author_id
 FROM forums AS f
@@ -334,6 +345,40 @@ func (q *Queries) ForumLastPosts(ctx context.Context, forumIds []int64) ([]Forum
 			&i.LastPostAt,
 			&i.LastPostAuthorID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const forumSiblings = `-- name: ForumSiblings :many
+SELECT id, position FROM forums WHERE parent_id IS ?1 ORDER BY position, id
+`
+
+type ForumSiblingsRow struct {
+	ID       int64
+	Position int64
+}
+
+// The forums under one parent, or the roots when parent_id is null, in the
+// order ListForums shows them. IS, so a null parent matches the roots.
+func (q *Queries) ForumSiblings(ctx context.Context, parentID sql.NullInt64) ([]ForumSiblingsRow, error) {
+	rows, err := q.db.QueryContext(ctx, forumSiblings, parentID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ForumSiblingsRow
+	for rows.Next() {
+		var i ForumSiblingsRow
+		if err := rows.Scan(&i.ID, &i.Position); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -663,6 +708,31 @@ func (q *Queries) PermissionRows(ctx context.Context, arg PermissionRowsParams) 
 	return items, nil
 }
 
+const placeForum = `-- name: PlaceForum :exec
+UPDATE forums SET parent_id = ?1, position = ?2,
+	updated_at = ?3
+WHERE id = ?4
+`
+
+type PlaceForumParams struct {
+	ParentID  sql.NullInt64
+	Position  int64
+	UpdatedAt int64
+	ID        int64
+}
+
+// A move: the forum's parent and position in one write, so a move into a gap
+// writes this row and no other. The depth triggers check parent_id.
+func (q *Queries) PlaceForum(ctx context.Context, arg PlaceForumParams) error {
+	_, err := q.db.ExecContext(ctx, placeForum,
+		arg.ParentID,
+		arg.Position,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	return err
+}
+
 const removeIdPMembership = `-- name: RemoveIdPMembership :execrows
 DELETE FROM group_members WHERE group_id = ? AND user_id = ? AND source = 'idp'
 `
@@ -748,6 +818,22 @@ func (q *Queries) SetForumParent(ctx context.Context, arg SetForumParentParams) 
 	return err
 }
 
+const setForumPosition = `-- name: SetForumPosition :exec
+UPDATE forums SET position = ?, updated_at = ? WHERE id = ?
+`
+
+type SetForumPositionParams struct {
+	Position  int64
+	UpdatedAt int64
+	ID        int64
+}
+
+// A sibling's new position, when a move finds no gap and renumbers.
+func (q *Queries) SetForumPosition(ctx context.Context, arg SetForumPositionParams) error {
+	_, err := q.db.ExecContext(ctx, setForumPosition, arg.Position, arg.UpdatedAt, arg.ID)
+	return err
+}
+
 const setForumVisibility = `-- name: SetForumVisibility :exec
 UPDATE forums SET visibility = ?, updated_at = ? WHERE id = ?
 `
@@ -760,5 +846,28 @@ type SetForumVisibilityParams struct {
 
 func (q *Queries) SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error {
 	_, err := q.db.ExecContext(ctx, setForumVisibility, arg.Visibility, arg.UpdatedAt, arg.ID)
+	return err
+}
+
+const updateForum = `-- name: UpdateForum :exec
+UPDATE forums SET name = ?, description = ?, updated_at = ? WHERE id = ?
+`
+
+type UpdateForumParams struct {
+	Name        string
+	Description string
+	UpdatedAt   int64
+	ID          int64
+}
+
+// The admin forum screen (TKT-01M29CXK19). A forum's name and description;
+// its slug is fixed at creation, since /f/{slug} is in every shared link.
+func (q *Queries) UpdateForum(ctx context.Context, arg UpdateForumParams) error {
+	_, err := q.db.ExecContext(ctx, updateForum,
+		arg.Name,
+		arg.Description,
+		arg.UpdatedAt,
+		arg.ID,
+	)
 	return err
 }

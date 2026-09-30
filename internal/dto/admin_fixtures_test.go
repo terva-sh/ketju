@@ -25,6 +25,17 @@ func init() {
 	corpus["handle-change."+tMember] = HandleChange{Handle: "alicia", Previous: "alice",
 		NextChangeAt: ptr(Millis(1760292000000))}
 	corpus["handle-change."+tAdmin] = HandleChange{Handle: "bob", Previous: "bob-"}
+
+	// The admin forum screen (TKT-01M29CXK19): a root, a child under it, and
+	// an archived restricted root, so parent_id is both null and set.
+	corpus["admin-forums."+tAdmin] = ManagedForumList{Forums: []ManagedForum{
+		{ID: 1, Slug: "general", Name: "General", Description: "Anything that fits nowhere else.",
+			Position: 1024, Visibility: "public", Threads: 12, Posts: 140},
+		{ID: 5, ParentID: ptr(int64(1)), Slug: "books", Name: "Books", Description: "What we are reading.",
+			Position: 1024, Visibility: "members", Threads: 3, Posts: 27},
+		{ID: 6, Slug: "attic", Name: "Attic", Description: "", Position: 2048, Visibility: "restricted",
+			Archived: true, Threads: 1, Posts: 4},
+	}}
 }
 
 // issuedToken is a credential as it is issued: the one time the token is

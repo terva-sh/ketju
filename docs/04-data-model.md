@@ -320,6 +320,25 @@ updated_at
 The one-level rule is enforced by triggers, so every write path gets it
 (TKT-01M29BYYHG).
 
+Settled in TKT-01M29CXK19, the admin forum screen:
+- **Positions are sparse.** `position` orders siblings and means nothing
+  else. A new forum goes 1024 after its last sibling. A move puts the forum
+  at the integer midway between its new neighbours, with 0 as the bound
+  before the first, so a move writes its own row and no other. Only when the
+  neighbours have no integer between them are that parent's children
+  renumbered to multiples of 1024, in their order, in the move's
+  transaction. Rewriting every sibling on every move lost because it
+  rewrites rows the move did not change. Fractional string keys lost
+  because `position` is an integer and a forum list is tens of rows.
+- **The slug is fixed at creation.** `/f/{slug}` is in every shared link,
+  and no design covers redirecting an old forum slug. The name and
+  description are editable.
+- **No forum is deleted.** Archiving is how a forum is retired, since
+  nothing here deletes by cascade.
+- **Archiving is reversible.** A forum's `archived` is a column that no log
+  record fixes, so an admin may unarchive. A thread's archive cannot be
+  undone only because the log has no unarchive record.
+
 ### groups, group_members
 ```
 groups: id, name, slug, description, is_system, created_at, updated_at
@@ -551,6 +570,17 @@ transaction that projects the record, with the frame's timestamp as `at`.
   `agent.limits_changed`, with the new `"burst"` and `"refill_seconds"`, null
   for the site default. The key is `"cause"` rather than `"via"`, because
   `"via"` says what did an action when no account did.
+- The admin forum screen (TKT-01M29CXK19) writes, against the forum and in
+  the transaction that makes the change, each with the forum's `"slug"`:
+  `forum.created` with `"name"`, `"parent"` (the parent's id, or null for a
+  root) and `"visibility"`; `forum.updated` with `"name"`, `"description"`
+  or both, each `{"from", "to"}`, for the fields that changed;
+  `forum.moved` with `"from_parent"` and `"to_parent"` (ids, or null for
+  the top level), the new `"position"`, and `"renumbered"`, true when the
+  siblings were renumbered; `forum.visibility_changed` with `"from"` and
+  `"to"`; and `forum.archived` and `forum.unarchived`. The last three are
+  written by `internal/perm`, which clears the decision cache when they
+  commit. A change to what the forum already has writes nothing.
 - Slow mode (TKT-01M29CRJ50) writes `thread.slow_mode` against the thread,
   in the transaction that writes `thread_slow_mode`, with the moderator as
   actor, `"from"` (the thread's previous value, or null when it had none)
@@ -580,6 +610,12 @@ names that the list lacks.
 | `flag.dismissed` | `post` | TKT-01M29CRJ4E |
 | `flag.resolved` | `post` | TKT-01M29CRJ4E |
 | `form.version_created` | `form` | TKT-01M29CP2KE |
+| `forum.archived` | `forum` | TKT-01M29CXK19 |
+| `forum.created` | `forum` | TKT-01M29CXK19 |
+| `forum.moved` | `forum` | TKT-01M29CXK19 |
+| `forum.unarchived` | `forum` | TKT-01M29CXK19 |
+| `forum.updated` | `forum` | TKT-01M29CXK19 |
+| `forum.visibility_changed` | `forum` | TKT-01M29CXK19 |
 | `group.created` | `group` | TKT-01M29CXK1X |
 | `group.deleted` | `group` | TKT-01M29CXK1X |
 | `group.member_added` | `user` | TKT-01M29CKRF9, TKT-01M29CXK1X |

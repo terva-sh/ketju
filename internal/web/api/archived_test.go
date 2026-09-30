@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
@@ -37,7 +38,7 @@ func (w *world) newAdmin() domain.Viewer {
 // archive archives w's forum through perm, as the admin forum screens will.
 func (w *world) archive() {
 	w.t.Helper()
-	if err := perm.New(w.db).SetForumArchived(w.t.Context(), w.forum, true); err != nil {
+	if err := perm.New(w.db).SetForumArchived(w.t.Context(), audit.By{}, w.forum, true); err != nil {
 		w.t.Fatal(err)
 	}
 }

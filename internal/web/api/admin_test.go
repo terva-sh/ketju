@@ -260,6 +260,13 @@ var adminRouteGates = map[string]string{
 	"POST /api/v1/admin/forms/{key}/versions":           "admin",
 	"POST /api/v1/admin/forms/{key}/preview":            "admin",
 	"GET /api/v1/admin/audit":                           "admin",
+	// The forum management screen (TKT-01M29CXK19) is an admin screen.
+	"GET /api/v1/admin/forums":                 "admin",
+	"POST /api/v1/admin/forums":                "admin",
+	"PATCH /api/v1/admin/forums/{id}":          "admin",
+	"POST /api/v1/admin/forums/{id}/move":      "admin",
+	"PUT /api/v1/admin/forums/{id}/visibility": "admin",
+	"PUT /api/v1/admin/forums/{id}/archived":   "admin",
 }
 
 // TestThreadModerationRoutesUseTheModeratesGate is TKT-01M3RQP0TG's first
