@@ -443,17 +443,47 @@ describe('a post', () => {
   });
 });
 
-// Review 421: the history route is not the thread page.
+// Review 421: the history route is not the thread page. It is the post's
+// history screen (TKT-01M29CP2Q3), under the thread's title, and it keeps
+// the thread's canonical slug.
 describe('the post history route', () => {
-  it('says what it is and links back to the post, rather than listing the page', async () => {
-    serve(page([post(26), post(27)], { number: 2 }));
+  // serveHistory answers the thread endpoint with p and the history
+  // endpoint with two revisions of post 27.
+  function serveHistory(p: ThreadPage) {
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', async (url: string) => {
+      urls.push(url);
+      if (url.endsWith('/posts/27/history')) {
+        const actor = base.posts[0].author;
+        const r = (revision: number, source: string) => ({ revision, actor, at: 1757500000000 + revision, reason: '', source, grace: false });
+        const body = { ordinal: 27, deleted: false, redacted: false, revisions: [r(1, 'one'), r(2, 'two')] };
+        return new Response(JSON.stringify(body), { status: 200 });
+      }
+      return new Response(JSON.stringify(p), { status: 200 });
+    });
+    return urls;
+  }
+
+  it('renders the history screen rather than listing the page', async () => {
+    const urls = serveHistory(page([post(26), post(27)], { number: 2 }));
     const root = await renderAt(`/t/${id}/why-we-left-slack/27/history`);
     expect(root.querySelector('[data-screen]')?.getAttribute('data-screen')).toBe('post-history');
     expect(at(root, 'h1')?.textContent).toBe(base.thread.title);
-    expect(at(root, '.history-pending h2')?.textContent).toBe('History of post #27');
-    expect(at(root, '.history-pending a')?.getAttribute('href')).toBe(`/t/${id}/why-we-left-slack/27`);
+    expect(at(root, '.post-history h2')?.textContent).toBe('History of post #27');
+    expect(urls).toContain(`/api/v1/threads/${id}/posts/27/history`);
+    expect([...root.querySelectorAll('.revision')].map((r) => r.getAttribute('data-revision'))).toEqual(['2', '1']);
+    expect(at(root, '.history-pending')).toBeNull();
+    expect(at(root, '.post-history > p > a')?.getAttribute('href')).toBe(`/t/${id}/why-we-left-slack/27`);
     expect(at(root, '.posts')).toBeNull();
     expect(at(root, '.pager')).toBeNull();
+  });
+
+  it('corrects a stale slug to the current one and stays on the history', async () => {
+    serveHistory(page([post(26), post(27)], { number: 2 }));
+    const root = await renderAt(`/t/${id}/old-slug/27/history`);
+    expect(location.pathname).toBe(`/t/${id}/why-we-left-slack/27/history`);
+    expect(root.querySelector('[data-screen]')?.getAttribute('data-screen')).toBe('post-history');
+    expect(at(root, '.post-history h2')?.textContent).toBe('History of post #27');
   });
 });
 

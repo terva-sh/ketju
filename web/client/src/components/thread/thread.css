@@ -757,3 +757,119 @@
     min-height: var(--target);
   }
 }
+
+/* A post's history (screens/PostHistory.tsx, docs/08 "Post history"): the
+   revisions newest first, each with its From and To choice, and the diff of
+   the two chosen. The diff marks words with the themed soft tokens, so it
+   reads in either theme, and with a line through or under them, so it does
+   not rest on colour alone. */
+.post-history {
+  padding: 16px 24px;
+}
+.post-history h2 {
+  font-size: 18px;
+  margin: 0 0 12px;
+}
+.history-notice {
+  color: var(--ink2);
+  font-style: italic;
+}
+.revisions {
+  list-style: none;
+  margin: 0 0 16px;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+}
+.revisions > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--rule);
+}
+/* An edge rather than a fill, so the muted role badge keeps its contrast. */
+.revisions > li.chosen {
+  box-shadow: inset 3px 0 0 var(--accent);
+}
+.compare-picks {
+  display: flex;
+  flex-shrink: 0;
+}
+.compare-picks .pick {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 28px;
+  min-height: 28px;
+}
+.revision {
+  display: flex;
+  gap: 10px;
+  min-width: 0;
+  flex-grow: 1;
+}
+.revision-main {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.revision-head {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.revision-head .revision-number {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.revision-head .author {
+  color: var(--ink);
+  font-weight: 600;
+  font-size: 14px;
+}
+.revision-reason,
+.revision-grace {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.history-diff h3 {
+  font-size: 15px;
+  margin: 0 0 4px;
+}
+.diff-key {
+  margin: 0 0 8px;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.diff {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.diff del {
+  background: var(--unread-soft);
+  text-decoration: line-through;
+}
+.diff ins {
+  background: var(--accent-soft);
+  text-decoration: underline;
+}
+@media (max-width: 719.98px) {
+  .post-history {
+    padding: 12px 16px;
+  }
+  .compare-picks .pick {
+    min-width: var(--target);
+    min-height: var(--target);
+  }
+}

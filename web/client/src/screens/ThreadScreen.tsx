@@ -42,6 +42,7 @@ import { refreshViewer, viewer } from '../state/viewer';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
 import { NotFound } from './Placeholder';
+import { PostHistory } from './PostHistory';
 
 // ThreadScreen is the thread page (docs/06 "The canonical view"): the posts
 // of one page in order, the pager, and the divider between read and unread.
@@ -268,7 +269,7 @@ export function ThreadScreen() {
       )}
       {res.error && <ErrorPanel error={res.error} what="This thread" onRetry={res.retry} />}
       {history ? (
-        <PostHistoryPending thread={head ?? { id: params.id, slug: params.slug }} ordinal={params.ordinal} />
+        <PostHistory thread={head ?? { id: params.id, slug: params.slug }} ordinal={params.ordinal} />
       ) : (
         <>
           {page && <ThreadBody key={key} page={page} lens={view.lens} onChanged={res.retry} />}
@@ -302,23 +303,6 @@ function PinnedNote({ pinned }: { pinned: Pinned }) {
       )}
       .
     </p>
-  );
-}
-
-// PostHistoryPending holds the history route's place until a post's history
-// has a screen of its own (TKT-01M39WZY8C, Build the post history screen). It
-// says what the address is, keeps the thread's title and canonical slug, and
-// links back to the post, rather than showing the thread page as if it were
-// the history (review 421).
-function PostHistoryPending({ thread, ordinal }: { thread: ThreadRef; ordinal: string }) {
-  return (
-    <section class="history-pending" data-history-for={ordinal}>
-      <h2>History of post #{ordinal}</h2>
-      <p>This screen is not built yet.</p>
-      <p>
-        <a href={permalink(thread, Number(ordinal))}>Back to post #{ordinal}</a>
-      </p>
-    </section>
   );
 }
 

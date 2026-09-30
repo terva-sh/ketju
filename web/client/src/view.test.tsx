@@ -153,14 +153,19 @@ describe('a stale slug', () => {
     const asked: string[] = [];
     vi.stubGlobal('fetch', async (url: string) => {
       asked.push(url);
+      // The history route's screen asks for the post's history too
+      // (TKT-01M29CP2Q3).
+      if (url.endsWith('/history')) {
+        return new Response(JSON.stringify({ ordinal: 42, deleted: false, redacted: false, revisions: [] }), { status: 200 });
+      }
       return new Response(threadJSON({ id: '01k4z3j0w8x2c', slug: 'renamed', title: 'T' }), {
         status: 200,
       });
     });
     await renderAt('/t/01k4z3j0w8x2c/old-name/42/history');
     expect(location.pathname).toBe('/t/01k4z3j0w8x2c/renamed/42/history');
-    // The page asked for is the one holding post 42.
-    expect(asked[0]).toBe('/api/v1/threads/01k4z3j0w8x2c?ordinal=42');
+    // The page asked for is the one holding post 42, beside the history.
+    expect(asked.filter((u) => !u.endsWith('/history'))).toEqual(['/api/v1/threads/01k4z3j0w8x2c?ordinal=42']);
   });
 
   // The thread is already on screen and a link to an old slug of it is
