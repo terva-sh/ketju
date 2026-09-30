@@ -36,15 +36,21 @@ async function send(page: Page, kind: string, button: string) {
   await expect(page.getByRole('heading', { level: 1 })).toBeFocused();
 }
 
-test('a moderator locks, unlocks, pins and unpins a thread', async ({ page, isMobile }) => {
+// open goes to the garden thread and checks it is as the seed left it,
+// unlocked and unpinned.
+async function open(page: Page) {
   await page.goto('/f/garden');
   await page.locator('[data-thread] .thread-title', { hasText: title }).click();
   await expect(page.getByRole('heading', { level: 1 })).toHaveText(title);
-  const locked = page.locator('[data-thread-state=locked]');
-  const pinned = page.locator('[data-thread-state=pinned]');
-  await expect(locked).toHaveCount(0);
-  await expect(pinned).toHaveCount(0);
+  await expect(page.locator('[data-thread-state]')).toHaveCount(0);
+}
 
+// Each test is short and runs at most one axe scan, because several steps
+// and scans sharing one test's 30 s budget timed out on a loaded CI runner
+// (TKT-01M3MTQG5A, e2e/a11y.spec.ts).
+test('a moderator locks and unlocks a thread', async ({ page, isMobile }) => {
+  await open(page);
+  const locked = page.locator('[data-thread-state=locked]');
   await action(page, isMobile, 'lock');
   const lock = page.getByRole('group', { name: 'Lock this thread' });
   await expect(lock.getByRole('textbox', { name: 'Reason (optional)' })).toBeFocused();
@@ -59,23 +65,16 @@ test('a moderator locks, unlocks, pins and unpins a thread', async ({ page, isMo
   await action(page, isMobile, 'unlock');
   await send(page, 'unlock', 'Unlock');
   await expect(locked).toHaveCount(0);
+});
 
+test('a moderator pins and unpins a thread', async ({ page, isMobile }) => {
+  await open(page);
+  const pinned = page.locator('[data-thread-state=pinned]');
   await action(page, isMobile, 'pin');
   const pin = page.getByRole('group', { name: 'Pin this thread' });
   await expect(pin.getByRole('radio', { name: 'In this forum' })).toBeChecked();
   // mona is a moderator by role, so the global scope is hers to choose.
   await expect(pin.getByRole('radio', { name: 'On every forum' })).toBeVisible();
-  const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
-  expect(overflow, 'horizontal overflow').toBeLessThanOrEqual(0);
-  for (const colorScheme of ['light', 'dark'] as const) {
-    await page.emulateMedia({ colorScheme });
-    const { violations } = await new AxeBuilder({ page })
-      .include('[data-moderate]')
-      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
-      .analyze();
-    const found = violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`);
-    expect(found, colorScheme).toEqual([]);
-  }
   await send(page, 'pin', 'Pin');
   await expect(pinned).toHaveText('Pinned in this forum.');
 
@@ -83,5 +82,24 @@ test('a moderator locks, unlocks, pins and unpins a thread', async ({ page, isMo
   await expect(page.getByRole('group', { name: 'Unpin this thread?' })).toBeVisible();
   await send(page, 'unpin', 'Unpin');
   await expect(pinned).toHaveCount(0);
-  await expect(locked).toHaveCount(0);
 });
+
+// The pin panel, which has the most controls, fits the width and passes axe
+// (WCAG 2.1 A and AA, as e2e/a11y.spec.ts scans) in each theme. Nothing is
+// sent, so the thread is left as it was.
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`the pin panel passes the scan in the ${colorScheme} theme`, async ({ page, isMobile }) => {
+    await page.emulateMedia({ colorScheme });
+    await open(page);
+    await action(page, isMobile, 'pin');
+    await expect(page.getByRole('group', { name: 'Pin this thread' })).toBeVisible();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    expect(overflow, 'horizontal overflow').toBeLessThanOrEqual(0);
+    const { violations } = await new AxeBuilder({ page })
+      .include('[data-moderate]')
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa'])
+      .analyze();
+    const found = violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`);
+    expect(found, colorScheme).toEqual([]);
+  });
+}
