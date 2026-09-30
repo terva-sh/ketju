@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS19315QTWBKNZN782VRF1
 title: Autosave reply drafts from the composer
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ dependencies:
   - TKT-01M3K9XBJA8FSJ8ADCEY284SGA
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ns1931
+  branch: run/ns1931-reply-drafts
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac6c39099534bd3eb
+  commit: f388921469800497b3e8496ea4a023e3d41a7296
+  session: null
+  claimed_at: 2026-09-30T10:57:05Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T05:08:40Z
-updated_at: 2026-09-30T09:40:18Z
+updated_at: 2026-09-30T10:57:07Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-ns1931
   name: ""
 extensions: {}
 ---
