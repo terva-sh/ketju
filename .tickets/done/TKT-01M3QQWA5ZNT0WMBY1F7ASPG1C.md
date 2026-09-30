@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T23:26:57Z
-updated_at: 2026-09-30T03:52:16Z
+updated_at: 2026-09-30T04:10:52Z
 created_by:
   id: agent:claude-code/phase2-run-cp2pj
   name: ""
@@ -202,6 +202,10 @@ Built on run/qqwa5z-flag-dialog from main at 052db1d. Three departures from the 
 - The e2e flow is a new e2e/flag.spec.ts, not an edit to replies.spec.ts, to keep clear of the Phase 2 exit lane's spec edits. Alice flags carol's #3 at both widths, and the second width is a repeat that gets the same receipt. One flag is under the threshold, so nothing on the page changes for other specs. targets.spec.ts's small() takes an optional root, because the open list covers the post below it. On the phone a radio is a 44 px box (appearance: none, the circle drawn by a gradient), because the target check presses 21 px beside each input.
 
 Evidence: go test -race ./... is green, and so are vitest (48 files, 1475 tests), tsc --noEmit -p . and Playwright (70 passed, 10 skipped by width). The thread view is 47363 B gzip, up from 45724 B on main (+1639 B, 78.9% of 60000 B). Each commit body lists the mutations tried against the tests; each was caught.
+
+**agent:claude-code/phase2-run-qqwa5z** at 2026-09-30T04:10:52Z
+
+Terva review 1538 on PR #202 (head 9686acb, base 9a8fc76) raised one medium finding, "Show the thanks only after an HTTP 200". It is accepted and fixed. apiSend resolves on any 2xx, so a 204 or any other 2xx body would have shown the thanks. FlagDialog now shows the thanks only for the receipt, {"received": true}, which is what the server answers a kept flag with. Anything else counts as a server fault (internal): it gets its sentence and the form stays filled. New FlagDialog.test.tsx cases cover 204, 201 with {}, 200 with {} and 200 with {received: false}. CI run 1294 on 9686acb was green.
 
 ## Summary
 

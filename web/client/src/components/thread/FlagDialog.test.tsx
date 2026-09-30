@@ -116,6 +116,23 @@ describe('the flag dialog', () => {
     expect(document.activeElement).toBe(closeOf(d));
   });
 
+  // Terva review 1538: apiSend resolves on any 2xx, and only the receipt
+  // earns the thanks.
+  it.each([
+    [{ status: 204 }],
+    [{ status: 201, body: {} }],
+    [{ status: 200, body: {} }],
+    [{ status: 200, body: { received: false } }],
+  ] as [Answer][])('a success that is not the receipt is not thanked: %j', async (answer) => {
+    stubServer({ [url]: () => answer });
+    const d = await open();
+    await choose(d, 'spam');
+    await send(d);
+    expect(d.textContent).not.toContain(flagThanks);
+    expect(d.querySelector('[role=alert]')?.textContent).toBe('Something went wrong on the server.');
+    expect(radio(d, 'spam').checked).toBe(true);
+  });
+
   it('unavailable is not a receipt', async () => {
     stubServer({ [url]: () => problemAnswer('unavailable', 503) });
     const d = await open();

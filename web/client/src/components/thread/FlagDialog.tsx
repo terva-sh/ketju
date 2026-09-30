@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { apiSend } from '../../api/client';
 import type { FlagReceipt } from '../../api/dto';
-import { asProblem, problemMessage } from '../../api/problem';
+import { asProblem, ProblemError, problemMessage } from '../../api/problem';
 import { trapTab } from '../focus';
 
 // The longest note a flag takes, in characters (code points), as the server
@@ -97,7 +97,16 @@ export function FlagDialog({
     setSending(true);
     setRefused(null);
     try {
-      await apiSend<FlagReceipt>('POST', `/api/v1/threads/${encodeURIComponent(thread)}/flags`, { ordinal, reason, note });
+      const r = await apiSend<FlagReceipt | undefined>('POST', `/api/v1/threads/${encodeURIComponent(thread)}/flags`, {
+        ordinal,
+        reason,
+        note,
+      });
+      // The thanks is for the receipt and nothing else (Terva review 1538):
+      // apiSend resolves on any 2xx, and a 204, or a body that is not
+      // {"received": true}, is not the 200 the server answers a kept flag
+      // with, so it is the server's fault and the form stays.
+      if (r?.received !== true) throw new ProblemError('internal', 0);
       setReceived(true);
     } catch (err) {
       setRefused(flagRefusal(err));
