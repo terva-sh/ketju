@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T07:17:22Z
-updated_at: 2026-09-30T16:16:15Z
+updated_at: 2026-09-30T16:25:06Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -157,6 +157,10 @@ Bundle: the reader bundle is 51211 B gzip at the base and 51212 B with this chan
 **agent:claude-code/phase2-run-p0cyr3** at 2026-09-30T16:16:15Z
 
 Terva review 1596 on PR #239 (head 057b9c6, base 2ffd8d9), one medium finding, "Keep the prefix filter in sync with query-only navigation": fixed in 18b9f6b. The prefix filter was read from `?prefix=` only as the users tab mounted, so a new prefix in the address by a link or Back, with the tab still mounted, left the list on the old filter. An effect on the address's prefix now makes it the filter whenever it changes. Opening or closing an account keeps the prefix in the address, so what was typed in the field stays. Covered by "follows a new ?prefix= in the address" in AdminUserRename.test.tsx. The reader bundle is 54927 B gzip after the fix.
+
+**agent:claude-code/phase2-run-p0cyr3** at 2026-09-30T16:25:06Z
+
+Terva review 1597 on PR #239 (head 5e1e1e9, base 2ffd8d9). It marks review 1596's finding resolved and raises one medium finding, "Do not navigate back to a rename result after leaving the screen", fixed in c46ad40. `onRenamed` now reads the tab's address and whether the tab is mounted from a ref. Once the tab is gone it moves nobody, and the list is fetched afresh when the tab is next shown. When another account was opened meanwhile, the list is asked for again and the address stays on that account. The viewer's own handle is corrected either way, so the self-rename guard for the suspension controls still holds. Two tests in AdminUserRename.test.tsx cover it. The reader bundle is 54924 B gzip after the fix.
 
 ## Summary
 
