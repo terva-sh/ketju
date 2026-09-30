@@ -12,7 +12,24 @@ import { permalink, type FlagHandler, type ThreadRef } from './Post';
 // flag). Choosing it closes the list and hands the dialog this post's More
 // button to return focus to: the flag item is gone by the time the dialog
 // closes, and the button stays (Terva review 1525 on PR #181).
-export function PostMore({ thread, ordinal, onFlag }: { thread: ThreadRef; ordinal: number; onFlag?: FlagHandler }) {
+//
+// Edit and delete follow flag when the post hands them over, on the
+// viewer's own post while the page offers them (TKT-01M3PTT97X). Choosing
+// one closes the list, and the editor or the confirmation opens in the
+// post; when it closes, focus comes back to this button (useOwn).
+export function PostMore({
+  thread,
+  ordinal,
+  onFlag,
+  onEdit,
+  onDelete,
+}: {
+  thread: ThreadRef;
+  ordinal: number;
+  onFlag?: FlagHandler;
+  onEdit?: () => void;
+  onDelete?: () => void;
+}) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const button = useRef<HTMLButtonElement>(null);
@@ -75,6 +92,28 @@ export function PostMore({ thread, ordinal, onFlag }: { thread: ThreadRef; ordin
               flag
             </button>
           </li>
+        )}
+        {(
+          [
+            ['edit', onEdit],
+            ['delete', onDelete],
+          ] as const
+        ).map(
+          ([name, act]) =>
+            act && (
+              <li key={name}>
+                <button
+                  type="button"
+                  data-post-action={name}
+                  onClick={() => {
+                    setOpen(false);
+                    act();
+                  }}
+                >
+                  {name}
+                </button>
+              </li>
+            ),
         )}
         <li>
           <a href={`${href}/history`} onClick={() => setOpen(false)}>

@@ -698,3 +698,58 @@
     border-radius: var(--radius) var(--radius) 0 0;
   }
 }
+
+/* Edit, delete and restore on the viewer's own posts (OwnControls,
+   TKT-01M3PTT97X). The editor is the shared composer, in the body's place;
+   the delete confirmation sits below the body, its buttons drawn as the
+   flag dialog's are. */
+.own-confirm,
+.own-editor-status {
+  margin-top: 12px;
+  padding: 12px 16px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.own-confirm p,
+.own-editor-status p {
+  margin: 0 0 12px;
+}
+.own-failure {
+  color: var(--ink);
+  font-weight: 600;
+}
+.own-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.own-buttons button {
+  height: 32px;
+  padding: 0 14px;
+  font: inherit;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.own-buttons .own-send {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.own-buttons .own-send:disabled,
+.post-footer [data-post-action='restore']:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+/* Full targets on a phone, the editor's Cancel and Save among them: the
+   reply composer's foot is hidden in its sheet, this one is not. */
+@media (max-width: 719.98px) {
+  .own-buttons button,
+  [data-editing] .composer-foot button {
+    height: auto;
+    min-height: var(--target);
+  }
+}

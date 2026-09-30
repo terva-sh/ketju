@@ -2,7 +2,7 @@ import { Fragment } from 'preact';
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { peekGet } from '../api/client';
-import type { CreatedPost, Pinned, ThreadPage } from '../api/dto';
+import type { CreatedPost, Pinned, Post as PostDTO, ThreadPage } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
@@ -13,11 +13,14 @@ import { FlagDialog } from '../components/thread/FlagDialog';
 import { ModerateDialog } from '../components/thread/ModerateDialog';
 import { Pager } from '../components/thread/Pager';
 import { permalink, Post, type FlagHandler, type PostActions, type ThreadRef } from '../components/thread/Post';
+import { isOwn, postControls } from '../components/thread/postControls';
+import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
 import { isTombstone } from '../components/thread/removal';
 import { expanderShown } from '../components/thread/ReplyExpander';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
+import { useWindowClock } from '../components/thread/useWindowClock';
 import '../components/thread/thread.css';
 import { Toolbar } from '../shell/Toolbar';
 import { isStaff, moderateKinds, threadActions, type PanelKind } from '../shell/threadActions';
@@ -218,7 +221,7 @@ export function ThreadScreen() {
         <PostHistoryPending thread={head ?? { id: params.id, slug: params.slug }} ordinal={params.ordinal} />
       ) : (
         <>
-          {page && <ThreadBody key={key} page={page} lens={view.lens} />}
+          {page && <ThreadBody key={key} page={page} lens={view.lens} onChanged={res.retry} />}
           {!page && !res.error && <p class="loading">Loading…</p>}
         </>
       )}
@@ -269,7 +272,7 @@ function PostHistoryPending({ thread, ordinal }: { thread: ThreadRef; ordinal: s
   );
 }
 
-function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
+function ThreadBody({ page, lens, onChanged }: { page: ThreadPage; lens: string; onChanged: () => void }) {
   const thread: ThreadRef = { id: page.thread.id, slug: page.thread.slug };
   const lastRead = page.viewer.last_read_ordinal;
   const divider = dividerBefore(
@@ -293,6 +296,24 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
   const onFlag: FlagHandler | undefined = viewer.value.user
     ? (ordinal, returnTo) => setFlagging({ ordinal, returnTo })
     : undefined;
+  // Edit, delete and restore on the viewer's own posts, offered by one rule
+  // at this render's now (postControls). The clock renders the page again
+  // when the soonest offer ends, and a change asks for the page again
+  // (TKT-01M3PTT97X).
+  const now = Date.now();
+  const offers = page.posts.map((p) => postControls(p, page.viewer, now));
+  useWindowClock(offers.map((c) => c.closesAt));
+  const windows = page.viewer.author_windows;
+  const ownOf = (p: PostDTO, i: number): Own | undefined =>
+    isOwn(p)
+      ? {
+          thread: thread.id,
+          offer: offers[i],
+          deleteUntil: windows ? p.created_at + windows.delete_seconds * 1000 : null,
+          logLength: page.thread.log_length,
+          onChanged,
+        }
+      : undefined;
   const postOf = (o: number) => page.posts.find((p) => p.ordinal === o);
   const authorOf = (o: number) => postOf(o)?.author.handle;
   // On a phone the composer is a sheet the reply bar opens (Shell), and
@@ -347,6 +368,7 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
                 post={p}
                 thread={thread}
                 unread={lastRead > 0 && p.ordinal > lastRead}
+                own={ownOf(p, i)}
                 expander={expanderShown(p, page.posts[i + 1])}
               />
             ) : (
@@ -356,6 +378,7 @@ function ThreadBody({ page, lens }: { page: ThreadPage; lens: string }) {
                 unread={lastRead > 0 && p.ordinal > lastRead}
                 actions={actions}
                 onFlag={onFlag}
+                own={ownOf(p, i)}
                 expander={expanderShown(p, page.posts[i + 1])}
               />
             )}

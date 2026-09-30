@@ -48,6 +48,11 @@ export interface ComposerFields {
 // sheet lays it out as the column that fills the phone's composer sheet,
 // toolbar last. focus puts the caret in the textarea when it mounts, which
 // the reply sheet asks for, since it opens because someone asked to write.
+//
+// editing names the post an author's editor is open on (PostEditor,
+// TKT-01M3PTT97X). The editor can be on the page beside the reply composer,
+// so its tabs and panels take ids of their own, and it is marked
+// data-editing rather than data-composer, which names the reply composer.
 export function ComposerBody({
   state: c,
   thread,
@@ -61,6 +66,7 @@ export function ComposerBody({
   head,
   notice,
   foot,
+  editing,
 }: {
   state: ComposerFields;
   thread?: string;
@@ -75,6 +81,7 @@ export function ComposerBody({
   head?: ComponentChildren;
   notice?: ComponentChildren;
   foot?: ComponentChildren;
+  editing?: number;
 }) {
   const source = c.source.value;
   const posting = c.posting.value;
@@ -135,8 +142,15 @@ export function ComposerBody({
 
   const listId = `mentions${useId()}`;
   const open = mention.open;
+  const ids = editing === undefined ? 'composer' : `edit-${editing}`;
   return (
-    <section class={sheet ? 'composer in-sheet' : 'composer'} ref={root} aria-label={name} data-composer={thread}>
+    <section
+      class={sheet ? 'composer in-sheet' : 'composer'}
+      ref={root}
+      aria-label={name}
+      data-composer={editing === undefined ? thread : undefined}
+      data-editing={editing}
+    >
       <header class="composer-head">
         {head}
         <div class="composer-tabs" role="tablist" aria-label="Composer view">
@@ -145,9 +159,9 @@ export function ComposerBody({
               key={t}
               type="button"
               role="tab"
-              id={`composer-tab-${t}`}
+              id={`${ids}-tab-${t}`}
               aria-selected={tab === t}
-              aria-controls={`composer-panel-${t}`}
+              aria-controls={`${ids}-panel-${t}`}
               onClick={() => setTab(t)}
             >
               {t === 'write' ? 'Write' : 'Preview'}
@@ -165,7 +179,7 @@ export function ComposerBody({
           ))}
         </div>
       )}
-      <div class="composer-body" id="composer-panel-write" role="tabpanel" aria-labelledby="composer-tab-write" hidden={tab !== 'write'}>
+      <div class="composer-body" id={`${ids}-panel-write`} role="tabpanel" aria-labelledby={`${ids}-tab-write`} hidden={tab !== 'write'}>
         <textarea
           ref={area}
           aria-label={label}
@@ -220,9 +234,9 @@ export function ComposerBody({
       </div>
       <div
         class="composer-preview"
-        id="composer-panel-preview"
+        id={`${ids}-panel-preview`}
         role="tabpanel"
-        aria-labelledby="composer-tab-preview"
+        aria-labelledby={`${ids}-tab-preview`}
         aria-busy={preview.busy}
         hidden={tab !== 'preview'}
       >

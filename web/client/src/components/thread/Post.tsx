@@ -4,6 +4,8 @@ import { bodyText, selectionIn } from '../../composer/quote';
 import { isPhone } from '../../state/layout';
 import { viewer } from '../../state/viewer';
 import { Avatar } from './Avatar';
+import { isOwn } from './postControls';
+import { DeleteConfirm, PostEditor, Restore, useOwn, type Own } from './OwnControls';
 import { PostMore } from './PostMore';
 import { PostTime } from './PostTime';
 import { removedMark } from './removal';
@@ -37,12 +39,20 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // (TKT-01M3QQWA5Z). The reply expander leads the footer when the page
 // offers it (expanderShown). On a phone link, flag and history collapse
 // under PostMore (docs/06 "Mobile").
+//
+// own is handed over on the viewer's own post, on the thread page only.
+// Edit and delete follow flag, under PostMore on a phone, while the page
+// offers them (postControls); edit opens the editor in the body's place, and
+// delete asks first, below the body. Restore is in the footer of a removed
+// post drawn with its body, which is how a moderator's own deleted post
+// reaches them (TKT-01M3PTT97X).
 export function Post({
   post,
   thread,
   unread,
   actions,
   onFlag,
+  own,
   expander = false,
 }: {
   post: PostDTO;
@@ -50,9 +60,14 @@ export function Post({
   unread: boolean;
   actions?: PostActions;
   onFlag?: FlagHandler;
+  own?: Own;
   expander?: boolean;
 }) {
   const flag = onFlag && mayFlag(post) ? onFlag : undefined;
+  const o = useOwn(own, post.ordinal);
+  const idle = o.mode === null;
+  const edit = idle && o.offer.edit ? () => o.open('edit') : undefined;
+  const del = idle && o.offer.delete ? () => o.open('delete') : undefined;
   // What was selected in this post when the pointer went down on quote:
   // a click can clear a selection before its handler runs.
   const selected = useRef<string | null>(null);
@@ -78,11 +93,16 @@ export function Post({
           {post.deleted && <span class="deleted-mark">{removedMark(post)}</span>}
           <ReplyTo post={post} />
         </header>
-        <div class="post-body" dangerouslySetInnerHTML={{ __html: post.html }} />
+        {o.mode === 'edit' ? (
+          <PostEditor o={o} thread={thread.id} ordinal={post.ordinal} replyTo={post.reply_to} />
+        ) : (
+          <div class="post-body" dangerouslySetInnerHTML={{ __html: post.html }} />
+        )}
         <Attachments post={post} />
+        {o.mode === 'delete' && <DeleteConfirm o={o} ordinal={post.ordinal} />}
         <footer class="post-footer">
           {expander && <ReplyToggle post={post} open={open} onToggle={toggle} />}
-          {actions && (
+          {actions && o.mode !== 'edit' && (
             <>
               <button
                 type="button"
@@ -105,7 +125,7 @@ export function Post({
             </>
           )}
           {isPhone.value ? (
-            <PostMore thread={thread} ordinal={post.ordinal} onFlag={flag} />
+            <PostMore thread={thread} ordinal={post.ordinal} onFlag={flag} onEdit={edit} onDelete={del} />
           ) : (
             <>
               <a class="hit" href={permalink(thread, post.ordinal)}>
@@ -121,11 +141,22 @@ export function Post({
                   flag
                 </button>
               )}
+              {edit && (
+                <button type="button" class="hit" data-post-action="edit" onClick={edit}>
+                  edit
+                </button>
+              )}
+              {del && (
+                <button type="button" class="hit" data-post-action="delete" onClick={del}>
+                  delete
+                </button>
+              )}
               <a class="hit" href={`${permalink(thread, post.ordinal)}/history`}>
                 history
               </a>
             </>
           )}
+          <Restore o={o} />
         </footer>
         {expander && open && <Replies thread={thread} ordinal={post.ordinal} />}
       </div>
@@ -149,10 +180,9 @@ export type FlagHandler = (ordinal: number, returnTo: HTMLElement) => void;
 // mayFlag is whether the viewer is offered flag on post: a signed-in member,
 // on a post that is shown (not removed, not moved) and is not their own
 // (maintainer decision 2026-09-29; the server refuses a self-flag too).
-// Handles are compared without case, as the server compares them.
+// Ownership is isOwn's, which the edit and delete offers use too.
 export function mayFlag(post: PostDTO): boolean {
-  const me = viewer.value.user;
-  return !!me && !post.deleted && post.moved_to === null && me.handle.toLowerCase() !== post.author.handle.toLowerCase();
+  return !!viewer.value.user && !post.deleted && post.moved_to === null && !isOwn(post);
 }
 
 // useHeldStill wraps change, a toggle's handler, so the toggle keeps its

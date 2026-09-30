@@ -71,6 +71,16 @@ export interface ThreadViewer {
   // the thread's author without moderate while the server would let them
   // rename it, and null otherwise, a moderator's included.
   rename_until: Millis | null;
+  // author_windows is how long this viewer may edit, and delete or restore,
+  // their own posts, from each post's creation, in the seconds the server
+  // enforces. null for a viewer who may moderate the forum, whom neither
+  // binds, and for one who is not a member.
+  author_windows: AuthorWindows | null;
+}
+
+export interface AuthorWindows {
+  edit_seconds: number;
+  delete_seconds: number;
 }
 
 // SlowMode is PUT /admin/threads/{id}/slow-mode's answer.
