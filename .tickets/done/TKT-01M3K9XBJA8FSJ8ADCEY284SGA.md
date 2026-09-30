@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3K9XBJA8FSJ8ADCEY284SGA
 title: Autosave new-thread drafts with their title
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-k9xbja
-  branch: run/k9xbja-forum-drafts
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a306a09e0acdd2f97
-  commit: 53623117f3d0bf68f6f4043ebc63791773139d58
-  session: null
-  claimed_at: 2026-09-30T09:57:40Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T06:05:54Z
-updated_at: 2026-09-30T09:59:02Z
+updated_at: 2026-09-30T10:14:33Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -50,13 +43,13 @@ The form-post table in docs/07 "Form posts for viewer state" needs a row for wha
 
 ## Acceptance criteria
 
-- [ ] GET, PUT and DELETE /api/v1/forums/{slug}/draft save, read back and delete a member's title and source per user and per forum, answering 204 when there is none, and a PUT without title clears it (TestForumDraftRoundTrip, TestForumDraftIsPerUserAndForum, TestForumDraftPutReplacesTheTitle)
-- [ ] docs/07 Drafts and its resources table describe the routes, its Form posts for viewer state table has a row for each, and TestEveryViewerStateRouteHasAFormPost lists them
-- [ ] Saving needs create_thread (forbidden otherwise), an archived forum is conflict to a member and saves for an admin, a hidden forum is not-found, anonymous is unauthenticated, and a title over MaxTitle or with a control character is validation-failed
-- [ ] dto.ForumDraft has a golden fixture and an entry in the client contract, and dto.Draft's goldens carry revision
-- [ ] PUT and DELETE on /api/v1/forums/{slug}/draft are in unchargedPaths and TestAgentBucket shows an agent's bucket is not charged for them
-- [ ] The migration, at the next free number, adds drafts.title, nullable with a CHECK that keeps it null on reply drafts, and drafts.revision and drafts.deleted, and docs/04 drafts matches the schema and names both draft routes (TestDraftUniqueness)
-- [ ] A draft's revision only grows and reads no clock: with the service clock fixed and then stepped back, PUT, PUT, DELETE, PUT answer 1, 2, 3 in Draft-Revision on the 204, and 4, for each kind of draft (TestDraftRevisionSurvivesDeletion, TestDraftRevisionIsPerKey, TestDeletingNothingKeepsTheRevision)
+- [x] GET, PUT and DELETE /api/v1/forums/{slug}/draft save, read back and delete a member's title and source per user and per forum, answering 204 when there is none, and a PUT without title clears it (TestForumDraftRoundTrip, TestForumDraftIsPerUserAndForum, TestForumDraftPutReplacesTheTitle)
+- [x] docs/07 Drafts and its resources table describe the routes, its Form posts for viewer state table has a row for each, and TestEveryViewerStateRouteHasAFormPost lists them
+- [x] Saving needs create_thread (forbidden otherwise), an archived forum is conflict to a member and saves for an admin, a hidden forum is not-found, anonymous is unauthenticated, and a title over MaxTitle or with a control character is validation-failed
+- [x] dto.ForumDraft has a golden fixture and an entry in the client contract, and dto.Draft's goldens carry revision
+- [x] PUT and DELETE on /api/v1/forums/{slug}/draft are in unchargedPaths and TestAgentBucket shows an agent's bucket is not charged for them
+- [x] The migration, at the next free number, adds drafts.title, nullable with a CHECK that keeps it null on reply drafts, and drafts.revision and drafts.deleted, and docs/04 drafts matches the schema and names both draft routes (TestDraftUniqueness)
+- [x] A draft's revision only grows and reads no clock: with the service clock fixed and then stepped back, PUT, PUT, DELETE, PUT answer 1, 2, 3 in Draft-Revision on the 204, and 4, for each kind of draft (TestDraftRevisionSurvivesDeletion, TestDraftRevisionIsPerKey, TestDeletingNothingKeepsTheRevision)
 
 ## Implementation plan
 
@@ -169,3 +162,17 @@ Plan refreshed against main at 5124209 on 2026-09-30. Changed: the migration is 
 **agent:claude-code/phase2-groom** at 2026-09-30T09:23:42Z
 
 Terva review 1559 on PR #210 (head 922a23c), finding 1 (high), accepted. A revision started from server milliseconds could repeat or fall after a delete and recreate within one millisecond or across a clock step back, letting a stale local copy win. Settled as an engineering choice: the revision is a per-key count that survives deletion. DELETE turns a live draft into a tombstone (deleted = 1, empty source, revision + 1) instead of removing the row; PUT inserts at 1 or revives with revision + 1; GET answers 204 for a tombstone; every 204 from a draft route carries Draft-Revision (0 for a key never saved). Every revision is computed in SQL from the stored value, in the write's own transaction, and no clock enters it. Lost, with reasons in the plan: server milliseconds (this finding); a per-user counter row, which is monotonic but counts other keys' writes and so breaks TKT-01M3NS1931's base + inflight test; a separate per-key counter table, which repeats the key and both partial unique indexes; restarting at 1; and a 200 tombstone body, which breaks '204 when there is none'. Tombstones are never swept, since a sweep would restart the count. Tests: TestDraftRevisionSurvivesDeletion (insert, update, delete, insert with the service clock fixed and then stepped back), TestDraftRevisionIsPerKey, TestDeletingNothingKeepsTheRevision. The migration is now named by the next free number, since TKT-01M29CP2R4 also plans 0018. Criteria 6 and 7 replace the old migration and millisecond criteria.
+
+**agent:claude-code/phase2-run-k9xbja** at 2026-09-30T10:14:17Z
+
+Built to the plan on run/k9xbja-forum-drafts (commit 930b8b7 on the branch). Migration 0018 was the next free number on main at 5362311. Settled while building, as engineering choices that affect only internals:
+- 0018 sets every draft stored before it to revision 1. A stored draft was saved at least once, and a save answers 1 or more, so 0 keeps the one meaning the plan gives it: a key never saved. The alternative, leaving them at the column default 0, would let a live draft answer the revision a client reads as "never saved". Tested by TestMigrationGivesStoredDraftsARevision.
+- The service's Draft and ForumDraft answer false for a tombstone and carry the key's revision in the returned DTO's Revision, with every other field zero. DeleteDraft and DeleteForumDraft return the revision they leave, read back in the delete's own write transaction. A separate return value lost because it would put a fourth result on both reads for one number the DTO already has a field for.
+- A second golden, forum-draft-untitled.member.json, pins the omitted title, since `title` is `omitempty` and one golden cannot show both shapes.
+- docs/07's form-post preamble now says a thread's slug is advisory and a forum's slug is its key, because the new rows live under /f/{slug}, where the slug is the key.
+- The reply draft's DELETE of a draft that is already a tombstone, or was never saved, writes nothing, so a retried delete never moves the revision (TestDeletingNothingKeepsTheRevision).
+Every criterion is met. CI's local set passed: gofmt, vet, go test -race ./..., sqlc regeneration unchanged, go generate ./internal/web/spa leaving the dist byte-identical, tsc, and vitest (1485 tests). Mutations tried are listed in the commit body, and each was caught.
+
+## Summary
+
+New-thread drafts with their title are served at GET/PUT/DELETE /api/v1/forums/{slug}/draft: per user and forum, saved through forumForThread (create_thread; archived is conflict but for an admin), read and discarded with read access, uncharged to an agent's bucket. Every draft now carries a revision that only grows: migration 0018 adds drafts.title, drafts.revision and drafts.deleted, a delete leaves a tombstone one revision on, revisions are computed in SQL with no clock, and every 204 from a draft route carries Draft-Revision (0 for a key never saved). Drafts stored before 0018 read as revision 1. dto.Draft gains revision, dto.ForumDraft is new; docs/04 and docs/07 describe both. The client half of the ordering is TKT-01M3NS1931, and the new-thread screen is TKT-01M3NS16VH. All seven criteria met.
