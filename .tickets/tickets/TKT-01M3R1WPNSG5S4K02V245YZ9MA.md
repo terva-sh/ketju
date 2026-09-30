@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R1WPNSG5S4K02V245YZ9MA
 title: Expose hard redaction in the post DTO and client
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -19,15 +19,22 @@ dependencies:
   - TKT-01M29CXJZ9MVXGY1FC0ESYNG8F
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-r1wpns
+  branch: run/r1wpns-redacted-dto
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa597c6d00d557379
+  commit: de1771d531b909bb2b8bcc2dc3c3650d8aae749c
+  session: null
+  claimed_at: 2026-09-30T12:37:33Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T02:21:56Z
-updated_at: 2026-09-30T08:58:52Z
+updated_at: 2026-09-30T12:37:36Z
 created_by:
   id: agent:claude-code/phase2-run-cxjz9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-r1wpns
   name: ""
 extensions: {}
 ---
