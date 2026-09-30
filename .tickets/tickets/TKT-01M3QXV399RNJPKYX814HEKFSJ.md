@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3QXV399RNJPKYX814HEKFSJ
 title: Add rename and move to the thread screen
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,15 +20,22 @@ dependencies:
   - TKT-01M3RQP0TGP43KRWGW11XSN2T7
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-qxv399
+  branch: run/qxv399-rename-move
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa4ee2b7db96c186d
+  commit: de1771d531b909bb2b8bcc2dc3c3650d8aae749c
+  session: null
+  claimed_at: 2026-09-30T12:16:32Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T01:11:09Z
-updated_at: 2026-09-30T09:21:25Z
+updated_at: 2026-09-30T12:16:33Z
 created_by:
   id: agent:claude-code/phase2-run-krh9
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-groom
+  id: agent:claude-code/phase2-run-qxv399
   name: ""
 extensions: {}
 ---
