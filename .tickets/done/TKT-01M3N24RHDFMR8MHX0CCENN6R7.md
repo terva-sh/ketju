@@ -22,7 +22,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-30T04:49:40Z
+updated_at: 2026-09-30T05:03:58Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -123,4 +123,4 @@ Criterion 7 ticked by the Phase 2 run orchestrator on 2026-09-30. The move half 
 
 ## Summary
 
-An archived forum is read-only to everyone but admins. perm drops create_thread, reply and upload for an archived forum in `decide`, so Check, CanEach and the grant Preview agree; read and moderate are unchanged. `perm.Evaluator.SetForumArchived` is the one write of forums.archived and clears every Evaluator's cache over the database. The posting paths read forums.archived from the forum row on every request (`readOnlyForum` in internal/service/threads/access.go) and answer conflict to non-admins, whatever the cache holds: a reply, a new thread (checked before create_thread), and an author's edit, delete or restore of their own post. Moderation paths (hide, restore, lock, pin) are not guarded. docs/04 and docs/07 describe it. Criterion 7's move half is left to TKT-01M29CKRH9 (Implement thread rename and move), which owns the move route and carries the archived-destination rule.
+An archived forum is read-only to everyone but admins. perm drops create_thread, reply and upload for an archived forum in `decide`, so Check, CanEach and the grant Preview agree; read and moderate are unchanged. `perm.Evaluator.SetForumArchived` is the one write of forums.archived and clears every Evaluator's cache over the database. The posting paths read forums.archived from the forum row on every request (`readOnlyForum` in internal/service/threads/access.go) and answer conflict to non-admins, whatever the cache holds: a reply, a new thread (checked before create_thread), and an author's edit, delete or restore of their own post. Moderation paths (hide, restore, lock, pin) are not guarded. docs/04 and docs/07 describe it. Criterion 7's move half landed with TKT-01M29CKRH9 (Implement thread rename and move), PR #193 at 052db1d. That ticket owns the move route and its archived-destination rule, and criterion 7 is now ticked.
