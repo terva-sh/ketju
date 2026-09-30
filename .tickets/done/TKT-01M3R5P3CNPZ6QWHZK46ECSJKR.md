@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3R5P3CNPZ6QWHZK46ECSJKR
 title: Keep the Go race tests inside their timeout under CI runner load
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -15,17 +15,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-r5p3cn
-  branch: run/r5p3cn-template-db
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a3bcf1742c4a5390e
-  commit: 53623117f3d0bf68f6f4043ebc63791773139d58
-  session: null
-  claimed_at: 2026-09-30T09:57:48Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T03:28:14Z
-updated_at: 2026-09-30T10:02:02Z
+updated_at: 2026-09-30T10:17:49Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -53,10 +46,10 @@ Reported by the rename/move lane on 2026-09-30.
 
 ## Acceptance criteria
 
-- [ ] dbtest.Open returns a database identical in schema and schema_migrations to a fresh Migrate (TestTemplateIsAFreshMigration), independent of every other (TestTemplateOpensAreIndependent), and migrates once per test binary (TestTemplateMigratesOnce)
-- [ ] Every test fixture outside internal/store/db and cmd/ketju opens its database through dbtest.Open, and TestFixturesUseTheTemplate fails on a new .Migrate( call elsewhere
-- [ ] A note records every package's go test -race -count=1 elapsed time before and after, on one named machine and base commit, and internal/perm and internal/web/api each take less than half their before time
-- [ ] The race step and every other step in .forgejo/workflows/ci.yml are unchanged (maintainer decision 2026-09-30, docs/08 Decided 2026-09-30)
+- [x] dbtest.Open returns a database identical in schema and schema_migrations to a fresh Migrate (TestTemplateIsAFreshMigration), independent of every other (TestTemplateOpensAreIndependent), and migrates once per test binary (TestTemplateMigratesOnce)
+- [x] Every test fixture outside internal/store/db and cmd/ketju opens its database through dbtest.Open, and TestFixturesUseTheTemplate fails on a new .Migrate( call elsewhere
+- [x] A note records every package's go test -race -count=1 elapsed time before and after, on one named machine and base commit, and internal/perm and internal/web/api each take less than half their before time
+- [x] The race step and every other step in .forgejo/workflows/ci.yml are unchanged (maintainer decision 2026-09-30, docs/08 Decided 2026-09-30)
 
 ## Implementation plan
 
@@ -143,3 +136,81 @@ Open decision settled by the maintainer on 2026-09-30: the CI race step keeps it
 **agent:claude-code/phase2-groom** at 2026-09-30T09:08:00Z
 
 Plan refreshed against main at 5124209 on 2026-09-30. The open decision is settled as the maintainer decided on 2026-09-30 (docs/08 'Decided 2026-09-30', merged in PR #208, whose note above records the same): the CI race step keeps its default timeout and the template database is built. The Open decision section is replaced by a Settled item citing it; the earlier Settled items are carried verbatim. Step 5 now says ci.yml does not change at all, including the 'Phase 2 exit tests, by name' step added by TKT-01M3NTSCMN, which re-runs cmd/ketju's exit tests; cmd/ketju keeps its own opening, so that step's time is unaffected. The fixture list was checked against every _test.go that calls .Migrate( at 5124209 and is complete; cmd/ketju/flow_test.go is new and exempt with cmd/ketju. Criterion 4 now states the decision. Criterion 3 compares against the before run on the implementer's machine rather than 9a8fc76's figures, which were taken on a machine the implementer may not have. Re-applied onto main at a660ae5, after PR #208 merged, with its note kept.
+
+**agent:claude-code/phase2-run-r5p3cn** at 2026-09-30T10:17:21Z
+
+Measurement for criterion 3, taken 2026-09-30 on brokkr (AMD Ryzen 9 5950X, 12 CPUs visible to Go, Go 1.27.1, Linux 6.12). Before is base commit 5362311 (origin/main at claim), exported with git archive. After is branch run/r5p3cn-template-db at 11e95cb. Each pair ran back to back with a warm build cache, using `go test -race -count=1 -json`. The seconds are each package's Elapsed from test2json. Other lanes' builds shared the machine: load average was 14 to 22 during the full-suite pair and 5 to 15 during the two-package pair. So the absolute figures are noisy, but an earlier pair gave the same ratios (perm 177.5 s to 46.2 s, web/api 241.3 s to 56.6 s).
+
+### internal/perm and internal/web/api alone
+
+`go test -race -count=1 ./internal/perm/ ./internal/web/api/`
+
+| package | before (s) | after (s) |
+|---|---|---|
+| `internal/web/api` | 148.3 | 49.2 |
+| `internal/perm` | 112.6 | 34.1 |
+
+internal/perm takes 30% of its before time, and internal/web/api takes 33%.
+
+### Every package, full suite
+
+`go test -race -count=1 ./...`
+
+| package | before (s) | after (s) |
+|---|---|---|
+| `internal/web/api` | 192.8 | 57.2 |
+| `internal/perm` | 164.0 | 42.9 |
+| `cmd/ketju` | 117.0 | 96.9 |
+| `internal/web/auth` | 99.0 | 29.8 |
+| `internal/store/db` | 93.0 | 75.3 |
+| `internal/events/projection` | 82.6 | 24.6 |
+| `internal/store/db/views` | 75.3 | 26.6 |
+| `internal/service/threads` | 71.6 | 21.6 |
+| `internal/service/identity` | 49.2 | 6.6 |
+| `internal/service/applications` | 47.0 | 14.0 |
+| `internal/auth/session` | 36.1 | 6.8 |
+| `internal/settings` | 25.4 | 3.7 |
+| `internal/service/account` | 23.4 | 3.6 |
+| `internal/jobs` | 21.2 | 3.3 |
+| `internal/store/threadlog` | 16.1 | 11.3 |
+| `internal/web/health` | 13.6 | 3.1 |
+| `internal/service/users` | 13.6 | 7.5 |
+| `internal/service/forms` | 10.2 | 2.4 |
+| `internal/auth/agentcred` | 8.8 | 2.8 |
+| `internal/web` | 6.9 | 3.8 |
+| `internal/auth/oidc` | 6.4 | 7.1 |
+| `internal/audit` | 3.6 | 2.5 |
+| `internal/store/db/dbtest` | 3.4 | 5.4 |
+| `internal/service/notify` | 3.2 | 1.7 |
+| `internal/render` | 3.2 | 2.5 |
+| `internal/forms` | 2.4 | 1.8 |
+| `internal/lock` | 2.3 | 2.2 |
+| `internal/auth/oidc/oidctest` | 1.3 | 1.6 |
+| `internal/store/threadcache` | 1.2 | 1.2 |
+| `internal/service/respcache` | 1.2 | 1.1 |
+| `internal/problem` | 1.2 | 1.1 |
+| `internal/dto` | 1.1 | 1.2 |
+| `internal/events` | 1.1 | 1.2 |
+| `internal/service/forums` | 1.1 | 1.1 |
+| `internal/store/threadid` | 1.1 | 1.1 |
+| `internal/config` | 1.1 | 1.1 |
+| `internal/logging` | 1.1 | 1.1 |
+| `internal/auth/seal` | 1.1 | 1.0 |
+| `internal/service/member` | 1.1 | 1.1 |
+| `internal/store/blob` | 1.1 | 1.0 |
+| `internal/web/spa` | 1.0 | 1.1 |
+| `internal/fsutil` | 1.0 | 1.0 |
+| `internal/domain` | 1.0 | 1.0 |
+| total package time | 1209.1 | 485.1 |
+
+Packages with no test files are left out. In the full suite, internal/perm takes 26% of its before time and internal/web/api 30%. cmd/ketju and internal/store/db still run their own migrations, as settled, so their figures move only with machine load. internal/store/db/dbtest grows by the new template and guard tests. The whole suite took 233 s of wall time before and 99 s after, compilation included.
+
+## Summary
+
+Test fixtures now copy a migrated template database instead of migrating a fresh one for every test. `dbtest.Open` (internal/store/db/dbtest/template.go) migrates once per test binary, closes the database so the WAL is checkpointed into the main file, and writes a copy of that file for each test. It refuses a path where a database or its WAL already exists. All 26 fixture calls in 25 files outside internal/store/db and cmd/ketju moved to it. The CI race step and its timeout are unchanged, as the maintainer decided (docs/08 "Decided 2026-09-30").
+
+Fidelity is held by tests. TestTemplateIsAFreshMigration compares header pragmas, the schema, schema_migrations and every row of every table against a fresh Migrate. TestTemplateHasEveryMigration compares the template against the migration files on disk, and a temporary migration 0018 reached both the template and an internal/perm fixture with nothing regenerated. TestFixturesUseTheTemplate fails on a new `.Migrate(` call in a test outside the allowed directories and names the file and line. Four mutations were each caught, as the code commit's body records.
+
+Measured back to back on brokkr against 5362311, under `-race`: internal/perm went from 164.0 s to 42.9 s and internal/web/api from 192.8 s to 57.2 s in the full suite. Run alone, they went from 112.6 s to 34.1 s and from 148.3 s to 49.2 s. The measurement note has every package's time.
+
+To convert a fixture, replace db.Open plus Migrate with `d := dbtest.Open(t, db.Options{Path: ...})`, which also registers the Close.
