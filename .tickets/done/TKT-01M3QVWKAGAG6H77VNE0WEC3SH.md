@@ -17,11 +17,13 @@ origin: TKT-01M3QS0TMVM2XWYTAPB7ZRJZZG
 dependencies:
   - TKT-01M3QS0TMVM2XWYTAPB7ZRJZZG
 blocks_on: none
-references: []
+references:
+  - ref: pr:253
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-30T00:37:01Z
-updated_at: 2026-09-30T23:02:22Z
+updated_at: 2026-09-30T23:02:43Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
