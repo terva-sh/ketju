@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3N24RHDFMR8MHX0CCENN6R7
 title: Make archived forums read-only in permission evaluation
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase2-run-n24rhd
-  branch: run/n24rhd-archived-forum-readonly
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a5fbd4fb2b15bf24e
-  commit: 43a844dd4d572a6c2f4d90c6468acf6fb8061468
-  session: null
-  claimed_at: 2026-09-30T00:18:29Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-28T22:28:37Z
-updated_at: 2026-09-30T00:21:20Z
+updated_at: 2026-09-30T00:30:06Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
@@ -45,12 +38,12 @@ An archived forum is read-only (docs/04 "permissions", decided 2026-09-28 in TKT
 
 ## Acceptance criteria
 
-- [ ] In an archived forum perm.Check denies create_thread, reply and upload to anonymous viewers, members, role moderators and moderators-group members, leaves read and moderate unchanged, and allows all five to an admin; CanEach agrees
-- [ ] A member's edit, delete and restore of their own post in an archived forum answer conflict and append nothing
-- [ ] perm.Evaluator.SetForumArchived writes forums.archived and invalidates cached decisions, so a cached reply Allow is Deny on the next check
-- [ ] docs/04 and docs/07 describe the behaviour as built
-- [ ] POST /forums/{slug}/threads and POST /threads/{id}/posts in an archived forum answer conflict to every signed-in non-admin and succeed for an admin; a restricted archived forum stays not-found to a viewer without read
-- [ ] The posting refusal reads forums.archived on every request, so an archive written outside SetForumArchived refuses the next post at once (TestArchivedRefusalIgnoresAStaleCache)
+- [x] In an archived forum perm.Check denies create_thread, reply and upload to anonymous viewers, members, role moderators and moderators-group members, leaves read and moderate unchanged, and allows all five to an admin; CanEach agrees
+- [x] A member's edit, delete and restore of their own post in an archived forum answer conflict and append nothing
+- [x] perm.Evaluator.SetForumArchived writes forums.archived and invalidates cached decisions, so a cached reply Allow is Deny on the next check
+- [x] docs/04 and docs/07 describe the behaviour as built
+- [x] POST /forums/{slug}/threads and POST /threads/{id}/posts in an archived forum answer conflict to every signed-in non-admin and succeed for an admin; a restricted archived forum stays not-found to a viewer without read
+- [x] The posting refusal reads forums.archived on every request, so an archive written outside SetForumArchived refuses the next post at once (TestArchivedRefusalIgnoresAStaleCache)
 - [ ] In an archived forum a moderator can still hide, restore, lock, pin and move a thread out, and moving a thread in is conflict to everyone but an admin
 
 ## Implementation plan
@@ -103,3 +96,21 @@ Open decision for the maintainer, from Phase 2 grooming on 2026-09-29: are moder
 **agent:claude-code/phase2-groom** at 2026-09-29T05:39:01Z
 
 Maintainer decision, 2026-09-29: in an archived forum moderators can still hide, lock, pin and move threads out; only posting is refused, and moving a thread in stays admin-only. This accepts the grooming recommendation and supersedes the open decision in the earlier note. Moved into the plan's Settled section.
+
+**agent:claude-code/phase2-run-n24rhd** at 2026-09-30T00:29:41Z
+
+Criterion 7 is left unticked. The hide, restore, lock and pin half is built and tested (TestModeratorsStillModerateInArchivedForums: a moderator's hide and restore of a member's post, lock, pin and unlock in an archived forum each append). The move half cannot be met here: no move route exists on main at 43a844d. TKT-01M29CKRH9 (Implement thread rename and move) owns it, and its own criterion already requires a move into an archived destination to be conflict to everyone but an admin, with moving out a moderator's to do (its Settled section cites this ticket). When it lands, its tests cover the rest of this criterion; nothing in this ticket blocks it, and no posting guard (readOnlyForum) sits on any moderation path it would use.
+
+Decisions taken inside the settled rules, for the record:
+- The archived rule lives in perm's `decide`, not `evaluateMany`, so the grant Preview agrees with Check and CanEach.
+- In an archived forum a moderator acting on somebody else's post (hide, restore, edit) is moderation and is allowed. A moderator acting on their own post is posting and is conflict, like a member's. The settled list refuses "an author's edit, delete and restore of their own post" and does not exempt moderators from posting.
+- The viewer block's `can_reply` also follows the row-read archived flag, so the page does not offer a reply the server will refuse while a stale cached Allow lives.
+- Draft saving (`PUT …/draft`) needs `reply`, so it is now forbidden in an archived forum through perm; it was not given its own conflict because a draft is not a post.
+
+**agent:claude-code/phase2-run-n24rhd** at 2026-09-30T00:29:50Z
+
+Correction to the previous note: the draft route is PUT /api/v1/drafts/{thread_id}, not PUT …/draft. The behaviour described is unchanged.
+
+## Summary
+
+An archived forum is read-only to everyone but admins. perm drops create_thread, reply and upload for an archived forum in `decide`, so Check, CanEach and the grant Preview agree; read and moderate are unchanged. `perm.Evaluator.SetForumArchived` is the one write of forums.archived and clears every Evaluator's cache over the database. The posting paths read forums.archived from the forum row on every request (`readOnlyForum` in internal/service/threads/access.go) and answer conflict to non-admins, whatever the cache holds: a reply, a new thread (checked before create_thread), and an author's edit, delete or restore of their own post. Moderation paths (hide, restore, lock, pin) are not guarded. docs/04 and docs/07 describe it. Criterion 7's move half is left to TKT-01M29CKRH9 (Implement thread rename and move), which owns the move route and carries the archived-destination rule.
