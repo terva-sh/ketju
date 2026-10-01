@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T18:24:42Z
+updated_at: 2026-10-01T18:35:03Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -176,6 +176,10 @@ Proof under TKT-01M3SZ3GCE's exact recipe, 2026-10-01, on the fix at c7b16e85. T
 
 Terva review 1795 (run a622b0bf), head 01666fd, base 86752c4, found one medium issue: 'Mark an already-selected radio as touched when it is clicked'. It is fixed in 8eab293. The radios now mark the choice on click, not on change, because a click on the radio already chosen fires no change event. A new Vitest case, 'a click on the slow-mode radio already chosen is kept when the page refetch lands', clicks Off while the refetch is held, lets 10 land, and checks that Off stays chosen and that Save sends 0. The case fails with onChange ('10' where '0' was expected) and passes with onClick. The reader bundle is 66220 B gzip, 31 B over main at dfd23a6. The moderation spec passed 46 of 46 in both projects with --repeat-each=3. All 2245 Vitest tests pass. While running go test -race, I found TestServeGeneratesNotifications failing intermittently on main as well (1 in 45 runs at 86752c4). It is filed as the draft TKT-01M3WBBF4H (Stop TestServeGeneratesNotifications racing the restore's notification) and is unrelated to this change, which touches no Go code.
 
+**agent:claude-code/phase3-tszhsw** at 2026-10-01T18:34:53Z
+
+This note supersedes the draft named in the review-1795 note. TKT-01M3WBBF4H duplicated TKT-01M3W9VRTV (Wait for a restored notification in TestServeGeneratesNotifications), which merged on main as #332 while this PR was open. TKT-01M3WBBF4H had no work on it, so it is removed. The flake it described is fixed on main.
+
 ## Summary
 
 Fixed in the client, at the cause the probe named. `ModerateDialog` took its slow-mode choice and Custom's seconds once, in `useState` initialisers. When a moderator saved and reopened the panel before the page's refetch landed, the panel opened on the old value and never read the refetch. The refetch answered 200 with the new `slow_mode_seconds`. On a loaded CI runner the refetch can land after the phone's two clicks that reopen the panel (run 1686). That ordering was the whole flake. The runner freeze (TKT-01M3VDYENN) was not involved.
@@ -190,4 +194,4 @@ Proof is in the notes. With the refetch held 2 s, the panel shows 10 seconds wit
 
 The reader bundle grew by 31 B, from 66189 B to 66220 B gzip, on main at dfd23a6.
 
-Run 1779's phone lock-test failure (note 2) is a separate case. Its 30 s budget ran out while the server answered single GETs in 2 to 4 s. That is runner overload, recorded in the cause note and not fixed here. Filed on the way: TKT-01M3WBBF4H (Stop TestServeGeneratesNotifications racing the restore's notification), a race on main.
+Run 1779's phone lock-test failure (note 2) is a separate case. Its 30 s budget ran out while the server answered single GETs in 2 to 4 s. That is runner overload, recorded in the cause note and not fixed here.
