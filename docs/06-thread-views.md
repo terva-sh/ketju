@@ -238,8 +238,9 @@ and is read as midnight UTC (07), so the field and a shared link select the
 same posts. A post that is a reply or has replies offers
 "Conversation", its chain lens, in its footer, under "more" on a phone. Every
 lens draws a "… N posts …" divider where it skipped posts, not only the
-chain. "Full thread" in the lens header goes to the canonical permalink of the
-post at the top of the viewport, or to the thread's own address when the lens
+chain. "Full thread" in the lens header is a link to the canonical permalink
+of the post at the top of the viewport, kept current as the reader scrolls so
+a new tab or a copied link goes there too, or to the thread's own address when the lens
 has no posts. On phones TKT-01M29CGBZD presents the
 switcher as a sheet. Alternatives: Only OP among the thread actions lost
 because on a phone those sit under the more menu, and 10 Q15 leaned to the

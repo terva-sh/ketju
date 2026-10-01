@@ -739,7 +739,11 @@ thread. A well-formed lens is then resolved against the thread:
 - `author:` matches the handle a member holds now, in any case. A handle
   nobody holds answers exactly as a handle with no posts here (`shown` 0),
   and a handle released by a rename is not followed. The lens therefore
-  tells a stranger nothing about who exists or who renamed.
+  tells a stranger nothing about who exists or who renamed. The one
+  exception is `deleted-user-<id>`, the placeholder drawn for an author the
+  database lacks (04 "Projection tables"). When no account holds it and no
+  users row has that id, it selects that author id, so "Only OP" works for
+  such a thread. It reaches no live account.
 
 With a lens, `page` and `total_pages` count the lens's posts. `?ordinal=N`
 serves the lens page holding N, or else the page holding the first lens post

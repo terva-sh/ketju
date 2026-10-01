@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:44:44Z
+updated_at: 2026-10-01T09:22:55Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,7 +50,6 @@ Returning at the same ordinal is the part that stops people getting lost. A read
 ## Acceptance criteria
 
 - [ ] The lens header shows the active lens, the shown count and the hidden count, and a '… N posts …' divider stands at every gap the server reports
-- [ ] Full thread lands on the canonical permalink of the post at the top of the viewport (vitest and e2e)
 - [ ] Only <handle> is one press from the thread head at both widths and gives the author lens URL, ?lens=author:<handle>
 - [ ] A bare ?lens=unread is replaced by unread:<B>, page 2 is unchanged after page 1 is read, and first unread lands on last_read + 1 from the canonical view and from the lens (e2e)
 - [ ] The read beacon runs under unread and since and under no other lens (vitest)
@@ -60,6 +59,7 @@ Returning at the same ordinal is the part that stops people getting lost. A read
 - [ ] Every switch (switcher item, Only <handle>, Conversation) sets the address's lens and drops its page and ordinal, and a fresh load of that address shows the same posts (e2e)
 - [ ] Empty states: an anonymous unread or mentions lens asks the reader to sign in; a fully read thread and an empty author or since lens offer the full thread at /t/{id}/{slug}; a one-post chain says the post is neither a reply nor replied to (vitest)
 - [ ] The since date field writes since:YYYY-MM-DD as chosen, read as midnight UTC, whatever the viewer's timezone (vitest with two non-UTC timezones)
+- [ ] Full thread's href is the canonical permalink of the post at the top of the viewport, kept current as the reader scrolls, so a press, a new tab and a copied link all land there (vitest and e2e)
 
 ## Implementation plan
 
@@ -86,7 +86,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
    - `describe(lens, header)` gives the header text: "Showing 7 of 212 posts by @mara", "Unread since #60", "Conversation around #42", "Since <PostTime>", "Mentioning you", "Removed posts".
    - `tracksUnderLens(kind)` is true for `''`, `unread` and `since`.
 3. **`components/thread/LensHeader.tsx`** is drawn above the posts when `page.lens` is set. It shows the description, the shown and hidden counts, and "Full thread".
-   - "Full thread" is an anchor to the permalink of the first post on the page, so it opens in a new tab. On a press it routes to the permalink of the post at the top of the viewport, the first `.post` whose bottom is below the sticky head. `useArrival` then scrolls to it.
+   - "Full thread" is an anchor whose `href` is always the permalink of the post at the top of the viewport, the first `.post` whose bottom is below the sticky head. It starts as the page's first post, and a passive scroll listener throttled to one `requestAnimationFrame` updates it as the reader scrolls. A press, opening it in a new tab and copying it all go to the same post, and `useArrival` scrolls to it.
    - On a lens page with no posts, "Full thread" and every empty state's link go to the canonical thread address, `/t/{id}/{slug}` with no page, where the server's landing rule places the reader.
    - The empty states:
      - an anonymous viewer on unread or mentions: "Sign in to see what is new here", with a link to `/auth/signin?return_to=`;
@@ -123,7 +123,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 
 - Vitest:
   - `lens.test.ts`: `lensParam` gives bare `mentions` and `mod` and `since:<ms>`; gap placement across pages, the description per kind, and `tracksUnderLens`.
-  - `LensHeader.test.tsx`: counts; each empty state; "Full thread" picks the post at the top of the viewport; on an empty lens page it and every empty state's link go to `/t/{id}/{slug}`.
+  - `LensHeader.test.tsx`: counts; each empty state; "Full thread"'s `href` follows the post at the top of the viewport after a scroll; on an empty lens page it and every empty state's link go to `/t/{id}/{slug}`.
   - `LensBar.test.tsx`: the date field writes `since:YYYY-MM-DD` unchanged with the viewer's timezone set to `America/Los_Angeles` and to `Pacific/Auckland`; the Only href equals the author lens URL; `aria-current`; Moderator offered only with `can_moderate`; Unread and Mentioning me only when signed in; Escape returns focus.
   - `ThreadScreen.lens.test.tsx`, through `renderAt`:
     - a bare unread is replaced by `unread:B`;
@@ -155,3 +155,7 @@ run decision: pending maintainer review. The decisions are recorded in docs/06 '
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T08:13:55Z
 
 Review 1692 (head 4065cf7, base a599b48): two medium findings were fixed in the plan. (1) The date field now writes since:YYYY-MM-DD as chosen, which the server reads as midnight UTC, instead of a local-midnight Unix ms; it is tested under two non-UTC timezones. (2) On an empty lens page, Full thread and the empty states go to /t/{id}/{slug}. docs/06 says both.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T09:22:55Z
+
+Review 1714 (head 656ce4e, base a599b48), medium, 'Make the Full thread anchor target the visible post': fixed. The anchor's href follows the post at the top of the viewport, updated by a passive scroll listener throttled to one requestAnimationFrame, so a new tab or a copied link lands there too (docs/06, criterion 11).

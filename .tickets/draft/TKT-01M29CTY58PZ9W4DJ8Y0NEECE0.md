@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:13:59Z
+updated_at: 2026-10-01T09:22:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -69,7 +69,10 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
    - On the thread page, add `row.AuthorID` to the set the page's existing `s.users` batch reads, so the page runs no extra statement.
    - Every other route that answers a `ThreadHeader` reads it the same way: `CreatedThread`, `PATCH /threads/{id}`, move, lock, pin and slow mode.
    - Regenerate the dto and api goldens (`thread.{anon,member,moderator,author}.json` and the moderate goldens).
-3. An anonymized starter reads as `deleted-user-<id>`, and its `author:` lens resolves through the users row that carries that handle. A starter the database lacks gets the `member.Missing` placeholder, which no row holds, and an empty lens. That is acceptable: the posts render as a deleted member's anyway.
+3. **Deleted members.**
+   - An anonymized starter reads as `deleted-user-<id>`, and its `author:` lens resolves through the users row that carries that handle.
+   - A starter the database lacks is drawn with `member.Missing`'s placeholder, `deleted-user-<id>`, which no row holds (docs/04 "Projection tables"). When no account holds the handle and it has exactly that form, the resolver reads whether a users row has that id, one more statement on this path only. When none does, it selects author id `<id>` from the index. Only OP therefore shows a missing starter's posts.
+   - When a row has that id, the handle answers as unknown, so `deleted-user-<id>` never reaches a live account's posts. The answer reveals nothing the page does not: a missing author's posts are already drawn under that placeholder, and an id with no posts here is an empty lens either way.
 
 ### Tests
 
@@ -78,6 +81,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 - `TestAuthorLensValueNotCached`: `author:Mara` then `author:mara`, and two different unknown handles, each answer with their own `lens.value` while the second request is a response-cache hit.
 - `TestAuthorLensCaseInsensitive`, and `TestAuthorLensUnknownHandleAnswersAsNoPosts`: an unknown handle and a handle with no posts here produce byte-equal bodies apart from `value`. A handle a rename released is not followed.
 - `TestAuthorLensEmptyAfterModeration`: an author whose every post here was hidden by a suspension gets `shown` 0, one empty page, 200.
+- `TestAuthorLensMissingStarter`: on a thread whose starter the database lacks, `author:deleted-user-<id>` from the header selects their visible posts. `deleted-user-<id>` naming a live account's id answers as an unknown handle.
 - `TestThreadHeaderCarriesAuthor`: present on every `ThreadHeader` answer, with an anonymized starter and a missing starter drawn as deleted members. The page's statement count is unchanged.
 - `TestLensPostsMatchCanonical` gains the author rows. They cover every viewer class, the moderator by group grant and the suspended viewer included, and every removed state, including a suspended author's posts hidden by the suspension, which are absent for every viewer.
 
@@ -95,3 +99,7 @@ run decision: pending maintainer review. docs/10 Q15 is settled: Only OP is a bu
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T08:13:59Z
 
 Review 1692 (head 4065cf7, base a599b48), medium, 'Keep the requested author handle distinct in the response cache': answered in the plan, with a test added. The response cache holds only the posts. dto.Lens, including the echoed value, is built on every request outside the cached body (docs/07 'The response cache'; TKT-01M29CRJ1P step 6 now says so). A shared key for two spellings therefore shares only identical posts. TestAuthorLensValueNotCached proves each answer echoes its own spelling on a cache hit.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T09:22:53Z
+
+Review 1714 (head 656ce4e, base a599b48), medium, 'Preserve a working Only OP link when the starter account is missing': fixed. A handle of the form deleted-user-<id> that no account holds selects author id <id> when no users row has that id. That costs one statement on this path only. The handle never reaches a live account's posts (docs/07, TestAuthorLensMissingStarter).
