@@ -35,7 +35,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-10-01T19:00:04Z
+updated_at: 2026-10-01T19:11:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -53,13 +53,13 @@ The sheet is how a phone gets the lens switcher that sits in the desktop thread 
 
 ## Acceptance criteria
 
-- [ ] A Lens button in the phone thread header opens a sheet listing exactly the lenses the desktop switcher offers this viewer (the moderator lens only to moderators)
-- [ ] Every choice is a link that updates the URL: a page keeps the lens, a lens follows the switcher's rule
-- [ ] Both sheets are useModal dialogs: focus moves in, Tab stays inside, Escape, the close button and the backdrop close them and focus returns to the opener
-- [ ] Sheet controls are at least 44 px and a bottom sheet pads by the safe-area inset (e2e, the targets.spec.ts pattern)
-- [ ] Tested at 390 and 1440 px with one axe scan per test; at 1440 px no sheet trigger is drawn
+- [x] A Lens button in the phone thread header opens a sheet listing exactly the lenses the desktop switcher offers this viewer (the moderator lens only to moderators)
+- [x] Every choice is a link that updates the URL: a page keeps the lens, a lens follows the switcher's rule
+- [x] Both sheets are useModal dialogs: focus moves in, Tab stays inside, Escape, the close button and the backdrop close them and focus returns to the opener
+- [x] Sheet controls are at least 44 px and a bottom sheet pads by the safe-area inset (e2e, the targets.spec.ts pattern)
+- [x] Tested at 390 and 1440 px with one axe scan per test; at 1440 px no sheet trigger is drawn
 - [ ] The committed dist is regenerated (go generate ./internal/web/spa) and npm run budget stays within 70000 B, with the before and after figures in the PR
-- [ ] On a phone the pager label is a button that opens a sheet reaching every page (a grid of all pages up to 60, past that a bounded grid plus a Go to page field), first unread when the reader has unread posts, and jump to date through the since lens
+- [x] On a phone the pager label is a button that opens a sheet reaching every page (a grid of all pages up to 60, past that a bounded grid plus a Go to page field), first unread when the reader has unread posts, and jump to date through the since lens
 
 ## Implementation plan
 
