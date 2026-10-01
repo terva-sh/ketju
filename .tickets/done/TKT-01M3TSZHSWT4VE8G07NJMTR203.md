@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TSZHSWT4VE8G07NJMTR203
 title: Stop the slow-mode e2e test failing on a phone under CI load
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-tszhsw
-  branch: run/tszhsw-slow-mode-phone
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a3b4596e38d57bd07
-  commit: e855e1a120cb1b147f7f318af945769ed75e6f53
-  session: null
-  claimed_at: 2026-10-01T16:55:36Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T17:35:04Z
+updated_at: 2026-10-01T18:12:45Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -59,7 +52,7 @@ Confirm the cause under load (TKT-01M3SZ3GCE's notes have a load recipe), from t
 - [x] The fix is at the named cause: the diff adds no retry, no longer timeout and no skip, and playwright.config.ts is unchanged
 - [x] If the cause is the panel's stale initial value, ModerateDialog's slow-mode choice follows slow_mode_seconds until the moderator chooses, with Vitest cases that fail against main before the change
 - [x] e2e/thread-moderation.spec.ts passes in 20 consecutive phone-project runs under the load recipe, and the full suite passes in both projects with its axe scans
-- [ ] If client code changed, the dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
+- [x] If client code changed, the dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
 
@@ -176,3 +169,15 @@ Proof, 2026-10-01, on the fix (commit 22447505, branch run/tszhsw-slow-mode-phon
 **agent:claude-code/phase3-tszhsw** at 2026-10-01T17:35:04Z
 
 Proof under TKT-01M3SZ3GCE's exact recipe, 2026-10-01, on the fix at c7b16e85. The image was golang:1.27-alpine with Alpine's Chromium 152.0.7977.82, installed as ci.yml installs them. Three podman containers ran at once, each with --cpus=1. The host carried 48 busy loops and a loop writing 256 MiB with fsync, and its load average peaked at 74.4. Each container ran `npx playwright test e2e/thread-moderation.spec.ts --project=phone --repeat-each=20 -x` and passed 144 of 144 in 7.3 to 7.4 min. That is 60 consecutive phone runs of the slow-mode test across the three, with no failure. This adds to the host proof in the note before.
+
+## Summary
+
+Fixed in the client, at the cause the probe named. `ModerateDialog` took its slow-mode choice and Custom's seconds once, in `useState` initialisers. When a moderator saved and reopened the panel before the page's refetch landed, the panel opened on the old value and never read the refetch. The refetch answered 200 with the new `slow_mode_seconds`. On a loaded CI runner the refetch can land after the phone's two clicks that reopen the panel (run 1686). That ordering was the whole flake. The runner freeze (TKT-01M3VDYENN) was not involved.
+
+The choice and the seconds now follow `slow_mode_seconds` through a layout effect until the moderator touches a radio or the field. After that, a later refetch leaves the moderator's choice alone. Two Vitest cases in `ThreadScreen.test.tsx` fail against main and pass on the fix. The test file's `checked` helper now reads each radio's `checked` property, because happy-dom's `:checked` selector can answer from before a click that no render followed. `e2e/thread-moderation.spec.ts` and `playwright.config.ts` are unchanged.
+
+Proof is in the notes. With the refetch held 2 s, the panel shows 10 seconds within 1 s of the answer at both widths, where main never does. Under 48 busy loops and an fsync loop on the host, 20 of 20 phone runs passed. In the CI image, three 1-CPU containers at once ran 60 phone runs, all green. After the rebase onto dfd23a6, the full suite passed in both projects with its axe scans: 214 passed, 12 skipped by width.
+
+The reader bundle grew by 32 B on main at dfd23a6, from 66189 B to 66221 B gzip of 70000 B.
+
+Run 1779's phone lock-test failure (note 2) is a separate case. Its 30 s budget ran out while the server answered single GETs in 2 to 4 s. That is runner overload, recorded in the cause note and not fixed here.
