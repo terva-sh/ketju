@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXK4E23MC6DWK4VBX6DXS
 title: Build the user settings screens
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:url-scheme
     path: docs/07-api-and-clients.md
-claim: null
+claim:
+  actor: agent:claude-code/phase3-settings-client
+  branch: run/cxk4e-settings-screens
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab6a07aa04ce32dcc
+  commit: d2b4f2083bb6f70ec049944728db2cea5c877a36
+  session: null
+  claimed_at: 2026-10-01T21:17:18Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-01T08:19:00Z
+updated_at: 2026-10-01T21:17:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-pages
+  id: agent:claude-code/phase3-settings-client
   name: ""
 extensions: {}
 ---
@@ -127,3 +134,7 @@ run decision: pending maintainer review. The account's theme wins over the brows
 **agent:claude-code/phase3-groom-pages** at 2026-10-01T08:19:00Z
 
 Terva review 1691 (head 2455be0, base a599b48), finding 'Include the account's current timezone in the selector': fixed in the plan. The select adds UTC and the stored value when the browser's list lacks them, sends only on its own change, and is covered by a named test.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-01T21:17:24Z
+
+Acceptance criterion 6's budget figure (70000 B) was superseded by the maintainer's raise to 120000 B gzip on 2026-10-01 (#331, docs/14 class 5, docs/07 'Bundle'). This ticket is judged against 120000 B; the criterion text is left as written. The reader is 71808 B on d2b4f208 before this ticket.
