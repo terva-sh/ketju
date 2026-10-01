@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V73DP6TZ1BDQVT7ATX0EC5
 title: Keep attachments in reply and new-thread drafts
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ dependencies:
   - TKT-01M29CXK0KHC2QZQ286AG0KKGD
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-v73dp6
-  branch: run/v73dp6-draft-attachments
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad5e25f968c2050ea
-  commit: 4990deaa56b419c5b8b3294e0f3df9abc0af451c
-  session: null
-  claimed_at: 2026-10-01T10:53:08Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:50:42Z
-updated_at: 2026-10-01T10:56:40Z
+updated_at: 2026-10-01T11:11:32Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
@@ -48,11 +41,11 @@ Filed by the Phase 3 grooming of live updates and attachments (TKT-01M3V3BVPY). 
 
 ## Acceptance criteria
 
-- [ ] Reply and new-thread drafts save and return their attachments with names and sizes (TestDraftKeepsAttachments)
+- [x] Reply and new-thread drafts save and return their attachments with names and sizes (TestDraftKeepsAttachments)
 - [ ] A draft's attachments are checked by the attach rules: another member's blob, a quarantined blob, more than 10, a duplicate, or no upload permission is refused (TestDraftAttachmentChecks)
-- [ ] Saving a draft adds no blob reference (TestDraftAttachmentAddsNoRef), and a tombstone holds no attachments (TestDraftTombstoneHasNoAttachments)
-- [ ] Blob GC and ketju redact keep a blob that a draft's attachments name, and GC collects it once the draft is deleted (TestBlobGCKeepsDraftAttachment, TestRedactKeepsDraftAttachedBlob)
-- [ ] docs/04 drafts, docs/07 Drafts and the Draft and ForumDraft goldens are updated in the same PR
+- [x] Saving a draft adds no blob reference (TestDraftAttachmentAddsNoRef), and a tombstone holds no attachments (TestDraftTombstoneHasNoAttachments)
+- [x] Blob GC and ketju redact keep a blob that a draft's attachments name, and GC collects it once the draft is deleted (TestBlobGCKeepsDraftAttachment, TestRedactKeepsDraftAttachedBlob)
+- [x] docs/04 drafts, docs/07 Drafts and the Draft and ForumDraft goldens are updated in the same PR
 
 ## Implementation plan
 
@@ -113,3 +106,19 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Revise
 **agent:claude-code/phase3-groom-live** at 2026-10-01T07:59:50Z
 
 run decision: pending maintainer review. Recorded in docs/07 'Drafts' (2026-10-01): both draft kinds carry attachments, checked by the attach rules but adding no reference. Blob GC and redact keep a blob a draft's attachments name. This follows the maintainer's 2026-09-28 decision (TKT-01M3K9XBJA) that a restored draft comes back whole.
+
+**agent:claude-code/phase3-v73dp6** at 2026-10-01T11:11:03Z
+
+run decision: pending maintainer review. A hash sent twice in a draft's attachments is kept once, at its first place, as a post keeps it. It is not refused as `validation-failed`. Recorded in docs/07 "Drafts" (2026-10-01).
+
+The grooming plan and the second criterion expected a duplicate to be refused. The attach rule TKT-01M29CXK0K merged in #284 does not refuse one. `blobs.Service.Check` answers "each once in the order sent", `TestAttachRefusals` posts ten with repeats and gets ten, and docs/07 "Attachments" says "at most 10 distinct hashes". The description and the settled item both say a draft is checked "as an attach does", so the draft follows the post. Refusing lost: a draft that refused a list the post accepts would fail the composer's autosave for no reason the member could see, and the composer (TKT-01M3V73J8K) sends one list to both.
+
+The second criterion stays unticked for that reason only. Its other four refusals hold on both routes (TestDraftAttachmentChecks): another member's blob is `not_yours`, a quarantined one `blocked`, eleven `too_many`, and no `upload` is `forbidden`. An unknown hash and a non-hash are also refused as `unknown`. The same test pins a repeat as kept once.
+
+## Summary
+
+Both draft routes keep the composer's attachments. Migration 0021 adds `drafts.attachments`, a JSON array that defaults to `'[]'`, and triggers that refuse a tombstone holding any. `PUT /drafts/{thread_id}` and `PUT /forums/{slug}/draft` take `attachments?`. The post path's `checkAttachments` checks them against the thread's forum or the named forum, and no reference is added. `GET` answers them as `Attachment` objects named as the viewer uploaded them. `DeleteCollectableBlob` refuses a blob a draft's attachments name, so blob GC and `ketju redact` keep it while the draft lists it, and GC collects it once the draft is deleted. `dto.Draft` and `dto.ForumDraft` gained `attachments`, which is never null. The goldens and the hand-written `web/client/src/api/dto.ts` mirror gained it too. The dist is unchanged, and the reader stays at 60465 B.
+
+One criterion is unticked. A repeated hash is kept once, as a post keeps it, and is not refused. That is a run decision pending maintainer review, recorded in docs/07 "Drafts" and in the note above. The criterion's four other refusals are tested and hold.
+
+The composer's use of the field is TKT-01M3V73J8K (Attach files in the composer and show them on posts). The Phase 5 draft form routes carry no attachments, as docs/07 now notes.
