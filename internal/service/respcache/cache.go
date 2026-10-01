@@ -51,7 +51,15 @@ type Key struct {
 	// per user (docs/06), so page 2 at 10 is not page 2 at 25.
 	Page     int
 	PageSize int
-	Lens     string
+	// Lens is the lens as resolved for this request, "" for the canonical
+	// page: author:<user id> rather than the handle asked for, so the key
+	// names what the selection was made from (TKT-01M29CRJ1P).
+	Lens string
+	// Selection is a digest of the page's ordinals, in order. Page and Lens
+	// say which page was asked for; this says which posts it holds, so a
+	// lens whose selection depends on something its string does not name
+	// can never serve one viewer's page to another.
+	Selection [32]byte
 	// Renderer is the render.Version the HTML was drawn with.
 	Renderer int
 	// Class is the viewer class: anon, member, moderator, or author:<user

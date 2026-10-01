@@ -1,0 +1,133 @@
+{
+  "thread": {
+    "id": "0369k573g0001",
+    "slug": "why-we-left-slack",
+    "title": "Why we left Slack",
+    "forum": {
+      "slug": "general",
+      "name": "General"
+    },
+    "post_count": 5,
+    "log_length": 881,
+    "locked": false,
+    "pinned": {
+      "scope": "forum",
+      "until": 1760000000000
+    },
+    "tags": [
+      "meta",
+      "tools"
+    ],
+    "created_at": 1757500100000
+  },
+  "page": {
+    "number": 1,
+    "size": 25,
+    "total_pages": 1
+  },
+  "lens": {
+    "kind": "chain",
+    "value": "1",
+    "shown": 3,
+    "hidden": 2,
+    "gaps": [
+      {
+        "after": 1,
+        "count": 1
+      },
+      {
+        "after": 3,
+        "count": 1
+      }
+    ]
+  },
+  "viewer": {
+    "last_read_ordinal": 2,
+    "watch": "",
+    "can_reply": true,
+    "can_upload": false,
+    "can_moderate": false,
+    "slow_mode_seconds": 0,
+    "next_post_at": null,
+    "rename_until": null,
+    "author_windows": {
+      "edit_seconds": 86400,
+      "delete_seconds": 900
+    },
+    "forum_read_only": false
+  },
+  "posts": [
+    {
+      "ordinal": 1,
+      "revision": 2,
+      "author": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757500200000,
+      "edited_at": 1757500500000,
+      "edited_by_moderator": false,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 2,
+      "html": "\u003cp\u003eThe bill was the \u003cstrong\u003esmaller\u003c/strong\u003e half of it.\u003c/p\u003e\n",
+      "attachments": [],
+      "deleted": false,
+      "removal": null,
+      "redacted": false,
+      "moved_to": null,
+      "machine_authored": false
+    },
+    {
+      "ordinal": 3,
+      "revision": 1,
+      "author": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "created_at": 1757500400000,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 0,
+      "html": "",
+      "attachments": [],
+      "deleted": true,
+      "removal": "author",
+      "redacted": false,
+      "moved_to": null,
+      "machine_authored": false
+    },
+    {
+      "ordinal": 5,
+      "revision": 1,
+      "author": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757500900000,
+      "edited_at": null,
+      "edited_by_moderator": false,
+      "reply_to": null,
+      "reply_to_suppressed": false,
+      "reply_count": 0,
+      "html": "",
+      "attachments": [],
+      "deleted": true,
+      "removal": "moderator",
+      "redacted": false,
+      "moved_to": null,
+      "machine_authored": false
+    }
+  ]
+}

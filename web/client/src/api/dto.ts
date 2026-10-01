@@ -46,6 +46,12 @@ export interface Lens {
   value: string;
   shown: number;
   hidden: number;
+  gaps: LensGap[];
+}
+
+export interface LensGap {
+  after: number;
+  count: number;
 }
 
 export interface ThreadHeader {

@@ -405,21 +405,34 @@ func (ix *Index) Tombstoned(ordinal uint32) (bool, error) {
 	return !e.Flags.Visible(), nil
 }
 
-// ByAuthor returns the ordinals authored by a user, in ordinal order.
+// Select returns the ordinals whose entries keep accepts, in ascending
+// order. It is the one walk every lens makes (TKT-01M29CRJ1P): keep sees each
+// post once, lowest ordinal first, and answers keep or skip, so a filter
+// built on it can drop posts and can never reorder them.
 //
-// The author lens docs/03 measured: 15 us over 50 000 posts here, against
-// 19.8 ms when the author has to be read back from the log.
-func (ix *Index) ByAuthor(author uint64) []uint32 {
+// keep runs under the index's read lock and must not call back into the
+// Index. A sync.RWMutex read lock taken twice deadlocks against a writer
+// waiting between the two, so a lens that needs a second look at the index,
+// such as a reply chain's ancestor walk, takes it before calling Select.
+func (ix *Index) Select(keep func(ordinal uint32, e IndexEntry) bool) []uint32 {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
 
 	var out []uint32
 	for i, e := range ix.entries {
-		if e.Author == author {
-			out = append(out, uint32(i)+1)
+		if o := uint32(i) + 1; keep(o, e) {
+			out = append(out, o)
 		}
 	}
 	return out
+}
+
+// ByAuthor returns the ordinals authored by a user, in ordinal order.
+//
+// The author lens docs/03 measured: 15 us over 50 000 posts here, against
+// 19.8 ms when the author has to be read back from the log.
+func (ix *Index) ByAuthor(author uint64) []uint32 {
+	return ix.Select(func(_ uint32, e IndexEntry) bool { return e.Author == author })
 }
 
 // Since returns the ordinals created at or after ms.
@@ -427,16 +440,7 @@ func (ix *Index) ByAuthor(author uint64) []uint32 {
 // CreatedMS is revision 1's timestamp, so "since my last visit" does not drag
 // a four-year-old post back into view because somebody fixed a typo in it.
 func (ix *Index) Since(ms int64) []uint32 {
-	ix.mu.RLock()
-	defer ix.mu.RUnlock()
-
-	var out []uint32
-	for i, e := range ix.entries {
-		if e.CreatedMS >= ms {
-			out = append(out, uint32(i)+1)
-		}
-	}
-	return out
+	return ix.Select(func(_ uint32, e IndexEntry) bool { return e.CreatedMS >= ms })
 }
 
 // Replies returns the ordinals that reply directly to ordinal.

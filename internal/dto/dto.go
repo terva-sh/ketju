@@ -119,11 +119,26 @@ type Pagination struct {
 // Shown and Hidden are both reported because docs/06 wants the reader told
 // what a lens is keeping from them. A lens that quietly removed 205 posts
 // would be indistinguishable from a short thread.
+//
+// Kind and Value name the lens as it was resolved: the string kind alone when
+// Value is empty, and kind:value otherwise, opens the same lens again
+// (docs/07 "What the thread endpoint does"). Shown is the lens's posts and
+// Hidden the thread's other posts. Gaps are where the lens skipped posts,
+// for every gap that touches this page.
 type Lens struct {
-	Kind   string `json:"kind"`
-	Value  string `json:"value"`
-	Shown  int    `json:"shown"`
-	Hidden int    `json:"hidden"`
+	Kind   string    `json:"kind"`
+	Value  string    `json:"value"`
+	Shown  int       `json:"shown"`
+	Hidden int       `json:"hidden"`
+	Gaps   []LensGap `json:"gaps"`
+}
+
+// LensGap is a run of posts a lens skipped: Count posts after ordinal After,
+// where After is 0 for a run at the start of the thread. The client draws it
+// as a "… N posts …" divider (docs/06 "Lenses").
+type LensGap struct {
+	After int `json:"after"`
+	Count int `json:"count"`
 }
 
 // ThreadHeader is the thread itself, without its posts.

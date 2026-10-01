@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"crypto/sha256"
+	"encoding/binary"
 	"encoding/json"
 	"slices"
 
@@ -32,7 +33,7 @@ import (
 // A request with after_log_length is not cached: it is a filtered page, and
 // rare.
 func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id threadid.ID, snap snapshot,
-	authors map[int64]dto.Author, q Query, size int, projected int64, a access) ([]dto.Post, error) {
+	authors map[int64]dto.Author, q Query, size int, projected int64, a access, lensKey string) ([]dto.Post, error) {
 	if q.HasAfter || !s.Responses.Enabled() {
 		return s.posts(ctx, th, id, snap, authors, q, a)
 	}
@@ -44,9 +45,12 @@ func (s *Service) pagePosts(ctx context.Context, th *threadcache.Thread, id thre
 	if err != nil {
 		return nil, err
 	}
+	// The lens is keyed in its resolved form, and the page's ordinals beside
+	// it, so two selections that land on the same page number never share
+	// an entry, nor a lens page and the canonical one (TKT-01M29CRJ1P).
 	key := respcache.Key{
 		Thread: id, LogLength: snap.logLength, Projected: projected,
-		Page: snap.page, PageSize: size, Lens: q.Lens,
+		Page: snap.page, PageSize: size, Lens: lensKey, Selection: ordinalsDigest(snap.ordinals),
 		Renderer: render.Version, Class: class, Authors: digest,
 	}
 	resolver := postResolver(th)
@@ -90,4 +94,13 @@ func authorsDigest(authors map[int64]dto.Author) ([32]byte, error) {
 		return [32]byte{}, err
 	}
 	return sha256.Sum256(b), nil
+}
+
+// ordinalsDigest hashes the page's ordinals, in order, for the cache key.
+func ordinalsDigest(ordinals []uint32) [32]byte {
+	b := make([]byte, 0, 4*len(ordinals))
+	for _, o := range ordinals {
+		b = binary.LittleEndian.AppendUint32(b, o)
+	}
+	return sha256.Sum256(b)
 }

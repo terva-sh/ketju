@@ -654,7 +654,8 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
              "post_count": 212, "log_length": 483920, "locked": false, "pinned": null,
              "tags": ["meta"], "created_at": 1757500000000},
   "page": {"number": 3, "size": 25, "total_pages": 9},
-  "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205},
+  "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205,
+           "gaps": [{"after": 52, "count": 8}, {"after": 61, "count": 14}]},
   "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_upload": true, "can_moderate": false,
              "slow_mode_seconds": 30, "next_post_at": null, "rename_until": null,
              "author_windows": {"edit_seconds": 86400, "delete_seconds": 900},
@@ -710,16 +711,19 @@ moderator removed; see "Removed posts" below).
 - **`watch`** is `"watch"`, `"mute"`, or `""` for neither.
 - **Access.** A thread the viewer may not see is `not-found`, as if it did
   not exist. A readable-when-signed-in thread is `unauthenticated` to an
-  anonymous viewer and `forbidden` to a member without read. `lens` is not
-  served yet and is `bad-request`, not ignored.
+  anonymous viewer and `forbidden` to a member without read. Access is
+  decided before the lens, so any lens on a thread the viewer may not see
+  is answered the same way. `lens` is never `bad-request`: an unknown value
+  serves the canonical page (the decided grammar below).
 - **Goldens.** `internal/dto/testdata/golden` fixes the shape;
   `internal/web/api/testdata/golden/thread.{anon,member,moderator,author}.json`
-  are what the endpoint actually serves for one seeded thread, regenerated with
+  are what the endpoint actually serves for one seeded thread, and
+  `thread.lens.json` a lens page of it, regenerated with
   `go test ./internal/web/api -update`.
 
 **Decided by the run (2026-10-01, pending maintainer review): the `lens`
-parameter** (TKT-01M29CRJ1P). It replaces the `bad-request` above once that
-ticket lands. The values are `unread`, `unread:<ordinal>`, `author:<handle>`,
+parameter** (TKT-01M29CRJ1P). It replaced the `bad-request` an unserved
+`lens` used to answer. The values are `unread`, `unread:<ordinal>`, `author:<handle>`,
 `chain:<ordinal>`, `since:<when>`, `mentions` and `mod`. `<when>` is one of
 three forms:
 - a date, `YYYY-MM-DD`, read as midnight UTC, so a shared link means the same
@@ -751,10 +755,25 @@ thread. A well-formed lens is then resolved against the thread:
 
 With a lens, `page` and `total_pages` count the lens's posts. `?ordinal=N`
 serves the lens page holding N, or else the page holding the first lens post
-after N, and the landing rule does not apply. `lens.shown` is the lens's
+after N, or else the lens's last page, and the landing rule does not apply.
+An ordinal past the thread's last post is `not-found` under a lens too, as
+the canonical page answers it. `lens.shown` is the lens's
 posts, `lens.hidden` the thread's other posts, and `lens.gaps` is a list of
 `{after, count}`: after which ordinal (0 for the start of the thread) the
 lens skipped how many posts, for every gap that touches the page.
+
+How the server applies a lens (TKT-01M29CRJ1P): `lens.Parse` in
+`internal/service/threads/lens` reads the value and is total. After access
+has admitted the viewer, the kind's resolver in
+`internal/service/threads/lenses.go` reads what it needs from the database.
+Inside the snapshot the page is drawn from, the resolved lens builds a
+filter, which answers keep or skip for one post at a time, and one
+ascending walk of the in-memory index (`threadlog.Index.Select`) makes the
+selection. The page is cut from the selection, and its posts are drawn by
+the canonical page's code, so a lens chooses ordinals and never what a post
+shows. A well-formed lens whose kind has no resolver yet serves the
+canonical page with `lens: null`. A lens is added by writing its filter in
+package `lens` and a row in `lensResolvers`.
 
 Alternatives: `bad-request` for an unknown lens lost because a lens is URL
 state, and a link outlives the build that understood it. A date in the
@@ -806,6 +825,15 @@ above is the design's; the implementation settles four internals:
   new `@alice` mentions the member it redirects to. Each lookup is stored
   with what it was asked against, and a hit asks again
   (`internal/service/threads` `mentions.go`).
+
+- **A lens page is keyed by its selection** (TKT-01M29CRJ1P). `Lens` holds
+  the lens as resolved, not as typed: `author:<user id>` rather than the
+  handle, `unread:<boundary>`, `mentions:<viewer id>`. Beside it,
+  `Selection` is a digest of the page's ordinals. A lens and the canonical
+  page, or two selections that land on the same page number, therefore
+  never share an entry, even if a lens's string fails to name something its
+  selection depends on. The lens block, like the header, is built on every
+  request and never stored.
 
 There is no invalidation and the package exports no way to forget an entry.
 A request with `after_log_length` bypasses the cache. `Stats` reports the

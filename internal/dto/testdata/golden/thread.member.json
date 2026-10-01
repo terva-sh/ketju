@@ -29,7 +29,17 @@
     "kind": "author",
     "value": "drew",
     "shown": 7,
-    "hidden": 205
+    "hidden": 205,
+    "gaps": [
+      {
+        "after": 52,
+        "count": 8
+      },
+      {
+        "after": 61,
+        "count": 14
+      }
+    ]
   },
   "viewer": {
     "last_read_ordinal": 60,

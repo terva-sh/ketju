@@ -54,8 +54,14 @@ func TestCachedPayloadHoldsNoViewer(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// The thread's twelve posts are page 1's ordinals.
+	ordinals := make([]uint32, 12)
+	for i := range ordinals {
+		ordinals[i] = uint32(i) + 1
+	}
 	stored, ok := s.Responses.Get(respcache.Key{Thread: id, LogLength: length, Projected: length, Page: 1,
-		PageSize: DefaultPageSize, Renderer: render.Version, Class: ClassMember, Authors: digest}, nil)
+		PageSize: DefaultPageSize, Selection: ordinalsDigest(ordinals), Renderer: render.Version,
+		Class: ClassMember, Authors: digest}, nil)
 	if !ok {
 		t.Fatalf("no entry under the key the page should have filled; stats %+v", s.Responses.Stats())
 	}

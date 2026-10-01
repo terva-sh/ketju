@@ -85,7 +85,14 @@ func newWorld(t *testing.T) *world {
 // newWorldSync is newWorld with the thread logs synced under policy.
 func newWorldSync(t *testing.T, policy threadlog.SyncPolicy) *world {
 	t.Helper()
-	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db")})
+	return newWorldTraced(t, policy, nil)
+}
+
+// newWorldTraced is newWorldSync with every statement the database runs
+// passed to trace (db.Options.Trace), when it is not nil.
+func newWorldTraced(t *testing.T, policy threadlog.SyncPolicy, trace func(string)) *world {
+	t.Helper()
+	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "db", "ketju.db"), Trace: trace})
 	root := filepath.Join(t.TempDir(), "threads")
 	c, err := threadcache.New(root, threadcache.Options{Sync: policy})
 	if err != nil {
@@ -541,7 +548,8 @@ func TestAfterLogLengthUnderConcurrentAppends(t *testing.T) {
 }
 
 // TestAccess: hidden threads are 404, a members forum is 401 to anonymous
-// viewers, and malformed or unsupported parameters are 400.
+// viewers, and malformed parameters are 400. A lens is never 400
+// (TestUnknownLensServesCanonical).
 func TestAccess(t *testing.T) {
 	w := newWorld(t)
 	id, _ := w.seed()
@@ -554,7 +562,6 @@ func TestAccess(t *testing.T) {
 	}{
 		{"no such thread", domain.Anonymous(), "/api/v1/threads/" + threadid.ID(12345).String(), http.StatusNotFound},
 		{"malformed id", domain.Anonymous(), "/api/v1/threads/not-an-id", http.StatusBadRequest},
-		{"a lens", domain.Anonymous(), base + "?lens=author:alice", http.StatusBadRequest},
 		{"page zero", domain.Anonymous(), base + "?page=0", http.StatusBadRequest},
 		{"page not a number", domain.Anonymous(), base + "?page=two", http.StatusBadRequest},
 		{"negative after", domain.Anonymous(), base + "?after_log_length=-1", http.StatusBadRequest},

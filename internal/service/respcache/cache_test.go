@@ -32,6 +32,7 @@ func TestEveryKeyFieldSeparates(t *testing.T) {
 		"page":       func(k *Key) { k.Page++ },
 		"page size":  func(k *Key) { k.PageSize = 10 },
 		"lens":       func(k *Key) { k.Lens = "author:drew" },
+		"selection":  func(k *Key) { k.Selection[0] = 1 },
 		"renderer":   func(k *Key) { k.Renderer++ },
 		"class":      func(k *Key) { k.Class = "moderator" },
 		"authors":    func(k *Key) { k.Authors[0] = 2 },

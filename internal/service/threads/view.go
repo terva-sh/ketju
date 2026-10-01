@@ -27,6 +27,7 @@ import (
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/service/respcache"
+	"github.com/terva-sh/ketju/internal/service/threads/lens"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -129,6 +130,12 @@ type Service struct {
 	// caches nothing.
 	Responses *respcache.Cache
 
+	// TestLenses serves a lens kind with a fixed filter, ahead of the
+	// resolvers in lenses.go. It is for tests in other packages, which can
+	// drive the lens framework end to end before a kind has a resolver; the
+	// server leaves it nil.
+	TestLenses map[lens.Kind]lens.Filter
+
 	// Quarantined reports a thread whose log startup catch-up found shorter
 	// than its projection (projection.Writer.Quarantined). Every endpoint
 	// answers it 503 until an operator repairs it, and every other thread
@@ -198,8 +205,9 @@ type Query struct {
 	// Ordinal is a permalink: the page holding it is served. It wins over
 	// Page when both are given.
 	Ordinal uint32
-	// Lens names a filter. Only the identity lens exists yet (TKT-01M29CRJ1P
-	// adds the rest), so any value is refused.
+	// Lens is the ?lens= value as given (TKT-01M29CRJ1P). A value that names
+	// no lens this build serves, the empty one included, is the canonical
+	// page, never an error (lenses.go).
 	Lens string
 	// After narrows the page to posts whose current revision was written at
 	// or after this log length: new posts and edits since a client's copy.
@@ -227,9 +235,6 @@ type Result = Served[dto.ThreadPage]
 // its ETag hashes the result (see etag), so a 304 still assembles the page,
 // mostly from the render cache, and saves the transfer.
 func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Query, ifNoneMatch string) (Result, error) {
-	if q.Lens != "" {
-		return Result{}, problem.Coded(problem.CodeBadRequest, fmt.Errorf("threads: unknown lens %q", q.Lens))
-	}
 	size := q.PageSize
 	if size <= 0 {
 		size = DefaultPageSize
@@ -239,6 +244,12 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		return Result{}, err
 	}
 	v, row, canModerate := a.viewer, a.row, a.canModerate
+	// Access comes first, so a thread hidden from v is not-found whatever
+	// the lens says (docs/07 "Access"). A nil lens is the canonical page.
+	rl, err := s.resolveLens(ctx, a, q.Lens)
+	if err != nil {
+		return Result{}, err
+	}
 
 	var (
 		forum    dbq.Forum
@@ -326,17 +337,24 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		// length before it (threadlog.Actor.Stable).
 		var (
 			snap    snapshot
+			sel     lens.Selection
 			pageErr error
 		)
 		th.Actor.Stable(func(logLength int64) {
-			snap = snapshot{logLength: logLength, n: th.Index.Len()}
-			snap.page, pageErr = PageFor(q, snap.n, size, v.Member(), lastRead)
+			if rl != nil {
+				snap, sel, pageErr = lensPage(th.Index, logLength, rl, q, size)
+			} else {
+				snap = snapshot{logLength: logLength, n: th.Index.Len()}
+				snap.page, pageErr = PageFor(q, snap.n, size, v.Member(), lastRead)
+			}
 			if pageErr != nil {
 				return
 			}
 			// From the same snapshot as the page, so a post of v's on it is
 			// the one next_post_at counts from.
-			if viewer.NextPostAt, pageErr = nextPostAt(a, th.Index, slow, now); pageErr != nil {
+			// lensPage has already taken a lens page's entries; what
+			// follows takes the canonical page's.
+			if viewer.NextPostAt, pageErr = nextPostAt(a, th.Index, slow, now); pageErr != nil || rl != nil {
 				return
 			}
 			from := uint32((snap.page-1)*size + 1)
@@ -361,7 +379,14 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
-		if res.Body.Posts, err = s.pagePosts(ctx, th, id, snap, authors, q, size, row.LogLengthProjected, a); err != nil {
+		lensKey := ""
+		if rl != nil {
+			// Page and total_pages count the lens's posts (docs/07).
+			res.Body.Page.TotalPages = sel.TotalPages(size)
+			res.Body.Lens = lensBody(rl, sel, snap.page, size)
+			lensKey = rl.key
+		}
+		if res.Body.Posts, err = s.pagePosts(ctx, th, id, snap, authors, q, size, row.LogLengthProjected, a, lensKey); err != nil {
 			return err
 		}
 		return res.finish(id, snap.logLength, ifNoneMatch)

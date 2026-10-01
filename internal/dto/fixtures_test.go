@@ -93,7 +93,8 @@ func threadPage(class string) ThreadPage {
 			CreatedAt: 1757500000000,
 		},
 		Page: Pagination{Number: 3, Size: 25, TotalPages: 9},
-		Lens: &Lens{Kind: "author", Value: "drew", Shown: 7, Hidden: 205},
+		Lens: &Lens{Kind: "author", Value: "drew", Shown: 7, Hidden: 205,
+			Gaps: []LensGap{{After: 52, Count: 8}, {After: 61, Count: 14}}},
 		Posts: []Post{
 			{
 				Ordinal:   61,

@@ -52,7 +52,7 @@ describe('the thread cache', () => {
   });
 
   it('keeps pages side by side while the length holds', async () => {
-    serve(page(1, 100), page(2, 100), page(1, 100, { kind: 'author', value: 'alice', shown: 1, hidden: 2 }));
+    serve(page(1, 100), page(2, 100), page(1, 100, { kind: 'author', value: 'alice', shown: 1, hidden: 2, gaps: [] }));
     await loadThreadPage(id, { page: 1 });
     await loadThreadPage(id, { page: 2 });
     await loadThreadPage(id, { page: 1, lens: 'author:alice' });
@@ -626,7 +626,7 @@ describe('the thread cache', () => {
   });
 
   it('keys a lens by kind and value', () => {
-    const p = page(4, 1, { kind: 'author', value: 'bob', shown: 1, hidden: 1 });
+    const p = page(4, 1, { kind: 'author', value: 'bob', shown: 1, hidden: 1, gaps: [] });
     expect(pageKey(p)).toBe('4 author:bob');
     expect(pageKey(page(4, 1))).toBe('4');
   });
