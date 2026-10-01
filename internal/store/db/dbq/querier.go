@@ -491,6 +491,12 @@ type Querier interface {
 	// There is always at least one row: with no unread threads, forum_id is null.
 	MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error)
 	MembershipsForUser(ctx context.Context, userID int64) ([]MembershipsForUserRow, error)
+	// MentionedOrdinals is the posts in a thread whose current revision
+	// mentions a user, for the mentions lens (TKT-01M29CTY6E). The mentions
+	// projection replaces a post's rows on every edit, so a mention an edit
+	// removed is gone here once projected. A scan of the thread's prefix of
+	// the primary key.
+	MentionedOrdinals(ctx context.Context, arg MentionedOrdinalsParams) ([]int64, error)
 	// NotifyApplicationDecided writes the approved applicant's
 	// application_decided row, as the user the approval created, with the
 	// deciding moderator as actor. A denied applicant has no user, so no row.

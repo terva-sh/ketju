@@ -457,6 +457,43 @@ func (q *Queries) MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, er
 	return items, nil
 }
 
+const mentionedOrdinals = `-- name: MentionedOrdinals :many
+SELECT ordinal FROM mentions WHERE thread_id = ? AND mentioned_user_id = ? ORDER BY ordinal
+`
+
+type MentionedOrdinalsParams struct {
+	ThreadID        int64
+	MentionedUserID int64
+}
+
+// MentionedOrdinals is the posts in a thread whose current revision
+// mentions a user, for the mentions lens (TKT-01M29CTY6E). The mentions
+// projection replaces a post's rows on every edit, so a mention an edit
+// removed is gone here once projected. A scan of the thread's prefix of
+// the primary key.
+func (q *Queries) MentionedOrdinals(ctx context.Context, arg MentionedOrdinalsParams) ([]int64, error) {
+	rows, err := q.db.QueryContext(ctx, mentionedOrdinals, arg.ThreadID, arg.MentionedUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []int64
+	for rows.Next() {
+		var ordinal int64
+		if err := rows.Scan(&ordinal); err != nil {
+			return nil, err
+		}
+		items = append(items, ordinal)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setForumWatch = `-- name: SetForumWatch :exec
 INSERT INTO watches (user_id, forum_id, level, created_at, updated_at)
 VALUES (?1, ?2, ?3, ?4, ?4)

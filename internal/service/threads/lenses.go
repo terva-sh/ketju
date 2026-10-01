@@ -57,9 +57,84 @@ type lensViewer struct {
 // unread TKT-01M29CTY4J, author TKT-01M29CTY58, chain TKT-01M29CTY5T, and
 // since, mentions and mod TKT-01M29CTY6E.
 var lensResolvers = map[lens.Kind]lensResolver{
-	lens.Unread: resolveUnread,
-	lens.Author: resolveAuthor,
-	lens.Chain:  resolveChain,
+	lens.Unread:   resolveUnread,
+	lens.Author:   resolveAuthor,
+	lens.Chain:    resolveChain,
+	lens.Since:    resolveSince,
+	lens.Mentions: resolveMentions,
+	lens.Mod:      resolveMod,
+}
+
+// resolveSince is the since lens (TKT-01M29CTY6E): the posts first written
+// at or after the moment, for every viewer. lens.Parse has already read the
+// moment's three forms as Unix ms, which the answer names. It reads nothing
+// from the database, and its key is since:<ms>.
+func resolveSince(_ context.Context, _ *Service, _ lensViewer, spec lens.Spec) (resolvedLens, error) {
+	ms := spec.SinceMS
+	return resolvedLens{kind: lens.Since, value: spec.Value(), key: "since:" + spec.Value(),
+		filter: func(*threadlog.Index) (lens.Filter, error) { return lens.CreatedSince(ms), nil }}, nil
+}
+
+// resolveMentions is the mentions lens (TKT-01M29CTY6E, docs/06 "the
+// mentions lens"): the posts that mention the viewer, from the mentions
+// projection, and the posts that reply to theirs, leaving out their own and
+// every removed post. It costs one statement. The projection trails the log
+// by the bus's delay, so a mention written a moment ago appears on the next
+// request, the trade /replies makes with post_meta.
+//
+// Anyone who is not a member is mentioned by nobody here: an empty lens,
+// 200, never an error. The key is mentions:<viewer id>, since the selection
+// is the viewer's own; the response key's projected length and the page's
+// ordinal digest move with the projection.
+func resolveMentions(ctx context.Context, s *Service, v lensViewer, _ lens.Spec) (resolvedLens, error) {
+	rl := resolvedLens{kind: lens.Mentions, key: "mentions", filter: keepNothing}
+	if !v.viewer.Member() {
+		return rl, nil
+	}
+	var mentioned []uint32
+	err := s.DB.Read(ctx, func(dq *dbq.Queries, _ *sql.Tx) error {
+		rows, err := dq.MentionedOrdinals(ctx, dbq.MentionedOrdinalsParams{ThreadID: v.row.ID, MentionedUserID: v.viewer.UserID})
+		for _, o := range rows {
+			if o > 0 && o <= math.MaxUint32 {
+				mentioned = append(mentioned, uint32(o))
+			}
+		}
+		return err
+	})
+	if err != nil {
+		return rl, err
+	}
+	viewer := uint64(v.viewer.UserID)
+	rl.key = "mentions:" + strconv.FormatInt(v.viewer.UserID, 10)
+	rl.filter = func(ix *threadlog.Index) (lens.Filter, error) { return lens.MentionsOf(ix, viewer, mentioned), nil }
+	return rl, nil
+}
+
+// resolveMod is the moderator lens (TKT-01M29CTY6E): exactly the removed
+// posts, each drawn as the canonical page draws it for this viewer, body
+// included where revealRemoved serves one. It is the one lens a viewer may
+// be refused, and the refusal is here, in the service, not in a client:
+// unauthenticated to anyone who is not a member (a suspended moderator is
+// served as anonymous), and forbidden to a member without moderate in the
+// thread's forum, by role or by group grant (docs/08 "Decided 2026-09-30").
+// That is access.canModerate, the rule by which revealRemoved already gives
+// the same viewer every removed body on the canonical page, so the lens
+// shows a moderator nothing that page does not. Access has run first, so a
+// thread hidden from the viewer is still not-found.
+//
+// Its pages are drawn for the moderator class alone, which the cache key
+// carries beside the lens's key, mod.
+func resolveMod(_ context.Context, _ *Service, v lensViewer, _ lens.Spec) (resolvedLens, error) {
+	switch {
+	case !v.viewer.Member():
+		return resolvedLens{}, problem.Coded(problem.CodeUnauthenticated,
+			fmt.Errorf("threads: the moderator lens needs a signed-in moderator"))
+	case !v.canModerate:
+		return resolvedLens{}, problem.Coded(problem.CodeForbidden,
+			fmt.Errorf("threads: the moderator lens needs moderate in this forum"))
+	}
+	return resolvedLens{kind: lens.Mod, key: "mod",
+		filter: func(*threadlog.Index) (lens.Filter, error) { return lens.Removed, nil }}, nil
 }
 
 // resolveChain is the reply chain lens (TKT-01M29CTY5T, docs/06 "Lenses"):

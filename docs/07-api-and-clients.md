@@ -744,7 +744,8 @@ parameter** (TKT-01M29CRJ1P). It replaced the `bad-request` an unserved
 three forms:
 - a date, `YYYY-MM-DD`, read as midnight UTC, so a shared link means the same
   moment to every reader;
-- an RFC 3339 time;
+- an RFC 3339 time, whose `+` offset an address carries as `%2B`, since a
+  query string reads `+` as a space and the value is then no lens;
 - Unix ms.
 
 The answer's `lens.value` names the moment as Unix ms. `mentions` and `mod`

@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T13:55:38Z
+updated_at: 2026-10-01T14:25:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -100,6 +100,10 @@ run decision: pending maintainer review. The chain keeps a removed post in place
 **agent:claude-code/phase3-lenses** at 2026-10-01T13:55:38Z
 
 Review 1771 (head 66d25a4, base 4e2ef49), medium, 'Check ordinals before converting them to int': fixed. ReplyChain compared uint32 ordinals with the post count as int(n) > posts, and int(4294967295) is negative on a 32-bit build. It now compares as uint64 through lens.pastLast. TestChainBoundsUnsigned covers this, and the lens package's tests pass under GOARCH=386. Reverting the check under 386 makes ix.Entry panic with an index out of range. Index.Entry, lensPage, PageFor and attachments.go hold the same pattern outside this ticket's code, and draft TKT-01M3VVZE4G (Compare ordinals as unsigned in the index and page bounds on 32-bit builds) owns them. The same review said its diff ended partway through the last test hunk, so a follow-up on that hunk is requested on the next head.
+
+**agent:claude-code/phase3-lenses** at 2026-10-01T14:25:34Z
+
+Follow-up 1772 (run 14c30863; head 275aa00, base 49d3713a) covered internal/web/api/lens_test.go, the hunk where the clean review 5b221e6c's diff was cut off. It found nothing, and it confirmed the expected chain sets and the TestLenses reset. It could not see the unchanged rest of TestLensPostsMatchCanonical, which reviews of #299 and #304 already covered. That part asserts the exact ordinals per viewer and keys a served chain row (chain:N) apart from a test-filter row (test:chain:N), so one row's cache entry cannot answer another. PR #316 merged as 902c30ec. This note lands with TKT-01M29CTY6E's PR, so #316's reviewed head stayed its merged head.
 
 ## Summary
 

@@ -295,3 +295,11 @@ RETURNING *;
 UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL, attachments = '[]',
 	revision = revision + 1, updated_at = sqlc.arg(now)
 WHERE user_id = sqlc.arg(user_id) AND forum_id = sqlc.arg(forum_id) AND thread_id IS NULL AND deleted = 0;
+
+-- MentionedOrdinals is the posts in a thread whose current revision
+-- mentions a user, for the mentions lens (TKT-01M29CTY6E). The mentions
+-- projection replaces a post's rows on every edit, so a mention an edit
+-- removed is gone here once projected. A scan of the thread's prefix of
+-- the primary key.
+-- name: MentionedOrdinals :many
+SELECT ordinal FROM mentions WHERE thread_id = ? AND mentioned_user_id = ? ORDER BY ordinal;

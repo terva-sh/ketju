@@ -195,3 +195,51 @@ func ReplyChain(ix *threadlog.Index, n uint32) (Filter, error) {
 func pastLast(o uint32, posts int) bool {
 	return posts < 0 || uint64(o) > uint64(posts)
 }
+
+// CreatedSince keeps the posts first written at or after ms, Unix ms: the
+// since lens (docs/06 "Lenses"). It reads the index entry's created time,
+// revision 1's, so an edit never brings an old post into the lens. A
+// removed post keeps its place, as the canonical page draws it.
+func CreatedSince(ms int64) Filter { return createdSince(ms) }
+
+type createdSince int64
+
+func (s createdSince) keep(_ uint32, e threadlog.IndexEntry) bool { return e.CreatedMS >= int64(s) }
+
+// Removed keeps exactly the posts not shown as themselves: deleted, hidden,
+// hidden pending review, moved and redacted (threadlog.EntryFlags.Visible).
+// It is the moderator lens (docs/06 "what each lens keeps of removed
+// posts"). What each post shows, its body included, is the canonical page's
+// rule for the viewer.
+var Removed Filter = removed{}
+
+type removed struct{}
+
+func (removed) keep(_ uint32, e threadlog.IndexEntry) bool { return !e.Flags.Visible() }
+
+// MentionsOf is the mentions lens's filter for viewer, user id (docs/06
+// "the mentions lens"): the posts whose current revision mentions them,
+// which mentioned lists from the mentions projection, and the posts that
+// reply to a post they wrote. It leaves out the viewer's own posts, and
+// every post not shown as itself. It reads ix for the viewer's posts, so
+// call it inside Stable, before Apply.
+func MentionsOf(ix *threadlog.Index, viewer uint64, mentioned []uint32) Filter {
+	f := mentionsOf{viewer: viewer, mentioned: map[uint32]bool{}, own: map[uint32]bool{}}
+	for _, o := range mentioned {
+		f.mentioned[o] = true
+	}
+	for _, o := range ix.ByAuthor(viewer) {
+		f.own[o] = true
+	}
+	return f
+}
+
+type mentionsOf struct {
+	viewer    uint64
+	mentioned map[uint32]bool
+	own       map[uint32]bool
+}
+
+func (m mentionsOf) keep(o uint32, e threadlog.IndexEntry) bool {
+	return (m.mentioned[o] || m.own[e.ReplyTo]) && e.Author != m.viewer && e.Flags.Visible()
+}

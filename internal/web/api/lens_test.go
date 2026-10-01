@@ -377,8 +377,10 @@ func (w *world) forumModerator(handle string, forum int64) domain.Viewer {
 // post is drawn on pages whose other posts, and so whose viewer class
 // (pageClass), differ. Each served kind adds its own rows: the unread lens
 // over several boundaries and over each viewer's own position, the author
-// lens for every author in the thread and for none, and the reply chain of
-// every post. Each lens is
+// lens for every author in the thread and for none, the reply chain of
+// every post, since from several moments, mentions over mentions put in
+// the projection, and the moderator lens, which every viewer who may not
+// moderate the forum is refused with nothing of the thread. Each lens is
 // read twice in two orders of viewers, so a page the response cache stored
 // for one viewer is offered to every other.
 func TestLensPostsMatchCanonical(t *testing.T) {
@@ -480,6 +482,43 @@ func TestLensPostsMatchCanonical(t *testing.T) {
 		raw := fmt.Sprintf("chain:%d", n)
 		lenses = append(lenses, lensCase{name: raw, raw: raw, want: func(int) []int { return want }})
 	}
+	// The since lens (TKT-01M29CTY6E): from the first post, from a removed
+	// one, from the last, and from after it. The same for every viewer.
+	for _, from := range []uint32{1, 3, 7, 10} {
+		raw := fmt.Sprintf("since:%d", w.entry(id, from).CreatedMS)
+		lenses = append(lenses, lensCase{name: raw, raw: raw, want: func(int) []int { return span(int(from), n) }})
+	}
+	lenses = append(lenses, lensCase{name: "since after the last post",
+		raw: fmt.Sprintf("since:%d", w.entry(id, n).CreatedMS+1), want: func(int) []int { return []int{} }})
+	// The mentions lens (TKT-01M29CTY6E). accessThread's posts were appended
+	// without mentions, so these rows put some in the projection: erin at
+	// #4, bob at #6 (hidden pending review), gina at #2 and at #8
+	// (redacted). alice's posts #1 and #5 have the replies #2, #4 and #10.
+	for _, m := range [][2]int64{{4, w.users["erin"]}, {6, w.users["bob"]}, {2, w.users["gina"]}, {8, w.users["gina"]}} {
+		w.exec(`INSERT INTO mentions (thread_id, ordinal, mentioned_user_id) VALUES (?, ?, ?)`, int64(id), m[0], m[1])
+	}
+	lenses = append(lenses, lensCase{name: "mentions", raw: "mentions", want: func(i int) []int {
+		if !viewers[i].v.Member() {
+			return []int{}
+		}
+		switch viewers[i].v.UserID {
+		case w.users["erin"]:
+			return []int{4}
+		case w.users["alice"]:
+			return []int{2, 4, 10}
+		case w.users["gina"]:
+			return []int{2}
+		}
+		return []int{}
+	}})
+	// The moderator lens (TKT-01M29CTY6E): the removed posts, to a viewer
+	// who may moderate this forum, and refused, nil here, to anyone else.
+	lenses = append(lenses, lensCase{name: "mod", raw: "mod", want: func(i int) []int {
+		if !viewers[i].sees || viewers[i].v.UserID == w.users["alice"] {
+			return nil
+		}
+		return []int{3, 5, 6, 7, 8, 9}
+	}})
 	order := make([]int, len(viewers))
 	for i := range order {
 		order[i] = i
@@ -496,15 +535,23 @@ func TestLensPostsMatchCanonical(t *testing.T) {
 			}
 			for _, i := range order {
 				vw := viewers[i]
-				p := page(t, w.get(vw.v, path))
+				rec := w.get(vw.v, path)
 				var want []int
 				if lc.want != nil {
-					want = lc.want(i)
+					if want = lc.want(i); want == nil {
+						// Refused: an error, and nothing of the thread.
+						if rec.Code == http.StatusOK || strings.Contains(rec.Body.String(), "only its author") {
+							t.Fatalf("round %d, %s, %s: %d %s, want a refusal", round, lc.name, vw.name, rec.Code, rec.Body)
+						}
+						continue
+					}
 				} else {
+					want = []int{}
 					for _, o := range slices.Sorted(slices.Values(lc.keep)) {
 						want = append(want, int(o))
 					}
 				}
+				p := page(t, rec)
 				if got := ordinalsOf(p.Posts); !slices.Equal(got, want) {
 					t.Fatalf("round %d, %s, %s: the lens served %v, want %v", round, lc.name, vw.name, got, want)
 				}
