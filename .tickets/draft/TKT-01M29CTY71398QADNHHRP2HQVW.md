@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T10:06:12Z
+updated_at: 2026-10-01T10:55:02Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -193,3 +193,20 @@ What the implementation must do:
 - When nothing is unread, show the existing "Nothing unread in this thread." hint.
 - Test it in vitest by advancing the tracker past B + 1 under `unread:B` and pressing First unread (and `u`). The target must be the current `last_read + 1` on a later lens page, never B + 1.
 - The e2e check in criterion 3 covers it from the lens after reading page 1.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T10:55:02Z
+
+Requirement carried from review 1741 (2026-10-01; PR #283, head e462522, base 3890b38). The grooming PR is past its five-round cap, so the finding is carried here rather than fixed in the plan, and it binds the implementing lane. It refines the earlier carried requirement from review 1730, which limits the read beacon to the canonical view and the unread lens.
+
+Finding (medium), "Do not track reads from an arbitrary unread:B boundary":
+- `unread:B` serves the posts after B to whoever opens it (TKT-01M29CTY4J), so a shared or typed link need not start at the reader's own position.
+- A reader at #10 who opens `unread:99` would have #11 to #98 marked read when the beacon sends #100 or later.
+
+What the implementation must do:
+- Under the unread lens, run the read beacon only when B is at or below the reader's current read position: B ≤ `last_read_ordinal` as the read tracker knows it now (`state/readTracker.ts`), or as the page's `viewer.last_read_ordinal` says when the tracker knows nothing newer. The lens then starts at or before the reader's first unread post and has no leading gap for them.
+- When B is above the reader's position, leave the beacon off for that view, as under the filtering lenses. A lens opened from the reader's own bare `?lens=unread` always has B equal to their position, so their normal path is unaffected.
+- Test it in vitest:
+  - `unread:B` with B above the reader's position sends no `PUT /read`;
+  - B equal to the position tracks;
+  - B below the position tracks, which only moves the position forward over posts the reader has already read or is now shown.
+- In the same PR, amend docs/06 "read tracking under a lens" to state this condition, alongside the since change carried from review 1730.
