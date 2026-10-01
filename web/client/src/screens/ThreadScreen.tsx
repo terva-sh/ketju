@@ -444,7 +444,7 @@ function ThreadBody({
       <section class="posts" ref={list} onClick={follow}>
         {page.posts.map((p, i) => (
           <Fragment key={p.ordinal}>
-            {p.ordinal === divider && <UnreadDivider unread={page.thread.post_count - lastRead} lastRead={lastRead} />}
+            {p.ordinal === divider && <UnreadDivider unread={page.thread.post_count - lastRead} lastRead={lastRead} at={page.viewer.last_read_at} />}
             {isTombstone(p) ? (
               <Tombstone
                 post={p}

@@ -220,12 +220,12 @@ func threadPage(class string) ThreadPage {
 		// started the thread, so their rename window runs to a day after
 		// its start. They moderate nothing, so the author windows bind them,
 		// at their defaults.
-		p.Viewer = ThreadViewer{LastReadOrdinal: 60, Watch: "watch", CanReply: true, CanUpload: true, CanModerate: false,
+		p.Viewer = ThreadViewer{LastReadOrdinal: 60, LastReadAt: ptr(Millis(1757500400000)), Watch: "watch", CanReply: true, CanUpload: true, CanModerate: false,
 			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000)), RenameUntil: ptr(Millis(1757586400000)),
 			AuthorWindows: &AuthorWindows{EditSeconds: 86400, DeleteSeconds: 900}}
 	case tModerator:
 		// Exempt: the interval is shown, and there is nothing to wait for.
-		p.Viewer = ThreadViewer{LastReadOrdinal: 42, Watch: "mute", CanReply: true, CanModerate: true,
+		p.Viewer = ThreadViewer{LastReadOrdinal: 42, LastReadAt: ptr(Millis(1757500300000)), Watch: "mute", CanReply: true, CanModerate: true,
 			SlowModeSeconds: 30, NextPostAt: nil}
 	}
 	return p
@@ -418,7 +418,7 @@ func lockedThread() ThreadPage {
 		Lens: nil,
 		// The lock takes reply away and leaves the author windows: a member
 		// may still delete and restore their own post in a locked thread.
-		Viewer: ThreadViewer{LastReadOrdinal: 2, Watch: "", CanReply: false, CanModerate: false, SlowModeSeconds: 0, NextPostAt: nil,
+		Viewer: ThreadViewer{LastReadOrdinal: 2, LastReadAt: ptr(Millis(1757100100000)), Watch: "", CanReply: false, CanModerate: false, SlowModeSeconds: 0, NextPostAt: nil,
 			AuthorWindows: &AuthorWindows{EditSeconds: 86400, DeleteSeconds: 900}},
 		Posts: []Post{{
 			Ordinal:     1,

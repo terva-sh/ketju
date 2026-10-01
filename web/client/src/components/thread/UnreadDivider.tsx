@@ -1,14 +1,25 @@
+import { PostTime } from './PostTime';
+
 // UnreadDivider is drawn between the last post the viewer has read and the
 // first they have not (docs/06 "Landing on return"): the single most valuable
-// piece of UI in a linear forum.
-export function UnreadDivider({ unread, lastRead }: { unread: number; lastRead: number }) {
+// piece of UI in a linear forum. It ends with the place and, when the server
+// says, when the viewer set it (at, the viewer block's last_read_at).
+export function UnreadDivider({ unread, lastRead, at }: { unread: number; lastRead: number; at: number | null }) {
   return (
     <div class="unread-divider" id="unread" role="separator" aria-label={`${unread} new ${unread === 1 ? 'post' : 'posts'} below`}>
       <span>
         {unread} new {unread === 1 ? 'post' : 'posts'} below
       </span>
       <span class="rule" />
-      <span class="last-read">last read #{lastRead}</span>
+      <span class="last-read">
+        last read #{lastRead}
+        {at !== null && (
+          <>
+            {' · '}
+            <PostTime at={at} />
+          </>
+        )}
+      </span>
     </div>
   );
 }

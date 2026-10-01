@@ -259,6 +259,26 @@ describe('the unread divider', () => {
     expect(d.textContent).toContain('last read #60');
   });
 
+  // When the place was set (docs/06 "Landing on return", TKT-01M3S3ZS0H).
+  it('the divider reads last read #N · TIME', async () => {
+    serve({ ...base, thread: { ...base.thread, id } });
+    const root = await renderAt(`/t/${id}/s?page=3`);
+    const last = at(root, '.unread-divider .last-read')!;
+    const time = last.querySelector('time')!;
+    expect(time.getAttribute('datetime')).toBe(new Date(base.viewer.last_read_at!).toISOString());
+    expect(last.textContent).toBe(`last read #60 · ${time.textContent}`);
+    // The separator's name is unchanged.
+    expect(at(root, '.unread-divider')?.getAttribute('aria-label')).toBe('152 new posts below');
+  });
+
+  it('with no time it reads last read #N', async () => {
+    serve({ ...base, thread: { ...base.thread, id }, viewer: { ...base.viewer, last_read_at: null } });
+    const root = await renderAt(`/t/${id}/s?page=3`);
+    const last = at(root, '.unread-divider .last-read')!;
+    expect(last.textContent).toBe('last read #60');
+    expect(last.querySelector('time')).toBeNull();
+  });
+
   it('sits mid-page between read and unread, marking the unread', async () => {
     const posts = Array.from({ length: 5 }, (_, i) => post(i + 1));
     serve(page(posts, { lastRead: 3, postCount: 5, totalPages: 1 }));

@@ -254,6 +254,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		forum    dbq.Forum
 		tags     []string
 		lastRead int64
+		readAt   *dto.Millis
 		watch    string
 		authorW  *dto.AuthorWindows
 	)
@@ -272,6 +273,8 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		switch {
 		case err == nil:
 			lastRead = rp.LastReadOrdinal
+			at := dto.Millis(rp.LastReadAt)
+			readAt = &at
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		}
@@ -315,6 +318,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	}
 	viewer := dto.ThreadViewer{
 		LastReadOrdinal: int(lastRead),
+		LastReadAt:      readAt,
 		Watch:           watch,
 		CanReply:        a.canReply && (row.Locked == 0 || canModerate) && readOnlyForum(a) == nil,
 		CanUpload:       canUpload,

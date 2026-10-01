@@ -660,7 +660,7 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
   "page": {"number": 3, "size": 25, "total_pages": 9},
   "lens": {"kind": "author", "value": "drew", "shown": 7, "hidden": 205,
            "gaps": [{"after": 52, "count": 8}, {"after": 61, "count": 14}]},
-  "viewer": {"last_read_ordinal": 60, "watch": "watch", "can_reply": true, "can_upload": true, "can_moderate": false,
+  "viewer": {"last_read_ordinal": 60, "last_read_at": 1757500400000, "watch": "watch", "can_reply": true, "can_upload": true, "can_moderate": false,
              "slow_mode_seconds": 30, "next_post_at": null, "rename_until": null,
              "author_windows": {"edit_seconds": 86400, "delete_seconds": 900},
              "forum_read_only": false},

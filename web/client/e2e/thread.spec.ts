@@ -71,7 +71,9 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
   // only the posts after it carry the unread edge.
   const divider = page.locator('.unread-divider');
   await expect(divider).toHaveCount(1);
-  await expect(divider.locator('.last-read')).toHaveText(`last read #${lastRead}`);
+  // It ends with when alice set her place (docs/06 "Landing on return").
+  await expect(divider.locator('.last-read')).toHaveText(new RegExp(`^last read #${lastRead} · \\S`));
+  await expect(divider.locator('.last-read time')).toHaveAttribute('datetime', /^\d{4}-\d\d-\d\dT/);
   await expect(page.locator(`#post-${lastRead} + .unread-divider + #post-${lastRead + 1}`)).toHaveCount(1);
   await expect(page.locator(`#post-${lastRead}`)).not.toHaveClass(/\bunread\b/);
   await expect(page.locator(`#post-${lastRead + 1}`)).toHaveClass(/\bunread\b/);
@@ -95,9 +97,9 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
 // capture writes name-{light,dark}.png of the page at its full height: a
 // taller viewport rather than a full-page capture, so the bars that stick to
 // the foot sit where a reader sees them, as forum-index.spec.ts does. It
-// waits for the fonts, stops animations and the caret, and masks each post's
-// time, the thread's and the draft note's, the only things on the page that
-// change between runs.
+// waits for the fonts, stops animations and the caret, and masks every time
+// on the page: each post's, the thread's, the draft note's and the unread
+// divider's, the only things on the page that change between runs.
 async function capture(page: Page, name: string) {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
   mkdirSync(dir, { recursive: true });
@@ -112,7 +114,7 @@ async function capture(page: Page, name: string) {
       path: join(dir, `${name}-${colorScheme}.png`),
       animations: 'disabled',
       caret: 'hide',
-      mask: [page.locator('.post-header time, .thread-meta time, .draft-note time')],
+      mask: [page.locator('.post-header time, .thread-meta time, .draft-note time, .unread-divider time')],
       maskColor: '#8B95A8',
     });
   }

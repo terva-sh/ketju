@@ -71,6 +71,8 @@ export interface ThreadHeader {
 
 export interface ThreadViewer {
   last_read_ordinal: number;
+  // last_read_at is when this viewer's place was last set, null with none.
+  last_read_at: Millis | null;
   watch: string;
   can_reply: boolean;
   // can_upload: this viewer may upload a file to attach here.

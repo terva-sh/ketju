@@ -173,6 +173,11 @@ type ThreadHeader struct {
 // it defeats the cache.
 type ThreadViewer struct {
 	LastReadOrdinal int `json:"last_read_ordinal"`
+	// LastReadAt is read_positions.last_read_at: when this viewer's place in
+	// the thread was last set, by a read beacon or by marking it unread
+	// (docs/06 "Landing on return"). Nil with no read position, which covers
+	// every anonymous viewer.
+	LastReadAt *Millis `json:"last_read_at"`
 	// Watch is watch, mute, or empty for neither.
 	Watch    string `json:"watch"`
 	CanReply bool   `json:"can_reply"`

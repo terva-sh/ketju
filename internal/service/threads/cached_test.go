@@ -65,7 +65,7 @@ func TestCachedPayloadHoldsNoViewer(t *testing.T) {
 	if !ok {
 		t.Fatalf("no entry under the key the page should have filled; stats %+v", s.Responses.Stats())
 	}
-	for _, field := range []string{`"viewer"`, `"last_read_ordinal"`, `"watch"`, `"can_reply"`, `"can_moderate"`} {
+	for _, field := range []string{`"viewer"`, `"last_read_ordinal"`, `"last_read_at"`, `"watch"`, `"can_reply"`, `"can_moderate"`} {
 		if bytes.Contains(stored, []byte(field)) {
 			t.Errorf("the cached payload carries %s: %s", field, stored)
 		}

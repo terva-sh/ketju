@@ -50,6 +50,7 @@
   },
   "viewer": {
     "last_read_ordinal": 60,
+    "last_read_at": 1757500400000,
     "watch": "watch",
     "can_reply": true,
     "can_upload": true,
