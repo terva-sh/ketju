@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3SZ3GCESETRH2R5MY9N01KN
 title: Stop admin-applications.spec.ts timing out under CI load
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,10 +20,17 @@ blocks_on: none
 references:
   - ref: pr:255
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-sz3gce
+  branch: run/sz3gce-applications-flake
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af3af22297b167b1c
+  commit: 8a849ca5d354d83e801dc93eb07177a414939f69
+  session: null
+  claimed_at: 2026-10-01T01:58:31Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T20:11:42Z
-updated_at: 2026-09-30T23:55:07Z
+updated_at: 2026-10-01T01:58:32Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
