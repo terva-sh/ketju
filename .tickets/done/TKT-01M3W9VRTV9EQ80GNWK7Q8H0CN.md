@@ -14,11 +14,13 @@ parent: TKT-01M29BN36D34YVKVRPNQD3PHDV
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:332
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T17:58:12Z
-updated_at: 2026-10-01T18:07:28Z
+updated_at: 2026-10-01T18:08:10Z
 created_by:
   id: agent:claude-code/phase3-notif-flake
   name: ""
