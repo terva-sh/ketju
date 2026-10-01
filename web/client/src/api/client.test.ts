@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { apiGet, apiGetOptional, apiSend, forgetGets, heldLimit, peekGet, resetApiCache } from './client';
+import { apiGet, apiGetOptional, apiSend, apiUpload, forgetGets, heldLimit, peekGet, resetApiCache } from './client';
 import { isProblem, ProblemError } from './problem';
 
 const json = (body: unknown, init: ResponseInit = {}) =>
@@ -408,5 +408,33 @@ describe('apiGetOptional', () => {
     }));
     const err = await apiGetOptional('/api/v1/drafts/t').catch((e) => e);
     expect(isProblem(err, 'forbidden')).toBe(true);
+  });
+});
+
+// TKT-01M3V73J8K: POST /blobs takes one multipart part named file.
+describe('apiUpload', () => {
+  it('apiUpload sends one file part and maps problems', async () => {
+    const calls = stub(
+      json({ hash: 'h', size: 1 }, { status: 201 }),
+      new Response(JSON.stringify({ type: 'validation-failed', status: 422, errors: [{ field: 'file', code: 'type_not_allowed' }] }), {
+        status: 422,
+        headers: { 'Content-Type': 'application/problem+json' },
+      }),
+      new Response('', { status: 413 }),
+    );
+    const f = new File(['bytes'], 'a.png', { type: 'image/png' });
+    expect(await apiUpload('/api/v1/blobs?thread=t', f)).toEqual({ hash: 'h', size: 1 });
+    const [c] = calls;
+    expect(c.method).toBe('POST');
+    // No Content-Type: the browser writes the multipart boundary.
+    expect(c.headers).toEqual({ Accept: 'application/json' });
+    const body = c.body as FormData;
+    expect([...body.keys()]).toEqual(['file']);
+    expect((body.get('file') as File).name).toBe('a.png');
+
+    const refused = await apiUpload('/api/v1/blobs?thread=t', f).catch((e) => e);
+    expect(refused).toBeInstanceOf(ProblemError);
+    expect((refused as ProblemError).fieldErrors).toEqual({ file: 'type_not_allowed' });
+    expect(isProblem(await apiUpload('/api/v1/blobs?thread=t', f).catch((e) => e), 'payload-too-large')).toBe(true);
   });
 });

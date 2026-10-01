@@ -22,8 +22,10 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/auth/oidc/oidctest"
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -281,6 +283,19 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 		}
 		return nil
 	}); err != nil {
+		return 0, err
+	}
+	// Members may upload everywhere, so the composer offers Attach
+	// (e2e/attachments.spec.ts, TKT-01M3V73J8K). No migration grants it
+	// (docs/07 "Attachments"); an admin would, through perm as this does.
+	var members dbq.Group
+	if err := d.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) (err error) {
+		members, err = q.GetGroupBySlug(ctx, domain.GroupMembers)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+	if err := perm.New(d).Grant(ctx, audit.System("e2e seed"), 0, members.ID, domain.PermUpload); err != nil {
 		return 0, err
 	}
 

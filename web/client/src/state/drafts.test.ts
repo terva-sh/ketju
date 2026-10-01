@@ -1,8 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetApiCache } from '../api/client';
-import type { Me } from '../api/dto';
+import type { Attachment, Me } from '../api/dto';
 import { composerFor, discardReply, loadReplyDraft, postReply, resetComposers } from './composer';
 import { draftDelay, draftNote, draftSavedAt, keepaliveLimit, startDrafts } from './drafts';
+import { attach } from './files';
+import { loadNewThreadDraft, newThreadFor, resetNewThreads } from './newThread';
 import { viewer } from './viewer';
 import draftsSource from './drafts.ts?raw';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
@@ -93,7 +95,7 @@ function fakeFetch(u: string, init: RequestInit = {}): Promise<Response> {
   const c: Call = {
     method: init.method ?? 'GET',
     url: u,
-    body: init.body ? JSON.parse(init.body as string) : undefined,
+    body: init.body instanceof FormData ? undefined : init.body ? JSON.parse(init.body as string) : undefined,
     keepalive: !!init.keepalive,
   };
   calls.push(c);
@@ -315,7 +317,7 @@ describe('before the draft has loaded', () => {
     pagehide();
     await wait(draftDelay);
     expect(writes()).toEqual([]);
-    expect(copy()).toEqual({ snapshot: { source: 'typed while it loaded', reply_to: null }, base: null, inflight: 0, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: 'typed while it loaded', reply_to: null, attachments: [] }, base: null, inflight: 0, deletes: 0 });
     newPage();
     await loadReplyDraft(T);
     await tick();
@@ -425,7 +427,7 @@ describe('refusals', () => {
     delete (document as { visibilityState?: string }).visibilityState;
     pagehide();
     expect(writes()).toEqual(['PUT a']);
-    expect(copy()).toEqual({ snapshot: { source: 'ab', reply_to: null }, base: 0, inflight: 0, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: 'ab', reply_to: null, attachments: [] }, base: 0, inflight: 0, deletes: 0 });
     await wait(1900);
     expect(writes()).toEqual(['PUT a']);
     await wait(100);
@@ -746,7 +748,7 @@ describe('pagehide', () => {
     pagehide();
     await tick();
     expect(writes()).toEqual(['PUT a']);
-    expect(copy()).toEqual({ snapshot: { source: 'ab', reply_to: null }, base: 0, inflight: 1, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: 'ab', reply_to: null, attachments: [] }, base: 0, inflight: 1, deletes: 0 });
     // Nor does anything follow it when it is answered before the page goes.
     await land(put);
     await wait(draftDelay * 2);
@@ -766,7 +768,7 @@ describe('pagehide', () => {
     await land(put);
     await wait(draftDelay * 2);
     expect(writes()).toEqual(['PUT a']);
-    expect(copy()).toEqual({ snapshot: { source: 'abc', reply_to: null }, base: 0, inflight: 1, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: 'abc', reply_to: null, attachments: [] }, base: 0, inflight: 1, deletes: 0 });
     expect(await (async () => {
       newPage();
       await loadReplyDraft(T);
@@ -779,7 +781,7 @@ describe('pagehide', () => {
     composerFor(T).source.value = 'x';
     const put = hold('PUT');
     pagehide();
-    expect(copy()).toEqual({ snapshot: { source: 'x', reply_to: null }, base: 0, inflight: 1, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: 'x', reply_to: null, attachments: [] }, base: 0, inflight: 1, deletes: 0 });
     lose(put);
     newPage();
     await loadReplyDraft(T);
@@ -803,7 +805,7 @@ describe('pagehide', () => {
     composerFor(T).source.value = big;
     pagehide();
     expect(writes()).toEqual([]);
-    expect(copy()).toEqual({ snapshot: { source: big, reply_to: null }, base: 0, inflight: 0, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: big, reply_to: null, attachments: [] }, base: 0, inflight: 0, deletes: 0 });
   });
 
   it('writes nothing for a draft already saved', async () => {
@@ -928,7 +930,7 @@ describe('the local copy', () => {
     expect(writes()).toEqual(['DELETE']);
     c.source.value = 'new text';
     pagehide();
-    expect(copy()).toEqual({ snapshot: { source: 'new text', reply_to: null }, base: 4, inflight: 1, deletes: 1 });
+    expect(copy()).toEqual({ snapshot: { source: 'new text', reply_to: null, attachments: [] }, base: 4, inflight: 1, deletes: 1 });
     // The other device's delete lands first, and this tab's on its tombstone.
     apply({ method: 'DELETE', url, body: undefined, keepalive: false });
     lose(del);
@@ -950,7 +952,7 @@ describe('the local copy', () => {
     await tick();
     pagehide();
     expect(writes()).toEqual(['PUT the reply']);
-    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null }, base: 0, inflight: 1, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null, attachments: [] }, base: 0, inflight: 1, deletes: 0 });
     // The save lands after the post, and its answer is lost with the page.
     lose(put);
     expect(server.live).toEqual({ source: 'the reply', reply_to: null });
@@ -1023,7 +1025,7 @@ describe('the local copy', () => {
     const del = hold('DELETE');
     pagehide();
     expect(writes()).toEqual(['PUT a', 'DELETE']);
-    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null }, base: 0, inflight: 2, deletes: 1 });
+    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null, attachments: [] }, base: 0, inflight: 2, deletes: 1 });
     // The DELETE never arrives.
     del.reject!(new TypeError('network'));
     expect(server.live).toEqual({ source: 'a', reply_to: null });
@@ -1069,7 +1071,7 @@ describe('the local copy', () => {
     const del = hold('DELETE');
     pagehide();
     expect(writes()).toEqual(['PUT a', 'DELETE']);
-    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null }, base: 1, inflight: 1, deletes: 1 });
+    expect(copy()).toEqual({ snapshot: { source: '', reply_to: null, attachments: [] }, base: 1, inflight: 1, deletes: 1 });
     await land(del);
     expect(copy()).toBeNull();
   });
@@ -1099,7 +1101,7 @@ describe('the local copy', () => {
     await fail(put);
     hold('PUT');
     pagehide();
-    expect(copy()).toEqual({ snapshot: { source: 'only here', reply_to: null }, base: null, inflight: 2, deletes: 0 });
+    expect(copy()).toEqual({ snapshot: { source: 'only here', reply_to: null, attachments: [] }, base: null, inflight: 2, deletes: 0 });
     refuse = () => undefined;
     expect(await restoredText()).toBe('only here');
     await tick();
@@ -1166,5 +1168,195 @@ describe('whose copies are kept', () => {
     pagehide();
     expect(writes()).toEqual([]);
     stop();
+  });
+});
+
+// TKT-01M3V73J8K: a draft keeps the composer's files (docs/07 "Drafts"). A
+// PUT sends their hashes, and a GET answers them as Attachments, which a
+// small server here keeps for each draft URL as the real one does.
+describe('attachments', () => {
+  const file = (l: string): Attachment => ({
+    hash: l.repeat(64),
+    size: 2048,
+    mime: 'image/png',
+    original_name: `${l}.png`,
+    width: 64,
+    height: 48,
+  });
+  const known = [file('a'), file('b'), file('c')];
+  const forumUrl = '/api/v1/forums/general/draft';
+  // kept is each draft URL's stored body, with hashes for attachments.
+  let kept: Record<string, Record<string, unknown> | null>;
+  beforeEach(() => {
+    kept = {};
+    refuse = (c) => {
+      if (c.url !== url && c.url !== forumUrl) return undefined;
+      server.revision++;
+      if (c.method === 'PUT') kept[c.url] = c.body as Record<string, unknown>;
+      if (c.method === 'DELETE') kept[c.url] = null;
+      const k = kept[c.url];
+      if (!k) return none();
+      const attachments = known.filter((a) => ((k.attachments as string[] | undefined) ?? []).includes(a.hash));
+      return jsonAnswer({ ...k, attachments, updated_at: savedAt(), revision: server.revision });
+    };
+  });
+  const puts = (u: string) => calls.filter((c) => c.url === u && c.method === 'PUT').map((c) => c.body);
+
+  it('attachments survive a draft round trip, for a reply', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'with files';
+    c.attachments.value = [known[0], known[1]];
+    await wait(draftDelay);
+    expect(puts(url)).toEqual([{ source: 'with files', reply_to: null, attachments: [known[0].hash, known[1].hash] }]);
+    // Removing a file saves the rest, and removing the last sends none.
+    c.attachments.value = [known[1]];
+    await wait(draftDelay);
+    expect(puts(url).at(-1)).toEqual({ source: 'with files', reply_to: null, attachments: [known[1].hash] });
+
+    newPage();
+    await loadReplyDraft(T);
+    await tick();
+    expect(composerFor(T).source.value).toBe('with files');
+    expect(composerFor(T).attachments.value).toEqual([known[1]]);
+    // Loading sends nothing back.
+    expect(writes()).toEqual([]);
+    composerFor(T).attachments.value = [];
+    await wait(draftDelay);
+    expect(puts(url).at(-1)).toEqual({ source: 'with files', reply_to: null });
+  });
+
+  it('attachments survive a draft round trip, for a new thread', async () => {
+    await loadNewThreadDraft('general');
+    const n = newThreadFor('general');
+    n.title.value = 'Photos';
+    n.attachments.value = [known[2]];
+    await wait(draftDelay);
+    // Files alone are a draft: the source may be empty.
+    expect(puts(forumUrl)).toEqual([{ title: 'Photos', source: '', attachments: [known[2].hash] }]);
+
+    resetNewThreads();
+    calls = [];
+    await loadNewThreadDraft('general');
+    await tick();
+    expect(newThreadFor('general').title.value).toBe('Photos');
+    expect(newThreadFor('general').attachments.value).toEqual([known[2]]);
+    expect(calls.filter((c) => c.method !== 'GET')).toEqual([]);
+  });
+
+  it('a copy in this browser keeps the files by name, and sends their hashes', async () => {
+    refuse = (c) => (c.method === 'GET' ? problem('internal', 500) : undefined);
+    await loadReplyDraft(T);
+    const put = hold('PUT');
+    composerFor(T).source.value = 'only here';
+    composerFor(T).attachments.value = [known[0]];
+    await wait(draftDelay);
+    await fail(put);
+    hold('PUT');
+    pagehide();
+    expect(copy().snapshot).toEqual({ source: 'only here', reply_to: null, attachments: [known[0]] });
+    refuse = () => undefined;
+    newPage();
+    await loadReplyDraft(T);
+    await tick();
+    expect(composerFor(T).attachments.value).toEqual([known[0]]);
+    expect(calls.filter((c) => c.method === 'PUT').map((c) => c.body)).toEqual([
+      { source: 'only here', reply_to: null, attachments: [known[0].hash] },
+    ]);
+  });
+
+  it('a copy holding something other than files restores none', async () => {
+    store({ source: 'x', reply_to: null, attachments: [{ hash: 1 }, 'nope', null] } as never, null, 1, 0);
+    newPage();
+    await loadReplyDraft(T);
+    await tick();
+    expect(composerFor(T).source.value).toBe('x');
+    expect(composerFor(T).attachments.value).toEqual([]);
+  });
+
+  // Terva review 1783: keepalive is decided by the body sent, which carries
+  // hashes, not by the snapshot, which carries each file's name and size.
+  it('measures keepalive by the body sent, not by the files’ names', async () => {
+    await loadReplyDraft(T);
+    const named = 'nopqrstuvw'.split('').map((l) => ({ ...file(l), original_name: `${l}${'-'.repeat(400)}.png` }));
+    const c = composerFor(T);
+    c.source.value = 'y'.repeat(keepaliveLimit - 2000);
+    c.attachments.value = named;
+    const encoded = (v: unknown) => new TextEncoder().encode(JSON.stringify(v)).length;
+    // The snapshot is over the bound, and the body under it.
+    expect(encoded({ source: c.source.value, reply_to: null, attachments: named })).toBeGreaterThan(keepaliveLimit);
+    await wait(draftDelay);
+    const sent = () => calls.filter((x) => x.url === url && x.method === 'PUT');
+    expect(encoded(sent()[0].body)).toBeLessThan(keepaliveLimit);
+    expect(sent().map((x) => x.keepalive)).toEqual([true]);
+    // On pagehide a change that fits is sent, not only kept in this browser.
+    c.source.value += 'z';
+    pagehide();
+    expect(sent().map((x) => x.keepalive)).toEqual([true, true]);
+  });
+
+  // Terva review 1782: a full draft restored under an upload made eleven.
+  describe('an upload while the draft loads', () => {
+    const ten = 'defghijklm'.split('').map(file);
+    const shot = file('z');
+    // answer lets the held POST /blobs answer with shot, and loaded the held
+    // draft GET answer with a draft of ten files.
+    let answer: (() => void) | null;
+    let loaded: (() => void) | null;
+    beforeEach(() => {
+      answer = loaded = null;
+      vi.stubGlobal('fetch', (u: string, init: RequestInit = {}) => {
+        if (u.startsWith('/api/v1/blobs?')) return new Promise<Response>((resolve) => (answer = () => resolve(jsonAnswer(shot, 201))));
+        if (u === url && (init.method ?? 'GET') === 'GET') {
+          calls.push({ method: 'GET', url: u, body: undefined, keepalive: false });
+          const draft = { thread_id: T, source: '', reply_to: null, attachments: ten, updated_at: 1, revision: 1 };
+          return new Promise<Response>((resolve) => (loaded = () => resolve(jsonAnswer(draft))));
+        }
+        return fakeFetch(u, init);
+      });
+    });
+
+    it('a draft does not fill a composer with a file on its way, which then wins', async () => {
+      const loading = loadReplyDraft(T);
+      const c = composerFor(T);
+      const up = attach(c, `thread=${T}`, [new File(['x'], 'z.png', { type: 'image/png' })]);
+      await tick();
+      loaded!();
+      await loading;
+      expect(c.attachments.value).toEqual([]);
+      answer!();
+      await up;
+      await tick();
+      expect(c.attachments.value).toEqual([shot]);
+      expect(c.uploads.value).toEqual([]);
+      await wait(draftDelay);
+      expect(puts(url).at(-1)).toEqual({ source: '', reply_to: null, attachments: [shot.hash] });
+    });
+
+    it('an answer that would be the eleventh file is refused on its chip', async () => {
+      const c = composerFor(T);
+      const up = attach(c, `thread=${T}`, [new File(['x'], 'z.png', { type: 'image/png' })]);
+      // Ten arrive while the upload is out, however they came.
+      c.attachments.value = ten;
+      answer!();
+      await up;
+      expect(c.attachments.value).toEqual(ten);
+      expect(c.uploads.value).toMatchObject([{ name: 'z.png', failure: 'A post takes at most 10 files.' }]);
+    });
+  });
+
+  it('a post sends the hashes and drops the files with the draft', async () => {
+    await loadReplyDraft(T);
+    const c = composerFor(T);
+    c.source.value = 'posting files';
+    c.attachments.value = [known[0]];
+    await postReply(T);
+    const post = calls.find((x) => x.url === `/api/v1/threads/${T}/posts`)!;
+    expect(post.body).toEqual({ source: 'posting files', attachments: [known[0].hash] });
+    expect(c.attachments.value).toEqual([]);
+    c.source.value = 'next';
+    c.attachments.value = [known[1]];
+    discardReply(T);
+    expect(c.attachments.value).toEqual([]);
   });
 });

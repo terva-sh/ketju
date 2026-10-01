@@ -138,7 +138,8 @@ export function stubServer(routes: StubServer['routes']): StubServer {
   const s: StubServer = { routes, sent: [] };
   vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
     const method = init.method ?? 'GET';
-    const body = init.body ? JSON.parse(init.body as string) : undefined;
+    // A multipart body (an upload) is recorded as it was sent.
+    const body = init.body instanceof FormData ? init.body : init.body ? JSON.parse(init.body as string) : undefined;
     s.sent.push({ method, url, body });
     const handler = s.routes[`${method} ${url}`];
     if (!handler) return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/problem+json' } });

@@ -126,6 +126,38 @@ describe('the new-thread screen', () => {
     expect(screenOf(root)).toBe('thread');
   });
 
+  // TKT-01M3V73J8K.
+  it('a new thread sends its attachments with ?forum=', async () => {
+    const shot = { hash: 'c'.repeat(64), size: 2048, mime: 'image/png', original_name: 'shot.png', width: 64, height: 48 };
+    const s = serve('general', { 'POST /api/v1/blobs?forum=general': () => ({ status: 201, body: shot }) });
+    const root = await renderAt(general);
+    await write(root, 'Photos', 'From the build.');
+    const input = root.querySelector<HTMLInputElement>('.composer [data-attach-input]')!;
+    Object.defineProperty(input, 'files', { value: [new File(['x'], 'shot.png', { type: 'image/png' })], configurable: true });
+    await act(() => void input.dispatchEvent(new Event('change', { bubbles: true })));
+    await wait(5);
+    const upload = sent(s, 'POST', '/api/v1/blobs?forum=general');
+    expect(upload.map((r) => (r.body as FormData).get('file'))).toMatchObject([{ name: 'shot.png' }]);
+    expect(root.querySelector(`[data-file="${shot.hash}"]`)?.textContent).toBe('shot.png2.0 KB×');
+    await click(post(root));
+    await wait(20);
+    expect(sent(s, 'POST', '/api/v1/forums/general/threads').map((r) => r.body)).toEqual([
+      { title: 'Photos', source: 'From the build.', attachments: [shot.hash] },
+    ]);
+  });
+
+  it('offers Attach only in a forum the tree says the viewer may upload to', async () => {
+    serve('general');
+    let root = await renderAt(general);
+    expect(root.querySelector('.composer [data-attach]')).not.toBeNull();
+    await unmount();
+    // general-events: a forum the golden tree says no to.
+    serve('general-events');
+    root = await renderAt('/f/general-events/new');
+    expect(screenOf(root)).toBe('new-thread');
+    expect(root.querySelector('.composer [data-attach]')).toBeNull();
+  });
+
   it('loads the draft, title and body, into the empty form', async () => {
     serve('general', {
       'GET /api/v1/forums/general/draft': () => ({ status: 200, body: { forum: 'general', title: 'Saved title', source: 'Saved body', updated_at: 0, revision: 4 } }),

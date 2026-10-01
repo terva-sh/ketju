@@ -32,12 +32,14 @@ export function ComposerSheet({
   postOf,
   onPosted,
   slow,
+  canUpload,
 }: {
   thread: string;
   authorOf: (ordinal: number) => string | undefined;
   postOf: (ordinal: number) => Post | undefined;
   onPosted: (res: CreatedPost) => void;
   slow?: Slow;
+  canUpload?: boolean;
 }) {
   const c = composerFor(thread);
   const root = useRef<HTMLDivElement>(null);
@@ -99,7 +101,7 @@ export function ComposerSheet({
           <div class="post-body" dangerouslySetInnerHTML={{ __html: answered.html }} />
         </figure>
       )}
-      <Composer thread={thread} authorOf={authorOf} onPosted={onPosted} slow={slow} sheet />
+      <Composer thread={thread} authorOf={authorOf} onPosted={onPosted} slow={slow} canUpload={canUpload} sheet />
     </div>
   );
 }

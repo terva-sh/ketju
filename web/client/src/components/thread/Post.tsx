@@ -4,6 +4,7 @@ import { problemMessage } from '../../api/problem';
 import { bodyText, selectionIn } from '../../composer/quote';
 import { isPhone } from '../../state/layout';
 import { viewer } from '../../state/viewer';
+import { Attachments } from './Attachments';
 import { Avatar } from './Avatar';
 import { isOwn } from './postControls';
 import { DeleteConfirm, PostEditor, Restore, useOwn, type Own } from './OwnControls';
@@ -298,28 +299,4 @@ export function Edited({ post }: { post: Pick<PostDTO, 'edited_at' | 'edited_by_
       {post.edited_by_moderator ? '(edited by a moderator)' : '(edited)'}
     </span>
   );
-}
-
-// Attachments lists a post's files, each a link to its blob. The reply
-// expander's copies show them too.
-export function Attachments({ post }: { post: PostDTO }) {
-  if (post.attachments.length === 0) return null;
-  return (
-    <ul class="attachments">
-      {post.attachments.map((a) => (
-        <li key={a.hash}>
-          <a href={`/blobs/${encodeURIComponent(a.hash)}`} download={a.original_name}>
-            {a.original_name}
-          </a>{' '}
-          <span class="size">{formatSize(a.size)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-export function formatSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }

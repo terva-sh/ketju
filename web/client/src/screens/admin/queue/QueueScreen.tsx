@@ -4,7 +4,7 @@ import type { AdminApplication, Post, Queue, QueueFlag, QueueItem, QueueResoluti
 import { isAbort, isProblem } from '../../../api/problem';
 import { useResource } from '../../../api/resource';
 import { ErrorPanel } from '../../../components/ErrorPanel';
-import { Attachments } from '../../../components/thread/Post';
+import { Attachments } from '../../../components/thread/Attachments';
 import { removedMark } from '../../../components/thread/removal';
 import { refreshViewer, viewer } from '../../../state/viewer';
 import { when } from '../../apply/when';

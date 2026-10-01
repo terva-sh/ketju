@@ -4,6 +4,7 @@ import { asProblem, problemMessage } from '../api/problem';
 import { Icon } from '../components/Icon';
 import { composerFor, discardReply, holdAtLeast, postReply, type Slow } from '../state/composer';
 import { draftNote } from '../state/drafts';
+import { uploading } from '../state/files';
 import { ComposerBody, DraftNote } from './ComposerBody';
 
 // The delays live with the body they time, and are exported here too, where
@@ -28,6 +29,9 @@ export { mentionDelay, previewDelay } from './ComposerBody';
 // comes back; one that runs fast is refused, and the Retry-After starts the
 // wait again.
 //
+// canUpload is the page's can_upload: with it the toolbar offers Attach,
+// and the files go with the reply (TKT-01M3V73J8K).
+//
 // In the phone's sheet (ComposerSheet, sheet set) it is the same composer
 // laid out as a column that fills the sheet, toolbar last, and it takes
 // focus when it opens, since the sheet opens because someone asked to write.
@@ -37,12 +41,14 @@ export function Composer({
   onPosted,
   slow,
   sheet = false,
+  canUpload = false,
 }: {
   thread: string;
   authorOf: (ordinal: number) => string | undefined;
   onPosted: (res: CreatedPost) => void;
   slow?: Slow;
   sheet?: boolean;
+  canUpload?: boolean;
 }) {
   const c = composerFor(thread);
   const nextPostAt = slow?.nextPostAt ?? null;
@@ -65,6 +71,7 @@ export function Composer({
       placeholder="Write a reply. Markdown works."
       sheet={sheet}
       focus={sheet}
+      upload={canUpload ? `thread=${encodeURIComponent(thread)}` : undefined}
       head={
         <>
           <h2>Reply</h2>
@@ -104,7 +111,7 @@ export function Composer({
         <footer class="composer-foot">
           <span>Markdown supported</span>
           <DraftNote draft={draft} note={note} />
-          <button type="button" class="discard" disabled={posting || (!source && replyTo === null)} onClick={() => discardReply(thread)}>
+          <button type="button" class="discard" disabled={posting || (!source && replyTo === null && !c.attachments.value.length)} onClick={() => discardReply(thread)}>
             Discard
           </button>
           <PostButton thread={thread} onPosted={onPosted} slow={slow} />
@@ -115,9 +122,9 @@ export function Composer({
 }
 
 // PostButton posts thread's composer. It is off while there is nothing to
-// post, while a post is in flight, and while slow mode holds the viewer,
-// when it points to the countdown. postReply refuses a second post while
-// one is in flight, so a double click posts once.
+// post, while a post is in flight or a file is uploading, and while slow
+// mode holds the viewer, when it points to the countdown. postReply refuses
+// a second post while one is in flight, so a double click posts once.
 export function PostButton({
   thread,
   onPosted,
@@ -137,7 +144,7 @@ export function PostButton({
       type="button"
       class="post-reply"
       data-post-reply
-      disabled={posting || held || !c.source.value.trim()}
+      disabled={posting || held || !c.source.value.trim() || uploading(c) > 0}
       aria-busy={posting}
       aria-describedby={held ? `slow-wait-${thread}` : undefined}
       onClick={() => void postReply(thread, slow).then((res) => res && onPosted(res))}
@@ -162,13 +169,19 @@ export function postFailure(err: unknown): string {
         ? `This thread is in slow mode. You can post again in ${p.retryAfter} second${p.retryAfter === 1 ? '' : 's'}.`
         : 'You are posting too quickly. Wait a moment and try again.';
     case 'validation-failed':
-      return 'The reply was not accepted: it may be empty, or answer a post that is not in this thread.';
+      return p.fieldErrors.attachments
+        ? attachRefused
+        : 'The reply was not accepted: it may be empty, or answer a post that is not in this thread.';
     case 'payload-too-large':
       return 'The reply is longer than the limit allows.';
     default:
       return problemMessage(err).text;
   }
 }
+
+// attachRefused is a post refused for one of its files (docs/07: not_yours,
+// blocked, unknown or too_many), which the writer can remove and post again.
+export const attachRefused = 'One of the attached files can no longer be attached. Remove it and try again.';
 
 // slowModeText says a slow mode of seconds, in minutes or hours when they
 // divide it evenly: "every 30 seconds", "every 5 minutes", "every hour".

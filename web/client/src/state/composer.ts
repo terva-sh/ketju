@@ -4,6 +4,7 @@ import type { CreatedPost, Draft, Millis } from '../api/dto';
 import { asProblem, ProblemError } from '../api/problem';
 import { insertBlock, quoteMarkdown } from '../composer/quote';
 import { drop, load, resetDrafts, watch, type DraftKey } from './drafts';
+import { clearFiles, filesIn, hashes, newFiles, uploading, type Files } from './files';
 import { isPhone } from './layout';
 import { viewer } from './viewer';
 
@@ -13,7 +14,8 @@ import { viewer } from './viewer';
 // (TKT-01M29CGBVN) shares it. It lives for the session, and is autosaved to
 // the viewer's draft for the thread (state/drafts.ts, TKT-01M3NS1931), which
 // loadReplyDraft brings back on another visit or device.
-export interface Composer {
+// Its files (Files) are the attachments that go with the reply.
+export interface Composer extends Files {
   source: Signal<string>;
   // replyTo is the post this reply answers, shown as the chip; null for a
   // reply to the thread (docs/06: the bottom composer sets none).
@@ -86,11 +88,11 @@ export function composerFor(thread: string): Composer {
   let c = composers.get(thread);
   if (!c) {
     const n: Composer = { source: signal(''), replyTo: signal(null), caret: signal(0), summoned: signal(0), open: signal(false),
-      posting: signal(false), failure: signal(null), slowUntil: signal(null), left: signal(0) };
+      posting: signal(false), failure: signal(null), slowUntil: signal(null), left: signal(0), ...newFiles() };
     composers.set(thread, n);
     // Disarmed until loadReplyDraft answers, so a thread the reader may not
     // reply in, which is never loaded, never saves.
-    watch(draftKey(thread), () => ({ source: n.source.value, reply_to: n.replyTo.value }));
+    watch(draftKey(thread), () => ({ source: n.source.value, reply_to: n.replyTo.value, attachments: n.attachments.value }));
     c = n;
   }
   return c;
@@ -99,20 +101,28 @@ export function composerFor(thread: string): Composer {
 // loadReplyDraft brings the viewer's draft for thread into its composer, once
 // per thread per session: the thread page asks when the reader may reply,
 // so the phone's reply bar shows it before the sheet opens. A draft fills
-// only an empty composer with no reply target and no post in flight; what
-// the reader typed meanwhile wins, and is saved over it.
+// only an empty composer with no reply target, no files, no upload and no
+// post in flight; what the reader did meanwhile wins, and is saved over it
+// (Terva review 1782: a draft's files filled in under an upload could make
+// an eleventh).
 export function loadReplyDraft(thread: string): Promise<void> {
   const c = composerFor(thread);
   return load<Draft>(
     draftKey(thread),
-    (d) => ({ source: typeof d.source === 'string' ? d.source : '', reply_to: typeof d.reply_to === 'number' ? d.reply_to : null }),
+    (d) => ({
+      source: typeof d.source === 'string' ? d.source : '',
+      reply_to: typeof d.reply_to === 'number' ? d.reply_to : null,
+      attachments: filesIn(d.attachments),
+    }),
     (s) => {
-      if (c.posting.value || c.replyTo.value !== null || c.source.value.trim()) return false;
+      if (c.posting.value || c.replyTo.value !== null || c.source.value.trim() || c.attachments.value.length || c.uploads.value.length)
+        return false;
       // A local copy is read back from storage, so its fields are checked.
       const source = typeof s.source === 'string' ? s.source : '';
       batch(() => {
         c.source.value = source;
         c.replyTo.value = typeof s.reply_to === 'number' ? s.reply_to : null;
+        c.attachments.value = filesIn(s.attachments);
         c.caret.value = source.length;
       });
       return true;
@@ -199,7 +209,9 @@ export function replyToThread(thread: string) {
 // One post at a time: while one is in flight another asks for nothing, so a
 // double click posts once. The textarea is read-only meanwhile (Composer),
 // so what was sent is what is cleared. A refusal keeps the source and the
-// chip and records why, for the composer to say.
+// chip and records why, for the composer to say. Nothing is posted while a
+// file is still uploading, so a post never leaves without one the writer
+// chose.
 //
 // It lives here rather than in the component because the sheet may close,
 // and the composer unmount, while the post is in flight; the answer still
@@ -222,22 +234,23 @@ export async function postReply(thread: string, slow?: Slow): Promise<CreatedPos
   const c = composerFor(thread);
   const who = owner;
   const source = c.source.value;
-  if (c.posting.value || !source.trim()) return null;
+  if (c.posting.value || !source.trim() || uploading(c)) return null;
   const replyTo = c.replyTo.value;
   c.posting.value = true;
   c.failure.value = null;
   try {
-    const res = await apiSend<CreatedPost>(
-      'POST',
-      `/api/v1/threads/${encodeURIComponent(thread)}/posts`,
-      replyTo === null ? { source } : { source, reply_to: replyTo },
-    );
+    const res = await apiSend<CreatedPost>('POST', `/api/v1/threads/${encodeURIComponent(thread)}/posts`, {
+      source,
+      ...(replyTo === null ? {} : { reply_to: replyTo }),
+      ...hashes(c.attachments.value),
+    });
     if (!current(thread, c, who)) return null;
     // The draft goes before the fields are cleared, so clearing them is not
     // a change to save (state/drafts.ts).
     drop(draftKey(thread));
     c.source.value = '';
     c.replyTo.value = null;
+    clearFiles(c);
     c.caret.value = 0;
     c.open.value = false;
     if (slow && slow.seconds > 0 && !slow.exempt) extend(c, Math.min(res.post.created_at, Date.now()) + slow.seconds * 1000);
@@ -266,14 +279,15 @@ function current(thread: string, c: Composer, who: string | null): boolean {
   return (viewer.peek().user?.handle ?? '') === who && owner === who && composers.get(thread) === c;
 }
 
-// discardReply empties thread's composer: the text, the chip and any
-// refusal, and deletes the draft. The wait stays: it is the viewer's, not
+// discardReply empties thread's composer: the text, the chip, the files and
+// any refusal, and deletes the draft. The wait stays: it is the viewer's, not
 // the draft's.
 export function discardReply(thread: string) {
   const c = composerFor(thread);
   drop(draftKey(thread));
   c.source.value = '';
   c.replyTo.value = null;
+  clearFiles(c);
   c.caret.value = 0;
   c.failure.value = null;
 }

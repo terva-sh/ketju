@@ -1,6 +1,8 @@
 import { effect, signal, untracked, type Signal } from '@preact/signals';
 import { apiGetOptional, apiSend } from '../api/client';
+import type { Attachment } from '../api/dto';
 import { isProblem, ProblemError } from '../api/problem';
+import { hashes } from './files';
 import { viewer } from './viewer';
 
 // Draft autosave (docs/06 "Composer", docs/07 "Drafts", TKT-01M3NS1931): one
@@ -30,8 +32,22 @@ import { viewer } from './viewer';
 
 export type DraftKey = { kind: 'reply'; thread: string } | { kind: 'new'; forum: string };
 
-// Snapshot is a draft as its PUT sends it: {source, reply_to} for a reply.
-export type Snapshot = Record<string, string | number | null>;
+// Snapshot is a draft as the composer holds it: {source, reply_to,
+// attachments} for a reply. The PUT sends attachments as their hashes
+// (wire); the snapshot keeps the whole Attachment, so a copy restored from
+// this browser can still name its files.
+export type Snapshot = Record<string, string | number | null | Attachment[]>;
+
+// wire is s as its PUT sends it.
+const wire = (s: Snapshot) => {
+  const { attachments, ...rest } = s;
+  return { ...rest, ...hashes(Array.isArray(attachments) ? attachments : []) };
+};
+
+// fitsKeepalive is whether s's PUT body is under the browser's keepalive
+// bound: the body sent, with hashes, not the snapshot, whose attachment
+// names and sizes are never sent (Terva review 1783).
+const fitsKeepalive = (s: Snapshot) => new TextEncoder().encode(JSON.stringify(wire(s))).length < keepaliveLimit;
 
 export type DraftStatus = 'idle' | 'saving' | 'saved' | 'failed' | 'off';
 
@@ -116,10 +132,12 @@ const urlOf = (k: DraftKey) =>
 const copyKey = (e: Entry) => `${copyPrefix}${e.owner}.${e.id}`;
 
 // isEmpty is a snapshot with nothing typed and nothing chosen.
-export const isEmpty = (s: Snapshot) => Object.values(s).every((v) => v === null || (typeof v === 'string' && !v.trim()));
+export const isEmpty = (s: Snapshot) =>
+  Object.values(s).every((v) => v === null || (Array.isArray(v) ? !v.length : typeof v === 'string' && !v.trim()));
 
 // blank is s with everything cleared, what the composer holds after a post.
-const blank = (s: Snapshot): Snapshot => Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === 'string' ? '' : null]));
+const blank = (s: Snapshot): Snapshot =>
+  Object.fromEntries(Object.entries(s).map(([k, v]) => [k, typeof v === 'string' ? '' : Array.isArray(v) ? [] : null]));
 
 // revisionOf reads Draft-Revision, which every draft 204 carries.
 function revisionOf(h: Headers): number | null {
@@ -227,8 +245,8 @@ function start(e: Entry, r: Req) {
   e.current = r;
   e.status.value = 'saving';
   let rev: number | null = null;
-  const keepalive = new TextEncoder().encode(r.json).length < keepaliveLimit;
-  apiSend<{ revision?: unknown; updated_at?: unknown } | undefined>(r.del ? 'DELETE' : 'PUT', e.url, r.del ? undefined : r.body, {
+  const keepalive = r.del || fitsKeepalive(r.body);
+  apiSend<{ revision?: unknown; updated_at?: unknown } | undefined>(r.del ? 'DELETE' : 'PUT', e.url, r.del ? undefined : wire(r.body), {
     keepalive,
     onHeaders: (h) => (rev = revisionOf(h)),
   }).then(
@@ -451,7 +469,7 @@ function unload() {
       // nothing counts as seen saved and the draft is sent again.
       if (!e.current && !e.unsure && j === e.confirmed) continue;
       e.sent = e.current ? e.current.json : e.unsure ? null : e.confirmed;
-      if (!e.current && (empty || new TextEncoder().encode(j).length < keepaliveLimit)) flush(e);
+      if (!e.current && (empty || fitsKeepalive(snap))) flush(e);
     }
     if (!e.owner || (empty && !e.current && !e.held)) continue;
     const c: Copy = {

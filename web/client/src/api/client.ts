@@ -144,6 +144,17 @@ export async function apiSend<T>(
   return json<T>(r);
 }
 
+// apiUpload sends file as the one multipart part named file, which is what
+// POST /blobs takes (docs/07 "Attachments"), and returns the JSON answer.
+// It sets no Content-Type, so the browser writes the multipart boundary.
+export async function apiUpload<T>(url: string, file: File): Promise<T> {
+  const body = new FormData();
+  body.append('file', file);
+  const r = await request(url, { method: 'POST', headers: { Accept: 'application/json' }, body });
+  if (!r.ok) throw await toProblem(r);
+  return json<T>(r);
+}
+
 async function request(url: string, init: RequestInit): Promise<Response> {
   try {
     return await fetch(url, { credentials: 'same-origin', ...init });

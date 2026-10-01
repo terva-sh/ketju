@@ -5,9 +5,11 @@ import type { Forum, ForumTree, ThreadList } from '../api/dto';
 import { asProblem, problemMessage, type ProblemError } from '../api/problem';
 import { useResource } from '../api/resource';
 import { useVisualViewport } from '../composer/ComposerSheet';
+import { attachRefused } from '../composer/Composer';
 import { ComposerBody, DraftNote } from '../composer/ComposerBody';
 import { threadHref } from '../components/ThreadRow';
 import { meHref } from '../shell/nav';
+import { uploading } from '../state/files';
 import { isPhone } from '../state/layout';
 import {
   canDiscard,
@@ -42,6 +44,10 @@ const maxTitle = 200;
 // (state/newThread.ts over state/drafts.ts), loaded when the screen opens,
 // and deleted once the thread is created, which then opens.
 //
+// Attach is offered where the forum tree says the viewer may upload to a new
+// thread there (can_upload), and the files go with the first post
+// (TKT-01M3V73J8K).
+//
 // The API decides who may start a thread here; the screen only warns. An
 // archived forum, when the forum tree says so, gets a notice before anything
 // is typed, and Post stays on, because an admin may start a thread there
@@ -75,7 +81,7 @@ export function NewThreadScreen() {
 
   const posting = n?.posting.value ?? false;
   const blocked = !!n && refusedHere(n);
-  const ready = !!n && !!n.title.value.trim() && !!n.source.value.trim();
+  const ready = !!n && !!n.title.value.trim() && !!n.source.value.trim() && !uploading(n);
   const canPost = ready && !posting && !blocked;
   const post = () => {
     void createThread(slug).then((res) => {
@@ -148,6 +154,7 @@ export function NewThreadScreen() {
         placeholder="Write the first post. Markdown works."
         sheet={phone}
         invalid={'source' in fields}
+        upload={forum?.can_upload ? `forum=${encodeURIComponent(slug)}` : undefined}
         head={phone && note ? <DraftNote draft={draft} note={note} /> : undefined}
         notice={
           <>
@@ -223,7 +230,9 @@ export function createFailure(err: unknown): string {
     case 'conflict':
       return 'This forum is archived, so your thread was not posted.';
     case 'validation-failed':
-      return 'The title must be 1 to 200 characters with no control characters, and the post cannot be empty.';
+      return p.fieldErrors.attachments
+        ? attachRefused
+        : 'The title must be 1 to 200 characters with no control characters, and the post cannot be empty.';
     case 'payload-too-large':
       return 'The post is longer than the limit allows.';
     case 'rate-limited':

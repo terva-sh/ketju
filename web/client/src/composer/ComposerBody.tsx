@@ -7,6 +7,8 @@ import { isAbort, problemMessage } from '../api/problem';
 import { Icon, type IconName } from '../components/Icon';
 import { PostTime } from '../components/thread/PostTime';
 import { draftSavedAt, type DraftKey } from '../state/drafts';
+import type { Files } from '../state/files';
+import { AttachButton, FileChips } from './Attach';
 import { applyEdit, type EditKind } from './edit';
 import { insertMention, mentionAt, type MentionAt } from './mention';
 import './composer.css';
@@ -42,8 +44,10 @@ export function DraftNote({ draft, note }: { draft: DraftKey; note: string }) {
 }
 
 // ComposerFields is what the composer body edits: a reply's composer
-// (state/composer.ts) and a new thread's (state/newThread.ts) both have them.
-export interface ComposerFields {
+// (state/composer.ts) and a new thread's (state/newThread.ts) both have them,
+// and their files too. An author's editor has no files, since an edit cannot
+// change them (docs/03).
+export interface ComposerFields extends Partial<Files> {
   source: Signal<string>;
   // caret is where the textarea's caret last was, where a quote goes.
   caret: Signal<number>;
@@ -70,6 +74,11 @@ export interface ComposerFields {
 // toolbar last. focus puts the caret in the textarea when it mounts, which
 // the reply sheet asks for, since it opens because someone asked to write.
 //
+// upload is where Attach uploads to, thread=<id> or forum=<slug>, given
+// only where the viewer may upload (can_upload). Without it there is no
+// Attach, and files already attached, from a draft saved where the viewer
+// could upload, are still shown and can be removed.
+//
 // editing names the post an author's editor is open on (PostEditor,
 // TKT-01M3PTT97X). The editor can be on the page beside the reply composer,
 // so its tabs and panels take ids of their own, and it is marked
@@ -88,6 +97,7 @@ export function ComposerBody({
   notice,
   foot,
   editing,
+  upload,
 }: {
   state: ComposerFields;
   thread?: string;
@@ -103,9 +113,11 @@ export function ComposerBody({
   notice?: ComponentChildren;
   foot?: ComponentChildren;
   editing?: number;
+  upload?: string;
 }) {
   const source = c.source.value;
   const posting = c.posting.value;
+  const files = c.attachments && c.uploads ? { attachments: c.attachments, uploads: c.uploads } : undefined;
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const root = useRef<HTMLElement>(null);
   const area = useRef<HTMLTextAreaElement>(null);
@@ -198,6 +210,7 @@ export function ComposerBody({
               <Icon name={icon} />
             </button>
           ))}
+          {upload && files && editing === undefined && <AttachButton files={files} query={upload} posting={posting} />}
         </div>
       )}
       <div class="composer-body" id={`${ids}-panel-write`} role="tabpanel" aria-labelledby={`${ids}-tab-write`} hidden={tab !== 'write'}>
@@ -273,6 +286,7 @@ export function ComposerBody({
           <div class="post-body" data-preview dangerouslySetInnerHTML={{ __html: preview.html }} />
         )}
       </div>
+      {files && <FileChips files={files} posting={posting} />}
       {foot}
     </section>
   );

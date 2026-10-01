@@ -177,7 +177,7 @@ describe('acting on a flagged post', () => {
     const it = item(root, hidden)!;
     const file = it.querySelector<HTMLAnchorElement>('.attachments a')!;
     expect(file.getAttribute('href')).toBe('/blobs/abc123');
-    expect(file.textContent).toBe('receipt.png');
+    expect(file.querySelector('.attachment-name')?.textContent).toBe('receipt.png');
     expect(it.textContent).not.toContain('This post has no words to show.');
   });
 

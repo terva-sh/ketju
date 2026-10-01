@@ -4,6 +4,7 @@ import type { CreatedThread, ForumDraft } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { checkOwner } from './composer';
 import { draftNote, draftStatus, drop, load, resetDrafts, watch, type DraftKey } from './drafts';
+import { clearFiles, filesIn, hashes, newFiles, uploading, type Files } from './files';
 import { viewer } from './viewer';
 
 // The new-thread composer's state, one per forum (docs/06 "Composer",
@@ -12,7 +13,8 @@ import { viewer } from './viewer';
 // it is autosaved as the viewer's new-thread draft for the forum, title
 // included (state/drafts.ts, docs/07 "Drafts"), which loadNewThreadDraft
 // brings back on another visit or device.
-export interface NewThread {
+// Its files (Files) are the attachments that go with the first post.
+export interface NewThread extends Files {
   title: Signal<string>;
   source: Signal<string>;
   caret: Signal<number>;
@@ -58,11 +60,12 @@ export function newThreadFor(forum: string): NewThread {
       failure: signal(null),
       loaded: signal(false),
       loading: false,
+      ...newFiles(),
     };
     states.set(forum, s);
     // Disarmed until loadNewThreadDraft answers, so an empty form never
     // deletes a draft before it has loaded, and a failed load never does.
-    watch(draftKey(forum), () => ({ title: s.title.value, source: s.source.value }));
+    watch(draftKey(forum), () => ({ title: s.title.value, source: s.source.value, attachments: s.attachments.value }));
     n = s;
   }
   return n;
@@ -70,8 +73,8 @@ export function newThreadFor(forum: string): NewThread {
 
 // loadNewThreadDraft brings the viewer's draft for forum into its composer,
 // once per forum per session, title and body together. A draft fills only
-// an empty form with nothing being posted: what the reader typed meanwhile
-// wins, and is saved over it. Whether this browser's own copy wins instead
+// an empty form, with no files, no upload and nothing being posted: what the
+// reader did meanwhile wins, and is saved over it (Terva review 1782). Whether this browser's own copy wins instead
 // is decided by the server's revision (state/drafts.ts restoreLocal).
 export async function loadNewThreadDraft(forum: string): Promise<void> {
   const n = newThreadFor(forum);
@@ -79,14 +82,20 @@ export async function loadNewThreadDraft(forum: string): Promise<void> {
   n.loading = true;
   await load<ForumDraft>(
     draftKey(forum),
-    (d) => ({ title: typeof d.title === 'string' ? d.title : '', source: typeof d.source === 'string' ? d.source : '' }),
+    (d) => ({
+      title: typeof d.title === 'string' ? d.title : '',
+      source: typeof d.source === 'string' ? d.source : '',
+      attachments: filesIn(d.attachments),
+    }),
     (s) => {
-      if (n.posting.value || n.title.value.trim() || n.source.value.trim()) return false;
+      if (n.posting.value || n.title.value.trim() || n.source.value.trim() || n.attachments.value.length || n.uploads.value.length)
+        return false;
       // A local copy is read back from storage, so its fields are checked.
       const source = typeof s.source === 'string' ? s.source : '';
       batch(() => {
         n.title.value = typeof s.title === 'string' ? s.title : '';
         n.source.value = source;
+        n.attachments.value = filesIn(s.attachments);
         n.caret.value = source.length;
       });
       return true;
@@ -100,7 +109,8 @@ export async function loadNewThreadDraft(forum: string): Promise<void> {
 // created.
 //
 // One at a time: while one is in flight another asks for nothing, so a
-// double click creates one thread. The fields are read-only meanwhile, so
+// double click creates one thread, and nothing is sent while a file is still
+// uploading. The fields are read-only meanwhile, so
 // what was sent is what is cleared. The draft is dropped before the fields
 // are cleared, so clearing them is not a change to save, and drop removes
 // this browser's copy with the server's draft. A refusal keeps the text and
@@ -114,16 +124,21 @@ export async function createThread(forum: string): Promise<CreatedThread | null>
   const who = owner;
   const title = n.title.value;
   const source = n.source.value;
-  if (n.posting.value || !title.trim() || !source.trim()) return null;
+  if (n.posting.value || !title.trim() || !source.trim() || uploading(n)) return null;
   n.posting.value = true;
   n.failure.value = null;
   try {
-    const res = await apiSend<CreatedThread>('POST', `/api/v1/forums/${encodeURIComponent(forum)}/threads`, { title, source });
+    const res = await apiSend<CreatedThread>('POST', `/api/v1/forums/${encodeURIComponent(forum)}/threads`, {
+      title,
+      source,
+      ...hashes(n.attachments.value),
+    });
     if (!current(forum, n, who)) return null;
     drop(draftKey(forum));
     batch(() => {
       n.title.value = '';
       n.source.value = '';
+      clearFiles(n);
       n.caret.value = 0;
     });
     return res;
@@ -144,7 +159,7 @@ function current(forum: string, n: NewThread, who: string | null): boolean {
 // canDiscard is whether Discard may act: the draft has loaded, nothing is
 // being posted, and there is something to discard.
 export function canDiscard(n: NewThread): boolean {
-  return n.loaded.value && !n.posting.value && !!(n.title.value || n.source.value);
+  return n.loaded.value && !n.posting.value && !!(n.title.value || n.source.value || n.attachments.value.length);
 }
 
 // discardNewThread empties forum's composer, and any refusal, and deletes
@@ -159,6 +174,7 @@ export function discardNewThread(forum: string) {
   batch(() => {
     n.title.value = '';
     n.source.value = '';
+    clearFiles(n);
     n.caret.value = 0;
     n.failure.value = null;
   });

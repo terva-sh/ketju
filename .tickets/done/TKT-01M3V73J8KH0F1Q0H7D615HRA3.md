@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V73J8KH0F1Q0H7D615HRA3
 title: Attach files in the composer and show them on posts
 type: task
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -20,16 +20,18 @@ dependencies:
   - TKT-01M29CYS9W8GAWNQVHFH7HZ7AR
   - TKT-01M3V73DP6TZ1BDQVT7ATX0EC5
 blocks_on: none
-references: []
+references:
+  - ref: pr:325
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T07:50:47Z
-updated_at: 2026-10-01T07:59:27Z
+updated_at: 2026-10-01T15:48:03Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-live
+  id: agent:claude-code/phase3-v73j8k
   name: ""
 extensions: {}
 ---
@@ -49,12 +51,12 @@ Filed by the Phase 3 grooming of live updates and attachments (TKT-01M3V3BVPY).
 
 ## Acceptance criteria
 
-- [ ] The composer offers Attach only when can_upload is true and never while editing, uploads each chosen file, shows it as a removable chip, and sends its hash with the reply or new thread (Composer.test.tsx, NewThreadScreen.test.tsx)
-- [ ] A refused upload says why on its chip for type_not_allowed, blocked, 413, forbidden and 429, and ten attachments disable Attach (Composer.test.tsx)
-- [ ] Attachments survive a draft round trip, for replies and new threads (drafts.test.ts)
-- [ ] Each attachment renders as the mockups' card: thumbnail or icon, name, size and an image's dimensions on desktop; a file card downloads under its name; a tombstone shows none (Attachments.test.tsx)
-- [ ] e2e attachments.spec.ts passes at 390 and 1440 px with one axe scan per test and no violations, including a stranger's 404 for a members-only blob
-- [ ] The dist committed from go generate ./internal/web/spa keeps the reader within the 70000 B gzip budget, and the PR records the change from 60465 B
+- [x] The composer offers Attach only when can_upload is true and never while editing, uploads each chosen file, shows it as a removable chip, and sends its hash with the reply or new thread (Composer.test.tsx, NewThreadScreen.test.tsx)
+- [x] A refused upload says why on its chip for type_not_allowed, blocked, 413, forbidden and 429, and ten attachments disable Attach (Composer.test.tsx)
+- [x] Attachments survive a draft round trip, for replies and new threads (drafts.test.ts)
+- [x] Each attachment renders as the mockups' card: thumbnail or icon, name, size and an image's dimensions on desktop; a file card downloads under its name; a tombstone shows none (Attachments.test.tsx)
+- [x] e2e attachments.spec.ts passes at 390 and 1440 px with one axe scan per test and no violations, including a stranger's 404 for a members-only blob
+- [x] The dist committed from go generate ./internal/web/spa keeps the reader within the 70000 B gzip budget, and the PR records the change from 60465 B
 
 ## Implementation plan
 
@@ -151,3 +153,55 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48, togeth
 - Adding or removing attachments when editing a post: impossible without a new `Edit` field, which docs/14 class 2 reserves for the maintainer.
 - Drag and drop, and pasting images into the composer. Neither is in docs/06, and both can come later with no ticket now.
 - Upload progress bars: `fetch` has no upload progress, and a spinner per chip is enough for a 10 MB cap.
+
+## Notes
+
+**agent:claude-code/phase3-v73j8k** at 2026-10-01T15:35:15Z
+
+Implementation notes (2026-10-01), against main 1dbf9b0. Where the build differs from the plan's wording, and why:
+
+- **Attachments.tsx.** `Attachments` and `formatSize` already existed in `Post.tsx` as a plain list. They moved to `components/thread/Attachments.tsx` as the card, and `ReplyExpander` and the admin `QueueScreen` import them from there. The card's text is "name size · W×H", so the link's accessible name is the file's name and size. Dimensions are left out on a phone through `isPhone`.
+- **Snapshot keeps whole attachments.** A draft's snapshot (`state/drafts.ts`) holds `Attachment` objects, and `wire` turns them into hashes for the PUT, leaving the field out when there are none. The alternative, keeping hashes only, lost: a copy restored from localStorage would have hashes with no names, and the composer could not draw its chips.
+- **Post waits for uploads in flight.** The plan does not say this. Without it, a post sent while an upload is out would leave without that file, or `postReply`'s clear would drop the file's answer. A refused upload does not hold Post.
+- **An eleventh file** is refused on its own chip in the client, "A post takes at most 10 files.", and nothing is sent to the server for it.
+- **429 wording.** `postFailure`'s Retry-After text is slow mode's ("This thread is in slow mode..."), which is wrong for an upload. The chip says "You are uploading too quickly. You can try again in N seconds." instead.
+- **A post refused for a file** (`validation-failed` with field `attachments`) now says "One of the attached files can no longer be attached. Remove it and try again." in both the reply composer and the new-thread screen.
+- **No spinner.** An upload's chip says "Uploading…" and is `aria-busy`. Nothing in the client animates yet (base.css), and text says the same thing to a screen reader.
+- **Contrast.** The card's size line and the chip's size use `--ink2`, not the mockup's `--muted`, which axe measured below 4.5:1 on `--surface2`.
+- **e2e seed.** The seed already had a thread in `garden`, so no thread was added. The plan's "bob" is `carol`, the seed's second member. The replies go in the `introductions` and `garden` side threads, not the main thread, whose post count other specs read. The members-only test uploads the fixture with a per-run tail after IEND. Otherwise its hash would be the public post's from the first test, and the blob would be served for that post. No Go test or e2e spec counts the seed's permission rows.
+- **Bundle.** Reader 62035 B on main 1dbf9b0, 63829 B with this change: +1794 B, 91.2% of 70000 B.
+
+**agent:claude-code/phase3-v73j8k** at 2026-10-01T15:44:45Z
+
+Terva review 1782 (run edd599ca-4c27-4f46-9f19-bfa0e2eb31f8, Actions run 2158), head ef18c90, base 1841d31. One finding.
+
+- **medium: "Account for draft restoration while uploads are pending". Fixed.** A draft could fill a composer while an upload was out. `attach` had counted its room before the draft arrived and appended the answer anyway, which could make eleven files.
+  - `loadReplyDraft` and `loadNewThreadDraft` no longer fill a composer that has any upload. This follows the existing rule that what the writer did meanwhile wins over a draft that loads late.
+  - `attach` checks the room again when each answer comes, and refuses an answer that would make an eleventh file on its chip.
+  - Two tests in `drafts.test.ts` ("an upload while the draft loads") cover these. Each fails with its half of the fix removed.
+- The review's summary also says the server upload and draft handlers "could not be independently judged". Those files are not in this PR. They merged under their own reviews: the blob store in #284 and drafts keeping attachments in #289. Every file this PR changes was in the supplied diff, and the review reports complete coverage, so no follow-up is needed.
+
+Bundle after the fix: 63873 B (+1838 B over main 1dbf9b0's 62035 B).
+
+**agent:claude-code/phase3-v73j8k** at 2026-10-01T15:48:03Z
+
+Terva review 1783 (run 46cfdcf2-c1bc-43e9-90d3-a1f71e7e8ec0, Actions run 2160), head d09ecf3, base 1841d31. The review marks review 1782's finding resolved, and raises one new finding.
+
+- **medium: "Measure the serialized wire body for draft keepalive limits". Fixed.** The snapshot carries each file's name and size, but the PUT sends only hashes. The keepalive decision in `start` and the pagehide flush in `unload` still measured the snapshot. A draft near 64 KiB could therefore go without keepalive, or not be sent at pagehide at all, even though its body fit.
+  - Both now ask `fitsKeepalive`, which measures `wire(snapshot)`, the body that is actually sent.
+  - New test in `drafts.test.ts`: "measures keepalive by the body sent, not by the files' names". It fails on the old measurement.
+- The review again says the server's upload, blob access and draft handlers could not be judged. As noted for review 1782, those files are not in this PR: #284 and #289 merged them under their own reviews.
+
+Bundle: 63878 B (+1843 B over main 1dbf9b0's 62035 B).
+
+## Summary
+
+Members can attach files from the composer and see them under posts.
+
+- **Composer.** `src/composer/Attach.tsx` adds Attach to the toolbar where `can_upload` allows it: the thread page's `viewer.can_upload` for a reply, and the forum tree's `can_upload` on the new-thread screen. It is never offered in an author's editor. Each chosen file goes through `apiUpload` to `POST /api/v1/blobs?thread=` or `?forum=`, one at a time, and appears as a chip with its name and size and a 44 px remove button. A refused upload says why on its chip. Post waits while an upload is in flight. At ten files Attach is off. The hashes go with the reply or the new thread.
+- **State.** `src/state/files.ts` holds the attached files and the uploads for the reply composer and the new-thread composer. Drafts save the files: the PUT sends hashes, and a restored draft or local copy brings the chips back.
+- **Posts.** `src/components/thread/Attachments.tsx` draws the mockups' card on the thread page, in the reply expander and in the moderation queue. An image shows its thumbnail, or a file icon when the thumbnail fails, and its dimensions on a desktop. Any other file downloads under its name. A tombstone shows no card.
+- **e2e.** The seed grants members `upload` globally. `e2e/attachments.spec.ts` passes at 390 and 1440 px: alice attaches an image and a text file, carol sees both cards, and a members-only blob is 404 to a reader who is not signed in.
+- **Bundle.** The reader went from 62035 B on main to 63829 B, +1794 B. The plan's starting point was 60465 B.
+
+The implementation note lists where the build departs from the plan's wording.

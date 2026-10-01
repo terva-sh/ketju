@@ -149,7 +149,8 @@ describe('the reply expander', () => {
     await click(root, toggle(root, 1)!);
     const link = root.querySelector('.replies [data-reply="7"] .attachments a')!;
     expect(link.getAttribute('href')).toBe('/blobs/abc123');
-    expect(link.textContent).toBe('plan.pdf');
+    expect(link.querySelector('.attachment-name')?.textContent).toBe('plan.pdf');
+    expect(link.getAttribute('download')).toBe('plan.pdf');
   });
 
   it('shows a deleted reply as a tombstone', async () => {

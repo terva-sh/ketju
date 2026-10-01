@@ -225,6 +225,56 @@
   cursor: pointer;
 }
 
+/* The composer's files (TKT-01M3V73J8K): a chip for each, by name and size,
+   with a remove button that is a full touch target everywhere. */
+.composer-files {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 0;
+  padding: 8px 16px;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+.file-chip {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  padding-left: 10px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface2);
+  font-size: 13px;
+}
+.file-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.file-size {
+  flex: none;
+  color: var(--ink2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.file-failure {
+  color: var(--ink);
+  font-size: 12.5px;
+}
+.file-remove {
+  flex: none;
+  min-width: var(--target);
+  min-height: var(--target);
+  border: 0;
+  background: none;
+  color: var(--muted);
+  font: inherit;
+  font-size: 16px;
+  cursor: pointer;
+}
+
 /* The phone: every control is a full touch target (docs/06 "Mobile"). There
    the composer is drawn in the sheet below, never inline. */
 @media (max-width: 719.98px) {

@@ -1,11 +1,14 @@
 import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { CreatedPost, Post, RenderResult, ThreadPage, UserSuggestions } from '../api/dto';
-import { composerFor, resetComposers, type Slow } from '../state/composer';
+import { signal } from '@preact/signals';
+import type { Attachment, CreatedPost, Post, RenderResult, ThreadPage, UserSuggestions } from '../api/dto';
+import { ProblemError } from '../api/problem';
+import { composerFor, loadReplyDraft, resetComposers, type Slow } from '../state/composer';
 import { viewer } from '../state/viewer';
 import { renderAt, threadPage, unmount } from '../testing';
-import { Composer, mentionDelay, previewDelay, slowModeText, waitText } from './Composer';
+import { attachRefused, Composer, mentionDelay, postFailure, previewDelay, slowModeText, waitText } from './Composer';
+import { ComposerBody } from './ComposerBody';
 import { draftDelay } from '../state/drafts';
 
 const thread = { id: '3yymw47g00001', slug: 'why-we-left-slack', title: 'Why we left Slack' };
@@ -762,5 +765,215 @@ describe('slow mode', () => {
     await run(0);
     await draft('second');
     expect(wait()).toBe('You can post again in 0:30');
+  });
+});
+
+// TKT-01M3V73J8K: Attach in the composer. The composer is rendered alone
+// against a stubbed server: POST /blobs answers each file as blob says, and
+// the post and the draft routes record what they were sent.
+describe('attachments', () => {
+  let host: HTMLElement | null = null;
+  let sent: { method: string; url: string; body: unknown }[];
+  // blob answers an upload of file; by default the server takes it.
+  let blob: (file: File) => Response | Promise<Response>;
+  const fileOf = (name: string, hash: string, mime = 'image/png'): Attachment => ({
+    hash: hash.repeat(64),
+    size: 2048,
+    mime,
+    original_name: name,
+    width: mime.startsWith('image/') ? 640 : null,
+    height: mime.startsWith('image/') ? 480 : null,
+  });
+  // taken is the server taking file, whose hash is its first letter's.
+  const taken = (file: File) => new Response(JSON.stringify(fileOf(file.name, file.name[0])), { status: 201 });
+  const problem = (type: string, status: number, extra: object = {}, headers: Record<string, string> = {}) =>
+    new Response(JSON.stringify({ type, title: type, status, ...extra }), {
+      status,
+      headers: { 'Content-Type': 'application/problem+json', ...headers },
+    });
+
+  beforeEach(async () => {
+    await unmount();
+    sent = [];
+    blob = taken;
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      const method = init.method ?? 'GET';
+      const body = init.body instanceof FormData ? init.body.get('file') : init.body ? JSON.parse(String(init.body)) : undefined;
+      sent.push({ method, url, body });
+      if (url.startsWith('/api/v1/blobs?')) return blob(body as File);
+      if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
+      if (url === `/api/v1/drafts/${thread.id}`) {
+        if (method === 'GET') return new Response(null, { status: 204, headers: { 'Draft-Revision': '0' } });
+        if (method === 'DELETE') return new Response(null, { status: 204, headers: { 'Draft-Revision': '2' } });
+        return new Response(JSON.stringify({ thread_id: thread.id, ...(body as object), updated_at: 1, revision: 1 }), { status: 200 });
+      }
+      if (method === 'POST' && url === `/api/v1/threads/${thread.id}/posts`) {
+        const c: CreatedPost = { post: page().posts[0], ordinal: 4, revision: 1, log_length: 2000 };
+        return new Response(JSON.stringify(c), { status: 201 });
+      }
+      throw new Error(`unexpected request ${method} ${url}`);
+    });
+  });
+  afterEach(async () => {
+    if (host) await act(() => render(null, host!));
+    host?.remove();
+    host = null;
+  });
+
+  async function mount(canUpload = true) {
+    host ??= document.body.appendChild(document.createElement('div'));
+    await act(() => render(<Composer thread={thread.id} authorOf={() => undefined} onPosted={() => {}} canUpload={canUpload} />, host!));
+  }
+  const attachButton = () => host!.querySelector<HTMLButtonElement>('[data-attach]');
+  const postButton = () => host!.querySelector<HTMLButtonElement>('[data-post-reply]')!;
+  const file = (name: string, type = 'image/png') => new File(['x'], name, { type });
+  // pick puts files in Attach's picker, as a person choosing them would.
+  async function pick(...files: File[]) {
+    const input = host!.querySelector<HTMLInputElement>('[data-attach-input]')!;
+    Object.defineProperty(input, 'files', { value: files, configurable: true });
+    await act(() => void input.dispatchEvent(new Event('change', { bubbles: true })));
+  }
+  // flush lets the uploads, which go one after another, and what follows
+  // them finish: a turn of the event loop for each, and one over.
+  const flush = async () => {
+    for (let i = 0; i < 12; i++) await act(() => new Promise((r) => setTimeout(r, 0)));
+  };
+  const choose = async (...f: File[]) => {
+    await pick(...f);
+    await flush();
+  };
+  const chips = () => [...host!.querySelectorAll('.file-chip')].map((c) => c.textContent);
+  const posts = () => sent.filter((s) => s.method === 'POST' && s.url.endsWith('/posts')).map((s) => s.body);
+
+  it('Attach is offered only with can_upload and never while editing', async () => {
+    await mount(false);
+    expect(attachButton()).toBeNull();
+    await mount(true);
+    expect(attachButton()?.getAttribute('aria-label')).toBe('Attach files');
+    expect(host!.querySelector('[data-attach-input]')?.getAttribute('accept')).toBe(
+      'image/png,image/jpeg,image/gif,application/pdf,text/plain',
+    );
+    // An author's editor is the same body with no files, as PostEditor
+    // builds it, and offers no Attach even when given where to upload.
+    await act(() =>
+      render(
+        <ComposerBody
+          state={{ source: signal('old'), caret: signal(0), summoned: signal(0), posting: signal(false) }}
+          thread={thread.id}
+          editing={2}
+          upload={`thread=${thread.id}`}
+          name="Edit post #2"
+          label="Post text"
+          placeholder=""
+        />,
+        host!,
+      ),
+    );
+    expect(host!.querySelector('[data-editing="2"]')).not.toBeNull();
+    expect(attachButton()).toBeNull();
+    // Nor does a body that has files, while it is editing.
+    await act(() =>
+      render(
+        <ComposerBody state={composerFor(thread.id)} editing={2} upload={`thread=${thread.id}`} name="Edit" label="Post text" placeholder="" />,
+        host!,
+      ),
+    );
+    expect(attachButton()).toBeNull();
+  });
+
+  it('an upload adds a chip and the reply sends its hash', async () => {
+    await mount();
+    await choose(file('a-shot.png'), file('b-notes.txt', 'text/plain'));
+    const uploads = sent.filter((s) => s.url.startsWith('/api/v1/blobs'));
+    expect(uploads.map((s) => [s.method, s.url, (s.body as File).name])).toEqual([
+      ['POST', `/api/v1/blobs?thread=${thread.id}`, 'a-shot.png'],
+      ['POST', `/api/v1/blobs?thread=${thread.id}`, 'b-notes.txt'],
+    ]);
+    expect(chips()).toEqual(['a-shot.png2.0 KB×', 'b-notes.txt2.0 KB×']);
+    expect(host!.querySelector('[data-file] button')?.getAttribute('aria-label')).toBe('Remove a-shot.png');
+    await act(() => void (composerFor(thread.id).source.value = 'see attached'));
+    await click(postButton());
+    await flush();
+    expect(posts()).toEqual([{ source: 'see attached', attachments: ['a'.repeat(64), 'b'.repeat(64)] }]);
+    // Posted, the files went with the text.
+    expect(chips()).toEqual([]);
+    expect(composerFor(thread.id).attachments.value).toEqual([]);
+  });
+
+  it('holds Post while a file is uploading, and says so on its chip', async () => {
+    let answer!: (r: Response) => void;
+    blob = () => new Promise((r) => (answer = r));
+    await mount();
+    await act(() => void (composerFor(thread.id).source.value = 'see attached'));
+    await pick(file('a-shot.png'));
+    const chip = host!.querySelector('[data-upload=uploading]')!;
+    expect(chip.textContent).toBe('a-shot.pngUploading…×');
+    expect(chip.getAttribute('aria-busy')).toBe('true');
+    expect(postButton().disabled).toBe(true);
+    answer(taken(file('a-shot.png')));
+    await flush();
+    expect(chips()).toEqual(['a-shot.png2.0 KB×']);
+    expect(postButton().disabled).toBe(false);
+  });
+
+  it('a refused upload says why on its chip', async () => {
+    const field = (code: string) => problem('validation-failed', 422, { errors: [{ field: 'file', code }] });
+    const refusals: [string, () => Response, string][] = [
+      ['type.png', () => field('type_not_allowed'), 'Only PNG, JPEG and GIF images, PDFs and plain text can be attached.'],
+      ['blocked.png', () => field('blocked'), "This file can't be attached."],
+      ['big.png', () => problem('payload-too-large', 413), 'This file is larger than this forum accepts.'],
+      ['nope.png', () => problem('forbidden', 403), "You can't attach files here."],
+      ['fast.png', () => problem('rate-limited', 429, {}, { 'Retry-After': '7' }), 'You are uploading too quickly. You can try again in 7 seconds.'],
+    ];
+    blob = (f) => refusals.find(([name]) => name === f.name)![1]();
+    await mount();
+    await choose(...refusals.map(([name]) => file(name)));
+    const refused = [...host!.querySelectorAll('[data-upload=refused]')];
+    expect(refused.map((c) => c.querySelector('[role=alert]')?.textContent)).toEqual(refusals.map(([, , why]) => why));
+    expect(composerFor(thread.id).attachments.value).toEqual([]);
+    // A refused file is not on its way, so Post is not held for it, and it
+    // can be removed.
+    await act(() => void (composerFor(thread.id).source.value = 'x'));
+    expect(postButton().disabled).toBe(false);
+    await click(host!.querySelector('[data-upload=refused] .file-remove'));
+    expect(host!.querySelectorAll('[data-upload=refused]')).toHaveLength(4);
+  });
+
+  it('ten attachments disable Attach', async () => {
+    await mount();
+    const names = 'abcdefghij'.split('').map((l) => `${l}.png`);
+    await choose(...names.slice(0, 9).map((n) => file(n)));
+    expect(attachButton()!.disabled).toBe(false);
+    // Two more: the tenth is taken, and the eleventh refused here without
+    // asking the server.
+    await choose(file(names[9]), file('k.png'));
+    expect(composerFor(thread.id).attachments.value).toHaveLength(10);
+    expect(sent.filter((s) => s.url.startsWith('/api/v1/blobs'))).toHaveLength(10);
+    expect(host!.querySelector('[data-upload=refused] [role=alert]')?.textContent).toBe('A post takes at most 10 files.');
+    expect(attachButton()!.disabled).toBe(true);
+    await click(host!.querySelector('[data-file] .file-remove'));
+    expect(attachButton()!.disabled).toBe(false);
+  });
+
+  it('removing a chip drops the hash from the reply and the draft', async () => {
+    await mount();
+    await act(() => loadReplyDraft(thread.id));
+    await act(() => void (composerFor(thread.id).source.value = 'see attached'));
+    await choose(file('a.png'), file('b.png'));
+    const puts = () => sent.filter((s) => s.method === 'PUT').map((s) => s.body);
+    await act(() => new Promise((r) => setTimeout(r, draftDelay + 50)));
+    expect(puts()).toEqual([{ source: 'see attached', reply_to: null, attachments: ['a'.repeat(64), 'b'.repeat(64)] }]);
+    await click(host!.querySelector(`[data-file="${'a'.repeat(64)}"] .file-remove`));
+    expect(chips()).toEqual(['b.png2.0 KB×']);
+    await act(() => new Promise((r) => setTimeout(r, draftDelay + 50)));
+    expect(puts().at(-1)).toEqual({ source: 'see attached', reply_to: null, attachments: ['b'.repeat(64)] });
+    await click(postButton());
+    await flush();
+    expect(posts()).toEqual([{ source: 'see attached', attachments: ['b'.repeat(64)] }]);
+  });
+
+  it('a post refused for one of its files says so', () => {
+    expect(postFailure(new ProblemError('validation-failed', 422, null, { attachments: 'not_yours' }))).toBe(attachRefused);
+    expect(postFailure(new ProblemError('validation-failed', 422))).toContain('it may be empty');
   });
 });

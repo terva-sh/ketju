@@ -551,9 +551,18 @@ function ThreadBody({
       <ThreadFoot page={page} route={route} />
       {canReply &&
         (isPhone.value ? (
-          sheetOpen && <ComposerSheet thread={thread.id} authorOf={authorOf} postOf={postOf} onPosted={posted} slow={slow} />
+          sheetOpen && (
+            <ComposerSheet
+              thread={thread.id}
+              authorOf={authorOf}
+              postOf={postOf}
+              onPosted={posted}
+              slow={slow}
+              canUpload={page.viewer.can_upload}
+            />
+          )
         ) : (
-          <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} slow={slow} />
+          <Composer thread={thread.id} authorOf={authorOf} onPosted={posted} slow={slow} canUpload={page.viewer.can_upload} />
         ))}
       {popover !== null && <PostPopover thread={thread} ordinal={popover} onClose={() => setPopover(null)} />}
       {flagging && (

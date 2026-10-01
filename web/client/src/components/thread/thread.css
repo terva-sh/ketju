@@ -191,17 +191,73 @@
   margin: 0 0 4px;
   font-size: 13px;
 }
+/* A post's files, as the mockups' attachment card: 320 px on a desktop, the
+   column's width on a phone, a 48 x 36 thumbnail (44 x 34 on a phone), the
+   name on one line and the size under it. */
 .attachments {
-  margin: 4px 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 0;
   padding: 0;
   list-style: none;
+}
+.attachment {
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 320px;
+  max-width: 100%;
+  min-height: var(--target);
+  padding: 8px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  background: var(--surface2);
+  color: var(--ink);
+  text-decoration: none;
   font-size: 13px;
 }
-.attachments a {
-  color: var(--accent);
+.attachment img,
+.attachment-icon {
+  flex-shrink: 0;
+  width: 48px;
+  height: 36px;
+  border-radius: 2px;
+  background: var(--thumb);
+  object-fit: cover;
 }
-.attachments .size {
-  color: var(--muted);
+.attachment-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink2);
+}
+.attachment-text {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+.attachment-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.attachment-meta {
+  /* --ink2, not the mockup's --muted, which is below 4.5:1 on --surface2. */
+  color: var(--ink2);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+@media (max-width: 719.98px) {
+  .attachment {
+    width: 100%;
+  }
+  .attachment img,
+  .attachment-icon {
+    width: 44px;
+    height: 34px;
+  }
 }
 .post-footer {
   display: flex;
@@ -339,7 +395,7 @@
 .post.removed .post-header .ordinal,
 .post.removed .edited,
 .post.removed .deleted-mark,
-.post.removed .attachments .size,
+.post.removed .attachment-meta,
 .post.removed .post-footer a {
   color: var(--ink2);
 }
