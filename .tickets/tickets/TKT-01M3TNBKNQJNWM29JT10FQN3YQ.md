@@ -20,6 +20,8 @@ blocks_on: none
 references:
   - ref: pr:258
     path: null
+  - ref: pr:261
+    path: null
 claim:
   actor: agent:claude-code/phase2-run-tnbknq
   branch: run/tnbknq-ci-error-context
@@ -30,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T04:30:23Z
+updated_at: 2026-10-01T04:30:48Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
