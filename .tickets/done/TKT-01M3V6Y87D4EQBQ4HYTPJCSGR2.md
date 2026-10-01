@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T23:21:32Z
+updated_at: 2026-10-01T23:21:41Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -142,8 +142,8 @@ A member can now watch or mute a thread from the desktop toolbar and the phone's
 
 - `components/WatchDialog.tsx` offers Watch, Mute, and a third choice that posts `""`. The third reads "Normal" when the forum has no level, and "Follow the forum (Watch)" or "Follow the forum (Mute)" otherwise (review 1693).
 - The thread action is labelled with the effective level: Watching, Muted or Watch. The forum control is labelled with the forum's own level and sits first in the header's `.list-actions`, before Mark all read and New thread.
-- A save drops the held lists through `forgetLists()`, which includes Watching, and the held thread pages that carry the level. It then refreshes `/me`. The forum list asks for itself again, so a mute takes its badges away.
+- A save calls `forgetLists()`, which includes Watching, and `forgetAllThreadPages()`, so no list or thread page from before the save is shown or stored after it (review 1822). It then refreshes `/me`. The forum list asks for itself again, so a mute takes its badges away.
 - A late answer closes only its own dialog, and never undoes a newer save to the same target (review 1820).
 - `ThreadList.watch` is required in `dto.ts`. The thread toolbar wraps.
 
-Reader bundle: 73762 B before, 75236 B after (+1474 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
+Reader bundle: 73762 B before, 75176 B after (+1414 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
