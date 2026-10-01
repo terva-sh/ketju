@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T09:44:51Z
+updated_at: 2026-10-01T09:47:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -246,3 +246,7 @@ Correction to the review 1728 note above: its base is f3538e6, main as PR #275 w
 **agent:claude-code/phase3-groom-search** at 2026-10-01T09:44:51Z
 
 Supersedes the correction above: review 1728's base is 6dfd01d, the main commit PR #275 branched from. f3538e6 is a later main commit.
+
+**agent:claude-code/phase3-groom-search** at 2026-10-01T09:47:41Z
+
+Requirement carried from review 1731 (2026-10-01; PR #275, head 64a8983, base 6dfd01d; medium, 'Remove old thread rows when re-indexing from the first frame'). This binds the implementing lane and overrides any plan text it contradicts. Whenever IndexThread starts from the first frame (no search_state, a recorded length past the log's end, a length ScanFramesFrom refuses, or a version reset), it first deletes every search_docs row of that thread (through DropSearchDoc, keeping FTS5 in step) and its search_state row, in the same transaction and savepoint as the scan, so an ordinal the log no longer holds cannot keep a row. TestStateNotAtAFrameBoundaryReindexesTheThread and TestStateAheadOfLogReindexesTheThread each add a row for an ordinal absent from the log, and assert it is gone. Also from the same review: reindex --search does not call Prepare separately (see the carried requirement on TKT-01M29CTY9D). Serve-time checks already drop a hit whose ordinal has no index entry, so neither gap widens access. Not fixed in the plan because PR #275 had used its two review rounds.

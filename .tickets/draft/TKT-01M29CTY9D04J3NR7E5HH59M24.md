@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:43:37Z
+updated_at: 2026-10-01T09:47:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -128,3 +128,7 @@ run decision: pending maintainer review. Recorded in docs/03 "Durability and rec
 **agent:claude-code/phase3-groom-search** at 2026-10-01T08:43:37Z
 
 Terva review 1711 (PR #270, head e5998ef, base a599b48), fixed. (high) 'Discard partial rows when a thread's log is damaged': each thread of the rebuild runs in its own SAVEPOINT and a log fault rolls back to it, so the thread keeps no rows; TestReindexSearchDamagedThread now faults after a post was indexed (criterion 6). The same fix is applied to TKT-01M29CRJ3B's batched Deliver (TestAFailedThreadKeepsItsRows).
+
+**agent:claude-code/phase3-groom-search** at 2026-10-01T09:47:41Z
+
+Requirement carried from review 1731 (2026-10-01; PR #275, head 64a8983, base 6dfd01d; medium, 'Keep version preparation inside the reindex transaction'). This binds the implementing lane and overrides any plan text it contradicts. reindex --search must not call Indexer.Prepare as a separate committed step. The version check, ClearSearch and the search_meta.version write all happen inside the rebuild's one transaction, so a run cancelled or failing before commit leaves the earlier index, and its version, exactly as they were, whatever version they carry. TestReindexSearchInterrupted adds a case where the stored version differs from search.Version and the run is cancelled after the clear: the old rows and old version remain. The TKT-01M29CRJ3B plan's sentence that 'ketju reindex --search and ketju redact call it [Prepare] too' does not apply to reindex. serve's Prepare then clears that old-version index at its next start, before listening. Not fixed in the plan because PR #275 had used its two review rounds.
