@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY8TB2CHCBQH3ABHCG3Q
 title: Build the search API
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:api-resources
     path: docs/07-api-and-clients.md
-claim: null
+claim:
+  actor: agent:claude-code/phase3-cty8t
+  branch: run/cty8t-search-api
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aadadb9df5c175246
+  commit: d80c2330c7d88339cac7bf28c89e67f97749fe4f
+  session: null
+  claimed_at: 2026-10-01T12:43:49Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T09:44:32Z
+updated_at: 2026-10-01T12:43:51Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-search
+  id: agent:claude-code/phase3-cty8t
   name: ""
 extensions: {}
 ---
