@@ -95,7 +95,8 @@ interface Entry {
   status: Signal<DraftStatus>;
   // savedAt is the updated_at of the server's newest answer holding the
   // draft: a PUT's, or the GET's. A DELETE's answer clears it, and a refused
-  // save leaves it, so the note can say when the draft last was saved.
+  // save leaves it, so the note can say when the draft last was saved. An
+  // answer older by revision than one already heard sets nothing (newer).
   savedAt: Signal<number | null>;
   // restored is set while the composer shows a copy with no known base
   // (restoreLocal), until the next change.
@@ -236,11 +237,18 @@ function start(e: Entry, r: Req) {
   );
 }
 
+// newer is whether an answer at rev is no older than every answer heard for
+// e, so what it says about the draft is current. An answer with no revision
+// is taken as current.
+const newer = (e: Entry, rev: number | null) => rev === null || e.known === null || rev >= e.known;
+
 function answered(e: Entry, r: Req, rev: number | null, at: unknown) {
   e.current = null;
   if (e.off) return;
-  if (r.del) e.savedAt.value = null;
-  else if (typeof at === 'number') e.savedAt.value = at;
+  if (newer(e, rev)) {
+    if (r.del) e.savedAt.value = null;
+    else if (typeof at === 'number') e.savedAt.value = at;
+  }
   if (rev !== null) e.known = Math.max(e.known ?? rev, rev);
   e.unsure = e.unsureDeletes = 0;
   e.confirmed = r.json;
@@ -332,11 +340,12 @@ export async function load<T extends { revision: number; updated_at: number }>(
   }
   if (entries.get(e.id) !== e || e.off) return;
   e.armed = true;
+  const current = newer(e, rev);
   if (rev !== null) e.known = Math.max(e.known ?? rev, rev);
   // A post or discard during the load has queued a DELETE, which is the
   // server's state now; the load's answer is not.
   if (gen !== e.gen) return settled(e);
-  e.savedAt.value = at;
+  if (current) e.savedAt.value = at;
   const local = restoreLocal(e, found, rev);
   e.sent = e.confirmed = JSON.stringify(found ?? blank(e.read()));
   e.held = found ? !isEmpty(found) : false;

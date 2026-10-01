@@ -519,6 +519,33 @@ describe('when the draft was saved', () => {
     expect(draftSavedAt(key)).toBeNull();
   });
 
+  // Terva review 1762: an answer older by revision than one already heard
+  // never replaces the time. The load runs once per key, and nothing is
+  // written until it answers, so a GET cannot land behind a PUT; this pins
+  // both, and the revision check behind them.
+  it('an answer older than one already heard keeps the newer time', async () => {
+    const get = hold('GET');
+    const load = loadReplyDraft(T);
+    composerFor(T).source.value = 'typed early';
+    await wait(draftDelay * 2);
+    void loadReplyDraft(T);
+    await tick();
+    expect(drafts().map((c) => c.method)).toEqual(['GET']);
+    await land(get);
+    await load;
+    await wait(draftDelay);
+    expect(writes()).toEqual(['PUT typed early']);
+    const at = savedAt();
+    expect(draftSavedAt(key)).toBe(at);
+    // A save answered with an older revision and time than the last.
+    refuse = (c) =>
+      c.method === 'PUT' ? jsonAnswer({ thread_id: T, source: 'stale', reply_to: null, updated_at: at - 60_000, revision: 0 }) : undefined;
+    composerFor(T).source.value = 'later';
+    await wait(draftDelay);
+    expect(writes()).toEqual(['PUT typed early', 'PUT later']);
+    expect(draftSavedAt(key)).toBe(at);
+  });
+
   it('a refused save keeps the last time and says not saved', async () => {
     await loadReplyDraft(T);
     composerFor(T).source.value = 'a';

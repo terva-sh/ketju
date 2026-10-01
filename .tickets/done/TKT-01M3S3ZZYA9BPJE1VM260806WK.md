@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T13:04:16Z
+updated_at: 2026-10-01T13:07:19Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -118,6 +118,12 @@ Built against main at 73e8208 (after #303). What the plan did not say, and what 
 - Reader bundle: 60602 B before, 60761 B after (+159 B gzip) of 70000 B.
 - e2e on this host at 390 and 1440 px: forum-index, drafts (now with an axe scan in both themes while the note shows), new-thread, a11y, thread and focus all passed. forum-index-*.png are refreshed on a fresh seed. thread-*.png are unchanged, because the page shows no note without a draft. `.draft-note time` is added to the thread capture's mask.
 
+**agent:claude-code/phase3-polish-client** at 2026-10-01T13:07:19Z
+
+Terva review 1762 (run 72a30cee) on #309, head df60593, base 2e937eb, found one medium issue: "An older GET can overwrite the time from a newer PUT". It is fixed. savedAt now changes only on an answer whose revision is no older than every answer heard for the key (`newer` in state/drafts.ts). That applies both to the GET in `load` and to PUT and DELETE answers in `answered`.
+
+The race as described cannot occur today. `load` runs once per key (`e.loading` is never cleared), and the key is disarmed until its GET answers, so no PUT is in flight or answered while the GET is out. The guard keeps the note right if either rule changes. Test: "an answer older than one already heard keeps the newer time". It pins both rules: a second load sends no second GET, and nothing is written before the GET lands. It also answers a later PUT with an older revision and time and checks that the newer time stays. With the guard removed, the test fails. Reader bundle with the guard: 60809 B (+207 B over main's 60602 B).
+
 ## Summary
 
-The forum index's heading is the site name, the wordmark's siteName. The draft note reads 'Draft saved TIME', where TIME is PostTime of the updated_at in the server's newest answer for the draft (state/drafts.ts savedAt, read through draftSavedAt). The note appears in the reply footer, in the phone reply sheet's head (the sheet hides its footer, so the note was missing there before), and in both places on the new-thread screen, all through one DraftNote component. Reader bundle 60602 -> 60761 B gzip (+159 B).
+The forum index's heading is the site name, the wordmark's siteName. The draft note reads 'Draft saved TIME', where TIME is PostTime of the updated_at in the server's newest answer for the draft. state/drafts.ts keeps savedAt, ordered by revision so an older answer never replaces a newer time (review 1762), and draftSavedAt reads it. The note appears in the reply footer, in the phone reply sheet's head (the sheet hides its footer, so the note was missing there before), and in both places on the new-thread screen, all through one DraftNote component. Reader bundle 60602 -> 60809 B gzip (+207 B).
