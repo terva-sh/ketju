@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3Z9E1RX86KA4WX4DQKWBJ
 title: Match the phone post header and footer to docs/06 Mobile
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -17,17 +17,10 @@ dependencies:
   - TKT-01M3S3ZZQDXM4RX4HK6V5X8VX7
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-s3z9e1
-  branch: run/s3z9e1-phone-post
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a3e72cb662cc8d2ed
-  commit: e855e1a120cb1b147f7f318af945769ed75e6f53
-  session: null
-  claimed_at: 2026-10-01T16:55:56Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T12:17:32Z
-updated_at: 2026-10-01T17:10:14Z
+updated_at: 2026-10-01T19:03:49Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -122,3 +115,7 @@ Requirement carried from review 1737 (2026-10-01; PR #282, head e9be93d, base 38
 **agent:claude-code/phase3-s3z9e1** at 2026-10-01T17:10:14Z
 
 Implemented on run/s3z9e1-phone-post as the plan says, with the reply-to at the right end of the second line (reviews 1725, 1737). The phone grid applies to '.posts > article.post' only, so tombstones (a div), the reply expander's copies (inside .replies) and the popover post keep their flex layouts. A canonical post's open replies now take the full width (margin-left 0); a tombstone's keep the -42px pull. PostControls.test.tsx asserted the old phone order quote, reply and now asserts reply, quote. docs/06 Mobile's run-decision paragraph now names the reply-to's place. Desktop screenshots are not refreshed: the layout is unchanged and their only differences were incidental (unread count). Reader bundle measured with a local go generate: 63878 B before, 64024 B after (+146 B of 70000 B). Dist not committed yet: the lens lane holds it (docs/14 'Client lanes may prepare').
+
+## Summary
+
+At 390 px a post on the thread page is a grid (thread.css, '.posts > article.post'): the 30 px avatar beside a two-line header, author and role badge over ordinal, time, edited and removal marks, with the reply-to at the right end of the second line so Tab goes ordinal then reply-to on one line (reviews 1725, 1737). The header's DOM order is unchanged; CSS order and a ::after line break stack it. The body, attachments, footer and replies take the full width. The phone footer renders reply before quote (Post.tsx), so it reads expander, reply, quote, More; the desktop keeps quote first. Tombstones, the reply expander's copies and the popover keep their layouts. Tests: Post.test.tsx (phone and desktop footer order, header DOM order), PostControls.test.tsx (phone order), e2e/thread.spec.ts (geometry on #post-56 and #post-55, Tab from #55's ordinal to its reply-to, one-line header and quote-then-reply at 1440 px). thread-phone-{light,dark}.png refreshed; desktop screenshots unchanged. docs/06 Mobile's run-decision paragraph names the reply-to's place. Reader bundle 66220 B to 66361 B gzip (+141 B).
