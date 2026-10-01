@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY5TZ1QMWK6BTGA21BWQ
 title: Implement the reply chain lens
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:293
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase3-lenses
+  branch: run/cty5t-chain-lens
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a64c824ddbdb7377f
+  commit: 4e2ef49d380063d4e1527fc8b9590794bbcb2c18
+  session: null
+  claimed_at: 2026-10-01T13:44:43Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T11:18:03Z
+updated_at: 2026-10-01T13:44:45Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-lenses
+  id: agent:claude-code/phase3-lenses
   name: ""
 extensions: {}
 ---
