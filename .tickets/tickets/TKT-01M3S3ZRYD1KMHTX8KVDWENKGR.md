@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:48Z
-updated_at: 2026-10-01T19:32:47Z
+updated_at: 2026-10-01T19:33:21Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -125,3 +125,7 @@ Implementation, prepared on run/s3zryd-front-footer (source only; the dist waits
 - Client: `IndexFoot` in ForumIndex.tsx; numbers through toLocaleString with the viewer's locale; `data-members` and `data-posts-total` carry the raw numbers for tests. Phone: the footer keeps 88 px clear on the right for the floating button.
 - e2e: forum-index.spec.ts gains an anonymous footer test and a member footer test (390 px: no hint, ? inert, clear of the FAB, axe on the footer; 1440 px: hint opens the list, Escape returns focus, ? opens it, axe with the list open). forum-index-*.png refreshed.
 - Reader bundle measured with go generate: 66220 B before, 66738 B after (+518 B gzip) of 120000 B.
+
+**agent:claude-code/phase3-s3zryd** at 2026-10-01T19:33:21Z
+
+For the PR body (orchestrator, 2026-10-01): binding ? on the forum index adds a single-key shortcut to a second page. TKT-01M3V9DWTN (Let a member turn off the single-key shortcuts (WCAG 2.1.4), draft, no milestone) owns the missing off switch. TKT-01M3S3ZZSZ left the / search key out until that ticket lands; ? is kept here because the hint's words would otherwise be false, and ? only opens a dialog that Escape closes. Phase B: name both in the PR body so the reviewer sees the tradeoff was weighed.
