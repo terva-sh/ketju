@@ -22,10 +22,12 @@ references:
     path: docs/07-api-and-clients.md
   - ref: design:whose-profile
     path: docs/05-identity-and-accounts.md
+  - ref: pr:338
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-01T20:57:52Z
+updated_at: 2026-10-01T20:58:20Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
