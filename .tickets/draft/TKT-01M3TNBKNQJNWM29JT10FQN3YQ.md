@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T02:40:36Z
+updated_at: 2026-10-01T03:46:14Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-sz3gce
+  id: agent:claude-code/phase2-run-tnbknq
   name: ""
 extensions: {}
 ---
@@ -47,3 +47,104 @@ Keeping `trace.zip` would need an artifact upload. That is a larger change, and 
 
 - A deliberately failing assertion on a scratch branch shows its `error-context.md` in the new step's log. The PR records that run. The assertion is not merged.
 - A green run skips the step.
+
+## Acceptance criteria
+
+- [ ] playwright.config.ts lists ['list'] first and ['./scripts/evidence-reporter.mjs'] second, and keeps workers: 1, retries: 0 and trace: 'retain-on-failure'; the PR does not change .forgejo/workflows/ci.yml
+- [ ] For a result whose status differs from its expected status, scripts/evidence-reporter.mjs writes one block naming the project, file:line and title path, holding the error-context.md file verbatim (cut at 64 KiB) and the serve.log lines written between onTestBegin and onTestEnd (the last 120); a result whose status equals its expected status writes nothing
+- [ ] Only the first 10 failing results get a full block and each later one gets one line with its error-context.md path; an error inside the reporter writes one line and never throws
+- [ ] scripts/evidence-reporter.test.mjs covers every case named in the plan's Tests and passes under npm test
+- [ ] A note records a local run on port 18901 of a deliberately failing scratch spec at both widths, with the command and the commit, whose output holds two evidence blocks, each with the Locator: line, the YAML ARIA tree and GET /api/v1/admin/applications in the server lines; the scratch spec is not in the PR's diff
+- [ ] A note records a local full-suite run with no failures and zero 'failure evidence' lines in its output, and the PR's green CI Playwright step log has zero 'failure evidence' lines
+- [ ] go generate ./internal/web/spa leaves internal/web/spa/dist unchanged, and the PR's diff touches nothing under web/client/src
+- [ ] The implementation PR adds a note to TKT-01M3SZ3GCE, before review, saying its blocker is done and what a failing test now prints; TKT-01M3SZ3GCE stays blocked
+- [ ] The commit body lists the mutations tried against the unit test and whether each was caught
+
+## Implementation plan
+
+Groomed 2026-10-01 against main at c3de983. A spike on that tree (Approach, "What the spike showed") ran a deliberately failing spec through a throwaway reporter, so the shape below has been run once rather than guessed.
+
+### Settled in grooming
+
+- **The step log is the only record that survives a CI failure.** The runner's artifacts go with its container, and Forgejo's v1 API has no artifact route (orchestrator's instructions for this ticket, 2026-10-01). So the evidence is printed into the Playwright step's log, and `trace.zip` stays out of scope, as the description says, until the forge's artifact support is confirmed.
+- **What a failure must leave in the log:** Playwright's `error-context.md` (the error, the failing locator and its call log, the page's ARIA snapshot, the source frame), and the server's log lines from the failing test (orchestrator, 2026-10-01; the description asks for `error-context.md` under a heading that names the test).
+- **A passing run's log does not grow.** A passing, skipped or expected-to-fail test prints nothing new (orchestrator, 2026-10-01; the description's "A green run skips the step").
+- **No CI step is weakened and no retry is added.** `playwright.config.ts` keeps `workers: 1`, `retries: 0`, `trace: 'retain-on-failure'` and the `list` reporter. No step in `.forgejo/workflows/ci.yml` is removed, reordered or given `continue-on-error` (orchestrator, 2026-10-01; docs/12 "Changing CI").
+- **The proof is a deliberately failing test run locally, and that test is never committed** (orchestrator, 2026-10-01). This replaces the description's scratch-branch CI run: see Tests for what the PR's own green CI run proves instead.
+- **Playwright runs on port 18901** (`KETJU_E2E_PORT=18901`) in this lane.
+- **The client dist does not change.** The ticket touches test config and a script, not `web/client/src`, so `go generate ./internal/web/spa` must leave `internal/web/spa/dist` unchanged and this lane does not hold the dist (docs/13 "Running two lanes, changed").
+
+### Approach
+
+The evidence is printed by a Playwright reporter that runs beside `list`, not by a CI step. The alternative and why it lost are at the end of this section.
+
+1. **`web/client/scripts/evidence-reporter.mjs`**, a new Playwright reporter (plain ESM, like `scripts/bundle.mjs`; `package.json` is `"type": "module"`). It is a default-exported class with an optional `{ write }` option (default `process.stdout.write`) so the unit test can capture its output.
+   - `onBegin`: the server log is `join(process.env.KETJU_E2E_DIR, 'serve.log')`. `playwright.config.ts` sets `KETJU_E2E_DIR` in the runner process before reporters load, and `ketju e2e` writes its request log there (`runE2E` in `cmd/ketju/e2e.go`).
+   - `onTestBegin(test)`: record `serve.log`'s size under `test.id` (0 if the file does not exist yet).
+   - `onTestEnd(test, result)`: take and delete the recorded offset. If `result.status === test.expectedStatus`, return and write nothing. Otherwise write one block:
+     - an opening line `── failure evidence: [<project>] › <file>:<line> › <title path> (<status>) ──`, with the file relative to the config's `rootDir`;
+     - the `error-context` attachment's file verbatim, under `error-context.md (<path>)`, cut at 64 KiB with a line naming the path and the bytes left out. If there is no such attachment, a line saying so;
+     - `serve.log` from the recorded offset to its current size, under `serve.log during this test`, keeping the last 120 lines and saying how many were left out. If the file does not exist, a line saying so;
+     - a closing line `── end of failure evidence ──`.
+   - Only the first 10 failing results get a block. Each one after that gets a single line naming the test and its `error-context.md` path, so a run in which the server died prints a bounded log.
+   - Every hook body is wrapped in `try`/`catch`. An error writes one line `failure evidence: could not print (<message>)` and never throws, so the reporter cannot change a run's outcome.
+   - It implements no `onStdOut`, `onStdErr` or `printsToStdio`, so `list` keeps its own output unchanged.
+2. **`web/client/playwright.config.ts`**: `reporter: [['list'], ['./scripts/evidence-reporter.mjs']]`, with a comment saying why. The list reporter stays first, so a failing test's `✘` line comes before its evidence block. Nothing else in the config changes.
+3. **`web/client/README.md`**, in the Playwright paragraph: one sentence saying that a failing test prints its `error-context.md` and its `serve.log` lines into the run's output, which is what CI keeps.
+4. **`.forgejo/workflows/ci.yml` is not changed.** The Playwright step's log is the stdout of `npx playwright test`, which already uses the config's reporters.
+5. **Check what CI runs:** in `web/client`, `npm test` (which runs the new unit test) and `npx tsc --noEmit -p .`; at the root, `go generate ./internal/web/spa` followed by `git status --short internal/web/spa/dist` showing nothing. No Go code changes, but `test -z "$(gofmt -l .)"`, `go build ./... && go vet ./...` and `go test -race ./...` still run before the push.
+
+### What the spike showed
+
+A throwaway reporter loaded with `--reporter=list,<path>` ran a scratch spec that signs in as mona, opens `/admin/applications` and waits for `[data-application-link="999"]`. This is the same step and wait that failed in TKT-01M3SZ3GCE's run #1592. On the desktop project:
+- At `onTestEnd`, `result.attachments` already held `error-context` and `trace`, with paths under the run's `results/` directory.
+- The `error-context.md` file was 3.5 KB and held the test name and location, `Locator: locator('[data-application-link="999"]')`, `Timeout: 5000ms`, the call log, the ARIA tree of the whole page (the table "Pending applications, newest first" with rows `#2` and `#1`), and the source frame at line 10.
+- The `serve.log` slice from `onTestBegin` to `onTestEnd` held 15 JSON lines: the page, the assets, the lazy `AdminRoot` chunk, and `GET /api/v1/admin/applications` with status 200, 281 bytes and 0 ms, each with its timestamp. That is the information the TKT-01M3SZ3GCE investigation had to rebuild by hand.
+- The list reporter prints only `Error Context: <path>` for the same file.
+
+### Alternative that lost: an `if: failure()` step in ci.yml
+
+The description proposed a new step after the Playwright step that runs `if: failure()` and prints every `error-context.md` it finds. It lost for these reasons:
+- It cannot give the failing test's server lines. The suite continues after a failure, so `serve.log`'s tail at the end of a 10-minute run shows the last spec's requests. Only the runner knows where each test started and ended.
+- It needs a fixed directory. That means adding `KETJU_E2E_DIR` to the Playwright step, which edits an existing step. Also, `ketju e2e` calls `os.Mkdir`, so the directory's parent must be made first. Otherwise it searches `/tmp/ketju-e2e-*`, which the description calls a guess.
+- Its heading would come from Playwright's output directory names, which are sanitized and shortened. The reporter has the project, the file, the line and the title path.
+- It also runs when an earlier step fails, such as gofmt. And it never runs locally, so a local failure keeps printing only a path.
+
+The reporter's risk is that it runs inside the Playwright process. It is contained by the `try`/`catch` in step 1, by the unit test, and by the PR's green CI run, which loads the reporter in the Alpine image.
+
+### Tests
+
+- **`web/client/scripts/evidence-reporter.test.mjs`** (Vitest, `// @vitest-environment node`, already within `include: ['scripts/**/*.test.mjs']`). It drives the class directly, with fake `TestCase` and `TestResult` objects, a temp `KETJU_E2E_DIR` with a `serve.log`, and an `error-context.md`. Named cases:
+  - `a passing test prints nothing`: also covers skipped and expected-to-fail (`expectedStatus: 'failed'`, `status: 'failed'`), and the captured output is the empty string;
+  - `a failing test prints its error context and the server lines it caused`: lines appended to `serve.log` before `onTestBegin` are absent, lines appended between `onTestBegin` and `onTestEnd` are present, and the block names the project, the file and line, and the title;
+  - `a timed-out test prints too`: `status: 'timedOut'`;
+  - `the server lines are cut to the last 120`, with a line counting what was left out;
+  - `a large error context is cut at 64 KiB`, naming the path;
+  - `after ten failures only a line per test`;
+  - `a missing error context or serve.log is said, not thrown`;
+  - `an error inside the reporter writes one line and does not throw`: for example, an attachment path that is a directory.
+- **Local proof, recorded in a note before the PR is opened.** On the implementation branch, with `KETJU_E2E_PORT=18901`:
+  1. Write a scratch spec, `e2e/zz-scratch-fail.spec.ts`, that waits for a link that is never rendered, as in the spike. Run `npx playwright test e2e/zz-scratch-fail.spec.ts` at both widths. The output must hold two evidence blocks, each with the `Locator:` line, a `# Page snapshot` or YAML ARIA tree, and `GET /api/v1/admin/applications` in the server lines. Record the command, the commit and an excerpt in the note. Delete the spec, and show with `git status` that it is gone before committing.
+  2. Run the full suite, `npx playwright test`, without the scratch spec. `grep -c 'failure evidence'` on its output must be 0. Record it in the note.
+- **CI.** The PR's own green run is the proof that the reporter loads in CI's image and stays silent there. The Playwright step log holds no `failure evidence` line. Read the step log for this, not the run summary.
+- **Mutations**, listed in the commit body with whether the unit test caught each one: printing on `result.status === 'passed'` only (an expected failure then prints); slicing `serve.log` from 0 instead of the recorded offset; dropping the 10-failure cap.
+
+### Out of scope
+
+- Keeping `trace.zip` or any artifact upload. That waits until the forge's artifact support is confirmed (description). No ticket owns it yet, and none is filed, because the confirmation comes first.
+- Changing the CI container, the Playwright step, workers, retries or timeouts (docs/12 "Changing CI"; Settled in grooming).
+- Diagnosing TKT-01M3SZ3GCE (Stop admin-applications.spec.ts timing out under CI load). That ticket stays blocked until the failure recurs. This ticket's implementation PR adds a note to it saying what the next failure will print.
+- Global errors outside a test, such as the web server failing to start. Playwright already prints those, and the server's stderr is piped by `webServer`.
+
+## Notes
+
+**agent:claude-code/phase2-run-tnbknq** at 2026-10-01T03:46:14Z
+
+Grooming, 2026-10-01, against main at c3de983. The plan and the criteria replace the description's "What to do" and "Done when" in two places, and the description is left as filed:
+
+- **A reporter, not an `if: failure()` step.** A Playwright reporter beside `list` (`scripts/evidence-reporter.mjs`) prints the evidence inline. It is the only place that knows where each test started and ended in `serve.log`. A step that runs after a 10-minute suite would print the log's tail, which belongs to the last spec, not to the failing test. The step would also have to edit the existing Playwright step to fix the run directory. The plan's "Alternative that lost" has the full comparison. `.forgejo/workflows/ci.yml` does not change.
+- **A local proof, not a scratch-branch CI run.** The orchestrator's instructions for this ticket name a deliberately failing test run locally, never committed. The PR's own green CI run proves that the reporter loads in CI's Alpine image and prints nothing there, because the Playwright step's log is the stdout of the same `npx playwright test`.
+
+A spike ran a scratch spec that waits on `/admin/applications` for a link that is never rendered, through a throwaway reporter. It confirmed that `result.attachments` holds `error-context` at `onTestEnd`. It also confirmed that the file carries the locator, the call log and the page's ARIA tree, and that a `serve.log` slice between `onTestBegin` and `onTestEnd` holds exactly that test's requests (the plan's "What the spike showed"). The spike's files are in scratch and are not committed.
+
+No open decision. Every choice in the plan is an engineering choice: where the code lives, the caps (64 KiB, 120 lines, 10 blocks), and reporter over step.
