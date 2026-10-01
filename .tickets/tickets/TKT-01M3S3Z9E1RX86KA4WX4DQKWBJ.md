@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3Z9E1RX86KA4WX4DQKWBJ
 title: Match the phone post header and footer to docs/06 Mobile
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ dependencies:
   - TKT-01M3S3ZZQDXM4RX4HK6V5X8VX7
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-s3z9e1
+  branch: run/s3z9e1-phone-post
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a3e72cb662cc8d2ed
+  commit: e855e1a120cb1b147f7f318af945769ed75e6f53
+  session: null
+  claimed_at: 2026-10-01T16:55:56Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:32Z
-updated_at: 2026-10-01T10:25:03Z
+updated_at: 2026-10-01T16:55:59Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-s3z9e1
   name: ""
 extensions: {}
 ---
