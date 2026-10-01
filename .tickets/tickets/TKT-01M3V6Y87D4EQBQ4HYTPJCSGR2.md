@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V6Y87D4EQBQ4HYTPJCSGR2
 title: Add the watch and mute control to thread and forum screens
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: pr:294
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase3-v6y87d
+  branch: run/v6y87d-watch-control
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae67d1f7eb6bbb11a
+  commit: 004be7accca44fa06300fe99dee803407a2a21ce
+  session: null
+  claimed_at: 2026-10-01T18:47:11Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T11:18:43Z
+updated_at: 2026-10-01T18:47:13Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-unread
+  id: agent:claude-code/phase3-v6y87d
   name: ""
 extensions: {}
 ---
