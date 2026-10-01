@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTYA0E5Y06WWYY2ETBF8V
 title: Add the client SSE subscription with the new-posts pill
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:live-updates
     path: docs/06-thread-views.md
-claim:
-  actor: agent:claude-code/phase3-ctya0
-  branch: run/ctya0-live-pill
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a2a3373478e22fdf9
-  commit: c403e67a0142b3617f33ceee3375081b6638a051
-  session: null
-  claimed_at: 2026-10-01T14:18:14Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T14:41:59Z
+updated_at: 2026-10-01T14:47:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,16 +43,16 @@ Polling every 30 seconds is the fallback when SSE is unavailable, which covers p
 
 ## Acceptance criteria
 
-- [ ] New posts never shift content under a reader who is not at the bottom: they wait behind the pill and no post element is inserted (ThreadScreen.test.tsx 'new posts wait behind the pill for a reader above the bottom', e2e live.spec.ts 'a new post waits behind the pill')
-- [ ] A reader at the bottom receives posts inline with no pill (ThreadScreen.test.tsx 'a reader at the bottom gets posts inline with no pill', e2e 'a reader at the bottom sees the post arrive')
-- [ ] Polling every 30 s takes over when the stream errors or its ready event is 10 s late, retries the stream every fourth poll, and stops when a stream says ready (live.test.ts, e2e 'polling takes over when the stream is refused')
-- [ ] The subscription closes on navigation away and after 60 s in a hidden tab, and leaks no connection (live.test.ts, ThreadScreen.test.tsx 'leaving the thread closes the stream')
-- [ ] e2e live.spec.ts passes at 390 and 1440 px with one axe scan per test and no violations
-- [ ] The dist committed from go generate ./internal/web/spa keeps the reader within the 70000 B gzip budget, and the PR records the change from 60465 B
-- [ ] The pill counts only posts that arrived after the page opened or the pill was last taken, never posts that already existed on later pages; show reveals them in place when they all fall on the page in view and otherwise goes to the page holding the first (ThreadScreen.test.tsx 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them', 'a full last page sends the pill to the next page', 'show reveals the posts and focuses the first')
-- [ ] Every hint refetches the page on screen in full, so an edit, a removal and a restore all show, together or apart, without moving the post in view (ThreadScreen.test.tsx 'an edit and a removal in one change both show', 'an edit applies in place without moving the post in view')
-- [ ] A post behind the pill is not marked read (ThreadScreen.test.tsx 'a post behind the pill is not marked read')
-- [ ] Posting a reply routes to its permalink as today, showing it at once on its own page when the page in view is full or earlier, with held posts above it and no pill, so a reply posted here never counts in the pill (ThreadScreen.test.tsx 'a reply from a full page goes to its own page', 'posting a reply with posts held takes the reader to the reply', 'the reader's own reply never counts in the pill')
+- [x] New posts never shift content under a reader who is not at the bottom: they wait behind the pill and no post element is inserted (ThreadScreen.test.tsx 'new posts wait behind the pill for a reader above the bottom', e2e live.spec.ts 'a new post waits behind the pill')
+- [x] A reader at the bottom receives posts inline with no pill (ThreadScreen.test.tsx 'a reader at the bottom gets posts inline with no pill', e2e 'a reader at the bottom sees the post arrive')
+- [x] Polling every 30 s takes over when the stream errors or its ready event is 10 s late, retries the stream every fourth poll, and stops when a stream says ready (live.test.ts, e2e 'polling takes over when the stream is refused')
+- [x] The subscription closes on navigation away and after 60 s in a hidden tab, and leaks no connection (live.test.ts, ThreadScreen.test.tsx 'leaving the thread closes the stream')
+- [x] e2e live.spec.ts passes at 390 and 1440 px with one axe scan per test and no violations
+- [x] The dist committed from go generate ./internal/web/spa keeps the reader within the 70000 B gzip budget, and the PR records the change from 60465 B
+- [x] The pill counts only posts that arrived after the page opened or the pill was last taken, never posts that already existed on later pages; show reveals them in place when they all fall on the page in view and otherwise goes to the page holding the first (ThreadScreen.test.tsx 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them', 'a full last page sends the pill to the next page', 'show reveals the posts and focuses the first')
+- [x] Every hint refetches the page on screen in full, so an edit, a removal and a restore all show, together or apart, without moving the post in view (ThreadScreen.test.tsx 'an edit and a removal in one change both show', 'an edit applies in place without moving the post in view')
+- [x] A post behind the pill is not marked read (ThreadScreen.test.tsx 'a post behind the pill is not marked read')
+- [x] Posting a reply routes to its permalink as today, showing it at once on its own page when the page in view is full or earlier, with held posts above it and no pill, so a reply posted here never counts in the pill (ThreadScreen.test.tsx 'a reply from a full page goes to its own page', 'posting a reply with posts held takes the reader to the reply', 'the reader's own reply never counts in the pill')
 
 ## Implementation plan
 
@@ -156,3 +149,7 @@ run decision: pending maintainer review. Amends notes 2 and 3 after Terva review
 **agent:claude-code/phase3-ctya0** at 2026-10-01T14:41:59Z
 
 run decision: pending maintainer review. A lens page holds no live subscription; live updates run on the canonical view. The unread lens is computed from the read position, which moves while the reader reads, so asking for its page again on a hint would take posts away under them, and the pill counts and reveals the whole thread's posts by ordinal, which a filtered page does not hold in order. Alternatives that lost: refetching every lens but unread (live behaviour would differ by lens, and the pill would count posts the lens hides); a pill on lens pages linking to the full thread (needs the post count, which a hint does not carry, so a second request per hint). Recorded in docs/06 'Live updates' in the implementation PR.
+
+## Summary
+
+Landed: the thread page holds a GET /events subscription on its canonical view (web/client/src/state/live.ts, ThreadScreen useLive). A hint longer than the page on screen asks for that page again in full by its number, and shows it with the first post in view held in place. Posts that arrived after the page opened wait behind NewPostsPill ('N new posts — show') unless the reader is at the bottom with all of them on the page; show reveals in place and focuses the first, or routes to the permalink of the first. Polling every 30 s on an error or a ready 10 s late, retrying the stream every fourth poll; a tab hidden 60 s closes its stream. The divider stays at the opening read position, held posts are not read, and the pill is withheld while the reader's own post is in flight (the post then routes to its permalink as before). Run decision, pending maintainer review: lens pages hold no subscription (docs/06). testing.tsx renderAt installs FakeEventSource (says ready by default). Reader bundle 60823 B at claim (60465 B at grooming) to 61914 B of 70000 B. All ten criteria met; unit, Go race and the full Playwright suite (199 passed) ran locally.
