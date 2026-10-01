@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T07:54:21Z
+updated_at: 2026-10-01T09:03:52Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -68,7 +68,7 @@ In-app only in v1, with no email and no push, so this list is the entire notific
 2. **State.** `web/client/src/state/notifications.ts` does three things:
    - `loadNotifications(cursor)` goes through `api/resource.ts`;
    - `markViewed(ids)` posts `{ids}` to `/api/v1/notifications/read` and then calls `refreshViewer()`, so the bell and the tab drop at once;
-   - `markAll(upTo)` posts `{up_to}`, the newest id shown.
+   - `markAll(upTo)` posts `{up_to}` with the first row's id on the first page. The list is in `id` order, so that is the highest id, and every unread row at or below it is cleared, including rows not yet paged in (review 1709).
 3. **Screen.** `web/client/src/screens/NotificationsScreen.tsx` replaces the `placeholder('notifications', 'Alerts')` entry in `routes.tsx`. It keeps screen `notifications` and the title "Alerts", through `useShellContext`.
    - It is an ordered list, one row per notification. Each row is a sentence by kind:
      - "*actor* mentioned you in *thread*"
@@ -93,7 +93,7 @@ In-app only in v1, with no email and no push, so this list is the entire notific
   - the permalink href;
   - the empty state;
   - exactly the displayed unread ids posted once, then `/me` fetched;
-  - "Mark all read" posting the newest id;
+  - "Mark all read" posting the first row's id;
   - "Older" appending the next page;
   - an error shown through `ErrorPanel`.
 - `nav` and `Shell` tests: the bell and the Alerts tab show the count from `/me` and drop after a mark.
@@ -118,3 +118,7 @@ In-app only in v1, with no email and no push, so this list is the entire notific
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T07:54:21Z
 
 Scope change in Phase 3 grooming (2026-10-01): this ticket is now client only. GET /notifications, POST /notifications/read and the /me count's filter moved to TKT-01M29CRJ2T (Build the notification generator). The description's 'with its API' now means the client's use of that API. The rule that a row carries no post text is a run decision recorded in docs/04 'notifications' and is pending maintainer review.
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T09:03:52Z
+
+Review 1709 (head 5c4846a, base a599b48), medium 'Use the list order, not the newest displayed ID, for Mark all read', fixed in the plans here and on TKT-01M29CRJ2T. The list is now keyset on id descending, the order the alerts arrived, with at shown only. Mark all read posts the first row's id as up_to, which clears every unread row at or below it.

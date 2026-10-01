@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T08:27:24Z
+updated_at: 2026-10-01T09:03:52Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -77,7 +77,7 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
    - `notification_progress (thread_id INTEGER PRIMARY KEY, log_length INTEGER NOT NULL, updated_at INTEGER NOT NULL)`. It is authoritative and carries no PROJECTION marker, so `db.ProjectionTables` and reindex leave it alone. The migration seeds it with `INSERT ... SELECT thread_id, log_length, updated_at FROM projection_state`. That only saves the first catch-up a scan. The projection may be behind when the migration runs, so the seed cannot be what keeps history quiet. The **install cutoff** does that: the generator reads its own migration's `schema_migrations.created_at` once at start, and a record whose frame timestamp is at or before it generates nothing. A post written before the generator existed is history whatever the projection had reached (review 1693).
    - `CREATE UNIQUE INDEX notifications_post ON notifications (user_id, thread_id, ordinal) WHERE thread_id IS NOT NULL`.
    - `CREATE UNIQUE INDEX notifications_watch_unread ON notifications (user_id, thread_id) WHERE kind = 'thread_you_watch' AND read_at IS NULL`.
-   - `CREATE INDEX notifications_recent ON notifications (user_id, at)`, for the newest-first list. It ends in the rowid, which breaks ties.
+   - `CREATE INDEX notifications_recent ON notifications (user_id)`. It ends in the rowid, which is the list's order.
    - `CREATE INDEX watches_by_thread ON watches (thread_id) WHERE thread_id IS NOT NULL` and `watches_by_forum ON watches (forum_id) WHERE forum_id IS NOT NULL`, so the generator finds a post's watchers without scanning.
    - No code has written a post kind yet (docs/04), so the unique indexes meet no duplicates.
 2. **Queries** in `internal/store/db/queries/notifications.sql`:
@@ -86,7 +86,8 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
    - `InsertWatchNotification` uses `INSERT ... ON CONFLICT DO NOTHING` with no target, so it yields to an unread watch row and to any row for the post.
    - `PostWatchers(thread_id, forum_id)` returns each user's effective level by the `coalesce(tw.level, fw.level, '')` rule.
    - `NotificationRecipients(ids)` returns each user's `status` and `role`.
-   - `ListNotifications` (keyset on `(at, id)` descending), `MarkNotificationsRead(user, ids)`, and `MarkNotificationsReadUpTo(user, id)`.
+   - `ListNotifications`, keyset on `id` descending: the order the rows were written, which is the order the alerts arrived. `at` is the record's own time and is only shown. Catch-up can write a notification for an older post after a newer one, so ordering by `at` would let `up_to` disagree with the list (review 1709).
+   - `MarkNotificationsRead(user, ids)` and `MarkNotificationsReadUpTo(user, id)`, which marks every unread row of the user with `id <= up_to`.
 3. **The generator**, `internal/events/notifier` (`Generator`, `Name() == "notifications"`). It is an `events.Subscriber` registered after the projection in `cmd/ketju/serve.go`. Its options are:
    - `DB`
    - `Root`
@@ -126,7 +127,7 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
    - The install cutoff keeps the first start, and any range the projection had not reached at install, from alerting on history. The seven-day rule covers a database restored without progress rows.
    - The generator's goroutine and closer follow the projection runner's (stop before the store closes, `busDrain`).
 5. **Serving**, in `internal/service/threads/notifications.go`. It is beside `userposts.go` because it uses the same quarantine, `LogSize` and index checks.
-   - `Notifications(ctx, v, cursor)` requires a member (`member.Require`). It reads a page of 25, newest first. The SQL joins `threads` (forum, slug, title, `log_length_projected`) and `post_meta`, and drops a row whose post is `deleted` or `moved`.
+   - `Notifications(ctx, v, cursor)` requires a member (`member.Require`). It reads a page of 25, highest `id` first. The SQL joins `threads` (forum, slug, title, `log_length_projected`) and `post_meta`, and drops a row whose post is `deleted` or `moved`.
    - Then `s.Perm.CanEach(v, forums, PermRead)` drops unreadable forums, and quarantined threads are dropped.
    - For a thread whose projection trails its log (`Threads.LogSize(id) != log_length_projected`), the index entry must be `Flags.Visible()`, as in `userPostCount`.
    - `new_application` is kept only when `v.Staff()`. `application_decided` is always kept.
@@ -178,7 +179,7 @@ Serving and access (`internal/web/api`). Each case asserts both `GET /notificati
   - a restore that brings a row back.
 - `TestNotificationsTrailingProjection`: a `Delete` appended while the projection is held hides the row through the index check, from the list and from `/me`'s count alike.
 - `TestNotificationList`: the golden `notifications.member.json`, paging by cursor, and a malformed cursor `bad-request`.
-- `TestMarkNotificationsRead`: by ids and by `up_to`. Another user's ids are ignored, and `/me` drops.
+- `TestMarkNotificationsRead`: by ids and by `up_to`. Another user's ids are ignored, and `/me` drops. A row written by catch-up for an older post, and so with a higher `id` and an earlier `at`, sits above the older rows in the list and is cleared by an `up_to` of the first row's id.
 - `TestBadgeMatchesNotificationList`: `/me` equals the unread rows the list serves.
 - `TestNotificationsRefusals`: anonymous `unauthenticated` and pre-user `forbidden`. Both answers are `no-store`.
 - `TestEveryViewerStateRouteHasAFormPost` with the POST added. `TestMeCountsScansNoTable` and `TestMeBudget` still pass. `TestProjectionTablesAreMarked` still passes, because progress is not a projection.
