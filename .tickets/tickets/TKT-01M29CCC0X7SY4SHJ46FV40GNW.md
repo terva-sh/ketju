@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCC0X7SY4SHJ46FV40GNW
 title: Implement the settings endpoints and session management
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: design:identity-sessions
     path: docs/05-identity-and-accounts.md
-claim: null
+claim:
+  actor: agent:claude-code/phase3-ccc0x
+  branch: run/ccc0x-settings-sessions
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af671810d1dec4448
+  commit: 6d10fe06d4b183e7cae48783855f30f1cc3bf261
+  session: null
+  claimed_at: 2026-10-01T11:12:12Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-10-01T10:18:44Z
+updated_at: 2026-10-01T11:12:13Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-pages
+  id: agent:claude-code/phase3-ccc0x
   name: ""
 extensions: {}
 ---
