@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T17:09:12Z
+updated_at: 2026-10-01T17:11:46Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -57,7 +57,7 @@ Confirm the cause under load (TKT-01M3SZ3GCE's notes have a load recipe), from t
 
 - [x] A note names the cause from evidence before any fix: a failure under TKT-01M3SZ3GCE's load recipe with its trace and evidence block, or a probe that delays the thread's refetch, and whether the refetch answered 200 with the new slow_mode_seconds
 - [ ] The fix is at the named cause: the diff adds no retry, no longer timeout and no skip, and playwright.config.ts is unchanged
-- [ ] If the cause is the panel's stale initial value, ModerateDialog's slow-mode choice follows slow_mode_seconds until the moderator chooses, with Vitest cases that fail against main before the change
+- [x] If the cause is the panel's stale initial value, ModerateDialog's slow-mode choice follows slow_mode_seconds until the moderator chooses, with Vitest cases that fail against main before the change
 - [ ] e2e/thread-moderation.spec.ts passes in 20 consecutive phone-project runs under the load recipe, and the full suite passes in both projects with its axe scans
 - [ ] If client code changed, the dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
 
