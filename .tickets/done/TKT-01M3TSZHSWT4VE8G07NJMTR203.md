@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T18:13:13Z
+updated_at: 2026-10-01T18:24:30Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -171,6 +171,10 @@ Proof, 2026-10-01, on the fix (commit 22447505, branch run/tszhsw-slow-mode-phon
 **agent:claude-code/phase3-tszhsw** at 2026-10-01T17:35:04Z
 
 Proof under TKT-01M3SZ3GCE's exact recipe, 2026-10-01, on the fix at c7b16e85. The image was golang:1.27-alpine with Alpine's Chromium 152.0.7977.82, installed as ci.yml installs them. Three podman containers ran at once, each with --cpus=1. The host carried 48 busy loops and a loop writing 256 MiB with fsync, and its load average peaked at 74.4. Each container ran `npx playwright test e2e/thread-moderation.spec.ts --project=phone --repeat-each=20 -x` and passed 144 of 144 in 7.3 to 7.4 min. That is 60 consecutive phone runs of the slow-mode test across the three, with no failure. This adds to the host proof in the note before.
+
+**agent:claude-code/phase3-tszhsw** at 2026-10-01T18:24:30Z
+
+Terva review 1795 (run a622b0bf), head 01666fd, base 86752c4, found one medium issue: 'Mark an already-selected radio as touched when it is clicked'. It is fixed in 8eab293. The radios now mark the choice on click, not on change, because a click on the radio already chosen fires no change event. A new Vitest case, 'a click on the slow-mode radio already chosen is kept when the page refetch lands', clicks Off while the refetch is held, lets 10 land, and checks that Off stays chosen and that Save sends 0. The case fails with onChange ('10' where '0' was expected) and passes with onClick. The reader bundle is 66220 B gzip, 31 B over main at dfd23a6. The moderation spec passed 46 of 46 in both projects with --repeat-each=3. All 2245 Vitest tests pass. While running go test -race, I found TestServeGeneratesNotifications failing intermittently on main as well (1 in 45 runs at 86752c4). It is filed as the draft TKT-01M3WBBF4H (Stop TestServeGeneratesNotifications racing the restore's notification) and is unrelated to this change, which touches no Go code.
 
 ## Summary
 
