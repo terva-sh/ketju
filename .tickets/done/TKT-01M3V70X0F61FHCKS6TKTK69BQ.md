@@ -18,11 +18,13 @@ origin: null
 dependencies:
   - TKT-01M29CTY8TB2CHCBQH3ABHCG3Q
 blocks_on: none
-references: []
+references:
+  - ref: pr:336
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T07:49:20Z
-updated_at: 2026-10-01T20:16:08Z
+updated_at: 2026-10-01T20:16:30Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
