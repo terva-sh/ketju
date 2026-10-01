@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:49:20Z
-updated_at: 2026-10-01T18:21:24Z
+updated_at: 2026-10-01T18:33:55Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
@@ -49,11 +49,11 @@ docs/07 "Search" describes the screen. docs/09 Phase 3 names "FTS5 search with s
 
 ## Acceptance criteria
 
-- [ ] Each result links to its post's permalink, or to the thread for a title match, shows forum, author and PostTime, and renders its snippet as text with matches in mark elements, never as markup (SearchScreen.test.tsx)
-- [ ] With no query, with no results (offering Clear filters when a filter is set), while the index is still building, and on a validation or not-found error, the screen shows a useful message rather than a blank page (SearchScreen.test.tsx)
-- [ ] e2e/search.spec.ts passes at 390 px and 1440 px with one axe scan per test and no violations: a member finds a reply by a unique word and follows it, and finds nothing from a forum they cannot read
+- [x] Each result links to its post's permalink, or to the thread for a title match, shows forum, author and PostTime, and renders its snippet as text with matches in mark elements, never as markup (SearchScreen.test.tsx)
+- [x] With no query, with no results (offering Clear filters when a filter is set), while the index is still building, and on a validation or not-found error, the screen shows a useful message rather than a blank page (SearchScreen.test.tsx)
+- [x] e2e/search.spec.ts passes at 390 px and 1440 px with one axe scan per test and no violations: a member finds a reply by a unique word and follows it, and finds nothing from a forum they cannot read
 - [ ] The committed dist is rebuilt with go generate ./internal/web/spa, the reader bundle stays within the 70000 B budget, and the PR reports the screen's bytes against the 2.6 KB estimate
-- [ ] /search keeps q, forum, author, after, before and cursor in its address, applies the form's draft only on Search, converts local From and To dates to ms with To including its day, and shows the filters in a fieldset at 720 px and up and in a Filters disclosure on the phone (SearchScreen.test.tsx)
+- [x] /search keeps q, forum, author, after, before and cursor in its address, applies the form's draft only on Search, converts local From and To dates to ms with To including its day, and shows the filters in a fieldset at 720 px and up and in a Filters disclosure on the phone (SearchScreen.test.tsx)
 
 ## Implementation plan
 
