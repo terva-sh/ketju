@@ -158,6 +158,29 @@ describe('the watch control on the thread page', () => {
     expect(control(root)?.textContent).toBe('Muted');
   });
 
+  // Terva review 1829: a live page that lands while the save is out was
+  // asked for before the save answered, so the saved level shows over it.
+  it('shows the saved level over a live page that landed while the save was out', async () => {
+    serve('', '');
+    let answer: ((a: { status: number; body: unknown }) => void) | null = null;
+    server.routes[`POST ${url}/watch`] = () => new Promise((resolve) => (answer = resolve));
+    const longer: ThreadPage = { ...page, thread: { ...page.thread, log_length: page.thread.log_length + 100 } };
+    server.routes[`GET ${url}?page=${page.page.number}`] = () => ({ status: 200, body: longer });
+    const root = await renderAt(`/t/${id}/a`);
+    await press(control(root));
+    await choose('Mute');
+    await press(dialog()!.querySelector('button[type=submit]'));
+    expect(answer).not.toBeNull();
+    // The live page, with the level from before, lands first.
+    await act(async () => FakeEventSource.open()[0].emit('thread', { thread_id: id, log_length: longer.thread.log_length }));
+    await settle(root);
+    expect(control(root)?.textContent).toBe('Watch');
+    await act(async () => answer!({ status: 200, body: { watch: 'mute', forum_watch: '' } }));
+    await wait();
+    expect(dialog()).toBeNull();
+    expect(control(root)?.textContent).toBe('Muted');
+  });
+
   // Terva review 1820: a save outlives a dialog dismissed while it is out.
   // Its answer neither closes a dialog opened since nor, once a later save
   // has started, puts back its own level.

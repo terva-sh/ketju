@@ -67,6 +67,10 @@ export function ThreadListScreen() {
   const [watchSet, setWatchSet] = useState<{ on: ThreadList; to: string } | null>(null);
   const [watching, setWatching] = useState(false);
   const watchButton = useRef<HTMLButtonElement>(null);
+  // The list on screen when a save answers, which a mark's retry may have
+  // replaced since the dialog opened (Terva review 1829 on the thread page).
+  const shownList = useRef(list);
+  shownList.current = list;
   const level = watchSet && watchSet.on === list ? watchSet.to : (list?.watch ?? '');
   const offerWatch = signedIn && !!list?.forum;
   useEffect(() => setWatching(false), [forum]);
@@ -118,7 +122,7 @@ export function ThreadListScreen() {
           returnTo={watchButton.current}
           fallback={() => null}
           onSaved={(to) => {
-            setWatchSet({ on: list!, to: to.watch });
+            if (shownList.current) setWatchSet({ on: shownList.current, to: to.watch });
             res.retry();
           }}
           onClose={() => setWatching(false)}

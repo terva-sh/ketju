@@ -46,7 +46,7 @@ import { subscribe } from '../state/live';
 import { marking, markUnread, readPosition, trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { refreshViewer, viewer } from '../state/viewer';
-import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
+import { cachedThread, loadCount, loadThreadPage, pageRequestedAt, threadUrl, type ThreadQuery } from '../state/threads';
 import { canonicalThreadUrl, useThreadView } from '../view';
 import { NotFound } from './Placeholder';
 import { PostHistory } from './PostHistory';
@@ -202,12 +202,15 @@ export function ThreadScreen() {
   // Watch is offered to a signed-in member once the page's viewer block is
   // theirs (pageFor), on every view of the thread, since it is about the
   // thread and not the posts on screen. A saved level shows at once
-  // (watchSet), for as long as the block it replaces is the one shown: the
-  // next page the server answers carries the level itself.
-  const [watchSet, setWatchSet] = useState<{ on: ThreadViewer; to: ThreadWatch } | null>(null);
+  // (watchSet) on any page of the thread whose load started before the save
+  // answered, whenever that page landed: a live refresh can land while the
+  // save is out (Terva review 1829). A page asked for after the answer
+  // carries the level itself, and the save's barrier (forgetAllThreadPages)
+  // has any page asked for before it asked for again.
+  const [watchSet, setWatchSet] = useState<{ thread: string; at: number; to: ThreadWatch } | null>(null);
   const [watchOpen, setWatchOpen] = useState<{ thread: string; returnTo: Element | null } | null>(null);
-  const pageViewer = shown?.viewer;
-  const watch = watchSet && pageViewer && watchSet.on === pageViewer ? watchSet.to : pageViewer;
+  const watch =
+    shown && watchSet && watchSet.thread === params.id && pageRequestedAt(shown) <= watchSet.at ? watchSet.to : shown?.viewer;
   const offerWatch = !!watch && tracksUnread() && pageFor === me;
   // First unread goes by the position as the read tracker knows it at the
   // press, which reading since the page arrived has moved (Terva review
@@ -359,7 +362,7 @@ export function ThreadScreen() {
           level={watch.watch}
           returnTo={watchOpen.returnTo}
           fallback={() => title.current}
-          onSaved={(to) => pageViewer && setWatchSet({ on: pageViewer, to: to as ThreadWatch })}
+          onSaved={(to) => setWatchSet({ thread: watchOpen.thread, at: loadCount(), to: to as ThreadWatch })}
           onClose={() => setWatchOpen(null)}
         />
       )}
