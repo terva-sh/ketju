@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-01T08:13:43Z
+updated_at: 2026-10-01T08:48:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,12 +45,12 @@ Pure Go decoders only, since the whole binary is cgo-free and a thumbnail featur
 
 - [ ] Side and decode-memory bounds are checked from DecodeConfig before any decode, so a PNG, JPEG or GIF bomb under 1 KB is refused with no decoder call and under 1 MiB allocated (TestThumbnailRefusesBombBeforeDecode, TestThumbnailBudgetCountsDepth)
 - [ ] A thumbnail is <hash>.thumb beside the blob, fitted inside 160 px, made once and made again only when missing (TestThumbnailFitsAndKeepsAspect, TestThumbnailFormats, TestThumbnailMadeOnceAndCached)
-- [ ] An image that fails to decode, or panics the decoder, leaves the blob served and the post rendered with its attachment, and is not decoded again until restart (TestThumbnailDecodeFailureLeavesBlobServable, TestDecodePanicIsContained)
 - [ ] A thumbnail is served only to the viewers its blob is served to, through the same Authorize (TestThumbnailServedOnlyToReaders, every row of the blob table)
 - [ ] Decodes run one at a time, and two readers of a new image make one decode (TestThumbnailsDecodeOneAtATime, TestThumbnailMadeOnceAndCached)
 - [ ] Blob GC and ketju redact remove a blob's thumbnail with it, and GC removes a thumbnail whose blob has no row (TestCollectorRemovesThumbnail, TestCollectorRemovesOrphanThumbnail, TestRedactRemovesThumbnail)
 - [ ] docs/03 and docs/07 name the thumbnail file and route in the same PR
 - [ ] Only the standard library's image/png, image/jpeg and image/gif decode untrusted bytes (TestThumbImportsOnlyStdlibImage), and a new CI step builds ./cmd/ketju with CGO_ENABLED=0
+- [ ] An image that fails to decode, or panics the decoder, leaves the blob served and the post rendered with its attachment, and is not decoded again while it stays in the 4096-entry failure cache (TestThumbnailDecodeFailureLeavesBlobServable, TestDecodePanicIsContained)
 
 ## Implementation plan
 
@@ -82,7 +82,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 
   So a JPEG thumbnail is made up to about 16.7 megapixels. A larger photo is still served, as a card with no thumbnail, which is the failure case the ticket already requires.
 - **One decode at a time.** A semaphore of one bounds memory to one `MaxDecodeBytes` budget, and a per-hash singleflight stops two readers of a new post from decoding the same file twice.
-- **Failures are remembered in memory, not on disk.** An LRU of 4096 hashes that failed to decode stops a reload from paying for the decode again. It is forgotten on restart (docs/03 decision: "a cache entry that means 'never' outlives the decoder that failed").
+- **Failures are remembered in memory, not on disk, on a best-effort basis.** An LRU of 4096 hashes that failed to decode stops a reload from paying for the decode again, while the hash stays in it. It is forgotten on restart, and an entry evicted by 4096 newer failures may be decoded once more. That is bounded by the one-at-a-time semaphore and the size bounds, so a retried failure costs time, never memory (Terva review 1712) (docs/03 decision: "a cache entry that means 'never' outlives the decoder that failed").
 
 ### Approach
 

@@ -139,6 +139,15 @@ is sent. The rules (TKT-01M29CRJ3X):
   stream queue), it closes every stream that names a forum, and resends the
   snapshot on streams that name only threads. The reconnect's `ready` is
   the forum client's signal to refetch (Terva review 1708).
+- **The projection goes first.** The hub handles an event only once the
+  thread's projection row has reached the event's log length. Both the
+  forum it routes by and the access it checks are read from that row. The
+  projection writer is another subscriber on the same bus, so without the
+  wait a move could be routed to the forum the thread left, and the move's
+  own hint could reach a reader who has just lost access. If the row has
+  not caught up within 5 s, the hub closes every stream that names the
+  thread or a forum, and each reconnect is judged afresh (Terva review
+  1712).
 
 Alternatives: keeping the fan-out free of permission checks lost, because
 docs/14 makes any widening a security finding, and a thread moved to a forum
