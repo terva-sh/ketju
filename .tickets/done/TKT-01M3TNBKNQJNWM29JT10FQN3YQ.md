@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TNBKNQJNWM29JT10FQN3YQ
 title: Print Playwright's error context into the CI log when a test fails
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ references:
     path: null
   - ref: pr:261
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-tnbknq
-  branch: run/tnbknq-ci-error-context
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac299ee09f0f9a4bf
-  commit: d6437072a867e900102a0bca4e9ef4c7ab57e554
-  session: null
-  claimed_at: 2026-10-01T04:17:16Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T04:38:01Z
+updated_at: 2026-10-01T04:56:44Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
@@ -66,7 +59,7 @@ Keeping `trace.zip` would need an artifact upload. That is a larger change, and 
 - [x] Only the first 10 failing results get a full block and each later one gets one line with its error-context.md path; an error inside the reporter writes one line and never throws
 - [x] scripts/evidence-reporter.test.mjs covers every case named in the plan's Tests and passes under npm test
 - [x] A note records a local run on port 18901 of a deliberately failing scratch spec at both widths, with the command and the commit, whose output holds two evidence blocks, each with the Locator: line, the YAML ARIA tree and GET /api/v1/admin/applications in the server lines; the scratch spec is not in the PR's diff
-- [ ] A note records a local full-suite run with no failures and zero 'failure evidence' lines in its output, and the PR's green CI Playwright step log has zero 'failure evidence' lines
+- [x] A note records a local full-suite run with no failures and zero 'failure evidence' lines in its output, and the PR's green CI Playwright step log has zero 'failure evidence' lines
 - [x] go generate ./internal/web/spa leaves internal/web/spa/dist unchanged, and the PR's diff touches nothing under web/client/src
 - [x] The implementation PR adds a note to TKT-01M3SZ3GCE, before review, saying its blocker is done and what a failing test now prints; TKT-01M3SZ3GCE stays blocked
 - [x] The commit body lists the mutations tried against the unit test and whether each was caught
@@ -232,3 +225,22 @@ Re-run on f87aed9:
 **agent:claude-code/phase2-run-tnbknq** at 2026-10-01T04:38:01Z
 
 Review 1637 (Terva run a00336c6-4d35-4940-b267-a91961b48aae, Actions run #1706) on PR #261 reviewed head 5a2bd22 against base b3cf1f4. It marked both of review 1636's findings resolved. It raised one low finding, 'Keep a complete line when the log tail starts at its boundary' (evidence-reporter.mjs:108), which is fixed in 80b69c4. The tail is now read from the byte before it, so the dropped first segment is the cut fragment or the empty string after a newline, never a whole line. The new case 'a line that starts exactly at the tail is kept' covers it, and the mutation that reads from the tail itself again is caught. npm test (69 files, 2043 tests) and tsc are clean on 80b69c4.
+
+**agent:claude-code/phase2-run-tnbknq** at 2026-10-01T04:56:36Z
+
+CI proof, 2026-10-01: PR #261's run #1707 on c37c38d (base b3cf1f4) is green. Its 'Playwright smoke at 390 px and 1440 px' step log, read from the step log rather than the summary, has 0 lines containing 'failure evidence' and no failed test: 193 passed and 11 skipped in 9.9 min. It is 409 lines and 32334 bytes, against 409 lines and 32333 bytes in main's green push run #1677 on c3de983, so a passing run's log did not grow. The run also proves the reporter loads in CI's Alpine image. Together with the local full-suite note, this satisfies criterion 6.
+
+## Summary
+
+Landed in PR #261. A failing Playwright test now leaves its evidence in the run's output, which is the only record CI keeps.
+
+- **`web/client/scripts/evidence-reporter.mjs`** runs after `list` (`web/client/playwright.config.ts`). For each result that failed, timed out or was interrupted, it prints one block under the test's `✘` line, between `── failure evidence: [<project>] › <file>:<line> › <title path> (<status>) ──` and `── end of failure evidence ──`. The block holds:
+  - Playwright's `error-context.md`, verbatim and cut at 64 KiB: the error, the locator and its call log, the page's ARIA tree, and the source frame;
+  - the `serve.log` lines from that test only, at most the last 120 and read from at most the slice's last 256 KiB.
+- A passed, skipped or expected-to-fail result prints nothing. After ten printed blocks, each further failure gets one line, and errors are written as one line and never thrown.
+- **Unchanged:** `.forgejo/workflows/ci.yml`, `workers: 1`, `retries: 0`, `trace: 'retain-on-failure'`, and `web/client/src` and the dist.
+- **Tests:** `scripts/evidence-reporter.test.mjs` has 11 cases, and 12 mutations were each caught.
+- **Proof:** a deliberately failing scratch spec, never committed, printed both parts at both widths. A full local suite run, and the PR's green CI Playwright step log, held no evidence line.
+- **Review:** three rounds. Review 1636 had two medium findings (an unbounded log read, and the cap counting failed attempts). Review 1637 had one low finding (a whole line dropped at the tail boundary). All three are fixed, and run a17d0335 was clean on c37c38d.
+- **Why a reporter rather than the description's `if: failure()` step:** the plan's "Alternative that lost" explains it. In short, only the runner knows each test's slice of `serve.log`.
+- **Still open:** `trace.zip` is still lost until the forge's artifact support is confirmed. TKT-01M3SZ3GCE stays blocked until its failure comes back, and its note says what that run will print. TKT-01M3TSZHSW was filed by this lane as a draft with no milestone.
