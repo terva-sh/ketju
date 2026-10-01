@@ -225,6 +225,15 @@ jobs:
           go test ./internal/events/projection/ ./internal/web/health/ \
             -run '^(TestCatchUpTenThousandUnderBound|TestHealthzP99)$' -count=1 -v
 
+      - name: notification catch-up past SQLite's variable limit (no -race)
+        # TKT-01M29CRJ2T, Terva review 1784. A backlog naming more posts than
+        # SQLite binds in one statement must still generate, or the thread
+        # retries the same refused statement forever. Appending the backlog
+        # takes seconds and minutes under -race, so the test is built without
+        # it and runs here.
+        run: |
+          go test ./internal/events/notifier/ -run '^TestLargeBacklogCatchesUp$' -count=1 -v
+
       - name: storage benchmarks still run (not a measurement)
         # TKT-01M29C2WV6. One iteration of each benchmark at a toy size, to
         # catch a benchmark that stopped compiling or started failing. It is

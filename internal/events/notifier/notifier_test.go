@@ -595,3 +595,23 @@ func TestNewRequiresOptions(t *testing.T) {
 		}
 	}
 }
+
+// TestLookupsSpanChunks: with the lookup bound at two ids, a batch that
+// needs several posts' authors and several members' rows reads them over
+// more than one statement and generates exactly what one statement would.
+func TestLookupsSpanChunks(t *testing.T) {
+	defer func(n int) { lookupChunk = n }(lookupChunk)
+	lookupChunk = 2
+	f := newFixture(t)
+	id, created := f.thread(f.forum)
+	f.deliver(created,
+		f.post(id, "alice", "one", 0),
+		f.post(id, "bob", "two", 0),
+		f.post(id, "carol", "three", 0),
+		f.post(id, "dave", "to alice", 1),
+		f.post(id, "alice", "to bob", 2, "carol", "dave", "mod"),
+		f.post(id, "mod", "to carol", 3))
+	f.want("alice reply_to_you #4 by dave",
+		"bob reply_to_you #5 by alice", "carol mention #5 by alice", "dave mention #5 by alice", "mod mention #5 by alice",
+		"carol reply_to_you #6 by mod")
+}

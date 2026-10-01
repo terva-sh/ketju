@@ -708,15 +708,17 @@ func (g *Generator) generate(ctx context.Context, q *dbq.Queries, id threadid.ID
 			need = append(need, int64(it.ordinal))
 		}
 	}
+	slices.Sort(need)
+	need = slices.Compact(need)
 	posts := map[uint32]dbq.PostAuthorsRow{}
-	if len(need) > 0 {
-		rows, err := q.PostAuthors(ctx, dbq.PostAuthorsParams{ThreadID: int64(id), Ordinals: need})
-		if err != nil {
-			return err
-		}
+	if err := inChunks(need, func(part []int64) error {
+		rows, err := q.PostAuthors(ctx, dbq.PostAuthorsParams{ThreadID: int64(id), Ordinals: part})
 		for _, r := range rows {
 			posts[uint32(r.Ordinal)] = r
 		}
+		return err
+	}); err != nil {
+		return err
 	}
 
 	// Every member's effective level on the thread.
@@ -803,14 +805,14 @@ func (g *Generator) generate(ctx context.Context, q *dbq.Queries, id threadid.ID
 	}
 	slices.Sort(lookup)
 	users := map[int64]dbq.User{}
-	if len(lookup) > 0 {
-		us, err := q.UsersByIDs(ctx, lookup)
-		if err != nil {
-			return err
-		}
+	if err := inChunks(lookup, func(part []int64) error {
+		us, err := q.UsersByIDs(ctx, part)
 		for _, u := range us {
 			users[u.ID] = u
 		}
+		return err
+	}); err != nil {
+		return err
 	}
 	readable := map[int64]bool{}
 	may := func(u int64) (bool, error) {
@@ -895,6 +897,25 @@ func checkHeader(r io.ReaderAt, id threadid.ID) error {
 	}
 	if h.ThreadID != uint64(id) {
 		return fmt.Errorf("the log at this thread's path names thread %s", threadid.ID(h.ThreadID))
+	}
+	return nil
+}
+
+// lookupChunk bounds how many ids one IN list binds. sqlc expands a slice
+// into one parameter per element, and SQLite refuses a statement with more
+// variables than its limit, so a catch-up backlog that names more posts or
+// members than that would fail the same way on every retry and never
+// advance (Terva review 1784). The bound sits far below any limit SQLite
+// has shipped with.
+var lookupChunk = 500
+
+// inChunks calls fn with ids in consecutive parts of at most lookupChunk,
+// stopping at the first error. With no ids it calls nothing.
+func inChunks(ids []int64, fn func([]int64) error) error {
+	for part := range slices.Chunk(ids, lookupChunk) {
+		if err := fn(part); err != nil {
+			return err
+		}
 	}
 	return nil
 }
