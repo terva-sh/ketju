@@ -12,7 +12,7 @@ labels:
   - area:client
   - effort:S
 assignees: []
-milestone: phase-2
+milestone: null
 parent: null
 origin: null
 dependencies: []
@@ -21,7 +21,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T04:01:29Z
+updated_at: 2026-10-01T04:17:38Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -45,3 +45,9 @@ After the first Save, the desktop project waits for the composer's `[data-slow-m
 ### What to do
 
 Confirm the cause under load (TKT-01M3SZ3GCE's notes have a load recipe), from the trace or from the evidence TKT-01M3TNBKNQ prints once it lands. Then fix it where it is: either the spec waits on the refetch on a phone too, inside the existing 5 s, or the panel follows the thread's value. No retries, no longer timeouts and no skips, the same rule as TKT-01M3SZ3GCE.
+
+## Notes
+
+**agent:claude-code/phase2-run-tnbknq** at 2026-10-01T04:17:38Z
+
+Milestone cleared, 2026-10-01: the orchestrator's scope note says drafts a lane files go in with no milestone, for the maintainer to place, so that the run does not grow its own scope. It was filed as phase-2 before that note.

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TNBKNQJNWM29JT10FQN3YQ
 title: Print Playwright's error context into the CI log when a test fails
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -20,10 +20,17 @@ blocks_on: none
 references:
   - ref: pr:258
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-tnbknq
+  branch: run/tnbknq-ci-error-context
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac299ee09f0f9a4bf
+  commit: d6437072a867e900102a0bca4e9ef4c7ab57e554
+  session: null
+  claimed_at: 2026-10-01T04:17:16Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T03:49:32Z
+updated_at: 2026-10-01T04:17:30Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
@@ -64,7 +71,7 @@ Keeping `trace.zip` would need an artifact upload. That is a larger change, and 
 
 ## Implementation plan
 
-Groomed 2026-10-01 against main at c3de983. A spike on that tree (Approach, "What the spike showed") ran a deliberately failing spec through a throwaway reporter, so the shape below has been run once rather than guessed.
+Revised at claim, 2026-10-01, against main at d643707. The only change from the groomed plan is the file naming in Approach step 1 and the mutation that covers it. Groomed 2026-10-01 against main at c3de983. A spike on that tree (Approach, "What the spike showed") ran a deliberately failing spec through a throwaway reporter, so the shape below has been run once rather than guessed.
 
 ### Settled in grooming
 
@@ -84,7 +91,7 @@ The evidence is printed by a Playwright reporter that runs beside `list`, not by
    - `onBegin`: the server log is `join(process.env.KETJU_E2E_DIR, 'serve.log')`. `playwright.config.ts` sets `KETJU_E2E_DIR` in the runner process before reporters load, and `ketju e2e` writes its request log there (`runE2E` in `cmd/ketju/e2e.go`).
    - `onTestBegin(test)`: record `serve.log`'s size under `test.id` (0 if the file does not exist yet).
    - `onTestEnd(test, result)`: take and delete the recorded offset. If `result.status === test.expectedStatus`, or the status is `skipped`, return and write nothing. A `skipped` result whose expected status is `passed` is a test that did not run, for example after a serial group's failure, and Playwright's summary counts it under "did not run". The failure that stopped it prints its own block. Otherwise write one block:
-     - an opening line `── failure evidence: [<project>] › <file>:<line> › <title path> (<status>) ──`, with the file relative to the config's `rootDir`;
+     - an opening line `── failure evidence: [<project>] › <file>:<line> › <title path> (<status>) ──`, with the file relative to the config file's directory (`dirname(config.configFile)`, falling back to `config.rootDir`). In Playwright 1.63, `rootDir` is the test directory, so it would drop the `e2e/` prefix that `list` prints (found in the first local run at claim);
      - the `error-context` attachment's file verbatim, under `error-context.md (<path>)`, cut at 64 KiB with a line naming the path and the bytes left out. If there is no such attachment, a line saying so;
      - `serve.log` from the recorded offset to its current size, under `serve.log during this test`, keeping the last 120 lines and saying how many were left out. If the file does not exist, a line saying so;
      - a closing line `── end of failure evidence ──`.
@@ -129,7 +136,7 @@ The reporter's risk is that it runs inside the Playwright process. It is contain
   1. Write a scratch spec, `e2e/zz-scratch-fail.spec.ts`, that waits for a link that is never rendered, as in the spike. Run `npx playwright test e2e/zz-scratch-fail.spec.ts` at both widths. The output must hold two evidence blocks, each with the `Locator:` line, a `# Page snapshot` or YAML ARIA tree, and `GET /api/v1/admin/applications` in the server lines. Record the command, the commit and an excerpt in the note. Delete the spec, and show with `git status` that it is gone before committing.
   2. Run the full suite, `npx playwright test`, without the scratch spec. `grep -c 'failure evidence'` on its output must be 0. Record it in the note.
 - **CI.** The PR's own green run is the proof that the reporter loads in CI's image and stays silent there. The Playwright step log holds no `failure evidence` line. Read the step log for this, not the run summary.
-- **Mutations**, listed in the commit body with whether the unit test caught each one: printing on `result.status === 'passed'` only (an expected failure then prints); slicing `serve.log` from 0 instead of the recorded offset; dropping the 10-failure cap.
+- **Mutations**, listed in the commit body with whether the unit test caught each one: printing on `result.status === 'passed'` only (an expected failure then prints); slicing `serve.log` from 0 instead of the recorded offset; dropping the 10-failure cap; naming files from `rootDir` instead of the config's directory.
 
 ### Out of scope
 
