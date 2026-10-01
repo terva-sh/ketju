@@ -7,6 +7,13 @@
       "slug": "general",
       "name": "General"
     },
+    "author": {
+      "handle": "bob",
+      "display_name": "Bob Iyer",
+      "avatar": "",
+      "role": "moderator",
+      "kind": "human"
+    },
     "post_count": 2,
     "log_length": 1841,
     "locked": false,

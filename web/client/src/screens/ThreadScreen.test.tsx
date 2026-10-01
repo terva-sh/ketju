@@ -80,6 +80,47 @@ describe('the thread screen', () => {
     expect(root.textContent).toContain('This has been deleted');
   });
 
+  // The thread head (docs/06 "The thread head", TKT-01M3S3ZF6J).
+  const headAt = async (id: string, over: Partial<ThreadHeader> = {}) => {
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url.startsWith('/api/v1/drafts/')) return new Response(null, { status: 204, headers: { 'Draft-Revision': '0' } });
+      return new Response(JSON.stringify(threadPage({ id, slug: 'a', title: 'Head' }, { thread: over as ThreadHeader })), {
+        status: 200,
+      });
+    });
+    const root = await renderAt(`/t/${id}/a`);
+    return root.querySelector('.thread-head')!;
+  };
+
+  it('the head names the starter, the time and the post count', async () => {
+    const created = Date.UTC(2025, 8, 10, 9, 30);
+    const head = await headAt('01k4z3j0w8x3a', { created_at: created, post_count: 212 });
+    const meta = head.querySelector('.thread-meta')!;
+    expect(meta.querySelector('.starter')?.textContent).toBe('alice');
+    const time = meta.querySelector('time')!;
+    expect(time.getAttribute('datetime')).toBe(new Date(created).toISOString());
+    expect(meta.textContent).toBe(`started by alice · ${time.textContent} · 212 posts`);
+    // Under the title.
+    expect(head.querySelector('h1 + .thread-meta')).toBe(meta);
+  });
+
+  it('the breadcrumb links the front page and the forum', async () => {
+    const head = await headAt('01k4z3j0w8x3b');
+    const crumb = head.querySelector('nav.breadcrumb')!;
+    expect(crumb.getAttribute('aria-label')).toBe('Breadcrumb');
+    expect(crumb.nextElementSibling?.tagName).toBe('H1');
+    const links = [...crumb.querySelectorAll('a')].map((a) => [a.textContent, a.getAttribute('href')]);
+    expect(links).toEqual([
+      ['Forums', '/'],
+      ['General', '/f/general'],
+    ]);
+  });
+
+  it('one post reads 1 post', async () => {
+    const head = await headAt('01k4z3j0w8x3c', { post_count: 1 });
+    expect(head.querySelector('.thread-meta')?.textContent).toMatch(/ · 1 post$/);
+  });
+
   // The title shown while another page of the same thread loads is the
   // thread's own, from the cache.
   it("keeps the thread's title while another of its pages loads", async () => {

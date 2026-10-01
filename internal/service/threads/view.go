@@ -254,6 +254,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	var (
 		forum    dbq.Forum
 		tags     []string
+		starter  dto.Author
 		lastRead int64
 		watch    string
 		authorW  *dto.AuthorWindows
@@ -264,6 +265,9 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			return fmt.Errorf("threads: the forum of %s: %w", id, err)
 		}
 		if tags, err = dq.ThreadTags(ctx, int64(id)); err != nil {
+			return err
+		}
+		if starter, err = starterOf(ctx, dq, row.AuthorID); err != nil {
 			return err
 		}
 		if !v.Member() {
@@ -375,7 +379,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		}
 
 		res.Body = dto.ThreadPage{
-			Thread: header(id, row, forum, tags, snap.n, snap.logLength, now),
+			Thread: header(id, row, forum, starter, tags, snap.n, snap.logLength, now),
 			Page:   dto.Pagination{Number: snap.page, Size: size, TotalPages: totalPages(snap.n, size)},
 			Viewer: viewer,
 		}
@@ -513,13 +517,15 @@ func matches(header, tag string) bool {
 // thread list applies (views.activePin), so an expiry needs no job to clear
 // it (TKT-01M29CKRGS). The projection row keeps the expired values until the
 // next pin record. The header is never cached, so the clock applies on every
-// request.
-func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n int, logLength int64, now time.Time) dto.ThreadHeader {
+// request, and the starter is read from the users row on every request, so a
+// rename or an anonymization shows on the next view.
+func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, starter dto.Author, tags []string, n int, logLength int64, now time.Time) dto.ThreadHeader {
 	h := dto.ThreadHeader{
-		ID:    id.String(),
-		Slug:  row.Slug,
-		Title: row.Title,
-		Forum: dto.ForumRef{Slug: forum.Slug, Name: forum.Name},
+		ID:     id.String(),
+		Slug:   row.Slug,
+		Title:  row.Title,
+		Forum:  dto.ForumRef{Slug: forum.Slug, Name: forum.Name},
+		Author: starter,
 		// From the index, not the projection, so it agrees with LogLength.
 		PostCount: n,
 		LogLength: logLength,
@@ -535,6 +541,20 @@ func header(id threadid.ID, row dbq.Thread, forum dbq.Forum, tags []string, n in
 		}
 	}
 	return h
+}
+
+// starterOf is the thread's starter, user id, as the header draws it: the
+// users row through member.Author, or member.Missing when the database has
+// no such row, as the thread list draws its rows' authors.
+func starterOf(ctx context.Context, dq *dbq.Queries, id int64) (dto.Author, error) {
+	u, err := dq.GetUser(ctx, id)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return member.Missing(id), nil
+	case err != nil:
+		return dto.Author{}, fmt.Errorf("threads: the starter %d: %w", id, err)
+	}
+	return member.Author(u), nil
 }
 
 // posts reads, renders and assembles the page's posts for a, reading the

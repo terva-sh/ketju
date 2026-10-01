@@ -652,6 +652,7 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
 {
   "thread": {"id": "3yymw47g00001", "slug": "why-we-left-slack", "title": "…",
              "forum": {"slug": "general", "name": "General"},
+             "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
              "post_count": 212, "log_length": 483920, "locked": false, "pinned": null,
              "tags": ["meta"], "created_at": 1757500000000},
   "page": {"number": 3, "size": 25, "total_pages": 9},
@@ -676,7 +677,10 @@ only per-user part, and it is cheap; everything above it comes from the
 response cache keyed on `(thread, page, lens, log_length, renderer_version,
 viewer_class)` where `viewer_class ∈ {anon, member, moderator, author:<id>}`
 (moderators see tombstone contents, and so does the author of a post a
-moderator removed; see "Removed posts" below).
+moderator removed; see "Removed posts" below). In practice only the posts are
+cached; the thread block is drawn on every request, and its `author`, the
+thread's starter, is read from the users row each time, so a rename or an
+anonymization shows on the next view (TKT-01M3S3ZF6J).
 
 #### What the thread endpoint does (TKT-01M29CA9AX)
 

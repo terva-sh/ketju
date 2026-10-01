@@ -80,10 +80,11 @@ func threadPage(class string) ThreadPage {
 
 	p := ThreadPage{
 		Thread: ThreadHeader{
-			ID:    "3yymw47g00001",
-			Slug:  "why-we-left-slack",
-			Title: "Why we left Slack",
-			Forum: ForumRef{Slug: "general", Name: "General"},
+			ID:     "3yymw47g00001",
+			Slug:   "why-we-left-slack",
+			Title:  "Why we left Slack",
+			Forum:  ForumRef{Slug: "general", Name: "General"},
+			Author: alice,
 
 			PostCount: 212,
 			LogLength: 483920,
@@ -405,6 +406,7 @@ func lockedThread() ThreadPage {
 			Slug:      "office-move-decided",
 			Title:     "Office move: decided",
 			Forum:     ForumRef{Slug: "general", Name: "General"},
+			Author:    bob,
 			PostCount: 2,
 			LogLength: 1841,
 			Locked:    true,
@@ -785,7 +787,7 @@ func createdThread() CreatedThread {
 	return CreatedThread{
 		Thread: ThreadHeader{
 			ID: "3yymw47g00001", Slug: "why-we-left-slack", Title: "Why we left Slack",
-			Forum: ForumRef{Slug: "general", Name: "General"}, PostCount: 1, LogLength: 312,
+			Forum: ForumRef{Slug: "general", Name: "General"}, Author: alice, PostCount: 1, LogLength: 312,
 			Tags: []string{}, CreatedAt: 1757500000000,
 		},
 		Post: CreatedPost{Post: p, Ordinal: 1, Revision: 1, LogLength: 312},

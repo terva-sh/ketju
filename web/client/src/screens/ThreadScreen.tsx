@@ -23,6 +23,7 @@ import {
 import { isOwn, noControls, postControls } from '../components/thread/postControls';
 import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
+import { PostTime } from '../components/thread/PostTime';
 import { isTombstone } from '../components/thread/removal';
 import { expanderShown } from '../components/thread/ReplyExpander';
 import { Tombstone } from '../components/thread/Tombstone';
@@ -239,13 +240,25 @@ export function ThreadScreen() {
     <main class="thread-page" data-screen={history ? 'post-history' : 'thread'}>
       <header class="thread-head">
         {head && (
-          <a class="forum hit" href={`/f/${encodeURIComponent(head.forum.slug)}`}>
-            {head.forum.name}
-          </a>
+          <nav class="breadcrumb" aria-label="Breadcrumb">
+            <a class="hit" href="/">
+              Forums
+            </a>
+            <span aria-hidden="true">›</span>
+            <a class="forum hit" href={`/f/${encodeURIComponent(head.forum.slug)}`}>
+              {head.forum.name}
+            </a>
+          </nav>
         )}
         <h1 ref={title} tabIndex={-1}>
           {head?.title ?? 'Thread'}
         </h1>
+        {head && (
+          <p class="thread-meta">
+            started by <span class="starter">{head.author.handle}</span> · <PostTime at={head.created_at} /> ·{' '}
+            {head.post_count} {head.post_count === 1 ? 'post' : 'posts'}
+          </p>
+        )}
         {head?.locked && (
           <p class="locked" data-thread-state="locked">
             This thread is locked.

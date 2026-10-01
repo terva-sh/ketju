@@ -504,13 +504,17 @@ func (s *Service) threadHeader(ctx context.Context, v domain.Viewer, id threadid
 		return dto.ThreadHeader{}, err
 	}
 	var (
-		forum dbq.Forum
-		tags  []string
+		forum   dbq.Forum
+		starter dto.Author
+		tags    []string
 	)
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
 		if forum, err = q.GetForum(ctx, a.row.ForumID); err != nil {
 			return fmt.Errorf("threads: the forum of %s: %w", id, err)
+		}
+		if starter, err = starterOf(ctx, q, a.row.AuthorID); err != nil {
+			return err
 		}
 		tags, err = q.ThreadTags(ctx, int64(id))
 		return err
@@ -527,7 +531,7 @@ func (s *Service) threadHeader(ctx context.Context, v domain.Viewer, id threadid
 	}); err != nil {
 		return dto.ThreadHeader{}, err
 	}
-	return header(id, a.row, forum, tags, n, logLength, s.now()), nil
+	return header(id, a.row, forum, starter, tags, n, logLength, s.now()), nil
 }
 
 // pinActive reports whether row is pinned at now: a pin whose pinned_until

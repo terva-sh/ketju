@@ -7,6 +7,13 @@
       "slug": "general",
       "name": "General"
     },
+    "author": {
+      "handle": "alice",
+      "display_name": "Alice Nakamura",
+      "avatar": "",
+      "role": "member",
+      "kind": "human"
+    },
     "post_count": 5,
     "log_length": 881,
     "locked": false,

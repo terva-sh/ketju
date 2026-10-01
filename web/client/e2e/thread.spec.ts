@@ -33,6 +33,17 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
   await page.goto(`${seed.thread}?page=${onPage}`);
   await expect(page.locator('#post-51')).toBeVisible();
 
+  // The thread head (docs/06 "The thread head"): the breadcrumb above the
+  // title, and under it who started the thread, when, and how many posts it
+  // has. carol writes the seed's ThreadCreated. The count is not named,
+  // since other specs add posts to the thread.
+  const crumbs = page.locator('.thread-head nav.breadcrumb a');
+  await expect(crumbs).toHaveText(['Forums', 'General']);
+  expect(await crumbs.evaluateAll((as) => as.map((a) => a.getAttribute('href')))).toEqual(['/', '/f/general']);
+  const meta = page.locator('.thread-head h1 + .thread-meta');
+  await expect(meta).toHaveText(/^started by carol · .+ · \d+ posts$/);
+  await expect(meta.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d\d-\d\dT/);
+
   // The header: ordinal, name and time. A member's post carries no role
   // badge (RoleBadge).
   const first = page.locator('#post-51 .post-header');
@@ -85,7 +96,7 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
 // taller viewport rather than a full-page capture, so the bars that stick to
 // the foot sit where a reader sees them, as forum-index.spec.ts does. It
 // waits for the fonts, stops animations and the caret, and masks each post's
-// time, which is the one thing on the page that changes between runs.
+// time and the thread's, the only things on the page that change between runs.
 async function capture(page: Page, name: string) {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
   mkdirSync(dir, { recursive: true });
@@ -100,7 +111,7 @@ async function capture(page: Page, name: string) {
       path: join(dir, `${name}-${colorScheme}.png`),
       animations: 'disabled',
       caret: 'hide',
-      mask: [page.locator('.post-header time')],
+      mask: [page.locator('.post-header time, .thread-meta time')],
       maskColor: '#8B95A8',
     });
   }

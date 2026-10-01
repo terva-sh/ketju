@@ -59,6 +59,8 @@ export interface ThreadHeader {
   slug: string;
   title: string;
   forum: ForumRef;
+  // author is the thread's starter.
+  author: Author;
   post_count: number;
   log_length: number;
   locked: boolean;

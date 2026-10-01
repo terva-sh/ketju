@@ -149,6 +149,10 @@ type ThreadHeader struct {
 	Slug  string   `json:"slug"`
 	Title string   `json:"title"`
 	Forum ForumRef `json:"forum"`
+	// Author is the thread's starter, from threads.author_id, drawn as the
+	// thread list's row draws it (docs/06 "The thread head"). It is the same
+	// for every viewer who may read the thread.
+	Author Author `json:"author"`
 
 	PostCount int `json:"post_count"`
 	// LogLength is the byte length of the thread log this response reflects.

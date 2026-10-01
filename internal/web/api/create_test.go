@@ -362,6 +362,22 @@ func TestCreateThread(t *testing.T) {
 	}
 }
 
+// TestCreatedThreadHeaderHasAuthor: the create answer's header names the
+// creator as the thread's starter, as a later read of the page by another
+// member does (TKT-01M3S3ZF6J).
+func TestCreatedThreadHeaderHasAuthor(t *testing.T) {
+	w := newWorld(t)
+	res := created[dto.CreatedThread](t, send(w.chain(), "carol", http.MethodPost, threadsPath("general"),
+		`{"title":"Who started this","source":"Me."}`))
+	if res.Thread.Author.Handle != "carol" {
+		t.Errorf("the create answer's thread.author is %+v, want carol", res.Thread.Author)
+	}
+	p := page(t, newHandlerFor(w).get(w.viewer("alice"), "/api/v1/threads/"+res.Thread.ID))
+	if renderJSON(t, p.Thread.Author) != renderJSON(t, res.Thread.Author) {
+		t.Errorf("a later read's thread.author is %s, want %s", renderJSON(t, p.Thread.Author), renderJSON(t, res.Thread.Author))
+	}
+}
+
 // TestCreateThreadRefusals: every refusal comes before the thread's files
 // exist, and each says what kind of refusal it is.
 func TestCreateThreadRefusals(t *testing.T) {
