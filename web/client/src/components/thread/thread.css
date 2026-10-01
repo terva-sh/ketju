@@ -59,7 +59,10 @@
 .thread-tools:empty {
   display: none;
 }
+/* A moderator's toolbar, with Watch, is wider than a tablet's column, so it
+   wraps rather than running off the page. */
 .thread-tools .toolbar {
+  flex-wrap: wrap;
   margin: 0;
 }
 .lens-bar {
@@ -843,6 +846,29 @@
   align-items: center;
   gap: 8px;
   min-height: 32px;
+}
+/* The watch dialog's choices (WatchDialog): the level, and on a line under
+   it what the level does. */
+.watch-dialog fieldset label {
+  align-items: flex-start;
+  padding: 4px 0;
+}
+.watch-dialog input[type='radio'] {
+  margin-top: 3px;
+}
+.watch-label,
+.watch-line {
+  display: block;
+}
+.watch-label {
+  font-weight: 600;
+}
+.watch-line {
+  color: var(--ink2);
+  font-size: 13px;
+}
+.watch-dialog .error-panel {
+  margin: 0 0 12px;
 }
 .flag-note,
 .moderate-field {

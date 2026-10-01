@@ -2,10 +2,11 @@ import { Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { peekGet } from '../api/client';
-import type { CreatedPost, Lens, Pinned, Post as PostDTO, ThreadPage, ThreadViewer } from '../api/dto';
+import type { CreatedPost, Lens, Pinned, Post as PostDTO, ThreadPage, ThreadViewer, ThreadWatch } from '../api/dto';
 import { isProblem, problemMessage, revokesAccess } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
+import { WatchDialog } from '../components/WatchDialog';
 import { Composer } from '../composer/Composer';
 import { ComposerSheet } from '../composer/ComposerSheet';
 import { delayUntil } from '../components/thread/deadline';
@@ -198,6 +199,16 @@ export function ThreadScreen() {
   const offerMark = !history && !!shown && tracksUnread() && !!forumSlug;
   const pressed = useRef(false);
   const [markFailed, setMarkFailed] = useState<{ thread: string; error: unknown } | null>(null);
+  // Watch is offered to a signed-in member once the page's viewer block is
+  // theirs (pageFor), on every view of the thread, since it is about the
+  // thread and not the posts on screen. A saved level shows at once
+  // (watchSet), for as long as the block it replaces is the one shown: the
+  // next page the server answers carries the level itself.
+  const [watchSet, setWatchSet] = useState<{ on: ThreadViewer; to: ThreadWatch } | null>(null);
+  const [watchOpen, setWatchOpen] = useState<{ thread: string; returnTo: Element | null } | null>(null);
+  const pageViewer = shown?.viewer;
+  const watch = watchSet && pageViewer && watchSet.on === pageViewer ? watchSet.to : pageViewer;
+  const offerWatch = !!watch && tracksUnread() && pageFor === me;
   // First unread goes by the position as the read tracker knows it at the
   // press, which reading since the page arrived has moved (Terva review
   // 1730), and under a held unread lens stays in the lens.
@@ -229,6 +240,13 @@ export function ThreadScreen() {
               ? { locked, pinned, staff, open: (kind) => setModerating({ thread: known.id, kind }) }
               : undefined,
             rename: offerRename ? () => setModerating({ thread: known.id, kind: 'rename' }) : undefined,
+            watch: offerWatch
+              ? {
+                  level: watch.watch,
+                  forumLevel: watch.forum_watch,
+                  open: () => setWatchOpen({ thread: known.id, returnTo: document.activeElement }),
+                }
+              : undefined,
           })
         : [],
     [
@@ -244,6 +262,9 @@ export function ThreadScreen() {
       pinned?.scope,
       pinned?.until,
       offerRename,
+      offerWatch,
+      watch?.watch,
+      watch?.forum_watch,
     ],
   );
   const title = useRef<HTMLHeadingElement>(null);
@@ -251,6 +272,7 @@ export function ThreadScreen() {
   useEffect(() => {
     setModerating(null);
     setMarkFailed(null);
+    setWatchOpen(null);
   }, [params.id]);
   const forum = head?.forum;
   const ctx = useMemo(
@@ -329,6 +351,16 @@ export function ThreadScreen() {
           current={{ title: head.title, forum: head.forum.slug }}
           admin={viewer.value.user?.role === 'admin'}
           onWindowClosed={() => setClosedOn(head.id)}
+        />
+      )}
+      {watchOpen && offerWatch && watchOpen.thread === params.id && (
+        <WatchDialog
+          target={{ thread: watchOpen.thread, forumLevel: watch.forum_watch }}
+          level={watch.watch}
+          returnTo={watchOpen.returnTo}
+          fallback={() => title.current}
+          onSaved={(to) => pageViewer && setWatchSet({ on: pageViewer, to: to as ThreadWatch })}
+          onClose={() => setWatchOpen(null)}
         />
       )}
       {res.error && <ErrorPanel error={res.error} what="This thread" onRetry={res.retry} />}

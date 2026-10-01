@@ -376,3 +376,61 @@ describe('scroll memory', () => {
     expect(history.length).toBeGreaterThanOrEqual(entry);
   });
 });
+
+// TKT-01M3V6Y87D: the forum's watch control, in the header, for a member.
+describe('the forum watch control', () => {
+  const control = (root: HTMLElement) => root.querySelector<HTMLButtonElement>('[data-watch-forum]');
+
+  it('is offered to a member, labelled with the forum’s level, and to nobody signed out', async () => {
+    let root = await listAt('/f/general', memberList, memberMe);
+    expect(control(root)?.textContent).toBe('Watching');
+    root = await listAt('/f/general', { ...structuredClone(memberList), watch: 'mute' }, memberMe);
+    expect(control(root)?.textContent).toBe('Muted');
+    root = await listAt('/f/general', { ...structuredClone(memberList), watch: '' }, memberMe);
+    expect(control(root)?.textContent).toBe('Watch');
+    root = await listAt('/f/general', anonList, anonMe);
+    expect(control(root)).toBeNull();
+  });
+
+  it('posts to the forum route, shows the level and asks for the list again', async () => {
+    viewer.value = structuredClone(memberMe) as Me;
+    const posted: unknown[] = [];
+    let level = 'watch';
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      asked.push(String(url));
+      if (init.method === 'POST' && url === '/api/v1/forums/general/watch') {
+        posted.push(JSON.parse(init.body as string));
+        level = 'mute';
+        return new Response(JSON.stringify({ watch: level }), { status: 200 });
+      }
+      if (String(url).startsWith('/api/v1/forums/general/threads')) {
+        const list = structuredClone(memberList) as ThreadList;
+        list.watch = level;
+        // A muted forum's threads count no unread (docs/04 `watches`).
+        if (level === 'mute') for (const t of list.threads) t.unread = 0;
+        return new Response(JSON.stringify(list), { status: 200 });
+      }
+      if (url === '/api/v1/me') return new Response(JSON.stringify(memberMe), { status: 200 });
+      return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/problem+json' } });
+    });
+    const root = await renderAt('/f/general');
+    expect(root.querySelector('[data-unread]')).not.toBeNull();
+    const lists = asked.filter((u) => u.startsWith('/api/v1/forums/general/threads')).length;
+    const button = control(root)!;
+    button.focus();
+    await act(async () => button.click());
+    const dialog = document.querySelector<HTMLElement>('[data-watch-dialog]')!;
+    expect(dialog.querySelector('h2')?.textContent).toBe('Alerts for General');
+    const mute = [...dialog.querySelectorAll<HTMLInputElement>('input[type=radio]')].find((r) => r.value === 'mute')!;
+    await act(async () => mute.click());
+    await act(async () => dialog.querySelector<HTMLButtonElement>('button[type=submit]')!.click());
+    for (let i = 0; i < 10; i++) await act(() => new Promise((r) => setTimeout(r, 5)));
+    expect(posted).toEqual([{ level: 'mute' }]);
+    expect(document.querySelector('[data-watch-dialog]')).toBeNull();
+    expect(control(root)?.textContent).toBe('Muted');
+    expect(document.activeElement).toBe(control(root));
+    expect(asked.filter((u) => u.startsWith('/api/v1/forums/general/threads')).length).toBe(lists + 1);
+    expect(asked).toContain('/api/v1/me');
+    expect(root.querySelector('[data-unread]')).toBeNull();
+  });
+});

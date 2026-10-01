@@ -37,6 +37,26 @@ describe('the thread actions', () => {
     expect(ids()).not.toContain('mark-unread');
   });
 
+  // TKT-01M3V6Y87D: Watch only when the page hands it over, after Mark
+  // unread, labelled with the effective level: the thread's own, then its
+  // forum's.
+  it('offers Watch when handed it, labelled by the effective level', () => {
+    const open = vi.fn();
+    const watch = (level: string, forumLevel: string) =>
+      threadActions(t, { markUnread: () => {}, rename: () => {}, watch: { level, forumLevel, open } });
+    expect(watch('', '').map((a) => a.id)).toEqual(['mark-unread', 'watch', 'rename', 'copy-link']);
+    const label = (level: string, forumLevel: string) => watch(level, forumLevel).find((a) => a.id === 'watch')!.label;
+    expect(label('', '')).toBe('Watch');
+    expect(label('watch', '')).toBe('Watching');
+    expect(label('mute', 'watch')).toBe('Muted');
+    expect(label('watch', 'mute')).toBe('Watching');
+    expect(label('', 'mute')).toBe('Muted');
+    expect(label('', 'watch')).toBe('Watching');
+    watch('', '').find((a) => a.id === 'watch')!.run();
+    expect(open).toHaveBeenCalledOnce();
+    expect(ids()).not.toContain('watch');
+  });
+
   it('lock or unlock by state', () => {
     expect(kinds({ locked: false, pinned: null, staff: false })).toEqual(['lock', 'pin']);
     expect(kinds({ locked: true, pinned: null, staff: false })).toEqual(['unlock', 'pin']);

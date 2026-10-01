@@ -1,4 +1,5 @@
 import type { Pinned } from '../api/dto';
+import { watchLabel } from '../components/WatchDialog';
 import { replyToThread } from '../state/composer';
 import type { ShellAction } from '../state/shell';
 
@@ -59,12 +60,14 @@ export interface ThreadActionOptions {
   // rename brings up the rename panel; the thread page sets it for a viewer
   // who moderates the thread, and for its author inside their window.
   rename?: () => void;
+  // watch is set only for a signed-in member: level is the thread's own,
+  // forumLevel its forum's, and open brings up the watch dialog.
+  watch?: { level: string; forumLevel: string; open: () => void };
 }
 
 // threadActions is every action on a thread, the one list the desktop
 // toolbar and the phone's more menu both render (docs/06 "Mobile"), so an
-// action added here is on both. Watch (TKT-01M29CA9CE) adds itself here with
-// its ticket.
+// action added here is on both.
 //
 // Reply is offered when the reader may reply, which the thread page says
 // (viewer.can_reply). It brings up the composer at the foot of the thread as
@@ -88,6 +91,11 @@ export interface ThreadActionOptions {
 // offered with them too, whatever the thread's state: its route is on the
 // same gate and decides moderate in the same forum (TKT-01M3RQP0TG).
 //
+// Watch is offered when the page hands it over, to a signed-in member (see
+// ThreadScreen). Its label is the thread's effective level, its own and
+// else its forum's (docs/04 `watches`): Watching, Muted, or Watch when
+// neither has one (TKT-01M3V6Y87D).
+//
 // Rename is offered when the page hands over rename (see ThreadScreen).
 export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions = {}): ShellAction[] {
   const m = opts.moderate;
@@ -95,6 +103,7 @@ export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions =
     ...(opts.canReply ? [{ id: 'reply', label: 'Reply', run: () => replyToThread(t.id) }] : []),
     ...(opts.firstUnread ? [{ id: 'first-unread', label: 'First unread', run: opts.firstUnread }] : []),
     ...(opts.markUnread ? [{ id: 'mark-unread', label: 'Mark unread', run: opts.markUnread }] : []),
+    ...(opts.watch ? [{ id: 'watch', label: watchLabel(opts.watch.level || opts.watch.forumLevel), run: opts.watch.open }] : []),
     ...(opts.rename ? [{ id: 'rename', label: 'Rename…', run: opts.rename }] : []),
     ...(m ? moderateKinds(m).map((k) => ({ id: k, label: moderateLabels[k], run: () => m.open(k) })) : []),
     ...(m

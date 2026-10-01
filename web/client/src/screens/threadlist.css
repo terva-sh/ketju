@@ -44,6 +44,20 @@
 .thread-list-head .list-actions {
   flex: none;
 }
+/* The forum's watch control (TKT-01M3V6Y87D) sits first in .list-actions,
+   drawn as Mark all read beside it is (components/markread.css). */
+.watch-control {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
 
 .thread-list-sort,
 .thread-list-pages {
@@ -107,8 +121,10 @@
   }
   /* forums.css hides the index's header button on phones, where the index
      has its floating one; here the header's is the only one. */
-  .thread-list-head .new-thread {
+  .thread-list-head .new-thread,
+  .watch-control {
     display: inline-flex;
+    align-items: center;
     height: var(--target);
   }
 }

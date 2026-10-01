@@ -1,4 +1,4 @@
-import { useEffect } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { apiGet, peekGet } from '../api/client';
 import type { ThreadList } from '../api/dto';
@@ -6,6 +6,7 @@ import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { MarkAllRead } from '../components/MarkAllRead';
+import { watchLabel, WatchDialog } from '../components/WatchDialog';
 import { ThreadRow } from '../components/ThreadRow';
 import { rememberList, useAfterMark } from '../state/lists';
 import { useScrollMemory } from '../state/scroll';
@@ -45,6 +46,11 @@ function pageHref(forum: string, cursor?: string, sort?: string): string {
 // A member is offered Mark all read for this forum (PUT /forums/{slug}/read,
 // TKT-01M3V6Y4JP): their place in each of its threads moves to the last
 // post, and every other forum is left as it was (docs/06 "Read tracking").
+//
+// A signed-in member is offered the forum's watch control in the header,
+// labelled with the forum's own level (TKT-01M3V6Y87D). A saved level shows
+// at once, for as long as the list it replaces is the one shown, and the
+// list is asked for again, since a mute takes its threads' badges away.
 export function ThreadListScreen() {
   const { params } = useRoute();
   const { query } = useLocation();
@@ -58,6 +64,12 @@ export function ThreadListScreen() {
   useAfterMark(res.retry);
   const name = list?.forum?.name ?? '';
   const signedIn = !!viewer.value.user;
+  const [watchSet, setWatchSet] = useState<{ on: ThreadList; to: string } | null>(null);
+  const [watching, setWatching] = useState(false);
+  const watchButton = useRef<HTMLButtonElement>(null);
+  const level = watchSet && watchSet.on === list ? watchSet.to : (list?.watch ?? '');
+  const offerWatch = signedIn && !!list?.forum;
+  useEffect(() => setWatching(false), [forum]);
 
   useShellContext(
     list || res.error ? { title: name || 'Threads', back: { href: '/', label: 'Forums' }, actions: [] } : null,
@@ -80,6 +92,18 @@ export function ThreadListScreen() {
         </div>
         {signedIn && list && (
           <div class="list-actions">
+            {offerWatch && (
+              <button
+                ref={watchButton}
+                type="button"
+                class="watch-control"
+                aria-haspopup="dialog"
+                data-watch-forum
+                onClick={() => setWatching(true)}
+              >
+                {watchLabel(level)}
+              </button>
+            )}
             <MarkAllRead url={`/api/v1/forums/${encodeURIComponent(forum)}/read`} />
             <a class="new-thread" href={`/f/${encodeURIComponent(forum)}/new`}>
               New thread
@@ -87,6 +111,19 @@ export function ThreadListScreen() {
           </div>
         )}
       </header>
+      {watching && offerWatch && (
+        <WatchDialog
+          target={{ forum, name: list!.forum!.name }}
+          level={level}
+          returnTo={watchButton.current}
+          fallback={() => null}
+          onSaved={(to) => {
+            setWatchSet({ on: list!, to: to.watch });
+            res.retry();
+          }}
+          onClose={() => setWatching(false)}
+        />
+      )}
       <nav class="thread-list-sort" aria-label="Sort threads">
         <a href={pageHref(forum)} aria-current={!sort ? 'page' : undefined}>
           Latest activity

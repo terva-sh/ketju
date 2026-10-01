@@ -66,7 +66,7 @@ function serve(lastRead = 0, lists: ThreadList[] = [], held: Promise<void> = Pro
   return urls;
 }
 
-const list = (threads: ThreadRow[], next = ''): ThreadList => ({ forum: { slug: 'general', name: 'General' }, threads, next_cursor: next });
+const list = (threads: ThreadRow[], next = ''): ThreadList => ({ forum: { slug: 'general', name: 'General' }, watch: '', threads, next_cursor: next });
 
 // Each post's top is where it would be on a page scrolled to the top: 72
 // px, the reading line, for the first, and 200 px apart.
@@ -344,8 +344,8 @@ describe('the shortcuts on a thread page', () => {
     // The list pages: this thread is on the first page with nothing unread
     // after it, and the next unread one is on the second.
     const urls = serve(0, [
-      { forum: { slug: 'general', name: 'General' }, threads: [row('aaa', 3), row(id, 0), row('bbb', 0)], next_cursor: '1' },
-      { forum: { slug: 'general', name: 'General' }, threads: [row('ccc', 0), row('ddd', 4, 9)], next_cursor: '' },
+      { forum: { slug: 'general', name: 'General' }, watch: '', threads: [row('aaa', 3), row(id, 0), row('bbb', 0)], next_cursor: '1' },
+      { forum: { slug: 'general', name: 'General' }, watch: '', threads: [row('ccc', 0), row('ddd', 4, 9)], next_cursor: '' },
     ]);
     const root = await renderAt(`/t/${id}/${slug}?page=1`);
     await type(root, 'n');
@@ -397,7 +397,7 @@ describe('the shortcuts on a thread page', () => {
   });
 
   it('n with no other unread thread says so', async () => {
-    serve(0, [{ forum: { slug: 'general', name: 'General' }, threads: [row(id, 4)], next_cursor: '' }]);
+    serve(0, [{ forum: { slug: 'general', name: 'General' }, watch: '', threads: [row(id, 4)], next_cursor: '' }]);
     const root = await renderAt(`/t/${id}/${slug}?page=1`);
     await type(root, 'n');
     await settle(root);
@@ -550,7 +550,7 @@ describe('the visible controls', () => {
   });
 
   it('Next unread thread opens it', async () => {
-    serve(0, [{ forum: { slug: 'general', name: 'General' }, threads: [row(id, 0), row('bbb', 2)], next_cursor: '' }]);
+    serve(0, [{ forum: { slug: 'general', name: 'General' }, watch: '', threads: [row(id, 0), row('bbb', 2)], next_cursor: '' }]);
     const root = await renderAt(`/t/${id}/${slug}?page=1`);
     await act(async () => root.querySelector<HTMLButtonElement>('.next-unread')!.click());
     await settle(root);

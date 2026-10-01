@@ -194,12 +194,10 @@ export interface ThreadRow {
 
 export interface ThreadList {
   forum: ForumRef | null;
-  // watch is the viewer's level on the forum, '' for none, for an anonymous
-  // viewer and on a cross-forum list. The server always sends it; it is
-  // optional here only so that the test fixtures that build a list by hand
-  // need no change before the client reads it (TKT-01M3V6Y87D makes it
-  // required when it adds the control).
-  watch?: string;
+  // watch is the viewer's level on the forum, 'watch', 'mute' or '' for
+  // none, and '' for an anonymous viewer and on a cross-forum list. The
+  // forum's header shows it on the watch control (TKT-01M3V6Y87D).
+  watch: string;
   threads: ThreadRow[];
   next_cursor: string;
 }

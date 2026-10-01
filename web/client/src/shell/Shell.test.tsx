@@ -301,9 +301,14 @@ describe('thread actions', () => {
     const root = await renderAt('/t/01k4z3j0w8x2c/a-thread');
     // The member golden may reply, so Reply leads the list, and has posts
     // its reader has not read, so First unread is offered; its reader is
-    // signed in, so Mark unread is too.
-    const want = threadActions(thread, { canReply: true, firstUnread: () => {}, markUnread: () => {} }).map((a) => a.id);
-    expect(want).toEqual(['reply', 'first-unread', 'mark-unread', 'copy-link']);
+    // signed in, so Mark unread and Watch are too.
+    const want = threadActions(thread, {
+      canReply: true,
+      firstUnread: () => {},
+      markUnread: () => {},
+      watch: { level: '', forumLevel: '', open: () => {} },
+    }).map((a) => a.id);
+    expect(want).toEqual(['reply', 'first-unread', 'mark-unread', 'watch', 'copy-link']);
     const toolbar = [...root.querySelectorAll<HTMLElement>('[data-shell=toolbar] [data-action]')].map((b) => b.dataset.action);
     expect(toolbar).toEqual(want);
     expect(root.querySelector('[aria-label=More]')).toBeNull();
