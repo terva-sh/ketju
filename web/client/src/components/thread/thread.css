@@ -888,3 +888,29 @@
     min-height: var(--target);
   }
 }
+
+/* The new-posts pill (NewPostsPill, docs/06 "Live updates"): a button at the
+   foot of the post list that stays in view while the reader is above it. On
+   a phone it is a full target and sits above the reply bar. */
+.new-posts {
+  position: sticky;
+  bottom: 12px;
+  display: block;
+  margin: 12px auto 0;
+  min-height: 36px;
+  padding: 6px 16px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--accent);
+  color: var(--accent-ink);
+  font: inherit;
+  font-size: 14px;
+  box-shadow: var(--shadow);
+  cursor: pointer;
+}
+.shell.phone .new-posts {
+  min-height: var(--target);
+}
+.shell.phone.has-replybar .new-posts {
+  bottom: calc(var(--replybar-h) + env(safe-area-inset-bottom, 0px) + 12px);
+}

@@ -72,9 +72,11 @@ export function pageKey(page: Pick<ThreadPage, 'page' | 'lens'>): string {
 // may already be newer, and its caller has stopped listening.
 //
 // It takes no after_log_length. That answer holds only what is new on the
-// page, and storing it here would replace a page with a fragment; applying a
-// fragment to the page it extends is the live-update client's
-// (TKT-01M29CTYA0).
+// page, and storing it here would replace a page with a fragment. The
+// live-update client asks for the whole page again instead (ThreadScreen
+// useLive): a removal or a restore writes no revision, so a fragment that
+// held an edit would leave a removed post on screen (docs/06, Terva review
+// 1696).
 export function loadThreadPage(id: string, q: ThreadQuery, signal?: AbortSignal): Promise<ThreadPage> {
   return load(id, q, signal, true);
 }

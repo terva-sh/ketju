@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T14:18:17Z
+updated_at: 2026-10-01T14:41:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -98,58 +98,35 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 
 ### Approach
 
-1. **`src/state/live.ts`** (new): `subscribe(id, onHint: (logLength: number) => void, poll: () => Promise<number>): () => void`.
-   - It opens `new EventSource('/events?threads=' + id)`. The constructor comes from `liveDeps.EventSource` so tests can replace it.
-   - The states are `connecting`, `live` and `polling`, exported as the signal `liveState` for tests.
-   - `ready` moves it to `live`. Each `thread` event calls `onHint(log_length)`.
-   - An `error` event, or no `ready` within 10 s, closes the source and moves it to `polling`. A `setTimeout` chain runs every 30 s and calls `poll()`, which answers the current log length through a conditional GET of the page on screen; a 304 is cheap. A longer length calls `onHint`. Every fourth poll opens a new source, and a `ready` from it stops the polling.
-   - On `visibilitychange`, a tab hidden for 60 s closes its source and stops polling. Showing the tab again resubscribes, and the snapshot catches it up.
-   - The returned function closes everything, and nothing stays open after it.
-2. **`src/state/threads.ts`** is unchanged, except that the comment on `loadThreadPage` that defers fragments to this ticket now says why the live client does not use them (see "No fragments").
+Revised at claim, 2026-10-01, against main at c403e67 (after the thread head #303, the lens framework #299, the unread and author lenses #304 and #310, `last_read_at` #314 and the layout-effect menus #292). The settled items above are carried unchanged. Where the build departs from the groomed approach, the departure and its reason are given.
+
+1. **`src/state/live.ts`** (new): `subscribe(id, held: () => number, refresh: () => void): () => void`.
+   - It opens `new EventSource('/events?threads=' + id)`, read from `globalThis` when it opens, so a test stubs the global. No `EventSource` at all goes straight to polling.
+   - `ready` stops any polling. A `thread` event for this thread whose `log_length` is longer than `held()` calls `refresh()`.
+   - An `error`, or no `ready` within 10 s, closes the source (the browser's own reconnect is not used) and starts a 30 s `setTimeout` chain that calls `refresh()`. Every fourth poll opens a new source, and its `ready` stops the polling.
+   - A tab hidden for 60 s closes its source and stops polling. Shown again with nothing open, it opens a new source, whose snapshot event catches it up.
+   - Departure: the groomed `poll: () => Promise<number>` and the `liveState` signal are dropped. The poll and the hint both ask for the same page, so one `refresh` serves both, and the tests read the fake sources and the requests instead of a state signal.
+2. **`src/state/threads.ts`**: unchanged except the `loadThreadPage` comment, which now says why the live client asks for whole pages.
 3. **`src/screens/ThreadScreen.tsx`**:
-   - **`useLive(id, page)`** subscribes while the screen shows the thread and closes on unmount or on a change of thread. A hint longer than the entry's length calls `loadThreadPage` for the page on screen. `poll` is the same call, answering the page's `thread.log_length`.
-   - **`knownCount`** is a per-thread signal holding `header.post_count` when the page first renders.
-   - **The pill's count** is `header.post_count - knownCount`, floored at 0.
-   - **The last page.** `ThreadBody` renders posts with `ordinal <= knownCount`. Earlier pages hold no ordinal past `knownCount` and are unaffected.
-   - **Bottom tracking.** An `IntersectionObserver` on a sentinel after the last post, with `rootMargin: '0px 0px 48px 0px'`, tracks "at the bottom". While the reader is at the bottom of the last page, `knownCount` follows `header.post_count`, so posts stream in.
-   - **Own replies keep today's behaviour.** `ThreadScreen`'s `posted` handler already routes to `permalink(thread, res.ordinal)`, from TKT-01M3ART992 (Post a reply from the composer). That is a page open: the body is keyed on the request, so `knownCount` is taken afresh from the page holding the reply. Held posts appear above the reply, and the arrival places the reader at the reply. A reply from a full last page, or from an earlier page, lands on its own page the same way. No set of the reader's own ordinals is needed, because the reply is always at or below the new `knownCount` (docs/06, after Terva reviews 1703 and 1716).
-   - **Scroll anchoring.** When a refetched page changes posts already shown, the screen records the first post in view and its `getBoundingClientRect().top` before the update. In a layout effect after it, the screen calls `scrollBy` with the difference.
-4. **`src/components/thread/NewPostsPill.tsx`** (new):
-   - A `<button>` reading "1 new post — show" or "N new posts — show", sticky at the bottom of the post list. On a phone it sits above the reply bar with `env(safe-area-inset-bottom)` padding, as a 44 px target.
-   - A visually hidden `aria-live="polite"` region beside it announces the count, at most once a second.
-   - A click with every ordinal from `knownCount + 1` to `header.post_count` on the page in view raises `knownCount` and focuses the first revealed post, which gets `tabIndex=-1`. Otherwise it routes to `?ordinal=<knownCount + 1>`. That is the page holding the first new post, whether the reader is on an earlier page or the last page has filled. Focus on reveal goes to the same post. The reader's own replies cannot sit above `knownCount`, because posting one is a page open (the "Own replies" step above), so `knownCount + 1` is always another member's post (Terva review 1708).
-   - The styles go in `components/thread/thread.css`.
-5. **Read tracking.** Posts beyond `knownCount` are not rendered, so `trackPosts` never sees them. A test asserts this rather than assuming it.
-6. **`src/testing.tsx`** gains a `FakeEventSource`, installed by `renderAt`, which records instances and has `emit(type, data)` and `fail()`.
-7. **Build.** Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and record the reader size against 60465 B in the PR.
+   - **`useLive`** subscribes on the canonical view of a thread the reader has been shown (`res.data` or the thread's cache entry), so moving between the thread's pages keeps one stream. It closes on leaving the thread, and when the thread leaves the cache (access withdrawn).
+   - **A hint or a poll** calls `loadThreadPage(id, { page: <number on screen> })`. A landing request names no page and is not repeated, because the server would land it on the reader's moved position. The answer is kept as `live` state, keyed on the request key and the viewer, and shown in place of `res.data` while its log is longer. An answer that withdraws access calls `res.retry()`, so the screen shows the refusal.
+   - **The divider** is drawn from the request's own viewer block (`read`), not the refetched page's, so it does not move under a reader whose position has moved since.
+   - **`known`** is a ref in `ThreadBody`, which is keyed on the request, holding `header.post_count` when the page opened. Departure: not a per-thread signal; a ref in the keyed body is taken afresh on every page open, the reply's permalink included, which is what "Own replies" needs. While the page's own request is still out (a held copy on screen), `known` follows the count, so a revalidation does not hold back posts that existed when the reader opened the page.
+   - **The pill's count** is `post_count - known`, floored at 0. It is 0 while the reader's own post is in flight (`composerFor(id).posting`), so a hint for their own reply that lands before the POST answers never shows a pill.
+   - **The body** draws posts with `ordinal <= known`. **Bottom tracking** is an `IntersectionObserver` on an empty element after the list, with `rootMargin: '0px 0px 48px 0px'`. At the bottom, with every held post on this page, `known` follows the count, so posts stream in, and held posts are drawn when the reader scrolls down to them.
+   - **Own replies keep today's behaviour**, as settled: `posted` routes to `permalink(thread, res.ordinal)`, a page open.
+   - **Scroll anchoring.** Before a live page is set, the first post in view and its top are recorded; a layout effect in the body then calls `scrollBy` with the difference.
+   - **Lens pages hold no subscription** (run decision recorded in docs/06 "Live updates", 2026-10-01, pending maintainer review): the unread lens is computed from the read position the reader is moving, so asking for it again would take posts away under them, and the pill counts the whole thread by ordinal.
+4. **`src/components/thread/NewPostsPill.tsx`** (new): a `<button class="new-posts">` reading "1 new post — show" or "N new posts — show", sticky at the foot of the list, a 44 px target on a phone and above the reply bar there. A visually hidden `aria-live="polite"` paragraph announces "N new posts" a second after the count last changed. Show with every held post on the page raises `known` and focuses the first revealed post (posts already carry `tabIndex=-1`); otherwise it routes to `permalink(thread, known + 1)`. Styles in `components/thread/thread.css`.
+5. **Read tracking.** Held posts are not drawn, so `trackPosts` never observes them, and the tracking effect runs again when more are drawn. A test asserts both.
+6. **`src/testing.tsx`** gains `FakeEventSource`, installed by `renderAt`. It says `ready` once opened unless a test sets `FakeEventSource.ready = false`, so screens that are not about live updates never fall back to polling.
+7. **Build.** `go generate ./internal/web/spa`, and the reader size against 60823 B on main at claim (the groomed 60465 B was main's at grooming).
 
 ### Tests
 
-- `src/state/live.test.ts` (fake timers):
-  - 'opens one stream for the thread and closes it on close()';
-  - 'falls back to polling when ready does not arrive in 10 s';
-  - 'falls back to polling on a stream error';
-  - 'polls every 30 s and stops when a stream says ready';
-  - 'retries the stream every fourth poll';
-  - 'a hidden tab closes its stream after 60 s and reopens when shown';
-  - 'a hint no longer than the held length does nothing'.
-- `src/screens/ThreadScreen.test.tsx`:
-  - 'new posts wait behind the pill for a reader above the bottom' asserts the post elements above are the same nodes in the same order and that no new post element is rendered;
-  - 'a reader at the bottom gets posts inline with no pill';
-  - 'show reveals the posts and focuses the first';
-  - 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them': a reader on page 1 of 3 sees no pill until a post arrives, and then "1 new post", routing to its ordinal;
-  - 'a full last page sends the pill to the next page';
-  - 'a reply from a full page goes to its own page': the reader replies as ordinal 26 from a full page 1. The screen routes to the page holding 26 and shows it at once, before any other post arrives, with no pill;
-  - 'an edit and a removal in one change both show': a hint whose refetched page has an edited post 3 and a removed post 4 renders the edit and the tombstone;
-  - 'a post behind the pill is not marked read';
-  - 'the reader's own reply never counts in the pill';
-  - 'posting a reply with posts held takes the reader to the reply': with two posts by others held, the reader posts. The screen routes to the reply's permalink, the two held posts render above it, the reader is placed at the reply, and no pill is shown;
-  - 'an edit applies in place without moving the post in view';
-  - 'leaving the thread closes the stream', where `FakeEventSource` reports no open instance after navigating away.
-- `e2e/live.spec.ts`, in both projects (390 and 1440 px), from stored sessions:
-  - 'a new post waits behind the pill': alice opens the seeded thread at its top, a post is made through bob's stored session with `request.post`, and the pill reads "1 new post — show" while the first post's position is unchanged. This test runs the one axe scan.
-  - 'a reader at the bottom sees the post arrive'.
-  - 'polling takes over when the stream is refused', using `page.route('**/events*', r => r.abort())` and `page.clock` to pass 30 s.
+- `src/state/live.test.ts` (fake timers): one stream opened and closed; a hint longer than the held length refreshes and one no longer does nothing; polling when ready is 10 s late; polling on an error; polling with no EventSource; a retry every fourth poll; polling stops on ready; a ready stream is not dropped at 10 s; a hidden tab closes after 60 s and reopens when shown; a tab shown again within 60 s keeps its stream; a hidden tab stops polling; closing leaves no stream and no timer.
+- `src/screens/ThreadScreen.test.tsx`, "live updates on the thread screen": the groomed cases ('new posts wait behind the pill for a reader above the bottom', 'a reader at the bottom gets posts inline with no pill', 'show reveals the posts and focuses the first', 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them', 'a full last page sends the pill to the next page', 'a reply from a full page goes to its own page', 'an edit and a removal in one change both show', 'a post behind the pill is not marked read', "the reader's own reply never counts in the pill", 'posting a reply with posts held takes the reader to the reply', 'an edit applies in place without moving the post in view', 'leaving the thread closes the stream'), and 'posts held while above the bottom are drawn when the reader reaches it', 'a hint for the reply while it is out shows no pill', 'a hint asks for the page on screen by its number, never a fragment', 'polls the page on screen when the stream is refused', 'a held copy shown while it is asked for again holds back nothing it brings', 'the divider stays where it was drawn while the reader reads on', 'a lens page holds no stream'.
+- `e2e/live.spec.ts`, both projects, from stored sessions, one axe scan per test: 'a new post waits behind the pill', 'a reader at the bottom sees the post arrive', 'polling takes over when the stream is refused'. alice starts a thread in site-feedback, which no other spec reads, and the reply comes from carol's stored session (the seed has no bob).
 
 ### Out of scope
 
@@ -175,3 +152,7 @@ run decision: pending maintainer review. Amends note 2 after Terva review 1696 o
 **agent:claude-code/phase3-groom-live** at 2026-10-01T08:58:40Z
 
 run decision: pending maintainer review. Amends notes 2 and 3 after Terva reviews 1703 and 1716 on PR #271. Posting a reply keeps today's behaviour: ThreadScreen's posted handler routes to the reply's permalink (TKT-01M3ART992). That is a page open, so the page holding the reply loads afresh, held posts appear above it, and the reader is placed at the reply. A reply from a full or earlier page lands on its own page the same way. The ownPosted set from the review-1703 fix is dropped: it could not render a reply that falls on another page (review 1716). docs/06 'Live updates' is updated to match.
+
+**agent:claude-code/phase3-ctya0** at 2026-10-01T14:41:59Z
+
+run decision: pending maintainer review. A lens page holds no live subscription; live updates run on the canonical view. The unread lens is computed from the read position, which moves while the reader reads, so asking for its page again on a hint would take posts away under them, and the pill counts and reveals the whole thread's posts by ordinal, which a filtered page does not hold in order. Alternatives that lost: refetching every lens but unread (live behaviour would differ by lens, and the pill would count posts the lens hides); a pill on lens pages linking to the full thread (needs the post count, which a hint does not carry, so a second request per hint). Recorded in docs/06 'Live updates' in the implementation PR.

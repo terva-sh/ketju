@@ -1,12 +1,13 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { peekGet } from '../api/client';
-import type { Forum, Me, ThreadHeader, ThreadPage } from '../api/dto';
+import type { Forum, Me, Post, ThreadHeader, ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
 import { resetLists } from '../state/lists';
 import { dwellMs, resetReadTracker } from '../state/readTracker';
 import { viewer } from '../state/viewer';
 import {
+  FakeEventSource,
   problemAnswer,
   renderAt,
   route,
@@ -241,13 +242,16 @@ describe('read tracking on the thread screen', () => {
       return new Promise<Response>(() => {});
     });
 
+    // The read tracker's observers are those watching posts; the screen's
+    // own watches the foot of the list for the new-posts pill.
+    const trackers = () => observers.filter((o) => o.observed.some((el) => el.id.startsWith('post-')));
     viewer.value = { ...structuredClone(member), user: null } as Me;
     await renderAt('/t/01k4z3j0w8x2c/a');
-    expect(observers).toHaveLength(0);
+    expect(trackers()).toHaveLength(0);
 
     viewer.value = structuredClone(member) as Me;
     await renderAt('/t/01k4z3j0w8x2c/a');
-    const io = observers.at(-1)!;
+    const io = trackers().at(-1)!;
     // The golden page holds posts 61 to 64, and the reader has read to 60.
     expect(io.observed.map((el) => el.id)).toEqual(['post-61', 'post-62', 'post-63', 'post-64']);
     vi.useFakeTimers();
@@ -1279,5 +1283,420 @@ describe('marking unread from the thread screen', () => {
     expect(root.querySelector('#post-62')).not.toBeNull();
     expect(root.querySelector('[data-post-action=unread]')).toBeNull();
     expect(root.querySelector('[data-action=mark-unread]')).toBeNull();
+  });
+});
+
+// TKT-01M29CTYA0: live updates on the thread page (docs/06 "Live updates").
+// The stub server holds a thread of posts by mara, paged by 25, and the
+// stream is FakeEventSource; a hint is sent once the thread has changed.
+describe('live updates on the thread screen', () => {
+  const saved = viewer.value;
+  const id = '01k4z3j0w8x2d';
+  const url = `/api/v1/threads/${id}`;
+  const base = threadPage({ id, slug: 'a', title: 'Live' });
+  let posts: Post[];
+  let len: number;
+  let lastRead: number;
+  let onPost: (() => void) | null;
+  let holdPost: Promise<void> | null;
+  let server: StubServer;
+  let observers: { observed: Element[]; callback: IntersectionObserverCallback }[];
+  let scrolled: string[];
+
+  const post = (ordinal: number, over: Partial<Post> = {}): Post => ({
+    ...base.posts[0],
+    ordinal,
+    author: { ...base.posts[0].author, handle: 'mara' },
+    reply_to: null,
+    reply_to_suppressed: false,
+    reply_count: 0,
+    attachments: [],
+    edited_at: null,
+    edited_by_moderator: false,
+    deleted: false,
+    removal: null,
+    html: `<p>body of ${ordinal}</p>`,
+    ...over,
+  });
+  const alice = { ...base.posts[0].author, handle: 'alice' };
+  const pageOf = (n: number): ThreadPage => ({
+    ...base,
+    lens: null,
+    thread: { ...base.thread, post_count: posts.length, log_length: len, pinned: null },
+    page: { number: n, size: 25, total_pages: Math.max(1, Math.ceil(posts.length / 25)) },
+    viewer: { ...base.viewer, last_read_ordinal: lastRead, can_reply: true, slow_mode_seconds: 0, next_post_at: null },
+    posts: posts.slice((n - 1) * 25, n * 25),
+  });
+  // add appends posts and lengthens the log; hint then says so on the
+  // stream.
+  const add = (...made: Post[]) => {
+    posts = [...posts, ...made];
+    len += 100;
+  };
+  const stream = () => FakeEventSource.open()[0];
+  const hint = async (root: HTMLElement) => {
+    await act(async () => stream().emit('thread', { thread_id: id, log_length: len }));
+    await settle(root);
+  };
+  // atBottom says the foot of the post list is in view, or not.
+  const atBottom = async (on: boolean) => {
+    const io = observers.find((o) => o.observed.some((el) => !el.id.startsWith('post-')))!;
+    await act(async () => io.callback([{ isIntersecting: on } as IntersectionObserverEntry], io as unknown as IntersectionObserver));
+  };
+  const pill = (root: HTMLElement) => root.querySelector<HTMLButtonElement>('button.new-posts');
+  const drawn = (root: HTMLElement) => [...root.querySelectorAll<HTMLElement>('.posts > [id^=post-]')];
+  const ids = (root: HTMLElement) => drawn(root).map((e) => e.id);
+
+  beforeEach(() => {
+    observers = [];
+    vi.stubGlobal(
+      'IntersectionObserver',
+      class {
+        observed: Element[] = [];
+        constructor(readonly callback: IntersectionObserverCallback) {
+          observers.push(this);
+        }
+        observe(el: Element) {
+          this.observed.push(el);
+        }
+        disconnect() {}
+      },
+    );
+    scrolled = [];
+    Element.prototype.scrollIntoView = function (this: Element) {
+      scrolled.push(this.id);
+    };
+    posts = [1, 2, 3, 4, 5].map((o) => post(o));
+    len = 1000;
+    lastRead = 0;
+    onPost = null;
+    holdPost = null;
+    const pageFor = (u: string) => {
+      const q = new URLSearchParams(u.split('?')[1] ?? '');
+      const o = Number(q.get('ordinal') ?? 0);
+      return { status: 200, body: pageOf(o ? Math.ceil(o / 25) : Number(q.get('page') ?? 1)), headers: { ETag: `"${len}"` } };
+    };
+    server = stubServer({});
+    server.routes = new Proxy(
+      {},
+      {
+        get: (_t, k: string) => {
+          if (k === `POST ${url}/posts`)
+            return async (b: { source: string }) => {
+              await holdPost;
+              const made = post(posts.length + 1, { author: alice, html: `<p>${b.source}</p>` });
+              add(made);
+              onPost?.();
+              return { status: 201, body: { post: made, ordinal: made.ordinal, revision: 1, log_length: len } };
+            };
+          if (k.startsWith('GET /api/v1/drafts/')) return () => ({ status: 204, headers: { 'Draft-Revision': '0' } });
+          if (k === `PUT ${url}/read`) return () => ({ status: 200, body: { last_read_ordinal: 1 } });
+          if (k === 'POST /api/v1/render') return () => ({ status: 200, body: { html: '', mentions: [], quotes: [], reply_to: null } });
+          if (k === `GET ${url}` || k.startsWith(`GET ${url}?`)) return () => pageFor(k.slice(4));
+          return undefined;
+        },
+      },
+    ) as StubServer['routes'];
+    viewer.value = structuredClone(member) as Me;
+  });
+  afterEach(async () => {
+    await unmount();
+    viewer.value = saved;
+    isPhone.value = false;
+    resetReadTracker();
+  });
+
+  it('new posts wait behind the pill for a reader above the bottom', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    expect(FakeEventSource.open().map((s) => s.url)).toEqual([`/events?threads=${id}`]);
+    const before = drawn(root);
+    expect(pill(root)).toBeNull();
+    add(post(6));
+    await hint(root);
+    const after = drawn(root);
+    expect(after).toHaveLength(before.length);
+    after.forEach((el, i) => expect(el, el.id).toBe(before[i]));
+    expect(root.querySelector('#post-6')).toBeNull();
+    expect(pill(root)?.textContent).toBe('1 new post — show');
+    // Announced politely, a second after the count changed.
+    const said = root.querySelector('[aria-live=polite]')!;
+    expect(said.textContent).toBe('');
+    await act(() => new Promise((r) => setTimeout(r, 1050)));
+    expect(said.textContent).toBe('1 new post');
+    add(post(7));
+    await hint(root);
+    expect(pill(root)?.textContent).toBe('2 new posts — show');
+    expect(root.querySelector('#post-6, #post-7')).toBeNull();
+    // The head counts every post.
+    expect(root.querySelector('.thread-meta')?.textContent).toMatch(/ · 7 posts$/);
+  });
+
+  it('a reader at the bottom gets posts inline with no pill', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    await atBottom(true);
+    add(post(6));
+    await hint(root);
+    expect(ids(root)).toEqual(['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6']);
+    expect(pill(root)).toBeNull();
+    // Streamed in, not taken: focus is not moved.
+    expect(document.activeElement?.id).not.toBe('post-6');
+  });
+
+  it('posts held while above the bottom are drawn when the reader reaches it', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    add(post(6));
+    await hint(root);
+    expect(pill(root)).not.toBeNull();
+    await atBottom(true);
+    expect(ids(root)).toContain('post-6');
+    expect(pill(root)).toBeNull();
+  });
+
+  it('show reveals the posts and focuses the first', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    add(post(6), post(7));
+    await hint(root);
+    const before = location.pathname + location.search;
+    await act(async () => pill(root)!.click());
+    expect(ids(root)).toEqual(['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6', 'post-7']);
+    expect(document.activeElement).toBe(root.querySelector('#post-6'));
+    expect(pill(root)).toBeNull();
+    expect(location.pathname + location.search).toBe(before);
+    // The count starts again from here.
+    add(post(8));
+    await hint(root);
+    expect(pill(root)?.textContent).toBe('1 new post — show');
+  });
+
+  it('the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them', async () => {
+    posts = Array.from({ length: 60 }, (_, i) => post(i + 1));
+    const root = await renderAt(`/t/${id}/a?page=1`);
+    await atBottom(true);
+    expect(ids(root)).toHaveLength(25);
+    expect(pill(root)).toBeNull();
+    // A hint no longer than the page on screen changes nothing.
+    await hint(root);
+    expect(pill(root)).toBeNull();
+    add(post(61));
+    await hint(root);
+    expect(pill(root)?.textContent).toBe('1 new post — show');
+    expect(ids(root)).toHaveLength(25);
+    await act(async () => pill(root)!.click());
+    await settle(root);
+    expect(location.pathname).toBe(`/t/${id}/a/61`);
+    expect(ids(root)).toEqual(Array.from({ length: 11 }, (_, i) => `post-${51 + i}`));
+    expect(scrolled).toContain('post-61');
+    expect(pill(root)).toBeNull();
+  });
+
+  it('a full last page sends the pill to the next page', async () => {
+    posts = Array.from({ length: 25 }, (_, i) => post(i + 1));
+    const root = await renderAt(`/t/${id}/a`);
+    await atBottom(true);
+    add(post(26));
+    await hint(root);
+    // At the bottom, but #26 is on page 2: held, not drawn.
+    expect(ids(root)).toHaveLength(25);
+    expect(pill(root)?.textContent).toBe('1 new post — show');
+    await act(async () => pill(root)!.click());
+    await settle(root);
+    expect(location.pathname).toBe(`/t/${id}/a/26`);
+    expect(ids(root)).toEqual(['post-26']);
+  });
+
+  const reply = async (root: HTMLElement, text: string) => {
+    const area = root.querySelector<HTMLTextAreaElement>('.composer textarea')!;
+    area.value = text;
+    await act(() => void area.dispatchEvent(new Event('input', { bubbles: true })));
+    await act(async () => root.querySelector<HTMLButtonElement>('[data-post-reply]')!.click());
+  };
+
+  it('a reply from a full page goes to its own page', async () => {
+    posts = Array.from({ length: 25 }, (_, i) => post(i + 1));
+    const root = await renderAt(`/t/${id}/a?page=1`);
+    await reply(root, 'my reply');
+    await settle(root);
+    await settle(root);
+    // Shown at once, with no other post and no hint since.
+    expect(location.pathname).toBe(`/t/${id}/a/26`);
+    expect(ids(root)).toEqual(['post-26']);
+    expect(root.querySelector('#post-26')?.textContent).toContain('my reply');
+    expect(scrolled).toContain('post-26');
+    expect(pill(root)).toBeNull();
+  });
+
+  it("the reader's own reply never counts in the pill", async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    // The server sends the reply's hint before it answers the POST.
+    const seen: (string | null)[] = [];
+    onPost = () => stream().emit('thread', { thread_id: id, log_length: len });
+    new MutationObserver(() => seen.push(pill(root)?.textContent ?? null)).observe(root, { childList: true, subtree: true });
+    await reply(root, 'mine');
+    await settle(root);
+    await settle(root);
+    expect(seen.filter((s) => s !== null)).toEqual([]);
+    expect(location.pathname).toBe(`/t/${id}/a/6`);
+    expect(ids(root)).toEqual(['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6']);
+    expect(pill(root)).toBeNull();
+  });
+
+  it('a hint for the reply while it is out shows no pill', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    let release!: () => void;
+    holdPost = new Promise((r) => (release = r));
+    await reply(root, 'mine');
+    // The server has made the post, and the stream says so, but the POST
+    // has not answered yet.
+    add(post(6, { author: alice, html: '<p>mine</p>' }));
+    await hint(root);
+    expect(pill(root)).toBeNull();
+    // The POST then answers: the post is made once.
+    posts = posts.slice(0, 5);
+    len -= 100;
+    release();
+    await settle(root);
+    await settle(root);
+    expect(location.pathname).toBe(`/t/${id}/a/6`);
+    expect(root.querySelector('#post-6')?.textContent).toContain('mine');
+    expect(pill(root)).toBeNull();
+  });
+
+  it('posting a reply with posts held takes the reader to the reply', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    add(post(6), post(7));
+    await hint(root);
+    expect(pill(root)?.textContent).toBe('2 new posts — show');
+    await reply(root, 'after them');
+    await settle(root);
+    await settle(root);
+    expect(location.pathname).toBe(`/t/${id}/a/8`);
+    expect(ids(root)).toEqual(['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6', 'post-7', 'post-8']);
+    expect(scrolled.at(-1)).toBe('post-8');
+    expect(pill(root)).toBeNull();
+  });
+
+  it('an edit and a removal in one change both show', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    posts = posts.map((p) =>
+      p.ordinal === 3 ? { ...p, html: '<p>edited 3</p>', edited_at: 1 } : p.ordinal === 4 ? { ...p, deleted: true, html: '' } : p,
+    );
+    len += 100;
+    await hint(root);
+    expect(root.querySelector('#post-3')?.textContent).toContain('edited 3');
+    expect(root.querySelector('#post-4')?.classList.contains('tombstone')).toBe(true);
+    expect(pill(root)).toBeNull();
+    // The restore that follows shows too.
+    posts = posts.map((p) => (p.ordinal === 4 ? post(4) : p));
+    len += 100;
+    await hint(root);
+    expect(root.querySelector('#post-4')?.classList.contains('tombstone')).toBe(false);
+    expect(root.querySelector('#post-4')?.textContent).toContain('body of 4');
+  });
+
+  it('an edit applies in place without moving the post in view', async () => {
+    // #1 and #2 are above the viewport and #3 is the first post in view;
+    // #2's edit makes it 60 px taller, which pushes #3 down.
+    const rect = vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (this: Element) {
+      const o = Number(this.getAttribute('data-ordinal'));
+      const grown = document.querySelector('#post-2')?.textContent?.includes('much longer') ? 60 : 0;
+      const top = o < 3 ? -300 + o * 100 : 100 + (o - 3) * 100 + grown;
+      return { top, bottom: top + 90, height: 90 } as DOMRect;
+    });
+    const by = vi.fn();
+    vi.stubGlobal('scrollBy', by);
+    const root = await renderAt(`/t/${id}/a`);
+    const third = root.querySelector('#post-3');
+    posts = posts.map((p) => (p.ordinal === 2 ? { ...p, html: '<p>much longer now</p>' } : p));
+    len += 100;
+    await hint(root);
+    expect(root.querySelector('#post-2')?.textContent).toContain('much longer');
+    expect(root.querySelector('#post-3')).toBe(third);
+    expect(by).toHaveBeenCalledWith(0, 60);
+    rect.mockRestore();
+  });
+
+  it('a post behind the pill is not marked read', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    add(post(6));
+    await hint(root);
+    const tracked = () =>
+      observers.filter((o) => o.observed.some((el) => el.id.startsWith('post-'))).flatMap((o) => o.observed.map((el) => el.id));
+    expect(tracked()).toContain('post-5');
+    expect(tracked()).not.toContain('post-6');
+    await act(async () => pill(root)!.click());
+    expect(tracked()).toContain('post-6');
+  });
+
+  it('a hint asks for the page on screen by its number, never a fragment', async () => {
+    posts = Array.from({ length: 30 }, (_, i) => post(i + 1));
+    const root = await renderAt(`/t/${id}/a/27`);
+    add(post(31));
+    await hint(root);
+    const gets = server.sent.filter((r) => r.method === 'GET' && r.url.startsWith(url)).map((r) => r.url);
+    expect(gets).toEqual([`${url}?ordinal=27`, `${url}?page=2`]);
+  });
+
+  it('polls the page on screen when the stream is refused', async () => {
+    FakeEventSource.ready = false;
+    try {
+      const root = await renderAt(`/t/${id}/a`);
+      vi.useFakeTimers();
+      await act(async () => stream().fail());
+      add(post(6));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+      vi.useRealTimers();
+      await settle(root);
+      expect(pill(root)?.textContent).toBe('1 new post — show');
+    } finally {
+      FakeEventSource.ready = true;
+      vi.useRealTimers();
+    }
+  });
+
+  it('a held copy shown while it is asked for again holds back nothing it brings', async () => {
+    const root = await renderAt(`/t/${id}/a?page=1`);
+    await route('/f/general');
+    await settle(root);
+    // The thread grew while the reader was away; the page they return to
+    // is shown at once from the held copy, and its answer adds #6.
+    add(post(6));
+    await route(`/t/${id}/a?page=1`);
+    await settle(root);
+    expect(ids(root)).toEqual(['post-1', 'post-2', 'post-3', 'post-4', 'post-5', 'post-6']);
+    expect(pill(root)).toBeNull();
+  });
+
+  it('the divider stays where it was drawn while the reader reads on', async () => {
+    lastRead = 3;
+    const root = await renderAt(`/t/${id}/a`);
+    const divider = () => root.querySelector('#unread')?.nextElementSibling?.id;
+    expect(divider()).toBe('post-4');
+    expect(root.querySelector('#unread')?.textContent).toContain('2 new posts below');
+    // The reader has read on to #5, and #6 arrives at the bottom.
+    await atBottom(true);
+    lastRead = 5;
+    add(post(6));
+    await hint(root);
+    expect(ids(root)).toContain('post-6');
+    expect(divider()).toBe('post-4');
+    expect(root.querySelector('#post-5')?.classList.contains('unread')).toBe(true);
+  });
+
+  it('a lens page holds no stream', async () => {
+    await renderAt(`/t/${id}/a?lens=author:mara`);
+    expect(FakeEventSource.all).toEqual([]);
+  });
+
+  it('leaving the thread closes the stream', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    expect(FakeEventSource.open()).toHaveLength(1);
+    await route(`/t/${id}/a?page=1`);
+    await settle(root);
+    // Another page of the same thread keeps it.
+    expect(FakeEventSource.open()).toHaveLength(1);
+    expect(FakeEventSource.all).toHaveLength(1);
+    await route('/f/general');
+    await settle(root);
+    expect(FakeEventSource.open()).toEqual([]);
   });
 });

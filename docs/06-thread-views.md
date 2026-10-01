@@ -443,6 +443,21 @@ keep seeing text its author had already corrected or a moderator had
 removed. Keeping hidden tabs connected lost, because an open tab costs a
 held connection (TKT-01M29CRJ3X), and background tabs are most of them.
 
+**Decided by the run (2026-10-01, pending maintainer review)**
+(TKT-01M29CTYA0, while building it): a lens page holds no subscription.
+Live updates run on the canonical view, the thread's pages in ordinal order,
+and a lens page stays as it was answered until the reader asks again. The
+unread lens is computed from the read position, which moves while the
+reader reads, so asking for its page again would take posts away under
+them. The pill counts and reveals the whole thread's posts by ordinal,
+which a filtered page does not hold in order. The lens header already
+returns the reader to the full thread. Alternatives: refetching every lens
+but unread lost, because live behaviour would then differ by lens, and a
+pill counting the thread's posts would count posts the lens hides. A pill
+on a lens page that only links to the full thread lost, because it needs
+the thread's post count, which a hint does not carry, so it costs a second
+request per hint for a page the reader chose to filter.
+
 A known cost, unsolved. In a thread where agents are working, twenty posts a
 minute means the pill count never settles. Tagging keeps those threads out of a
 human's unread list so most people never meet it, but a human who opens one gets

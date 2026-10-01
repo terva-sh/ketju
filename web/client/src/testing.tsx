@@ -34,6 +34,8 @@ export async function renderAt(url: string): Promise<HTMLElement> {
   }
   resetApiCache();
   resetThreadCache();
+  FakeEventSource.all = [];
+  vi.stubGlobal('EventSource', FakeEventSource);
   history.replaceState(null, '', url);
   const root = document.createElement('div');
   mounted = root;
@@ -43,6 +45,37 @@ export async function renderAt(url: string): Promise<HTMLElement> {
   });
   await settle(root);
   return root;
+}
+
+// FakeEventSource stands in for EventSource, which happy-dom lacks; renderAt
+// installs it, so a thread page's live-update stream (state/live.ts) opens
+// one. Unless a test says otherwise (ready = false), it says ready once
+// opened, as the server does, so a screen that is not about live updates
+// does not fall back to polling. emit sends an event, fail an error.
+export class FakeEventSource {
+  static all: FakeEventSource[] = [];
+  static ready = true;
+  static open = () => FakeEventSource.all.filter((s) => !s.closed);
+  onerror: (() => void) | null = null;
+  closed = false;
+  private on = new Map<string, ((e: MessageEvent) => void)[]>();
+  constructor(readonly url: string) {
+    FakeEventSource.all.push(this);
+    if (FakeEventSource.ready) void Promise.resolve().then(() => this.emit('ready', {}));
+  }
+  addEventListener(type: string, fn: (e: MessageEvent) => void) {
+    this.on.set(type, [...(this.on.get(type) ?? []), fn]);
+  }
+  emit(type: string, data: unknown) {
+    if (this.closed) return;
+    for (const fn of this.on.get(type) ?? []) fn(new MessageEvent(type, { data: JSON.stringify(data) }));
+  }
+  fail() {
+    if (!this.closed) this.onerror?.();
+  }
+  close() {
+    this.closed = true;
+  }
 }
 
 // unmount takes the app renderAt mounted down. A test that changes the

@@ -1,9 +1,9 @@
 import { Fragment } from 'preact';
-import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { forgetGets, peekGet } from '../api/client';
-import type { CreatedPost, Pinned, Post as PostDTO, ThreadPage } from '../api/dto';
-import { isProblem, problemMessage } from '../api/problem';
+import type { CreatedPost, Pinned, Post as PostDTO, ThreadPage, ThreadViewer } from '../api/dto';
+import { isProblem, problemMessage, revokesAccess } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Composer } from '../composer/Composer';
@@ -11,6 +11,7 @@ import { ComposerSheet } from '../composer/ComposerSheet';
 import { delayUntil } from '../components/thread/deadline';
 import { FlagDialog } from '../components/thread/FlagDialog';
 import { ModerateDialog } from '../components/thread/ModerateDialog';
+import { NewPostsPill } from '../components/thread/NewPostsPill';
 import { Pager } from '../components/thread/Pager';
 import {
   permalink,
@@ -37,6 +38,7 @@ import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/short
 import { isPhone } from '../state/layout';
 import { composerFor, loadReplyDraft, quotePost, replyToPost, type Slow } from '../state/composer';
 import { listFor } from '../state/lists';
+import { subscribe } from '../state/live';
 import { marking, markUnread, trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { refreshViewer, viewer } from '../state/viewer';
@@ -97,7 +99,15 @@ export function ThreadScreen() {
   // (storeThreadHeader) before the page is asked for again, so a lock or pin
   // shows at once.
   const cached = cachedThread(params.id)?.header;
-  const pageHead = res.data?.thread;
+  // While the canonical view is open, a live hint asks for the page on screen
+  // again (useLive), and the newer answer is shown in place of the request's.
+  const [live, setLive] = useState<Live | null>(null);
+  const shown =
+    res.data && live && live.key === key && live.me === me && live.page.thread.log_length > res.data.thread.log_length
+      ? live.page
+      : res.data;
+  useLive(params.id, !history && !view.lens && !!(res.data || cached), { key, me, page: shown, retry: res.retry }, setLive);
+  const pageHead = shown?.thread;
   const head = pageHead && cached && cached.log_length > pageHead.log_length ? cached : (pageHead ?? cached);
 
   // The slug is checked whenever the address or the answer changes, not only
@@ -235,7 +245,7 @@ export function ThreadScreen() {
   useShellContext(ctx, [ctx]);
 
   if (missing) return <NotFound />;
-  const page = res.data;
+  const page = shown;
   return (
     <main class="thread-page" data-screen={history ? 'post-history' : 'thread'}>
       <header class="thread-head">
@@ -299,7 +309,17 @@ export function ThreadScreen() {
         <PostHistory thread={head ?? { id: params.id, slug: params.slug }} ordinal={params.ordinal} />
       ) : (
         <>
-          {page && <ThreadBody key={key} page={page} lens={view.lens} onChanged={res.retry} current={pageFor === me} />}
+          {page && (
+            <ThreadBody
+              key={key}
+              page={page}
+              read={res.data!.viewer}
+              opening={res.loading}
+              lens={view.lens}
+              onChanged={res.retry}
+              current={pageFor === me}
+            />
+          )}
           {!page && !res.error && <p class="loading">Loading…</p>}
         </>
       )}
@@ -335,22 +355,77 @@ function PinnedNote({ pinned }: { pinned: Pinned }) {
 
 function ThreadBody({
   page,
+  read,
+  opening,
   lens,
   onChanged,
   current,
 }: {
   page: ThreadPage;
+  // read is the viewer block of the page as the request answered it, whose
+  // read position the divider is drawn at. A live refetch reports the
+  // position the reader has moved since, and the divider stays where it was
+  // drawn rather than moving under them.
+  read: ThreadViewer;
+  // opening is whether the request for this page is still out.
+  opening: boolean;
   lens: string;
   onChanged: () => void;
   // current is whether page was asked for by the viewer signed in now.
   current: boolean;
 }) {
   const thread: ThreadRef = { id: page.thread.id, slug: page.thread.slug };
-  const lastRead = page.viewer.last_read_ordinal;
+  const lastRead = read.last_read_ordinal;
+  const { route } = useLocation();
+
+  // The new-posts pill (docs/06 "Live updates"). known is the thread's post
+  // count when the page opened, or when the pill was last taken: posts past
+  // it are held behind the pill rather than drawn, so nothing moves under
+  // the reader. While the page's own request is out, a held copy may be on
+  // screen, and known follows what it answers. A reader at the bottom, with
+  // every new post on this page, gets them drawn as they come.
+  const count = page.thread.post_count;
+  const known = useRef(count);
+  const settled = useRef(false);
+  if (!settled.current) {
+    known.current = count;
+    settled.current = !opening;
+  }
+  const [, redraw] = useState(0);
+  const posts = page.posts.filter((p) => p.ordinal <= known.current);
+  const waiting = Math.max(0, count - known.current);
+  const fits = page.posts.length - posts.length === waiting;
+  const posting = composerFor(thread.id).posting.value;
+  const end = useRef<HTMLDivElement>(null);
+  const bottom = useAtBottom(end);
+  const focus = useRef(0);
+  // take draws the held posts; from the pill, focus goes to the first.
+  const take = (focusFirst: boolean) => {
+    if (known.current >= count) return;
+    if (focusFirst) focus.current = known.current + 1;
+    known.current = count;
+    redraw((n) => n + 1);
+  };
+  useEffect(() => {
+    if (bottom && fits) take(false);
+  }, [bottom, fits, count]);
+  useLayoutEffect(() => {
+    if (focus.current) document.getElementById(`post-${focus.current}`)?.focus();
+    focus.current = 0;
+    const a = anchor;
+    anchor = null;
+    const el = a && document.getElementById(a.id);
+    if (el) scrollBy(0, el.getBoundingClientRect().top - a!.top);
+  });
+  const show = () => {
+    if (fits) take(true);
+    else route(permalink(thread, known.current + 1));
+  };
+
   const divider = dividerBefore(
-    page.posts.map((p) => p.ordinal),
+    posts.map((p) => p.ordinal),
     lastRead,
-    page.thread.post_count,
+    known.current,
   );
   const [popover, setPopover] = useState<number | null>(null);
 
@@ -375,7 +450,7 @@ function ThreadBody({
   // TKT-01M3QHKD21). Nothing is offered while the page is another viewer's
   // (current false), until the page asked for again answers.
   const now = Date.now();
-  const offers = page.posts.map((p) => (current ? postControls(p, page.viewer, now) : noControls));
+  const offers = posts.map((p) => (current ? postControls(p, page.viewer, now) : noControls));
   useWindowClock(offers.map((c) => c.closesAt));
   const windows = page.viewer.author_windows;
   const moderates = page.viewer.can_moderate && !!viewer.value.user;
@@ -393,7 +468,6 @@ function ThreadBody({
   // Unread from here is offered to a signed-in reader, on its own rule
   // rather than with quote and reply, as flag is: it makes that post and
   // every later one unread, and returns to the list.
-  const { route } = useLocation();
   const onUnread: UnreadHandler | undefined = tracksUnread()
     ? (ordinal) => markAndReturn(thread.id, page.thread.forum.slug, route, ordinal - 1)
     : undefined;
@@ -410,7 +484,7 @@ function ThreadBody({
   };
   useThreadShortcuts(page, lens, route);
   const list = useRef<HTMLElement>(null);
-  useReadTracking(thread.id, list, page, lastRead);
+  useReadTracking(thread.id, list, page, lastRead, posts.length);
   // A posted reply is shown where it landed: its permalink, which asks for
   // the page holding it at the log length the post made, and scrolls to it.
   // Nothing moves a reader who has left the thread while it was posting.
@@ -442,16 +516,16 @@ function ThreadBody({
     <>
       {pager}
       <section class="posts" ref={list} onClick={follow}>
-        {page.posts.map((p, i) => (
+        {posts.map((p, i) => (
           <Fragment key={p.ordinal}>
-            {p.ordinal === divider && <UnreadDivider unread={page.thread.post_count - lastRead} lastRead={lastRead} at={page.viewer.last_read_at} />}
+            {p.ordinal === divider && <UnreadDivider unread={known.current - lastRead} lastRead={lastRead} at={read.last_read_at} />}
             {isTombstone(p) ? (
               <Tombstone
                 post={p}
                 thread={thread}
                 unread={lastRead > 0 && p.ordinal > lastRead}
                 own={ownOf(p, i)}
-                expander={expanderShown(p, page.posts[i + 1])}
+                expander={expanderShown(p, posts[i + 1])}
               />
             ) : (
               <Post
@@ -462,12 +536,14 @@ function ThreadBody({
                 onFlag={onFlag}
                 onUnread={onUnread}
                 own={ownOf(p, i)}
-                expander={expanderShown(p, page.posts[i + 1])}
+                expander={expanderShown(p, posts[i + 1])}
               />
             )}
           </Fragment>
         ))}
       </section>
+      <div ref={end} />
+      <NewPostsPill count={posting ? 0 : waiting} onShow={show} />
       {pager}
       <ThreadFoot page={page} route={route} />
       {canReply &&
@@ -494,12 +570,98 @@ function ThreadBody({
 // it unmounts on every navigation away from this page, and stopping flushes.
 // The divider stays where the page drew it: what is read while the page is
 // open moves it on the next visit, not under the reader.
-function useReadTracking(id: string, list: { current: HTMLElement | null }, page: ThreadPage, lastRead: number) {
+//
+// Only the posts drawn are tracked, so one held behind the new-posts pill is
+// not read, and tracking starts again when more are drawn.
+function useReadTracking(id: string, list: { current: HTMLElement | null }, page: ThreadPage, lastRead: number, drawn: number) {
   const signedIn = !!viewer.value.user;
   useEffect(() => {
     if (!signedIn || !list.current) return;
     return trackPosts(id, list.current, lastRead, page);
-  }, [id, page, signedIn]);
+  }, [id, page, signedIn, drawn]);
+}
+
+// Live is a page a live hint asked for again: for the request key and the
+// viewer it was asked for, so moving on, or signing in as someone else,
+// leaves it behind.
+interface Live {
+  key: string;
+  me: string | null;
+  page: ThreadPage;
+}
+
+// useLive holds the live-update subscription (state/live.ts) while on is
+// true: on the canonical view of a thread the reader has been shown, so
+// moving between its pages keeps one stream. It closes when the screen
+// leaves the thread, or the thread leaves the cache (access withdrawn).
+//
+// A hint, or a poll, asks for the page on screen again, in full and by its
+// number, never an after_log_length fragment: a removal or a restore writes
+// no revision, so a fragment holding an edit would leave a removed post on
+// screen (docs/06, Terva review 1696). A landing request, which names no
+// page, is not repeated, because the server would land it on the reader's
+// new position. The answer is shown if it is newer than the page on screen,
+// with the first post in view held where it was (anchor). An answer that
+// withdraws access asks for the page through the screen's request, which
+// then shows the refusal.
+//
+// A lens page holds no subscription: the unread lens is recomputed from the
+// read position the reader is moving, so asking for it again would take
+// posts away under them, and the pill counts the whole thread's posts
+// (docs/06, run decision of 2026-10-01).
+function useLive(
+  id: string,
+  on: boolean,
+  now: { key: string; me: string | null; page: ThreadPage | undefined; retry: () => void },
+  setLive: (l: Live) => void,
+) {
+  const at = useRef(now);
+  at.current = now;
+  useEffect(() => {
+    if (!on) return;
+    const held = () => at.current.page?.thread.log_length ?? Infinity;
+    return subscribe(id, held, () => {
+      const { key, me, page, retry } = at.current;
+      if (!page) return;
+      loadThreadPage(id, { page: page.page.number }).then(
+        (p) => {
+          if (at.current.key !== key || p.thread.log_length <= held()) return;
+          anchor = firstInView();
+          setLive({ key, me, page: p });
+        },
+        (err: unknown) => {
+          if (at.current.key === key && revokesAccess(err)) retry();
+        },
+      );
+    });
+  }, [id, on]);
+}
+
+// anchor is the first post in view, and its top, before a live page is
+// drawn: the thread body scrolls by however far it moved, so an edit or a
+// removal above it does not move the text being read.
+let anchor: { id: string; top: number } | null = null;
+
+function firstInView() {
+  for (const el of document.querySelectorAll('.posts > [data-ordinal]')) {
+    const r = el.getBoundingClientRect();
+    if (r.bottom > 0) return { id: el.id, top: r.top };
+  }
+  return null;
+}
+
+// useAtBottom is whether the end of the last post drawn is in view, within
+// 48 px (docs/06 "Live updates"). end is an empty element after the list.
+function useAtBottom(end: { current: HTMLElement | null }) {
+  const [bottom, setBottom] = useState(false);
+  useEffect(() => {
+    const io = new IntersectionObserver((es) => setBottom(es[es.length - 1].isIntersecting), {
+      rootMargin: '0px 0px 48px 0px',
+    });
+    io.observe(end.current!);
+    return () => io.disconnect();
+  }, []);
+  return bottom;
 }
 
 // onThread is whether the reader is still on a page of thread id.
