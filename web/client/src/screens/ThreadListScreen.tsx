@@ -7,7 +7,7 @@ import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { MarkAllRead } from '../components/MarkAllRead';
 import { ThreadRow } from '../components/ThreadRow';
-import { rememberList } from '../state/lists';
+import { rememberList, useAfterMark } from '../state/lists';
 import { useScrollMemory } from '../state/scroll';
 import { useShellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
@@ -54,6 +54,8 @@ export function ThreadListScreen() {
   const key = threadListUrl(forum, cursor, sort);
   const res = useResource(key, (signal) => apiGet<ThreadList>(key, { signal }), () => peekGet<ThreadList>(key));
   const list = res.data;
+  // A mark all read changes the rows' counts (state/lists.ts).
+  useAfterMark(res.retry);
   const name = list?.forum?.name ?? '';
   const signedIn = !!viewer.value.user;
 
@@ -78,7 +80,7 @@ export function ThreadListScreen() {
         </div>
         {signedIn && list && (
           <div class="list-actions">
-            <MarkAllRead url={`/api/v1/forums/${encodeURIComponent(forum)}/read`} onMarked={res.retry} />
+            <MarkAllRead url={`/api/v1/forums/${encodeURIComponent(forum)}/read`} />
             <a class="new-thread" href={`/f/${encodeURIComponent(forum)}/new`}>
               New thread
             </a>

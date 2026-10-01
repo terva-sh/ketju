@@ -1,3 +1,5 @@
+import { signal } from '@preact/signals';
+import { useEffect, useRef } from 'preact/hooks';
 import { forgetGets } from '../api/client';
 import { forgetAllThreadPages } from './threads';
 
@@ -57,4 +59,24 @@ export function forgetLists() {
 export function forgetReadState() {
   forgetLists();
   forgetAllThreadPages();
+  marks.value++;
+}
+
+// marks counts the marks made in this tab. A list on screen asks for itself
+// again when it moves (useAfterMark), whichever screen the mark was made
+// from: a reader may leave for another list while the PUT is out, and that
+// list may have answered before the mark landed (Terva review 1802).
+export const marks = signal(0);
+
+// useAfterMark calls retry each time a mark lands while the caller is
+// mounted. It does not call it on mount: a list mounted after a mark asked
+// for itself after it.
+export function useAfterMark(retry: () => void) {
+  const n = marks.value;
+  const seen = useRef(n);
+  useEffect(() => {
+    if (n === seen.current) return;
+    seen.current = n;
+    retry();
+  }, [n]);
 }

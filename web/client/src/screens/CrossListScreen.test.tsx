@@ -203,6 +203,47 @@ describe('mark all read', () => {
     expect(cachedThread(thread.id)).toBeUndefined();
   });
 
+  // Terva review 1802: the reader leaves for another list while the PUT is
+  // out, and that list answers before the mark lands. The list on screen
+  // asks for itself again when it does.
+  it('refreshes the list on screen when a mark lands after the reader moved on', async () => {
+    let marked = false;
+    let land!: () => void;
+    const s = stubServer({
+      'GET /api/v1/unread': ok(list()),
+      'GET /api/v1/new': () => ({ status: 200, body: marked ? list({ threads: [] }) : list() }),
+      'PUT /api/v1/me/read': () =>
+        new Promise((r) => (land = () => ((marked = true), r({ status: 200, body: { at: 1 } })))),
+      'GET /api/v1/me': ok(me(0, 0)),
+    });
+    const root = await renderAt('/unread');
+    await act(async () => root.querySelector<HTMLButtonElement>('[data-mark-read]')!.click());
+    await route('/new');
+    await until(() => screenOf(root) === 'new' && rows(root).length === 2);
+    expect(gets(s).filter((u) => u === '/api/v1/new')).toHaveLength(1);
+
+    await act(async () => land());
+    await until(() => rows(root).length === 0);
+    expect(gets(s).filter((u) => u === '/api/v1/new')).toHaveLength(2);
+    expect(root.querySelector('[data-empty-list]')?.textContent).toContain('No new threads.');
+  });
+
+  it('does not ask again for a list mounted after the mark', async () => {
+    const s = stubServer({
+      'GET /api/v1/unread': ok(list()),
+      'GET /api/v1/watching': ok(list()),
+      'PUT /api/v1/me/read': ok({ at: 1 }),
+      'GET /api/v1/me': ok(me(0, 0)),
+    });
+    const root = await renderAt('/unread');
+    await act(async () => root.querySelector<HTMLButtonElement>('[data-mark-read]')!.click());
+    await until(() => gets(s).includes('/api/v1/me'));
+    await route('/watching');
+    await until(() => rows(root).length === 2);
+    await settle(root);
+    expect(gets(s).filter((u) => u === '/api/v1/watching')).toHaveLength(1);
+  });
+
   it('keeps the list and says so when the mark fails', async () => {
     const s = stubServer({
       'GET /api/v1/unread': ok(list()),

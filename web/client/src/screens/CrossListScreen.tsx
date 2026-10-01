@@ -7,7 +7,7 @@ import { ErrorPanel } from '../components/ErrorPanel';
 import { MarkAllRead } from '../components/MarkAllRead';
 import { ThreadRow } from '../components/ThreadRow';
 import { meHref } from '../shell/nav';
-import { type CrossListName, rememberList } from '../state/lists';
+import { type CrossListName, rememberList, useAfterMark } from '../state/lists';
 import { useScrollMemory } from '../state/scroll';
 import { useShellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
@@ -75,6 +75,9 @@ export function CrossListScreen({ list }: { list: CrossListName }) {
     () => (key ? peekGet<ThreadList>(key) : undefined),
   );
   const data = res.data;
+  // A mark all read, from here or from the screen the reader just left,
+  // changes what every list holds (state/lists.ts).
+  useAfterMark(res.retry);
 
   useShellContext({ title: def.title, actions: [] }, [def.title]);
   useScrollMemory(key ?? pageHref(list, cursor), !!data || !signedIn);
@@ -87,7 +90,7 @@ export function CrossListScreen({ list }: { list: CrossListName }) {
         <h1>{def.title}</h1>
         {list === 'unread' && data && data.threads.length > 0 && (
           <div class="list-actions">
-            <MarkAllRead url="/api/v1/me/read" onMarked={res.retry} />
+            <MarkAllRead url="/api/v1/me/read" />
           </div>
         )}
       </header>

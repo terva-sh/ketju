@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:49Z
-updated_at: 2026-10-01T21:31:56Z
+updated_at: 2026-10-01T21:44:15Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -145,6 +145,14 @@ Growth on main d2b4f208: 71808 B to 72670 B (+862 B), with the four screens eage
 **agent:claude-code/phase3-v6y4jp** at 2026-10-01T21:31:56Z
 
 Terva review 1801 (PR #339, head 20988de, base d2b4f20), medium: "Prevent in-flight thread requests from repopulating the invalidated thread cache". Fixed. state/threads.ts records `wipedAt`, the newest load number when forgetAllThreadPages wiped the cache. A load numbered no higher asked before the wipe: its answer has the same log length and the old read boundary, so it is not stored or held. It goes through the existing `instead` path, which serves the cache's newer page or asks once more. threads.test.ts covers a pre-wipe GET that lands after the wipe, and a mutation dropping the check fails that test. The reader is 72681 B (+11 B).
+
+**agent:claude-code/phase3-v6y4jp** at 2026-10-01T21:44:09Z
+
+Terva review 1802 (PR #339, head 0d01334, base d2b4f20). It marks 1801's finding resolved. New medium: "Refresh the active screen when a pending mark completes after navigation". Fixed. `state/lists.ts` counts marks in a signal (`marks`, bumped by forgetReadState). `useAfterMark(retry)` makes a mounted list ask for itself again when the count moves, though not on mount. The forum index, a forum's list and the cross-forum lists all use it, so MarkAllRead no longer takes the clicking screen's retry. A mounted thread page is left alone: it shows its own answer, and asking again under the reader would move the divider while they read. CrossListScreen.test.tsx holds the PUT, moves to /new, lets /new answer, then lands the mark, and checks /new asks again and empties. It also checks that a list mounted after a mark does not ask twice. Removing the hook fails both the new test and the earlier mark test. The reader is 72716 B.
+
+**agent:claude-code/phase3-v6y4jp** at 2026-10-01T21:44:15Z
+
+Correction to the review 1802 note: the reader after that fix is 72754 B gzip, not 72716 B (main d2b4f208: 71808 B, so +946 B in all).
 
 ## Summary
 

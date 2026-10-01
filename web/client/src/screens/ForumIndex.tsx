@@ -6,6 +6,7 @@ import { ErrorPanel } from '../components/ErrorPanel';
 import { Icon } from '../components/Icon';
 import { MarkAllRead } from '../components/MarkAllRead';
 import { PostTime } from '../components/thread/PostTime';
+import { useAfterMark } from '../state/lists';
 import { siteName, viewer } from '../state/viewer';
 import { ForumPicker, pickable } from './ForumPicker';
 import '../components/unread.css';
@@ -38,6 +39,8 @@ export function ForumIndex() {
   const res = useResource(forumsUrl, (signal) => apiGet<ForumTree>(forumsUrl, { signal }), () =>
     peekGet<ForumTree>(forumsUrl),
   );
+  // A mark all read changes every count here (state/lists.ts).
+  useAfterMark(res.retry);
   const me = viewer.value;
   const signedIn = !!me.user;
   const [picking, setPicking] = useState(false);
@@ -60,7 +63,7 @@ export function ForumIndex() {
         </div>
         {signedIn && forums && (
           <div class="list-actions">
-            {forums.length > 0 && <MarkAllRead url="/api/v1/me/read" onMarked={res.retry} />}
+            {forums.length > 0 && <MarkAllRead url="/api/v1/me/read" />}
             {canStart && (
               <button type="button" class="new-thread" onClick={pick} aria-haspopup="dialog">
                 New thread
