@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY86ER6FJ1EWNSJHVEP9
 title: Build the notifications UI and alerts tab
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -24,17 +24,10 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:294
     path: null
-claim:
-  actor: agent:claude-code/phase3-cty86
-  branch: run/cty86-notifications-ui
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a95b9c9d7b3f72a71
-  commit: 86752c422f9d6152ce015e2c1b52cdd721f33910
-  session: null
-  claimed_at: 2026-10-01T18:09:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T18:23:30Z
+updated_at: 2026-10-01T19:46:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -54,11 +47,11 @@ In-app only in v1, with no email and no push, so this list is the entire notific
 
 ## Acceptance criteria
 
-- [ ] Each notification links to the post that caused it, landing on the right page with the post anchored (alerts.spec.ts, NotificationsScreen.test.tsx)
-- [ ] Badge counts match the list and clear on read in the desktop bell and the phone's Alerts tab, from the displayed rows and from mark-all (alerts.spec.ts, NotificationsScreen.test.tsx)
-- [ ] The Alerts screen works at 390 px and 1440 px with the same content, each test with one axe scan and no violations (alerts.spec.ts)
-- [ ] An empty state explains what would appear there
-- [ ] The committed dist is rebuilt with go generate ./internal/web/spa and npm run budget stays within 70000 B, with the reader's growth, measured eager and lazy, recorded in the PR
+- [x] Each notification links to the post that caused it, landing on the right page with the post anchored (alerts.spec.ts, NotificationsScreen.test.tsx)
+- [x] Badge counts match the list and clear on read in the desktop bell and the phone's Alerts tab, from the displayed rows and from mark-all (alerts.spec.ts, NotificationsScreen.test.tsx)
+- [x] The Alerts screen works at 390 px and 1440 px with the same content, each test with one axe scan and no violations (alerts.spec.ts)
+- [x] An empty state explains what would appear there
+- [x] The committed dist is rebuilt with go generate ./internal/web/spa and npm run budget stays within 70000 B, with the reader's growth, measured eager and lazy, recorded in the PR
 
 ## Implementation plan
 
@@ -147,3 +140,15 @@ Smaller choices inside the plan, not run decisions:
 Bundle (npm run budget, reader as counted by scripts/bundle.mjs): 66189 B before, 67619 B eager (+1430 B: JS +1098, CSS +334). Made lazy, the screen would cost 69591 B (+3402 B), because Vite splits a shared chunk and every non-admin chunk counts. So the screen is eager, as the plan expected.
 
 The empty-state e2e test answers the list empty through page.route, because by then every seeded reader may already have alerts from other specs. The first test clears alice's alerts with up_to first, so its count of 1 belongs to that test alone.
+
+## Summary
+
+The Alerts screen at `/notifications` replaces its placeholder (`web/client/src/screens/NotificationsScreen.tsx`, `notifications.css`, `state/notifications.ts`). Each notification is one sentence by kind: mention, reply_to_you, quoted, thread_you_watch, application_decided and new_application. The thread's title links to the post's permalink, followed by the forum and an absolute `PostTime`. No post text is shown or fetched.
+
+The unread rows a page shows are posted once by id, and `/me` is fetched again, so the desktop bell and the phone's Alerts tab drop. The rows keep their unread marking, a dot, a weight and a visually hidden "Unread", until the reader leaves. "Mark all read" posts the first row's id as `up_to` (review 1709). "Older" appends the next page and moves focus to it. The empty state says what would appear there.
+
+Tests: `NotificationsScreen.test.tsx` has 15 tests. They cover each kind's sentence and link, the goldens, that no post is fetched, the marks and badges at both widths, mark-all and its failure, Older and its failure, the empty state and a list failure. `e2e/alerts.spec.ts` runs a real mention end to end at 390 and 1440 px: the badge appears, the row is marked and the badge clears, and the link lands on `#post-2` in view. A second test covers the empty state. Each test runs one axe scan.
+
+Bundle: the reader went from 66354 B to 67798 B (+1444 B). Measured before the rebase, eager cost +1430 B and lazy +3402 B, so the screen is eager.
+
+Run decision, pending maintainer review, recorded in docs/06 "Thread list views": Older appends in place, and mark-all clears the marking of the rows shown.
