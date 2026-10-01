@@ -53,7 +53,7 @@ func TestLensResolverRegistration(t *testing.T) {
 
 		var seen lens.Spec
 		with := maps.Clone(lensResolvers)
-		with[kind] = func(_ context.Context, _ *Service, a access, spec lens.Spec) (resolvedLens, error) {
+		with[kind] = func(_ context.Context, _ *Service, _ lensViewer, spec lens.Spec) (resolvedLens, error) {
 			seen = spec
 			return resolvedLens{kind: spec.Kind, value: "resolved", key: "k:" + spec.String(),
 				filter: func(ix *threadlog.Index) (lens.Filter, error) {
@@ -107,6 +107,45 @@ func TestCanonicalPageUnchangedByTheFramework(t *testing.T) {
 		b, _ := json.Marshal(lensed.Body)
 		if plain.Body.Lens != nil || string(a) != string(b) || plain.ETag != lensed.ETag {
 			t.Errorf("%+v: an unserved lens changed the page", q)
+		}
+	}
+}
+
+// TestUnreadLensKeyNamesBoundary: the unread lens's cache key names the
+// boundary it resolved to, so two members at different positions never
+// share an entry, even before the page's ordinal digest, which is keyed
+// beside it, tells their pages apart (TKT-01M29CTY4J). A bare unread and
+// unread:B at the same B resolve alike, and a viewer who is not a member
+// resolves to the empty lens whatever position a row holds for them.
+func TestUnreadLensKeyNamesBoundary(t *testing.T) {
+	member := func(id int64) access {
+		return access{viewer: domain.Viewer{UserID: id, Role: domain.RoleMember, Active: true}}
+	}
+	resolve := func(v lensViewer, raw string) resolvedLens {
+		t.Helper()
+		rl, err := resolveUnread(t.Context(), nil, v, lens.Parse(raw))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rl
+	}
+	at10, at20 := resolve(lensViewer{member(1), 10}, "unread"), resolve(lensViewer{member(2), 20}, "unread")
+	if at10.key != "unread:10" || at10.value != "10" || at20.key != "unread:20" || at20.value != "20" {
+		t.Fatalf("bare unread at 10 and 20 resolved to %q/%q and %q/%q", at10.key, at10.value, at20.key, at20.value)
+	}
+	if held := resolve(lensViewer{member(2), 20}, "unread:10"); held.key != at10.key || held.value != at10.value {
+		t.Fatalf("unread:10 asked by a member at 20 resolved to %q/%q, want unread:10", held.key, held.value)
+	}
+	none := resolve(lensViewer{member(3), 0}, "unread")
+	if none.key != "unread:0" || none.value != "0" {
+		t.Fatalf("bare unread with no position resolved to %q/%q, want unread:0", none.key, none.value)
+	}
+	ix := threadlog.NewIndex(threadlog.IndexHeader{PostCount: 1}, []threadlog.IndexEntry{{Offset: 64, Revision: 1}})
+	for _, v := range []domain.Viewer{domain.Anonymous(), {UserID: 4, Role: domain.RoleMember}} {
+		rl := resolve(lensViewer{access{viewer: v}, 7}, "unread")
+		f, err := rl.filter(ix)
+		if err != nil || rl.value != "" || rl.key == at10.key || rl.key == none.key || lens.Apply(ix, f).Len() != 0 {
+			t.Fatalf("%+v: bare unread resolved to %q/%q, want the empty lens", v, rl.key, rl.value)
 		}
 	}
 }

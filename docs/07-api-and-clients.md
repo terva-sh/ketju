@@ -771,7 +771,9 @@ How the server applies a lens (TKT-01M29CRJ1P): `lens.Parse` in
 `internal/service/threads/lens` reads the value and is total. After access
 has admitted the viewer, the kind's resolver in
 `internal/service/threads/lenses.go` reads what it needs from the database.
-Inside the snapshot the page is drawn from, the resolved lens builds a
+It runs once the viewer block's reads are done, and is handed the viewer's
+read position, so the unread lens (TKT-01M29CTY4J) reads nothing more and
+runs exactly the canonical page's statements. Inside the snapshot the page is drawn from, the resolved lens builds a
 filter, which answers keep or skip for one post at a time, and one
 ascending walk of the in-memory index (`threadlog.Index.Select`) makes the
 selection. The page is cut from the selection, and its posts are drawn by

@@ -127,3 +127,12 @@ func (s Selection) Gaps(n, size int) []dto.LensGap {
 	add(prev, next)
 	return gaps
 }
+
+// After keeps the posts after ordinal after: the unread lens's unread:B
+// (docs/06 "the unread lens holds its boundary"). A boundary at or past the
+// last post keeps nothing.
+func After(after uint32) Filter { return unreadAfter(after) }
+
+type unreadAfter uint32
+
+func (b unreadAfter) keep(o uint32, _ threadlog.IndexEntry) bool { return o > uint32(b) }

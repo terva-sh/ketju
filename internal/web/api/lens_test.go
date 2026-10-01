@@ -27,10 +27,11 @@ import (
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
-// Tests for the lens framework (TKT-01M29CRJ1P). No lens kind has a resolver
-// yet, so these serve fixed filters through threads.Service.TestLenses: the
+// Tests for the lens framework (TKT-01M29CRJ1P). These serve fixed filters
+// through threads.Service.TestLenses, which wins over a kind's resolver: the
 // framework is the same whichever lens chose the ordinals. Each lens ticket
-// adds its kind's rows to TestLensPostsMatchCanonical.
+// adds its kind's rows to TestLensPostsMatchCanonical, and its own tests
+// beside this file.
 
 // lensAs serves kind with f on w's service, replacing whatever it served.
 func (w *world) lensAs(kind lens.Kind, f lens.Filter) {
@@ -367,8 +368,10 @@ func (w *world) forumModerator(handle string, forum int64) domain.Viewer {
 // Every viewer class reads every post of accessThread under several lenses:
 // each post alone, the odd posts, the even posts, and all of them, so each
 // post is drawn on pages whose other posts, and so whose viewer class
-// (pageClass), differ. Each lens is read twice in two orders of viewers, so a
-// page the response cache stored for one viewer is offered to every other.
+// (pageClass), differ. Each served kind adds its own rows: the unread lens
+// over several boundaries and over each viewer's own position. Each lens is
+// read twice in two orders of viewers, so a page the response cache stored
+// for one viewer is offered to every other.
 func TestLensPostsMatchCanonical(t *testing.T) {
 	w := newWorld(t)
 	id := w.accessThread()
@@ -379,18 +382,27 @@ func TestLensPostsMatchCanonical(t *testing.T) {
 		// sees is what this viewer must read of the hidden post #5: its
 		// body or a tombstone. It proves the matrix reaches both.
 		sees bool
+		// read is the viewer's read position, which a bare unread lens
+		// starts after; -1 is none. A viewer who is not a member has no
+		// position to read from, whatever its row says.
+		read int64
 	}{
-		{"anonymous", domain.Anonymous(), false},
-		{"member", w.viewer("erin"), false},
-		{"author of a post a moderator hid", w.viewer("alice"), true},
-		{"author of a post hidden pending review", w.viewer("carol"), false},
-		{"moderator by role", w.viewer("bob"), true},
-		{"moderator by group grant", w.groupModerator(w.forum), true},
-		{"moderator of another forum", w.forumModerator("hank", elsewhere), false},
-		{"admin", w.newAdmin(), true},
-		{"suspended, the author of a post his suspension hid", w.session("dave"), false},
+		{"anonymous", domain.Anonymous(), false, -1},
+		{"member", w.viewer("erin"), false, -1},
+		{"author of a post a moderator hid", w.viewer("alice"), true, 4},
+		{"author of a post hidden pending review", w.viewer("carol"), false, 6},
+		{"moderator by role", w.viewer("bob"), true, 7},
+		{"moderator by group grant", w.groupModerator(w.forum), true, 2},
+		{"moderator of another forum", w.forumModerator("hank", elsewhere), false, 5},
+		{"admin", w.newAdmin(), true, 10},
+		{"suspended, the author of a post his suspension hid", w.session("dave"), false, 1},
 	}
 	const n = 10
+	for _, vw := range viewers {
+		if vw.read >= 0 {
+			w.readTo(vw.v.UserID, id, vw.read)
+		}
+	}
 	canonical := make([]map[int]string, len(viewers))
 	for i, vw := range viewers {
 		canonical[i] = map[int]string{}
@@ -417,27 +429,54 @@ func TestLensPostsMatchCanonical(t *testing.T) {
 		}
 	}
 
+	// A case is a served lens, raw, whose posts for viewer i are want(i), or
+	// else the test filter keeping keep, served as chain.
 	type lensCase struct {
 		name string
 		keep []uint32
+		raw  string
+		want func(i int) []int
 	}
-	lenses := []lensCase{{"odd", odd(n)}, {"even", even(n)}, {"all", append(even(n), odd(n)...)}}
+	lenses := []lensCase{{name: "odd", keep: odd(n)}, {name: "even", keep: even(n)},
+		{name: "all", keep: append(even(n), odd(n)...)}}
 	for o := uint32(1); o <= n; o++ {
-		lenses = append(lenses, lensCase{fmt.Sprintf("#%d alone", o), []uint32{o}})
+		lenses = append(lenses, lensCase{name: fmt.Sprintf("#%d alone", o), keep: []uint32{o}})
 	}
+	// The unread lens (TKT-01M29CTY4J): ranges that start before, on and
+	// after the removed posts, an empty one, and each viewer's own position.
+	for _, b := range []int{0, 2, 4, 6, 9, 10} {
+		lenses = append(lenses, lensCase{name: fmt.Sprintf("unread:%d", b), raw: fmt.Sprintf("unread:%d", b),
+			want: func(int) []int { return span(b+1, n) }})
+	}
+	lenses = append(lenses, lensCase{name: "bare unread", raw: "unread", want: func(i int) []int {
+		if !viewers[i].v.Member() {
+			return []int{}
+		}
+		return span(int(max(viewers[i].read, 0))+1, n)
+	}})
 	order := make([]int, len(viewers))
 	for i := range order {
 		order[i] = i
 	}
 	for round := range 2 {
 		for li, lc := range lenses {
-			w.lensAs(lens.Chain, lens.Ordinals(lc.keep...))
-			path := fmt.Sprintf("%s?lens=chain:%d", threadPath(id), li+1)
+			path := threadPath(id) + "?lens=" + lc.raw
+			if lc.raw == "" {
+				w.lensAs(lens.Chain, lens.Ordinals(lc.keep...))
+				path = fmt.Sprintf("%s?lens=chain:%d", threadPath(id), li+1)
+			}
 			for _, i := range order {
 				vw := viewers[i]
 				p := page(t, w.get(vw.v, path))
-				want := slices.Sorted(slices.Values(lc.keep))
-				if got := ordinalsOf(p.Posts); len(got) != len(want) {
+				var want []int
+				if lc.want != nil {
+					want = lc.want(i)
+				} else {
+					for _, o := range slices.Sorted(slices.Values(lc.keep)) {
+						want = append(want, int(o))
+					}
+				}
+				if got := ordinalsOf(p.Posts); !slices.Equal(got, want) {
 					t.Fatalf("round %d, %s, %s: the lens served %v, want %v", round, lc.name, vw.name, got, want)
 				}
 				for _, post := range p.Posts {

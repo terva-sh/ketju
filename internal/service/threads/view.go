@@ -244,12 +244,6 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		return Result{}, err
 	}
 	v, row, canModerate := a.viewer, a.row, a.canModerate
-	// Access comes first, so a thread hidden from v is not-found whatever
-	// the lens says (docs/07 "Access"). A nil lens is the canonical page.
-	rl, err := s.resolveLens(ctx, a, q.Lens)
-	if err != nil {
-		return Result{}, err
-	}
 
 	var (
 		forum    dbq.Forum
@@ -295,6 +289,14 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		authorW, err = viewerWindows(ctx, dq)
 		return err
 	})
+	if err != nil {
+		return Result{}, err
+	}
+	// Access came first, so a thread hidden from v is not-found whatever
+	// the lens says (docs/07 "Access"). The lens resolves after the viewer's
+	// read position is read, so the unread lens costs no statement of its
+	// own. A nil lens is the canonical page.
+	rl, err := s.resolveLens(ctx, lensViewer{access: a, lastRead: lastRead}, q.Lens)
 	if err != nil {
 		return Result{}, err
 	}
