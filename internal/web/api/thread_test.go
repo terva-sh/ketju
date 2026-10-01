@@ -259,9 +259,16 @@ func (w *world) seed() (threadid.ID, int64) {
 			UserID: w.users["carol"], ThreadID: int64(id), LastReadOrdinal: 2, LastReadAt: 1})
 	})
 	if err := w.db.Write(w.t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
-		_, err := tx.ExecContext(w.t.Context(),
+		if _, err := tx.ExecContext(w.t.Context(),
 			`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at) VALUES (?, ?, 'mute', 1, 1)`,
-			w.users["bob"], int64(id))
+			w.users["bob"], int64(id)); err != nil {
+			return err
+		}
+		// carol watches the forum, which the thread follows: the member
+		// golden shows forum_watch beside an empty watch (TKT-01M29CRJ29).
+		_, err := tx.ExecContext(w.t.Context(),
+			`INSERT INTO watches (user_id, forum_id, level, created_at, updated_at) VALUES (?, ?, 'watch', 1, 1)`,
+			w.users["carol"], w.forum)
 		return err
 	}); err != nil {
 		w.t.Fatal(err)

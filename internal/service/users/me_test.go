@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/db/dbtest"
@@ -43,7 +44,10 @@ func TestMeReadsNoLogs(t *testing.T) {
 // one. Over random threads, read positions, marks, watches, mutes and
 // authorship, MeCounts' three counts are what UnreadCount and those rows say,
 // summed per forum. Threads share a few forums, so a thread wrongly
-// subtracted from, or added to, another's count changes a total.
+// subtracted from, or added to, another's count changes a total. Forums
+// carry watches and mutes of their own, and the reference takes each
+// thread's level from domain.EffectiveWatch, so the SQL's coalesce is held
+// to the Go statement of the precedence (TKT-01M29CRJ29).
 //
 // ForumUnread, the forum index's column (TKT-01M29CA9A5), is held to the same
 // threads count here, so the index and the /me badge cannot disagree.
@@ -56,8 +60,9 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 			mark = sql.NullInt64{Int64: 1000 + rng.Int64N(100), Valid: true}
 		}
 		threads := 1 + rng.IntN(12)
-		// What the reader did to each thread, for the reference below.
-		muted, watched, wrote := map[int64]bool{}, map[int64]bool{}, map[int64]bool{}
+		// What the reader did to each thread and forum, for the reference
+		// below.
+		threadLevel, forumLevel, wrote := map[int64]string{}, map[int64]string{}, map[int64]bool{}
 		// Threads share forums, so a rule that subtracts one thread from
 		// another's count shows up in the forum's total.
 		forums := 1 + rng.IntN(3)
@@ -81,6 +86,20 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 				if err := ex(`INSERT INTO forums (id, slug, name, visibility, created_at, updated_at)
 					VALUES (?, ?, 'F', 'public', 1, 1)`, f, fmt.Sprintf("f%d", f)); err != nil {
 					return err
+				}
+				if level := []string{"", "watch", "mute"}[rng.IntN(3)]; level != "" {
+					if err := ex(`INSERT INTO watches (user_id, forum_id, level, created_at, updated_at)
+						VALUES (1, ?, ?, 1, 1)`, f, level); err != nil {
+						return err
+					}
+					forumLevel[int64(f)] = level
+				}
+				// Another member's mute of the same forum touches nobody else.
+				if rng.IntN(2) == 0 {
+					if err := ex(`INSERT INTO watches (user_id, forum_id, level, created_at, updated_at)
+						VALUES (2, ?, 'mute', 1, 1)`, f); err != nil {
+						return err
+					}
 				}
 			}
 			for th := 1; th <= threads; th++ {
@@ -115,7 +134,7 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 						VALUES (1, ?, ?, 1, 1)`, th, level); err != nil {
 						return err
 					}
-					muted[int64(th)], watched[int64(th)] = level == "mute", level == "watch"
+					threadLevel[int64(th)] = level
 				}
 			}
 			return nil
@@ -160,11 +179,13 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 		}
 		wantBy := map[int64]counts{}
 		for th := int64(1); th <= int64(threads); th++ {
-			unread := want[th] && !muted[th]
+			level := domain.EffectiveWatch(threadLevel[th], forumLevel[forumOf[th]])
+			unread := want[th] && level != domain.WatchMute
 			c := wantBy[forumOf[th]]
 			c.threads += b(unread)
 			c.participated += b(unread && wrote[th])
-			c.watching += b(unread && watched[th])
+			// Watching is a thread-level watch alone (docs/06).
+			c.watching += b(unread && threadLevel[th] == domain.WatchWatch)
 			wantBy[forumOf[th]] = c
 		}
 		gotIndex := map[int64]int64{}

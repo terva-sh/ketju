@@ -178,9 +178,13 @@ type ThreadViewer struct {
 	// (docs/06 "Landing on return"). Nil with no read position, which covers
 	// every anonymous viewer.
 	LastReadAt *Millis `json:"last_read_at"`
-	// Watch is watch, mute, or empty for neither.
-	Watch    string `json:"watch"`
-	CanReply bool   `json:"can_reply"`
+	// Watch is the thread's own level: watch, mute, or empty when the
+	// thread follows its forum.
+	Watch string `json:"watch"`
+	// ForumWatch is the viewer's level on the thread's forum, which applies
+	// when Watch is empty (docs/04 "watches", TKT-01M29CRJ29).
+	ForumWatch string `json:"forum_watch"`
+	CanReply   bool   `json:"can_reply"`
 	// CanUpload is whether this viewer may upload a file to attach here:
 	// upload in the thread's forum, which is not read-only to them. False
 	// for an anonymous viewer (TKT-01M29CXK0K).
@@ -385,7 +389,9 @@ type ThreadRow struct {
 
 	// Unread is the badge count. LastReadOrdinal is what the badge links to:
 	// the client jumps to LastReadOrdinal+1. Both are zero for a viewer with
-	// no read position, including every anonymous one.
+	// no read position, including every anonymous one. Unread is zero for a
+	// thread the viewer muted, by its own row or its forum's (docs/04
+	// "watches"), and LastReadOrdinal is still sent.
 	Unread          int `json:"unread"`
 	LastReadOrdinal int `json:"last_read_ordinal"`
 }
@@ -395,7 +401,12 @@ type ThreadRow struct {
 type ThreadList struct {
 	// Forum is nil on a cross-forum surface, which is the difference between
 	// "this forum's threads" and "threads from anywhere that are unread".
-	Forum   *ForumRef   `json:"forum"`
+	Forum *ForumRef `json:"forum"`
+	// Watch is the viewer's level on the forum: watch, mute, or empty for
+	// neither, and empty for an anonymous viewer and on a cross-forum
+	// surface (TKT-01M29CRJ29). A row's own level is not sent: a muted row
+	// shows unread 0.
+	Watch   string      `json:"watch"`
 	Threads []ThreadRow `json:"threads"`
 	// NextCursor is empty at the end of the list. docs/07 makes these lists
 	// cursor-paged because their order is time, and an offset into a list
@@ -620,6 +631,23 @@ type CreatedThread struct {
 // integer: every post after it is unread, and 0 means none has been read.
 type ReadPosition struct {
 	LastReadOrdinal int `json:"last_read_ordinal"`
+}
+
+// ThreadWatch is the answer to POST /threads/{id}/watch (docs/07,
+// TKT-01M29CRJ29): the viewer's levels as they stand after the request,
+// the same two the thread page's viewer block carries. Watch is the
+// thread's own, "" when it follows its forum; ForumWatch is the forum's, so
+// a client can say what clearing the thread's level falls back to.
+type ThreadWatch struct {
+	Watch      string `json:"watch"`
+	ForumWatch string `json:"forum_watch"`
+}
+
+// ForumWatch is the answer to POST /forums/{slug}/watch (docs/07,
+// TKT-01M29CRJ29): the viewer's level on the forum after the request, the
+// thread list's watch.
+type ForumWatch struct {
+	Watch string `json:"watch"`
 }
 
 // FlagReceipt is the answer to POST /threads/{id}/flags (docs/07,

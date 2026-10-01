@@ -29,6 +29,7 @@ import type {
   Form,
   FormAdmin,
   ForumDraft,
+  ForumWatch,
   ForumTree,
   GroupDetail,
   GroupList,
@@ -57,6 +58,7 @@ import type {
   ThreadHint,
   ThreadList,
   ThreadPage,
+  ThreadWatch,
   UserPosts,
   UserSuggestions,
 } from './dto';
@@ -142,6 +144,8 @@ import userPostsMember from '../../../../internal/dto/testdata/golden/user-posts
 import userPostsModerator from '../../../../internal/dto/testdata/golden/user-posts.moderator.json';
 import userPostsOwnMember from '../../../../internal/dto/testdata/golden/user-posts-own.member.json';
 import usersMember from '../../../../internal/dto/testdata/golden/users.member.json';
+import watchForumMember from '../../../../internal/dto/testdata/golden/watch-forum.member.json';
+import watchThreadMember from '../../../../internal/dto/testdata/golden/watch-thread.member.json';
 
 // NoExtraKeys is true when every key of U, at every depth, is a key of T.
 // null in the golden says nothing about keys, and an empty array has no
@@ -250,4 +254,6 @@ export const contract = [
   matches<UserPosts>()(userPostsModerator),
   matches<UserPosts>()(userPostsOwnMember),
   matches<UserSuggestions>()(usersMember),
+  matches<ForumWatch>()(watchForumMember),
+  matches<ThreadWatch>()(watchThreadMember),
 ];

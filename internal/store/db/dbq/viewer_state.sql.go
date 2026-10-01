@@ -10,6 +10,34 @@ import (
 	"database/sql"
 )
 
+const clearForumWatch = `-- name: ClearForumWatch :exec
+DELETE FROM watches WHERE user_id = ? AND forum_id = ?
+`
+
+type ClearForumWatchParams struct {
+	UserID  int64
+	ForumID sql.NullInt64
+}
+
+func (q *Queries) ClearForumWatch(ctx context.Context, arg ClearForumWatchParams) error {
+	_, err := q.db.ExecContext(ctx, clearForumWatch, arg.UserID, arg.ForumID)
+	return err
+}
+
+const clearThreadWatch = `-- name: ClearThreadWatch :exec
+DELETE FROM watches WHERE user_id = ? AND thread_id = ?
+`
+
+type ClearThreadWatchParams struct {
+	UserID   int64
+	ThreadID sql.NullInt64
+}
+
+func (q *Queries) ClearThreadWatch(ctx context.Context, arg ClearThreadWatchParams) error {
+	_, err := q.db.ExecContext(ctx, clearThreadWatch, arg.UserID, arg.ThreadID)
+	return err
+}
+
 const deleteForumDraft = `-- name: DeleteForumDraft :execrows
 UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL, attachments = '[]',
 	revision = revision + 1, updated_at = ?1
@@ -98,20 +126,28 @@ touched AS (
 	SELECT thread_id FROM read_positions WHERE user_id = ?1
 	UNION SELECT thread_id FROM watches WHERE user_id = ?1 AND thread_id IS NOT NULL
 ),
-not_unread AS (
-	SELECT t.forum_id, count(*) AS threads
+touched_state AS (
+	SELECT t.forum_id, count(*) AS touched,
+	       sum(t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0)
+	           AND coalesce(w.level, fw.level, '') <> 'mute') AS unread
 	FROM touched
 	JOIN threads AS t ON t.id = touched.thread_id
 	CROSS JOIN me
 	LEFT JOIN read_positions AS rp ON rp.user_id = ?1 AND rp.thread_id = t.id
 	LEFT JOIN watches AS w ON w.user_id = ?1 AND w.thread_id = t.id
+	LEFT JOIN watches AS fw ON fw.user_id = ?1 AND fw.forum_id = t.forum_id
 	WHERE t.last_post_at > me.mark AND t.last_post_ordinal > 0
-	  AND NOT (t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0) AND coalesce(w.level, '') <> 'mute')
 	GROUP BY t.forum_id
+),
+counted AS (
+	SELECT a.forum_id,
+	       CAST(CASE WHEN fw.level = 'mute' THEN 0 ELSE a.threads - coalesce(n.touched, 0) END
+	            + coalesce(n.unread, 0) AS INTEGER) AS threads
+	FROM active AS a
+	LEFT JOIN touched_state AS n ON n.forum_id = a.forum_id
+	LEFT JOIN watches AS fw ON fw.user_id = ?1 AND fw.forum_id = a.forum_id
 )
-SELECT a.forum_id, CAST(a.threads - coalesce(n.threads, 0) AS INTEGER) AS threads
-FROM active AS a LEFT JOIN not_unread AS n ON n.forum_id = a.forum_id
-WHERE a.threads - coalesce(n.threads, 0) > 0
+SELECT forum_id, threads FROM counted WHERE threads > 0
 `
 
 type ForumUnreadRow struct {
@@ -149,6 +185,22 @@ func (q *Queries) ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadR
 		return nil, err
 	}
 	return items, nil
+}
+
+const forumWatchLevel = `-- name: ForumWatchLevel :one
+SELECT level FROM watches WHERE user_id = ? AND forum_id = ?
+`
+
+type ForumWatchLevelParams struct {
+	UserID  int64
+	ForumID sql.NullInt64
+}
+
+func (q *Queries) ForumWatchLevel(ctx context.Context, arg ForumWatchLevelParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, forumWatchLevel, arg.UserID, arg.ForumID)
+	var level string
+	err := row.Scan(&level)
+	return level, err
 }
 
 const getForumDraft = `-- name: GetForumDraft :one
@@ -288,7 +340,8 @@ touched AS (
 state AS (
 	SELECT t.forum_id,
 	       t.last_post_ordinal > 0 AS active,
-	       t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0) AND coalesce(w.level, '') <> 'mute' AS unread,
+	       t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0)
+	         AND coalesce(w.level, fw.level, '') <> 'mute' AS unread,
 	       coalesce(w.level, '') = 'watch' AS watched,
 	       m.thread_id IS NOT NULL AS participated
 	FROM touched
@@ -296,25 +349,29 @@ state AS (
 	CROSS JOIN me
 	LEFT JOIN read_positions AS rp ON rp.user_id = ?1 AND rp.thread_id = t.id
 	LEFT JOIN watches AS w ON w.user_id = ?1 AND w.thread_id = t.id
+	LEFT JOIN watches AS fw ON fw.user_id = ?1 AND fw.forum_id = t.forum_id
 	LEFT JOIN mine AS m ON m.thread_id = t.id
 	-- Only threads with a post after the mark: the rest are read by the mark,
-	-- and are not in active's count to subtract from.
+	-- and are not in active's count.
 	WHERE t.last_post_at > me.mark
 ),
 adjust AS (
 	SELECT forum_id,
-	       sum(active AND NOT unread) AS not_unread,
+	       sum(active) AS touched,
+	       sum(unread) AS unread,
 	       sum(unread AND participated) AS participated,
 	       sum(unread AND watched) AS watching
 	FROM state GROUP BY forum_id
 ),
 by_forum AS (
 	SELECT a.forum_id,
-	       a.threads - coalesce(j.not_unread, 0) AS threads,
+	       CAST(CASE WHEN fw.level = 'mute' THEN 0 ELSE a.threads - coalesce(j.touched, 0) END
+	            + coalesce(j.unread, 0) AS INTEGER) AS threads,
 	       CAST(coalesce(j.participated, 0) AS INTEGER) AS participated,
 	       CAST(coalesce(j.watching, 0) AS INTEGER) AS watching
-	FROM active AS a LEFT JOIN adjust AS j ON j.forum_id = a.forum_id
-	WHERE a.threads - coalesce(j.not_unread, 0) > 0
+	FROM active AS a
+	LEFT JOIN adjust AS j ON j.forum_id = a.forum_id
+	LEFT JOIN watches AS fw ON fw.user_id = ?1 AND fw.forum_id = a.forum_id
 )
 SELECT (SELECT count(*) FROM notifications AS n
         LEFT JOIN applications AS na ON na.id = n.application_id
@@ -322,7 +379,7 @@ SELECT (SELECT count(*) FROM notifications AS n
           AND (n.kind <> 'new_application' OR na.status = 'pending')) AS notifications,
        f.forum_id, f.threads, f.participated, f.watching
 FROM (SELECT 1) AS one
-LEFT JOIN by_forum AS f ON 1
+LEFT JOIN by_forum AS f ON f.threads > 0
 `
 
 type MeCountsRow struct {
@@ -349,11 +406,13 @@ type MeCountsRow struct {
 // ordinal and the latest time, which is unread exactly when any post is. A
 // test holds the two rules together.
 //
-// participated is a thread the viewer has written in; watching is a
-// thread-level watch. A thread the viewer muted counts nowhere. Forum-level
-// watches are not in these counts yet: what the cross-forum lists contain is
-// TKT-01M29CTY7K's to settle, and it should reuse this rule so the badges
-// and the lists agree.
+// A thread whose effective level is mute counts nowhere (docs/04
+// "watches", TKT-01M29CRJ29). The effective level is the thread's own row,
+// then its forum's, coalesce(w.level, fw.level, ”), as
+// domain.EffectiveWatch says in Go. participated is a thread the viewer has
+// written in; watching is a thread-level watch (docs/06 "Thread list
+// views": a forum-level watch drives notifications only). Both count only
+// unread threads, so a muted one is in neither.
 //
 // The shape is for cost, because the shell runs this on every page load.
 // It starts from, per forum, the threads with a post after the mark, all of
@@ -362,8 +421,11 @@ type MeCountsRow struct {
 // over threads_forum_active, which reads only the index entries after the
 // mark (migration 0007). Neither reads every thread. Everything that depends
 // on the viewer starts from the viewer's own rows (read positions, watches,
-// posts) and subtracts from that count, so it grows with what they have
-// touched rather than with the site.
+// posts), so it grows with what they have touched rather than with the
+// site: a forum's count is its threads the viewer has not touched, which
+// are unread unless the forum is muted, plus the touched ones that are
+// unread by their effective level. The forum's own row is one search on
+// watches_forum per forum.
 //
 // There is always at least one row: with no unread threads, forum_id is null.
 func (q *Queries) MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error) {
@@ -393,6 +455,63 @@ func (q *Queries) MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, er
 		return nil, err
 	}
 	return items, nil
+}
+
+const setForumWatch = `-- name: SetForumWatch :exec
+INSERT INTO watches (user_id, forum_id, level, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?4)
+ON CONFLICT (user_id, forum_id) WHERE forum_id IS NOT NULL DO UPDATE SET
+	level = excluded.level,
+	updated_at = excluded.updated_at
+`
+
+type SetForumWatchParams struct {
+	UserID  int64
+	ForumID sql.NullInt64
+	Level   string
+	Now     int64
+}
+
+func (q *Queries) SetForumWatch(ctx context.Context, arg SetForumWatchParams) error {
+	_, err := q.db.ExecContext(ctx, setForumWatch,
+		arg.UserID,
+		arg.ForumID,
+		arg.Level,
+		arg.Now,
+	)
+	return err
+}
+
+const setThreadWatch = `-- name: SetThreadWatch :exec
+INSERT INTO watches (user_id, thread_id, level, created_at, updated_at)
+VALUES (?1, ?2, ?3, ?4, ?4)
+ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
+	level = excluded.level,
+	updated_at = excluded.updated_at
+`
+
+type SetThreadWatchParams struct {
+	UserID   int64
+	ThreadID sql.NullInt64
+	Level    string
+	Now      int64
+}
+
+// Watches and mutes (docs/04 "watches", TKT-01M29CRJ29): one row per user
+// per thread and per user per forum. Setting a level replaces the row's
+// level and keeps its created_at; clearing it deletes the row, since no
+// row is what "follow the forum" and "nothing" mean. The conflict target
+// names the partial index's predicate, which SQLite requires to match it,
+// and the update takes its values from excluded only, because sqlc does
+// not bind a parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1).
+func (q *Queries) SetThreadWatch(ctx context.Context, arg SetThreadWatchParams) error {
+	_, err := q.db.ExecContext(ctx, setThreadWatch,
+		arg.UserID,
+		arg.ThreadID,
+		arg.Level,
+		arg.Now,
+	)
+	return err
 }
 
 const threadWatchLevel = `-- name: ThreadWatchLevel :one

@@ -153,6 +153,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: post, Path: "/api/v1/threads/{id}/posts/{ordinal}/restore", Handler: h.restorePost},
 		{Method: put, Path: "/api/v1/threads/{id}/read", Handler: h.markRead},
 		{Method: del, Path: "/api/v1/threads/{id}/read", Handler: h.markUnread},
+		{Method: post, Path: "/api/v1/threads/{id}/watch", Handler: h.watchThread},
 		{Method: post, Path: "/api/v1/threads/{id}/flags", Handler: h.flag},
 		{Method: post, Path: "/api/v1/blobs", Handler: h.upload},
 		{Method: get, Path: "/api/v1/drafts/{thread_id}", Handler: h.getDraft},
@@ -163,6 +164,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/forums/{slug}/draft", Handler: h.getForumDraft},
 		{Method: put, Path: "/api/v1/forums/{slug}/draft", Handler: h.putForumDraft},
 		{Method: del, Path: "/api/v1/forums/{slug}/draft", Handler: h.deleteForumDraft},
+		{Method: post, Path: "/api/v1/forums/{slug}/watch", Handler: h.watchForum},
 		{Method: get, Path: "/api/v1/users", Handler: h.usersByPrefix},
 		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
 		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},
@@ -212,7 +214,7 @@ type handlers struct {
 	// draws on the same buckets.
 	applyLimit func(http.Handler) http.Handler
 	// agentLimit is the per-agent token bucket every write route but the
-	// read position and drafts is charged to (agents.go).
+	// read position, drafts and watches is charged to (agents.go).
 	agentLimit func(http.Handler) http.Handler
 
 	// adminRoutes is every route adminRoute registered, with its gate.

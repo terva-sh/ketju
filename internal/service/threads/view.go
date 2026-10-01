@@ -251,12 +251,13 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	v, row, canModerate := a.viewer, a.row, a.canModerate
 
 	var (
-		forum    dbq.Forum
-		tags     []string
-		lastRead int64
-		readAt   *dto.Millis
-		watch    string
-		authorW  *dto.AuthorWindows
+		forum      dbq.Forum
+		tags       []string
+		lastRead   int64
+		readAt     *dto.Millis
+		watch      string
+		forumWatch string
+		authorW    *dto.AuthorWindows
 	)
 	err = s.DB.Read(ctx, func(dq *dbq.Queries, tx *sql.Tx) error {
 		var err error
@@ -278,11 +279,12 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		}
-		watch, err = dq.ThreadWatchLevel(ctx, dbq.ThreadWatchLevelParams{
-			UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true}})
-		if errors.Is(err, sql.ErrNoRows) {
-			err = nil
+		// Both levels are the viewer's own, so they are in the viewer
+		// block, which is never cached (TKT-01M29CRJ29).
+		if watch, err = threadWatchLevel(ctx, dq, v, id); err != nil {
+			return err
 		}
+		forumWatch, err = forumWatchLevel(ctx, dq, v, row.ForumID)
 		// The author windows are per viewer, so they are in the viewer block,
 		// which is never cached, and the ETag, which hashes it, moves when
 		// they change. A viewer who may moderate the forum is bound by
@@ -320,6 +322,7 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		LastReadOrdinal: int(lastRead),
 		LastReadAt:      readAt,
 		Watch:           watch,
+		ForumWatch:      forumWatch,
 		CanReply:        a.canReply && (row.Locked == 0 || canModerate) && readOnlyForum(a) == nil,
 		CanUpload:       canUpload,
 		CanModerate:     canModerate,

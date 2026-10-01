@@ -88,10 +88,18 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 			}
 		}
 	}
-	if err := s.DB.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+	// The viewer's level on the forum, for the forum header's control, is
+	// read with the rows: it is the viewer's own, and this answer is
+	// no-store and in no cache (TKT-01M29CRJ29).
+	forumWatch := domain.WatchNone
+	if err := s.DB.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
 		var err error
 		rows, err = views.ThreadList(ctx, tx, views.ListParams{ForumID: forum.ID, UserID: v.UserID, Sort: sort,
 			After: after, Pinned: shown, Limit: ListPageSize + 1})
+		if err != nil || !v.Member() {
+			return err
+		}
+		forumWatch, err = forumWatchLevel(ctx, q, v, forum.ID)
 		return err
 	}); err != nil {
 		return dto.ThreadList{}, err
@@ -107,7 +115,7 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	if err != nil {
 		return dto.ThreadList{}, err
 	}
-	out := dto.ThreadList{Forum: &dto.ForumRef{Slug: forum.Slug, Name: forum.Name}, Threads: []dto.ThreadRow{},
+	out := dto.ThreadList{Forum: &dto.ForumRef{Slug: forum.Slug, Name: forum.Name}, Watch: forumWatch, Threads: []dto.ThreadRow{},
 		NextCursor: next}
 	for i, r := range all {
 		row := dto.ThreadRow{
@@ -131,9 +139,13 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 			}
 		}
 		// An anonymous viewer has no read state (docs/06), whatever the
-		// query made of user 0.
+		// query made of user 0. A thread the viewer muted, by its own row
+		// or its forum's, shows no badge (docs/04 "watches"), and its
+		// position is still the jump target.
 		if v.Member() {
-			row.Unread = int(r.Unread)
+			if r.Watch != domain.WatchMute {
+				row.Unread = int(r.Unread)
+			}
 			row.LastReadOrdinal = int(r.LastReadOrdinal)
 		}
 		out.Threads = append(out.Threads, row)

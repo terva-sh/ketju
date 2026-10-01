@@ -39,6 +39,36 @@ RETURNING last_read_ordinal;
 -- name: ThreadWatchLevel :one
 SELECT level FROM watches WHERE user_id = ? AND thread_id = ?;
 
+-- name: ForumWatchLevel :one
+SELECT level FROM watches WHERE user_id = ? AND forum_id = ?;
+
+-- Watches and mutes (docs/04 "watches", TKT-01M29CRJ29): one row per user
+-- per thread and per user per forum. Setting a level replaces the row's
+-- level and keeps its created_at; clearing it deletes the row, since no
+-- row is what "follow the forum" and "nothing" mean. The conflict target
+-- names the partial index's predicate, which SQLite requires to match it,
+-- and the update takes its values from excluded only, because sqlc does
+-- not bind a parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1).
+-- name: SetThreadWatch :exec
+INSERT INTO watches (user_id, thread_id, level, created_at, updated_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(level), sqlc.arg(now), sqlc.arg(now))
+ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
+	level = excluded.level,
+	updated_at = excluded.updated_at;
+
+-- name: ClearThreadWatch :exec
+DELETE FROM watches WHERE user_id = ? AND thread_id = ?;
+
+-- name: SetForumWatch :exec
+INSERT INTO watches (user_id, forum_id, level, created_at, updated_at)
+VALUES (sqlc.arg(user_id), sqlc.arg(forum_id), sqlc.arg(level), sqlc.arg(now), sqlc.arg(now))
+ON CONFLICT (user_id, forum_id) WHERE forum_id IS NOT NULL DO UPDATE SET
+	level = excluded.level,
+	updated_at = excluded.updated_at;
+
+-- name: ClearForumWatch :exec
+DELETE FROM watches WHERE user_id = ? AND forum_id = ?;
+
 -- A thread's unread posts for one user: those past the user's read position
 -- (0 when they never opened the thread, so no row) and written after
 -- users.mark_all_read_at, which means "everything before this moment is read"
@@ -69,11 +99,13 @@ WHERE p.thread_id = sqlc.arg('thread_id')
 -- ordinal and the latest time, which is unread exactly when any post is. A
 -- test holds the two rules together.
 --
--- participated is a thread the viewer has written in; watching is a
--- thread-level watch. A thread the viewer muted counts nowhere. Forum-level
--- watches are not in these counts yet: what the cross-forum lists contain is
--- TKT-01M29CTY7K's to settle, and it should reuse this rule so the badges
--- and the lists agree.
+-- A thread whose effective level is mute counts nowhere (docs/04
+-- "watches", TKT-01M29CRJ29). The effective level is the thread's own row,
+-- then its forum's, coalesce(w.level, fw.level, ''), as
+-- domain.EffectiveWatch says in Go. participated is a thread the viewer has
+-- written in; watching is a thread-level watch (docs/06 "Thread list
+-- views": a forum-level watch drives notifications only). Both count only
+-- unread threads, so a muted one is in neither.
 --
 -- The shape is for cost, because the shell runs this on every page load.
 -- It starts from, per forum, the threads with a post after the mark, all of
@@ -82,8 +114,11 @@ WHERE p.thread_id = sqlc.arg('thread_id')
 -- over threads_forum_active, which reads only the index entries after the
 -- mark (migration 0007). Neither reads every thread. Everything that depends
 -- on the viewer starts from the viewer's own rows (read positions, watches,
--- posts) and subtracts from that count, so it grows with what they have
--- touched rather than with the site.
+-- posts), so it grows with what they have touched rather than with the
+-- site: a forum's count is its threads the viewer has not touched, which
+-- are unread unless the forum is muted, plus the touched ones that are
+-- unread by their effective level. The forum's own row is one search on
+-- watches_forum per forum.
 --
 -- There is always at least one row: with no unread threads, forum_id is null.
 -- name: MeCounts :many
@@ -109,7 +144,8 @@ touched AS (
 state AS (
 	SELECT t.forum_id,
 	       t.last_post_ordinal > 0 AS active,
-	       t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0) AND coalesce(w.level, '') <> 'mute' AS unread,
+	       t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0)
+	         AND coalesce(w.level, fw.level, '') <> 'mute' AS unread,
 	       coalesce(w.level, '') = 'watch' AS watched,
 	       m.thread_id IS NOT NULL AS participated
 	FROM touched
@@ -117,25 +153,29 @@ state AS (
 	CROSS JOIN me
 	LEFT JOIN read_positions AS rp ON rp.user_id = sqlc.arg(user_id) AND rp.thread_id = t.id
 	LEFT JOIN watches AS w ON w.user_id = sqlc.arg(user_id) AND w.thread_id = t.id
+	LEFT JOIN watches AS fw ON fw.user_id = sqlc.arg(user_id) AND fw.forum_id = t.forum_id
 	LEFT JOIN mine AS m ON m.thread_id = t.id
 	-- Only threads with a post after the mark: the rest are read by the mark,
-	-- and are not in active's count to subtract from.
+	-- and are not in active's count.
 	WHERE t.last_post_at > me.mark
 ),
 adjust AS (
 	SELECT forum_id,
-	       sum(active AND NOT unread) AS not_unread,
+	       sum(active) AS touched,
+	       sum(unread) AS unread,
 	       sum(unread AND participated) AS participated,
 	       sum(unread AND watched) AS watching
 	FROM state GROUP BY forum_id
 ),
 by_forum AS (
 	SELECT a.forum_id,
-	       a.threads - coalesce(j.not_unread, 0) AS threads,
+	       CAST(CASE WHEN fw.level = 'mute' THEN 0 ELSE a.threads - coalesce(j.touched, 0) END
+	            + coalesce(j.unread, 0) AS INTEGER) AS threads,
 	       CAST(coalesce(j.participated, 0) AS INTEGER) AS participated,
 	       CAST(coalesce(j.watching, 0) AS INTEGER) AS watching
-	FROM active AS a LEFT JOIN adjust AS j ON j.forum_id = a.forum_id
-	WHERE a.threads - coalesce(j.not_unread, 0) > 0
+	FROM active AS a
+	LEFT JOIN adjust AS j ON j.forum_id = a.forum_id
+	LEFT JOIN watches AS fw ON fw.user_id = sqlc.arg(user_id) AND fw.forum_id = a.forum_id
 )
 SELECT (SELECT count(*) FROM notifications AS n
         LEFT JOIN applications AS na ON na.id = n.application_id
@@ -143,7 +183,7 @@ SELECT (SELECT count(*) FROM notifications AS n
           AND (n.kind <> 'new_application' OR na.status = 'pending')) AS notifications,
        f.forum_id, f.threads, f.participated, f.watching
 FROM (SELECT 1) AS one
-LEFT JOIN by_forum AS f ON 1;
+LEFT JOIN by_forum AS f ON f.threads > 0;
 
 -- ForumUnread is the forum index's unread column (GET /forums,
 -- TKT-01M29CA9A5): per forum, the viewer's threads with an unread post. It
@@ -170,20 +210,28 @@ touched AS (
 	SELECT thread_id FROM read_positions WHERE user_id = sqlc.arg(user_id)
 	UNION SELECT thread_id FROM watches WHERE user_id = sqlc.arg(user_id) AND thread_id IS NOT NULL
 ),
-not_unread AS (
-	SELECT t.forum_id, count(*) AS threads
+touched_state AS (
+	SELECT t.forum_id, count(*) AS touched,
+	       sum(t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0)
+	           AND coalesce(w.level, fw.level, '') <> 'mute') AS unread
 	FROM touched
 	JOIN threads AS t ON t.id = touched.thread_id
 	CROSS JOIN me
 	LEFT JOIN read_positions AS rp ON rp.user_id = sqlc.arg(user_id) AND rp.thread_id = t.id
 	LEFT JOIN watches AS w ON w.user_id = sqlc.arg(user_id) AND w.thread_id = t.id
+	LEFT JOIN watches AS fw ON fw.user_id = sqlc.arg(user_id) AND fw.forum_id = t.forum_id
 	WHERE t.last_post_at > me.mark AND t.last_post_ordinal > 0
-	  AND NOT (t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0) AND coalesce(w.level, '') <> 'mute')
 	GROUP BY t.forum_id
+),
+counted AS (
+	SELECT a.forum_id,
+	       CAST(CASE WHEN fw.level = 'mute' THEN 0 ELSE a.threads - coalesce(n.touched, 0) END
+	            + coalesce(n.unread, 0) AS INTEGER) AS threads
+	FROM active AS a
+	LEFT JOIN touched_state AS n ON n.forum_id = a.forum_id
+	LEFT JOIN watches AS fw ON fw.user_id = sqlc.arg(user_id) AND fw.forum_id = a.forum_id
 )
-SELECT a.forum_id, CAST(a.threads - coalesce(n.threads, 0) AS INTEGER) AS threads
-FROM active AS a LEFT JOIN not_unread AS n ON n.forum_id = a.forum_id
-WHERE a.threads - coalesce(n.threads, 0) > 0;
+SELECT forum_id, threads FROM counted WHERE threads > 0;
 
 -- Drafts (docs/07 "Drafts", TKT-01M3K9XBJA): a reply draft, one per user per
 -- thread (drafts_thread), and a new-thread draft, one per user per forum

@@ -11,6 +11,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
+	"github.com/terva-sh/ketju/internal/forms"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/member"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -130,6 +131,118 @@ func (s *Service) MarkUnread(ctx context.Context, v domain.Viewer, id threadid.I
 		return out, err
 	}
 	return dto.ReadPosition{LastReadOrdinal: int(pos)}, nil
+}
+
+// Watches and mutes (docs/04 "watches", docs/07, TKT-01M29CRJ29). A level
+// is the viewer's own row on a thread or a forum, reached only through
+// something the viewer can read, so each admits the viewer with the access
+// its page uses first: a thread or forum hidden from them is not-found here
+// as on its page, and nothing about it is written or said. Watching needs
+// only read, so an archived thread or forum may be watched, and a member
+// who may not reply may still mute.
+//
+// The empty level clears the row: a thread with none follows its forum, and
+// a forum with none adds nothing. Any other level than watch or mute is
+// validation-failed, before anything is written.
+
+// SetThreadWatch is POST /threads/{id}/watch: it sets the viewer's own
+// level on the thread, and answers both levels as they then stand, read in
+// the write's transaction.
+func (s *Service) SetThreadWatch(ctx context.Context, v domain.Viewer, id threadid.ID, level string) (dto.ThreadWatch, error) {
+	var out dto.ThreadWatch
+	if err := s.MayKeepState(v); err != nil {
+		return out, err
+	}
+	a, err := s.access(ctx, v, id)
+	if err != nil {
+		return out, err
+	}
+	if err := checkWatchLevel(level); err != nil {
+		return out, err
+	}
+	thread := sql.NullInt64{Int64: int64(id), Valid: true}
+	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		if level == domain.WatchNone {
+			err = q.ClearThreadWatch(ctx, dbq.ClearThreadWatchParams{UserID: v.UserID, ThreadID: thread})
+		} else {
+			err = q.SetThreadWatch(ctx, dbq.SetThreadWatchParams{UserID: v.UserID, ThreadID: thread, Level: level,
+				Now: s.now().UnixMilli()})
+		}
+		if err != nil {
+			return err
+		}
+		if out.Watch, err = threadWatchLevel(ctx, q, v, id); err != nil {
+			return err
+		}
+		out.ForumWatch, err = forumWatchLevel(ctx, q, v, a.row.ForumID)
+		return err
+	})
+	return out, err
+}
+
+// SetForumWatch is POST /forums/{slug}/watch: it sets the viewer's level on
+// the forum, which covers the forum's own threads and not its children's,
+// and answers the level as it then stands. The forum is admitted as its
+// thread list admits it.
+func (s *Service) SetForumWatch(ctx context.Context, v domain.Viewer, slug string, level string) (dto.ForumWatch, error) {
+	var out dto.ForumWatch
+	if err := s.MayKeepState(v); err != nil {
+		return out, err
+	}
+	forum, err := s.readForum(ctx, v, slug)
+	if err != nil {
+		return out, err
+	}
+	if err := checkWatchLevel(level); err != nil {
+		return out, err
+	}
+	key := sql.NullInt64{Int64: forum.ID, Valid: true}
+	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		if level == domain.WatchNone {
+			err = q.ClearForumWatch(ctx, dbq.ClearForumWatchParams{UserID: v.UserID, ForumID: key})
+		} else {
+			err = q.SetForumWatch(ctx, dbq.SetForumWatchParams{UserID: v.UserID, ForumID: key, Level: level,
+				Now: s.now().UnixMilli()})
+		}
+		if err != nil {
+			return err
+		}
+		out.Watch, err = forumWatchLevel(ctx, q, v, forum.ID)
+		return err
+	})
+	return out, err
+}
+
+// checkWatchLevel refuses a level that is not watch, mute or none, as
+// docs/07's field errors name a value outside a closed set.
+func checkWatchLevel(level string) error {
+	if domain.ValidWatchLevel(level) {
+		return nil
+	}
+	return &forms.Invalid{Kind: forms.ErrInvalidAnswers,
+		Fields: []forms.FieldError{{Field: "level", Code: forms.CodeNotAnOption}}}
+}
+
+// threadWatchLevel is v's own level on thread id, "" with no row.
+func threadWatchLevel(ctx context.Context, q *dbq.Queries, v domain.Viewer, id threadid.ID) (string, error) {
+	level, err := q.ThreadWatchLevel(ctx, dbq.ThreadWatchLevelParams{
+		UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true}})
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.WatchNone, nil
+	}
+	return level, err
+}
+
+// forumWatchLevel is v's level on forum id, "" with no row.
+func forumWatchLevel(ctx context.Context, q *dbq.Queries, v domain.Viewer, id int64) (string, error) {
+	level, err := q.ForumWatchLevel(ctx, dbq.ForumWatchLevelParams{
+		UserID: v.UserID, ForumID: sql.NullInt64{Int64: id, Valid: true}})
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.WatchNone, nil
+	}
+	return level, err
 }
 
 // Drafts (docs/07 "Drafts"): a reply draft keyed by thread (TKT-01M29CA9CE),

@@ -1,11 +1,14 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/forms"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -81,6 +84,86 @@ func (h *handlers) markUnread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := h.threads.MarkUnread(r.Context(), v, id, in.Ordinal)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
+}
+
+// watchRequest is the body of POST /api/v1/threads/{id}/watch and POST
+// /api/v1/forums/{slug}/watch (docs/07): {level}, one of watch, mute or ""
+// to clear. It is kept raw so that a level of the wrong JSON type is a field
+// error, as PATCH /settings answers one, rather than a body that does not
+// parse.
+type watchRequest struct {
+	Level json.RawMessage `json:"level"`
+}
+
+// watchLevel reads the level from a watch request's body: a missing one is
+// bad-request, and one that is not a JSON string, null included, is
+// validation-failed with wrong_type. Whether the string is a level is the
+// service's to say.
+func watchLevel(r *http.Request) (string, error) {
+	var in watchRequest
+	if err := decodeStrict(r.Body, &in); err != nil {
+		return "", err
+	}
+	if in.Level == nil {
+		return "", problem.Coded(problem.CodeBadRequest, errors.New("api: the watch request has no level"))
+	}
+	var level string
+	if bytes.Equal(in.Level, []byte("null")) || json.Unmarshal(in.Level, &level) != nil {
+		return "", &forms.Invalid{Kind: forms.ErrInvalidAnswers,
+			Fields: []forms.FieldError{{Field: "level", Code: forms.CodeWrongType}}}
+	}
+	return level, nil
+}
+
+// watchThread and watchForum are POST /api/v1/threads/{id}/watch and POST
+// /api/v1/forums/{slug}/watch, watches and mutes (TKT-01M29CRJ29). The rules
+// are the threads service's (SetThreadWatch, SetForumWatch): the viewer is
+// asked whether they keep state before the body is read, and a thread or
+// forum they cannot see is not-found as on its page. Each answers 200 with
+// the levels as they now stand, not cached.
+func (h *handlers) watchThread(w http.ResponseWriter, r *http.Request) {
+	v := domain.ViewerFrom(r.Context())
+	if err := h.threads.MayKeepState(v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	id, err := threadid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	level, err := watchLevel(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.threads.SetThreadWatch(r.Context(), v, id, level)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, res)
+}
+
+func (h *handlers) watchForum(w http.ResponseWriter, r *http.Request) {
+	v := domain.ViewerFrom(r.Context())
+	if err := h.threads.MayKeepState(v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	level, err := watchLevel(r)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.threads.SetForumWatch(r.Context(), v, r.PathValue("slug"), level)
 	if err != nil {
 		h.fail(w, r, err)
 		return

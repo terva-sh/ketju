@@ -21,9 +21,10 @@ import (
 // bucket: agents.write_burst writes at once, refilling one every
 // agents.write_refill_seconds, both overridable per agent. Over it the
 // answer is 429 with Retry-After, and the handler does not run, so nothing
-// is appended. Reads are not charged, and nor are the two writes that only
-// record what the agent has read or is typing: the read position and
-// drafts. Charging those would throttle an agent for reading. A member
+// is appended. Reads are not charged, and nor are the writes that only
+// record the agent's own viewer state: the read position, drafts, and
+// watches and mutes (TKT-01M29CRJ29). Charging those would throttle an
+// agent for reading. A member
 // signed in with a cookie is never charged here; docs/08 leaves humans
 // unlimited but for the per-address ceiling, which still applies to agents.
 //
@@ -49,6 +50,8 @@ var unchargedPaths = []string{
 	"/api/v1/threads/{id}/read",
 	"/api/v1/drafts/{thread_id}",
 	"/api/v1/forums/{slug}/draft",
+	"/api/v1/threads/{id}/watch",
+	"/api/v1/forums/{slug}/watch",
 }
 
 // charged is fn behind the agent's bucket, unless method does not write or

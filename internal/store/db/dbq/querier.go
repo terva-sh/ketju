@@ -104,6 +104,7 @@ type Querier interface {
 	// did not reopen: no restore happened, so no row is owed (TKT-01M29CRJ4E).
 	ClearFlagsAuditPending(ctx context.Context, ids []int64) (int64, error)
 	ClearForumThreadCounts(ctx context.Context) error
+	ClearForumWatch(ctx context.Context, arg ClearForumWatchParams) error
 	ClearMentions(ctx context.Context) error
 	ClearPostAttachments(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
@@ -114,6 +115,7 @@ type Querier interface {
 	ClearSearchMeta(ctx context.Context) error
 	ClearSearchState(ctx context.Context) error
 	ClearThreadTags(ctx context.Context) error
+	ClearThreadWatch(ctx context.Context, arg ClearThreadWatchParams) error
 	// The statements ClearProjections runs, one per table in ProjectionTables.
 	ClearThreads(ctx context.Context) error
 	// Resolving or dismissing a flag updates it in place; only an open flag can
@@ -292,6 +294,7 @@ type Querier interface {
 	//
 	// Only forums with an unread thread have a row.
 	ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error)
+	ForumWatchLevel(ctx context.Context, arg ForumWatchLevelParams) (string, error)
 	GetAgent(ctx context.Context, userID int64) (Agent, error)
 	GetApplication(ctx context.Context, id int64) (Application, error)
 	// The upload, attach and serve paths' queries (TKT-01M29CXK0K, docs/07
@@ -464,11 +467,13 @@ type Querier interface {
 	// ordinal and the latest time, which is unread exactly when any post is. A
 	// test holds the two rules together.
 	//
-	// participated is a thread the viewer has written in; watching is a
-	// thread-level watch. A thread the viewer muted counts nowhere. Forum-level
-	// watches are not in these counts yet: what the cross-forum lists contain is
-	// TKT-01M29CTY7K's to settle, and it should reuse this rule so the badges
-	// and the lists agree.
+	// A thread whose effective level is mute counts nowhere (docs/04
+	// "watches", TKT-01M29CRJ29). The effective level is the thread's own row,
+	// then its forum's, coalesce(w.level, fw.level, ''), as
+	// domain.EffectiveWatch says in Go. participated is a thread the viewer has
+	// written in; watching is a thread-level watch (docs/06 "Thread list
+	// views": a forum-level watch drives notifications only). Both count only
+	// unread threads, so a muted one is in neither.
 	//
 	// The shape is for cost, because the shell runs this on every page load.
 	// It starts from, per forum, the threads with a post after the mark, all of
@@ -477,8 +482,11 @@ type Querier interface {
 	// over threads_forum_active, which reads only the index entries after the
 	// mark (migration 0007). Neither reads every thread. Everything that depends
 	// on the viewer starts from the viewer's own rows (read positions, watches,
-	// posts) and subtracts from that count, so it grows with what they have
-	// touched rather than with the site.
+	// posts), so it grows with what they have touched rather than with the
+	// site: a forum's count is its threads the viewer has not touched, which
+	// are unread unless the forum is muted, plus the touched ones that are
+	// unread by their effective level. The forum's own row is one search on
+	// watches_forum per forum.
 	//
 	// There is always at least one row: with no unread threads, forum_id is null.
 	MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, error)
@@ -590,6 +598,7 @@ type Querier interface {
 	// A sibling's new position, when a move finds no gap and renumbers.
 	SetForumPosition(ctx context.Context, arg SetForumPositionParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
+	SetForumWatch(ctx context.Context, arg SetForumWatchParams) error
 	// log_offset is the current revision's record, as the index entry's Offset
 	// is, so a Delete or Restore (which is not a revision) leaves it alone.
 	SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error)
@@ -611,6 +620,14 @@ type Querier interface {
 	SetThreadPinned(ctx context.Context, arg SetThreadPinnedParams) (int64, error)
 	SetThreadProjected(ctx context.Context, arg SetThreadProjectedParams) (int64, error)
 	SetThreadTitle(ctx context.Context, arg SetThreadTitleParams) (int64, error)
+	// Watches and mutes (docs/04 "watches", TKT-01M29CRJ29): one row per user
+	// per thread and per user per forum. Setting a level replaces the row's
+	// level and keeps its created_at; clearing it deletes the row, since no
+	// row is what "follow the forum" and "nothing" mean. The conflict target
+	// names the partial index's predicate, which SQLite requires to match it,
+	// and the update takes its values from excluded only, because sqlc does
+	// not bind a parameter inside ON CONFLICT ... DO UPDATE on SQLite (v1.31.1).
+	SetThreadWatch(ctx context.Context, arg SetThreadWatchParams) error
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	// SetUserStatus is every status change but anonymizing (internal/perm,
 	// lifecycle.go). It writes the reason and end with the status, so a

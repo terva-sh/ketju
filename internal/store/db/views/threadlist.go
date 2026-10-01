@@ -51,8 +51,14 @@ type ThreadRow struct {
 	LastReadOrdinal int64
 	// Unread is the viewer's unread posts in the thread, by docs/04's
 	// per-post rule (dbq's UnreadCount): past the read position and after
-	// mark_all_read_at.
+	// mark_all_read_at. It does not look at Watch: the caller shows a muted
+	// thread's badge as 0.
 	Unread int64
+	// Watch is the viewer's effective level on the thread (docs/04
+	// "watches"): its own row, then its forum's, then "". The forum is the
+	// thread's own, so a global pin from another forum takes that forum's
+	// row.
+	Watch string
 }
 
 // Key is r's position in a list sorted by s.
@@ -64,7 +70,13 @@ func (r ThreadRow) Key(s Sort) Key {
 }
 
 // rowColumns is what every thread list selects, for scanRows. The viewer is
-// bound twice, as the first two parameters: users AS me, then read_positions.
+// bound four times, as the first four parameters: users AS me,
+// read_positions, then the thread's and the forum's watches rows.
+//
+// The effective level, a coalesce of the thread's level, the forum's and the
+// empty string, is the SQL statement of domain.EffectiveWatch, and
+// TestEffectiveWatchSQLAgrees holds the two together. Both rows are found by
+// a unique index, watches_thread and watches_forum.
 //
 // The unread count is UnreadCount's rule for each row without reading a post
 // where the answer is known without one: nothing past the read position is
@@ -84,10 +96,13 @@ SELECT t.id, t.forum_id, t.slug, t.title, t.author_id, t.created_at, t.post_coun
          ELSE (SELECT count(*) FROM post_meta AS pm
                WHERE pm.thread_id = t.id AND pm.ordinal > coalesce(rp.last_read_ordinal, 0)
                  AND pm.created_at > me.mark_all_read_at)
-       END
+       END,
+       coalesce(tw.level, fw.level, '')
 FROM threads AS t%s
 LEFT JOIN users AS me ON me.id = ?
 LEFT JOIN read_positions AS rp ON rp.user_id = ? AND rp.thread_id = t.id
+LEFT JOIN watches AS tw ON tw.user_id = ? AND tw.thread_id = t.id
+LEFT JOIN watches AS fw ON fw.user_id = ? AND fw.forum_id = t.forum_id
 `
 
 // selectRows is rowColumns reading threads through index. Naming the index
@@ -139,7 +154,7 @@ func threadListSQL(p ListParams) (string, []any) {
 	}
 	q := selectRows(index) + `
 WHERE t.forum_id = ? AND t.last_post_ordinal > 0`
-	args := []any{p.UserID, p.UserID, p.ForumID}
+	args := []any{p.UserID, p.UserID, p.UserID, p.UserID, p.ForumID}
 	if p.After != nil {
 		q += ` AND (` + col + `, t.id) < (?, ?)`
 		args = append(args, p.After.At, p.After.ID)
@@ -183,7 +198,7 @@ func pinnedSQL(forumID, userID, now int64) (string, []any) {
 WHERE t.last_post_ordinal > 0 AND ` + activePin + `
   AND (t.pinned_scope = 'global' OR (t.pinned_scope = 'forum' AND t.forum_id = ?))
 ORDER BY t.pinned_scope = 'global' DESC, t.last_post_at DESC, t.id DESC`
-	return q, []any{userID, userID, now, forumID}
+	return q, []any{userID, userID, userID, userID, now, forumID}
 }
 
 func scanRows(ctx context.Context, tx *sql.Tx, q string, args ...any) ([]ThreadRow, error) {
@@ -198,7 +213,7 @@ func scanRows(ctx context.Context, tx *sql.Tx, q string, args ...any) ([]ThreadR
 		var locked int64
 		if err := rows.Scan(&r.ID, &r.ForumID, &r.Slug, &r.Title, &r.AuthorID, &r.CreatedAt, &r.PostCount,
 			&r.LastPostAt, &r.LastPostAuthorID, &r.LastPostOrdinal, &locked, &r.PinnedScope, &r.PinnedUntil,
-			&r.LastReadOrdinal, &r.Unread); err != nil {
+			&r.LastReadOrdinal, &r.Unread, &r.Watch); err != nil {
 			return nil, err
 		}
 		r.Locked = locked != 0

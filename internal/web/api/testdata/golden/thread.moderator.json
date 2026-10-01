@@ -37,6 +37,7 @@
     "last_read_ordinal": 0,
     "last_read_at": null,
     "watch": "mute",
+    "forum_watch": "",
     "can_reply": true,
     "can_upload": false,
     "can_moderate": true,

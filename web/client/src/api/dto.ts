@@ -73,7 +73,10 @@ export interface ThreadViewer {
   last_read_ordinal: number;
   // last_read_at is when this viewer's place was last set, null with none.
   last_read_at: Millis | null;
+  // watch is the thread's own level, '' when it follows its forum;
+  // forum_watch is the forum's, which applies then.
   watch: string;
+  forum_watch: string;
   can_reply: boolean;
   // can_upload: this viewer may upload a file to attach here.
   can_upload: boolean;
@@ -188,6 +191,12 @@ export interface ThreadRow {
 
 export interface ThreadList {
   forum: ForumRef | null;
+  // watch is the viewer's level on the forum, '' for none, for an anonymous
+  // viewer and on a cross-forum list. The server always sends it; it is
+  // optional here only so that the test fixtures that build a list by hand
+  // need no change before the client reads it (TKT-01M3V6Y87D makes it
+  // required when it adds the control).
+  watch?: string;
   threads: ThreadRow[];
   next_cursor: string;
 }
@@ -417,6 +426,20 @@ export interface SnippetPart {
 // raises, so it can differ from the ordinal sent (internal/dto ReadPosition).
 export interface ReadPosition {
   last_read_ordinal: number;
+}
+
+// ThreadWatch is POST /threads/{id}/watch: the thread's own level and its
+// forum's after the request, as the viewer block names them (internal/dto
+// ThreadWatch).
+export interface ThreadWatch {
+  watch: string;
+  forum_watch: string;
+}
+
+// ForumWatch is POST /forums/{slug}/watch: the forum's level after the
+// request, the thread list's watch (internal/dto ForumWatch).
+export interface ForumWatch {
+  watch: string;
 }
 
 // FlagReceipt is POST /threads/{id}/flags: that the report was received and

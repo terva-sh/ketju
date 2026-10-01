@@ -783,6 +783,11 @@ mute useless in a watched forum, the case the ticket names; a forum row
 covering child forums lost because nothing else in the forum tree inherits
 down, and a member can watch a child forum directly.
 
+`domain.EffectiveWatch` is the rule in Go, and the queries state it as a
+coalesce of the thread's row, then the forum's, then the empty string; tests
+hold the two together. A member sets either level through the two watch
+routes in 07, and an empty level deletes the row (TKT-01M29CRJ29).
+
 ### read_positions
 ```
 user_id, thread_id, last_read_ordinal, last_read_at

@@ -219,8 +219,9 @@ func threadPage(class string) ThreadPage {
 		// 1757500500000, and the thread asks 30 s between posts. The member
 		// started the thread, so their rename window runs to a day after
 		// its start. They moderate nothing, so the author windows bind them,
-		// at their defaults.
-		p.Viewer = ThreadViewer{LastReadOrdinal: 60, LastReadAt: ptr(Millis(1757500400000)), Watch: "watch", CanReply: true, CanUpload: true, CanModerate: false,
+		// at their defaults. They watch the thread in a forum they muted,
+		// and the thread's own level wins (docs/04 "watches").
+		p.Viewer = ThreadViewer{LastReadOrdinal: 60, LastReadAt: ptr(Millis(1757500400000)), Watch: "watch", ForumWatch: "mute", CanReply: true, CanUpload: true, CanModerate: false,
 			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000)), RenameUntil: ptr(Millis(1757586400000)),
 			AuthorWindows: &AuthorWindows{EditSeconds: 86400, DeleteSeconds: 900}}
 	case tModerator:
@@ -260,14 +261,18 @@ func threadList(class string) ThreadList {
 			Locked:         true,
 		},
 	}
+	watch := ""
 	if class != tAnon {
 		rows[0].Unread = 12
 		rows[0].LastReadOrdinal = 200
 		rows[1].Unread = 4
 		rows[1].LastReadOrdinal = 0
+		// The member watches the forum (TKT-01M29CRJ29).
+		watch = "watch"
 	}
 	return ThreadList{
 		Forum:      &ForumRef{Slug: "general", Name: "General"},
+		Watch:      watch,
 		Threads:    rows,
 		NextCursor: "YXwxfDE3NTc0MDAwMDAwMDB8NDU3NDE0MDA0MDg1NDExMDIxMHw0NTc0MTQwMDQwODU0MTEwMjA5",
 	}
@@ -450,6 +455,7 @@ func archivedForumThread() ThreadPage {
 func crossForumList() ThreadList {
 	l := threadList(tMember)
 	l.Forum = nil
+	l.Watch = ""
 	l.NextCursor = ""
 	return l
 }
@@ -536,9 +542,13 @@ var corpus = map[string]any{
 	"created-thread." + tMember: createdThread(),
 	"unread." + tMember:         crossForumList(),
 	"read." + tMember:           ReadPosition{LastReadOrdinal: 62},
-	"flag-receipt." + tMember:   FlagReceipt{Received: true},
-	"draft." + tMember:          draftReply(),
-	"draft-plain." + tMember:    draftPlain(),
+	// A thread muted in a watched forum, and a forum muted
+	// (TKT-01M29CRJ29).
+	"watch-thread." + tMember: ThreadWatch{Watch: "mute", ForumWatch: "watch"},
+	"watch-forum." + tMember:  ForumWatch{Watch: "mute"},
+	"flag-receipt." + tMember: FlagReceipt{Received: true},
+	"draft." + tMember:        draftReply(),
+	"draft-plain." + tMember:  draftPlain(),
 
 	"forum-draft." + tMember:          forumDraft(),
 	"forum-draft-untitled." + tMember: forumDraftUntitled(),

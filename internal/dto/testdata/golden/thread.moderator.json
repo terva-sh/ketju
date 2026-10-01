@@ -52,6 +52,7 @@
     "last_read_ordinal": 42,
     "last_read_at": 1757500300000,
     "watch": "mute",
+    "forum_watch": "",
     "can_reply": true,
     "can_upload": false,
     "can_moderate": true,
