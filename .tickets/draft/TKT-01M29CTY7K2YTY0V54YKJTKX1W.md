@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:27:14Z
+updated_at: 2026-10-01T10:03:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -61,7 +61,7 @@ These are the queries most likely to get slow. Unread across all forums combines
   - *Watching*: threads with a thread-level `watch`, by activity.
 
   A thread whose effective level is `mute` is in none of them. Forum-level watches drive notifications only.
-- **Badges agree with lists.** The TKT-01M29CA99R note of 2026-09-24 says the lists use `MeCounts`'s rule, or change `MeCounts` in the same PR. Here `MeCounts` keeps its rule and gains a `new` count for the New badge that docs/06 "Mobile" asks for.
+- **Badges agree with lists.** The TKT-01M29CA99R note of 2026-09-24 says the lists use `MeCounts`'s rule, or change `MeCounts` in the same PR. Here `MeCounts` gains a `new` count for the New badge that docs/06 "Mobile" asks for. Its `mine` CTE also takes `moved = 0`, so Participated means one thing in the badge and the list (review 1729).
 - **Mark all read** (docs/06 "Read tracking", run decision 2026-10-01). The site level sets `users.mark_all_read_at`, forward only. The forum level moves each of the forum's thread positions to the thread's last post, forward only, in one statement.
 - **Mute and precedence** come from TKT-01M29CRJ29 (docs/04 `watches`). This ticket depends on it.
 - **Response shape.** `dto.ThreadList` already says it is the cross-forum surfaces' response with `forum: null` (`internal/dto/dto.go`). Paging is a cursor keyset, as for the forum list (docs/07).
@@ -84,7 +84,7 @@ These are the queries most likely to get slow. Unread across all forums combines
    - Quarantined threads (`s.Quarantined`) are dropped. `listDetails` supplies tags and authors, and a new `ForumsByID` query (in `forums_groups.sql`) names each row's forum.
    - The answer is `dto.ThreadList{Forum: nil}`, 25 to a page (`ListPageSize`).
 4. **DTO.** `dto.ThreadRow` gains `forum *ForumRef`, set on cross-forum rows and null on a forum's own list. `dto.UnreadCounts` gains `new`. Regenerate the goldens (dto fixtures, `me.*`, the thread list, and the four new `crosslist.*.json`).
-5. **`/me`.** `MeCounts` gains a per-forum `new` column by the New rule, in the same statement. With no mark it starts from `forum_thread_counts.threads`. With a mark it starts from a count over `threads_forum_created` after the mark. From that start it subtracts the threads the viewer has opened, and the muted ones, from the viewer's own rows, as `threads` already does. `users.Me` sums it over readable forums.
+5. **`/me`.** `MeCounts`'s `mine` CTE becomes `SELECT DISTINCT thread_id FROM post_meta WHERE author_id = ? AND moved = 0`, the list's own predicate, so a thread whose only post by the viewer was moved out counts as participated in neither (review 1729). `MeCounts` also gains a per-forum `new` column by the New rule, in the same statement. With no mark it starts from `forum_thread_counts.threads`. With a mark it starts from a count over `threads_forum_created` after the mark. From that start it subtracts the threads the viewer has opened, and the muted ones, from the viewer's own rows, as `threads` already does. `users.Me` sums it over readable forums.
 6. **Mark all read.**
    - `PUT /api/v1/me/read` sets `users.mark_all_read_at = max(coalesce(mark, 0), now)` through a new `SetMarkAllRead`.
    - `PUT /api/v1/forums/{slug}/read` admits the viewer with `readForum`. It runs `INSERT INTO read_positions SELECT ?, id, last_post_ordinal, ? FROM threads WHERE forum_id = ? AND last_post_ordinal > 0 ON CONFLICT DO UPDATE` to the larger ordinal (`UpsertReadPosition`'s rule).
@@ -107,7 +107,7 @@ These are the queries most likely to get slow. Unread across all forums combines
 - `TestBadgesMatchLists`, one seeded world with read, unread, never-opened, participated, watched, thread-muted, forum-muted and restricted threads:
   - every page of `/unread` counted equals `me.unread.threads`;
   - `/new` equals `me.unread.new`;
-  - the unread rows of `/participated` equal `me.unread.participated`;
+  - the unread rows of `/participated` equal `me.unread.participated`, including a thread whose only post by the viewer has `post_meta.moved` set, which neither counts;
   - the unread rows of `/watching` equal `me.unread.watching`.
 - `TestMarkAllRead`. Site and forum level each clear the matching rows from `/me` and the lists on the next request. The forum level leaves other forums unread. Neither moves a position or the mark back. A hidden forum is `not-found`.
 - `TestCrossListCursor`: keyset paging, a thread bumped between pages not shown twice, and a cursor from another list or from a forum's list `bad-request`.
@@ -132,3 +132,7 @@ From TKT-01M29CA99R (Implement GET /me): the unread badges in /me come from the 
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T07:54:18Z
 
 run decision: pending maintainer review. Two decisions bind this ticket, recorded in docs/06 on 2026-10-01. (1) The four lists, under 'Thread list views'. New means threads you have never opened that were started after your site-level mark, and /me gains unread.new for its badge. Participated means threads with a post of yours that was not moved, read or unread. Watching means thread-level watches only. A muted thread is in no list. (2) Mark all read, under 'Read tracking'. Only the site level sets users.mark_all_read_at. The forum level moves that forum's read positions to each thread's last post, forward only. docs/06 read literally had the forum level set the site-wide mark, which contradicts 'forum level'; this is the safer reading. The screens and the Mark all read buttons were split out to TKT-01M3V6Y4JP (Build the unread, new, participated and watching screens).
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T10:03:57Z
+
+Review 1729 (head 1c66ce7, base f3538e6), medium 'Keep the Participated list and badge on the same moved-post rule', fixed in the plan. MeCounts's mine CTE takes moved = 0, the list's predicate, and TestBadgesMatchLists covers a thread whose only post by the viewer was moved. This supersedes the 2026-09-24 note's 'participated means the viewer has a post in the thread': a moved post no longer counts. Round 4 of 5.
