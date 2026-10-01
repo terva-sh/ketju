@@ -33,7 +33,7 @@ afterEach(() => {
   spy.mockRestore();
 });
 
-const start = (id = 't1') => (close = subscribe(id, () => held, refresh));
+const start = (id = 't1', r: () => Promise<unknown> | void = refresh) => (close = subscribe(id, () => held, r).close);
 const setVisibility = (v: DocumentVisibilityState) => {
   visibility = v;
   document.dispatchEvent(new Event('visibilitychange'));
@@ -170,6 +170,52 @@ describe('the live subscription', () => {
     vi.advanceTimersByTime(10 * pollMs);
     expect(refreshed).toBe(n);
     expect(open()).toEqual([]);
+  });
+
+  // Terva reviews 1779 and 1780.
+  it('a failed refresh on a live stream is tried again every 30 s until one answers', async () => {
+    let fails = 2;
+    start('t1', () => (refreshed++, fails-- > 0 ? Promise.reject(new Error('503')) : Promise.resolve()));
+    open()[0].emit('ready', {});
+    open()[0].emit('thread', { thread_id: 't1', log_length: 101 });
+    await flush();
+    expect(refreshed).toBe(1);
+    await vi.advanceTimersByTimeAsync(pollMs);
+    expect(refreshed).toBe(2);
+    await vi.advanceTimersByTimeAsync(pollMs);
+    expect(refreshed).toBe(3);
+    await vi.advanceTimersByTimeAsync(10 * pollMs);
+    expect(refreshed).toBe(3);
+  });
+
+  it('a hidden tab stops trying a failed refresh, and its new stream catches up when shown', async () => {
+    start('t1', () => (refreshed++, Promise.reject(new Error('503'))));
+    open()[0].emit('ready', {});
+    open()[0].emit('thread', { thread_id: 't1', log_length: 101 });
+    await flush();
+    // Hidden between retries, so one is due after the stream stops.
+    await vi.advanceTimersByTimeAsync(10_000);
+    setVisibility('hidden');
+    await vi.advanceTimersByTimeAsync(hiddenMs);
+    const n = refreshed;
+    expect(open()).toEqual([]);
+    await vi.advanceTimersByTimeAsync(20 * pollMs);
+    expect(refreshed).toBe(n);
+    setVisibility('visible');
+    open()[0].emit('ready', {});
+    open()[0].emit('thread', { thread_id: 't1', log_length: 101 });
+    expect(refreshed).toBe(n + 1);
+  });
+
+  it('a failed refresh while polling waits for the next poll', async () => {
+    start('t1', () => (refreshed++, Promise.reject(new Error('503'))));
+    open()[0].fail();
+    await vi.advanceTimersByTimeAsync(pollMs);
+    expect(refreshed).toBe(1);
+    await vi.advanceTimersByTimeAsync(pollMs - 1);
+    expect(refreshed).toBe(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(refreshed).toBe(2);
   });
 
   it('closing leaves no stream and no timer behind', () => {
