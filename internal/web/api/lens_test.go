@@ -308,6 +308,13 @@ func (w *world) accessThread() threadid.ID {
 // length still matches the log, so the reopened thread trusts it.
 func (w *world) flagOffline(id threadid.ID, ordinal uint32, flag threadlog.EntryFlags) {
 	w.t.Helper()
+	w.entryOffline(id, ordinal, func(e *threadlog.IndexEntry) { e.Flags |= flag })
+}
+
+// entryOffline changes ordinal's entry in id's sidecar index with edit, as
+// flagOffline does: with the thread closed, and the stores reopened on it.
+func (w *world) entryOffline(id threadid.ID, ordinal uint32, edit func(*threadlog.IndexEntry)) {
+	w.t.Helper()
 	if err := w.cache.Close(); err != nil {
 		w.t.Fatal(err)
 	}
@@ -324,7 +331,7 @@ func (w *world) flagOffline(id threadid.ID, ordinal uint32, flag threadlog.Entry
 	if err != nil {
 		w.t.Fatal(err)
 	}
-	e.Flags |= flag
+	edit(&e)
 	copy(b[off:], e.AppendTo(nil))
 	if err := os.WriteFile(path, b, 0o644); err != nil {
 		w.t.Fatal(err)
@@ -369,8 +376,9 @@ func (w *world) forumModerator(handle string, forum int64) domain.Viewer {
 // each post alone, the odd posts, the even posts, and all of them, so each
 // post is drawn on pages whose other posts, and so whose viewer class
 // (pageClass), differ. Each served kind adds its own rows: the unread lens
-// over several boundaries and over each viewer's own position, and the
-// author lens for every author in the thread and for none. Each lens is
+// over several boundaries and over each viewer's own position, the author
+// lens for every author in the thread and for none, and the reply chain of
+// every post. Each lens is
 // read twice in two orders of viewers, so a page the response cache stored
 // for one viewer is offered to every other.
 func TestLensPostsMatchCanonical(t *testing.T) {
@@ -464,12 +472,23 @@ func TestLensPostsMatchCanonical(t *testing.T) {
 		"author:nobody": {}} {
 		lenses = append(lenses, lensCase{name: raw, raw: raw, want: func(int) []int { return want }})
 	}
+	// The reply chain lens (TKT-01M29CTY5T) of every post: #2 and #4 reply
+	// to #1, and #10 to #5, which a moderator hid, so chain:10 runs through
+	// a removed post. The chain is the same for every viewer.
+	for n, want := range map[int][]int{1: {1, 2, 4}, 2: {1, 2}, 3: {3}, 4: {1, 4}, 5: {5, 10}, 6: {6}, 7: {7},
+		8: {8}, 9: {9}, 10: {5, 10}} {
+		raw := fmt.Sprintf("chain:%d", n)
+		lenses = append(lenses, lensCase{name: raw, raw: raw, want: func(int) []int { return want }})
+	}
 	order := make([]int, len(viewers))
 	for i := range order {
 		order[i] = i
 	}
 	for round := range 2 {
 		for li, lc := range lenses {
+			// A served lens is read through its resolver, which the test
+			// filter would otherwise shadow for the chain kind.
+			w.svc.TestLenses = nil
 			path := threadPath(id) + "?lens=" + lc.raw
 			if lc.raw == "" {
 				w.lensAs(lens.Chain, lens.Ordinals(lc.keep...))

@@ -149,3 +149,39 @@ type byAuthor uint64
 func (a byAuthor) keep(_ uint32, e threadlog.IndexEntry) bool {
 	return e.Author == uint64(a) && e.Flags.Visible()
 }
+
+// ReplyChain is the reply chain lens's filter for post n (docs/06
+// "Lenses"): n's ancestors, found by following reply_to upward, n itself,
+// and n's direct replies. It reads ix, so call it inside Stable, before
+// Apply; the filter it returns reads nothing more. A post past the last is
+// not-found, as a permalink to it is.
+//
+// A well-formed log only ever points a reply backwards, so the walk stops at
+// the first link that does not: a reply_to of 0, one at or past the post
+// that names it, or one past the last post. That is what ends a cycle, a
+// self-reference or a forward reference in a corrupt index. The walk is also
+// capped at the thread's length, a second bound that does not depend on the
+// first being right. A removed ancestor keeps its place, and its reply_to
+// is followed as any other's, since the index keeps it.
+func ReplyChain(ix *threadlog.Index, n uint32) (Filter, error) {
+	posts := ix.Len()
+	if n == 0 || int(n) > posts {
+		return nil, problem.Coded(problem.CodeNotFound,
+			fmt.Errorf("lens: chain:%d past the last post %d", n, posts))
+	}
+	keep := []uint32{n}
+	for cur, steps := n, 0; steps < posts; steps++ {
+		e, err := ix.Entry(cur)
+		if err != nil {
+			return nil, err
+		}
+		up := e.ReplyTo
+		if up == 0 || up >= cur || int(up) > posts {
+			break
+		}
+		keep = append(keep, up)
+		cur = up
+	}
+	keep = append(keep, ix.Replies(n)...)
+	return Ordinals(keep...), nil
+}

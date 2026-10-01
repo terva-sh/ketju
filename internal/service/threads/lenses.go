@@ -59,6 +59,20 @@ type lensViewer struct {
 var lensResolvers = map[lens.Kind]lensResolver{
 	lens.Unread: resolveUnread,
 	lens.Author: resolveAuthor,
+	lens.Chain:  resolveChain,
+}
+
+// resolveChain is the reply chain lens (TKT-01M29CTY5T, docs/06 "Lenses"):
+// chain:N is N's ancestors, N and its direct replies, in ordinal order, for
+// every viewer. Each post in it is drawn as the canonical page draws it, so
+// a removed ancestor keeps its place as the tombstone that viewer is shown.
+// It reads nothing from the database: the chain is read from the index the
+// page is drawn from, and chain: past the last post is not-found there. The
+// key is chain:N, which with the thread's log length names the selection.
+func resolveChain(_ context.Context, _ *Service, _ lensViewer, spec lens.Spec) (resolvedLens, error) {
+	n := spec.Ordinal
+	return resolvedLens{kind: lens.Chain, value: spec.Value(), key: "chain:" + spec.Value(),
+		filter: func(ix *threadlog.Index) (lens.Filter, error) { return lens.ReplyChain(ix, n) }}, nil
 }
 
 // keepNothing is the filter of a lens that selects no post.
