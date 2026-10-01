@@ -38,6 +38,34 @@ human who does.
   unread thread below this one, or when there is none below, the first
   above it. Each shortcut has a visible control that does the same, below
   the posts or in the thread's actions.
+  **Decided by the run (2026-10-01, pending maintainer review):** the
+  desktop top bar keeps its link to `/search` rather than the mockups'
+  240 px field, as 07 "Search" decided for the search screen
+  (TKT-01M3V70X0F), and the mockups' `/` key hint is left out
+  (TKT-01M3S3ZZSZ, item D1). Every shortcut here is a single key with no
+  modifier, and none can yet be turned off, which WCAG 2.1.4 asks for
+  (TKT-01M3V9DWTN). `/` waits on that off switch, and TKT-01M3V7GE59 owns
+  it. Alternatives: the mockups' field lost because 07 "Search" had already
+  chosen the link, and two run decisions should not disagree about one
+  control. `/` now lost because it would add one more shortcut that does
+  not meet 2.1.4.
+
+### The thread head
+
+Under the title the thread head says who started the thread, when, and how
+many posts it has, then the thread's tags, pin and watch state as their own
+tickets add them. **Decided by the run (2026-10-01, pending maintainer
+review):** it reads "started by HANDLE · TIME · N posts" at both widths.
+HANDLE is the thread's author as its row in the thread list names it. TIME is
+the thread's creation time, written as every other time is (absolute,
+`PostTime`, see "Post anatomy"). N is the thread's post count, the number the
+pager counts in, deleted posts included. Above the title, the forum is a
+breadcrumb, "Forums › General" (TKT-01M3S3ZF6J). Alternatives: the phone
+mockup's shorter "mara · 3 days ago" lost because the same components render
+at every size (see "Mobile") and the words cost no width that wrapping does
+not absorb; the mockups' "3 days ago" lost to the absolute-time decision of
+2026-10-01; and a post count without deleted posts lost because it would
+disagree with the pager's "posts 51–75 of 212" on the same screen.
 
 ### Landing on return
 
@@ -50,6 +78,24 @@ Last read rather than first unread is decided (10 Q14, TKT-01M29BW9P4). The two
 land on the same page in practice, and the divider carries the difference. The
 confirmation with real readers on real phones is a Phase 1 human verification
 item, not a gate on building it.
+
+**Decided by the run (2026-10-01, pending maintainer review):** the divider
+ends with "last read #N · TIME" at both widths, where TIME is
+`read_positions.last_read_at`. That is when the viewer's place in this
+thread was last set: by a read beacon, or by marking the thread unread,
+which sets the place where the reader says it is at that moment. It is
+written as every other time is (absolute, `PostTime`), and the thread page
+carries it in its per-viewer block (TKT-01M3S3ZS0H). Alternatives:
+- The phone mockup's shorter "read to #63" lost because "Mobile" below says
+  the divider is identical to desktop.
+- Leaving the time out lost because the time is what tells a returning
+  reader how stale their place is.
+- The time the post numbered N was written lost because that says when
+  somebody else wrote, not when the reader set their place.
+- A separate column for the last beacon alone, so that a mark-unread does
+  not move the time, lost because it is a schema change for one line of
+  text. A mark-unread is itself the reader saying where they are, and the
+  time of that statement is the truthful one to show.
 
 ### Read tracking
 
@@ -173,6 +219,15 @@ the full thread at the same ordinal, so nobody gets lost in a filter.
   (05 "Changing a handle", TKT-01M3NRP3W9).
 - Drafts autosave to the server (`drafts` table, one per user+thread) so a
   half-written reply survives a browser crash and appears on another device.
+  **Decided by the run (2026-10-01, pending maintainer review):** the
+  composer's footer says "Draft saved TIME", where TIME is the `updated_at`
+  of the server's latest answer for the draft, written as every other time
+  is (absolute, `PostTime`), so a draft loaded from another device says
+  when it was saved there (TKT-01M3S3ZZYA). Alternatives: the mockup's
+  "12 seconds ago" lost to the absolute-time decision of 2026-10-01, and a
+  counter that ticks would redraw the composer every second; the bare
+  "Draft saved" the composer says now lost because it cannot tell a draft
+  saved a moment ago from one left on a phone last week.
 - Composer sits at the **bottom** of the page after the posts (Tildes'
   reasoning: read before you write). A sticky "Reply" button scrolls to it.
 
@@ -186,6 +241,39 @@ the full thread at the same ordinal, so nobody gets lost in a filter.
   **Participated**, **Watching**. These are the "what's new" surfaces and
   live in the top navigation.
 - Optional per-forum display `?sort=created` for announcement forums.
+- The forum index (the front page). **Decided by the run (2026-10-01,
+  pending maintainer review):** its heading is the `site_name` setting, the
+  same value the wordmark shows (07 "Site settings"), as the mockups head
+  the page with the community's name (TKT-01M3S3ZZYA). Alternatives: the
+  client's "Forums" lost because it names no community; and the mockups'
+  "Ketju" wordmark beside it, which would avoid the name appearing twice,
+  lost because 07 already puts `site_name` in the wordmark (TKT-01M29CXK2H).
+- **Decided by the run (2026-10-01, pending maintainer review):** the forum
+  index ends with a footer, "N members · M posts", then at 720 px and above
+  "Press ? for keyboard shortcuts" (TKT-01M3S3ZRYD). M is the sum of
+  `post_count` over the forums the page lists, so it counts only forums the
+  viewer may read and needs no new field. N is exactly the accounts the
+  mention lookup (`GET /users?prefix=`) can offer: active, with a handle
+  that does not end in `-`. It is sent only to a member session, in a
+  `members` field of `GET /forums`. An anonymous viewer or an applicant
+  gets null, and their footer shows the post count alone. A member can
+  already list every one of those accounts through the lookup, so the
+  count tells a member nothing they could not learn. An anonymous viewer
+  cannot list them, so an anonymous viewer is not told the count. The
+  mockups' Guidelines and Markdown help links are left out, since neither
+  page exists. Alternatives:
+  - A site-wide post count lost because it would count posts in forums the
+    viewer cannot read.
+  - Counting every active account lost because it would include the few
+    whose handle ends in `-`, which the lookup leaves out, and so would
+    tell members something the lookup does not. Registration no longer
+    gives out such a handle (04 "users"), so the difference is small.
+  - The member count for everyone lost because it would tell an anonymous
+    visitor something no other answer does.
+  - The count on `/me` lost because `/me` is read on every page and inlined
+    in the shell, for a number one screen shows.
+  - The shortcut hint on phones lost because shortcuts are absent there
+    ("Mobile").
 
 ## Moderator flow for drift: split and merge
 
@@ -290,6 +378,19 @@ arrangement.
   and the reply expander; link, flag, "unread from here", and history
   collapse under a "more" control. The unread divider, tombstones, and the
   unread edge marker are identical to desktop.
+  **Decided by the run (2026-10-01, pending maintainer review):** the
+  sentence above names what stays in the phone footer, not its order. The
+  footer reads the reply expander when the post offers one, then reply,
+  then quote, then "more" at the right edge, as the phone mockup draws it.
+  The header puts the 30 px avatar in its first row, with the author and
+  role badge on one line beside it and the ordinal, time and edited mark on
+  the next, and the body takes the full width below (TKT-01M3S3Z9E1).
+  Alternatives: reply, quote and then the expander, read as an order from
+  this sentence, lost because it moves the expander away from where "Post
+  anatomy" and both thread mockups put it, so the footer would differ
+  between widths for no reason the sentence gives; and the desktop's quote
+  before reply lost because this sentence and the phone mockup both put
+  reply first.
 - **Pages.** A "Page 3 of 9" control with previous and next; tapping the
   label opens a picker sheet with page numbers and the jump-to-unread and
   jump-to-date actions. Lenses open from a sheet as well.
