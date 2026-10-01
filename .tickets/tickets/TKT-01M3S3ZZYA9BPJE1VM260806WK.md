@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZZYA9BPJE1VM260806WK
 title: Head the forum index with the site name and show draft-saved status
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -18,15 +18,22 @@ dependencies:
   - TKT-01M3NS19315QTWBKNZN782VRF1
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-polish-client
+  branch: run/3zzya-site-heading-draft-saved
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab6f84ce9575cee6f
+  commit: 73e8208e5fd38dcefb5ba20f8c57b45be52e34d1
+  session: null
+  claimed_at: 2026-10-01T12:53:55Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T07:56:06Z
+updated_at: 2026-10-01T12:53:56Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-polish-client
   name: ""
 extensions: {}
 ---
