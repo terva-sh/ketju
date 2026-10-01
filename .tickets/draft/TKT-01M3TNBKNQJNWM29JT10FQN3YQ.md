@@ -17,11 +17,13 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:258
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T03:46:14Z
+updated_at: 2026-10-01T03:46:42Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
