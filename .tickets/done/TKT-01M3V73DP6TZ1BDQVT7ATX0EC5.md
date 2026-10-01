@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:50:42Z
-updated_at: 2026-10-01T11:12:09Z
+updated_at: 2026-10-01T11:25:34Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
@@ -116,6 +116,15 @@ run decision: pending maintainer review. A hash sent twice in a draft's attachme
 The grooming plan and the second criterion expected a duplicate to be refused. The attach rule TKT-01M29CXK0K merged in #284 does not refuse one. `blobs.Service.Check` answers "each once in the order sent", `TestAttachRefusals` posts ten with repeats and gets ten, and docs/07 "Attachments" says "at most 10 distinct hashes". The description and the settled item both say a draft is checked "as an attach does", so the draft follows the post. Refusing lost: a draft that refused a list the post accepts would fail the composer's autosave for no reason the member could see, and the composer (TKT-01M3V73J8K) sends one list to both.
 
 The second criterion stays unticked for that reason only. Its other four refusals hold on both routes (TestDraftAttachmentChecks): another member's blob is `not_yours`, a quarantined one `blocked`, eleven `too_many`, and no `upload` is `forbidden`. An unknown hash and a non-hash are also refused as `unknown`. The same test pins a repeat as kept once.
+
+**agent:claude-code/phase3-v73dp6** at 2026-10-01T11:25:34Z
+
+Terva review 1749 (run 5f8a5fe6-aafb-4f19-bfbc-6879ea9728e1, Actions run #1927) on PR #289, head 89cef95c8a025f7a30b53b59e004de93ace4e5d0, base 6d10fe06d4b183e7cae48783855f30f1cc3bf261. Status failure, with two findings. Both are fixed. Neither is a disagreement.
+
+- **high: Persist the draft atomically with attachment validation against GC.** Accepted. The attach check ran before the draft's write transaction. GC could delete an old blob at zero between the check and the upsert, and its draft guard could not see a draft not yet written. Fix: `threads.Attachments` gains `Recheck(ctx, q, userID, hashes)`. `blobs.Service` implements it with Check's per-blob rules (exists, uploaded by the viewer, not quarantined), now shared as `attachable`. Both draft saves call it through `q` inside the `DB.Write` that upserts. That transaction is BEGIN IMMEDIATE on the single write connection, so it is ordered against the collector's delete. A collected blob refuses the save as `validation-failed: attachments unknown`, and a draft saved first is kept by the delete's guard. Test: `TestDraftCollectedBlobRefused`, built on the existing `collecting` fake, which deletes the blob rows right after Check. Removing the recheck makes it fail.
+- **medium: Do not report a committed save as failed when metadata lookup fails.** Accepted. The response's attachment metadata was read in a separate transaction after the commit. Fix: `draftAttachments`, `draftDTO` and `forumDraftDTO` now read through the caller's `q`. Both saves build their answer inside the write transaction, before it commits, and both GETs build theirs inside the read. No read follows a commit, so an error can only come from a save that did not commit. No test injects a failed read. The fix is structural: no database call remains after `DB.Write` returns.
+
+docs/03 "Blob garbage collection" now states the write-boundary rule.
 
 ## Summary
 

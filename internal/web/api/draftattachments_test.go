@@ -276,3 +276,33 @@ func TestDraftTombstoneHasNoAttachments(t *testing.T) {
 		t.Errorf("a draft started again on a tombstone has %v", d.Attachments)
 	}
 }
+
+// TestDraftCollectedBlobRefused is Terva review 1749's first finding: a
+// blob the collector deletes after the attach check and before the draft's
+// write refuses the save, on both routes, and leaves the draft as it was.
+// Otherwise the draft would keep a hash with no bytes, which no reference
+// and no later pass would ever notice. The recheck runs in the draft's own
+// write transaction, which is ordered against the collector's delete.
+func TestDraftCollectedBlobRefused(t *testing.T) {
+	bw := newBlobWorld(t)
+	bw.grantUpload(bw.forum)
+	id, _ := bw.seed()
+	kept := bw.uploaded("carol", "kept.txt", blobstest.Text(46))
+	for _, path := range []string{draftPath(id), forumDraftPath("general")} {
+		if rec := bw.putJSON("carol", path, map[string]any{"source": "s", "attachments": []string{kept.Hash}}); rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", path, rec.Code, rec.Body)
+		}
+	}
+	before := bw.storedAttachments("carol")
+	bw.svc.Attachments = collecting{Service: bw.blobs, bw: bw}
+	for i, path := range []string{draftPath(id), forumDraftPath("general")} {
+		gone := bw.uploaded("carol", fmt.Sprintf("gone-%d.txt", i), blobstest.Text(byte(47+i)))
+		rec := bw.putJSON("carol", path, map[string]any{"source": "s", "attachments": []string{gone.Hash}})
+		if got := fieldErrors(t, rec); got != "validation-failed: attachments unknown" {
+			t.Errorf("%s: %d %s", path, rec.Code, got)
+		}
+	}
+	if after := bw.storedAttachments("carol"); fmt.Sprint(after) != fmt.Sprint(before) {
+		t.Fatalf("a refused save changed the drafts: %v then %v", before, after)
+	}
+}

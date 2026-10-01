@@ -66,6 +66,12 @@ type Attachments interface {
 	AddRefs(ctx context.Context, hashes []string) error
 	// DropRefs lowers each blob's refcount again.
 	DropRefs(ctx context.Context, hashes []string) error
+	// Recheck asks Check's per-blob rules again of hashes, as Check
+	// answered them, through q, a write transaction of the caller's. A
+	// draft holds no reference, so it asks this in the write that saves it,
+	// and a blob the collector has deleted since Check refuses the save
+	// rather than leaving the draft a hash with no bytes.
+	Recheck(ctx context.Context, q *dbq.Queries, userID int64, hashes []string) error
 }
 
 // checkAttachments is Attachments.Check, or a refusal of any attachment when

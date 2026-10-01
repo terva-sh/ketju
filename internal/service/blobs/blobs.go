@@ -444,32 +444,57 @@ func (s *Service) Check(ctx context.Context, v domain.Viewer, forumID int64, has
 	if !can {
 		return nil, problem.Coded(problem.CodeForbidden, errors.New("blobs: this viewer may not attach files here"))
 	}
-	var rows []dbq.AttachCandidatesRow
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		var err error
-		rows, err = q.AttachCandidates(ctx, dbq.AttachCandidatesParams{UserID: v.UserID, Hashes: list})
-		return err
+		return attachable(ctx, q, v.UserID, list)
 	}); err != nil {
 		return nil, err
+	}
+	return list, nil
+}
+
+// Recheck is threads.Attachments.Recheck: Check's rules for each blob,
+// asked again through q, the caller's write transaction. A draft names
+// its attachments without a reference, and the collector deletes a blob
+// at zero that no draft names, so a draft saved after a pass deleted the
+// blob would keep a hash with no bytes. Asked inside the write that saves
+// the draft, the question is ordered against the collector's delete, which
+// is a write too: either the blob is gone and the save is refused, or the
+// draft is saved first and the delete keeps the blob (TKT-01M3V73DP6, Terva
+// review 1749). Permission is not asked again; Check asked it on this
+// request.
+func (s *Service) Recheck(ctx context.Context, q *dbq.Queries, userID int64, hashes []string) error {
+	if len(hashes) == 0 {
+		return nil
+	}
+	return attachable(ctx, q, userID, hashes)
+}
+
+// attachable refuses the first of hashes, already distinct and valid, that
+// userID may not attach: one with no blob, one they did not upload, or one
+// quarantined.
+func attachable(ctx context.Context, q *dbq.Queries, userID int64, hashes []string) error {
+	rows, err := q.AttachCandidates(ctx, dbq.AttachCandidatesParams{UserID: userID, Hashes: hashes})
+	if err != nil {
+		return err
 	}
 	byHash := make(map[string]dbq.AttachCandidatesRow, len(rows))
 	for _, r := range rows {
 		byHash[r.Hash] = r
 	}
-	for _, h := range list {
+	for _, h := range hashes {
 		r, ok := byHash[h]
 		switch {
 		case !ok:
-			return nil, invalid("attachments", CodeUnknown)
+			return invalid("attachments", CodeUnknown)
 		case !r.Uploaded:
 			// Before the status: a blob v did not upload is not v's to
 			// learn anything about.
-			return nil, invalid("attachments", CodeNotYours)
+			return invalid("attachments", CodeNotYours)
 		case r.Status != "ok":
-			return nil, invalid("attachments", CodeBlocked)
+			return invalid("attachments", CodeBlocked)
 		}
 	}
-	return list, nil
+	return nil
 }
 
 // AddRefs is threads.Attachments.AddRefs: each blob's refcount raised in one

@@ -229,7 +229,11 @@ func attachmentDTO(h string, m dbq.AttachmentMetaRow, ok bool) dto.Attachment {
 // in the order saved, each named as the viewer uploaded it: the attach
 // check let only their own uploads in. Never nil, so the DTO says [] rather
 // than null.
-func (s *Service) draftAttachments(ctx context.Context, v domain.Viewer, stored string) ([]dto.Attachment, error) {
+//
+// It reads through q, the transaction that read or wrote the draft, so a
+// save's answer is built before its commit and a failure here cannot
+// report a save that committed as one that did not (Terva review 1749).
+func draftAttachments(ctx context.Context, q *dbq.Queries, v domain.Viewer, stored string) ([]dto.Attachment, error) {
 	var hashes []string
 	if err := json.Unmarshal([]byte(stored), &hashes); err != nil {
 		return nil, fmt.Errorf("threads: a draft's attachments: %w", err)
@@ -238,19 +242,13 @@ func (s *Service) draftAttachments(ctx context.Context, v domain.Viewer, stored 
 	if len(hashes) == 0 {
 		return out, nil
 	}
-	meta := make(map[string]dbq.AttachmentMetaRow, len(hashes))
-	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		rows, err := q.AttachmentMeta(ctx, dbq.AttachmentMetaParams{AuthorID: v.UserID, Hashes: hashes})
-		if err != nil {
-			return fmt.Errorf("threads: attachment metadata: %w", err)
-		}
-		for _, r := range rows {
-			meta[r.Hash] = r
-		}
-		return nil
-	})
+	rows, err := q.AttachmentMeta(ctx, dbq.AttachmentMetaParams{AuthorID: v.UserID, Hashes: hashes})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("threads: attachment metadata: %w", err)
+	}
+	meta := make(map[string]dbq.AttachmentMetaRow, len(rows))
+	for _, r := range rows {
+		meta[r.Hash] = r
 	}
 	for _, h := range hashes {
 		m, ok := meta[h]

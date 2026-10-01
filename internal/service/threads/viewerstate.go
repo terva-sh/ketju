@@ -179,18 +179,21 @@ func (s *Service) Draft(ctx context.Context, v domain.Viewer, id threadid.ID) (d
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
 		row, err = q.GetThreadDraft(ctx, threadDraftKey(v, id))
+		if err != nil || row.Deleted != 0 {
+			return err
+		}
+		out, err = draftDTO(ctx, q, v, id, row)
 		return err
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return out, false, nil
+		return dto.Draft{}, false, nil
 	case err != nil:
-		return out, false, err
+		return dto.Draft{}, false, err
 	case row.Deleted != 0:
 		return dto.Draft{Revision: row.Revision}, false, nil
 	}
-	out, err = s.draftDTO(ctx, v, id, row)
-	return out, err == nil, err
+	return out, true, nil
 }
 
 // SaveDraft is PUT /drafts/{thread_id} (docs/06 "Composer", docs/07): the
@@ -225,22 +228,28 @@ func (s *Service) SaveDraft(ctx context.Context, v domain.Viewer, id threadid.ID
 		}
 		replyTo = sql.NullInt64{Int64: int64(*req.ReplyTo), Valid: true}
 	}
-	attachments, err := s.draftAttachmentsColumn(ctx, v, a.row.ForumID, req.Attachments)
+	list, column, err := s.draftAttachmentList(ctx, v, a.row.ForumID, req.Attachments)
 	if err != nil {
 		return out, err
 	}
-	var row dbq.Draft
 	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		row, err = q.UpsertThreadDraft(ctx, dbq.UpsertThreadDraftParams{
+		if err := s.recheckAttachments(ctx, q, v, list); err != nil {
+			return err
+		}
+		row, err := q.UpsertThreadDraft(ctx, dbq.UpsertThreadDraftParams{
 			UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true},
-			Source: req.Source, ReplyTo: replyTo, Attachments: attachments, Now: s.now().UnixMilli(),
+			Source: req.Source, ReplyTo: replyTo, Attachments: column, Now: s.now().UnixMilli(),
 		})
+		if err != nil {
+			return err
+		}
+		out, err = draftDTO(ctx, q, v, id, row)
 		return err
 	})
 	if err != nil {
-		return out, err
+		return dto.Draft{}, err
 	}
-	return s.draftDTO(ctx, v, id, row)
+	return out, nil
 }
 
 // DeleteDraft is DELETE /drafts/{thread_id} (docs/07): the viewer discards
@@ -293,18 +302,21 @@ func (s *Service) ForumDraft(ctx context.Context, v domain.Viewer, slug string) 
 	err = s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
 		row, err = q.GetForumDraft(ctx, forumDraftKey(v, forum))
+		if err != nil || row.Deleted != 0 {
+			return err
+		}
+		out, err = forumDraftDTO(ctx, q, v, forum, row)
 		return err
 	})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return out, false, nil
+		return dto.ForumDraft{}, false, nil
 	case err != nil:
-		return out, false, err
+		return dto.ForumDraft{}, false, err
 	case row.Deleted != 0:
 		return dto.ForumDraft{Revision: row.Revision}, false, nil
 	}
-	out, err = s.forumDraftDTO(ctx, v, forum, row)
-	return out, err == nil, err
+	return out, true, nil
 }
 
 // SaveForumDraft is PUT /forums/{slug}/draft (docs/07 "Drafts"): the viewer's
@@ -332,22 +344,28 @@ func (s *Service) SaveForumDraft(ctx context.Context, v domain.Viewer, slug stri
 		}
 		title = sql.NullString{String: *req.Title, Valid: true}
 	}
-	attachments, err := s.draftAttachmentsColumn(ctx, v, forum.ID, req.Attachments)
+	list, column, err := s.draftAttachmentList(ctx, v, forum.ID, req.Attachments)
 	if err != nil {
 		return out, err
 	}
-	var row dbq.Draft
 	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		row, err = q.UpsertForumDraft(ctx, dbq.UpsertForumDraftParams{
+		if err := s.recheckAttachments(ctx, q, v, list); err != nil {
+			return err
+		}
+		row, err := q.UpsertForumDraft(ctx, dbq.UpsertForumDraftParams{
 			UserID: v.UserID, ForumID: sql.NullInt64{Int64: forum.ID, Valid: true},
-			Title: title, Source: req.Source, Attachments: attachments, Now: s.now().UnixMilli(),
+			Title: title, Source: req.Source, Attachments: column, Now: s.now().UnixMilli(),
 		})
+		if err != nil {
+			return err
+		}
+		out, err = forumDraftDTO(ctx, q, v, forum, row)
 		return err
 	})
 	if err != nil {
-		return out, err
+		return dto.ForumDraft{}, err
 	}
-	return s.forumDraftDTO(ctx, v, forum, row)
+	return out, nil
 }
 
 // DeleteForumDraft is DELETE /forums/{slug}/draft (docs/07 "Drafts"): as
@@ -408,19 +426,33 @@ func forumDraftKey(v domain.Viewer, forum dbq.Forum) dbq.GetForumDraftParams {
 	return dbq.GetForumDraftParams{UserID: v.UserID, ForumID: sql.NullInt64{Int64: forum.ID, Valid: true}}
 }
 
-// draftAttachmentsColumn checks a draft's attachments as a post to forumID
-// would have them checked (checkAttachments), and answers the list it
-// passed as the drafts.attachments column. It adds no reference.
-func (s *Service) draftAttachmentsColumn(ctx context.Context, v domain.Viewer, forumID int64, hashes []string) (string, error) {
+// draftAttachmentList checks a draft's attachments as a post to forumID
+// would have them checked (checkAttachments), and answers the list that
+// passed and its drafts.attachments column. It adds no reference.
+func (s *Service) draftAttachmentList(ctx context.Context, v domain.Viewer, forumID int64, hashes []string) ([]string, string, error) {
 	list, err := s.checkAttachments(ctx, v, forumID, hashes)
 	if err != nil {
-		return "", err
+		return nil, "", err
 	}
-	return encodeAttachments(list)
+	column, err := encodeAttachments(list)
+	return list, column, err
 }
 
-func (s *Service) draftDTO(ctx context.Context, v domain.Viewer, id threadid.ID, row dbq.Draft) (dto.Draft, error) {
-	attachments, err := s.draftAttachments(ctx, v, row.Attachments)
+// recheckAttachments is Attachments.Recheck of list, which
+// draftAttachmentList answered, through q, the write that saves the draft.
+// An empty list asks nothing, and a list is only ever non-empty when the
+// service has a blob store (checkAttachments).
+func (s *Service) recheckAttachments(ctx context.Context, q *dbq.Queries, v domain.Viewer, list []string) error {
+	if len(list) == 0 {
+		return nil
+	}
+	return s.Attachments.Recheck(ctx, q, v.UserID, list)
+}
+
+// draftDTO and forumDraftDTO draw a draft through q, the transaction that
+// read or wrote it.
+func draftDTO(ctx context.Context, q *dbq.Queries, v domain.Viewer, id threadid.ID, row dbq.Draft) (dto.Draft, error) {
+	attachments, err := draftAttachments(ctx, q, v, row.Attachments)
 	if err != nil {
 		return dto.Draft{}, err
 	}
@@ -433,8 +465,8 @@ func (s *Service) draftDTO(ctx context.Context, v domain.Viewer, id threadid.ID,
 	return d, nil
 }
 
-func (s *Service) forumDraftDTO(ctx context.Context, v domain.Viewer, forum dbq.Forum, row dbq.Draft) (dto.ForumDraft, error) {
-	attachments, err := s.draftAttachments(ctx, v, row.Attachments)
+func forumDraftDTO(ctx context.Context, q *dbq.Queries, v domain.Viewer, forum dbq.Forum, row dbq.Draft) (dto.ForumDraft, error) {
+	attachments, err := draftAttachments(ctx, q, v, row.Attachments)
 	if err != nil {
 		return dto.ForumDraft{}, err
 	}

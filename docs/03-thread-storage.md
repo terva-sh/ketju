@@ -918,6 +918,14 @@ refcount: a blob only a draft attaches is never collected while the draft
 lists it, and once the draft is deleted, or saved without it, the next pass
 may collect it at once if it has been at zero that long.
 
+Because a draft holds no reference, its save asks the attach check's
+per-blob questions again inside the write transaction that stores it (Terva
+review 1749): does the blob still exist, did the viewer upload it, and is it
+not quarantined. That write and the collector's delete are both write
+transactions, so one is ordered before the other. If the delete commits
+first, the save is refused as `unknown`. If the save commits first, the
+delete finds the draft and keeps the blob.
+
 The bytes are never gone while the row remains. Inside one `db.Write`, the
 collector deletes the row and renames the file to `<hash>.gc` beside it. A
 rename that fails rolls the row back. If the transaction does not commit, the
