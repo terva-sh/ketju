@@ -146,6 +146,24 @@ describe('the evidence reporter', () => {
     expect(got).toContain(`… ${total - shownBytes} earlier bytes left out`);
   });
 
+  // Review 1637 on PR #261: when the tail falls exactly on a line's start,
+  // that line is whole and is shown. Lines of exactly 4096 bytes put the
+  // tail on line 36's first byte, with 64 whole lines after it.
+  it('a line that starts exactly at the tail is kept', () => {
+    const { r, text } = started();
+    const t = testCase();
+    const line = (i) => `${`{"path":"/edge/${String(i).padStart(3, '0')}","pad":"`.padEnd(4093, 'p')}"}\n`;
+    expect(line(0)).toHaveLength(4096);
+    r.onTestBegin(t);
+    for (let i = 0; i < 100; i++) appendFileSync(serveLog(), line(i));
+    r.onTestEnd(t, result('failed', withContext(context())));
+    const got = text();
+    const shown = got.split('\n').filter((l) => l.includes('"/edge/'));
+    expect(shown).toHaveLength(maxLogTailBytes / 4096);
+    expect(shown[0]).toContain('"/edge/036"');
+    expect(got).toContain(`… ${36 * 4096} earlier bytes left out`);
+  });
+
   it(`a large error context is cut at ${maxContextBytes} bytes`, () => {
     const { r, text } = started();
     const t = testCase();

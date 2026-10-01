@@ -100,8 +100,12 @@ export default class EvidenceReporter {
       const end = size(this.log);
       const start = from <= end ? from : 0;
       const tail = Math.max(start, end - maxLogTailBytes);
-      const lines = readRange(this.log, tail, end - tail).text.split('\n');
-      // A read that starts inside the slice may start inside a line.
+      // A tail inside the slice is read from the byte before it, so the
+      // first segment is either the end of a line the tail cut, or the
+      // empty string after a newline when the tail fell on a line's start.
+      // Either way it is dropped, and no whole line is (review 1637).
+      const at = tail > start ? tail - 1 : tail;
+      const lines = readRange(this.log, at, end - at).text.split('\n');
       if (tail > start) lines.shift();
       const kept = lines.filter((l) => l !== '').slice(-maxLogLines);
       const shown = kept.reduce((n, l) => n + Buffer.byteLength(l) + 1, 0);
