@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-29T05:08:32Z
-updated_at: 2026-10-01T14:13:42Z
+updated_at: 2026-10-01T14:33:21Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
@@ -75,7 +75,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
 ### Approach
 1. **No `secure_delete`** (Terva review 1719). The `VACUUM` in step 4 covers pages freed before the run and during it.
 2. **Find the index.** `searchIndexer` reads `db.MissingSearchTables` (added by TKT-01M29CTY9D) once, right after the database opens and before the journal is looked at. All search tables missing means a database migrated before 0022: `r.search` is nil and every search step is skipped. Some missing, which only dropping one by hand produces, is refused with exit 4 before anything is touched, because the tables left may hold the text. Otherwise `r.search` is a `search.Indexer` with no thread cache, so it opens logs and `.idx` read-only.
-3. **Bring the rows current per thread.** At the start of `run`, `Prepare`: an index another version built is emptied, as serve's start would empty it. After `projected:<thread>`, `r.search.IndexThread(ctx, id, size)` and a `searched:<thread>` step. Catch-up reads the appended `Redacted` records: the post's entry is not `Visible()`, so its row is dropped, and a title's row 0 becomes the replacement.
+3. **Bring the rows current per thread.** The run never calls `Prepare` (Terva review 1775): emptying an index of another version would leave every untouched thread without rows until serve's catch-up, and the journal's clear removes the redacted rows whatever the version. After `projected:<thread>`, `r.search.IndexThread(ctx, id, size)` and a `searched:<thread>` step. Catch-up reads the appended `Redacted` records: the post's entry is not `Visible()`, so its row is dropped, and a title's row 0 becomes the replacement.
 4. **Clear by the journal** (`clearSearch`), after the audit row and blobs and before `fsutil.Remove(journalPath)`:
    - one `d.Write`: `db.DropSearchDoc` for every post target, the copy set and the skipped members included; for a title target, new `search.Indexer.PutTitle` writes row 0 from `j.Replacement`, with the creator and creation time from the log's first frame, exactly as the indexer would; FTS5 `optimize`; a `search-rows` step inside the transaction;
    - new `db.DB.Vacuum` (VACUUM on the write connection, outside any transaction), every run; step `vacuumed`;
@@ -83,7 +83,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
    Every part is idempotent, so a resumed run repeats it harmlessly.
 5. **Dry run.** The plan, and the pending-journal report, print `search index: N row(s) to clear or rewrite`, read only, or that there is no search index yet.
 6. **Usage text** says the index is cleared, the database compacted every run, and that this needs free disk of about the database's size.
-7. **docs/03** "The search index" gains an "As built" note for the three details beyond the run decision: skipped members' rows, `Prepare`, and refusing partial tables.
+7. **docs/03** "The search index" gains an "As built" note for the three details beyond the run decision: skipped members' rows, leaving the index's version alone, and refusing partial tables.
 
 ### Tests
 All in `cmd/ketju`; the new ones in `redact_search_test.go`:
@@ -93,6 +93,7 @@ All in `cmd/ketju`; the new ones in `redact_search_test.go`:
 - `TestRedactLeavesNoTermsInTheDatabase`: W1 at revision 1, edited to W2 through the indexer's ordinary path. A control shows W1's last six bytes in `ketju.db` before the run. Afterwards neither `ketju.db` nor `ketju.db-wal` holds the end of W1 or W2.
 - `TestRedactResumesSearchClear`: stop at every step, the new `searched:A`, `searched:B`, `search-rows`, `vacuumed` and `search-cleared` included, then `--resume`. The rows and results match an uninterrupted run's.
 - `TestRedactKeepsTheJournalWhenTheCheckpointIsBlocked`: a reader on another handle blocks the checkpoint; the run fails with `ErrBusy` and keeps the journal, and the resume finishes.
+- `TestRedactKeepsAnIndexOfAnotherVersion`: over an index of version `Version-1`, the redacted word is gone, the untouched thread keeps its row, the version is unchanged, and serve's catch-up then rebuilds correctly.
 - `TestRedactWithoutSearchTables`: a database whose migrations stop before 0022 is redacted, exit 0, and still has no search tables. `TestRedactRefusesPartialSearchTables`: a hand-dropped table is refused and nothing changes.
 - `TestRestoredBackupDropsRedactedText`: a copy of the cleanly closed database is taken before the run and restored after it; `CatchUp` removes the row.
 - `TestRedactDryRunWritesNothing` gains the search count.
@@ -117,6 +118,10 @@ Terva review 1719 (PR #270, head 8572a70, base a599b48), fixed on groom/p3-searc
 
 Implementation decisions (recorded in docs/03 'Hard redaction', 'The search index', As built): (1) A database holding only some of the search tables (one dropped by hand) is refused with exit 4 before the journal is read or written, so nothing changes; the tables left may hold the text and the run could not say it cleared them. Alternative, treating it as 'no index' and skipping, lost because it would report a takedown complete over a table that may still hold the text. (2) The journal clear also deletes the rows of the copy set's skipped members (already redacted, or log gone), which should have none; deleting is harmless and closes the case of a log removed while its rows stayed. (3) run() calls Prepare first: an index of another version is emptied, as serve's start would, so it holds no text at all. (4) The title row is rewritten through a new search.Indexer.PutTitle, which builds row 0 exactly as the indexer does (DropSentinels, trim, creator and time from the log's first frame), so the clear and catch-up cannot write different rows. (5) The checkpoint is a new db.DB.Checkpoint that returns ErrBusy when a reader holds it back; the run then fails with the journal kept (TestRedactKeepsTheJournalWhenTheCheckpointIsBlocked). Mutations tried: no VACUUM, no optimize, no journal drops, no explicit checkpoint; each fails a test (see the commit).
 
+**agent:claude-code/phase3-search-cli** at 2026-10-01T14:33:15Z
+
+Terva review 1775 (PR #317, head 45f5b8a, base 902c30e; run ed6292d2), fixed. (high) 'Rebuild search rows for unaffected threads after Prepare clears the index': redact no longer calls Prepare. An index of another version keeps every row the redaction does not name, and serve's start empties and rebuilds it as it would have; the journal's clear, optimize and VACUUM remove the redacted text whatever the version. Alternative, a full CatchUp in the redact run after Prepare reset the index, lost because it makes a takedown re-index the whole forum offline for no security gain. This supersedes the implementation-decisions note's item (3). TestRedactKeepsAnIndexOfAnotherVersion covers it. docs/03 As built and the plan are updated. The first dispatch on this head (run e654c31e) ended 'superseded' because main moved during the run; it was re-dispatched.
+
 ## Summary
 
-ketju redact clears the search index's copy of the text and every page of the database that held it. Prepare at the start; after each swap the thread's rows are brought current (searched:<thread>); before the journal goes, one transaction deletes every journaled post's row (skipped copy-set members included), rewrites a redacted title's row 0 through search.Indexer.PutTitle, and runs optimize; then VACUUM and a WAL checkpoint that must not be busy, every run (new db.DB.Vacuum, db.DB.Checkpoint). A blocked checkpoint fails the run with the journal kept. No search tables: nothing to clear. Some missing: refused before anything changes. --dry-run counts the rows. Proved by searching for unique redacted words, scanning every search table (FTS5 shadow tables included) and the raw ketju.db and WAL bytes, with a control that an earlier revision's word was in the file before. All five criteria met.
+ketju redact clears the search index's copy of the text and every page of the database that held it. After each swap the thread's rows are brought current (searched:<thread>); before the journal goes, one transaction deletes every journaled post's row (skipped copy-set members included), rewrites a redacted title's row 0 through search.Indexer.PutTitle, and runs optimize; then VACUUM and a WAL checkpoint that must not be busy, every run (new db.DB.Vacuum, db.DB.Checkpoint). A blocked checkpoint fails the run with the journal kept. The index's version is left alone (review 1775): other threads keep their rows. No search tables: nothing to clear. Some missing: refused before anything changes. --dry-run counts the rows. Proved by searching for unique redacted words, scanning every search table (FTS5 shadow tables included) and the raw ketju.db and WAL bytes, with a control that an earlier revision's word was in the file before. All five criteria met.

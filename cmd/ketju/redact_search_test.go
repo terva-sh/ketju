@@ -12,6 +12,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/events/search"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -431,6 +432,40 @@ func TestRestoredBackupDropsRedactedText(t *testing.T) {
 	}
 	if w.hits("kept") != 1 {
 		t.Error("catch-up lost the other post")
+	}
+}
+
+// TestRedactKeepsAnIndexOfAnotherVersion is Terva review 1775: over an index
+// another version built, the run removes the redacted text and leaves every
+// other row, and the version, as they were; serve's catch-up then rebuilds
+// the index without the text.
+func TestRedactKeepsAnIndexOfAnotherVersion(t *testing.T) {
+	w := newIndexedRedactWorld(t)
+	id, other := w.thread("A thread"), w.thread("Untouched thread")
+	n := w.post(id, "the versionword text")
+	w.post(other, "bystanderword stays")
+	w.indexed()
+	withDB(t, w.data, func(q *dbq.Queries, _ *sql.Tx) error {
+		return q.SetSearchVersion(t.Context(), search.Version-1)
+	})
+
+	w.mustRedact(postArgs(id, n)...)
+	if w.hits("versionword") != 0 || w.searchRows(id, n) != 0 {
+		t.Error("the redacted post keeps its row in an index of another version")
+	}
+	if w.hits("bystanderword") != 1 {
+		t.Error("a thread the redaction did not touch lost its row")
+	}
+	if v := w.count(`SELECT version FROM search_meta`); int64(v) != search.Version-1 {
+		t.Errorf("the run changed the index's version to %d", v)
+	}
+	if tables := w.rawSearch("ionword"); len(tables) != 0 {
+		t.Errorf("search tables still hold the word: %v", tables)
+	}
+
+	catchUp(t, w.data) // as serve's start: Prepare empties it, catch-up rebuilds
+	if w.hits("versionword") != 0 || w.hits("bystanderword") != 1 {
+		t.Error("the rebuilt index is wrong")
 	}
 }
 

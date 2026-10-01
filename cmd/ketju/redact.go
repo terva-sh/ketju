@@ -810,13 +810,11 @@ func (r *redactor) run(ctx context.Context, j *redactJournal) error {
 	if err != nil {
 		return fmt.Errorf("redact: %w", err)
 	}
-	if r.search != nil {
-		// An index another version built is emptied here, as serve's start
-		// would empty it, and holds no text at all from then on.
-		if err := r.search.Prepare(ctx); err != nil {
-			return fmt.Errorf("redact: %w", err)
-		}
-	}
+	// The run never calls the indexer's Prepare: an index another version
+	// built would be emptied, and every thread the redaction does not touch
+	// would lose its rows until serve's catch-up (Terva review 1775). The
+	// journal's clear below takes the redacted rows out whatever the
+	// version, and serve's start settles the version as it would have.
 	ids, groups := byThread(j)
 	for _, id := range ids {
 		ts := groups[id]
