@@ -5,7 +5,7 @@ import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Icon } from '../components/Icon';
 import { PostTime } from '../components/thread/PostTime';
-import { viewer } from '../state/viewer';
+import { siteName, viewer } from '../state/viewer';
 import { ForumPicker, pickable } from './ForumPicker';
 import '../components/unread.css';
 import './forums.css';
@@ -49,7 +49,7 @@ export function ForumIndex() {
     <main class="forum-index" data-screen="forum-index">
       <header class="forum-index-head">
         <div>
-          <h1>Forums</h1>
+          <h1>{siteName}</h1>
           {signedIn && <p class="forum-index-summary">{summary(me.unread.threads)}</p>}
         </div>
         {canStart && (

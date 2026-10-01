@@ -180,6 +180,30 @@ describe('a saved draft', () => {
     expect(b.querySelector('.reply-chip')?.getAttribute('data-reply-chip')).toBe('2');
     expect(sheet(root)).toBeNull();
   });
+
+  // The sheet hides the composer's footer, so its head says when the draft
+  // was saved (TKT-01M3S3ZZYA).
+  it('says in the sheet when it was saved', async () => {
+    const savedAt = Date.UTC(2025, 8, 10, 9, 30);
+    vi.stubGlobal('fetch', async (url: string) => {
+      if (url === `/api/v1/drafts/${thread.id}`) {
+        return new Response(JSON.stringify({ thread_id: thread.id, source: 'Kept.', reply_to: null, updated_at: savedAt, revision: 4 }), {
+          status: 200,
+        });
+      }
+      if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
+      return new Response(JSON.stringify(page()), { status: 200 });
+    });
+    const root = await renderAt(path);
+    await act(() => new Promise((r) => setTimeout(r, 20)));
+    await click(root.querySelector('.replybar-open'));
+    // The draft loaded fills the composer, which saves nothing it already has.
+    await act(() => new Promise((r) => setTimeout(r, 1600)));
+    const note = sheet(root)!.querySelector('.composer-head [role=status]')!;
+    const time = note.querySelector('time')!;
+    expect(time.getAttribute('datetime')).toBe(new Date(savedAt).toISOString());
+    expect(note.textContent).toBe(`Draft saved ${time.textContent}`);
+  });
 });
 
 // AC3: a draft shows in the bar and survives closing the sheet.

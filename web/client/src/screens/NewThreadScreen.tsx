@@ -5,7 +5,7 @@ import type { Forum, ForumTree, ThreadList } from '../api/dto';
 import { asProblem, problemMessage, type ProblemError } from '../api/problem';
 import { useResource } from '../api/resource';
 import { useVisualViewport } from '../composer/ComposerSheet';
-import { ComposerBody } from '../composer/ComposerBody';
+import { ComposerBody, DraftNote } from '../composer/ComposerBody';
 import { threadHref } from '../components/ThreadRow';
 import { meHref } from '../shell/nav';
 import { isPhone } from '../state/layout';
@@ -137,6 +137,7 @@ export function NewThreadScreen() {
   const failure = n.failure.value;
   const fields = failure ? asProblem(failure).fieldErrors : {};
   const note = newThreadNote(slug);
+  const draft = { kind: 'new', forum: slug } as const;
   return (
     <main class={`new-thread-page${phone ? ' in-sheet' : ''}`} data-screen="new-thread" ref={main}>
       {head}
@@ -147,7 +148,7 @@ export function NewThreadScreen() {
         placeholder="Write the first post. Markdown works."
         sheet={phone}
         invalid={'source' in fields}
-        head={phone && note ? <span class="draft-note" role="status">{note}</span> : undefined}
+        head={phone && note ? <DraftNote draft={draft} note={note} /> : undefined}
         notice={
           <>
             {forum?.archived && (
@@ -166,11 +167,7 @@ export function NewThreadScreen() {
         foot={
           <footer class="composer-foot">
             <span>Markdown supported</span>
-            {!phone && (
-              <span class="draft-note" role="status">
-                {note}
-              </span>
-            )}
+            {!phone && <DraftNote draft={draft} note={note} />}
             <button type="button" class="discard" disabled={!discardable} onClick={discard}>
               Discard
             </button>

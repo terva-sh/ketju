@@ -4,7 +4,7 @@ import { asProblem, problemMessage } from '../api/problem';
 import { Icon } from '../components/Icon';
 import { composerFor, discardReply, holdAtLeast, postReply, type Slow } from '../state/composer';
 import { draftNote } from '../state/drafts';
-import { ComposerBody } from './ComposerBody';
+import { ComposerBody, DraftNote } from './ComposerBody';
 
 // The delays live with the body they time, and are exported here too, where
 // the reply composer's tests read them.
@@ -53,6 +53,8 @@ export function Composer({
   const posting = c.posting.value;
   const failure = c.failure.value;
   const replyTo = c.replyTo.value;
+  const draft = { kind: 'reply', thread } as const;
+  const note = draftNote(draft);
   return (
     <ComposerBody
       state={c}
@@ -75,6 +77,8 @@ export function Composer({
               </button>
             </span>
           )}
+          {/* The sheet hides the footer, so it says how the draft stands here. */}
+          {sheet && note && <DraftNote draft={draft} note={note} />}
         </>
       }
       notice={
@@ -99,9 +103,7 @@ export function Composer({
       foot={
         <footer class="composer-foot">
           <span>Markdown supported</span>
-          <span class="draft-note" role="status">
-            {draftNote({ kind: 'reply', thread })}
-          </span>
+          <DraftNote draft={draft} note={note} />
           <button type="button" class="discard" disabled={posting || (!source && replyTo === null)} onClick={() => discardReply(thread)}>
             Discard
           </button>

@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type APIRequestContext, type Browser } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,12 +47,20 @@ test('a reply and its target follow alice to another browser, and posting it del
       const page = await first.newPage();
       await page.goto(at);
       await page.locator('#post-10 [data-post-action=reply]').click();
-      if (isMobile) {
-        await page.locator('.composer-sheet textarea').fill(text);
-      } else {
-        await page.locator('.composer textarea').fill(text);
-        await expect(page.locator('.composer-foot [role=status]')).toHaveText('Draft saved');
+      // The note says when the server saved the draft (docs/06 "Composer"):
+      // in the footer on the desktop, and in the sheet's head on a phone,
+      // whose sheet has no footer.
+      const note = isMobile ? page.locator('.composer-sheet .composer-head [role=status]') : page.locator('.composer-foot [role=status]');
+      await page.locator(isMobile ? '.composer-sheet textarea' : '.composer textarea').fill(text);
+      await expect(note).toHaveText(/^Draft saved \S/);
+      await expect(note.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d\d-\d\dT/);
+      // The composer with its note passes the scan in both themes.
+      for (const colorScheme of ['light', 'dark'] as const) {
+        await page.emulateMedia({ colorScheme });
+        const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+        expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`), colorScheme).toEqual([]);
       }
+      await page.emulateMedia({ colorScheme: null });
       await expect
         .poll(async () => {
           const r = await first.request.get(draftUrl);

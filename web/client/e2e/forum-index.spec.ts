@@ -33,6 +33,11 @@ test('a member sees counts, empty forums, and a new-thread button clear of the t
   await expect(page.locator('[data-forum="garden"]')).toBeVisible();
   await expect(page.locator('[data-forum="moderators"]')).toHaveCount(0);
   await expect(page.locator('[data-forum="reading"] [data-no-threads] a')).toHaveAttribute('href', '/f/reading/new');
+  // The heading is the site's name, the text the wordmark shows (docs/06
+  // "Thread list views (forum index)").
+  const wordmark = (await page.locator('[data-shell] .wordmark:visible').first().textContent())!.trim();
+  expect(wordmark).not.toBe('');
+  await expect(page.locator('.forum-index-head h1')).toHaveText(wordmark);
 
   // Before anything is focused or opened, at the page's full height: a
   // taller viewport rather than a full-page capture, so the tab bar and the

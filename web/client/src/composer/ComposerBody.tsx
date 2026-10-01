@@ -5,6 +5,8 @@ import { apiGet, apiSend } from '../api/client';
 import type { Author, RenderResult, UserSuggestions } from '../api/dto';
 import { isAbort, problemMessage } from '../api/problem';
 import { Icon, type IconName } from '../components/Icon';
+import { PostTime } from '../components/thread/PostTime';
+import { draftSavedAt, type DraftKey } from '../state/drafts';
 import { applyEdit, type EditKind } from './edit';
 import { insertMention, mentionAt, type MentionAt } from './mention';
 import './composer.css';
@@ -19,6 +21,25 @@ export const previewDelay = 400;
 export const mentionDelay = 150;
 
 const mentionLimit = 8;
+
+// DraftNote is what a composer says about its draft: note, which is
+// draftNote's words or the new-thread screen's, and after "Draft saved" when
+// the server saved it (docs/06 "Composer"), so a draft loaded from another
+// device says when it was saved there.
+export function DraftNote({ draft, note }: { draft: DraftKey; note: string }) {
+  const at = draftSavedAt(draft);
+  return (
+    <span class="draft-note" role="status">
+      {note}
+      {note === 'Draft saved' && at !== null && (
+        <>
+          {' '}
+          <PostTime at={at} />
+        </>
+      )}
+    </span>
+  );
+}
 
 // ComposerFields is what the composer body edits: a reply's composer
 // (state/composer.ts) and a new thread's (state/newThread.ts) both have them.

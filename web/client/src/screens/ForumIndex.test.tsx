@@ -37,6 +37,20 @@ async function index(tree: unknown, me: unknown) {
 
 const rowOf = (root: HTMLElement, slug: string) => root.querySelector<HTMLElement>(`[data-forum="${slug}"]`);
 
+// The heading is the site's name, the wordmark's (docs/06 "Thread list
+// views (forum index)", TKT-01M3S3ZZYA).
+describe('the heading', () => {
+  it('is the site name from /me', async () => {
+    const root = await index(memberTree, memberMe);
+    expect(root.querySelector('.forum-index-head h1')?.textContent).toBe(memberMe.site_name);
+  });
+
+  it('follows the setting', async () => {
+    const root = await index(anonTree, { ...anonMe, site_name: 'The Thursday Group' });
+    expect(root.querySelector('.forum-index-head h1')?.textContent).toBe('The Thursday Group');
+  });
+});
+
 // AC1: the unread counts are the content for a signed-in reader, and are
 // absent, not zero, for an anonymous one.
 describe('unread counts', () => {

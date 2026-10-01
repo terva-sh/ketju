@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { resetApiCache } from '../api/client';
 import type { Me } from '../api/dto';
 import { composerFor, discardReply, loadReplyDraft, postReply, resetComposers } from './composer';
-import { draftDelay, draftNote, keepaliveLimit, startDrafts } from './drafts';
+import { draftDelay, draftNote, draftSavedAt, keepaliveLimit, startDrafts } from './drafts';
 import { viewer } from './viewer';
 import draftsSource from './drafts.ts?raw';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
@@ -66,16 +66,20 @@ const problem = (type: string, status: number, headers: Record<string, string> =
     headers: { 'Content-Type': 'application/problem+json', ...headers },
   });
 
+// savedAt is the server's updated_at for the draft at its current
+// revision: a distinct time for each save.
+const savedAt = () => 1_757_500_000_000 + server.revision * 1000;
+
 function apply(c: Call): Response {
   if (c.url === `/api/v1/threads/${T}/posts`) return jsonAnswer({ ordinal: 5 }, 201);
   if (c.url !== url) return problem('not-found', 404);
   switch (c.method) {
     case 'GET':
-      return server.live ? jsonAnswer({ thread_id: T, ...server.live, updated_at: 0, revision: server.revision }) : none();
+      return server.live ? jsonAnswer({ thread_id: T, ...server.live, updated_at: savedAt(), revision: server.revision }) : none();
     case 'PUT':
       server.revision++;
       server.live = { source: c.body!.source!, reply_to: c.body!.reply_to ?? null };
-      return jsonAnswer({ thread_id: T, ...server.live, updated_at: 0, revision: server.revision });
+      return jsonAnswer({ thread_id: T, ...server.live, updated_at: savedAt(), revision: server.revision });
     default:
       if (server.live) {
         server.revision++;
@@ -480,6 +484,54 @@ describe('refusals', () => {
   });
 });
 
+// When the draft was saved (docs/06 "Composer", TKT-01M3S3ZZYA).
+describe('when the draft was saved', () => {
+  it("a saved draft carries the server's updated_at", async () => {
+    await loadReplyDraft(T);
+    expect(draftSavedAt(key)).toBeNull();
+    composerFor(T).source.value = 'a';
+    await wait(draftDelay);
+    expect(draftSavedAt(key)).toBe(savedAt());
+    composerFor(T).source.value = 'ab';
+    await wait(draftDelay);
+    expect(server.revision).toBe(2);
+    expect(draftSavedAt(key)).toBe(savedAt());
+  });
+
+  it("a loaded draft carries the GET's updated_at", async () => {
+    server = { revision: 4, live: { source: 'from the phone', reply_to: null } };
+    await loadReplyDraft(T);
+    expect(draftSavedAt(key)).toBe(savedAt());
+    await wait(draftDelay);
+    expect(writes()).toEqual([]);
+    expect(draftNote(key)).toBe('Draft saved');
+    expect(draftSavedAt(key)).toBe(savedAt());
+  });
+
+  it('a discard clears it', async () => {
+    await loadReplyDraft(T);
+    composerFor(T).source.value = 'a';
+    await wait(draftDelay);
+    expect(draftSavedAt(key)).not.toBeNull();
+    discardReply(T);
+    await wait(draftDelay);
+    expect(writes()).toEqual(['PUT a', 'DELETE']);
+    expect(draftSavedAt(key)).toBeNull();
+  });
+
+  it('a refused save keeps the last time and says not saved', async () => {
+    await loadReplyDraft(T);
+    composerFor(T).source.value = 'a';
+    await wait(draftDelay);
+    const at = savedAt();
+    refuse = (c) => (c.method === 'PUT' ? problem('internal', 500) : undefined);
+    composerFor(T).source.value = 'ab';
+    await wait(draftDelay * 3);
+    expect(draftNote(key)).toBe('Draft not saved');
+    expect(draftSavedAt(key)).toBe(at);
+  });
+});
+
 // AC7.
 describe('posting and discarding', () => {
   it('a post deletes and cancels the pending save', async () => {
@@ -778,7 +830,18 @@ describe('the local copy', () => {
     });
 
     it('nothing in state/drafts.ts reads the clock to decide', () => {
-      expect(draftsSource).not.toMatch(/Date\.now|new Date|performance\.now|updated_at/);
+      const code = draftsSource.replace(/\/\/.*$/gm, '');
+      expect(code).not.toMatch(/Date\.now|new Date|performance\.now/);
+      // The server's updated_at is only shown (draftSavedAt, TKT-01M3S3ZZYA):
+      // it is typed, carried to savedAt, and read back once, by draftSavedAt.
+      const carried = code
+        .replace(/updated_at\?: unknown|updated_at: number/g, '')
+        .replace(/, d\?\.updated_at\)/, '')
+        .replace(/at = r\.body\.updated_at;/, '')
+        .replace(/typeof r\.body\?\.updated_at === 'number'/, '');
+      expect(carried).not.toMatch(/updated_at/);
+      expect(code.match(/savedAt\.value(?!\s*=[^=])/g)).toHaveLength(1);
+      expect(code).toMatch(/return entries\.get\(idOf\(key\)\)\?\.savedAt\.value \?\? null;/);
     });
   });
 

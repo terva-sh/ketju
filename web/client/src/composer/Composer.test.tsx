@@ -479,6 +479,7 @@ describe('whose composer it is', () => {
 // TKT-01M3NS1931: the footer says how the autosaved draft stands.
 describe('the draft', () => {
   it('says whether the draft is saving, saved, or not saved', async () => {
+    const savedAt = Date.UTC(2025, 8, 10, 9, 30);
     let refuse = false;
     const drafts: string[] = [];
     vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
@@ -488,7 +489,7 @@ describe('the draft', () => {
         if (method === 'GET') return new Response(null, { status: 204, headers: { 'Draft-Revision': '0' } });
         if (refuse) return new Response('{}', { status: 500, headers: { 'Content-Type': 'application/problem+json' } });
         const body = JSON.parse(String(init.body));
-        return new Response(JSON.stringify({ thread_id: thread.id, ...body, updated_at: 0, revision: drafts.length }), { status: 200 });
+        return new Response(JSON.stringify({ thread_id: thread.id, ...body, updated_at: savedAt, revision: drafts.length }), { status: 200 });
       }
       if (url === '/api/v1/render') return new Response(JSON.stringify({ html: '', mentions: [], quotes: [], reply_to: null }));
       return new Response(JSON.stringify(page()), { status: 200 });
@@ -502,7 +503,10 @@ describe('the draft', () => {
     expect(note()).toBe('Saving…');
     await act(async () => void (await vi.advanceTimersByTimeAsync(draftDelay)));
     expect(drafts).toEqual(['GET', 'PUT']);
-    expect(note()).toBe('Draft saved');
+    // When the server saved it (TKT-01M3S3ZZYA).
+    const time = root.querySelector('.composer-foot [role=status] time');
+    expect(time?.getAttribute('datetime')).toBe(new Date(savedAt).toISOString());
+    expect(note()).toBe(`Draft saved ${time!.textContent}`);
     refuse = true;
     await type(root, ' again');
     await act(async () => void (await vi.advanceTimersByTimeAsync(draftDelay)));

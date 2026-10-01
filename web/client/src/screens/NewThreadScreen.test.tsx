@@ -21,10 +21,18 @@ const archived = '/f/archive-2024/new';
 const thread = created.thread;
 
 const none = (): Answer => ({ status: 204, headers: { 'Draft-Revision': '0' } });
+// savedAt is the server's updated_at for every save it answers.
+const savedAt = Date.UTC(2025, 8, 10, 9, 30);
 const saved = (slug: string) => (b: unknown): Answer => ({
   status: 200,
-  body: { forum: slug, ...(b as object), updated_at: 0, revision: 1 },
+  body: { forum: slug, ...(b as object), updated_at: savedAt, revision: 1 },
 });
+// savedNote is what the note says once the server has saved the draft at at.
+const savedNote = (root: HTMLElement, at = savedAt) => {
+  const time = root.querySelector('.draft-note time');
+  expect(time?.getAttribute('datetime')).toBe(new Date(at).toISOString());
+  return `Draft saved ${time!.textContent}`;
+};
 
 // serve stubs the forum tree, the draft routes and create for slug, and the
 // thread page the screen goes to; over replaces any of them.
@@ -137,7 +145,7 @@ describe('the new-thread screen', () => {
     expect(note(root)).toBe('Saving…');
     await act(async () => void (await vi.advanceTimersByTimeAsync(draftDelay)));
     expect(sent(s, 'PUT', '/api/v1/forums/general/draft').map((r) => r.body)).toEqual([{ title: 'Bonfire', source: 'Friday at eight.' }]);
-    expect(note(root)).toBe('Draft saved');
+    expect(note(root)).toBe(savedNote(root));
   });
 
   it('previews the body as a first post, with no thread', async () => {
@@ -249,7 +257,7 @@ describe('an archived forum', () => {
     await write(root, 'Archived notes', 'For the record.');
     expect(post(root).disabled).toBe(false);
     await act(async () => void (await vi.advanceTimersByTimeAsync(draftDelay)));
-    expect(note(root)).toBe('Draft saved');
+    expect(note(root)).toBe(savedNote(root));
     vi.useRealTimers();
     await click(post(root));
     await wait(20);

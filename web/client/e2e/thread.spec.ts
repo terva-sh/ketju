@@ -96,7 +96,8 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
 // taller viewport rather than a full-page capture, so the bars that stick to
 // the foot sit where a reader sees them, as forum-index.spec.ts does. It
 // waits for the fonts, stops animations and the caret, and masks each post's
-// time and the thread's, the only things on the page that change between runs.
+// time, the thread's and the draft note's, the only things on the page that
+// change between runs.
 async function capture(page: Page, name: string) {
   const dir = join(dirname(fileURLToPath(import.meta.url)), 'screenshots');
   mkdirSync(dir, { recursive: true });
@@ -111,7 +112,7 @@ async function capture(page: Page, name: string) {
       path: join(dir, `${name}-${colorScheme}.png`),
       animations: 'disabled',
       caret: 'hide',
-      mask: [page.locator('.post-header time, .thread-meta time')],
+      mask: [page.locator('.post-header time, .thread-meta time, .draft-note time')],
       maskColor: '#8B95A8',
     });
   }

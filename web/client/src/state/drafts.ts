@@ -93,6 +93,10 @@ interface Entry {
   unsureDeletes: number;
   timer?: ReturnType<typeof setTimeout>;
   status: Signal<DraftStatus>;
+  // savedAt is the updated_at of the server's newest answer holding the
+  // draft: a PUT's, or the GET's. A DELETE's answer clears it, and a refused
+  // save leaves it, so the note can say when the draft last was saved.
+  savedAt: Signal<number | null>;
   // restored is set while the composer shows a copy with no known base
   // (restoreLocal), until the next change.
   restored: Signal<boolean>;
@@ -154,6 +158,7 @@ export function watch(key: DraftKey, read: () => Snapshot) {
     unsure: 0,
     unsureDeletes: 0,
     status: signal<DraftStatus>('idle'),
+    savedAt: signal<number | null>(null),
     restored: signal(false),
     restoredJson: null,
     copied: null,
@@ -222,18 +227,20 @@ function start(e: Entry, r: Req) {
   e.status.value = 'saving';
   let rev: number | null = null;
   const keepalive = new TextEncoder().encode(r.json).length < keepaliveLimit;
-  apiSend<{ revision?: unknown } | undefined>(r.del ? 'DELETE' : 'PUT', e.url, r.del ? undefined : r.body, {
+  apiSend<{ revision?: unknown; updated_at?: unknown } | undefined>(r.del ? 'DELETE' : 'PUT', e.url, r.del ? undefined : r.body, {
     keepalive,
     onHeaders: (h) => (rev = revisionOf(h)),
   }).then(
-    (d) => answered(e, r, typeof d?.revision === 'number' ? d.revision : rev),
+    (d) => answered(e, r, typeof d?.revision === 'number' ? d.revision : rev, d?.updated_at),
     (err) => failed(e, r, err),
   );
 }
 
-function answered(e: Entry, r: Req, rev: number | null) {
+function answered(e: Entry, r: Req, rev: number | null, at: unknown) {
   e.current = null;
   if (e.off) return;
+  if (r.del) e.savedAt.value = null;
+  else if (typeof at === 'number') e.savedAt.value = at;
   if (rev !== null) e.known = Math.max(e.known ?? rev, rev);
   e.unsure = e.unsureDeletes = 0;
   e.confirmed = r.json;
@@ -298,7 +305,7 @@ function turnOff(e: Entry) {
 // flight, so loading never overwrites what the reader typed. Loading sends
 // nothing back, unless the reader typed while it was in flight or a local
 // copy won.
-export async function load<T extends { revision: number }>(
+export async function load<T extends { revision: number; updated_at: number }>(
   key: DraftKey,
   toSnapshot: (body: T) => Snapshot,
   fill: (s: Snapshot) => boolean,
@@ -309,9 +316,11 @@ export async function load<T extends { revision: number }>(
   const gen = e.gen;
   let found: Snapshot | null;
   let rev: number | null;
+  let at: number | null = null;
   try {
     const r = await apiGetOptional<T>(e.url);
     found = r.body && toSnapshot(r.body);
+    if (typeof r.body?.updated_at === 'number') at = r.body.updated_at;
     rev = r.body ? (typeof r.body.revision === 'number' ? r.body.revision : null) : revisionOf(r.headers);
   } catch (err) {
     if (entries.get(e.id) !== e || e.off) return;
@@ -327,6 +336,7 @@ export async function load<T extends { revision: number }>(
   // A post or discard during the load has queued a DELETE, which is the
   // server's state now; the load's answer is not.
   if (gen !== e.gen) return settled(e);
+  e.savedAt.value = at;
   const local = restoreLocal(e, found, rev);
   e.sent = e.confirmed = JSON.stringify(found ?? blank(e.read()));
   e.held = found ? !isEmpty(found) : false;
@@ -513,6 +523,12 @@ export function draftNote(key: DraftKey): string {
   if (s === 'failed') return 'Draft not saved';
   if (e.restored.value) return 'Restored from this browser';
   return s === 'saving' ? 'Saving…' : s === 'saved' ? 'Draft saved' : '';
+}
+
+// draftSavedAt is when the server last saved key's draft, as its newest
+// answer says, or null when no answer has held one.
+export function draftSavedAt(key: DraftKey): number | null {
+  return entries.get(idOf(key))?.savedAt.value ?? null;
 }
 
 // draftStatus is how key's autosave stands, for a screen that says more

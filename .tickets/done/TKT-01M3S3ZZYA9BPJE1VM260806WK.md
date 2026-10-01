@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZZYA9BPJE1VM260806WK
 title: Head the forum index with the site name and show draft-saved status
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -18,17 +18,10 @@ dependencies:
   - TKT-01M3NS19315QTWBKNZN782VRF1
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-polish-client
-  branch: run/3zzya-site-heading-draft-saved
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab6f84ce9575cee6f
-  commit: 73e8208e5fd38dcefb5ba20f8c57b45be52e34d1
-  session: null
-  claimed_at: 2026-10-01T12:53:55Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T12:53:56Z
+updated_at: 2026-10-01T13:03:29Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -50,10 +43,10 @@ Once those two are done, head the forum index with `site_name` (falling back to 
 
 ## Acceptance criteria
 
-- [ ] At 390 px and 1440 px the forum index's heading is the site_name setting, the value the wordmark shows
-- [ ] The draft note reads Draft saved TIME, TIME an absolute PostTime of the server's updated_at for the draft, in the reply composer, the phone sheet and the new-thread screen (drafts.test.ts, Composer.test.tsx, e2e/drafts.spec.ts)
-- [ ] The forum index and the composer pass axe at 390 px and 1440 px, and forum-index-*.png are refreshed
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
+- [x] At 390 px and 1440 px the forum index's heading is the site_name setting, the value the wordmark shows
+- [x] The draft note reads Draft saved TIME, TIME an absolute PostTime of the server's updated_at for the draft, in the reply composer, the phone sheet and the new-thread screen (drafts.test.ts, Composer.test.tsx, e2e/drafts.spec.ts)
+- [x] The forum index and the composer pass axe at 390 px and 1440 px, and forum-index-*.png are refreshed
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
 
@@ -109,3 +102,20 @@ Groomed 2026-10-01 for the Phase 3 run (docs/14), against main at a599b48.
 **agent:claude-code/phase3-groom-polish** at 2026-10-01T07:56:06Z
 
 run decision: pending maintainer review. Two decisions. (1) The forum index's heading is site_name, the same value the wordmark shows, recorded in docs/06 'Thread list views (forum index)'. The name then appears twice, a cost of docs/07 putting site_name in the wordmark (TKT-01M29CXK2H). The description's 'Forums' fallback does not arise, because site_name defaults to Ketju. (2) The draft note reads 'Draft saved TIME', TIME being the server's updated_at through PostTime, recorded in docs/06 'Composer'. Both dependencies are done.
+
+**agent:claude-code/phase3-polish-client** at 2026-10-01T13:03:15Z
+
+Built against main at 73e8208 (after #303). What the plan did not say, and what I found:
+
+- **The phone's reply sheet has no footer.** composer.css hides `.composer.in-sheet .composer-foot`, so the plan's "the reply composer's footer, which the phone's sheet reuses" was wrong: the reply sheet showed no draft note at all. To meet criterion 2 ("the phone sheet"), Composer now puts the note in its head when `sheet` is set, as the new-thread screen already does on a phone. The muted 12.5 px style for a note in a sheet's head moved from newthread.css to composer.css, so both sheets share it. The footer's note is still in the DOM, hidden. Test: ComposerSheet.test.tsx "says in the sheet when it was saved".
+- **One component draws the note.** `DraftNote` in ComposerBody.tsx renders the words and, after "Draft saved", `PostTime` of `draftSavedAt(key)`. It is used by the reply footer, the reply sheet's head, and both places on the new-thread screen.
+- **The clock guard in drafts.test.ts.** "nothing in state/drafts.ts reads the clock to decide" refused the text `updated_at` anywhere in drafts.ts. The guard is narrowed to what it protects. drafts.ts still reads no clock (Date.now, new Date, performance.now). `updated_at` appears only where it is typed and carried into `savedAt`, and `savedAt` is read only by `draftSavedAt`. Nothing about ordering or restoring the local copy reads the time.
+- **savedAt.** It is set from each PUT answer's `updated_at` and from the GET's when a load is not overtaken by a post or discard. A DELETE's answer clears it, and a refused or failed save leaves it. The pagehide keepalive PUT is answered into the same `answered`, so it would set the time if the page lived.
+- **The heading** is `siteName`, the wordmark's computed value, so it falls back to "Ketju" as the wordmark does. No existing test asserted "Forums".
+- Mutations tried: dropping the load's `savedAt` assignment failed "a loaded draft carries the GET's updated_at"; dropping the sheet's note failed "says in the sheet when it was saved".
+- Reader bundle: 60602 B before, 60761 B after (+159 B gzip) of 70000 B.
+- e2e on this host at 390 and 1440 px: forum-index, drafts (now with an axe scan in both themes while the note shows), new-thread, a11y, thread and focus all passed. forum-index-*.png are refreshed on a fresh seed. thread-*.png are unchanged, because the page shows no note without a draft. `.draft-note time` is added to the thread capture's mask.
+
+## Summary
+
+The forum index's heading is the site name, the wordmark's siteName. The draft note reads 'Draft saved TIME', where TIME is PostTime of the updated_at in the server's newest answer for the draft (state/drafts.ts savedAt, read through draftSavedAt). The note appears in the reply footer, in the phone reply sheet's head (the sheet hides its footer, so the note was missing there before), and in both places on the new-thread screen, all through one DraftNote component. Reader bundle 60602 -> 60761 B gzip (+159 B).

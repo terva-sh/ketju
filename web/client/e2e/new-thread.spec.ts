@@ -53,7 +53,9 @@ test('a new thread’s title and body follow alice to another browser, and posti
       await expect(page.locator('[data-screen="new-thread"]')).toBeVisible();
       await page.locator('#new-thread-title').fill(title);
       await page.locator('.composer textarea').fill(body);
-      await expect(page.locator('.draft-note')).toHaveText('Draft saved');
+      // With when the server saved it (docs/06 "Composer").
+      await expect(page.locator('.draft-note')).toHaveText(/^Draft saved \S/);
+      await expect(page.locator('.draft-note time')).toHaveAttribute('datetime', /^\d{4}-\d\d-\d\dT/);
       await expect
         .poll(async () => {
           const r = await first.request.get(draftUrl);
