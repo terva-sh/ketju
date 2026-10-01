@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ1PY355KX3HX7A5N785
 title: Build the lens framework over the in-memory index
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -23,15 +23,22 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:293
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase3-crj1p
+  branch: run/crj1p-lens-framework
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a687b806d2a6e30c7
+  commit: 3f1884b94717e1f95d536c39a0e1883a6f0c3eec
+  session: null
+  claimed_at: 2026-10-01T11:39:44Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T11:17:58Z
+updated_at: 2026-10-01T11:39:45Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-lenses
+  id: agent:claude-code/phase3-crj1p
   name: ""
 extensions: {}
 ---
