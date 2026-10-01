@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZS0H5485CG25KMRCT5N8
 title: Show the last-read time beside the unread divider's ordinal
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -16,15 +16,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-polish-client
+  branch: run/3zs0h-last-read-time
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab6f84ce9575cee6f
+  commit: 0d5a4d0900b196dff4bf9485dd55ac25b21471c9
+  session: null
+  claimed_at: 2026-10-01T13:39:22Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:48Z
-updated_at: 2026-10-01T08:30:43Z
+updated_at: 2026-10-01T13:39:24Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-polish-client
   name: ""
 extensions: {}
 ---
