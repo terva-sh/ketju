@@ -499,6 +499,16 @@ lost because a reply to yourself is not what the lens is for
   have, lost for the reason above; keeping the marking after mark-all lost
   because the reader would see no effect of the button but a status line.
 
+  **Decided by the run (2026-10-01, pending maintainer review)**, while
+  building it: the hint is a button that opens the shortcut list, and `?`
+  opens the list on the forum index too, so the hint's words hold. The list
+  opened there leads with "These keys work on a thread page.", since every
+  other key in it is a thread page's. Alternatives: the hint as plain text
+  lost because `?` did nothing outside a thread page, so the hint would
+  have been false. Front-page shortcuts of their own, such as j and k
+  between forums, lost because nothing asked for them and the list would
+  then differ by screen.
+
 ## Moderator flow for drift: split and merge
 
 Drift is the known cost of flat threads, and moving posts is the answer.

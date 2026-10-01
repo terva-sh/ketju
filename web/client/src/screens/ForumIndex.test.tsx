@@ -1,6 +1,8 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ForumTree, Me } from '../api/dto';
+import { helpOpen } from '../keyboard/shortcuts';
+import { isPhone } from '../state/layout';
 import { viewer } from '../state/viewer';
 import { renderAt, screenOf, settle, stubServer } from '../testing';
 import { render } from 'preact';
@@ -299,5 +301,70 @@ describe('mark all read', () => {
   it('is not offered with no forums', async () => {
     const root = await index({ ...memberTree, forums: [] }, memberMe);
     expect(root.querySelector('[data-mark-read]')).toBeNull();
+  });
+});
+
+// The footer (docs/06 "Thread list views (forum index)", TKT-01M3S3ZRYD).
+describe('the footer', () => {
+  afterEach(() => {
+    isPhone.value = false;
+    helpOpen.value = false;
+  });
+  const foot = (root: HTMLElement) => root.querySelector<HTMLElement>('.forum-index-foot');
+
+  it("sums the listed forums' posts, children included", async () => {
+    const root = await index(memberTree, memberMe);
+    // general 9637, its children 0 and 1130, archive-2024 31980.
+    const total = 9637 + 0 + 1130 + 31980;
+    expect(foot(root)!.querySelector('[data-posts-total]')?.getAttribute('data-posts-total')).toBe(String(total));
+    expect(foot(root)!.textContent).toContain(`${total.toLocaleString(memberMe.settings.locale)} posts`);
+    const one = structuredClone(anonTree) as ForumTree;
+    one.forums = [{ ...one.forums[1], post_count: 1 }];
+    const single = await index(one, anonMe);
+    expect(foot(single)!.querySelector('[data-posts-total]')?.textContent).toBe('1 post');
+  });
+
+  it('names the members when the tree carries them, and leaves them out when null', async () => {
+    const member = await index(memberTree, memberMe);
+    expect(foot(member)!.querySelector('[data-members]')?.textContent).toBe(`${memberTree.members} members · `);
+    const anon = await index(anonTree, anonMe);
+    expect(anonTree.members).toBeNull();
+    expect(foot(anon)!.querySelector('[data-members]')).toBeNull();
+    expect(foot(anon)!.textContent).not.toContain('member');
+    const one = await index({ ...memberTree, members: 1 }, memberMe);
+    expect(foot(one)!.querySelector('[data-members]')?.textContent).toBe('1 member · ');
+  });
+
+  it('is not drawn while the index lists no forum', async () => {
+    const root = await index({ forums: [], members: 3 }, memberMe);
+    expect(foot(root)).toBeNull();
+  });
+
+  it('offers the shortcut list above 720 px, by its button and by ?, and a phone shows none', async () => {
+    const root = await index(memberTree, memberMe);
+    const hint = foot(root)!.querySelector<HTMLButtonElement>('.keys-hint')!;
+    expect(hint.textContent).toBe('Press ? for keyboard shortcuts');
+    // A pointer's click focuses the button first, as jsdom's click() does not.
+    hint.focus();
+    await act(async () => hint.click());
+    const dialog = root.querySelector<HTMLElement>('[role=dialog]')!;
+    expect(dialog.textContent).toContain('Keyboard shortcuts');
+    expect(dialog.textContent).toContain('These keys work on a thread page.');
+    await act(async () => dialog.querySelector<HTMLButtonElement>('.help-close')!.click());
+    expect(root.querySelector('[role=dialog]')).toBeNull();
+    expect(document.activeElement).toBe(hint);
+
+    const key = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
+    await act(async () => void document.body.dispatchEvent(key));
+    expect(key.defaultPrevented).toBe(true);
+    expect(root.querySelector('[role=dialog]')).not.toBeNull();
+    await act(async () => void (helpOpen.value = false));
+
+    await act(async () => void (isPhone.value = true));
+    expect(foot(root)!.querySelector('.keys-hint')).toBeNull();
+    const phoneKey = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
+    await act(async () => void document.body.dispatchEvent(phoneKey));
+    expect(phoneKey.defaultPrevented).toBe(false);
+    expect(root.querySelector('[role=dialog]')).toBeNull();
   });
 });

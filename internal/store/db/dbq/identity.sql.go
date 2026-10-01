@@ -58,6 +58,24 @@ func (q *Queries) AnonymizeUser(ctx context.Context, arg AnonymizeUserParams) er
 	return err
 }
 
+const countActiveMembers = `-- name: CountActiveMembers :one
+SELECT count(*) FROM users
+WHERE status = 'active'
+  AND substr(handle, -1) <> '-'
+`
+
+// The front page footer's member count (GET /api/v1/forums, TKT-01M3S3ZRYD):
+// exactly the accounts UsersByHandlePrefix can offer, so a member is told
+// nothing the mention lookup does not already list. Its WHERE clause must
+// stay UsersByHandlePrefix's without the prefix range;
+// TestForumTreeMembersCountsActiveAccounts holds the two equal.
+func (q *Queries) CountActiveMembers(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, countActiveMembers)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createIdentity = `-- name: CreateIdentity :one
 INSERT INTO identities (user_id, provider_key, subject, email, email_verified, issuer, created_at, updated_at)
 VALUES (?, ?, ?, ?, ?, ?, ?, ?)

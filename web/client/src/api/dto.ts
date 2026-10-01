@@ -231,6 +231,9 @@ export interface ThreadLink {
 
 export interface ForumTree {
   forums: Forum[];
+  // members: the accounts the mention lookup can offer, for the front page
+  // footer. Null for an anonymous viewer or an applicant (TKT-01M3S3ZRYD).
+  members: number | null;
 }
 
 export interface UnreadCounts {

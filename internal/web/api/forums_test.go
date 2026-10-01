@@ -296,3 +296,54 @@ func TestForumTreeEmpty(t *testing.T) {
 		t.Errorf("body %s", body)
 	}
 }
+
+// TestForumTreeMembersOnlyForMembers is the footer's member count through
+// the handler (TKT-01M3S3ZRYD): a member session is told the accounts the
+// mention lookup can offer, here newWorld's four, and an anonymous viewer, a
+// pre-user and a signed-in account that is not active are told null.
+func TestForumTreeMembersOnlyForMembers(t *testing.T) {
+	w := newForumWorld(t)
+	for _, h := range []string{"alice", "bob", "carol"} {
+		tree, _ := w.tree(h)
+		if tree.Members == nil || *tree.Members != 4 {
+			t.Errorf("%s is told members %v, want 4", h, tree.Members)
+		}
+	}
+	for name, v := range map[string]domain.Viewer{
+		"anonymous": domain.Anonymous(),
+		"pre-user":  {PreUser: true, IdentityID: 7, Active: true, SessionKey: "s-pre"},
+		"inactive":  {UserID: w.users["alice"], Role: domain.RoleMember, Active: false, SessionKey: "s-alice"},
+	} {
+		rec := w.get(v, "/api/v1/forums")
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s: %d %s", name, rec.Code, rec.Body)
+		}
+		if !strings.Contains(rec.Body.String(), `"members":null`) {
+			t.Errorf("the %s viewer is told a member count: %s", name, rec.Body)
+		}
+	}
+}
+
+// TestForumTreeMembersNeverShared: GET /forums is built per request and
+// kept by no cache, so a member's count cannot reach an anonymous viewer
+// through one. Requests alternate between the two; every answer is
+// no-store with no ETag a cache could revalidate against, and every
+// anonymous answer is null however recently a member was answered.
+func TestForumTreeMembersNeverShared(t *testing.T) {
+	w := newForumWorld(t)
+	for i := range 3 {
+		for _, h := range []string{"alice", ""} {
+			rec := w.get(w.viewer(h), "/api/v1/forums")
+			if rec.Code != http.StatusOK {
+				t.Fatalf("round %d, %q: %d %s", i, h, rec.Code, rec.Body)
+			}
+			hd := rec.Header()
+			if hd.Get("Cache-Control") != "no-store" || hd.Get("ETag") != "" {
+				t.Errorf("round %d, %q: Cache-Control %q, ETag %q", i, h, hd.Get("Cache-Control"), hd.Get("ETag"))
+			}
+			if anon := strings.Contains(rec.Body.String(), `"members":null`); (h == "") != anon {
+				t.Errorf("round %d, %q: %s", i, h, rec.Body)
+			}
+		}
+	}
+}

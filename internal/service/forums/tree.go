@@ -29,7 +29,8 @@ type Service struct {
 
 // Tree is GET /forums (docs/07): the forums v may read, roots in position
 // order with their children under them, each with its thread and post
-// counts, v's unread count and its latest activity.
+// counts, v's unread count and its latest activity, and for a member the
+// site's member count.
 //
 // A forum v cannot read is absent, not flagged: in a small community a list
 // of forum names is itself information (TKT-01M29CA9A5). Its children go
@@ -37,17 +38,34 @@ type Service struct {
 // say where it had been (settled in grooming). An anonymous viewer is
 // evaluated as everyone, so public forums are all they see.
 //
-// The statements are fixed, however many forums there are: the forum rows,
-// two perm batches, read and upload (none when perm's cache already knows,
+// The statements are fixed, however many forums there are: the forum rows
+// and, for a member, the member count, two perm batches, read and upload (none when perm's cache already knows,
 // and the second reuses what the first evaluated), then in one read
 // the thread and post counts, v's unread counts, the last posts and their
 // authors.
 func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, error) {
-	var rows []dbq.Forum
+	var (
+		rows    []dbq.Forum
+		members *int
+	)
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		var err error
-		rows, err = q.ListForums(ctx)
-		return err
+		if rows, err = q.ListForums(ctx); err != nil {
+			return err
+		}
+		// The footer's member count goes to a member session only, the
+		// viewers the mention lookup serves (users.MaySuggest), because it
+		// counts exactly what that lookup can list. An anonymous viewer and
+		// a pre-user are not told it (docs/06, TKT-01M3S3ZRYD).
+		if v.Member() {
+			n, err := q.CountActiveMembers(ctx)
+			if err != nil {
+				return err
+			}
+			m := int(n)
+			members = &m
+		}
+		return nil
 	}); err != nil {
 		return dto.ForumTree{}, err
 	}
@@ -64,7 +82,7 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 	}
 	listed := s.listed(rows, readable)
 	if len(listed) == 0 {
-		return dto.ForumTree{Forums: []dto.Forum{}}, nil
+		return dto.ForumTree{Forums: []dto.Forum{}, Members: members}, nil
 	}
 	// can_upload, for the new-thread screen (TKT-01M29CXK0K): one more perm
 	// batch, which the cache answers once the read batch above has
@@ -162,7 +180,7 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 			Children:    []dto.Forum{},
 		}
 	}
-	out := dto.ForumTree{Forums: []dto.Forum{}}
+	out := dto.ForumTree{Forums: []dto.Forum{}, Members: members}
 	for _, f := range listed {
 		n := node(f.row)
 		for _, c := range f.children {

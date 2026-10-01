@@ -2,6 +2,7 @@ import { Fragment } from 'preact';
 import { useRef } from 'preact/hooks';
 import { isControl, useModal } from '../components/focus';
 import { helpOpen, shortcuts } from './shortcuts';
+import './keyboard.css';
 
 // HelpOverlay lists the keyboard shortcuts, each with the control that does
 // the same. ? or the "Keyboard shortcuts" button below the posts opens it.
@@ -13,7 +14,10 @@ import { helpOpen, shortcuts } from './shortcuts';
 // the body after a click on the list's text. Focus moves and the listener
 // goes on in the same task as the ? that drew the list. An Escape pressed
 // before the next frame went to the post and was lost (TKT-01M3TMRCMJ).
-export function HelpOverlay() {
+//
+// The front page's footer opens it too (TKT-01M3S3ZRYD), with a lead line
+// saying where the keys work, since none of them does anything there but ?.
+export function HelpOverlay({ lead }: { lead?: string }) {
   const root = useRef<HTMLDivElement>(null);
   const close = () => (helpOpen.value = false);
   useModal(root, close, (el) => {
@@ -33,6 +37,7 @@ export function HelpOverlay() {
             Close
           </button>
         </div>
+        {lead && <p class="help-note">{lead}</p>}
         <table class="help-list">
           <thead>
             <tr>

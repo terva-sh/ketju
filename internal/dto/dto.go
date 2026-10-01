@@ -483,6 +483,12 @@ type ThreadLink struct {
 // ForumTree is the response to GET /forums.
 type ForumTree struct {
 	Forums []Forum `json:"forums"`
+	// Members is the front page footer's member count: exactly the accounts
+	// the mention lookup (GET /users?prefix=) can offer, active with a
+	// handle not ending in '-'. Only a member session is told it; it is null
+	// for an anonymous viewer and a pre-user, who cannot use the lookup
+	// (docs/06 "Thread list views (forum index)", TKT-01M3S3ZRYD).
+	Members *int `json:"members"`
 }
 
 // UnreadCounts are the badges on the cross-forum surfaces in docs/07.

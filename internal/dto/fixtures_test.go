@@ -281,7 +281,7 @@ func threadList(class string) ThreadList {
 // forumTree exercises the one level of nesting docs/04 allows, a leaf with no
 // children, an archived forum, and a forum with no threads, whose last post is
 // null. An anonymous viewer is shown public forums only (TKT-01M29CA9A5), so
-// the members-only child is the member's alone.
+// the members-only child is the member's alone, and so is the member count.
 func forumTree(class string) ForumTree {
 	general := Forum{
 		Slug:        "general",
@@ -342,7 +342,13 @@ func forumTree(class string) ForumTree {
 			Children: []Forum{},
 		})
 	}
-	return ForumTree{Forums: []Forum{general, archive}}
+	tree := ForumTree{Forums: []Forum{general, archive}}
+	if class != tAnon {
+		// The footer's member count is a member's alone (TKT-01M3S3ZRYD).
+		members := 34
+		tree.Members = &members
+	}
+	return tree
 }
 
 // me is the viewer. The anonymous case is the one that matters most: a null

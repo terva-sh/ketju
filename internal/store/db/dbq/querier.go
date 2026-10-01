@@ -127,6 +127,12 @@ type Querier interface {
 	// decision, since a group is created empty and deleted only when empty.
 	// The active admins, which a demotion must not bring to zero.
 	CountActiveAdmins(ctx context.Context) (int64, error)
+	// The front page footer's member count (GET /api/v1/forums, TKT-01M3S3ZRYD):
+	// exactly the accounts UsersByHandlePrefix can offer, so a member is told
+	// nothing the mention lookup does not already list. Its WHERE clause must
+	// stay UsersByHandlePrefix's without the prefix range;
+	// TestForumTreeMembersCountsActiveAccounts holds the two equal.
+	CountActiveMembers(ctx context.Context) (int64, error)
 	// A user's live member sessions, by the lookup's own cutoffs
 	// (session.ExpiredBefore).
 	CountUserSessions(ctx context.Context, arg CountUserSessionsParams) (int64, error)

@@ -212,6 +212,36 @@
   color: var(--muted);
 }
 
+/* The footer: the counts, then the shortcut hint from 720 px up, small and
+   muted as the mockup's (TKT-01M3S3ZRYD). */
+.forum-index-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 20px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.keys-hint {
+  min-height: 24px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+.keys-hint:hover {
+  color: var(--ink2);
+}
+.keys-hint kbd {
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: inherit;
+  border: 1px solid var(--rule);
+  border-radius: 3px;
+}
+
 /* The floating new-thread button and the picker are the phone's and
    everyone's respectively; the button is hidden from 720 px up, where the
    header's button does its work. */
@@ -362,6 +392,11 @@
   }
   .forum-index-empty {
     padding: 0 16px;
+  }
+  /* Clear of the floating button, which sits over the page's right edge
+     just above the tab bar. */
+  .forum-index-foot {
+    padding: 0 88px 0 16px;
   }
 
   .fab {

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { apiGet, peekGet } from '../api/client';
 import type { Forum, ForumTree } from '../api/dto';
 import { useResource } from '../api/resource';
@@ -7,6 +7,9 @@ import { Icon } from '../components/Icon';
 import { MarkAllRead } from '../components/MarkAllRead';
 import { PostTime } from '../components/thread/PostTime';
 import { useAfterMark } from '../state/lists';
+import { HelpOverlay } from '../keyboard/HelpOverlay';
+import { helpOpen, ignored } from '../keyboard/shortcuts';
+import { isPhone } from '../state/layout';
 import { siteName, viewer } from '../state/viewer';
 import { ForumPicker, pickable } from './ForumPicker';
 import '../components/unread.css';
@@ -98,6 +101,7 @@ export function ForumIndex() {
           ))}
         </>
       )}
+      {forums && forums.length > 0 && <IndexFoot forums={forums} members={res.data?.members ?? null} />}
       {canStart && (
         <button type="button" class="fab" aria-label="New thread" aria-haspopup="dialog" onClick={pick} data-fab>
           <Icon name="pen" size={22} />
@@ -113,6 +117,48 @@ export function ForumIndex() {
         />
       )}
     </main>
+  );
+}
+
+// IndexFoot ends the front page (docs/06 "Thread list views (forum index)",
+// TKT-01M3S3ZRYD): the member count, which the server sends a member alone,
+// and the posts in the forums listed here, so only forums the reader may
+// read are counted. From 720 px up it offers the shortcut list, which ? opens
+// here too; a phone has no shortcuts (docs/06 "Mobile").
+function IndexFoot({ forums, members }: { forums: Forum[]; members: number | null }) {
+  const phone = isPhone.value;
+  const locale = viewer.value.settings.locale || undefined;
+  const count = (n: number, what: string) => `${n.toLocaleString(locale)} ${what}${n === 1 ? '' : 's'}`;
+  let posts = 0;
+  for (const f of forums) {
+    posts += f.post_count;
+    for (const c of f.children) posts += c.post_count;
+  }
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '?' || isPhone.value || helpOpen.value || ignored(e)) return;
+      e.preventDefault();
+      helpOpen.value = true;
+    };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      helpOpen.value = false;
+    };
+  }, []);
+  return (
+    <footer class="forum-index-foot">
+      <span>
+        {members !== null && <span data-members={members}>{count(members, 'member')} · </span>}
+        <span data-posts-total={posts}>{count(posts, 'post')}</span>
+      </span>
+      {!phone && (
+        <button type="button" class="keys-hint" aria-haspopup="dialog" onClick={() => (helpOpen.value = true)}>
+          Press <kbd>?</kbd> for keyboard shortcuts
+        </button>
+      )}
+      {helpOpen.value && !phone && <HelpOverlay lead="These keys work on a thread page." />}
+    </footer>
   );
 }
 

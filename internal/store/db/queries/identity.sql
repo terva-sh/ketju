@@ -264,3 +264,13 @@ WHERE handle >= sqlc.arg(lo) AND handle < sqlc.arg(hi)
   AND substr(handle, -1) <> '-'
 ORDER BY handle
 LIMIT sqlc.arg(lim);
+
+-- name: CountActiveMembers :one
+-- The front page footer's member count (GET /api/v1/forums, TKT-01M3S3ZRYD):
+-- exactly the accounts UsersByHandlePrefix can offer, so a member is told
+-- nothing the mention lookup does not already list. Its WHERE clause must
+-- stay UsersByHandlePrefix's without the prefix range;
+-- TestForumTreeMembersCountsActiveAccounts holds the two equal.
+SELECT count(*) FROM users
+WHERE status = 'active'
+  AND substr(handle, -1) <> '-';
