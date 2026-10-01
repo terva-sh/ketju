@@ -20,10 +20,12 @@ blocks_on: children
 references:
   - ref: design:identity-approval
     path: docs/05-identity-and-accounts.md
+  - ref: pr:263
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:07:17Z
-updated_at: 2026-09-30T23:54:05Z
+updated_at: 2026-10-01T05:14:18Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
