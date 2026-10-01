@@ -1299,6 +1299,7 @@ describe('live updates on the thread screen', () => {
   let lastRead: number;
   let onPost: (() => void) | null;
   let holdPost: Promise<void> | null;
+  let holdGet: Promise<void> | null;
   let server: StubServer;
   let observers: { observed: Element[]; callback: IntersectionObserverCallback }[];
   let scrolled: string[];
@@ -1371,6 +1372,7 @@ describe('live updates on the thread screen', () => {
     lastRead = 0;
     onPost = null;
     holdPost = null;
+    holdGet = null;
     const pageFor = (u: string) => {
       const q = new URLSearchParams(u.split('?')[1] ?? '');
       const o = Number(q.get('ordinal') ?? 0);
@@ -1392,7 +1394,13 @@ describe('live updates on the thread screen', () => {
           if (k.startsWith('GET /api/v1/drafts/')) return () => ({ status: 204, headers: { 'Draft-Revision': '0' } });
           if (k === `PUT ${url}/read`) return () => ({ status: 200, body: { last_read_ordinal: 1 } });
           if (k === 'POST /api/v1/render') return () => ({ status: 200, body: { html: '', mentions: [], quotes: [], reply_to: null } });
-          if (k === `GET ${url}` || k.startsWith(`GET ${url}?`)) return () => pageFor(k.slice(4));
+          // A held GET answers with the thread as it was when it was asked.
+          if (k === `GET ${url}` || k.startsWith(`GET ${url}?`))
+            return async () => {
+              const answer = pageFor(k.slice(4));
+              await holdGet;
+              return answer;
+            };
           return undefined;
         },
       },
@@ -1680,6 +1688,37 @@ describe('live updates on the thread screen', () => {
     expect(ids(root)).toContain('post-6');
     expect(divider()).toBe('post-4');
     expect(root.querySelector('#post-5')?.classList.contains('unread')).toBe(true);
+  });
+
+  it('a hint while another page of the thread loads is caught up once it arrives', async () => {
+    posts = Array.from({ length: 30 }, (_, i) => post(i + 1));
+    const root = await renderAt(`/t/${id}/a?page=1`);
+    let release!: () => void;
+    holdGet = new Promise((r) => (release = r));
+    await route(`/t/${id}/a?page=2`);
+    // Page 2 is asked for and answered from before #31; the hint for #31
+    // comes while it is out.
+    add(post(31));
+    await act(async () => stream().emit('thread', { thread_id: id, log_length: len }));
+    holdGet = null;
+    release();
+    await settle(root);
+    await settle(root);
+    expect(ids(root)).toEqual(['post-26', 'post-27', 'post-28', 'post-29', 'post-30']);
+    expect(pill(root)?.textContent).toBe('1 new post — show');
+  });
+
+  it('what the screen offers follows the live page', async () => {
+    // A reader who has read everything is offered no First unread; a post
+    // that arrives makes one unread.
+    lastRead = 5;
+    const root = await renderAt(`/t/${id}/a`);
+    const offered = () => [...root.querySelectorAll('[data-shell=toolbar] [data-action]')].map((b) => b.getAttribute('data-action'));
+    expect(offered()).not.toContain('first-unread');
+    add(post(6));
+    await hint(root);
+    expect(offered()).toContain('first-unread');
+    expect(root.querySelector('.composer')).not.toBeNull();
   });
 
   it('a lens page holds no stream', async () => {

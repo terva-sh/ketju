@@ -81,6 +81,30 @@ test('a reader at the bottom sees the post arrive', async ({ page, browser }, in
   await scan(page);
 });
 
+// On a phone the reply bar covers the foot of the screen, and the end of a
+// list still behind it is not in view (Terva review 1778).
+test('a list end behind the reply bar is not the bottom', async ({ page, browser, isMobile }, info) => {
+  test.skip(!isMobile, 'the reply bar is the phone layout');
+  const t = await start(page, info, true);
+  await open(page, t);
+  await expect(page.locator('.replybar')).toBeVisible();
+  // The list's end 10 px below the foot of the screen: within 48 px of the
+  // viewport, but 74 px past the top of the 64 px bar, which is where what
+  // the reader can see ends.
+  await page.evaluate(() => scrollBy(0, document.querySelector('.posts')!.getBoundingClientRect().bottom - (innerHeight + 10)));
+  const end = await page.evaluate(() => document.querySelector('.posts')!.getBoundingClientRect().bottom - innerHeight);
+  expect(Math.round(end)).toBe(10);
+
+  await replyAsCarol(browser, info, t.id, 'Held under the bar.');
+  await expect(page.getByRole('button', { name: '1 new post — show' })).toBeVisible();
+  await expect(page.locator('#post-2')).toHaveCount(0);
+  await scan(page);
+
+  // Scrolled clear of the bar, the reader is at the bottom and it is drawn.
+  await page.evaluate(() => scrollBy(0, 200));
+  await expect(page.locator('#post-2')).toContainText('Held under the bar.');
+});
+
 test('polling takes over when the stream is refused', async ({ page, browser }, info) => {
   await page.clock.install();
   let refused = 0;

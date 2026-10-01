@@ -100,7 +100,9 @@ export function ThreadScreen() {
   // shows at once.
   const cached = cachedThread(params.id)?.header;
   // While the canonical view is open, a live hint asks for the page on screen
-  // again (useLive), and the newer answer is shown in place of the request's.
+  // again (useLive), and the newer answer is shown in place of the request's:
+  // its header, and its viewer block for what the screen offers. Only the
+  // divider keeps the request's read position (ThreadBody's read).
   const [live, setLive] = useState<Live | null>(null);
   const shown =
     res.data && live && live.key === key && live.me === me && live.page.thread.log_length > res.data.thread.log_length
@@ -134,7 +136,7 @@ export function ThreadScreen() {
   // Reply summons the composer at the foot of the thread body, so it is
   // offered only where there is one: not on the post history route, which
   // shows no body (review 543).
-  const canReply = !history && (res.data?.viewer.can_reply ?? false);
+  const canReply = !history && (shown?.viewer.can_reply ?? false);
   // The reader's draft for the thread is loaded once they may reply, here
   // rather than in the composer, so the phone's reply bar shows it before
   // the sheet opens. loadReplyDraft asks once per thread per session.
@@ -143,16 +145,16 @@ export function ThreadScreen() {
   }, [params.id, canReply]);
   // First unread is offered to a signed-in reader with posts they have not
   // read, on the thread body, where there are posts to go to.
-  const lastRead = res.data?.viewer.last_read_ordinal ?? 0;
-  const postCount = res.data?.thread.post_count ?? 0;
-  const unread = !history && !!res.data && tracksUnread() && lastRead < postCount;
+  const lastRead = shown?.viewer.last_read_ordinal ?? 0;
+  const postCount = shown?.thread.post_count ?? 0;
+  const unread = !history && !!shown && tracksUnread() && lastRead < postCount;
   // Lock, unlock, pin and unpin are offered to a viewer the page says
   // moderates this thread's forum (can_moderate), on the thread body. A
   // global pin is staff's by role, which the viewer's own role says
   // (moderateKinds). Slow mode is offered to the same viewers whatever the
   // thread's state. The panel is for the thread it was opened on, so moving
   // to another thread leaves it behind.
-  const mayModerate = !history && (res.data?.viewer.can_moderate ?? false);
+  const mayModerate = !history && (shown?.viewer.can_moderate ?? false);
   const staff = isStaff(viewer.value.user?.role);
   const [moderating, setModerating] = useState<{ thread: string; kind: PanelKind } | null>(null);
   const locked = head?.locked ?? false;
@@ -163,7 +165,7 @@ export function ThreadScreen() {
   // closes, set for at most maxTimeout and set again when it fires early
   // (delayUntil). A rename-window-closed answer withdraws it for this thread
   // at once (closedOn), whatever this clock says.
-  const renameUntil = history ? null : (res.data?.viewer.rename_until ?? null);
+  const renameUntil = history ? null : (shown?.viewer.rename_until ?? null);
   const windowOpen = renameUntil !== null && Date.now() < renameUntil;
   const [tick, setTick] = useState(0);
   useEffect(() => {
@@ -180,7 +182,7 @@ export function ThreadScreen() {
   // mark is out is ignored (pressed), and a failure says so under the head
   // and leaves the reader where they are, to press again.
   const forumSlug = head?.forum.slug;
-  const offerMark = !history && !!res.data && tracksUnread() && !!forumSlug;
+  const offerMark = !history && !!shown && tracksUnread() && !!forumSlug;
   const pressed = useRef(false);
   const [markFailed, setMarkFailed] = useState<{ thread: string; error: unknown } | null>(null);
   const actions = useMemo(
@@ -289,7 +291,7 @@ export function ThreadScreen() {
           kind={panel.kind}
           pinned={head.pinned}
           staff={staff}
-          slowSeconds={res.data?.viewer.slow_mode_seconds}
+          slowSeconds={shown?.viewer.slow_mode_seconds}
           offered={
             panel.kind === 'rename'
               ? offerRename
@@ -543,7 +545,7 @@ function ThreadBody({
           </Fragment>
         ))}
       </section>
-      <div ref={end} />
+      <div class="posts-end" ref={end} />
       <NewPostsPill count={posting ? 0 : waiting} onShow={show} />
       {pager}
       <ThreadFoot page={page} route={route} />
@@ -618,15 +620,27 @@ function useLive(
 ) {
   const at = useRef(now);
   at.current = now;
+  // A hint or a poll while no page is on screen, as when moving to another
+  // page of the thread, is kept, and the page is asked for again once it
+  // arrives: its request may have been answered from before the change, and
+  // a live stream sends nothing more just because a page arrived (Terva
+  // review 1778).
+  const missed = useRef(false);
+  const run = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    if (!missed.current || !now.page || !run.current) return;
+    missed.current = false;
+    run.current();
+  }, [now.page]);
   useEffect(() => {
     if (!on) return;
     // An answer that lands after the subscription closed is for a screen
     // that has gone, and sets nothing.
     let open = true;
-    const held = () => at.current.page?.thread.log_length ?? Infinity;
-    const close = subscribe(id, held, () => {
+    const held = () => at.current.page?.thread.log_length ?? -1;
+    const refresh = () => {
       const { key, me, page, retry } = at.current;
-      if (!page) return;
+      if (!page) return void (missed.current = true);
       loadThreadPage(id, { page: page.page.number }).then(
         (p) => {
           if (!open || at.current.key !== key || p.thread.log_length <= held()) return;
@@ -637,9 +651,13 @@ function useLive(
           if (open && at.current.key === key && revokesAccess(err)) retry();
         },
       );
-    });
+    };
+    run.current = refresh;
+    const close = subscribe(id, held, refresh);
     return () => {
       open = false;
+      run.current = null;
+      missed.current = false;
       close();
     };
   }, [id, on]);
@@ -659,7 +677,9 @@ function firstInView() {
 }
 
 // useAtBottom is whether the end of the last post drawn is in view, within
-// 48 px (docs/06 "Live updates"). end is an empty element after the list.
+// 48 px (docs/06 "Live updates"). end is an empty element after the list,
+// which thread.css moves down by the phone's reply bar, so the end of a list
+// still behind the bar is not in view (Terva review 1778).
 function useAtBottom(end: { current: HTMLElement | null }) {
   const [bottom, setBottom] = useState(false);
   useEffect(() => {

@@ -914,3 +914,11 @@
 .shell.phone.has-replybar .new-posts {
   bottom: calc(var(--replybar-h) + env(safe-area-inset-bottom, 0px) + 12px);
 }
+/* The empty element after the post list that says the reader is at the
+   bottom when it comes into view. Under the phone's reply bar it sits the
+   bar's height lower, so the list's end counts as in view only once it is
+   above the bar. Relative, so nothing else moves. */
+.shell.phone.has-replybar .posts-end {
+  position: relative;
+  top: calc(var(--replybar-h) + env(safe-area-inset-bottom, 0px));
+}
