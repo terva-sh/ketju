@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T23:04:35Z
+updated_at: 2026-10-01T23:17:49Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -128,13 +128,18 @@ Both put alice's level back in a `finally`.
 
 Reader bundle (`npm run budget`, measured with the dist generated locally and then restored): 66189 B before, 67360 B after (+1171 B gzip).
 
+**agent:claude-code/phase3-v6y87d** at 2026-10-01T23:17:41Z
+
+Review 1820 (head f9c09d8, base 0009f715), medium "Prevent a dismissed save from closing a newer watch dialog". Fixed in aacd5b11. A save's answer closes the dialog only while that dialog is mounted. It is handed to onSaved only if no later save to the same route has started since, so answers that land out of order do not put back an older level. A successful write still drops the held lists and pages and refreshes /me, even after its dialog was dismissed. The new test in ThreadScreen.watch.test.tsx, "keeps a late answer from closing a newer dialog or undoing a newer save", covers cancel and reopen and out-of-order answers. It fails without the fix. Reader bundle after the fix: 75236 B (+1474 B over main's 73762 B).
+
 ## Summary
 
-A member can now watch or mute a thread from the desktop toolbar and the phone's more menu, and a forum from its thread-list header. Anonymous readers and pre-users are not offered the control.
+A member can now watch or mute a thread from the desktop toolbar and the phone's more menu, and a forum from its thread-list header. Anonymous readers and pre-users are not offered the control. The PR is #341.
 
 - `components/WatchDialog.tsx` offers Watch, Mute, and a third choice that posts `""`. The third reads "Normal" when the forum has no level, and "Follow the forum (Watch)" or "Follow the forum (Mute)" otherwise (review 1693).
 - The thread action is labelled with the effective level: Watching, Muted or Watch. The forum control is labelled with the forum's own level and sits first in the header's `.list-actions`, before Mark all read and New thread.
 - A save drops the held lists through `forgetLists()`, which includes Watching, and the held thread pages that carry the level. It then refreshes `/me`. The forum list asks for itself again, so a mute takes its badges away.
+- A late answer closes only its own dialog, and never undoes a newer save to the same target (review 1820).
 - `ThreadList.watch` is required in `dto.ts`. The thread toolbar wraps.
 
-Reader bundle: 73762 B before, 75183 B after (+1421 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
+Reader bundle: 73762 B before, 75236 B after (+1474 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
