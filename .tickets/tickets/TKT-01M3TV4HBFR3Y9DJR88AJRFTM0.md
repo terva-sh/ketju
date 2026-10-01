@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TV4HBFR3Y9DJR88AJRFTM0
 title: Move focus and key listeners into layout effects in menus and popovers
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -17,15 +17,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-tv4hbf
+  branch: run/tv4hbf-layout-focus
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-addd3ffe176a3a7fa
+  commit: ccb234d753a96820821414af2e47917622be5578
+  session: null
+  claimed_at: 2026-10-01T10:56:27Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T04:21:36Z
-updated_at: 2026-10-01T07:55:48Z
+updated_at: 2026-10-01T10:56:28Z
 created_by:
   id: agent:claude-code/phase2-run-ts0zv9
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-tv4hbf
   name: ""
 extensions: {}
 ---
