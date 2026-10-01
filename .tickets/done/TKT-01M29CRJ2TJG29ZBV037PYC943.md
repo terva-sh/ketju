@@ -26,10 +26,12 @@ references:
     path: null
   - ref: pr:323
     path: null
+  - ref: pr:327
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T15:57:54Z
+updated_at: 2026-10-01T16:12:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
