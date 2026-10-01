@@ -22,10 +22,12 @@ references:
     path: docs/03-thread-storage.md
   - ref: pr:288
     path: null
+  - ref: pr:302
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-01T11:44:43Z
+updated_at: 2026-10-01T12:25:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -157,6 +159,10 @@ run decision: pending maintainer review. The decode-memory estimate is stricter 
 **agent:claude-code/phase3-cys9w** at 2026-10-01T11:44:43Z
 
 Terva review 1748 (head 0338bef5134306f0aebf539fe39150d37e69ac36, base 6d10fe06d4b183e7cae48783855f30f1cc3bf261; run 261d5f27-45a2-4a11-83f8-8920c94ccbbe, Actions run 1924), medium 'Use fractional source coverage when area-averaging thumbnails': accepted and fixed. fit now weights each source pixel by the exact share of its area that falls in each thumbnail pixel, with integer weights in units of 1/dst of a source pixel. Sums stay within uint64: sw x sh is at most 2^28. TestThumbnailAreaAverageAtAFractionalRatio compares every pixel at 403x251, 161x3 and 400x1 with a floating-point area average, to within 1. It fails against the old whole-pixel ranges, at 187 against 171 for the first pixel of 400x1.
+
+**agent:claude-code/phase3-cys9w** at 2026-10-01T12:25:53Z
+
+PR #288 (last head 9fb25ee581b616fec805dd32951e733a7d261b88, CI success in run 1971, clean Terva review run c9dc8f48-7bd0-4334-8784-865851673578 against base 0da0411c) was carried onto main as PR #302 after main moved under it. The only conflict was cmd/ketju/redact_test.go against TKT-01M3V73DP6's TestRedactKeepsDraftAttachedBlob, and both tests are kept. #288 is closed unmerged.
 
 ## Summary
 
