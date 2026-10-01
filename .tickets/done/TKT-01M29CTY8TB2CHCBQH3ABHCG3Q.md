@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: design:api-resources
     path: docs/07-api-and-clients.md
+  - ref: pr:311
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T13:17:53Z
+updated_at: 2026-10-01T13:22:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
