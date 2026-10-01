@@ -15,11 +15,13 @@ parent: TKT-01M29BKBKP8C66GXXQK4HPEZ35
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:306
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T10:57:46Z
-updated_at: 2026-10-01T12:54:53Z
+updated_at: 2026-10-01T12:55:31Z
 created_by:
   id: agent:claude-code/phase3-run-crj3b
   name: ""
