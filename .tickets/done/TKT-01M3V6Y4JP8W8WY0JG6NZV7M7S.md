@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V6Y4JP8W8WY0JG6NZV7M7S
 title: Build the unread, new, participated and watching screens
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: pr:294
     path: null
-claim:
-  actor: agent:claude-code/phase3-v6y4jp
-  branch: run/v6y4jp-list-screens
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a4de4e066da6b5199
-  commit: 86752c422f9d6152ce015e2c1b52cdd721f33910
-  session: null
-  claimed_at: 2026-10-01T18:09:17Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:47:49Z
-updated_at: 2026-10-01T18:42:47Z
+updated_at: 2026-10-01T21:28:27Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -49,10 +42,10 @@ The server half is TKT-01M29CTY7K (Build the cross-forum unread, new, participat
 
 ## Acceptance criteria
 
-- [ ] /unread, /new, /participated and /watching render their lists from the API, each row with its forum, paging by Older, with an empty state each (CrossListScreen.test.tsx)
-- [ ] Mark all read on /unread and in a forum's header clears the list and the badges without a reload, offered only to members (CrossListScreen.test.tsx, ThreadListScreen.test.tsx, unread-lists.spec.ts)
-- [ ] The New tab and the desktop New link show /me's unread.new
-- [ ] The screens work at 390 px and 1440 px, each test with one axe scan and no violations (unread-lists.spec.ts)
+- [x] /unread, /new, /participated and /watching render their lists from the API, each row with its forum, paging by Older, with an empty state each (CrossListScreen.test.tsx)
+- [x] Mark all read on /unread and in a forum's header clears the list and the badges without a reload, offered only to members (CrossListScreen.test.tsx, ThreadListScreen.test.tsx, unread-lists.spec.ts)
+- [x] The New tab and the desktop New link show /me's unread.new
+- [x] The screens work at 390 px and 1440 px, each test with one axe scan and no violations (unread-lists.spec.ts)
 - [ ] The committed dist is rebuilt with go generate ./internal/web/spa and npm run budget stays within 70000 B, with the reader's growth, measured eager and lazy, recorded in the PR
 
 ## Implementation plan
@@ -140,3 +133,24 @@ Implementation notes (prepared on run/v6y4jp-list-screens; dist not yet committe
 - e2e (review 1743's requirement): the site-wide mark runs as `nell`, a member seeded for it in cmd/ketju e2e.go (after ada, so the earlier ids keep their values). She signs in inside the spec with `paceAuth(2)`, and has a row in e2e/session.ts's budget table. No other spec signs her in. Each test first has carol start a fresh thread in site-feedback, so there is something to clear whatever ran before. The forum-level mark runs as alice in site-feedback, where only live.spec.ts reads her, and only in threads it starts itself. It sets Minutes back to the seeded #30 with setReadPosition, as thread-list.spec.ts also does, and checks that the mark left it unread.
 - targets.spec.ts gains /participated at 390 px (alice always has rows there), which measures the forum link's hit area beside the title.
 - Bundle. The reader was 66189 B on main. With the screens eager it is 67146 B (+957 B). With CrossListScreen lazy it is 67629 B (+1440 B), because lazy non-admin chunks count and the chunk adds its own overhead. Eager stays.
+
+**agent:claude-code/phase3-v6y4jp** at 2026-10-01T21:28:09Z
+
+Criterion 5 left unticked. The dist is rebuilt with `go generate ./internal/web/spa` and committed, and the reader's growth is recorded, measured both ways. But the criterion names a 70000 B budget, and the reader is now 72670 B gzip. The maintainer raised the budget to 120000 B on 2026-10-01 (#331, docs/14 class 5). Main was already 71808 B before this change, so no client change could meet the number as written. `npm run budget` passes against the current 120000 B.
+
+Growth on main d2b4f208: 71808 B to 72670 B (+862 B), with the four screens eager. On the earlier base 86752c42 it was 66189 B to 67146 B eager (+957 B), against 67629 B with CrossListScreen lazy (+1440 B). Lazy non-admin chunks count toward the budget, and the split adds chunk overhead, so eager stays.
+
+## Summary
+
+/unread, /new, /participated and /watching are built (screens/CrossListScreen.tsx). They replace the Phase 1 placeholders. Each list renders from its API route with the forum list's ThreadRow, names each row's forum as a link, pages by the server's cursor in the address, and has its own empty state. A signed-out reader is asked to sign in, and no request is sent.
+
+Mark all read (components/MarkAllRead.tsx) is offered to members only:
+- on /unread, for the whole site;
+- in a forum's header, for that forum;
+- in the forum index's header from 720 px up, for the whole site (run decision, mockup divergence F3).
+
+After a mark the client drops every held list and thread page, refetches the list and refreshes /me, so the list and the badges change without a reload. The New tab and the desktop New link show /me's unread.new. dto.ts makes ThreadRow.forum and UnreadCounts.new required.
+
+The e2e site-wide mark runs as nell, a member seeded for it who signs in with paceAuth(2) and whom no other spec reads (review 1743).
+
+Reader bundle: 71808 B to 72670 B (+862 B) of the 120000 B budget. Criterion 5 is left unticked because it names the old 70000 B budget; see the note.
