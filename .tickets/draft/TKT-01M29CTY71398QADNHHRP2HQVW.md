@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T09:22:55Z
+updated_at: 2026-10-01T10:06:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -159,3 +159,37 @@ Review 1692 (head 4065cf7, base a599b48): two medium findings were fixed in the 
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T09:22:55Z
 
 Review 1714 (head 656ce4e, base a599b48), medium, 'Make the Full thread anchor target the visible post': fixed. The anchor's href follows the post at the top of the viewport, updated by a passive scroll listener throttled to one requestAnimationFrame, so a new tab or a copied link lands there too (docs/06, criterion 11).
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T10:06:10Z
+
+Requirement carried from review 1730 (2026-10-01; PR #277, head 297cc75, base f3538e6). This was the fifth and last grooming round, so the finding is carried here rather than fixed in the plan, and it binds the implementing lane.
+
+Finding (medium), "Do not advance read position across the since lens's leading gap":
+- A since lens can begin well after the viewer's last-read ordinal.
+- Under the planned rule, the read beacon runs under since and sends the highest post seen.
+- A reader at #10 who reads a since page starting at #100 would therefore have #11 to #99 marked read without seeing them.
+- The docs/06 decision "read tracking under a lens" says the beacon runs under since because its posts run on without a gap. That holds only after the gap before the first post.
+
+What the implementation must do:
+- Run the read beacon under the canonical view and the unread lens only. Exclude since, along with author, chain, mentions and mod.
+- `tracksUnderLens(kind)` is true for `''` and `unread` alone.
+- The vitest criterion "The read beacon runs under unread and since and under no other lens" is read as "under unread and under no other lens". Its test asserts `trackPosts` is not called under since.
+- In the same PR, amend docs/06 "Decided by the run (2026-10-01, pending maintainer review): read tracking under a lens" to say the beacon runs under unread only. Give the leading-gap reason, and add the since alternative to the losing options.
+- The unread lens is not affected. It starts at B + 1, with B the position when it opened, and the position only moves forward, so it has no leading gap.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T10:06:12Z
+
+Requirement carried from review 1730 (2026-10-01; PR #277, head 297cc75, base f3538e6). This was the fifth and last grooming round, so the finding is carried here rather than fixed in the plan, and it binds the implementing lane.
+
+Finding (medium), "Keep First unread tied to the current read position":
+- The plan's step 7 says First unread under a held `unread:B` lens focuses the lens's first post on page 1, B + 1.
+- The read beacon runs under the unread lens, so once the reader has moved on, B + 1 is already read, and the action jumps backwards.
+- That contradicts the criterion that First unread lands on `last_read + 1`.
+
+What the implementation must do:
+- First unread under the unread lens targets the current position plus one: the reader's `last_read_ordinal` as the read tracker now knows it (`state/readTracker.ts`), not B and not the page's stale `viewer.last_read_ordinal`.
+- When that post is on the lens page on screen, focus it.
+- Otherwise, route to `?lens=unread:B&ordinal=<last_read + 1>`, which serves the lens page holding it (TKT-01M29CRJ1P `PageOf`). `useArrival` then scrolls to it.
+- When nothing is unread, show the existing "Nothing unread in this thread." hint.
+- Test it in vitest by advancing the tracker past B + 1 under `unread:B` and pressing First unread (and `u`). The target must be the current `last_read + 1` on a later lens page, never B + 1.
+- The e2e check in criterion 3 covers it from the lens after reading page 1.

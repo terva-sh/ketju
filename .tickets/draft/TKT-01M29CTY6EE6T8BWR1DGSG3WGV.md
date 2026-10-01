@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:44:49Z
+updated_at: 2026-10-01T10:06:15Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -112,3 +112,7 @@ run decision: pending maintainer review. Three decisions bind this ticket. (1) T
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T08:44:49Z
 
 Review 1702 (head 57bb98f, base a599b48), medium, 'Make the round-trip requirement valid for bare lens kinds': fixed. mentions and mod answer an empty lens.value. The lens an answer names is kind alone when value is empty and kind:value otherwise (docs/07). TestLensValueRoundTrips and the client's lensParam (TKT-01M29CTY71) both use that rule.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T10:06:15Z
+
+Cross-reference: review 1730 (PR #277, head 297cc75) found that the read beacon must not run under the since lens. A since page can start well past the reader's position, and the beacon would mark the skipped posts read. The requirement is carried on TKT-01M29CTY71, whose PR amends the docs/06 read-tracking decision. Nothing changes in this ticket's server plan.
