@@ -2,6 +2,7 @@ import { useRef, useState } from 'preact/hooks';
 import { apiSend, forgetGets } from '../api/client';
 import type { ForumWatch, ThreadWatch } from '../api/dto';
 import { ProblemError } from '../api/problem';
+import { forgetLists } from '../state/lists';
 import { refreshViewer } from '../state/viewer';
 import { ErrorPanel } from './ErrorPanel';
 import { useModal } from './focus';
@@ -34,13 +35,10 @@ export function followChoice(forumLevel: string | null): { label: string; line: 
 
 export type WatchTarget = { thread: string; forumLevel: string } | { forum: string; name: string };
 
-// counts is a held GET that counts unread, which mute changes: the forum
-// tree and a forum's lists, and the cross-forum lists.
-const counts = (u: string) => u.startsWith('/api/v1/forums') || /^\/api\/v1\/(unread|new|participated|watching)(\?|$)/.test(u);
-
 // carriesLevel is a held thread page that names the level just set: the
 // thread's own pages, or for a forum every thread page, since a forum's
-// level reaches each of its threads' viewer blocks.
+// level reaches each of its threads' viewer blocks. Only the held answers
+// go: the thread cache keeps headers, which carry no level.
 function carriesLevel(u: string, target: WatchTarget): boolean {
   if (!('thread' in target)) return u.startsWith('/api/v1/threads/');
   const base = `/api/v1/threads/${encodeURIComponent(target.thread)}`;
@@ -113,7 +111,10 @@ export function WatchDialog({
     try {
       const r = await apiSend<ThreadWatch | ForumWatch | undefined>('POST', url, { level: choice }, { status: 200 });
       if (typeof r?.watch !== 'string') throw new ProblemError('internal', 200);
-      forgetGets((u) => counts(u) || carriesLevel(u, target), { inFlight: true });
+      // Every list counts unread, which mute changes, and Watching lists the
+      // threads with a thread-level watch (state/lists.ts).
+      forgetLists();
+      forgetGets((u) => carriesLevel(u, target), { inFlight: true });
       void refreshViewer().catch(() => undefined);
       onSaved(r);
       onClose();

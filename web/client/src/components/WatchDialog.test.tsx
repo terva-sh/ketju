@@ -129,10 +129,12 @@ describe('the watch dialog', () => {
       [threadUrl]: () => ({ status: 200, body: { watch: 'mute', forum_watch: '' } }),
       'GET /api/v1/me': () => ({ status: 200, body: me }),
       'GET /api/v1/forums': () => ({ status: 200, body: { forums: [] }, headers: { ETag: '"f"' } }),
+      'GET /api/v1/watching': () => ({ status: 200, body: {}, headers: { ETag: '"w"' } }),
       [`GET /api/v1/threads/${thread}?page=2`]: () => ({ status: 200, body: {}, headers: { ETag: '"t"' } }),
       'GET /api/v1/threads/other': () => ({ status: 200, body: {}, headers: { ETag: '"o"' } }),
     });
     await apiGet('/api/v1/forums');
+    await apiGet('/api/v1/watching');
     await apiGet(`/api/v1/threads/${thread}?page=2`);
     await apiGet('/api/v1/threads/other');
     const d = await open(onThread(), 'watch');
@@ -141,6 +143,8 @@ describe('the watch dialog', () => {
     expect(s.sent.filter((r) => r.url === '/api/v1/me')).toHaveLength(1);
     expect(viewer.value.unread.threads).toBe(0);
     expect(peekGet('/api/v1/forums')).toBeUndefined();
+    // The Watching list is asked for afresh when it is next shown.
+    expect(peekGet('/api/v1/watching')).toBeUndefined();
     expect(peekGet(`/api/v1/threads/${thread}?page=2`)).toBeUndefined();
     // Another thread's level did not change.
     expect(peekGet('/api/v1/threads/other')).toBeDefined();
