@@ -158,12 +158,14 @@ test('the unread lens holds while reading, and First unread lands after the posi
 });
 
 // AC5: every lens is reachable from the Lens control, with 44 px targets on
-// a phone; Removed posts is offered to a moderator and not to a member.
+// a phone; Removed posts is offered to a moderator and not to a member. A
+// phone's Lens opens the same list in a sheet (TKT-01M29CGBZD,
+// phone-sheets.spec.ts).
 test('the switcher reaches every lens, Removed posts only for a moderator', async ({ browser, isMobile }, info) => {
   for (const who of ['alice', 'mona']) {
     const { ctx, page } = await as(who, browser, info);
     await page.goto(`${seed.thread}?page=1`);
-    const lens = page.locator('[data-lens-switch]');
+    const lens = page.locator(isMobile ? '[data-lens-sheet]' : '[data-lens-switch]');
     await lens.click();
     await expect(lens).toHaveAttribute('aria-expanded', 'true');
     const items = page.locator('#lens-menu a');
@@ -175,7 +177,7 @@ test('the switcher reaches every lens, Removed posts only for a moderator', asyn
     expect(lenses.includes('mod')).toBe(who === 'mona');
     await expect(page.locator('#lens-menu input[type=date]')).toBeVisible();
     if (isMobile) {
-      const targets = page.locator('[data-lens-only], [data-lens-switch], #lens-menu a, #lens-menu input, #lens-menu button');
+      const targets = page.locator('[data-lens-only], [data-lens-sheet], #lens-menu a, #lens-menu input, #lens-menu button');
       for (const box of await targets.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().height)))
         expect(box).toBeGreaterThanOrEqual(44);
     }

@@ -672,6 +672,10 @@
   border-radius: 6px 6px 0 0;
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
+.sheet .lens-since input {
+  flex: 1;
+  min-width: var(--target);
+}
 .sheet .lens-menu {
   position: static;
   min-width: 0;
@@ -1068,6 +1072,9 @@
   .lens-since input,
   .lens-since button {
     min-height: var(--target);
+  }
+  .lens-since button {
+    min-width: var(--target);
   }
   .lens-tool {
     height: auto;
