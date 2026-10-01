@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T12:43:51Z
+updated_at: 2026-10-01T12:50:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -89,6 +89,16 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
   - the `indexing` flag.
 
   Alternatives for each are listed there. The index's contents and shape are TKT-01M29CRJ3B's decisions, in docs/04 "search (FTS)".
+
+### Revised at claim (2026-10-01, against main at d80c2330)
+The approach below stands. Reading the code as it is after #301 changed these points, each toward failing closed:
+- **A trailing row fails closed.** After `projectNow`, the re-read row must have `log_length_projected` at or past `at`, or the thread's hits are dropped. That covers a service built with no `Project` too, where `projectNow` does nothing.
+- **An ordinal the index does not hold is dropped**, not an error: `stable`'s pick keeps only ordinals up to `Index.Len()`, so one stale row cannot fail a whole search.
+- **A post row must match its entry wholly:** visible, the same revision, and the same author and creation time. The doc's author and time serve the filters, so a doc that disagrees with the entry is not served.
+- **The link is drawn from the re-read row**, never from the statement's join: the thread's title and slug and its forum's slug and name come from the row read at or past `at`, so a result for a post never carries a title or forum the thread no longer shows.
+- **The thread must still have a post** in the re-read row (`post_count > 0`).
+- **`q`'s field codes** are `required` (empty once trimmed), `too_long` (over 200 characters) and `too_many` (over 16 words), from docs/07's list. docs/07 "Field errors" gains `q`.
+- **The access, freshness and paging tests live in `internal/web/api`** (`search_test.go`), not `internal/service/threads`. That package's world already has the thread page to compare with, and helpers for group-grant moderators, unprojected moves, offline redaction and suspensions. A real `search.Indexer` over the world's logs is driven by hand there, so "the indexer stopped" is the indexer not called. `parseTerms`, `splitSnippet` and the cursor are unit-tested in `internal/service/threads`.
 
 ### Approach
 1. **DTO** in `internal/dto/dto.go`:
