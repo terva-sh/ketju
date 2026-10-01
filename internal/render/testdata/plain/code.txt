@@ -1,0 +1,8 @@
+Inline code in a sentence.
+func main() {
+	fmt.Println("hello")
+}
+no language
+indented code block
+second line
+print("tildes")

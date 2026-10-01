@@ -1212,7 +1212,8 @@ cache. It searches the index docs/04 "search" describes.
   out.
 - **`indexing`** is true while `serve`'s first pass over threads whose
   index trails the log is still running (03 "Durability and recovery"),
-  so the screen can say that results may be missing.
+  and after it until every thread that pass left behind is indexed, so
+  the screen can say that results may be missing.
 
 Alternatives: refusing anonymous readers lost, because they can already
 read every public post and search shows nothing more. A total count lost:

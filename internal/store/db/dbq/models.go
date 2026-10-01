@@ -264,6 +264,33 @@ type SchemaMigration struct {
 	CreatedAt int64
 }
 
+type Search struct {
+	Title       string
+	SourcePlain string
+}
+
+type SearchDoc struct {
+	ID          int64
+	ThreadID    int64
+	Ordinal     int64
+	Revision    int64
+	AuthorID    int64
+	CreatedAt   int64
+	Title       string
+	SourcePlain string
+}
+
+type SearchMetum struct {
+	ID      int64
+	Version int64
+}
+
+type SearchState struct {
+	ThreadID  int64
+	LogLength int64
+	UpdatedAt int64
+}
+
 type Session struct {
 	IDHash              sqltypes.SessionHash
 	UserID              sql.NullInt64

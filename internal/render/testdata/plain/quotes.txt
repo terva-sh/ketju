@@ -1,0 +1,8 @@
+A reply that quotes an earlier post.
+My response to that.
+Quoting a post that itself quoted something:
+A blockquote that is not a quotation stays a blockquote:
+Just something worth setting apart.
+And the syntax shown literally, which must not become a quotation:
+> [quote=#37]
+> quoted text

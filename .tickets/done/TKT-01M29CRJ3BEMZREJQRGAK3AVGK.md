@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ3BEMZREJQRGAK3AVGK
 title: Build the FTS5 search index and indexer
 type: task
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,21 @@ blocks_on: none
 references:
   - ref: design:data-model-search
     path: docs/04-data-model.md
+  - ref: pr:290
+    path: null
+  - ref: pr:296
+    path: null
+  - ref: pr:298
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T09:47:41Z
+updated_at: 2026-10-01T12:18:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-search
+  id: agent:claude-code/phase3-run-crj3b
   name: ""
 extensions: {}
 ---
@@ -44,19 +50,19 @@ Indexing plain source rather than HTML keeps markdown syntax out of the results 
 
 ## Acceptance criteria
 
-- [ ] Every connection, read-only ones included, has FTS5 through ext/fts5 with go.mod unchanged (TestEveryConnectionHasFTS5)
-- [ ] A burst of 200 posts is indexed in at most two write transactions, and an edit replaces the post's row rather than adding one (TestBurstIsBatched, TestEditReplacesTheRow)
-- [ ] The index holds plain source with markdown syntax and link destinations stripped, and no word found only in an earlier revision matches (TestPlainGolden, TestIndexIsPlainSource, TestOldRevisionTextIsNotIndexed)
-- [ ] Indexing incrementally and indexing each thread from its first frame give equal rows, and FTS5 integrity-check passes on both (TestIncrementalEqualsFromScratch)
-- [ ] Indexer.Lag reports the threads and bytes behind and the log records each transition, and an append returns while the indexer is stalled (TestLagIsReported, TestAppendDoesNotWaitForTheIndexer)
-- [ ] serve indexes trailing threads in the background after the listener opens, and a batch reporting dropped events is caught up (TestServeAnswersWhileSearchIndexes, TestDroppedEventsAreCaughtUp)
-- [ ] The search tables are db.SearchTables, not db.ProjectionTables, and reindex --projections keeps their rows (TestSearchTablesAreMarked, TestClearProjectionsKeepsSearch)
-- [ ] The search query binds the viewer's readable forums inside the MATCH statement, so a page's rows and length ignore forums the viewer cannot read (TestSearchFiltersForumsInTheStatement)
+- [x] Every connection, read-only ones included, has FTS5 through ext/fts5 with go.mod unchanged (TestEveryConnectionHasFTS5)
+- [x] A burst of 200 posts is indexed in at most two write transactions, and an edit replaces the post's row rather than adding one (TestBurstIsBatched, TestEditReplacesTheRow)
+- [x] The index holds plain source with markdown syntax and link destinations stripped, and no word found only in an earlier revision matches (TestPlainGolden, TestIndexIsPlainSource, TestOldRevisionTextIsNotIndexed)
+- [x] Indexing incrementally and indexing each thread from its first frame give equal rows, and FTS5 integrity-check passes on both (TestIncrementalEqualsFromScratch)
+- [x] Indexer.Lag reports the threads and bytes behind and the log records each transition, and an append returns while the indexer is stalled (TestLagIsReported, TestAppendDoesNotWaitForTheIndexer)
+- [x] serve indexes trailing threads in the background after the listener opens, and a batch reporting dropped events is caught up (TestServeAnswersWhileSearchIndexes, TestDroppedEventsAreCaughtUp)
+- [x] The search tables are db.SearchTables, not db.ProjectionTables, and reindex --projections keeps their rows (TestSearchTablesAreMarked, TestClearProjectionsKeepsSearch)
+- [x] The search query binds the viewer's readable forums inside the MATCH statement, so a page's rows and length ignore forums the viewer cannot read (TestSearchFiltersForumsInTheStatement)
 - [ ] A post deleted by its author, hidden by a moderator (group grant included), auto-hidden, hidden by a suspension, moved or redacted loses its row through incremental delivery and through a from-scratch index alike, a restored post's row returns at its current revision, and every record type has an index decision (TestRemovedPostsLeaveTheIndex, TestEveryRecordTypeHasAnIndexDecision)
-- [ ] search_state never records a length past the frames scanned, so a later record is never skipped (TestStateNeverPassesTheScan)
-- [ ] A thread that fails partway through a batch keeps its earlier rows and search_state while the batch's other threads commit (TestAFailedThreadKeepsItsRows)
-- [ ] A version change or a missing search_meta row empties the index and records the version in one transaction, which serve runs before its listener opens, so no row of another version is ever served; every thread is then re-indexed once, a restart mid-pass resumes, and a restart after it re-indexes nothing (TestVersionChangeReindexes, TestVersionChangeServesNoOldRows, TestServePreparesSearchBeforeListening)
-- [ ] A search_state length that is not a frame boundary re-indexes the thread from its first frame, and catch-up after a redaction swap resumes on a boundary and drops the row (TestStateNotAtAFrameBoundaryReindexesTheThread, TestCatchUpAfterARedactionSwap)
+- [x] search_state never records a length past the frames scanned, so a later record is never skipped (TestStateNeverPassesTheScan)
+- [x] A thread that fails partway through a batch keeps its earlier rows and search_state while the batch's other threads commit (TestAFailedThreadKeepsItsRows)
+- [x] A version change or a missing search_meta row empties the index and records the version in one transaction, which serve runs before its listener opens, so no row of another version is ever served; every thread is then re-indexed once, a restart mid-pass resumes, and a restart after it re-indexes nothing (TestVersionChangeReindexes, TestVersionChangeServesNoOldRows, TestServePreparesSearchBeforeListening)
+- [x] A search_state length that is not a frame boundary re-indexes the thread from its first frame, and catch-up after a redaction swap resumes on a boundary and drops the row (TestStateNotAtAFrameBoundaryReindexesTheThread, TestCatchUpAfterARedactionSwap)
 
 ## Implementation plan
 
@@ -205,6 +211,18 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
 - `Lag` on `/metrics`: TKT-01M29CEE7S (Add the metrics endpoint). `/healthz` stays as docs/02 fixes it.
 - Stemming and Go tokenizers: docs/09 "Later".
 
+### Revised at claim (2026-10-01, agent:claude-code/phase3-run-crj3b, against main at 3890b38)
+The approach above stands, with the requirement carried from review 1731 (note of 2026-10-01) built in. These are the places where the build differs from it, or settles what it left open:
+- **Migration 0022** was the next free number on origin/main at push time (0020 went to the blob store, TKT-01M29CXK0K, and 0021 to draft attachments, TKT-01M3V73DP6). `search_docs`'s key column is `id`, the rowid alias and FTS5's `content_rowid`, so that sqlc never models a column named `rowid`. The query joins on `d.id = search.rowid`.
+- **Review 1731's requirement.** `db.DropSearchThread` deletes every row of a thread through `DropSearchDoc` and its `search_state` row. `indexThread` calls it in the thread's savepoint whenever it starts from the first frame: no `search_state`, a length past the log's end, or a length whose first frame does not parse (`errNotABoundary`). After a version reset, `ClearSearch` has already emptied everything. Both tests add a row at ordinal 99, which no log holds, and assert that it is gone.
+- **The walk** moves from `projection` to `threadid.WalkLogs`. The projection's catch-up and reindex call it.
+- **The transaction hook.** `db.Options.Trace` does not see the driver's BEGIN, although its comment says it does. TestBurstIsBatched therefore counts write transactions at the indexer's own per-transaction hook, not from the trace.
+- **`render.Plain`** also drops attributed quotations (`[quote=#N]`) and autolinks. These are two run decisions, pending maintainer review, recorded in docs/04 "search (FTS)". `render.DropSentinels` strips the snippet sentinels from titles as well.
+- **Split and merge** are reserved and have no body in this build, so the index marks no post moved. Their decision is a reason, not a touch, and TestEveryRecordTypeHasAnIndexDecision decides "touches" by applying each catalogued type to an index. The `PostsSplitOut` row of TestRemovedPostsLeaveTheIndex cannot be written in this build. TestMovedIsNotVisible holds the drop path for a moved entry instead.
+- **Indexing()** is true from `New` until a `CatchUp` finishes with no thread left behind, and again from a `Prepare` that emptied the index. A catch-up that leaves threads behind leaves it true until the behind set first drains, and a thread falling behind afterwards does not set it again (Terva review 1753). A catch-up clears only the lag its snapshot covers, so a delivery that failed after its walk stays behind for Retry.
+- **Run owns the sweep** (Terva review 1750). A sweep is owed from `New` until a `CatchUp` finishes, and again after a `CatchUp` fails, the dropped-events sweep included. `Run` runs `CatchUp` while one is owed, backing off from one second to a minute, and otherwise retries the threads that are behind. `serve` starts `Run` after its listener opens and does not call `CatchUp` itself. A log cut back to its header, or holding only its header with no `search_state`, is indexed from its first frame: its rows go, and its `search_state` is recorded at the header so the next catch-up passes it by (Terva reviews 1750 and 1755). `Retry` forgets a thread quarantined since it fell behind, as `Deliver` and `CatchUp` do. A result that reached its log's end clears a thread only if no later target was set after its run was asked for (Terva review 1755).
+- **The test locations.** TestAppendDoesNotWaitForTheIndexer is in `internal/events/search`, through `posts.Writer` and a real bus, which is the append seam `threads.Service` uses. `cmd/ketju/search_test.go` holds TestServePreparesSearchBeforeListening and TestServeAnswersWhileSearchIndexes. Serve gains a `search` startup step and a `stop search` shutdown step.
+
 ## Notes
 
 **agent:claude-code/phase1-run-415af6aa** at 2026-09-24T07:08:06Z
@@ -250,3 +268,31 @@ Supersedes the correction above: review 1728's base is 6dfd01d, the main commit 
 **agent:claude-code/phase3-groom-search** at 2026-10-01T09:47:41Z
 
 Requirement carried from review 1731 (2026-10-01; PR #275, head 64a8983, base 6dfd01d; medium, 'Remove old thread rows when re-indexing from the first frame'). This binds the implementing lane and overrides any plan text it contradicts. Whenever IndexThread starts from the first frame (no search_state, a recorded length past the log's end, a length ScanFramesFrom refuses, or a version reset), it first deletes every search_docs row of that thread (through DropSearchDoc, keeping FTS5 in step) and its search_state row, in the same transaction and savepoint as the scan, so an ordinal the log no longer holds cannot keep a row. TestStateNotAtAFrameBoundaryReindexesTheThread and TestStateAheadOfLogReindexesTheThread each add a row for an ordinal absent from the log, and assert it is gone. Also from the same review: reindex --search does not call Prepare separately (see the carried requirement on TKT-01M29CTY9D). Serve-time checks already drop a hit whose ordinal has no index entry, so neither gap widens access. Not fixed in the plan because PR #275 had used its two review rounds.
+
+**agent:claude-code/phase3-run-crj3b** at 2026-10-01T11:02:02Z
+
+run decision: pending maintainer review. Recorded in docs/04 'search (FTS)' (2026-10-01): render.Plain leaves out (1) an attributed quotation ([quote=#N]), whose text is another post's copy that the page drops once that post is deleted, so indexing it would let search show withheld text; a plain blockquote keeps its text; and (2) an autolink, whose text is its destination, so no URL reaches the index. Alternatives and why each lost are in docs/04.
+
+**agent:claude-code/phase3-run-crj3b** at 2026-10-01T11:06:03Z
+
+Criterion 9 is left unticked because of one word, 'moved'. Every other way a post leaves the index is tested, through Deliver and from the first frame, by TestRemovedPostsLeaveTheIndex: the author's delete, a moderator's hide by role and by group, the auto-hide, a suspension's hide and a hard redaction. The Restore case and TestEveryRecordTypeHasAnIndexDecision are tested too. A moved post cannot be produced in this build: PostsSplitOut is reserved with no body, so the actor cannot write one and the index never sets EntryMoved. TestMovedIsNotVisible holds only that a moved entry would take the same drop path. The split row belongs to TKT-01M29CXJZZ, which must add a touch decision for PostsSplitOut and PostsMergedIn; TestEveryRecordTypeHasAnIndexDecision will then require it.
+
+**agent:claude-code/phase3-run-crj3b** at 2026-10-01T11:06:06Z
+
+Found while building, filed as draft TKT-01M3VHSYFR (Write back index entries an Extended replay changes before trusting it), bug, priority high, no milestone. Reproduced on main at 3890b38. A crash after a Delete reaches the log but before its .idx entry does leaves a stale entry. The next append's header flush then marks the .idx as trusted, and the deleted post is served Visible again. The search index reads the same entries, so it would show what the thread page shows. ketju redact is not exposed, because it rewrites the whole .idx. The search test fixture does the same after its log rewrite, as redact does.
+
+**agent:claude-code/phase3-run-crj3b** at 2026-10-01T11:21:45Z
+
+Terva review 1750 (PR #290, head 23fbb20, base 6d10fe0, run 1930), both findings fixed. (high) 'Clear stale rows when a log contains only its header': indexThread now drops the thread's rows and search_state before returning for a header-only log, when it starts from the first frame. TestHeaderOnlyLogDropsItsRows covers it, and fails with the old order. (high) 'Retry a catch-up that fails before it discovers threads': the indexer now owes a sweep from New until a CatchUp finishes, and again after any CatchUp fails. Run runs CatchUp first, and keeps running it with backoff while it is owed, before it retries behind threads. serve now calls only Run after its hold. TestRunRetriesAFailedCatchUp covers a first sweep that fails, and TestRunRetriesALaterFailedSweep a dropped-events sweep that fails after one has finished. The second test catches removing the re-arm.
+
+**agent:claude-code/phase3-run-crj3b** at 2026-10-01T11:40:18Z
+
+Terva review 1753 (PR #290, head c94436d, base 6d10fe0, run 1952). It found both findings from review 1750 resolved, and raised two new findings, both now fixed. (high) 'Do not forget a newer failed delivery during catch-up': CatchUp's state-equals-size branch now calls forgetUpTo, which clears a thread only when nothing holds it past the snapshot's size. TestCatchUpKeepsANewerFailedDelivery covers this, and restoring the unconditional forget makes it fail. (medium) 'Keep Indexing true while the catch-up has failed threads': CatchUp clears indexing only when it leaves nothing behind. Otherwise, once no sweep is owed, transition clears it when the behind set first drains, and later lag never sets it again. docs/07's indexing field now says so. TestIndexingStaysTrueWhileThreadsFail covers this, and both an unconditional clear and no clear on drain make it fail.
+
+**agent:claude-code/phase3-run-crj3b** at 2026-10-01T11:57:28Z
+
+Terva review 1755 (PR #296, head 91980d9, base 0da0411, run 1970) raised three findings, all fixed. (high) 'Do not clear a newer failed delivery with an older indexing result': settle now clears a thread that reached its log's end only when b.target <= r.lag, meaning no later target was set after the run was asked for. A target past the log's end, left by a shorter swapped log, still clears once Retry asks for it. TestAnOlderResultKeepsANewerFailedTarget covers both halves. (medium) 'Check quarantine again when retrying a failed thread': Retry now forgets quarantined threads, as Deliver and CatchUp do; TestRetrySkipsAQuarantinedThread covers it. (medium) 'Clear orphan rows for a header-only log with no search state': CatchUp now sends a header-only log with no state through the first-frame path, which drops its rows and records search_state at the header, so later catch-ups pass it by with no transaction; a log shorter than a header is still skipped. TestHeaderOnlyLogWithoutStateDropsOrphanRows covers it, and TestHeaderOnlyLogDropsItsRows now expects state at the header. Each fix was mutated back and its test failed.
+
+## Summary
+
+Built to the groomed plan, with review 1731's requirement included. ext/fts5 is registered on every connection, and go.mod and go.sum are unchanged. Migration 0022 adds search_docs as the external content of FTS5 'search' (unicode61 remove_diacritics 2, no rank), with search_state and search_meta. These are db.SearchTables, apart from the projections. db.PutSearchDoc, DropSearchDoc, DropSearchThread and ClearSearch are the only writers. render.Plain and PlainVersion carry a hash-enforced golden. internal/events/search is the indexer: batched writes, one savepoint per thread, a decisions table, Prepare before listening, then CatchUp, Run, Retry and Lag. views.Search and MatchAll bind the readable forums in the MATCH statement and order newest first. serve has a 'search' startup step and a 'stop search' shutdown step. The walk moves to threadid.WalkLogs. Criterion 9 is unticked only for 'moved', which this build cannot produce (see note). There are two run decisions, pending maintainer review, in docs/04: attributed quotations and autolinks stay out of the plain text. Draft TKT-01M3VHSYFR is filed for a stale .idx after an Extended replay. The API (TKT-01M29CTY8T), reindex --search (TKT-01M29CTY9D) and redact's clearing (TKT-01M3NS122F) build on this.

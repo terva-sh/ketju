@@ -7,6 +7,7 @@ import (
 
 	"github.com/ncruces/go-sqlite3"
 	"github.com/ncruces/go-sqlite3/driver"
+	"github.com/ncruces/go-sqlite3/ext/fts5"
 )
 
 // This file is the only one in the module that may import a SQLite driver.
@@ -19,10 +20,19 @@ import (
 // the per-connection callback, the busy check, and the persist-WAL control.
 
 // openPool opens a database/sql pool on path with the given DSN query, which
-// must start with "?". Every connection the pool opens gets FCNTL_PERSIST_WAL,
-// and SQLite's statement trace when trace is not nil.
+// must start with "?". Every connection the pool opens gets FTS5,
+// FCNTL_PERSIST_WAL, and SQLite's statement trace when trace is not nil.
 func openPool(path, query string, trace func(sql string)) (*sql.DB, error) {
 	return driver.Open(fileURI(path)+query, func(c *sqlite3.Conn) error {
+		// The search index is an FTS5 table (docs/04 "search (FTS)"), and
+		// ncruces has FTS5 only on a connection it is registered on. Every
+		// pool comes through here, the read-only one included, so `ketju
+		// fsck` and a VACUUM INTO backup can read a database that holds the
+		// table (TKT-01M29CRJ3B). ext/fts5 is a package of the module already
+		// pinned, so go.mod does not change.
+		if err := fts5.Register(c); err != nil {
+			return err
+		}
 		// Keep the -wal file when the last connection closes. SQLite would
 		// otherwise delete it and create a fresh one on the next open, and
 		// ncruces skips the directory fsync that a fresh file needs

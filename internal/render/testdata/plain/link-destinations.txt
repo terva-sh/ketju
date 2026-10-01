@@ -1,0 +1,3 @@
+An inline link keeps its text.
+A reference link keeps its text too, and a picture of a cat keeps its alt text.
+An autolink, , and a bare  are their own destinations, so neither is kept.

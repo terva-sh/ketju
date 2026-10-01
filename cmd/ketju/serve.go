@@ -24,6 +24,7 @@ import (
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/events/projection"
+	"github.com/terva-sh/ketju/internal/events/search"
 	"github.com/terva-sh/ketju/internal/jobs"
 	"github.com/terva-sh/ketju/internal/lock"
 	"github.com/terva-sh/ketju/internal/logging"
@@ -108,6 +109,11 @@ type serveOpts struct {
 	// runReturned is called as the projection runner returns, which is how
 	// a test holds it back to see that shutdown waits for it.
 	runReturned func()
+
+	// searchHold, when set, runs in the search indexer's goroutine before
+	// its catch-up, under the context that stops it, so a test can hold
+	// the pass back and see that the listener does not wait for it.
+	searchHold func(ctx context.Context)
 
 	// listen wraps the listener, so a test can make accepting fail.
 	listen func(net.Listener) net.Listener
@@ -345,11 +351,33 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	if err := bus.Subscribe(hub, 0); err != nil {
 		return fail("subscribing the live-update hub", err)
 	}
+	// The search index (docs/04 "search (FTS)"). Its queue is deep because a
+	// burst of posts is what it batches (TKT-01M29CRJ3B); a drop costs a
+	// catch-up, never a missed row.
+	indexer, err := search.New(search.Options{
+		DB: d, Root: cfg.DataDir, Threads: cache, Quarantined: proj.Quarantined, Logger: log,
+	})
+	if err != nil {
+		return fail("starting the search indexer", err)
+	}
+	if err := bus.Subscribe(indexer, 4096); err != nil {
+		return fail("subscribing the search indexer", err)
+	}
 
 	step("catch-up")
 	report, err := proj.CatchUp(ctx, reopen)
 	if err != nil {
 		return fail("catching up the projection", err)
+	}
+
+	// The search index's version is settled before the listener opens: an
+	// index another version built is emptied here, in one transaction, so
+	// no request can reach a row of it (Terva review 1719). Indexing the
+	// threads that trail is the slow part, and runs after the listener
+	// opens.
+	step("search")
+	if err := indexer.Prepare(ctx); err != nil {
+		return fail("preparing the search index", err)
 	}
 	// The runner's retries use the cache and the database, so shutdown waits
 	// for it to return before closing either (review 470). Its closer is
@@ -372,6 +400,30 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		case <-time.After(busDrain):
 			return fmt.Errorf("serve: the projection runner did not stop within %s; "+
 				"closing the store under it", busDrain)
+		}
+	})
+	// The search catch-up and its retries use the cache and the database,
+	// so shutdown waits for them as for the projection runner. Its closer is
+	// pushed before the bus's, so it runs after the bus has delivered what is
+	// queued.
+	searched := make(chan struct{})
+	go func() {
+		defer close(searched)
+		if o.searchHold != nil {
+			o.searchHold(run)
+		}
+		// Run catches up first, and runs the catch-up again until one
+		// finishes, then retries the threads that fail (Terva review 1750).
+		indexer.Run(run)
+	}()
+	closers = append(closers, func() error {
+		step("stop search")
+		stopRun()
+		select {
+		case <-searched:
+			return nil
+		case <-time.After(busDrain):
+			return fmt.Errorf("serve: the search indexer did not stop within %s; closing the store under it", busDrain)
 		}
 	})
 	if err := bus.Start(run); err != nil {
@@ -585,7 +637,8 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	log.Info("ketju started",
 		"listen", ln.Addr().String(), "data_dir", cfg.DataDir,
 		"subscribers", bus.Subscribers(), "open_threads", cache.Bound(),
-		"caught_up", report.Closed, "corrupt", len(report.Corrupt), "catch_up_elapsed", report.Elapsed)
+		"caught_up", report.Closed, "corrupt", len(report.Corrupt), "catch_up_elapsed", report.Elapsed,
+		"search_indexing", indexer.Indexing())
 	if o.ready != nil {
 		o.ready(ln.Addr().String())
 	}

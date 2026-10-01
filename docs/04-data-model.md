@@ -1123,6 +1123,31 @@ index holds, for TKT-01M29CRJ3B (Build the FTS5 search index and indexer).
   fallback driver, cannot load one (`spikes/sqlite-driver/README.md`), and
   multi-language stemming is under "Later" in 09.
 
+As built (TKT-01M29CRJ3B, migration 0022): `search_docs`'s key column is
+`id`, the alias of its rowid and the FTS5 table's `content_rowid`. The
+indexer is `internal/events/search`, the plain text is `render.Plain`, and the
+query is `views.Search`. Split and merge records are reserved and have no body
+in this build, so no post is marked moved yet. Until TKT-01M29CXJZZ gives
+them bodies, the indexer skips them, as the index does.
+
+**Decided by the run (2026-10-01, pending maintainer review):** what the
+plain text leaves out, for TKT-01M29CRJ3B.
+- **An attributed quotation (`[quote=#N]`) is left out of the quoting
+  post's row.** A plain blockquote keeps its text. The quotation copies
+  another post of the same thread, and that post has its own row while it is
+  visible. Once that post is deleted, the page shows the quotation without its
+  text (`render` drops it). Indexing the copy would let search find, and its
+  snippet show, text the page no longer shows. Alternative: index the
+  quotation like any blockquote. It lost because the indexer cannot tell
+  whether the quoted post is still visible: it would have to re-index every
+  quoting post whenever a quoted post is deleted.
+- **An autolink is left out**, `<https://…>` and a bare `www.…` alike,
+  because its text is its destination. A link keeps its text, and an image
+  keeps its alt text. Alternative: keep an autolink's text because a reader
+  sees it. It lost because the index then holds URLs, which the ticket's rule
+  "link destinations stripped" excludes, and one rule for every destination
+  is easier to hold than an exception.
+
 ### projection_state
 ```
 thread_id (pk), log_length, updated_at

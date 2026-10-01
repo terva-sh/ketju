@@ -1,0 +1,6 @@
+a png
+an svg
+script
+vbscript
+a file
+an ftp server

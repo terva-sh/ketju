@@ -1,0 +1,4 @@
+Ampersands & angle brackets < > in text.
+An entity: & and < and ©
+Backslash escapes: *not emphasis* and # not a heading.
+A URL with a query:

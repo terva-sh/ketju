@@ -1,0 +1,10 @@
+an attachment
+with a title
+A linked attachment.
+upper case hash
+short hash
+suffix
+query
+absolute
+protocol relative
+no leading slash

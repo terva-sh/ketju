@@ -1,0 +1,5 @@
+left center right default
+a b c d
+1 2 3 4
+one column
+only

@@ -108,6 +108,11 @@ type Querier interface {
 	ClearPostAttachments(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
 	ClearProjectionState(ctx context.Context) error
+	// The statements ClearSearch runs after FTS5's delete-all, one per table in
+	// SearchTables.
+	ClearSearchDocs(ctx context.Context) error
+	ClearSearchMeta(ctx context.Context) error
+	ClearSearchState(ctx context.Context) error
 	ClearThreadTags(ctx context.Context) error
 	// The statements ClearProjections runs, one per table in ProjectionTables.
 	ClearThreads(ctx context.Context) error
@@ -192,6 +197,8 @@ type Querier interface {
 	// LookupSession already refuses them once the identity has a user; this
 	// removes the rows.
 	DeletePreUserSessions(ctx context.Context, identityID sql.NullInt64) error
+	DeleteSearchDoc(ctx context.Context, id int64) error
+	DeleteSearchState(ctx context.Context, threadID int64) error
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
 	// DeleteSessionsThroughIdentity ends every session signed in through one
 	// identity, of either kind: what removing that identity does in its own
@@ -309,6 +316,15 @@ type Querier interface {
 	GetMembership(ctx context.Context, arg GetMembershipParams) (string, error)
 	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)
 	GetReadPosition(ctx context.Context, arg GetReadPositionParams) (ReadPosition, error)
+	// The search index's plain statements (docs/04 "search (FTS)",
+	// TKT-01M29CRJ3B). The FTS5 commands that keep the virtual table `search` in
+	// step with search_docs, and every MATCH, are hand-written: in
+	// internal/store/db/search.go and internal/store/db/views/search.go. The
+	// writes below are called from search.go alone, which
+	// TestOnlySearchGoWritesTheIndex holds.
+	GetSearchDoc(ctx context.Context, arg GetSearchDocParams) (GetSearchDocRow, error)
+	GetSearchState(ctx context.Context, threadID int64) (int64, error)
+	GetSearchVersion(ctx context.Context) (int64, error)
 	GetSession(ctx context.Context, idHash sqltypes.SessionHash) (Session, error)
 	GetSetting(ctx context.Context, key string) (Setting, error)
 	GetThread(ctx context.Context, id int64) (Thread, error)
@@ -369,6 +385,7 @@ type Querier interface {
 	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
 	InsertPostAttachment(ctx context.Context, arg InsertPostAttachmentParams) error
+	InsertSearchDoc(ctx context.Context, arg InsertSearchDocParams) (int64, error)
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error
 	// LatestApplicationForIdentity is the identity's newest application, pending
 	// or decided. The 24-hour rule counts from its created_at.
@@ -399,6 +416,10 @@ type Querier interface {
 	// Startup catch-up reads every thread's projected length in one statement
 	// and compares it with the log sizes a directory walk finds (TKT-01M29C5Y1S).
 	ListProjectionLengths(ctx context.Context) ([]ListProjectionLengthsRow, error)
+	ListSearchDocOrdinals(ctx context.Context, threadID int64) ([]int64, error)
+	// Catch-up reads every thread's indexed length in one statement and
+	// compares it with the logs, as the projection's does.
+	ListSearchLengths(ctx context.Context) ([]ListSearchLengthsRow, error)
 	ListSettings(ctx context.Context) ([]Setting, error)
 	ListUserSessions(ctx context.Context, userID sql.NullInt64) ([]ListUserSessionsRow, error)
 	LiveAgentCredential(ctx context.Context, userID int64) (LiveAgentCredentialRow, error)
@@ -581,6 +602,8 @@ type Querier interface {
 	// revision. The two read paths then agree on edited_at.
 	SetPostRevisionKeepEdited(ctx context.Context, arg SetPostRevisionKeepEditedParams) (int64, error)
 	SetProjectionState(ctx context.Context, arg SetProjectionStateParams) error
+	SetSearchState(ctx context.Context, arg SetSearchStateParams) error
+	SetSearchVersion(ctx context.Context, version int64) error
 	SetThreadArchived(ctx context.Context, id int64) (int64, error)
 	SetThreadForum(ctx context.Context, arg SetThreadForumParams) (int64, error)
 	SetThreadLastPost(ctx context.Context, arg SetThreadLastPostParams) (int64, error)
@@ -643,6 +666,7 @@ type Querier interface {
 	// A system group's slug and flag are fixed by trigger; its name and
 	// description are not.
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (int64, error)
+	UpdateSearchDoc(ctx context.Context, arg UpdateSearchDocParams) error
 	// UpdateUserSettings writes a member's own settings in one statement
 	// (TKT-01M29CCC0X). timezone is kept when null. prefs is a JSON object of
 	// only the keys the request named, merged into prefs_json, so a key the

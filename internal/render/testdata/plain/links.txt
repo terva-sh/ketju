@@ -1,0 +1,7 @@
+An inline link.
+A link with a title.
+A reference link.
+A relative link.
+An autolink:
+A mailto:
+An  autolink.

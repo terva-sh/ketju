@@ -1,0 +1,5 @@
+emphasis and also emphasis.
+strong and also strong.
+both at once.
+struck through.
+A code span inline, and a span with a ` backtick.

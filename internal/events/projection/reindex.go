@@ -113,7 +113,7 @@ func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (R
 	w.sweeping.Lock()
 	defer w.sweeping.Unlock()
 
-	logs, strays, err := w.walk()
+	logs, strays, err := threadid.WalkLogs(w.root)
 	if err != nil {
 		return rep, fmt.Errorf("projection: reindex: %w", err)
 	}

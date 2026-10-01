@@ -12,8 +12,9 @@ import (
 // can: the rest is authoritative and must be backed up.
 //
 // TestProjectionTablesAreMarked holds this list equal to the tables whose
-// schema carries the PROJECTION marker, so a new projection (the search
-// index, TKT-01M29CRJ3B) must add itself here or fail the tests.
+// schema carries the PROJECTION marker, so a new projection must add itself
+// here or fail the tests. The search index is not one: it is SearchTables,
+// which ClearProjections leaves alone (search.go, TKT-01M29CRJ3B).
 var ProjectionTables = []string{"threads", "thread_tags", "post_meta", "mentions", "projection_state",
 	"forum_thread_counts", "post_attachments"}
 

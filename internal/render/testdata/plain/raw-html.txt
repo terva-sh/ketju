@@ -1,0 +1,2 @@
+Inline raw HTML is dropped: this span’s tags and bold tags, keeping the words between them.
+After the block, text is kept.
