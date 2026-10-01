@@ -31,6 +31,7 @@ const slowChoices = [
   ['300', '5 minutes'],
   ['custom', 'Custom'],
 ];
+const slowChoice = (s: number) => (slowChoices.some(([v]) => v === String(s)) ? String(s) : 'custom');
 
 const titles: Record<PanelKind, string> = {
   lock: 'Lock this thread',
@@ -179,8 +180,17 @@ export function ModerateDialog({
   const [loadError, setLoadError] = useState<unknown>(null);
   const [scope, setScope] = useState<'forum' | 'global'>('forum');
   const [until, setUntil] = useState('');
-  const [choice, setChoice] = useState(slowChoices.some(([v]) => v === String(slowSeconds)) ? String(slowSeconds) : 'custom');
+  const [choice, setChoice] = useState(slowChoice(slowSeconds));
   const [custom, setCustom] = useState(String(slowSeconds));
+  // Until the moderator chooses, the slow-mode choice follows the page: a
+  // panel opened before the refetch after a save lands would otherwise keep
+  // the value from before it (TKT-01M3TSZHSW).
+  const chose = useRef(false);
+  useLayoutEffect(() => {
+    if (chose.current) return;
+    setChoice(slowChoice(slowSeconds));
+    setCustom(String(slowSeconds));
+  }, [slowSeconds]);
   const [sending, setSending] = useState(false);
   const [refused, setRefused] = useState<string | null>(null);
   // Set synchronously, so a second press before the render that disables
@@ -406,7 +416,10 @@ export function ModerateDialog({
                       name={`moderate-slow-${thread}`}
                       value={v}
                       checked={choice === v}
-                      onChange={() => setChoice(v)}
+                      onChange={() => {
+                        chose.current = true;
+                        setChoice(v);
+                      }}
                     />
                     {label}
                   </label>
@@ -415,7 +428,14 @@ export function ModerateDialog({
               {choice === 'custom' && (
                 <label class="moderate-field">
                   Seconds between posts
-                  <input inputMode="numeric" value={custom} onInput={(e) => setCustom(e.currentTarget.value)} />
+                  <input
+                    inputMode="numeric"
+                    value={custom}
+                    onInput={(e) => {
+                      chose.current = true;
+                      setCustom(e.currentTarget.value);
+                    }}
+                  />
                 </label>
               )}
             </>

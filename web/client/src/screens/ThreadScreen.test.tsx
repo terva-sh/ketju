@@ -937,7 +937,9 @@ describe('moderating from the thread screen', () => {
   // TKT-01M3R0PM0K: slow mode, PUT …/slow-mode, in the same panel.
   const puts = () => server.sent.filter((r) => r.method === 'PUT').map((r) => ({ url: r.url, body: r.body }));
   const slowUrl = `/api/v1/admin/threads/${id}/slow-mode`;
-  const checked = () => panel()!.querySelector<HTMLInputElement>('input[type=radio]:checked')?.value;
+  // The radio whose checked property is set. happy-dom's :checked selector
+  // can answer from before a click that no render followed.
+  const checked = () => [...panel()!.querySelectorAll<HTMLInputElement>('input[type=radio]')].find((i) => i.checked)?.value;
   const pick = (v: string) => act(async () => panel()!.querySelector<HTMLInputElement>(`input[value="${v}"]`)!.click());
   async function custom(v: string) {
     const f = panel()!.querySelector<HTMLInputElement>('input[inputmode=numeric]')!;
@@ -973,6 +975,64 @@ describe('moderating from the thread screen', () => {
     expect(panel()).toBeNull();
     expect(notice(root)).toBe('Slow mode: one post every 5 minutes');
     expect(document.activeElement).toBe(root.querySelector('h1'));
+  });
+
+  // TKT-01M3TSZHSW: after a save, the page is asked for again, and a panel
+  // opened before that answer lands was prefilled from the page before the
+  // save. It follows the thread's value until the moderator chooses.
+  async function saveThenReopen(answer: number) {
+    let land!: () => void;
+    const held = new Promise<ThreadPage>((r) => (land = () => r(at({ viewer: { slow_mode_seconds: answer } }))));
+    pages = [at({ viewer: { slow_mode_seconds: 0 } }), held];
+    moderate['slow-mode'] = (b) => ({ status: 200, body: b, headers: { 'Cache-Control': 'no-store' } });
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'slow-mode');
+    await pick('10');
+    await submit();
+    expect(panel()).toBeNull();
+    await open(root, 'slow-mode');
+    expect(checked()).toBe('0');
+    return async () => {
+      land();
+      await settle(root);
+    };
+  }
+
+  it('the slow-mode panel opened before the page refetch takes the thread value when it lands', async () => {
+    let landed = await saveThenReopen(10);
+    await landed();
+    expect(checked()).toBe('10');
+
+    // A value no interval names lands as Custom's seconds.
+    landed = await saveThenReopen(45);
+    await landed();
+    expect(checked()).toBe('custom');
+    expect(panel()!.querySelector<HTMLInputElement>('input[inputmode=numeric]')!.value).toBe('45');
+  });
+
+  it("a moderator's slow-mode choice is kept when the page refetch lands", async () => {
+    const landed = await saveThenReopen(10);
+    await landed();
+    expect(checked()).toBe('10');
+    // Once the moderator chooses, a later answer leaves the choice alone:
+    // here after a conflict, which asks for the page again.
+    let land!: () => void;
+    pages = [new Promise<ThreadPage>((r) => (land = () => r(at({ viewer: { slow_mode_seconds: 30 } }))))];
+    moderate['slow-mode'] = () => problemAnswer('conflict', 409);
+    await pick('300');
+    await submit();
+    land();
+    await settle(document.body);
+    expect(panel()?.querySelector('[role=alert]')?.textContent).toBe('Slow mode is already set to that, or the thread is archived.');
+    expect(checked()).toBe('300');
+
+    await pick('custom');
+    await custom('45');
+    await submit();
+    await settle(document.body);
+    expect(checked()).toBe('custom');
+    expect(panel()!.querySelector<HTMLInputElement>('input[inputmode=numeric]')!.value).toBe('45');
+    expect(puts().map((p) => p.body)).toEqual([{ seconds: 10 }, { seconds: 300 }, { seconds: 45 }]);
   });
 
   it('a group moderator sets slow mode', async () => {
