@@ -52,6 +52,14 @@ for (const ordinal of [1, 5]) {
       await expect(region).toContainText('Seeded post 30.');
       await expect(region).toContainText('Seeded post 55.');
       await expect(page.locator('#post-30, #post-55')).toHaveCount(0);
+      // A copy keeps its own one-line header at both widths: the phone's
+      // stacked header is the canonical post's alone (TKT-01M3S3Z9E1,
+      // Terva review 1797).
+      const copy = region.locator('[data-reply="55"] .post-header');
+      const o = (await copy.locator('.ordinal').boundingBox())!;
+      const a = (await copy.locator('.author').boundingBox())!;
+      expect(o.y < a.y + a.height && a.y < o.y + o.height, 'ordinal and author share a line').toBe(true);
+      expect(o.x).toBeLessThan(a.x);
     } else {
       expect(await region.locator('.post--recessed').evaluateAll((es) => es.map((e) => e.getAttribute('data-reply')))).toEqual(['6', '8']);
     }

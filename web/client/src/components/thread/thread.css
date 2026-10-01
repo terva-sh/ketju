@@ -902,19 +902,19 @@
     grid-column: 2;
     gap: 0 6px;
   }
-  .posts > article.post .post-header > * {
+  .posts > article.post > .post-main > .post-header > * {
     order: 2;
   }
-  .posts > article.post .post-header > .author,
-  .posts > article.post .post-header > .role-badge {
+  .posts > article.post > .post-main > .post-header > .author,
+  .posts > article.post > .post-main > .post-header > .role-badge {
     order: 0;
   }
-  .posts > article.post .post-header::after {
+  .posts > article.post > .post-main > .post-header::after {
     content: '';
     order: 1;
     flex-basis: 100%;
   }
-  .posts > article.post .replies {
+  .posts > article.post > .post-main > .replies {
     margin-left: 0;
   }
   .pager {
