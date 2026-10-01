@@ -464,20 +464,25 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   deletes the search row of every (thread, ordinal) the journal lists and
   rewrites a redacted title's row from its replacement. The index holds one
   row per post, its current revision (04 "search"), so no older revision
-  has a row to miss. The deletes run with `PRAGMA secure_delete` on, and the
-  command then runs FTS5's `optimize`, which merges the index's segments, so
-  neither the freed pages nor a stale segment keeps the text's terms in
-  `ketju.db`. It then checkpoints the WAL into `ketju.db` and truncates it,
-  and a checkpoint that cannot complete fails the run with the journal
-  kept, so a resume finishes it. A database
-  without the search tables (one not yet migrated) has nothing to clear.
-  A database restored from a backup taken before the redaction drops the
-  rows by itself: its `search_state` trails the log, and catch-up reaches
-  the `Redacted` records. Alternatives: relying on catch-up alone lost,
-  because a stale `search_state` or a damaged index would leave the text
-  searchable after the command reported success; deleting the rows without
-  `secure_delete` and `optimize` lost, because the terms would stay in the
-  database file, which a takedown has to reach as it reaches the log.
+  has a row to miss; but an edit freed the pages of the row it replaced,
+  and those pages can still hold an earlier revision's terms. So the
+  command then runs FTS5's `optimize`, which merges the index's segments,
+  and then `VACUUM`, every time, which rebuilds `ketju.db` from its live
+  pages, so no freed page keeps the text's terms. It then checkpoints the
+  WAL into `ketju.db` and truncates it, and a checkpoint that cannot
+  complete fails the run with the journal kept, so a resume finishes it.
+  The `VACUUM` costs a rewrite of the database and free disk of about its
+  size, which a rare, offline takedown can afford. A database without the
+  search tables (one not yet migrated) has nothing to clear. A database
+  restored from a backup taken before the redaction drops the rows by
+  itself: its `search_state` trails the log, and catch-up reaches the
+  `Redacted` records. Alternatives: relying on catch-up alone lost, because
+  a stale `search_state` or a damaged index would leave the text searchable
+  after the command reported success; deleting the rows with only `PRAGMA
+  secure_delete` and `optimize` lost, because `secure_delete` cannot reach
+  pages freed before it was turned on, and the terms would stay in the
+  database file, which a takedown has to reach as it reaches the log (Terva
+  review 1719).
 - **Titles.** Decided 2026-09-29 (TKT-01M3NS147C): the command also redacts
   a thread's title, because a takedown or an erasure can cover a title as
   easily as a post, and a rename leaves every earlier title in the log. It

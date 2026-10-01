@@ -24,12 +24,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T09:14:08Z
+updated_at: 2026-10-01T09:38:45Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-run-orchestrator
+  id: agent:claude-code/phase3-groom-search
   name: ""
 extensions: {}
 ---
@@ -55,7 +55,7 @@ Indexing plain source rather than HTML keeps markdown syntax out of the results 
 - [ ] A post deleted by its author, hidden by a moderator (group grant included), auto-hidden, hidden by a suspension, moved or redacted loses its row through incremental delivery and through a from-scratch index alike, a restored post's row returns at its current revision, and every record type has an index decision (TestRemovedPostsLeaveTheIndex, TestEveryRecordTypeHasAnIndexDecision)
 - [ ] search_state never records a length past the frames scanned, so a later record is never skipped (TestStateNeverPassesTheScan)
 - [ ] A thread that fails partway through a batch keeps its earlier rows and search_state while the batch's other threads commit (TestAFailedThreadKeepsItsRows)
-- [ ] A version change or a missing search_meta row empties the index and records the version in one transaction, so no row of another version is served, then re-indexes every thread once: a restart mid-pass resumes, and a restart after it re-indexes nothing (TestVersionChangeReindexes, TestVersionChangeServesNoOldRows)
+- [ ] A version change or a missing search_meta row empties the index and records the version in one transaction, which serve runs before its listener opens, so no row of another version is ever served; every thread is then re-indexed once, a restart mid-pass resumes, and a restart after it re-indexes nothing (TestVersionChangeReindexes, TestVersionChangeServesNoOldRows, TestServePreparesSearchBeforeListening)
 
 ## Implementation plan
 
@@ -126,9 +126,10 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
 
      A last title, if one was seen, is put as row (thread, 0). `search_state` moves to `logLength`, the end of the frames scanned, and never past it, in the same transaction as the rows. A snapshot taken past `logLength` may already show a later edit or hide. Writing its values early is harmless, because they are absolute and a later write converges on them. Recording its length would be harmful: the frames between `logLength` and the snapshot were never scanned for touched ordinals or titles, so the next catch-up would skip them for good (Terva review 1695). The next delivery scans them and applies their values again.
    - **Batches.** `Deliver` indexes every thread in the batch in one `db.Write`. It commits and opens another at a thread boundary once the transaction holds 256 posts or 1 MiB of text, so the single write connection is never held for long. A burst is a few transactions, not one per post. Each thread in a transaction runs inside its own `SAVEPOINT`. A thread that fails partway, from a damaged frame or an unreadable log, rolls back to it, so the thread's rows and `search_state` stay as they were and the other threads in the transaction still commit. Like the projection writer, a failed thread joins a behind set that later deliveries and `Run` retry. `Deliver` returns an error only when its sweep after `Dropped > 0` fails.
-   - **`CatchUp(ctx)`** compares every thread under `threads/` with its `search_state`, using the projection catch-up's directory walk (export it from `projection`, or move it to `threadid`, rather than copying it). It indexes each thread that trails and skips each quarantined one. It first checks `search_meta.version` against `search.Version`. A missing row (a fresh migration, or after `ClearSearch`) counts as different. A different version is handled in one transaction: `db.ClearSearch` (FTS5 `delete-all`, and empty `search_docs`, `search_state` and `search_meta`) **and write `search_meta.version = search.Version`**. Every thread then trails and is re-indexed from its first frame. No row built by another version's extraction survives the change, so none can be served while the pass runs (Terva review 1713). Search answers from the rows the pass has rebuilt so far, with `indexing` true, as after an upgrade. Writing the version at that moment, not at the end of the pass, means a restart mid-pass resumes thread by thread from `search_state`, and a finished pass is never repeated (Terva review 1707). `Indexing()` is true from the start of the first `CatchUp` until it returns.
+   - **`CatchUp(ctx)`** compares every thread under `threads/` with its `search_state`, using the projection catch-up's directory walk (export it from `projection`, or move it to `threadid`, rather than copying it). It indexes each thread that trails and skips each quarantined one. `CatchUp` assumes `Prepare` (next bullet) has already run. `Indexing()` is true from the start of the first `CatchUp` until it returns.
+   - **`Prepare(ctx)`** settles the index's version, synchronously, before anything can search it. It checks `search_meta.version` against `search.Version`. A missing row (a fresh migration, or after `ClearSearch`) counts as different. A different version is handled in one transaction: `db.ClearSearch` (FTS5 `delete-all`, and empty `search_docs`, `search_state` and `search_meta`) **and write `search_meta.version = search.Version`**. Every thread then trails and `CatchUp` re-indexes it from its first frame. No row built by another version's extraction survives the change, and because `Prepare` runs before the listener opens, no request can reach one in between (Terva reviews 1713 and 1719). Search answers from the rows the pass has rebuilt so far, with `indexing` true, as after an upgrade. Writing the version in that transaction, not at the end of the pass, means a restart mid-pass resumes thread by thread from `search_state`, and a finished pass is never repeated (Terva review 1707). With the version current, `Prepare` is one read. `ketju reindex --search` and `ketju redact` call it too, before they index anything.
    - **`Lag() Lag{Threads, Bytes}`**, with one log line when the index falls behind and one when it catches up, as `Bus` and `projection.Writer` do.
-6. **Wiring in `cmd/ketju/serve.go`.** After the projection: `bus.Subscribe(indexer, 4096)`. `CatchUp` runs in a goroutine started after `bus.Start`, so it never holds back the listener. Shutdown cancels it and waits, as for `proj.Run`. A mutex in the indexer serializes `IndexThread`, so `Deliver` and `CatchUp` never index one thread at once. The startup log line adds `search_indexing`. The `Indexing` and `Lag` functions are handed to the threads service in TKT-01M29CTY8T.
+6. **Wiring in `cmd/ketju/serve.go`.** After the projection: `bus.Subscribe(indexer, 4096)`. In the startup sequence, beside the projection's catch-up and before `net.Listen`, `serve` calls `indexer.Prepare(ctx)`. A failure there fails startup, as a failed projection catch-up does. `CatchUp` then runs in a goroutine started after `bus.Start`, so the slow part never holds back the listener. Shutdown cancels it and waits, as for `proj.Run`. A mutex in the indexer serializes `IndexThread`, so `Deliver` and `CatchUp` never index one thread at once. The startup log line adds `search_indexing`. The `Indexing` and `Lag` functions are handed to the threads service in TKT-01M29CTY8T.
 7. **The query: `views.Search(ctx, tx, SearchParams) ([]SearchRow, error)`** in a new `internal/store/db/views/search.go`, hand-written because of the sqlc limit above:
    ```sql
    SELECT d.thread_id, d.ordinal, d.revision, d.author_id, d.created_at, d.title,
@@ -180,6 +181,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
   - `TestAFailedThreadKeepsItsRows`: in one batch with two healthy threads, a thread whose log is damaged after posts that were already put keeps its earlier rows and `search_state` unchanged. The healthy threads commit, and the failed one is reported by `Lag`.
   - `TestStateAheadOfLogReindexesTheThread`.
   - `TestVersionChangeReindexes`: a different version, and a missing `search_meta` row, each re-index every thread. A restart after that pass finishes re-indexes nothing. A restart in the middle of the pass indexes only the threads it had not reached.
+  - `TestServePreparesSearchBeforeListening` (`cmd/ketju`): a data directory whose index carries another version, with `CatchUp` stalled by a hook. The first search request after `ready` finds none of the old rows, and `search_meta.version` is already current.
   - `TestVersionChangeServesNoOldRows`: an index built by an earlier version whose extraction kept link destinations, then a version change with the pass stalled after one thread. A search for a link destination finds nothing. A search for a word in the unreached threads finds nothing, and `Indexing()` is true. The rebuilt thread is found.
   - `TestLagIsReported`: `Lag` while stalled, and one log line per transition.
   - `TestIndexerNeverWritesALogOrIndex`: files are opened read-only, as the projection's test holds.
@@ -225,3 +227,7 @@ Terva review 1713 (PR #270, head d0b6f16, base a599b48), fixed. (high) 'Do not s
 **agent:claude-code/phase3-run-orchestrator** at 2026-10-01T09:14:08Z
 
 Orchestrator, 2026-10-01: grooming PR #270 reached the five-round review cap (docs/13). Every finding was fixed, and the plan still has security-relevant detail that each round sharpened. The orchestrator allows one sixth review round as a recorded exception, on the head that carries this note. This commit also triggers a fresh CI run: run 1790 failed in e2e/smoke.spec.ts on a server stall unrelated to this PR, which is filed separately.
+
+**agent:claude-code/phase3-groom-search** at 2026-10-01T09:38:45Z
+
+Terva review 1719 (PR #270, head 8572a70, base a599b48), fixed on groom/p3-search-2. (high) 'Clear an obsolete index before search requests can reach it': the version check and atomic clear move out of background CatchUp into a synchronous Indexer.Prepare, which serve calls before net.Listen (and reindex and redact call before indexing); a failure fails startup. docs/04 'search (FTS)' says so; TestServePreparesSearchBeforeListening; criterion 12 rewritten.

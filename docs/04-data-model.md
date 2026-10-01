@@ -966,8 +966,9 @@ index holds, for TKT-01M29CRJ3B (Build the FTS5 search index and indexer).
   does for projections. `search_meta` holds one number, the version of the
   plain-text extraction and tokenizer that built the index. A build that
   finds another version, or none, empties the whole index and records its
-  own version in one transaction, so no row of another version is ever
-  served. `serve` then re-indexes every thread in the background, search
+  own version in one transaction. `serve` does this before its listener
+  opens, so no row of another version is ever served. It then re-indexes
+  every thread in the background, search
   says it is incomplete meanwhile, and a restart mid-pass resumes rather
   than starting again. Alternatives: one FTS5 table with `UNINDEXED` key
   columns lost, because removing a post's row by `(thread_id, ordinal)`
