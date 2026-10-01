@@ -1300,6 +1300,7 @@ describe('live updates on the thread screen', () => {
   let onPost: (() => void) | null;
   let holdPost: Promise<void> | null;
   let holdGet: Promise<void> | null;
+  let failGets: number;
   let server: StubServer;
   let observers: { observed: Element[]; callback: IntersectionObserverCallback }[];
   let scrolled: string[];
@@ -1373,6 +1374,7 @@ describe('live updates on the thread screen', () => {
     onPost = null;
     holdPost = null;
     holdGet = null;
+    failGets = 0;
     const pageFor = (u: string) => {
       const q = new URLSearchParams(u.split('?')[1] ?? '');
       const o = Number(q.get('ordinal') ?? 0);
@@ -1397,6 +1399,7 @@ describe('live updates on the thread screen', () => {
           // A held GET answers with the thread as it was when it was asked.
           if (k === `GET ${url}` || k.startsWith(`GET ${url}?`))
             return async () => {
+              if (failGets > 0 && failGets--) return problemAnswer('unavailable', 503);
               const answer = pageFor(k.slice(4));
               await holdGet;
               return answer;
@@ -1706,6 +1709,24 @@ describe('live updates on the thread screen', () => {
     await settle(root);
     expect(ids(root)).toEqual(['post-26', 'post-27', 'post-28', 'post-29', 'post-30']);
     expect(pill(root)?.textContent).toBe('1 new post — show');
+  });
+
+  it('a refresh that fails is tried again without another hint', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    vi.useFakeTimers();
+    try {
+      add(post(6));
+      failGets = 1;
+      await act(async () => stream().emit('thread', { thread_id: id, log_length: len }));
+      await act(async () => void (await vi.advanceTimersByTimeAsync(10)));
+      expect(pill(root)).toBeNull();
+      await act(async () => void (await vi.advanceTimersByTimeAsync(30_000)));
+    } finally {
+      vi.useRealTimers();
+    }
+    await settle(root);
+    expect(pill(root)?.textContent).toBe('1 new post — show');
+    expect(server.sent.filter((r) => r.method === 'GET' && r.url.startsWith(url))).toHaveLength(3);
   });
 
   it('what the screen offers follows the live page', async () => {

@@ -38,7 +38,7 @@ import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/short
 import { isPhone } from '../state/layout';
 import { composerFor, loadReplyDraft, quotePost, replyToPost, type Slow } from '../state/composer';
 import { listFor } from '../state/lists';
-import { subscribe } from '../state/live';
+import { pollMs, subscribe } from '../state/live';
 import { marking, markUnread, trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { refreshViewer, viewer } from '../state/viewer';
@@ -637,9 +637,14 @@ function useLive(
     // An answer that lands after the subscription closed is for a screen
     // that has gone, and sets nothing.
     let open = true;
+    // A refresh that fails for any other reason than access is tried again
+    // a poll's interval later, until one answers: a stream that stays up
+    // sends nothing more for the change it already named (Terva review 1779).
+    let again: ReturnType<typeof setTimeout> | undefined;
     const held = () => at.current.page?.thread.log_length ?? -1;
     const refresh = () => {
       const { key, me, page, retry } = at.current;
+      clearTimeout(again);
       if (!page) return void (missed.current = true);
       loadThreadPage(id, { page: page.page.number }).then(
         (p) => {
@@ -648,7 +653,9 @@ function useLive(
           setLive({ key, me, page: p });
         },
         (err: unknown) => {
-          if (open && at.current.key === key && revokesAccess(err)) retry();
+          if (!open || at.current.key !== key) return;
+          if (revokesAccess(err)) retry();
+          else again = setTimeout(refresh, pollMs);
         },
       );
     };
@@ -656,6 +663,7 @@ function useLive(
     const close = subscribe(id, held, refresh);
     return () => {
       open = false;
+      clearTimeout(again);
       run.current = null;
       missed.current = false;
       close();
