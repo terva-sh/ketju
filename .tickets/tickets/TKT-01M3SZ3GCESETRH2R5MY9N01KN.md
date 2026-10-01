@@ -26,12 +26,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T20:11:42Z
-updated_at: 2026-10-01T09:14:30Z
+updated_at: 2026-10-01T09:51:14Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-run-orchestrator
+  id: agent:claude-code/phase3-run-vbwma8
   name: ""
 extensions: {}
 ---
@@ -202,3 +202,17 @@ Block reason refreshed 2026-10-01 (orchestrator) because TKT-01M3TNBKNQ is done.
 **agent:claude-code/phase3-run-orchestrator** at 2026-10-01T09:14:30Z
 
 2026-10-01: CI run 1790 caught a server stall with evidence. GET /api/v1/threads took 8892 ms right after a read-position DELETE, while every other request took under 25 ms. That is filed as TKT-01M3VBWMA8. This ticket's timeout may be the same stall seen from the admin applications list. If TKT-01M3VBWMA8's fix names a cause that also explains the admin list, this ticket can close against it. It stays blocked until then.
+
+**agent:claude-code/phase3-run-vbwma8** at 2026-10-01T09:51:14Z
+
+Evidence from TKT-01M3VBWMA8 (Find the nine-second server stall on a thread page after a read reset), 2026-10-01: run 1592's failure fits a runner-wide freeze, and the log shows one.
+
+Run 1592 ran on runner `b3cc8959-8e64-43c7-82c4-c0ba937d9d05`. So did run 1595, which was in its Playwright step at the same time. Forgejo's step-log timestamps show:
+- 1592: `[desktop] admin-applications.spec.ts:40` ran from about 19:42:52.2 to 19:43:01.22 UTC and failed after 9.0 s. The test before it ended at 19:42:48.97.
+- 1595: `[phone] targets.spec.ts:69`, "the thread list", ran from 19:42:50.10 to 19:43:00.997 and took 10.9 s. The same test took 870 ms in run 1790.
+
+These are two containers, each with its own ketju server and Chromium. Both lost about ten seconds, and both stalls ended within 0.25 s of each other. TKT-01M3VBWMA8's note has the same pattern on the same runner at 09:11:24 to 09:11:33 on 2026-10-01, across runs 1790, 1794 and 1798. A run on the other runner, build-0, kept making progress through that window.
+
+That explains this ticket's 42 runs that did not fail. Neither CPU load nor fsync load reproduces a freeze of the whole runner. It also explains #1592's server answering the list in milliseconds whenever it ran.
+
+TKT-01M3VBWMA8 is blocked under docs/14 class 3 (outside the repository), on TKT-01M3VDYENN (Find why CI runner b3cc8959 freezes every job for about ten seconds). This ticket's status is left to its owner. The evidence here is two concurrent jobs on one runner, not a trace of this test, so I have not closed it.
