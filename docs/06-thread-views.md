@@ -188,6 +188,69 @@ in-memory index of the thread (03) and, for cross-thread data, `post_meta`.
 A lens header always shows the count of hidden posts and a one-click return to
 the full thread at the same ordinal, so nobody gets lost in a filter.
 
+**Decided by the run (2026-10-01, pending maintainer review): what each lens
+keeps of removed posts.** Unread, since and reply chain are slices of the
+thread. Each keeps a removed post in its place as the tombstone the canonical
+page shows, so numbering and the chain's reply links hold (08 "Tombstones").
+By author and mentions keep only posts shown as themselves, so "showing 7 of
+212" counts posts a reader can read, and an author whose every post was
+removed is an empty lens. The moderator lens keeps exactly the removed posts:
+deleted, hidden, hidden pending review, moved and redacted, each with its
+tombstone reason. It carries a body only where 07 "Removed posts" already
+serves that body to the moderator. A lens selects the same posts for every
+viewer, except unread and mentions, which depend on the viewer. Alternatives:
+keeping tombstones in every lens lost because the author lens of a member
+whose posts a suspension hid would be a page of tombstones. Dropping them from
+every lens lost because a reply chain through a removed post would lose its
+link. A moderator lens showing the whole thread with removed bodies inline lost
+because the moderator's canonical page has shown exactly that since
+TKT-01M29CKRJ9, so the lens would add nothing (TKT-01M29CRJ1P,
+TKT-01M29CTY6E).
+
+**Decided by the run (2026-10-01, pending maintainer review): the unread lens
+holds its boundary.** `?lens=unread` takes the viewer's `last_read_ordinal` B
+and answers as `unread:B`, the posts after B. The client replaces the address
+with `?lens=unread:B`, so paging, reload and Back show the same posts while
+reading moves the position. Opening the bare lens again starts from the new
+position. B is the integer the divider, the landing page and "first unread"
+already use, so the lens's first post is the post "first unread" lands on.
+An anonymous viewer's unread lens is empty, and the client asks them to sign
+in. Alternatives: re-evaluating on each page lost because reading page 1
+moves the position, and page 2 would then skip a page of posts. Holding the
+boundary in server state lost because lenses are URL state (07 "Path to a
+non-JS client") (TKT-01M29CTY4J).
+
+**Decided by the run (2026-10-01, pending maintainer review): read tracking
+under a lens.** The read beacon runs under the unread and since lenses, whose
+posts run on without a gap, and under no other lens. Under author, chain,
+mentions or moderator, marking the highest post seen would mark every post
+the lens skipped as read. Alternatives: tracking under every lens lost for
+that reason. Tracking under none lost because the unread lens is where a daily
+reader reads (TKT-01M29CTY71).
+
+**Decided by the run (2026-10-01, pending maintainer review): the lens bar.**
+It sits under the thread head at both widths, as the mockups draw it. It holds
+"Only <handle>", the author lens for the thread's author, and "Lens", which
+opens the switcher. The switcher offers the full thread, unread, by author
+for each author on the page, mentions me, since a date, and moderator to a
+viewer who moderates the forum. A post that is a reply or has replies offers
+"Conversation", its chain lens, in its footer, under "more" on a phone. Every
+lens draws a "… N posts …" divider where it skipped posts, not only the
+chain. "Full thread" in the lens header goes to the canonical permalink of the
+post at the top of the viewport. On phones TKT-01M29CGBZD presents the
+switcher as a sheet. Alternatives: Only OP among the thread actions lost
+because on a phone those sit under the more menu, and 10 Q15 leaned to the
+header. Dividers in the chain lens alone lost because an author lens would
+then read as one unbroken conversation, which it is not (TKT-01M29CTY71,
+TKT-01M29CTY58).
+
+**Decided by the run (2026-10-01, pending maintainer review): the mentions
+lens** keeps the posts that mention the viewer, by the user id the `mentions`
+projection records, and the posts that reply to a post the viewer wrote. It
+leaves out the viewer's own posts. Alternative: keeping the viewer's own posts
+lost because a reply to yourself is not what the lens is for
+(TKT-01M29CTY6E).
+
 ## Composer
 
 - Markdown with a toolbar; live preview rendered by the **same server

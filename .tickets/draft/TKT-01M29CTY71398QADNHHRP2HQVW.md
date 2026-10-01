@@ -10,7 +10,7 @@ due_on: null
 labels:
   - area:client
   - area:views
-  - effort:M
+  - effort:L
 assignees: []
 milestone: phase-3
 parent: TKT-01M29BN36D34YVKVRPNQD3PHDV
@@ -18,20 +18,26 @@ origin: null
 dependencies:
   - TKT-01M29CRJ1PY355KX3HX7A5N785
   - TKT-01M29CEE6V358M5KCBJGHD58HM
+  - TKT-01M29CTY4JB7MMAWHVDT4BTCZM
+  - TKT-01M29CTY58PZ9W4DJ8Y0NEECE0
+  - TKT-01M29CTY5TZ1QMWK6BTGA21BWQ
+  - TKT-01M29CTY6EE6T8BWR1DGSG3WGV
 blocks_on: none
 references:
   - ref: design:lenses
     path: docs/06-thread-views.md
+  - ref: ticket:TKT-01M29CGBZD
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-09-11T23:28:54Z
+updated_at: 2026-10-01T07:51:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase3-groom-lenses
+  name: ""
 extensions: {}
 ---
 
@@ -43,7 +49,103 @@ Returning at the same ordinal is the part that stops people getting lost. A read
 
 ## Acceptance criteria
 
-- [ ] The header shows the active lens, the shown count, and the hidden count
-- [ ] Returning to the full thread lands on the same ordinal the reader was viewing
-- [ ] Switching lenses updates the URL so the view is shareable
-- [ ] The header is legible at 390 px and reachable from the phone lens sheet
+- [ ] The lens header shows the active lens, the shown count and the hidden count, and a '… N posts …' divider stands at every gap the server reports
+- [ ] Full thread lands on the canonical permalink of the post at the top of the viewport (vitest and e2e)
+- [ ] Only <handle> is one press from the thread head at both widths and gives the author lens URL, ?lens=author:<handle>
+- [ ] A bare ?lens=unread is replaced by unread:<B>, page 2 is unchanged after page 1 is read, and first unread lands on last_read + 1 from the canonical view and from the lens (e2e)
+- [ ] Empty states: an anonymous unread or mentions lens asks the reader to sign in; a fully read thread and an empty author or since lens offer the full thread; a one-post chain says the post is neither a reply nor replied to
+- [ ] The read beacon runs under unread and since and under no other lens (vitest)
+- [ ] At 390 px every lens is reachable from the Lens control, which TKT-01M29CGBZD later presents as a sheet, and the header and bar are legible with 44 px targets
+- [ ] e2e at 390 and 1440 px pass with one axe scan per test and no violations
+- [ ] The committed dist is rebuilt with go generate ./internal/web/spa and the reader stays within 70000 B gzip; the PR states the reader's bytes before and after, and the switcher's bytes measured inside and outside a lazy chunk
+- [ ] Every switch (switcher item, Only <handle>, Conversation) sets the address's lens and drops its page and ordinal, and a fresh load of that address shows the same posts (e2e)
+
+## Implementation plan
+
+Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
+
+### Settled in grooming
+
+- Every lens header shows what is being filtered, how many posts are hidden, and a one-press return to the full thread at the same ordinal (docs/06 "Lenses"). Lenses and pages are URL state, never client-only state (docs/07 "Path to a non-JS client"). `web/client/src/view.ts` (`useThreadView`, `setLens`) already holds the lens in the query string, and `Pager` already carries it on every page link.
+- This ticket is the one client ticket for lenses. The four lens tickets are server-only, so the committed dist changes in one PR (docs/13 "Running two lanes, changed").
+- The lens bar sits under the thread head at both widths, as the mockups draw it (`docs/mockups/generate.py`, "Only mara" and "Lens" beside the pager on desktop, a row of 44 px buttons on the phone). It holds "Only <handle>" and "Lens", which opens the switcher. The switcher's items, the post's "Conversation" entry, dividers for every lens, and "Full thread" going to the post at the top of the viewport are all in docs/06, under "Decided by the run (2026-10-01): the lens bar". "Only OP" on the header is docs/10 Q15, decided by the run 2026-10-01.
+- The unread lens's boundary is held by replacing a bare `?lens=unread` with `?lens=unread:B` (docs/06, under "the unread lens holds its boundary").
+- The read beacon runs under unread and since only (docs/06, under "read tracking under a lens").
+- An unknown lens is served as the canonical page with `lens: null` (docs/07, under "the `lens` parameter").
+- Times are absolute, through `PostTime` (docs/06, decided 2026-10-01).
+- The switcher is a disclosure of links, as `PostMore` is, not a modal, so it does not use `useModal`. Focus and key listeners go in layout effects, following TKT-01M3TV4HBF.
+- On phones TKT-01M29CGBZD later presents the switcher as a sheet. Until then this ticket's switcher serves both widths.
+
+### Approach
+
+1. **DTO.** In `web/client/src/api/dto.ts`, `Lens` gains `gaps: {after: number; count: number}[]` and `ThreadHeader` gains `author: Author`, matching TKT-01M29CRJ1P and TKT-01M29CTY58.
+2. **`components/thread/lens.ts`** holds the pure helpers:
+   - `lensParam(kind, value)` builds the string, and `onlyHref(thread, handle)` builds the Only link.
+   - `gapBefore(posts, gaps)` places each gap before the first post whose ordinal is past `after`, and the trailing gap after the last post.
+   - `describe(lens, header)` gives the header text: "Showing 7 of 212 posts by @mara", "Unread since #60", "Conversation around #42", "Since <PostTime>", "Mentioning you", "Removed posts".
+   - `tracksUnderLens(kind)` is true for `''`, `unread` and `since`.
+3. **`components/thread/LensHeader.tsx`** is drawn above the posts when `page.lens` is set. It shows the description, the shown and hidden counts, and "Full thread".
+   - "Full thread" is an anchor to the permalink of the first post on the page, so it opens in a new tab. On a press it routes to the permalink of the post at the top of the viewport, the first `.post` whose bottom is below the sticky head. `useArrival` then scrolls to it.
+   - The empty states:
+     - an anonymous viewer on unread or mentions: "Sign in to see what is new here", with a link to `/auth/signin?return_to=`;
+     - a fully read thread: "Nothing unread. Read the full thread";
+     - an author lens or since with no posts: "No posts here. Read the full thread";
+     - a chain of one post: "#N is not a reply and has no replies".
+4. **`components/thread/GapDivider.tsx`** draws "… N posts …" wherever `gapBefore` says. Its count links to the canonical permalink of the first skipped post.
+5. **`components/thread/LensBar.tsx`** is drawn under the thread head at both widths.
+   - "Only <handle>" links to `?lens=author:<header.author.handle>`, with `aria-current` while that lens is on.
+   - "Lens" opens the switcher. Its items are links that change only the `lens` and drop `page` and the ordinal:
+     - Full thread;
+     - Unread, for a signed-in viewer;
+     - one "By @handle" for each distinct author on the page;
+     - Mentioning me, for a signed-in viewer;
+     - Since a date, a date field whose day is turned into the Unix ms of local midnight in the viewer's timezone setting;
+     - Removed posts (`mod`), only when `viewer.can_moderate`.
+   - Escape and a press outside close it, returning focus to "Lens".
+   - Targets are 44 px below 720 px.
+6. **Conversation.** `Post` gains a "Conversation" link to `?lens=chain:<ordinal>` when the post has `reply_to` or `reply_count > 0`. On desktop it is inline in the footer. On a phone it is in `PostMore`. It is not on `Tombstone` and not in the reply expander's copies.
+7. **`ThreadScreen.tsx`.**
+   - When the address holds a bare `unread` and the answer's `lens` is `unread` with a value, route with replace to `unread:<value>`, keeping `page` and the hash.
+   - When the address holds a lens and the answer's `lens` is null, route with replace to the address without it, so the address stays the view.
+   - Under a lens, page links use `lensParam(page.lens.kind, page.lens.value)`.
+   - `useReadTracking` runs only when `tracksUnderLens(kind)`.
+   - `firstUnread` under the unread lens focuses the lens's first post on page 1, or routes to page 1 of `unread:B`. Anywhere else it keeps the canonical permalink of `last_read + 1`.
+   - `Pager`'s "posts x–y of n" stays hidden under a lens, as now, and its count comes from `page.total_pages`.
+8. **Bundle.**
+   - The header, bar, divider, empty states, the Conversation link and the glue belong in the reader, since a lens URL can be the first page loaded. Estimated at about 1.4 KB gzip.
+   - The switcher's menu, with its date field and author list, is estimated at about 0.9 KB gzip. It is measured both ways and becomes a lazy chunk (`components/thread/LensMenu.tsx`, loaded on the first press of "Lens") if that saves at least 400 B from the reader. If it does, `testing.tsx` gains a `lazyChunks` row for `/^\/t\//`.
+   - Expected reader: about 61.9 to 62.8 KB of 70000 B. If the reader would pass 70000 B, stop: a budget raise is the maintainer's (docs/14, class 5).
+   - Rebuild the committed dist with `go generate ./internal/web/spa`.
+
+### Tests
+
+- Vitest:
+  - `lens.test.ts`: gap placement across pages, the description per kind, and `tracksUnderLens`.
+  - `LensHeader.test.tsx`: counts; each empty state; "Full thread" picks the post at the top of the viewport.
+  - `LensBar.test.tsx`: the Only href equals the author lens URL; `aria-current`; Moderator offered only with `can_moderate`; Unread and Mentioning me only when signed in; Escape returns focus.
+  - `ThreadScreen.lens.test.tsx`, through `renderAt`:
+    - a bare unread is replaced by `unread:B`;
+    - an unknown lens is dropped from the address;
+    - `trackPosts` is not called under author, chain, mentions or mod, and is called under unread and since;
+    - dividers are drawn from `gaps`;
+    - Conversation is on a reply and on a replied-to post, and absent otherwise.
+  - The fixtures are a lens golden from `internal/dto/testdata/golden`.
+- e2e `e2e/lenses.spec.ts`, with stored sessions, one axe scan per test, each test at 390 and 1440 px. It calls no `/auth/*`, so it needs no `paceAuth`.
+  - Only <handle> from the thread head gives `?lens=author:<op>`, "Showing N of M", and the same posts on a fresh load.
+  - Conversation from a reply gives the chain with dividers, and "Full thread" lands on the post that was at the top.
+  - The unread lens holds while reading: page 2 is unchanged after page 1 is read. First unread lands on `last_read + 1` from the canonical view and from the lens.
+  - The switcher reaches every lens at 390 px with 44 px targets. A moderator sees Removed posts, and a member does not.
+- `npm run typecheck`, `npm test`, `npm run build` (budget), and the Playwright suite as `ci.yml` runs them.
+
+### Out of scope
+
+- The phone lens sheet and page picker: `TKT-01M29CGBZD`. It should depend on this ticket.
+- Server behaviour of each lens: `TKT-01M29CRJ1P`, `TKT-01M29CTY4J`, `TKT-01M29CTY58`, `TKT-01M29CTY5T`, `TKT-01M29CTY6E`.
+- Moving the existing menus to layout effects: `TKT-01M3TV4HBF`.
+- The cross-forum unread surfaces: `TKT-01M29CTY7K`.
+
+## Notes
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T07:51:20Z
+
+run decision: pending maintainer review. The decisions are recorded in docs/06 'Lenses', under the lens bar and read tracking under a lens. (1) The lens bar sits under the thread head at both widths: Only <handle> and Lens, as in the mockups. (2) The switcher items are recorded there. (3) Conversation is the chain entry on any reply or replied-to post. (4) Every lens draws gap dividers. (5) Full thread goes to the post at the top of the viewport. (6) The read beacon runs under unread and since only. This ticket also absorbs the client parts of the four lens tickets: the Only button, the unread address replacement and first unread under the lens, the empty states, the dividers, and the since date entry. The dist then changes in one client PR, so effort rises from M to L. TKT-01M29CGBZD (phone sheets, another lane) should depend on this ticket; it is referenced rather than linked so as not to write that lane's file. Decided in the Phase 3 grooming of 2026-10-01, lane lenses.

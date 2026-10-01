@@ -713,6 +713,44 @@ moderator removed; see "Removed posts" below).
   are what the endpoint actually serves for one seeded thread, regenerated with
   `go test ./internal/web/api -update`.
 
+**Decided by the run (2026-10-01, pending maintainer review): the `lens`
+parameter** (TKT-01M29CRJ1P). It replaces the `bad-request` above once that
+ticket lands. The values are `unread`, `unread:<ordinal>`, `author:<handle>`,
+`chain:<ordinal>`, `since:<when>`, `mentions` and `mod`. `<when>` is one of
+three forms:
+- a date, `YYYY-MM-DD`, read as midnight UTC, so a shared link means the same
+  moment to every reader;
+- an RFC 3339 time;
+- Unix ms.
+
+The answer's `lens.value` names the moment as Unix ms.
+
+Any other value, an empty one included, serves the canonical page with
+`lens: null` rather than an error, so an old or mistyped link still opens the
+thread. A well-formed lens is then resolved against the thread:
+- `chain:` past the last post is `not-found`, as `?ordinal=` is.
+- `mod` is `unauthenticated` to an anonymous viewer, and `forbidden` to a
+  viewer without `moderate` in the thread's forum, by role or through a group
+  (08 "Decided 2026-09-30"). That is the rule by which `revealRemoved`
+  already serves the same viewer the removed bodies on the canonical page.
+- `author:` matches the handle a member holds now, in any case. A handle
+  nobody holds answers exactly as a handle with no posts here (`shown` 0),
+  and a handle released by a rename is not followed. The lens therefore
+  tells a stranger nothing about who exists or who renamed.
+
+With a lens, `page` and `total_pages` count the lens's posts. `?ordinal=N`
+serves the lens page holding N, or else the page holding the first lens post
+after N, and the landing rule does not apply. `lens.shown` is the lens's
+posts, `lens.hidden` the thread's other posts, and `lens.gaps` is a list of
+`{after, count}`: after which ordinal (0 for the start of the thread) the
+lens skipped how many posts, for every gap that touches the page.
+
+Alternatives: `bad-request` for an unknown lens lost because a lens is URL
+state, and a link outlives the build that understood it. A date in the
+viewer's timezone lost because the same link would mean different moments to
+different readers. Following a released handle lost because the profile
+route refuses a stranger that answer (05 "Changing a handle").
+
 #### The response cache (TKT-01M29CCBY0)
 
 `internal/service/respcache` holds a page's posts as serialized JSON, bounded

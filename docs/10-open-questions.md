@@ -92,7 +92,12 @@ Each item states the options, the current lean, and when it must be decided.
     check on a real device with real readers is still open and belongs to
     the Phase 1 human verification pass. (TKT-01M29BW9P4)
 15. **"Only OP" as a button vs discoverable through the author lens.**
-    Lean: button on the thread header.
+    Lean: button on the thread header. **Decided by the run (2026-10-01,
+    pending maintainer review):** a button on the thread header, "Only
+    <handle>", beside the lens switcher, as the mockups draw it at both
+    widths (06 "Lenses", TKT-01M29CTY58, TKT-01M29CTY71). Alternative:
+    leaving it to the author lens in the switcher lost because the mockups
+    put it one press from the thread head.
 16. **Digest lens scoring** once reply/quote counts exist:
     `replies*3 + quotes*2 + mentions`? Decide in Phase 3+ with data.
 17. **Infinite scroll as an opt-in user preference** on top of pages.
