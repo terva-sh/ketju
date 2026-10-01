@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T09:03:52Z
+updated_at: 2026-10-01T09:39:35Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -54,6 +54,7 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
 - [ ] GET /notifications and POST /notifications/read are served, refuse non-members, and are documented in docs/07 with a form-post row (TestNotificationList, TestMarkNotificationsRead, TestNotificationsRefusals, TestEveryViewerStateRouteHasAFormPost)
 - [ ] The /me notifications count equals the unread rows GET /notifications serves (TestBadgeMatchesNotificationList); TestMeCountsScansNoTable and TestMeBudget still pass
 - [ ] The generator opens thread logs read-only and decides each recipient's access through perm as their own session would (TestGeneratorOpensLogsReadOnly, TestRecipientViewerMatchesSession)
+- [ ] A thread the viewer has muted since its notification was written, at thread or forum level, has that notification neither listed nor counted until unmuted, and a decided application's new_application row is listed as read and not counted (TestNotificationsNeverWidenAccess case l, TestBadgeMatchesNotificationList)
 
 ## Implementation plan
 
@@ -62,7 +63,7 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
 - **One notification per post per recipient.** It keeps the strongest kind, ranked `mention`, then `reply_to_you`, then `quoted`, then `thread_you_watch` (docs/04 `notifications`, run decision 2026-10-01).
 - **`thread_you_watch` collapses.** A member has at most one unread row of it per thread. That row names the first new post, and later posts add nothing until the member reads it (docs/04, run decision 2026-10-01).
 - **Edits.** An `Edit` with a `mentions` key notifies the members it names, as `mention`, and nothing else. A member already notified about the post gets no new row, though their unread row may move to a stronger kind (docs/04, run decision 2026-10-01).
-- **Serving.** A post notification is listed and counted only while the post is visible to every reader and the viewer may read its forum at that moment, moderators included. Rows are never deleted for this, so a restore brings one back. `new_application` is served only to a viewer whose role is moderator or admin at that moment. No notification carries post text (docs/04, run decision 2026-10-01). This is the docs/14 "never widen access" invariant, and any finding against it is a security finding.
+- **Serving.** A post notification is listed and counted only while three things hold at that moment, moderators included: the post is visible to every reader, the viewer may read its forum, and the thread's effective level for the viewer is not `mute`. Rows are never deleted for this, so a restore or an unmute brings one back. `new_application` is served only to a viewer whose role is moderator or admin at that moment. Once its application is no longer pending, it is served as read, so it agrees with the badge. No notification carries post text (docs/04, run decision 2026-10-01). This is the docs/14 "never widen access" invariant, and any finding against it is a security finding.
 - **Generation skips** the post's author, a recipient who is not `active`, a recipient who cannot read the forum when the post is processed, a recipient whose effective level is `mute`, and a record more than seven days older than its processing (docs/04 `notifications`).
 - **Precedence and mute** are TKT-01M29CRJ29's, through `domain.EffectiveWatch` (docs/04 `watches`).
 - **Mentions** come from the record's `mentions` key, which the renderer filled at write time. A mention inside a quotation is not in it (docs/06 "Composer", TKT-01M29C0WEQ). Quotes are not in the log, so the generator renders the source to find them (`render.Result.Quotes`).
@@ -130,12 +131,12 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
    - `Notifications(ctx, v, cursor)` requires a member (`member.Require`). It reads a page of 25, highest `id` first. The SQL joins `threads` (forum, slug, title, `log_length_projected`) and `post_meta`, and drops a row whose post is `deleted` or `moved`.
    - Then `s.Perm.CanEach(v, forums, PermRead)` drops unreadable forums, and quarantined threads are dropped.
    - For a thread whose projection trails its log (`Threads.LogSize(id) != log_length_projected`), the index entry must be `Flags.Visible()`, as in `userPostCount`.
-   - `new_application` is kept only when `v.Staff()`. `application_decided` is always kept.
+   - `new_application` is kept only when `v.Staff()`, and is served with `read: true` once its application is not `pending`. No `read_at` is written. `application_decided` is always kept.
    - The answer is `dto.NotificationList{notifications, next_cursor}`. Each `dto.Notification` is `{id, kind, thread {id, slug, title} | null, forum {slug, name} | null, ordinal, actor Author | null, at, read}`. The actor goes through `member.Author`, so an anonymized one is the placeholder.
    - A page may be short after filtering, and `next_cursor` is empty only at the end.
    - `MarkNotificationsRead(ctx, v, req)` takes `{ids}` or `{up_to}` and touches only the viewer's own unread rows. It answers `dto.NotificationsRead{marked}`.
-   - **One visibility decision for both surfaces** (review 1693). `threads.Service.VisibleNotifications(ctx, v, refs)` takes candidate rows, each with thread, ordinal, forum, `log_length_projected` and the `post_meta` live flag. It applies the forum check (`CanEach`), the quarantine, and the trailing-projection index check, and returns the rows that may be served. The list calls it on its page.
-   - `/me` calls the same function. `MeCounts`'s notifications part becomes per-thread rows in the same one statement, through a `UNION ALL` with a row-kind column: `forum_id`, `thread_id`, `log_length_projected`, and `json_group_array(ordinal)` of the viewer's unread post notifications whose `post_meta` row is live, plus one row counting the unread application kinds, with `new_application` only while pending and only for a staff role. `users.Service` gains a `VisibleNotifications` hook, wired in `serve.go` as `QueueCount` is. So the badge and the list cannot disagree, even while the projection trails the log.
+   - **One visibility decision for both surfaces** (review 1693). `threads.Service.VisibleNotifications(ctx, v, refs)` takes candidate rows, each with thread, ordinal, forum, `log_length_projected` and the `post_meta` live flag. Each candidate row also carries the thread's effective level for the viewer (`coalesce(tw.level, fw.level, '')`, joined from the viewer's own `watches` rows in the same SQL). The function drops a row whose level is `mute` (review 1718), then applies the forum check (`CanEach`), the quarantine, and the trailing-projection index check, and returns the rows that may be served. The list calls it on its page.
+   - `/me` calls the same function. `MeCounts`'s notifications part becomes per-thread rows in the same one statement, through a `UNION ALL` with a row-kind column: `forum_id`, `thread_id`, `log_length_projected`, and `json_group_array(ordinal)` of the viewer's unread post notifications whose `post_meta` row is live, each thread with its effective level, plus one row counting the unread application kinds, with `new_application` only while pending and only for a staff role. `users.Service` gains a `VisibleNotifications` hook, wired in `serve.go` as `QueueCount` is. So the badge and the list cannot disagree, even while the projection trails the log.
    - The statement count does not change. The index is consulted only for a thread whose projection trails its log, which is a thread just appended to and so already open in the cache.
 6. **Routes:** `GET /api/v1/notifications?cursor=` and `POST /api/v1/notifications/read`, both `no-store`. The POST joins `unchargedPaths`. Anonymous is `unauthenticated` and a pre-user is `forbidden`.
 7. **Docs.**
@@ -176,11 +177,12 @@ Serving and access (`internal/web/api`). Each case asserts both `GET /notificati
   - (i) a suspended author whose posts were hidden, gone and then back after the restore;
   - (j) a quarantined thread;
   - (k) `new_application` after the viewer is demoted;
+  - (l) a thread muted after its notification was written, gone, then back after unmuting, whether muted at thread level or through its forum (review 1718);
   - a restore that brings a row back.
 - `TestNotificationsTrailingProjection`: a `Delete` appended while the projection is held hides the row through the index check, from the list and from `/me`'s count alike.
 - `TestNotificationList`: the golden `notifications.member.json`, paging by cursor, and a malformed cursor `bad-request`.
 - `TestMarkNotificationsRead`: by ids and by `up_to`. Another user's ids are ignored, and `/me` drops. A row written by catch-up for an older post, and so with a higher `id` and an earlier `at`, sits above the older rows in the list and is cleared by an `up_to` of the first row's id.
-- `TestBadgeMatchesNotificationList`: `/me` equals the unread rows the list serves.
+- `TestBadgeMatchesNotificationList`: `/me` equals the unread rows the list serves, through a muted thread and through a `new_application` whose application is decided. That application's row is listed as read and is not counted (review 1718).
 - `TestNotificationsRefusals`: anonymous `unauthenticated` and pre-user `forbidden`. Both answers are `no-store`.
 - `TestEveryViewerStateRouteHasAFormPost` with the POST added. `TestMeCountsScansNoTable` and `TestMeBudget` still pass. `TestProjectionTablesAreMarked` still passes, because progress is not a projection.
 
@@ -201,3 +203,7 @@ run decision: pending maintainer review. Four decisions bind this ticket, record
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T08:27:24Z
 
 Review 1693 (head 2b18c6f, base a599b48) fixed in the plan. High, 'Apply trailing-projection visibility checks to the notification badge': the list and /me now share one function, threads.Service.VisibleNotifications. It checks forum access, quarantine and the index for a trailing projection. MeCounts returns per-thread ordinals in the same single statement so /me can call it. Medium, 'Do not seed progress from a projection that may still be behind': history is now cut off by the generator migration's schema_migrations.created_at, and records at or before it generate nothing. The projection_state seed only saves a scan. docs/04 says the same.
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T09:39:28Z
+
+Review 1718 (head f93170e, base f3538e6) fixed in the plan and in docs/04. High, 'Filter existing notifications when a member mutes a thread': VisibleNotifications now drops rows whose thread is muted for the viewer when served, for the list and /me alike; case (l) is added to TestNotificationsNeverWidenAccess. Medium, 'Make decided-application rows follow the same list and badge rule': a new_application whose application is no longer pending is served as read, with no read_at written, so the list and the badge agree. The work is carried onto groom/p3-unread-notifications-2 because main moved; that is round 4 of 5.

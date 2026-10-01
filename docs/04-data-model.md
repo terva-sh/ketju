@@ -697,7 +697,8 @@ sets it: closing an application does not. `GET /me`'s `notifications` count
 (`MeCounts`) counts an unread row of any kind but `new_application`, and a
 `new_application` row only while its application is `pending`, so the badge
 drops when an application is decided or withdrawn and the row stays unread
-for the notification list (TKT-01M29CTY86).
+for the notification list (TKT-01M29CTY86). The list serves such a row as
+read, so the list and the badge agree (run decision below).
 
 The post kinds are written by the notification generator, a subscriber on
 the event bus (TKT-01M29CRJ2T). These run decisions bind it:
@@ -729,13 +730,18 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
   hears of it; every edit notifying everyone again lost because it repeats
   alerts.
 - **Decided by the run (2026-10-01, pending maintainer review):** a post
-  notification is served (listed and counted) only while two things hold:
-  the post is visible to every reader, so not deleted, hidden, hidden
-  pending review, redacted or moved; and the viewer may read the thread's
-  forum at that moment. Both are checked when the list is served, and
-  moderators are held to the same rule. Rows are never deleted for this, so
-  a restored post's notification comes back. A `new_application` row is
-  served only to a viewer whose role is moderator or admin at that moment.
+  notification is served (listed and counted) only while three things
+  hold. The post is visible to every reader, so not deleted, hidden, hidden
+  pending review, redacted or moved. The viewer may read the thread's forum
+  at that moment. The thread's effective level for the viewer is not `mute`
+  at that moment, so muting a thread also silences what it already sent.
+  All three are checked when the list is served, and moderators are held to
+  the same rule. Rows are never deleted for any of this, so a restored post
+  or an unmuted thread brings its notification back. A `new_application`
+  row is served only to a viewer whose role is moderator or admin at that
+  moment. Once its application is no longer `pending`, the list serves it
+  as read without writing `read_at`. That makes it agree with the badge,
+  which stops counting it at the same moment.
   No notification carries any of the post's text. It carries the kind, the
   actor, the thread's title, the forum and the ordinal. Alternatives: let
   moderators see notifications of removed posts lost because an alert asks
