@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TMRCMJWCDN5D298XH4HZ1N
 title: Close the shortcuts overlay on an Escape pressed before it takes focus
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,10 +22,17 @@ references:
     path: null
   - ref: pr:257
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-tmrcmj
+  branch: run/tmrcmj-shortcuts-escape
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a8a151256a6579252
+  commit: af9cd5423d2f731d665d8ff9ff2983d7516b7056
+  session: null
+  claimed_at: 2026-10-01T04:01:03Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T02:30:06Z
-updated_at: 2026-10-01T03:45:17Z
+updated_at: 2026-10-01T04:01:04Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
