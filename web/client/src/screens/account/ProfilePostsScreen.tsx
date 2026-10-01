@@ -1,3 +1,4 @@
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { apiGet } from '../../api/client';
 import type { UserPost, UserPosts } from '../../api/dto';
@@ -37,7 +38,10 @@ const pageHref = (handle: string, cursor?: string) =>
 // history, not a thread, so it offers no reply, quote, flag or expander.
 //
 // The profile is fetched beside the list for the heading, and so that a
-// renamed handle's address is replaced here too (useProfile).
+// renamed handle's address is replaced here too (useProfile). Its failure is
+// reported with its own retry, and the list's retry asks for it again too,
+// so neither request is left failed with no way to try it again (Terva
+// review 1800).
 export function ProfilePostsScreen() {
   const { params } = useRoute();
   const { query } = useLocation();
@@ -61,7 +65,19 @@ export function ProfilePostsScreen() {
         </a>
         <h1>Posts by {name}</h1>
       </header>
-      {res.error && !list && <ErrorPanel error={res.error} what="These posts" onRetry={res.retry} />}
+      {res.error && !list && (
+        <ErrorPanel
+          error={res.error}
+          what="These posts"
+          onRetry={() => {
+            res.retry();
+            if (profile.error) profile.retry();
+          }}
+        />
+      )}
+      {profile.error && !profile.data && !(res.error && !list) && (
+        <ErrorPanel error={profile.error} what="This member's profile" onRetry={profile.retry} />
+      )}
       {list && list.posts.length === 0 && (
         <p class="account-empty" data-empty-list>
           {cursor ? 'No more posts.' : 'No posts you can see.'}
@@ -90,9 +106,22 @@ export function ProfilePostsScreen() {
 
 // HistoryPost is one post in a history: where it is, then the post as its
 // thread page draws it, read-only.
+//
+// A quote's source link is written by the server as #post-N, an anchor in
+// the quoting post's own thread (internal/render quote.go), which the thread
+// page resolves. A history mixes threads and has no such anchors, so each
+// one is pointed at the quoted post's permalink in this post's thread
+// (Terva review 1800).
 function HistoryPost({ item }: { item: UserPost }) {
   const { thread, forum, post } = item;
   const link = permalink(thread, post.ordinal);
+  const body = useRef<HTMLDivElement>(null);
+  useLayoutEffect(() => {
+    for (const a of body.current?.querySelectorAll<HTMLAnchorElement>('a.quote-source') ?? []) {
+      const o = /^#post-([1-9][0-9]*)$/.exec(a.getAttribute('href') ?? '')?.[1];
+      if (o) a.setAttribute('href', permalink(thread, Number(o)));
+    }
+  }, [post.html, thread.id, thread.slug]);
   return (
     <li class="history-post" data-history-post={link}>
       <p class="history-where">
@@ -120,7 +149,7 @@ function HistoryPost({ item }: { item: UserPost }) {
             </p>
           ) : (
             <>
-              <div class="post-body" dangerouslySetInnerHTML={{ __html: post.html }} />
+              <div class="post-body" ref={body} dangerouslySetInnerHTML={{ __html: post.html }} />
               <Attachments post={post} />
             </>
           )}

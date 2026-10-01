@@ -1,3 +1,4 @@
+import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me, Profile, UserPosts } from '../../api/dto';
 import { viewer } from '../../state/viewer';
@@ -89,6 +90,58 @@ describe('the posts list', () => {
     const root = await renderAt('/u/alice/posts');
     expect(root.querySelector('[data-empty-list]')?.textContent).toBe('No posts you can see.');
     expect(root.querySelector('.account-pages')).toBeNull();
+  });
+});
+
+// A quote's source link is #post-N in the quoting post's thread
+// (internal/render quote.go); a history mixes threads, so it is pointed at
+// the quoted post's permalink there (Terva review 1800).
+it("points a quote's source at the quoted post in its own thread", async () => {
+  const page = structuredClone(memberPosts) as UserPosts;
+  page.posts[0].post.html =
+    '<details class="quote" open><summary>Quote from #7</summary><blockquote><p>q</p></blockquote>' +
+    '<p class="quote-attribution"><a href="#post-7" class="quote-source">Post #7</a></p></details><p>reply</p>';
+  serve({ '/api/v1/users/alice/posts': page });
+  const root = await renderAt('/u/alice/posts');
+  const source = items(root)[0].querySelector<HTMLAnchorElement>('a.quote-source')!;
+  expect(source.getAttribute('href')).toBe('/t/3yymw47g00001/why-we-left-slack/7');
+  expect(root.querySelector('.history-posts a[href^="#"]')).toBeNull();
+});
+
+// The profile is a request of its own beside the list: its failure is shown
+// with a retry, and the list's retry asks for it again (Terva review 1800).
+describe('a failed profile request', () => {
+  it('is reported with its own retry, which recovers it', async () => {
+    let fail = true;
+    stubServer({
+      'GET /api/v1/users/alice': () => (fail ? problemAnswer('unavailable', 503) : ok(profile)),
+      'GET /api/v1/users/alice/posts': () => ok(memberPosts),
+    });
+    const root = await renderAt('/u/alice/posts');
+    expect(items(root)).toHaveLength(2);
+    const panel = root.querySelector<HTMLElement>('[role=alert]')!;
+    expect(panel.textContent).toContain("This member's profile could not be loaded.");
+    fail = false;
+    await act(async () => panel.querySelector('button')!.click());
+    await vi.waitFor(() => expect(root.querySelector('h1')?.textContent).toBe('Posts by Alice Nakamura'));
+    expect(root.querySelector('[role=alert]')).toBeNull();
+  });
+
+  it('is asked for again by the list’s retry when both failed', async () => {
+    let fail = true;
+    const s = stubServer({
+      'GET /api/v1/users/alice': () => (fail ? problemAnswer('unavailable', 503) : ok(profile)),
+      'GET /api/v1/users/alice/posts': () => (fail ? problemAnswer('unavailable', 503) : ok(memberPosts)),
+    });
+    const root = await renderAt('/u/alice/posts');
+    const panels = root.querySelectorAll<HTMLElement>('[role=alert]');
+    expect(panels).toHaveLength(1);
+    expect(panels[0].textContent).toContain('These posts could not be loaded.');
+    fail = false;
+    await act(async () => panels[0].querySelector('button')!.click());
+    await vi.waitFor(() => expect(items(root)).toHaveLength(2));
+    await vi.waitFor(() => expect(root.querySelector('h1')?.textContent).toBe('Posts by Alice Nakamura'));
+    expect(s.sent.filter((r) => r.url === '/api/v1/users/alice')).toHaveLength(2);
   });
 });
 

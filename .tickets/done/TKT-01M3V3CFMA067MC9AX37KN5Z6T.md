@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-01T20:58:20Z
+updated_at: 2026-10-01T21:01:25Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -174,13 +174,22 @@ The dist was handed to this lane on 2026-10-01. The branch was rebased onto orig
 - **Bundle.** The reader is 71675 B against 70218 B on main 9978cd3a, +1457 B of the 120000 B budget. Before #334 to #336 it was 66189 B to 67509 B. The account screens stay inlined.
 - **Commits.** The promote commit and the code commit became one commit during the rebase.
 
+**agent:claude-code/phase3-v3cfma** at 2026-10-01T21:01:08Z
+
+Terva review 1800 (run a920e871-f362-4b14-bbd4-09da0549b1b1, Actions run 2247) on head a41a91cd5f963e6e303b3867f2610b1f22e329f8, base 9978cd3a547568d3233ea1d85c1610d772cbdd4e. Both findings are medium, and both are fixed.
+
+- **"Quote-source links do not work in the cross-thread post history".** Accepted. `HistoryPost` now points each `a.quote-source` (`#post-N` from internal/render quote.go) at `permalink(thread, N)` in its own thread, in a layout effect after the server's HTML is inserted. The test is "points a quote's source at the quoted post in its own thread".
+- **"Surface failures of the posts screen's profile request".** Accepted. A failed profile request is shown in its own ErrorPanel with a retry. When both requests failed, the list's retry asks for the profile again too. The tests are under "a failed profile request".
+
+The reader bundle is now 71808 B.
+
 ## Summary
 
 The profile and its posts are built.
 
 - **`/u/{handle}`** draws `GET /users/{handle}` as the server answers it: avatar, display name, handle, role badge, bio (server-rendered, drawn as a post body), join date and post count. It draws the status only when the server sends one and the account is not active. A not-found answer shows not found, and a signed-out reader is told to sign in. A renamed handle's address is replaced with the current one, keeping `/posts` and the query. The viewer's own profile keeps the Account block (Link a sign-in, Sign out).
-- **`/u/{handle}/posts`** pages newest first by the API's cursor, which the address carries ("Older posts", "Newest"). Each post shows its forum, thread and permalink, and is read-only. A removed post is drawn as the server sends it: a tombstone without a body, or marked with its body.
+- **`/u/{handle}/posts`** pages newest first by the API's cursor, which the address carries ("Older posts", "Newest"). Each post shows its forum, thread and permalink, and is read-only. Its quote-source links point at the quoted post in its own thread. A removed post is drawn as the server sends it: a tombstone without a body, or marked with its body. A failed profile request beside the list is shown with a retry.
 - **Author names** in post headers, the reply expander and the reply-to popover link to the profile, with the phone's 44 px target. On the phone's stacked post header the ordinal is now text, and the permalink is under More (run decision, docs/06 "Mobile").
 - **Code.** The screens are in `web/client/src/screens/account/`, inlined into the reader. A lazy chunk counted 2182 B more, because the split added a shared chunk. The settings screens (TKT-01M29CXK4E) join `AccountRoot.tsx` and reuse `account.css` and `AccountBlock` in `profile.tsx`.
-- **Bundle.** The reader is 71675 B of 120000 B, +1457 B over main 9978cd3a.
-- **Tests.** Vitest has 82 files and 2353 tests. `e2e/profile.spec.ts` covers the author link, the posts list and permalink, the suspended status for a moderator but not a member, and the own Account block. `targets.spec.ts` has a profile case. The full Playwright suite passes at 390 and 1440 px, and `go test -race ./...` is clean.
+- **Bundle.** The reader is 71808 B of 120000 B, +1590 B over main 9978cd3a.
+- **Tests.** Vitest has 82 files and 2356 tests. `e2e/profile.spec.ts` covers the author link, the posts list and permalink, the suspended status for a moderator but not a member, and the own Account block. `targets.spec.ts` has a profile case. The full Playwright suite passes at 390 and 1440 px, and `go test -race ./...` is clean.
