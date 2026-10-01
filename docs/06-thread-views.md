@@ -213,15 +213,21 @@ when SSE is unavailable; the non-JS client gets a plain "refresh" link.
 - **"At the very bottom"** means the end of the page's last post is inside
   the viewport, give or take 48 px. On a phone the reply bar does not count
   as content.
-- **What the pill counts.** It counts posts newer than the newest post the
-  reader has been shown, never edits. The reader's own replies never count,
-  since the composer already shows them. "Show" reveals the held posts in
-  place on the last page. On an earlier page it goes to the page holding the
-  first new post. The pill is a button at the bottom of the post list, and
-  its count is announced politely. A post held behind it is not marked read.
+- **What the pill counts.** It counts posts that arrived after the reader
+  opened the page, or after they last took the pill: the thread's post
+  count now, less its count then. Posts that already existed on later pages
+  never count, and neither do edits. The reader's own replies never count,
+  since the composer already shows them.
+- **What "show" does.** It reveals the held posts in place when they all
+  fall on the page in view. Otherwise it goes to the page holding the first
+  one. The pill is a button at the bottom of the post list, and its count
+  is announced politely. A post held behind it is not marked read.
 - **Changes to posts already shown** (an edit, a removal, a restore) are
   applied at once. The scroll position is corrected against the first post
-  in view, so the text under the reader does not move.
+  in view, so the text under the reader does not move. Each hint refetches
+  the whole page rather than an `after_log_length` fragment. A removal or a
+  restore writes no revision, so a fragment that also held an edit would
+  leave a removed post on screen (Terva review 1696).
 - **Polling takes over** when the stream errors, or when its `ready` event
   does not arrive within 10 s, which is what a buffering proxy looks like.
   The client polls every 30 s and tries the stream again every fourth poll,

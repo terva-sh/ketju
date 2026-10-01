@@ -1423,9 +1423,10 @@ about uploads and serving:
   it. Archives lost, because nothing here needs them yet.
 - **Answer.** 201 `dto.Attachment` `{hash, size, mime, original_name, width,
   height}` for new bytes and known bytes alike, so an upload does not reveal
-  whether someone else sent the same file. `original_name` is the name this
-  upload sent, and `width` and `height` are null for anything that is not
-  an image.
+  whether someone else sent the same file. `original_name` is the name the
+  viewer first uploaded these bytes under, which is the name this upload
+  sent unless they uploaded the same bytes before. `width` and `height` are
+  null for anything that is not an image.
 - **Attach.** `POST /threads/{id}/posts` and `POST /forums/{slug}/threads`
   take `attachments`, at most 10 distinct hashes. Each must be a blob the
   poster uploaded and that is not quarantined, and the poster needs
@@ -1440,13 +1441,20 @@ about uploads and serving:
   request for a blob no post names yet, and a request for a hash with no
   blob. A `/blobs/<hash>` URL written into a post's source is not a
   reference. Responses carry the stored type, `Cache-Control: private,
-  max-age=31536000, immutable`, `Vary: Cookie`, the hash as `ETag`,
+  no-cache`, `Vary: Cookie`, the hash as `ETag`,
   `Content-Security-Policy: default-src 'none'; sandbox`,
   `Cross-Origin-Resource-Policy: same-origin`, and `Content-Disposition:
-  inline` for images and `attachment` for everything else.
-- **Names.** A post's attachment shows the name its author uploaded the
-  bytes under (the `blob_uploads` table, 04), so a second uploader of the
-  same bytes never learns the first one's file name.
+  inline` for images and `attachment` for everything else. The browser
+  keeps the bytes but asks again on every use, and the server checks access
+  before it answers 304, so a reader who loses access, or signs out, stops
+  seeing the file. This replaces docs/03's "immutable cache headers", which
+  predates the docs/14 rule. A revalidation costs a request, not a
+  transfer.
+- **Names.** A post's attachment shows the name its author first uploaded
+  the bytes under (the `blob_uploads` table, 04). A row is written once and
+  never changed, so uploading the same bytes again under another name
+  renames nothing already posted, and a second uploader of the same bytes
+  never learns the first one's file name.
 
 Alternatives: letting an uploader fetch a blob before a post names it lost,
 because docs/14 says a blob is served only to a reader of a post that
@@ -1456,4 +1464,8 @@ The composer shows its own uploads by name and size instead. Counting a
 who learned a hash could publish the bytes by writing the URL into a public
 post. Attaching any blob the poster may read lost to the same reasoning: a
 re-upload is the honest way to re-share. A public `Cache-Control` lost,
-because the answer depends on who asks.
+because the answer depends on who asks. `immutable` with a year's
+`max-age` lost (Terva review 1696), because a browser would show the file
+for a year after its reader lost access to the post. Taking the name from
+each upload lost, because a later upload of the same bytes would rename
+the attachment on posts already written.

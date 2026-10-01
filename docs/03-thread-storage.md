@@ -826,7 +826,9 @@ deduplicated by content hash, and referenced from the post body's
 `attachments[]` list by hash, filename, size, and MIME type. A `blobs` table in
 the database tracks reference counts for garbage collection and holds the
 scan/quarantine status. Images get server-side thumbnails cached next to the
-blob. Blobs are served with immutable cache headers from a hash-addressed URL.
+blob. Blobs are served from a hash-addressed URL. They were to carry immutable
+cache headers, and they are revalidated on every use instead, so that access
+is checked each time (07 "Attachments", decided by the run 2026-10-01).
 
 ### Blob garbage collection
 

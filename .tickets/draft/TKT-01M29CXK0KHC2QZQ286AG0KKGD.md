@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-01T07:59:44Z
+updated_at: 2026-10-01T08:13:52Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,11 +51,11 @@ MIME is decided by sniffing against an allowlist, not by what the upload claims.
 - [ ] A blob is served only to a viewer who may read the body of a post naming it, by the thread page's rules; every case in TestBlobServedOnlyToReaders passes, including deleted, moderator-hidden, hidden-pending-review, redacted, moved-to-an-unreadable-forum, suspended-author, group-grant moderator, unattached, quarantined and source-URL-only, and every refusal is identical to a missing hash
 - [ ] A post attaches at most 10 blobs, each one the poster uploaded and not quarantined; AddBlobRef runs before the append, a collected blob is refused, and a failed append drops the references again (the TestAttach* tests)
 - [ ] A reply with attachments is projected before it answers, so its blobs are servable at once (TestReplyWithAttachmentIsServableAtOnce)
-- [ ] GET /blobs/{hash} answers with private immutable caching, the hash as ETag with 304 and Range support, nosniff, the sandbox CSP, CORP same-origin, and inline or attachment disposition (TestBlobHeaders)
 - [ ] A quarantined blob is never served, and its bytes cannot be uploaded or attached again (TestBlobServedOnlyToReaders quarantined row, TestUploadOfQuarantinedBytesBlocked, TestAttachQuarantinedRefused)
 - [ ] post_attachments is a projection that reindex rebuilds identically and a Redacted record clears (TestPostAttachmentsProjected, TestRedactedDropsPostAttachments, TestReindexRebuildsPostAttachments)
-- [ ] A post's attachment shows the name its author uploaded it under, a second uploader never sees the first one's name, and a tombstone carries no attachments (TestSecondUploaderNeverSeesFirstName, TestTombstoneCarriesNoAttachments)
 - [ ] The thread page's viewer and the forum tree carry can_upload, and the goldens and docs/04 and docs/07 are updated in the same PR (TestThreadViewerCanUpload, TestForumTreeCanUpload)
+- [ ] GET /blobs/{hash} answers with Cache-Control private, no-cache, the hash as ETag with 304 and Range support, nosniff, the sandbox CSP, CORP same-origin, and inline or attachment disposition (TestBlobHeaders), and a conditional request is authorized before any 304, so a reader who lost access or signed out gets not-found (TestRevalidationRechecksAccess)
+- [ ] A post's attachment shows the name its author first uploaded it under and a later upload of the same bytes renames nothing, a second uploader never sees the first one's name, and a tombstone carries no attachments (TestReuploadKeepsFirstName, TestSecondUploaderNeverSeesFirstName, TestTombstoneCarriesNoAttachments)
 
 ## Implementation plan
 
@@ -82,10 +82,11 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 - **Upload, type, attach, serve and names** are the run decision in docs/07 "Attachments" (2026-10-01, pending maintainer review):
   - `POST /api/v1/blobs?thread=` or `?forum=` takes one `file` part, and needs a member with `upload` in that forum.
   - The type is sniffed by `http.DetectContentType`. The allowlist is png, jpeg and gif, each of which must also pass `DecodeConfig`, plus pdf and text/plain. Anything else is `validation-failed`, `type_not_allowed`, and quarantined bytes are `blocked`.
-  - The answer is 201 `Attachment`, identical whether or not the bytes were known.
+  - The answer is 201 `Attachment`, identical whether or not the bytes were known. Its `original_name` is the name the viewer first uploaded these bytes under.
   - A post attaches at most 10 blobs, each one the poster uploaded.
   - A blob is served only to a viewer who may read the body of a post that names it, by the thread page's rules. Everyone else gets `not-found`, the uploader included.
-  - A post's attachment shows the name its author uploaded it under.
+  - A post's attachment shows the name its author first uploaded it under. A `blob_uploads` row is written once and never updated, so a later upload of the same bytes renames nothing already posted (Terva review 1696).
+  - Blob responses are `Cache-Control: private, no-cache` with the hash as `ETag`, so every use revalidates and `Authorize` runs before any 304. A year's `immutable` lost (Terva review 1696), because a browser would keep showing the file after its reader lost access. docs/03's "immutable cache headers" sentence now points at this.
   - No migration grants `upload` to members.
 - **The upload and attach ordering** is docs/03's contract with the collector:
   - `AddBlobRef` comes before the append, and an attach whose `AddBlobRef` changes no row is refused;
@@ -97,7 +98,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
   - for a redacted post, nobody.
 
   Serving reuses that function, so a blob and its post never disagree.
-- **The response cache.** Attachment metadata for a (hash, author) pair never changes once written, so the cached `posts` may carry it without a new key part. The `can_upload` flags live in the viewer block and the forum tree, and neither is cached (docs/07 "The response cache").
+- **The response cache.** Attachment metadata for a (hash, author) pair never changes once written: `blobs` keeps its size, type and dimensions, and the `blob_uploads` row is insert-once. So the cached `posts` may carry it without a new key part. The `can_upload` flags live in the viewer block and the forum tree, and neither is cached (docs/07 "The response cache").
 - **No new audit action.** An upload is not a moderation act, and `blob.deleted` stays the redaction's and nothing else's.
 
 ### Approach
@@ -111,8 +112,8 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
    - `GetBlob` (any status, for the upload path);
    - `CreateBlob` with width and height;
    - `RefreshBlob`, which sets `unreferenced_since = now` while `refcount = 0`, so GC waits seven days from the latest upload;
-   - `UpsertBlobUpload`;
-   - `BlobUploadedBy(hash, user_id)`;
+   - `InsertBlobUpload`, which is `INSERT … ON CONFLICT (hash, user_id) DO NOTHING`, so the first name stands;
+   - `BlobUploadedBy(hash, user_id)`, which answers the stored name;
    - `AttachmentMeta`, one batched read joining `blobs` to `blob_uploads` on (hash, author) for a page's posts;
    - `PostAttachmentRefs(hash, after_thread, after_ordinal, limit)`, keyset-paged;
    - `InsertPostAttachment` and `DeletePostAttachments(thread_id, ordinal)`.
@@ -133,8 +134,8 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
      3. Sniff the first 512 bytes and check the allowlist. For an image, call `png`, `jpeg` or `gif`'s own `DecodeConfig` on the staged file, as the sniffed type says, never `image.DecodeConfig`. That gives the width and height, or the upload is refused.
      4. Clean the name: base name only, no control characters or path separators, at most 255 bytes of UTF-8, and `file` if nothing is left.
      5. `fsync` the staged file.
-     6. In one `db.Write`, read the blob with `GetBlob`. A quarantined blob is `blocked`. A missing one is created with `CreateBlob`, and an existing one gets `RefreshBlob`. Then `UpsertBlobUpload(hash, v.UserID, name, now)` and `blob.Commit`.
-     7. Answer `Attachment{hash, size, mime, name as sent, width, height}`.
+     6. In one `db.Write`, read the blob with `GetBlob`. A quarantined blob is `blocked`. A missing one is created with `CreateBlob`, and an existing one gets `RefreshBlob`. Then `InsertBlobUpload(hash, v.UserID, name, now)`, `BlobUploadedBy` for the name that stands, and `blob.Commit`.
+     7. Answer `Attachment{hash, size, mime, the stored name, width, height}`.
    - **`Authorize(ctx, v, hash)`**: `BlobForServing`, then the references a page of 100 at a time, memoised per thread. It allows the first reference for which `threads.CanSeePostBody` says yes. Every refusal, a malformed hash included, is the same `not-found`.
    - **`CheckAttach(ctx, v, forumID, hashes)`** and **`AddRefs(ctx, hashes)`**, for the post paths:
      - at most 10 distinct valid hashes;
@@ -173,7 +174,8 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 - **Content addressing.**
   - `TestUploadDedupOneFileOneRow`: two members upload the same bytes, giving one file, one `blobs` row at refcount 0, and two `blob_uploads` rows.
   - `TestTwoPostsTwoRefs`: attaching the bytes to two posts makes the refcount 2.
-  - `TestUploadAnswerSameForKnownBytes`: the same status and shape, with `original_name` echoing this upload's name.
+  - `TestUploadAnswerSameForKnownBytes`: the same status and shape for bytes another member sent first, with `original_name` the name this viewer sent.
+  - `TestReuploadKeepsFirstName`: an author attaches `a.png`, then uploads the same bytes as `b.png`. The answer says `a.png`, and the posted attachment still reads `a.png`, both live and from the response cache.
 - **Who may upload.** `TestUploadPermission`, a table:
   - anonymous is 401;
   - a pre-user is 403, from the gate;
@@ -214,7 +216,8 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
   | quarantined | | everyone |
   | named only by a `/blobs/<hash>` URL in a post's source | | everyone |
   | malformed hash | | everyone |
-- **Headers.** `TestBlobHeaders`: `private, max-age=31536000, immutable`, `Vary: Cookie`, the hash as `ETag` with a 304 on `If-None-Match`, a 206 for `Range`, `nosniff`, `default-src 'none'; sandbox`, `Cross-Origin-Resource-Policy: same-origin`, `inline` for an image and `attachment` for a PDF.
+- **Headers.** `TestBlobHeaders`: `private, no-cache`, `Vary: Cookie`, the hash as `ETag` with a 304 on `If-None-Match`, a 206 for `Range`, `nosniff`, `default-src 'none'; sandbox`, `Cross-Origin-Resource-Policy: same-origin`, `inline` for an image and `attachment` for a PDF.
+- **Revalidation.** `TestRevalidationRechecksAccess`: a reader's `If-None-Match` gets 304. After the post is hidden, the same conditional request from that member is the 404 a missing hash gets, never a 304. The same holds after sign-out, and after a `perm` write removes `read`.
 - **Projection.**
   - `TestPostAttachmentsProjected`;
   - `TestRedactedDropsPostAttachments`;
@@ -257,3 +260,7 @@ run decision: pending maintainer review. Recorded in docs/07 'Attachments' and d
 - A post shows the name its author uploaded under.
 - Uploads are staged in blobs/tmp/.
 The on-disk layout itself is fixed by docs/03 'On-disk layout' and internal/store/blob, so no open decision was needed. Serving an unposted blob to its uploader would widen the docs/14 invariant (class 1), so it was not taken.
+
+**agent:claude-code/phase3-groom-live** at 2026-10-01T08:13:52Z
+
+run decision: pending maintainer review. Amends note 1 after Terva review 1696 on PR #271. Blob and thumbnail responses are Cache-Control: private, no-cache with the hash as ETag, and Authorize runs before any 304. The year-long immutable caching docs/03 once named would let a browser keep showing a file after access was lost. A blob_uploads row is written once, so a re-upload of the same bytes under another name renames nothing already posted, and the upload answer carries the viewer's first name. docs/07 'Attachments' and docs/03 'Attachments' are updated.

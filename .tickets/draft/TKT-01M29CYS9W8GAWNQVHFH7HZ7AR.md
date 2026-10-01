@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-01T07:59:48Z
+updated_at: 2026-10-01T08:13:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -103,7 +103,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
    - Otherwise the method enters the singleflight for the hash and the semaphore, waiting with `ctx`, and calls `Thumbnail` on the blob file. It writes the result through `blob.Stage` and renames it to `ThumbPath`, with no `fsync` because the file is a cache, and serves it.
    - `ErrTooLarge` and `ErrDecode` enter the failure LRU and answer `not-found`, and the blob itself stays servable.
    - Errors go to the log at warn, with the hash and never the bytes.
-3. **`internal/web/blobs`**: `GET` and `HEAD /blobs/{hash}/thumb` set the blob's headers, with `inline` disposition and `ETag: "<hash>.thumb"`, and serve through `http.ServeContent`.
+3. **`internal/web/blobs`**: `GET` and `HEAD /blobs/{hash}/thumb` set the blob's headers: `private, no-cache`, `inline` disposition, and `ETag: "<hash>.thumb"`. `Authorize` runs before any 304, as for the blob (TKT-01M29CXK0K, after Terva review 1696), and the file is served through `http.ServeContent`.
 4. **Removal with the blob.**
    - `BlobGC.collect` removes `ThumbPath` after the row's deletion commits. A failed removal is logged and left for the next pass.
    - A new step in `Run`, beside `recoverTrash`, globs `blobs/sha256/*/*.thumb` and removes each one whose `BlobExists` is false, inside a `db.Write` so that no upload interleaves.
@@ -122,7 +122,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 - `TestDecodePanicIsContained`: a hook that panics gives `ErrDecode`, and the process carries on.
 - `TestThumbnailMadeOnceAndCached`: two requests make one decode. Deleting the file makes it again on the next request.
 - `TestThumbnailDecodeFailureLeavesBlobServable`: a PNG that is truncated after a valid header gives 404 on `/thumb` and 200 on `/blobs/{hash}`. The thread page renders the post with its attachment, and a second `/thumb` request makes no decode call.
-- `TestThumbnailServedOnlyToReaders`: the same table as `TestBlobServedOnlyToReaders` (TKT-01M29CXK0K), run against `/thumb` through a shared fixture.
+- `TestThumbnailServedOnlyToReaders`: the same table as `TestBlobServedOnlyToReaders` (TKT-01M29CXK0K), run against `/thumb` through a shared fixture. `TestRevalidationRechecksAccess` also runs against `/thumb`.
 - `TestThumbnailNotForNonImages`: a PDF's `/thumb` is 404.
 - `TestThumbnailsDecodeOneAtATime`: under `testing/synctest`, three concurrent requests for different hashes never overlap inside `Thumbnail`.
 - `TestCollectorRemovesThumbnail`, `TestCollectorRemovesOrphanThumbnail` and `TestRedactRemovesThumbnail`.
