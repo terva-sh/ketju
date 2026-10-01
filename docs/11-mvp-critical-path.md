@@ -18,12 +18,12 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-255 tickets: 12 epics and 243 children. Every ticket derived from the design
+261 tickets: 12 epics and 249 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
-2026-09-30, 17 had no `area:` label, 37 no `effort:` label, 28 no milestone,
-and 42 no reference. The nine open questions in
+2026-10-01, 17 had no `area:` label, 37 no `effort:` label, 30 no milestone,
+and 34 no reference. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
 filed as spikes that block the work they gate, so a decision like CBOR versus
 JSON blocks the frame codec rather than sitting in a document nobody rereads
@@ -44,8 +44,8 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 87 in Phase 1, 78 in Phase 2, 21 in
-Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 28 carrying no
+Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 21 in
+Phase 3, 13 in Phase 4, 1 in Phase 5, 2 filed as later, and 30 carrying no
 milestone.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
@@ -55,7 +55,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-184 done, 16 ready, 1 in progress, 2 blocked, 49 draft, 3 archived (counted 2026-10-01 with
+198 done, 7 ready, 3 blocked, 50 draft, 3 archived (counted 2026-10-01 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -225,7 +225,7 @@ same terms (docs/13 "The extension of 2026-09-30"), tracked by
 `TKT-01M3RQP0VZ`. It merged 30 of the PRs numbered #208–#239 on the gate;
 the other two, #213 and #219, were closed after being carried into #221. It then paused
 at the maintainer's request. The client's reader bundle budget was raised to
-70000 B along the way. Phase 2 now carries 78 tickets: 65 done, 7 ready, 1 in
+70000 B along the way. At that pause Phase 2 carried 78 tickets: 65 done, 7 ready, 1 in
 progress (the tracking ticket) and 5 draft. The seven ready are client work:
 edit and delete windows (`TKT-01M3PTT97X`), moderators' post controls
 (`TKT-01M3QHKD21`), post history (`TKT-01M29CP2Q3`), mark-unread
@@ -237,9 +237,15 @@ an e2e form restore (`TKT-01M3SK2HFE`). The screenshot work filed nine visual
 drafts under `TKT-01M29BN367` with no milestone; on 2026-10-01 the maintainer
 settled one of them, the post-times spike `TKT-01M3S3ZF48`, as absolute times,
 and it is done. The same day the maintainer resumed the run for the seven ready
-tickets and the three drafts. Edit and delete windows landed as #243, and the three drafts were groomed
-in #242 and promoted, so Phase 2 stands at 66 done, 9 ready, 1 in progress
-and the two epics in draft.
+tickets and the three drafts. It merged #241–#262 on the gate and ended the
+same day. Phase 2 closes at 82 tickets, 80 of them done, including the forms
+epic `TKT-01M29BKBM3` and the tracking ticket. The moderation epic
+`TKT-01M29BN36J` stays open, because four of its children are Phase 4 drafts.
+The admin-applications e2e flake `TKT-01M3SZ3GCE` is blocked until it recurs:
+it would not reproduce, and CI now prints a failing test's error context so
+that the next occurrence carries its evidence (`TKT-01M3TNBKNQ`). The run's
+report, with its one open disagreement and its questions, is the summary on
+`TKT-01M3RQP0VZ`.
 
 ## The critical path
 

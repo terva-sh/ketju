@@ -1,8 +1,10 @@
 # 13 — The Autonomous Phase 2 Run
 
-Status: in force from the merge of this document until every `phase-2`
-ticket is done or archived. The exit gate closed on 2026-09-30, and the maintainer then
-extended the run to the rest of Phase 2 (see "The extension of 2026-09-30").
+Status: ended on 2026-10-01. The exit gate closed on 2026-09-30, and the
+maintainer then extended the run to the rest of Phase 2 (see "The extension of
+2026-09-30"). The extension ended with 80 of Phase 2's 82 tickets done. The
+moderation epic waits on its Phase 4 children, and one e2e flake is blocked
+until it recurs. The report is the summary on `TKT-01M3RQP0VZ`.
 Like [12-autonomous-run.md](12-autonomous-run.md), it covers one run, not a
 standing policy.
 
