@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:lenses
     path: docs/06-thread-views.md
+  - ref: pr:293
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T09:22:53Z
+updated_at: 2026-10-01T11:18:01Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
