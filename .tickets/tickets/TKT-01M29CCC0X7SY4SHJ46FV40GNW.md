@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-10-01T11:12:13Z
+updated_at: 2026-10-01T11:18:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -71,6 +71,19 @@ Removing the last identity from an account has to be refused, or the user locks 
 - Sessions are ended through `internal/auth/session` (`Store.RevokeUser`, plus the new revoke-by-id). Nothing else in the API deletes a session row for this feature. Identities are written by `internal/service/identity` only, as `Link` (`link.go`) is.
 - An agent never uses OIDC and has no session (docs/05 "Agent accounts"). The session and identity routes refuse a request authenticated by an agent credential with `forbidden`, as `POST /auth/{provider}/link` does. `GET` and `PATCH /settings` are open to agents, because `page_size` changes the thread pages an agent reads.
 - Adding an audit action means adding it to both `audit.Actions` and docs/04 "audit_log" (`TestActionsDocumented`). This ticket adds one action, `identity.unlinked`.
+
+### Revised at claim (2026-10-01, agent:claude-code/phase3-ccc0x)
+
+The code as it stands on main at claim changes these points of the approach below. Everything else stands.
+
+- `session.Info.Key` was `key(hash)`, which is the viewer's `SessionKey`, the key perm's cache uses. It is renamed `Info.ID` and derived as the approach says, under its own prefix. Nothing else read `Info.Key` apart from `TestListForUser`. `Info` also gains `IdentityID` and `Provider`, so `ListUserSessions` returns `identity_id` and `oidc_provider_key`.
+- `Unlink` reads the token's session through a new `session.HeldThrough(ctx, q, token, userID, now) (identityID, err)`. `HeldBy` becomes a wrapper over it. It deletes the sessions through the identity with a new `session.EndThrough(ctx, q, identityID)`, which runs in the caller's transaction as `HeldBy` does. Session rows are then deleted only by the session package, as the settled item asks.
+- `api.Deps.Sessions` is optional. When nil, `build` makes `&session.Store{DB: d.Users.DB, Now: d.Users.Now}`, as it builds the groups, account and identity services. `serve.go` passes its store, and the settings tests pass the store their session middleware uses, so the two clocks agree. `Deps.Providers []identity.ProviderName` comes from `cfg.OIDC.Providers`. When it is empty, every identity is unconfigured and every removal is `conflict`. That is the safe failure.
+- The settings write is one static statement. It uses `json_patch(<the nested CASE guard>, ?)` with a patch object holding only the keys the request names, rather than one `json_set` per key, so sqlc needs no dynamic SQL. For the top-level scalar keys used here, a merge patch is `json_set`: other keys are kept. A patch never holds a null, because each value is validated first.
+- `PATCH /settings` decodes into `json.RawMessage` fields with unknown keys refused (`bad-request`). It then decodes each key on its own, so `"30"` for `page_size` is the field error `wrong_type` rather than a bad request. A timezone of `""` or `Local` is `not_an_option`, because `time.LoadLocation` would read either as the server's zone.
+- Only `GET /threads/{id}` computes a page (`threads.PageFor` has one caller). `GET /threads/{id}/posts/{ordinal}` returns one post and no page, so only the `thread` handler sets `Query.PageSize`, through a new `users.PageSize(ctx, v)`.
+- `DELETE /settings/identities/{id}` answers `dto.IdentityRemoved {signed_out}`, which gets a golden like every other answer. The goldens are `user-settings.member`, `sessions.member`, `identities.member` and `identity-removed.member`. They are not named `settings.*`, because `settings.admin` is the site settings.
+- `web/client/src/api/dto.ts` and `dto-contract.ts` mirror the new types, because the contract test fails on a golden nothing imports. `Settings.theme` is optional there (`theme?: ThemePref`). `bootstrap.ts`'s anonymous fallback builds a `Settings` without it, and changing `bootstrap.ts` would change the committed dist, which another lane holds. The types emit no JavaScript, so the dist does not change. TKT-01M29CXK4E (Build the user settings screens) makes `theme` required when it wires the screen and the bootstrap.
 
 ### Approach
 
