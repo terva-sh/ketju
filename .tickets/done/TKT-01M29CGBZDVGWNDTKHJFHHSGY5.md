@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBZDVGWNDTKHJFHHSGY5
 title: Add the page picker and lens sheets on phones
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -25,17 +25,10 @@ blocks_on: none
 references:
   - ref: design:mobile-pages
     path: docs/06-thread-views.md
-claim:
-  actor: agent:claude-code/phase3-cgbzd
-  branch: run/cgbzd-phone-sheets
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac5735cfcd6af8dbf
-  commit: 004be7accca44fa06300fe99dee803407a2a21ce
-  session: null
-  claimed_at: 2026-10-01T18:47:21Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-10-01T19:11:23Z
+updated_at: 2026-10-01T22:30:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -58,7 +51,7 @@ The sheet is how a phone gets the lens switcher that sits in the desktop thread 
 - [x] Both sheets are useModal dialogs: focus moves in, Tab stays inside, Escape, the close button and the backdrop close them and focus returns to the opener
 - [x] Sheet controls are at least 44 px and a bottom sheet pads by the safe-area inset (e2e, the targets.spec.ts pattern)
 - [x] Tested at 390 and 1440 px with one axe scan per test; at 1440 px no sheet trigger is drawn
-- [ ] The committed dist is regenerated (go generate ./internal/web/spa) and npm run budget stays within 70000 B, with the before and after figures in the PR
+- [x] The committed dist is regenerated (go generate ./internal/web/spa) and npm run budget stays within 70000 B, with the before and after figures in the PR
 - [x] On a phone the pager label is a button that opens a sheet reaching every page (a grid of all pages up to 60, past that a bounded grid plus a Go to page field), first unread when the reader has unread posts, and jump to date through the since lens
 
 ## Implementation plan
@@ -138,3 +131,7 @@ Implementation, prepared on run/cgbzd-phone-sheets (not pushed; the dist waits f
 - The since form moved out of LensMenu as `SinceForm`, and the page sheet's "Jump to date" uses it.
 - The vitest specs are in PageSheet.test.tsx and a "the lens sheet" block in LensBar.test.tsx. The e2e spec is e2e/phone-sheets.spec.ts. lenses.spec.ts now opens the switcher through the sheet on a phone.
 - The reader bundle grew from 66189 B to 67245 B (+1056 B), against a budget of 120000 B. The AC's 70000 B figure is older than the maintainer's raise (#331).
+
+## Summary
+
+On a phone the pager's Page N of M is a button opening a page sheet (First unread through the thread page's own handler, every page up to 60 as 44 px links keeping the lens, past that the first, the last and 20 either side with a Go to page field, and a date field opening the since lens). Lens in the lens bar opens the switcher's own LensMenu in a sheet. Both are useModal sheets (components/thread/Sheet.tsx) docked to the foot and padded by the bottom safe-area inset; neither trigger is drawn from 720 px. SinceForm is shared by the switcher and the page sheet. Reader bundle 72754 B to 73762 B (+1008 B) of 120000 B. Run decision pending maintainer review: First unread in the sheet is the thread page's button, not a link (docs/06 Pages).
