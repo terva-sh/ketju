@@ -29,9 +29,17 @@ test('a member flags another member’s post and is thanked', async ({ page, isM
   }
 
   const opener = isMobile ? post.locator('[data-post-more]') : post.locator('[data-post-action=flag]');
+  const dialog = page.getByRole('dialog', { name: 'Flag post #3' });
+  // Escape pressed straight after opening, with nothing between, closes it
+  // (TKT-01M3TS0ZV9).
   if (isMobile) await opener.click();
   await post.locator('[data-post-action=flag]').click();
-  const dialog = page.getByRole('dialog', { name: 'Flag post #3' });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await expect(opener).toBeFocused();
+
+  if (isMobile) await opener.click();
+  await post.locator('[data-post-action=flag]').click();
   await expect(dialog).toBeVisible();
   await dialog.getByRole('radio', { name: 'Off-topic' }).check();
   const answer = page.waitForResponse((r) => r.url().endsWith('/flags') && r.request().method() === 'POST');

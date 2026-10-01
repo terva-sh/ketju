@@ -91,5 +91,13 @@ test('a member sees counts, empty forums, and a new-thread button clear of the t
   await page.keyboard.press('Escape');
   await expect(picker).toHaveCount(0);
 
+  // Escape pressed straight after opening, with nothing between, closes it
+  // too, and focus goes back (TKT-01M3TS0ZV9).
+  const opener = isMobile ? fab : page.locator('.new-thread');
+  await opener.click();
+  await page.keyboard.press('Escape');
+  await expect(picker).toHaveCount(0);
+  await expect(opener).toBeFocused();
+
   await ctx.close();
 });

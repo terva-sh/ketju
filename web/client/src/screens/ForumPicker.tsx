@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useRef } from 'preact/hooks';
 import type { Forum } from '../api/dto';
 import { Icon } from '../components/Icon';
-import { trapTab } from '../components/focus';
+import { useModal } from '../components/focus';
 
 // ForumPicker is where a new thread starts from the forum index: a thread
 // needs a forum, and /f/{slug}/new is the one address for starting one
@@ -16,18 +16,12 @@ import { trapTab } from '../components/focus';
 export function ForumPicker({ forums, onClose }: { forums: Forum[]; onClose: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   // Focus goes inside the dialog, on the first forum or, with none to
-  // offer, the close button, so Escape and Tab always reach the dialog's
-  // handler (review on PR #86).
-  useEffect(() => {
-    const el = root.current;
+  // offer, the close button (review on PR #86), in the same task as the
+  // press that opened it. Escape and Tab are taken on the document, so they
+  // reach the dialog wherever focus is (useModal, TKT-01M3TS0ZV9).
+  useModal(root, onClose, (el) => {
     (el?.querySelector<HTMLElement>('a[href]') ?? el?.querySelector<HTMLElement>('button'))?.focus();
-  }, []);
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !e.defaultPrevented) {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'Tab') trapTab(e, root.current);
-  };
+  });
   const choices = pickable(forums);
   return (
     <div class="picker-backdrop" onClick={(e) => e.target === e.currentTarget && onClose()}>
@@ -37,7 +31,6 @@ export function ForumPicker({ forums, onClose }: { forums: Forum[]; onClose: () 
         role="dialog"
         aria-modal="true"
         aria-labelledby="forum-picker-title"
-        onKeyDown={onKeyDown}
       >
         <div class="picker-head">
           <h2 id="forum-picker-title">Start a thread in…</h2>

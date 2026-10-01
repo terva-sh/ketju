@@ -1,5 +1,8 @@
+import { h, render, type ComponentChild } from 'preact';
+import { useRef } from 'preact/hooks';
+import { act } from 'preact/test-utils';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { focusMainHeading, guardFocus, isControl, routeFocuser } from './focus';
+import { focusMainHeading, guardFocus, isControl, routeFocuser, useModal } from './focus';
 
 // The page-wide focus helpers (TKT-01M29CGBXK, AC2). The Router's call and
 // the screens are covered end to end by e2e/focus.spec.ts.
@@ -166,5 +169,85 @@ describe('isControl', () => {
     expect(isControl(null)).toBe(false);
     const loose = document.createElement('button');
     expect(isControl(loose)).toBe(false);
+  });
+});
+
+// useModal, for the modal dialogs (TKT-01M3TS0ZV9). Each dialog's own tests
+// press Escape straight after opening it; these pin what no one dialog
+// shows on its own.
+describe('useModal', () => {
+  const hosts: HTMLElement[] = [];
+  afterEach(async () => {
+    for (const host of hosts.splice(0)) await act(async () => render(null, host));
+  });
+  const press = (k: string, on: EventTarget) => {
+    const e = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+    on.dispatchEvent(e);
+    return e;
+  };
+  async function mount(dialog: ComponentChild) {
+    const host = document.createElement('div');
+    document.body.append(host);
+    hosts.push(host);
+    await act(async () => render(dialog, host));
+    return host;
+  }
+  function Dialog({ onClose, back }: { onClose: () => void; back?: HTMLElement }) {
+    const root = useRef<HTMLDivElement>(null);
+    useModal(root, onClose, (el) => {
+      el?.querySelector<HTMLElement>('button')?.focus();
+      return back && (() => back.focus());
+    });
+    return h('div', { ref: root, role: 'dialog' }, h('button', { id: 'first' }, 'first'), h('button', { id: 'last' }, 'last'));
+  }
+
+  it('takes Escape and Tab wherever focus is', async () => {
+    const onClose = vi.fn();
+    await mount(h(Dialog, { onClose }));
+    expect(document.activeElement?.id).toBe('first');
+    // A click on the dialog's text leaves focus on the body.
+    (document.activeElement as HTMLElement).blur();
+    expect(document.activeElement).toBe(document.body);
+    expect(press('Tab', document.body).defaultPrevented).toBe(true);
+    expect(document.activeElement?.id).toBe('first');
+    (document.activeElement as HTMLElement).blur();
+    expect(press('Escape', document.body).defaultPrevented).toBe(true);
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
+  // A menu that opened the dialog keeps its Escape listener on the document
+  // until the frame after it closed. It was added first, so in the bubble
+  // phase it would hear the key first and take it.
+  it('hears Escape before a listener added earlier', async () => {
+    let seen: boolean | null = null;
+    const earlier = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      seen = e.defaultPrevented;
+      if (!e.defaultPrevented) e.preventDefault();
+    };
+    document.addEventListener('keydown', earlier);
+    try {
+      const onClose = vi.fn();
+      await mount(h(Dialog, { onClose }));
+      press('Escape', document.activeElement!);
+      expect(onClose).toHaveBeenCalledTimes(1);
+      expect(seen).toBe(true);
+    } finally {
+      document.removeEventListener('keydown', earlier);
+    }
+  });
+
+  it('lets go of the keys when it goes, and puts focus back', async () => {
+    const opener = document.createElement('button');
+    document.body.append(opener);
+    opener.focus();
+    const onClose = vi.fn();
+    const host = await mount(h(Dialog, { onClose, back: opener }));
+    expect(document.activeElement?.id).toBe('first');
+    await act(async () => render(null, host));
+    expect(document.activeElement).toBe(opener);
+    expect(press('Escape', opener).defaultPrevented).toBe(false);
+    expect(press('Tab', document.body).defaultPrevented).toBe(false);
+    expect(onClose).not.toHaveBeenCalled();
   });
 });

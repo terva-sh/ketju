@@ -623,6 +623,40 @@ describe('moderating from the thread screen', () => {
     expect(document.activeElement).toBe(root.querySelector('h1'));
   });
 
+  // The panel is drawn on the microtask after the press that opens it, and
+  // must have focus from then on, before a frame has passed, so an Escape
+  // pressed straight away reaches it (TKT-01M3TS0ZV9). The presses are
+  // outside act, which would run the effects and hide the race.
+  it('an Escape pressed straight after opening closes the panel', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    const opener = root.querySelector<HTMLButtonElement>('[data-shell=toolbar] [data-action=lock]')!;
+    opener.focus();
+    try {
+      opener.click();
+      await Promise.resolve();
+      expect(panel()).not.toBeNull();
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      expect(panel()).toBeNull();
+      expect(posts()).toEqual([]);
+      expect(document.activeElement).toBe(root.querySelector('h1'));
+    } finally {
+      await act(() => new Promise((r) => setTimeout(r, 50)));
+    }
+  });
+
+  // The panel is inline, not modal: an Escape with focus elsewhere in the
+  // page is not its to take.
+  it('an Escape outside the panel leaves it open', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    await open(root, 'lock');
+    const post = root.querySelector<HTMLElement>('[id^=post-]')!;
+    post.focus();
+    expect(document.activeElement).toBe(post);
+    await act(async () => void post.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })));
+    expect(panel()?.getAttribute('data-moderate')).toBe('lock');
+  });
+
   it("a locked thread closes a member's composer", async () => {
     as('member');
     pages = [at({ thread: { locked: true }, viewer: { can_moderate: false, can_reply: false } })];

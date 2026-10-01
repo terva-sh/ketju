@@ -1,6 +1,6 @@
 import { Fragment } from 'preact';
-import { useLayoutEffect, useRef } from 'preact/hooks';
-import { isControl, trapTab } from '../components/focus';
+import { useRef } from 'preact/hooks';
+import { isControl, useModal } from '../components/focus';
 import { helpOpen, shortcuts } from './shortcuts';
 
 // HelpOverlay lists the keyboard shortcuts, each with the control that does
@@ -8,31 +8,22 @@ import { helpOpen, shortcuts } from './shortcuts';
 // It is a modal dialog: focus starts on Close, Tab stays inside, and Escape,
 // Close or a click outside ends it, handing focus back to what opened it.
 //
-// Its keys are taken on the document rather than on the dialog, so Escape
-// closes it wherever focus is: on the post that opened it, or on the body
-// after a click on the list's text. Focus moves and the listener goes on in
-// a layout effect, in the same task as the ? that drew the list. A plain
-// effect waits for the next frame, and an Escape pressed before that went to
-// the post and was lost (TKT-01M3TMRCMJ).
+// Its keys are taken on the document rather than on the dialog (useModal),
+// so Escape closes it wherever focus is: on the post that opened it, or on
+// the body after a click on the list's text. Focus moves and the listener
+// goes on in the same task as the ? that drew the list. An Escape pressed
+// before the next frame went to the post and was lost (TKT-01M3TMRCMJ).
 export function HelpOverlay() {
   const root = useRef<HTMLDivElement>(null);
   const close = () => (helpOpen.value = false);
-  useLayoutEffect(() => {
+  useModal(root, close, (el) => {
     const opener = document.activeElement;
-    root.current?.querySelector<HTMLElement>('button')?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !e.defaultPrevented) {
-        e.preventDefault();
-        close();
-      } else if (e.key === 'Tab') trapTab(e, root.current);
-    };
-    document.addEventListener('keydown', onKey);
+    el?.querySelector<HTMLElement>('button')?.focus();
     return () => {
-      document.removeEventListener('keydown', onKey);
       if (isControl(opener)) opener.focus({ preventScroll: true });
       else if (opener instanceof HTMLElement && opener.isConnected && opener.matches('[tabindex="-1"]')) opener.focus({ preventScroll: true });
     };
-  }, []);
+  });
   return (
     <div class="help-backdrop" onClick={(e) => e.target === e.currentTarget && close()}>
       <div ref={root} class="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">

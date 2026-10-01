@@ -193,6 +193,27 @@ describe('the forum picker', () => {
     expect(document.activeElement).toBe(fab);
   });
 
+  // The picker is drawn on the microtask after the press that opens it, and
+  // must take an Escape from then on, before a frame has passed
+  // (TKT-01M3TS0ZV9). The presses are outside act, which would run the
+  // effects and hide the race.
+  it('closes on an Escape pressed straight after opening', async () => {
+    const root = await index(memberTree, memberMe);
+    const opener = root.querySelector<HTMLButtonElement>('.new-thread')!;
+    opener.focus();
+    try {
+      opener.click();
+      await Promise.resolve();
+      expect(root.querySelector('[role=dialog]')).not.toBeNull();
+      document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+      await Promise.resolve();
+      expect(root.querySelector('[role=dialog]')).toBeNull();
+      expect(document.activeElement).toBe(opener);
+    } finally {
+      await act(() => new Promise((r) => setTimeout(r, 50)));
+    }
+  });
+
   it('takes focus with nothing to offer, so Escape still closes it', async () => {
     const tree = structuredClone(memberTree) as ForumTree;
     for (const f of tree.forums) f.archived = true;

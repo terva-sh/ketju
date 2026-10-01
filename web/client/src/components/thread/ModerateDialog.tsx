@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { useLocation } from 'preact-iso';
 import { apiGet, apiSend, forgetGets, peekGet } from '../../api/client';
 import type { Forum, ForumTree, Pinned, SlowMode, ThreadHeader } from '../../api/dto';
@@ -193,6 +193,11 @@ export function ModerateDialog({
   };
   useEffect(() => {
     if (kind === 'move') load();
+  }, []);
+  // Focus goes in during the press that opened the panel, not a frame later,
+  // so an Escape pressed straight away reaches the panel rather than the
+  // control that opened it (TKT-01M3TS0ZV9).
+  useLayoutEffect(() => {
     root.current?.querySelector<HTMLElement>('textarea, input, select, button')?.focus();
     const panel = root.current;
     return () => {

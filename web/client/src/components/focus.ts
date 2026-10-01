@@ -1,6 +1,44 @@
+import { useLayoutEffect, useRef } from 'preact/hooks';
+
 // Focus helpers: for the modal dialogs (the composer sheet, the forum
-// picker), and for the page as a whole (TKT-01M29CGBXK; docs/07
-// "Accessibility").
+// picker, the flag dialog, the shortcuts list), and for the page as a whole
+// (TKT-01M29CGBXK; docs/07 "Accessibility").
+
+// useModal makes the element in root a modal dialog's keyboard owner for as
+// long as it is mounted. enter moves focus into it and may answer a
+// function that puts focus back when it goes. Escape anywhere in the page
+// calls onClose, and Tab stays inside (trapTab), wherever focus is: on the
+// control that opened it, or on the body after a click on its text.
+//
+// Both happen in a layout effect, in the same task as the press that drew
+// the dialog. A plain effect waits for the next frame, and a key pressed
+// before then went to the opener and was lost (TKT-01M3TMRCMJ,
+// TKT-01M3TS0ZV9). The listener is on the document in the capture phase,
+// so the open dialog hears a key first: a menu that opened it keeps its own
+// Escape listener until the frame after it closed, and that listener took
+// the key and moved focus out of the dialog.
+export function useModal(
+  root: { current: HTMLElement | null },
+  onClose: () => void,
+  enter: (root: HTMLElement | null) => void | (() => void),
+) {
+  const close = useRef(onClose);
+  close.current = onClose;
+  useLayoutEffect(() => {
+    const leave = enter(root.current);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !e.defaultPrevented) {
+        e.preventDefault();
+        close.current();
+      } else if (e.key === 'Tab') trapTab(e, root.current);
+    };
+    document.addEventListener('keydown', onKey, true);
+    return () => {
+      document.removeEventListener('keydown', onKey, true);
+      leave?.();
+    };
+  }, []);
+}
 
 // trapTab keeps Tab and Shift+Tab inside the dialog, as aria-modal promises:
 // from the last control Tab goes to the first, and from the first Shift+Tab

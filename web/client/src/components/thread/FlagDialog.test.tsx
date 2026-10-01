@@ -1,8 +1,10 @@
 import { render } from 'preact';
+import { useState } from 'preact/hooks';
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { problemAnswer, stubServer, type Answer, type StubServer } from '../../testing';
 import { FlagDialog, flagThanks, maxFlagNote } from './FlagDialog';
+import { PostMore } from './PostMore';
 
 // The flag dialog (TKT-01M3QQWA5Z; docs/08 "Flags", docs/07
 // POST /threads/{id}/flags), against a stubbed server.
@@ -216,5 +218,78 @@ describe('the flag dialog', () => {
     returnTo.remove();
     await close();
     expect(document.activeElement).toBe(article);
+  });
+});
+
+// The dialog is drawn on the microtask after the press that opens it, and
+// must take an Escape from then on, before a frame has passed: a quick
+// reader, or a loaded e2e run, presses it there (TKT-01M3TS0ZV9). The
+// presses are dispatched outside act, which would run the effects and hide
+// the race.
+describe('an Escape pressed straight after opening', () => {
+  const key = (k: string) => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+  const dialog = () => root.querySelector('[role=dialog]');
+  // settle lets the raced frame run before the next test.
+  const settle = () => act(() => new Promise((r) => setTimeout(r, 50)));
+
+  it('closes the dialog', async () => {
+    stubServer({});
+    function Opener() {
+      const [open, setOpen] = useState(false);
+      return (
+        <>
+          <button type="button" data-opener onClick={() => setOpen(true)}>
+            flag
+          </button>
+          {open && <FlagDialog thread={thread} ordinal={4} returnTo={returnTo} onClose={() => setOpen(false)} />}
+        </>
+      );
+    }
+    await act(async () => render(<Opener />, root));
+    const opener = root.querySelector<HTMLButtonElement>('[data-opener]')!;
+    opener.focus();
+    try {
+      opener.click();
+      await Promise.resolve();
+      expect(dialog()).not.toBeNull();
+      key('Escape');
+      await Promise.resolve();
+      expect(dialog()).toBeNull();
+      expect(document.activeElement).toBe(returnTo);
+    } finally {
+      await settle();
+    }
+  });
+
+  // On a phone, flag is an item of the post's More list. The list's Escape
+  // listener stays on the document until the frame after it closed, and
+  // took the key, putting focus on its button with the dialog still open.
+  it('closes the dialog opened from a phone’s More list', async () => {
+    stubServer({});
+    function Phone() {
+      const [to, setTo] = useState<HTMLElement | null>(null);
+      return (
+        <>
+          <PostMore thread={{ id: thread, slug: 'a' }} ordinal={4} onFlag={(_, r) => setTo(r)} />
+          {to && <FlagDialog thread={thread} ordinal={4} returnTo={to} onClose={() => setTo(null)} />}
+        </>
+      );
+    }
+    await act(async () => render(<Phone />, root));
+    const more = root.querySelector<HTMLButtonElement>('[data-post-more]')!;
+    await act(async () => more.click());
+    const item = root.querySelector<HTMLButtonElement>('[data-post-action=flag]')!;
+    item.focus();
+    try {
+      item.click();
+      await Promise.resolve();
+      expect(dialog()).not.toBeNull();
+      key('Escape');
+      await Promise.resolve();
+      expect(dialog()).toBeNull();
+      expect(document.activeElement).toBe(more);
+    } finally {
+      await settle();
+    }
   });
 });

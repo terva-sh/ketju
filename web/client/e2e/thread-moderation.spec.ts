@@ -52,6 +52,13 @@ async function open(page: Page) {
 test('a moderator locks and unlocks a thread', async ({ page, isMobile }) => {
   await open(page);
   const locked = page.locator('[data-thread-state=locked]');
+  // Escape pressed straight after opening, with nothing between, closes
+  // the panel (TKT-01M3TS0ZV9). Where focus lands is the unit tests' to
+  // pin: on a phone the more menu may take it (TKT-01M3TV4HBF).
+  await action(page, isMobile, 'lock');
+  await page.keyboard.press('Escape');
+  await expect(page.locator('[data-moderate]')).toHaveCount(0);
+
   await action(page, isMobile, 'lock');
   const lock = page.getByRole('group', { name: 'Lock this thread' });
   await expect(lock.getByRole('textbox', { name: 'Reason (optional)' })).toBeFocused();

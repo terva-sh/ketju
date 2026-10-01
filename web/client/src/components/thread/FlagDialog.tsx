@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'preact/hooks';
 import { apiSend } from '../../api/client';
 import type { FlagReceipt } from '../../api/dto';
 import { asProblem, ProblemError, problemMessage } from '../../api/problem';
-import { trapTab } from '../focus';
+import { useModal } from '../focus';
 
 // The longest note a flag takes, in characters (code points), as the server
 // counts it (threads.MaxFlagNote, utf8.RuneCountInString).
@@ -47,8 +47,9 @@ export function flagRefusal(err: unknown): string {
 // fresh page could show the reporter the post going down, which is the
 // outcome (TKT-01M3QQWA5Z).
 //
-// It is a modal dialog, as HelpOverlay is: focus starts inside, Tab stays
-// inside, and Escape, Close or a press on the backdrop end it. Focus then
+// It is a modal dialog, as HelpOverlay is (useModal): focus starts inside
+// in the same task as the press that opened it, Tab stays inside, and
+// Escape wherever focus is, Close or a press on the backdrop end it. Focus then
 // goes to returnTo, the control the post handed over, if it is still in the
 // page and drawn, or else to the post itself. The control that opened the
 // dialog is not remembered at mount, because on a phone it is an item of a
@@ -74,13 +75,13 @@ export function FlagDialog({
   // Send sends nothing.
   const inFlight = useRef(false);
 
-  useEffect(() => {
-    root.current?.querySelector<HTMLElement>('input, button')?.focus();
+  useModal(root, onClose, (el) => {
+    el?.querySelector<HTMLElement>('input, button')?.focus();
     return () => {
       if (returnTo.isConnected && returnTo.offsetParent !== null) returnTo.focus({ preventScroll: true });
       else document.getElementById(`post-${ordinal}`)?.focus({ preventScroll: true });
     };
-  }, []);
+  });
   // The form, and the Send that had focus, are replaced by the thanks.
   useEffect(() => {
     if (received) root.current?.querySelector<HTMLElement>('[data-flag-close]')?.focus();
@@ -116,12 +117,6 @@ export function FlagDialog({
       setSending(false);
     }
   };
-  const onKeyDown = (e: KeyboardEvent) => {
-    if (e.key === 'Escape' && !e.defaultPrevented) {
-      e.preventDefault();
-      onClose();
-    } else if (e.key === 'Tab') trapTab(e, root.current);
-  };
   const close = (
     <button type="button" class="flag-close" data-flag-close onClick={onClose}>
       Close
@@ -138,7 +133,6 @@ export function FlagDialog({
         aria-modal="true"
         aria-labelledby="flag-title"
         data-flag-dialog={ordinal}
-        onKeyDown={onKeyDown}
       >
         <h2 id="flag-title">Flag post #{ordinal}</h2>
         {received ? (
