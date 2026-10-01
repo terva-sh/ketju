@@ -1,4 +1,4 @@
-import { useRef, useState } from 'preact/hooks';
+import { useEffect, useRef, useState } from 'preact/hooks';
 import { apiSend, forgetGets } from '../api/client';
 import type { ForumWatch, ThreadWatch } from '../api/dto';
 import { ProblemError } from '../api/problem';
@@ -33,6 +33,12 @@ export function followChoice(forumLevel: string | null): { label: string; line: 
   return { label: 'Normal', line: 'Alert me when someone mentions, replies to or quotes me.' };
 }
 
+// saves numbers the saves started in this tab, and latest is the newest
+// save's number per route, so an answer can tell whether a later save to the
+// same thread or forum has started since.
+let saves = 0;
+const latest = new Map<string, number>();
+
 export type WatchTarget = { thread: string; forumLevel: string } | { forum: string; name: string };
 
 // carriesLevel is a held thread page that names the level just set: the
@@ -60,6 +66,14 @@ function carriesLevel(u: string, target: WatchTarget): boolean {
 // Focus goes back to returnTo when it is still in the page and drawn, or
 // else to fallback(): on a phone the control was a more menu item, and the
 // menu focuses its button before it runs one.
+//
+// A save outlives a dialog dismissed while it is out, and the reader may
+// open the control again and save again before it answers (Terva review
+// 1820). Its answer still drops the held copies and asks for /me, since the
+// write happened. It is handed to onSaved only if no later save has started
+// since on the same target, so answers landing out of order do not put back
+// an older level, and
+// it closes the dialog only if it is still this one.
 export function WatchDialog({
   target,
   level,
@@ -82,6 +96,13 @@ export function WatchDialog({
   // Set synchronously, so a second press before the render that disables
   // Save sends nothing.
   const inFlight = useRef(false);
+  const mounted = useRef(true);
+  useEffect(
+    () => () => {
+      mounted.current = false;
+    },
+    [],
+  );
 
   useModal(root, onClose, (el) => {
     el?.querySelector<HTMLElement>('input:checked')?.focus();
@@ -108,6 +129,8 @@ export function WatchDialog({
     inFlight.current = true;
     setSending(true);
     setRefused(null);
+    const n = ++saves;
+    latest.set(url, n);
     try {
       const r = await apiSend<ThreadWatch | ForumWatch | undefined>('POST', url, { level: choice }, { status: 200 });
       if (typeof r?.watch !== 'string') throw new ProblemError('internal', 200);
@@ -116,9 +139,10 @@ export function WatchDialog({
       forgetLists();
       forgetGets((u) => carriesLevel(u, target), { inFlight: true });
       void refreshViewer().catch(() => undefined);
-      onSaved(r);
-      onClose();
+      if (latest.get(url) === n) onSaved(r);
+      if (mounted.current) onClose();
     } catch (err) {
+      if (!mounted.current) return;
       setRefused(err);
       inFlight.current = false;
       setSending(false);

@@ -125,4 +125,53 @@ describe('the watch control on the thread page', () => {
     await press(more);
     expect(root.querySelector('[data-shell=more-menu] [data-action=watch]')?.textContent).toBe('Watching');
   });
+
+  // Terva review 1820: a save outlives a dialog dismissed while it is out.
+  // Its answer neither closes a dialog opened since nor, once a later save
+  // has started, puts back its own level.
+  it('keeps a late answer from closing a newer dialog or undoing a newer save', async () => {
+    serve('', '');
+    const pending: ((level: string) => void)[] = [];
+    server.routes[`POST ${url}/watch`] = () =>
+      new Promise((resolve) => pending.push((level) => resolve({ status: 200, body: { watch: level, forum_watch: '' } })));
+    const root = await renderAt(`/t/${id}/a`);
+    const escape = () => act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    const save = async (label: string) => {
+      await press(control(root));
+      await choose(label);
+      await press(dialog()!.querySelector('button[type=submit]'));
+    };
+
+    // Mute is sent, and the dialog dismissed before it answers.
+    await save('Mute');
+    await escape();
+    expect(dialog()).toBeNull();
+    // Opened again, its answer lands: the open dialog stays, and the level
+    // it set shows, since nothing later was sent.
+    await press(control(root));
+    expect(dialog()).not.toBeNull();
+    await act(async () => pending[0]('mute'));
+    await wait();
+    expect(dialog()).not.toBeNull();
+    expect(control(root)?.textContent).toBe('Muted');
+    await escape();
+
+    // Watch is sent and dismissed, then Normal is sent and answers first.
+    await save('Watch');
+    await escape();
+    await save('Normal');
+    await act(async () => pending[2](''));
+    await wait();
+    expect(dialog()).toBeNull();
+    expect(control(root)?.textContent).toBe('Watch');
+    // Watch's answer, landing last, leaves the newer level shown.
+    await act(async () => pending[1]('watch'));
+    await wait();
+    expect(control(root)?.textContent).toBe('Watch');
+    expect(server.sent.filter((r) => r.method === 'POST').map((r) => r.body)).toEqual([
+      { level: 'mute' },
+      { level: 'watch' },
+      { level: '' },
+    ]);
+  });
 });
