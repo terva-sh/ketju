@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T13:22:06Z
+updated_at: 2026-10-01T13:33:48Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -199,6 +199,10 @@ Built against main at d80c2330. What the next person needs and the code does not
 - `indexing` is wired in `serve` to `search.Indexer.Indexing`. A service with no `SearchIndexing` reports false.
 - The dist is unchanged. The client change is type-only (`dto.ts`, `dto-contract.ts`), `go generate ./internal/web/spa` leaves `internal/web/spa/dist` byte-identical, and the reader bundle stays at 60464 B.
 - The golden for an anonymous reader is `search-empty.anonymous.json`, as criterion 4 names it, although the other goldens spell the class `anon`.
+
+**agent:claude-code/phase3-cty8t** at 2026-10-01T13:33:48Z
+
+Terva review 1765 (PR #311, head a100eb6, base eaf54f6, run 7819dc94, Actions run 2063), round 1 of 5. (medium) 'Set no-store before handling search errors': fixed. problem.write already sets no-store on every problem body, but the handler now sets Cache-Control: no-store before it calls Search, so its own policy does not rest on the shared writer. TestSearchRoute checks no-store on a validation-failed, a bad-request, a not-found, an unauthenticated and a pre-user's forbidden answer.
 
 ## Summary
 

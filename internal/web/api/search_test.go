@@ -873,6 +873,23 @@ func TestSearchRoute(t *testing.T) {
 	if got := problemCode(t, send(h, "pre-user", http.MethodGet, searchPath("q", "needle"), "")); got != "forbidden" {
 		t.Errorf("a pre-user: %s, want forbidden", got)
 	}
+	// Every refusal is no-store too, whichever check refuses it (Terva
+	// review 1765).
+	for _, c := range []struct {
+		who, path, code string
+	}{
+		{"carol", searchPath("q", ""), "validation-failed"},
+		{"carol", searchPath("q", "needle", "cursor", "!!"), "bad-request"},
+		{"carol", searchPath("q", "needle", "forum", "nowhere"), "not-found"},
+		{"", searchPath("q", "needle", "forum", "members"), "unauthenticated"},
+		{"pre-user", searchPath("q", "needle"), "forbidden"},
+	} {
+		rec := send(h, c.who, http.MethodGet, c.path, "")
+		if got := problemCode(t, rec); got != c.code || rec.Header().Get("Cache-Control") != "no-store" {
+			t.Errorf("%s as %q: %s with Cache-Control %q, want %s and no-store", c.path, c.who, got,
+				rec.Header().Get("Cache-Control"), c.code)
+		}
+	}
 	var res dto.SearchResults
 	rec = send(h, "inactive", http.MethodGet, searchPath("q", "needle"), "")
 	if err := json.Unmarshal(rec.Body.Bytes(), &res); err != nil || !slices.Equal(hitKeys(res), []string{hitKey(open, 2)}) {
