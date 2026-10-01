@@ -18,12 +18,12 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-269 tickets: 12 epics and 257 children. Every ticket derived from the design
+281 tickets: 12 epics and 269 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
-2026-10-01, 17 had no `area:` label, 39 no `effort:` label, 22 no milestone,
-and 39 no reference. The nine open questions in
+2026-10-01, 17 had no `area:` label, 43 no `effort:` label, 30 no milestone,
+and 40 no reference. The nine open questions in
 [10-open-questions.md](10-open-questions.md) that carry a decision deadline are
 filed as spikes that block the work they gate, so a decision like CBOR versus
 JSON blocks the frame codec rather than sitting in a document nobody rereads
@@ -44,12 +44,16 @@ before coding.
 | `TKT-01M29BN36W` Non-JS HTML client | 5 | XL | Placeholder, not broken down |
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
-Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 39 in
-Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 22 carrying no
+Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 43 in
+Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 30 carrying no
 milestone. Phase 3 grew from 21 on 2026-10-01, when its run (docs/14) pulled
 the settings pair forward from Phase 4, filed the profile screen, the exit
 check and its tracking ticket, and placed ten unplaced drafts. Its grooming
-then filed two attachment tickets and a CI stall (`TKT-01M3VBWMA8`).
+then filed two attachment tickets, a CI stall (`TKT-01M3VBWMA8`), the search
+results screen and the two unread-list client tickets, and the run placed the
+index write-back bug `TKT-01M3VHSYFR` in Phase 3 because it broke the
+"never widen access" invariant. One Phase 3 ticket was archived when the
+polish grooming merged it into another.
 
 Note that the storage epic's children are not all Phase 0: of 23, 19 are, two
 are Phase 2 and two are Phase 4. Phase 0 reaches 25 by adding the epic itself
@@ -58,7 +62,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-198 done, 7 ready, 4 blocked, 57 draft, 3 archived (counted 2026-10-01 with
+219 done, 7 ready, 4 blocked, 47 draft, 4 archived (counted 2026-10-01 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was

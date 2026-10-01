@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:50:19Z
-updated_at: 2026-10-01T09:51:14Z
+updated_at: 2026-10-01T15:16:52Z
 created_by:
   id: agent:claude-code/phase3-run-vbwma8
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-run-vbwma8
+  id: agent:claude-code/phase3-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -58,3 +58,12 @@ Once it is fixed, unblock TKT-01M3VBWMA8 and TKT-01M3SZ3GCE. Close each against 
 
 - [ ] A note names what froze the runner in at least one of the two windows, from the host's own records
 - [ ] The runner is changed so that the cause named does not freeze a job, and the change is recorded in a note
+
+## Notes
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-01T15:16:52Z
+
+More evidence, 2026-10-01 (orchestrator):
+- Main push run 2116 on 902c30e ran on b3cc8959 and failed one test: [desktop] e2e/read-tracking.spec.ts:66, where the dwelt post 25 was missing from the beacon's sent list [1..5]; the test took 6.1 s. The same spec on 902c30e locally, --repeat-each=5 across both projects: 54/54 passed at 2.4-3.3 s each.
+- PR run 2069 (TKT-01M29CTY9D) failed only on a Playwright timeout in apply.spec, also attributed to this freeze by that lane.
+Main's own push CI now fails on this runner as well as PR runs.

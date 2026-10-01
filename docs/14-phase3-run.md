@@ -136,3 +136,31 @@ Every docs/13 invariant holds. These are added:
 - Promote a ticket outside `phase-3` and the scope above.
 - Raise the bundle budget, change the frozen log format, or touch anything
   outside the repository without the maintainer.
+
+## Amended during the run
+
+The run changed its own procedure on 2026-10-01 as it learned. Each change is
+recorded here so a later reader does not have to reconstruct it from lane
+briefs.
+
+- **Review cap for grooming.** A grooming PR past five review rounds carries
+  its remaining non-security findings as dated ticket notes headed
+  "Requirement carried from review <id>". They bind the implementer as much as
+  the plan does. The PR then merges on a carry review of the ticket-only
+  commit. Security findings are always fixed. A sixth round was granted once
+  (#271), when round five's findings were narrow.
+- **Carries.** A ticket-only commit after a clean review needs a carry review
+  (`carry=true`) on the new head. A carry never crosses to a new PR: a PR
+  opened to replace a conflicted one needs a full review of its own.
+- **Lanes promote their own ticket** (draft, ready, claim, in-progress) once
+  its plan has merged, instead of waiting for the orchestrator.
+- **Lanes link PRs on their own tickets only.** Linking every PR on the
+  tracking ticket made every grooming PR conflict with every other; the
+  orchestrator logs PRs on the tracking ticket instead.
+- **Client lanes may prepare while another holds the dist.** A lane
+  implements and tests without committing the dist or opening a PR, and
+  rebases its unpushed branch and regenerates the dist when handed it. One
+  open PR still changes the dist at a time.
+- **Main's push CI.** Each merge cancels the previous push run, and Forgejo
+  reports a cancelled run as `failure` with no steps. Read the run's status
+  before treating a push failure as a broken build.

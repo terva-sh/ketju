@@ -52,17 +52,19 @@ dependencies:
   - TKT-01M3VBWMA83SC252X83NTQ417Y
   - TKT-01M3V70X0F61FHCKS6TKTK69BQ
   - TKT-01M3VHSYFR176FWWBAPV8PHSEK
+  - TKT-01M3V6Y4JP8W8WY0JG6NZV7M7S
+  - TKT-01M3V6Y87D4EQBQ4HYTPJCSGR2
 blocks_on: none
 references: []
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-01T12:54:10Z
+updated_at: 2026-10-01T15:16:11Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-vhsyfr
+  id: agent:claude-code/phase3-run-orchestrator
   name: ""
 extensions: {}
 ---
