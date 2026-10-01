@@ -94,7 +94,10 @@ thread, replies, and checks the unread divider in a real browser, at 390 px and
 provider on loopback, and signs in through the provider's own page. The config
 builds and starts it; it needs Go and port 8787 (`KETJU_E2E_PORT`). The
 server's log is `serve.log` beside the run's data, in a directory under
-`$TMPDIR`.
+`$TMPDIR`. When a test fails, `scripts/evidence-reporter.mjs` prints its
+`error-context.md` (the error, the locator, and the page's ARIA tree) and
+the `serve.log` lines from while it ran into the run's output. In CI that
+output is the only record that survives the job.
 
 A `setup` project (`e2e/session.setup.ts`) signs the seeded readers in
 once and saves their sessions (`stateFile` in `e2e/session.ts`), and both

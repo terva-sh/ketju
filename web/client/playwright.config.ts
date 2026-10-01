@@ -31,7 +31,11 @@ export default defineConfig({
   fullyParallel: false,
   retries: 0,
   forbidOnly: !!process.env.CI,
-  reporter: 'list',
+  // list, then the evidence a failure leaves (scripts/evidence-reporter.mjs,
+  // TKT-01M3TNBKNQ): a failing test's error-context.md and the serve.log
+  // lines it caused, printed into the output, because CI's runner keeps
+  // nothing else once the job ends. A passing run prints nothing more.
+  reporter: [['list'], ['./scripts/evidence-reporter.mjs']],
   outputDir: join(dirname(run), 'results'),
   use: {
     baseURL,
