@@ -23,10 +23,12 @@ references:
     path: null
   - ref: ci:1790
     path: null
+  - ref: pr:278
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T09:14:22Z
-updated_at: 2026-10-01T09:51:14Z
+updated_at: 2026-10-01T09:52:27Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
