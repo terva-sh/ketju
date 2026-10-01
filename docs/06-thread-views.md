@@ -233,11 +233,14 @@ It sits under the thread head at both widths, as the mockups draw it. It holds
 "Only <handle>", the author lens for the thread's author, and "Lens", which
 opens the switcher. The switcher offers the full thread, unread, by author
 for each author on the page, mentions me, since a date, and moderator to a
-viewer who moderates the forum. A post that is a reply or has replies offers
+viewer who moderates the forum. The date goes into the address as written
+and is read as midnight UTC (07), so the field and a shared link select the
+same posts. A post that is a reply or has replies offers
 "Conversation", its chain lens, in its footer, under "more" on a phone. Every
 lens draws a "… N posts …" divider where it skipped posts, not only the
 chain. "Full thread" in the lens header goes to the canonical permalink of the
-post at the top of the viewport. On phones TKT-01M29CGBZD presents the
+post at the top of the viewport, or to the thread's own address when the lens
+has no posts. On phones TKT-01M29CGBZD presents the
 switcher as a sheet. Alternatives: Only OP among the thread actions lost
 because on a phone those sit under the more menu, and 10 Q15 leaned to the
 header. Dividers in the chain lens alone lost because an author lens would

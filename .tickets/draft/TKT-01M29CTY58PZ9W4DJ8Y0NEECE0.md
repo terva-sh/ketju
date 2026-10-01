@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T07:51:08Z
+updated_at: 2026-10-01T08:13:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -63,7 +63,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 
 ### Approach
 
-1. **Resolver.** In `internal/service/threads/lenses.go`, add `lens.Author(id uint64)`, whose filter keeps `e.Author == id && e.Flags.Visible()`. The resolver reads `dbq.GetUserByHandle` once, before the snapshot. When no account holds the handle, it uses a filter that keeps nothing. Either way the answer echoes the handle as typed in `lens.value`, so its shape says nothing about whether the handle exists. The cache key's `Lens` is `author:<user id>`, or `author:-` when no account matched.
+1. **Resolver.** In `internal/service/threads/lenses.go`, add `lens.Author(id uint64)`, whose filter keeps `e.Author == id && e.Flags.Visible()`. The resolver reads `dbq.GetUserByHandle` once, before the snapshot. When no account holds the handle, it uses a filter that keeps nothing. Either way the answer echoes the handle as typed in `lens.value`, so its shape says nothing about whether the handle exists. The cache key's `Lens` is `author:<user id>`, or `author:-` when no account matched. That is safe because the response cache holds only the posts: `lens.value` is built on every request outside the cached body (TKT-01M29CRJ1P step 6), so two spellings of one handle share cached posts and each answer still echoes its own spelling.
 2. **The thread header's author.**
    - Add `Author dto.Author` (`author`) to `dto.ThreadHeader`, the thread's starter from `threads.author_id`, drawn as every author block is (`member.Author`, and `member.FillMissing` for an account the database lacks).
    - On the thread page, add `row.AuthorID` to the set the page's existing `s.users` batch reads, so the page runs no extra statement.
@@ -75,6 +75,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 
 - `TestAuthorLensFromIndex`: an author lens page runs the canonical page's statements plus the one handle lookup, the same count on a 10-post and a 2000-post thread (db.Options.Trace, the `statements` counter from `me_test.go`).
 - `TestAuthorLensKeepsVisiblePosts`: deleted, hidden, hidden-pending-review, moved and redacted posts by the author are left out of `shown`, and `hidden` is the post count minus `shown`.
+- `TestAuthorLensValueNotCached`: `author:Mara` then `author:mara`, and two different unknown handles, each answer with their own `lens.value` while the second request is a response-cache hit.
 - `TestAuthorLensCaseInsensitive`, and `TestAuthorLensUnknownHandleAnswersAsNoPosts`: an unknown handle and a handle with no posts here produce byte-equal bodies apart from `value`. A handle a rename released is not followed.
 - `TestAuthorLensEmptyAfterModeration`: an author whose every post here was hidden by a suspension gets `shown` 0, one empty page, 200.
 - `TestThreadHeaderCarriesAuthor`: present on every `ThreadHeader` answer, with an anonymized starter and a missing starter drawn as deleted members. The page's statement count is unchanged.
@@ -90,3 +91,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T07:51:08Z
 
 run decision: pending maintainer review. docs/10 Q15 is settled: Only OP is a button on the thread header, 'Only <handle>', beside the lens switcher, as the mockups draw it (docs/10 Q15, docs/06 'Lenses'). The author lens keeps only posts shown as themselves, and resolves the handle a member holds now; an unknown handle answers as one with no posts, and a released handle is not followed (docs/07). The button itself moves to TKT-01M29CTY71, so the dist changes in one client PR. This ticket adds the thread header's author field that the button needs. Decided in the Phase 3 grooming of 2026-10-01, lane lenses.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T08:13:59Z
+
+Review 1692 (head 4065cf7, base a599b48), medium, 'Keep the requested author handle distinct in the response cache': answered in the plan, with a test added. The response cache holds only the posts. dto.Lens, including the echoed value, is built on every request outside the cached body (docs/07 'The response cache'; TKT-01M29CRJ1P step 6 now says so). A shared key for two spellings therefore shares only identical posts. TestAuthorLensValueNotCached proves each answer echoes its own spelling on a cache hit.

@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T07:51:20Z
+updated_at: 2026-10-01T08:13:55Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -53,12 +53,13 @@ Returning at the same ordinal is the part that stops people getting lost. A read
 - [ ] Full thread lands on the canonical permalink of the post at the top of the viewport (vitest and e2e)
 - [ ] Only <handle> is one press from the thread head at both widths and gives the author lens URL, ?lens=author:<handle>
 - [ ] A bare ?lens=unread is replaced by unread:<B>, page 2 is unchanged after page 1 is read, and first unread lands on last_read + 1 from the canonical view and from the lens (e2e)
-- [ ] Empty states: an anonymous unread or mentions lens asks the reader to sign in; a fully read thread and an empty author or since lens offer the full thread; a one-post chain says the post is neither a reply nor replied to
 - [ ] The read beacon runs under unread and since and under no other lens (vitest)
 - [ ] At 390 px every lens is reachable from the Lens control, which TKT-01M29CGBZD later presents as a sheet, and the header and bar are legible with 44 px targets
 - [ ] e2e at 390 and 1440 px pass with one axe scan per test and no violations
 - [ ] The committed dist is rebuilt with go generate ./internal/web/spa and the reader stays within 70000 B gzip; the PR states the reader's bytes before and after, and the switcher's bytes measured inside and outside a lazy chunk
 - [ ] Every switch (switcher item, Only <handle>, Conversation) sets the address's lens and drops its page and ordinal, and a fresh load of that address shows the same posts (e2e)
+- [ ] Empty states: an anonymous unread or mentions lens asks the reader to sign in; a fully read thread and an empty author or since lens offer the full thread at /t/{id}/{slug}; a one-post chain says the post is neither a reply nor replied to (vitest)
+- [ ] The since date field writes since:YYYY-MM-DD as chosen, read as midnight UTC, whatever the viewer's timezone (vitest with two non-UTC timezones)
 
 ## Implementation plan
 
@@ -86,6 +87,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
    - `tracksUnderLens(kind)` is true for `''`, `unread` and `since`.
 3. **`components/thread/LensHeader.tsx`** is drawn above the posts when `page.lens` is set. It shows the description, the shown and hidden counts, and "Full thread".
    - "Full thread" is an anchor to the permalink of the first post on the page, so it opens in a new tab. On a press it routes to the permalink of the post at the top of the viewport, the first `.post` whose bottom is below the sticky head. `useArrival` then scrolls to it.
+   - On a lens page with no posts, "Full thread" and every empty state's link go to the canonical thread address, `/t/{id}/{slug}` with no page, where the server's landing rule places the reader.
    - The empty states:
      - an anonymous viewer on unread or mentions: "Sign in to see what is new here", with a link to `/auth/signin?return_to=`;
      - a fully read thread: "Nothing unread. Read the full thread";
@@ -99,7 +101,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
      - Unread, for a signed-in viewer;
      - one "By @handle" for each distinct author on the page;
      - Mentioning me, for a signed-in viewer;
-     - Since a date, a date field whose day is turned into the Unix ms of local midnight in the viewer's timezone setting;
+     - Since a date, a date field whose chosen day goes into the address as `since:YYYY-MM-DD`, which the server reads as midnight UTC (docs/07). The client never converts it to a local moment, so the field and a shared date link select the same posts;
      - Removed posts (`mod`), only when `viewer.can_moderate`.
    - Escape and a press outside close it, returning focus to "Lens".
    - Targets are 44 px below 720 px.
@@ -121,8 +123,8 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 
 - Vitest:
   - `lens.test.ts`: gap placement across pages, the description per kind, and `tracksUnderLens`.
-  - `LensHeader.test.tsx`: counts; each empty state; "Full thread" picks the post at the top of the viewport.
-  - `LensBar.test.tsx`: the Only href equals the author lens URL; `aria-current`; Moderator offered only with `can_moderate`; Unread and Mentioning me only when signed in; Escape returns focus.
+  - `LensHeader.test.tsx`: counts; each empty state; "Full thread" picks the post at the top of the viewport; on an empty lens page it and every empty state's link go to `/t/{id}/{slug}`.
+  - `LensBar.test.tsx`: the date field writes `since:YYYY-MM-DD` unchanged with the viewer's timezone set to `America/Los_Angeles` and to `Pacific/Auckland`; the Only href equals the author lens URL; `aria-current`; Moderator offered only with `can_moderate`; Unread and Mentioning me only when signed in; Escape returns focus.
   - `ThreadScreen.lens.test.tsx`, through `renderAt`:
     - a bare unread is replaced by `unread:B`;
     - an unknown lens is dropped from the address;
@@ -149,3 +151,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T07:51:20Z
 
 run decision: pending maintainer review. The decisions are recorded in docs/06 'Lenses', under the lens bar and read tracking under a lens. (1) The lens bar sits under the thread head at both widths: Only <handle> and Lens, as in the mockups. (2) The switcher items are recorded there. (3) Conversation is the chain entry on any reply or replied-to post. (4) Every lens draws gap dividers. (5) Full thread goes to the post at the top of the viewport. (6) The read beacon runs under unread and since only. This ticket also absorbs the client parts of the four lens tickets: the Only button, the unread address replacement and first unread under the lens, the empty states, the dividers, and the since date entry. The dist then changes in one client PR, so effort rises from M to L. TKT-01M29CGBZD (phone sheets, another lane) should depend on this ticket; it is referenced rather than linked so as not to write that lane's file. Decided in the Phase 3 grooming of 2026-10-01, lane lenses.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T08:13:55Z
+
+Review 1692 (head 4065cf7, base a599b48): two medium findings were fixed in the plan. (1) The date field now writes since:YYYY-MM-DD as chosen, which the server reads as midnight UTC, instead of a local-midnight Unix ms; it is tested under two non-UTC timezones. (2) On an empty lens page, Full thread and the empty states go to /t/{id}/{slug}. docs/06 says both.

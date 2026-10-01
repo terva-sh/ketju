@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T07:51:00Z
+updated_at: 2026-10-01T08:13:41Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -88,7 +88,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
    - `after_log_length` filters the lens page's posts exactly as it filters a canonical page's.
    - Remove the `bad-request` for a non-empty `q.Lens`.
 5. **DTO.** Add `Gaps []LensGap` (`{after, count}`, json `gaps`) to `dto.Lens`. Regenerate `internal/dto/testdata/golden` with a lens page, and add `internal/web/api/testdata/golden/thread.lens.json`, served with the test filter registered.
-6. **Response cache.** `respcache.Key` keeps `Lens` and fills it with the resolved form (`unread:60`, `author:<user id>`, `mentions:<viewer id>`, `chain:42`, `since:<ms>`, `mod`). It gains `Selection [32]byte`, the page's ordinal digest. A lens whose selection depends on something its string does not name can then never serve one viewer's page to another. `pageClass` reads the lens page's snapshot as it reads the canonical one.
+6. **Response cache.** Only the posts are cached (docs/07 "The response cache"). `dto.Lens`, like the header and the viewer block, is built on every request and never stored, so the key needs only what the posts differ by. `respcache.Key` keeps `Lens` and fills it with the resolved form (`unread:60`, `author:<user id>`, `mentions:<viewer id>`, `chain:42`, `since:<ms>`, `mod`). It gains `Selection [32]byte`, the page's ordinal digest. A lens whose selection depends on something its string does not name can then never serve one viewer's page to another. `pageClass` reads the lens page's snapshot as it reads the canonical one.
 7. **Docs.** In docs/07 "What the thread endpoint does", replace the `lens ... is bad-request` sentence with a pointer to the decided grammar. In "The response cache", note the `Selection` field.
 
 ### Tests
@@ -100,7 +100,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 - `TestSelectionGaps` covers leading, inner, cross-page and trailing gaps.
 - `TestUnknownLensServesCanonical` (api): `?lens=nonsense`, `?lens=`, `?lens=chain:abc` and a kind with no resolver each answer 200 with `lens: null` and the canonical page's posts.
 - `TestLensOnHiddenThreadIsNotFound`: any lens on a thread in a forum hidden from the viewer is `not-found`. A signed-in-only forum is `unauthenticated` to an anonymous viewer.
-- **Never widen access.** `TestLensPostsMatchCanonical` (service, table-driven) holds every post a lens page serves byte-equal to the post the canonical page (`?ordinal=`) serves the same viewer.
+- **Never widen access.** `TestLensPostsMatchCanonical` (internal/web/api `lens_test.go`, table-driven on the `world` fixture of `thread_test.go`, whose `svc` is the `threads.Service`) holds every post a lens page serves byte-equal to the post the canonical page (`?ordinal=`) serves the same viewer.
   - The viewers are anonymous, member, the author of a hidden post, a moderator by role, a moderator by group grant (`world.groupModerator`), a moderator of another forum, an admin, and a suspended viewer, who is served as anonymous.
   - The posts are visible, author-deleted, moderator-hidden, hidden pending review, redacted (no body for anyone, moderators included), moved (no body, `moved_to` null until TKT-01M29CXJZZ), and a suspended author's posts hidden by the suspension.
   - This ticket runs it with the test filter. Each lens ticket adds its kind's rows.
