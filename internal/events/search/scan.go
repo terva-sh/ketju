@@ -150,7 +150,12 @@ type source struct {
 // read-only, and nothing is written back, the .idx included. The cache is
 // never asked to open a thread, so indexing does not evict one a reader has
 // open.
-func (x *Indexer) source(id threadid.ID) (*source, error) {
+//
+// fromLog opens the thread from its log alone, as Rebuild does: the cache is
+// not peeked, the sidecar index is not read, and the index is built in
+// memory by replaying every frame, so a stale or damaged .idx cannot reach
+// the rebuilt index.
+func (x *Indexer) source(id threadid.ID, fromLog bool) (*source, error) {
 	f, err := x.open(id.LogPath(x.root))
 	if err != nil {
 		return nil, err
@@ -158,9 +163,9 @@ func (x *Indexer) source(id threadid.ID) (*source, error) {
 	src := &source{f: f, cache: x.threads}
 	if err := checkHeader(f, id); err != nil {
 		f.Close()
-		return nil, err
+		return nil, logFault{err}
 	}
-	if x.threads != nil {
+	if x.threads != nil && !fromLog {
 		if th, ok := x.threads.Peek(id); ok {
 			src.th = th
 			src.length = th.Actor.LogLength()
@@ -172,15 +177,17 @@ func (x *Indexer) source(id threadid.ID) (*source, error) {
 		f.Close()
 		return nil, err
 	}
-	idx, err := x.readIndex(id.IndexPath(x.root))
-	if err != nil {
-		f.Close()
-		return nil, err
+	var idx []byte
+	if !fromLog {
+		if idx, err = x.readIndex(id.IndexPath(x.root)); err != nil {
+			f.Close()
+			return nil, err
+		}
 	}
 	rec, err := threadlog.Open(f, fi.Size(), idx)
 	if err != nil {
 		f.Close()
-		return nil, err
+		return nil, logFault{err}
 	}
 	src.rec, src.length = rec, rec.LogLength
 	return src, nil

@@ -141,3 +141,50 @@ func format(v any) string {
 		return fmt.Sprintf("%v", v)
 	}
 }
+
+// DumpSearch writes the search index's tables as canonical text: search_docs
+// by (thread, ordinal) without its rowid, which depends on the order rows
+// were written in, search_state without its wall clock, and search_meta. Two
+// indexes of the same logs dump identically however they were built, which
+// is the check behind "reindex --search gives the same rows as the
+// incremental path" (TKT-01M29CTY9D). The FTS5 index is not dumped: compare
+// what searches return, and run db.CheckSearchIndex.
+func DumpSearch(t testing.TB, d *db.DB) string {
+	t.Helper()
+	var b strings.Builder
+	err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		for _, q := range []string{
+			`SELECT 'doc', thread_id, ordinal, revision, author_id, created_at, title, source_plain FROM search_docs ORDER BY thread_id, ordinal`,
+			`SELECT 'state', thread_id, log_length, '', '', '', '', '' FROM search_state ORDER BY thread_id`,
+			`SELECT 'meta', id, version, '', '', '', '', '' FROM search_meta`,
+		} {
+			rows, err := tx.QueryContext(t.Context(), q)
+			if err != nil {
+				return err
+			}
+			for rows.Next() {
+				v := make([]any, 8)
+				p := make([]any, 8)
+				for i := range v {
+					p[i] = &v[i]
+				}
+				if err := rows.Scan(p...); err != nil {
+					rows.Close()
+					return err
+				}
+				fmt.Fprintf(&b, "%v %v %v %v %v %v %q %q\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7])
+			}
+			if err := rows.Close(); err != nil {
+				return err
+			}
+			if err := rows.Err(); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("dumping the search index: %v", err)
+	}
+	return b.String()
+}

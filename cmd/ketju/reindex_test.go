@@ -657,7 +657,6 @@ func TestReindexExitCodes(t *testing.T) {
 	t.Run("usage", func(t *testing.T) {
 		data, _ := populate(t, 1)
 		for _, args := range [][]string{
-			{"--root", data, "--search"},
 			{"--root", data, "--projections=false"},
 			{"--root", data, "extra"},
 			{"--root", data, "--no-such-flag"},
@@ -761,7 +760,7 @@ func readmeRecovery(t *testing.T) string {
 	if !ok {
 		t.Fatal("the recovery section's sh block is not closed")
 	}
-	for _, want := range []string{"ketju reindex", "ketju fsck", "$KETJU_BACKUP"} {
+	for _, want := range []string{"ketju reindex", "--search", "ketju fsck", "$KETJU_BACKUP"} {
 		if !strings.Contains(block, want) {
 			t.Errorf("the recovery procedure does not run %q:\n%s", want, block)
 		}
@@ -777,6 +776,7 @@ func readmeRecovery(t *testing.T) string {
 func TestREADMERecoveryProcedure(t *testing.T) {
 	script := readmeRecovery(t)
 	data, ids := populate(t, 5)
+	catchUp(t, data) // so the backup holds a search index, older than the logs
 
 	// The backup. VACUUM INTO cannot run inside the transaction every access
 	// here goes through, and this package may not open a driver of its own,
@@ -805,6 +805,8 @@ func TestREADMERecoveryProcedure(t *testing.T) {
 	if !strings.Contains(want, "threads: 7 rows") {
 		t.Fatalf("the setup did not write after the backup:\n%s", want)
 	}
+	catchUp(t, data)
+	wantSearch, _ := searchAt(t, data)
 
 	// The database is lost: damaged past opening.
 	if err := os.WriteFile(filepath.Join(data, "db", "ketju.db"), []byte("not a database"), 0o600); err != nil {
@@ -827,7 +829,7 @@ func TestREADMERecoveryProcedure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("the README procedure failed: %v\n%s", err, out)
 	}
-	for _, want := range []string{"reindexed 7 of 7 thread(s)", "no corruption found"} {
+	for _, want := range []string{"reindexed 7 of 7 thread(s)", "search: indexed 7 of 7 thread(s)", "no corruption found"} {
 		if !strings.Contains(string(out), want) {
 			t.Errorf("the procedure's output lacks %q:\n%s", want, out)
 		}
@@ -836,6 +838,13 @@ func TestREADMERecoveryProcedure(t *testing.T) {
 	got, members := dumpAt(t, data)
 	if got != want {
 		t.Fatalf("the recovered projection differs from the one lost:\n%s\n---\n%s", want, got)
+	}
+	// The search index comes from the logs too, never from the backup.
+	if gotSearch, _ := searchAt(t, data); gotSearch != wantSearch {
+		t.Errorf("the recovered search index differs from the one lost:\n%s\n---\n%s", wantSearch, gotSearch)
+	}
+	if err := checkSearchIndex(t, data); err != nil {
+		t.Error(err)
 	}
 	if members != backedUp {
 		t.Errorf("members = %q, want the backup's %q", members, backedUp)

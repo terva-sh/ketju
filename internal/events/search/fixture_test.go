@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
-	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -300,44 +298,10 @@ func (f *fixture) check() {
 	f.write(func(_ *dbq.Queries, tx *sql.Tx) error { return db.CheckSearchIndex(f.t.Context(), tx) })
 }
 
-// dump writes the search tables as canonical text: search_docs by (thread,
-// ordinal) without its rowid, which depends on the order rows were written
-// in, and search_state without its wall clock.
+// dump writes the search tables as canonical text (dbtest.DumpSearch).
 func (f *fixture) dump() string {
 	f.t.Helper()
-	var b strings.Builder
-	err := f.db.Read(f.t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
-		for _, q := range []string{
-			`SELECT 'doc', thread_id, ordinal, revision, author_id, created_at, title, source_plain FROM search_docs ORDER BY thread_id, ordinal`,
-			`SELECT 'state', thread_id, log_length, '', '', '', '', '' FROM search_state ORDER BY thread_id`,
-			`SELECT 'meta', id, version, '', '', '', '', '' FROM search_meta`,
-		} {
-			rows, err := tx.QueryContext(f.t.Context(), q)
-			if err != nil {
-				return err
-			}
-			for rows.Next() {
-				v := make([]any, 8)
-				p := make([]any, 8)
-				for i := range v {
-					p[i] = &v[i]
-				}
-				if err := rows.Scan(p...); err != nil {
-					rows.Close()
-					return err
-				}
-				fmt.Fprintf(&b, "%v %v %v %v %v %v %q %q\n", v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7])
-			}
-			if err := rows.Close(); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	return b.String()
+	return dbtest.DumpSearch(f.t, f.db)
 }
 
 // fromScratch indexes every thread under the fixture's data directory into

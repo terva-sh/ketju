@@ -71,17 +71,19 @@ arrives, take backups as
    mv db db.damaged
    mkdir db
    cp "$KETJU_BACKUP" db/ketju.db
-   ketju reindex --root .
+   ketju reindex --root . --projections --search
    ketju fsck --root .
    ```
 
    `mv` moves the damaged database out of the way together with its `-wal`
    and `-shm` files, which must not be paired with the backup. If `db/` is
    gone entirely, leave out the `mv` line. `ketju reindex` empties the
-   restored database's projection tables, which are as old as the backup, and
-   rebuilds them from the logs, so posts written after the backup come back.
-   It reports its progress on stderr while it runs. `ketju fsck` then checks
-   every log.
+   restored database's projection tables and search index, which are as old
+   as the backup, and rebuilds both from the logs, so posts written after the
+   backup come back and can be found. It reports its progress on stderr while
+   it runs. Without `--search`, `serve` rebuilds the search index in the
+   background instead, and search says it is incomplete until it is done.
+   `ketju fsck` then checks every log.
 3. Start `ketju serve`, and delete `db.damaged` once the forum is working.
 
 If reindex exits 1, a thread's log cannot be projected: it is damaged, or its

@@ -335,67 +335,7 @@ func TestIncrementalEqualsFromScratch(t *testing.T) {
 	for seed := range uint64(6) {
 		t.Run(fmt.Sprint(seed), func(t *testing.T) {
 			f := newFixture(t)
-			rng := rand.New(rand.NewPCG(seed, 99))
-			words := []string{"apple", "birch", "cedar", "delta", "ember", "fjord", "grove"}
-			text := func() string {
-				var w []string
-				for range 1 + rng.IntN(4) {
-					w = append(w, words[rng.IntN(len(words))])
-				}
-				return strings.Join(w, " ")
-			}
-			var ids []threadid.ID
-			posts := map[threadid.ID]uint32{}
-			redacted := map[threadid.ID]map[uint32]bool{}
-			var pending []events.Event
-			flush := func() {
-				if len(pending) > 0 {
-					f.deliver(pending...)
-					pending = nil
-				}
-			}
-			for range 120 {
-				if len(ids) == 0 || rng.IntN(10) == 0 {
-					id, ev := f.thread(text())
-					ids = append(ids, id)
-					redacted[id] = map[uint32]bool{}
-					pending = append(pending, ev)
-					continue
-				}
-				id := ids[rng.IntN(len(ids))]
-				n := posts[id]
-				o := uint32(1 + rng.IntN(int(max(n, 1))))
-				ok := n > 0 && !redacted[id][o]
-				var ev events.Event
-				switch r := rng.IntN(20); {
-				case r < 7 || n == 0:
-					ev = f.post(id, uint64(5+rng.IntN(3)), text())
-					posts[id]++
-				case r < 10 && ok:
-					ev = f.edit(id, o, text())
-				case r < 12 && ok:
-					ev = f.del(id, o, threadlog.DeleteBody{})
-				case r < 13 && ok:
-					ev = f.del(id, o, threadlog.DeleteBody{ByModerator: true})
-				case r < 14 && ok:
-					ev = f.append(id, threadlog.Append{Type: threadlog.TypeDelete, Ordinal: o, Body: &threadlog.DeleteBody{Auto: true}})
-				case r < 16 && ok:
-					ev = f.restore(id, o)
-				case r < 18:
-					ev = f.rename(id, text())
-				case r < 19 && ok:
-					flush() // a redaction closes every thread, so what is queued goes first
-					ev = f.redact(id, o)
-					redacted[id][o] = true
-				default:
-					ev = f.redactTitle(id, text())
-				}
-				pending = append(pending, ev)
-				if rng.IntN(3) == 0 {
-					flush()
-				}
-			}
-			flush()
+			randomHistory(f, seed)
 			f.check()
 			incremental := f.dump()
 			if scratch := f.fromScratch(); scratch != incremental {
@@ -403,6 +343,74 @@ func TestIncrementalEqualsFromScratch(t *testing.T) {
 			}
 		})
 	}
+}
+
+// randomHistory writes 120 records of every kind the index cares about, the
+// hard redaction of posts and titles included, to threads of f, and indexes
+// them incrementally in batches as serve would.
+func randomHistory(f *fixture, seed uint64) {
+	f.t.Helper()
+	rng := rand.New(rand.NewPCG(seed, 99))
+	words := []string{"apple", "birch", "cedar", "delta", "ember", "fjord", "grove"}
+	text := func() string {
+		var w []string
+		for range 1 + rng.IntN(4) {
+			w = append(w, words[rng.IntN(len(words))])
+		}
+		return strings.Join(w, " ")
+	}
+	var ids []threadid.ID
+	posts := map[threadid.ID]uint32{}
+	redacted := map[threadid.ID]map[uint32]bool{}
+	var pending []events.Event
+	flush := func() {
+		if len(pending) > 0 {
+			f.deliver(pending...)
+			pending = nil
+		}
+	}
+	for range 120 {
+		if len(ids) == 0 || rng.IntN(10) == 0 {
+			id, ev := f.thread(text())
+			ids = append(ids, id)
+			redacted[id] = map[uint32]bool{}
+			pending = append(pending, ev)
+			continue
+		}
+		id := ids[rng.IntN(len(ids))]
+		n := posts[id]
+		o := uint32(1 + rng.IntN(int(max(n, 1))))
+		ok := n > 0 && !redacted[id][o]
+		var ev events.Event
+		switch r := rng.IntN(20); {
+		case r < 7 || n == 0:
+			ev = f.post(id, uint64(5+rng.IntN(3)), text())
+			posts[id]++
+		case r < 10 && ok:
+			ev = f.edit(id, o, text())
+		case r < 12 && ok:
+			ev = f.del(id, o, threadlog.DeleteBody{})
+		case r < 13 && ok:
+			ev = f.del(id, o, threadlog.DeleteBody{ByModerator: true})
+		case r < 14 && ok:
+			ev = f.append(id, threadlog.Append{Type: threadlog.TypeDelete, Ordinal: o, Body: &threadlog.DeleteBody{Auto: true}})
+		case r < 16 && ok:
+			ev = f.restore(id, o)
+		case r < 18:
+			ev = f.rename(id, text())
+		case r < 19 && ok:
+			flush() // a redaction closes every thread, so what is queued goes first
+			ev = f.redact(id, o)
+			redacted[id][o] = true
+		default:
+			ev = f.redactTitle(id, text())
+		}
+		pending = append(pending, ev)
+		if rng.IntN(3) == 0 {
+			flush()
+		}
+	}
+	flush()
 }
 
 // TestDroppedEventsAreCaughtUp is criterion 6's second half: a batch

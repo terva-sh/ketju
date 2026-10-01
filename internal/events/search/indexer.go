@@ -228,9 +228,10 @@ func (x *Indexer) Indexing() bool { return x.indexing.Load() }
 // thread from search_state, and one after the pass re-indexes nothing
 // (Terva reviews 1707, 1713 and 1719).
 //
-// serve calls it before its listener opens, and `ketju reindex --search`
-// and `ketju redact` before they index anything. With the version current it
-// is one read.
+// serve calls it before its listener opens. `ketju reindex --search` does
+// not: Rebuild settles the version inside its own transaction, so a failed
+// rebuild never commits an emptied index (Terva review 1731). With the
+// version current it is one read.
 func (x *Indexer) Prepare(ctx context.Context) error {
 	v, have, err := x.version(ctx)
 	if err != nil {
@@ -521,6 +522,11 @@ type target struct {
 	id   threadid.ID
 	upTo int64
 	lag  int64
+
+	// rebuild indexes the thread for Rebuild: from its log alone, never its
+	// sidecar index, and writing search_docs without the FTS5 index, which
+	// Rebuild builds once before it commits.
+	rebuild bool
 }
 
 // result is what indexing one target came to.
@@ -697,7 +703,7 @@ func (x *Indexer) inSavepoint(ctx context.Context, tx *sql.Tx, t target) (out ou
 	if _, err := tx.ExecContext(ctx, "SAVEPOINT search_thread"); err != nil {
 		return out, nil, err
 	}
-	out, threadErr = x.indexThread(ctx, tx, t.id, t.upTo)
+	out, threadErr = x.indexThread(ctx, tx, t)
 	if threadErr != nil {
 		if _, err := tx.ExecContext(ctx, "ROLLBACK TO search_thread"); err != nil {
 			return out, threadErr, err
@@ -708,7 +714,7 @@ func (x *Indexer) inSavepoint(ctx context.Context, tx *sql.Tx, t target) (out ou
 	}
 	if threadErr != nil {
 		out.indexed = out.from
-		out.posts, out.bytes = 0, 0
+		out.posts, out.bytes, out.docs = 0, 0, 0
 	}
 	return out, threadErr, nil
 }
@@ -720,11 +726,18 @@ type outcome struct {
 	end     int64 // the log length the snapshot saw
 	posts   int   // rows put or dropped, for the batch limit
 	bytes   int64 // text put
+	docs    int   // posts' rows put, the title's left out
 }
 
-// indexThread indexes thread id up to upTo, or to its log's end when upTo is
-// zero or less, inside tx. See the package comment.
-func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, id threadid.ID, upTo int64) (outcome, error) {
+// indexThread indexes thread t.id up to t.upTo, or to its log's end when
+// that is zero or less, inside tx. See the package comment. A failure the
+// log explains is a logFault (IsLogFault).
+func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, t target) (outcome, error) {
+	id, upTo := t.id, t.upTo
+	put, drop := db.PutSearchDoc, db.DropSearchDoc
+	if t.rebuild {
+		put, drop = db.PutSearchRow, db.DropSearchRow
+	}
 	q := dbq.New(tx)
 	var out outcome
 	from, err := q.GetSearchState(ctx, int64(id))
@@ -740,7 +753,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, id threadid.ID, u
 		return out, nil // already there; an event can arrive after a sweep
 	}
 
-	src, err := x.source(id)
+	src, err := x.source(id, t.rebuild)
 	if err != nil {
 		return out, err
 	}
@@ -750,7 +763,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, id threadid.ID, u
 		upTo = src.length
 	}
 	if src.length < upTo {
-		return out, fmt.Errorf("thread %s: the log is %d bytes, shorter than the %d an event reported", id, src.length, upTo)
+		return out, logFault{fmt.Errorf("thread %s: the log is %d bytes, shorter than the %d an event reported", id, src.length, upTo)}
 	}
 	fresh := !known
 	if known && from > src.length {
@@ -773,7 +786,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, id threadid.ID, u
 				"thread", id, "search_state", from, "err", err)
 			fresh = true
 		} else if err != nil {
-			return out, fmt.Errorf("thread %s: %w", id, err)
+			return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
 		}
 	}
 	if fresh {
@@ -798,7 +811,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, id threadid.ID, u
 			return out, nil
 		}
 		if s, err = scanFrames(src.f, from, upTo); err != nil {
-			return out, fmt.Errorf("thread %s: %w", id, err)
+			return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
 		}
 	}
 
@@ -809,7 +822,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, id threadid.ID, u
 	slices.Sort(ordinals)
 	entries, snapLen, err := src.entries(ordinals)
 	if err != nil {
-		return out, fmt.Errorf("thread %s: %w", id, err)
+		return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
 	}
 	if snapLen < upTo {
 		return out, fmt.Errorf("thread %s: the index snapshot is at %d, before the %d scanned", id, snapLen, upTo)
@@ -818,38 +831,39 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, id threadid.ID, u
 		e := entries[i]
 		out.posts++
 		if !e.Flags.Visible() {
-			if err := db.DropSearchDoc(ctx, tx, int64(id), int64(o)); err != nil {
+			if err := drop(ctx, tx, int64(id), int64(o)); err != nil {
 				return out, err
 			}
 			continue
 		}
 		source, err := src.text(o, e)
 		if err != nil {
-			return out, fmt.Errorf("thread %s: reading post %d: %w", id, o, err)
+			return out, logFault{fmt.Errorf("thread %s: reading post %d: %w", id, o, err)}
 		}
 		plain := render.Plain(source)
 		out.bytes += int64(len(plain))
-		if err := db.PutSearchDoc(ctx, tx, db.SearchDoc{
+		if err := put(ctx, tx, db.SearchDoc{
 			Thread: int64(id), Ordinal: int64(o), Revision: int64(e.Revision),
 			AuthorID: int64(e.Author), CreatedAt: e.CreatedMS, SourcePlain: plain,
 		}); err != nil {
 			return out, err
 		}
+		out.docs++
 	}
 
 	if s.titleSeen {
 		out.posts++
 		title := strings.TrimSpace(render.DropSentinels(s.title))
 		if title == "" {
-			err = db.DropSearchDoc(ctx, tx, int64(id), 0)
+			err = drop(ctx, tx, int64(id), 0)
 		} else {
 			if !s.creatorSeen {
 				if s.creator, err = firstFrame(src.f, upTo); err != nil {
-					return out, fmt.Errorf("thread %s: %w", id, err)
+					return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
 				}
 			}
 			out.bytes += int64(len(title))
-			err = db.PutSearchDoc(ctx, tx, db.SearchDoc{
+			err = put(ctx, tx, db.SearchDoc{
 				Thread: int64(id), Ordinal: 0, AuthorID: int64(s.creator.actor), CreatedAt: s.creator.ms, Title: title,
 			})
 		}

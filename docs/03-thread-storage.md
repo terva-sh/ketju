@@ -776,6 +776,18 @@ version was bumped first.
   into a second set of tables and swapping lost, because their DDL would
   need a second copy outside the migrations, which `ClearProjections`
   already refuses for the same reason.
+  As built (TKT-01M29CTY9D): the rebuild is `search.Indexer.Rebuild`. Reading
+  the old version, emptying the index and recording the new version all
+  happen inside the one transaction, so a failed run leaves the old index
+  and its version as they were, and `serve`'s `Prepare` deals with an old
+  version at its next start (Terva review 1731). Each thread is indexed
+  through the indexer's own per-thread path, inside a savepoint that a log
+  fault rolls back (Terva review 1711), from its log alone: the rebuild
+  replays every frame and never reads the `.idx`, so a stale or damaged
+  sidecar cannot reach the rebuilt index. The rows are written without the
+  FTS5 index, which is then built once (`rebuild`) and merged (`optimize`)
+  before the commit. A search table dropped by hand is reported (exit 4),
+  not recreated.
 - **Decided by the run (2026-10-01, pending maintainer review):** for
   TKT-01M3VHSYFR (Write back index entries an Extended replay changes before
   trusting it), `ketju serve` discards every `.idx` once per data directory.

@@ -44,6 +44,7 @@ const (
 	ftsDelete    = `INSERT INTO search (search, rowid, title, source_plain) VALUES ('delete', ?, ?, ?)`
 	ftsDeleteAll = `INSERT INTO search (search) VALUES ('delete-all')`
 	ftsRebuild   = `INSERT INTO search (search) VALUES ('rebuild')`
+	ftsOptimize  = `INSERT INTO search (search) VALUES ('optimize')`
 	ftsIntegrity = `INSERT INTO search (search, rank) VALUES ('integrity-check', 1)`
 )
 
@@ -145,12 +146,81 @@ func ClearSearch(ctx context.Context, tx *sql.Tx) error {
 }
 
 // RebuildSearchIndex rebuilds the FTS5 index from search_docs in one pass,
-// leaving search_docs as it is. It is `ketju reindex --search`'s fast path,
-// for an index whose segments are damaged while its rows are not
-// (TKT-01M29CTY9D).
+// leaving search_docs as it is. `ketju reindex --search` writes its rows with
+// PutSearchRow and then builds the index once with this, which is faster than
+// row by row, and discards whatever the index held before, damaged segments
+// included (TKT-01M29CTY9D).
 func RebuildSearchIndex(ctx context.Context, tx *sql.Tx) error {
 	_, err := tx.ExecContext(ctx, ftsRebuild)
 	return err
+}
+
+// OptimizeSearchIndex merges the FTS5 index's segments into one, so no
+// segment written before it, and none of the terms only such a segment
+// held, is left in the index's live pages.
+func OptimizeSearchIndex(ctx context.Context, tx *sql.Tx) error {
+	_, err := tx.ExecContext(ctx, ftsOptimize)
+	return err
+}
+
+// PutSearchRow and DropSearchRow write search_docs alone and leave the FTS5
+// index as it is. They are for a rebuild that runs RebuildSearchIndex before
+// it commits, which builds the index from search_docs: anything else that
+// calls them leaves the index out of step with its rows.
+func PutSearchRow(ctx context.Context, tx *sql.Tx, doc SearchDoc) error {
+	q := dbq.New(tx)
+	old, err := q.GetSearchDoc(ctx, dbq.GetSearchDocParams{ThreadID: doc.Thread, Ordinal: doc.Ordinal})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		_, err := q.InsertSearchDoc(ctx, dbq.InsertSearchDocParams{
+			ThreadID: doc.Thread, Ordinal: doc.Ordinal, Revision: doc.Revision,
+			AuthorID: doc.AuthorID, CreatedAt: doc.CreatedAt, Title: doc.Title, SourcePlain: doc.SourcePlain,
+		})
+		return err
+	case err != nil:
+		return err
+	}
+	return q.UpdateSearchDoc(ctx, dbq.UpdateSearchDocParams{
+		Revision: doc.Revision, AuthorID: doc.AuthorID, CreatedAt: doc.CreatedAt,
+		Title: doc.Title, SourcePlain: doc.SourcePlain, ID: old.ID,
+	})
+}
+
+// DropSearchRow removes the search_docs row for (thread, ordinal), if there
+// is one; see PutSearchRow.
+func DropSearchRow(ctx context.Context, tx *sql.Tx, thread, ordinal int64) error {
+	q := dbq.New(tx)
+	old, err := q.GetSearchDoc(ctx, dbq.GetSearchDocParams{ThreadID: thread, Ordinal: ordinal})
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return nil
+	case err != nil:
+		return err
+	}
+	return q.DeleteSearchDoc(ctx, old.ID)
+}
+
+// searchSchema is every object of the search index: the FTS5 table and the
+// tables in SearchTables.
+var searchSchema = append([]string{"search"}, SearchTables...)
+
+// MissingSearchTables returns the search index's tables that the database
+// lacks: none in a database migrated past 0022, all of them in one whose
+// migrations stop before it, and some only when someone dropped them by
+// hand.
+func MissingSearchTables(ctx context.Context, tx *sql.Tx) ([]string, error) {
+	var missing []string
+	for _, name := range searchSchema {
+		var n int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT count(*) FROM sqlite_schema WHERE type = 'table' AND name = ?`, name).Scan(&n); err != nil {
+			return nil, err
+		}
+		if n == 0 {
+			missing = append(missing, name)
+		}
+	}
+	return missing, nil
 }
 
 // CheckSearchIndex runs FTS5's integrity-check against search_docs, the
