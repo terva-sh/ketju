@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V70X0F61FHCKS6TKTK69BQ
 title: Build the search results screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -19,17 +19,10 @@ dependencies:
   - TKT-01M29CTY8TB2CHCBQH3ABHCG3Q
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-v70x0f
-  branch: run/v70x0f-search-screen
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-afb3b3055ac2b1ea3
-  commit: 86752c422f9d6152ce015e2c1b52cdd721f33910
-  session: null
-  claimed_at: 2026-10-01T18:09:09Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:49:20Z
-updated_at: 2026-10-01T18:33:55Z
+updated_at: 2026-10-01T20:16:08Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
@@ -52,7 +45,7 @@ docs/07 "Search" describes the screen. docs/09 Phase 3 names "FTS5 search with s
 - [x] Each result links to its post's permalink, or to the thread for a title match, shows forum, author and PostTime, and renders its snippet as text with matches in mark elements, never as markup (SearchScreen.test.tsx)
 - [x] With no query, with no results (offering Clear filters when a filter is set), while the index is still building, and on a validation or not-found error, the screen shows a useful message rather than a blank page (SearchScreen.test.tsx)
 - [x] e2e/search.spec.ts passes at 390 px and 1440 px with one axe scan per test and no violations: a member finds a reply by a unique word and follows it, and finds nothing from a forum they cannot read
-- [ ] The committed dist is rebuilt with go generate ./internal/web/spa, the reader bundle stays within the 70000 B budget, and the PR reports the screen's bytes against the 2.6 KB estimate
+- [x] The committed dist is rebuilt with go generate ./internal/web/spa, the reader bundle stays within the 70000 B budget, and the PR reports the screen's bytes against the 2.6 KB estimate
 - [x] /search keeps q, forum, author, after, before and cursor in its address, applies the form's draft only on Search, converts local From and To dates to ms with To including its day, and shows the filters in a fieldset at 720 px and up and in a Filters disclosure on the phone (SearchScreen.test.tsx)
 
 ## Implementation plan
@@ -166,3 +159,28 @@ run decision: pending maintainer review. Recorded in docs/07 "Search", the "As b
 Bundle, measured both ways on main 86752c42: the reader bundle is 66189 B before and 68626 B after (+2437 B: JS +1898 B, CSS +537 B), against the 2.6 KB estimate. With SearchScreen lazy it is 70151 B, so the screen stays in the entry.
 
 Caught while checking screenshots: the top bar's search link is `class="search"` (shell/TopBar.tsx), so a `.search` rule in search.css restyled it on every page. The screen's root is `.search-page`, and a Vitest case refuses a bare `.search` selector in search.css.
+
+**agent:claude-code/phase3-v70x0f** at 2026-10-01T20:15:55Z
+
+Criterion 4 and the budget. The criterion names the 70000 B budget it was groomed against. The maintainer raised the budget to 120000 B on 2026-10-01 (#331, docs/14 "The stop rule, changed", class 5), and that is the budget in force and in budget.json. The reader on main 26bea62b was 67802 B before this screen and 70172 B after it (+2370 B, against the 2.6 KB estimate). That is over the old figure the criterion quotes and well within the budget that holds, so the criterion is ticked against 120000 B. Without the raise, the merges before this one (notifications, phone header) had already left only 2198 B of the old budget, and this screen would have stopped the run under class 5.
+
+## Summary
+
+The `/search` screen (`web/client/src/screens/SearchScreen.tsx`, `search.css`) replaces the placeholder route, built to docs/07 "Search" and the plan.
+
+- **The address is the state:** `q`, `forum`, `author`, `after`, `before` and `cursor`.
+- **The form is a draft** that Search puts in the address, so typing fetches nothing. From and To are local days, sent as ms, and To includes its day (`src/dates.ts`, now shared with the audit screen).
+- **The filters** are a fieldset from 720 px up, and a Filters disclosure on the phone that is open when a filter is set.
+- **Results** link to the post's permalink, or to the thread for a title match. Each shows the forum, the author with `RoleBadge`, `PostTime`, and the snippet as text nodes, each match in `<mark>`.
+- **Paging:** More results follows `next_cursor`, and First results drops the cursor.
+- **States:** no query; no results, with Clear filters when a filter is set; the `indexing` note; a refused query beside the field; an unknown forum, with Clear filters; any other failure in `ErrorPanel` with Retry; and a hidden status region with the count.
+- **Focus:** with no query, focus starts in the field. `focusMainHeading` now prefers `main [data-autofocus]`.
+
+Run decisions, pending maintainer review, are recorded in docs/07 "As built" and in the run-decision note: nothing a search answers is held in the client, `#N` sits beside a post's title, and the query errors are in the screen's own words.
+
+Reader bundle on main 26bea62b: 67802 B before, 70172 B after (+2370 B, against the 2.6 KB estimate), against the 120000 B budget. It stays in the entry, because a lazy chunk measured 1525 B worse.
+
+Tests:
+- `SearchScreen.test.tsx`, 22 cases, including a snippet holding `<script>` and `&`;
+- a `focus.test.ts` case for `data-autofocus`;
+- `e2e/search.spec.ts`, three tests at 390 and 1440 px with one axe scan each: a member finds a reply by a unique word and follows it; a word only in the restricted moderators forum finds nothing for alice, after ada's own search proves it is indexed; and the forum and date filters narrow the results.
