@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { applyTheme, readThemePref, setThemePref, themePref } from './theme';
+import type { Me } from '../api/dto';
+import anonMe from '../../../../internal/dto/testdata/golden/me.anon.json';
+import memberMe from '../../../../internal/dto/testdata/golden/me.member.json';
+import { applyTheme, readThemePref, setThemePref, syncThemeFromAccount, themePref } from './theme';
 
 function memory(initial: Record<string, string> = {}) {
   const m = new Map(Object.entries(initial));
@@ -67,5 +70,41 @@ describe('the theme choice', () => {
       removeItem: () => {},
     });
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+});
+
+// The account's theme wins over this device's copy on every load, and
+// replaces it (docs/07 "Theme", decided by the run 2026-10-01, pending
+// maintainer review; TKT-01M29CXK4E).
+describe('the account theme', () => {
+  const as = (golden: unknown, theme: string): Me => {
+    const me = structuredClone(golden) as Me;
+    me.settings.theme = theme;
+    return me;
+  };
+
+  it('theme from the account wins and is stored', () => {
+    const s = memory({ 'ketju.theme': 'light' });
+    syncThemeFromAccount(as(memberMe, 'dark'), s);
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(s.m.get('ketju.theme')).toBe('dark');
+    expect(themePref.value).toBe('dark');
+    syncThemeFromAccount(as(memberMe, 'system'), s);
+    expect(s.m.has('ketju.theme')).toBe(false);
+    expect(document.documentElement.hasAttribute('data-theme')).toBe(false);
+  });
+
+  it("leaves a signed-out reader's own choice", () => {
+    const s = memory({ 'ketju.theme': 'light' });
+    applyTheme('light');
+    syncThemeFromAccount(as(anonMe, 'dark'), s);
+    expect(s.m.get('ketju.theme')).toBe('light');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it('changes nothing for a theme it does not know', () => {
+    const s = memory({ 'ketju.theme': 'light' });
+    syncThemeFromAccount(as(memberMe, 'sepia'), s);
+    expect(s.m.get('ketju.theme')).toBe('light');
   });
 });

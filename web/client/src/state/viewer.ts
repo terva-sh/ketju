@@ -2,6 +2,7 @@ import { computed, signal } from '@preact/signals';
 import { apiGet } from '../api/client';
 import type { Me } from '../api/dto';
 import { readBootstrap } from '../bootstrap';
+import { syncThemeFromAccount } from './theme';
 
 // viewer is who is reading, seeded from the bootstrap block the shell inlines
 // (docs/07 "Embedding") so the first paint needs no request, and replaced
@@ -32,8 +33,9 @@ export const siteName = computed(() => viewer.value.site_name || 'Ketju');
 
 let refreshes = 0;
 
-// refreshViewer fetches /me and replaces the viewer with it. A failure leaves
-// the viewer as it was and is the caller's to report.
+// refreshViewer fetches /me and replaces the viewer with it, and takes the
+// account's theme (state/theme.ts). A failure leaves the viewer as it was
+// and is the caller's to report.
 //
 // Only the newest refresh replaces the viewer, and not if it was aborted:
 // refreshes can overlap (a sign-in, then a sign-out) and finish in any order,
@@ -42,6 +44,9 @@ let refreshes = 0;
 export async function refreshViewer(signal?: AbortSignal): Promise<Me> {
   const n = ++refreshes;
   const me = await apiGet<Me>('/api/v1/me', { signal });
-  if (n === refreshes && !signal?.aborted) viewer.value = me;
+  if (n === refreshes && !signal?.aborted) {
+    viewer.value = me;
+    syncThemeFromAccount(me);
+  }
   return me;
 }

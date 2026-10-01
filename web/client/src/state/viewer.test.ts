@@ -8,6 +8,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   resetApiCache();
   viewer.value = anonymous;
+  document.documentElement.removeAttribute('data-theme');
+  localStorage.clear();
 });
 
 describe('the viewer', () => {
@@ -21,6 +23,16 @@ describe('the viewer', () => {
     expect(viewer.value).toEqual(member);
     expect(notifications.value).toBe(member.notifications);
     expect(member.notifications).toBeGreaterThan(0);
+  });
+
+  // The account's theme wins on each /me (state/theme.ts, TKT-01M29CXK4E).
+  it("takes the account's theme", async () => {
+    const dark = { ...member, settings: { ...member.settings, theme: 'dark' } };
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(dark), { status: 200 }));
+    localStorage.setItem('ketju.theme', 'light');
+    await refreshViewer();
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+    expect(localStorage.getItem('ketju.theme')).toBe('dark');
   });
 
   it('stays as it was when /me fails', async () => {

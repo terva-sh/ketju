@@ -248,7 +248,9 @@ export function forgetThreadPages(id: string) {
 
 // forgetAllThreadPages drops every held thread page and the whole cache,
 // as a mark all read does (state/lists.ts forgetReadState): it moves the
-// viewer's place in threads the client cannot name. A request still out
+// viewer's place in threads the client cannot name. A page size change
+// does it too (screens/account/SettingsScreen.tsx): pages cut at the old
+// size would sit beside pages cut at the new one under one log length. A request still out
 // began before the mark: its answer is neither held nor stored (wipedAt).
 export function forgetAllThreadPages() {
   forgetGets((u) => u.startsWith('/api/v1/threads/'), { inFlight: true });

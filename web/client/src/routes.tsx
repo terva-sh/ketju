@@ -1,18 +1,27 @@
 import type { AnyComponent } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { lazy, useLocation } from 'preact-iso';
+import { nav } from './leave';
 import { crossListScreen } from './screens/CrossListScreen';
 import { ForumIndex } from './screens/ForumIndex';
 import { NewThreadScreen } from './screens/NewThreadScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ThreadListScreen } from './screens/ThreadListScreen';
-import { NotFound, Placeholder } from './screens/Placeholder';
+import { NotFound } from './screens/Placeholder';
 // The account screens, a member's profile and posts (TKT-01M3V3CFMA), are
 // in the reader's own chunk rather than a lazy one. Measured both ways, the
 // split cost 2182 B more in all (69818 B against 67636 B), because the
 // budget counts every chunk but admin and the split added a shared chunk of
-// what they have in common with the reader (docs/07 "Preact client").
-import { ProfilePostsScreen, ProfileScreen } from './screens/account/AccountRoot';
+// what they have in common with the reader (docs/07 "Preact client"). The
+// settings screens (TKT-01M29CXK4E) are inline for the same reason: 2327 B
+// fewer than a lazy chunk of their own.
+import {
+  IdentitiesScreen,
+  ProfilePostsScreen,
+  ProfileScreen,
+  SessionsScreen,
+  SettingsScreen,
+} from './screens/account/AccountRoot';
 import { SearchScreen } from './screens/SearchScreen';
 import { ThreadScreen } from './screens/ThreadScreen';
 
@@ -35,11 +44,6 @@ export interface RouteEntry {
   screen: string;
   component: AnyComponent<any>;
 }
-
-const placeholder = (screen: string, title: string): RouteEntry['component'] =>
-  function Screen() {
-    return <Placeholder screen={screen} title={title} />;
-  };
 
 // clientScope is the set of links the client may follow itself, given to
 // LocationProvider as its scope. preact-iso intercepts every same-origin link
@@ -89,19 +93,8 @@ export function serverOwned(pathname: string): boolean {
   return first === 'auth' || first === 'blobs' || first === 'assets';
 }
 
-// nav.leave hands the address to the server with a full load, in place of
-// the entry the router just pushed. An object so a test can intercept it.
-//
-// nav.loadedAt is the address the server served this document at. Fallback
-// never hands that one back: the server has already answered it with the
-// shell, and handing it back would reload the page forever if the rules
-// above and the server's ever disagree.
-export const nav = {
-  loadedAt: location.pathname + location.search,
-  leave(url: string) {
-    location.replace(url);
-  },
-};
+// nav (leave.ts) is how Fallback hands an address to the server.
+export { nav };
 
 // Fallback is the route for an address nothing in the table matches. If the
 // browser resolved it to a server-owned path — a link clientScope could not
@@ -138,9 +131,9 @@ export const routes: RouteEntry[] = [
   { path: '/search', screen: 'search', component: SearchScreen },
   { path: '/u/:handle', screen: 'profile', component: ProfileScreen },
   { path: '/u/:handle/posts', screen: 'profile-posts', component: ProfilePostsScreen },
-  { path: '/settings', screen: 'settings', component: placeholder('settings', 'Settings') },
-  { path: '/settings/sessions', screen: 'settings-sessions', component: placeholder('settings-sessions', 'Sessions') },
-  { path: '/settings/identities', screen: 'settings-identities', component: placeholder('settings-identities', 'Sign-in identities') },
+  { path: '/settings', screen: 'settings', component: SettingsScreen },
+  { path: '/settings/sessions', screen: 'settings-sessions', component: SessionsScreen },
+  { path: '/settings/identities', screen: 'settings-identities', component: IdentitiesScreen },
   { path: '/apply', screen: 'apply', component: ApplyForm },
   { path: '/apply/status', screen: 'apply-status', component: ApplyStatus },
   { path: '/admin', screen: 'admin', component: Admin },

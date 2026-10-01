@@ -504,6 +504,15 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
   say everywhere, and the member who reaches for it after losing a laptop
   cannot be sure the device in hand is clean; offering both buttons lost
   because the per-session sign-out already covers "everyone but me".
+  **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M29CXK4E):** in the session list a row names its provider by the
+  key `/settings/sessions` sends ("signed in with github"), and on
+  `/settings/identities` an identity whose provider the operator removed
+  reads "No longer configured" with that key. Alternatives: asking
+  `/settings/identities` for each provider's display name lost because it
+  is a second request on every visit for a label; leaving the provider out
+  lost because a member signed in through two providers tells their
+  sessions apart by it.
 - Removing a linked identity (07 `DELETE /settings/identities/{id}`).
   **Decided by the run (2026-10-01, pending maintainer review;
   TKT-01M29CCC0X):** the removal is refused, as `conflict`, unless the

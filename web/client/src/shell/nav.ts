@@ -31,9 +31,9 @@ export const profileHref = (handle: string) => `/u/${encodeURIComponent(handle)}
 // linkSignInHref is the server's "link a sign-in" page (TKT-01M29CKRES,
 // docs/05 "Login flow" step 3), which comes back to url, the path and
 // query the reader is at, once the member has linked, or chosen not to. It
-// is outside clientScope too, so the link is a full page load. The entry
-// is on the member's own profile until the settings screens
-// (TKT-01M29CXK4) build /settings/identities, whose "add" is this link.
+// is outside clientScope too, so the link is a full page load. It is on
+// the member's own profile and on /settings/identities (TKT-01M29CXK4E),
+// each coming back to itself.
 export function linkSignInHref(url: string): string {
   return `/auth/link?return_to=${encodeURIComponent(url)}`;
 }

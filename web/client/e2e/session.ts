@@ -42,6 +42,11 @@ export async function signIn(page: Page, who: string) {
 //     project                         who marks the whole site read and
 //                                     whose state nothing else reads
 //   smoke.spec.ts, per project     0  starts from alice's stored session
+//   settings.spec.ts, per project 11  paceAuth(4) first in the session
+//                                     test: two sign-ins; paceAuth(7)
+//                                     first in the identities test: a
+//                                     sign-in, a link (3) and a sign-in
+//                                     with the linked identity
 //
 // The rule for a new spec: one that spends /auth/* either calls paceAuth
 // with its count first, or waits out a 429 through through(). Add its row

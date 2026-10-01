@@ -242,14 +242,15 @@ export interface UnreadCounts {
 }
 
 // Settings is /me's settings, and GET and PATCH /settings (TKT-01M29CCC0X).
-// theme is system, light or dark, and the server always sends it. It is
-// optional here only until the settings screens (TKT-01M29CXK4E) give the
-// bootstrap's anonymous fallback one.
+// theme is system, light or dark, and the server always sends it; so does
+// the bootstrap's anonymous fallback. It is typed as a string, as the
+// goldens are, and state/theme.ts reads any value but the three as no
+// choice.
 export interface Settings {
   timezone: string;
   locale: string;
   page_size: number;
-  theme?: string;
+  theme: string;
 }
 
 export interface Me {

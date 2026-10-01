@@ -87,6 +87,17 @@ var seedPending = []struct{ project, subject, name string }{
 	{"desktop", "quinn", "Quinn Okafor"},
 }
 
+// seedSettings are the settings screens' members (TKT-01M29CXK4E,
+// e2e/settings.spec.ts), one per Playwright project, because the
+// identities test removes the identity its member signs in with. No spec
+// keeps a stored session for them, so signing them out everywhere costs no
+// other spec its sign-in. link is a second subject at the fake provider,
+// with no account until the test links it to the member.
+var seedSettings = []struct{ handle, name, link string }{
+	{"sid-phone", "Sid Phone", "sid-phone-link"},
+	{"sid-desktop", "Sid Desktop", "sid-desktop-link"},
+}
+
 func runE2E(args []string) error {
 	fs := flag.NewFlagSet("e2e", flag.ContinueOnError)
 	dir := fs.String("dir", "", "directory to create the data directory and config in; must not exist")
@@ -112,6 +123,9 @@ func runE2E(args []string) error {
 	idp.Users = append(idp.Users, seedModerator, seedAdmin, seedMarker)
 	idp.Users = append(idp.Users, seedApplicants...)
 	idp.Users = append(idp.Users, seedStrangers...)
+	for _, u := range seedSettings {
+		idp.Users = append(idp.Users, u.handle, u.link)
+	}
 
 	site := "http://localhost:" + strconv.Itoa(*port)
 	data := filepath.Join(*dir, "data")
@@ -462,6 +476,18 @@ func seedReview(ctx context.Context, data, issuer string) (map[string]int64, err
 		if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: marker, Valid: true},
 			ProviderKey: e2eProvider, Subject: seedMarker, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
 			return err
+		}
+		// The settings members after seedMarker, so the ids above stay as they were.
+		for _, u := range seedSettings {
+			id, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: u.handle, DisplayName: u.name,
+				Status: domain.StatusActive, Role: domain.RoleMember, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
+			if err != nil {
+				return err
+			}
+			if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: id, Valid: true},
+				ProviderKey: e2eProvider, Subject: u.handle, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
+				return err
+			}
 		}
 		form, err := q.GetFormByKey(ctx, "registration")
 		if err != nil {

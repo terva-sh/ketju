@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-01T21:17:24Z
+updated_at: 2026-10-01T22:02:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,13 +50,13 @@ The session list is the screen that makes server-side sessions worth their cost.
 
 ## Acceptance criteria
 
-- [ ] Timezone, page size and theme apply at once on /settings, and a second browser of the same member shows them on its first load; the account's theme wins over the browser's stored copy
-- [ ] /settings/sessions shows device, IP and last use, marks this device, signs out another session in place, and signs out everywhere after a dialog that says this browser signs out too, then loads /
-- [ ] e2e: signing out another session ends it server-side (its next /me has user null), using a dedicated member, with paceAuth and a row in e2e/session.ts
-- [ ] The own profile's Account block links to Settings and keeps Link a sign-in and Sign out
-- [ ] Tested at 390 and 1440 px with one axe scan per test
+- [x] Timezone, page size and theme apply at once on /settings, and a second browser of the same member shows them on its first load; the account's theme wins over the browser's stored copy
+- [x] /settings/sessions shows device, IP and last use, marks this device, signs out another session in place, and signs out everywhere after a dialog that says this browser signs out too, then loads /
+- [x] e2e: signing out another session ends it server-side (its next /me has user null), using a dedicated member, with paceAuth and a row in e2e/session.ts
+- [x] The own profile's Account block links to Settings and keeps Link a sign-in and Sign out
+- [x] Tested at 390 and 1440 px with one axe scan per test
 - [ ] The committed dist is regenerated (go generate ./internal/web/spa) and npm run budget stays within 70000 B, with the before and after figures in the PR
-- [ ] /settings/identities links through /auth/link and removes an identity; an identity whose removal the API marks not removable has Remove disabled and explained, a conflict answer shows the explanation, and signed_out true loads /
+- [x] /settings/identities links through /auth/link and removes an identity; an identity whose removal the API marks not removable has Remove disabled and explained, a conflict answer shows the explanation, and signed_out true loads /
 
 ## Implementation plan
 
@@ -138,3 +138,34 @@ Terva review 1691 (head 2455be0, base a599b48), finding 'Include the account's c
 **agent:claude-code/phase3-settings-client** at 2026-10-01T21:17:24Z
 
 Acceptance criterion 6's budget figure (70000 B) was superseded by the maintainer's raise to 120000 B gzip on 2026-10-01 (#331, docs/14 class 5, docs/07 'Bundle'). This ticket is judged against 120000 B; the criterion text is left as written. The reader is 71808 B on d2b4f208 before this ticket.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-01T22:02:00Z
+
+Implementation notes (Phase A, branch run/cxk4e-settings-screens, unpushed; the dist is not committed until the orchestrator hands it over).
+
+### Where it landed
+
+- `screens/account/SettingsScreen.tsx`, `SessionsScreen.tsx`, `IdentitiesScreen.tsx`, the shared `settings.tsx` (heading and links between the three, the `Confirm` dialog on `useModal`, `leaveHome`) and `settings.css`. They join `AccountRoot.tsx` and the reader's chunk.
+- `state/theme.ts` `syncThemeFromAccount(me)`, called from `main.tsx` after the bootstrap and from `refreshViewer` after each `/me`. `Settings.theme` is required in `api/dto.ts`, typed `string` as the goldens are; the bootstrap's anonymous fallback carries `system`.
+- The Account block on the own profile gains "Settings" above "Link a sign-in".
+- e2e: `e2e/settings.spec.ts`, with two members seeded for it in `cmd/ketju/e2e.go` (`seedSettings`: `sid-phone` and `sid-desktop`, plus link subjects `sid-phone-link` and `sid-desktop-link` at the fake provider), one per project, because the identities test removes the identity its member signs in with. The budget row is in `e2e/session.ts` (4 + 7 /auth/* per project).
+
+### Bundle, measured both ways
+
+Reader before: 71808 B (d2b4f208). Inline in the reader's chunk: 75035 B at the final head (+3227 B). Measured both ways at one state of the code, inline was 74945 B and a lazy chunk of their own 77272 B, the split again adding a shared chunk, so they are inline. Judged against 120000 B (#331).
+
+### Where the code departs from the plan, and why
+
+- Field errors do not use `forms/messages.ts`. That module is in the lazy application chunk; importing it from the reader pulled the chunk's shared code into a new chunk the reader loads, 1040 B more. The three settings fields have one meaning per code, so each field has its own words.
+- `nav` (the full-load hand-off) moved from `routes.tsx` to `src/leave.ts`, re-exported from `routes.tsx`, so a screen can call `nav.leave('/')` without importing the route table that imports the screens.
+- A page size change drops every cached and held thread page (`forgetEveryThreadPage` in `state/threads.ts`). The thread cache keys pages by log length and page number, so a page cut at 25 would otherwise sit beside pages cut at 10.
+- A settings field shows the value being saved until the answer comes, and keeps a refused value beside its reason. Drawn from the stored value alone, a radio or select jumped back while the PATCH was in flight (the e2e caught it: Playwright's `check()` saw the radio uncheck).
+- A GET /settings answer is taken into the viewer only while no PATCH has been sent, so a slow GET cannot undo a change.
+
+### Tested
+
+tsc; vitest 2415 passed; gofmt, go build, go vet and `go test -race ./...` clean, TestPhase2Exit passed; the full Playwright suite at 390 and 1440 px, 237 passed and 13 skipped by width, and settings, profile and targets again on the final head. Criterion 6 stays unticked until the dist is regenerated and committed in Phase B.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-01T22:02:02Z
+
+run decision: pending maintainer review. In the session list a row names its provider by the key /settings/sessions sends ("signed in with github"), and on /settings/identities an identity whose provider the operator removed reads "No longer configured" with that key. Asking /settings/identities for display names lost because it is a second request on every visit for a label; leaving the provider out lost because a member signed in through two providers tells their sessions apart by it. Recorded in docs/05 "Sessions and CSRF".

@@ -87,13 +87,19 @@ export function Joined({ at }: { at: number }) {
 
 // AccountBlock is on the viewer's own profile: the account's actions, one
 // press from every screen, since the top bar's handle and the phone's Me tab
-// both come to the profile (decided 2026-09-29, TKT-01M3QS0TMV). "Link a
-// sign-in" and Sign out (TKT-01M3QVWKAG, for this browser only) are there;
-// the settings screens (TKT-01M29CXK4E) add theirs.
+// both come to the profile (decided 2026-09-29, TKT-01M3QS0TMV): Settings
+// (TKT-01M29CXK4E), "Link a sign-in", and Sign out (TKT-01M3QVWKAG, for
+// this browser only).
 export function AccountBlock() {
   return (
     <section class="account-block" data-account aria-labelledby="account-heading">
       <h2 id="account-heading">Account</h2>
+      <p>
+        Timezone, page size, theme, and where you are signed in.{' '}
+        <a class="hit" href="/settings" data-nav="settings">
+          Settings
+        </a>
+      </p>
       <LinkSignIn />
       <SignOutForm class="sign-out" />
     </section>

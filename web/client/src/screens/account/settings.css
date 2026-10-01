@@ -1,0 +1,195 @@
+/* The settings screens (TKT-01M29CXK4E): /settings, /settings/sessions and
+   /settings/identities. There is no mockup; they take the account screens'
+   column and cards (account.css), and the Sign out button's look
+   (shell.css .sign-out) for every button. One column at every width, and
+   every control a full target. Existing tokens only. */
+
+.settings-nav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+  margin-top: 6px;
+  font-size: 14px;
+}
+.settings-nav a {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  color: var(--ink2);
+  text-decoration: none;
+  border-bottom: 2px solid transparent;
+}
+.settings-nav a[aria-current='page'] {
+  color: var(--ink);
+  font-weight: 600;
+  border-bottom-color: var(--accent);
+}
+
+.settings-form {
+  gap: 20px;
+}
+.settings-field {
+  margin: 0;
+  padding: 0;
+  border: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+.settings-field > label,
+.settings-field legend {
+  padding: 0;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--ink);
+}
+.settings-field select,
+.settings-field input[type='text'],
+.settings-field input[type='number'] {
+  box-sizing: border-box;
+  min-height: var(--target);
+  max-width: 100%;
+  padding: 0 10px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--bg);
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+}
+.settings-field select,
+.settings-field input[type='text'] {
+  width: 24em;
+}
+.settings-field input[type='number'] {
+  width: 7em;
+}
+.settings-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 20px;
+}
+.settings-choices label {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--target);
+  cursor: pointer;
+}
+.settings-hint,
+.settings-meta,
+.settings-saved {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink2);
+}
+.settings-error {
+  margin: 0;
+  font-size: 13px;
+  color: var(--unread);
+}
+.settings-error:empty,
+.settings-saved:empty {
+  display: none;
+}
+
+.settings-title {
+  margin: 0;
+  font-size: 16px;
+}
+.settings-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.settings-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  padding: 12px 0;
+  border-top: 1px solid var(--rule);
+}
+.settings-row:first-child {
+  border-top: 0;
+  padding-top: 0;
+}
+.settings-what {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-wrap: anywhere;
+}
+.settings-name {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.settings-row .sign-out {
+  flex: none;
+}
+.sign-out:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.settings-all {
+  align-self: flex-start;
+}
+
+.confirm-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 80px 16px 16px;
+  background: rgba(15, 22, 34, 0.35);
+}
+.confirm {
+  width: min(440px, 100%);
+  box-sizing: border-box;
+  padding: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.18);
+}
+.confirm h2 {
+  margin: 0 0 10px;
+  font-size: 16px;
+}
+.confirm p {
+  margin: 0 0 14px;
+}
+.confirm-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.confirm-go {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+@media (max-width: 719.98px) {
+  .account > .settings-error {
+    padding: 0 16px;
+  }
+  .settings-field select,
+  .settings-field input[type='text'] {
+    width: 100%;
+  }
+  .settings-row {
+    flex-wrap: wrap;
+  }
+}

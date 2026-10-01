@@ -1,9 +1,12 @@
 import { signal } from '@preact/signals';
+import type { Me } from '../api/dto';
 
 // The reader's theme choice (TKT-01M29CCC0F). "system" follows
-// prefers-color-scheme; "light" and "dark" override it. It lives on this
-// device only: syncing it to the account's settings waits for the settings
-// endpoints (phase 4).
+// prefers-color-scheme; "light" and "dark" override it. A member's choice
+// is stored on the account, /me's settings.theme, and wins on every load:
+// this device keeps a copy only so the first paint is not the wrong theme
+// (docs/07 "Theme", decided by the run 2026-10-01, pending maintainer
+// review; TKT-01M29CXK4E). A signed-out reader's choice stays here.
 
 export type ThemePref = 'system' | 'light' | 'dark';
 
@@ -53,4 +56,14 @@ function safeStorage(): Storage | undefined {
   } catch {
     return undefined;
   }
+}
+
+// syncThemeFromAccount makes a member's account theme this device's choice,
+// stored and applied, replacing whatever copy the device held. It changes
+// nothing for a signed-out reader or a pre-user, who have no account, nor
+// for a theme it does not know. main.tsx calls it after the bootstrap, and
+// refreshViewer after each /me.
+export function syncThemeFromAccount(me: Me, storage?: Pick<Storage, 'setItem' | 'removeItem'>) {
+  const t = me.settings.theme as ThemePref;
+  if (me.user && prefs.includes(t)) setThemePref(t, storage);
 }
