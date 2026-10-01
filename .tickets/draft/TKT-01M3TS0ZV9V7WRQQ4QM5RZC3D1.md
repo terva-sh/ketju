@@ -16,11 +16,13 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:260
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T03:44:42Z
-updated_at: 2026-10-01T04:22:35Z
+updated_at: 2026-10-01T04:23:00Z
 created_by:
   id: agent:claude-code/phase2-run-tmrcmj
   name: ""
