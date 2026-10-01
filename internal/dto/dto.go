@@ -834,6 +834,44 @@ type UserPost struct {
 	Post   Post       `json:"post"`
 }
 
+// NotificationList is GET /notifications (docs/07, TKT-01M29CRJ2T): one page
+// of the viewer's notifications, the newest written first, 25 to a page.
+type NotificationList struct {
+	Notifications []Notification `json:"notifications"`
+	// NextCursor is empty at the end of the list.
+	NextCursor string `json:"next_cursor"`
+}
+
+// Notification is one notification. It names what happened and where, and
+// never carries any of the post's text (docs/04 "notifications", run
+// decision 2026-10-01): an alert sends the reader to the thread page, which
+// decides what they may read there.
+type Notification struct {
+	// ID orders the list and is what POST /notifications/read takes.
+	ID int64 `json:"id"`
+	// Kind is one of the six in docs/04.
+	Kind string `json:"kind"`
+	// Thread, Forum and Ordinal name the post, and are null for the
+	// application kinds.
+	Thread  *ThreadLink `json:"thread"`
+	Forum   *ForumRef   `json:"forum"`
+	Ordinal *uint32     `json:"ordinal"`
+	// Actor is who caused it: the post's author or editor, or the moderator
+	// who decided an application. Null when there is none, as for
+	// new_application.
+	Actor *Author `json:"actor"`
+	At    Millis  `json:"at"`
+	// Read is true once the viewer read it, and for a new_application whose
+	// application is no longer pending, which the badge has stopped counting.
+	Read bool `json:"read"`
+}
+
+// NotificationsRead answers POST /notifications/read: how many unread
+// notifications it marked read.
+type NotificationsRead struct {
+	Marked int `json:"marked"`
+}
+
 // SearchResults is GET /search (docs/07 "Search"): one page of hits in the
 // forums the viewer may read, newest first. There is no total.
 type SearchResults struct {

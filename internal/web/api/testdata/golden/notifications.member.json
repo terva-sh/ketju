@@ -1,0 +1,90 @@
+{
+  "notifications": [
+    {
+      "id": 5,
+      "kind": "application_decided",
+      "thread": null,
+      "forum": null,
+      "ordinal": null,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "at": 4,
+      "read": false
+    },
+    {
+      "id": 4,
+      "kind": "mention",
+      "thread": {
+        "id": "0369k573g0035",
+        "slug": "why-we-left-slack",
+        "title": "Why we left Slack"
+      },
+      "forum": {
+        "slug": "general",
+        "name": "General"
+      },
+      "ordinal": 4,
+      "actor": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "",
+        "role": "member",
+        "kind": "human"
+      },
+      "at": 1757500500000,
+      "read": false
+    },
+    {
+      "id": 3,
+      "kind": "quoted",
+      "thread": {
+        "id": "0369k573g0035",
+        "slug": "why-we-left-slack",
+        "title": "Why we left Slack"
+      },
+      "forum": {
+        "slug": "general",
+        "name": "General"
+      },
+      "ordinal": 3,
+      "actor": {
+        "handle": "bob",
+        "display_name": "Bob Iyer",
+        "avatar": "",
+        "role": "moderator",
+        "kind": "human"
+      },
+      "at": 1757500400000,
+      "read": false
+    },
+    {
+      "id": 1,
+      "kind": "thread_you_watch",
+      "thread": {
+        "id": "0369k573g0035",
+        "slug": "why-we-left-slack",
+        "title": "Why we left Slack"
+      },
+      "forum": {
+        "slug": "general",
+        "name": "General"
+      },
+      "ordinal": 1,
+      "actor": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "",
+        "role": "member",
+        "kind": "human"
+      },
+      "at": 1757500200000,
+      "read": true
+    }
+  ],
+  "next_cursor": ""
+}

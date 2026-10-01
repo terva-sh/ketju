@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strconv"
@@ -29,6 +30,8 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/db/dbtest"
+	"github.com/terva-sh/ketju/internal/store/threadcache"
+	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/web"
 	"github.com/terva-sh/ketju/internal/web/spa"
 )
@@ -88,8 +91,27 @@ func newMeWorld(t *testing.T) *meWorld {
 	// One evaluator, as serve shares one: the queue's scope warms the read
 	// decisions /me makes next (perm.ModeratedForums).
 	perms := perm.New(d)
-	threadSvc := &threads.Service{DB: d, Perm: perms}
-	w.users = &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount}
+	// The threads directory holds an empty file at each seeded thread's log
+	// path, as long as its projection says it is (0), so the notification
+	// count's check for a projection trailing its log finds none trailing
+	// and reads no log (TKT-01M29CRJ2T).
+	root := filepath.Join(t.TempDir(), "threads")
+	for id := threadid.ID(1); id <= 7; id++ {
+		if err := os.MkdirAll(id.Dir(root), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(id.LogPath(root), nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	cache, err := threadcache.New(root, threadcache.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { cache.Close() })
+	threadSvc := &threads.Service{DB: d, Perm: perms, Threads: cache}
+	w.users = &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount,
+		VisibleNotifications: threadSvc.CountVisibleNotifications}
 	store := &session.Store{DB: d, Now: func() time.Time { return w.now }}
 	shell, err := web.NewShell(mustShell(t), nil)
 	if err != nil {
@@ -173,6 +195,12 @@ func (w *meWorld) seed() {
 		 (1, 1, 3, 1), (1, 3, 4, 1)`,
 		`INSERT INTO watches (user_id, thread_id, level, created_at, updated_at) VALUES
 		 (1, 2, 'watch', 1, 1), (1, 4, 'mute', 1, 1)`,
+		// The posts the notifications below name, by somebody who is not a
+		// user here, so nobody's participation changes: a notification is
+		// counted only while its post is live in post_meta (TKT-01M29CRJ2T).
+		`INSERT INTO post_meta (thread_id, ordinal, author_id, created_at, log_offset) VALUES
+		 (1, 3, 9, `+itoa(later-10)+`, 0), (1, 4, 9, `+itoa(later-10)+`, 0), (1, 5, 9, `+itoa(later-10)+`, 0),
+		 (2, 1, 9, `+itoa(later-10)+`, 0)`,
 		`INSERT INTO notifications (user_id, kind, thread_id, ordinal, at, read_at) VALUES
 		 (1, 'mention', 1, 4, 1, NULL), (1, 'reply_to_you', 1, 5, 1, NULL), (1, 'quoted', 1, 3, 1, 5),
 		 (2, 'mention', 1, 4, 1, NULL)`,

@@ -313,6 +313,34 @@ func (r *Reader) Restored(from, upTo int64, ordinal uint32, actor uint64, ms int
 	return found && err == nil, err
 }
 
+// Moved reports whether the log, from from to upTo bytes, holds a
+// ThreadMoved: whether the thread's forum changed in that stretch. A reader
+// deciding access by a projection that has reached only from asks it of the
+// rest of the log, since the index keeps each post's flags but not the
+// thread's forum (Terva review 1781 on PR #323). It reads frame headers
+// only. from is a frame boundary, as for Removals, or zero for the whole
+// log. A damaged frame stops the walk with its error.
+func (r *Reader) Moved(from, upTo int64) (bool, error) {
+	from = max(from, FileHeaderSize)
+	var (
+		found   bool
+		scanErr error
+	)
+	err := ScanFramesFrom(r.log, from, upTo, func(rec ScanRecord) bool {
+		h := rec.Header
+		if rec.Err != nil {
+			scanErr = &ReadError{Ordinal: h.Ordinal, Offset: uint64(rec.Offset), Err: rec.Err}
+			return false
+		}
+		found = h.Type == TypeThreadMoved
+		return !found
+	})
+	if err == nil {
+		err = scanErr
+	}
+	return found && err == nil, err
+}
+
 // History returns every revision of a post in log order, reading the log up
 // to upTo bytes.
 //

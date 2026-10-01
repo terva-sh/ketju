@@ -694,11 +694,15 @@ withdrawal writes none.
 
 `read_at` records that the recipient read the notification, and nothing else
 sets it: closing an application does not. `GET /me`'s `notifications` count
-(`MeCounts`) counts an unread row of any kind but `new_application`, and a
-`new_application` row only while its application is `pending`, so the badge
-drops when an application is decided or withdrawn and the row stays unread
-for the notification list (TKT-01M29CTY86). The list serves such a row as
-read, so the list and the badge agree (run decision below).
+is exactly the unread rows `GET /notifications` serves (TKT-01M29CRJ2T). An
+`application_decided` row counts while unread. A `new_application` row counts
+only while its application is `pending` and the viewer is an active moderator
+or admin, so the badge drops when an application is decided or withdrawn and
+the row stays unread; the list serves such a row as read, so the two agree
+(run decision below). A post notification counts only while the serving rule
+below admits it. `MeCounts` offers the post rows grouped by thread, and the
+threads service's `VisibleNotifications` decides them for the badge and the
+list alike, so neither can count what the other hides.
 
 The post kinds are written by the notification generator, a subscriber on
 the event bus (TKT-01M29CRJ2T). These run decisions bind it:
@@ -762,6 +766,19 @@ generator's progress. Progress is kept
 per thread in `notification_progress` (TKT-01M29CRJ2T). That table is
 authoritative and is not a projection: `ketju reindex` leaves both it and
 `notifications` alone.
+
+Migration 0024 adds the table and the indexes the generator and the list
+need. `notifications_post` is unique on `(user_id, thread_id, ordinal)` for
+the post kinds, and the generator upserts on it, moving an unread row only to a
+stronger kind, leaving a read row as it was read, and never touching `read_at` or `at`, so a replay converges (Terva review 1781).
+`notifications_watch_unread` is unique on `(user_id, thread_id)` for an
+unread `thread_you_watch`, which is the one-unread-watch rule.
+`notifications_recent` on `(user_id)` serves the list's keyset on `id`.
+`watches_by_thread` and `watches_by_forum` find a post's watchers without a
+scan. The generator processes a thread only up to the length its projection
+has reached, so it never reads `post_meta`, `threads` or `watches` for a
+range they do not yet describe, and holds the thread until the projection
+catches up.
 
 ### watches
 ```

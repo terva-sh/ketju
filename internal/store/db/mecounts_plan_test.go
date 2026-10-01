@@ -34,7 +34,10 @@ func TestMeCountsScansNoTable(t *testing.T) {
 
 	allowed := map[string]bool{
 		"CONSTANT": true, "one": true, "touched": true, "mine": true, "f": true,
-		"c": true, // forum_thread_counts: a row per forum
+		// The viewer's unread post notifications, read by notifications_user
+		// (user_id, read_at), grouped by thread (TKT-01M29CRJ2T).
+		"noted_threads": true,
+		"c":             true, // forum_thread_counts: a row per forum
 	}
 	scan := regexp.MustCompile(`^SCAN (\S+)`)
 	d, _ := openTest(t)

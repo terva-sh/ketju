@@ -40,6 +40,8 @@ import type {
   ManagedForumList,
   MarkedRead,
   Me,
+  NotificationList,
+  NotificationsRead,
   PermissionGrid,
   PermissionPreview,
   Post,
@@ -113,6 +115,9 @@ import meAnon from '../../../../internal/dto/testdata/golden/me.anon.json';
 import meMember from '../../../../internal/dto/testdata/golden/me.member.json';
 import meModerator from '../../../../internal/dto/testdata/golden/me.moderator.json';
 import mePreUser from '../../../../internal/dto/testdata/golden/me.pre_user.json';
+import notificationsMember from '../../../../internal/dto/testdata/golden/notifications.member.json';
+import notificationsModerator from '../../../../internal/dto/testdata/golden/notifications.moderator.json';
+import notificationsReadMember from '../../../../internal/dto/testdata/golden/notifications-read.member.json';
 import postMember from '../../../../internal/dto/testdata/golden/post.member.json';
 import postModerator from '../../../../internal/dto/testdata/golden/post.moderator.json';
 import postSourceMember from '../../../../internal/dto/testdata/golden/post-source.member.json';
@@ -253,6 +258,9 @@ export const contract = [
   matches<ThreadList>()(threadsAnon),
   matches<ThreadList>()(threadsMember),
   matches<ThreadList>()(unreadMember),
+  matches<NotificationList>()(notificationsMember),
+  matches<NotificationList>()(notificationsModerator),
+  matches<NotificationsRead>()(notificationsReadMember),
   matches<UserPosts>()(userPostsMember),
   matches<UserPosts>()(userPostsModerator),
   matches<UserPosts>()(userPostsOwnMember),

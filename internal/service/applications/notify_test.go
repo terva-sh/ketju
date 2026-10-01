@@ -19,17 +19,25 @@ import (
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/views"
 )
 
 // meCount is user's GET /me notifications count, from the statement GET /me
-// runs.
+// runs: the application kinds it counts, and the post notifications it
+// offers the threads service's decision (TKT-01M29CRJ2T), every one of which
+// is in a public forum here.
 func (w *world) meCount(user int64) int64 {
 	w.t.Helper()
 	var n int64
 	if err := w.db.Read(w.t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
 		rows, err := q.MeCounts(w.t.Context(), user)
-		if err == nil {
-			n = rows[0].Notifications
+		if err != nil {
+			return err
+		}
+		n = rows[0].Notifications
+		notified, err := views.ParseNotified(rows[0].NotifiedPosts)
+		for _, t := range notified {
+			n += int64(len(t.Ordinals))
 		}
 		return err
 	}); err != nil {
@@ -106,7 +114,12 @@ func TestClosedApplicationLeavesTheCount(t *testing.T) {
 		t.Run(c.name, func(t *testing.T) {
 			w := newReviewWorld(t)
 			// A reply notification with no application, and one the
-			// moderator already read.
+			// moderator already read, about posts the projection has.
+			w.exec(`INSERT INTO threads (id, forum_id, slug, title, author_id, created_at, post_count,
+				last_post_at, last_post_author_id, last_post_ordinal, log_length_projected)
+				VALUES (1, 1, 't', 'T', 9, 1, 3, 1, 9, 3, 100)`)
+			w.exec(`INSERT INTO post_meta (thread_id, ordinal, author_id, created_at, log_offset)
+				VALUES (1, 2, 9, 1, 10), (1, 3, 9, 1, 20)`)
 			w.exec(`INSERT INTO notifications (user_id, kind, thread_id, ordinal, at, read_at) VALUES
 				(2, 'reply_to_you', 1, 2, 1, NULL), (2, 'mention', 1, 3, 1, 5)`)
 			v, id := w.pendingApp("closing")

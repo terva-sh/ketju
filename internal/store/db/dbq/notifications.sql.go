@@ -8,7 +8,250 @@ package dbq
 import (
 	"context"
 	"database/sql"
+	"strings"
 )
+
+const getNotificationProgress = `-- name: GetNotificationProgress :one
+
+SELECT log_length FROM notification_progress WHERE thread_id = ?
+`
+
+// The post kinds are written by the notification generator
+// (internal/events/notifier, TKT-01M29CRJ2T), which keeps its progress per
+// thread in notification_progress (migration 0024).
+func (q *Queries) GetNotificationProgress(ctx context.Context, threadID int64) (int64, error) {
+	row := q.db.QueryRowContext(ctx, getNotificationProgress, threadID)
+	var log_length int64
+	err := row.Scan(&log_length)
+	return log_length, err
+}
+
+const insertWatchNotification = `-- name: InsertWatchNotification :exec
+INSERT INTO notifications (user_id, kind, thread_id, ordinal, actor_id, at)
+VALUES (?1, 'thread_you_watch', ?2, ?3, ?4, ?5)
+ON CONFLICT DO NOTHING
+`
+
+type InsertWatchNotificationParams struct {
+	UserID   int64
+	ThreadID sql.NullInt64
+	Ordinal  sql.NullInt64
+	ActorID  sql.NullInt64
+	At       int64
+}
+
+// InsertWatchNotification writes a thread_you_watch row, unless the member
+// already has an unread one for the thread (notifications_watch_unread) or
+// any row for the post (notifications_post): DO NOTHING with no target
+// yields to either.
+func (q *Queries) InsertWatchNotification(ctx context.Context, arg InsertWatchNotificationParams) error {
+	_, err := q.db.ExecContext(ctx, insertWatchNotification,
+		arg.UserID,
+		arg.ThreadID,
+		arg.Ordinal,
+		arg.ActorID,
+		arg.At,
+	)
+	return err
+}
+
+const listNotificationProgress = `-- name: ListNotificationProgress :many
+SELECT thread_id, log_length FROM notification_progress
+`
+
+type ListNotificationProgressRow struct {
+	ThreadID  int64
+	LogLength int64
+}
+
+func (q *Queries) ListNotificationProgress(ctx context.Context) ([]ListNotificationProgressRow, error) {
+	rows, err := q.db.QueryContext(ctx, listNotificationProgress)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListNotificationProgressRow
+	for rows.Next() {
+		var i ListNotificationProgressRow
+		if err := rows.Scan(&i.ThreadID, &i.LogLength); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listNotifications = `-- name: ListNotifications :many
+SELECT n.id, n.kind, n.thread_id, n.ordinal, n.actor_id, n.at, n.read_at,
+       t.forum_id, t.slug AS thread_slug, t.title AS thread_title, t.log_length_projected,
+       f.slug AS forum_slug, f.name AS forum_name, a.status AS application_status
+FROM notifications AS n INDEXED BY notifications_recent
+LEFT JOIN threads AS t ON t.id = n.thread_id
+LEFT JOIN forums AS f ON f.id = t.forum_id
+LEFT JOIN post_meta AS pm ON pm.thread_id = n.thread_id AND pm.ordinal = n.ordinal
+LEFT JOIN applications AS a ON a.id = n.application_id
+LEFT JOIN watches AS tw ON tw.user_id = n.user_id AND tw.thread_id = n.thread_id
+LEFT JOIN watches AS fw ON fw.user_id = n.user_id AND fw.forum_id = t.forum_id
+WHERE n.user_id = ?1 AND n.id < ?2
+  AND CASE WHEN n.thread_id IS NULL THEN
+        n.kind <> 'new_application'
+        OR EXISTS (SELECT 1 FROM users AS u WHERE u.id = n.user_id AND u.status = 'active'
+                   AND u.role IN ('moderator', 'admin'))
+      ELSE t.id IS NOT NULL AND pm.deleted = 0 AND pm.moved = 0
+        AND coalesce(tw.level, fw.level, '') <> 'mute'
+      END
+ORDER BY n.id DESC
+LIMIT ?3
+`
+
+type ListNotificationsParams struct {
+	UserID int64
+	Before int64
+	Lim    int64
+}
+
+type ListNotificationsRow struct {
+	ID                 int64
+	Kind               string
+	ThreadID           sql.NullInt64
+	Ordinal            sql.NullInt64
+	ActorID            sql.NullInt64
+	At                 int64
+	ReadAt             sql.NullInt64
+	ForumID            sql.NullInt64
+	ThreadSlug         sql.NullString
+	ThreadTitle        sql.NullString
+	LogLengthProjected sql.NullInt64
+	ForumSlug          sql.NullString
+	ForumName          sql.NullString
+	ApplicationStatus  sql.NullString
+}
+
+// ListNotifications is GET /notifications's candidates (TKT-01M29CRJ2T): a
+// page of the member's rows, the newest written first, keyset on id. id is
+// the order the rows were written, which is the order the alerts arrived;
+// catch-up can write a row for an older post after a newer one, so ordering
+// by at would let up_to disagree with the list (review 1709).
+//
+// A post row is a candidate only while its thread has a projection row, its
+// post_meta row is neither deleted nor moved, and the thread's effective
+// level for the member, coalesce(tw.level, fw.level, ”), is not mute
+// (docs/04, run decision 2026-10-01). A new_application row is one only
+// while the member is an active moderator or admin. MeCounts states the
+// same rules; TestBadgeMatchesNotificationList holds the two together. The
+// rest of the rule (forum read, quarantine, a projection trailing its log)
+// is threads.Service.VisibleNotifications's.
+func (q *Queries) ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error) {
+	rows, err := q.db.QueryContext(ctx, listNotifications, arg.UserID, arg.Before, arg.Lim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListNotificationsRow
+	for rows.Next() {
+		var i ListNotificationsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Kind,
+			&i.ThreadID,
+			&i.Ordinal,
+			&i.ActorID,
+			&i.At,
+			&i.ReadAt,
+			&i.ForumID,
+			&i.ThreadSlug,
+			&i.ThreadTitle,
+			&i.LogLengthProjected,
+			&i.ForumSlug,
+			&i.ForumName,
+			&i.ApplicationStatus,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const markNotificationsRead = `-- name: MarkNotificationsRead :execrows
+UPDATE notifications SET read_at = ?1
+WHERE user_id = ?2 AND read_at IS NULL AND id IN (/*SLICE:ids*/?)
+`
+
+type MarkNotificationsReadParams struct {
+	At     sql.NullInt64
+	UserID int64
+	Ids    []int64
+}
+
+// MarkNotificationsRead marks the member's own unread rows among ids read.
+func (q *Queries) MarkNotificationsRead(ctx context.Context, arg MarkNotificationsReadParams) (int64, error) {
+	query := markNotificationsRead
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.At)
+	queryParams = append(queryParams, arg.UserID)
+	if len(arg.Ids) > 0 {
+		for _, v := range arg.Ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(arg.Ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	result, err := q.db.ExecContext(ctx, query, queryParams...)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const markNotificationsReadUpTo = `-- name: MarkNotificationsReadUpTo :execrows
+UPDATE notifications SET read_at = ?1
+WHERE user_id = ?2 AND read_at IS NULL AND id <= ?3
+`
+
+type MarkNotificationsReadUpToParams struct {
+	At     sql.NullInt64
+	UserID int64
+	UpTo   int64
+}
+
+// MarkNotificationsReadUpTo marks every unread row of the member's with an
+// id at or below up_to read: the list's first row's id marks the list.
+func (q *Queries) MarkNotificationsReadUpTo(ctx context.Context, arg MarkNotificationsReadUpToParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markNotificationsReadUpTo, arg.At, arg.UserID, arg.UpTo)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const notificationsSince = `-- name: NotificationsSince :one
+SELECT created_at FROM schema_migrations WHERE name = 'notification_generator'
+`
+
+// NotificationsSince is the install cutoff: when the generator's migration
+// was applied, found by its name so a renumber does not move it. A record
+// written at or before it generates nothing, so installing the generator
+// alerts nobody to history (docs/04 "notifications", review 1693).
+func (q *Queries) NotificationsSince(ctx context.Context) (int64, error) {
+	row := q.db.QueryRowContext(ctx, notificationsSince)
+	var created_at int64
+	err := row.Scan(&created_at)
+	return created_at, err
+}
 
 const notifyApplicationDecided = `-- name: NotifyApplicationDecided :exec
 INSERT INTO notifications (user_id, kind, application_id, actor_id, at)
@@ -64,4 +307,165 @@ func (q *Queries) NotifyStaffOfApplication(ctx context.Context, arg NotifyStaffO
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const postAuthors = `-- name: PostAuthors :many
+SELECT ordinal, author_id, deleted, moved FROM post_meta
+WHERE thread_id = ?1 AND ordinal IN (/*SLICE:ordinals*/?)
+`
+
+type PostAuthorsParams struct {
+	ThreadID int64
+	Ordinals []int64
+}
+
+type PostAuthorsRow struct {
+	Ordinal  int64
+	AuthorID int64
+	Deleted  int64
+	Moved    int64
+}
+
+// PostAuthors is the author and liveness of each post a record replies to
+// or quotes.
+func (q *Queries) PostAuthors(ctx context.Context, arg PostAuthorsParams) ([]PostAuthorsRow, error) {
+	query := postAuthors
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ThreadID)
+	if len(arg.Ordinals) > 0 {
+		for _, v := range arg.Ordinals {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ordinals*/?", strings.Repeat(",?", len(arg.Ordinals))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ordinals*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PostAuthorsRow
+	for rows.Next() {
+		var i PostAuthorsRow
+		if err := rows.Scan(
+			&i.Ordinal,
+			&i.AuthorID,
+			&i.Deleted,
+			&i.Moved,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const setNotificationProgress = `-- name: SetNotificationProgress :exec
+INSERT INTO notification_progress (thread_id, log_length, updated_at)
+VALUES (?1, ?2, ?3)
+ON CONFLICT (thread_id) DO UPDATE SET
+	log_length = excluded.log_length,
+	updated_at = excluded.updated_at
+`
+
+type SetNotificationProgressParams struct {
+	ThreadID  int64
+	LogLength int64
+	UpdatedAt int64
+}
+
+func (q *Queries) SetNotificationProgress(ctx context.Context, arg SetNotificationProgressParams) error {
+	_, err := q.db.ExecContext(ctx, setNotificationProgress, arg.ThreadID, arg.LogLength, arg.UpdatedAt)
+	return err
+}
+
+const threadWatchers = `-- name: ThreadWatchers :many
+SELECT tw.user_id, tw.level, 1 AS on_thread FROM watches AS tw WHERE tw.thread_id = ?1
+UNION ALL
+SELECT fw.user_id, fw.level, 0 AS on_thread FROM watches AS fw WHERE fw.forum_id = ?2
+`
+
+type ThreadWatchersParams struct {
+	ThreadID sql.NullInt64
+	ForumID  sql.NullInt64
+}
+
+type ThreadWatchersRow struct {
+	UserID   int64
+	Level    string
+	OnThread int64
+}
+
+// ThreadWatchers is every watches row that bears on a thread: its own rows,
+// and the rows for the forum it is in now. The generator combines a
+// member's two through domain.EffectiveWatch (docs/04 "watches").
+func (q *Queries) ThreadWatchers(ctx context.Context, arg ThreadWatchersParams) ([]ThreadWatchersRow, error) {
+	rows, err := q.db.QueryContext(ctx, threadWatchers, arg.ThreadID, arg.ForumID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ThreadWatchersRow
+	for rows.Next() {
+		var i ThreadWatchersRow
+		if err := rows.Scan(&i.UserID, &i.Level, &i.OnThread); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertPostNotification = `-- name: UpsertPostNotification :exec
+INSERT INTO notifications (user_id, kind, thread_id, ordinal, actor_id, at)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+ON CONFLICT (user_id, thread_id, ordinal) WHERE thread_id IS NOT NULL DO UPDATE SET
+	kind = excluded.kind,
+	actor_id = excluded.actor_id
+WHERE notifications.read_at IS NULL
+  AND (CASE excluded.kind WHEN 'mention' THEN 4 WHEN 'reply_to_you' THEN 3 WHEN 'quoted' THEN 2 ELSE 1 END)
+    > (CASE notifications.kind WHEN 'mention' THEN 4 WHEN 'reply_to_you' THEN 3 WHEN 'quoted' THEN 2 ELSE 1 END)
+`
+
+type UpsertPostNotificationParams struct {
+	UserID   int64
+	Kind     string
+	ThreadID sql.NullInt64
+	Ordinal  sql.NullInt64
+	ActorID  sql.NullInt64
+	At       int64
+}
+
+// UpsertPostNotification writes one member's notification for one post, or
+// moves the row the member already has for that post to kind when kind is
+// the stronger: mention, then reply_to_you, then quoted, then
+// thread_you_watch (docs/04, run decision 2026-10-01). Only an unread row
+// moves: one the member has read stays as they read it, so an edit's
+// mention does not rewrite history they have seen (Terva review 1781). It
+// never touches read_at or at, so a replay leaves a read row read, and it reads only
+// excluded and the row itself: sqlc v1.31.1 binds no parameter inside DO
+// UPDATE on SQLite.
+func (q *Queries) UpsertPostNotification(ctx context.Context, arg UpsertPostNotificationParams) error {
+	_, err := q.db.ExecContext(ctx, upsertPostNotification,
+		arg.UserID,
+		arg.Kind,
+		arg.ThreadID,
+		arg.Ordinal,
+		arg.ActorID,
+		arg.At,
+	)
+	return err
 }

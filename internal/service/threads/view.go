@@ -166,6 +166,9 @@ type Service struct {
 	// QueuePage is the items on one page of the moderator queue; zero is
 	// QueuePageSize. Tests set it to page through a few items.
 	QueuePage int
+	// NotificationsPage is the rows on one page of the notification list;
+	// zero is NotificationsPageSize. Tests set it to page through a few.
+	NotificationsPage int
 
 	// trace, when set, is told which path Replies answered from. Tests use it
 	// to prove both paths ran.

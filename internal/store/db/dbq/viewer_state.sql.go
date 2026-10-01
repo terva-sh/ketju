@@ -424,11 +424,31 @@ by_forum AS (
 	FROM active AS a
 	LEFT JOIN adjust AS j ON j.forum_id = a.forum_id
 	LEFT JOIN watches AS fw ON fw.user_id = ?1 AND fw.forum_id = a.forum_id
+),
+noted AS (
+	SELECT n.thread_id, t.forum_id, t.log_length_projected AS projected, n.ordinal
+	FROM notifications AS n INDEXED BY notifications_user
+	JOIN threads AS t ON t.id = n.thread_id
+	JOIN post_meta AS pm ON pm.thread_id = n.thread_id AND pm.ordinal = n.ordinal
+	LEFT JOIN watches AS tw ON tw.user_id = n.user_id AND tw.thread_id = n.thread_id
+	LEFT JOIN watches AS fw ON fw.user_id = n.user_id AND fw.forum_id = t.forum_id
+	WHERE n.user_id = ?1 AND n.read_at IS NULL AND n.thread_id IS NOT NULL
+	  AND pm.deleted = 0 AND pm.moved = 0 AND coalesce(tw.level, fw.level, '') <> 'mute'
+),
+noted_threads AS (
+	SELECT thread_id, forum_id, projected, json_group_array(ordinal) AS ordinals
+	FROM noted GROUP BY thread_id
 )
 SELECT (SELECT count(*) FROM notifications AS n
         LEFT JOIN applications AS na ON na.id = n.application_id
-        WHERE n.user_id = ?1 AND n.read_at IS NULL
-          AND (n.kind <> 'new_application' OR na.status = 'pending')) AS notifications,
+        WHERE n.user_id = ?1 AND n.read_at IS NULL AND n.thread_id IS NULL
+          AND (n.kind <> 'new_application'
+               OR (na.status = 'pending'
+                   AND EXISTS (SELECT 1 FROM users AS u WHERE u.id = n.user_id AND u.status = 'active'
+                               AND u.role IN ('moderator', 'admin'))))) AS notifications,
+       CAST((SELECT json_group_array(json_object('thread', thread_id, 'forum', forum_id, 'projected', projected,
+                                                 'ordinals', json(ordinals)))
+             FROM noted_threads) AS TEXT) AS notified_posts,
        f.forum_id, f.threads, f.participated, f.watching,
        f.new
 FROM (SELECT 1) AS one
@@ -437,6 +457,7 @@ LEFT JOIN by_forum AS f ON f.threads > 0 OR f.new > 0
 
 type MeCountsRow struct {
 	Notifications int64
+	NotifiedPosts string
 	ForumID       sql.NullInt64
 	Threads       sql.NullInt64
 	Participated  sql.NullInt64
@@ -448,11 +469,21 @@ type MeCountsRow struct {
 // and their unread threads by forum, so the service can drop the forums they
 // cannot read in one batch from perm.
 //
-// A new_application notification counts only while its application is
-// pending (TKT-01M29CP2N0). Closing an application, by approval, denial or
-// withdrawal, never writes read_at, because nobody read anything; the badge
-// drops because the application stopped waiting, and the row stays unread
-// for the notification list. Every other kind counts while unread.
+// notifications counts the viewer's unread application notifications. A
+// new_application row counts only while its application is pending
+// (TKT-01M29CP2N0), and only while the viewer is an active moderator or
+// admin (docs/04, run decision 2026-10-01). Closing an application, by
+// approval, denial or withdrawal, never writes read_at, because nobody read
+// anything; the badge drops because the application stopped waiting, and the
+// row stays unread for the notification list, which serves it as read.
+//
+// notified_posts is the viewer's unread post notifications that
+// ListNotifications would offer, as JSON grouped by thread: [{thread, forum,
+// projected, ordinals}]. The post must be live in post_meta and the thread
+// not muted for the viewer, by the same rules ListNotifications states. The
+// service hands it to threads.Service.VisibleNotifications, which the list
+// calls too, so the badge counts exactly the unread rows the list serves
+// (TKT-01M29CRJ2T).
 //
 // A thread is unread when its newest post is: past the read position (0 with
 // no row) and written after mark_all_read_at. That is UnreadCount's per-post
@@ -502,6 +533,7 @@ func (q *Queries) MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, er
 		var i MeCountsRow
 		if err := rows.Scan(
 			&i.Notifications,
+			&i.NotifiedPosts,
 			&i.ForumID,
 			&i.Threads,
 			&i.Participated,

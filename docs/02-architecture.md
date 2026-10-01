@@ -272,7 +272,7 @@ All in-process goroutines, no external queue:
 |-----|---------|-------|
 | Projection writer | event bus | ordered per thread, idempotent |
 | Search indexer | event bus | batched |
-| Notification generator | event bus | |
+| Notification generator | event bus | per-thread progress in `notification_progress`; projects a thread before reading it; catch-up at startup and after a drop, running the projection's sweep first, then every log against its progress (TKT-01M29CRJ2T) |
 | Session sweeper | hourly | delete expired |
 | Blob GC | daily | refcount 0 for 7 days and named in no thread log (03 "Blob garbage collection") |
 | Suspension expiry | every minute | lift suspensions whose end has passed; their hidden posts stay hidden (08 "Suspension") |

@@ -217,6 +217,12 @@ type Notification struct {
 	ApplicationID sql.NullInt64
 }
 
+type NotificationProgress struct {
+	ThreadID  int64
+	LogLength int64
+	UpdatedAt int64
+}
+
 type Permission struct {
 	ForumID    sql.NullInt64
 	GroupID    int64

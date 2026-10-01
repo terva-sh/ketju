@@ -402,6 +402,34 @@ export interface UserPost {
   post: Post;
 }
 
+// NotificationList is GET /notifications?cursor=: a page of the viewer's
+// notifications, the newest written first (internal/dto NotificationList).
+// next_cursor is empty at the end. The client screen is TKT-01M29CTY86's.
+export interface NotificationList {
+  notifications: Notification[];
+  next_cursor: string;
+}
+
+// Notification names what happened and where, and carries no post text
+// (internal/dto Notification). thread, forum and ordinal are null for the
+// application kinds; actor is null when there is none.
+export interface Notification {
+  id: number;
+  kind: string;
+  thread: ThreadLink | null;
+  forum: ForumRef | null;
+  ordinal: number | null;
+  actor: Author | null;
+  at: Millis;
+  read: boolean;
+}
+
+// NotificationsRead answers POST /notifications/read (internal/dto
+// NotificationsRead).
+export interface NotificationsRead {
+  marked: number;
+}
+
 // SearchResults is GET /search?q=&forum=&author=&after=&before=&cursor=: a
 // page of hits in the forums this viewer may read, newest first, with no
 // total (internal/dto SearchResults). next_cursor is empty on the last page.

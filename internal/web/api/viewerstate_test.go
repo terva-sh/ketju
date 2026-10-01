@@ -375,6 +375,7 @@ func TestEveryViewerStateRouteHasAFormPost(t *testing.T) {
 		"POST /api/v1/forums/{slug}/watch",
 		"PUT /api/v1/me/read",
 		"PUT /api/v1/forums/{slug}/read",
+		"POST /api/v1/notifications/read",
 	}
 	w := newWorld(t)
 	id, _ := w.seed()

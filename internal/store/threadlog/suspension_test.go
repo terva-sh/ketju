@@ -241,3 +241,44 @@ func TestRestored(t *testing.T) {
 		t.Errorf("a damaged frame: %t, %v", got, err)
 	}
 }
+
+// Moved finds a ThreadMoved in the stretch it is given and nothing outside
+// it, from zero meaning the whole log (Terva review 1781 on PR #323).
+func TestMoved(t *testing.T) {
+	a, lg, _, _ := newThread(t, SyncNever)
+	mustAppend(t, a, post("one"))
+	mustAppend(t, a, Append{Type: TypeThreadRenamed, Author: 7, Body: &ThreadRenamedBody{Title: "Renamed"}})
+	before := a.LogLength()
+	mustAppend(t, a, Append{Type: TypeThreadMoved, Author: 7, Body: &ThreadMovedBody{ForumID: 3}})
+	after := a.LogLength()
+	mustAppend(t, a, post("two"))
+	end := a.LogLength()
+	if err := a.Close(); err != nil {
+		t.Fatal(err)
+	}
+	r := NewReader(bytes.NewReader(lg.bytes()), a.Index())
+	for _, c := range []struct {
+		name     string
+		from, to int64
+		want     bool
+	}{
+		{"the whole log", FileHeaderSize, end, true},
+		{"from zero", 0, end, true},
+		{"from just before the move", before, end, true},
+		{"up to just before it", FileHeaderSize, before, false},
+		{"after it", after, end, false},
+		{"nothing", end, end, false},
+	} {
+		got, err := r.Moved(c.from, c.to)
+		if err != nil || got != c.want {
+			t.Errorf("%s: %t, %v; want %t", c.name, got, err, c.want)
+		}
+	}
+
+	b := lg.bytes()
+	b[len(b)-2] ^= 0xff
+	bad := NewReader(bytes.NewReader(b), a.Index())
+	if got, err := bad.Moved(after, end); err == nil || got {
+		t.Errorf("a damaged frame: %t, %v", got, err)
+	}
+}

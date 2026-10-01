@@ -23,6 +23,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/events"
+	"github.com/terva-sh/ketju/internal/events/notifier"
 	"github.com/terva-sh/ketju/internal/events/projection"
 	"github.com/terva-sh/ketju/internal/events/search"
 	"github.com/terva-sh/ketju/internal/jobs"
@@ -374,6 +375,31 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	if err := bus.Subscribe(indexer, 4096); err != nil {
 		return fail("subscribing the search indexer", err)
 	}
+	// One evaluator for the process: the notification generator decides
+	// each recipient's access through it, sign-in promotes through it
+	// (bootstrap), and its cache is the one every request reads.
+	perms := perm.New(d)
+	// The notification generator (docs/04 "notifications", TKT-01M29CRJ2T).
+	// It projects a thread before reading it, and its sweep runs the
+	// projection's first, so a thread whose events both dropped is still
+	// found (review 1743).
+	gen, err := notifier.New(notifier.Options{
+		DB: d, Root: cfg.DataDir, Perm: perms, Quarantined: proj.Quarantined, Logger: log,
+		Project: func(ctx context.Context, id threadid.ID, upTo int64) error {
+			_, err := proj.ProjectThread(ctx, id, upTo)
+			return err
+		},
+		Sweep: func(ctx context.Context) error {
+			_, err := proj.CatchUp(ctx, reopen)
+			return err
+		},
+	})
+	if err != nil {
+		return fail("starting the notification generator", err)
+	}
+	if err := bus.Subscribe(gen, 0); err != nil {
+		return fail("subscribing the notification generator", err)
+	}
 
 	step("catch-up")
 	report, err := proj.CatchUp(ctx, reopen)
@@ -437,6 +463,28 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 			return fmt.Errorf("serve: the search indexer did not stop within %s; closing the store under it", busDrain)
 		}
 	})
+	// The notification generator sweeps at once, beside the listener, as
+	// the search indexer does: until it has, an alert for a post written
+	// while the server was down is late, never lost or doubled. Its closer
+	// is pushed before the bus's, so it runs after the bus has delivered
+	// what is queued.
+	step("notifications")
+	notified := make(chan struct{})
+	go func() {
+		defer close(notified)
+		gen.Run(run)
+	}()
+	closers = append(closers, func() error {
+		step("stop notifications")
+		stopRun()
+		select {
+		case <-notified:
+			return nil
+		case <-time.After(busDrain):
+			return fmt.Errorf("serve: the notification generator did not stop within %s; closing the store under it",
+				busDrain)
+		}
+	})
 	if err := bus.Start(run); err != nil {
 		return fail("starting the event bus", err)
 	}
@@ -468,9 +516,6 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		return fail("loading the cookie key", err)
 	}
 	sessions := &session.Store{DB: d}
-	// One evaluator for the process: sign-in promotes through it (bootstrap),
-	// and its cache is the one every request reads.
-	perms := perm.New(d)
 	// A group_map target no group has grants nothing. It is said here, once,
 	// as well as at each sign-in that meets it, because only the database
 	// can tell, so config check cannot (docs/02 "Configuration").
@@ -567,7 +612,8 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	})
 
 	step("listener")
-	userSvc := &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount, Quarantined: proj.QuarantinedIDs}
+	userSvc := &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount, Quarantined: proj.QuarantinedIDs,
+		VisibleNotifications: threadSvc.CountVisibleNotifications}
 	forumSvc := &forums.Service{DB: d, Perm: perms, Logger: log}
 	tmpl, err := spa.Shell()
 	if err != nil {

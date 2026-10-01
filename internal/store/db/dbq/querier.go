@@ -319,6 +319,10 @@ type Querier interface {
 	GetGroupBySlug(ctx context.Context, slug string) (Group, error)
 	GetIdentityBySubject(ctx context.Context, arg GetIdentityBySubjectParams) (Identity, error)
 	GetMembership(ctx context.Context, arg GetMembershipParams) (string, error)
+	// The post kinds are written by the notification generator
+	// (internal/events/notifier, TKT-01M29CRJ2T), which keeps its progress per
+	// thread in notification_progress (migration 0024).
+	GetNotificationProgress(ctx context.Context, threadID int64) (int64, error)
 	GetProjectionState(ctx context.Context, threadID int64) (ProjectionState, error)
 	GetReadPosition(ctx context.Context, arg GetReadPositionParams) (ReadPosition, error)
 	// The search index's plain statements (docs/04 "search (FTS)",
@@ -392,6 +396,11 @@ type Querier interface {
 	InsertPostAttachment(ctx context.Context, arg InsertPostAttachmentParams) error
 	InsertSearchDoc(ctx context.Context, arg InsertSearchDocParams) (int64, error)
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error
+	// InsertWatchNotification writes a thread_you_watch row, unless the member
+	// already has an unread one for the thread (notifications_watch_unread) or
+	// any row for the post (notifications_post): DO NOTHING with no target
+	// yields to either.
+	InsertWatchNotification(ctx context.Context, arg InsertWatchNotificationParams) error
 	// LatestApplicationForIdentity is the identity's newest application, pending
 	// or decided. The 24-hour rule counts from its created_at.
 	LatestApplicationForIdentity(ctx context.Context, identityID sql.NullInt64) (LatestApplicationForIdentityRow, error)
@@ -415,6 +424,22 @@ type Querier interface {
 	ListForums(ctx context.Context) ([]Forum, error)
 	ListGroups(ctx context.Context) ([]Group, error)
 	ListMigrations(ctx context.Context) ([]SchemaMigration, error)
+	ListNotificationProgress(ctx context.Context) ([]ListNotificationProgressRow, error)
+	// ListNotifications is GET /notifications's candidates (TKT-01M29CRJ2T): a
+	// page of the member's rows, the newest written first, keyset on id. id is
+	// the order the rows were written, which is the order the alerts arrived;
+	// catch-up can write a row for an older post after a newer one, so ordering
+	// by at would let up_to disagree with the list (review 1709).
+	//
+	// A post row is a candidate only while its thread has a projection row, its
+	// post_meta row is neither deleted nor moved, and the thread's effective
+	// level for the member, coalesce(tw.level, fw.level, ''), is not mute
+	// (docs/04, run decision 2026-10-01). A new_application row is one only
+	// while the member is an active moderator or admin. MeCounts states the
+	// same rules; TestBadgeMatchesNotificationList holds the two together. The
+	// rest of the rule (forum read, quarantine, a projection trailing its log)
+	// is threads.Service.VisibleNotifications's.
+	ListNotifications(ctx context.Context, arg ListNotificationsParams) ([]ListNotificationsRow, error)
 	// Every permission row, for the grid and for checking a batch of changes
 	// against what is there.
 	ListPermissions(ctx context.Context) ([]ListPermissionsRow, error)
@@ -465,16 +490,31 @@ type Querier interface {
 	// The WHERE on the SELECT is what lets SQLite parse the ON CONFLICT clause
 	// as the upsert's rather than as a join constraint.
 	MarkForumRead(ctx context.Context, arg MarkForumReadParams) (int64, error)
+	// MarkNotificationsRead marks the member's own unread rows among ids read.
+	MarkNotificationsRead(ctx context.Context, arg MarkNotificationsReadParams) (int64, error)
+	// MarkNotificationsReadUpTo marks every unread row of the member's with an
+	// id at or below up_to read: the list's first row's id marks the list.
+	MarkNotificationsReadUpTo(ctx context.Context, arg MarkNotificationsReadUpToParams) (int64, error)
 	MaxFormVersion(ctx context.Context, formID int64) (int64, error)
 	// MeCounts is GET /me's count statement: the viewer's unread notifications,
 	// and their unread threads by forum, so the service can drop the forums they
 	// cannot read in one batch from perm.
 	//
-	// A new_application notification counts only while its application is
-	// pending (TKT-01M29CP2N0). Closing an application, by approval, denial or
-	// withdrawal, never writes read_at, because nobody read anything; the badge
-	// drops because the application stopped waiting, and the row stays unread
-	// for the notification list. Every other kind counts while unread.
+	// notifications counts the viewer's unread application notifications. A
+	// new_application row counts only while its application is pending
+	// (TKT-01M29CP2N0), and only while the viewer is an active moderator or
+	// admin (docs/04, run decision 2026-10-01). Closing an application, by
+	// approval, denial or withdrawal, never writes read_at, because nobody read
+	// anything; the badge drops because the application stopped waiting, and the
+	// row stays unread for the notification list, which serves it as read.
+	//
+	// notified_posts is the viewer's unread post notifications that
+	// ListNotifications would offer, as JSON grouped by thread: [{thread, forum,
+	// projected, ordinals}]. The post must be live in post_meta and the thread
+	// not muted for the viewer, by the same rules ListNotifications states. The
+	// service hands it to threads.Service.VisibleNotifications, which the list
+	// calls too, so the badge counts exactly the unread rows the list serves
+	// (TKT-01M29CRJ2T).
 	//
 	// A thread is unread when its newest post is: past the read position (0 with
 	// no row) and written after mark_all_read_at. That is UnreadCount's per-post
@@ -521,6 +561,11 @@ type Querier interface {
 	// removed is gone here once projected. A scan of the thread's prefix of
 	// the primary key.
 	MentionedOrdinals(ctx context.Context, arg MentionedOrdinalsParams) ([]int64, error)
+	// NotificationsSince is the install cutoff: when the generator's migration
+	// was applied, found by its name so a renumber does not move it. A record
+	// written at or before it generates nothing, so installing the generator
+	// alerts nobody to history (docs/04 "notifications", review 1693).
+	NotificationsSince(ctx context.Context) (int64, error)
 	// NotifyApplicationDecided writes the approved applicant's
 	// application_decided row, as the user the approval created, with the
 	// deciding moderator as actor. A denied applicant has no user, so no row.
@@ -555,6 +600,9 @@ type Querier interface {
 	// The post's author, for the projection writer to tell an author's own
 	// Edit, Delete or Restore from a moderator's (TKT-01M29CKRGS).
 	PostAuthor(ctx context.Context, arg PostAuthorParams) (int64, error)
+	// PostAuthors is the author and liveness of each post a record replies to
+	// or quotes.
+	PostAuthors(ctx context.Context, arg PostAuthorsParams) ([]PostAuthorsRow, error)
 	// The posts the auto-hide owes a hide: at least threshold open flags, and
 	// not already down in the projection. The sweep asks the index again for
 	// each before it appends anything, so a projection that lags costs at most
@@ -652,6 +700,7 @@ type Querier interface {
 	// that arrives late, leaves a later mark where it is. The answer is the mark
 	// as it now stands.
 	SetMarkAllRead(ctx context.Context, arg SetMarkAllReadParams) (int64, error)
+	SetNotificationProgress(ctx context.Context, arg SetNotificationProgressParams) error
 	// log_offset is the current revision's record, as the index entry's Offset
 	// is, so a Delete or Restore (which is not a revision) leaves it alone.
 	SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error)
@@ -696,6 +745,10 @@ type Querier interface {
 	TagsForThreads(ctx context.Context, threadIds []int64) ([]ThreadTag, error)
 	ThreadTags(ctx context.Context, threadID int64) ([]string, error)
 	ThreadWatchLevel(ctx context.Context, arg ThreadWatchLevelParams) (string, error)
+	// ThreadWatchers is every watches row that bears on a thread: its own rows,
+	// and the rows for the forum it is in now. The generator combines a
+	// member's two through domain.EffectiveWatch (docs/04 "watches").
+	ThreadWatchers(ctx context.Context, arg ThreadWatchersParams) ([]ThreadWatchersRow, error)
 	// The threads holding a post by the user, from the projection: every
 	// thread a suspension's hide or restore has to look in (TKT-01M29CP2QK).
 	// The thread's own author is taken too, since CreateThread projects its
@@ -752,6 +805,16 @@ type Querier interface {
 	UpsertForumDraft(ctx context.Context, arg UpsertForumDraftParams) (Draft, error)
 	// A Post resets every column, for the same reason UpsertThread does.
 	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
+	// UpsertPostNotification writes one member's notification for one post, or
+	// moves the row the member already has for that post to kind when kind is
+	// the stronger: mention, then reply_to_you, then quoted, then
+	// thread_you_watch (docs/04, run decision 2026-10-01). Only an unread row
+	// moves: one the member has read stays as they read it, so an edit's
+	// mention does not rewrite history they have seen (Terva review 1781). It
+	// never touches read_at or at, so a replay leaves a read row read, and it reads only
+	// excluded and the row itself: sqlc v1.31.1 binds no parameter inside DO
+	// UPDATE on SQLite.
+	UpsertPostNotification(ctx context.Context, arg UpsertPostNotificationParams) error
 	// Reading never moves backwards: opening an older page of a thread must not
 	// mark the newer posts unread again, and a beacon that arrives late, out of
 	// order or from a second device must not either (PUT /threads/{id}/read,

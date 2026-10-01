@@ -37,6 +37,14 @@ type Service struct {
 	// cannot see them, so Me takes them out of its counts (TKT-01M29CTY7K).
 	// Nil quarantines nothing.
 	Quarantined func() []threadid.ID
+
+	// VisibleNotifications is how many of the unread post notifications
+	// MeCounts offers v may be served now: the decision the notification
+	// list makes (threads.Service.CountVisibleNotifications,
+	// TKT-01M29CRJ2T), so the badge counts exactly the unread rows the list
+	// serves. Nil counts none of them, so a server wired without it
+	// undercounts rather than counting a notification nobody may see.
+	VisibleNotifications func(ctx context.Context, v domain.Viewer, threads []views.NotifiedThread) (int, error)
 }
 
 // The settings a viewer has not chosen (docs/06 "Paged, not infinite" for the
@@ -129,6 +137,16 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	}); err != nil {
 		return dto.Me{}, err
 	}
+	var notified []views.NotifiedThread
+	if len(rows) > 0 && s.VisibleNotifications != nil {
+		var err error
+		if notified, err = views.ParseNotified(rows[0].NotifiedPosts); err != nil {
+			return dto.Me{}, err
+		}
+	}
+	// One batch for every forum either count names, so the post
+	// notifications' read checks below are in perm's cache already and add
+	// no statement.
 	var forums []int64
 	for _, r := range rows {
 		if r.ForumID.Valid {
@@ -138,6 +156,11 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	for _, m := range held {
 		forums = append(forums, m.ForumID)
 	}
+	for _, t := range notified {
+		if !slices.Contains(forums, t.Forum) {
+			forums = append(forums, t.Forum)
+		}
+	}
 	readable := map[int64]bool{}
 	if len(forums) > 0 {
 		var err error
@@ -145,8 +168,18 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 			return dto.Me{}, err
 		}
 	}
-	for _, r := range rows {
-		me.Notifications = int(r.Notifications)
+	// The post notifications, decided as the notification list decides
+	// them. With none unread this costs nothing.
+	if len(notified) > 0 {
+		var err error
+		if me.Notifications, err = s.VisibleNotifications(ctx, v, notified); err != nil {
+			return dto.Me{}, err
+		}
+	}
+	for i, r := range rows {
+		if i == 0 {
+			me.Notifications += int(r.Notifications)
+		}
 		if !r.ForumID.Valid || !readable[r.ForumID.Int64] {
 			continue
 		}
