@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:24Z
-updated_at: 2026-10-01T17:42:00Z
+updated_at: 2026-10-01T20:40:18Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -122,3 +122,27 @@ Orchestrator log, 2026-10-01 (merges #320 to #327).
 **agent:claude-code/phase3-run-orchestrator** at 2026-10-01T17:42:00Z
 
 Maintainer decision, 2026-10-01: raise the reader bundle budget to 120000 B gzip ("Let's go with 120"), resolving the class 5 question. The reader stood at 63878 B. The remaining Phase 3 client plans were estimated to land the reader at 80 to 85 KB. 100 KB was the alternative put to the maintainer. Changed in web/client/budget.json, its test, web/client/README.md, docs/07 and docs/14.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-01T20:40:18Z
+
+Maintainer decision, 2026-10-01: the run decisions are approved ("Yes your run decisions are approved"). That covers every line marked "Decided by the run (..., pending maintainer review)" in docs/03 to docs/07 and every ticket note headed "run decision: pending maintainer review" made by this run, including those the queued client lanes reported to the maintainer before landing. The closing PR rewrites those markers as approved. Decisions made after this note still need review.
+
+Orchestrator log, 2026-10-01 (merges #328 to #336, and the runner investigation).
+
+- #328 -> #330 TKT-01M29CTY71 lens header and switcher merged (8e7c604, b1b9c2f, dfd23a6); reviews 1792 (medium: First unread kept unread:B above the reader) and 1793 (medium: Full thread lost position; lens header now sticky) fixed; clean 8f330c24 on c264e78 / base 367c90d; CI 2196; reader 63878 -> 66189 B (+2311). Run decisions (docs/06): header wording, divider only canonical/unread, switcher authors from visible posts, since date shows UTC day, sticky lens header; read-tracking decision amended for 1730/1741/1792. Remote branch run/cty71-lens-client (#328, closed, carried) left for end-of-run cleanup.
+- #331 budget raised to 120000 B (maintainer) merged; clean on 0b55baa, CI 2193.
+- #332 TKT-01M3W9VRTV notifications test race (run 2184) merged 004be7a; test-only (author's restore reaches the projection via the bus; docs/04 sets no time bound); reproduced 4/20 under load before, 60/60 after; clean 0963125a on 4ba1b6f / base 86752c4; CI 2201. No other racy Phase 3 tests in cmd/ketju.
+- #333 TKT-01M3TSZHSW slow-mode phone e2e merged a3ed233; cause: ModerateDialog set its slow-mode choice once in useState initialisers, so a panel reopened before the refetch landed opened on the old value (not the runner freeze); clean 810f1d90 on 208180b / base 86752c4, carried to ticket-only 4122030 (it removed a duplicate draft filed inside the PR, never on main); CI 2215; reader 66189 -> 66220 B.
+- Note from TSZHSW lane: run 1779's phone lock-test failure is a different problem (30 s budget exhausted while the server took 2-4 s per page request: runner overload); recorded in the TSZHSW cause note, not fixed.
+- #334 TKT-01M3S3Z9E1 phone post header/footer merged 598f0d3; review 1797 (medium: stacked-header CSS reached the reply expander's copies) fixed; clean 46691910 on 598f0d3 / base a3ed233; CI 2222; reader 66220 -> 66354 B.
+- #335 TKT-01M29CTY86 notifications UI merged 26bea62; review 1798 (medium: failed repeat mark-all re-marked cleared rows) fixed; clean 48b5b765 on 26bea62 / base 598f0d3; CI 2229; reader 66354 -> 67802 B. Run decision (docs/06 Thread list views): Older appends in place; mark-all clears marking of rows shown.
+- #336 TKT-01M3V70X0F search screen merged 9978cd3; review 1799: HIGH (access invariant: retained results shown after the query was cleared; fixed in useResource, which now drops its answer on a null key) and medium (re-submit of the current address issued no request) fixed; clean d7d01e61 on 9978cd3 / base 26bea62; CI 2237; reader 67802 -> 70218 B. Run decisions (docs/07 Search): no held search answers, #N beside titles, the screen's own query errors.
+
+- Runner b3cc8959 (forgejo-runner v13.0.0) is build-1 (tailnet 100.105.215.101): KVM, 6 vCPU, 3.76 GiB RAM, 8 GB swap on a disk partition (/dev/sda5), ~420 MB in use. Runner build-0 (v12.1.0) is build-0 (192.168.1.35): KVM, 4 vCPU, 4.9 GiB RAM, 4 GB swap, ~1 GB in use, and it also hosts Forgejo, MariaDB and a dind container.
+- build-1 live sample (120 s, 2-3 concurrent jobs, one ketju Build and Test): each job ~1 GiB; MemAvailable fell to 1.8 GiB; a full memory stall in 103 of 120 seconds (short); ~160 MB swapped in and out. No 10 s freeze caught in that window. The system journal for the two freeze windows is not readable from the sothr account (not in adm).
+- build-0 at the same time: load 36 on 4 vCPU, CPU pressure some avg10 95%, run queue 52-62, swapping out 16-81 MB/s, 4 concurrent jobs plus Forgejo and its DB.
+- Reading: build-1's freezes most likely come from memory overcommit (several heavy jobs in 3.76 GiB, swapping to disk). build-0 is CPU-starved but slows evenly. Recommended: build-1 capacity 1 or 8 GB RAM; build-0 capacity 1-2, or move its runner off the Forgejo VM.
+- Main push run 2184 failed on build-0 in TestServeGeneratesNotifications (test race after delete/restore under load); a lane is fixing it.
+- #328 -> #330 TKT-01M29CTY71 lens header and switcher merged (8e7c604, b1b9c2f, dfd23a6); reviews 1792 (medium: First unread kept unread:B above the reader) and 1793 (medium: Full thread lost position; lens header now sticky) fixed; clean 8f330c24 on c264e78 / base 367c90d; CI 2196; reader 63878 -> 66189 B (+2311). Run decisions (docs/06): header wording, divider only canonical/unread, switcher authors from visible posts, since date shows UTC day, sticky lens header; read-tracking decision amended for 1730/1741/1792. Remote branch run/cty71-lens-client (#328, closed, carried) left for end-of-run cleanup.
+- #331 budget raised to 120000 B (maintainer) merged; clean on 0b55baa, CI 2193.
+- #332 TKT-01M3W9VRTV notifications test race (run 2184) merged 004be7a; test-only (author's restore reaches the projection via the bus; docs/04 sets no time bound); reproduced 4/20 under load before, 60/60 after; clean 0963125a on 4ba1b6f / base 86752c4; CI 2201. No other racy Phase 3 tests in cmd/ketju.

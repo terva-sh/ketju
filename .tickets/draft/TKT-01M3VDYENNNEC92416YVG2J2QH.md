@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:50:19Z
-updated_at: 2026-10-01T15:16:52Z
+updated_at: 2026-10-01T20:40:29Z
 created_by:
   id: agent:claude-code/phase3-run-vbwma8
   name: ""
@@ -67,3 +67,16 @@ More evidence, 2026-10-01 (orchestrator):
 - Main push run 2116 on 902c30e ran on b3cc8959 and failed one test: [desktop] e2e/read-tracking.spec.ts:66, where the dwelt post 25 was missing from the beacon's sent list [1..5]; the test took 6.1 s. The same spec on 902c30e locally, --repeat-each=5 across both projects: 54/54 passed at 2.4-3.3 s each.
 - PR run 2069 (TKT-01M29CTY9D) failed only on a Playwright timeout in apply.spec, also attributed to this freeze by that lane.
 Main's own push CI now fails on this runner as well as PR runs.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-01T20:40:29Z
+
+Findings, 2026-10-01 (orchestrator, read-only over SSH as sothr; nothing changed on either host):
+- Runner b3cc8959 (forgejo-runner v13.0.0) is build-1 (tailnet 100.105.215.101): KVM, 6 vCPU, 3.76 GiB RAM, 8 GB swap on a disk partition (/dev/sda5), ~420 MB in use. Runner build-0 (v12.1.0) is build-0 (192.168.1.35): KVM, 4 vCPU, 4.9 GiB RAM, 4 GB swap, ~1 GB in use, and it also hosts Forgejo, MariaDB and a dind container.
+- build-1 live sample (120 s, 2-3 concurrent jobs, one ketju Build and Test): each job ~1 GiB; MemAvailable fell to 1.8 GiB; a full memory stall in 103 of 120 seconds (short); ~160 MB swapped in and out. No 10 s freeze caught in that window. The system journal for the two freeze windows is not readable from the sothr account (not in adm).
+- build-0 at the same time: load 36 on 4 vCPU, CPU pressure some avg10 95%, run queue 52-62, swapping out 16-81 MB/s, 4 concurrent jobs plus Forgejo and its DB.
+- Reading: build-1's freezes most likely come from memory overcommit (several heavy jobs in 3.76 GiB, swapping to disk). build-0 is CPU-starved but slows evenly. Recommended: build-1 capacity 1 or 8 GB RAM; build-0 capacity 1-2, or move its runner off the Forgejo VM.
+- Main push run 2184 failed on build-0 in TestServeGeneratesNotifications (test race after delete/restore under load); a lane is fixing it.
+- #328 -> #330 TKT-01M29CTY71 lens header and switcher merged (8e7c604, b1b9c2f, dfd23a6); reviews 1792 (medium: First unread kept unread:B above the reader) and 1793 (medium: Full thread lost position; lens header now sticky) fixed; clean 8f330c24 on c264e78 / base 367c90d; CI 2196; reader 63878 -> 66189 B (+2311). Run decisions (docs/06): header wording, divider only canonical/unread, switcher authors from visible posts, since date shows UTC day, sticky lens header; read-tracking decision amended for 1730/1741/1792. Remote branch run/cty71-lens-client (#328, closed, carried) left for end-of-run cleanup.
+- #331 budget raised to 120000 B (maintainer) merged; clean on 0b55baa, CI 2193.
+- #332 TKT-01M3W9VRTV notifications test race (run 2184) merged 004be7a; test-only (author's restore reaches the projection via the bus; docs/04 sets no time bound); reproduced 4/20 under load before, 60/60 after; clean 0963125a on 4ba1b6f / base 86752c4; CI 2201. No other racy Phase 3 tests in cmd/ketju.
+- The maintainer was given the recommendation and the hosts' details; the runner configs (/home/runner/config.yml) are not readable or writable from the sothr account, so the change is theirs.
