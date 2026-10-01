@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3VHSYFR176FWWBAPV8PHSEK
 title: Write back index entries an Extended replay changes before trusting it
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -20,17 +20,10 @@ references:
     path: null
   - ref: pr:312
     path: null
-claim:
-  actor: agent:claude-code/phase3-run-vhsyfr
-  branch: run/vhsyfr-extended-writeback
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad7c0e59b3133396e
-  commit: b55ff738a2ca832472bb498e59226009e8413911
-  session: null
-  claimed_at: 2026-10-01T13:19:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T10:57:46Z
-updated_at: 2026-10-01T13:24:29Z
+updated_at: 2026-10-01T13:44:48Z
 created_by:
   id: agent:claude-code/phase3-run-crj3b
   name: ""
@@ -72,7 +65,7 @@ It is outside the search ticket's scope: the search index reads the same entries
 ## Acceptance criteria
 
 - [x] threadcache.openThread writes the whole recovered index to the .idx (temp file beside it, rename, fsync of file and directory unless SyncNever) before the actor starts whenever the outcome is not Trusted; TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted passes for Extended, Rebuilt with no .idx and Rebuilt with a broken header, for author Delete, moderator hide, suspension hide, auto-hide, Redacted, Edit and Restore, each reopen Trusted and equal entry for entry to a full rebuild
-- [ ] The PR quotes TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted failing on main (a commit holding only the test) for Delete, moderator hide, auto-hide and Redacted under both Extended and Rebuilt, and passing on the reviewed head
+- [x] The PR quotes TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted failing on main (a commit holding only the test) for Delete, moderator hide, auto-hide and Redacted under both Extended and Rebuilt, and passing on the reviewed head
 - [x] TestAWriteBackIsTrustedWithoutAnAppend and TestAFailedWriteBackNeverMarksTheIndexTrusted pass: an Extended open closed with no append reopens Trusted with 0 bytes replayed, and a failed write-back leaves the .idx header short of the log so the deleted post stays hidden
 - [x] The actor writes no index header after a failed entry write, a failed index Sync or a diverged Apply, for the rest of its life including Close; TestAFailedEntryWriteLeavesTheHeaderUnwritten and TestAFailedIndexSyncLeavesTheHeaderUnwritten pass
 - [x] A batch that changes an existing entry fsyncs the index between its entry writes and its header write unless SyncNever, and a batch of new posts only adds no index fsync; TestAMutationIsSyncedToTheIndexBeforeTheHeaderCoversIt passes, and a ticket note records BenchmarkAppendLatency for a post and a delete on main and on the head
@@ -199,3 +192,28 @@ A post costs the same as before. A delete pays one more index fsync, about 0.5 m
 **agent:claude-code/phase3-run-vhsyfr** at 2026-10-01T13:21:09Z
 
 Implementation notes. (1) The plan made a write-back fail by making the shard directory read-only. CI may run as root, which writes there anyway and would skip the test, so TestAFailedWriteBackNeverMarksTheIndexTrusted puts a non-empty directory where the write-back's temp file goes (<id>.idx.writeback), which fails for any user. TestDiscardUnverifiedIndexesFailsWhenAnIndexStays does the same at the .idx path, to cover the criterion's 'a removal failure stops serve from starting': the discard returns an error and writes no marker, and serve fails on that error. (2) The actor's 'changed an existing entry' test is changesEntry: Edit, Delete, Restore, or a post Redacted, with a non-zero ordinal. (3) A diverged Apply sets the same sticky flag as a failed entry write or index sync. No test provokes it, because the actor validates every record before the log write; the code path is the same flag the two failure tests prove. (4) TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted failed on main for all 21 cases (7 records x 3 crashes) at commit 8e997ab7, which holds the test alone over origin/main eaf54f64. The PR quotes the run.
+
+**agent:claude-code/phase3-run-vhsyfr** at 2026-10-01T13:44:26Z
+
+Review and CI on PR #312, head 26a7c0be, base eaf54f64:
+
+- Terva clean full review: run 0e5e370d (Actions #2068), no findings. It suggested looking first at the write-back failure path and the one-time discard path, so a follow-up was requested on both and on the actor changes. The follow-up, run fe6a0a57 (Actions #2074), also had no findings. Its one caveat: it could not see the startup steps before the discard. They are: the lock, the pending-redaction check, and the threads/ and blobs/ mkdir. None of them opens a thread or reads an index, and `threadcache.New` comes after the discard.
+- CI run 2066 passed. Its "go test (race)" step log shows `ok` for cmd/ketju (213.0 s), internal/store/threadcache (2.5 s) and internal/store/threadlog (14.5 s).
+
+Criterion 9 stays unticked. The step runs `go test -race ./...` without `-v`, so its log names packages, not tests, and "the merged head" can only be checked after the merge. The new tests are in the three packages above, and each package passed on the PR head.
+
+## Summary
+
+Landed in PR #312, which was groomed in #306.
+
+**Write-back.** An `Extended` or `Rebuilt` open in `threadcache.openThread` now writes the whole recovered index back (`writeBack`: temp file `<id>.idx.writeback`, fsync, rename, directory fsync, with no fsyncs under `SyncNever`) before the actor starts. A failed write-back is logged through the new `threadcache.Options.Logger`, and the actor runs over `discardIndex`.
+
+**Actor** (`internal/store/threadlog/actor.go`). A sticky `untrusted` flag stops every later header after a failed entry write, a failed index fsync or a diverged `Apply`. A batch that rewrites an existing entry (`changesEntry`) fsyncs the index before its header. Posts cost the same. A delete pays about 0.5 ms more at p50, as recorded in the benchmark note.
+
+**Existing deployments.** `ketju serve` calls `threadcache.DiscardUnverifiedIndexes` before `threadcache.New`. It removes every `.idx` once per data directory and writes `<data>/index-writeback`, and a failure stops the start. Each thread rebuilds and writes back its index on first open, so the dogfood instance needs no manual step. `ketju fsck --rebuild` stays the manual repair.
+
+**Docs.** docs/03 write path step 4 and the index open path describe all of this.
+
+**Tests.** The crash test, `TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted`, fails on main for all 21 cases (7 records x 3 crashes) and passes on the head.
+
+**Unticked.** Criterion 9 is not ticked. CI's race step does not name tests, and the merged head is checked only after the merge. The three packages passed on the PR head. The follow-up is TKT-01M3VRFRFW (Order a new post's index entry before the header that covers it), a draft with no milestone.
