@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T17:25:56Z
+updated_at: 2026-10-01T17:35:04Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -172,3 +172,7 @@ Proof, 2026-10-01, on the fix (commit 22447505, branch run/tszhsw-slow-mode-phon
 ### What the diff does not change
 
 `playwright.config.ts` and `e2e/thread-moderation.spec.ts` are unchanged. The diff adds no retry, no timeout and no skip. `ThreadScreen.test.tsx` gains the two cases and changes one helper, `checked`, which reads the chosen radio. It now reads each radio's `checked` property instead of the `:checked` selector. happy-dom's selector answered with the radio from before a click when no render followed the click, which would have hidden the second case's choice.
+
+**agent:claude-code/phase3-tszhsw** at 2026-10-01T17:35:04Z
+
+Proof under TKT-01M3SZ3GCE's exact recipe, 2026-10-01, on the fix at c7b16e85. The image was golang:1.27-alpine with Alpine's Chromium 152.0.7977.82, installed as ci.yml installs them. Three podman containers ran at once, each with --cpus=1. The host carried 48 busy loops and a loop writing 256 MiB with fsync, and its load average peaked at 74.4. Each container ran `npx playwright test e2e/thread-moderation.spec.ts --project=phone --repeat-each=20 -x` and passed 144 of 144 in 7.3 to 7.4 min. That is 60 consecutive phone runs of the slow-mode test across the three, with no failure. This adds to the host proof in the note before.
