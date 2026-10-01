@@ -169,10 +169,12 @@ function note(o: OwnState, kind: 'edit' | 'delete'): string | null {
 // for it (TKT-01M3QHKD21). Cancel has focus when it opens, so a second
 // Enter does not delete; Escape cancels. Neither closes it while the delete
 // is in flight, since a refusal is said here and would have nowhere to go
-// (Terva review 1610).
+// (Terva review 1610). Focus moves in a layout effect, in the press that
+// opened it: a frame later, an Enter pressed straight away had already gone
+// to the control that opened it, or to the body (TKT-01M3TV4HBF).
 export function DeleteConfirm({ o, ordinal }: { o: OwnState; ordinal: number }) {
   const cancel = useRef<HTMLButtonElement>(null);
-  useEffect(() => cancel.current?.focus(), []);
+  useLayoutEffect(() => cancel.current?.focus(), []);
   const text = note(o, 'delete');
   return (
     <div
@@ -270,10 +272,11 @@ export function PostEditor({
 
   // While the source loads, or when it failed to, focus is on this block's
   // first button: the control that opened the editor may be gone, as a
-  // phone's More item is. Once it loads, the composer takes it.
+  // phone's More item is. Once it loads, the composer takes it. It moves in
+  // a layout effect, as DeleteConfirm's does (TKT-01M3TV4HBF).
   const status = useRef<HTMLDivElement>(null);
   const waiting = loaded === null || 'error' in loaded;
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (waiting) status.current?.querySelector('button')?.focus();
   }, [loaded]);
 

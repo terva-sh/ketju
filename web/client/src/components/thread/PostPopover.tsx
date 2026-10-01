@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'preact/hooks';
+import { useLayoutEffect, useRef } from 'preact/hooks';
 import { apiGet } from '../../api/client';
 import type { Post as PostDTO } from '../../api/dto';
 import { useResource } from '../../api/resource';
@@ -23,14 +23,23 @@ export function PostPopover({ thread, ordinal, onClose }: { thread: ThreadRef; o
   // reply-to or quote link, when focus was still inside (TKT-01M29CGBXK).
   // Safari does not focus a link on click, so that may be the body, and the
   // page's focus guard then takes it (components/focus.ts).
-  useEffect(() => {
+  //
+  // All of it happens in a layout effect, in the same task as the press that
+  // opened the popover, so a key pressed straight away reaches it rather
+  // than the link (TKT-01M3TV4HBF). Escape is heard on the document, and one
+  // a dialog has already taken is left alone.
+  useLayoutEffect(() => {
     const opener = document.activeElement;
     box.current?.focus();
-    const key = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    addEventListener('keydown', key);
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape' || e.defaultPrevented) return;
+      e.preventDefault();
+      onClose();
+    };
+    document.addEventListener('keydown', key);
     const root = box.current;
     return () => {
-      removeEventListener('keydown', key);
+      document.removeEventListener('keydown', key);
       const inside = !document.activeElement || document.activeElement === document.body || root?.contains(document.activeElement);
       if (inside && isControl(opener)) opener.focus({ preventScroll: true });
     };

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { Icon } from '../Icon';
 import { permalink, type FlagHandler, type ThreadRef } from './Post';
 
@@ -46,7 +46,12 @@ export function PostMore({
   const button = useRef<HTMLButtonElement>(null);
   const list = `post-more-${ordinal}`;
 
-  useEffect(() => {
+  // The listeners go on in the press that opened the list and come off in
+  // the commit that closes it, as the shell's MoreMenu's do: a plain effect
+  // missed an Escape pressed straight after opening, and took one pressed
+  // straight after choosing an item, from wherever that item had put focus
+  // (TKT-01M3TV4HBF).
+  useLayoutEffect(() => {
     if (!open) return;
     // Focus was on an item, which is about to be hidden, so it goes back to
     // the button, as the shell's MoreMenu does.

@@ -593,3 +593,58 @@ describe("a moderator's controls", () => {
     expect(footer(root)).toEqual(['quote', 'reply', 'flag']);
   });
 });
+
+// The confirmation and the editor's status block take focus in the press
+// that opened them, not a frame later, so a key pressed straight away lands
+// in them rather than on the control that opened them (TKT-01M3TV4HBF). The
+// presses are dispatched outside act, which would run the effects and hide
+// the race.
+describe('a key pressed straight after opening', () => {
+  // enter presses Enter where focus is, as a browser does: a button that
+  // has focus and whose keydown nobody took is clicked.
+  const enter = () => {
+    const at = document.activeElement as HTMLElement;
+    const taken = !at.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }));
+    if (!taken && at instanceof HTMLButtonElement) at.click();
+  };
+  // lull lets the raced frame run before the test goes on.
+  const lull = () => act(() => new Promise((r) => setTimeout(r, 50)));
+
+  it('Enter one microtask after delete opens the confirmation lands on Cancel and deletes nothing', async () => {
+    const root = await renderAt(`/t/${id}/a`);
+    const del = control(root, 'delete');
+    del.focus();
+    try {
+      del.click();
+      await Promise.resolve();
+      expect(confirmOf(root)).not.toBeNull();
+      expect(document.activeElement).toBe(confirmButton(root, 'Cancel'));
+      enter();
+      await Promise.resolve();
+      expect(confirmOf(root)).toBeNull();
+    } finally {
+      await lull();
+    }
+    expect(sent('DELETE')).toEqual([]);
+  });
+
+  it('while the source loads, a key one microtask after opening lands in the status block', async () => {
+    routes[`GET ${postUrl}/source`] = () => new Promise<Answer>(() => {});
+    const root = await renderAt(`/t/${id}/a`);
+    const edit = control(root, 'edit');
+    edit.focus();
+    try {
+      edit.click();
+      await Promise.resolve();
+      expect(editor(root)?.textContent).toContain('Loading the post…');
+      expect(editor(root)!.contains(document.activeElement)).toBe(true);
+      // Focus is on Cancel, the block's one button while the source loads.
+      enter();
+      await Promise.resolve();
+      expect(editor(root)).toBeNull();
+    } finally {
+      await lull();
+    }
+    expect(sent('PATCH')).toEqual([]);
+  });
+});
