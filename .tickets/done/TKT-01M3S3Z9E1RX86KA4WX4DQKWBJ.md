@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-30T12:17:32Z
-updated_at: 2026-10-01T19:03:49Z
+updated_at: 2026-10-01T19:03:59Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -42,10 +42,10 @@ At the phone breakpoint, stack the header and put reply before quote in the foot
 
 ## Acceptance criteria
 
-- [ ] At 390 px a post's footer reads the reply expander when offered, reply, quote, then More at the right edge, in DOM and focus order; at 1440 px the order is unchanged (Post.test.tsx, e2e/thread.spec.ts)
-- [ ] The thread page passes axe at 390 px and 1440 px in both themes (e2e/a11y.spec.ts), e2e/targets.spec.ts passes, and thread-phone-{light,dark}.png are refreshed
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
-- [ ] At 390 px a post's header draws the 30 px avatar, author and role badge on the first line, and ordinal, time, edited mark and then the reply-to indicator on the second, with the reply-to at that line's right end so focus order follows reading order. The body takes the full width below. At 1440 px the header is one line as before (e2e/thread.spec.ts, by geometry and by Tab from #post-55's ordinal)
+- [x] At 390 px a post's footer reads the reply expander when offered, reply, quote, then More at the right edge, in DOM and focus order; at 1440 px the order is unchanged (Post.test.tsx, e2e/thread.spec.ts)
+- [x] The thread page passes axe at 390 px and 1440 px in both themes (e2e/a11y.spec.ts), e2e/targets.spec.ts passes, and thread-phone-{light,dark}.png are refreshed
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
+- [x] At 390 px a post's header draws the 30 px avatar, author and role badge on the first line, and ordinal, time, edited mark and then the reply-to indicator on the second, with the reply-to at that line's right end so focus order follows reading order. The body takes the full width below. At 1440 px the header is one line as before (e2e/thread.spec.ts, by geometry and by Tab from #post-55's ordinal)
 
 ## Implementation plan
 
