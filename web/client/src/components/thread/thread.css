@@ -877,6 +877,46 @@
     width: 30px;
     height: 30px;
   }
+  /* A post on the page (docs/06 "Mobile", TKT-01M3S3Z9E1): the avatar beside
+     a two-line header, author and badge over ordinal, time and marks, with
+     the reply-to at the right end of the second line, so the header's two
+     links, the ordinal then the reply-to, read left to right in focus order.
+     The DOM keeps the desktop's order; CSS order and a line break stack it.
+     The body and all below it take the full width. Tombstones, the reply
+     expander's copies and the popover keep their own layouts. */
+  .posts > article.post {
+    display: grid;
+    grid-template-columns: 30px minmax(0, 1fr);
+    gap: 6px 8px;
+  }
+  .posts > article.post > .avatar {
+    align-self: center;
+  }
+  .posts > article.post > .post-main {
+    display: contents;
+  }
+  .posts > article.post > .post-main > * {
+    grid-column: 1 / -1;
+  }
+  .posts > article.post > .post-main > .post-header {
+    grid-column: 2;
+    gap: 0 6px;
+  }
+  .posts > article.post .post-header > * {
+    order: 2;
+  }
+  .posts > article.post .post-header > .author,
+  .posts > article.post .post-header > .role-badge {
+    order: 0;
+  }
+  .posts > article.post .post-header::after {
+    content: '';
+    order: 1;
+    flex-basis: 100%;
+  }
+  .posts > article.post .replies {
+    margin-left: 0;
+  }
   .pager {
     padding: 0 16px;
   }

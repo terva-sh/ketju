@@ -585,7 +585,11 @@ arrangement.
   then quote, then "more" at the right edge, as the phone mockup draws it.
   The header puts the 30 px avatar in its first row, with the author and
   role badge on one line beside it and the ordinal, time and edited mark on
-  the next, and the body takes the full width below (TKT-01M3S3Z9E1).
+  the next, and the body takes the full width below (TKT-01M3S3Z9E1). The
+  reply-to indicator sits at the right end of that second line, so the
+  header's two links, the ordinal and then the reply-to, read left to right
+  in focus order; at the right of the first line, Tab would move from the
+  second line back up to the first (Terva review 1725).
   Alternatives: reply, quote and then the expander, read as an order from
   this sentence, lost because it moves the expander away from where "Post
   anatomy" and both thread mockups put it, so the footer would differ

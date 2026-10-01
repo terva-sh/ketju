@@ -95,6 +95,32 @@ export function Post({
   // Conversation is the post's reply chain lens, on a post that answers
   // another or has answers (docs/06 "the lens bar").
   const chain = post.reply_to !== null || post.reply_count > 0 ? lensHref(thread, `chain:${post.ordinal}`) : undefined;
+  // On a phone the footer reads reply before quote, as the phone mockup draws
+  // it; the desktop keeps quote first (docs/06 "Mobile" and "Post anatomy").
+  // Each is built once and placed, so DOM, focus and visual order agree.
+  const phone = isPhone.value;
+  const quote = actions && (
+    <button
+      type="button"
+      class="hit"
+      data-post-action="quote"
+      onMouseDown={(e) => {
+        selected.current = selectionIn(bodyOf(e.currentTarget));
+      }}
+      onClick={(e) => {
+        const body = bodyOf(e.currentTarget);
+        actions.quote(post.ordinal, selected.current ?? selectionIn(body) ?? bodyText(body));
+        selected.current = null;
+      }}
+    >
+      quote
+    </button>
+  );
+  const reply = actions && (
+    <button type="button" class="hit" data-post-action="reply" onClick={() => actions.reply(post.ordinal)}>
+      reply
+    </button>
+  );
   return (
     <article
       class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' removed' : '')}
@@ -124,29 +150,8 @@ export function Post({
         {o.mode === 'delete' && <DeleteConfirm o={o} ordinal={post.ordinal} />}
         <footer class="post-footer">
           {expander && <ReplyToggle post={post} open={open} onToggle={toggle} />}
-          {actions && o.mode !== 'edit' && (
-            <>
-              <button
-                type="button"
-                class="hit"
-                data-post-action="quote"
-                onMouseDown={(e) => {
-                  selected.current = selectionIn(bodyOf(e.currentTarget));
-                }}
-                onClick={(e) => {
-                  const body = bodyOf(e.currentTarget);
-                  actions.quote(post.ordinal, selected.current ?? selectionIn(body) ?? bodyText(body));
-                  selected.current = null;
-                }}
-              >
-                quote
-              </button>
-              <button type="button" class="hit" data-post-action="reply" onClick={() => actions.reply(post.ordinal)}>
-                reply
-              </button>
-            </>
-          )}
-          {isPhone.value ? (
+          {actions && o.mode !== 'edit' && (phone ? <>{reply}{quote}</> : <>{quote}{reply}</>)}
+          {phone ? (
             <PostMore
               thread={thread}
               ordinal={post.ordinal}

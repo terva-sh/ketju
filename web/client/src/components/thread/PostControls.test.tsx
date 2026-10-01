@@ -336,7 +336,8 @@ describe("the viewer's own post", () => {
   it('on a phone edit and delete are under More', async () => {
     isPhone.value = true;
     const root = await renderAt(`/t/${id}/a`);
-    expect(footer(root)).toEqual(['quote', 'reply']);
+    // Reply before quote on a phone (docs/06 "Mobile", TKT-01M3S3Z9E1).
+    expect(footer(root)).toEqual(['reply', 'quote']);
     const more = at(root).querySelector<HTMLButtonElement>('[data-post-more]')!;
     await click(more);
     expect([...at(root).querySelectorAll('.post-more-list li')].map((li) => li.textContent)).toEqual([

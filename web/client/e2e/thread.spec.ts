@@ -28,6 +28,8 @@ const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_
 const onPage = 3;
 const lastRead = 53;
 
+type Box = { x: number; y: number; width: number; height: number };
+
 test('the thread page renders the mockup’s parts', async ({ page, isMobile }, info) => {
   await setReadPosition(page.request, seed.thread, lastRead);
   await page.goto(`${seed.thread}?page=${onPage}`);
@@ -66,6 +68,53 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
   await expect(removed).toHaveClass(/\btombstone\b/);
   await expect(removed.locator('.tombstone-line .ordinal')).toHaveText('#57');
   await expect(removed.locator('.tombstone-text')).toHaveText('Post removed by author');
+
+  // The header and footer at each width (TKT-01M3S3Z9E1; docs/06 "Mobile"
+  // and "Post anatomy"). On the phone the header stacks: author and badge on
+  // the first line, then ordinal and time, with the reply-to at the right
+  // end of that second line, so Tab goes from the ordinal to the reply-to
+  // without moving back up. The body takes the full width below the avatar,
+  // and the footer reads reply before quote, with More last. On the desktop
+  // the header is one line and the footer reads quote before reply.
+  const mod = page.locator('#post-56');
+  const box = async (l: Locator) => (await l.boundingBox())!;
+  const sameLine = (a: Box, b: Box) => a.y < b.y + b.height && b.y < a.y + a.height;
+  const author = await box(mod.locator('.author'));
+  const ordinal = await box(mod.locator('.ordinal'));
+  const actions = mod.locator('.post-footer [data-post-action=reply], .post-footer [data-post-action=quote]');
+  const [firstAction, secondAction] = [await box(actions.nth(0)), await box(actions.nth(1))];
+  expect(firstAction.x).toBeLessThan(secondAction.x);
+  if (isMobile) {
+    expect(author.y + author.height / 2).toBeLessThan(ordinal.y);
+    expect(sameLine(await box(mod.locator('.role-badge')), author)).toBe(true);
+    expect(sameLine(await box(mod.locator('.post-header time')), ordinal)).toBe(true);
+    // The body starts at the post's left padding, not beside the avatar.
+    const inset = await mod.evaluate((el) => {
+      const s = getComputedStyle(el);
+      const body = el.querySelector('.post-body')!.getBoundingClientRect();
+      return body.left - el.getBoundingClientRect().left - parseFloat(s.borderLeftWidth) - parseFloat(s.paddingLeft);
+    });
+    expect(Math.abs(inset)).toBeLessThan(1);
+    await expect(actions).toHaveText(['reply', 'quote']);
+    const footer = mod.locator('.post-footer > *');
+    await expect(footer.last()).toHaveClass(/\bpost-more\b/);
+    expect((await box(footer.last())).x).toBeGreaterThan(secondAction.x);
+
+    const answer = page.locator('#post-55');
+    const o = answer.locator('.ordinal');
+    const rt = answer.locator('.reply-to');
+    const [ob, rb] = [await box(o), await box(rt)];
+    expect(sameLine(rb, ob)).toBe(true);
+    expect(rb.x).toBeGreaterThan(ob.x + ob.width);
+    await o.focus();
+    await page.keyboard.press('Tab');
+    await expect(rt).toBeFocused();
+    // So the screenshots below do not draw its focus ring.
+    await rt.blur();
+  } else {
+    expect(sameLine(author, ordinal)).toBe(true);
+    await expect(actions).toHaveText(['quote', 'reply']);
+  }
 
   // The divider sits between the last read post and the first unread, and
   // only the posts after it carry the unread edge.

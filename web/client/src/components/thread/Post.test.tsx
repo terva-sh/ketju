@@ -162,3 +162,53 @@ describe('conversation', () => {
     expect(list.querySelector('[data-conversation]')?.getAttribute('href')).toBe(href);
   });
 });
+
+// The order of a post's footer and header (TKT-01M3S3Z9E1; docs/06 "Mobile"
+// and "Post anatomy"): on a phone the footer reads the expander, reply,
+// quote, then More; the desktop keeps quote before reply. The header's DOM
+// order is the same at both widths, since the phone stacks it in CSS.
+describe('the order of the footer and header', () => {
+  const actions = { quote: vi.fn(), reply: vi.fn() };
+  async function drawAll(p: PostDTO) {
+    await act(async () =>
+      render(<Post post={p} thread={thread} unread={false} actions={actions} onFlag={vi.fn()} expander />, root),
+    );
+  }
+  // footer names the footer's controls in DOM order, which is focus order.
+  const footer = () =>
+    [...root.querySelectorAll('.post-footer > *')].map((e) =>
+      e.matches('[data-replies]')
+        ? 'expander'
+        : e.matches('.post-more')
+          ? 'more'
+          : (e.getAttribute('data-post-action') ?? e.textContent),
+    );
+
+  it('orders the phone footer expander, reply, quote, then More', async () => {
+    isPhone.value = true;
+    await drawAll(post({ reply_count: 2 }));
+    expect(footer()).toEqual(['expander', 'reply', 'quote', 'more']);
+  });
+
+  it('keeps the desktop footer order', async () => {
+    await drawAll(post({ reply_count: 2 }));
+    expect(footer()).toEqual(['expander', 'quote', 'reply', 'link', 'conversation', 'flag', 'history']);
+  });
+
+  it("keeps the header's DOM order", async () => {
+    for (const phone of [false, true]) {
+      isPhone.value = phone;
+      await drawAll(
+        post({
+          author: { ...post().author, role: 'moderator' },
+          edited_at: Date.now(),
+          edited_by_moderator: false,
+          reply_to: 1,
+          reply_to_suppressed: false,
+        }),
+      );
+      const names = [...root.querySelectorAll('.post-header > *')].map((e) => e.className || e.localName);
+      expect(names, `phone ${phone}`).toEqual(['ordinal hit', 'author', 'role-badge', 'time', 'edited', 'reply-to hit']);
+    }
+  });
+});
