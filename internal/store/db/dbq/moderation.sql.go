@@ -588,6 +588,7 @@ WHERE blobs.hash = ?1
   AND blobs.unreferenced_since <= CAST(?2 AS INTEGER)
   AND NOT EXISTS (SELECT 1 FROM users WHERE instr(lower(users.avatar_blob), blobs.hash) > 0)
   AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(lower(drafts.source), blobs.hash) > 0)
+  AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(drafts.attachments, blobs.hash) > 0)
 `
 
 type DeleteCollectableBlobParams struct {
@@ -599,10 +600,14 @@ type DeleteCollectableBlobParams struct {
 // collectable at the moment of the delete: still at zero references, still
 // at zero since before cutoff, and named by no user's avatar and no draft.
 // A reference added after the candidates were read therefore wins. The
-// avatar and draft conditions are guards: nothing writes either reference
-// yet, and the delete should not be what finds out that something now does.
-// Both compare in lower case, as the log scan does, because the hash is
-// stored lower case and free text may name it in either (review 1157).
+// avatar and draft-source conditions are guards: nothing writes either
+// reference yet, and the delete should not be what finds out that something
+// now does. Both compare in lower case, as the log scan does, because the
+// hash is stored lower case and free text may name it in either (review
+// 1157). A draft's attachments do name blobs (TKT-01M3V73DP6) and add no
+// reference, so a blob only a draft attaches is kept for as long as the
+// draft lists it. They are stored as the attach check answers them, lower
+// case, and need no lower().
 func (q *Queries) DeleteCollectableBlob(ctx context.Context, arg DeleteCollectableBlobParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteCollectableBlob, arg.Hash, arg.Cutoff)
 	if err != nil {

@@ -3,6 +3,7 @@ package threads
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strings"
 
@@ -199,22 +200,73 @@ func (s *Service) attachmentsOf(ctx context.Context, id threadid.ID, posts []thr
 	for i, hs := range hashes {
 		for _, h := range hs {
 			m, ok := meta[key{posts[i].Author, h}]
-			if !ok {
-				out[i] = append(out[i], dto.Attachment{Hash: h, OriginalName: "attachment"})
-				continue
-			}
-			a := dto.Attachment{Hash: h, Size: m.Size, MIME: m.Mime, OriginalName: m.OriginalName}
-			if a.OriginalName == "" {
-				a.OriginalName = "attachment" + extensionOf(m.Mime)
-			}
-			if m.Width.Valid && m.Height.Valid {
-				w, h := int(m.Width.Int64), int(m.Height.Int64)
-				a.Width, a.Height = &w, &h
-			}
-			out[i] = append(out[i], a)
+			out[i] = append(out[i], attachmentDTO(h, m, ok))
 		}
 	}
 	return out, nil
+}
+
+// attachmentDTO draws hash h from its AttachmentMeta row m, read for the
+// person whose upload names it: a post's author, or a draft's owner. A hash
+// with no row (ok false) is listed with the hash alone, and an owner with no
+// upload of it gets a name made from the type.
+func attachmentDTO(h string, m dbq.AttachmentMetaRow, ok bool) dto.Attachment {
+	if !ok {
+		return dto.Attachment{Hash: h, OriginalName: "attachment"}
+	}
+	a := dto.Attachment{Hash: h, Size: m.Size, MIME: m.Mime, OriginalName: m.OriginalName}
+	if a.OriginalName == "" {
+		a.OriginalName = "attachment" + extensionOf(m.Mime)
+	}
+	if m.Width.Valid && m.Height.Valid {
+		w, h := int(m.Width.Int64), int(m.Height.Int64)
+		a.Width, a.Height = &w, &h
+	}
+	return a
+}
+
+// draftAttachments answers a draft's stored attachments (TKT-01M3V73DP6),
+// in the order saved, each named as the viewer uploaded it: the attach
+// check let only their own uploads in. Never nil, so the DTO says [] rather
+// than null.
+func (s *Service) draftAttachments(ctx context.Context, v domain.Viewer, stored string) ([]dto.Attachment, error) {
+	var hashes []string
+	if err := json.Unmarshal([]byte(stored), &hashes); err != nil {
+		return nil, fmt.Errorf("threads: a draft's attachments: %w", err)
+	}
+	out := make([]dto.Attachment, 0, len(hashes))
+	if len(hashes) == 0 {
+		return out, nil
+	}
+	meta := make(map[string]dbq.AttachmentMetaRow, len(hashes))
+	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		rows, err := q.AttachmentMeta(ctx, dbq.AttachmentMetaParams{AuthorID: v.UserID, Hashes: hashes})
+		if err != nil {
+			return fmt.Errorf("threads: attachment metadata: %w", err)
+		}
+		for _, r := range rows {
+			meta[r.Hash] = r
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, h := range hashes {
+		m, ok := meta[h]
+		out = append(out, attachmentDTO(h, m, ok))
+	}
+	return out, nil
+}
+
+// encodeAttachments is the drafts.attachments column for hashes: a JSON
+// array, [] for none, never null, which the column's CHECK refuses.
+func encodeAttachments(hashes []string) (string, error) {
+	if len(hashes) == 0 {
+		return "[]", nil
+	}
+	b, err := json.Marshal(hashes)
+	return string(b), err
 }
 
 // extensionOf names a file of a stored type, for an attachment whose author

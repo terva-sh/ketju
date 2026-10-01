@@ -767,6 +767,39 @@ func TestRedactDeletesOnlyUnsharedBlobs(t *testing.T) {
 	}
 }
 
+// TestRedactKeepsDraftAttachedBlob is TKT-01M3V73DP6's AC4: a redacted
+// post's only blob is kept, file and row, while its author's draft still
+// attaches it, and redact says why. The reference the post held is dropped
+// all the same, and no blob.deleted row is written.
+func TestRedactKeepsDraftAttachedBlob(t *testing.T) {
+	w := newRedactWorld(t)
+	h := w.blob("posted, then drafted again", 1)
+	id := w.thread("A thread")
+	n := w.post(id, "with a file", h)
+	w.ready()
+	d := openDB(t, w.data)
+	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		_, err := q.UpsertThreadDraft(t.Context(), dbq.UpsertThreadDraftParams{UserID: w.users["alice"],
+			ThreadID: sql.NullInt64{Int64: int64(id), Valid: true}, Source: "trying again",
+			Attachments: `["` + h + `"]`, Now: 1})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+
+	out := w.mustRedact(postArgs(id, n)...)
+	if want := "kept blob " + h + ": another post, an avatar or a draft still refers to it"; !strings.Contains(out, want) {
+		t.Errorf("redact said:\n%s\nwant a line %q", out, want)
+	}
+	if w.refcount(h) != 0 || !w.blobFile(h) {
+		t.Errorf("the draft's blob: refcount %d, file %v; want 0 and kept", w.refcount(h), w.blobFile(h))
+	}
+	if del := w.auditDetails("blob.deleted"); len(del) != 0 {
+		t.Errorf("blob.deleted rows %v", del)
+	}
+}
+
 // TestRedactAuditsOnlyCommittedDeletes and TestRedactBlobDeleteFailureKeepsTheFile:
 // a failure inside the blob's transaction leaves its row, its file where it
 // was, no .gc and no blob.deleted row; the rerun deletes it once.

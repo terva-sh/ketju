@@ -197,25 +197,28 @@ WHERE a.threads - coalesce(n.threads, 0) > 0;
 SELECT * FROM drafts WHERE user_id = ? AND thread_id = ?;
 
 -- PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
--- source and reply target, keeping its created_at, and a tombstone comes back
--- to life. A new row starts at revision 1 and each save adds one. The
--- conflict target names the partial index's predicate, which SQLite requires
--- to match it.
+-- source, reply target and attachments, keeping its created_at, and a
+-- tombstone comes back to life. A new row starts at revision 1 and each save
+-- adds one. The conflict target names the partial index's predicate, which
+-- SQLite requires to match it. attachments is a JSON array of the hashes the
+-- attach check answered (TKT-01M3V73DP6); saving one adds no reference.
 -- name: UpsertThreadDraft :one
-INSERT INTO drafts (user_id, thread_id, source, reply_to, created_at, updated_at, revision)
-VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(source), sqlc.arg(reply_to), sqlc.arg(now), sqlc.arg(now), 1)
+INSERT INTO drafts (user_id, thread_id, source, reply_to, attachments, created_at, updated_at, revision)
+VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(source), sqlc.arg(reply_to), sqlc.arg(attachments), sqlc.arg(now), sqlc.arg(now), 1)
 ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
 	source = excluded.source,
 	reply_to = excluded.reply_to,
+	attachments = excluded.attachments,
 	updated_at = excluded.updated_at,
 	deleted = 0,
 	revision = drafts.revision + 1
 RETURNING *;
 
 -- DELETE /drafts/{thread_id}: a live draft becomes a tombstone one revision
--- on. A tombstone, or a key with no row, is left as it is.
+-- on, holding no text and no attachments. A tombstone, or a key with no row,
+-- is left as it is.
 -- name: DeleteThreadDraft :execrows
-UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL,
+UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL, attachments = '[]',
 	revision = revision + 1, updated_at = sqlc.arg(now)
 WHERE user_id = sqlc.arg(user_id) AND thread_id = sqlc.arg(thread_id) AND deleted = 0;
 
@@ -223,14 +226,15 @@ WHERE user_id = sqlc.arg(user_id) AND thread_id = sqlc.arg(thread_id) AND delete
 SELECT * FROM drafts WHERE user_id = ? AND forum_id = ? AND thread_id IS NULL;
 
 -- PUT /forums/{slug}/draft: as UpsertThreadDraft, for the one new-thread
--- draft per (user, forum). The title is replaced as a whole, so a save
--- without one clears it.
+-- draft per (user, forum). The title and attachments are replaced as a
+-- whole, so a save without them clears them.
 -- name: UpsertForumDraft :one
-INSERT INTO drafts (user_id, forum_id, title, source, created_at, updated_at, revision)
-VALUES (sqlc.arg(user_id), sqlc.arg(forum_id), sqlc.arg(title), sqlc.arg(source), sqlc.arg(now), sqlc.arg(now), 1)
+INSERT INTO drafts (user_id, forum_id, title, source, attachments, created_at, updated_at, revision)
+VALUES (sqlc.arg(user_id), sqlc.arg(forum_id), sqlc.arg(title), sqlc.arg(source), sqlc.arg(attachments), sqlc.arg(now), sqlc.arg(now), 1)
 ON CONFLICT (user_id, forum_id) WHERE thread_id IS NULL DO UPDATE SET
 	title = excluded.title,
 	source = excluded.source,
+	attachments = excluded.attachments,
 	updated_at = excluded.updated_at,
 	deleted = 0,
 	revision = drafts.revision + 1
@@ -238,6 +242,6 @@ RETURNING *;
 
 -- DELETE /forums/{slug}/draft: as DeleteThreadDraft.
 -- name: DeleteForumDraft :execrows
-UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL,
+UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL, attachments = '[]',
 	revision = revision + 1, updated_at = sqlc.arg(now)
 WHERE user_id = sqlc.arg(user_id) AND forum_id = sqlc.arg(forum_id) AND thread_id IS NULL AND deleted = 0;

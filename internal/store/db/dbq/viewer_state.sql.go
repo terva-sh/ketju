@@ -11,7 +11,7 @@ import (
 )
 
 const deleteForumDraft = `-- name: DeleteForumDraft :execrows
-UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL,
+UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL, attachments = '[]',
 	revision = revision + 1, updated_at = ?1
 WHERE user_id = ?2 AND forum_id = ?3 AND thread_id IS NULL AND deleted = 0
 `
@@ -32,7 +32,7 @@ func (q *Queries) DeleteForumDraft(ctx context.Context, arg DeleteForumDraftPara
 }
 
 const deleteThreadDraft = `-- name: DeleteThreadDraft :execrows
-UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL,
+UPDATE drafts SET deleted = 1, source = '', reply_to = NULL, title = NULL, attachments = '[]',
 	revision = revision + 1, updated_at = ?1
 WHERE user_id = ?2 AND thread_id = ?3 AND deleted = 0
 `
@@ -44,7 +44,8 @@ type DeleteThreadDraftParams struct {
 }
 
 // DELETE /drafts/{thread_id}: a live draft becomes a tombstone one revision
-// on. A tombstone, or a key with no row, is left as it is.
+// on, holding no text and no attachments. A tombstone, or a key with no row,
+// is left as it is.
 func (q *Queries) DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, deleteThreadDraft, arg.Now, arg.UserID, arg.ThreadID)
 	if err != nil {
@@ -151,7 +152,7 @@ func (q *Queries) ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadR
 }
 
 const getForumDraft = `-- name: GetForumDraft :one
-SELECT id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted FROM drafts WHERE user_id = ? AND forum_id = ? AND thread_id IS NULL
+SELECT id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted, attachments FROM drafts WHERE user_id = ? AND forum_id = ? AND thread_id IS NULL
 `
 
 type GetForumDraftParams struct {
@@ -174,6 +175,7 @@ func (q *Queries) GetForumDraft(ctx context.Context, arg GetForumDraftParams) (D
 		&i.Title,
 		&i.Revision,
 		&i.Deleted,
+		&i.Attachments,
 	)
 	return i, err
 }
@@ -201,7 +203,7 @@ func (q *Queries) GetReadPosition(ctx context.Context, arg GetReadPositionParams
 
 const getThreadDraft = `-- name: GetThreadDraft :one
 
-SELECT id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted FROM drafts WHERE user_id = ? AND thread_id = ?
+SELECT id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted, attachments FROM drafts WHERE user_id = ? AND thread_id = ?
 `
 
 type GetThreadDraftParams struct {
@@ -231,6 +233,7 @@ func (q *Queries) GetThreadDraft(ctx context.Context, arg GetThreadDraftParams) 
 		&i.Title,
 		&i.Revision,
 		&i.Deleted,
+		&i.Attachments,
 	)
 	return i, err
 }
@@ -436,34 +439,37 @@ func (q *Queries) UnreadCount(ctx context.Context, arg UnreadCountParams) (int64
 }
 
 const upsertForumDraft = `-- name: UpsertForumDraft :one
-INSERT INTO drafts (user_id, forum_id, title, source, created_at, updated_at, revision)
-VALUES (?1, ?2, ?3, ?4, ?5, ?5, 1)
+INSERT INTO drafts (user_id, forum_id, title, source, attachments, created_at, updated_at, revision)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1)
 ON CONFLICT (user_id, forum_id) WHERE thread_id IS NULL DO UPDATE SET
 	title = excluded.title,
 	source = excluded.source,
+	attachments = excluded.attachments,
 	updated_at = excluded.updated_at,
 	deleted = 0,
 	revision = drafts.revision + 1
-RETURNING id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted
+RETURNING id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted, attachments
 `
 
 type UpsertForumDraftParams struct {
-	UserID  int64
-	ForumID sql.NullInt64
-	Title   sql.NullString
-	Source  string
-	Now     int64
+	UserID      int64
+	ForumID     sql.NullInt64
+	Title       sql.NullString
+	Source      string
+	Attachments string
+	Now         int64
 }
 
 // PUT /forums/{slug}/draft: as UpsertThreadDraft, for the one new-thread
-// draft per (user, forum). The title is replaced as a whole, so a save
-// without one clears it.
+// draft per (user, forum). The title and attachments are replaced as a
+// whole, so a save without them clears them.
 func (q *Queries) UpsertForumDraft(ctx context.Context, arg UpsertForumDraftParams) (Draft, error) {
 	row := q.db.QueryRowContext(ctx, upsertForumDraft,
 		arg.UserID,
 		arg.ForumID,
 		arg.Title,
 		arg.Source,
+		arg.Attachments,
 		arg.Now,
 	)
 	var i Draft
@@ -479,6 +485,7 @@ func (q *Queries) UpsertForumDraft(ctx context.Context, arg UpsertForumDraftPara
 		&i.Title,
 		&i.Revision,
 		&i.Deleted,
+		&i.Attachments,
 	)
 	return i, err
 }
@@ -514,36 +521,40 @@ func (q *Queries) UpsertReadPosition(ctx context.Context, arg UpsertReadPosition
 }
 
 const upsertThreadDraft = `-- name: UpsertThreadDraft :one
-INSERT INTO drafts (user_id, thread_id, source, reply_to, created_at, updated_at, revision)
-VALUES (?1, ?2, ?3, ?4, ?5, ?5, 1)
+INSERT INTO drafts (user_id, thread_id, source, reply_to, attachments, created_at, updated_at, revision)
+VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, 1)
 ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
 	source = excluded.source,
 	reply_to = excluded.reply_to,
+	attachments = excluded.attachments,
 	updated_at = excluded.updated_at,
 	deleted = 0,
 	revision = drafts.revision + 1
-RETURNING id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted
+RETURNING id, user_id, thread_id, forum_id, source, reply_to, created_at, updated_at, title, revision, deleted, attachments
 `
 
 type UpsertThreadDraftParams struct {
-	UserID   int64
-	ThreadID sql.NullInt64
-	Source   string
-	ReplyTo  sql.NullInt64
-	Now      int64
+	UserID      int64
+	ThreadID    sql.NullInt64
+	Source      string
+	ReplyTo     sql.NullInt64
+	Attachments string
+	Now         int64
 }
 
 // PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
-// source and reply target, keeping its created_at, and a tombstone comes back
-// to life. A new row starts at revision 1 and each save adds one. The
-// conflict target names the partial index's predicate, which SQLite requires
-// to match it.
+// source, reply target and attachments, keeping its created_at, and a
+// tombstone comes back to life. A new row starts at revision 1 and each save
+// adds one. The conflict target names the partial index's predicate, which
+// SQLite requires to match it. attachments is a JSON array of the hashes the
+// attach check answered (TKT-01M3V73DP6); saving one adds no reference.
 func (q *Queries) UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftParams) (Draft, error) {
 	row := q.db.QueryRowContext(ctx, upsertThreadDraft,
 		arg.UserID,
 		arg.ThreadID,
 		arg.Source,
 		arg.ReplyTo,
+		arg.Attachments,
 		arg.Now,
 	)
 	var i Draft
@@ -559,6 +570,7 @@ func (q *Queries) UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftPa
 		&i.Title,
 		&i.Revision,
 		&i.Deleted,
+		&i.Attachments,
 	)
 	return i, err
 }

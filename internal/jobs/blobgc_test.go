@@ -559,6 +559,63 @@ func TestAvatarAndDraftGuards(t *testing.T) {
 	}
 }
 
+// TestBlobGCKeepsDraftAttachment is TKT-01M3V73DP6's AC4: a blob at zero
+// references for eight days is kept while a draft's attachments name it,
+// of either kind, and collected once the draft is deleted. A blob beside it
+// that no draft names goes in the first pass, so the guard is the draft's
+// and not something keeping every blob.
+func TestBlobGCKeepsDraftAttachment(t *testing.T) {
+	w := newGCWorld(t)
+	w.now = t0.Add(8 * 24 * time.Hour)
+	reply, forum, loose := w.upload("in a reply draft", t0), w.upload("in a new-thread draft", t0), w.upload("in no draft", t0)
+	var uid, fid int64
+	w.write(func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		uid, err = q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "drafter",
+			DisplayName: "D", Status: "active", Role: "member", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+		if err != nil {
+			return err
+		}
+		res, err := tx.ExecContext(t.Context(), `INSERT INTO forums (slug, name, visibility, created_at, updated_at) VALUES ('f', 'F', 'public', 1, 1)`)
+		if err != nil {
+			return err
+		}
+		if fid, err = res.LastInsertId(); err != nil {
+			return err
+		}
+		if _, err := q.UpsertThreadDraft(t.Context(), dbq.UpsertThreadDraftParams{UserID: uid,
+			ThreadID: sql.NullInt64{Int64: 9, Valid: true}, Source: "see the file",
+			Attachments: `["` + reply + `"]`, Now: 1}); err != nil {
+			return err
+		}
+		_, err = q.UpsertForumDraft(t.Context(), dbq.UpsertForumDraftParams{UserID: uid,
+			ForumID: sql.NullInt64{Int64: fid, Valid: true}, Source: "",
+			Attachments: `["` + forum + `"]`, Now: 1})
+		return err
+	})
+	res := w.mustRun()
+	if !w.kept(reply) || !w.kept(forum) {
+		t.Fatalf("collected a blob a draft attaches: reply kept %v, new-thread kept %v", w.kept(reply), w.kept(forum))
+	}
+	if w.kept(loose) || res.Removed != 1 {
+		t.Fatalf("the blob no draft names: kept %v, removed %d", w.kept(loose), res.Removed)
+	}
+
+	w.write(func(q *dbq.Queries, _ *sql.Tx) error {
+		if _, err := q.DeleteThreadDraft(t.Context(), dbq.DeleteThreadDraftParams{Now: 2, UserID: uid,
+			ThreadID: sql.NullInt64{Int64: 9, Valid: true}}); err != nil {
+			return err
+		}
+		_, err := q.DeleteForumDraft(t.Context(), dbq.DeleteForumDraftParams{Now: 2, UserID: uid,
+			ForumID: sql.NullInt64{Int64: fid, Valid: true}})
+		return err
+	})
+	if res := w.mustRun(); w.kept(reply) || w.kept(forum) || res.Removed != 2 {
+		t.Fatalf("after the drafts were deleted: reply kept %v, new-thread kept %v, removed %d",
+			w.kept(reply), w.kept(forum), res.Removed)
+	}
+}
+
 // TestAFileThatWillNotGoKeepsItsRow: when the file cannot be removed, the
 // row delete rolls back, so the next pass finds the blob again rather than
 // leaving a file no row accounts for.

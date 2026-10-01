@@ -693,29 +693,45 @@ func userPostsOwn() UserPosts {
 }
 
 // draftReply is GET /drafts/{thread_id} for a reply to post 61, half
-// written; draftPlain is one that replies to the thread as a whole.
+// written, with a file attached (TKT-01M3V73DP6); draftPlain is one that
+// replies to the thread as a whole and attaches nothing.
 func draftReply() Draft {
 	reply := uint32(61)
 	return Draft{ThreadID: "3yymw47g00001", Source: "The bill was the smaller half, but",
-		ReplyTo: &reply, UpdatedAt: 1757500300000, Revision: 3}
+		ReplyTo: &reply, Attachments: []Attachment{{
+			Hash:         "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+			Size:         90112,
+			MIME:         "application/pdf",
+			OriginalName: "invoice-march.pdf",
+		}}, UpdatedAt: 1757500300000, Revision: 3}
 }
 
 func draftPlain() Draft {
 	return Draft{ThreadID: "3yymw47g00001", Source: "Agreed, and",
-		ReplyTo: nil, UpdatedAt: 1757500310000, Revision: 1}
+		ReplyTo: nil, Attachments: []Attachment{}, UpdatedAt: 1757500310000, Revision: 1}
 }
 
 // forumDraft is GET /forums/{slug}/draft for a new thread whose title is
-// half typed, its trailing space kept; forumDraftUntitled is one saved
-// before any title was typed, whose title is omitted.
+// half typed, its trailing space kept, with an image attached;
+// forumDraftUntitled is one saved before any title was typed, whose title
+// is omitted, and which attaches nothing.
 func forumDraft() ForumDraft {
 	title := "Moving the book club to "
 	return ForumDraft{Forum: "social", Title: &title, Source: "We keep losing the thread in the group chat.",
+		Attachments: []Attachment{{
+			Hash:         "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+			Size:         18422,
+			MIME:         "image/png",
+			OriginalName: "book-club-poll.png",
+			Width:        ptr(1280),
+			Height:       ptr(720),
+		}},
 		UpdatedAt: 1757500320000, Revision: 5}
 }
 
 func forumDraftUntitled() ForumDraft {
-	return ForumDraft{Forum: "social", Source: "Something about the", UpdatedAt: 1757500330000, Revision: 1}
+	return ForumDraft{Forum: "social", Source: "Something about the", Attachments: []Attachment{},
+		UpdatedAt: 1757500330000, Revision: 1}
 }
 
 // renderReply is POST /render for a reply that quotes post 61, whose quoted

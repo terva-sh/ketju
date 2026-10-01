@@ -230,7 +230,7 @@ func TestDraftFollowsTheUser(t *testing.T) {
 	}
 
 	saved := ok[dto.Draft](t, w.sendAs(laptop, http.MethodPut, draftPath(id), `{"source":"Half a thought","reply_to":1}`))
-	want := dto.Draft{ThreadID: id.String(), Source: "Half a thought", ReplyTo: ptrU32(1), UpdatedAt: dto.Millis(w.clock), Revision: 1}
+	want := dto.Draft{ThreadID: id.String(), Source: "Half a thought", ReplyTo: ptrU32(1), Attachments: []dto.Attachment{}, UpdatedAt: dto.Millis(w.clock), Revision: 1}
 	if renderJSON(t, saved) != renderJSON(t, want) {
 		t.Fatalf("saved %s, want %s", renderJSON(t, saved), renderJSON(t, want))
 	}

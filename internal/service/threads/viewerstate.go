@@ -143,6 +143,12 @@ func (s *Service) MarkUnread(ctx context.Context, v domain.Viewer, id threadid.I
 // When a read answers false, or a delete answers, the revision given is the
 // key's as it stands: a tombstone's, or 0 for a key that has never been
 // saved. The handlers send it as the Draft-Revision header on the 204.
+//
+// Both kinds keep the composer's attachments (TKT-01M3V73DP6, docs/07
+// "Drafts", decided by the run 2026-10-01). A save checks them as a post's
+// are, through checkAttachments, against the forum the post would go to,
+// but adds no reference: blob GC and ketju redact keep a blob a draft names
+// instead (DeleteCollectableBlob). A tombstone holds none.
 
 // DraftRequest is a draft reply as the composer holds it.
 type DraftRequest struct {
@@ -152,6 +158,10 @@ type DraftRequest struct {
 	Source string
 	// ReplyTo is the post the reply chip names, or nil for none.
 	ReplyTo *uint32
+	// Attachments are blob hashes the viewer uploaded, held to a post's
+	// attach rules (Attachments.Check). A save replaces the whole list, so
+	// none clears a stored one.
+	Attachments []string
 }
 
 // Draft is GET /drafts/{thread_id} (docs/07): the viewer's draft reply to the
@@ -179,7 +189,8 @@ func (s *Service) Draft(ctx context.Context, v domain.Viewer, id threadid.ID) (d
 	case row.Deleted != 0:
 		return dto.Draft{Revision: row.Revision}, false, nil
 	}
-	return draftDTO(id, row), true, nil
+	out, err = s.draftDTO(ctx, v, id, row)
+	return out, err == nil, err
 }
 
 // SaveDraft is PUT /drafts/{thread_id} (docs/06 "Composer", docs/07): the
@@ -188,7 +199,8 @@ func (s *Service) Draft(ctx context.Context, v domain.Viewer, id threadid.ID) (d
 //
 // Saving needs reply in the thread's forum, since a draft is a reply being
 // written. A reply target must name a post the thread has; a deleted one is
-// accepted, as the reply path accepts it.
+// accepted, as the reply path accepts it. Attachments are checked as a
+// reply's are, in the thread's forum.
 func (s *Service) SaveDraft(ctx context.Context, v domain.Viewer, id threadid.ID, req DraftRequest) (dto.Draft, error) {
 	var out dto.Draft
 	if err := s.MayKeepState(v); err != nil {
@@ -213,18 +225,22 @@ func (s *Service) SaveDraft(ctx context.Context, v domain.Viewer, id threadid.ID
 		}
 		replyTo = sql.NullInt64{Int64: int64(*req.ReplyTo), Valid: true}
 	}
+	attachments, err := s.draftAttachmentsColumn(ctx, v, a.row.ForumID, req.Attachments)
+	if err != nil {
+		return out, err
+	}
 	var row dbq.Draft
 	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		row, err = q.UpsertThreadDraft(ctx, dbq.UpsertThreadDraftParams{
 			UserID: v.UserID, ThreadID: sql.NullInt64{Int64: int64(id), Valid: true},
-			Source: req.Source, ReplyTo: replyTo, Now: s.now().UnixMilli(),
+			Source: req.Source, ReplyTo: replyTo, Attachments: attachments, Now: s.now().UnixMilli(),
 		})
 		return err
 	})
 	if err != nil {
 		return out, err
 	}
-	return draftDTO(id, row), nil
+	return s.draftDTO(ctx, v, id, row)
 }
 
 // DeleteDraft is DELETE /drafts/{thread_id} (docs/07): the viewer discards
@@ -256,6 +272,8 @@ type ForumDraftRequest struct {
 	Title *string
 	// Source may be empty, as for a reply draft.
 	Source string
+	// Attachments are as for a reply draft, checked in the forum.
+	Attachments []string
 }
 
 // ForumDraft is GET /forums/{slug}/draft (docs/07 "Drafts"): the viewer's
@@ -285,7 +303,8 @@ func (s *Service) ForumDraft(ctx context.Context, v domain.Viewer, slug string) 
 	case row.Deleted != 0:
 		return dto.ForumDraft{Revision: row.Revision}, false, nil
 	}
-	return forumDraftDTO(forum, row), true, nil
+	out, err = s.forumDraftDTO(ctx, v, forum, row)
+	return out, err == nil, err
 }
 
 // SaveForumDraft is PUT /forums/{slug}/draft (docs/07 "Drafts"): the viewer's
@@ -296,7 +315,7 @@ func (s *Service) ForumDraft(ctx context.Context, v domain.Viewer, slug string) 
 // archived forum is conflict to everyone but an admin, and it needs
 // create_thread. The title is held to a thread title's rules but two: it may
 // be empty, and it is kept as typed rather than trimmed, since it is not
-// finished.
+// finished. Attachments are checked as a new thread's are, in this forum.
 func (s *Service) SaveForumDraft(ctx context.Context, v domain.Viewer, slug string, req ForumDraftRequest) (dto.ForumDraft, error) {
 	var out dto.ForumDraft
 	if err := s.MayKeepState(v); err != nil {
@@ -313,18 +332,22 @@ func (s *Service) SaveForumDraft(ctx context.Context, v domain.Viewer, slug stri
 		}
 		title = sql.NullString{String: *req.Title, Valid: true}
 	}
+	attachments, err := s.draftAttachmentsColumn(ctx, v, forum.ID, req.Attachments)
+	if err != nil {
+		return out, err
+	}
 	var row dbq.Draft
 	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		row, err = q.UpsertForumDraft(ctx, dbq.UpsertForumDraftParams{
 			UserID: v.UserID, ForumID: sql.NullInt64{Int64: forum.ID, Valid: true},
-			Title: title, Source: req.Source, Now: s.now().UnixMilli(),
+			Title: title, Source: req.Source, Attachments: attachments, Now: s.now().UnixMilli(),
 		})
 		return err
 	})
 	if err != nil {
 		return out, err
 	}
-	return forumDraftDTO(forum, row), nil
+	return s.forumDraftDTO(ctx, v, forum, row)
 }
 
 // DeleteForumDraft is DELETE /forums/{slug}/draft (docs/07 "Drafts"): as
@@ -385,20 +408,41 @@ func forumDraftKey(v domain.Viewer, forum dbq.Forum) dbq.GetForumDraftParams {
 	return dbq.GetForumDraftParams{UserID: v.UserID, ForumID: sql.NullInt64{Int64: forum.ID, Valid: true}}
 }
 
-func draftDTO(id threadid.ID, row dbq.Draft) dto.Draft {
-	d := dto.Draft{ThreadID: id.String(), Source: row.Source, UpdatedAt: dto.Millis(row.UpdatedAt), Revision: row.Revision}
+// draftAttachmentsColumn checks a draft's attachments as a post to forumID
+// would have them checked (checkAttachments), and answers the list it
+// passed as the drafts.attachments column. It adds no reference.
+func (s *Service) draftAttachmentsColumn(ctx context.Context, v domain.Viewer, forumID int64, hashes []string) (string, error) {
+	list, err := s.checkAttachments(ctx, v, forumID, hashes)
+	if err != nil {
+		return "", err
+	}
+	return encodeAttachments(list)
+}
+
+func (s *Service) draftDTO(ctx context.Context, v domain.Viewer, id threadid.ID, row dbq.Draft) (dto.Draft, error) {
+	attachments, err := s.draftAttachments(ctx, v, row.Attachments)
+	if err != nil {
+		return dto.Draft{}, err
+	}
+	d := dto.Draft{ThreadID: id.String(), Source: row.Source, Attachments: attachments,
+		UpdatedAt: dto.Millis(row.UpdatedAt), Revision: row.Revision}
 	if row.ReplyTo.Valid {
 		r := uint32(row.ReplyTo.Int64)
 		d.ReplyTo = &r
 	}
-	return d
+	return d, nil
 }
 
-func forumDraftDTO(forum dbq.Forum, row dbq.Draft) dto.ForumDraft {
-	d := dto.ForumDraft{Forum: forum.Slug, Source: row.Source, UpdatedAt: dto.Millis(row.UpdatedAt), Revision: row.Revision}
+func (s *Service) forumDraftDTO(ctx context.Context, v domain.Viewer, forum dbq.Forum, row dbq.Draft) (dto.ForumDraft, error) {
+	attachments, err := s.draftAttachments(ctx, v, row.Attachments)
+	if err != nil {
+		return dto.ForumDraft{}, err
+	}
+	d := dto.ForumDraft{Forum: forum.Slug, Source: row.Source, Attachments: attachments,
+		UpdatedAt: dto.Millis(row.UpdatedAt), Revision: row.Revision}
 	if row.Title.Valid {
 		t := row.Title.String
 		d.Title = &t
 	}
-	return d
+	return d, nil
 }

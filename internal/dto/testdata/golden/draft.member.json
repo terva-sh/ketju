@@ -2,6 +2,16 @@
   "thread_id": "3yymw47g00001",
   "source": "The bill was the smaller half, but",
   "reply_to": 61,
+  "attachments": [
+    {
+      "hash": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+      "size": 90112,
+      "mime": "application/pdf",
+      "original_name": "invoice-march.pdf",
+      "width": null,
+      "height": null
+    }
+  ],
   "updated_at": 1757500300000,
   "revision": 3
 }

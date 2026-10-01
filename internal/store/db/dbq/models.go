@@ -84,17 +84,18 @@ type BlobUpload struct {
 }
 
 type Draft struct {
-	ID        int64
-	UserID    int64
-	ThreadID  sql.NullInt64
-	ForumID   sql.NullInt64
-	Source    string
-	ReplyTo   sql.NullInt64
-	CreatedAt int64
-	UpdatedAt int64
-	Title     sql.NullString
-	Revision  int64
-	Deleted   int64
+	ID          int64
+	UserID      int64
+	ThreadID    sql.NullInt64
+	ForumID     sql.NullInt64
+	Source      string
+	ReplyTo     sql.NullInt64
+	CreatedAt   int64
+	UpdatedAt   int64
+	Title       sql.NullString
+	Revision    int64
+	Deleted     int64
+	Attachments string
 }
 
 type Flag struct {

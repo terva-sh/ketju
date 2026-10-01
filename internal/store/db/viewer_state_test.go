@@ -190,6 +190,70 @@ func TestMigrationGivesStoredDraftsARevision(t *testing.T) {
 	}
 }
 
+// TestDraftAttachmentsColumn (0021, TKT-01M3V73DP6): attachments is a JSON
+// array, and a tombstone holds none, whether it is written as one or a live
+// draft is turned into one; a draft stored before 0021 reads as one with no
+// attachments.
+func TestDraftAttachmentsColumn(t *testing.T) {
+	d, _ := openUnmigrated(t)
+	if err := d.migrate(t.Context(), migrationsBefore(t, 21), "m"); err != nil {
+		t.Fatal(err)
+	}
+	u := itoa(createUser(t, d, "writer"))
+	execAll(t, d, `INSERT INTO drafts (user_id, thread_id, source, created_at, updated_at) VALUES (`+u+`, 42, 'half', 1, 1)`)
+	if err := d.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var got []string
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		got = rows(t, tx, `SELECT source, attachments FROM drafts`)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"[half []]"}; !slices.Equal(got, want) {
+		t.Errorf("after 0021 the drafts are %v, want %v", got, want)
+	}
+
+	h := `["` + strings.Repeat("a", 64) + `"]`
+	ins := `INSERT INTO drafts (user_id, thread_id, source, attachments, deleted, created_at, updated_at)
+	        VALUES (` + u + `, ?, ?, ?, ?, 1, 1)`
+	for _, c := range []struct {
+		name        string
+		thread      int64
+		source      string
+		attachments string
+		deleted     int
+		ok          bool
+	}{
+		{"a draft with one attachment", 50, "s", h, 0, true},
+		{"a draft with none", 51, "s", "[]", 0, true},
+		{"not JSON", 52, "s", "[", 0, false},
+		{"a JSON object", 53, "s", `{"a":1}`, 0, false},
+		{"a JSON string", 54, "s", `"a"`, 0, false},
+		{"a tombstone with none", 55, "", "[]", 1, true},
+		{"a tombstone with an empty array spelled with a space", 56, "", "[ ]", 1, true},
+		{"a tombstone with an attachment", 57, "", h, 1, false},
+	} {
+		err := exec(t, d, ins, c.thread, c.source, c.attachments, c.deleted)
+		if (err == nil) != c.ok {
+			t.Errorf("%s: got %v, want accepted=%v", c.name, err, c.ok)
+		}
+	}
+
+	// A live draft with an attachment cannot be made a tombstone without
+	// emptying it, nor a tombstone given one.
+	if err := exec(t, d, `UPDATE drafts SET deleted = 1, source = '' WHERE thread_id = 50`); err == nil {
+		t.Error("a live draft became a tombstone keeping its attachment")
+	}
+	if err := exec(t, d, `UPDATE drafts SET attachments = ? WHERE thread_id = 55`, h); err == nil {
+		t.Error("a tombstone was given an attachment")
+	}
+	if err := exec(t, d, `UPDATE drafts SET deleted = 1, source = '', attachments = '[]' WHERE thread_id = 50`); err != nil {
+		t.Errorf("a draft emptied as it becomes a tombstone was refused: %v", err)
+	}
+}
+
 // TestNotificationKindsClosed is AC3: the six kinds are accepted, anything
 // else is refused, and the CHECK's list is domain.NotificationKinds.
 func TestNotificationKindsClosed(t *testing.T) {

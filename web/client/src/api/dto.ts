@@ -395,6 +395,8 @@ export interface Draft {
   thread_id: string;
   source: string;
   reply_to: number | null;
+  // attachments are the composer's files, never null (TKT-01M3V73DP6).
+  attachments: Attachment[];
   updated_at: Millis;
   // revision only grows, whatever either clock does; a 204 carries it as
   // the Draft-Revision header.
@@ -409,6 +411,7 @@ export interface ForumDraft {
   forum: string;
   title?: string;
   source: string;
+  attachments: Attachment[];
   updated_at: Millis;
   revision: number;
 }

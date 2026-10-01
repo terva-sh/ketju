@@ -828,7 +828,8 @@ Recovery reads only flags with the marker set (08 "Flags").
 ```
 user_id, thread_id (nullable = new-thread draft, then forum_id), title
 (nullable, new-thread drafts only), source, reply_to, updated_at,
-revision (0 or more), deleted (0 or 1)
+revision (0 or more), deleted (0 or 1),
+attachments (JSON array of blob hashes, '[]' for none)   -- 0021
 UNIQUE (user_id, thread_id) WHERE thread_id IS NOT NULL
 UNIQUE (user_id, forum_id) WHERE thread_id IS NULL
 ```
@@ -857,6 +858,15 @@ the count. There is at most one per thread or forum a member has ever
 drafted in, and blob GC finds no attachment in an empty source. Both columns
 come from migration 0018 (TKT-01M3K9XBJA), which sets every draft stored
 before it to revision 1.
+
+`attachments` holds the composer's files as the attach check answers them:
+each hash once, in the order sent, at most ten (07 "Drafts",
+TKT-01M3V73DP6). A `CHECK` keeps it a JSON array. A tombstone holds none, and
+two triggers hold that, because SQLite cannot add it to `deleted`'s `CHECK`
+without rebuilding the table. A draft adds no reference to a blob, so blob GC
+and `ketju redact` keep a blob any draft's attachments name (03 "Blob garbage
+collection"). The column comes from migration 0021, whose default reads every
+draft stored before it as one with no attachments.
 
 ### blobs
 ```

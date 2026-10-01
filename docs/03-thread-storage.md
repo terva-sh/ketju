@@ -887,7 +887,8 @@ when all of these hold at the moment of the delete:
 - its `refcount` is zero and has been for seven days (`unreferenced_since`,
   04), checked again in the statement that deletes the row, so a reference
   committed after the pass read its candidates wins;
-- no user's `avatar_blob` and no draft's source names its hash;
+- no user's `avatar_blob` and no draft's source or attachments name its
+  hash;
 - its hash, as sixty-four hex digits in either case, appears in no record body
   of any log under `threads/`. That includes soft-deleted posts, whose `Post`
   record a `Restore` brings back with its attachments, and superseded
@@ -908,6 +909,14 @@ error. With no candidates it reads no logs.
 A soft delete therefore never releases a blob, and an edit cannot drop one,
 because `Edit` has no attachments field. Only the offline hard deletion
 described under "Record types" removes a reference from a log.
+
+A draft's attachments add no reference (07 "Drafts", TKT-01M3V73DP6). The
+collector keeps a blob that any draft's attachments name, of either kind,
+and so does `ketju redact`, which deletes through the same statement
+(`DeleteCollectableBlob`). The seven days are still counted from the
+refcount: a blob only a draft attaches is never collected while the draft
+lists it, and once the draft is deleted, or saved without it, the next pass
+may collect it at once if it has been at zero that long.
 
 The bytes are never gone while the row remains. Inside one `db.Write`, the
 collector deletes the row and renames the file to `<hash>.gc` beside it. A

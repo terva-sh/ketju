@@ -1036,10 +1036,12 @@ per thread (04 `drafts`), kept on the server so it follows the user to
 another device.
 
 - `GET` answers 200 `internal/dto` `Draft` `{thread_id, source, reply_to,
-  updated_at, revision}`, or 204 with no body when the viewer has no draft
-  for the thread. Having no draft is the usual state rather than an error,
-  and `not-found` stays reserved for a thread the viewer cannot see.
-- `PUT` takes `{source, reply_to?}` and answers 200 with the draft as stored.
+  attachments, updated_at, revision}`, or 204 with no body when the viewer
+  has no draft for the thread. Having no draft is the usual state rather
+  than an error, and `not-found` stays reserved for a thread the viewer
+  cannot see.
+- `PUT` takes `{source, reply_to?, attachments?}` and answers 200 with the
+  draft as stored.
   It replaces the viewer's one draft for the thread, whichever device sent
   it, and `updated_at` is the server's time of the save. `source` is required
   but may be empty, because a draft that holds only a reply target is still
@@ -1060,14 +1062,14 @@ forum (04 `drafts`), with the thread's title as well as its body
 differences:
 
 - `GET` answers 200 `internal/dto` `ForumDraft` `{forum, title?, source,
-  updated_at, revision}`, where `forum` is the slug and `title` is left out
-  when the draft has none, or 204.
-- `PUT` takes `{title?, source}` and replaces the whole draft, so a `PUT`
-  without `title` clears a stored one. `source` is required but may be
-  empty. The title follows a thread title's rules but for two: it may be
-  empty, and it is stored as typed, not trimmed, because it is unfinished.
-  More than 200 characters (`MaxTitle`) or a control character is
-  `validation-failed`.
+  attachments, updated_at, revision}`, where `forum` is the slug and
+  `title` is left out when the draft has none, or 204.
+- `PUT` takes `{title?, source, attachments?}` and replaces the whole
+  draft, so a `PUT` without `title` clears a stored one. `source` is
+  required but may be empty. The title follows a thread title's rules but
+  for two: it may be empty, and it is stored as typed, not trimmed, because
+  it is unfinished. More than 200 characters (`MaxTitle`) or a control
+  character is `validation-failed`.
 - Saving is refused as starting a thread there would be: an archived forum
   is `conflict` to everyone but an admin, and it needs `create_thread`
   (`forbidden` otherwise). `GET` and `DELETE` need only read access to the
@@ -1102,6 +1104,34 @@ This follows the maintainer's decision of 2026-09-28 (TKT-01M3K9XBJA) that
 a draft restored on another device should come back whole. Leaving
 attachments out of drafts lost, because a restored draft would silently
 drop files whose bytes the collector then deletes after seven days.
+
+How it works (TKT-01M3V73DP6):
+- **`PUT`.** `attachments` is replaced as a whole, like the rest of the
+  draft, so a `PUT` without it, or with `null`, leaves the draft with none.
+  It is checked against the forum the post would go to: the thread's forum
+  for a reply draft, and the named forum for a new-thread draft. So each
+  hash must be a blob the viewer uploaded and that is not quarantined, the
+  list holds at most 10 distinct hashes, and the viewer needs `upload`
+  there. The refusals are a post's: `validation-failed` with `{field:
+  "attachments", code}` of `not_yours`, `blocked`, `unknown` or
+  `too_many`, and `forbidden` without `upload`. An empty list needs no
+  `upload`. A refused `PUT` changes nothing.
+- **Repeats.** A hash sent twice is kept once, at its first place, as a
+  post keeps it. **Decided by the run (2026-10-01, pending maintainer
+  review).** The grooming plan had a repeat refused as `validation-failed`.
+  That lost, because the attach rule TKT-01M29CXK0K merged keeps a repeat
+  once, and a draft that refused a list the post would accept would fail
+  the composer's autosave for no reason the member could see.
+- **`GET`.** `attachments` lists the stored hashes in order as
+  `Attachment` objects, with the name the viewer uploaded each under. It is
+  `[]`, never `null`, when there are none.
+- **No reference.** Saving a draft does not raise a blob's `refcount` or
+  move its `unreferenced_since`. Blob GC and `ketju redact` keep a blob that
+  any draft's attachments name instead (03 "Blob garbage collection"). A
+  draft does not make a blob servable either: `GET /blobs/{hash}` still
+  serves only a reader of a post that names it (see "Attachments"), so the
+  composer shows a draft's files by name and size, as it shows its own
+  uploads.
 
 #### Search (TKT-01M29CTY8T, TKT-01M3V70X0F)
 
@@ -1411,6 +1441,11 @@ here.
 | `DELETE /api/v1/forums/{slug}/draft` | `POST /f/{slug}/draft/delete` | none | `DeleteForumDraft` |
 | `POST /api/v1/threads/{id}/watch` | `POST /t/{id}/watch` | `level` | owned by TKT-01M29CRJ29, which builds the route |
 | `POST /api/v1/threads/{id}/flags` | `POST /t/{id}/posts/{ordinal}/flag` | `reason`, `note` | the JSON route is built (TKT-01M29CP2PJ); the form route is Phase 5 |
+
+The draft form routes are Phase 5, and as written above they carry no
+`attachments` field. A draft saved through them keeps none, as the JSON route
+does when the field is left out. The HTML client's attachment form is
+Phase 5's to design.
 
 The read mark on a page `GET` is the one place a safe method writes. It is
 safe to repeat, because the position only moves forward, and it is what

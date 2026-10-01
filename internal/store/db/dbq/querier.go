@@ -158,10 +158,14 @@ type Querier interface {
 	// collectable at the moment of the delete: still at zero references, still
 	// at zero since before cutoff, and named by no user's avatar and no draft.
 	// A reference added after the candidates were read therefore wins. The
-	// avatar and draft conditions are guards: nothing writes either reference
-	// yet, and the delete should not be what finds out that something now does.
-	// Both compare in lower case, as the log scan does, because the hash is
-	// stored lower case and free text may name it in either (review 1157).
+	// avatar and draft-source conditions are guards: nothing writes either
+	// reference yet, and the delete should not be what finds out that something
+	// now does. Both compare in lower case, as the log scan does, because the
+	// hash is stored lower case and free text may name it in either (review
+	// 1157). A draft's attachments do name blobs (TKT-01M3V73DP6) and add no
+	// reference, so a blob only a draft attaches is kept for as long as the
+	// draft lists it. They are stored as the attach check answers them, lower
+	// case, and need no lower().
 	DeleteCollectableBlob(ctx context.Context, arg DeleteCollectableBlobParams) (int64, error)
 	// Deletes a group only when nothing refers to it: not a system group, no
 	// stored member, no permission row. One statement, so a member added
@@ -194,7 +198,8 @@ type Querier interface {
 	// transaction (TKT-01M29CCC0X).
 	DeleteSessionsThroughIdentity(ctx context.Context, identityID sql.NullInt64) (int64, error)
 	// DELETE /drafts/{thread_id}: a live draft becomes a tombstone one revision
-	// on. A tombstone, or a key with no row, is left as it is.
+	// on, holding no text and no attachments. A tombstone, or a key with no row,
+	// is left as it is.
 	DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error)
 	DeleteThreadTags(ctx context.Context, threadID int64) error
 	// DeleteUserIdentities removes every identity of an anonymized account
@@ -648,8 +653,8 @@ type Querier interface {
 	// malformed JSON (Terva reviews 1704 and 1734).
 	UpdateUserSettings(ctx context.Context, arg UpdateUserSettingsParams) (UpdateUserSettingsRow, error)
 	// PUT /forums/{slug}/draft: as UpsertThreadDraft, for the one new-thread
-	// draft per (user, forum). The title is replaced as a whole, so a save
-	// without one clears it.
+	// draft per (user, forum). The title and attachments are replaced as a
+	// whole, so a save without them clears them.
 	UpsertForumDraft(ctx context.Context, arg UpsertForumDraftParams) (Draft, error)
 	// A Post resets every column, for the same reason UpsertThread does.
 	UpsertPostMeta(ctx context.Context, arg UpsertPostMetaParams) error
@@ -666,10 +671,11 @@ type Querier interface {
 	// it must undo whatever later records did before they are applied again.
 	UpsertThread(ctx context.Context, arg UpsertThreadParams) error
 	// PUT /drafts/{thread_id}: the one row for (user, thread) takes the new
-	// source and reply target, keeping its created_at, and a tombstone comes back
-	// to life. A new row starts at revision 1 and each save adds one. The
-	// conflict target names the partial index's predicate, which SQLite requires
-	// to match it.
+	// source, reply target and attachments, keeping its created_at, and a
+	// tombstone comes back to life. A new row starts at revision 1 and each save
+	// adds one. The conflict target names the partial index's predicate, which
+	// SQLite requires to match it. attachments is a JSON array of the hashes the
+	// attach check answered (TKT-01M3V73DP6); saving one adds no reference.
 	UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftParams) (Draft, error)
 	// UserIdentities is every identity an account has, oldest first: the
 	// settings screen's list, and what removing one counts (TKT-01M29CCC0X).

@@ -18,9 +18,11 @@ type readRequest struct {
 }
 
 // draftRequest is the body of PUT /api/v1/drafts/{thread_id} (docs/07).
+// Attachments absent or null is none, as for a post.
 type draftRequest struct {
-	Source  *string `json:"source"`
-	ReplyTo *uint32 `json:"reply_to"`
+	Source      *string  `json:"source"`
+	ReplyTo     *uint32  `json:"reply_to"`
+	Attachments []string `json:"attachments"`
 }
 
 // maxReadBody bounds DELETE /read's optional {ordinal} body, as
@@ -149,7 +151,7 @@ func (h *handlers) putDraft(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: the draft has no source")))
 		return
 	}
-	d, err := h.threads.SaveDraft(r.Context(), v, id, threads.DraftRequest{Source: *in.Source, ReplyTo: in.ReplyTo})
+	d, err := h.threads.SaveDraft(r.Context(), v, id, threads.DraftRequest{Source: *in.Source, ReplyTo: in.ReplyTo, Attachments: in.Attachments})
 	if err != nil {
 		h.fail(w, r, err)
 		return
@@ -179,8 +181,9 @@ func (h *handlers) deleteDraft(w http.ResponseWriter, r *http.Request) {
 
 // forumDraftRequest is the body of PUT /api/v1/forums/{slug}/draft (docs/07).
 type forumDraftRequest struct {
-	Title  *string `json:"title"`
-	Source *string `json:"source"`
+	Title       *string  `json:"title"`
+	Source      *string  `json:"source"`
+	Attachments []string `json:"attachments"`
 }
 
 // getForumDraft, putForumDraft and deleteForumDraft are
@@ -223,7 +226,7 @@ func (h *handlers) putForumDraft(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	d, err := h.threads.SaveForumDraft(r.Context(), v, r.PathValue("slug"),
-		threads.ForumDraftRequest{Title: in.Title, Source: *in.Source})
+		threads.ForumDraftRequest{Title: in.Title, Source: *in.Source, Attachments: in.Attachments})
 	if err != nil {
 		h.fail(w, r, err)
 		return

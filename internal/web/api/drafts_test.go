@@ -60,7 +60,7 @@ func TestForumDraftRoundTrip(t *testing.T) {
 	noDraftRevision(t, w.sendAs(phone, http.MethodGet, path, ""))
 	saved := ok[dto.ForumDraft](t, w.sendAs(laptop, http.MethodPut, path, `{"title":"Moving the club ","source":"We keep losing"}`))
 	title := "Moving the club "
-	want := dto.ForumDraft{Forum: "general", Title: &title, Source: "We keep losing", UpdatedAt: dto.Millis(w.clock), Revision: 1}
+	want := dto.ForumDraft{Forum: "general", Title: &title, Source: "We keep losing", Attachments: []dto.Attachment{}, UpdatedAt: dto.Millis(w.clock), Revision: 1}
 	if renderJSON(t, saved) != renderJSON(t, want) {
 		t.Fatalf("saved %s, want %s", renderJSON(t, saved), renderJSON(t, want))
 	}

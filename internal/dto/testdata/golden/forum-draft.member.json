@@ -2,6 +2,16 @@
   "forum": "social",
   "title": "Moving the book club to ",
   "source": "We keep losing the thread in the group chat.",
+  "attachments": [
+    {
+      "hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
+      "size": 18422,
+      "mime": "image/png",
+      "original_name": "book-club-poll.png",
+      "width": 1280,
+      "height": 720
+    }
+  ],
   "updated_at": 1757500320000,
   "revision": 5
 }
