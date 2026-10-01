@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYS9W8GAWNQVHFH7HZ7AR
 title: Generate image thumbnails for attachments
 type: task
-status: draft
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -20,15 +20,17 @@ blocks_on: none
 references:
   - ref: design:storage-attachments
     path: docs/03-thread-storage.md
+  - ref: pr:288
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-01T08:48:34Z
+updated_at: 2026-10-01T11:44:43Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-live
+  id: agent:claude-code/phase3-cys9w
   name: ""
 extensions: {}
 ---
@@ -43,14 +45,14 @@ Pure Go decoders only, since the whole binary is cgo-free and a thumbnail featur
 
 ## Acceptance criteria
 
-- [ ] Side and decode-memory bounds are checked from DecodeConfig before any decode, so a PNG, JPEG or GIF bomb under 1 KB is refused with no decoder call and under 1 MiB allocated (TestThumbnailRefusesBombBeforeDecode, TestThumbnailBudgetCountsDepth)
-- [ ] A thumbnail is <hash>.thumb beside the blob, fitted inside 160 px, made once and made again only when missing (TestThumbnailFitsAndKeepsAspect, TestThumbnailFormats, TestThumbnailMadeOnceAndCached)
-- [ ] A thumbnail is served only to the viewers its blob is served to, through the same Authorize (TestThumbnailServedOnlyToReaders, every row of the blob table)
-- [ ] Decodes run one at a time, and two readers of a new image make one decode (TestThumbnailsDecodeOneAtATime, TestThumbnailMadeOnceAndCached)
-- [ ] Blob GC and ketju redact remove a blob's thumbnail with it, and GC removes a thumbnail whose blob has no row (TestCollectorRemovesThumbnail, TestCollectorRemovesOrphanThumbnail, TestRedactRemovesThumbnail)
-- [ ] docs/03 and docs/07 name the thumbnail file and route in the same PR
-- [ ] Only the standard library's image/png, image/jpeg and image/gif decode untrusted bytes (TestThumbImportsOnlyStdlibImage), and a new CI step builds ./cmd/ketju with CGO_ENABLED=0
-- [ ] An image that fails to decode, or panics the decoder, leaves the blob served and the post rendered with its attachment, and is not decoded again while it stays in the 4096-entry failure cache (TestThumbnailDecodeFailureLeavesBlobServable, TestDecodePanicIsContained)
+- [x] Side and decode-memory bounds are checked from DecodeConfig before any decode, so a PNG, JPEG or GIF bomb under 1 KB is refused with no decoder call and under 1 MiB allocated (TestThumbnailRefusesBombBeforeDecode, TestThumbnailBudgetCountsDepth)
+- [x] A thumbnail is <hash>.thumb beside the blob, fitted inside 160 px, made once and made again only when missing (TestThumbnailFitsAndKeepsAspect, TestThumbnailFormats, TestThumbnailMadeOnceAndCached)
+- [x] A thumbnail is served only to the viewers its blob is served to, through the same Authorize (TestThumbnailServedOnlyToReaders, every row of the blob table)
+- [x] Decodes run one at a time, and two readers of a new image make one decode (TestThumbnailsDecodeOneAtATime, TestThumbnailMadeOnceAndCached)
+- [x] Blob GC and ketju redact remove a blob's thumbnail with it, and GC removes a thumbnail whose blob has no row (TestCollectorRemovesThumbnail, TestCollectorRemovesOrphanThumbnail, TestRedactRemovesThumbnail)
+- [x] docs/03 and docs/07 name the thumbnail file and route in the same PR
+- [x] Only the standard library's image/png, image/jpeg and image/gif decode untrusted bytes (TestThumbImportsOnlyStdlibImage), and a new CI step builds ./cmd/ketju with CGO_ENABLED=0
+- [x] An image that fails to decode, or panics the decoder, leaves the blob served and the post rendered with its attachment, and is not decoded again while it stays in the 4096-entry failure cache (TestThumbnailDecodeFailureLeavesBlobServable, TestDecodePanicIsContained)
 
 ## Implementation plan
 
@@ -132,9 +134,30 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 - Uploading, attaching, serving the blob, and `Authorize`: TKT-01M29CXK0K.
 - Showing the thumbnail on the post card: TKT-01M3V73J8K (Attach files in the composer and show them on posts).
 - WebP, HEIC and more sizes: decided against in docs/03 and docs/07 for Phase 3.
+### At implementation (2026-10-01, against main at 4990dea)
+
+The plan above stands, and Settled in grooming is unchanged. What the code changed:
+- **The decode estimate is stricter in two cases** that the header reveals and `DecodeConfig` does not report. An Adam7-interlaced PNG counts double, read from the IHDR's interlace byte, because the decoder allocates a full image as well as each pass's image. A four-component (CMYK) JPEG counts 1.5×, because it keeps four coefficient planes and four image planes. Both only refuse more, which keeps the settled estimate the overestimate it is meant to be.
+- **The service seam is `Service.Thumbnailer`** (nil is `blob.Thumbnail`), beside `decodeHook` in `internal/store/blob`. The HTTP tests in `internal/web/api` count decodes through it, which `decodeHook` cannot do from another package.
+- **`Thumb` returns the opened file**, not a path, so a thumbnail the collector removes between the check and the open is made again rather than answering 404.
+- **The orphan-thumbnail sweep runs after the hold check**, beside the orphan-blob sweep, not beside `recoverTrash`, so a held pass deletes nothing, as docs/03 says of it. It reads which thumbnails have rows in one read, then checks again and removes each orphan inside its own `db.Write`.
+- **`TestThumbnailMadeOnceAndCached` is in `internal/service/blobs`**, under `testing/synctest` with the decode paced, and `TestThumbnailCachedOverHTTP` covers the same through the route. `TestThumbnailWaiterTakesOverFromCancelledMaker` and `TestThumbnailFailureRemembered` were added.
+- **The CI step is `go build -o /dev/null ./cmd/ketju`** with `CGO_ENABLED=0`, placed after `build`.
 
 ## Notes
 
 **agent:claude-code/phase3-groom-live** at 2026-10-01T07:59:48Z
 
 run decision: pending maintainer review. Recorded in docs/03 (2026-10-01): one thumbnail, <hash>.thumb beside the blob, fitted inside 160 px. JPEG for JPEG and PNG for PNG and GIF. It is a cache made on first request, and GC and redact remove it. Decoder choice, also in docs/07 'Attachments': stdlib image/png, image/jpeg and image/gif only, each called directly by sniffed type, with a hand-written area-average resize. golang.org/x/image lost: a second decoder surface and a new module for a 160 px thumbnail. Bounds before decode: 16384 px a side and 256 MiB estimated decode memory, so JPEG thumbnails stop near 16.7 MP and a larger photo is a card with no thumbnail.
+
+**agent:claude-code/phase3-cys9w** at 2026-10-01T11:10:27Z
+
+run decision: pending maintainer review. The decode-memory estimate is stricter than the groomed numbers in two cases the header reveals: an Adam7-interlaced PNG counts double (the decoder holds a full image and each pass's image), and a four-component JPEG counts 1.5x (four coefficient and four image planes). Recorded in docs/07 'Attachments', Thumbnails bullet. Effect a member sees: an interlaced RGBA PNG over about 33 MP, or a CMYK JPEG over about 11 MP, shows as a card with no thumbnail; the blob is still served. Alternative that lost: the groomed 4 and 16 bytes a pixel as written, which understate those decoders' peak and so would let one decode reach about 512 MiB against a 256 MiB budget. Mutations tried against the tests, each caught: Thumb authorizing as an admin instead of the viewer, no side bound, no memory budget, 16-bit PNG at 4 bytes, interlace ignored, no recover, no failure memory, no singleflight (caught once concurrent failing readers were added), semaphore of 8, no takeover from a cancelled maker, GC keeping the thumbnail, GC ignoring orphan thumbnails, redact keeping the thumbnail, the thumbnail's ETag set to the blob's, nearest-pixel instead of area averaging, and a thumbnail made for a PDF.
+
+**agent:claude-code/phase3-cys9w** at 2026-10-01T11:44:43Z
+
+Terva review 1748 (head 0338bef5134306f0aebf539fe39150d37e69ac36, base 6d10fe06d4b183e7cae48783855f30f1cc3bf261; run 261d5f27-45a2-4a11-83f8-8920c94ccbbe, Actions run 1924), medium 'Use fractional source coverage when area-averaging thumbnails': accepted and fixed. fit now weights each source pixel by the exact share of its area that falls in each thumbnail pixel, with integer weights in units of 1/dst of a source pixel. Sums stay within uint64: sw x sh is at most 2^28. TestThumbnailAreaAverageAtAFractionalRatio compares every pixel at 403x251, 161x3 and 400x1 with a floating-point area average, to within 1. It fails against the old whole-pixel ranges, at 187 against 171 for the first pixel of 400x1.
+
+## Summary
+
+GET /blobs/{hash}/thumb serves an image attachment's 160 px thumbnail, kept as <hash>.thumb beside the blob and made on first request. internal/store/blob/thumb.go holds ThumbPath, ThumbType and Thumbnail: header bounds from the type's own DecodeConfig (16384 px a side, 256 MiB estimated decode), then the stdlib png, jpeg or gif decoder called directly inside a recover, an area-average resize, and JPEG or PNG out. internal/service/blobs/thumb.go adds Service.Thumb, which calls Authorize first, so thumbnails follow the blob's access rule (TestThumbnailServedOnlyToReaders runs every row of the blob table). It also adds the one-decode semaphore, a per-hash singleflight, and a 4096-entry in-memory failure LRU, with Service.Thumbnailer as the test seam. Blob GC removes a collected blob's thumbnail after the commit and sweeps thumbnails whose blob has no row (not in a held pass). ketju redact removes it with the blob. docs/03 and docs/07 name the file and route, and CI gains a CGO_ENABLED=0 build of ./cmd/ketju. No migration. All eight criteria are ticked.

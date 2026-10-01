@@ -65,6 +65,17 @@ jobs:
         # command or package is covered here with no edit to this step.
         run: go build ./...
 
+      - name: the binary builds without cgo
+        # TKT-01M29CYS9W. The step above and the race step below build with
+        # cgo, which -race needs, so neither would notice a dependency that
+        # needs a C compiler. ketju ships as one static binary, and image
+        # thumbnails are made by the standard library's decoders for the
+        # same reason (docs/07 "Attachments"), so the binary is built here
+        # the way it ships.
+        env:
+          CGO_ENABLED: "0"
+        run: go build -o /dev/null ./cmd/ketju
+
       - name: generated database code is current
         # TKT-01M29BW9Q1. sqlc compiles internal/store/db/queries against the
         # migrations into package dbq, and the committed output is what ships.

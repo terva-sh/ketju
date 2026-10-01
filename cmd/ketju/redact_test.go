@@ -800,6 +800,39 @@ func TestRedactKeepsDraftAttachedBlob(t *testing.T) {
 	}
 }
 
+// TestRedactRemovesThumbnail: a deleted blob's thumbnail goes with it, and
+// a blob another post still names keeps its own (TKT-01M29CYS9W).
+func TestRedactRemovesThumbnail(t *testing.T) {
+	w := newRedactWorld(t)
+	only, shared := w.blob("only mine", 1), w.blob("shared", 2)
+	thumb := func(h string) string {
+		p, err := blob.ThumbPath(w.data, h)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return p
+	}
+	for _, h := range []string{only, shared} {
+		if err := os.WriteFile(thumb(h), []byte("thumbnail"), 0o640); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id := w.thread("A thread")
+	n := w.post(id, "with files", only, shared)
+	w.post(id, "also shared", shared)
+	w.ready()
+	w.mustRedact(postArgs(id, n)...)
+	if w.blobFile(only) {
+		t.Fatal("the unshared blob stays")
+	}
+	if _, err := os.Stat(thumb(only)); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the deleted blob's thumbnail: %v", err)
+	}
+	if _, err := os.Stat(thumb(shared)); err != nil {
+		t.Errorf("the shared blob's thumbnail: %v", err)
+	}
+}
+
 // TestRedactAuditsOnlyCommittedDeletes and TestRedactBlobDeleteFailureKeepsTheFile:
 // a failure inside the blob's transaction leaves its row, its file where it
 // was, no .gc and no blob.deleted row; the rerun deletes it once.

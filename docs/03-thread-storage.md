@@ -942,8 +942,9 @@ That sets two rules for the upload and attach paths (TKT-01M29CXK0):
   `db.Write`, so an upload of bytes the collector is deleting at that moment is
   ordered before or after the collection, never interleaved with it.
 
-Thumbnails are not named yet. The collector removes only the blob's own file,
-and whoever defines the thumbnail name removes thumbnails the same way.
+A blob's thumbnail is `<hash>.thumb` beside it (the decision below,
+TKT-01M29CYS9W). The collector removes it after the row's deletion commits,
+and removes any `.thumb` whose blob has no row, except in a held pass.
 
 **Decided by the run (2026-10-01, pending maintainer review)**
 (TKT-01M29CXK0K, TKT-01M29CYS9W):

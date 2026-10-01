@@ -727,6 +727,34 @@ func blobAnswer(rec *httptest.ResponseRecorder) string {
 // post naming it in its attachments, and every refusal is byte for byte
 // the answer to a hash nothing has.
 func TestBlobServedOnlyToReaders(t *testing.T) {
+	bw, cases := blobAccessTable(t)
+	checkAccess(t, bw, cases, "")
+}
+
+// TestThumbnailServedOnlyToReaders is the same invariant for thumbnails
+// (TKT-01M29CYS9W): every row of the blob table, against /thumb. A
+// thumbnail reaches exactly the viewers its blob reaches, through the same
+// Authorize, and every refusal is the answer to the thumbnail of a hash
+// nothing has.
+func TestThumbnailServedOnlyToReaders(t *testing.T) {
+	bw, cases := blobAccessTable(t)
+	checkAccess(t, bw, cases, "/thumb")
+}
+
+// accessCase is one row of the blob access table: a hash, who is served
+// it, and who is refused.
+type accessCase struct {
+	name    string
+	hash    string
+	served  []string
+	refused []string
+}
+
+// blobAccessTable builds the world behind the blob access table: an image
+// blob for each way a post can be readable or not, with the viewers each
+// is served to and refused to.
+func blobAccessTable(t *testing.T) (*blobWorld, []accessCase) {
+	t.Helper()
 	bw := newBlobWorld(t)
 	bw.admin()
 	bw.grantUpload(0)
@@ -795,12 +823,7 @@ func TestBlobServedOnlyToReaders(t *testing.T) {
 		int64(redactedThread), redacted)
 
 	everyone := []string{"", "carol", "alice", "erin", "bob", "gina", "dora", "inactive:carol"}
-	cases := []struct {
-		name    string
-		hash    string
-		served  []string
-		refused []string
-	}{
+	return bw, []accessCase{
 		{"visible post", visible, []string{"", "carol", "alice", "inactive:carol"}, nil},
 		{"members-only forum", membersOnly, []string{"carol", "alice"}, []string{"", "inactive:carol"}},
 		{"hidden forum", hiddenForum, []string{"dora"}, []string{"", "carol", "alice", "bob", "gina", "inactive:carol"}},
@@ -817,16 +840,23 @@ func TestBlobServedOnlyToReaders(t *testing.T) {
 		{"malformed hash", strings.ToUpper(visible), nil, everyone},
 		{"malformed hash, short", visible[:63], nil, everyone},
 	}
+}
+
+// checkAccess runs the access table against /blobs/{hash} followed by
+// suffix: each served viewer gets 200, and each refused one the answer to
+// a hash nothing has.
+func checkAccess(t *testing.T, bw *blobWorld, cases []accessCase, suffix string) {
+	t.Helper()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			for _, who := range c.served {
-				if rec := bw.fetch(who, c.hash); rec.Code != http.StatusOK {
+				if rec := bw.fetch(who, c.hash+suffix); rec.Code != http.StatusOK {
 					t.Errorf("%q was refused: %d %s", who, rec.Code, rec.Body)
 				}
 			}
 			for _, who := range c.refused {
-				got := blobAnswer(bw.fetch(who, c.hash))
-				want := blobAnswer(bw.fetch(who, strings.Repeat("0", 64)))
+				got := blobAnswer(bw.fetch(who, c.hash+suffix))
+				want := blobAnswer(bw.fetch(who, strings.Repeat("0", 64)+suffix))
 				if got != want {
 					t.Errorf("%q's refusal differs from a missing hash's:\n%s\n---\n%s", who, got, want)
 				}
@@ -888,7 +918,7 @@ func TestBlobHeaders(t *testing.T) {
 	}
 	// No other method, and no other path under /blobs/, answers anything
 	// but not-found.
-	for _, p := range []string{"/blobs/" + a.Hash + "/thumb", "/blobs/", "/blobs/" + a.Hash + "/x"} {
+	for _, p := range []string{"/blobs/" + a.Hash + "/thumb/x", "/blobs/", "/blobs/" + a.Hash + "/x"} {
 		if rec := bw.fetch("alice", strings.TrimPrefix(p, "/blobs/")); rec.Code != http.StatusNotFound {
 			t.Errorf("%s: %d", p, rec.Code)
 		}
@@ -898,14 +928,33 @@ func TestBlobHeaders(t *testing.T) {
 // TestRevalidationRechecksAccess: a conditional request is authorized
 // before any 304, so a reader who has lost access gets not-found, never a
 // 304 that would let the browser keep showing the file.
+//
+// It runs against the thumbnail too (TKT-01M29CYS9W), whose ETag is
+// "<hash>.thumb".
 func TestRevalidationRechecksAccess(t *testing.T) {
-	bw := newBlobWorld(t)
-	bw.grantUpload(0)
-	lounge := bw.forumAt("lounge", domain.VisibilityMembers, false)
-	id := bw.threadIn(70, lounge, "Lounge", "alice")
-	a := bw.uploaded("alice", "a.png", blobstest.PNG(2, 2, 40))
-	created[dto.CreatedPost](t, bw.replyWith("alice", id, a.Hash))
+	for _, suffix := range []string{"", "/thumb"} {
+		t.Run("/blobs/{hash}"+suffix, func(t *testing.T) { revalidationRechecksAccess(t, suffix) })
+	}
+}
+
+func revalidationRechecksAccess(t *testing.T, suffix string) {
+	world := newBlobWorld(t)
+	world.grantUpload(0)
+	lounge := world.forumAt("lounge", domain.VisibilityMembers, false)
+	id := world.threadIn(70, lounge, "Lounge", "alice")
+	a := world.uploaded("alice", "a.png", blobstest.PNG(2, 2, 40))
+	created[dto.CreatedPost](t, world.replyWith("alice", id, a.Hash))
 	tag := `"` + a.Hash + `"`
+	if suffix != "" {
+		tag = `"` + a.Hash + `.thumb"`
+	}
+	// bw fetches the path under test; everything else is the world's.
+	bw := struct {
+		*blobWorld
+		fetch func(who, hash string, header ...string) *httptest.ResponseRecorder
+	}{world, func(who, hash string, header ...string) *httptest.ResponseRecorder {
+		return world.fetch(who, hash+suffix, header...)
+	}}
 	// What a hash nothing has answers, to the same conditional request. It
 	// must be a 404: a refusal that answered 304 would let the browser keep
 	// showing the file.

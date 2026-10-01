@@ -1067,7 +1067,9 @@ func (r *redactor) deleteBlobs(ctx context.Context, j *redactJournal) error {
 		if err := r.o.step("blob-committed:" + h); err != nil {
 			return err
 		}
-		for _, p := range []string{path, path + ".gc"} {
+		// The thumbnail goes with the bytes it was made from
+		// (TKT-01M29CYS9W); it is a cache, so nothing else holds it.
+		for _, p := range []string{path, path + ".gc", path + blob.ThumbSuffix} {
 			if err := os.Remove(p); err != nil && !errors.Is(err, fs.ErrNotExist) {
 				return fmt.Errorf("redact: removing %s: %w", p, err)
 			}

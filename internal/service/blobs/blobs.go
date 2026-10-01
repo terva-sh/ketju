@@ -26,6 +26,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 	"unicode"
 	"unicode/utf8"
@@ -78,6 +79,13 @@ type Service struct {
 	// Now is the clock rows are stamped with; nil is time.Now.
 	Now    func() time.Time
 	Logger *slog.Logger
+
+	// Thumbnailer makes a thumbnail from a blob's bytes; nil is
+	// blob.Thumbnail. Tests replace it to count and pace decodes.
+	Thumbnailer func(f io.ReadSeeker, mime string) (data []byte, contentType string, err error)
+
+	thumbsOnce sync.Once
+	thumbs     *thumbs
 
 	// afterCommit, when set, runs inside the upload's transaction once the
 	// file is in place, and its error fails the transaction; cleanup, when

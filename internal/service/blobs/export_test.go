@@ -14,3 +14,18 @@ func SetCleanup(s *Service, f func(ctx context.Context, hash string) error) { s.
 
 // CleanName is cleanName.
 var CleanName = cleanName
+
+// MakeThumb is makeThumb: the thumbnail for hash made, waited for, or
+// refused as failed before, without Authorize.
+func MakeThumb(s *Service, ctx context.Context, hash, mime string) error {
+	return s.makeThumb(ctx, hash, mime)
+}
+
+// FailedSet is the failure list, for its own test.
+type FailedSet = lru
+
+// NewFailedSet is newLRU.
+var NewFailedSet = newLRU
+
+func (l *lru) Has(k string) bool { return l.has(k) }
+func (l *lru) Add(k string)      { l.add(k) }

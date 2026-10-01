@@ -84,7 +84,8 @@ func TestCollectorRemovesOrphanBlobFiles(t *testing.T) {
 	withRow := w.upload("with a row", w.now)
 	_, withRowPath := path("with a row")
 	named, namedPath := path("named by a log")
-	_, thumb := path("thumbnail")
+	// A thumbnail is not a blob file, and one whose blob has a row stays.
+	thumb := withRowPath
 	w.aged(orphan, old)
 	w.aged(fresh, w.now.Add(-time.Minute))
 	w.aged(namedPath, old)

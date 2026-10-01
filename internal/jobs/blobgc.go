@@ -155,6 +155,10 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("blob gc: removing blob files no row names: %w", err)
 	}
+	thumbs, err := g.removeOrphanThumbs(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("blob gc: removing thumbnails no row names: %w", err)
+	}
 
 	var (
 		candidates, inLog, removed, changed, failed int64
@@ -173,6 +177,9 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 		}
 		if orphans > 0 {
 			attrs = append(attrs, "orphans", orphans)
+		}
+		if thumbs > 0 {
+			attrs = append(attrs, "orphan_thumbs", thumbs)
 		}
 		return Result{Removed: removed, Attrs: attrs}
 	}
@@ -281,12 +288,89 @@ func (g *BlobGC) collect(ctx context.Context, hash string, cutoff int64) (gone b
 		}
 		return false, fmt.Errorf("blob gc: %s: %w", hash, err)
 	}
+	var errs []error
 	if moved {
 		if err := os.Remove(trash); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return deleted, fmt.Errorf("blob gc: %s: removing the moved file (the next pass removes it): %w", hash, err)
+			errs = append(errs, fmt.Errorf("blob gc: %s: removing the moved file (the next pass removes it): %w", hash, err))
 		}
 	}
-	return deleted, nil
+	if deleted {
+		// The thumbnail is a cache of the bytes just removed, so it needs
+		// no move-aside: it goes once the row has (docs/03).
+		if err := removeThumb(g.Root, hash); err != nil {
+			errs = append(errs, fmt.Errorf("blob gc: %s: removing the thumbnail (the next pass removes it): %w", hash, err))
+		}
+	}
+	return deleted, errors.Join(errs...)
+}
+
+// removeThumb removes the thumbnail of the blob for hash, if it has one.
+func removeThumb(root, hash string) error {
+	path, err := blob.ThumbPath(root, hash)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// removeOrphanThumbs removes every thumbnail whose blob has no row: one
+// whose removal with its blob failed, or one made by a request that
+// authorized the blob just before a pass collected it. Which have rows is
+// read once; each without one is checked again and removed inside a write,
+// so no upload of the same bytes interleaves. A thumbnail with a row is
+// never touched. It returns how many it removed.
+func (g *BlobGC) removeOrphanThumbs(ctx context.Context) (int64, error) {
+	paths, err := filepath.Glob(filepath.Join(g.Root, blob.Dir, blob.Algorithm, "*", "*"+blob.ThumbSuffix))
+	if err != nil || len(paths) == 0 {
+		return 0, err
+	}
+	var hashes []string
+	for _, p := range paths {
+		hash := strings.TrimSuffix(filepath.Base(p), blob.ThumbSuffix)
+		if want, err := blob.ThumbPath(g.Root, hash); err != nil || want != p {
+			continue // not a name a thumbnail is written under; leave it for a person
+		}
+		hashes = append(hashes, hash)
+	}
+	var orphans []string
+	if err := g.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		for _, h := range hashes {
+			exists, err := q.BlobExists(ctx, h)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				orphans = append(orphans, h)
+			}
+		}
+		return nil
+	}); err != nil {
+		return 0, err
+	}
+	var removed int64
+	for _, h := range orphans {
+		err := g.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			exists, err := q.BlobExists(ctx, h)
+			if err != nil || exists {
+				return err
+			}
+			path, _ := blob.ThumbPath(g.Root, h)
+			switch err := os.Remove(path); {
+			case err == nil:
+				removed++
+			case !errors.Is(err, fs.ErrNotExist):
+				return err
+			}
+			return nil
+		})
+		if err != nil {
+			return removed, fmt.Errorf("%s: %w", h, err)
+		}
+	}
+	return removed, nil
 }
 
 // recoverTrash settles every file a previous pass moved aside and did not

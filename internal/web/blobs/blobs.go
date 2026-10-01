@@ -1,5 +1,6 @@
 // Package blobs serves GET and HEAD /blobs/{hash}, an attachment's bytes
-// (docs/07 "Attachments", TKT-01M29CXK0K), for web.Groups.Blobs.
+// (docs/07 "Attachments", TKT-01M29CXK0K), and /blobs/{hash}/thumb, an
+// image attachment's thumbnail (TKT-01M29CYS9W), for web.Groups.Blobs.
 //
 // Who may read a blob is internal/service/blobs's question (Authorize);
 // this package asks it on every request, conditional ones included, and
@@ -38,6 +39,7 @@ func New(svc *blobsvc.Service, log *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 	// GET also matches HEAD.
 	mux.HandleFunc("GET /blobs/{hash}", h.serve)
+	mux.HandleFunc("GET /blobs/{hash}/thumb", h.thumb)
 	mux.HandleFunc("/blobs/", func(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.CodeNotFound)
 	})
@@ -91,17 +93,50 @@ func (h *handler) serve(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 
-	hd.Set("Content-Type", b.Mime)
-	hd.Set("ETag", `"`+hash+`"`)
+	disposition := "attachment"
+	if strings.HasPrefix(b.Mime, "image/") {
+		disposition = "inline"
+	}
+	content(w, r, f, b.Mime, `"`+hash+`"`, disposition)
+}
+
+// content writes a served file's headers and the file, by
+// http.ServeContent, which answers Range, HEAD and If-None-Match. The
+// caller has already authorized the request.
+func content(w http.ResponseWriter, r *http.Request, f *os.File, mime, etag, disposition string) {
+	hd := w.Header()
+	hd.Set("Content-Type", mime)
+	hd.Set("ETag", etag)
 	hd.Set("X-Content-Type-Options", "nosniff")
 	hd.Set("Content-Security-Policy", Policy)
 	hd.Set("Cross-Origin-Resource-Policy", "same-origin")
-	if strings.HasPrefix(b.Mime, "image/") {
-		hd.Set("Content-Disposition", "inline")
-	} else {
-		hd.Set("Content-Disposition", "attachment")
-	}
+	hd.Set("Content-Disposition", disposition)
 	// No modification time: the hash is the validator, and the bytes under
 	// it never change.
 	http.ServeContent(w, r, "", time.Time{}, f)
+}
+
+// thumb answers an image blob's thumbnail to a viewer the blob would be
+// served to, made on this request if it is missing, with the blob's
+// headers and "<hash>.thumb" as its ETag. Authorize runs inside Thumb,
+// before any 304, as for the blob. Everyone else, a blob that is not an
+// image, and an image that could not be thumbnailed get not-found in the
+// same bytes as for a hash nothing has; the blob itself is still served.
+func (h *handler) thumb(w http.ResponseWriter, r *http.Request) {
+	hd := w.Header()
+	hd.Set("Cache-Control", "private, no-cache")
+	hd.Set("Vary", "Cookie")
+
+	hash := r.PathValue("hash")
+	f, ctype, err := h.svc.Thumb(r.Context(), domain.ViewerFrom(r.Context()), hash)
+	if errors.Is(err, blobsvc.ErrNotFound) {
+		problem.Write(w, r, problem.CodeNotFound)
+		return
+	}
+	if err != nil {
+		problem.WriteError(r.Context(), w, r, h.log, err)
+		return
+	}
+	defer f.Close()
+	content(w, r, f, ctype, `"`+hash+`.thumb"`, "inline")
 }
