@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY7K2YTY0V54YKJTKX1W
 title: Build the cross-forum unread, new, participated, and watching lists
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -23,15 +23,22 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:294
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase3-cty7k
+  branch: run/cty7k-cross-lists
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af6fcd27d256dc7a0
+  commit: 04224e4912f7b9cca839ffcba119e66a4ecf6b37
+  session: null
+  claimed_at: 2026-10-01T14:51:29Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T11:52:55Z
+updated_at: 2026-10-01T14:51:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-unread
+  id: agent:claude-code/phase3-cty7k
   name: ""
 extensions: {}
 ---
