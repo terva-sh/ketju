@@ -723,7 +723,10 @@ three forms:
 - an RFC 3339 time;
 - Unix ms.
 
-The answer's `lens.value` names the moment as Unix ms.
+The answer's `lens.value` names the moment as Unix ms. `mentions` and `mod`
+take no value, and their `lens.value` is empty, as is an anonymous viewer's
+bare `unread`. The lens an answer names is `kind` alone when `value` is empty
+and `kind:value` otherwise, and that string opens the same lens again.
 
 Any other value, an empty one included, serves the canonical page with
 `lens: null` rather than an error, so an old or mistyped link still opens the

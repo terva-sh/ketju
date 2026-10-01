@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T07:51:15Z
+updated_at: 2026-10-01T08:44:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,8 +45,8 @@ The moderator lens is the one with teeth: it is the only place a member-invisibl
 - [ ] mentions keeps the posts that mention the viewer or reply to a post they wrote, leaves out their own posts and removed posts, and drops a post once an edit removes the mention
 - [ ] mod is refused at the service layer, tested by calling Service.View directly: anonymous and suspended viewers get unauthenticated, a member and a moderator of another forum get forbidden, and a moderator by role, a moderator by group grant and an admin are served
 - [ ] mod keeps exactly the removed posts with their removal reason, gives a redacted or moved post no body for anyone, and is never served from a member's cache entry
-- [ ] All three are URL-addressable: the kind:value an answer names serves the same posts to the same viewer class when opened again (TestLensValueRoundTrips)
 - [ ] TestLensPostsMatchCanonical gains the since, mentions and mod rows for every viewer class and removed state
+- [ ] All three are URL-addressable: the lens an answer names (kind alone when value is empty, as for mentions and mod; kind:value otherwise) serves the same posts to the same viewer class when opened again (TestLensValueRoundTrips)
 
 ## Implementation plan
 
@@ -73,12 +73,12 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
    - Add the query `MentionedOrdinals :many`, `SELECT ordinal FROM mentions WHERE thread_id = ? AND mentioned_user_id = ? ORDER BY ordinal`, to `internal/store/db/queries/viewer_state.sql`. It is a primary-key prefix scan, and needs no migration. Regenerate sqlc.
    - The resolver reads it once before the snapshot. Inside the snapshot it takes `ix.ByAuthor(viewer)` as the viewer's own set before `Select`, because a filter must not call back into the index.
    - The filter keeps `(mentioned[o] || own[e.ReplyTo]) && e.Author != viewer && e.Flags.Visible()`.
-   - For a viewer who is not a member, the selection is empty with 200 and kind `mentions`.
+   - `lens.value` is empty. For a viewer who is not a member, the selection is empty with 200 and kind `mentions`.
    - The cache key's `Lens` is `mentions:<viewer id>`.
    - The projection trails the log by the bus's delay, so a mention written a moment ago appears on the next request. That is the same trade `/replies` makes with `post_meta`.
 3. **mod.**
    - The resolver refuses first: `unauthenticated` when `!a.viewer.Member()`, `forbidden` when `!a.canModerate`. Both checks come after `access`, so a hidden thread is still `not-found`.
-   - The filter keeps `!e.Flags.Visible()`.
+   - The filter keeps `!e.Flags.Visible()`, and `lens.value` is empty.
    - Pages are drawn through `pageClass`, which is always `moderator` here. The cache key's `Lens` is `mod`.
 4. Docs: none beyond the decisions already merged with this grooming.
 
@@ -93,7 +93,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 - `TestModLensRefusedAtServiceLayer` calls `Service.View` directly. An anonymous viewer and a suspended moderator are `unauthenticated`. A member and a moderator of another forum are `forbidden`. A moderator by role, a moderator by group grant (`world.groupModerator`) and an admin are served. A hidden thread is `not-found` to everyone without read.
 - `TestModLensSelectsRemovedPosts`: each removed kind appears with its `removal`. A redacted post and a moved post have no body for anyone. A post hidden pending review shows its body to the moderator.
 - `TestModLensNeverServedFromAMemberCacheEntry`: mod pages are keyed `moderator`, and a member asking after a moderator gets `forbidden`, not a cached page.
-- `TestLensValueRoundTrips`: for since, mentions and mod, opening `kind:value` from an answer serves the same posts to the same viewer class.
+- `TestLensValueRoundTrips`: the lens an answer names, `kind` alone when `value` is empty and `kind:value` otherwise (docs/07), serves the same posts to the same viewer class when opened again: `since:<ms>`, and bare `mentions` and `mod`, whose `value` is empty. `mentions:x` and `mod:x` serve the canonical page.
 - `TestLensPostsMatchCanonical` gains the since, mentions and mod rows. They cover every viewer class, the moderator by group grant and the suspended viewer included, and every removed state, a suspended author's hidden posts included.
 
 ### Out of scope
@@ -108,3 +108,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T07:51:15Z
 
 run decision: pending maintainer review. Three decisions bind this ticket. (1) The moderator lens is a filter to the removed posts, not the whole thread with bodies inline; the inline form is already the moderator's canonical page (docs/06 'Lenses'). (2) mentions keeps posts that mention the viewer or reply to their post and leaves out their own (docs/06). (3) since: reads a date as midnight UTC, so a shared link means one moment (docs/07). Who may open mod is not a new security rule: it is moderate in the thread's forum by role or group grant (docs/08 'Decided 2026-09-30'), the rule by which revealRemoved already serves the same viewer every removed body on the canonical page (docs/07 'Removed posts'). Decided in the Phase 3 grooming of 2026-10-01, lane lenses.
+
+**agent:claude-code/phase3-groom-lenses** at 2026-10-01T08:44:49Z
+
+Review 1702 (head 57bb98f, base a599b48), medium, 'Make the round-trip requirement valid for bare lens kinds': fixed. mentions and mod answer an empty lens.value. The lens an answer names is kind alone when value is empty and kind:value otherwise (docs/07). TestLensValueRoundTrips and the client's lensParam (TKT-01M29CTY71) both use that rule.

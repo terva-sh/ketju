@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:13:55Z
+updated_at: 2026-10-01T08:44:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -81,7 +81,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 
 1. **DTO.** In `web/client/src/api/dto.ts`, `Lens` gains `gaps: {after: number; count: number}[]` and `ThreadHeader` gains `author: Author`, matching TKT-01M29CRJ1P and TKT-01M29CTY58.
 2. **`components/thread/lens.ts`** holds the pure helpers:
-   - `lensParam(kind, value)` builds the string, and `onlyHref(thread, handle)` builds the Only link.
+   - `lensParam(kind, value)` builds the string: `kind` alone when `value` is empty, as for `mentions`, `mod` and an anonymous bare `unread`, and `kind:value` otherwise (docs/07). `onlyHref(thread, handle)` builds the Only link.
    - `gapBefore(posts, gaps)` places each gap before the first post whose ordinal is past `after`, and the trailing gap after the last post.
    - `describe(lens, header)` gives the header text: "Showing 7 of 212 posts by @mara", "Unread since #60", "Conversation around #42", "Since <PostTime>", "Mentioning you", "Removed posts".
    - `tracksUnderLens(kind)` is true for `''`, `unread` and `since`.
@@ -122,7 +122,7 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`).
 ### Tests
 
 - Vitest:
-  - `lens.test.ts`: gap placement across pages, the description per kind, and `tracksUnderLens`.
+  - `lens.test.ts`: `lensParam` gives bare `mentions` and `mod` and `since:<ms>`; gap placement across pages, the description per kind, and `tracksUnderLens`.
   - `LensHeader.test.tsx`: counts; each empty state; "Full thread" picks the post at the top of the viewport; on an empty lens page it and every empty state's link go to `/t/{id}/{slug}`.
   - `LensBar.test.tsx`: the date field writes `since:YYYY-MM-DD` unchanged with the viewer's timezone set to `America/Los_Angeles` and to `Pacific/Auckland`; the Only href equals the author lens URL; `aria-current`; Moderator offered only with `can_moderate`; Unread and Mentioning me only when signed in; Escape returns focus.
   - `ThreadScreen.lens.test.tsx`, through `renderAt`:
