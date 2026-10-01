@@ -27,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T22:52:37Z
+updated_at: 2026-10-01T23:10:15Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -56,10 +56,10 @@ Match each to the mockup, or record in docs/06 or docs/07 why the client differs
 
 ## Acceptance criteria
 
-- [ ] Every axe scan in a11y.spec.ts, forum-index.spec.ts and thread.spec.ts passes at 390 px and 1440 px in both themes, and forum-index-*, thread-* and thread-list-*.png are refreshed
+- [x] Every axe scan in a11y.spec.ts, forum-index.spec.ts and thread.spec.ts passes at 390 px and 1440 px in both themes, and forum-index-*, thread-* and thread-list-*.png are refreshed
 - [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
-- [ ] D1: the desktop top bar keeps its link to /search, as docs/07 Search decided, with no / shortcut and no key hint, and docs/06 Paged, not infinite records why it differs from the mockup (decided by the run 2026-10-01)
-- [ ] Each of T4, T10, P1, P4, M1, D2 and F9 matches its mockup at its width. Each is checked in e2e where it can be measured: the current page's fill, the 900 px column, the phone title's colour, the 44 px icon steps, the wordmark's alignment and the lock's position. The rest are checked in the refreshed screenshots
+- [x] D1: the desktop top bar keeps its link to /search, as docs/07 Search decided, with no / shortcut and no key hint, and docs/06 Paged, not infinite records why it differs from the mockup (decided by the run 2026-10-01)
+- [x] Each of T4, T10, P1, P4, M1, D2 and F9 matches its mockup at its width. Each is checked in e2e where it can be measured: the current page's fill, the 900 px column, the phone title's colour, the 44 px icon steps, the wordmark's alignment and the lock's position. The rest are checked in the refreshed screenshots
 
 ## Implementation plan
 
@@ -133,3 +133,25 @@ run decision: pending maintainer review. This supersedes the earlier D1 notes. W
 **agent:claude-code/phase3-visual-client** at 2026-10-01T22:52:37Z
 
 Acceptance criterion 2's 70000 B figure is superseded: the maintainer raised the reader budget to 120000 B gzip on 2026-10-01 (#331). This ticket is judged against 120000 B; the criterion text is left as filed. The reader is 73762 B on main at 0009f715. D1 needs no code: docs/06 'Paged, not infinite' already carries the D1 decision on main at 0009f715.
+
+**agent:claude-code/phase3-visual-client** at 2026-10-01T23:10:15Z
+
+Prepared on run/s3zzsz-visual-gaps from main at 0009f715, before the dist is regenerated (docs/14 "Client lanes may prepare").
+
+Each item was re-checked against main at 0009f715 before it changed:
+- T4 (thread.css): `.pager .current` is ink-filled with `bg` text at weight 600, as `thread().pager` draws it; `.pager .span` is mono.
+- T10 (thread.css): `.thread-page` max-width went from 880 px to 900 px. The padding stays outside the content box, so `.posts` measures 900 px at 1440 px.
+- P1 (shell.css): `.topbar.phone .title` is muted, weight 400, 13 px. The wordmark rule sets ink back.
+- M1 (PhoneTopBar.tsx, shell.css): with no screen context the bar no longer renders `tb-spacer` before the wordmark. The wordmark is left-aligned with 10 px of padding and is only as wide as the name, so the empty middle of the bar is no longer a link home. A titled screen keeps its spacer and its centred title.
+- P4 (Pager.tsx, thread.css): after #340 the phone steps are 44 px squares holding `Icon name="back"`, with next mirrored by `scaleX(-1)`. The inactive placeholder holds an icon too, so the pager does not shift. The aria-labels are unchanged.
+- D2 (TopBar.tsx, shell.css): `Avatar` of `viewer.user` at 28 px, then the handle in `span.handle`, which now carries the 16ch ellipsis that `.who` used to carry.
+- F9 (forums.css, phone block): `.forum-lock { margin-left: auto }` puts the lock at the right end of the name column, before the unread badge column.
+- D1: no code. docs/06 "Paged, not infinite" on main already records why the bar keeps the /search link.
+
+Tests: tsc; vitest 2445 passed (new: avatar beside handle, anonymous sees no avatar, the index bar opens with the wordmark, icon-only phone steps); `go test -race ./...` passes; the full Playwright suite at 390 and 1440 px passes (240 passed, 18 skipped), with the new e2e measures in thread.spec.ts and forum-index.spec.ts.
+
+The screenshots were compared with the mockups by eye. thread-desktop-{light,dark}: page 3 is ink-filled (near-white in dark), the span is mono, the column is 900 px, and the 28 px avatar circle sits beside "alice". thread-phone-dark: "General" is muted and regular, and the steps are icon squares with the disabled next mirrored. forum-index-phone-light: the wordmark is at the left, and the garden's lock sits at the right before "1 new". thread-list-phone: the title is muted.
+
+Reader bundle: 73762 B before and 73871 B after (+109 B), within the 120000 B budget.
+
+No new run decisions.
