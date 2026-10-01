@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T23:17:49Z
+updated_at: 2026-10-01T23:21:32Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -131,6 +131,10 @@ Reader bundle (`npm run budget`, measured with the dist generated locally and th
 **agent:claude-code/phase3-v6y87d** at 2026-10-01T23:17:41Z
 
 Review 1820 (head f9c09d8, base 0009f715), medium "Prevent a dismissed save from closing a newer watch dialog". Fixed in aacd5b11. A save's answer closes the dialog only while that dialog is mounted. It is handed to onSaved only if no later save to the same route has started since, so answers that land out of order do not put back an older level. A successful write still drops the held lists and pages and refreshes /me, even after its dialog was dismissed. The new test in ThreadScreen.watch.test.tsx, "keeps a late answer from closing a newer dialog or undoing a newer save", covers cancel and reopen and out-of-order answers. It fails without the fix. Reader bundle after the fix: 75236 B (+1474 B over main's 73762 B).
+
+**agent:claude-code/phase3-v6y87d** at 2026-10-01T23:21:32Z
+
+Review 1822 (head 39f18a4, base 0009f715), medium "Invalidate pending thread-page results as well as held GETs". Fixed in the commit after 39f18a4. A save now calls forgetAllThreadPages(), the generation barrier from #339 that a mark all read uses. A thread page asked for before the save is neither held nor stored when it lands, and loadThreadPage asks for it again, so the screen gets a post-save viewer block. This wipes the whole thread cache rather than one thread's, because a forum level reaches every thread in the forum and the barrier is global. A save is rare, as a mark is. Review 1822 judged finding 1 from review 1820 resolved. The new test in ThreadScreen.watch.test.tsx, "does not let a page asked for before a save put back the old level", holds back a live reload across a save. It fails without the fix. Reader bundle: 75176 B (+1414 B over main's 73762 B).
 
 ## Summary
 
