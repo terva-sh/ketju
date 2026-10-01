@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TS0ZV9V7WRQQ4QM5RZC3D1
 title: Take Escape in the flag, moderate and forum-picker dialogs before focus
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -19,17 +19,10 @@ blocks_on: none
 references:
   - ref: pr:260
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-ts0zv9
-  branch: run/ts0zv9-dialog-escape
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a68d50bdbb0d8f9b0
-  commit: b3cf1f48f27b15e5e8c8b4872361c1842ac91c7e
-  session: null
-  claimed_at: 2026-10-01T04:34:17Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T03:44:42Z
-updated_at: 2026-10-01T04:34:21Z
+updated_at: 2026-10-01T04:46:38Z
 created_by:
   id: agent:claude-code/phase2-run-tmrcmj
   name: ""
@@ -59,15 +52,15 @@ ComposerSheet already uses `useLayoutEffect` and is not affected in the same way
 
 ## Acceptance criteria
 
-- [ ] components/focus.ts exports useModal(root, onClose, enter), which runs enter (moving focus) in a useLayoutEffect and adds a capture-phase keydown listener on document for Escape (close unless defaultPrevented) and Tab (trapTab), removed by that effect's cleanup; HelpOverlay, FlagDialog and ForumPicker use it, and none keeps a keydown handler of its own
-- [ ] ModerateDialog moves focus to its first control in a useLayoutEffect, starts the move forum load in a separate useEffect, and stays inline and non-modal: Escape is still taken by the section's onKeyDown and Tab is not trapped
-- [ ] FlagDialog.test.tsx has a case that opens the dialog from a button outside act and dispatches Escape on document.activeElement one microtask later, asserting the dialog closed and focus is on returnTo, and a case that does the same from PostMore's flag item, asserting closed with focus on the More button; a ticket note records both failing on unchanged code
-- [ ] ForumIndex.test.tsx has the same race case for the picker opened from the index's new-thread button, asserting it closed and focus returned to the button; a ticket note records it failing on unchanged code
-- [ ] ThreadScreen.test.tsx has the same race case for the lock panel opened from the toolbar, asserting the panel closed, nothing was sent, and focus is on the h1, plus a case that Escape with focus on a post leaves the panel open; a ticket note records the race case failing on unchanged code
-- [ ] focus.test.ts tests useModal: with focus on the body Escape closes and Tab focuses the first control; a document keydown listener added before mount that preventDefaults Escape does not stop the close; after unmount Escape no longer calls onClose
-- [ ] e2e/flag.spec.ts, e2e/forum-index.spec.ts and e2e/thread-moderation.spec.ts each add an open-then-Escape step pressed back to back that expects the dialog gone (and, for flag and picker, the opener focused); every existing assertion is kept, and no retry, longer timeout, skip, focus wait or axe scan is added
-- [ ] Those three specs passed 20 of 20 repeats each on KETJU_E2E_PORT=18911 under CPU contention, with the command, load and counts in a ticket note, which also records the new steps run against the old dialogs
-- [ ] internal/web/spa/dist is regenerated with go generate ./internal/web/spa, and the PR states the reader bundle's gzip size before and after (under 70000 B)
+- [x] components/focus.ts exports useModal(root, onClose, enter), which runs enter (moving focus) in a useLayoutEffect and adds a capture-phase keydown listener on document for Escape (close unless defaultPrevented) and Tab (trapTab), removed by that effect's cleanup; HelpOverlay, FlagDialog and ForumPicker use it, and none keeps a keydown handler of its own
+- [x] ModerateDialog moves focus to its first control in a useLayoutEffect, starts the move forum load in a separate useEffect, and stays inline and non-modal: Escape is still taken by the section's onKeyDown and Tab is not trapped
+- [x] FlagDialog.test.tsx has a case that opens the dialog from a button outside act and dispatches Escape on document.activeElement one microtask later, asserting the dialog closed and focus is on returnTo, and a case that does the same from PostMore's flag item, asserting closed with focus on the More button; a ticket note records both failing on unchanged code
+- [x] ForumIndex.test.tsx has the same race case for the picker opened from the index's new-thread button, asserting it closed and focus returned to the button; a ticket note records it failing on unchanged code
+- [x] ThreadScreen.test.tsx has the same race case for the lock panel opened from the toolbar, asserting the panel closed, nothing was sent, and focus is on the h1, plus a case that Escape with focus on a post leaves the panel open; a ticket note records the race case failing on unchanged code
+- [x] focus.test.ts tests useModal: with focus on the body Escape closes and Tab focuses the first control; a document keydown listener added before mount that preventDefaults Escape does not stop the close; after unmount Escape no longer calls onClose
+- [x] e2e/flag.spec.ts, e2e/forum-index.spec.ts and e2e/thread-moderation.spec.ts each add an open-then-Escape step pressed back to back that expects the dialog gone (and, for flag and picker, the opener focused); every existing assertion is kept, and no retry, longer timeout, skip, focus wait or axe scan is added
+- [x] Those three specs passed 20 of 20 repeats each on KETJU_E2E_PORT=18911 under CPU contention, with the command, load and counts in a ticket note, which also records the new steps run against the old dialogs
+- [x] internal/web/spa/dist is regenerated with go generate ./internal/web/spa, and the PR states the reader bundle's gzip size before and after (under 70000 B)
 
 ## Implementation plan
 
@@ -154,3 +147,57 @@ Groomed 2026-10-01 against main at 61201be. That is the merge of TKT-01M3TMRCMJ'
 **agent:claude-code/phase2-run-ts0zv9** at 2026-10-01T04:22:35Z
 
 Grooming, 2026-10-01, against main at 61201be. A throwaway Vitest probe confirmed the race in all three dialogs: one microtask after the opener's click each is in the DOM with focus still on the opener, and an Escape there is dropped. It also found that on a phone PostMore's document listener, which Preact removes only after the next frame, takes an Escape pressed straight after choosing Flag; a bubble-phase document listener in the dialog does not fix that and a capture-phase one does. So the plan adds useModal in components/focus.ts (layout effect, capture-phase document listener) for HelpOverlay, FlagDialog and ForumPicker, and gives ModerateDialog, which is inline and non-modal by design, only the layout-effect focus move. Filed TKT-01M3TV4HBF (Move focus and key listeners into layout effects in menus and popovers) with no milestone for MoreMenu, PostMore, PostPopover, DeleteConfirm and ComposerSheet's Escape from the body. No open decision.
+
+**agent:claude-code/phase2-run-ts0zv9** at 2026-10-01T04:46:14Z
+
+Implementation evidence, 2026-10-01. The plan groomed in PR #260 held at claim. Main at b3cf1f4 differs from the groomed 61201be only in `.tickets/`, so the plan is not revised. The new tests were written before the fix and run on the unchanged dialogs. They are committed together with the fix, because `focus.test.ts` imports `useModal` and a tests-only commit would not build.
+
+### The race tests fail before the fix
+
+`npx vitest run` on FlagDialog.test.tsx, ForumIndex.test.tsx and ThreadScreen.test.tsx, against main's dialogs: 4 failed and 87 passed.
+
+- FlagDialog "closes the dialog" failed at `FlagDialog.test.tsx:257`: `expected <div class="flag-dialog" …> to be null`.
+- FlagDialog "closes the dialog opened from a phone's More list" failed at `:289`, with the same assertion.
+- ForumIndex "closes on an Escape pressed straight after opening" failed at `ForumIndex.test.tsx:210`: `expected <div class="forum-picker" …> to be null`.
+- ThreadScreen "an Escape pressed straight after opening closes the panel" failed at `ThreadScreen.test.tsx:640`: `expected <section …> to be null`.
+- ThreadScreen "an Escape outside the panel leaves it open" passes on both the old and the new code. It pins the non-modal decision.
+
+With the fix, the whole client suite passes: 2040 tests in 68 files. `npx tsc --noEmit -p .` is clean. gofmt, `go build`, `go vet` and `go test -race ./...` pass.
+
+### Mutations, each caught
+
+- `useModal`'s `useLayoutEffect` changed to `useEffect`: 4 cases fail (flag, phone flag, picker, and HelpOverlay's #259 race case).
+- The listener moved to the bubble phase: 2 cases fail ("hears Escape before a listener added earlier", and the phone flag case).
+- The listener never removed: 10 cases fail.
+- ModerateDialog's focus moved back to `useEffect`: its race case fails.
+
+### e2e: the new steps catch the old dialogs
+
+Main's five source files were put back, built with `npx vite build`, and run with the new specs. The command was `-g "flags another|new-thread button|locks and unlocks" --repeat-each 10`, on port 18911, with no load. 39 of 60 failed, every one on a new step's `toHaveCount(0)` (received 1):
+
+- `thread-moderation.spec.ts:60`: 19 of 20
+- `forum-index.spec.ts:99`: 18 of 20
+- `flag.spec.ts:38`: 2 of 20
+
+### 20 runs under CPU contention, with the fix
+
+From `web/client`: `KETJU_E2E_PORT=18911 KETJU_E2E_DIR=<scratch>/e2e-load/run npx playwright test e2e/flag.spec.ts e2e/forum-index.spec.ts e2e/thread-moderation.spec.ts --repeat-each 20`.
+
+Load: 24 busy `while :; do :; done` loops on a 12-core host, started before the run and stopped after it. The 1-minute load average was 29.7 at the end.
+
+Result: 404 passed, 0 failed, 0 flaky, in 10.6 minutes. That is 20 runs of each of the 10 tests in each of the phone and desktop projects, and the 4 setup sign-ins. No retry, timeout change, skip or focus wait was added.
+
+### Bundle
+
+The reader bundle went from 60440 B to 60465 B gzip (+25 B), of 70000 B.
+
+## Summary
+
+The race is fixed in all three dialogs. FlagDialog, ForumPicker and ModerateDialog moved focus in a useEffect, after the next frame, and caught Escape only on the dialog. So an Escape pressed straight after opening went to the opener and was lost. On a phone, PostMore's stale document listener also took the key and moved focus out of the flag dialog.
+
+- components/focus.ts now has useModal. It moves focus in a layout effect, and takes Escape and Tab on the document in the capture phase while the dialog is mounted. HelpOverlay, FlagDialog and ForumPicker use it.
+- ModerateDialog, which is inline and non-modal, moves focus in a layout effect and keeps its panel-level Escape.
+- Four Vitest race cases fail on the old code and pass now. useModal has its own tests.
+- Three e2e specs gained back-to-back open-then-Escape steps. Against the old dialogs, those steps failed in 39 of 60 runs. With the fix, 20 loaded repeats passed: 404 passed, 0 failed.
+- The reader bundle went from 60440 B to 60465 B.
+- The menus, popover and delete confirmation that share the pattern are TKT-01M3TV4HBF, a draft with no milestone.
