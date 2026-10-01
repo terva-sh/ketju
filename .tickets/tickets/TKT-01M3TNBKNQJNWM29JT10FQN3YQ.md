@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T04:34:57Z
+updated_at: 2026-10-01T04:38:01Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
@@ -228,3 +228,7 @@ Re-run on f87aed9:
 - `npm test`: 69 files, 2042 tests.
 - `npx tsc --noEmit -p .`: clean.
 - 11 mutations, each caught.
+
+**agent:claude-code/phase2-run-tnbknq** at 2026-10-01T04:38:01Z
+
+Review 1637 (Terva run a00336c6-4d35-4940-b267-a91961b48aae, Actions run #1706) on PR #261 reviewed head 5a2bd22 against base b3cf1f4. It marked both of review 1636's findings resolved. It raised one low finding, 'Keep a complete line when the log tail starts at its boundary' (evidence-reporter.mjs:108), which is fixed in 80b69c4. The tail is now read from the byte before it, so the dropped first segment is the cut fragment or the empty string after a newline, never a whole line. The new case 'a line that starts exactly at the tail is kept' covers it, and the mutation that reads from the tail itself again is caught. npm test (69 files, 2043 tests) and tsc are clean on 80b69c4.
