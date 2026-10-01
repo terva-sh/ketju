@@ -776,3 +776,48 @@ func TestParseRefusesAMalformedQuery(t *testing.T) {
 		t.Errorf("a well-formed escape parsed as %+v, %v", sub, err)
 	}
 }
+
+// TestInterruptedWaitIsNotLag: a projection wait cut short by the bus's
+// context or by shutdown still ends the streams that could hear of the
+// thread, but only a wait that ran its length counts as lag (Terva review
+// 1747).
+func TestInterruptedWaitIsNotLag(t *testing.T) {
+	id := threadid.ID(1 << 20)
+	batch := events.Batch{Events: []events.Event{{Thread: id, LogLength: 9}}}
+	for _, c := range []struct {
+		name string
+		wait time.Duration
+		cut  func(h *Hub, cancel context.CancelFunc)
+		lag  uint64
+	}{
+		{"the context ended", time.Hour, func(_ *Hub, cancel context.CancelFunc) { cancel() }, 0},
+		{"the hub closed", time.Hour, func(h *Hub, _ context.CancelFunc) { h.Close() }, 0},
+		{"the wait ran out", 30 * time.Millisecond, func(*Hub, context.CancelFunc) {}, 1},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := NewHub(HubOptions{Projections: fakeProjections{behind: true}, ProjectionWait: c.wait,
+				ProjectionPoll: time.Millisecond, Logger: quiet, Limits: Limits{Connections: 10, PerUser: 10, Anonymous: 10}})
+			s, err := h.open([]threadid.ID{id}, nil, 0)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(t.Context())
+			defer cancel()
+			done := make(chan error, 1)
+			go func() { done <- h.Deliver(ctx, batch) }()
+			time.Sleep(10 * time.Millisecond)
+			c.cut(h, cancel)
+			select {
+			case <-done:
+			case <-time.After(5 * time.Second):
+				t.Fatal("Deliver did not return")
+			}
+			if !s.ended.Load() {
+				t.Error("the stream naming the thread was left open")
+			}
+			if got := h.Stats().Lagged; got != c.lag {
+				t.Errorf("lagged = %d, want %d", got, c.lag)
+			}
+		})
+	}
+}

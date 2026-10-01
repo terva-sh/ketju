@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T11:05:23Z
+updated_at: 2026-10-01T11:19:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -265,6 +265,10 @@ This was review round 4 of 5. The full `go test -race ./...` passes on this tree
 Carried to #287. Main moved under #281 when the blob store (#284, TKT-01M29CXK0K) landed, and the two PRs conflicted in `cmd/ketju/serve.go` and docs/07. Per the run brief, the final tree of #281 is carried onto main ccb234d as one commit, bc34f19, on `run/crj3x-sse-fanout-2`, and #281 is closed with a comment. Both sides of each conflict are kept: `Blobs` and `Events` are both mounted, and docs/07's request limits keep #284's upload row and the three stream rows.
 
 Terva review 1746 (round 5 on #281: head c5eef67, base ccb234d, run bc2937e2-8935-456c-a64b-d47d517eac77): the status was success, with one low finding, "Reject malformed query parameters instead of silently ignoring them" (handler.go:105). `URL.Query()` drops a pair it cannot decode, so `forums=%ZZ` was read as absent. It is fixed in #287: `parse` uses `url.ParseQuery(r.URL.RawQuery)` and answers `bad-request` on its error. `TestParseRefusesAMalformedQuery` covers a bad escape in a value, a bad escape in a key and a `;` separator, and checks that a well-formed escape still decodes. Reverting the check is caught. The docs/07 /events row says so.
+
+**agent:claude-code/phase3-run-crj3x** at 2026-10-01T11:19:54Z
+
+Terva review 1747 on #287 (round 1 on #287: head b3aba54, base ccb234d, run 57dce6d8-b03a-4516-b7ea-c7f0f79af213, Actions run 1920): status success, with one low finding, "Do not count interrupted projection waits as lag" (hub.go:338). `await` returned the threads still behind both when the wait ran out and when the bus context or the hub's shutdown cut it short, and `Deliver` counted every one in `Stats.Lagged`. So a shutdown could report lag that never happened. Fixed: `await` also reports whether the wait ran its full length, and only then is `Lagged` counted. Either way the streams that could hear of the thread still end, because their hint cannot be routed. Ending them fails closed, which is the security posture. `TestInterruptedWaitIsNotLag` covers a cancelled context, a closed hub and a wait that ran out. Three mutations were tried and each was caught: counting lag unconditionally, never reporting a timeout, and not ending the streams.
 
 ## Summary
 

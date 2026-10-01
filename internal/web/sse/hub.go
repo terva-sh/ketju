@@ -312,12 +312,17 @@ func (h *Hub) Deliver(ctx context.Context, b events.Batch) error {
 		return nil
 	}
 
-	rows, lagging := h.await(ctx, order, targets)
+	rows, lagging, timedOut := h.await(ctx, order, targets)
 
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	// A thread still behind ends the streams that could hear of it, whether
+	// the wait ran out or was interrupted, because either way its hint
+	// cannot be routed. Only a wait that ran out is lag (Terva review 1747).
 	for _, id := range lagging {
-		h.lagged.Add(1)
+		if timedOut {
+			h.lagged.Add(1)
+		}
 		for s := range h.byThread[id] {
 			s.end()
 		}
@@ -363,9 +368,10 @@ func (h *Hub) send(s *stream, hn hint) {
 // await waits until each thread's projection row has reached its target,
 // and returns the rows that did and the threads that did not within the
 // wait. The hub closing, or ctx ending, stops the wait: every thread still
-// behind is then lagging.
-func (h *Hub) await(ctx context.Context, order []threadid.ID, targets map[threadid.ID]int64) (map[threadid.ID]threads.Projection, []threadid.ID) {
-	rows := make(map[threadid.ID]threads.Projection, len(order))
+// behind is then returned too. timedOut reports whether the wait ran its
+// full length, which only then makes the threads behind lag.
+func (h *Hub) await(ctx context.Context, order []threadid.ID, targets map[threadid.ID]int64) (rows map[threadid.ID]threads.Projection, behind []threadid.ID, timedOut bool) {
+	rows = make(map[threadid.ID]threads.Projection, len(order))
 	pending := order
 	deadline := time.Now().Add(h.wait)
 	var logged bool
@@ -388,23 +394,23 @@ func (h *Hub) await(ctx context.Context, order []threadid.ID, targets map[thread
 		}
 		pending = next
 		if len(pending) == 0 {
-			return rows, nil
+			return rows, nil, false
 		}
 		left := time.Until(deadline)
 		if left <= 0 {
 			h.log.Warn("a thread's projection did not reach its event in time; closing the live-update streams that could hear of it",
 				"threads", len(pending), "wait", h.wait)
-			return rows, pending
+			return rows, pending, true
 		}
 		t := time.NewTimer(min(h.poll, left))
 		select {
 		case <-t.C:
 		case <-ctx.Done():
 			t.Stop()
-			return rows, pending
+			return rows, pending, false
 		case <-h.done:
 			t.Stop()
-			return rows, pending
+			return rows, pending, false
 		}
 	}
 }
