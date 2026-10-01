@@ -249,17 +249,34 @@ func postText(r *rand.Rand, i int) string {
 
 // Criterion: results are compared across the fsync policies so the default is
 // chosen on evidence.
+//
+// The delete sub-benchmarks append a Delete of one existing post, over and
+// over: a record that rewrites an entry in place, which fsyncs the index
+// before its header (TKT-01M3VHSYFR). Read them against the post figures for
+// what that fsync costs.
 func BenchmarkAppendLatency(b *testing.B) {
+	post := Append{Type: TypePost, Author: 1,
+		Body: &PostBody{Source: "a message of an entirely ordinary length, as most of them are"}}
+	del := Append{Type: TypeDelete, Ordinal: 1, Author: 1, Body: &DeleteBody{}}
 	for _, policy := range []SyncPolicy{SyncAlways, SyncGroup, SyncNever} {
 		for _, writers := range []int{1, 8} {
 			b.Run(fmt.Sprintf("%s/writers=%d", policy, writers), func(b *testing.B) {
-				benchAppend(b, policy, writers)
+				benchAppend(b, policy, writers, post)
+			})
+		}
+	}
+	for _, policy := range []SyncPolicy{SyncAlways, SyncGroup} {
+		for _, writers := range []int{1, 8} {
+			b.Run(fmt.Sprintf("delete/%s/writers=%d", policy, writers), func(b *testing.B) {
+				benchAppend(b, policy, writers, del)
 			})
 		}
 	}
 }
 
-func benchAppend(b *testing.B, policy SyncPolicy, writers int) {
+// benchAppend measures appending rec over and over. The thread starts with
+// one post, so a record that names post 1 has something to name.
+func benchAppend(b *testing.B, policy SyncPolicy, writers int, rec Append) {
 	dir := benchTempDir(b)
 	lf, err := os.OpenFile(filepath.Join(dir, "a.log"), os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
@@ -277,13 +294,15 @@ func benchAppend(b *testing.B, policy SyncPolicy, writers int) {
 
 	a := NewActor(&Index{Header: IndexHeader{ThreadID: 1}}, FileHeaderSize, lf, xf, policy)
 	defer a.Close()
+	if _, err := a.Append(Append{Type: TypePost, Author: 1, Body: &PostBody{Source: "the first post"}}); err != nil {
+		b.Fatal(err)
+	}
 
 	n := b.N
 	if n < writers {
 		n = writers
 	}
 	lat := make([]time.Duration, n)
-	body := &PostBody{Source: "a message of an entirely ordinary length, as most of them are"}
 
 	b.ResetTimer()
 	var wg sync.WaitGroup
@@ -293,7 +312,7 @@ func benchAppend(b *testing.B, policy SyncPolicy, writers int) {
 			defer wg.Done()
 			for i := w; i < n; i += writers {
 				start := time.Now()
-				if _, err := a.Append(Append{Type: TypePost, Author: 1, Body: body}); err != nil {
+				if _, err := a.Append(rec); err != nil {
 					b.Errorf("append: %v", err)
 					return
 				}

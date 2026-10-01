@@ -13,6 +13,7 @@ package threadcache
 import (
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"sync"
 
@@ -47,6 +48,10 @@ type Options struct {
 	// avoid. So the caller supplies it; once the database in docs/04 exists,
 	// its projection is the authority. Nil means nothing is archived.
 	Archived func(threadid.ID) bool
+
+	// Logger receives what the cache cannot return to a caller, such as an
+	// index it could not write back. Nil means slog.Default().
+	Logger *slog.Logger
 }
 
 // Thread is one open thread: its index, its actor, and a reader over its log.
@@ -84,6 +89,7 @@ type Cache struct {
 	bound  int
 	policy threadlog.SyncPolicy
 	isArch func(threadid.ID) bool
+	log    *slog.Logger
 
 	mu     sync.Mutex
 	open   map[threadid.ID]*entry
@@ -123,8 +129,12 @@ func New(root string, opts Options) (*Cache, error) {
 	case bound < 0:
 		return nil, fmt.Errorf("threadcache: bound %d is negative", bound)
 	}
+	log := opts.Logger
+	if log == nil {
+		log = slog.Default()
+	}
 	return &Cache{
-		root: root, bound: bound, policy: opts.Sync, isArch: opts.Archived,
+		root: root, bound: bound, policy: opts.Sync, isArch: opts.Archived, log: log,
 		open: make(map[threadid.ID]*entry),
 	}, nil
 }
@@ -343,15 +353,36 @@ func (c *Cache) openThread(id threadid.ID) (*Thread, error) {
 		}
 	}
 
-	idxf, err := os.OpenFile(idxPath, os.O_RDWR|os.O_CREATE, 0o644)
-	if err != nil {
-		logf.Close()
-		return nil, fmt.Errorf("threadcache: opening %s: %w", idxPath, err)
+	// An index that was replayed onto or rebuilt describes the log only in
+	// memory. The file still holds the entries it had, or none, and the
+	// actor's first header would make the next open trust every one of them:
+	// a Delete the replay applied would be visible again (TKT-01M3VHSYFR). So
+	// the whole index is written back before the actor can write a header.
+	var idxw threadlog.IndexWriter
+	var idxf *os.File
+	if rec.Outcome != threadlog.Trusted {
+		if err := writeBack(idxPath, rec.Index, c.policy); err != nil {
+			// The file keeps its older header, which does not cover the
+			// log, so the next open replays and tries again. Until then the
+			// actor writes nothing to it, and the thread is served from the
+			// index in memory, which is correct.
+			c.log.Warn("could not write a thread's index back; serving it from memory, and the next open replays it again",
+				"thread", id.String(), "outcome", rec.Outcome.String(), "err", err)
+			idxw = discardIndex{}
+		}
+	}
+	if idxw == nil {
+		idxf, err = os.OpenFile(idxPath, os.O_RDWR|os.O_CREATE, 0o644)
+		if err != nil {
+			logf.Close()
+			return nil, fmt.Errorf("threadcache: opening %s: %w", idxPath, err)
+		}
+		idxw = idxf
 	}
 
 	t := &Thread{
 		ID: id, Index: rec.Index,
-		Actor:    threadlog.NewActor(rec.Index, rec.LogLength, logf, idxf, c.policy),
+		Actor:    threadlog.NewActor(rec.Index, rec.LogLength, logf, idxw, c.policy),
 		Reader:   threadlog.NewReader(logf, rec.Index),
 		Outcome:  rec.Outcome,
 		Replayed: rec.Replayed,
@@ -432,7 +463,9 @@ func (c *Cache) closeThread(t *Thread) error {
 		}
 	}
 	keep(t.Actor.Close())
-	keep(t.idx.Close())
+	if t.idx != nil {
+		keep(t.idx.Close())
+	}
 	keep(t.log.Close())
 	return first
 }

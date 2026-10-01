@@ -170,6 +170,16 @@ type Actor struct {
 	logLength   int64
 	headerDirty bool
 
+	// untrusted is set once the index file may disagree with the in-memory
+	// index: an entry write failed, an index fsync failed, or a record would
+	// not apply. From then on no header is written, for the actor's whole
+	// life, because the header is what makes the next open trust every entry
+	// in the file. The header on disk keeps its older length, so the next
+	// open replays and writes the index back whole (TKT-01M3VHSYFR). Before
+	// that ticket a failure here set headerDirty, and the flush that follows
+	// every batch then wrote a header covering the entry that was wrong.
+	untrusted bool
+
 	// published is logLength as readers may see it, set only after the index
 	// has applied the records that length covers. A reader that takes it and
 	// then an index snapshot therefore never holds an index older than the
@@ -324,6 +334,7 @@ func (a *Actor) shutdown() {
 	a.flushHeader()
 	if a.policy != SyncNever {
 		if err := a.index.Sync(); err != nil {
+			a.untrusted = true
 			a.noteErr(fmt.Errorf("threadlog: syncing the index: %w", err))
 		}
 	}
@@ -394,25 +405,43 @@ func (a *Actor) commit(batch []request) {
 	//    index file. A reader in Stable spins only for the in-memory part.
 	a.logLength = base + int64(len(buf))
 	applied := make([]bool, len(staging))
+	changed := false
 	a.applying.Add(1)
 	for i := range staging {
 		s := &staging[i]
 		if err := a.ix.Apply(s.header, s.body, uint64(s.offset), s.size); err != nil {
 			// The record is durable and the in-memory index would not take it.
-			// The log is the truth, so the append stands and the index is left
-			// marked stale for the next open to rebuild.
-			a.headerDirty = true
+			// The log is the truth, so the append stands, and no header is
+			// written again: the next open replays from the last one and
+			// rebuilds what this index lost.
+			a.untrusted = true
 			a.noteErr(fmt.Errorf("threadlog: index diverged at ordinal %d: %w", s.header.Ordinal, err))
 			continue
 		}
 		applied[i] = true
 		s.res.LogLength = a.logLength
+		if changesEntry(s.header) {
+			changed = true
+		}
 	}
 	a.published.Store(a.logLength)
 	a.applying.Add(1)
 	for i := range staging {
 		if applied[i] {
 			a.writeEntry(staging[i].header.Ordinal)
+		}
+	}
+	// A record that changed an existing entry, such as a Delete or an Edit,
+	// rewrote that entry in place. Nothing orders that write before the
+	// header's on disk, and a power cut that kept the header and lost the
+	// entry would leave a trusted index showing a hidden post. So the entries
+	// are made durable before the header that covers them is written
+	// (TKT-01M3VHSYFR). A batch of new posts pays no extra fsync: a lost new
+	// entry hides nothing (TKT-01M3VRFRFW).
+	if changed && !a.untrusted && a.policy != SyncNever {
+		if err := a.index.Sync(); err != nil {
+			a.untrusted = true
+			a.noteErr(fmt.Errorf("threadlog: syncing the index before its header: %w", err))
 		}
 	}
 	a.headerDirty = true
@@ -422,6 +451,17 @@ func (a *Actor) commit(batch []request) {
 	for i := range staging {
 		staging[i].req.reply <- answer{res: staging[i].res}
 	}
+}
+
+// changesEntry reports whether a record rewrites an existing post's entry,
+// which is every record Apply folds into an entry other than the Post that
+// creates it.
+func changesEntry(h FrameHeader) bool {
+	switch h.Type {
+	case TypeEdit, TypeDelete, TypeRestore, TypeRedacted:
+		return h.Ordinal != 0
+	}
+	return false
 }
 
 // frameFor assigns the ordinal and revision for one request and encodes its
@@ -538,7 +578,8 @@ func (a *Actor) checkState(req Append, staging []staged) error {
 // writeEntry writes one index entry, without fsync.
 //
 // A failure is not fatal. The log already holds the record, so the entry is
-// rebuildable, and the header is left dirty so the next open notices.
+// rebuildable, and the actor writes no header from then on, so the next open
+// replays rather than trusting a file with this entry wrong.
 func (a *Actor) writeEntry(ordinal uint32) {
 	if ordinal == 0 {
 		return // a thread event has no entry
@@ -552,17 +593,19 @@ func (a *Actor) writeEntry(ordinal uint32) {
 		return
 	}
 	if _, err := a.index.WriteAt(e.AppendTo(nil), off); err != nil {
-		a.headerDirty = true
+		a.untrusted = true
 		a.noteErr(fmt.Errorf("threadlog: writing index entry %d: %w", ordinal, err))
 	}
 }
 
 // flushHeader writes the index header, which is what makes the index trusted on
-// the next open. Never fsyncs: that happens once, on Close.
+// the next open. It fsyncs only when Close does, or before a batch that changed
+// an existing entry (see commit).
 //
-// Called only after the log fsync has returned.
+// Called only after the log fsync has returned, and never once the actor is
+// untrusted.
 func (a *Actor) flushHeader() {
-	if !a.headerDirty {
+	if !a.headerDirty || a.untrusted {
 		return
 	}
 	h := a.ix.Header

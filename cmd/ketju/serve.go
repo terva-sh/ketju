@@ -254,6 +254,17 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 			return fail("creating "+sub, err)
 		}
 	}
+	// Thread indexes an older build may have left trusted over a stale entry
+	// go, once per data directory, before anything opens a thread; each is
+	// rebuilt from its log on first open (TKT-01M3VHSYFR, docs/03
+	// "Durability and recovery"). Starting without it could serve a deleted
+	// or hidden post as visible, so a failure stops the start.
+	if n, err := threadcache.DiscardUnverifiedIndexes(cfg.DataDir); err != nil {
+		return fail("discarding thread indexes written before index write-back", err)
+	} else if n > 0 {
+		log.Info("discarded thread indexes an older build wrote; each is rebuilt from its log when the thread is first opened",
+			"removed", n)
+	}
 	// Uploads staged by a process that stopped mid-upload. Under the lock
 	// and before the listener, nothing is being staged now, so all of it
 	// goes (docs/03, TKT-01M29CXK0K).
@@ -299,7 +310,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 
 	step("stores")
 	cache, err := threadcache.New(cfg.DataDir, threadcache.Options{
-		Bound: cfg.Storage.OpenThreads, Sync: cfg.SyncPolicy(), Archived: archived(d),
+		Bound: cfg.Storage.OpenThreads, Sync: cfg.SyncPolicy(), Archived: archived(d), Logger: log,
 	})
 	if err != nil {
 		return fail("opening the thread store", err)

@@ -638,6 +638,15 @@ is: read both headers, and if `idx.log_length == stat(log).size` the index is
 trusted; otherwise replay records from `idx.log_length` to the end and repair.
 A missing or corrupt index is rebuilt by a full replay. Rebuilding a 100 MB
 log is a sequential read and takes well under a second on ordinary hardware.
+The repair is written back before the thread actor starts: the whole index,
+to a file beside the old one, fsynced and renamed over it (TKT-01M3VHSYFR). A
+replay changes entries that already exist (a `Delete`, a hide, an `Edit`, a
+`Redacted`) as well as adding new ones, and the actor writes only the entries
+its own appends touch. Without the write-back, its first header would make
+the next open trust the stale entries, and a deleted post would be served as
+visible again. If the write-back fails, the actor writes nothing to the file,
+so its old header still does not cover the log and the next open replays
+again.
 
 The index is the only file we ever write non-sequentially (updating an entry
 on `Edit`/`Delete`), and it is tiny and disposable, so that is acceptable.
@@ -666,8 +675,18 @@ Steps for a `Post`:
    `group` (default, drain and sync with no wait), `never`).
 4. Append index entry; update in-memory index; write index header lazily
    (the header's `log_length` is what makes the index trusted, so it is
-   updated *after* the log fsync — the worst case on crash is an index that
-   claims to be older than it is, which triggers a harmless replay).
+   updated *after* the log fsync, and a crash leaves an index that claims to
+   be older than it is, which the next open replays past and writes back).
+   The header must never reach the file over an entry that is wrong there
+   (TKT-01M3VHSYFR):
+   - a batch that rewrote an existing entry (`Edit`, `Delete`, `Restore`)
+     fsyncs the index after its entry writes and before the header, unless
+     the policy is `never`, so a power cut cannot keep the header and lose
+     the entry. A batch of new posts adds no fsync; a new entry lost that way
+     hides nothing (TKT-01M3VRFRFW);
+   - once an entry write, an index fsync or the in-memory apply fails, the
+     actor writes no header for the rest of its life, and the next open
+     replays.
 5. Publish an in-process event `{thread_id, ordinal, new_log_length}`.
    Subscribers: the projection writer (DB), the search indexer, the live
    update fan-out (SSE), the notification generator.
