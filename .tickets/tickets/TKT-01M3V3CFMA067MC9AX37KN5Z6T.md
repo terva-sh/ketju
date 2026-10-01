@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-01T18:40:40Z
+updated_at: 2026-10-01T20:48:35Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -149,3 +149,32 @@ Implementation, prepared on run/v3cfma-profile-screen (2026-10-01). The dist is 
 - I compared screenshots of the profile, the posts list and a thread page, at both widths and in both themes, by eye. There is no profile mockup. The author name in a thread still looks as the mockups draw it.
 
 Acceptance criterion 7 (the committed dist) stays unticked until the dist is handed to this lane.
+
+**agent:claude-code/phase3-v3cfma** at 2026-10-01T20:48:35Z
+
+run decision: pending maintainer review. On the phone the post header's ordinal is now text, and the permalink is under More (docs/06 "Mobile", recorded in the same PR).
+
+### Why
+
+The phone post header (TKT-01M3S3Z9E1, #334) stacks the author and badge over the ordinal, time and marks. Once the author's name became a profile link with the 44 px target this ticket requires, the two links sat about 20 px apart, centre to centre (measured at 390 px: the author's centre at y 779, the ordinal's at y 799.5). Flex items paint in `order`, so the ordinal's target painted over the author's lower left. `e2e/targets.spec.ts` failed on every author name on the thread page.
+
+Two 44 px targets need 44 px between their centres. The phone mockup (`docs/mockups/generate.py`, `mobile_thread`) draws the author as a link and the ordinal as a plain span. docs/06 "Mobile" already puts "link", the permalink, under "more" on the phone. So the ordinal is a span on the phone and stays a link on the desktop. The header's links are now the author on the first line and the reply-to at the right end of the second. Focus reads them in that order, which keeps Terva review 1725's rule. `thread.spec.ts` now tabs from the author to the reply-to.
+
+### Alternatives that lost
+
+- **About 25 px of room between the two header lines.** It passed the targets spec, but the screenshot left the avatar floating between two widely spaced lines, far from the mockup.
+- **Leading the DOM with the author and keeping both links.** It fixes the focus order but makes no room for both targets.
+- **No enlarged target on the author's name on the phone.** docs/06 "Targets and gestures" names author names among the links that take one, and acceptance criterion 5 asks for it.
+- **A few pixels of room, enough for the seeded names.** It would fail a short name such as "bo", whose target reaches down under the ordinal.
+
+Byte for byte, the committed phone screenshots are unchanged by this decision.
+
+**agent:claude-code/phase3-v3cfma** at 2026-10-01T20:48:35Z
+
+The dist was handed to this lane on 2026-10-01. The branch was rebased onto origin/main 9978cd3a, after #334 (phone post header), #335 (notifications) and #336 (search).
+
+- **Conflicts.** `routes.tsx` keeps the notifications and search routes beside the profile ones. In `Post.test.tsx`, #334's header-order test now names the author `author hit`, and on the phone `ordinal`, a span (see the run decision note).
+- **`useResource`.** #336 made `useResource` drop its answer when the key goes null. The profile and posts screens never pass a null key, so they are unaffected.
+- **Margin.** The 6 px phone margin between the ordinal and the author now applies only to the reply expander's one-line copies (`.post--recessed`). A post on the page stacks its header.
+- **Bundle.** The reader is 71675 B against 70218 B on main 9978cd3a, +1457 B of the 120000 B budget. Before #334 to #336 it was 66189 B to 67509 B. The account screens stay inlined.
+- **Commits.** The promote commit and the code commit became one commit during the rebase.
