@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY86ER6FJ1EWNSJHVEP9
 title: Build the notifications UI and alerts tab
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -24,15 +24,22 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:294
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase3-cty86
+  branch: run/cty86-notifications-ui
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a95b9c9d7b3f72a71
+  commit: 86752c422f9d6152ce015e2c1b52cdd721f33910
+  session: null
+  claimed_at: 2026-10-01T18:09:33Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T11:18:43Z
+updated_at: 2026-10-01T18:09:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-unread
+  id: agent:claude-code/phase3-cty86
   name: ""
 extensions: {}
 ---
