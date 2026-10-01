@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZZQDXM4RX4HK6V5X8VX7
 title: Seed a moderator post, a tombstone and an edit in the e2e thread
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -16,15 +16,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-s3zzqd
+  branch: run/s3zzqd-e2e-seed-moderator
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a17c0bda8d4969053
+  commit: ccb234d753a96820821414af2e47917622be5578
+  session: null
+  claimed_at: 2026-10-01T10:56:23Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T07:54:06Z
+updated_at: 2026-10-01T10:56:25Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-s3zzqd
   name: ""
 extensions: {}
 ---
