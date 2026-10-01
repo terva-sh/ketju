@@ -26,12 +26,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T20:11:42Z
-updated_at: 2026-10-01T03:24:20Z
+updated_at: 2026-10-01T04:30:20Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-sz3gce
+  id: agent:claude-code/phase2-run-tnbknq
   name: ""
 extensions: {}
 ---
@@ -173,3 +173,20 @@ TKT-01M3TNBKNQ (Print Playwright's error context into the CI log when a test fai
 **agent:claude-code/phase2-run-sz3gce** at 2026-10-01T03:23:43Z
 
 in-progress to blocked: Not reproduced in 42 CI-image full-suite runs under load, 11 host runs and 300 probe repeats (note of 2026-10-01). The plan forbids fixing an unseen cause, and #1592 kept no record of the page. Waits on TKT-01M3TNBKNQ, which prints Playwright's error context on a CI failure. Blocked rather than left in-progress (the plan's wording) so that no idle claim holds it.
+
+**agent:claude-code/phase2-run-tnbknq** at 2026-10-01T04:30:20Z
+
+Blocker done, 2026-10-01: TKT-01M3TNBKNQ (Print Playwright's error context into the CI log when a test fails) lands in the same PR as this note. This ticket stays blocked until the failure comes back.
+
+### What the next failure of this test will print
+
+`web/client/playwright.config.ts` now runs `scripts/evidence-reporter.mjs` after `list`. When `admin-applications.spec.ts` fails in CI, the Playwright step's log holds, directly under the test's `✘` line, a block that opens with `── failure evidence: [desktop] › e2e/admin-applications.spec.ts:40 › a moderator approves a pending application (failed) ──`. The block contains:
+
+- **Playwright's `error-context.md`, verbatim.** It has the error, the locator (`[data-application-link="2"]`) and its call log, and the YAML ARIA tree of the whole page when the 5 s ran out. That tree shows whether the page was still on "Loading…", showed an error panel, or rendered the table "Pending applications, newest first" without row `#2`. Those are candidates 1 to 3 in this ticket's plan.
+- **The `serve.log` lines from this test only**, as JSON with timestamps: the page request, the assets, the lazy `AdminRoot` chunk, and `GET /api/v1/admin/applications` with its status, its size and `duration_ms`. These give when the list request was sent and what it answered, which the first criterion asks for. If the request is missing, the browser never sent it. That is the runner-stall reading in note 2.
+
+A local run of a deliberately failing spec on the same page printed both parts at both widths (TKT-01M3TNBKNQ's proof note). `trace.zip` is still lost with the runner.
+
+### How to read it
+
+Open the failed run's "Playwright smoke at 390 px and 1440 px" step log from the commit's `ci / Build and Test` status, and search for `failure evidence`. A green run prints no such line.

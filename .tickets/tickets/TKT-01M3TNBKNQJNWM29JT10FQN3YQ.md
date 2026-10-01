@@ -30,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T04:17:30Z
+updated_at: 2026-10-01T04:30:23Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
@@ -59,15 +59,15 @@ Keeping `trace.zip` would need an artifact upload. That is a larger change, and 
 
 ## Acceptance criteria
 
-- [ ] playwright.config.ts lists ['list'] first and ['./scripts/evidence-reporter.mjs'] second, and keeps workers: 1, retries: 0 and trace: 'retain-on-failure'; the PR does not change .forgejo/workflows/ci.yml
-- [ ] For a result whose status differs from its expected status and is not skipped, scripts/evidence-reporter.mjs writes one block naming the project, file:line and title path, holding the error-context.md file verbatim (cut at 64 KiB) and the serve.log lines written between onTestBegin and onTestEnd (the last 120); a result that is skipped, or whose status equals its expected status, writes nothing
-- [ ] Only the first 10 failing results get a full block and each later one gets one line with its error-context.md path; an error inside the reporter writes one line and never throws
-- [ ] scripts/evidence-reporter.test.mjs covers every case named in the plan's Tests and passes under npm test
-- [ ] A note records a local run on port 18901 of a deliberately failing scratch spec at both widths, with the command and the commit, whose output holds two evidence blocks, each with the Locator: line, the YAML ARIA tree and GET /api/v1/admin/applications in the server lines; the scratch spec is not in the PR's diff
+- [x] playwright.config.ts lists ['list'] first and ['./scripts/evidence-reporter.mjs'] second, and keeps workers: 1, retries: 0 and trace: 'retain-on-failure'; the PR does not change .forgejo/workflows/ci.yml
+- [x] For a result whose status differs from its expected status and is not skipped, scripts/evidence-reporter.mjs writes one block naming the project, file:line and title path, holding the error-context.md file verbatim (cut at 64 KiB) and the serve.log lines written between onTestBegin and onTestEnd (the last 120); a result that is skipped, or whose status equals its expected status, writes nothing
+- [x] Only the first 10 failing results get a full block and each later one gets one line with its error-context.md path; an error inside the reporter writes one line and never throws
+- [x] scripts/evidence-reporter.test.mjs covers every case named in the plan's Tests and passes under npm test
+- [x] A note records a local run on port 18901 of a deliberately failing scratch spec at both widths, with the command and the commit, whose output holds two evidence blocks, each with the Locator: line, the YAML ARIA tree and GET /api/v1/admin/applications in the server lines; the scratch spec is not in the PR's diff
 - [ ] A note records a local full-suite run with no failures and zero 'failure evidence' lines in its output, and the PR's green CI Playwright step log has zero 'failure evidence' lines
-- [ ] go generate ./internal/web/spa leaves internal/web/spa/dist unchanged, and the PR's diff touches nothing under web/client/src
-- [ ] The implementation PR adds a note to TKT-01M3SZ3GCE, before review, saying its blocker is done and what a failing test now prints; TKT-01M3SZ3GCE stays blocked
-- [ ] The commit body lists the mutations tried against the unit test and whether each was caught
+- [x] go generate ./internal/web/spa leaves internal/web/spa/dist unchanged, and the PR's diff touches nothing under web/client/src
+- [x] The implementation PR adds a note to TKT-01M3SZ3GCE, before review, saying its blocker is done and what a failing test now prints; TKT-01M3SZ3GCE stays blocked
+- [x] The commit body lists the mutations tried against the unit test and whether each was caught
 
 ## Implementation plan
 
@@ -157,3 +157,53 @@ Grooming, 2026-10-01, against main at c3de983. The plan and the criteria replace
 A spike ran a scratch spec that waits on `/admin/applications` for a link that is never rendered, through a throwaway reporter. It confirmed that `result.attachments` holds `error-context` at `onTestEnd`. It also confirmed that the file carries the locator, the call log and the page's ARIA tree, and that a `serve.log` slice between `onTestBegin` and `onTestEnd` holds exactly that test's requests (the plan's "What the spike showed"). The spike's files are in scratch and are not committed.
 
 No open decision. Every choice in the plan is an engineering choice: where the code lives, the caps (64 KiB, 120 lines, 10 blocks), and reporter over step.
+
+**agent:claude-code/phase2-run-tnbknq** at 2026-10-01T04:30:18Z
+
+Proof, 2026-10-01, on commit 7da9abe (branch run/tnbknq-ci-error-context, on main at d643707). Both runs are from `web/client` on this host. The logs are in a scratch directory under ~/.cache/agent-scratch/ketju/.
+
+### A deliberately failing spec, at both widths
+
+The scratch spec `e2e/zz-scratch-fail.spec.ts` is not committed, and it was deleted before the run below. As mona, it opens `/admin/applications`, checks the `h1`, and waits for `[data-application-link="999"]`, which is never rendered. This is the step and the wait that failed in TKT-01M3SZ3GCE's run #1592.
+
+```
+GOROOT=/home/sothr/.local/share/mise/installs/go/1.27.1 KETJU_E2E_PORT=18901 npx playwright test e2e/zz-scratch-fail.spec.ts
+```
+
+Result: 2 failed (phone and desktop), 4 passed (setup), 14.5 s. Under each `✘` line the output held one block:
+
+```
+── failure evidence: [phone] › e2e/zz-scratch-fail.spec.ts:7 › scratch: a link that is never rendered (failed) ──
+error-context.md (/tmp/ketju-e2e-gmoWKq/results/zz-scratch-fail-scratch-a-link-that-is-never-rendered-phone/error-context.md):
+...
+Locator: locator('[data-application-link="999"]')
+Expected: visible
+Timeout: 5000ms
+...
+  - table "Pending applications, newest first":
+...
+      - row "#2 Oct 1, 2026, 4:17 AM quinn@example.test verified via fake":
+...
+serve.log during this test (/tmp/ketju-e2e-gmoWKq/run/serve.log), 15 lines:
+...
+{"time":"2026-09-30T23:18:57.357299676-05:00","level":"INFO","msg":"request","method":"GET","path":"/api/v1/admin/applications","status":200,"bytes":281,"duration_ms":0,"viewer":3}
+...
+── end of failure evidence ──
+```
+
+The desktop block is the same, with 14 server lines. Each block holds the `Locator:` line, the YAML ARIA tree of the page, and `GET /api/v1/admin/applications` in the server lines. No server line from the setup project or from the other width appears in either block.
+
+### The full suite, passing
+
+```
+GOROOT=/home/sothr/.local/share/mise/installs/go/1.27.1 KETJU_E2E_PORT=18901 npx playwright test
+```
+
+The run had 193 passed, 11 skipped and 0 failed, in 4.2 min. `grep -c 'failure evidence'` on its output gives 0. The output is 223 lines, which are the list reporter's alone.
+
+### Also run on 7da9abe
+
+- `npm test`: 69 files, 2040 tests, all passing, including the 8 in `scripts/evidence-reporter.test.mjs`.
+- `npx tsc --noEmit -p .`: clean.
+- `go generate ./internal/web/spa`, run after #259 changed the dist on main: `git status` shows nothing under `internal/web/spa/dist`.
+- The eight mutations in the commit body were each caught by the unit test.
