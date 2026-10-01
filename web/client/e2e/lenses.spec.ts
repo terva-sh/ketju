@@ -56,19 +56,18 @@ test('Only <handle> gives the author lens, which a fresh load shows the same', a
   await expect(page.locator('.lens-header')).toBeVisible();
   expect(await ordinals(page)).toEqual(shown);
 
-  // AC11: Full thread follows the post at the top of the viewport, under the
-  // phone's sticky bar, and lands on it in the full thread.
+  // AC11: Full thread follows the post at the top of the viewport, below
+  // the header that stays there (and the phone's bar), and a pointer press
+  // after reading on lands on it in the full thread (Terva review 1793).
   const full = page.locator('[data-full-thread]');
   await expect(full).toHaveAttribute('href', /\/1$/);
   await page.locator('#post-9').evaluate((el) => {
-    const bar = document.querySelector('.topbar.phone')?.getBoundingClientRect().bottom ?? 0;
-    scrollBy(0, el.getBoundingClientRect().top - bar);
+    // Twice: the first scroll sticks the header, which moves its edge.
+    for (let i = 0; i < 2; i++) scrollBy(0, el.getBoundingClientRect().top - document.querySelector('.lens-header')!.getBoundingClientRect().bottom);
   });
+  await expect(full).toBeInViewport();
   await expect(full).toHaveAttribute('href', /\/9$/);
-  // The link as it reads now. A pointer click would first scroll the header
-  // back into view, which changes the post at the top (filed as a draft:
-  // the header is out of reach once the reader has scrolled).
-  await full.dispatchEvent('click');
+  await full.click();
   await expect(page).toHaveURL(/\/t\/[^/]+\/[^/?]+\/9$/);
   await expect(page.locator('.lens-header')).toHaveCount(0);
   await expect(page.locator('#post-9')).toBeInViewport();
@@ -126,8 +125,9 @@ test('the unread lens holds while reading, and First unread lands after the posi
   await expect(page).toHaveURL(/\?page=2&lens=unread:10$/);
   await expect(page.locator('#post-36')).toBeVisible();
   expect((await ordinals(page))[0]).toBe(36);
+  // The move to page 2 sent what page 1 read; wait for it to land.
+  await expect.poll(() => readPosition(ctx.request, thread)).toBeGreaterThan(10);
   const at = await readPosition(ctx.request, thread);
-  expect(at).toBeGreaterThan(10);
 
   const firstUnread = async () => {
     if (isMobile) {

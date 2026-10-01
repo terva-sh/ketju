@@ -142,8 +142,12 @@
 }
 
 /* The lens header over a lens's posts (LensHeader): what is filtered, the
-   counts, and Full thread. */
+   counts, and Full thread. It stays at the top of the screen, under the
+   phone's top bar, so Full thread is in reach while the lens is read. */
 .lens-header {
+  position: sticky;
+  top: 0;
+  z-index: 4;
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
@@ -154,6 +158,9 @@
   background: var(--surface);
   border: 1px solid var(--rule);
   border-radius: var(--radius);
+}
+.thread-page:has(.lens-header) .post {
+  scroll-margin-top: 88px;
 }
 .lens-what {
   margin: 0;
@@ -921,7 +928,16 @@
     padding: 0 14px;
   }
   .lens-header {
-    margin: 0 16px 12px;
+    top: calc(53px + env(safe-area-inset-top, 0px));
+    margin: 0 0 12px;
+    padding: 6px 16px;
+    border-radius: 0;
+    border-inline: 0;
+    font-size: 13px;
+  }
+  /* A post moved to sits below the bar and the header. */
+  .thread-page:has(.lens-header) .post {
+    scroll-margin-top: 136px;
   }
   .lens-gap {
     padding: 6px 16px;

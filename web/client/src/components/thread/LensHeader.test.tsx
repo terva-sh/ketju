@@ -75,7 +75,9 @@ describe('the lens header', () => {
     let scrolled = 0;
     Element.prototype.getBoundingClientRect = function (this: Element) {
       const o = Number(this.getAttribute('data-ordinal') ?? 0);
-      const top = o ? (o - 3) * 300 - scrolled : 0;
+      // The header is above the posts and out of the way here.
+      if (!o) return { top: 0, bottom: 0, height: 0 } as DOMRect;
+      const top = (o - 3) * 300 - scrolled;
       return { top, bottom: top + 280, height: 280 } as DOMRect;
     };
     await draw(lens('author', 'mara'), [3, 4, 5]);
@@ -108,6 +110,22 @@ describe('the lens header', () => {
     await draw(lens('author', 'mara'), [3, 4]);
     expect(full()).toBe(`${home}/4`);
     bar.remove();
+  });
+});
+
+// Terva review 1793: the header stays on top of the posts, so a post under it
+// is not the one being read.
+describe('the header that stays on top', () => {
+  it('measures below its own edge', async () => {
+    Element.prototype.getBoundingClientRect = function (this: Element) {
+      if (this.classList.contains('lens-header')) return { top: 0, bottom: 60, height: 60 } as DOMRect;
+      const o = Number(this.getAttribute('data-ordinal') ?? 0);
+      // #3 ends under the header, at 40 px; #4 runs on below it.
+      const top = o === 3 ? -200 : 40;
+      return { top, bottom: top + 240, height: 240 } as DOMRect;
+    };
+    await draw(lens('author', 'mara'), [3, 4]);
+    expect(full()).toBe(`${home}/4`);
   });
 });
 

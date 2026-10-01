@@ -318,6 +318,11 @@ header's details.**
   lens that would leave its author out.
 - **The date field.** It shows a since lens's moment as its UTC day, the
   same rule by which a chosen day is read.
+- **The header stays on top.** The lens header stays at the top of the
+  screen while the lens is read, under the phone's top bar. Full thread is
+  therefore in reach wherever the reader is, and reaching it does not
+  scroll the page and change the post it goes to (Terva review 1793). The
+  post at the top is the first one below the header's edge.
 
 Alternatives:
 - A count of the lens's posts alone lost because "showing 7 of 212" is
@@ -326,6 +331,12 @@ Alternatives:
   under an author lens would count posts the lens does not show.
 - The field in the viewer's own timezone lost for the reason the address
   does not use it (07).
+- A header that scrolls away with the posts lost because a reader who
+  scrolled back up to press Full thread would land near the top of the
+  page, not where they were reading.
+- A per-post "full thread" entry in place of a header that stays lost
+  because the post's ordinal already links its canonical permalink, and
+  docs/06 promises the one-press return in the header.
 
 (TKT-01M29CTY71)
 

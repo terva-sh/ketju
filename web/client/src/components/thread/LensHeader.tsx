@@ -11,6 +11,9 @@ import { PostTime } from './PostTime';
 // LensHeader is drawn above a lens's posts (docs/06 "Lenses"): what is being
 // filtered, how many posts it shows and hides, and Full thread, the one
 // press back to the canonical thread at the post the reader is looking at.
+// It stays at the top of the screen while the lens is read (thread.css), so
+// Full thread is in reach wherever the reader is, and reaching it does not
+// scroll the page and change where it goes (Terva review 1793).
 //
 // Full thread is a link whose address is always the canonical permalink of
 // the post at the top of the viewport, kept current as the reader scrolls,
@@ -73,9 +76,9 @@ export function LensHeader({ lens, thread, first }: { lens: Lens; thread: Thread
 }
 
 // useTopPost is the ordinal of the post at the top of the viewport: the
-// first post whose bottom is below the phone's sticky top bar. It starts as
-// first, the page's first post, and is measured again at most once a frame
-// as the reader scrolls.
+// first post whose bottom is below what stays on top of it, the phone's top
+// bar and this header. It starts as first, the page's first post, and is
+// measured again at most once a frame as the reader scrolls.
 function useTopPost(first: number | undefined): number | undefined {
   const [top, setTop] = useState(first);
   useLayoutEffect(() => {
@@ -84,7 +87,8 @@ function useTopPost(first: number | undefined): number | undefined {
     let frame = 0;
     const measure = () => {
       frame = 0;
-      const bar = document.querySelector('.topbar.phone')?.getBoundingClientRect().bottom ?? 0;
+      const bottom = (sel: string) => document.querySelector(sel)?.getBoundingClientRect().bottom ?? 0;
+      const bar = Math.max(bottom('.topbar.phone'), bottom('.lens-header'));
       for (const el of document.querySelectorAll<HTMLElement>(postSelector)) {
         if (el.getBoundingClientRect().bottom > bar) return setTop(Number(el.dataset.ordinal));
       }

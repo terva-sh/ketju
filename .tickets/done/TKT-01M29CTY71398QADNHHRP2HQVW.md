@@ -37,7 +37,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T17:23:02Z
+updated_at: 2026-10-01T17:37:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -256,6 +256,10 @@ Review 1792 (PR #328, head 95da4a1, base 5d8f360), medium, 'Leave an unread lens
 **agent:claude-code/phase3-cty71** at 2026-10-01T17:22:30Z
 
 Filed TKT-01M3W7T2YH, 'Keep a lens's Full thread in reach once the reader has scrolled', as a draft with no milestone. The header scrolls away, so pressing Full thread after scrolling back up lands near the top of the page. The e2e therefore presses the link as it reads, without scrolling to it. Bundle on the carried tree, main at e855e1a: 66113 B of 70000 B (+2235 B over 63878 B).
+
+**agent:claude-code/phase3-cty71** at 2026-10-01T17:37:14Z
+
+Review 1793 (PR #330, head 81f1a23, base e855e1a), medium, 'Keep Full thread accessible without changing its destination': fixed. The lens header now stays at the top of the screen (sticky, under the phone's top bar), and the post at the top is measured below its edge. The e2e presses Full thread with a real pointer click after scrolling to #9 and lands on /9, at both widths. docs/06 records it under the lens header's details, with the alternatives. This supersedes the earlier note filing TKT-01M3W7T2YH: that draft was removed, because this PR fixes what it described and it was never on main. Bundle: 66189 B of 70000 B.
 
 ## Summary
 
