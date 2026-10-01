@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3NS122FTMG03KSKHJ0NP4V0
 title: Clear the search index in the hard-redaction tool
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,22 @@ dependencies:
   - TKT-01M29CTY9D04J3NR7E5HH59M24
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-search-cli
+  branch: run/ns122f-redact-search
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-abf8078d1aa918c1f
+  commit: ca5e50ccd6d563c79955623707dd05f4c6b0a3f6
+  session: null
+  claimed_at: 2026-10-01T14:02:42Z
+  expires_at: null
 archive: null
 created_at: 2026-09-29T05:08:32Z
-updated_at: 2026-10-01T09:38:45Z
+updated_at: 2026-10-01T14:02:44Z
 created_by:
   id: agent:claude-code/phase2-groom
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-search
+  id: agent:claude-code/phase3-search-cli
   name: ""
 extensions: {}
 ---
