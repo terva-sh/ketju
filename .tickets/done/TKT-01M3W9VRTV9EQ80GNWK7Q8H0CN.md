@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3W9VRTV9EQ80GNWK7Q8H0CN
 title: Wait for a restored notification in TestServeGeneratesNotifications
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -15,17 +15,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-notif-flake
-  branch: run/9vrtv-notif-flake
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a10b78c78ef1a6f05
-  commit: 367c90db1291b95d161870efa3add79d8c500e48
-  session: null
-  claimed_at: 2026-10-01T17:58:19Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T17:58:12Z
-updated_at: 2026-10-01T17:58:27Z
+updated_at: 2026-10-01T18:07:28Z
 created_by:
   id: agent:claude-code/phase3-notif-flake
   name: ""
@@ -85,11 +78,49 @@ proves.
 
 ## Acceptance criteria
 
-- [ ] The test polls with a deadline after the restore and checks that the same row came back, with no fixed sleep
-- [ ] The read after the delete stays a single read, so the immediate hide is still proven
-- [ ] Under a CPU hog, -race -count=20 fails before the change and passes after
-- [ ] Other Phase 3 tests in cmd/ketju were checked for the same single read after an async change
+- [x] The test polls with a deadline after the restore and checks that the same row came back, with no fixed sleep
+- [x] The read after the delete stays a single read, so the immediate hide is still proven
+- [x] Under a CPU hog, -race -count=20 fails before the change and passes after
+- [x] Other Phase 3 tests in cmd/ketju were checked for the same single read after an async change
 
 ## Implementation plan
 
 Test-only change in cmd/ketju/notifications_test.go. A helper, await(cond), polls list() every 20 ms up to a 10 s deadline and returns the last read. It replaces the inline loop for the first notification. The read after the restore becomes await(len == 1), checked to be the same id and ordinal as the first notification; that id is what up_to marks. The read after the delete, and the badge check, stay single reads, because the hide is synchronous: either post_meta says deleted, or the thread trails and VisibleNotifications reads the index. got0 has no other caller and goes. No product change; the reason is in the description. Evidence: loaded.sh (24 busy loops on 12 cores, -race -count=20) before and after.
+
+## Notes
+
+**agent:claude-code/phase3-notif-flake** at 2026-10-01T18:02:52Z
+
+### Loaded runs
+
+The runs used `loaded.sh`: 24 busy shell loops on 12 cores, then
+`go test -race -count=N -run 'TestServeGeneratesNotifications$' ./cmd/ketju/`.
+
+- Before the change, on origin/main 367c90d, count=20: 4 of 20 failed, every
+  one with `notifications_test.go:120: the list is empty`. None failed at the
+  delete check, which agrees with the hide being synchronous.
+- After the change, count=20 passed, then count=40 passed: 60 of 60.
+
+### Other Phase 3 tests in cmd/ketju
+
+I checked every cmd/ketju test file that Phase 3 commits touched since
+2026-09-30. None of them reads once after an async change in the same way:
+
+- `search_test.go`: `searchWorld` waits for "search catch-up finished"
+  before its first read. The held-catch-up tests read while the catch-up is
+  held, so nothing moves under them. The released pass is awaited with a
+  deadline.
+- `serve_events_test.go`: every line is awaited with a 5 s timeout.
+- `redact_search_test.go`, `reindex_search_test.go` and the redact_test.go
+  additions run the offline tools, and nothing runs asynchronously after
+  them.
+- The blob additions to `serve_test.go` (d253ac0d) are synchronous upload
+  and fetch.
+- No cmd/ketju test covers watches or the cross-forum lists. Their API
+  tests, and `internal/web/api/notifications_test.go`, drive the projection
+  and the generator explicitly (`ProjectThread`, `gen.Deliver`), so they do
+  not race the bus.
+
+## Summary
+
+The test was wrong, not the product. The author's own restore is projected through the bus, and ListNotifications drops a row while post_meta says deleted, so a restored notification comes back once the projection reaches the Restore. docs/04 promises that, with no time bound, and the access invariant allows serving late. TestServeGeneratesNotifications now waits for the restored row with a 10 s deadline and checks that it is the same row. The read after the delete stays a single read, because the hide is synchronous. got0 is gone. Under 24 busy loops: 4 of 20 runs failed before the change, and 60 of 60 passed after. No other Phase 3 test in cmd/ketju has the pattern.

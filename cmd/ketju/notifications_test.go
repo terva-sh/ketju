@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
@@ -51,8 +50,8 @@ func notificationRows(t *testing.T, d *db.DB) string {
 // TestServeGeneratesNotifications is the generator as serve wires it
 // (TKT-01M29CRJ2T): a reply through the API that names a member reaches
 // their notification list and their /me badge through the event bus, with
-// no post text, and a delete through the API takes it off both. Marking it
-// read clears the badge.
+// no post text, and a delete through the API takes it off both. A restore
+// brings the same row back, and marking it read clears the badge.
 func TestServeGeneratesNotifications(t *testing.T) {
 	s := startExit(t, mona, sam)
 	writer, reader := s.member(t, sam), s.member(t, mona)
@@ -83,13 +82,18 @@ func TestServeGeneratesNotifications(t *testing.T) {
 		res.decode(t, &out)
 		return out.Notifications, res.String()
 	}
-	var got []note
-	var body string
-	for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
-		if got, body = list(); len(got) > 0 || time.Now().After(deadline) {
-			break
+	// await reads the list until cond holds or ten seconds pass, and returns
+	// the last read. A notification is written, and a restored one comes back,
+	// only once the projection reaches the record (TKT-01M3W9VRTV).
+	await := func(cond func([]note) bool) ([]note, string) {
+		t.Helper()
+		for deadline := time.Now().Add(10 * time.Second); ; time.Sleep(20 * time.Millisecond) {
+			if got, body := list(); cond(got) || time.Now().After(deadline) {
+				return got, body
+			}
 		}
 	}
+	got, body := await(func(n []note) bool { return len(n) > 0 })
 	if len(got) != 1 || got[0].Kind != "mention" || got[0].Ordinal == nil || *got[0].Ordinal != ordinal {
 		t.Fatalf("mona's notifications: %s", body)
 	}
@@ -107,7 +111,9 @@ func TestServeGeneratesNotifications(t *testing.T) {
 	if del.status >= 300 {
 		t.Fatalf("deleting answered %d:\n%s", del.status, del)
 	}
-	if got, body = list(); len(got) != 0 {
+	// The hide is not awaited: post_meta says deleted, or the thread trails
+	// and the index does, so a delete is off the list when it answers.
+	if got, body := list(); len(got) != 0 {
 		t.Errorf("a deleted post's notification is still listed: %s", body)
 	}
 	if n := reader.me(t).Notifications; n != 0 {
@@ -117,33 +123,20 @@ func TestServeGeneratesNotifications(t *testing.T) {
 	if restore.status >= 300 {
 		t.Fatalf("restoring answered %d:\n%s", restore.status, restore)
 	}
-	marked := reader.do(t, http.MethodPost, "/api/v1/notifications/read", map[string]any{"up_to": got0(t, list)})
+	// The author's own restore is projected through the bus, and until then
+	// post_meta still says deleted, so the row comes back when the projection
+	// reaches the Restore.
+	back, body := await(func(n []note) bool { return len(n) > 0 })
+	if len(back) != 1 || back[0].ID != got[0].ID || back[0].Ordinal == nil || *back[0].Ordinal != ordinal {
+		t.Fatalf("after the restore, mona's notifications are %s, want row %d back", body, got[0].ID)
+	}
+	marked := reader.do(t, http.MethodPost, "/api/v1/notifications/read", map[string]any{"up_to": back[0].ID})
 	if marked.status != http.StatusOK || !strings.Contains(marked.String(), `"marked":1`) {
 		t.Fatalf("marking read answered %d:\n%s", marked.status, marked)
 	}
 	if n := reader.me(t).Notifications; n != 0 {
 		t.Errorf("mona's badge is %d after marking it read", n)
 	}
-}
-
-// got0 is the id of the first notification list returns.
-func got0[T interface{ ~[]E }, E any](t *testing.T, list func() (T, string)) int64 {
-	t.Helper()
-	got, body := list()
-	if len(got) == 0 {
-		t.Fatalf("the list is empty: %s", body)
-	}
-	b, err := json.Marshal(got[0])
-	if err != nil {
-		t.Fatal(err)
-	}
-	var first struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.Unmarshal(b, &first); err != nil {
-		t.Fatal(err)
-	}
-	return first.ID
 }
 
 // TestReindexWritesNoNotifications is AC5's last part (TKT-01M29CRJ2T):
