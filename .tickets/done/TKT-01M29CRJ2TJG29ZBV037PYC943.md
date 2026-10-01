@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T16:12:14Z
+updated_at: 2026-10-01T16:38:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -161,6 +161,27 @@ This is fixed. docs/04's run decision lets only an unread row move to a stronger
 Each fix was reverted in turn to check that its test fails:
 - dropping the moved check: caught by `TestNotificationsTrailingMove`;
 - dropping the `read_at` condition: caught by `TestEditLeavesReadNotificationAlone`.
+
+**agent:claude-code/phase3-crj2t** at 2026-10-01T16:38:20Z
+
+Review 1784 on #327 (head 112a95e, base 0ed44eb, Actions run 2175) raised one finding, and it is fixed. This is round 1 of 5 on #327. #323 was replaced after its own round 1 (review 1781), and its second dispatch never reported.
+
+### Medium: a backlog past SQLite's variable limit stalls catch-up
+This is not a security finding, but it is a liveness bug: a thread whose backlog asked for more post authors than SQLite binds was refused on every retry and never advanced. I fixed it rather than recording a disagreement.
+
+The fix:
+- `generate` deduplicates the ordinals it looks up.
+- `PostAuthors` and `UsersByIDs` are both read in chunks of at most 500 ids, through `inChunks`.
+
+The tests:
+- `TestLargeBacklogCatchesUp` replays 32,800 replies to post #1, past SQLite's default limit of 32,766, and checks that a later mention arrives. With the fix removed, it fails with "too many SQL variables".
+- `TestLookupsSpanChunks` checks that a lookup split over several chunks generates exactly what one statement would.
+
+The backlog test takes about 6 s without -race and about 137 s with it. Following the pattern of `catchup_bound_test.go`, it is built `!race` and runs in its own CI step, "notification catch-up past SQLite's variable limit (no -race)".
+
+Alternatives considered:
+- **Lower SQLite's variable limit on the test connection.** It lost because `db.DB` does not expose its write connection, and reaching it would add test-only API to the store.
+- **Process bounded frame ranges.** It lost because it changes how progress commits, while chunking the two lookups is local to `generate`.
 
 ## Summary
 
