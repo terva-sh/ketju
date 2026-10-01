@@ -10,8 +10,8 @@ due_on: null
 labels:
   - area:storage
 assignees: []
-milestone: null
-parent: null
+milestone: phase-3
+parent: TKT-01M29BKBKP8C66GXXQK4HPEZ35
 origin: null
 dependencies: []
 blocks_on: none
@@ -19,12 +19,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T10:57:46Z
-updated_at: 2026-10-01T10:57:46Z
+updated_at: 2026-10-01T12:54:53Z
 created_by:
   id: agent:claude-code/phase3-run-crj3b
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-run-crj3b
+  id: agent:claude-code/phase3-vhsyfr
   name: ""
 extensions: {}
 ---
@@ -57,3 +57,116 @@ When `Open` returns `Extended` or `Rebuilt`, the thread cache (or the actor at s
 ### Why it is filed here
 
 It is outside the search ticket's scope: the search index reads the same entries, so it inherits whatever the thread page shows. It touches what readers can see (docs/14 "Invariants, added"), so it is filed as a bug with priority high, for the maintainer or the orchestrator to place.
+
+## Acceptance criteria
+
+- [ ] threadcache.openThread writes the whole recovered index to the .idx (temp file beside it, rename, fsync of file and directory unless SyncNever) before the actor starts whenever the outcome is not Trusted; TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted passes for Extended, Rebuilt with no .idx and Rebuilt with a broken header, for author Delete, moderator hide, suspension hide, auto-hide, Redacted, Edit and Restore, each reopen Trusted and equal entry for entry to a full rebuild
+- [ ] The PR quotes TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted failing on main (a commit holding only the test) for Delete, moderator hide, auto-hide and Redacted under both Extended and Rebuilt, and passing on the reviewed head
+- [ ] TestAWriteBackIsTrustedWithoutAnAppend and TestAFailedWriteBackNeverMarksTheIndexTrusted pass: an Extended open closed with no append reopens Trusted with 0 bytes replayed, and a failed write-back leaves the .idx header short of the log so the deleted post stays hidden
+- [ ] The actor writes no index header after a failed entry write, a failed index Sync or a diverged Apply, for the rest of its life including Close; TestAFailedEntryWriteLeavesTheHeaderUnwritten and TestAFailedIndexSyncLeavesTheHeaderUnwritten pass
+- [ ] A batch that changes an existing entry fsyncs the index between its entry writes and its header write unless SyncNever, and a batch of new posts only adds no index fsync; TestAMutationIsSyncedToTheIndexBeforeTheHeaderCoversIt passes, and a ticket note records BenchmarkAppendLatency for a post and a delete on main and on the head
+- [ ] ketju serve calls threadcache.DiscardUnverifiedIndexes before threadcache.New: without <data>/index-writeback it removes every .idx and then writes the marker, with it present it removes nothing, and a removal failure stops serve from starting; TestDiscardUnverifiedIndexesRemovesEveryIndexOnce and TestServeDiscardsIndexesWrittenBeforeWriteBack (the thread page serves a hand-poisoned deleted post as a tombstone) pass
+- [ ] docs/03 write path step 4 and the index open path describe the write-back, the header stop after a failed index write, and the mutation fsync, and no longer call the crash case a harmless replay
+- [ ] No change to the log format or the .idx layout (format.go, header.go and the index.go field tables unchanged), and none to web/client or the committed dist
+- [ ] go test -race ./... passes in CI on the merged head, with the step log naming the new tests
+
+## Implementation plan
+
+Groomed 2026-10-01 for the Phase 3 run (docs/14), against main at d80c2330.
+
+### Settled in grooming
+
+- **Placement.** The orchestrator placed this in Phase 3 on 2026-10-01: it breaks docs/14 "Invariants, added" (search, notifications, lens results and live events never widen access), and the thread page, every lens and the search scan read the same entry flags. Parent: the storage engine epic, TKT-01M29BKBKP.
+- **Reproduced on main at d80c2330 for both outcomes**, with a scratch test in `internal/store/threadcache` shaped like the description's steps:
+  - `Extended` (the old `.idx` put back after a `Delete` of post 1): open is `extended`; after one more post and a close, the reopen is `trusted` and post 1 has flags `0x0`, `Visible()`.
+  - `Rebuilt` (the `.idx` removed): open is `rebuilt`; the actor writes only the new post's entry into a fresh file, so ordinals before it are zero entries under a header that covers the whole log. The reopen is `trusted` and post 1 is visible again. A log restored from a backup without its `.idx` reaches this on its first append.
+- **The trust rule this ticket enforces.** A header that covers log length L may reach the `.idx` only when every entry in the file equals the in-memory entry for the log up to L. On main it breaks three ways:
+  1. a non-`Trusted` open, because nothing writes the replayed or rebuilt entries back (`threadcache.openThread`, `threadlog.NewActor`);
+  2. in `Actor.commit`, a failed `writeEntry` or a diverged `ix.Apply` sets `headerDirty = true`, and the unconditional `a.headerDirty = true; a.flushHeader()` that follows then writes a header covering the record whose entry is wrong;
+  3. a power cut, because no fsync orders an in-place entry write before the header write, so the header page can persist while a `Delete`'s entry page does not.
+- **Formats.** The log format is frozen (docs/03 "Format freeze") and is not touched. The `.idx` layout is not changed either: the fix uses the existing header and entries, so docs/03's format procedure is not needed.
+- **The `.idx` is derived** (docs/03 "Index file format": "a derived, rebuildable file"). Discarding one is always safe, because the next open rebuilds it from the log. Repairing indexes on existing deployments is therefore not docs/14 stop-rule class 2, and is decided below.
+- **Cases beyond hiding.** An `Edit` replayed and not written back leaves the entry pointing at the previous revision, so a stale index serves superseded text: a leak of the same kind. A `Restore` not written back keeps a restored post hidden, which narrows rather than widens. Writing the whole index back covers both. No record sets `EntryMoved` yet (`apply.go` has no move case), so there is no moved case to test; the whole-index write covers it when one exists.
+- **Run decision: one-time discard of existing indexes** (docs/03 "Durability and recovery", Decided by the run 2026-10-01, pending maintainer review). `ketju serve` removes every `.idx` once per data directory, before the thread cache opens anything, then writes the marker `<data>/index-writeback`. Each thread rebuilds its index from its log on first open and writes it back by step 1 below. Alternatives:
+  - leaving it to the operator to run `ketju fsck --rebuild` lost, because nothing tells an operator an index is poisoned, and the run cannot touch the dogfood deployment (docs/14 class 3);
+  - verifying every index against its log on every open lost, because that is the full replay the trusted path exists to avoid (docs/03 "Durability and recovery");
+  - rebuilding every index eagerly at startup lost, because startup would then scale with total log bytes, while a lazy rebuild costs the same once per thread;
+  - extending `ketju reindex` lost, because it rebuilds database projections, refuses to run beside serve, and still needs an operator.
+
+  `ketju fsck --rebuild` stays the manual repair and is unchanged.
+
+### Approach
+
+1. **Write back on every non-trusted open** (`internal/store/threadcache/cache.go`, `openThread`). After `threadlog.Open` and `rec.Truncate`, and before `idxf` is opened, when `rec.Outcome != threadlog.Trusted`, write `rec.Index.AppendTo(nil)` to `id.IndexPath(root)` whole: a temp file beside it (`<id>.idx.writeback`), then rename. Under `SyncGroup` and `SyncAlways` use `fsutil.WriteFile`, which fsyncs the file and the directory. Under `SyncNever` write and rename without the fsyncs, matching the actor's own policy, so that test suites creating many threads do not pay for them. The header written carries `rec.LogLength`, so the next open is `Trusted` even if no append follows. `Create` opens through the same path, so a new thread's empty index is written once.
+2. **A write-back that fails never leads to trust.** If step 1 fails, log it at warning with the thread id (add `Options.Logger`, nil meaning `slog.Default()`), and start the actor over an unexported `discardIndex` writer whose `WriteAt` and `Sync` succeed and write nothing. The stale file keeps its old header, so the next open replays again and retries the write-back. The thread serves from its in-memory index, which is correct. `closeThread` tolerates the missing `*os.File`.
+3. **The actor stops writing headers once the file may be wrong** (`internal/store/threadlog/actor.go`). Add a field `untrusted bool`, owned by the actor goroutine and sticky for the actor's life. Set it:
+   - when `ix.Apply` fails in `commit` (index diverged);
+   - when `writeEntry`'s `WriteAt` fails;
+   - when an index `Sync` fails (step 4 and `shutdown`).
+
+   `flushHeader` returns without writing once it is set. Replace the `a.headerDirty = true` in those error paths, which today make the next `flushHeader` write a header over the bad entry. `Close` still returns the first error, as now.
+4. **Order a changed entry before the header that covers it** (`Actor.commit`). When any applied record in the batch changed an existing entry (`Edit`, `Delete`, `Restore`, or a post `Redacted`, which is every type `postFlagEffect` or `applyEdit` touches), call `a.index.Sync()` after the entry writes and before `flushHeader`, unless the policy is `SyncNever`. A batch of new posts only adds no fsync. Measure `BenchmarkAppendLatency` for a post and for a delete (add a delete sub-benchmark beside it) on main and on the branch, and record both in a ticket note. A mutation pays one index fsync; a post pays nothing new.
+5. **One-time discard on existing deployments** (the run decision above). Add `threadcache.DiscardUnverifiedIndexes(root string) (removed int, err error)`:
+   - if `<root>/index-writeback` exists, it returns at once;
+   - otherwise it lists threads with `threadid.WalkLogs`, removes each `id.IndexPath(root)` that exists, fsyncs each shard directory it removed from, then writes the marker with `fsutil.WriteFile`.
+
+   A crash midway leaves no marker, so the next start repeats it, which is harmless. `cmd/ketju/serve.go` calls it in the `"database"` step, after the lock, the pending-redaction check and the `threads/` mkdir, and before `threadcache.New`. A failure stops serve from starting (`fail("discarding thread indexes written before write-back", err)`), because a poisoned index left in place would widen access. It logs the count at info.
+6. **docs/03.**
+   - Write path, step 4: drop "the worst case on crash is an index that claims to be older than it is, which triggers a harmless replay". Say instead that a replayed or rebuilt index is written back whole before the actor starts, that a batch changing an existing entry fsyncs the index before its header, and that a failed index write stops header writes until the next open.
+   - The open path paragraph under "Index file format": "replay ... and repair" names the write-back.
+7. **No client, dist, log or `.idx` layout change.**
+
+### Tests
+
+`internal/store/threadcache/cache_test.go` and a new `writeback_test.go`. Every case follows the description's steps through a real `Cache`:
+1. create a thread with posts 1 and 2, close the cache, and copy the `.idx`;
+2. reopen, append the record, and close;
+3. make the crash (see below);
+4. reopen, append one post, and close;
+5. reopen and assert.
+
+- `TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted`, table-driven. Records:
+  - author `Delete`;
+  - moderator hide (`Delete` `by_moderator`);
+  - suspension hide (`Delete` `by_moderator` with `suspension`);
+  - auto-hide (`Delete` `auto`);
+  - `Redacted`. The log is rewritten with `threadlog.RedactPosts` and swapped in with the pre-redaction `.idx` kept, which is a `ketju redact` crash after its swap;
+  - `Edit`, where the reader must serve the new source;
+  - `Restore` of an auto-hidden post.
+
+  Crashes: `Extended` (the old `.idx` put back), `Rebuilt` with the `.idx` removed, and `Rebuilt` with the `.idx` header CRC broken and its old entries intact.
+
+  Assert that the last reopen is `Trusted`, that its index equals a full rebuild (`threadlog.Open(log, size, nil)`) entry for entry, and that for each hiding case the entry is not `Visible()` and `Reader.Range` returns a tombstone with no source. Commit this test first, alone, and quote its failure on main for Delete, moderator hide, auto-hide and Redacted under both outcomes.
+- `TestAWriteBackIsTrustedWithoutAnAppend`: an `Extended` open closed with no append reopens `Trusted`, with 0 bytes replayed, and equal to a full rebuild.
+- `TestAFailedWriteBackNeverMarksTheIndexTrusted`: the shard directory is made read-only after setup, so the temp file cannot be created (skipped when running as root). Append and close. The `.idx` header still names the old length, and the reopen, with the directory writable again, hides the deleted post and is `Trusted` only after the write-back.
+- `TestDiscardUnverifiedIndexesRemovesEveryIndexOnce`: a hand-poisoned `.idx` (header covers the log, post 1's entry has stale flags 0) and no marker. The call removes it and writes the marker, and the reopen is `Rebuilt` with post 1 hidden. A second call with the marker present removes nothing, and the next reopen is `Trusted`.
+
+`internal/store/threadlog/actor_test.go`, with a fault-injecting and recording `IndexWriter`:
+- `TestAFailedEntryWriteLeavesTheHeaderUnwritten`: the entry `WriteAt` fails. No header write follows in that batch or any later one, including `Close`, and `Close` returns the error.
+- `TestAFailedIndexSyncLeavesTheHeaderUnwritten`: the same for a failed index `Sync` in a mutation batch.
+- `TestAMutationIsSyncedToTheIndexBeforeTheHeaderCoversIt`, under `SyncGroup`:
+  - a batch holding a `Delete` records `WriteAt(entry)`, `Sync`, `WriteAt(header)` in that order;
+  - a batch of posts only records no index `Sync`;
+  - replaying the recorded writes with every write after the last `Sync` dropped except the header gives an index whose deleted post is not visible.
+
+`cmd/ketju/serve_test.go`:
+- `TestServeDiscardsIndexesWrittenBeforeWriteBack`: a data directory holding a thread whose `.idx` was poisoned by hand. After the real `serve` starts, `GET /api/v1/threads/{id}` (the thread page, read anonymously in a public forum as `TestServeQuarantinesACorruptThread` reads it) serves post 1 as a tombstone, and `<data>/index-writeback` exists.
+
+Existing tests that must keep passing unchanged: `TestReopeningAnEvictedThreadTrustsItsIndex`, `TestOpenExtendsAShortIndexRatherThanRebuilding`, `TestRedactedIndexExtendedEqualsRebuilt`, the crash suite in `crash_test.go`, and `TestShutdownFlushesEveryIndex`.
+
+### Out of scope
+
+- **A new post's entry lost to a power cut under a header that persisted.** No fsync orders a new-post entry before the header, and step 4 deliberately adds none to a batch of new posts. The entry would read as zeros. That reveals nothing hidden: a post's entry starts visible, and every record that hides it is a mutation, which step 4 syncs. Filed as TKT-01M3VRFRFW (Order a new post's index entry before the header that covers it), a draft with no milestone.
+- **Search, projections and notifications** read the log through their own replay or through the cache. The discard in step 5 also clears any poisoned index that `internal/events/search/scan.go` would read. They need no change here.
+- **`ketju fsck --rebuild` and `ketju redact`'s `reindex`** already write a whole index atomically and are unchanged.
+- **A move record.** None exists yet; whichever ticket adds one inherits step 1.
+
+## Notes
+
+**agent:claude-code/phase3-vhsyfr** at 2026-10-01T12:54:53Z
+
+Placed in Phase 3 by the orchestrator on 2026-10-01, because it breaks the docs/14 invariant that nothing widens access ("Invariants, added"): after a crash or with a missing .idx, a deleted, hidden or redacted post is served as visible again, which is part of the Phase 3 exit criterion. Milestone phase-3, parent TKT-01M29BKBKP (Thread log storage engine); TKT-01M3V3CFRE (the Phase 3 exit check) now depends on it.
+
+**agent:claude-code/phase3-vhsyfr** at 2026-10-01T12:54:53Z
+
+run decision: pending maintainer review. Existing deployments get an automatic one-time repair: ketju serve discards every .idx once per data directory (marker <data>/index-writeback) before the thread cache opens, and each thread rebuilds and writes back its index on first open. Recorded in docs/03 "Durability and recovery" with the alternatives (operator-run fsck --rebuild, verify on every open, eager rebuild at startup, extending reindex) and why each lost. Not a docs/14 stop-rule class: the .idx is derived and rebuildable (class 2 excludes it), and the change is code in the repository, not deployment configuration (class 3).

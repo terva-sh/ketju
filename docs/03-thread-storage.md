@@ -776,6 +776,29 @@ version was bumped first.
   into a second set of tables and swapping lost, because their DDL would
   need a second copy outside the migrations, which `ClearProjections`
   already refuses for the same reason.
+- **Decided by the run (2026-10-01, pending maintainer review):** for
+  TKT-01M3VHSYFR (Write back index entries an Extended replay changes before
+  trusting it), `ketju serve` discards every `.idx` once per data directory.
+  It removes them before the thread cache opens anything, then writes the
+  marker `<data>/index-writeback`. A build without write-back can leave a
+  sidecar that a crash or a missing index turned into a trusted header over a
+  stale entry, and that sidecar serves a deleted, hidden or redacted post as
+  visible. Nothing short of a full replay tells one apart. Each thread then
+  rebuilds its index from its log on its first open and writes it back, and a
+  start that crashes midway leaves no marker and repeats the discard.
+  Alternatives:
+  - leaving it to the operator to run `ketju fsck --rebuild` lost, because
+    nothing tells an operator an index is poisoned. `fsck --rebuild` stays the
+    manual repair;
+  - verifying every index against its log on every open lost, because that is
+    the full replay the trusted path exists to avoid;
+  - rebuilding every index at startup lost, because startup would then scale
+    with total log bytes, while the lazy rebuild costs the same once per
+    thread;
+  - extending `ketju reindex` lost, because it rebuilds database projections,
+    refuses to run beside `serve`, and would still need an operator.
+
+  The index is derived, so this changes no format.
 - `ketju dump <thread-id>` prints a log as JSON lines for inspection.
 - Startup projection catch-up (04, `projection_state`) closes any gap between
   a log and its projection before the listener accepts requests. A log
