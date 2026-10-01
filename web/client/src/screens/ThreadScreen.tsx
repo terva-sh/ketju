@@ -201,16 +201,20 @@ export function ThreadScreen() {
   // First unread goes by the position as the read tracker knows it at the
   // press, which reading since the page arrived has moved (Terva review
   // 1730), and under a held unread lens stays in the lens.
+  // The phone's page sheet offers the same handler (Pager).
   const now = useRef(shown);
   now.current = shown;
+  const goFirstUnread = useMemo(
+    () =>
+      known && unread ? () => firstUnread(known, readPosition(known.id, now.current), postCount, route, view.lens) : undefined,
+    [known?.id, known?.slug, unread, postCount, view.lens],
+  );
   const actions = useMemo(
     () =>
       known
         ? threadActions(known, {
             canReply,
-            firstUnread: unread
-              ? () => firstUnread(known, readPosition(known.id, now.current), postCount, route, view.lens)
-              : undefined,
+            firstUnread: goFirstUnread,
             markUnread: offerMark
               ? () => {
                   if (pressed.current) return;
@@ -231,9 +235,7 @@ export function ThreadScreen() {
       known?.id,
       known?.slug,
       canReply,
-      unread,
-      postCount,
-      view.lens,
+      goFirstUnread,
       offerMark,
       forumSlug,
       mayModerate,
@@ -343,6 +345,7 @@ export function ThreadScreen() {
               lens={lens}
               onChanged={res.retry}
               current={pageFor === me}
+              firstUnread={goFirstUnread}
             />
           )}
           {!page && !res.error && <p class="loading">Loading…</p>}
@@ -385,6 +388,7 @@ function ThreadBody({
   lens,
   onChanged,
   current,
+  firstUnread,
 }: {
   page: ThreadPage;
   // read is the viewer block of the page as the request answered it, whose
@@ -399,6 +403,8 @@ function ThreadBody({
   onChanged: () => void;
   // current is whether page was asked for by the viewer signed in now.
   current: boolean;
+  // firstUnread is the thread page's First unread, when it offers one.
+  firstUnread?: () => void;
 }) {
   const thread: ThreadRef = { id: page.thread.id, slug: page.thread.slug };
   const lastRead = read.last_read_ordinal;
@@ -543,7 +549,9 @@ function ThreadBody({
     } else setPopover(ordinal);
   };
 
-  const pager = <Pager page={page.page} thread={thread} lens={lensArg} postCount={page.thread.post_count} />;
+  const pager = (
+    <Pager page={page.page} thread={thread} lens={lensArg} postCount={page.thread.post_count} firstUnread={firstUnread} />
+  );
   return (
     <>
       {lens && <LensHeader lens={lens} thread={thread} first={posts[0]?.ordinal} />}

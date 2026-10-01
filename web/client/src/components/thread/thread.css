@@ -636,6 +636,97 @@
   min-width: var(--target);
   min-height: var(--target);
 }
+/* The label opens the page sheet (PageSheet), drawn as the mockup's 44 px
+   button. */
+.pager-narrow .where {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--target);
+  padding: 0 16px;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.pager-narrow .where .icon {
+  color: var(--muted);
+}
+
+/* The phone's sheets (Sheet): the forum picker's dialog (forums.css),
+   docked to the foot of the screen and padded above the home indicator, as
+   the tab bar is. Only a phone draws a trigger for one. */
+.sheet-backdrop {
+  align-items: flex-end;
+  padding: 0;
+}
+.sheet {
+  width: 100%;
+  max-height: 85dvh;
+  border-width: 1px 0 0;
+  border-radius: 6px 6px 0 0;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+.sheet .lens-menu {
+  position: static;
+  min-width: 0;
+  border: 0;
+  box-shadow: none;
+}
+.sheet-action {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  min-height: var(--target);
+  padding: 0 16px;
+  font: inherit;
+  font-weight: 500;
+  color: var(--accent);
+  background: none;
+  border: 0;
+  border-bottom: 1px solid var(--rule);
+  cursor: pointer;
+}
+.page-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(var(--target), 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 12px 16px;
+  list-style: none;
+}
+.page-grid a,
+.page-grid .gap {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--target);
+}
+.page-grid a {
+  box-sizing: border-box;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink2);
+  text-decoration: none;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.page-grid a[aria-current] {
+  color: var(--accent-ink);
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.page-grid .gap {
+  color: var(--muted);
+}
+.lens-bar [data-lens-sheet] {
+  display: none;
+}
 
 .post-popover {
   position: fixed;
@@ -981,6 +1072,13 @@
   .lens-tool {
     height: auto;
     padding: 0 14px;
+  }
+  /* Lens opens the sheet here, not the menu under it. */
+  .lens-bar [data-lens-switch] {
+    display: none;
+  }
+  .lens-bar [data-lens-sheet] {
+    display: inline-flex;
   }
   .lens-header {
     top: calc(53px + env(safe-area-inset-top, 0px));

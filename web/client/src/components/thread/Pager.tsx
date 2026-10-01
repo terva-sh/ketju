@@ -1,5 +1,8 @@
+import { useRef, useState } from 'preact/hooks';
 import type { Pagination } from '../../api/dto';
+import { Icon } from '../Icon';
 import { lensQuery } from './lens';
+import { PageSheet } from './PageSheet';
 import type { ThreadRef } from './Post';
 
 // Pager moves between a thread's pages (docs/06 "Paged, not infinite"). The
@@ -8,17 +11,25 @@ import type { ThreadRef } from './Post';
 // one, at the 720 px breakpoint. Every page is a link, so it can be opened in
 // a new tab and the router follows it in this one; a link keeps the lens and
 // leaves any permalink, since the page is now the reader's choice.
+//
+// On a phone the label is a button that opens the page sheet (PageSheet),
+// which reaches every page, First unread (firstUnread, the thread page's
+// handler, when it offers one) and a date (TKT-01M29CGBZD).
 export function Pager({
   page,
   thread,
   lens,
   postCount,
+  firstUnread,
 }: {
   page: Pagination;
   thread: ThreadRef;
   lens: string;
   postCount: number;
+  firstUnread?: () => void;
 }) {
+  const [sheet, setSheet] = useState(false);
+  const opener = useRef<HTMLButtonElement>(null);
   if (page.total_pages <= 1) return null;
   const href = (n: number) => pageHref(thread, n, lens);
   const prev = page.number > 1 ? page.number - 1 : null;
@@ -53,11 +64,29 @@ export function Pager({
       </div>
       <div class="pager-narrow">
         <PageStep to={prev} href={href} label="Previous page" text="‹ Prev" />
-        <span class="where">
+        <button
+          ref={opener}
+          type="button"
+          class="where"
+          aria-haspopup="dialog"
+          aria-expanded={sheet}
+          onClick={() => setSheet(true)}
+        >
           Page {page.number} of {page.total_pages}
-        </span>
+          <Icon name="down" size={12} />
+        </button>
         <PageStep to={next} href={href} label="Next page" text="Next ›" />
       </div>
+      {sheet && (
+        <PageSheet
+          page={page}
+          thread={thread}
+          lens={lens}
+          firstUnread={firstUnread}
+          opener={opener}
+          onClose={() => setSheet(false)}
+        />
+      )}
     </nav>
   );
 }

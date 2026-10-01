@@ -155,3 +155,100 @@ describe('since a date', () => {
     expect(location.pathname + location.search).toBe(`${home}?page=1`);
   });
 });
+
+// The phone's lens sheet (TKT-01M29CGBZD, docs/06 "Mobile", "Pages"): Lens
+// opens the switcher's own list in a modal sheet.
+describe('the lens sheet', () => {
+  const sheetButton = (root: HTMLElement) => root.querySelector<HTMLButtonElement>('[data-lens-sheet]')!;
+  const sheet = () => document.querySelector<HTMLElement>('.sheet[role=dialog]');
+  const openSheet = async (root: HTMLElement) => act(async () => sheetButton(root).click());
+  const listed = () =>
+    [...sheet()!.querySelectorAll<HTMLAnchorElement>('#lens-menu a')].map((a) => [a.textContent, a.getAttribute('href')]);
+  const press = (k: string) =>
+    act(async () => void document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true })));
+
+  beforeEach(() => {
+    isPhone.value = true;
+  });
+
+  it('lists exactly the lenses the switcher offers this viewer', async () => {
+    for (const moderator of [false, true]) {
+      serve({ moderator });
+      const root = await renderAt(`${home}?page=1`);
+      await open(root);
+      const offered = items(root);
+      await act(async () => lensButton(root).click());
+      expect(sheetButton(root).getAttribute('aria-haspopup')).toBe('dialog');
+      expect(sheetButton(root).getAttribute('aria-expanded')).toBe('false');
+      await openSheet(root);
+      expect(sheetButton(root).getAttribute('aria-expanded')).toBe('true');
+      expect(sheet()!.getAttribute('aria-modal')).toBe('true');
+      expect(listed()).toEqual(offered);
+      expect(listed().some(([t]) => t === 'Removed posts')).toBe(moderator);
+      expect(sheet()!.querySelector('input[type=date]')).not.toBeNull();
+      // Focus starts on the first lens.
+      expect(document.activeElement).toBe(sheet()!.querySelector('#lens-menu a'));
+    }
+  });
+
+  it('marks the lens on screen current', async () => {
+    serve();
+    const root = await renderAt(`${home}?lens=author:alice`);
+    await openSheet(root);
+    expect([...sheet()!.querySelectorAll('#lens-menu a[aria-current]')].map((a) => a.textContent)).toEqual(['By alice']);
+  });
+
+  it('goes to a chosen lens and closes', async () => {
+    serve();
+    const root = await renderAt(`${home}?page=2`);
+    await openSheet(root);
+    await act(async () => sheet()!.querySelector<HTMLAnchorElement>('[data-lens-item=mentions]')!.click());
+    await settle(root);
+    expect(location.pathname + location.search).toBe(`${home}?lens=mentions`);
+    expect(sheet()).toBeNull();
+    expect(root.querySelector('.lens-header')).not.toBeNull();
+  });
+
+  it('goes to a date through the since lens', async () => {
+    serve();
+    const root = await renderAt(`${home}?page=1`);
+    await openSheet(root);
+    const field = sheet()!.querySelector<HTMLInputElement>('input[type=date]')!;
+    field.value = '2026-09-01';
+    await act(async () => void field.dispatchEvent(new Event('input', { bubbles: true })));
+    await act(async () => field.form!.requestSubmit());
+    await settle(root);
+    expect(location.pathname + location.search).toBe(`${home}?lens=since:2026-09-01`);
+    expect(sheet()).toBeNull();
+  });
+
+  it('closes on Escape, the close button and the backdrop, focus going back to Lens', async () => {
+    serve();
+    const root = await renderAt(`${home}?page=1`);
+    await openSheet(root);
+    await press('Escape');
+    expect(sheet()).toBeNull();
+    expect(document.activeElement).toBe(sheetButton(root));
+
+    await openSheet(root);
+    await act(async () => sheet()!.querySelector<HTMLButtonElement>('.picker-close')!.click());
+    expect(sheet()).toBeNull();
+    expect(document.activeElement).toBe(sheetButton(root));
+
+    await openSheet(root);
+    await act(async () => void document.querySelector('.sheet-backdrop')!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+    expect(sheet()).toBeNull();
+    expect(document.activeElement).toBe(sheetButton(root));
+    expect(sheetButton(root).getAttribute('aria-expanded')).toBe('false');
+  });
+
+  it('keeps Tab inside', async () => {
+    serve();
+    const root = await renderAt(`${home}?page=1`);
+    await openSheet(root);
+    const controls = [...sheet()!.querySelectorAll<HTMLElement>('a[href], button, input')];
+    controls.at(-1)!.focus();
+    await press('Tab');
+    expect(document.activeElement).toBe(controls[0]);
+  });
+});
