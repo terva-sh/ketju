@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T17:11:46Z
+updated_at: 2026-10-01T17:25:56Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -56,9 +56,9 @@ Confirm the cause under load (TKT-01M3SZ3GCE's notes have a load recipe), from t
 ## Acceptance criteria
 
 - [x] A note names the cause from evidence before any fix: a failure under TKT-01M3SZ3GCE's load recipe with its trace and evidence block, or a probe that delays the thread's refetch, and whether the refetch answered 200 with the new slow_mode_seconds
-- [ ] The fix is at the named cause: the diff adds no retry, no longer timeout and no skip, and playwright.config.ts is unchanged
+- [x] The fix is at the named cause: the diff adds no retry, no longer timeout and no skip, and playwright.config.ts is unchanged
 - [x] If the cause is the panel's stale initial value, ModerateDialog's slow-mode choice follows slow_mode_seconds until the moderator chooses, with Vitest cases that fail against main before the change
-- [ ] e2e/thread-moderation.spec.ts passes in 20 consecutive phone-project runs under the load recipe, and the full suite passes in both projects with its axe scans
+- [x] e2e/thread-moderation.spec.ts passes in 20 consecutive phone-project runs under the load recipe, and the full suite passes in both projects with its axe scans
 - [ ] If client code changed, the dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
@@ -157,3 +157,18 @@ Uniform CPU or fsync load slows the clicks as much as the GET, so it does not re
 ### Verdict and fix
 
 The cause is the panel's stale initial value (Approach step 2): a correct 200 refetch that the open panel never reads. A moderator on a slow phone sees the same thing. The fix is in `ModerateDialog`, as the plan says. `choice` and `custom` follow `slowSeconds` until the moderator touches a radio or the field. The spec keeps its assertions and gains no wait.
+
+**agent:claude-code/phase3-tszhsw** at 2026-10-01T17:25:52Z
+
+Proof, 2026-10-01, on the fix (commit 22447505, branch run/tszhsw-slow-mode-phone on main at e855e1a). The host has 12 CPUs, and Playwright ran on port 18994. The dist was regenerated locally for these runs and not committed, because another lane holds it.
+
+- **The probe on the fix.** The same probe held the refetch for 2 s at both widths. The panel stayed on Off while the GET was held, which is the honest state. Within 1 s of the GET's 200 it showed 10 seconds, and it kept showing 10 seconds for all five checks. On main it never showed 10 seconds (the cause note).
+- **20 consecutive phone-project runs under load.** The command was `npx playwright test e2e/thread-moderation.spec.ts --project=phone --repeat-each=20 -x`. The load was 48 unpinned busy loops and a loop writing 256 MiB with fsync, with Playwright, Chromium and the server pinned to CPU 0. The load average peaked at 67.9. All 144 tests passed, and the slow-mode test passed 20 of 20 times, in 4.9 min.
+- **The full suite in both projects.** An unfiltered `npx playwright test`, with no load, passed 206 tests and skipped 12. The skips are width-specific. Every axe scan passed.
+- **Vitest.** All 2170 tests passed. The two new cases fail against main: each expects "10" after the held page lands and gets "0".
+- `npx tsc --noEmit -p .`, `gofmt`, `go build ./...`, `go vet ./...` and `go test -race ./...` were all clean.
+- **Reader bundle.** It grew from 63878 B to 63916 B gzip, which is +38 B against the 70000 B budget.
+
+### What the diff does not change
+
+`playwright.config.ts` and `e2e/thread-moderation.spec.ts` are unchanged. The diff adds no retry, no timeout and no skip. `ThreadScreen.test.tsx` gains the two cases and changes one helper, `checked`, which reads the chosen radio. It now reads each radio's `checked` property instead of the `:checked` selector. happy-dom's selector answered with the radio from before a click when no render followed the click, which would have hidden the second case's choice.
