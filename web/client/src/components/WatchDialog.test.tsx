@@ -146,8 +146,9 @@ describe('the watch dialog', () => {
     // The Watching list is asked for afresh when it is next shown.
     expect(peekGet('/api/v1/watching')).toBeUndefined();
     expect(peekGet(`/api/v1/threads/${thread}?page=2`)).toBeUndefined();
-    // Another thread's level did not change.
-    expect(peekGet('/api/v1/threads/other')).toBeDefined();
+    // Every thread page goes, behind the barrier a mark all read uses
+    // (forgetAllThreadPages), so none asked for before the save is kept.
+    expect(peekGet('/api/v1/threads/other')).toBeUndefined();
   });
 
   it('shows a refusal and stays open as chosen', async () => {

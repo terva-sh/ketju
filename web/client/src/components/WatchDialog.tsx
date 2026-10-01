@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
-import { apiSend, forgetGets } from '../api/client';
+import { apiSend } from '../api/client';
 import type { ForumWatch, ThreadWatch } from '../api/dto';
 import { ProblemError } from '../api/problem';
 import { forgetLists } from '../state/lists';
+import { forgetAllThreadPages } from '../state/threads';
 import { refreshViewer } from '../state/viewer';
 import { ErrorPanel } from './ErrorPanel';
 import { useModal } from './focus';
@@ -40,16 +41,6 @@ let saves = 0;
 const latest = new Map<string, number>();
 
 export type WatchTarget = { thread: string; forumLevel: string } | { forum: string; name: string };
-
-// carriesLevel is a held thread page that names the level just set: the
-// thread's own pages, or for a forum every thread page, since a forum's
-// level reaches each of its threads' viewer blocks. Only the held answers
-// go: the thread cache keeps headers, which carry no level.
-function carriesLevel(u: string, target: WatchTarget): boolean {
-  if (!('thread' in target)) return u.startsWith('/api/v1/threads/');
-  const base = `/api/v1/threads/${encodeURIComponent(target.thread)}`;
-  return u === base || u.startsWith(base + '?') || u.startsWith(base + '/');
-}
 
 // WatchDialog sets the viewer's level on a thread or on a forum's own
 // threads (docs/04 `watches`, TKT-01M3V6Y87D). It is the only way a level is
@@ -135,9 +126,13 @@ export function WatchDialog({
       const r = await apiSend<ThreadWatch | ForumWatch | undefined>('POST', url, { level: choice }, { status: 200 });
       if (typeof r?.watch !== 'string') throw new ProblemError('internal', 200);
       // Every list counts unread, which mute changes, and Watching lists the
-      // threads with a thread-level watch (state/lists.ts).
+      // threads with a thread-level watch (state/lists.ts). Every thread page
+      // carries a level in its viewer block, a forum's reaching all of its
+      // threads, and a page asked for before this answer is not stored, and
+      // is asked for again, however late it lands (forgetAllThreadPages, as
+      // a mark all read does; Terva review 1822).
       forgetLists();
-      forgetGets((u) => carriesLevel(u, target), { inFlight: true });
+      forgetAllThreadPages();
       void refreshViewer().catch(() => undefined);
       if (latest.get(url) === n) onSaved(r);
       if (mounted.current) onClose();

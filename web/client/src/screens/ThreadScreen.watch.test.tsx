@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me, ThreadPage } from '../api/dto';
 import { isPhone } from '../state/layout';
 import { viewer } from '../state/viewer';
-import { renderAt, settle, stubServer, threadPage, unmount, type StubServer } from '../testing';
+import { FakeEventSource, renderAt, settle, stubServer, threadPage, unmount, type StubServer } from '../testing';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 
 // The watch control on the thread page (TKT-01M3V6Y87D): the desktop
@@ -124,6 +124,38 @@ describe('the watch control on the thread page', () => {
     expect(document.activeElement).toBe(more);
     await press(more);
     expect(root.querySelector('[data-shell=more-menu] [data-action=watch]')?.textContent).toBe('Watching');
+  });
+
+  // Terva review 1822: a page asked for before a save that lands after it
+  // reports the level from before. It is not stored and is asked for again,
+  // so the screen shows the level the save set.
+  it('does not let a page asked for before a save put back the old level', async () => {
+    serve('', '');
+    const root = await renderAt(`/t/${id}/a`);
+    const longer = (watch: string): ThreadPage => ({
+      ...page,
+      thread: { ...page.thread, log_length: page.thread.log_length + 100 },
+      viewer: { ...page.viewer, watch },
+    });
+    let first: ((a: { status: number; body: ThreadPage }) => void) | null = null;
+    let asked = 0;
+    server.routes[`GET ${url}?page=${page.page.number}`] = () => {
+      if (asked++ === 0) return new Promise((resolve) => (first = resolve));
+      return { status: 200, body: longer('mute') };
+    };
+    // A live hint asks for the page; its answer is held back.
+    await act(async () => FakeEventSource.open()[0].emit('thread', { thread_id: id, log_length: page.thread.log_length + 100 }));
+    await wait();
+    expect(asked).toBe(1);
+    await press(control(root));
+    await choose('Mute');
+    await press(dialog()!.querySelector('button[type=submit]'));
+    expect(control(root)?.textContent).toBe('Muted');
+    // The held-back answer, from before the save, lands now.
+    await act(async () => first!({ status: 200, body: longer('') }));
+    await settle(root);
+    expect(asked).toBe(2);
+    expect(control(root)?.textContent).toBe('Muted');
   });
 
   // Terva review 1820: a save outlives a dialog dismissed while it is out.
