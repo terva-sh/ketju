@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TS0ZV9V7WRQQ4QM5RZC3D1
 title: Take Escape in the flag, moderate and forum-picker dialogs before focus
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -19,10 +19,17 @@ blocks_on: none
 references:
   - ref: pr:260
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase2-run-ts0zv9
+  branch: run/ts0zv9-dialog-escape
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a68d50bdbb0d8f9b0
+  commit: b3cf1f48f27b15e5e8c8b4872361c1842ac91c7e
+  session: null
+  claimed_at: 2026-10-01T04:34:17Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T03:44:42Z
-updated_at: 2026-10-01T04:23:00Z
+updated_at: 2026-10-01T04:34:21Z
 created_by:
   id: agent:claude-code/phase2-run-tmrcmj
   name: ""
