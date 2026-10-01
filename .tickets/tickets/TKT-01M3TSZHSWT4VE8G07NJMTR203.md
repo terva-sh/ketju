@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TSZHSWT4VE8G07NJMTR203
 title: Stop the slow-mode e2e test failing on a phone under CI load
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-tszhsw
+  branch: run/tszhsw-slow-mode-phone
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a3b4596e38d57bd07
+  commit: e855e1a120cb1b147f7f318af945769ed75e6f53
+  session: null
+  claimed_at: 2026-10-01T16:55:36Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T09:04:45Z
+updated_at: 2026-10-01T16:55:40Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-tszhsw
   name: ""
 extensions: {}
 ---
