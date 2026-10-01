@@ -91,7 +91,7 @@ touches. These are:
 4. **Dropping or materially changing a docs/09 Phase 3 deliverable.**
 5. **Raising the reader bundle budget** (70000 B gzip, docs/07). The run
    lazy-loads where a chunk genuinely saves bytes. If the reader would still
-   pass the budget, it stops.
+   exceed the budget after that, it stops.
 6. **A contradiction between design documents** that has no safer reading.
 
 When one of these comes up:
