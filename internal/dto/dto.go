@@ -773,6 +773,38 @@ type UserPost struct {
 	Post   Post       `json:"post"`
 }
 
+// SearchResults is GET /search (docs/07 "Search"): one page of hits in the
+// forums the viewer may read, newest first. There is no total.
+type SearchResults struct {
+	Results []SearchResult `json:"results"`
+	// NextCursor is empty on the last page, and after the 1000th result.
+	NextCursor string `json:"next_cursor"`
+	// Indexing is true while the index may be missing posts, because it
+	// trails the logs after a start or a rebuild.
+	Indexing bool `json:"indexing"`
+}
+
+// SearchResult is one hit: a post, or a thread's title when Ordinal is 0.
+type SearchResult struct {
+	// Thread is the thread as it is now: its title and slug when served.
+	Thread ThreadLink `json:"thread"`
+	Forum  ForumRef   `json:"forum"`
+	// Ordinal is the post's, or 0 when the thread's title matched.
+	Ordinal uint32 `json:"ordinal"`
+	// Author is the post's author, or the thread's for a title.
+	Author    Author `json:"author"`
+	CreatedAt Millis `json:"created_at"`
+	// Snippet is plain text around the matches, in segments. It is never
+	// markup: the client escapes Text and marks the segments that match.
+	Snippet []SnippetPart `json:"snippet"`
+}
+
+// SnippetPart is a run of a snippet's plain text, and whether it matched.
+type SnippetPart struct {
+	Text  string `json:"text"`
+	Match bool   `json:"match"`
+}
+
 // Form is a declarative form version as a client renders it (docs/05
 // "Forms"): the apply screen, the form editor's preview, and a future HTML
 // client draw the same fields from this one shape.

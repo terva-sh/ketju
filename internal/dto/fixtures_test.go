@@ -551,6 +551,11 @@ var corpus = map[string]any{
 	"user-posts." + tModerator:  userPosts(tModerator),
 	"user-posts-own." + tMember: userPostsOwn(),
 
+	// The class is spelled out, as TKT-01M29CTY8T's criterion names the
+	// file: an anonymous reader may search (docs/07 "Search").
+	"search." + tMember:      searchResults(),
+	"search-empty.anonymous": SearchResults{Results: []SearchResult{}, Indexing: true},
+
 	"form-admin." + tAdmin:   formAdmin(),
 	"form-preview." + tAdmin: formPreview(),
 
@@ -693,6 +698,23 @@ func userPostsOwn() UserPosts {
 	out.Posts[1].Post.HTML = ""
 	out.NextCursor = ""
 	return out
+}
+
+// searchResults is GET /search?q=bill for a member: a post whose snippet
+// opens and ends inside the text, a thread whose title matched (ordinal 0,
+// the thread's author), and more to come. A snippet is plain text: the
+// angle brackets in the second are the post's words, not markup.
+func searchResults() SearchResults {
+	return SearchResults{Results: []SearchResult{
+		{Thread: ThreadLink{ID: "3yymw47g00001", Slug: "why-we-left-slack", Title: "Why we left Slack"},
+			Forum: ForumRef{Slug: "general", Name: "General"}, Ordinal: 61, Author: alice, CreatedAt: 1757500000000,
+			Snippet: []SnippetPart{{Text: "…the ", Match: false}, {Text: "bill", Match: true},
+				{Text: " was the smaller half of it.", Match: false}}},
+		{Thread: ThreadLink{ID: "3yymw47g00004", Slug: "the-bill-for-hosting", Title: "The bill for <hosting>"},
+			Forum: ForumRef{Slug: "social", Name: "Social"}, Ordinal: 0, Author: alice, CreatedAt: 1757400000000,
+			Snippet: []SnippetPart{{Text: "The ", Match: false}, {Text: "bill", Match: true},
+				{Text: " for <hosting>", Match: false}}},
+	}, NextCursor: "MjU"}
 }
 
 // draftReply is GET /drafts/{thread_id} for a reply to post 61, half

@@ -51,6 +51,7 @@ import type {
   SessionList,
   Settings,
   RenderResult,
+  SearchResults,
   SiteSettings,
   SlowMode,
   ThreadHint,
@@ -122,6 +123,8 @@ import renderMember from '../../../../internal/dto/testdata/golden/render.member
 import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
 import repliesMember from '../../../../internal/dto/testdata/golden/replies.member.json';
 import repliesModerator from '../../../../internal/dto/testdata/golden/replies.moderator.json';
+import searchMember from '../../../../internal/dto/testdata/golden/search.member.json';
+import searchEmptyAnonymous from '../../../../internal/dto/testdata/golden/search-empty.anonymous.json';
 import sessionsMember from '../../../../internal/dto/testdata/golden/sessions.member.json';
 import settingsAdmin from '../../../../internal/dto/testdata/golden/settings.admin.json';
 import slowModeModerator from '../../../../internal/dto/testdata/golden/slow-mode.moderator.json';
@@ -228,6 +231,8 @@ export const contract = [
   matches<ReadPosition>()(readMember),
   matches<RenderResult>()(renderMember),
   matches<RenderResult>()(renderPlainMember),
+  matches<SearchResults>()(searchMember),
+  matches<SearchResults>()(searchEmptyAnonymous),
   matches<SessionList>()(sessionsMember),
   matches<SiteSettings>()(settingsAdmin),
   matches<Settings>()(userSettingsMember),

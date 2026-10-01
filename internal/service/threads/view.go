@@ -190,6 +190,11 @@ type Service struct {
 	// Logger reports what a request cannot answer with: an audit row owed
 	// after an action that happened (queue.go). Nil is slog.Default().
 	Logger *slog.Logger
+
+	// SearchIndexing reports whether the search index may be missing posts
+	// because it trails the logs (search.Indexer.Indexing), for Search's
+	// indexing flag. Nil is never indexing.
+	SearchIndexing func() bool
 }
 
 // Appender is what the service appends through: *posts.Writer, the one

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY8TB2CHCBQH3ABHCG3Q
 title: Build the search API
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: design:api-resources
     path: docs/07-api-and-clients.md
-claim:
-  actor: agent:claude-code/phase3-cty8t
-  branch: run/cty8t-search-api
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aadadb9df5c175246
-  commit: d80c2330c7d88339cac7bf28c89e67f97749fe4f
-  session: null
-  claimed_at: 2026-10-01T12:43:49Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T12:50:03Z
+updated_at: 2026-10-01T13:17:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,13 +45,13 @@ Snippets come from FTS5 rather than from re-reading logs, which keeps a search o
 
 ## Acceptance criteria
 
-- [ ] Results exclude forums the viewer cannot read inside the statement, so a page's results and length are the same whether or not other forums hold matches (TestSearchPageLengthIgnoresUnreadableForums)
-- [ ] Snippets come from the index as plain-text segments with matches flagged, and carry no markup (TestSearchSnippetIsNeverMarkup)
-- [ ] q, forum, author, after, before and cursor follow docs/07 Search, and the filters combine (TestSearchQueryRules, TestSearchParams, TestSearchPagesFill)
-- [ ] Responses are no-store and never in the response cache, and the goldens search.member.json and search-empty.anonymous.json are held by the client's DTO contract with the dist unchanged (TestSearchRoute, TestSearchIsNotCached, contract.test.ts)
-- [ ] No result reaches a viewer who may not read the post when it is served, with a case each for a hidden forum, a signed-in-only forum to an anonymous reader, an author's delete, a moderator's hide including a group-grant moderator, an auto-hide, a redaction, a move to an unreadable forum (projected, and with the projection held behind the log), a suspended author's hidden posts, a revoked grant and a quarantined thread (TestSearchNeverWidensAccess)
-- [ ] A post edited, removed or moved, or a thread renamed, after indexing is not served until the index catches up, and a title is judged at the log length the request read even when the projection trails, so no snippet or title shows text the thread no longer shows (TestSearchIsFreshWhenServed)
-- [ ] Results are ordered newest first using only each post's own facts, so a viewer's pages, in order and content, do not change when posts are added in a forum they cannot read (TestSearchPagesIgnoreUnreadableForums)
+- [x] Results exclude forums the viewer cannot read inside the statement, so a page's results and length are the same whether or not other forums hold matches (TestSearchPageLengthIgnoresUnreadableForums)
+- [x] Snippets come from the index as plain-text segments with matches flagged, and carry no markup (TestSearchSnippetIsNeverMarkup)
+- [x] q, forum, author, after, before and cursor follow docs/07 Search, and the filters combine (TestSearchQueryRules, TestSearchParams, TestSearchPagesFill)
+- [x] Responses are no-store and never in the response cache, and the goldens search.member.json and search-empty.anonymous.json are held by the client's DTO contract with the dist unchanged (TestSearchRoute, TestSearchIsNotCached, contract.test.ts)
+- [x] No result reaches a viewer who may not read the post when it is served, with a case each for a hidden forum, a signed-in-only forum to an anonymous reader, an author's delete, a moderator's hide including a group-grant moderator, an auto-hide, a redaction, a move to an unreadable forum (projected, and with the projection held behind the log), a suspended author's hidden posts, a revoked grant and a quarantined thread (TestSearchNeverWidensAccess)
+- [x] A post edited, removed or moved, or a thread renamed, after indexing is not served until the index catches up, and a title is judged at the log length the request read even when the projection trails, so no snippet or title shows text the thread no longer shows (TestSearchIsFreshWhenServed)
+- [x] Results are ordered newest first using only each post's own facts, so a viewer's pages, in order and content, do not change when posts are added in a forum they cannot read (TestSearchPagesIgnoreUnreadableForums)
 
 ## Implementation plan
 
@@ -188,3 +181,23 @@ Terva review 1713 (PR #270, head d0b6f16, base a599b48), fixed. (medium) 'Make t
 **agent:claude-code/phase3-groom-search** at 2026-10-01T09:44:32Z
 
 Terva review 1728 (PR #275, head b5fa248), finding 2 (medium) 'Account for restricted documents affecting relevance-ranked pages': fixed. Relevance (bm25) is dropped because its statistics are index-wide; results are ordered newest first (created_at, then row), which uses only each post's own facts, so the docs/07 guarantee that pages do not depend on unreadable forums now holds for order too. This supersedes the run decision 'relevance order' recorded earlier; docs/07 'Search' records the change and why relevance lost. TestSearchPagesIgnoreUnreadableForums; criterion 7.
+
+**agent:claude-code/phase3-cty8t** at 2026-10-01T13:15:18Z
+
+run decision: pending maintainer review. `q`'s field-error codes. The plan said only "validation-failed with a field error on q". The codes chosen come from docs/07's existing list: `required` (empty once trimmed, or only quotes), `too_long` (over 200 characters, counted as characters, not bytes) and `too_many` (over 16 words, counting the words inside quoted phrases). docs/07 "Field errors on validation-failed" now names `q` beside `handle` and `note`. Alternatives: a new code per rule (`too_short`, `too_many_words`) lost, because the form codes already say each thing and a client already branches on them; a bare validation-failed with no `errors` lost, because the plan asked for the field error and the screen (TKT-01M3V70X0F) must say which rule failed.
+
+**agent:claude-code/phase3-cty8t** at 2026-10-01T13:15:18Z
+
+Built against main at d80c2330. What the next person needs and the code does not say:
+
+- Where the tests are. The access, freshness and paging tests are in `internal/web/api/search_test.go`, not `internal/service/threads` (plan, "Revised at claim"). They drive a real `search.Indexer` over the world's logs by hand with `world.index()`; a test that wants the index to trail does not call it. `TestSearchNeverWidensAccess` checks each case's stated viewers and also every result against that viewer's thread page, read after the search, so the page is the oracle for both too much and too little.
+- Criterion 6, "a post ... moved". No record in this build moves a post (split and merge are reserved, docs/04 "As built"), so no API test can reach a moved post. `servesPost` is the per-post rule, and `TestServesPost` covers it for EntryMoved with every other entry state. The thread move is covered end to end, projected and held behind.
+- Mutations tried against the tests, each caught: never projecting a trailing row (4 failures); dropping the visibility check; dropping the revision check; dropping the title check; drawing the link from the statement's join (caught only after adding the `linkword` check, because an earlier search had already projected the rename); dropping the re-read forum and the forum-filter checks (caught after adding the unprojected-move case to `TestSearchParams`); trusting the row after a no-op projection (caught after adding the no-`Project` case); dropping the quarantine check; and filling a page from one batch. Removing the reach bound makes the loop spin with a negative LIMIT rather than fail a test, so the bound is load-bearing for termination as well.
+- Paging is by offset, as the plan settled. A matching post written while a reader pages can repeat a result at the top of the next page. docs/07 "Search" says so.
+- `indexing` is wired in `serve` to `search.Indexer.Indexing`. A service with no `SearchIndexing` reports false.
+- The dist is unchanged. The client change is type-only (`dto.ts`, `dto-contract.ts`), `go generate ./internal/web/spa` leaves `internal/web/spa/dist` byte-identical, and the reader bundle stays at 60464 B.
+- The golden for an anonymous reader is `search-empty.anonymous.json`, as criterion 4 names it, although the other goldens spell the class `anon`.
+
+## Summary
+
+GET /api/v1/search is built: threads.Service.Search (internal/service/threads/search.go), the route (internal/web/api/search.go), and internal/dto SearchResults, SearchResult and SnippetPart with the goldens search.member.json and search-empty.anonymous.json. The client change is type-only, and the dist is byte-identical. Search never widens access. The forums perm.ReadableForums lists are bound in the one statement that matches, orders and pages. Each hit is judged again under its thread at the log length the request read. A trailing projection is brought up to that length and the row read again. The thread must be in a readable forum (and the one asked for). A post must be visible at the indexed revision, author and time. A title must be the thread's title now. The link is drawn from that row. A failed or missing projection, or a quarantined thread, drops the thread's hits, so the index alone is never the authority. Every criterion is met. Criterion 6's moved post is covered by TestServesPost, because nothing in this build moves a post. One run decision is pending maintainer review: q's field codes. docs/07 Search, Field errors and the Resources row are updated.

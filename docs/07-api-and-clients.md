@@ -133,7 +133,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `GET  /drafts/{thread_id}` `PUT` `DELETE` | composer drafts, one per user per thread → `internal/dto` `Draft`; see "Drafts" below |
 | `GET  /forums/{slug}/draft` `PUT` `DELETE` | new-thread drafts with their title, one per user per forum → `internal/dto` `ForumDraft`; see "Drafts" below (TKT-01M3K9XBJA) |
 | `GET  /unread` `/new` `/participated` `/watching` | cross-forum thread lists |
-| `GET  /search?q=&forum=&author=&after=&before=` | FTS5 results with snippets |
+| `GET  /search?q=&forum=&author=&after=&before=&cursor=` | FTS5 results with snippets → `internal/dto` `SearchResults`, newest first, 25 to a page, in the forums the viewer may read and judged again against each thread's log when served; anonymous readers included, `no-store`, never from the response cache, not charged to an agent's bucket. See "Search" below (TKT-01M29CTY8T) |
 | `GET  /notifications` `POST /notifications/read` | |
 | `POST /blobs?thread={id}` or `?forum={slug}` (multipart) | upload one part named `file` → 201 `internal/dto` `Attachment`, `no-store`. The viewer is admitted before the body is read: anonymous `unauthenticated`, pre-user `forbidden`, the forum hidden `not-found`, without `upload` or in an archived forum but to an admin `forbidden`. Neither or both of `thread` and `forum`, another part, or a second part is `bad-request`, and a second part is found before the file is stored, so the refused request leaves nothing behind (Terva review 1736). The type is sniffed, and a refused file is `validation-failed` with `{field: "file", code}`: `type_not_allowed` or `blocked`. Over `limits.attachment_mb` is `payload-too-large`. See "Attachments" below (TKT-01M29CXK0K) |
 | `GET /blobs/{hash}` | outside `/api`, at `/blobs/…`: an attachment's bytes, to a viewer who may read a post naming it, and `not-found` to everyone else. `private, no-cache`, revalidated against the hash as `ETag`, with access checked before any 304; `Range` and `HEAD` work. See "Attachments" below (TKT-01M29CXK0K) |
@@ -204,7 +204,9 @@ RFC 9457 extension member. No other body has it.
   `fields.2.options` or `title`. The whole schema is `""`. A path never
   carries a key the request sent, so the body echoes nothing. An
   application's approval or denial names its own fields, `handle` and
-  `note` (below, "Applications"), and a handle change names `handle`.
+  `note` (below, "Applications"), and a handle change names `handle`. A
+  search names `q`, with `required`, `too_long` (over 200 characters) or
+  `too_many` (over 16 words) (below, "Search").
 - `code` is one of the codes below, or for a `handle` one of the three
   listed with the approval route, plus `same` on a handle change. They are
   API surface, like the `type`s above.
@@ -1224,6 +1226,30 @@ cache. It searches the index docs/04 "search" describes.
   index trails the log is still running (03 "Durability and recovery"),
   and after it until every thread that pass left behind is indexed, so
   the screen can say that results may be missing.
+
+As built (TKT-01M29CTY8T): `threads.Service.Search` in
+`internal/service/threads/search.go`, and the route in
+`internal/web/api/search.go`. Each part of the freshness check fails closed:
+- a thread's row that is still short of the request's log length after the
+  projection is asked to catch up, as in a service built with no projection,
+  serves none of its hits;
+- a post's hit must match its index entry in revision, author and creation
+  time, and an ordinal past the end of the thread's index is left out
+  rather than failing the search;
+- a result's thread title and slug, and its forum's slug and name, come from
+  the row read at or past the request's log length, never from the
+  statement's join, so a post's result never carries a title the thread
+  has lost.
+
+The cursor is the offset into the statement's rows, past the last result
+shown, encoded as base64url. Only offsets 1 to 999 are read back, so a
+cursor for the first page, or one at or past the reach, is `bad-request`.
+Because it is an offset, a matching post written while a reader pages
+pushes the results after it down by one, and the next page may open with
+the result the last one ended on. A keyset cursor on `created_at` and the
+row would avoid that. It needs a keyset in `views.Search`, which pages by
+offset as the plan settled, and is left for later with the sort option
+above.
 
 Alternatives: refusing anonymous readers lost, because they can already
 read every public post and search shows nothing more. A total count lost:

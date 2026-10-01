@@ -509,6 +509,8 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 			return err
 		},
 		Logger: log,
+		// GET /search says when results may be missing (TKT-01M29CTY8T).
+		SearchIndexing: indexer.Indexing,
 	}
 	// The blob store (TKT-01M29CXK0K). Posting checks and counts
 	// attachments through it, and it asks the threads service who may read

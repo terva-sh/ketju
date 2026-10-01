@@ -1,0 +1,74 @@
+{
+  "results": [
+    {
+      "thread": {
+        "id": "3yymw47g00001",
+        "slug": "why-we-left-slack",
+        "title": "Why we left Slack"
+      },
+      "forum": {
+        "slug": "general",
+        "name": "General"
+      },
+      "ordinal": 61,
+      "author": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757500000000,
+      "snippet": [
+        {
+          "text": "…the ",
+          "match": false
+        },
+        {
+          "text": "bill",
+          "match": true
+        },
+        {
+          "text": " was the smaller half of it.",
+          "match": false
+        }
+      ]
+    },
+    {
+      "thread": {
+        "id": "3yymw47g00004",
+        "slug": "the-bill-for-hosting",
+        "title": "The bill for <hosting>"
+      },
+      "forum": {
+        "slug": "social",
+        "name": "Social"
+      },
+      "ordinal": 0,
+      "author": {
+        "handle": "alice",
+        "display_name": "Alice Nakamura",
+        "avatar": "b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1",
+        "role": "member",
+        "kind": "human"
+      },
+      "created_at": 1757400000000,
+      "snippet": [
+        {
+          "text": "The ",
+          "match": false
+        },
+        {
+          "text": "bill",
+          "match": true
+        },
+        {
+          "text": " for <hosting>",
+          "match": false
+        }
+      ]
+    }
+  ],
+  "next_cursor": "MjU",
+  "indexing": false
+}

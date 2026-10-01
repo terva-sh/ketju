@@ -166,6 +166,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/users", Handler: h.usersByPrefix},
 		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
 		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},
+		{Method: get, Path: "/api/v1/search", Handler: h.search},
 		{Method: get, Path: "/api/v1/settings", Handler: h.settings},
 		{Method: patch, Path: "/api/v1/settings", Handler: h.patchSettings},
 		{Method: get, Path: "/api/v1/settings/sessions", Handler: h.sessionList},

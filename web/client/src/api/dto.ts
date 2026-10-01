@@ -382,6 +382,34 @@ export interface UserPost {
   post: Post;
 }
 
+// SearchResults is GET /search?q=&forum=&author=&after=&before=&cursor=: a
+// page of hits in the forums this viewer may read, newest first, with no
+// total (internal/dto SearchResults). next_cursor is empty on the last page.
+// indexing is true while results may be missing.
+export interface SearchResults {
+  results: SearchResult[];
+  next_cursor: string;
+  indexing: boolean;
+}
+
+// SearchResult is one hit: a post, or the thread's title when ordinal is 0
+// (internal/dto SearchResult). thread is the thread as it is now.
+export interface SearchResult {
+  thread: ThreadLink;
+  forum: ForumRef;
+  ordinal: number;
+  author: Author;
+  created_at: number;
+  snippet: SnippetPart[];
+}
+
+// SnippetPart is a run of a snippet's plain text. It is never markup: the
+// client escapes text and marks the parts whose match is true.
+export interface SnippetPart {
+  text: string;
+  match: boolean;
+}
+
 // ReadPosition is PUT and DELETE /threads/{id}/read: the viewer's position as
 // stored after the request, which a PUT never lowers and a DELETE never
 // raises, so it can differ from the ordinal sent (internal/dto ReadPosition).
