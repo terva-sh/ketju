@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V73DP6TZ1BDQVT7ATX0EC5
 title: Keep attachments in reply and new-thread drafts
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ dependencies:
   - TKT-01M29CXK0KHC2QZQ286AG0KKGD
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-v73dp6
+  branch: run/v73dp6-draft-attachments
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad5e25f968c2050ea
+  commit: 4990deaa56b419c5b8b3294e0f3df9abc0af451c
+  session: null
+  claimed_at: 2026-10-01T10:53:08Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:50:42Z
-updated_at: 2026-10-01T07:59:50Z
+updated_at: 2026-10-01T10:53:10Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-live
+  id: agent:claude-code/phase3-v73dp6
   name: ""
 extensions: {}
 ---
