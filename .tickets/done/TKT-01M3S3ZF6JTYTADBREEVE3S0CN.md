@@ -18,10 +18,12 @@ blocks_on: none
 references:
   - ref: pr:300
     path: null
+  - ref: pr:303
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-30T12:17:38Z
-updated_at: 2026-10-01T12:06:34Z
+updated_at: 2026-10-01T12:35:22Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -131,6 +133,10 @@ Terva run 86857e76 on #297 (head e3d4656, base 0da0411) was clean, with no findi
 - HTTP: the page's ETag hashes the response body (threads.etag), so a new handle changes the body and the tag, and the GET that revalidates gets a 200 rather than a 304.
 - Client: ThreadScreen shows the page's header unless the stored header (storeThreadHeader, from a moderation answer) has a longer log_length. A rename appends nothing, so the revalidated page's header wins.
 - Server: the header is never in the response cache, which holds only posts (cached.go). TestThreadHeaderAuthorFollowsRename covers it with the cache on and off.
+
+**agent:claude-code/phase3-polish-client** at 2026-10-01T12:35:20Z
+
+PR #300 is replaced by #303. #300 passed the gate on head 0b01d34, base dbb697d: CI run 1994 succeeded, and Terva run fcff8ef3 was clean, with no findings. That review said only that the binary screenshots could not be inspected. They are evidence for a person to compare by eye, so no follow-up was requested; a PR comment on #300 says what they show. Before merging, I checked main and found that TKT-01M29CRJ1P (#299, the lens framework) had added internal/web/api/testdata/golden/thread.lens.json. #300's rebase would have left that golden without thread.author, and TestLensPageGolden failed on the combined tree. #303 carries #300's tree onto main at dbb697d as one commit (b9c9e1f) and regenerates that golden. Nothing else changed. The dist is the same, and the reader bundle is still 60602 B.
 
 ## Summary
 
