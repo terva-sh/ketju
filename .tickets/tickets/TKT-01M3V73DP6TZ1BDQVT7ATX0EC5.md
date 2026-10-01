@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:50:42Z
-updated_at: 2026-10-01T10:53:10Z
+updated_at: 2026-10-01T10:56:40Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
@@ -56,8 +56,9 @@ Filed by the Phase 3 grooming of live updates and attachments (TKT-01M3V3BVPY). 
 
 ## Implementation plan
 
-Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read for this plan:
+Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Revised at claim on 2026-10-01, against main at 4990dea, after TKT-01M29CXK0K merged in #284 (d253ac0). Read for this plan:
 - docs/04 "drafts" and docs/07 "Drafts", with the run decision of 2026-10-01;
+- docs/07 "Attachments", and the attach path as #284 built it (`threads.Attachments`, `blobs.Service.Check`, `TestAttachRefusals`);
 - docs/03 "Blob garbage collection";
 - migration 0018 and the draft queries;
 - `DeleteCollectableBlob` in `queries/moderation.sql`, which `ketju redact`'s `deleteBlobs` also calls;
@@ -72,26 +73,32 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 - **GC keeps them.** `DeleteCollectableBlob` already refuses a blob a draft's source names. It also refuses one a draft's `attachments` names. Redaction calls the same statement, so it keeps them too. The seven-day clock stays the refcount's: an attachment only a draft names is never collected while the draft exists, as a source mention already is not.
 - **Authoritative data.** `drafts` is an authoritative table (docs/04), and the column is additive with a default, so a database from before the migration reads as drafts with no attachments.
 
+### What the claim found
+
+- **The interface is `Check`, not `CheckAttach`.** #284 named it `threads.Attachments.Check`, and the threads service already wraps it as `checkAttachments`, which also refuses any attachment when the server has no blob store. Both draft saves call `checkAttachments` and never `AddRefs`.
+- **A repeated hash is kept once, not refused.** The attach rule #284 merged answers "the hashes as the Post will record them, each once in the order sent", and `TestAttachRefusals` posts ten with repeats and gets ten. docs/07 "Attachments" says "at most 10 distinct hashes". The groomed test list expected `validation-failed` for a duplicate. Following the attach rule instead is a run decision (pending maintainer review). A draft that refused a list the post would take would fail the composer's autosave on a list it can still post. The duplicate part of the second criterion is therefore met as "kept once", and the box is left unticked with a note.
+- **The migration is 0021**, the next after 0020 (TKT-01M29CXK0K). It is checked again against origin/main before the PR opens and before it merges.
+
 ### Approach
 
-1. **Migration** (the next free number after TKT-01M29CXK0K's, checked at implementation).
+1. **Migration 0021.**
    - `ALTER TABLE drafts ADD COLUMN attachments TEXT NOT NULL DEFAULT '[]' CHECK (json_valid(attachments) AND json_type(attachments) = 'array')`.
-   - A trigger refuses `deleted = 1` with `attachments <> '[]'`, because SQLite cannot add that `CHECK` to the existing table without rebuilding it.
+   - Triggers on insert and on update refuse `deleted = 1` with `attachments <> '[]'`, because SQLite cannot add that `CHECK` to the existing table without rebuilding it.
    - docs/04 "drafts" gains the column.
-2. **Queries** (`queries/viewer_state.sql`). `UpsertThreadDraft` and `UpsertForumDraft` write `attachments`, `DeleteThreadDraft` and `DeleteForumDraft` write `'[]'`, and `DeleteCollectableBlob` gains `AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(drafts.attachments, blobs.hash) > 0)`.
-3. **Service** (`internal/service/threads` `viewerstate.go`, the draft methods):
-   - `SaveDraft` and `SaveForumDraft` take `Attachments []string` and call `s.Attachments.CheckAttach`, the interface TKT-01M29CXK0K adds to avoid an import cycle, without `AddRefs`. The forum is the thread's forum for a reply draft and the named forum for a new-thread draft.
-   - Attachments without `upload` are `forbidden`, and an empty list needs nothing.
-   - The DTOs are built with the same metadata helper as posts, keyed on (hash, viewer).
-4. **DTO.** `Draft` and `ForumDraft` gain `Attachments []Attachment` (`attachments`, never null). The goldens are regenerated.
-5. **Docs.** docs/07 "Drafts" describes the `PUT` and `GET` shapes. The form-post table's draft rows are Phase 5, and are noted there as not yet carrying attachments.
+2. **Queries** (`queries/viewer_state.sql`). `UpsertThreadDraft` and `UpsertForumDraft` write `attachments`, `DeleteThreadDraft` and `DeleteForumDraft` write `'[]'`, and `DeleteCollectableBlob` gains `AND NOT EXISTS (SELECT 1 FROM drafts WHERE instr(drafts.attachments, blobs.hash) > 0)`. The hashes are stored as `Check` answers them, valid lower-case hex, so no `lower()` is needed.
+3. **Service** (`internal/service/threads` `viewerstate.go`):
+   - `DraftRequest` and `ForumDraftRequest` gain `Attachments []string`. `SaveDraft` checks them against the thread's forum, after the reply check, and `SaveForumDraft` against the named forum, after `forumForThread`. Both store the list `checkAttachments` answers as a JSON array.
+   - `Draft` and `ForumDraft` (and the saves' answers) draw the stored hashes as `dto.Attachment`, with the metadata helper `attachmentsOf` uses, factored out and keyed on (hash, viewer), so the names are the viewer's own uploads.
+4. **Handlers.** The two `PUT` bodies take `attachments`. An absent or null list is none.
+5. **DTO.** `Draft` and `ForumDraft` gain `Attachments []Attachment` (`attachments`, never null). The four goldens are regenerated. The hand-written mirror in `web/client/src/api/dto.ts` gains the field because `dto-contract.ts` refuses a golden key the type lacks. A type adds no JavaScript, so `go generate ./internal/web/spa` must leave the dist unchanged, and is run to prove it.
+6. **Docs.** docs/07 "Drafts" describes the `PUT` and `GET` shapes and the repeated-hash decision. docs/03 "Blob garbage collection" and docs/04 "drafts" say the collector keeps a blob a draft's attachments name. The form-post table's draft rows are Phase 5, and are noted there as not yet carrying attachments.
 
 ### Tests
 
-- `TestDraftKeepsAttachments`: reply and new-thread drafts, saved and read back with names and sizes.
-- `TestDraftAttachmentChecks`: another member's blob is `not_yours`, a quarantined one `blocked`, eleven `too_many`, a duplicate `validation-failed`, and no `upload` is `forbidden`.
+- `TestDraftKeepsAttachments`: reply and new-thread drafts, saved and read back with names and sizes, through the HTTP chain.
+- `TestDraftAttachmentChecks`: another member's blob is `not_yours`, a quarantined one `blocked`, eleven `too_many`, no `upload` is `forbidden`, and a repeated hash is kept once.
 - `TestDraftAttachmentAddsNoRef`: the refcount stays 0 and `unreferenced_since` is unchanged.
-- `TestDraftTombstoneHasNoAttachments`: the delete empties them, and the trigger refuses a tombstone that has any.
+- `TestDraftTombstoneHasNoAttachments`: the delete empties them, and the triggers refuse a tombstone that has any.
 - `TestBlobGCKeepsDraftAttachment`: a blob at zero for eight days that a draft's attachments name is kept. Once the draft is deleted, it is collected.
 - `TestRedactKeepsDraftAttachedBlob`: `ketju redact` reports "kept blob … a draft still refers to it".
 - The goldens for `Draft` and `ForumDraft` are regenerated, and the diff is read.
