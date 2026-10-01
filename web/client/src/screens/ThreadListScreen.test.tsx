@@ -433,4 +433,46 @@ describe('the forum watch control', () => {
     expect(asked).toContain('/api/v1/me');
     expect(root.querySelector('[data-unread]')).toBeNull();
   });
+
+  // Terva review 1832: a save outlives its dialog. One for General that
+  // answers once the reader is on Chatter does not label Chatter's control.
+  it('keeps a late save to one forum off another forum’s control', async () => {
+    viewer.value = structuredClone(memberMe) as Me;
+    let answer: ((r: Response) => void) | null = null;
+    let chatter = 0;
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+      asked.push(String(url));
+      if (init.method === 'POST' && url === '/api/v1/forums/general/watch') return new Promise<Response>((resolve) => (answer = resolve));
+      for (const [slug, name] of [
+        ['general', 'General'],
+        ['chatter', 'Chatter'],
+      ]) {
+        if (String(url).startsWith(`/api/v1/forums/${slug}/threads`)) {
+          // Chatter answers once; a reload is held back, so nothing
+          // corrects a wrong label for the test.
+          if (slug === 'chatter' && chatter++ > 0) return new Promise<Response>(() => {});
+          const list = { ...structuredClone(memberList), forum: { slug, name }, watch: '' } as ThreadList;
+          return new Response(JSON.stringify(list), { status: 200 });
+        }
+      }
+      if (url === '/api/v1/me') return new Response(JSON.stringify(memberMe), { status: 200 });
+      return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/problem+json' } });
+    });
+    const root = await renderAt('/f/general');
+    await act(async () => control(root)!.click());
+    const dialog = document.querySelector<HTMLElement>('[data-watch-dialog]')!;
+    const mute = [...dialog.querySelectorAll<HTMLInputElement>('input[type=radio]')].find((r) => r.value === 'mute')!;
+    await act(async () => mute.click());
+    await act(async () => dialog.querySelector<HTMLButtonElement>('button[type=submit]')!.click());
+    await act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    expect(document.querySelector('[data-watch-dialog]')).toBeNull();
+    await route('/f/chatter');
+    await settle(root);
+    expect(root.querySelector('h1')?.textContent).toBe('Chatter');
+    expect(control(root)?.textContent).toBe('Watch');
+    // General's answer lands now.
+    await act(async () => answer!(new Response(JSON.stringify({ watch: 'mute' }), { status: 200 })));
+    for (let i = 0; i < 10; i++) await act(() => new Promise((r) => setTimeout(r, 5)));
+    expect(control(root)?.textContent).toBe('Watch');
+  });
 });

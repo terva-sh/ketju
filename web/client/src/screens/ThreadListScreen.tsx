@@ -64,14 +64,16 @@ export function ThreadListScreen() {
   useAfterMark(res.retry);
   const name = list?.forum?.name ?? '';
   const signedIn = !!viewer.value.user;
-  const [watchSet, setWatchSet] = useState<{ on: ThreadList; to: string } | null>(null);
+  const [watchSet, setWatchSet] = useState<{ forum: string; on: ThreadList; to: string } | null>(null);
   const [watching, setWatching] = useState(false);
   const watchButton = useRef<HTMLButtonElement>(null);
-  // The list on screen when a save answers, which a mark's retry may have
-  // replaced since the dialog opened (Terva review 1829 on the thread page).
-  const shownList = useRef(list);
-  shownList.current = list;
-  const level = watchSet && watchSet.on === list ? watchSet.to : (list?.watch ?? '');
+  // The forum and list on screen when a save answers. A save outlives its
+  // dialog, so the reader may have gone to another forum by then, whose
+  // control it must not label (Terva review 1832); and a mark's retry may
+  // have replaced the list since the dialog opened.
+  const shown = useRef({ forum, list });
+  shown.current = { forum, list };
+  const level = watchSet && watchSet.forum === forum && watchSet.on === list ? watchSet.to : (list?.watch ?? '');
   const offerWatch = signedIn && !!list?.forum;
   useEffect(() => setWatching(false), [forum]);
 
@@ -122,7 +124,9 @@ export function ThreadListScreen() {
           returnTo={watchButton.current}
           fallback={() => null}
           onSaved={(to) => {
-            if (shownList.current) setWatchSet({ on: shownList.current, to: to.watch });
+            const now = shown.current;
+            if (now.forum !== forum || !now.list) return;
+            setWatchSet({ forum, on: now.list, to: to.watch });
             res.retry();
           }}
           onClose={() => setWatching(false)}
