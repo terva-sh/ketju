@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V6Y4JP8W8WY0JG6NZV7M7S
 title: Build the unread, new, participated and watching screens
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: pr:294
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase3-v6y4jp
+  branch: run/v6y4jp-list-screens
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a4de4e066da6b5199
+  commit: 86752c422f9d6152ce015e2c1b52cdd721f33910
+  session: null
+  claimed_at: 2026-10-01T18:09:17Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:49Z
-updated_at: 2026-10-01T11:18:43Z
+updated_at: 2026-10-01T18:09:19Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-unread
+  id: agent:claude-code/phase3-v6y4jp
   name: ""
 extensions: {}
 ---
