@@ -669,6 +669,15 @@ arrangement.
   nearby page in one tap; a grid of every page however many lost because
   a thread of thousands of pages would draw thousands of controls
   (Terva review 1691).
+  **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M29CGBZD):** "First unread" in the sheet is a button that runs the
+  thread page's own First unread, not a link. It goes to the reader's
+  position at the press plus one, which reading on the page moves after
+  the sheet is drawn, and to a post already on screen it moves focus
+  without changing the URL, as First unread in the thread actions does
+  ("read tracking under a lens"). Alternative: a link to the post after
+  the position the page arrived with lost because it would send a reader
+  who had read on back to a post they have read (Terva review 1730).
 - **Targets and gestures.** Every standalone control (buttons, tabs,
   pager, post actions, the "more" menu) is at least 44 px on its shorter
   side. Inline links inside text (author names, ordinals, tag chips) keep

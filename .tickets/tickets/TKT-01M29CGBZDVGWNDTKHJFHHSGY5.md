@@ -35,7 +35,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-10-01T18:47:24Z
+updated_at: 2026-10-01T19:00:04Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -126,3 +126,15 @@ run decision: pending maintainer review. The page sheet lists every page as a 44
 **agent:claude-code/phase3-groom-pages** at 2026-10-01T08:18:59Z
 
 run decision: pending maintainer review. Supersedes the earlier run-decision note on the grid: after Terva review 1691 (head 2455be0, base a599b48, finding 'Bound the number of page links rendered in the phone sheet'), the grid holds every page only up to 60 pages. Past that it holds the first, the last and current plus or minus 20, with a Go to page field. docs/06 Pages is updated.
+
+**agent:claude-code/phase3-cgbzd** at 2026-10-01T19:00:04Z
+
+run decision: pending maintainer review. In the page sheet, "First unread" is a button that runs the thread page's own First unread (keyboard/shortcuts.ts firstUnread, with readPosition at the press), not a link. A link would be computed when the sheet is drawn, and reading moves the position after that, so it would send a reader who had read on back to a post they have read (Terva review 1730). To a post already on screen it moves focus without changing the URL, as First unread in the thread actions does. Recorded in docs/06 Mobile, Pages (2026-10-01).
+
+Implementation, prepared on run/cgbzd-phone-sheets (not pushed; the dist waits for the orchestrator):
+- `components/thread/Sheet.tsx` is the shared sheet: a useModal dialog drawn with the forum picker's classes (forums.css) and docked to the foot of the screen, padded by `env(safe-area-inset-bottom)`. Focus returns to the opener when focus is in the sheet or on the body. A choice that moved focus elsewhere, such as First unread focusing a post on this page, keeps it there.
+- `components/thread/PageSheet.tsx` holds the page sheet and `sheetPages`. Past 60 pages it marks each skipped run with "…" and does not fill a one-page gap, so it never draws more than 43 links. The sheet's title is "Pages", and the number field is labelled "Go to page".
+- There is no LensSheet.tsx. LensBar draws a second Lens button, `[data-lens-sheet]`, which CSS shows below 720 px in place of `[data-lens-switch]`. It opens LensMenu itself inside a Sheet, so the phone lists exactly the switcher's lenses from the same code.
+- The since form moved out of LensMenu as `SinceForm`, and the page sheet's "Jump to date" uses it.
+- The vitest specs are in PageSheet.test.tsx and a "the lens sheet" block in LensBar.test.tsx. The e2e spec is e2e/phone-sheets.spec.ts. lenses.spec.ts now opens the switcher through the sheet on a phone.
+- The reader bundle grew from 66189 B to 67245 B (+1056 B), against a budget of 120000 B. The AC's 70000 B figure is older than the maintainer's raise (#331).
