@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/service/blobs"
 	"github.com/terva-sh/ketju/internal/store/blob"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -29,6 +30,12 @@ import (
 const (
 	BlobGCInterval = 24 * time.Hour
 	BlobGrace      = 7 * 24 * time.Hour
+
+	// StaleUpload is how old a staged upload, or a blob file no row names,
+	// must be before a pass removes it (docs/03, decided by the run
+	// 2026-10-01). An upload in progress is younger; one a crash left is
+	// not.
+	StaleUpload = time.Hour
 )
 
 // blobPage is how many candidates a pass takes at a time. Each page costs
@@ -132,10 +139,21 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("blob gc: settling an interrupted removal: %w", err)
 	}
+	// The hold comes before every removal, the stale staged files'
+	// included, so that a held pass deletes nothing, as it says (Terva
+	// review 1732).
 	if g.Hold != nil {
 		if reason := g.Hold(); reason != "" {
 			return Result{}, fmt.Errorf("%w: %s; nothing was deleted", ErrHeld, reason)
 		}
+	}
+	staged, err := blob.SweepTmp(g.Root, StaleUpload, g.now())
+	if err != nil {
+		return Result{}, fmt.Errorf("blob gc: removing stale staged uploads: %w", err)
+	}
+	orphans, err := g.removeOrphans(ctx)
+	if err != nil {
+		return Result{}, fmt.Errorf("blob gc: removing blob files no row names: %w", err)
 	}
 
 	var (
@@ -149,6 +167,12 @@ func (g *BlobGC) Run(ctx context.Context) (Result, error) {
 			"failed", failed}
 		if restored > 0 {
 			attrs = append(attrs, "restored", restored)
+		}
+		if staged > 0 {
+			attrs = append(attrs, "stale_staged", staged)
+		}
+		if orphans > 0 {
+			attrs = append(attrs, "orphans", orphans)
 		}
 		return Result{Removed: removed, Attrs: attrs}
 	}
@@ -306,6 +330,48 @@ func (g *BlobGC) recoverTrash(ctx context.Context) (int64, error) {
 		}
 	}
 	return restored, nil
+}
+
+// removeOrphans removes blob files no row names, over StaleUpload old
+// (docs/03). An upload leaves one when its transaction fails after the file
+// was placed, or when it crashes between the two, and such a file is never
+// served, since serving needs the row. Each is checked and removed inside a
+// write (blobs.RemoveIfOrphan), so an upload placing the same bytes, which
+// also writes, cannot interleave, and a file whose row exists is never
+// touched.
+//
+// A file no row names is kept when a thread log names its hash. No failed
+// upload is on a post, so such a file is not one; it is a database restored
+// from a backup older than the blobs directory, and those bytes have no
+// other copy. The same scan as a pass's decides it, and a log that cannot
+// be read holds the sweep.
+func (g *BlobGC) removeOrphans(ctx context.Context) (int64, error) {
+	hashes, err := blob.Orphans(g.Root, StaleUpload, g.now())
+	if err != nil || len(hashes) == 0 {
+		return 0, err
+	}
+	want := make(map[string]bool, len(hashes))
+	for _, h := range hashes {
+		want[h] = true
+	}
+	named, err := referencedInLogs(ctx, g.Root, want)
+	if err != nil {
+		return 0, fmt.Errorf("%w: the thread logs could not all be read, so no orphan was removed: %w", ErrHeld, err)
+	}
+	var removed int64
+	for _, h := range hashes {
+		if named[h] {
+			continue
+		}
+		gone, err := blobs.RemoveIfOrphan(ctx, g.DB, g.Root, h)
+		if err != nil {
+			return removed, fmt.Errorf("%s: %w", h, err)
+		}
+		if gone {
+			removed++
+		}
+	}
+	return removed, nil
 }
 
 // ReferencedInLogs is referencedInLogs for ketju redact, which deletes a

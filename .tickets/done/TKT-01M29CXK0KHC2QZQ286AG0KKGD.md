@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXK0KHC2QZQ286AG0KKGD
 title: Build the content-addressed blob store and upload path
 type: task
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,17 @@ blocks_on: none
 references:
   - ref: design:storage-attachments
     path: docs/03-thread-storage.md
+  - ref: pr:280
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-01T08:36:54Z
+updated_at: 2026-10-01T10:25:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-live
+  id: agent:claude-code/phase3-run-cxk0k
   name: ""
 extensions: {}
 ---
@@ -44,19 +46,19 @@ MIME is decided by sniffing against an allowlist, not by what the upload claims.
 
 ## Acceptance criteria
 
-- [ ] The same bytes uploaded by two members are one file and one blobs row with two blob_uploads rows, and attaching them to two posts makes the refcount 2 (TestUploadDedupOneFileOneRow, TestTwoPostsTwoRefs)
-- [ ] The type is sniffed from the bytes, never the claim: only image/png, image/jpeg and image/gif that pass their DecodeConfig, application/pdf and text/plain are stored, and anything else is validation-failed type_not_allowed (TestUploadSniffsNotClaims, TestUploadRefusesOutsideAllowlist, TestUploadImageMustDecodeConfig)
-- [ ] Upload needs a member with upload in the named forum: anonymous 401, pre-user 403, no grant 403, hidden forum 404, archived forum 403 except an admin (TestUploadPermission)
-- [ ] A blob is served only to a viewer who may read the body of a post naming it, by the thread page's rules; every case in TestBlobServedOnlyToReaders passes, including deleted, moderator-hidden, hidden-pending-review, redacted, moved-to-an-unreadable-forum, suspended-author, group-grant moderator, unattached, quarantined and source-URL-only, and every refusal is identical to a missing hash
-- [ ] A post attaches at most 10 blobs, each one the poster uploaded and not quarantined; AddBlobRef runs before the append, a collected blob is refused, and a failed append drops the references again (the TestAttach* tests)
-- [ ] A reply with attachments is projected before it answers, so its blobs are servable at once (TestReplyWithAttachmentIsServableAtOnce)
-- [ ] A quarantined blob is never served, and its bytes cannot be uploaded or attached again (TestBlobServedOnlyToReaders quarantined row, TestUploadOfQuarantinedBytesBlocked, TestAttachQuarantinedRefused)
-- [ ] post_attachments is a projection that reindex rebuilds identically and a Redacted record clears (TestPostAttachmentsProjected, TestRedactedDropsPostAttachments, TestReindexRebuildsPostAttachments)
-- [ ] The thread page's viewer and the forum tree carry can_upload, and the goldens and docs/04 and docs/07 are updated in the same PR (TestThreadViewerCanUpload, TestForumTreeCanUpload)
-- [ ] GET /blobs/{hash} answers with Cache-Control private, no-cache, the hash as ETag with 304 and Range support, nosniff, the sandbox CSP, CORP same-origin, and inline or attachment disposition (TestBlobHeaders), and a conditional request is authorized before any 304, so a reader who lost access or signed out gets not-found (TestRevalidationRechecksAccess)
-- [ ] A post's attachment shows the name its author first uploaded it under and a later upload of the same bytes renames nothing, a second uploader never sees the first one's name, and a tombstone carries no attachments (TestReuploadKeepsFirstName, TestSecondUploaderNeverSeesFirstName, TestTombstoneCarriesNoAttachments)
-- [ ] The size cap limits.attachment_mb is enforced during the read, and an honest Content-Length over it is refused before a byte is read; every refused or failed upload removes its staged file at once, and GC removes staged files over an hour old (TestUploadCapDuringRead, TestUploadContentLengthOverCap, TestRefusedUploadLeavesNoStagedFile, TestCollectorSweepsStaleStagedFiles)
-- [ ] A blob file with no row is never served, an upload whose transaction fails after placing its file removes it, and the collector removes any orphan over an hour old (TestUploadCommitFailureLeavesNoOrphan, TestCollectorRemovesOrphanBlobFiles)
+- [x] The same bytes uploaded by two members are one file and one blobs row with two blob_uploads rows, and attaching them to two posts makes the refcount 2 (TestUploadDedupOneFileOneRow, TestTwoPostsTwoRefs)
+- [x] The type is sniffed from the bytes, never the claim: only image/png, image/jpeg and image/gif that pass their DecodeConfig, application/pdf and text/plain are stored, and anything else is validation-failed type_not_allowed (TestUploadSniffsNotClaims, TestUploadRefusesOutsideAllowlist, TestUploadImageMustDecodeConfig)
+- [x] Upload needs a member with upload in the named forum: anonymous 401, pre-user 403, no grant 403, hidden forum 404, archived forum 403 except an admin (TestUploadPermission)
+- [x] A blob is served only to a viewer who may read the body of a post naming it, by the thread page's rules; every case in TestBlobServedOnlyToReaders passes, including deleted, moderator-hidden, hidden-pending-review, redacted, moved-to-an-unreadable-forum, suspended-author, group-grant moderator, unattached, quarantined and source-URL-only, and every refusal is identical to a missing hash
+- [x] A post attaches at most 10 blobs, each one the poster uploaded and not quarantined; AddBlobRef runs before the append, a collected blob is refused, and a failed append drops the references again (the TestAttach* tests)
+- [x] A reply with attachments is projected before it answers, so its blobs are servable at once (TestReplyWithAttachmentIsServableAtOnce)
+- [x] A quarantined blob is never served, and its bytes cannot be uploaded or attached again (TestBlobServedOnlyToReaders quarantined row, TestUploadOfQuarantinedBytesBlocked, TestAttachQuarantinedRefused)
+- [x] post_attachments is a projection that reindex rebuilds identically and a Redacted record clears (TestPostAttachmentsProjected, TestRedactedDropsPostAttachments, TestReindexRebuildsPostAttachments)
+- [x] The thread page's viewer and the forum tree carry can_upload, and the goldens and docs/04 and docs/07 are updated in the same PR (TestThreadViewerCanUpload, TestForumTreeCanUpload)
+- [x] GET /blobs/{hash} answers with Cache-Control private, no-cache, the hash as ETag with 304 and Range support, nosniff, the sandbox CSP, CORP same-origin, and inline or attachment disposition (TestBlobHeaders), and a conditional request is authorized before any 304, so a reader who lost access or signed out gets not-found (TestRevalidationRechecksAccess)
+- [x] A post's attachment shows the name its author first uploaded it under and a later upload of the same bytes renames nothing, a second uploader never sees the first one's name, and a tombstone carries no attachments (TestReuploadKeepsFirstName, TestSecondUploaderNeverSeesFirstName, TestTombstoneCarriesNoAttachments)
+- [x] The size cap limits.attachment_mb is enforced during the read, and an honest Content-Length over it is refused before a byte is read; every refused or failed upload removes its staged file at once, and GC removes staged files over an hour old (TestUploadCapDuringRead, TestUploadContentLengthOverCap, TestRefusedUploadLeavesNoStagedFile, TestCollectorSweepsStaleStagedFiles)
+- [x] A blob file with no row is never served, an upload whose transaction fails after placing its file removes it, and the collector removes any orphan over an hour old (TestUploadCommitFailureLeavesNoOrphan, TestCollectorRemovesOrphanBlobFiles)
 
 ## Implementation plan
 
@@ -254,6 +256,15 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 - A moderator control to quarantine a blob. No ticket owns one, and nothing in Phase 3 needs it. The tests set the status with `SetBlobStatus`.
 - Backing up `blobs/`: TKT-01M29CXK35, in Phase 4.
 
+
+### Revised at claim (2026-10-01, against main at a15d1b2)
+
+Everything above stands, `### Settled in grooming` unchanged. Reading the code at claim adds:
+- **An edited post's attachments come from `post_attachments`.** An index entry points at the current revision, and an `Edit` body has no `attachments`, so `threadlog.Reader` returns none for an edited post. `view.go` takes the hashes from the `Post` record when it read one, and otherwise, for an entry carrying `EntryHasAttachments`, from `post_attachments` for that (thread, ordinal). Serving already reads `post_attachments`, so the page and the serve path agree. The response cache key already names `log_length_projected`, so a page drawn before the projection caught up is not reused after it.
+- **`api.Deps.Blobs` is optional.** Fifteen call sites build `api.Deps`, all tests but `serve.go`. A nil `Blobs` answers `POST /api/v1/blobs` with `not-implemented`, as `web.Groups` does for an absent group, and a nil `threads.Service.Attachments` refuses any attachment as today. `serve.go` wires both.
+- **The upload body limit** is `limits.attachment_mb` plus a 64 KiB multipart allowance in `web.Limits.forPath`. An honest `Content-Length` over that is refused before a byte is read, and the `file` part is capped at exactly `limits.attachment_mb` while it is read.
+- **The migration number** is checked against origin/main at push time.
+
 ## Notes
 
 **agent:claude-code/phase3-groom-live** at 2026-10-01T07:59:44Z
@@ -271,3 +282,31 @@ The on-disk layout itself is fixed by docs/03 'On-disk layout' and internal/stor
 **agent:claude-code/phase3-groom-live** at 2026-10-01T08:13:52Z
 
 run decision: pending maintainer review. Amends note 1 after Terva review 1696 on PR #271. Blob and thumbnail responses are Cache-Control: private, no-cache with the hash as ETag, and Authorize runs before any 304. The year-long immutable caching docs/03 once named would let a browser keep showing a file after access was lost. A blob_uploads row is written once, so a re-upload of the same bytes under another name renames nothing already posted, and the upload answer carries the viewer's first name. docs/07 'Attachments' and docs/03 'Attachments' are updated.
+
+**agent:claude-code/phase3-run-cxk0k** at 2026-10-01T09:56:27Z
+
+Implementation notes (agent:claude-code/phase3-run-cxk0k, 2026-10-01). Where the build differs from the plan's Approach, and why:
+- **post_attachments has a `position` column.** An edited post's current record is an Edit with no attachments, so the page reads its list from the projection; position keeps the order the Post gave. It is a projection column, rebuilt by reindex, so no format question.
+- **threads.Attachments is Check, AddRefs and DropRefs, without Meta.** The thread service reads attachment metadata itself (`AttachmentMeta`), so a thread page with no blob store still draws its attachments. A nil `Attachments` refuses any attachment as before.
+- **api.Deps.Blobs is optional** and a nil one answers POST /api/v1/blobs not-implemented: fifteen test sites build Deps. serve.go wires it.
+- **The upload refuses an archived forum from the forum's row** as well as through perm, so an archive refuses at once whatever perm's one-minute cache holds, as readOnlyForum does for posts. viewer.can_upload and the forum tree's can_upload read it the same way.
+- **The blob_uploads cascade** is named as the second exception in TestNoCascadingDeletes, with the reason.
+- **Forum-level grants replace a group's global ones in that forum** (perm). Granting members `upload` in one forum through the admin grid therefore needs read, create_thread and reply granted there too. That is the grid's existing rule and not this ticket's to change; the tests grant the full set.
+
+run decision: pending maintainer review. Recorded in docs/03 "Blob garbage collection" (2026-10-01): the collector keeps a blob file with no row when a thread log names its hash, and removes no orphan while a pass is held. No failed upload is on a post, so such a file means a database restored from a backup older than blobs/, and its bytes have no other copy. The alternative, removing every hour-old orphan as review 1708's text read, lost because it would delete posted files after such a restore. This only narrows what is deleted.
+
+**agent:claude-code/phase3-run-cxk0k** at 2026-10-01T10:14:44Z
+
+Terva review 1732 (run f475757d, head f452a30, base f3538e6), both fixed. high: Commit now syncs every directory from the shard up to the data directory before the rename (and the shard after it), always, so a new shard's entry survives a power cut; TestCommitSyncsNewShardInItsParent records the syncs through a syncDir seam. Always rather than only when MkdirAll created something, because a shard a crashed process created was never synced either; four fsyncs per new blob are cheap. medium: the collector checks Hold before sweeping stale staged files, so a held pass removes nothing; the orphan test now also keeps a stale staged file while held. Both mutations (sweep before hold, parent syncs dropped) fail the tests. docs/03 says both.
+
+**agent:claude-code/phase3-run-cxk0k** at 2026-10-01T10:20:29Z
+
+Terva review 1735 (run 79b82405, head 8707cce, base f3538e6): both 1732 findings resolved; one new medium, fixed. A client pausing mid-body past the collector's hour had its staged file swept, and the upload then failed at Commit (the server sets only ReadHeaderTimeout, so nothing bounds a body read). blob.Stage now records the staged file's base name in an in-process set until blob.Unstage, which Upload's deferred cleanup calls after removing or committing the file; SweepTmp skips held names at any age. One process holds the data directory, so an in-memory set is all of them. Considered instead: a per-read deadline on the upload body (indirect, and couples the collector's hour to a handler timeout) and touching the file's mtime while waiting (no event to touch on during a pause). Tests: TestSweepTmpSkipsHeldFiles, TestSweepSparesAPausedUpload (io.Pipe upload paused, file aged two hours, swept, resumed, succeeds). Removing the skip fails both.
+
+**agent:claude-code/phase3-run-cxk0k** at 2026-10-01T10:25:24Z
+
+Terva review 1736 (run bab42c5b, head 101facb, base 3890b38): 1735's finding resolved; one new medium, fixed. A file part followed by a second part answered bad-request after the file was committed with its blob_uploads row, so the uploader could attach the blob of a refused request. The handler now hands Upload the part through onlyPart, which at the part's end calls NextPart and fails the read (partError: bad-request, or payload-too-large for a MaxBytesError) unless the body ends; Upload fails on the read error before it syncs or commits, and its deferred cleanup removes the staged file. Considered: undoing the upload after the fact, which would mean deleting a blob_uploads row and possibly a blob row and file that a concurrent identical upload may share, and is a second write that can fail. TestUploadOverHTTP now uses bytes no other upload carries for the two-part and trailing-field cases, and asserts no blob row and no file for them; against the old handler it fails on both. docs/07 says so.
+
+## Summary
+
+Landed the blob store, the upload path and the serve route, server-side, with all thirteen criteria met. Migration 0020 adds blob_uploads (insert-once, cascading from blobs), blobs.width and height, and the post_attachments projection (with a position column) in db.ProjectionTables. internal/store/blob stages uploads in blobs/tmp/ and commits them into place. internal/service/blobs holds MayUpload and Upload (type sniffed against the allowlist and DecodeConfig, the cap held while the bytes are read, every refusal removing its staged file, an orphan removed when the transaction fails), Check, AddRefs and DropRefs for posting, and Authorize, which asks threads.CanSeeAnyPostBody about each post naming the blob. Reply and CreateThread take attachments, raising refs before the append and dropping them when it fails, and a reply with attachments is projected before it answers. The page reads attachment metadata, taking an edited post's list from post_attachments. viewer.can_upload and the forum tree's can_upload are new. POST /api/v1/blobs streams multipart, and GET and HEAD /blobs/{hash} (internal/web/blobs) answer private, no-cache with access checked before any 304, plus ETag, Range, sandbox CSP, CORP and disposition. The upload body limit is the cap plus 64 KiB. The collector sweeps stale staged files and hour-old orphans no row and no log names, and never while held. Client dto.ts changed in its types only, and the dist is byte-identical. docs/03, 04 and 07 are updated. Thumbnails (TKT-01M29CYS9W), the composer (TKT-01M3V73J8K), drafts (TKT-01M3V73DP6) and the upload budget (TKT-01M3V73KM1) stay out of scope.

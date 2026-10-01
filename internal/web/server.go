@@ -38,8 +38,9 @@ type Groups struct {
 	// Auth serves /auth/* -- the OIDC start and callback, and logout.
 	Auth http.Handler
 
-	// Blobs serves /blobs/* -- attachment reads, outside /api so they can be
-	// cached immutably.
+	// Blobs serves /blobs/* -- attachment reads (internal/web/blobs), outside
+	// /api because a post's markdown links them by that URL (docs/07
+	// "Attachments").
 	Blobs http.Handler
 
 	// Events serves /events -- the SSE stream. It is outside the API version

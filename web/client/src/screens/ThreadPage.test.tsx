@@ -457,7 +457,7 @@ describe('a post', () => {
   });
 
   it('lists its attachments', async () => {
-    serve(page([post(1, { attachments: [{ hash: 'h1', size: 2048, mime: 'image/png', original_name: 'shot.png' }] })]));
+    serve(page([post(1, { attachments: [{ hash: 'h1', size: 2048, mime: 'image/png', original_name: 'shot.png', width: 640, height: 480 }] })]));
     const root = await renderAt(`/t/${id}/s?page=1`);
     const a = at(root, '#post-1 .attachments a')!;
     expect(a.getAttribute('href')).toBe('/blobs/h1');

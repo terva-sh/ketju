@@ -705,6 +705,7 @@ describe('moderating from the thread screen', () => {
     description: '',
     visibility: 'public',
     archived: false,
+    can_upload: false,
     thread_count: 0,
     post_count: 0,
     unread: 0,

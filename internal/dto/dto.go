@@ -84,6 +84,10 @@ type Attachment struct {
 	Size         int64  `json:"size"`
 	MIME         string `json:"mime"`
 	OriginalName string `json:"original_name"`
+	// Width and Height are an image's, in pixels, and null for anything
+	// that is not an image (docs/07 "Attachments").
+	Width  *int `json:"width"`
+	Height *int `json:"height"`
 }
 
 // ForumRef names a forum from inside another response, where the full forum is
@@ -151,9 +155,13 @@ type ThreadHeader struct {
 type ThreadViewer struct {
 	LastReadOrdinal int `json:"last_read_ordinal"`
 	// Watch is watch, mute, or empty for neither.
-	Watch       string `json:"watch"`
-	CanReply    bool   `json:"can_reply"`
-	CanModerate bool   `json:"can_moderate"`
+	Watch    string `json:"watch"`
+	CanReply bool   `json:"can_reply"`
+	// CanUpload is whether this viewer may upload a file to attach here:
+	// upload in the thread's forum, which is not read-only to them. False
+	// for an anonymous viewer (TKT-01M29CXK0K).
+	CanUpload   bool `json:"can_upload"`
+	CanModerate bool `json:"can_moderate"`
 	// SlowModeSeconds is the thread's slow mode, the minimum seconds between
 	// one member's posts: the thread's own value, or the site default when it
 	// has none. 0 is off. Moderators are exempt, but it is served to them
@@ -383,6 +391,10 @@ type Forum struct {
 	// Visibility is public, members or restricted.
 	Visibility string `json:"visibility"`
 	Archived   bool   `json:"archived"`
+	// CanUpload is whether this viewer may upload a file to attach to a new
+	// thread here, for the new-thread screen. False for an anonymous viewer
+	// (TKT-01M29CXK0K).
+	CanUpload bool `json:"can_upload"`
 
 	// ThreadCount is the forum's threads with a post, not including
 	// children's.

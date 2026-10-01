@@ -143,7 +143,7 @@ describe('the reply expander', () => {
   });
 
   it('shows a reply’s attachments, linked to their blobs', async () => {
-    const file = { hash: 'abc123', original_name: 'plan.pdf', mime: 'application/pdf', size: 2048 };
+    const file = { hash: 'abc123', original_name: 'plan.pdf', mime: 'application/pdf', size: 2048, width: null, height: null };
     serve(page([post(1, { reply_count: 1 })]), { 1: [post(7, { reply_to: 1, html: '', attachments: [file] })] });
     const root = await renderAt(`/t/${id}/s?page=1`);
     await click(root, toggle(root, 1)!);

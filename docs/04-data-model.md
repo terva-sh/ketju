@@ -769,7 +769,8 @@ before it to revision 1.
 ### blobs
 ```
 hash (pk), size, mime, original_name, uploaded_by, uploaded_at,
-refcount, status ('ok'|'quarantined'), unreferenced_since
+refcount, status ('ok'|'quarantined'), unreferenced_since,
+width, height                -- an image's, null otherwise (0020)
 ```
 `hash` is the lowercase hex SHA-256 the file is stored under (03).
 `unreferenced_since` is set whenever `refcount` is zero (from the upload
@@ -777,6 +778,26 @@ itself, since a new blob has no references yet) and is null otherwise, a
 CHECK holding the two together, so garbage collection can wait "seven days at
 zero" rather than seven days from upload. `BlobForServing` is the only lookup the serve path uses, and
 it does not find a quarantined blob.
+
+`original_name` and `uploaded_by` are the first upload's, kept for an
+operator. What a post shows is `blob_uploads`'. An upload of bytes already
+stored sets `unreferenced_since` to its own time while `refcount` is zero,
+so the collector's seven days start again (TKT-01M29CXK0K).
+
+### blob_uploads
+```
+hash, user_id, original_name, uploaded_at
+PRIMARY KEY (hash, user_id)
+hash REFERENCES blobs ON DELETE CASCADE
+```
+Who has uploaded each blob, and the name they first gave it (migration
+0020, TKT-01M29CXK0K). A post may attach only a blob its author has a row
+for, and its attachment shows that row's name. A row is written once and
+never updated, so uploading the same bytes again under another name renames
+nothing already posted, and a second uploader never learns the first one's
+name (docs/07 "Attachments"). The cascade is the schema's one deleting
+foreign key: a blob row goes only when the collector or `ketju redact`
+finds nothing naming it, and its upload rows go in the same transaction.
 
 ### settings
 ```
@@ -928,6 +949,20 @@ lists. The per-thread index file already answers within-thread questions.
 ```
 thread_id, ordinal, mentioned_user_id
 ```
+
+### post_attachments
+```
+thread_id, ordinal, hash, position
+PRIMARY KEY (thread_id, ordinal, hash)
+INDEX (hash, thread_id, ordinal)
+```
+The hashes each post's `Post` record lists in `attachments`, in order
+(`position`), for the serve path's question "which posts name this blob"
+(migration 0020, TKT-01M29CXK0K). A `Redacted` record removes the post's
+rows. Nothing else changes them, since an `Edit` has no attachments field
+(03), and a thread page reads an edited post's attachments from here. The
+refcount on `blobs` is the collector's bookkeeping; this table is what
+access is checked against.
 
 ### search (FTS)
 Full-text index over `(thread_id, ordinal, revision, title, source_plain)`.

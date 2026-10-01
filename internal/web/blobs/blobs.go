@@ -1,0 +1,107 @@
+// Package blobs serves GET and HEAD /blobs/{hash}, an attachment's bytes
+// (docs/07 "Attachments", TKT-01M29CXK0K), for web.Groups.Blobs.
+//
+// Who may read a blob is internal/service/blobs's question (Authorize);
+// this package asks it on every request, conditional ones included, and
+// writes the headers that keep a stored file from acting as a page of this
+// origin.
+package blobs
+
+import (
+	"errors"
+	"io/fs"
+	"log/slog"
+	"net/http"
+	"os"
+	"strings"
+	"time"
+
+	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/problem"
+	blobsvc "github.com/terva-sh/ketju/internal/service/blobs"
+)
+
+// Policy is a blob response's Content-Security-Policy. It replaces the page
+// policy securityHeaders set on the way in: a blob loads nothing and runs
+// nothing, and sandbox gives a document opened from it an opaque origin.
+const Policy = "default-src 'none'; sandbox"
+
+// New returns the /blobs/ handler.
+func New(svc *blobsvc.Service, log *slog.Logger) http.Handler {
+	if svc == nil {
+		panic("blobs.New: the blob service is required")
+	}
+	if log == nil {
+		log = slog.Default()
+	}
+	h := &handler{svc: svc, log: log}
+	mux := http.NewServeMux()
+	// GET also matches HEAD.
+	mux.HandleFunc("GET /blobs/{hash}", h.serve)
+	mux.HandleFunc("/blobs/", func(w http.ResponseWriter, r *http.Request) {
+		problem.Write(w, r, problem.CodeNotFound)
+	})
+	return mux
+}
+
+type handler struct {
+	svc *blobsvc.Service
+	log *slog.Logger
+}
+
+// serve answers a blob to a viewer who may read a post naming it, and
+// not-found to everyone else, in the same bytes as for a hash nothing has.
+//
+// Every answer, a refusal included, is private, no-cache and varies by
+// cookie: the browser may keep the bytes, but asks again on every use, and
+// Authorize runs before http.ServeContent compares If-None-Match, so a
+// reader who has lost access, or signed out, gets not-found rather than a
+// 304 (docs/07 "Attachments").
+func (h *handler) serve(w http.ResponseWriter, r *http.Request) {
+	hd := w.Header()
+	hd.Set("Cache-Control", "private, no-cache")
+	hd.Set("Vary", "Cookie")
+
+	hash := r.PathValue("hash")
+	b, err := h.svc.Authorize(r.Context(), domain.ViewerFrom(r.Context()), hash)
+	if errors.Is(err, blobsvc.ErrNotFound) {
+		problem.Write(w, r, problem.CodeNotFound)
+		return
+	}
+	if err != nil {
+		problem.WriteError(r.Context(), w, r, h.log, err)
+		return
+	}
+	path, err := h.svc.Path(hash)
+	if err != nil {
+		problem.Write(w, r, problem.CodeNotFound)
+		return
+	}
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		// A row with no file: the bytes are gone, which an operator must
+		// hear about, and to the reader it is a blob that is not there.
+		h.log.ErrorContext(r.Context(), "blobs: a blob's row has no file", "hash", hash)
+		problem.Write(w, r, problem.CodeNotFound)
+		return
+	}
+	if err != nil {
+		problem.WriteError(r.Context(), w, r, h.log, err)
+		return
+	}
+	defer f.Close()
+
+	hd.Set("Content-Type", b.Mime)
+	hd.Set("ETag", `"`+hash+`"`)
+	hd.Set("X-Content-Type-Options", "nosniff")
+	hd.Set("Content-Security-Policy", Policy)
+	hd.Set("Cross-Origin-Resource-Policy", "same-origin")
+	if strings.HasPrefix(b.Mime, "image/") {
+		hd.Set("Content-Disposition", "inline")
+	} else {
+		hd.Set("Content-Disposition", "attachment")
+	}
+	// No modification time: the hash is the validator, and the bytes under
+	// it never change.
+	http.ServeContent(w, r, "", time.Time{}, f)
+}

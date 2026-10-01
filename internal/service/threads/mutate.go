@@ -229,7 +229,7 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 	if err != nil {
 		return dto.CreatedPost{}, err
 	}
-	if err := checkPost(req.Source, nil); err != nil {
+	if err := checkPost(req.Source); err != nil {
 		return dto.CreatedPost{}, err
 	}
 	flags, err := s.authorFlags(ctx, v)
@@ -260,7 +260,7 @@ func (s *Service) Edit(ctx context.Context, v domain.Viewer, id threadid.ID, ord
 		if err != nil {
 			return threadlog.Append{}, err
 		}
-		pb := postBody(req.Source, r)
+		pb := postBody(req.Source, r, nil)
 		grace := isGrace(v, e, now, w)
 		refuse := gone
 		if grace {

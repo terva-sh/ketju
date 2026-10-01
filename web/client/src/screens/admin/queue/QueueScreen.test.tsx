@@ -171,7 +171,7 @@ describe('acting on a flagged post', () => {
     const q = onePage();
     const p = q.items[0].flag!.post!;
     p.html = '';
-    p.attachments = [{ hash: 'abc123', original_name: 'receipt.png', size: 2048, mime: 'image/png' }];
+    p.attachments = [{ hash: 'abc123', original_name: 'receipt.png', size: 2048, mime: 'image/png', width: 640, height: 480 }];
     server.routes[`GET ${queueUrl}`] = () => ({ status: 200, body: q });
     const root = await renderAt('/admin/queue');
     const it = item(root, hidden)!;

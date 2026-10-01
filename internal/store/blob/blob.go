@@ -1,9 +1,7 @@
 // Package blob is the on-disk side of attachments (docs/03 "Attachments"):
-// where a blob's bytes live, named by their SHA-256.
-//
-// The upload path and the serve route arrive with TKT-01M29CXK0 (Phase 3).
-// This package holds only what the blob garbage collector needs now, the
-// layout, so that the upload path reuses it rather than restating it.
+// where a blob's bytes live, named by their SHA-256, and how an upload gets
+// them there (staging.go). The rules about who may upload, attach and read
+// a blob are internal/service/blobs's; this package knows only files.
 package blob
 
 import (
@@ -26,6 +24,13 @@ const (
 
 	// HashLen is the length of a hash in lowercase hex.
 	HashLen = 64
+
+	// Tmp is the subdirectory of Dir where an upload is staged until its
+	// hash is known (docs/03, decided by the run 2026-10-01). It is on the
+	// same filesystem as the blobs, so the rename into place is atomic, and
+	// it holds nothing that outlives a request: serve empties it at startup
+	// and the collector removes anything in it over an hour old.
+	Tmp = "tmp"
 )
 
 // ErrBadHash means a string is not a lowercase hex SHA-256.

@@ -38,7 +38,8 @@ type Service struct {
 // evaluated as everyone, so public forums are all they see.
 //
 // The statements are fixed, however many forums there are: the forum rows,
-// one perm batch (none when perm's cache already knows), then in one read
+// two perm batches, read and upload (none when perm's cache already knows,
+// and the second reuses what the first evaluated), then in one read
 // the thread and post counts, v's unread counts, the last posts and their
 // authors.
 func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, error) {
@@ -64,6 +65,18 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 	listed := s.listed(rows, readable)
 	if len(listed) == 0 {
 		return dto.ForumTree{Forums: []dto.Forum{}}, nil
+	}
+	// can_upload, for the new-thread screen (TKT-01M29CXK0K): one more perm
+	// batch, which the cache answers once the read batch above has
+	// evaluated these forums. An anonymous viewer uploads nowhere, and an
+	// archived forum takes no upload but an admin's, whatever the cache
+	// holds, as the upload path reads it.
+	canUpload := map[int64]bool{}
+	if v.Member() {
+		var err error
+		if canUpload, err = s.Perm.CanEach(ctx, v, ids, domain.PermUpload); err != nil {
+			return dto.ForumTree{}, err
+		}
 	}
 
 	var (
@@ -141,6 +154,7 @@ func (s *Service) Tree(ctx context.Context, v domain.Viewer) (dto.ForumTree, err
 			Description: f.Description,
 			Visibility:  f.Visibility,
 			Archived:    f.Archived != 0,
+			CanUpload:   canUpload[f.ID] && (f.Archived == 0 || v.Role == domain.RoleAdmin),
 			ThreadCount: threads[f.ID],
 			PostCount:   posts[f.ID],
 			Unread:      unreadBy[f.ID],

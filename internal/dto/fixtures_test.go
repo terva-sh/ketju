@@ -107,11 +107,20 @@ func threadPage(class string) ThreadPage {
 				ReplyToSuppressed: false,
 				ReplyCount:        3,
 				HTML:              "<p>The bill was the smaller half of it.</p>",
+				// An image, with its dimensions, and a file that is not one,
+				// whose dimensions are null (TKT-01M29CXK0K).
 				Attachments: []Attachment{{
 					Hash:         "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
 					Size:         18422,
 					MIME:         "image/png",
 					OriginalName: "retention-settings.png",
+					Width:        ptr(1280),
+					Height:       ptr(720),
+				}, {
+					Hash:         "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+					Size:         90112,
+					MIME:         "application/pdf",
+					OriginalName: "invoice-march.pdf",
 				}},
 				Deleted:         false,
 				MovedTo:         nil,
@@ -209,7 +218,7 @@ func threadPage(class string) ThreadPage {
 		// started the thread, so their rename window runs to a day after
 		// its start. They moderate nothing, so the author windows bind them,
 		// at their defaults.
-		p.Viewer = ThreadViewer{LastReadOrdinal: 60, Watch: "watch", CanReply: true, CanModerate: false,
+		p.Viewer = ThreadViewer{LastReadOrdinal: 60, Watch: "watch", CanReply: true, CanUpload: true, CanModerate: false,
 			SlowModeSeconds: 30, NextPostAt: ptr(Millis(1757500530000)), RenameUntil: ptr(Millis(1757586400000)),
 			AuthorWindows: &AuthorWindows{EditSeconds: 86400, DeleteSeconds: 900}}
 	case tModerator:
@@ -306,6 +315,8 @@ func forumTree(class string) ForumTree {
 		Children: []Forum{},
 	}
 	if class != tAnon {
+		// upload is granted per forum, and to nobody anonymous.
+		general.CanUpload = true
 		general.Unread = 7
 		general.Children = append(general.Children, Forum{
 			Slug:        "general-offtopic",

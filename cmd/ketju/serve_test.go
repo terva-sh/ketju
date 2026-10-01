@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
 	"net/http"
 	"os"
@@ -22,6 +23,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/jobs"
 	"github.com/terva-sh/ketju/internal/lock"
+	"github.com/terva-sh/ketju/internal/store/blob"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -272,6 +274,44 @@ func TestStartupOrderAndShutdown(t *testing.T) {
 		if !strings.Contains(r.log.String(), line) {
 			t.Errorf("the log has no %q line:\n%s", line, r.log)
 		}
+	}
+}
+
+// TestServeSweepsStagedUploads: uploads a stopped process left in
+// blobs/tmp/, however recent, are gone before the listener opens, and a
+// blob file beside them is untouched (TKT-01M29CXK0K, docs/03).
+func TestServeSweepsStagedUploads(t *testing.T) {
+	path, data := writeConfig(t, "")
+	tmp := blob.TmpDir(data)
+	if err := os.MkdirAll(tmp, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	staged := filepath.Join(tmp, "upload-123")
+	if err := os.WriteFile(staged, []byte("half an upload"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	kept, err := blob.Path(data, strings.Repeat("ab", 32))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(kept), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(kept, []byte("a blob"), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	r := start(t, path, serveOpts{})
+	if _, err := os.Stat(staged); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the staged upload is still there: %v", err)
+	}
+	if _, err := os.Stat(kept); err != nil {
+		t.Errorf("a blob file went: %v", err)
+	}
+	if !strings.Contains(r.log.String(), "removed uploads a stopped process left staged") {
+		t.Errorf("the log does not say so:\n%s", r.log)
+	}
+	if err := r.shutdown(t); err != nil {
+		t.Fatal(err)
 	}
 }
 

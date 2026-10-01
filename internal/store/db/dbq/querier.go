@@ -46,6 +46,14 @@ type Querier interface {
 	// blocked, and the claims that prefill the form.
 	ApplicantIdentity(ctx context.Context, id int64) (ApplicantIdentityRow, error)
 	ApplicationNotes(ctx context.Context, applicationID int64) ([]ApplicationNotesRow, error)
+	// What an attach needs to know of each hash for its poster: the blob's
+	// status, and whether the poster uploaded it. A hash with no blob is
+	// absent.
+	AttachCandidates(ctx context.Context, arg AttachCandidatesParams) ([]AttachCandidatesRow, error)
+	// A page's attachment metadata: each blob's stored facts, and the name the
+	// given author uploaded it under, if they did. A hash with no blob is
+	// absent.
+	AttachmentMeta(ctx context.Context, arg AttachmentMetaParams) ([]AttachmentMetaRow, error)
 	// Whether audit_log already records this action on this target. Bootstrap
 	// promotion reads it as its idempotency marker (TKT-01M29C800G), through the
 	// audit_log_target index.
@@ -87,6 +95,8 @@ type Querier interface {
 	// it keeps (TKT-01M29C5Y2S, review 1156). A candidate is only a candidate:
 	// DeleteCollectableBlob checks every condition again as it deletes.
 	BlobGCCandidates(ctx context.Context, arg BlobGCCandidatesParams) ([]BlobGCCandidatesRow, error)
+	// The name a member uploaded a blob under; no row means they never did.
+	BlobUploadedBy(ctx context.Context, arg BlobUploadedByParams) (string, error)
 	// BlockIdentity marks an identity so its re-applications are refused
 	// (docs/05 step 5). Zero rows means it is gone or has a user.
 	BlockIdentity(ctx context.Context, arg BlockIdentityParams) (int64, error)
@@ -95,6 +105,7 @@ type Querier interface {
 	ClearFlagsAuditPending(ctx context.Context, ids []int64) (int64, error)
 	ClearForumThreadCounts(ctx context.Context) error
 	ClearMentions(ctx context.Context) error
+	ClearPostAttachments(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
 	ClearProjectionState(ctx context.Context) error
 	ClearThreadTags(ctx context.Context) error
@@ -131,6 +142,11 @@ type Querier interface {
 	// Sessions are addressed only by the hash of their id. There is deliberately
 	// no query that takes the plaintext: hashing belongs to the session store.
 	CreateSession(ctx context.Context, arg CreateSessionParams) error
+	// A new blob has no references yet, so it is unreferenced from the moment
+	// it is uploaded; the post that carries it adds the first one.
+	// original_name and uploaded_by are the first uploader's, kept for an
+	// operator: what a post shows is blob_uploads'.
+	CreateUploadedBlob(ctx context.Context, arg CreateUploadedBlobParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (int64, error)
 	// DecideApplication approves or denies a pending application. Zero rows
 	// means it was no longer pending: another moderator decided it, or the
@@ -161,6 +177,7 @@ type Querier interface {
 	// user_id is null and which DeleteUserSessions would miss.
 	DeleteIdentitySessions(ctx context.Context, userID sql.NullInt64) error
 	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
+	DeletePostAttachments(ctx context.Context, arg DeletePostAttachmentsParams) error
 	// DeletePreUserSessions ends every applicant session bound to an identity:
 	// what approving an application does in its own transaction (TKT-01M29CP2MG).
 	// LookupSession already refuses them once the identity has a user; this
@@ -252,6 +269,12 @@ type Querier interface {
 	ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error)
 	GetAgent(ctx context.Context, userID int64) (Agent, error)
 	GetApplication(ctx context.Context, id int64) (Application, error)
+	// The upload, attach and serve paths' queries (TKT-01M29CXK0K, docs/07
+	// "Attachments"). BlobForServing, in moderation.sql, stays the serve path's
+	// one lookup of a blob row (docs/04 "blobs").
+	// A blob in any status, for the upload path, which must tell a quarantined
+	// blob from a missing one.
+	GetBlob(ctx context.Context, hash string) (Blob, error)
 	GetFlag(ctx context.Context, id int64) (Flag, error)
 	GetFormByID(ctx context.Context, id int64) (Form, error)
 	// Forms and their versions (docs/04 "forms, form_versions"). Versions are
@@ -317,6 +340,9 @@ type Querier interface {
 	InsertAgentCredential(ctx context.Context, arg InsertAgentCredentialParams) error
 	InsertApplication(ctx context.Context, arg InsertApplicationParams) (int64, error)
 	InsertApplicationNote(ctx context.Context, arg InsertApplicationNoteParams) (int64, error)
+	// The first upload of a blob by a member names it for them. A later one
+	// changes nothing, so a name already posted stands (Terva review 1696).
+	InsertBlobUpload(ctx context.Context, arg InsertBlobUploadParams) error
 	InsertFormVersion(ctx context.Context, arg InsertFormVersionParams) error
 	// InsertHandleRelease records that a handle left an account, and reserves
 	// it until reserved_until. user_id is null for an anonymized account's old
@@ -324,6 +350,7 @@ type Querier interface {
 	InsertHandleRelease(ctx context.Context, arg InsertHandleReleaseParams) error
 	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
+	InsertPostAttachment(ctx context.Context, arg InsertPostAttachmentParams) error
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error
 	// LatestApplicationForIdentity is the identity's newest application, pending
 	// or decided. The 24-hour rule counts from its created_at.
@@ -442,6 +469,12 @@ type Querier interface {
 	// A move: the forum's parent and position in one write, so a move into a gap
 	// writes this row and no other. The depth triggers check parent_id.
 	PlaceForum(ctx context.Context, arg PlaceForumParams) error
+	// The posts naming a blob, a page at a time after the keyset (after_thread,
+	// after_ordinal), in (thread, ordinal) order.
+	PostAttachmentRefs(ctx context.Context, arg PostAttachmentRefsParams) ([]PostAttachmentRefsRow, error)
+	// A post's attachments as the projection holds them, for an edited post,
+	// whose current revision's record carries none, in the Post's order.
+	PostAttachmentsOf(ctx context.Context, arg PostAttachmentsOfParams) ([]string, error)
 	// The post's author, for the projection writer to tell an author's own
 	// Edit, Delete or Restore from a moderator's (TKT-01M29CKRGS).
 	PostAuthor(ctx context.Context, arg PostAuthorParams) (int64, error)
@@ -465,6 +498,11 @@ type Querier interface {
 	// RecordIdentityLogin notes a sign-in on the identity: when, and the claims
 	// the IdP asserted this time, which may have changed since the last.
 	RecordIdentityLogin(ctx context.Context, arg RecordIdentityLoginParams) error
+	// An upload of bytes already stored restarts the collector's seven days
+	// while nothing refers to them, so a blob uploaded again for a post not yet
+	// written is not collected under it. A referenced blob is left alone: its
+	// unreferenced_since is null, and the CHECK holds it so.
+	RefreshBlob(ctx context.Context, arg RefreshBlobParams) error
 	// Removes one IdP-sourced membership, and never one an admin holds.
 	RemoveIdPMembership(ctx context.Context, arg RemoveIdPMembershipParams) (int64, error)
 	RemoveMembership(ctx context.Context, arg RemoveMembershipParams) error

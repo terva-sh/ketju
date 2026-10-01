@@ -386,7 +386,7 @@ func (q *Queries) BlobExists(ctx context.Context, hash string) (bool, error) {
 }
 
 const blobForServing = `-- name: BlobForServing :one
-SELECT hash, size, mime, original_name, uploaded_by, uploaded_at, refcount, status, unreferenced_since FROM blobs WHERE hash = ? AND status = 'ok'
+SELECT hash, size, mime, original_name, uploaded_by, uploaded_at, refcount, status, unreferenced_since, width, height FROM blobs WHERE hash = ? AND status = 'ok'
 `
 
 // The one lookup the serve path may use: a quarantined blob is not found.
@@ -403,6 +403,8 @@ func (q *Queries) BlobForServing(ctx context.Context, hash string) (Blob, error)
 		&i.Refcount,
 		&i.Status,
 		&i.UnreferencedSince,
+		&i.Width,
+		&i.Height,
 	)
 	return i, err
 }

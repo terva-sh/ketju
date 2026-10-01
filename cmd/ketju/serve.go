@@ -31,6 +31,7 @@ import (
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/account"
 	"github.com/terva-sh/ketju/internal/service/applications"
+	"github.com/terva-sh/ketju/internal/service/blobs"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/identity"
@@ -38,6 +39,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/respcache"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
+	"github.com/terva-sh/ketju/internal/store/blob"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -45,6 +47,7 @@ import (
 	"github.com/terva-sh/ketju/internal/web"
 	"github.com/terva-sh/ketju/internal/web/api"
 	"github.com/terva-sh/ketju/internal/web/auth"
+	blobsweb "github.com/terva-sh/ketju/internal/web/blobs"
 	"github.com/terva-sh/ketju/internal/web/health"
 	"github.com/terva-sh/ketju/internal/web/spa"
 )
@@ -244,6 +247,14 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 			return fail("creating "+sub, err)
 		}
 	}
+	// Uploads staged by a process that stopped mid-upload. Under the lock
+	// and before the listener, nothing is being staged now, so all of it
+	// goes (docs/03, TKT-01M29CXK0K).
+	if n, err := blob.SweepTmp(cfg.DataDir, 0, time.Now()); err != nil {
+		log.Warn("could not empty the upload staging directory; the collector retries it", "removed", n, "err", err)
+	} else if n > 0 {
+		log.Info("removed uploads a stopped process left staged", "removed", n)
+	}
 	dbPath := filepath.Join(cfg.DataDir, "db", "ketju.db")
 	d, err := db.Open(ctx, db.Options{Path: dbPath})
 	if err != nil {
@@ -437,6 +448,12 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		},
 		Logger: log,
 	}
+	// The blob store (TKT-01M29CXK0K). Posting checks and counts
+	// attachments through it, and it asks the threads service who may read
+	// the posts that name a blob.
+	blobSvc := &blobs.Service{DB: d, Root: cfg.DataDir, Perm: perms, Threads: threadSvc,
+		Max: int64(cfg.Limits.AttachmentMB) << 20, Logger: log}
+	threadSvc.Attachments = blobSvc
 	gc := &jobs.BlobGC{DB: d, Root: cfg.DataDir, Hold: func() string {
 		if n := proj.QuarantinedCount(); n > 0 {
 			return fmt.Sprintf("%d thread(s) are quarantined", n)
@@ -516,8 +533,9 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 
 	var root http.Handler = web.New(web.Groups{
 		API: api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Forms: formSvc,
-			Applications: &applications.Service{DB: d}, Perm: perms, Logger: log}),
+			Applications: &applications.Service{DB: d}, Perm: perms, Blobs: blobSvc, Logger: log}),
 		Auth:   auth.New(authh),
+		Blobs:  blobsweb.New(blobSvc, log),
 		Assets: spa.Assets(),
 		Health: health.Handler(health.Options{
 			DB: d, Dir: probe, Quarantined: proj.QuarantinedCount, Logger: log,

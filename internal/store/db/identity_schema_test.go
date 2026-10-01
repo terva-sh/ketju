@@ -214,9 +214,19 @@ func TestSessionIDColumnIsHashOnly(t *testing.T) {
 // applications.identity_id is ON DELETE SET NULL, because identities are
 // removed (account linking, anonymization) and an application outlives its
 // identity (0011, docs/04 "applications"). It deletes nothing.
+//
+// The second is blob_uploads.hash, ON DELETE CASCADE (0020, TKT-01M29CXK0K):
+// a blob row is deleted only by the collector and by ketju redact, each
+// when nothing names the blob, and its upload rows name nothing without it.
+// The cascade removes them in the deleting transaction, so neither deleter
+// has to know the table exists (TestCollectorRemovesBlobUploads,
+// TestRedactRemovesBlobUploads).
 func TestNoCascadingDeletes(t *testing.T) {
 	d, _ := openTest(t)
-	allowed := map[string]string{"applications.identity_id -> identities": "SET NULL"}
+	allowed := map[string]string{
+		"applications.identity_id -> identities": "SET NULL",
+		"blob_uploads.hash -> blobs":             "CASCADE",
+	}
 	var bad []string
 	fks := 0
 	err := d.Read(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {

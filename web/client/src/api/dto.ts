@@ -20,6 +20,9 @@ export interface Attachment {
   size: number;
   mime: string;
   original_name: string;
+  // An image's dimensions in pixels; null for anything that is not an image.
+  width: number | null;
+  height: number | null;
 }
 
 export interface ForumRef {
@@ -62,6 +65,8 @@ export interface ThreadViewer {
   last_read_ordinal: number;
   watch: string;
   can_reply: boolean;
+  // can_upload: this viewer may upload a file to attach here.
+  can_upload: boolean;
   can_moderate: boolean;
   // slow_mode_seconds is the thread's effective slow mode, 0 for off.
   slow_mode_seconds: number;
@@ -183,6 +188,8 @@ export interface Forum {
   description: string;
   visibility: string;
   archived: boolean;
+  // can_upload: this viewer may upload a file to attach to a new thread here.
+  can_upload: boolean;
   thread_count: number;
   post_count: number;
   unread: number;

@@ -22,9 +22,10 @@ type replyRequest struct {
 
 // threadRequest is the body of POST /api/v1/forums/{slug}/threads (docs/07).
 type threadRequest struct {
-	Title  *string  `json:"title"`
-	Source *string  `json:"source"`
-	Tags   []string `json:"tags"`
+	Title       *string  `json:"title"`
+	Source      *string  `json:"source"`
+	Tags        []string `json:"tags"`
+	Attachments []string `json:"attachments"`
 }
 
 // reply is POST /api/v1/threads/{id}/posts and createThread is POST
@@ -82,7 +83,7 @@ func (h *handlers) createThread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := h.threads.CreateThread(r.Context(), v, r.PathValue("slug"), threads.CreateThreadRequest{
-		Title: *in.Title, Source: *in.Source, Tags: in.Tags,
+		Title: *in.Title, Source: *in.Source, Tags: in.Tags, Attachments: in.Attachments,
 	})
 	if err != nil {
 		h.fail(w, r, err)

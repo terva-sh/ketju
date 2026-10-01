@@ -106,12 +106,20 @@ const MaxPostBody = 64 << 10
 // MaxPostBody. docs/07 puts attachment upload at POST /api/v1/blobs.
 const UploadPath = APIPrefix + "blobs"
 
+// UploadOverhead is what an upload's body may carry beyond the attachment
+// cap: the multipart boundaries and part headers around the file. The file
+// part itself is held to exactly the cap as it is read
+// (internal/service/blobs), so the allowance lets a file of the full cap
+// through without letting a larger one in (TKT-01M29CXK0K).
+const UploadOverhead = 64 << 10
+
 // Limits are the request body bounds.
 type Limits struct {
 	// Body caps every request that is not an upload. Defaults to MaxPostBody.
 	Body int64
 
-	// Upload caps an upload. Defaults to config's DefaultAttachmentMB.
+	// Upload caps an upload's file: limits.attachment_mb. The body may be
+	// UploadOverhead larger. Defaults to config's DefaultAttachmentMB.
 	Upload int64
 }
 
@@ -134,7 +142,7 @@ func (l Limits) withDefaults() Limits {
 // limit the next handler forgets.
 func (l Limits) forPath(p string) int64 {
 	if p == UploadPath || strings.HasPrefix(p, UploadPath+"/") {
-		return l.Upload
+		return l.Upload + UploadOverhead
 	}
 	return l.Body
 }

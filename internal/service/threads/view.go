@@ -142,8 +142,12 @@ type Service struct {
 	// IDs names new threads.
 	IDs *threadid.Generator
 	// Project projects a thread up to a log length before CreateThread
-	// answers (projection.Writer.ProjectThread). Nil leaves it to the bus.
+	// answers, and before Reply answers a post with attachments
+	// (projection.Writer.ProjectThread). Nil leaves it to the bus.
 	Project func(ctx context.Context, id threadid.ID, logLength int64) error
+	// Attachments checks and counts a post's attachments: a
+	// *blobs.Service in the server. Nil refuses any attachment.
+	Attachments Attachments
 	// Now is the clock posts are stamped with and slow mode measures by. Nil
 	// is time.Now.
 	Now func() time.Time
@@ -286,10 +290,15 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	if err != nil {
 		return Result{}, err
 	}
+	canUpload, err := s.canUpload(ctx, a)
+	if err != nil {
+		return Result{}, err
+	}
 	viewer := dto.ThreadViewer{
 		LastReadOrdinal: int(lastRead),
 		Watch:           watch,
 		CanReply:        a.canReply && (row.Locked == 0 || canModerate) && readOnlyForum(a) == nil,
+		CanUpload:       canUpload,
 		CanModerate:     canModerate,
 		SlowModeSeconds: slow,
 		AuthorWindows:   authorW,
@@ -554,8 +563,12 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 
 	handles := s.handleMemo(ctx)
 	rctx := render.Context{Posts: postResolver(th)}
+	attachments, err := s.attachmentsOf(ctx, id, posts)
+	if err != nil {
+		return nil, deps, err
+	}
 
-	for _, p := range posts {
+	for i, p := range posts {
 		d := dto.Post{
 			Ordinal:         int(p.Ordinal),
 			Revision:        int(p.Revision),
@@ -593,11 +606,7 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			d.ReplyTo = &r
 			d.ReplyToSuppressed = p.ReplyTo == p.Ordinal-1
 		}
-		// Blob metadata arrives with the blobs table (TKT-01M29BYYJ0); until
-		// then an attachment is its hash.
-		for _, h := range p.Attachments {
-			d.Attachments = append(d.Attachments, dto.Attachment{Hash: h})
-		}
+		d.Attachments = append(d.Attachments, attachments[i]...)
 		// A removed post reaches here with its source only when revealRemoved
 		// let HiddenEntry read it, and that read cleared Tombstone.
 		if !p.Tombstone {

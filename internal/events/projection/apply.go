@@ -106,6 +106,9 @@ func applyPost(ctx context.Context, q *dbq.Queries, f frame) error {
 	}))(f, "thread"); err != nil {
 		return err
 	}
+	if err := replaceAttachments(ctx, q, f, b.Attachments); err != nil {
+		return err
+	}
 	return replaceMentions(ctx, q, f, b.Mentions)
 }
 
@@ -212,9 +215,9 @@ func applyArchived(ctx context.Context, q *dbq.Queries, f frame) error {
 }
 
 // applyRedacted is a hard redaction's marker (docs/03 "Hard redaction",
-// TKT-01M29CXJZ9). For a post, the post is deleted and has no mentions, which
-// is what a reindex of the rewritten log leaves: its blanked Post names no
-// one. So catching up by this one frame and reindexing the new log agree.
+// TKT-01M29CXJZ9). For a post, the post is deleted and has no mentions and
+// no attachments, which is what a reindex of the rewritten log leaves: its
+// blanked Post names no one and lists no blob (TKT-01M29CXK0K). So catching up by this one frame and reindexing the new log agree.
 // A title marker changes no row: the ThreadRenamed the command appends after
 // it sets the title, through applyRenamed.
 func applyRedacted(ctx context.Context, q *dbq.Queries, f frame) error {
@@ -234,6 +237,10 @@ func applyRedacted(ctx context.Context, q *dbq.Queries, f frame) error {
 	}))(f, "post"); err != nil {
 		return err
 	}
+	if err := q.DeletePostAttachments(ctx, dbq.DeletePostAttachmentsParams{
+		ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)}); err != nil {
+		return err
+	}
 	return q.DeleteMentions(ctx, dbq.DeleteMentionsParams{ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)})
 }
 
@@ -244,6 +251,24 @@ func replaceTags(ctx context.Context, q *dbq.Queries, id threadid.ID, tags []str
 	}
 	for _, tag := range tags {
 		if err := q.InsertThreadTag(ctx, dbq.InsertThreadTagParams{ThreadID: int64(id), Tag: tag}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// replaceAttachments sets a post's post_attachments rows to the hashes its
+// Post record lists, in order (TKT-01M29CXK0K). A hash named twice keeps its
+// first position. Only a Post sets them: an Edit has no attachments field.
+func replaceAttachments(ctx context.Context, q *dbq.Queries, f frame, hashes []string) error {
+	if err := q.DeletePostAttachments(ctx, dbq.DeletePostAttachmentsParams{
+		ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)}); err != nil {
+		return err
+	}
+	for i, h := range hashes {
+		if err := q.InsertPostAttachment(ctx, dbq.InsertPostAttachmentParams{
+			ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal), Hash: h, Position: int64(i),
+		}); err != nil {
 			return err
 		}
 	}

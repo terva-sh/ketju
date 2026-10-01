@@ -705,6 +705,38 @@ func TestRedactListsQuotes(t *testing.T) {
 	}
 }
 
+// TestRedactRemovesBlobUploads: deleting a blob's row takes its upload
+// rows with it, in the same transaction (TKT-01M29CXK0K), and a blob that
+// stays keeps its own.
+func TestRedactRemovesBlobUploads(t *testing.T) {
+	w := newRedactWorld(t)
+	only, shared := w.blob("only mine", 1), w.blob("shared", 2)
+	d := openDB(t, w.data)
+	if err := d.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		for _, h := range []string{only, shared} {
+			if err := q.InsertBlobUpload(t.Context(), dbq.InsertBlobUploadParams{Hash: h, UserID: w.users["alice"],
+				OriginalName: "f.txt", UploadedAt: 1}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	d.Close()
+	id := w.thread("A thread")
+	n := w.post(id, "with files", only, shared)
+	w.post(id, "also shared", shared)
+	w.ready()
+	w.mustRedact(postArgs(id, n)...)
+	if got := w.count(`SELECT count(*) FROM blob_uploads WHERE hash = ?`, only); got != 0 {
+		t.Errorf("the deleted blob keeps %d upload rows", got)
+	}
+	if got := w.count(`SELECT count(*) FROM blob_uploads WHERE hash = ?`, shared); got != 1 {
+		t.Errorf("the kept blob has %d upload rows", got)
+	}
+}
+
 // TestRedactDeletesOnlyUnsharedBlobs and TestRedactAuditsOnlyCommittedDeletes:
 // a blob only the post named goes, row, file and all, with a blob.deleted
 // row; one another post names stays, one reference fewer; the post.redacted

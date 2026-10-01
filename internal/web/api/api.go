@@ -21,6 +21,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/account"
 	"github.com/terva-sh/ketju/internal/service/applications"
 	"github.com/terva-sh/ketju/internal/service/auditlog"
+	"github.com/terva-sh/ketju/internal/service/blobs"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/groups"
@@ -44,7 +45,12 @@ type Deps struct {
 	Applications *applications.Service
 	// Perm is the process's evaluator. The admin API's moderates gate asks
 	// it (admin.go).
-	Perm   *perm.Evaluator
+	Perm *perm.Evaluator
+	// Blobs answers POST /api/v1/blobs (blobs.go, TKT-01M29CXK0K). It is
+	// the one optional service: nil answers the route not-implemented, as
+	// web.Groups answers a group it lacks, so a test of something else
+	// need not build a blob store.
+	Blobs  *blobs.Service
 	Logger *slog.Logger
 	// Now is the clock of the per-identity limiter and of the per-agent
 	// bucket; nil is time.Now. Tests set it.
@@ -75,7 +81,7 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		log = slog.Default()
 	}
 	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, applications: d.Applications,
-		perm: d.Perm, log: log, applyLimit: web.KeyedLimit(web.ApplyRate, applicantKey, d.Now),
+		perm: d.Perm, blobs: d.Blobs, log: log, applyLimit: web.KeyedLimit(web.ApplyRate, applicantKey, d.Now),
 		// The per-agent bucket (agents.go, TKT-01M29P9RSW): one for the
 		// handler set, so every route it wraps draws on the same buckets.
 		agentLimit: web.KeyedRateLimit(agentCharge, d.Now),
@@ -131,6 +137,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: put, Path: "/api/v1/threads/{id}/read", Handler: h.markRead},
 		{Method: del, Path: "/api/v1/threads/{id}/read", Handler: h.markUnread},
 		{Method: post, Path: "/api/v1/threads/{id}/flags", Handler: h.flag},
+		{Method: post, Path: "/api/v1/blobs", Handler: h.upload},
 		{Method: get, Path: "/api/v1/drafts/{thread_id}", Handler: h.getDraft},
 		{Method: put, Path: "/api/v1/drafts/{thread_id}", Handler: h.putDraft},
 		{Method: del, Path: "/api/v1/drafts/{thread_id}", Handler: h.deleteDraft},
@@ -167,6 +174,7 @@ type handlers struct {
 	forms        *formsvc.Service
 	applications *applications.Service
 	perm         *perm.Evaluator
+	blobs        *blobs.Service
 	groups       *groups.Service
 	account      *account.Service
 	identity     *identity.Service

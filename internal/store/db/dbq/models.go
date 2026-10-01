@@ -72,6 +72,15 @@ type Blob struct {
 	Refcount          int64
 	Status            string
 	UnreferencedSince sql.NullInt64
+	Width             sql.NullInt64
+	Height            sql.NullInt64
+}
+
+type BlobUpload struct {
+	Hash         string
+	UserID       int64
+	OriginalName string
+	UploadedAt   int64
 }
 
 type Draft struct {
@@ -212,6 +221,13 @@ type Permission struct {
 	GroupID    int64
 	Permission string
 	CreatedAt  int64
+}
+
+type PostAttachment struct {
+	ThreadID int64
+	Ordinal  int64
+	Hash     string
+	Position int64
 }
 
 type PostMetum struct {

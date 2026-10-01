@@ -31,7 +31,7 @@ type ReplyRequest struct {
 	Source string
 	// ReplyTo is the post being answered, nil for none.
 	ReplyTo *uint32
-	// Attachments are blob hashes. No upload exists yet, so any is refused.
+	// Attachments are blob hashes the author uploaded (Attachments.Check).
 	Attachments []string
 }
 
@@ -42,6 +42,66 @@ type CreateThreadRequest struct {
 	// Tags must be empty: nothing yet says what a tag may be, and a log keeps
 	// whatever it is given forever, so none is accepted until something does.
 	Tags []string
+	// Attachments are the first post's, as for a reply.
+	Attachments []string
+}
+
+// Attachments is what posting needs of the blob store
+// (internal/service/blobs, TKT-01M29CXK0K). It is an interface because
+// blobs imports this package, for ForumOf and CanSeePostBody, and this one
+// must not import it back.
+//
+// docs/03 "Blob garbage collection" sets the order: Check refuses before
+// anything is appended, AddRefs raises each blob's refcount just before the
+// Post is appended, and DropRefs takes the references back when that append
+// fails.
+type Attachments interface {
+	// Check answers the hashes as the Post will record them, each once in
+	// the order sent, or why the attach is refused: too many, a blob the
+	// poster did not upload, one quarantined or unknown, or a poster
+	// without upload in forumID.
+	Check(ctx context.Context, v domain.Viewer, forumID int64, hashes []string) ([]string, error)
+	// AddRefs raises each blob's refcount in one transaction, and refuses
+	// the lot if a blob has been collected since Check.
+	AddRefs(ctx context.Context, hashes []string) error
+	// DropRefs lowers each blob's refcount again.
+	DropRefs(ctx context.Context, hashes []string) error
+}
+
+// checkAttachments is Attachments.Check, or a refusal of any attachment when
+// the service has no blob store, as before one existed.
+func (s *Service) checkAttachments(ctx context.Context, v domain.Viewer, forumID int64, hashes []string) ([]string, error) {
+	if len(hashes) == 0 {
+		return nil, nil
+	}
+	if s.Attachments == nil {
+		return nil, problem.Coded(problem.CodeValidationFailed, errors.New("threads: this server takes no attachments"))
+	}
+	return s.Attachments.Check(ctx, v, forumID, hashes)
+}
+
+// appendWithRefs raises the references of hashes, then appends a through
+// the Writer. When the append fails the references are dropped again, and a
+// failure there is logged with the hashes: the refcount is then one high,
+// which keeps a blob longer and loses nothing.
+func (s *Service) appendWithRefs(th *threadcache.Thread, hashes []string, a threadlog.Append) (threadlog.Result, error) {
+	if len(hashes) == 0 {
+		return s.Writer.Append(th, a)
+	}
+	// The references are bookkeeping for what the log says, so they are
+	// written whatever the client does meanwhile.
+	ctx := context.Background()
+	if err := s.Attachments.AddRefs(ctx, hashes); err != nil {
+		return threadlog.Result{}, err
+	}
+	res, err := s.Writer.Append(th, a)
+	if err != nil {
+		if derr := s.Attachments.DropRefs(ctx, hashes); derr != nil {
+			s.logger().Error("threads: a post's append failed and its blob references could not be dropped",
+				"thread", th.ID.String(), "hashes", hashes, "err", derr)
+		}
+	}
+	return res, err
 }
 
 // MayWrite reports whether v may post at all: a member (member.Require). The
@@ -76,7 +136,11 @@ func (s *Service) Reply(ctx context.Context, v domain.Viewer, id threadid.ID, re
 	if !a.canReply {
 		return out, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: %s is not open to this viewer's replies", id))
 	}
-	if err := checkPost(req.Source, req.Attachments); err != nil {
+	if err := checkPost(req.Source); err != nil {
+		return out, err
+	}
+	attachments, err := s.checkAttachments(ctx, v, a.row.ForumID, req.Attachments)
+	if err != nil {
 		return out, err
 	}
 	flags, err := s.authorFlags(ctx, v)
@@ -106,14 +170,23 @@ func (s *Service) Reply(ctx context.Context, v domain.Viewer, id threadid.ID, re
 		if err != nil {
 			return err
 		}
-		res, err = s.Writer.Append(th, threadlog.Append{
+		res, err = s.appendWithRefs(th, attachments, threadlog.Append{
 			Type: threadlog.TypePost, Flags: flags, Author: uint64(v.UserID),
-			Body: postBody(req.Source, r), TimeMS: now.UnixMilli(),
+			Body: postBody(req.Source, r, attachments), TimeMS: now.UnixMilli(),
 		})
 		return err
 	})
 	if err != nil {
 		return out, err
+	}
+	// A reply with attachments is projected before the answer, as a new
+	// thread is, because serving a blob reads post_attachments: the client
+	// shows the post's files at once (TKT-01M29CXK0K). The bus delivers the
+	// same event to the projection, which is the retry when this fails.
+	if len(attachments) > 0 && s.Project != nil {
+		if err := s.Project(ctx, id, res.LogLength); err != nil {
+			return out, fmt.Errorf("threads: projecting %s's new post %d: %w", id, res.Ordinal, err)
+		}
 	}
 	p, err := s.Post(ctx, v, id, res.Ordinal, "")
 	if err != nil {
@@ -149,7 +222,11 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 	if len(req.Tags) > 0 {
 		return out, problem.Coded(problem.CodeValidationFailed, errors.New("threads: tags are not accepted yet"))
 	}
-	if err := checkPost(req.Source, nil); err != nil {
+	if err := checkPost(req.Source); err != nil {
+		return out, err
+	}
+	attachments, err := s.checkAttachments(ctx, v, forum.ID, req.Attachments)
+	if err != nil {
 		return out, err
 	}
 	// No thread to quote from or reply to yet: this is for the render's
@@ -180,9 +257,9 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 		}); err != nil {
 			return threadlog.Result{}, err
 		}
-		return s.Writer.Append(th, threadlog.Append{
+		return s.appendWithRefs(th, attachments, threadlog.Append{
 			Type: threadlog.TypePost, Flags: flags, Author: uint64(v.UserID), TimeMS: now,
-			Body: postBody(req.Source, r),
+			Body: postBody(req.Source, r, attachments),
 		})
 	}()
 	if err != nil {
@@ -257,23 +334,20 @@ func checkTitle(title string) (string, error) {
 	return title, nil
 }
 
-// checkPost refuses a post with nothing to show, and any attachment, since
-// nothing can upload one yet.
-func checkPost(source string, attachments []string) error {
+// checkPost refuses a post with nothing to show. Attachments are
+// checkAttachments'.
+func checkPost(source string) error {
 	if strings.TrimSpace(source) == "" {
 		return problem.Coded(problem.CodeValidationFailed, errors.New("threads: the post is empty"))
-	}
-	if len(attachments) > 0 {
-		return problem.Coded(problem.CodeValidationFailed, errors.New("threads: attachments are not accepted yet"))
 	}
 	return nil
 }
 
-// postBody is what the log records of a post: its source, and the facts the
-// render validated. Mentions are user ids in document order, each once, as
-// the render reports them.
-func postBody(source string, r render.Result) *threadlog.PostBody {
-	b := &threadlog.PostBody{Source: source, Mentions: []uint64{}}
+// postBody is what the log records of a post: its source, the facts the
+// render validated, and the attachments Attachments.Check passed. Mentions
+// are user ids in document order, each once, as the render reports them.
+func postBody(source string, r render.Result, attachments []string) *threadlog.PostBody {
+	b := &threadlog.PostBody{Source: source, Mentions: []uint64{}, Attachments: attachments}
 	if r.ReplyTo != nil {
 		b.ReplyTo = *r.ReplyTo
 	}

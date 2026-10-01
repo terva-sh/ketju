@@ -35,6 +35,7 @@
     "last_read_ordinal": 0,
     "watch": "",
     "can_reply": false,
+    "can_upload": false,
     "can_moderate": false,
     "slow_mode_seconds": 30,
     "next_post_at": null,
@@ -65,7 +66,17 @@
           "hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90",
           "size": 18422,
           "mime": "image/png",
-          "original_name": "retention-settings.png"
+          "original_name": "retention-settings.png",
+          "width": 1280,
+          "height": 720
+        },
+        {
+          "hash": "0f1e2d3c4b5a69788796a5b4c3d2e1f00f1e2d3c4b5a69788796a5b4c3d2e1f0",
+          "size": 90112,
+          "mime": "application/pdf",
+          "original_name": "invoice-march.pdf",
+          "width": null,
+          "height": null
         }
       ],
       "deleted": false,

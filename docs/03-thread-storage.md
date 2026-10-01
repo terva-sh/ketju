@@ -942,7 +942,13 @@ and whoever defines the thumbnail name removes thumbnails the same way.
   type off the allowlist, a failed `DecodeConfig`, a failed write, or a
   client that went away. Serve empties the directory at startup, under the
   data-directory lock, and the collector removes any staged file older than
-  an hour, which covers a crash mid-upload (Terva review 1703).
+  an hour, which covers a crash mid-upload (Terva review 1703), except in
+  a held pass, which removes nothing (Terva review 1732), and except a file
+  an upload in the process is still writing, however long its client has
+  paused (Terva review 1735). Before the rename
+  the upload syncs every directory from the blob's shard up to the data
+  directory, so the shard that the first upload into it creates survives a
+  power cut, and it syncs the shard after the rename.
 - **A blob file with no row is an orphan and is never served,** since
   serving needs the row (`BlobForServing`). One is left when an upload's
   transaction fails after the file has been renamed into place, or when a
@@ -951,7 +957,11 @@ and whoever defines the thumbnail name removes thumbnails the same way.
   removes any that remain, at least an hour old, with the same check inside
   its own `db.Write`. Uploads write inside `db.Write` too, so neither
   removal can interleave with an upload that is placing the same bytes
-  (Terva review 1708).
+  (Terva review 1708). The collector keeps an orphan whose hash a thread
+  log names, and removes none while a pass is held. No failed upload is on
+  a post, so such a file is a database restored from a backup older than
+  `blobs/`, and those bytes have no other copy (TKT-01M29CXK0K, at
+  implementation).
 - **The collector and `ketju redact`** remove `<hash>.thumb` once the row's
   deletion has committed. The collector also removes a `.thumb` whose blob
   has no row. A thumbnail needs no move-aside, because losing one costs only
