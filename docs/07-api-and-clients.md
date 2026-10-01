@@ -1053,6 +1053,89 @@ a draft restored on another device should come back whole. Leaving
 attachments out of drafts lost, because a restored draft would silently
 drop files whose bytes the collector then deletes after seven days.
 
+#### Search (TKT-01M29CTY8T, TKT-01M3V70X0F)
+
+**Decided by the run (2026-10-01, pending maintainer review):**
+`GET /search?q=&forum=&author=&after=&before=&cursor=` answers
+`internal/dto` `SearchResults` with `no-store`, and never from the response
+cache. It searches the index docs/04 "search" describes.
+- **Who.** Anyone who may read a forum, an anonymous reader included, as
+  for thread pages. A pre-user never reaches it (05 "mode = approval").
+  Results come only from the forums `perm.ReadableForums` lists for the
+  viewer, and that list is a condition of the one statement that matches,
+  ranks and pages, so neither a page nor its length depends on a forum the
+  viewer cannot read.
+- **`q`** is required: 1 to 200 characters once trimmed, and at most 16
+  words, or `validation-failed`. Its words must all match, and a
+  double-quoted run of words is a phrase. Nothing else is query syntax:
+  `OR`, `NOT`, `NEAR`, `*`, `^` and `column:` are searched as words.
+- **`forum`** is a slug, and selects that forum's own threads, not its
+  children's. Access is answered as the thread list answers it: unknown or
+  hidden is `not-found`, signed-in-only is `unauthenticated` to an
+  anonymous reader, and no read is `forbidden`.
+- **`author`** is a handle in any case. A handle nobody has is an empty
+  page, not an error, as the audit log's `actor` is.
+- **`after`, `before`** are Unix ms, `after` the first included and
+  `before` the first not, as the audit log's `from` and `to` are. Anything
+  but a non-negative integer is `bad-request`.
+- **Order and pages.** By relevance (FTS5's bm25, the title weighted above
+  the body), ties newest first, 25 to a page. `next_cursor` is opaque and
+  empty on the last page, and a cursor the server did not issue is
+  `bad-request`. A search reaches at most 1000 results. No total is
+  returned.
+- **A result** is `{thread: {id, slug, title}, forum: {slug, name},
+  ordinal, author, created_at, snippet}`. `ordinal` is 0 when the thread's
+  title matched. `title` is the thread's title now. `author` is drawn as a
+  post's author is (`member.Author`). `snippet` is a list of `{text,
+  match}` segments of plain text, never markup, and the client marks the
+  matches.
+- **Fresh when served.** Each hit's thread is judged at the log length the
+  request reads under it. Where the projection trails that length, the
+  thread is projected up to it first, as a suspension's hide does, and its
+  forum and title are read again. A hit is served only if that forum is
+  one the viewer may read (and the `forum` asked for, if any). A post must
+  also be still visible and still at the revision that was indexed, and a
+  title must still be the thread's title. So a thread moved into a forum
+  the viewer cannot read is left out even before its projection catches up.
+  A post deleted, hidden, moved, redacted or edited since it was indexed is
+  left out until the indexer catches up, and is never shown with old text.
+  A thread that cannot be projected, or is quarantined, has its results left
+  out.
+- **`indexing`** is true while `serve`'s first pass over threads whose
+  index trails the log is still running (03 "Durability and recovery"),
+  so the screen can say that results may be missing.
+
+Alternatives: refusing anonymous readers lost, because they can already
+read every public post and search shows nothing more. A total count lost:
+it costs a second full match per search, and the freshness check can leave
+out a counted row. Newest first only lost, because relevance is what a
+search box promises; a sort option is left for later. Passing FTS5's own
+syntax through lost, because a malformed query would be a server error and
+a column filter names internals. Calendar dates lost to the audit log's
+precedent: the client knows the reader's time zone and the server does not.
+
+The screen at `/search` (TKT-01M3V70X0F) keeps the endpoint's parameters,
+`cursor` included, in its address, so a search is a link and Back returns
+to the one before. The form edits a draft that Search puts in the address,
+so typing fetches nothing. The query field comes first and has focus when
+the screen opens with no query. The filters are the forum (a list of the
+forums `/forums` gives), the author's handle, and From and To dates, which
+are local, and To includes its day. On the phone layout the filters fold
+under a "Filters" disclosure, open when any is set. Each result shows the
+thread's title, linking to the post's permalink or to the thread for a
+title match, then the forum, the author, the time (`PostTime`) and the
+snippet with each match in `<mark>`. "More results" follows `next_cursor`,
+as pages do elsewhere (06). With no query the screen says what search
+covers. With no results it names the query and, when a filter is set,
+offers to clear the filters. While `indexing` is true it says that some
+posts may be missing. It is part of the reader bundle, since a lazy chunk
+would count toward the budget all the same (see "Preact client").
+Alternatives: searching as the reader types lost, because it sends a query
+per keystroke and moves results under a finger on a phone, and the audit
+screen already set the draft-then-apply pattern. A search field in the top
+bar lost to the shell as built, where the top bar's link to `/search` is
+the visible control.
+
 ### Where the shapes live
 
 `internal/dto` holds the structs, and `internal/dto/testdata/golden` holds one

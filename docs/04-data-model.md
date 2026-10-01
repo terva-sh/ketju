@@ -934,6 +934,57 @@ Full-text index over `(thread_id, ordinal, revision, title, source_plain)`.
 Kept in the same database if the engine supports FTS (SQLite FTS5) or in a
 separate pure-Go index (bleve) otherwise. Always rebuildable.
 
+ncruces v0.35.6 has FTS5 only on a connection that `ext/fts5` registers it
+on. Checked on 2026-10-01: without `fts5.Register`, `CREATE VIRTUAL TABLE …
+USING fts5` fails with "no such module: fts5"; with it, the table, `MATCH`
+and `snippet()` work on SQLite 3.53.4. `ext/fts5` is a package of the module
+already pinned, so `go.mod` does not change. The call belongs in `openPool`
+in `driver.go`, the one file that may import the driver, so every connection
+has it, the read-only ones included (TKT-01M29CRJ3B).
+
+**Decided by the run (2026-10-01, pending maintainer review):** what the
+index holds, for TKT-01M29CRJ3B (Build the FTS5 search index and indexer).
+- **Only what every reader of the thread may see.** There is one row per
+  post that is not deleted, hidden, hidden pending review, moved or redacted
+  (`EntryFlags.Visible`), holding its current revision only. An edit
+  replaces the row. A post that stops being visible loses its row, and one
+  restored gets it back. A thread's title is a row of its own, ordinal 0,
+  and a thread with no post yet is left out when served, as the thread page
+  leaves it out. Alternatives: indexing every post and
+  filtering per viewer lost, because it keeps removed text in the database
+  and puts every removal rule into one query; a moderator reviews a hidden
+  post in the queue and on the thread page, not in search. Indexing every
+  revision lost, because a snippet could then show text a member may not
+  read when `public_edit_history` is off, and the index would grow with
+  every edit.
+- **Shape.** `search_docs (rowid, thread_id, ordinal, revision, author_id,
+  created_at, title, source_plain)`, unique on `(thread_id, ordinal)`, is
+  the external content table of the FTS5 table `search (title,
+  source_plain)`. `author_id` and `created_at` come from the post's index
+  entry and serve the author and date filters. `search_state (thread_id,
+  log_length)` records how far each thread is indexed, as `projection_state`
+  does for projections. `search_meta` holds one number, the version of the
+  plain-text extraction and tokenizer that built the index. A build that
+  finds another version, or none, empties the whole index and records its
+  own version in one transaction, so no row of another version is ever
+  served. `serve` then re-indexes every thread in the background, search
+  says it is incomplete meanwhile, and a restart mid-pass resumes rather
+  than starting again. Alternatives: one FTS5 table with `UNINDEXED` key
+  columns lost, because removing a post's row by `(thread_id, ordinal)`
+  would scan the table; the title in every post's row lost, because a
+  rename would rewrite every row of the thread.
+- **Not a projection table.** The search tables are listed in
+  `db.SearchTables`, not in `db.ProjectionTables`. `ketju reindex
+  --projections` leaves them alone and `ketju reindex --search` rebuilds
+  them (03). They hold the plain text of visible posts, so a database backup
+  holds that text too. Content is still restored from the logs, never from
+  a backup.
+- **Tokenizer.** FTS5's built-in `unicode61 remove_diacritics 2`, with no
+  stemming. Alternatives: `porter` lost, because it stems English only and
+  mangles other languages; a Go tokenizer lost for now, because modernc, the
+  fallback driver, cannot load one (`spikes/sqlite-driver/README.md`), and
+  multi-language stemming is under "Later" in 09.
+
 ### projection_state
 ```
 thread_id (pk), log_length, updated_at

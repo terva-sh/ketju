@@ -457,6 +457,27 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
 - **Audit.** The action is written to `audit_log` (04 "audit_log"), and the
   index and projections for each thread are brought current by the appended
   records. The operator must be an active admin.
+- **The search index.** Decided by the run (2026-10-01, pending maintainer
+  review), for TKT-01M3NS122F (Clear the search index in the hard-redaction
+  tool). After each log's swap the command brings that thread's search rows
+  current as it does its projection, and before it deletes the journal it
+  deletes the search row of every (thread, ordinal) the journal lists and
+  rewrites a redacted title's row from its replacement. The index holds one
+  row per post, its current revision (04 "search"), so no older revision
+  has a row to miss. The deletes run with `PRAGMA secure_delete` on, and the
+  command then runs FTS5's `optimize`, which merges the index's segments, so
+  neither the freed pages nor a stale segment keeps the text's terms in
+  `ketju.db`. It then checkpoints the WAL into `ketju.db` and truncates it,
+  and a checkpoint that cannot complete fails the run with the journal
+  kept, so a resume finishes it. A database
+  without the search tables (one not yet migrated) has nothing to clear.
+  A database restored from a backup taken before the redaction drops the
+  rows by itself: its `search_state` trails the log, and catch-up reaches
+  the `Redacted` records. Alternatives: relying on catch-up alone lost,
+  because a stale `search_state` or a damaged index would leave the text
+  searchable after the command reported success; deleting the rows without
+  `secure_delete` and `optimize` lost, because the terms would stay in the
+  database file, which a takedown has to reach as it reaches the log.
 - **Titles.** Decided 2026-09-29 (TKT-01M3NS147C): the command also redacts
   a thread's title, because a takedown or an erasure can cover a title as
   easily as a post, and a rename leaves every earlier title in the log. It
@@ -725,9 +746,28 @@ version was bumped first.
   `serve` to cut at its next open. A thread whose log is damaged before its
   last frame, or whose records contradict each other, gets no rows, is
   reported, and makes the exit status 1; the run goes on. A failure that is
-  not the log's, such as a database write, stops the run. `--search` arrives
-  with full-text search in Phase 2 (TKT-01M29C5Y25). The README's recovery
-  procedure is built on it and run as a test.
+  not the log's, such as a database write, stops the run. The README's
+  recovery procedure is built on it and run as a test.
+- **Decided by the run (2026-10-01, pending maintainer review):** `ketju
+  reindex --search` (TKT-01M29CTY9D, Phase 3; the line here used to say
+  Phase 2 and name TKT-01M29C5Y25) rebuilds the search index (04 "search")
+  and nothing else. `--projections` is still the default, and both flags
+  together do both, projections first. The rebuild runs in one transaction:
+  it empties the search tables, indexes every thread from its first frame,
+  and commits, so an interrupted run leaves the old index in service. While
+  it runs, the WAL grows by about the index's size. A database with no
+  search rows needs no command: `serve` indexes every thread whose
+  `search_state` trails its log in the background, after the listener
+  opens, and search reports itself incomplete until that pass ends.
+  The two differ because a reindex replaces an index that is complete,
+  if stale or damaged, and an interrupted reindex should leave that one in
+  place; after an upgrade there is no complete index to keep, so a partial
+  one, flagged as such, is the best there is. Alternatives: one transaction
+  per thread lost, because an interrupted run would put a half-built index
+  in service in place of a complete one; building
+  into a second set of tables and swapping lost, because their DDL would
+  need a second copy outside the migrations, which `ClearProjections`
+  already refuses for the same reason.
 - `ketju dump <thread-id>` prints a log as JSON lines for inspection.
 - Startup projection catch-up (04, `projection_state`) closes any gap between
   a log and its projection before the listener accepts requests. A log
