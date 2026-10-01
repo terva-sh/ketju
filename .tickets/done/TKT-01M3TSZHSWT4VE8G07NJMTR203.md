@@ -17,11 +17,13 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:333
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T18:12:45Z
+updated_at: 2026-10-01T18:13:13Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
