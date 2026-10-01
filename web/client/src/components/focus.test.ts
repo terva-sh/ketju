@@ -40,6 +40,13 @@ describe('focusMainHeading', () => {
     expect(document.activeElement).toBe(document.querySelector('h1'));
   });
 
+  it('focuses the control a screen marks data-autofocus instead, and leaves the heading alone', () => {
+    page('<input data-autofocus id="outside"><main><h1>Search</h1><input id="q" data-autofocus></main>');
+    focusMainHeading();
+    expect(document.activeElement).toBe(document.getElementById('q'));
+    expect(document.querySelector('h1')!.hasAttribute('tabindex')).toBe(false);
+  });
+
   it('falls back to the main, and does nothing without one', () => {
     page('<main><p>No heading</p></main>');
     focusMainHeading();

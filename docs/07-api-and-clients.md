@@ -1298,6 +1298,35 @@ screen already set the draft-then-apply pattern. A search field in the top
 bar lost to the shell as built, where the top bar's link to `/search` is
 the visible control.
 
+As built (TKT-01M3V70X0F): `web/client/src/screens/SearchScreen.tsx`.
+**Decided by the run (2026-10-01, pending maintainer review):**
+- **Nothing a search answers is held in the client.** The endpoint is
+  `no-store` and sends no ETag, so `apiGet` keeps no copy, and the screen
+  keeps none of its own. Back asks the server again, shows "Searching…"
+  until it answers, and then puts the reader back where they were. A held
+  copy would render at once, as a thread list does, but it would show
+  results without the check the server makes on every request, which
+  docs/14's access invariant forbids.
+- **A post's result names its number** beside the thread's title (`#61`),
+  so several results from one thread read as different links. A title
+  match has none.
+- **The query's field errors are in the screen's own words**: `required`,
+  `too_long` and `too_many` say what a search allows, and any other code
+  reads as the refusal does. `forms/messages.ts` is bundled with the
+  application screens (`vite.config.ts`), and importing it would load that
+  chunk on every page.
+- **Focus on arrival.** The route focuser moves focus to a new screen's
+  heading after the screen's own effects run, so a field cannot take focus
+  alone. `focusMainHeading` focuses a control marked `data-autofocus`
+  first, and the query field carries the mark only when there is no query.
+- **Placement, measured.** In the entry, the reader bundle went from
+  66189 B to 68626 B gzip (2437 B, against the 2.6 KB estimate). As a lazy
+  chunk it was 70151 B, because the chunk and its CSS repeat what the entry
+  already loads.
+
+The From and To conversions are `src/dates.ts`, shared with the audit log
+screen.
+
 ### Where the shapes live
 
 `internal/dto` holds the structs, and `internal/dto/testdata/golden` holds one

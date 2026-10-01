@@ -7,6 +7,7 @@ import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ThreadListScreen } from './screens/ThreadListScreen';
 import { NotFound, Placeholder } from './screens/Placeholder';
 import { ProfilePlaceholder } from './screens/ProfilePlaceholder';
+import { SearchScreen } from './screens/SearchScreen';
 import { ThreadScreen } from './screens/ThreadScreen';
 
 // The admin screens are their own chunk, fetched the first time an /admin
@@ -128,7 +129,7 @@ export const routes: RouteEntry[] = [
   { path: '/participated', screen: 'participated', component: placeholder('participated', 'Participated') },
   { path: '/watching', screen: 'watching', component: placeholder('watching', 'Watching') },
   { path: '/notifications', screen: 'notifications', component: NotificationsScreen },
-  { path: '/search', screen: 'search', component: placeholder('search', 'Search') },
+  { path: '/search', screen: 'search', component: SearchScreen },
   { path: '/u/:handle', screen: 'profile', component: ProfilePlaceholder },
   { path: '/u/:handle/posts', screen: 'profile-posts', component: placeholder('profile-posts', 'Posts') },
   { path: '/settings', screen: 'settings', component: placeholder('settings', 'Settings') },

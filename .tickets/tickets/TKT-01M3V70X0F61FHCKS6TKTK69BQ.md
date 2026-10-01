@@ -29,7 +29,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:49:20Z
-updated_at: 2026-10-01T18:09:10Z
+updated_at: 2026-10-01T18:21:24Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
@@ -152,3 +152,17 @@ run decision: pending maintainer review. Recorded in docs/07 "Search" (2026-10-0
 **agent:claude-code/phase3-groom-search** at 2026-10-01T08:43:37Z
 
 Terva review 1711 (PR #270, head e5998ef, base a599b48), fixed. (medium) 'Do not rely on CSS to open the desktop filters': the container now follows the isPhone signal, a details disclosure on the phone and a fieldset at 720 px and up, with a Vitest case for each (criterion 5).
+
+**agent:claude-code/phase3-v70x0f** at 2026-10-01T18:21:24Z
+
+run decision: pending maintainer review. Recorded in docs/07 "Search", the "As built (TKT-01M3V70X0F)" paragraph. Each departs from, or adds to, the plan:
+
+- Nothing a search answers is held. The plan had `useResource(key, fetch, peek)` so Back renders at once, but the endpoint is no-store with no ETag, so `apiGet` holds nothing and `peekGet` has nothing to peek. A screen-local cache would show results without the server's per-request access check (docs/14 "Invariants", a security class), so Back asks again and `useScrollMemory` restores the position once the answer is on screen. The Vitest case is "asks again on Back, and shows the earlier search". Alternative that lost: a module-level cache of the last few answers, for the reason above.
+- The query's field errors are in the screen's own words, for `required`, `too_long` and `too_many`, with the refusal's own words for any other code. The plan named `forms/messages.ts`, but `src/forms` sits in the ApplyRoot chunk group (`vite.config.ts`). Importing it from an entry screen would load the whole application chunk on every page.
+- A post's result shows `#N` beside the thread title, so results from one thread are distinguishable links. A title match shows none.
+- Focus on arrival: `routeFocuser` runs in the Router's layout effect, after the screen's own, and moved focus to the h1. `focusMainHeading` now prefers `main [data-autofocus]`. The query field carries the mark only with no query. The screen's layout effect still focuses it on a first load and when the query is cleared in place.
+- `dateOf`, `startOf` and `stamp` moved from `screens/admin/AuditScreen.tsx` to `src/dates.ts`, which AuditScreen re-exports for its tests. Importing them from the admin chunk would have pulled that chunk into the entry.
+
+Bundle, measured both ways on main 86752c42: the reader bundle is 66189 B before and 68626 B after (+2437 B: JS +1898 B, CSS +537 B), against the 2.6 KB estimate. With SearchScreen lazy it is 70151 B, so the screen stays in the entry.
+
+Caught while checking screenshots: the top bar's search link is `class="search"` (shell/TopBar.tsx), so a `.search` rule in search.css restyled it on every page. The screen's root is `.search-page`, and a Vitest case refuses a bare `.search` selector in search.css.

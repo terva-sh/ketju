@@ -72,9 +72,21 @@ export function isControl(el: Element | null): el is HTMLElement {
 // focusMainHeading moves focus to the screen's heading, the first h1 in its
 // main, or to the main when it has none. It does not scroll: a thread page
 // has already put the reader on their post, and a list where they were.
+//
+// A screen that exists to take input says where focus starts instead, with
+// data-autofocus on the control: search with no query starts in its query
+// field (docs/07 "Search"). The screen cannot focus it alone, because this
+// runs after the new screen's own effects and would move focus on again.
 export function focusMainHeading() {
-  const to = document.querySelector<HTMLElement>('main h1') ?? document.querySelector<HTMLElement>('main');
+  const to =
+    document.querySelector<HTMLElement>('main [data-autofocus]') ??
+    document.querySelector<HTMLElement>('main h1') ??
+    document.querySelector<HTMLElement>('main');
   if (!to) return;
+  if (to.hasAttribute('data-autofocus')) {
+    to.focus({ preventScroll: true });
+    return;
+  }
   if (!to.hasAttribute('tabindex')) to.setAttribute('tabindex', '-1');
   to.focus({ preventScroll: true });
 }
