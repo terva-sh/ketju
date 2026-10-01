@@ -216,10 +216,16 @@ when SSE is unavailable; the non-JS client gets a plain "refresh" link.
 - **What the pill counts.** It counts posts that arrived after the reader
   opened the page, or after they last took the pill: the thread's post
   count now, less its count then. Posts that already existed on later pages
-  never count, and neither do edits. The reader's own replies never count,
-  since the composer already shows them. Posting one shows that reply at
-  the end of the page and reveals nothing held behind the pill (Terva
-  review 1703).
+  never count, and neither do edits.
+- **Posting a reply takes the reader to it,** as the composer already does
+  by routing to the reply's permalink. That is a page open: the page
+  holding the reply loads afresh with every post up to it, and the reader
+  is placed at their reply. A reply that does not fit on the page in view
+  goes to its own page in the same way. Posts that were held behind the
+  pill appear above the reply, and nothing moves under the reader, because
+  the reader has moved. The new page's count includes the reply, so a
+  reply posted from this page never counts in the pill (Terva reviews 1703
+  and 1716).
 - **What "show" does.** It reveals the held posts in place when they all
   fall on the page in view. Otherwise it goes to the page holding the first
   one. The pill is a button at the bottom of the post list, and its count

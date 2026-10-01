@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:36:54Z
+updated_at: 2026-10-01T08:58:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,8 +51,8 @@ Polling every 30 seconds is the fallback when SSE is unavailable, which covers p
 - [ ] The dist committed from go generate ./internal/web/spa keeps the reader within the 70000 B gzip budget, and the PR records the change from 60465 B
 - [ ] The pill counts only posts that arrived after the page opened or the pill was last taken, never posts that already existed on later pages; show reveals them in place when they all fall on the page in view and otherwise goes to the page holding the first (ThreadScreen.test.tsx 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them', 'a full last page sends the pill to the next page', 'show reveals the posts and focuses the first')
 - [ ] Every hint refetches the page on screen in full, so an edit, a removal and a restore all show, together or apart, without moving the post in view (ThreadScreen.test.tsx 'an edit and a removal in one change both show', 'an edit applies in place without moving the post in view')
-- [ ] A post behind the pill is not marked read; the reader's own reply never counts in the pill, and posting one renders it at the end and reveals nothing held (ThreadScreen.test.tsx 'a post behind the pill is not marked read', 'the reader's own reply never counts in the pill', 'posting a reply reveals nothing held')
-- [ ] The pill routes and focuses past the reader's own replies, to the first new post by someone else (ThreadScreen.test.tsx 'the pill skips the reader's own reply')
+- [ ] A post behind the pill is not marked read (ThreadScreen.test.tsx 'a post behind the pill is not marked read')
+- [ ] Posting a reply routes to its permalink as today, showing it at once on its own page when the page in view is full or earlier, with held posts above it and no pill, so a reply posted here never counts in the pill (ThreadScreen.test.tsx 'a reply from a full page goes to its own page', 'posting a reply with posts held takes the reader to the reply', 'the reader's own reply never counts in the pill')
 
 ## Implementation plan
 
@@ -102,18 +102,17 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 3. **`src/screens/ThreadScreen.tsx`**:
    - **`useLive(id, page)`** subscribes while the screen shows the thread and closes on unmount or on a change of thread. A hint longer than the entry's length calls `loadThreadPage` for the page on screen. `poll` is the same call, answering the page's `thread.log_length`.
    - **`knownCount`** is a per-thread signal holding `header.post_count` when the page first renders.
-   - **`ownPosted`** is a per-thread set of the ordinals the reader posted from this page. It is kept apart from `knownCount` so that posting never moves the cutoff (Terva review 1703).
-   - **The pill's count** is the number of ordinals from `knownCount + 1` to `header.post_count` that are not in `ownPosted`.
-   - **The last page.** `ThreadBody` renders posts with `ordinal <= knownCount`, and also the posts in `ownPosted`. Earlier pages hold no ordinal past `knownCount` and are unaffected.
+   - **The pill's count** is `header.post_count - knownCount`, floored at 0.
+   - **The last page.** `ThreadBody` renders posts with `ordinal <= knownCount`. Earlier pages hold no ordinal past `knownCount` and are unaffected.
    - **Bottom tracking.** An `IntersectionObserver` on a sentinel after the last post, with `rootMargin: '0px 0px 48px 0px'`, tracks "at the bottom". While the reader is at the bottom of the last page, `knownCount` follows `header.post_count`, so posts stream in.
-   - **Own replies.** The composer's `onPosted` adds the new ordinal to `ownPosted`, and does not touch `knownCount`. A reply posted while others' posts are held appears at the end of the page, and the held posts stay behind the pill until it is taken or the reader reaches the bottom.
+   - **Own replies keep today's behaviour.** `ThreadScreen`'s `posted` handler already routes to `permalink(thread, res.ordinal)`, from TKT-01M3ART992 (Post a reply from the composer). That is a page open: the body is keyed on the request, so `knownCount` is taken afresh from the page holding the reply. Held posts appear above the reply, and the arrival places the reader at the reply. A reply from a full last page, or from an earlier page, lands on its own page the same way. No set of the reader's own ordinals is needed, because the reply is always at or below the new `knownCount` (docs/06, after Terva reviews 1703 and 1716).
    - **Scroll anchoring.** When a refetched page changes posts already shown, the screen records the first post in view and its `getBoundingClientRect().top` before the update. In a layout effect after it, the screen calls `scrollBy` with the difference.
 4. **`src/components/thread/NewPostsPill.tsx`** (new):
    - A `<button>` reading "1 new post — show" or "N new posts — show", sticky at the bottom of the post list. On a phone it sits above the reply bar with `env(safe-area-inset-bottom)` padding, as a 44 px target.
    - A visually hidden `aria-live="polite"` region beside it announces the count, at most once a second.
-   - A click with every ordinal from `knownCount + 1` to `header.post_count` on the page in view raises `knownCount` and focuses the first revealed post, which gets `tabIndex=-1`. Otherwise it routes to `?ordinal=<first>`, where `first` is the lowest ordinal above `knownCount` that is not in `ownPosted`. That is the page holding the first new post by someone else, whether the reader is on an earlier page or the last page has filled. Focus on reveal goes to the same `first` (Terva review 1708).
+   - A click with every ordinal from `knownCount + 1` to `header.post_count` on the page in view raises `knownCount` and focuses the first revealed post, which gets `tabIndex=-1`. Otherwise it routes to `?ordinal=<knownCount + 1>`. That is the page holding the first new post, whether the reader is on an earlier page or the last page has filled. Focus on reveal goes to the same post. The reader's own replies cannot sit above `knownCount`, because posting one is a page open (the "Own replies" step above), so `knownCount + 1` is always another member's post (Terva review 1708).
    - The styles go in `components/thread/thread.css`.
-5. **Read tracking.** Posts beyond `knownCount` that are not the reader's own are not rendered, so `trackPosts` never sees them. A test asserts this rather than assuming it.
+5. **Read tracking.** Posts beyond `knownCount` are not rendered, so `trackPosts` never sees them. A test asserts this rather than assuming it.
 6. **`src/testing.tsx`** gains a `FakeEventSource`, installed by `renderAt`, which records instances and has `emit(type, data)` and `fail()`.
 7. **Build.** Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and record the reader size against 60465 B in the PR.
 
@@ -133,11 +132,11 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
   - 'show reveals the posts and focuses the first';
   - 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them': a reader on page 1 of 3 sees no pill until a post arrives, and then "1 new post", routing to its ordinal;
   - 'a full last page sends the pill to the next page';
-  - 'the pill skips the reader's own reply': the reader replies as ordinal 26 on a full page, and another member posts 27. The pill reads "1 new post" and routes to 27;
+  - 'a reply from a full page goes to its own page': the reader replies as ordinal 26 from a full page 1. The screen routes to the page holding 26 and shows it at once, before any other post arrives, with no pill;
   - 'an edit and a removal in one change both show': a hint whose refetched page has an edited post 3 and a removed post 4 renders the edit and the tombstone;
   - 'a post behind the pill is not marked read';
   - 'the reader's own reply never counts in the pill';
-  - 'posting a reply reveals nothing held': with two posts by others held, the reader posts. Their reply renders at the end, the two stay unrendered, and the pill still reads "2 new posts — show";
+  - 'posting a reply with posts held takes the reader to the reply': with two posts by others held, the reader posts. The screen routes to the reply's permalink, the two held posts render above it, the reader is placed at the reply, and no pill is shown;
   - 'an edit applies in place without moving the post in view';
   - 'leaving the thread closes the stream', where `FakeEventSource` reports no open instance after navigating away.
 - `e2e/live.spec.ts`, in both projects (390 and 1440 px), from stored sessions:
@@ -165,3 +164,7 @@ run decision: pending maintainer review. Recorded in docs/06 'Live updates' (202
 **agent:claude-code/phase3-groom-live** at 2026-10-01T08:13:52Z
 
 run decision: pending maintainer review. Amends note 2 after Terva review 1696 on PR #271. This supersedes note 1's fragment merge: every hint refetches the page on screen in full. A removal or restore writes no revision, so a fragment that also held an edit would leave the removed post visible. The pill counts header.post_count less the count when the page opened (or the pill was last taken), so posts that already existed on later pages never count. docs/06 'Live updates' is updated to match.
+
+**agent:claude-code/phase3-groom-live** at 2026-10-01T08:58:40Z
+
+run decision: pending maintainer review. Amends notes 2 and 3 after Terva reviews 1703 and 1716 on PR #271. Posting a reply keeps today's behaviour: ThreadScreen's posted handler routes to the reply's permalink (TKT-01M3ART992). That is a page open, so the page holding the reply loads afresh, held posts appear above it, and the reader is placed at the reply. A reply from a full or earlier page lands on its own page the same way. The ownPosted set from the review-1703 fix is dropped: it could not render a reply that falls on another page (review 1716). docs/06 'Live updates' is updated to match.
