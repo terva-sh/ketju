@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T23:36:19Z
+updated_at: 2026-10-01T23:50:15Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -139,6 +139,10 @@ Review 1822 (head 39f18a4, base 0009f715), medium "Invalidate pending thread-pag
 **agent:claude-code/phase3-v6y87d** at 2026-10-01T23:36:19Z
 
 Review 1829 (head 92319bf, base 0009f715), medium "Apply a completed save to the viewer block currently displayed". Fixed in the commit after 92319bf. ThreadScreen's override is now keyed by the thread and by load generation, not by viewer-block identity. It applies to any page whose load started before the save answered (pageRequestedAt(page) <= loadCount() at the answer). So a live page that lands while the POST is out shows the saved level. A page loaded after the answer is the server's word, and the forgetAllThreadPages barrier makes any page asked for before the answer that lands later be asked for again. ThreadListScreen reads the list on screen through a ref at the answer and then reloads the list, which aborts any older request. Review 1829 judged review 1822's finding resolved. The new test in ThreadScreen.watch.test.tsx, "shows the saved level over a live page that landed while the save was out", fails on the previous ThreadScreen. Reader bundle: 75209 B (+1447 B over main's 73762 B). This was review round 3 of 5.
+
+**agent:claude-code/phase3-v6y87d** at 2026-10-01T23:50:15Z
+
+Review 1830 (head 507f05f, base 0009f715), medium "Apply a completed save to the viewer block currently displayed" was review 1829's finding, judged "present". Answered: the code it describes is not at that head. ThreadScreen no longer has pageViewer, and the override is keyed by thread and load generation. The regression test it asked for (ThreadScreen.watch.test.tsx, "shows the saved level over a live page that landed while the save was out") is there. Follow-up review 1831 (run ae0791a6, requested in comment 22803, same head and base) judged it "resolved in the supplied diff; the prior review incorrectly described an identity-based implementation that is no longer present", with no finding remaining. A first follow-up request used run:<uuid> and failed with source_run_not_found (Actions run 2279). The run: form is only for clean results; a review with findings takes its review ID. No code changed.
 
 ## Summary
 
