@@ -26,12 +26,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T20:11:42Z
-updated_at: 2026-10-01T05:38:26Z
+updated_at: 2026-10-01T09:14:30Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-orchestrator
+  id: agent:claude-code/phase3-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -198,3 +198,7 @@ ready to blocked: Not reproduced in 42 CI-image full-suite runs under load, 11 h
 **agent:claude-code/phase2-run-orchestrator** at 2026-10-01T05:38:26Z
 
 Block reason refreshed 2026-10-01 (orchestrator) because TKT-01M3TNBKNQ is done. git ticket ignores --reason on a blocked-to-blocked status write while still reporting success, so the ticket went blocked -> ready -> blocked to set it. That brief ready state means nothing; the ticket has stayed blocked throughout. Review 1642 on PR #263 caught the unchanged reason.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-01T09:14:30Z
+
+2026-10-01: CI run 1790 caught a server stall with evidence. GET /api/v1/threads took 8892 ms right after a read-position DELETE, while every other request took under 25 ms. That is filed as TKT-01M3VBWMA8. This ticket's timeout may be the same stall seen from the admin applications list. If TKT-01M3VBWMA8's fix names a cause that also explains the admin list, this ticket can close against it. It stays blocked until then.
