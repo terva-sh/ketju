@@ -158,6 +158,11 @@ end` lost, because the client would have to handle a second refusal path
 beside the HTTP one. A per-address anonymous cap lost to the proxy problem
 above.
 
+The implementation is `internal/web/sse`: the hub there is the bus
+subscriber named `sse`, and the handler serves `/events`. docs/07 has the
+wire format. `ketju serve` closes the hub as shutdown begins, because a
+stream never finishes by itself and the drain waits for every handler.
+
 ## Configuration
 
 `config.toml` (bootstrap, providers, paths, listen address, fsync policy,

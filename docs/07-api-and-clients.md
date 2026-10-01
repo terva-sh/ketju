@@ -143,7 +143,7 @@ page-numbered for thread posts (`?page=`), matching the UI.
 | `PUT /settings/handle` `{handle}` | the viewer changes their own handle (05 "Changing a handle", TKT-01M3NRP3W9): 200 `internal/dto` `HandleChange` `{handle, previous, next_change_at}`, `no-store`. `next_change_at` is when they may change it again, 30 days on. A second change inside the 30 days is `conflict` with `available_at` (below, "Errors"), the Unix ms it becomes possible; an admin's rename neither waits for this cooldown nor starts it. A refused handle is `validation-failed` with `errors: [{field: "handle", code}]`, the code one of `invalid_handle`, `reserved` and `taken` as for an approval (below, "Applications"), where `taken` includes a handle a rename or an anonymization released within 90 days, the viewer's own old one included, or `same` for the handle they have. The old handle is reserved for 90 days, and `user.renamed` is audited with `{from, to}` in the same transaction. Anonymous is `unauthenticated`, a pre-user `forbidden`, both before the body is read. Charged to the per-address write limiter |
 | `POST /settings/deactivate` | the viewer deactivates their own account (05 "Account lifecycle"): 204 `no-store`, every session of the account deleted in the same transaction, this one included, and the session cookie cleared. The last active admin is `conflict`. Anonymous is `unauthenticated`, a pre-user `forbidden`. They come back by signing in and pressing Reactivate (05 "Login flow"). TKT-01M29CKRFS |
 | `GET  /apply/form` `POST /apply` `GET /apply/status` `POST /apply/withdraw` | approval mode, a pre-user session only (05 "mode = approval"): anonymous `unauthenticated`, a member `forbidden`. `GET /apply/form` → `internal/dto` `ApplicationForm`: the active `registration` form as `Form`, and `prefill`, the identity's claim for each `from_claim` field that has one. `POST /apply` `{version, answers}` → 201 `ApplicationStatus`; `version` must be the active version or it is `conflict` and nothing is written, and answers that break the form are `validation-failed` with field errors; a locked field stores the claim whatever is sent. `GET /apply/status` → `ApplicationStatus` `{status, provider, submitted_at, decided_at, can_withdraw, can_apply, can_apply_at, sign_in}`: `status` is none, pending, approved, denied or withdrawn, `can_apply_at` is set only when the 24-hour rule alone stands in the way, and `sign_in` only when approved, which a pre-user session sees only until the approval retires it (05 "mode = approval" step 4); it never carries a moderator's note. `POST /apply/withdraw` (empty body or `{}`) → 200 `ApplicationStatus`, `conflict` with nothing pending. The form and the submit refuse, in this order: an identity with a user `conflict`, a blocked one `forbidden` (with no reason given), `registration.mode` other than approval `forbidden`, a pending application `conflict`, and a submission within 24 hours of the last `rate-limited` with `Retry-After`. The two writes are also limited per identity (08 "The transport-level ceiling"). Every answer is `no-store` |
-| `GET  /events?threads=&forums=` | SSE (outside `/api/v1` versioning: `/events`) |
+| `GET  /events?threads=&forums=` | SSE (outside `/api/v1` versioning: `/events`), `internal/web/sse` (docs/02 "Live updates"). `threads` is up to 20 comma-separated thread ids and `forums` up to 10 forum slugs; at least one is needed, each at most once, and an empty element, a malformed id, a query that does not decode (a bad `%` escape or a `;` separator) or any other parameter is `bad-request`. Each thread is admitted as `GET /threads/{id}` admits the viewer and each forum as its thread list does, with the same `not-found`, `unauthenticated` and `forbidden`; the first refusal is the answer. `Sec-Fetch-Site: cross-site` is `forbidden`, and a pre-user is turned away by the pre-user gate like any page. A full `limits.sse_*` is `rate-limited` with `Retry-After: 30`. The stream is `text/event-stream`, `no-store`, and opens with `retry: 5000`, then `event: ready` with `data: {}` (an EventSource drops an event with no data), then one `event: thread` per thread named with its current length. After that it sends `event: thread` with `data: {"thread_id", "log_length"}` (`internal/dto` `ThreadHint`) when a thread named, or a thread in a forum named, reaches a longer log, and the comment `: hb` every 25 s. There is no `id:` field and no other event. The stream ends, for the client to reconnect and be judged afresh, when its session or agent credential ends, its user is no longer active, it loses read on a thread or forum named, its queue of 64 hints fills, or the hub loses events while it names a forum |
 
 ### Error catalogue
 
@@ -1494,9 +1494,12 @@ stale nonce to the next reader and the policy would block the whole page.
 |-------|-------|--------------|
 | Request body | 64 KB | no — part of the API contract |
 | Upload (`POST /api/v1/blobs`) | 10 MB for the file, and 64 KiB more for the multipart framing around it | yes, `limits.attachment_mb` (`KETJU_LIMITS_ATTACHMENT_MB`) |
+| Live-update streams (`GET /events`), all together | 1000 | yes, `limits.sse_connections` (`KETJU_LIMITS_SSE_CONNECTIONS`), 1 to 100000 |
+| Live-update streams of one signed-in user | 8 | yes, `limits.sse_per_user` (`KETJU_LIMITS_SSE_PER_USER`), 1 to 1000 |
+| Live-update streams of every anonymous viewer together | 100 | yes, `limits.sse_anonymous` (`KETJU_LIMITS_SSE_ANONYMOUS`), 1 to 100000 |
 
-Both are refused with a `payload-too-large` problem rather than a truncated
-read. A body whose `Content-Length` is over the limit is refused before a byte
+The body limits are refused with a `payload-too-large` problem rather than a
+truncated read. A body whose `Content-Length` is over the limit is refused before a byte
 is read; a chunked body, or one whose `Content-Length` lies, is caught by
 `MaxBytesReader` and the resulting error maps to the same code.
 
@@ -1511,7 +1514,12 @@ because what counts as a reasonable attachment depends on who is running the
 forum, and is bounded above because an upload is buffered before the uploader
 is authenticated.
 
-These sit below two other limits at other layers: `render.MaxSource` (256 KiB)
+A stream over any of the three stream limits is refused `rate-limited` with
+`Retry-After: 30`, and a closed stream frees its slot at once. Each stream is
+a held connection and a goroutine, so the bound is chosen in the config
+rather than discovered when a community grows (docs/02 "Live updates").
+
+The body limits sit below two other limits at other layers: `render.MaxSource` (256 KiB)
 is the renderer's own backstop, and `MaxFrameSize` (1 MiB, docs/03) is the
 storage format's bound.
 

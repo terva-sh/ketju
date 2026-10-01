@@ -28,6 +28,9 @@ oidc.providers.club.groups_claim = "groups"                      # file
 oidc.providers.club.group_map = { "forum-mods" = "moderators" }  # file
 oidc.providers.club.insecure_skip_issuer_check = false           # default
 limits.attachment_mb = 10                                        # default
+limits.sse_connections = 1000                                    # default
+limits.sse_per_user = 8                                          # default
+limits.sse_anonymous = 100                                       # default
 
 # environment variables this build reads; * is set here.
 # Each but KETJU_CONFIG can instead be given as NAME_FILE, naming a file that holds the value.
@@ -43,6 +46,9 @@ limits.attachment_mb = 10                                        # default
 #   KETJU_STORAGE_RENDERED_CACHE_MB  storage.rendered_cache_mb
 #   KETJU_STORAGE_RESPONSE_CACHE_MB  storage.response_cache_mb
 #   KETJU_LIMITS_ATTACHMENT_MB       limits.attachment_mb
+#   KETJU_LIMITS_SSE_CONNECTIONS     limits.sse_connections
+#   KETJU_LIMITS_SSE_PER_USER        limits.sse_per_user
+#   KETJU_LIMITS_SSE_ANONYMOUS       limits.sse_anonymous
 #   KETJU_BOOTSTRAP_ADMIN_EMAILS     bootstrap.admin_emails
 #   KETJU_BOOTSTRAP_ADMIN_SUBJECTS   bootstrap.admin_subjects
 #   KETJU_OIDC_CLUB_ISSUER           oidc.providers.club.issuer

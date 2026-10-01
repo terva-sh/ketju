@@ -35,7 +35,7 @@ var sectionReasons = map[string]string{
 	"log":             readBeforeDB + " The logger is set up before anything else runs.",
 	"bootstrap":       "It decides who is admin before any admin exists, so no admin can be asked.",
 	"oidc":            "It holds provider secrets, and is needed before anyone can sign in.",
-	"limits":          readBeforeDB + " The upload cap is sized to the machine's disk, which is the operator's to judge.",
+	"limits":          readBeforeDB + " The upload cap is sized to the machine's disk and the stream limits to its connections, which are the operator's to judge.",
 }
 
 // Sections lists every top-level key of Config as a Section, in the order

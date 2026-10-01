@@ -42,7 +42,30 @@ func validateLimits(l Limits, p *problemList) {
 	if l.AttachmentMB > maxAttachmentMB {
 		p.addf("limits.attachment_mb", "%d MB is above the ceiling of %d MB; an upload is bounded before the uploader is authenticated", l.AttachmentMB, maxAttachmentMB)
 	}
+	for _, s := range []struct {
+		key        string
+		value, max int
+	}{
+		{"limits.sse_connections", l.SSEConnections, maxSSEConnections},
+		{"limits.sse_per_user", l.SSEPerUser, maxSSEPerUser},
+		{"limits.sse_anonymous", l.SSEAnonymous, maxSSEConnections},
+	} {
+		if s.value < 1 {
+			p.addf(s.key, "%d is not a usable limit; below 1 every live-update stream is refused", s.value)
+		}
+		if s.value > s.max {
+			p.addf(s.key, "%d is above the ceiling of %d; each stream holds a connection and a goroutine", s.value, s.max)
+		}
+	}
 }
+
+// The live-update stream ceilings are sanity bounds in the style of
+// maxAttachmentMB, not policy: a value past them is a typo or a process that
+// would run out of file descriptors before it reached the limit.
+const (
+	maxSSEConnections = 100000
+	maxSSEPerUser     = 1000
+)
 
 func validateListen(addr string, p *problemList) {
 	host, port, err := net.SplitHostPort(addr)

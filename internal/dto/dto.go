@@ -563,6 +563,17 @@ type CreatedPost struct {
 	LogLength int64  `json:"log_length"`
 }
 
+// ThreadHint is the data of one `event: thread` on the live-update stream,
+// GET /events (docs/02 "Live updates", TKT-01M29CRJ3X): thread ThreadID has
+// reached LogLength. It is the whole payload. It carries no content and
+// nothing per viewer, and no more than the thread page, which shows every
+// reader the log length anyway. The client fetches what changed through
+// the ordinary read path.
+type ThreadHint struct {
+	ThreadID  string `json:"thread_id"`
+	LogLength int64  `json:"log_length"`
+}
+
 // CreatedThread is the response to POST /forums/{slug}/threads (docs/07): the
 // new thread's header and its first post, each as a later read of the thread
 // page serves it.

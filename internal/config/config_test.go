@@ -165,6 +165,9 @@ func TestLoadsTheFullExample(t *testing.T) {
 	if c.Storage.Fsync != "always" || c.Storage.OpenThreads != 128 {
 		t.Errorf("storage = %+v", c.Storage)
 	}
+	if want := (Limits{AttachmentMB: 25, SSEConnections: 2000, SSEPerUser: 4, SSEAnonymous: 50}); c.Limits != want {
+		t.Errorf("limits = %+v, want %+v", c.Limits, want)
+	}
 	if len(c.OIDC.Providers) != 2 {
 		t.Fatalf("got %d providers, want 2", len(c.OIDC.Providers))
 	}
@@ -203,6 +206,12 @@ func TestInvalidValuesAreRefusedByName(t *testing.T) {
 		{"site_url has a query", minimal + "\nsite_url = \"https://x.example/?a=1\"", "site_url"},
 		{"bad admin email", minimal + "\n[bootstrap]\nadmin_emails = [\"nobody\"]", "bootstrap.admin_emails"},
 		{"bare admin subject", minimal + "\n[bootstrap]\nadmin_subjects = [\"1100000\"]", "bootstrap.admin_subjects"},
+		{"no streams at all", minimal + "\n[limits]\nsse_connections = 0", "limits.sse_connections"},
+		{"streams past the ceiling", minimal + "\n[limits]\nsse_connections = 100001", "limits.sse_connections"},
+		{"no stream per user", minimal + "\n[limits]\nsse_per_user = 0", "limits.sse_per_user"},
+		{"streams per user past the ceiling", minimal + "\n[limits]\nsse_per_user = 1001", "limits.sse_per_user"},
+		{"no anonymous stream", minimal + "\n[limits]\nsse_anonymous = -1", "limits.sse_anonymous"},
+		{"anonymous streams past the ceiling", minimal + "\n[limits]\nsse_anonymous = 100001", "limits.sse_anonymous"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -526,5 +535,43 @@ func TestCookieKeyPath(t *testing.T) {
 	}
 	if c := mustLoad(t, path, env(map[string]string{"KETJU_COOKIE_KEY_FILE": "/run/secrets/cookie"})); c.CookieKeyPath() != "/run/secrets/cookie" {
 		t.Errorf("cookie_key_file from the environment = %q", c.CookieKeyPath())
+	}
+}
+
+// TestSSELimitDefaultsAndEnv: the three live-update stream limits default to
+// docs/02's numbers when absent, take their KETJU_LIMITS_* variables over the
+// file, and name the variable when it is not a number (TKT-01M29CRJ3X).
+func TestSSELimitDefaultsAndEnv(t *testing.T) {
+	t.Parallel()
+
+	c := mustLoad(t, write(t, minimal), env(nil))
+	if want := (Limits{AttachmentMB: DefaultAttachmentMB, SSEConnections: 1000, SSEPerUser: 8, SSEAnonymous: 100}); c.Limits != want {
+		t.Errorf("defaults = %+v, want %+v", c.Limits, want)
+	}
+
+	c = mustLoad(t, write(t, minimal+"\n[limits]\nsse_connections = 50\nsse_per_user = 2\nsse_anonymous = 5\n"), env(map[string]string{
+		"KETJU_LIMITS_SSE_CONNECTIONS": "40",
+		"KETJU_LIMITS_SSE_PER_USER":    "3",
+		"KETJU_LIMITS_SSE_ANONYMOUS":   "7",
+	}))
+	if c.Limits.SSEConnections != 40 || c.Limits.SSEPerUser != 3 || c.Limits.SSEAnonymous != 7 {
+		t.Errorf("the variables did not win over the file: %+v", c.Limits)
+	}
+	entries := entryMap(t, c)
+	for key, want := range map[string]Source{
+		"limits.sse_connections": {Layer: LayerEnv, From: "KETJU_LIMITS_SSE_CONNECTIONS"},
+		"limits.sse_per_user":    {Layer: LayerEnv, From: "KETJU_LIMITS_SSE_PER_USER"},
+		"limits.sse_anonymous":   {Layer: LayerEnv, From: "KETJU_LIMITS_SSE_ANONYMOUS"},
+	} {
+		if got := entries[key].Source; got != want {
+			t.Errorf("%s: source %v, want %v", key, got, want)
+		}
+	}
+
+	for _, name := range []string{"KETJU_LIMITS_SSE_CONNECTIONS", "KETJU_LIMITS_SSE_PER_USER", "KETJU_LIMITS_SSE_ANONYMOUS"} {
+		e := loadErr(t, write(t, minimal), env(map[string]string{name: "lots"}))
+		if !strings.Contains(e.Error(), name) {
+			t.Errorf("a non-numeric %s is refused without naming it: %v", name, e)
+		}
 	}
 }

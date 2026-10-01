@@ -215,6 +215,22 @@ func (s *Store) Lookup(ctx context.Context, token string) (Credential, error) {
 	if !ok {
 		return Credential{}, ErrNoCredential
 	}
+	return s.lookup(ctx, h)
+}
+
+// Refresh reads c again, by the hash it already holds, and returns it as it
+// stands now, or ErrNoCredential once it has been revoked or its agent is no
+// longer active. It touches nothing.
+//
+// A live-update stream calls it before each write, so a revoked credential
+// ends the stream it opened (docs/02 "Live updates", TKT-01M29CRJ3X). The
+// token is not needed, and so is never kept.
+func (s *Store) Refresh(ctx context.Context, c Credential) (Credential, error) {
+	return s.lookup(ctx, c.hash)
+}
+
+// lookup resolves a stored hash to its live credential.
+func (s *Store) lookup(ctx context.Context, h sqltypes.SessionHash) (Credential, error) {
 	var out Credential
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		row, err := q.LookupAgentCredential(ctx, h)

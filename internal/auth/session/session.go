@@ -178,6 +178,25 @@ func (s *Store) Lookup(ctx context.Context, token string) (Session, error) {
 	if !ok {
 		return Session{}, ErrNoSession
 	}
+	return s.lookup(ctx, h)
+}
+
+// Refresh reads sess again, by the hash it already holds and under Lookup's
+// expiry rule, and returns it as it stands now: the user's status and role
+// as the row has them, or ErrNoSession once the session has been revoked,
+// swept, or has expired. It touches nothing and creates nothing.
+//
+// A request that outlives the moment it resolved its session, as a
+// live-update stream does, calls it before acting on the viewer again, so
+// a sign-out, a revocation or a suspension ends what the session was
+// holding open (docs/02 "Live updates", TKT-01M29CRJ3X). The cookie is not
+// needed, and so is never kept.
+func (s *Store) Refresh(ctx context.Context, sess Session) (Session, error) {
+	return s.lookup(ctx, sess.hash)
+}
+
+// lookup resolves a stored hash to its live session.
+func (s *Store) lookup(ctx context.Context, h sqltypes.SessionHash) (Session, error) {
 	c := ExpiredBefore(s.now())
 	var row dbq.LookupSessionRow
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {

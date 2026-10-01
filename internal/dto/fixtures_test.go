@@ -529,6 +529,7 @@ var corpus = map[string]any{
 	"render-plain." + tMember:   renderPlain(),
 	"users." + tMember:          userSuggestions(),
 	"created-post." + tMember:   createdPost(),
+	"thread-hint." + tAnon:      ThreadHint{ThreadID: "3yymw47g00001", LogLength: 483920},
 	"created-thread." + tMember: createdThread(),
 	"unread." + tMember:         crossForumList(),
 	"read." + tMember:           ReadPosition{LastReadOrdinal: 62},

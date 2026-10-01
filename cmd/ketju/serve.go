@@ -50,6 +50,7 @@ import (
 	blobsweb "github.com/terva-sh/ketju/internal/web/blobs"
 	"github.com/terva-sh/ketju/internal/web/health"
 	"github.com/terva-sh/ketju/internal/web/spa"
+	"github.com/terva-sh/ketju/internal/web/sse"
 )
 
 // defaultDrain is how long shutdown waits for in-flight requests (docs/02
@@ -335,6 +336,15 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	if err := bus.Subscribe(proj, 0); err != nil {
 		return fail("subscribing the projection", err)
 	}
+	// The live-update hub routes an event only once the projection has
+	// applied it, which it learns from the projection row, so it needs
+	// nothing but the database to subscribe (docs/02 "Live updates").
+	hub := sse.NewHub(sse.HubOptions{Projections: threads.Projections{DB: d}, Logger: log,
+		Limits: sse.Limits{Connections: cfg.Limits.SSEConnections, PerUser: cfg.Limits.SSEPerUser,
+			Anonymous: cfg.Limits.SSEAnonymous}})
+	if err := bus.Subscribe(hub, 0); err != nil {
+		return fail("subscribing the live-update hub", err)
+	}
 
 	step("catch-up")
 	report, err := proj.CatchUp(ctx, reopen)
@@ -531,11 +541,13 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 			"waited", busDrain)
 	}
 
+	agentCreds := &agentcred.Store{DB: d}
 	var root http.Handler = web.New(web.Groups{
 		API: api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Forms: formSvc,
 			Applications: &applications.Service{DB: d}, Perm: perms, Blobs: blobSvc, Logger: log}),
 		Auth:   auth.New(authh),
 		Blobs:  blobsweb.New(blobSvc, log),
+		Events: &sse.Handler{Hub: hub, Threads: threadSvc, Sessions: sessions, Credentials: agentCreds, Logger: log},
 		Assets: spa.Assets(),
 		Health: health.Handler(health.Options{
 			DB: d, Dir: probe, Quarantined: proj.QuarantinedCount, Logger: log,
@@ -549,7 +561,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		SiteURL: cfg.SiteURL,
 		// A bearer credential decides a request that carries one, and every
 		// other request goes to the session middleware (TKT-01M29P9RSW).
-		Session: agentcred.Middleware(&agentcred.Store{DB: d}, session.Middleware(sessions, log), log),
+		Session: agentcred.Middleware(agentCreds, session.Middleware(sessions, log), log),
 	})
 	if o.wrap != nil {
 		root = o.wrap(root)
@@ -563,6 +575,9 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		ln = o.listen(ln)
 	}
 	srv := &http.Server{Handler: root, ReadHeaderTimeout: 10 * time.Second, ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelWarn)}
+	// A live-update stream never finishes by itself, and Shutdown waits for
+	// every handler, so the hub ends them all as the drain begins.
+	srv.RegisterOnShutdown(hub.Close)
 	log.Info("ketju started",
 		"listen", ln.Addr().String(), "data_dir", cfg.DataDir,
 		"subscribers", bus.Subscribers(), "open_threads", cache.Bound(),

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ3XXH2CHG4GKC4CGXAS
 title: Build the SSE endpoint and fan-out
 type: task
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,17 @@ blocks_on: none
 references:
   - ref: design:live-updates
     path: docs/02-architecture.md
+  - ref: pr:281
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T08:48:34Z
+updated_at: 2026-10-01T10:56:27Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-live
+  id: agent:claude-code/phase3-run-crj3x
   name: ""
 extensions: {}
 ---
@@ -44,17 +46,17 @@ The connection count is the operational risk. Every open tab is a held connectio
 
 ## Acceptance criteria
 
-- [ ] Every event's data is exactly {thread_id, log_length}, and the stream sends only ready and thread events and comments (TestEventPayloadIsThreadAndLogLength)
-- [ ] A subscription is admitted only as the thread page would admit the viewer, answering 404, 401 or 403 as the page does, and a pre-user or cross-site request is refused (TestSubscribeAnswersAsThePage, TestPreUserCannotSubscribe, TestSubscribeRefusesCrossSite)
-- [ ] An event about an author-deleted, moderator-hidden, hidden-pending-review or redacted post, or about a suspended author's post before and after the bulk hide, carries only the log length the viewer's next thread page serves (TestEventCarriesNoMoreThanThePage)
-- [ ] A member who moderates a forum by group grant keeps receiving events through hides and restores there (TestGroupGrantModeratorKeepsStream)
-- [ ] limits.sse_connections, limits.sse_per_user and limits.sse_anonymous are config keys with env overrides and docs/07 rows, and a stream over any of them is refused rate-limited with Retry-After (TestStreamLimits, TestSSELimitDefaultsAndEnv)
-- [ ] Publishing never blocks on a slow stream; a stream whose queue fills is closed (TestSlowClientIsClosedAndPublishNeverBlocks)
-- [ ] A hint reaches a client through httputil.ReverseProxy with default settings within one second of the append (TestHintsFlushThroughReverseProxy)
-- [ ] Serve's shutdown ends every open stream inside the drain and returns without cutting requests (TestServeShutdownClosesEventStreams)
-- [ ] A stream ends without writing the next hint when its session is revoked or expires, its user is suspended or deactivated, its agent credential is revoked, read is revoked, or the thread moves to a forum the viewer cannot read; an idle stream ends at the next heartbeat (the seven TestStreamCloses* tests and TestAgentStreamClosesWhenCredentialRevoked)
-- [ ] A stream opens with ready and the current log length of every thread named; a dropped bus batch resends that snapshot on thread-only streams and closes every stream that names a forum, whose client refetches on the reconnect's ready (TestResumeMissesNothing, TestDroppedBatchResyncs)
-- [ ] The hub handles an event only after the thread's projection row has reached it, so a move is routed to the forum the thread joined and its hint never reaches a reader who lost access by it; a row still behind after 5 s closes the affected streams (TestMoveIsRoutedAfterProjection, TestProjectionLagClosesStreams)
+- [x] Every event's data is exactly {thread_id, log_length}, and the stream sends only ready and thread events and comments (TestEventPayloadIsThreadAndLogLength)
+- [x] A subscription is admitted only as the thread page would admit the viewer, answering 404, 401 or 403 as the page does, and a pre-user or cross-site request is refused (TestSubscribeAnswersAsThePage, TestPreUserCannotSubscribe, TestSubscribeRefusesCrossSite)
+- [x] An event about an author-deleted, moderator-hidden, hidden-pending-review or redacted post, or about a suspended author's post before and after the bulk hide, carries only the log length the viewer's next thread page serves (TestEventCarriesNoMoreThanThePage)
+- [x] A member who moderates a forum by group grant keeps receiving events through hides and restores there (TestGroupGrantModeratorKeepsStream)
+- [x] limits.sse_connections, limits.sse_per_user and limits.sse_anonymous are config keys with env overrides and docs/07 rows, and a stream over any of them is refused rate-limited with Retry-After (TestStreamLimits, TestSSELimitDefaultsAndEnv)
+- [x] Publishing never blocks on a slow stream; a stream whose queue fills is closed (TestSlowClientIsClosedAndPublishNeverBlocks)
+- [x] A hint reaches a client through httputil.ReverseProxy with default settings within one second of the append (TestHintsFlushThroughReverseProxy)
+- [x] Serve's shutdown ends every open stream inside the drain and returns without cutting requests (TestServeShutdownClosesEventStreams)
+- [x] A stream ends without writing the next hint when its session is revoked or expires, its user is suspended or deactivated, its agent credential is revoked, read is revoked, or the thread moves to a forum the viewer cannot read; an idle stream ends at the next heartbeat (the seven TestStreamCloses* tests and TestAgentStreamClosesWhenCredentialRevoked)
+- [x] A stream opens with ready and the current log length of every thread named; a dropped bus batch resends that snapshot on thread-only streams and closes every stream that names a forum, whose client refetches on the reconnect's ready (TestResumeMissesNothing, TestDroppedBatchResyncs)
+- [x] The hub handles an event only after the thread's projection row has reached it, so a move is routed to the forum the thread joined and its hint never reaches a reader who lost access by it; a row still behind after 5 s closes the affected streams (TestMoveIsRoutedAfterProjection, TestProjectionLagClosesStreams)
 
 ## Implementation plan
 
@@ -175,3 +177,101 @@ The invariant tests run against `dbtest.Open` and the real thread service, throu
 **agent:claude-code/phase3-groom-live** at 2026-10-01T07:59:35Z
 
 run decision: pending maintainer review. Recorded in docs/02 'Live updates' (2026-10-01). The stream checks access as the thread page does: at subscribe, and again before every write and at every 25 s heartbeat, after resolving the session or agent credential afresh. Losing either closes the stream. The payload is {thread_id, log_length} only. The limits are limits.sse_connections 1000, limits.sse_per_user 8 and limits.sse_anonymous 100 (one pool, because web.ClientIP behind a proxy is the proxy). A stream opens with ready and a snapshot. Alternatives and why they lost are in the doc. The docs/02 'stateless' wording, against the docs/14 invariant, is a contradiction with a safer reading, so this is a run decision and not an open one.
+
+**agent:claude-code/phase3-run-crj3x** at 2026-10-01T09:59:27Z
+
+Built to the plan and its Settled in grooming, against origin/main at 6dfd01d. The plan stands as written; the points below are where the code settled something the plan left open, or differs in a detail. Each is an internal default (docs/12 "Gaps the design leaves open"), and docs/07's /events row records the wire-visible ones.
+
+### What landed
+
+- `internal/web/sse`: `hub.go` (the bus subscriber `sse`) and `handler.go` (`GET /events`). serve subscribes the hub after the projection writer and before `bus.Start`, mounts the handler as `web.Groups.Events`, and closes the hub from `srv.RegisterOnShutdown`.
+- `session.Store.Refresh` and `agentcred.Store.Refresh` read the row again by the hash already held. Neither touches the row or creates anything, and `chokepoint_test.go` passes unedited.
+- `threads.Service.ReadAccess`, `ForumAccess` and `LogLength`, plus `threads.Projections` (`internal/service/threads/live.go`).
+- Config: `limits.sse_connections` (1000), `limits.sse_per_user` (8) and `limits.sse_anonymous` (100), with `KETJU_LIMITS_SSE_*` overrides and ceilings of 100000, 1000 and 100000. They appear in `ketju config check` (golden updated) and in docs/07 "Request limits".
+- `dto.ThreadHint` `{thread_id, log_length}`, with the golden `thread-hint.anon.json` and the TS type in `dto.ts` and `dto-contract.ts`. `go generate ./internal/web/spa` leaves the dist byte-identical (checked with `git diff --exit-code`). The reader bundle is unchanged at 60465 B.
+
+### Settled while building
+
+1. **`ready` carries `data: {}`.** An EventSource drops an event that has no data line, so a bare `event: ready` would never reach the client's ready handler. The alternative was a payload on ready; it lost, because the payload is meant to be `{thread_id, log_length}` and nothing else.
+2. **Hints are coalesced.** The hub routes each thread once per bus batch, at that thread's newest length. Each stream also skips a hint that is no longer than what it has already written, so a hint arriving after a snapshot that already covers it is not repeated. The client needs only the newest length.
+3. **A stream opened anonymously stays anonymous.** A stream opened by a member is checked at every write and heartbeat. It ends when the refreshed session or credential is gone, or when it no longer resolves to the same active member. That second check covers a status change that leaves the session row in place. The alternative was to re-check access as anonymous and keep the stream open. It lost, because the stream was opened, and counted against the limits, as that member.
+4. **Fail closed on a forum-routed hint.** A forum-routed hint for a thread the viewer cannot read is skipped only on a refusal code (not-found, forbidden, unauthenticated or unavailable). Any other error ends the stream.
+5. **Unknown query parameters are `bad-request`**, as are a parameter given twice and an empty list element.
+6. **`threads.Projections` is a separate type** from `threads.Service`, because the hub subscribes to the bus before serve has built the service.
+
+### Test notes
+
+- **Pre-user.** The pre-user gate answers `GET /events` with its 303 to the status page, as it answers any page; the plan's Settled section says nothing here changes the gate. `TestPreUserCannotSubscribe` asserts the 303, that no stream opens, and that the handler itself answers 403 should the gate ever let a pre-user through.
+- **Hard redaction.** A `Redacted` record is written only by `ketju redact`, with the server stopped; the actor refuses one from anywhere else. The hard-redaction case of `TestEventCarriesNoMoreThanThePage` therefore redacts offline and restarts the stores. It then checks that the reconnect's snapshot carries the log length the next page serves.
+- **Shortened timers.** `TestProjectionLagClosesStreams` and `TestStreamClosesAtHeartbeatAfterSignOut` set short timers through options and assert the 5 s and 25 s defaults. `TestHeartbeat` runs at 25 s under `testing/synctest`.
+- **Close tests.** The seven `TestStreamCloses*` tests are top-level tests.
+
+### Mutations tried, each caught
+
+- dropping the access check before a hint;
+- not refreshing the session before a hint;
+- dropping the active-member check;
+- routing without waiting for the projection;
+- skipping the heartbeat's check;
+- not closing forum streams on a dropped batch;
+- not refusing cross-site requests;
+- dropping the per-user limit;
+- not closing the hub at serve's shutdown.
+
+**agent:claude-code/phase3-run-crj3x** at 2026-10-01T10:18:54Z
+
+Terva review 1733 (run da23e51a-09de-4ca2-b8b9-71afcba057cf, Actions run 1855), head 7facedc, base f3538e6. It raised four findings, one high and three medium. Each bears on what reaches a viewer and when, so each is fixed, none argued:
+
+1. **High: recheck forum membership before writing a queued hint.** Fixed. A hint that reached a stream through a forum is now written only if `ReadAccess` places the thread in a forum the stream names at the moment of writing. The forum ids are kept from admission. Test: `TestForumHintChecksTheThreadsForumNow`.
+2. **Medium: check every named forum before writing a hint.** Fixed. Every hint now runs `checkAll` first: the session or credential resolved again, plus every named thread and forum. Test: `TestHintChecksEveryNamedForum`.
+3. **Medium: revalidate access while writing a multi-thread snapshot.** Fixed. The snapshot runs `checkAll` before each thread's hint, including a snapshot sent on resync. Test: `TestSnapshotRechecksBeforeEachThread`.
+4. **Medium: stop processing queued hints once the hub ends a stream.** Fixed in two places. The loop's `next` checks for an end after every select, so an end wins over a ready hint. `stream.end` also sets an ended flag first, and `Hub.send` queues nothing for an ended stream. Test: `TestEndedStreamWritesNoQueuedHint`.
+
+Mutations of each fix were caught. One was missed at first: a check before the select hid the check after it. That check was dropped, and the one after the select now covers both cases and is the one the test exercises.
+
+The cost: each hint now re-checks the whole subscription, at most 20 threads and 10 forums, where the plan checked only the hint's thread. A stream normally names one thread.
+
+**agent:claude-code/phase3-run-crj3x** at 2026-10-01T10:45:13Z
+
+Terva review 1742 (run d37df3cb-421f-4a08-9023-1035dd9d0f9f, Actions run 1891), head 8354bae, base 3890b38. Of review 1733's findings, the review marks 1 to 3 resolved and finding 4 still present in part. It also raised two new mediums. Both are about a stream outliving its end, so both are fixed:
+
+1. **Medium: stop an in-progress hint when the hub ends its stream.** This is the remaining part of review 1733's finding 4. Fixed: `write` checks that the stream has not ended, immediately before writing and after setting the deadline. That covers a hint already past its access checks. Test: `TestHubEndDuringDeliverWritesNothing`.
+2. **Medium: make shutdown interrupt a blocked stream write.** Fixed. A watcher goroutine in `run` sets the write deadline to now when the client, the hub's close, or the hub's end of the stream stops it, so a write blocked on a client that has stopped reading fails at once. The watcher is waited for before `run` returns, so it never touches the connection after the handler. A stopped stream leaves the deadline in the past, so the response's own ending cannot block the drain either. Test: `TestShutdownInterruptsABlockedWrite`, in which the stream returns at once rather than after the 10 s write deadline.
+
+A mutation of each fix was caught. Review 1733's earlier "first review" CI run (1854) was cancelled by the next push and was not a failure of the code. CI run 1867 on 8354bae was green.
+
+**agent:claude-code/phase3-run-crj3x** at 2026-10-01T10:51:33Z
+
+Terva review 1744 (run 54556edf-7c79-4512-9b65-02333e913f95, Actions run 1898), head bbf4e91, base 3890b38. The review marks review 1742's finding 1 resolved and finding 2 still present. It raised two mediums. Both are fixed:
+
+1. **Medium: do not clear a shutdown deadline before flushing.** Fixed. I read the old order as already safe: the clear ran only after `Flush` returned, and `run`'s defer set a past deadline again. The fix is cheap and makes the rule explicit, so it is made. Every change to the write deadline now goes through one mutex. The watcher's `halt` marks the stream stopped and sets a past deadline under that mutex, and `setDeadline` refuses once the stream has stopped. From the stop on, the deadline only ever moves to the past. Test: `TestStoppedStreamKeepsAPastDeadline`. A mutation that restores the unconditional clear is caught.
+2. **Medium: recheck access before writing the opening ready event.** Fixed. `ServeHTTP` runs `checkAll` after the stream is registered and before anything is written. A loss is answered as admission answers it: the page's code, or unauthenticated for an ended session. Test: `TestReadyFollowsAFreshCheck`. A mutation that drops the check is caught.
+
+This was review round 3 of 5.
+
+**agent:claude-code/phase3-run-crj3x** at 2026-10-01T10:56:27Z
+
+Terva review 1745 (run 22b6f331-1215-4493-8cab-504b49d90dc1, Actions run 1906), head 61ccccb, base 3890b38. The review marks both of review 1744's findings resolved. It raised one medium and one low. Both are fixed:
+
+1. **Medium: do not report every refresh failure as an ended session.** Fixed. `current` marks a stream `errEnded` only for `session.ErrNoSession`, `agentcred.ErrNoCredential`, or a different or inactive member. Any other refresh error, such as a database failure, is returned as it is. The stream still ends, failing closed, and the check before ready answers it 500 rather than 401. Test: `TestRefreshErrorIsNotAnEndedSession`. A mutation is caught.
+2. **Low: enforce subscription limits before deduplicating entries.** Fixed. `parse` bounds the raw comma-separated count against `MaxThreads` and `MaxForums` before it drops duplicates. Test: `TestParseBoundsTheListAsSent`. A mutation is caught.
+
+This was review round 4 of 5. The full `go test -race ./...` passes on this tree.
+
+## Summary
+
+`GET /events` is built in `internal/web/sse` and wired into `ketju serve`.
+
+**Stream contents.** The stream opens with `event: ready`, carrying `data: {}`, then sends a snapshot of each thread it names. After that it sends `event: thread` with `{thread_id, log_length}` (`dto.ThreadHint`) and nothing else, plus a `: hb` heartbeat every 25 s.
+
+**Access checks.** A subscription is admitted as the thread page and the thread list admit the viewer. Before every write and at every heartbeat, the stream resolves its session or agent credential again (`session.Store.Refresh`, `agentcred.Store.Refresh`, neither of which touches the row) and checks thread access again. It closes on any loss.
+
+**The hub.** The hub is the bus subscriber `sse`. It routes an event only once the thread's projection row has reached it, so a move goes to the forum the thread joined. A thread still behind after 5 s closes the streams that could hear of it. A dropped batch resends the snapshot on streams that name only threads, and closes streams that name a forum. A stream whose 64-hint queue fills is closed, and publishing never blocks.
+
+**Limits.** Three config keys set the limits, with env overrides, docs/07 rows and `ketju config check` output: `limits.sse_connections` (1000), `limits.sse_per_user` (8) and `limits.sse_anonymous` (100). A stream over any of them is refused `rate-limited` with `Retry-After: 30`.
+
+**Shutdown.** Serve closes the hub as shutdown begins, so the drain does not wait for open streams.
+
+Every acceptance criterion has a named test, and the mutations listed in the notes were each caught. The client dist is byte-identical. The reader bundle is unchanged at 60465 B.
+
+The client subscription is TKT-01M29CTYA0 (Add the client SSE subscription with the new-posts pill). Confirming the stream through the dogfood proxy belongs to TKT-01M3V3CFRE (Check Phase 3's exit criterion with named end-to-end tests).

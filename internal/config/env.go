@@ -68,6 +68,15 @@ var overrides = []Override{
 	{Env: "KETJU_LIMITS_ATTACHMENT_MB", Key: "limits.attachment_mb", apply: func(c *Config, v string, p *problemList) {
 		c.Limits.AttachmentMB = parseInt(v, "limits.attachment_mb", "KETJU_LIMITS_ATTACHMENT_MB", p)
 	}},
+	{Env: "KETJU_LIMITS_SSE_CONNECTIONS", Key: "limits.sse_connections", apply: func(c *Config, v string, p *problemList) {
+		c.Limits.SSEConnections = parseInt(v, "limits.sse_connections", "KETJU_LIMITS_SSE_CONNECTIONS", p)
+	}},
+	{Env: "KETJU_LIMITS_SSE_PER_USER", Key: "limits.sse_per_user", apply: func(c *Config, v string, p *problemList) {
+		c.Limits.SSEPerUser = parseInt(v, "limits.sse_per_user", "KETJU_LIMITS_SSE_PER_USER", p)
+	}},
+	{Env: "KETJU_LIMITS_SSE_ANONYMOUS", Key: "limits.sse_anonymous", apply: func(c *Config, v string, p *problemList) {
+		c.Limits.SSEAnonymous = parseInt(v, "limits.sse_anonymous", "KETJU_LIMITS_SSE_ANONYMOUS", p)
+	}},
 
 	{Env: "KETJU_BOOTSTRAP_ADMIN_EMAILS", Key: "bootstrap.admin_emails", apply: func(c *Config, v string, _ *problemList) {
 		c.Bootstrap.AdminEmails = splitList(v)

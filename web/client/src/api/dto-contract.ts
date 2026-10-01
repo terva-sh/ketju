@@ -49,6 +49,7 @@ import type {
   RenderResult,
   SiteSettings,
   SlowMode,
+  ThreadHint,
   ThreadList,
   ThreadPage,
   UserPosts,
@@ -120,6 +121,7 @@ import slowModeModerator from '../../../../internal/dto/testdata/golden/slow-mod
 import threadAnon from '../../../../internal/dto/testdata/golden/thread.anon.json';
 import threadLockedMember from '../../../../internal/dto/testdata/golden/thread-locked.member.json';
 import threadArchivedMember from '../../../../internal/dto/testdata/golden/thread-archived.member.json';
+import threadHintAnon from '../../../../internal/dto/testdata/golden/thread-hint.anon.json';
 import threadMember from '../../../../internal/dto/testdata/golden/thread.member.json';
 import threadModerator from '../../../../internal/dto/testdata/golden/thread.moderator.json';
 import threadsAnon from '../../../../internal/dto/testdata/golden/threads.anon.json';
@@ -223,6 +225,7 @@ export const contract = [
   matches<ThreadPage>()(threadArchivedMember),
   matches<ThreadPage>()(threadMember),
   matches<ThreadPage>()(threadModerator),
+  matches<ThreadHint>()(threadHintAnon),
   matches<ThreadList>()(threadsAnon),
   matches<ThreadList>()(threadsMember),
   matches<ThreadList>()(unreadMember),

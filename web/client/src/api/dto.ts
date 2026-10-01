@@ -261,6 +261,14 @@ export interface CreatedPost {
   log_length: number;
 }
 
+// ThreadHint is the data of an `event: thread` on the live-update stream,
+// GET /events: the thread reached log_length, and nothing else
+// (internal/dto ThreadHint).
+export interface ThreadHint {
+  thread_id: string;
+  log_length: number;
+}
+
 // CreatedThread is POST /forums/{slug}/threads: the new thread's header and
 // its first post (internal/dto CreatedThread).
 export interface CreatedThread {

@@ -57,6 +57,9 @@ const (
 	DefaultLogLevel         = "info"
 	DefaultLogFormat        = "auto"
 	DefaultAttachmentMB     = 10
+	DefaultSSEConnections   = 1000
+	DefaultSSEPerUser       = 8
+	DefaultSSEAnonymous     = 100
 	defaultMaxCacheMB       = 1 << 20 // 1 TB, a bound to catch a typo, not a policy
 	defaultMaxOpenThreads   = 1 << 20
 	minimumOpenThreadsAllow = 1
@@ -137,7 +140,8 @@ type Storage struct {
 
 // Limits is the part of the request limits an operator may tune.
 //
-// Only the attachment cap is here. The post body limit is fixed at 64 KB by
+// The attachment cap and the live-update stream limits are here. The post
+// body limit is fixed at 64 KB by
 // docs/07 and lives in internal/web as a constant: it is part of what the API
 // promises a client, not a dial, and an installation that quietly raised it
 // would accept posts that another installation could not federate or import.
@@ -146,6 +150,20 @@ type Limits struct {
 	// because what counts as a reasonable attachment depends entirely on who
 	// is running the forum and what their disk looks like.
 	AttachmentMB int `toml:"attachment_mb"`
+
+	// SSEConnections caps the live-update streams (GET /events) open at once,
+	// across every viewer. Each one is a held connection and a goroutine, so
+	// the bound has to be chosen rather than discovered when a community
+	// grows (docs/02 "Live updates").
+	SSEConnections int `toml:"sse_connections"`
+
+	// SSEPerUser caps one signed-in user's open streams: one per open tab.
+	SSEPerUser int `toml:"sse_per_user"`
+
+	// SSEAnonymous caps every anonymous stream together. It is one pool rather
+	// than a per-address cap, because behind a reverse proxy every client has
+	// the proxy's address.
+	SSEAnonymous int `toml:"sse_anonymous"`
 }
 
 // Bootstrap names the accounts that become admin on first login, so that a
@@ -375,6 +393,15 @@ func applyDefaults(c *Config, present map[string]bool) {
 	}
 	if !present["limits.attachment_mb"] {
 		c.Limits.AttachmentMB = DefaultAttachmentMB
+	}
+	if !present["limits.sse_connections"] {
+		c.Limits.SSEConnections = DefaultSSEConnections
+	}
+	if !present["limits.sse_per_user"] {
+		c.Limits.SSEPerUser = DefaultSSEPerUser
+	}
+	if !present["limits.sse_anonymous"] {
+		c.Limits.SSEAnonymous = DefaultSSEAnonymous
 	}
 	for i := range c.OIDC.Providers {
 		p := &c.OIDC.Providers[i]
