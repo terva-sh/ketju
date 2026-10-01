@@ -89,7 +89,8 @@ touches. These are:
    account, credential, DNS name, or a change to the dogfood deployment's
    configuration.
 4. **Dropping or materially changing a docs/09 Phase 3 deliverable.**
-5. **Raising the reader bundle budget** (70000 B gzip, docs/07). The run
+5. **Raising the reader bundle budget** (docs/07). The maintainer raised it
+   from 70000 to 120000 B gzip on 2026-10-01, during the run. The run
    lazy-loads where a chunk genuinely saves bytes. If the reader would still
    exceed the budget after that, it stops.
 6. **A contradiction between design documents** that has no safer reading.

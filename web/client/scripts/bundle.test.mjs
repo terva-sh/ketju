@@ -119,8 +119,8 @@ describe('check', () => {
 });
 
 describe('budget.json', () => {
-  it('holds the design number, 70 KB read as 70000 bytes (docs/07)', () => {
-    expect(readBudget()).toBe(70000);
+  it('holds the design number, 120 KB read as 120000 bytes (docs/07)', () => {
+    expect(readBudget()).toBe(120000);
   });
 });
 

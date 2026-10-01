@@ -1405,11 +1405,17 @@ work stays where it is.
 
 - **Stack:** Preact 10.x, `@preact/signals`, `preact-iso` router, Vite 8,
   TypeScript. No component library; a small hand-written CSS system with
-  custom properties and light/dark themes. Target bundle: < 70 KB gzipped
-  for the thread view. CI enforces it, reading 70 KB as 70000 bytes and
+  custom properties and light/dark themes. Target bundle: < 120 KB gzipped
+  for the thread view. CI enforces it, reading 120 KB as 120000 bytes and
   counting everything the reader loads except fonts and the lazy admin
   chunk; the number is committed in `web/client/budget.json`
-  (TKT-01M29CGBYH). The maintainer raised it from 60 KB on 2026-09-30.
+  (TKT-01M29CGBYH). The maintainer raised it from 60 KB to 70 KB on
+  2026-09-30, and to 120 KB on 2026-10-01, when the reader stood at
+  63.9 KB with Phase 3's lens, search, notification, unread-list, profile,
+  settings and phone-sheet screens still to come, an estimated 80 to 85 KB
+  in all. The budget counts every lazy chunk except admin, so splitting
+  those screens out saved nothing. The maintainer chose 120 KB over the
+  100 KB alternative, which would have left about 15 KB of headroom.
   Phase 2 added moderation controls, drafts and thread actions to the
   reader, putting it near 55 KB with several reader tickets still to come.
   Lazy-loading small panels did not help, because the budget counts every
@@ -1423,7 +1429,7 @@ work stays where it is.
 - **Fonts:** IBM Plex Sans, IBM Plex Mono and Newsreader, as in the
   mockups, self-hosted as subset WOFF2 files embedded in the binary and
   served from the same origin. The CSP allows no third-party font host.
-  They are cached apart from the code and do not count toward the 70 KB
+  They are cached apart from the code and do not count toward the 120 KB
   budget, which measures the thread view's JavaScript and CSS. Two
   alternatives lost. A system font stack would drift from every mockup, and
   counting fonts inside the budget would force dropping Newsreader.

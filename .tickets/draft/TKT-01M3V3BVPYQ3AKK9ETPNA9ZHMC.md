@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:24Z
-updated_at: 2026-10-01T17:14:50Z
+updated_at: 2026-10-01T17:42:00Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -118,3 +118,7 @@ Orchestrator log, 2026-10-01 (merges #320 to #327).
 - #323 -> #327 TKT-01M29CRJ2T notification generator merged e855e1a (code d0a6213, b768b4f); reviews 1781 (high security: moved-thread notification visible before projection caught up; medium) and 1784 (medium: SQLite variable limit stalled catch-up) fixed; 1791 clean on 1675897 / base 5d8f360; CI 2178 (new non-race backlog step); migration 0024. Run decisions: threads with an unprojected move are held from list and badge; only unread notifications upgrade.
 - /tmp (7.8 GB tmpfs) filled to 100% and broke every lane. The run freed its own Playwright run directories and moved lane temp files to ~/.cache/agent-scratch (run brief "Temporary files"); the maintainer then asked for /tmp to be cleaned, and 4133 of their entries older than 2026-10-01, none in use, were removed (mostly old acp-sess-* harness directories), leaving 13% used.
 - Maintainer decision: TKT-01M3V6XSW2 (recent sign-in) answered "I don't think we need a recent fresh signin for any of those actions"; recorded in docs/05 and archived.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-01T17:42:00Z
+
+Maintainer decision, 2026-10-01: raise the reader bundle budget to 120000 B gzip ("Let's go with 120"), resolving the class 5 question. The reader stood at 63878 B. The remaining Phase 3 client plans were estimated to land the reader at 80 to 85 KB. 100 KB was the alternative put to the maintainer. Changed in web/client/budget.json, its test, web/client/README.md, docs/07 and docs/14.
