@@ -17,11 +17,13 @@ origin: null
 dependencies:
   - TKT-01M29CXK0KHC2QZQ286AG0KKGD
 blocks_on: none
-references: []
+references:
+  - ref: pr:289
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T07:50:42Z
-updated_at: 2026-10-01T11:11:32Z
+updated_at: 2026-10-01T11:12:09Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
