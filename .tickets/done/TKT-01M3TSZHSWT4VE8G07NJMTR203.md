@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T04:01:24Z
-updated_at: 2026-10-01T18:24:30Z
+updated_at: 2026-10-01T18:24:42Z
 created_by:
   id: agent:claude-code/phase2-run-tnbknq
   name: ""
@@ -180,10 +180,14 @@ Terva review 1795 (run a622b0bf), head 01666fd, base 86752c4, found one medium i
 
 Fixed in the client, at the cause the probe named. `ModerateDialog` took its slow-mode choice and Custom's seconds once, in `useState` initialisers. When a moderator saved and reopened the panel before the page's refetch landed, the panel opened on the old value and never read the refetch. The refetch answered 200 with the new `slow_mode_seconds`. On a loaded CI runner the refetch can land after the phone's two clicks that reopen the panel (run 1686). That ordering was the whole flake. The runner freeze (TKT-01M3VDYENN) was not involved.
 
-The choice and the seconds now follow `slow_mode_seconds` through a layout effect until the moderator touches a radio or the field. After that, a later refetch leaves the moderator's choice alone. Two Vitest cases in `ThreadScreen.test.tsx` fail against main and pass on the fix. The test file's `checked` helper now reads each radio's `checked` property, because happy-dom's `:checked` selector can answer from before a click that no render followed. `e2e/thread-moderation.spec.ts` and `playwright.config.ts` are unchanged.
+The choice and the seconds now follow `slow_mode_seconds` through a layout effect until the moderator clicks a radio or types in the field. A click on the radio already chosen counts too (Terva review 1795). After that, a later refetch leaves the moderator's choice alone. Three Vitest cases in `ThreadScreen.test.tsx` cover this:
+- Two of them fail against main.
+- The third fails if the radios mark the choice on change rather than on click.
 
-Proof is in the notes. With the refetch held 2 s, the panel shows 10 seconds within 1 s of the answer at both widths, where main never does. Under 48 busy loops and an fsync loop on the host, 20 of 20 phone runs passed. In the CI image, three 1-CPU containers at once ran 60 phone runs, all green. After the rebase onto dfd23a6, the full suite passed in both projects with its axe scans: 214 passed, 12 skipped by width.
+The test file's `checked` helper now reads each radio's `checked` property, because happy-dom's `:checked` selector can answer from before a click that no render followed. `e2e/thread-moderation.spec.ts` and `playwright.config.ts` are unchanged.
 
-The reader bundle grew by 32 B on main at dfd23a6, from 66189 B to 66221 B gzip of 70000 B.
+Proof is in the notes. With the refetch held 2 s, the panel shows 10 seconds within 1 s of the answer at both widths. On main it never does. Under 48 busy loops and an fsync loop on the host, 20 of 20 phone runs passed. In the CI image, three 1-CPU containers at once ran 60 phone runs, all green. After the rebase onto dfd23a6, the full suite passed in both projects with its axe scans: 214 passed, 12 skipped by width.
 
-Run 1779's phone lock-test failure (note 2) is a separate case. Its 30 s budget ran out while the server answered single GETs in 2 to 4 s. That is runner overload, recorded in the cause note and not fixed here.
+The reader bundle grew by 31 B, from 66189 B to 66220 B gzip, on main at dfd23a6.
+
+Run 1779's phone lock-test failure (note 2) is a separate case. Its 30 s budget ran out while the server answered single GETs in 2 to 4 s. That is runner overload, recorded in the cause note and not fixed here. Filed on the way: TKT-01M3WBBF4H (Stop TestServeGeneratesNotifications racing the restore's notification), a race on main.
