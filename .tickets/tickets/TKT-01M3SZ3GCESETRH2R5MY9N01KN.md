@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M3SZ3GCESETRH2R5MY9N01KN
 title: Stop admin-applications.spec.ts timing out under CI load
 type: bug
-status: in-progress
-status_reason: null
+status: blocked
+status_reason: "Not reproduced in 42 CI-image full-suite runs under load, 11 host runs and 300 probe repeats (note of 2026-10-01). The plan forbids fixing an unseen cause, and #1592 kept no record of the page. Waits on TKT-01M3TNBKNQ, which prints Playwright's error context on a CI failure. Blocked rather than left in-progress (the plan's wording) so that no idle claim holds it."
 priority: normal
 due_on: null
 labels:
@@ -15,22 +15,16 @@ assignees: []
 milestone: phase-2
 parent: null
 origin: null
-dependencies: []
+dependencies:
+  - TKT-01M3TNBKNQJNWM29JT10FQN3YQ
 blocks_on: none
 references:
   - ref: pr:255
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-sz3gce
-  branch: run/sz3gce-applications-flake
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af3af22297b167b1c
-  commit: 8a849ca5d354d83e801dc93eb07177a414939f69
-  session: null
-  claimed_at: 2026-10-01T01:58:31Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T20:11:42Z
-updated_at: 2026-10-01T01:58:32Z
+updated_at: 2026-10-01T03:23:44Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -121,3 +115,59 @@ Grooming refresh, 2026-10-01, against main at f3ba70d. This is a reading of run 
 - The two assertions before line 50 passed: the `h1` "Applications" and `[data-no-email]`. Both render inside `AdminRoot` (web/client/src/screens/admin/AdminRoot.tsx), and only after the lazy admin chunk has loaded and `section.may(me)` has passed. So the 5 s ran out after the chunk had loaded and the viewer had resolved. It ran out on `ApplicationList`: its request `GET /api/v1/admin/applications?status=pending`, the render of its answer, or a list without application 2. This separates the ticket from TKT-01M3S8Y2NA, whose cause was the chunk's first import.
 - The desktop test ran 119th of 186, after every phone spec, including `apply.spec.ts` and `phase2-exit.spec.ts`, which write applications, and `admin-forms.spec.ts`, which saves a new version of the registration form. A repro therefore starts from the full suite.
 - The trace and `error-context.md` were written under the CI container's /tmp and are gone. The first local failure's trace is the first evidence of what the page showed.
+
+**agent:claude-code/phase2-run-sz3gce** at 2026-10-01T03:23:35Z
+
+Investigation, 2026-10-01: the failure did not reproduce, so the cause is not named and no code changed. Every run was on main's tree at f3ba70d, with the grooming commits on top. Logs, the scripts and the server logs are in a scratch directory under ~/.cache/agent-scratch/ketju/.
+
+### Correction to the grooming note
+
+The grooming note said that run #1592 was "not slower than usual overall". That was wrong. Its only comparison was #1595, which ran on the runner at the same time. Across 168 CI runs read for this note, the Playwright step usually takes 4 to 6 minutes. #1592 (9.4 min), #1595 (9.9 min) and #1598 (11.7 min) were all running between 19:35 and 19:55 UTC. So #1592 did run under load, as the description says.
+
+### What CI shows
+
+- Across those 168 runs, the desktop admin-applications test passed in 3.0 to 13.4 s. #1592 is its only failure.
+- The only other Playwright failure in the runs scanned is #1522, an a11y scan that ran out the 30 s test budget, under the contention that TKT-01M3MTQG5A handled.
+- From the reporter's durations, #1592's desktop test started about 5 minutes after mona's session was issued. That is when the first request of the session's next touch is due (`session.TouchInterval`).
+
+### Runs, all on main
+
+Port 18991. The CI image is `golang:1.27-alpine` with Alpine's Chromium 152.0.7977.82, as `ci.yml` installs them, in podman.
+
+| Where | Load | Runs | Suite time | admin-applications |
+|---|---|---|---|---|
+| Host, Playwright's headless shell, `e2e/admin-` | 48 busy loops | 10 | 3.3-4.1 min | 10 of 10 passed |
+| Host, full suite | 48 loops | 1 | 9.9 min | passed |
+| CI image, full suite | none | 5 | 4.7-4.9 min | 5 of 5 passed |
+| CI image, full suite | 48 loops | 1 | 6.1 min | passed |
+| CI image, 3 containers × 2 CPUs at once, full suite | 24 loops | 21 | 7.3-8.8 min | 21 of 21 passed |
+| CI image, 3 containers × 1 CPU at once, full suite | 48 loops, plus a loop writing 256 MiB files with fsync | 15 | 10.1-11.4 min | 15 of 15 passed |
+
+The last two rows match CI's loaded runs. The suite takes 8 to 11 minutes there, as #1592, #1595 and #1598 did.
+
+- **Probe.** A probe spec, not committed, repeated only the step that failed: it loaded `/admin/applications` as mona and timed each stage to `[data-application-link="2"]`. Nothing was approved. It ran 200 times in the CI image under 48 loops, and 100 times in a 1-CPU container. From `[data-no-email]` to the link took at most 38 ms and 194 ms. From `goto` to `[data-no-email]` took at most 1.5 s. No repeat failed.
+
+### What the runs rule out
+
+- **Candidate 1, a slow list request.** In all 53 runs that loaded the page (42 full-suite runs in the CI image, and 11 runs on the host), the server log shows `GET /api/v1/admin/applications` arriving 0.09 to 0.62 s after the page request. The server took 0 to 3 ms to answer it, and the status was always 200. A uniform slowdown would have to be about ten times worse than the 10-minute runs to use up 5 s.
+- **A session touch on a slow fsync.** In the 15 runs at CI speed, mona's touch fell on the desktop project's `GET /admin/applications` page request, as it did in #1592. Under the fsync loop, that request took at most 38 ms.
+- **Candidate 3, a list without application 2.** The desktop list always held two rows: 268 bytes, application 2 and apply.spec's pending application. No spec decides application 2.
+- **Candidate 5, the lazy admin chunk.** As the grooming note says, the `h1` and `[data-no-email]` render after the chunk has loaded.
+- **Candidate 2, a failed request.** It was never seen: no non-200 answer, and no error panel in the probe.
+- **Candidate 4, the spec.** The probe's 300 repeats of the same step all passed.
+
+### What is left
+
+The evidence fits a stall of the CI runner itself during the 5 s wait. A container freeze or a long scheduling pause on a shared runner would hold up the browser while Playwright's deadline runs out. Nothing here proves it, and the trace and `error-context.md` from #1592 were written to the CI container's /tmp and are gone. Without them, a fix would guess at a cause nobody has seen, which the plan rules out (Approach step 1).
+
+### Found on the way
+
+`e2e/shortcuts.spec.ts:73` failed in 2 of the 21 runs at 2 CPUs. It pressed Escape while the shortcuts dialog was still open. Filed as TKT-01M3TMRCMJ (Close the shortcuts overlay on an Escape pressed before it takes focus).
+
+### What unblocks this ticket
+
+TKT-01M3TNBKNQ (Print Playwright's error context into the CI log when a test fails). Once it lands, the next CI failure of this test will show what the page held. The next person can then name the cause from that log, or close this ticket if the failure never returns.
+
+**agent:claude-code/phase2-run-sz3gce** at 2026-10-01T03:23:43Z
+
+in-progress to blocked: Not reproduced in 42 CI-image full-suite runs under load, 11 host runs and 300 probe repeats (note of 2026-10-01). The plan forbids fixing an unseen cause, and #1592 kept no record of the page. Waits on TKT-01M3TNBKNQ, which prints Playwright's error context on a CI failure. Blocked rather than left in-progress (the plan's wording) so that no idle claim holds it.
