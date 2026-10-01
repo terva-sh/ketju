@@ -24,15 +24,17 @@ references:
     path: null
   - ref: pr:275
     path: null
+  - ref: pr:286
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:24Z
-updated_at: 2026-10-01T09:39:09Z
+updated_at: 2026-10-01T10:50:35Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-search
+  id: agent:claude-code/phase3-groom-pages
   name: ""
 extensions: {}
 ---
