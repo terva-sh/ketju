@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T13:24:35Z
+updated_at: 2026-10-01T13:40:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -123,6 +123,10 @@ Requirement carried from review 1731 (2026-10-01; PR #275, head 64a8983, base 6d
 **agent:claude-code/phase3-search-cli** at 2026-10-01T12:58:49Z
 
 Implementation decisions (internal, recorded in docs/03 'Durability and recovery' As built): (1) the rebuild is a method, search.Indexer.Rebuild, not the package function the groomed plan named, so it shares the indexer's open/walk seams. (2) In rebuild mode each log is opened alone: no .idx is read and the thread cache is not peeked, so the in-memory index comes from replaying every frame. Alternative, trusting the .idx as the incremental path does, lost because a recovery tool should depend on the logs only, and a stale sidecar (TKT-01M3VHSYFR) would otherwise reach the rebuilt index; TestRebuildReadsTheLogNotTheIdx holds it. (3) Rows are written with new db.PutSearchRow/DropSearchRow (search_docs only) and the FTS5 index is built once by 'rebuild' then 'optimize', as the plan said. (4) Log faults are marked positively (search.IsLogFault) where the log's bytes are read, as projection.IsLogFault does, so a database error inside a thread stops the run instead of being reported as a damaged thread. (5) A header-only log counts as indexed (it has no rows). Review 1731's requirement is met: Rebuild never calls Prepare; the version read, ClearSearch and the version write are in its one transaction (TestRebuildKeepsTheOldIndexOnFailure, TestReindexSearchInterrupted, both with an old version Version-1).
+
+**agent:claude-code/phase3-search-cli** at 2026-10-01T13:40:12Z
+
+Terva review 1766 (PR #313, head dad08e7, base eaf54f6; run 2cf3245b), fixed. (high) 'Do not treat filesystem read failures as damaged logs': threadlog.Open and the frame scan report what a failed read left them as damage, so an EIO could be committed as a failed thread (exit 1) with no rows. The indexer now reads each log through a readRecorder that remembers the first read error other than EOF; a fault found after one is that read error, not a logFault, so Rebuild rolls the whole run back and exits 4. TestRebuildStopsOnAReadError covers a failure at the header, in the replay and at a later frame; TestRebuildRollsBackAFailedThread now injects corrupted bytes (a real checksum failure) rather than a read error. Earlier review on #307: run 01d37b20 at head 0a6209d, base 2e937eb, clean with no findings; its remark that 'transaction commit handling could not be judged' is about db.Write, unchanged, which commits only when fn returns nil and is exercised by TestRebuildKeepsTheOldIndexOnFailure and TestReindexSearchInterrupted. CI run 2069 on dad08e7 failed only in Playwright: apply.spec.ts 'page.emulateMedia: Test timeout of 42500ms exceeded', a timeout-only failure in a client spec this PR does not touch (TKT-01M3VDYENN).
 
 ## Summary
 

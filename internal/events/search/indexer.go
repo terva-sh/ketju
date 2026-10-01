@@ -763,7 +763,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, t target) (outcom
 		upTo = src.length
 	}
 	if src.length < upTo {
-		return out, logFault{fmt.Errorf("thread %s: the log is %d bytes, shorter than the %d an event reported", id, src.length, upTo)}
+		return out, src.fault(fmt.Errorf("thread %s: the log is %d bytes, shorter than the %d an event reported", id, src.length, upTo))
 	}
 	fresh := !known
 	if known && from > src.length {
@@ -786,7 +786,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, t target) (outcom
 				"thread", id, "search_state", from, "err", err)
 			fresh = true
 		} else if err != nil {
-			return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
+			return out, src.fault(fmt.Errorf("thread %s: %w", id, err))
 		}
 	}
 	if fresh {
@@ -811,7 +811,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, t target) (outcom
 			return out, nil
 		}
 		if s, err = scanFrames(src.f, from, upTo); err != nil {
-			return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
+			return out, src.fault(fmt.Errorf("thread %s: %w", id, err))
 		}
 	}
 
@@ -822,7 +822,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, t target) (outcom
 	slices.Sort(ordinals)
 	entries, snapLen, err := src.entries(ordinals)
 	if err != nil {
-		return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
+		return out, src.fault(fmt.Errorf("thread %s: %w", id, err))
 	}
 	if snapLen < upTo {
 		return out, fmt.Errorf("thread %s: the index snapshot is at %d, before the %d scanned", id, snapLen, upTo)
@@ -838,7 +838,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, t target) (outcom
 		}
 		source, err := src.text(o, e)
 		if err != nil {
-			return out, logFault{fmt.Errorf("thread %s: reading post %d: %w", id, o, err)}
+			return out, src.fault(fmt.Errorf("thread %s: reading post %d: %w", id, o, err))
 		}
 		plain := render.Plain(source)
 		out.bytes += int64(len(plain))
@@ -859,7 +859,7 @@ func (x *Indexer) indexThread(ctx context.Context, tx *sql.Tx, t target) (outcom
 		} else {
 			if !s.creatorSeen {
 				if s.creator, err = firstFrame(src.f, upTo); err != nil {
-					return out, logFault{fmt.Errorf("thread %s: %w", id, err)}
+					return out, src.fault(fmt.Errorf("thread %s: %w", id, err))
 				}
 			}
 			out.bytes += int64(len(title))

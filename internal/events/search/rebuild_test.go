@@ -136,7 +136,7 @@ func TestRebuildRollsBackAFailedThread(t *testing.T) {
 
 	rep := f.rebuild()
 	if len(rep.Failed) != 1 || rep.Failed[0].Thread != bad || !IsLogFault(rep.Failed[0].Err) ||
-		!strings.Contains(rep.Failed[0].Err.Error(), "injected") || !strings.Contains(rep.Failed[0].Err.Error(), "post 2") {
+		!strings.Contains(rep.Failed[0].Err.Error(), "post 2") {
 		t.Fatalf("failed = %+v", rep.Failed)
 	}
 	if rep.Indexed != 2 || rep.Threads != 3 {
@@ -156,7 +156,9 @@ func TestRebuildRollsBackAFailedThread(t *testing.T) {
 	f.check()
 }
 
-// faultyLog fails the failAt-th read at offset at.
+// faultyLog returns the failAt-th read at offset at with its last byte
+// flipped, as a damaged sector would read: the frame then fails its
+// checksum, which is the log's fault.
 type faultyLog struct {
 	*os.File
 	at            int64
@@ -164,13 +166,66 @@ type faultyLog struct {
 }
 
 func (l faultyLog) ReadAt(p []byte, off int64) (int, error) {
+	n, err := l.File.ReadAt(p, off)
 	if off == l.at {
 		*l.reads++
-		if *l.reads == *l.failAt {
-			return 0, errors.New("injected read fault")
+		if *l.reads == *l.failAt && n > 0 {
+			p[n-1] ^= 0xff
 		}
 	}
+	return n, err
+}
+
+// failingLog fails every read from offset at on with an I/O error.
+type failingLog struct {
+	*os.File
+	at int64
+}
+
+func (l failingLog) ReadAt(p []byte, off int64) (int, error) {
+	if off >= l.at {
+		return 0, &os.PathError{Op: "read", Path: l.Name(), Err: errors.New("input/output error")}
+	}
 	return l.File.ReadAt(p, off)
+}
+
+// TestRebuildStopsOnAReadError is Terva review 1766: a read the filesystem
+// fails, at any point in a thread, is not the log's fault. The rebuild stops
+// and leaves the old index as it was, rather than committing one without the
+// thread and reporting its log damaged.
+func TestRebuildStopsOnAReadError(t *testing.T) {
+	f := newFixture(t)
+	a, ac := f.thread("Healthy")
+	bad, bc := f.thread("Unreadable")
+	first := f.post(bad, 5, "first readable")
+	f.deliver(ac, bc, f.post(a, 5, "alpha stays"), first, f.post(bad, 5, "second unreadable"))
+	before := f.dump()
+	path := bad.LogPath(f.root)
+	for _, c := range []struct {
+		name string
+		at   int64
+	}{
+		{"the file header", 0},
+		{"the replay", threadlog.FileHeaderSize},
+		{"a later frame", first.LogLength},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			f.x.open = func(p string) (logFile, error) {
+				l, err := os.OpenFile(p, os.O_RDONLY, 0)
+				if err != nil || p != path {
+					return l, err
+				}
+				return failingLog{File: l, at: c.at}, nil
+			}
+			_, err := f.x.Rebuild(t.Context(), nil)
+			if err == nil || IsLogFault(err) || !strings.Contains(err.Error(), "input/output error") {
+				t.Fatalf("want the read error, not a log fault: %v", err)
+			}
+			if got := f.dump(); got != before {
+				t.Errorf("a rebuild stopped by a read error changed the index:\n%s\n---\n%s", before, got)
+			}
+		})
+	}
 }
 
 // TestRebuildKeepsTheOldIndexOnFailure is Terva review 1731's requirement: a

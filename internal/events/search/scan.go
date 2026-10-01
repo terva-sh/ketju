@@ -3,6 +3,7 @@ package search
 import (
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/terva-sh/ketju/internal/store/threadcache"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -134,7 +135,7 @@ func firstFrame(r interface {
 // source is one thread as the indexer reads it: its log, opened read-only
 // for scanning, and an index to take entries from.
 type source struct {
-	f      logFile
+	f      *readRecorder
 	length int64 // the log's whole frames when the source was opened
 
 	// One of these: the thread as the cache has it open, held by a Peek
@@ -143,6 +144,41 @@ type source struct {
 	th    *threadcache.Thread
 	rec   *threadlog.Recovery
 }
+
+// readRecorder is a log whose reads remember the first error that is not
+// the end of the file. Such an error is the disk's or the filesystem's,
+// never the log's bytes: threadlog reports what a failed read left it as if
+// the log were damaged, so a fault found after one is not the log's (Terva
+// review 1766). An end of file is the log's: it is how a log cut short
+// reads.
+type readRecorder struct {
+	logFile
+	err error
+}
+
+func (r *readRecorder) ReadAt(p []byte, off int64) (int, error) {
+	n, err := r.logFile.ReadAt(p, off)
+	if err != nil && r.err == nil && !errors.Is(err, io.EOF) && !errors.Is(err, io.ErrUnexpectedEOF) {
+		r.err = err
+	}
+	return n, err
+}
+
+// fault classifies err, a failure found reading the log through r: a
+// logFault, unless a read failed for a reason other than the log's bytes,
+// in which case it is that read failure and not the log's.
+func (r *readRecorder) fault(err error) error {
+	if r.err != nil {
+		return fmt.Errorf("%w (reading the log failed: %w)", err, r.err)
+	}
+	return logFault{err}
+}
+
+// fault classifies a failure found reading the source's log (readRecorder).
+// A thread open in the cache is read through the cache's own file, whose
+// reads are not recorded; Rebuild, the one caller that tells the two kinds
+// apart, never reads through the cache.
+func (s *source) fault(err error) error { return s.f.fault(err) }
 
 // source opens thread id for indexing. A thread the cache has open is read
 // from its index in memory, and stays open under a Peek reference until
@@ -156,14 +192,15 @@ type source struct {
 // memory by replaying every frame, so a stale or damaged .idx cannot reach
 // the rebuilt index.
 func (x *Indexer) source(id threadid.ID, fromLog bool) (*source, error) {
-	f, err := x.open(id.LogPath(x.root))
+	opened, err := x.open(id.LogPath(x.root))
 	if err != nil {
 		return nil, err
 	}
+	f := &readRecorder{logFile: opened}
 	src := &source{f: f, cache: x.threads}
 	if err := checkHeader(f, id); err != nil {
 		f.Close()
-		return nil, logFault{err}
+		return nil, f.fault(err)
 	}
 	if x.threads != nil && !fromLog {
 		if th, ok := x.threads.Peek(id); ok {
@@ -187,7 +224,7 @@ func (x *Indexer) source(id threadid.ID, fromLog bool) (*source, error) {
 	rec, err := threadlog.Open(f, fi.Size(), idx)
 	if err != nil {
 		f.Close()
-		return nil, logFault{err}
+		return nil, f.fault(err)
 	}
 	src.rec, src.length = rec, rec.LogLength
 	return src, nil
