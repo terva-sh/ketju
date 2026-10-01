@@ -610,6 +610,20 @@ arrangement.
   between widths for no reason the sentence gives; and the desktop's quote
   before reply lost because this sentence and the phone mockup both put
   reply first.
+  **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M3V3CFMA):** once the author's name links to their profile, the
+  phone header's ordinal is text, as the phone mockup draws it, and the
+  permalink is under "more". Stacked one over the other, the name and the
+  ordinal sit about 20 px apart, and two 44 px targets need 44 px between
+  their centres. So the header's links are the author on the first line
+  and the reply-to at the right end of the second, and focus reads them
+  in that order. The desktop keeps its ordinal link. Alternatives: about
+  25 px of room between the two lines lost because it left the avatar
+  floating between two widely spaced lines, far from the mockup; leading
+  the DOM with the author while keeping both links lost because it does
+  not make room for both targets; and leaving the name without the
+  enlarged target lost because "Targets and gestures" names author names
+  among the links that take one.
 - **Pages.** A "Page 3 of 9" control with previous and next; tapping the
   label opens a picker sheet with page numbers and the jump-to-unread and
   jump-to-date actions. Lenses open from a sheet as well.

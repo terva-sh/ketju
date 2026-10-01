@@ -1,0 +1,223 @@
+/* The account screens (AccountRoot.tsx): a member's profile and their posts,
+   and the settings screens after them (TKT-01M29CXK4E). There is no mockup;
+   the column, heading and paging follow the thread list (threadlist.css),
+   and a post in a history is drawn with the thread page's post styles
+   (thread.css). Existing tokens only. */
+
+.account {
+  max-width: 880px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.account-card,
+.account-block,
+.history-posts {
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.account-card,
+.account-block {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.account-block h2 {
+  margin: 0;
+  font-size: 16px;
+}
+.account-block p,
+.account-block form {
+  margin: 0;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.profile-head .avatar {
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+}
+.account h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.profile-handle {
+  margin: 4px 0 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 10px;
+  font-size: 14px;
+  color: var(--ink2);
+}
+.profile-status {
+  color: var(--unread);
+  border-color: var(--unread);
+}
+
+.profile-facts {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 32px;
+  font-size: 14px;
+}
+.profile-facts dt {
+  color: var(--ink2);
+  font-size: 12px;
+}
+.profile-facts dd {
+  margin: 0;
+  color: var(--ink);
+  font-weight: 500;
+}
+.profile-posts {
+  align-self: flex-start;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--target);
+  color: var(--accent);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.account-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.account-up {
+  font-size: 13px;
+  color: var(--muted);
+  text-decoration: none;
+}
+.account-up:hover {
+  color: var(--accent);
+}
+
+.history-posts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.history-post {
+  padding: 14px 24px 4px;
+  border-bottom: 1px solid var(--rule);
+}
+.history-post:last-child {
+  border-bottom: 0;
+}
+.history-post > .post {
+  padding: 0 0 12px;
+  border-bottom: 0;
+}
+.history-post > .post.removed {
+  margin: 0 -24px;
+  padding: 8px 24px 12px;
+}
+.history-where {
+  margin: 0;
+  font-size: 13px;
+  color: var(--ink2);
+  overflow-wrap: anywhere;
+}
+.history-where a {
+  color: var(--ink2);
+  text-decoration: none;
+}
+.history-where a[data-thread-link] {
+  color: var(--ink);
+  font-weight: 600;
+}
+.history-where a:hover {
+  text-decoration: underline;
+}
+.history-tombstone {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 13px;
+}
+
+.account-pages {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  font-size: 14px;
+}
+.account-pages a {
+  color: var(--ink2);
+  text-decoration: none;
+  min-height: var(--target);
+  display: inline-flex;
+  align-items: center;
+}
+.account-pages a[rel='next'] {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 500;
+}
+.account-empty {
+  margin: 0;
+  color: var(--ink2);
+}
+
+@media (max-width: 719.98px) {
+  .account {
+    padding: 16px 0 32px;
+    gap: 12px;
+  }
+  .account-card,
+  .account-block,
+  .history-posts {
+    border-radius: 0;
+    border-inline: 0;
+  }
+  .account-card,
+  .account-block {
+    padding: 16px;
+  }
+  .account-head,
+  .account-pages,
+  .account-empty {
+    padding: 0 16px;
+  }
+  .account-up {
+    display: none;
+  }
+  .account h1 {
+    font-size: 24px;
+  }
+  .history-post {
+    padding: 4px 16px 0;
+  }
+  .history-post > .post.removed {
+    margin: 0 -16px;
+    padding: 8px 16px 12px;
+  }
+  /* On the phone the forum and the thread are each a full target, with room
+     below for the ordinal's (.hit), which reaches 22 px up from its centre. */
+  .history-where {
+    margin-bottom: 14px;
+  }
+  .history-where a {
+    display: inline-flex;
+    align-items: center;
+    min-height: var(--target);
+  }
+}

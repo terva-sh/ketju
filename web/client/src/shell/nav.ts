@@ -19,8 +19,12 @@ export interface NavItem {
 // link is a full page load and reaches the server.
 export function meHref(url: string): string {
   const u = viewer.value.user;
-  return u ? `/u/${encodeURIComponent(u.handle)}` : `/auth/signin?return_to=${encodeURIComponent(url)}`;
+  return u ? profileHref(u.handle) : `/auth/signin?return_to=${encodeURIComponent(url)}`;
 }
+
+// profileHref is a member's profile (docs/07 "URL scheme"), where an
+// author's name in a post header links (TKT-01M3V3CFMA).
+export const profileHref = (handle: string) => `/u/${encodeURIComponent(handle)}`;
 
 // linkSignInHref is the server's "link a sign-in" page (TKT-01M29CKRES,
 // docs/05 "Login flow" step 3), which comes back to url, the path and

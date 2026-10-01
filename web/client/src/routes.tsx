@@ -6,7 +6,12 @@ import { NewThreadScreen } from './screens/NewThreadScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ThreadListScreen } from './screens/ThreadListScreen';
 import { NotFound, Placeholder } from './screens/Placeholder';
-import { ProfilePlaceholder } from './screens/ProfilePlaceholder';
+// The account screens, a member's profile and posts (TKT-01M3V3CFMA), are
+// in the reader's own chunk rather than a lazy one. Measured both ways, the
+// split cost 2182 B more in all (69818 B against 67636 B), because the
+// budget counts every chunk but admin and the split added a shared chunk of
+// what they have in common with the reader (docs/07 "Preact client").
+import { ProfilePostsScreen, ProfileScreen } from './screens/account/AccountRoot';
 import { SearchScreen } from './screens/SearchScreen';
 import { ThreadScreen } from './screens/ThreadScreen';
 
@@ -130,8 +135,8 @@ export const routes: RouteEntry[] = [
   { path: '/watching', screen: 'watching', component: placeholder('watching', 'Watching') },
   { path: '/notifications', screen: 'notifications', component: NotificationsScreen },
   { path: '/search', screen: 'search', component: SearchScreen },
-  { path: '/u/:handle', screen: 'profile', component: ProfilePlaceholder },
-  { path: '/u/:handle/posts', screen: 'profile-posts', component: placeholder('profile-posts', 'Posts') },
+  { path: '/u/:handle', screen: 'profile', component: ProfileScreen },
+  { path: '/u/:handle/posts', screen: 'profile-posts', component: ProfilePostsScreen },
   { path: '/settings', screen: 'settings', component: placeholder('settings', 'Settings') },
   { path: '/settings/sessions', screen: 'settings-sessions', component: placeholder('settings-sessions', 'Sessions') },
   { path: '/settings/identities', screen: 'settings-identities', component: placeholder('settings-identities', 'Sign-in identities') },

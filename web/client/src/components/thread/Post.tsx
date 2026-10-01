@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Post as PostDTO } from '../../api/dto';
 import { problemMessage } from '../../api/problem';
 import { bodyText, selectionIn } from '../../composer/quote';
+import { profileHref } from '../../shell/nav';
 import { isPhone } from '../../state/layout';
 import { viewer } from '../../state/viewer';
 import { Attachments } from './Attachments';
@@ -57,6 +58,12 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 //
 // Conversation, the post's reply chain lens, follows link on a post that is
 // a reply or has replies, under PostMore on a phone (TKT-01M29CTY71).
+//
+// On a phone the header stacks, the author and role badge over the ordinal,
+// time and marks (docs/06 "Mobile"). The author's name is a link to their
+// profile there, and the ordinal is text, as the phone mockup draws them:
+// two links one over the other are too close for each to have its 44 px
+// target, and the permalink is under More (TKT-01M3V3CFMA).
 //
 // A post whose current revision is a moderator's edit says so in place of
 // "(edited)", naming nobody: the post's history names them (docs/08 "Post
@@ -131,10 +138,14 @@ export function Post({
       <Avatar author={post.author} />
       <div class="post-main">
         <header class="post-header">
-          <a class="ordinal hit" href={permalink(thread, post.ordinal)}>
-            #{post.ordinal}
-          </a>
-          <span class="author">{post.author.display_name || post.author.handle}</span>
+          {isPhone.value ? (
+            <span class="ordinal">#{post.ordinal}</span>
+          ) : (
+            <a class="ordinal hit" href={permalink(thread, post.ordinal)}>
+              #{post.ordinal}
+            </a>
+          )}
+          <AuthorLink author={post.author} />
           <RoleBadge author={post.author} />
           <PostTime at={post.created_at} />
           <Edited post={post} />
@@ -302,6 +313,18 @@ export function ReplyTo({ post }: { post: PostDTO }) {
   return (
     <a class="reply-to hit" href={`#post-${post.reply_to}`} data-reply-to={post.reply_to}>
       ↩ #{post.reply_to}
+    </a>
+  );
+}
+
+// AuthorLink is a post header's author: the name, linking to their profile
+// (docs/06 "Targets and gestures" lists author names among the inline
+// links, and every mockup draws one). On the phone it takes the 44 px hit
+// area. Whether the profile is served is the server's to say.
+export function AuthorLink({ author }: { author: PostDTO['author'] }) {
+  return (
+    <a class="author hit" href={profileHref(author.handle)}>
+      {author.display_name || author.handle}
     </a>
   );
 }

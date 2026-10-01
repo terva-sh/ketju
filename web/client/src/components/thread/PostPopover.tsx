@@ -5,7 +5,7 @@ import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../ErrorPanel';
 import { isControl } from '../focus';
 import { Avatar } from './Avatar';
-import { permalink, type ThreadRef } from './Post';
+import { AuthorLink, permalink, type ThreadRef } from './Post';
 import { PostTime } from './PostTime';
 import { isTombstone, removedMark, TombstoneText } from './removal';
 import { RoleBadge } from './RoleBadge';
@@ -69,7 +69,7 @@ export function PostPopover({ thread, ordinal, onClose }: { thread: ThreadRef; o
             <div class="post-main">
               <header class="post-header">
                 <span class="ordinal">#{post.ordinal}</span>
-                <span class="author">{post.author.display_name || post.author.handle}</span>
+                <AuthorLink author={post.author} />
                 <RoleBadge author={post.author} />
                 <PostTime at={post.created_at} />
                 {post.deleted && <span class="deleted-mark">{removedMark(post)}</span>}

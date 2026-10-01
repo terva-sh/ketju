@@ -166,7 +166,9 @@ describe('conversation', () => {
 // The order of a post's footer and header (TKT-01M3S3Z9E1; docs/06 "Mobile"
 // and "Post anatomy"): on a phone the footer reads the expander, reply,
 // quote, then More; the desktop keeps quote before reply. The header's DOM
-// order is the same at both widths, since the phone stacks it in CSS.
+// order is the same at both widths, since the phone stacks it in CSS. On a
+// phone the ordinal is text, as the phone mockup draws it, so the header's
+// links are the author over the reply-to (TKT-01M3V3CFMA).
 describe('the order of the footer and header', () => {
   const actions = { quote: vi.fn(), reply: vi.fn() };
   async function drawAll(p: PostDTO) {
@@ -208,7 +210,52 @@ describe('the order of the footer and header', () => {
         }),
       );
       const names = [...root.querySelectorAll('.post-header > *')].map((e) => e.className || e.localName);
-      expect(names, `phone ${phone}`).toEqual(['ordinal hit', 'author', 'role-badge', 'time', 'edited', 'reply-to hit']);
+      expect(names, `phone ${phone}`).toEqual(
+        phone
+          ? ['ordinal', 'author hit', 'role-badge', 'time', 'edited', 'reply-to hit']
+          : ['ordinal hit', 'author hit', 'role-badge', 'time', 'edited', 'reply-to hit'],
+      );
     }
+  });
+});
+
+// Author names link to the author's profile (TKT-01M3V3CFMA; docs/06
+// "Targets and gestures"), with the phone's hit area, whatever the post.
+describe('the author link', () => {
+  const link = () => root.querySelector<HTMLAnchorElement>('.post-header a.author')!;
+
+  it.each([false, true])('post author names link to their profile, phone %s', async (phone) => {
+    isPhone.value = phone;
+    await draw(post({ author: { ...post().author, handle: 'mo-ritz', display_name: 'Moritz' } }));
+    expect(link().getAttribute('href')).toBe('/u/mo-ritz');
+    expect(link().textContent).toBe('Moritz');
+    expect(link().classList.contains('hit')).toBe(true);
+  });
+
+  it('falls back to the handle, as an anonymized account has no display name', async () => {
+    await draw(post({ author: { ...post().author, handle: 'deleted-user-7', display_name: '' } }));
+    expect(link().getAttribute('href')).toBe('/u/deleted-user-7');
+    expect(link().textContent).toBe('deleted-user-7');
+  });
+
+  it('is on a removed post shown with its body', async () => {
+    await draw(post({ deleted: true, removal: 'moderator' }));
+    expect(link().getAttribute('href')).toBe('/u/carol');
+  });
+
+  // The phone's stacked header has room for one 44 px target over another
+  // only if one of them is text: the ordinal is, as the phone mockup draws
+  // it, and the permalink is under More.
+  it('leaves the ordinal as text on a phone, with the permalink under More', async () => {
+    isPhone.value = true;
+    await draw(post());
+    const ordinal = root.querySelector('.post-header .ordinal')!;
+    expect(ordinal.localName).toBe('span');
+    expect(ordinal.textContent).toBe('#7');
+    await act(async () => root.querySelector<HTMLButtonElement>('[data-post-more]')!.click());
+    expect(root.querySelector('.post-more-list a[href="/t/3yymw47g00001/s/7"]')?.textContent).toBe('link');
+    isPhone.value = false;
+    await draw(post());
+    expect(root.querySelector('.post-header a.ordinal')?.getAttribute('href')).toBe('/t/3yymw47g00001/s/7');
   });
 });

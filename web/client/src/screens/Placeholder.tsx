@@ -4,8 +4,7 @@ import { useShellContext } from '../state/shell';
 // Placeholder stands in for a screen phase 1 has not built yet, so every URL
 // in docs/07 already answers with the right screen's name rather than
 // NotFound. Each screen's ticket replaces its entry in routes.tsx. children
-// are anything a placeholder carries before its screen is built, as the
-// profile's Account block (ProfilePlaceholder).
+// are anything a placeholder carries before its screen is built.
 export function Placeholder({ screen, title, children }: { screen: string; title: string; children?: ComponentChildren }) {
   useShellContext({ title, actions: [] }, [title]);
   return (

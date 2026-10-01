@@ -106,6 +106,19 @@ test('the thread page, and its composer sheet', async ({ browser }, info) => {
   await ctx.close();
 });
 
+// A profile and its posts (TKT-01M3V3CFMA): the posts link, and in the list
+// each post's forum, thread and ordinal, and the paging.
+test('a profile and its posts', async ({ browser }, info) => {
+  const { ctx, page } = await signedIn(browser, info);
+  await page.goto('/u/carol');
+  await expect(page.locator('[data-profile-posts]')).toBeVisible();
+  expect(await small(page)).toEqual([]);
+  await page.goto('/u/carol/posts');
+  await expect(page.locator('[data-older]')).toBeVisible();
+  expect(await small(page), 'the posts list').toEqual([]);
+  await ctx.close();
+});
+
 // A post's "more" control on the phone, its items, and the flag dialog
 // (TKT-01M3QQWA5Z; docs/06 "Mobile"). #3 is carol's, so alice may flag it,
 // and she is signed in, so unread from here is there too (TKT-01M3KFFFJR).

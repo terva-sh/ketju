@@ -4,7 +4,7 @@ import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../ErrorPanel';
 import { Avatar } from './Avatar';
 import { Attachments } from './Attachments';
-import { Edited, permalink, type ThreadRef } from './Post';
+import { AuthorLink, Edited, permalink, type ThreadRef } from './Post';
 import { PostTime } from './PostTime';
 import { isTombstone, removedMark, TombstoneText } from './removal';
 import { RoleBadge } from './RoleBadge';
@@ -75,7 +75,7 @@ export function Replies({ thread, ordinal }: { thread: ThreadRef; ordinal: numbe
                 <a class="ordinal hit" href={permalink(thread, p.ordinal)}>
                   #{p.ordinal}
                 </a>
-                <span class="author">{p.author.display_name || p.author.handle}</span>
+                <AuthorLink author={p.author} />
                 <RoleBadge author={p.author} />
                 <PostTime at={p.created_at} />
                 <Edited post={p} />

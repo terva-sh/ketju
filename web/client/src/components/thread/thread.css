@@ -281,10 +281,25 @@
   font-size: 12px;
   text-decoration: none;
 }
+/* The author's name links to their profile (TKT-01M3V3CFMA), drawn as the
+   mockups draw it: the ink, not the accent, and no underline until hovered. */
 .post-header .author {
   color: var(--ink);
   font-weight: 600;
   font-size: 14px;
+  text-decoration: none;
+}
+.post-header .author:hover {
+  text-decoration: underline;
+}
+/* On the phone the ordinal's and the author's targets (.hit) reach 22 px
+   either side of their centres; where the two share a line, in the reply
+   expander's copies, the room between them keeps a short ordinal's from
+   running under the name. A post on the page stacks its header instead. */
+@media (max-width: 719.98px) {
+  .post--recessed .post-header .ordinal + .author {
+    margin-left: 6px;
+  }
 }
 .role-badge,
 .deleted-mark {

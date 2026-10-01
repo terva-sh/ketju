@@ -72,8 +72,10 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
   // The header and footer at each width (TKT-01M3S3Z9E1; docs/06 "Mobile"
   // and "Post anatomy"). On the phone the header stacks: author and badge on
   // the first line, then ordinal and time, with the reply-to at the right
-  // end of that second line, so Tab goes from the ordinal to the reply-to
-  // without moving back up. The body takes the full width below the avatar,
+  // end of that second line. The author's name is the first line's link and
+  // the ordinal is text, as the phone mockup draws them (TKT-01M3V3CFMA), so
+  // Tab goes from the author down to the reply-to, and never back up. The
+  // body takes the full width below the avatar,
   // and the footer reads reply before quote, with More last. On the desktop
   // the header is one line and the footer reads quote before reply.
   const mod = page.locator('#post-56');
@@ -106,7 +108,8 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
     const [ob, rb] = [await box(o), await box(rt)];
     expect(sameLine(rb, ob)).toBe(true);
     expect(rb.x).toBeGreaterThan(ob.x + ob.width);
-    await o.focus();
+    expect(await o.evaluate((el) => el.localName)).toBe('span');
+    await answer.locator('.author').focus();
     await page.keyboard.press('Tab');
     await expect(rt).toBeFocused();
     // So the screenshots below do not draw its focus ring.
