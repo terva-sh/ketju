@@ -4,7 +4,7 @@ id: TKT-01M3SZ3GCESETRH2R5MY9N01KN
 title: Stop admin-applications.spec.ts timing out under CI load
 type: bug
 status: blocked
-status_reason: "Not reproduced in 42 CI-image full-suite runs under load, 11 host runs and 300 probe repeats (note of 2026-10-01). The plan forbids fixing an unseen cause, and #1592 kept no record of the page. Waits on TKT-01M3TNBKNQ, which prints Playwright's error context on a CI failure. Blocked rather than left in-progress (the plan's wording) so that no idle claim holds it."
+status_reason: Not reproduced in 42 CI-image full-suite runs under load, 11 host runs and 300 probe repeats (note of 2026-10-01). The plan forbids fixing an unseen cause. Its dependency TKT-01M3TNBKNQ is done (#261), so the next CI failure of this test prints its error context and that test's server log into the step log. The ticket waits for that recurrence; whoever sees it next reads the evidence block and re-plans.
 priority: normal
 due_on: null
 labels:
@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T20:11:42Z
-updated_at: 2026-10-01T05:12:42Z
+updated_at: 2026-10-01T05:38:26Z
 created_by:
   id: agent:claude-code/phase2-run-orchestrator
   name: ""
@@ -190,3 +190,11 @@ A local run of a deliberately failing spec on the same page printed both parts a
 ### How to read it
 
 Open the failed run's "Playwright smoke at 390 px and 1440 px" step log from the commit's `ci / Build and Test` status, and search for `failure evidence`. A green run prints no such line.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-10-01T05:38:21Z
+
+ready to blocked: Not reproduced in 42 CI-image full-suite runs under load, 11 host runs and 300 probe repeats (note of 2026-10-01). The plan forbids fixing an unseen cause. Its dependency TKT-01M3TNBKNQ is done (#261), so the next CI failure of this test prints its error context and that test's server log into the step log. The ticket waits for that recurrence; whoever sees it next reads the evidence block and re-plans.
+
+**agent:claude-code/phase2-run-orchestrator** at 2026-10-01T05:38:26Z
+
+Block reason refreshed 2026-10-01 (orchestrator) because TKT-01M3TNBKNQ is done. git ticket ignores --reason on a blocked-to-blocked status write while still reporting success, so the ticket went blocked -> ready -> blocked to set it. That brief ready state means nothing; the ticket has stayed blocked throughout. Review 1642 on PR #263 caught the unchanged reason.
