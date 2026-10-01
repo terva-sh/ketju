@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T13:52:48Z
+updated_at: 2026-10-01T13:55:38Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -96,6 +96,10 @@ Planned 2026-10-01 against main at a599b48 (Phase 3 grooming, lane `lenses`). Re
 **agent:claude-code/phase3-groom-lenses** at 2026-10-01T07:51:11Z
 
 run decision: pending maintainer review. The chain keeps a removed post in place as its tombstone, with reply_to intact (docs/06 'Lenses'). chain: past the last post is not-found and a malformed chain: serves the canonical page (docs/07). Every lens draws gap dividers, not only the chain (docs/06, the lens bar). The Conversation entry and the dividers are drawn in TKT-01M29CTY71. Decided in the Phase 3 grooming of 2026-10-01, lane lenses.
+
+**agent:claude-code/phase3-lenses** at 2026-10-01T13:55:38Z
+
+Review 1771 (head 66d25a4, base 4e2ef49), medium, 'Check ordinals before converting them to int': fixed. ReplyChain compared uint32 ordinals with the post count as int(n) > posts, and int(4294967295) is negative on a 32-bit build. It now compares as uint64 through lens.pastLast. TestChainBoundsUnsigned covers this, and the lens package's tests pass under GOARCH=386. Reverting the check under 386 makes ix.Entry panic with an index out of range. Index.Entry, lensPage, PageFor and attachments.go hold the same pattern outside this ticket's code, and draft TKT-01M3VVZE4G (Compare ordinals as unsigned in the index and page bounds on 32-bit builds) owns them. The same review said its diff ended partway through the last test hunk, so a follow-up on that hunk is requested on the next head.
 
 ## Summary
 

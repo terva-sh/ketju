@@ -73,6 +73,26 @@ func TestChainWalkBoundedOnMalformedIndex(t *testing.T) {
 	}
 }
 
+// TestChainBoundsUnsigned: an ordinal is compared with the post count
+// without converting it to int, which on a 32-bit build turns 4294967295
+// negative (review 1771). Run under GOARCH=386 as well, the table and the
+// walk above hold there too.
+func TestChainBoundsUnsigned(t *testing.T) {
+	for _, c := range []struct {
+		o     uint32
+		posts int
+		past  bool
+	}{{1, 1, false}, {2, 1, true}, {1<<31 - 1, 10, true}, {1 << 31, 10, true}, {1<<32 - 1, 10, true},
+		{1<<32 - 1, 1<<31 - 1, true}, {1<<31 - 1, 1<<31 - 1, false}, {1, -1, true}} {
+		if got := lens.PastLast(c.o, c.posts); got != c.past {
+			t.Errorf("PastLast(%d, %d) = %v, want %v", c.o, c.posts, got, c.past)
+		}
+	}
+	if _, err := lens.ReplyChain(replyIndex(0, 0, 0), 1<<32-1); !notFound(err) {
+		t.Fatalf("chain:4294967295 on three posts: %v, want not-found", err)
+	}
+}
+
 // TestChainKeepsAncestorsAndReplies is AC2's selection: n's ancestors, n and
 // its direct replies, and neither its replies' replies nor its siblings. A
 // post past the last, or none, is not-found.
