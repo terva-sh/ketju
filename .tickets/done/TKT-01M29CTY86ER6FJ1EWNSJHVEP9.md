@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T19:47:18Z
+updated_at: 2026-10-01T19:50:12Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -142,6 +142,10 @@ Smaller choices inside the plan, not run decisions:
 Bundle (npm run budget, reader as counted by scripts/bundle.mjs): 66189 B before, 67619 B eager (+1430 B: JS +1098, CSS +334). Made lazy, the screen would cost 69591 B (+3402 B), because Vite splits a shared chunk and every non-admin chunk counts. So the screen is eager, as the plan expected.
 
 The empty-state e2e test answers the list empty through page.route, because by then every seeded reader may already have alerts from other specs. The first test clears alice's alerts with up_to first, so its count of 1 belongs to that test alone.
+
+**agent:claude-code/phase3-cty86** at 2026-10-01T19:50:12Z
+
+Terva review 1798 (head a3cbc39, base 598f0d3), medium 'Preserve successfully cleared rows when a later mark-all attempt fails': fixed. A successful mark-all now records the id it cleared up to (clearedUpTo), separate from the request in flight, so a failed later attempt no longer puts back the unread marking. Added a test where a successful mark-all is followed by a failed repeat. The reader is now 67802 B.
 
 ## Summary
 

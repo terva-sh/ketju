@@ -41,7 +41,11 @@ export function NotificationsScreen() {
   const key = notificationsUrl();
   const first = useResource(key, (signal) => loadNotifications(undefined, signal));
   const [older, setOlder] = useState<Older | null>(null);
-  const [cleared, setCleared] = useState<'idle' | 'busy' | 'done'>('idle');
+  // clearedUpTo is the id a mark-all cleared up to, once one has succeeded,
+  // and stays so whatever a later attempt does (Terva review 1798).
+  // clearing is a mark-all in flight.
+  const [clearedUpTo, setClearedUpTo] = useState<number | null>(null);
+  const [clearing, setClearing] = useState(false);
   const [clearError, setClearError] = useState<ProblemError | undefined>(undefined);
   const [focusId, setFocusId] = useState<number | null>(null);
   const root = useRef<HTMLElement>(null);
@@ -81,15 +85,17 @@ export function NotificationsScreen() {
   };
 
   const clearAll = async () => {
-    if (rows.length === 0 || cleared === 'busy') return;
-    setCleared('busy');
+    if (rows.length === 0 || clearing) return;
+    const upTo = rows[0].id;
+    setClearing(true);
     setClearError(undefined);
     try {
-      await markAll(rows[0].id);
-      setCleared('done');
+      await markAll(upTo);
+      setClearedUpTo((c) => Math.max(c ?? upTo, upTo));
     } catch (err) {
       setClearError(asProblem(err));
-      setCleared('idle');
+    } finally {
+      setClearing(false);
     }
   };
 
@@ -98,13 +104,13 @@ export function NotificationsScreen() {
       <header class="alerts-head">
         <h1>Alerts</h1>
         {rows.length > 0 && (
-          <button type="button" class="alerts-clear" onClick={clearAll} disabled={cleared === 'busy'} data-mark-all>
+          <button type="button" class="alerts-clear" onClick={clearAll} disabled={clearing} data-mark-all>
             Mark all read
           </button>
         )}
       </header>
       <p class="alerts-status" role="status">
-        {cleared === 'done' ? 'All alerts are marked read.' : ''}
+        {clearedUpTo !== null && !clearError ? 'All alerts are marked read.' : ''}
       </p>
       {clearError && (
         <p class="alerts-error" role="alert">
@@ -120,7 +126,7 @@ export function NotificationsScreen() {
       {rows.length > 0 && (
         <ol class="alert-rows">
           {rows.map((n) => (
-            <AlertRow key={n.id} n={n} unread={!n.read && cleared !== 'done'} />
+            <AlertRow key={n.id} n={n} unread={!n.read && (clearedUpTo === null || n.id > clearedUpTo)} />
           ))}
         </ol>
       )}

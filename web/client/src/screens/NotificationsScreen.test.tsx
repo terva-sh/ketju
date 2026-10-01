@@ -208,6 +208,25 @@ describe('marking read', () => {
     expect(rows(root).filter((r) => r.classList.contains('unread'))).toHaveLength(0);
   });
 
+  // Terva review 1798: a failed second attempt does not put back the unread
+  // marking the first one cleared.
+  it('keeps rows cleared by a mark-all when a later one fails', async () => {
+    const s = serve({ [list]: page([note(12, 'mention'), note(10, 'quoted')]) });
+    const root = await renderAt('/notifications');
+    await flush();
+    const mark = () => act(() => root.querySelector<HTMLButtonElement>('[data-mark-all]')!.click());
+    await mark();
+    await flush();
+    expect(rows(root).filter((r) => r.classList.contains('unread'))).toHaveLength(0);
+
+    s.routes[read] = () => problemAnswer('unavailable', 503);
+    await mark();
+    await flush();
+    expect(root.querySelector('[role=alert]')?.textContent).toContain('could not be marked read');
+    expect(rows(root).filter((r) => r.classList.contains('unread'))).toHaveLength(0);
+    expect(root.querySelectorAll('[data-alert] .visually-hidden')).toHaveLength(0);
+  });
+
   it('says so when mark-all fails, and keeps the badge', async () => {
     const s = serve({ [list]: page([note(12, 'mention', { read: true })]) });
     s.routes[read] = () => problemAnswer('unavailable', 503);
