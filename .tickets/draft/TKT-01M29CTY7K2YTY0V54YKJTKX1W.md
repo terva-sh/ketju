@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T11:18:43Z
+updated_at: 2026-10-01T11:52:55Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -138,3 +138,7 @@ run decision: pending maintainer review. Two decisions bind this ticket, recorde
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T10:03:57Z
 
 Review 1729 (head 1c66ce7, base f3538e6), medium 'Keep the Participated list and badge on the same moved-post rule', fixed in the plan. MeCounts's mine CTE takes moved = 0, the list's predicate, and TestBadgesMatchLists covers a thread whose only post by the viewer was moved. This supersedes the 2026-09-24 note's 'participated means the viewer has a post in the thread': a moved post no longer counts. Round 4 of 5.
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T11:52:55Z
+
+Requirement carried from review 1751 (2026-10-01; PR #294, head 728a981, base 0da0411). Finding 1 (medium, not security): 'Exclude empty threads from the New badge count'. The /new list requires t.last_post_ordinal > 0, but the plan's /me new count starts from forum_thread_counts.threads, or from a created-at count after the mark, and subtracts only opened and muted threads. What the implementation must do: the new count's starting set must apply the list's exact predicate, threads with last_post_ordinal > 0. forum_thread_counts.threads already counts only threads with a post (docs/04), but the created-at count over threads_forum_created must add AND t.last_post_ordinal > 0, and the subtraction must use the same predicate. TestBadgesMatchLists must include a thread with no post and no read position, which counts in neither /new nor unread.new. Finding 2 (low): 'Replace the superseded forum mark-all-read rule'. docs/06 'Read tracking' still has the original bullet 'Forum and site level mark all read set users.mark_all_read_at' above the run decision that replaces it. What the implementation must do: in the PR that builds the two mark-read routes, rewrite that bullet to state the settled rule, which is that the site level sets users.mark_all_read_at and the forum level moves that forum's read positions forward, and keep the dated decision line as its record.
