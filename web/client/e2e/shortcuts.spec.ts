@@ -1,3 +1,4 @@
+import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Browser, type Page, type TestInfo } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -73,8 +74,29 @@ test.describe('at 1440 px', () => {
     await expect(dialog).toHaveCount(0);
     await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
     await expect(dialog).toBeVisible();
+    // The list's one scan, while it is open.
+    const { violations } = await new AxeBuilder({ page }).include('.help-overlay').withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+    expect(violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`)).toEqual([]);
     await dialog.getByRole('button', { name: 'Close' }).click();
     await expect(dialog).toHaveCount(0);
+
+    // ? then Escape at once, as a quick reader presses them: the list
+    // closes before it has taken focus as well as after (TKT-01M3TMRCMJ).
+    // A watcher notes that it did open, so the closed list is not just one
+    // ? never drew.
+    await page.evaluate(() => {
+      const w = window as unknown as { helpSeen: boolean };
+      w.helpSeen = false;
+      new MutationObserver((_, obs) => {
+        if (!document.querySelector('.help-overlay')) return;
+        w.helpSeen = true;
+        obs.disconnect();
+      }).observe(document.body, { childList: true, subtree: true });
+    });
+    await page.keyboard.press('?');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    expect(await page.evaluate(() => (window as unknown as { helpSeen: boolean }).helpSeen)).toBe(true);
     await ctx.close();
   });
 

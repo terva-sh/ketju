@@ -412,6 +412,58 @@ describe('the shortcuts on a thread page', () => {
     expect(root.querySelector('[role=dialog]')).toBeNull();
     expect(focused()).toBe('post-2');
   });
+
+  // TKT-01M3TMRCMJ: ? draws the list on the next microtask, in the same
+  // task, but an effect would move focus into it only after the next frame.
+  // An Escape pressed between the two, as a quick reader or a loaded e2e
+  // run presses it, is on the post, and must still close the list. The keys
+  // are dispatched outside act, which would flush the effects and hide it.
+  it('Escape pressed before the list has taken focus still closes it', async () => {
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    const post2 = root.querySelector<HTMLElement>('#post-2')!;
+    post2.focus();
+    const key = (k: string) => document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+    try {
+      key('?');
+      await Promise.resolve();
+      expect(root.querySelector('[role=dialog]')).not.toBeNull();
+      key('Escape');
+      await Promise.resolve();
+      expect(root.querySelector('[role=dialog]')).toBeNull();
+      expect(focused()).toBe('post-2');
+    } finally {
+      await act(() => new Promise((r) => setTimeout(r, 50)));
+    }
+  });
+
+  it('Escape and Tab reach the list wherever focus is, and the page’s keys wait for it', async () => {
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    root.querySelector<HTMLElement>('#post-2')!.focus();
+    await type(root, '?');
+    // A click on the list's text leaves focus on the body.
+    const loseFocus = () => (document.activeElement as HTMLElement).blur();
+    loseFocus();
+    expect(document.activeElement).toBe(document.body);
+    await press('j', document.body);
+    expect(document.activeElement).toBe(document.body);
+    await press('Tab', document.body);
+    expect(document.activeElement?.classList.contains('help-close')).toBe(true);
+    loseFocus();
+    await press('Escape', document.body);
+    expect(root.querySelector('[role=dialog]')).toBeNull();
+    expect(focused()).toBe('post-2');
+    // Closed, the page has its keys back, and nothing of the list's is left
+    // listening: another Escape is not taken.
+    await press('j');
+    expect(focused()).toBe('post-3');
+    const again = new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true });
+    await act(async () => {
+      document.activeElement!.dispatchEvent(again);
+    });
+    expect(again.defaultPrevented).toBe(false);
+  });
 });
 
 // AC1: none fires while focus is in the composer.
