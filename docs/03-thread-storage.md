@@ -889,8 +889,12 @@ and whoever defines the thumbnail name removes thumbnails the same way.
   needs it and made again whenever it is missing, so no backup needs it and
   deleting every thumbnail loses nothing.
 - **Uploads are staged in `blobs/tmp/`**, on the same filesystem, so the
-  rename to the blob's path is atomic. Serve empties the directory at
-  startup, under the data-directory lock.
+  rename to the blob's path is atomic. A staged file is removed at once
+  when its upload is refused or fails, whatever the reason: too large, a
+  type off the allowlist, a failed `DecodeConfig`, a failed write, or a
+  client that went away. Serve empties the directory at startup, under the
+  data-directory lock, and the collector removes any staged file older than
+  an hour, which covers a crash mid-upload (Terva review 1703).
 - **The collector and `ketju redact`** remove `<hash>.thumb` once the row's
   deletion has committed. The collector also removes a `.thumb` whose blob
   has no row. A thumbnail needs no move-aside, because losing one costs only

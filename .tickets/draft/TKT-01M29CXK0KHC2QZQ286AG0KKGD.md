@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-01T08:13:52Z
+updated_at: 2026-10-01T08:25:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -46,7 +46,6 @@ MIME is decided by sniffing against an allowlist, not by what the upload claims.
 
 - [ ] The same bytes uploaded by two members are one file and one blobs row with two blob_uploads rows, and attaching them to two posts makes the refcount 2 (TestUploadDedupOneFileOneRow, TestTwoPostsTwoRefs)
 - [ ] The type is sniffed from the bytes, never the claim: only image/png, image/jpeg and image/gif that pass their DecodeConfig, application/pdf and text/plain are stored, and anything else is validation-failed type_not_allowed (TestUploadSniffsNotClaims, TestUploadRefusesOutsideAllowlist, TestUploadImageMustDecodeConfig)
-- [ ] The size cap limits.attachment_mb is enforced during the read: a chunked body over it is 413 with no staged file left, and an honest Content-Length over it is refused before a byte is read (TestUploadCapDuringRead, TestUploadContentLengthOverCap)
 - [ ] Upload needs a member with upload in the named forum: anonymous 401, pre-user 403, no grant 403, hidden forum 404, archived forum 403 except an admin (TestUploadPermission)
 - [ ] A blob is served only to a viewer who may read the body of a post naming it, by the thread page's rules; every case in TestBlobServedOnlyToReaders passes, including deleted, moderator-hidden, hidden-pending-review, redacted, moved-to-an-unreadable-forum, suspended-author, group-grant moderator, unattached, quarantined and source-URL-only, and every refusal is identical to a missing hash
 - [ ] A post attaches at most 10 blobs, each one the poster uploaded and not quarantined; AddBlobRef runs before the append, a collected blob is refused, and a failed append drops the references again (the TestAttach* tests)
@@ -56,6 +55,7 @@ MIME is decided by sniffing against an allowlist, not by what the upload claims.
 - [ ] The thread page's viewer and the forum tree carry can_upload, and the goldens and docs/04 and docs/07 are updated in the same PR (TestThreadViewerCanUpload, TestForumTreeCanUpload)
 - [ ] GET /blobs/{hash} answers with Cache-Control private, no-cache, the hash as ETag with 304 and Range support, nosniff, the sandbox CSP, CORP same-origin, and inline or attachment disposition (TestBlobHeaders), and a conditional request is authorized before any 304, so a reader who lost access or signed out gets not-found (TestRevalidationRechecksAccess)
 - [ ] A post's attachment shows the name its author first uploaded it under and a later upload of the same bytes renames nothing, a second uploader never sees the first one's name, and a tombstone carries no attachments (TestReuploadKeepsFirstName, TestSecondUploaderNeverSeesFirstName, TestTombstoneCarriesNoAttachments)
+- [ ] The size cap limits.attachment_mb is enforced during the read, and an honest Content-Length over it is refused before a byte is read; every refused or failed upload removes its staged file at once, and GC removes staged files over an hour old (TestUploadCapDuringRead, TestUploadContentLengthOverCap, TestRefusedUploadLeavesNoStagedFile, TestCollectorSweepsStaleStagedFiles)
 
 ## Implementation plan
 
@@ -125,12 +125,12 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
    - Reindex rebuilds the table like the other projections.
 4. **`internal/store/blob`**:
    - `TmpDir`, and `Stage(root) (*os.File, error)` for a random file in `blobs/tmp/`;
-   - `SweepTmp(root)`, which `serve` calls under the lock before it listens;
+   - `SweepTmp(root, olderThan)`. `serve` calls it with 0 under the lock before it listens, and `BlobGC.Run` calls it with one hour, for a crash mid-upload;
    - `Commit(tmp, root, hash)`, which renames into place and syncs the directory. When a file is already there, it removes the staged one instead, which is safe because the bytes are identical.
 5. **`internal/service/blobs`** (new). `Service{DB, Root, Perm, Threads, Clock, Log}`.
    - **`Upload(ctx, v, target, name, r, max)`**:
      1. An anonymous viewer is refused `unauthenticated`. The target resolves to a forum, either through `threads.ReadAccess` or through the forum slug. Then `perm.Check(upload)`: Hidden is `not-found`, Deny is `forbidden`. `perm` already denies an archived forum to everyone but admins.
-     2. Copy the part into the staged file through `io.LimitReader(r, max+1)` while hashing with SHA-256. More than `max` bytes is `payload-too-large`, and the staged file is removed.
+     2. Stage the part, with a `defer` that removes the staged file unless step 6 committed it. So every refusal and failure removes it at once: too large, a type off the allowlist, a failed `DecodeConfig`, `blocked`, a database error, or a client that went away mid-body (Terva review 1703). Copy the part into the staged file through `io.LimitReader(r, max+1)` while hashing with SHA-256. More than `max` bytes is `payload-too-large`.
      3. Sniff the first 512 bytes and check the allowlist. For an image, call `png`, `jpeg` or `gif`'s own `DecodeConfig` on the staged file, as the sniffed type says, never `image.DecodeConfig`. That gives the width and height, or the upload is refused.
      4. Clean the name: base name only, no control characters or path separators, at most 255 bytes of UTF-8, and `file` if nothing is left.
      5. `fsync` the staged file.
@@ -189,6 +189,8 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
   - `TestUploadNameSanitized`.
   - `TestUploadRacesCollector`: an upload during `collect` leaves the file present exactly when the row is.
   - `TestServeSweepsStagedUploads`.
+  - `TestRefusedUploadLeavesNoStagedFile`, a table: over the cap, a type off the allowlist, a failed `DecodeConfig`, quarantined bytes, an injected `db.Write` failure, and a client that disconnects mid-body. Each leaves `blobs/tmp/` empty.
+  - `TestCollectorSweepsStaleStagedFiles`: a staged file two hours old is removed and one a minute old is kept.
 - **Attach.**
   - `TestAttachRaisesRefcountBeforeAppend`;
   - `TestAttachCollectedBlobRefused`;

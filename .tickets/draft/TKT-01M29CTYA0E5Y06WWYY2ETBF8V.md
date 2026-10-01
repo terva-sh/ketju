@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:13:52Z
+updated_at: 2026-10-01T08:25:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -45,13 +45,13 @@ Polling every 30 seconds is the fallback when SSE is unavailable, which covers p
 
 - [ ] New posts never shift content under a reader who is not at the bottom: they wait behind the pill and no post element is inserted (ThreadScreen.test.tsx 'new posts wait behind the pill for a reader above the bottom', e2e live.spec.ts 'a new post waits behind the pill')
 - [ ] A reader at the bottom receives posts inline with no pill (ThreadScreen.test.tsx 'a reader at the bottom gets posts inline with no pill', e2e 'a reader at the bottom sees the post arrive')
-- [ ] A post behind the pill is not marked read, and the reader's own reply never counts in the pill (ThreadScreen.test.tsx)
 - [ ] Polling every 30 s takes over when the stream errors or its ready event is 10 s late, retries the stream every fourth poll, and stops when a stream says ready (live.test.ts, e2e 'polling takes over when the stream is refused')
 - [ ] The subscription closes on navigation away and after 60 s in a hidden tab, and leaks no connection (live.test.ts, ThreadScreen.test.tsx 'leaving the thread closes the stream')
 - [ ] e2e live.spec.ts passes at 390 and 1440 px with one axe scan per test and no violations
 - [ ] The dist committed from go generate ./internal/web/spa keeps the reader within the 70000 B gzip budget, and the PR records the change from 60465 B
 - [ ] The pill counts only posts that arrived after the page opened or the pill was last taken, never posts that already existed on later pages; show reveals them in place when they all fall on the page in view and otherwise goes to the page holding the first (ThreadScreen.test.tsx 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them', 'a full last page sends the pill to the next page', 'show reveals the posts and focuses the first')
 - [ ] Every hint refetches the page on screen in full, so an edit, a removal and a restore all show, together or apart, without moving the post in view (ThreadScreen.test.tsx 'an edit and a removal in one change both show', 'an edit applies in place without moving the post in view')
+- [ ] A post behind the pill is not marked read; the reader's own reply never counts in the pill, and posting one renders it at the end and reveals nothing held (ThreadScreen.test.tsx 'a post behind the pill is not marked read', 'the reader's own reply never counts in the pill', 'posting a reply reveals nothing held')
 
 ## Implementation plan
 
@@ -100,17 +100,19 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 2. **`src/state/threads.ts`** is unchanged, except that the comment on `loadThreadPage` that defers fragments to this ticket now says why the live client does not use them (see "No fragments").
 3. **`src/screens/ThreadScreen.tsx`**:
    - **`useLive(id, page)`** subscribes while the screen shows the thread and closes on unmount or on a change of thread. A hint longer than the entry's length calls `loadThreadPage` for the page on screen. `poll` is the same call, answering the page's `thread.log_length`.
-   - **`knownCount`** is a per-thread signal holding `header.post_count` when the page first renders. The pill's count is `header.post_count - knownCount`, floored at 0.
-   - **The last page.** `ThreadBody` renders only posts with `ordinal <= knownCount`. Earlier pages hold no ordinal past `knownCount` and are unaffected.
+   - **`knownCount`** is a per-thread signal holding `header.post_count` when the page first renders.
+   - **`ownPosted`** is a per-thread set of the ordinals the reader posted from this page. It is kept apart from `knownCount` so that posting never moves the cutoff (Terva review 1703).
+   - **The pill's count** is the number of ordinals from `knownCount + 1` to `header.post_count` that are not in `ownPosted`.
+   - **The last page.** `ThreadBody` renders posts with `ordinal <= knownCount`, and also the posts in `ownPosted`. Earlier pages hold no ordinal past `knownCount` and are unaffected.
    - **Bottom tracking.** An `IntersectionObserver` on a sentinel after the last post, with `rootMargin: '0px 0px 48px 0px'`, tracks "at the bottom". While the reader is at the bottom of the last page, `knownCount` follows `header.post_count`, so posts stream in.
-   - **Own replies.** The composer's `onPosted` raises `knownCount` to the new ordinal.
+   - **Own replies.** The composer's `onPosted` adds the new ordinal to `ownPosted`, and does not touch `knownCount`. A reply posted while others' posts are held appears at the end of the page, and the held posts stay behind the pill until it is taken or the reader reaches the bottom.
    - **Scroll anchoring.** When a refetched page changes posts already shown, the screen records the first post in view and its `getBoundingClientRect().top` before the update. In a layout effect after it, the screen calls `scrollBy` with the difference.
 4. **`src/components/thread/NewPostsPill.tsx`** (new):
    - A `<button>` reading "1 new post — show" or "N new posts — show", sticky at the bottom of the post list. On a phone it sits above the reply bar with `env(safe-area-inset-bottom)` padding, as a 44 px target.
    - A visually hidden `aria-live="polite"` region beside it announces the count, at most once a second.
    - A click with every ordinal from `knownCount + 1` to `header.post_count` on the page in view raises `knownCount` and focuses the first revealed post, which gets `tabIndex=-1`. Otherwise it routes to `?ordinal=<knownCount + 1>`, which is the page holding the first new post, whether the reader is on an earlier page or the last page has filled.
    - The styles go in `components/thread/thread.css`.
-5. **Read tracking.** Posts beyond `knownCount` are not rendered, so `trackPosts` never sees them. A test asserts this rather than assuming it.
+5. **Read tracking.** Posts beyond `knownCount` that are not the reader's own are not rendered, so `trackPosts` never sees them. A test asserts this rather than assuming it.
 6. **`src/testing.tsx`** gains a `FakeEventSource`, installed by `renderAt`, which records instances and has `emit(type, data)` and `fail()`.
 7. **Build.** Run `go generate ./internal/web/spa`, commit `internal/web/spa/dist`, and record the reader size against 60465 B in the PR.
 
@@ -133,6 +135,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
   - 'an edit and a removal in one change both show': a hint whose refetched page has an edited post 3 and a removed post 4 renders the edit and the tombstone;
   - 'a post behind the pill is not marked read';
   - 'the reader's own reply never counts in the pill';
+  - 'posting a reply reveals nothing held': with two posts by others held, the reader posts. Their reply renders at the end, the two stay unrendered, and the pill still reads "2 new posts — show";
   - 'an edit applies in place without moving the post in view';
   - 'leaving the thread closes the stream', where `FakeEventSource` reports no open instance after navigating away.
 - `e2e/live.spec.ts`, in both projects (390 and 1440 px), from stored sessions:

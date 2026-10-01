@@ -217,7 +217,9 @@ when SSE is unavailable; the non-JS client gets a plain "refresh" link.
   opened the page, or after they last took the pill: the thread's post
   count now, less its count then. Posts that already existed on later pages
   never count, and neither do edits. The reader's own replies never count,
-  since the composer already shows them.
+  since the composer already shows them. Posting one shows that reply at
+  the end of the page and reveals nothing held behind the pill (Terva
+  review 1703).
 - **What "show" does.** It reveals the held posts in place when they all
   fall on the page in view. Otherwise it goes to the page holding the first
   one. The pill is a button at the bottom of the post list, and its count
