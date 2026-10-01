@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T03:46:42Z
+updated_at: 2026-10-01T03:49:32Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
@@ -53,7 +53,7 @@ Keeping `trace.zip` would need an artifact upload. That is a larger change, and 
 ## Acceptance criteria
 
 - [ ] playwright.config.ts lists ['list'] first and ['./scripts/evidence-reporter.mjs'] second, and keeps workers: 1, retries: 0 and trace: 'retain-on-failure'; the PR does not change .forgejo/workflows/ci.yml
-- [ ] For a result whose status differs from its expected status, scripts/evidence-reporter.mjs writes one block naming the project, file:line and title path, holding the error-context.md file verbatim (cut at 64 KiB) and the serve.log lines written between onTestBegin and onTestEnd (the last 120); a result whose status equals its expected status writes nothing
+- [ ] For a result whose status differs from its expected status and is not skipped, scripts/evidence-reporter.mjs writes one block naming the project, file:line and title path, holding the error-context.md file verbatim (cut at 64 KiB) and the serve.log lines written between onTestBegin and onTestEnd (the last 120); a result that is skipped, or whose status equals its expected status, writes nothing
 - [ ] Only the first 10 failing results get a full block and each later one gets one line with its error-context.md path; an error inside the reporter writes one line and never throws
 - [ ] scripts/evidence-reporter.test.mjs covers every case named in the plan's Tests and passes under npm test
 - [ ] A note records a local run on port 18901 of a deliberately failing scratch spec at both widths, with the command and the commit, whose output holds two evidence blocks, each with the Locator: line, the YAML ARIA tree and GET /api/v1/admin/applications in the server lines; the scratch spec is not in the PR's diff
@@ -83,7 +83,7 @@ The evidence is printed by a Playwright reporter that runs beside `list`, not by
 1. **`web/client/scripts/evidence-reporter.mjs`**, a new Playwright reporter (plain ESM, like `scripts/bundle.mjs`; `package.json` is `"type": "module"`). It is a default-exported class with an optional `{ write }` option (default `process.stdout.write`) so the unit test can capture its output.
    - `onBegin`: the server log is `join(process.env.KETJU_E2E_DIR, 'serve.log')`. `playwright.config.ts` sets `KETJU_E2E_DIR` in the runner process before reporters load, and `ketju e2e` writes its request log there (`runE2E` in `cmd/ketju/e2e.go`).
    - `onTestBegin(test)`: record `serve.log`'s size under `test.id` (0 if the file does not exist yet).
-   - `onTestEnd(test, result)`: take and delete the recorded offset. If `result.status === test.expectedStatus`, return and write nothing. Otherwise write one block:
+   - `onTestEnd(test, result)`: take and delete the recorded offset. If `result.status === test.expectedStatus`, or the status is `skipped`, return and write nothing. A `skipped` result whose expected status is `passed` is a test that did not run, for example after a serial group's failure, and Playwright's summary counts it under "did not run". The failure that stopped it prints its own block. Otherwise write one block:
      - an opening line `── failure evidence: [<project>] › <file>:<line> › <title path> (<status>) ──`, with the file relative to the config's `rootDir`;
      - the `error-context` attachment's file verbatim, under `error-context.md (<path>)`, cut at 64 KiB with a line naming the path and the bytes left out. If there is no such attachment, a line saying so;
      - `serve.log` from the recorded offset to its current size, under `serve.log during this test`, keeping the last 120 lines and saying how many were left out. If the file does not exist, a line saying so;
@@ -117,7 +117,7 @@ The reporter's risk is that it runs inside the Playwright process. It is contain
 ### Tests
 
 - **`web/client/scripts/evidence-reporter.test.mjs`** (Vitest, `// @vitest-environment node`, already within `include: ['scripts/**/*.test.mjs']`). It drives the class directly, with fake `TestCase` and `TestResult` objects, a temp `KETJU_E2E_DIR` with a `serve.log`, and an `error-context.md`. Named cases:
-  - `a passing test prints nothing`: also covers skipped and expected-to-fail (`expectedStatus: 'failed'`, `status: 'failed'`), and the captured output is the empty string;
+  - `a passing test prints nothing`: also covers skipped, expected-to-fail (`expectedStatus: 'failed'`, `status: 'failed'`), and did-not-run (`expectedStatus: 'passed'`, `status: 'skipped'`), and the captured output is the empty string;
   - `a failing test prints its error context and the server lines it caused`: lines appended to `serve.log` before `onTestBegin` are absent, lines appended between `onTestBegin` and `onTestEnd` are present, and the block names the project, the file and line, and the title;
   - `a timed-out test prints too`: `status: 'timedOut'`;
   - `the server lines are cut to the last 120`, with a line counting what was left out;
