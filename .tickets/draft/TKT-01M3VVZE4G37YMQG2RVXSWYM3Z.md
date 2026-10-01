@@ -1,7 +1,7 @@
 ---
 schema: 3
 id: TKT-01M3VVZE4G37YMQG2RVXSWYM3Z
-title: Compare ordinals as unsigned in the index and page bounds on 32-bit builds
+title: Compare ordinals as unsigned in index and page bounds on 32-bit builds
 type: bug
 status: draft
 status_reason: null
@@ -20,7 +20,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T13:55:32Z
-updated_at: 2026-10-01T13:55:32Z
+updated_at: 2026-10-01T13:58:07Z
 created_by:
   id: agent:claude-code/phase3-lenses
   name: ""
