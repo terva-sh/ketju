@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CGBZDVGWNDTKHJFHHSGY5
 title: Add the page picker and lens sheets on phones
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -25,15 +25,22 @@ blocks_on: none
 references:
   - ref: design:mobile-pages
     path: docs/06-thread-views.md
-claim: null
+claim:
+  actor: agent:claude-code/phase3-cgbzd
+  branch: run/cgbzd-phone-sheets
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ac5735cfcd6af8dbf
+  commit: 004be7accca44fa06300fe99dee803407a2a21ce
+  session: null
+  claimed_at: 2026-10-01T18:47:21Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-10-01T08:18:59Z
+updated_at: 2026-10-01T18:47:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-pages
+  id: agent:claude-code/phase3-cgbzd
   name: ""
 extensions: {}
 ---
