@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3TMRCMJWCDN5D298XH4HZ1N
 title: Close the shortcuts overlay on an Escape pressed before it takes focus
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ references:
     path: null
   - ref: pr:257
     path: null
-claim:
-  actor: agent:claude-code/phase2-run-tmrcmj
-  branch: run/tmrcmj-shortcuts-escape
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a8a151256a6579252
-  commit: af9cd5423d2f731d665d8ff9ff2983d7516b7056
-  session: null
-  claimed_at: 2026-10-01T04:01:03Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T02:30:06Z
-updated_at: 2026-10-01T04:01:04Z
+updated_at: 2026-10-01T04:01:45Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
@@ -69,12 +62,12 @@ The step is `page.keyboard.press('Escape')`, followed by `expect(dialog).toHaveC
 
 ## Acceptance criteria
 
-- [ ] A Vitest case in web/client/src/keyboard/shortcuts.test.tsx dispatches ? then Escape on a focused post with no frame between them (outside act, one microtask apart) and asserts the overlay closed and focus returned to the post; a ticket note records it failing on unchanged code and passing after the fix
-- [ ] HelpOverlay moves focus to Close in a useLayoutEffect, and takes Escape and Tab through a document keydown listener added and removed by that effect; the dialog's own onKeyDown Escape handler is gone
-- [ ] A Vitest case shows that with the overlay open and focus on document.body, Escape closes it and Tab moves focus to Close; that j moves no post while it is open; and that after it closes j works again and no overlay listener remains
-- [ ] e2e/shortcuts.spec.ts keeps every existing assertion, adds ? then Escape pressed back to back with expect(dialog).toHaveCount(0), and adds exactly one axe scan of the open overlay, run as alice from her stored session; no retry, longer timeout or skip is added
-- [ ] e2e/shortcuts.spec.ts passed 20 of 20 desktop runs on port 18911 under CPU contention, with the command, load and results in a ticket note
-- [ ] internal/web/spa/dist is regenerated with go generate ./internal/web/spa, and the PR states the reader bundle's gzip size before and after (under 70000 B)
+- [x] A Vitest case in web/client/src/keyboard/shortcuts.test.tsx dispatches ? then Escape on a focused post with no frame between them (outside act, one microtask apart) and asserts the overlay closed and focus returned to the post; a ticket note records it failing on unchanged code and passing after the fix
+- [x] HelpOverlay moves focus to Close in a useLayoutEffect, and takes Escape and Tab through a document keydown listener added and removed by that effect; the dialog's own onKeyDown Escape handler is gone
+- [x] A Vitest case shows that with the overlay open and focus on document.body, Escape closes it and Tab moves focus to Close; that j moves no post while it is open; and that after it closes j works again and no overlay listener remains
+- [x] e2e/shortcuts.spec.ts keeps every existing assertion, adds ? then Escape pressed back to back with expect(dialog).toHaveCount(0), and adds exactly one axe scan of the open overlay, run as alice from her stored session; no retry, longer timeout or skip is added
+- [x] e2e/shortcuts.spec.ts passed 20 of 20 desktop runs on port 18911 under CPU contention, with the command, load and results in a ticket note
+- [x] internal/web/spa/dist is regenerated with go generate ./internal/web/spa, and the PR states the reader bundle's gzip size before and after (under 70000 B)
 
 ## Implementation plan
 
@@ -136,3 +129,40 @@ Groomed 2026-10-01 against main at c3de983.
 **agent:claude-code/phase2-run-tmrcmj** at 2026-10-01T03:45:00Z
 
 Grooming, 2026-10-01, against main at c3de983. The race is confirmed in Vitest, not inferred: after ? the overlay renders on the next microtask with focus still on the post, an Escape dispatched there is dropped, and the focus effect later puts focus on Close with the dialog open (details in the plan's Settled in grooming). The plan fixes HelpOverlay with a layout effect and a document listener. Filed TKT-01M3TS0ZV9 (Take Escape in the flag, moderate and forum-picker dialogs before focus) for the same race in three other dialogs. No open decision.
+
+**agent:claude-code/phase2-run-tmrcmj** at 2026-10-01T04:01:33Z
+
+Implementation evidence, 2026-10-01. The plan groomed in PR #257 held at claim (main at af9cd54, which differs from the groomed c3de983 only in `.tickets/`), so it is not revised.
+
+### Approach 1: the race test fails before the fix
+
+The new tests were run against the old `HelpOverlay.tsx` (main's), with `npx vitest run src/keyboard/shortcuts.test.tsx`:
+
+- "Escape pressed before the list has taken focus still closes it" failed at `shortcuts.test.tsx:433`: `expected <div class="help-overlay" …> to be null`. The dialog was still open after Escape.
+- "Escape and Tab reach the list wherever focus is, and the page's keys wait for it" failed at `shortcuts.test.tsx:452`: `expected false to be true`. Tab from the body did not move focus to Close.
+
+With the fix, all 50 tests in the file pass. The whole client suite passes, 2032 tests in 68 files, and `npx tsc --noEmit -p .` is clean.
+
+### Mutations, each caught
+
+- `useLayoutEffect` changed back to `useEffect`: the microtask case fails.
+- The listener on the dialog root, not the document: the focus-anywhere case fails.
+- The listener never removed: the second Escape is taken, and the focus-anywhere case fails.
+
+### e2e: the new step catches the old code
+
+The new `?` then Escape step in `e2e/shortcuts.spec.ts` was run on the old overlay, rebuilt into the dist: `--project desktop --repeat-each 10 -g "lists them"`, port 18911, no load. It failed 9 of 10 runs at `shortcuts.spec.ts:98` (`toHaveCount(0)`, received 1). It reproduces the bug in Chromium without any load.
+
+### Approach 6: 20 runs under CPU contention, with the fix
+
+Command, from `web/client`: `KETJU_E2E_PORT=18911 KETJU_E2E_DIR=<scratch>/e2e-load/run npx playwright test e2e/shortcuts.spec.ts --repeat-each 20`. Each repeat also runs the setup and phone projects.
+
+Load: 24 busy `while :; do :; done` loops on a 12-core host, started before the run and stopped after it. The 1-minute load average was 33.4 at the end. The main test took 2.8 to 4.4 s per run, against 1.2 s unloaded.
+
+Result: 84 passed, 0 failed, 0 flaky. That is all 20 runs of each of the three desktop tests, including "j and k move between posts, g goes to one, ? lists them" (line 34, formerly the failure at :73), 20 phone runs, and 4 setup runs. No retry, timeout change or skip was added.
+
+One full-suite Playwright run on port 18911 passed 193, with 11 skipped.
+
+## Summary
+
+The race is confirmed and fixed. ? drew HelpOverlay on the next microtask, but focus moved to Close only after the next frame (useEffect), and Escape was caught only on the dialog. So an Escape in that window landed on the post and was dropped. HelpOverlay now moves focus in a useLayoutEffect, and takes Escape and Tab on the document while it is mounted, so Escape closes it wherever focus is. Two Vitest cases fail on the old code and pass now. The e2e spec gains a back-to-back ? and Escape step, which failed 9 of 10 on the old code, and one axe scan of the open list. 20 loaded repeats of e2e/shortcuts.spec.ts on port 18911 passed: 84 passed, 0 failed. The reader bundle is 60438 B to 60440 B. The same race in FlagDialog, ModerateDialog and ForumPicker is TKT-01M3TS0ZV9.
