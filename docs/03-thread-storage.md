@@ -895,6 +895,15 @@ and whoever defines the thumbnail name removes thumbnails the same way.
   client that went away. Serve empties the directory at startup, under the
   data-directory lock, and the collector removes any staged file older than
   an hour, which covers a crash mid-upload (Terva review 1703).
+- **A blob file with no row is an orphan and is never served,** since
+  serving needs the row (`BlobForServing`). One is left when an upload's
+  transaction fails after the file has been renamed into place, or when a
+  crash lands between the two. The upload removes it at once, in a second
+  `db.Write` that first checks the row is still absent. The collector
+  removes any that remain, at least an hour old, with the same check inside
+  its own `db.Write`. Uploads write inside `db.Write` too, so neither
+  removal can interleave with an upload that is placing the same bytes
+  (Terva review 1708).
 - **The collector and `ketju redact`** remove `<hash>.thumb` once the row's
   deletion has committed. The collector also removes a `.thumb` whose blob
   has no row. A thumbnail needs no move-aside, because losing one costs only

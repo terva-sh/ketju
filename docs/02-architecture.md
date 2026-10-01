@@ -133,7 +133,12 @@ is sent. The rules (TKT-01M29CRJ3X):
   reads `RemoteAddr`).
 - **Resuming.** A stream opens with an `event: ready`, then sends the current
   `{thread_id, log_length}` of each thread named. A client that missed events
-  while disconnected therefore catches up by comparing log lengths.
+  while disconnected therefore catches up by comparing log lengths. A forum
+  has no such snapshot, so a client of `forums=` refetches its listing on
+  every `ready`. When the hub loses events (a dropped bus batch, or a full
+  stream queue), it closes every stream that names a forum, and resends the
+  snapshot on streams that name only threads. The reconnect's `ready` is
+  the forum client's signal to refetch (Terva review 1708).
 
 Alternatives: keeping the fan-out free of permission checks lost, because
 docs/14 makes any widening a security finding, and a thread moved to a forum

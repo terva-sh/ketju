@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:25:30Z
+updated_at: 2026-10-01T08:36:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,6 +52,7 @@ Polling every 30 seconds is the fallback when SSE is unavailable, which covers p
 - [ ] The pill counts only posts that arrived after the page opened or the pill was last taken, never posts that already existed on later pages; show reveals them in place when they all fall on the page in view and otherwise goes to the page holding the first (ThreadScreen.test.tsx 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them', 'a full last page sends the pill to the next page', 'show reveals the posts and focuses the first')
 - [ ] Every hint refetches the page on screen in full, so an edit, a removal and a restore all show, together or apart, without moving the post in view (ThreadScreen.test.tsx 'an edit and a removal in one change both show', 'an edit applies in place without moving the post in view')
 - [ ] A post behind the pill is not marked read; the reader's own reply never counts in the pill, and posting one renders it at the end and reveals nothing held (ThreadScreen.test.tsx 'a post behind the pill is not marked read', 'the reader's own reply never counts in the pill', 'posting a reply reveals nothing held')
+- [ ] The pill routes and focuses past the reader's own replies, to the first new post by someone else (ThreadScreen.test.tsx 'the pill skips the reader's own reply')
 
 ## Implementation plan
 
@@ -110,7 +111,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 4. **`src/components/thread/NewPostsPill.tsx`** (new):
    - A `<button>` reading "1 new post — show" or "N new posts — show", sticky at the bottom of the post list. On a phone it sits above the reply bar with `env(safe-area-inset-bottom)` padding, as a 44 px target.
    - A visually hidden `aria-live="polite"` region beside it announces the count, at most once a second.
-   - A click with every ordinal from `knownCount + 1` to `header.post_count` on the page in view raises `knownCount` and focuses the first revealed post, which gets `tabIndex=-1`. Otherwise it routes to `?ordinal=<knownCount + 1>`, which is the page holding the first new post, whether the reader is on an earlier page or the last page has filled.
+   - A click with every ordinal from `knownCount + 1` to `header.post_count` on the page in view raises `knownCount` and focuses the first revealed post, which gets `tabIndex=-1`. Otherwise it routes to `?ordinal=<first>`, where `first` is the lowest ordinal above `knownCount` that is not in `ownPosted`. That is the page holding the first new post by someone else, whether the reader is on an earlier page or the last page has filled. Focus on reveal goes to the same `first` (Terva review 1708).
    - The styles go in `components/thread/thread.css`.
 5. **Read tracking.** Posts beyond `knownCount` that are not the reader's own are not rendered, so `trackPosts` never sees them. A test asserts this rather than assuming it.
 6. **`src/testing.tsx`** gains a `FakeEventSource`, installed by `renderAt`, which records instances and has `emit(type, data)` and `fail()`.
@@ -132,6 +133,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
   - 'show reveals the posts and focuses the first';
   - 'the pill on an earlier page counts only posts that arrived after it opened, and goes to the first of them': a reader on page 1 of 3 sees no pill until a post arrives, and then "1 new post", routing to its ordinal;
   - 'a full last page sends the pill to the next page';
+  - 'the pill skips the reader's own reply': the reader replies as ordinal 26 on a full page, and another member posts 27. The pill reads "1 new post" and routes to 27;
   - 'an edit and a removal in one change both show': a hint whose refetched page has an edited post 3 and a removed post 4 renders the edit and the tombstone;
   - 'a post behind the pill is not marked read';
   - 'the reader's own reply never counts in the pill';

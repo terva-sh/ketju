@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T07:59:35Z
+updated_at: 2026-10-01T08:36:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -49,11 +49,11 @@ The connection count is the operational risk. Every open tab is a held connectio
 - [ ] An event about an author-deleted, moderator-hidden, hidden-pending-review or redacted post, or about a suspended author's post before and after the bulk hide, carries only the log length the viewer's next thread page serves (TestEventCarriesNoMoreThanThePage)
 - [ ] A member who moderates a forum by group grant keeps receiving events through hides and restores there (TestGroupGrantModeratorKeepsStream)
 - [ ] limits.sse_connections, limits.sse_per_user and limits.sse_anonymous are config keys with env overrides and docs/07 rows, and a stream over any of them is refused rate-limited with Retry-After (TestStreamLimits, TestSSELimitDefaultsAndEnv)
-- [ ] A stream opens with ready and the current log length of every thread named, and a dropped bus batch resends it, so a client that missed events catches up by log length (TestResumeMissesNothing, TestDroppedBatchResyncs)
 - [ ] Publishing never blocks on a slow stream; a stream whose queue fills is closed (TestSlowClientIsClosedAndPublishNeverBlocks)
 - [ ] A hint reaches a client through httputil.ReverseProxy with default settings within one second of the append (TestHintsFlushThroughReverseProxy)
 - [ ] Serve's shutdown ends every open stream inside the drain and returns without cutting requests (TestServeShutdownClosesEventStreams)
 - [ ] A stream ends without writing the next hint when its session is revoked or expires, its user is suspended or deactivated, its agent credential is revoked, read is revoked, or the thread moves to a forum the viewer cannot read; an idle stream ends at the next heartbeat (the seven TestStreamCloses* tests and TestAgentStreamClosesWhenCredentialRevoked)
+- [ ] A stream opens with ready and the current log length of every thread named; a dropped bus batch resends that snapshot on thread-only streams and closes every stream that names a forum, whose client refetches on the reconnect's ready (TestResumeMissesNothing, TestDroppedBatchResyncs)
 
 ## Implementation plan
 
@@ -100,7 +100,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 4. **The hub** (`internal/web/sse/hub.go`):
    - It keeps a registry: thread id to streams, forum id to streams, and counters for all streams, per user, and anonymous.
    - `Deliver` handles each event without blocking. It looks up the thread's streams. When any forum is subscribed, it also reads the thread's forum from its projection row, one read per event and never one per stream, and looks up that forum's streams. Each stream gets the event on its channel (capacity 64) with a non-blocking send. A full channel marks the stream overflowed and closes it, and the browser reconnects and resynchronises.
-   - `Batch.Dropped > 0` sets a resync flag on every stream.
+   - `Batch.Dropped > 0` sets a resync flag on every stream that names only threads, and closes every stream that names a forum. A forum has no snapshot to resend, so the reconnect's `ready` is that client's signal to refetch its listing (docs/02, after Terva review 1708). An overflowed stream is closed whatever it names.
    - `Close()` refuses new streams and closes every stream's `done` channel.
    - `Stats()` reports open, anonymous, refused and overflowed counts, for the metrics endpoint (TKT-01M29CEE7S).
 5. **The handler** (`internal/web/sse/handler.go`, GET and HEAD only):
@@ -149,7 +149,7 @@ The invariant tests run against `dbtest.Open` and the real thread service, throu
 - `TestForumSubscription`: a hint for each thread in the forum. Once a thread moves out, no more hints for it. A thread in a forum the viewer cannot read sends nothing.
 - `TestStreamLimits`: the total, per-user and anonymous limits each answer 429 with `Retry-After`, and a closed stream frees its slot.
 - `TestResumeMissesNothing`: a client that held an old length reconnects after three appends, and the snapshot carries the current length.
-- `TestDroppedBatchResyncs`: a `Batch` with `Dropped > 0` makes every stream resend its snapshot.
+- `TestDroppedBatchResyncs`: a `Batch` with `Dropped > 0` makes every thread-only stream resend its snapshot, and closes every stream that names a forum.
 - `TestSlowClientIsClosedAndPublishNeverBlocks`: a stream that never reads is closed once its channel fills, and `Publish` stays non-blocking throughout.
 - `TestHeartbeat`: `: hb` arrives every 25 s under synctest.
 - `TestHintsFlushThroughReverseProxy`: with `httputil.ReverseProxy` and its default settings in front of the handler, a hint arrives within one second of the append.

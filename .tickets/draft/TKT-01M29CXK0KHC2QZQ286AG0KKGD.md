@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-01T08:25:30Z
+updated_at: 2026-10-01T08:36:54Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -56,6 +56,7 @@ MIME is decided by sniffing against an allowlist, not by what the upload claims.
 - [ ] GET /blobs/{hash} answers with Cache-Control private, no-cache, the hash as ETag with 304 and Range support, nosniff, the sandbox CSP, CORP same-origin, and inline or attachment disposition (TestBlobHeaders), and a conditional request is authorized before any 304, so a reader who lost access or signed out gets not-found (TestRevalidationRechecksAccess)
 - [ ] A post's attachment shows the name its author first uploaded it under and a later upload of the same bytes renames nothing, a second uploader never sees the first one's name, and a tombstone carries no attachments (TestReuploadKeepsFirstName, TestSecondUploaderNeverSeesFirstName, TestTombstoneCarriesNoAttachments)
 - [ ] The size cap limits.attachment_mb is enforced during the read, and an honest Content-Length over it is refused before a byte is read; every refused or failed upload removes its staged file at once, and GC removes staged files over an hour old (TestUploadCapDuringRead, TestUploadContentLengthOverCap, TestRefusedUploadLeavesNoStagedFile, TestCollectorSweepsStaleStagedFiles)
+- [ ] A blob file with no row is never served, an upload whose transaction fails after placing its file removes it, and the collector removes any orphan over an hour old (TestUploadCommitFailureLeavesNoOrphan, TestCollectorRemovesOrphanBlobFiles)
 
 ## Implementation plan
 
@@ -126,7 +127,8 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
 4. **`internal/store/blob`**:
    - `TmpDir`, and `Stage(root) (*os.File, error)` for a random file in `blobs/tmp/`;
    - `SweepTmp(root, olderThan)`. `serve` calls it with 0 under the lock before it listens, and `BlobGC.Run` calls it with one hour, for a crash mid-upload;
-   - `Commit(tmp, root, hash)`, which renames into place and syncs the directory. When a file is already there, it removes the staged one instead, which is safe because the bytes are identical.
+   - `Commit(tmp, root, hash) (placed bool, err error)`, which renames into place and syncs the directory, and reports whether it placed the file. When a file is already there, it removes the staged one instead, which is safe because the bytes are identical.
+   - `Orphans(root, olderThan)`, which lists blob files under `blobs/sha256/*/` that are older than `olderThan`. Names ending in `.gc` or `.thumb` are left out.
 5. **`internal/service/blobs`** (new). `Service{DB, Root, Perm, Threads, Clock, Log}`.
    - **`Upload(ctx, v, target, name, r, max)`**:
      1. An anonymous viewer is refused `unauthenticated`. The target resolves to a forum, either through `threads.ReadAccess` or through the forum slug. Then `perm.Check(upload)`: Hidden is `not-found`, Deny is `forbidden`. `perm` already denies an archived forum to everyone but admins.
@@ -134,7 +136,7 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
      3. Sniff the first 512 bytes and check the allowlist. For an image, call `png`, `jpeg` or `gif`'s own `DecodeConfig` on the staged file, as the sniffed type says, never `image.DecodeConfig`. That gives the width and height, or the upload is refused.
      4. Clean the name: base name only, no control characters or path separators, at most 255 bytes of UTF-8, and `file` if nothing is left.
      5. `fsync` the staged file.
-     6. In one `db.Write`, read the blob with `GetBlob`. A quarantined blob is `blocked`. A missing one is created with `CreateBlob`, and an existing one gets `RefreshBlob`. Then `InsertBlobUpload(hash, v.UserID, name, now)`, `BlobUploadedBy` for the name that stands, and `blob.Commit`.
+     6. In one `db.Write`, read the blob with `GetBlob`. A quarantined blob is `blocked`. A missing one is created with `CreateBlob`, and an existing one gets `RefreshBlob`. Then `InsertBlobUpload(hash, v.UserID, name, now)`, `BlobUploadedBy` for the name that stands, and `blob.Commit`. If the transaction fails after `Commit` placed the file, a second `db.Write` removes the file when `BlobExists` is still false. If that also fails, the collector's orphan sweep finishes the job (docs/03, after Terva review 1708). The orphan is never served in the meantime, because serving needs the row.
      7. Answer `Attachment{hash, size, mime, the stored name, width, height}`.
    - **`Authorize(ctx, v, hash)`**: `BlobForServing`, then the references a page of 100 at a time, memoised per thread. It allows the first reference for which `threads.CanSeePostBody` says yes. Every refusal, a malformed hash included, is the same `not-found`.
    - **`CheckAttach(ctx, v, forumID, hashes)`** and **`AddRefs(ctx, hashes)`**, for the post paths:
@@ -157,8 +159,9 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
    - **Body limit.** `web.Limits` gets an upload overhead allowance of 64 KiB for multipart headers, so the file part itself may be the full `attachment_mb`. The part is capped at exactly the limit in step 5.
    - **`internal/web/blobs`** (new): `GET` and `HEAD /blobs/{hash}`, through `Authorize` and then `http.ServeContent` on the file, so `Range` and `If-None-Match` work. It sets the headers docs/07 "Attachments" lists before writing, so the `sandbox` CSP replaces the page policy that `securityHeaders` set on the way in.
    - **Wiring.** `serve.go` sets `Groups.Blobs` and calls `blob.SweepTmp` at startup.
-10. **Blob deletion.** `BlobGC.collect` and `redactor.deleteBlobs` delete the blob row, and the `ON DELETE CASCADE` removes its `blob_uploads` rows in the same transaction. A test holds this rather than trusting the pragma.
-11. **Docs.**
+10. **Orphans.** `BlobGC.Run` gains a step beside `recoverTrash`. For each file from `blob.Orphans(root, time.Hour)`, it removes the file inside a `db.Write` when `BlobExists` is false.
+11. **Blob deletion.** `BlobGC.collect` and `redactor.deleteBlobs` delete the blob row, and the `ON DELETE CASCADE` removes its `blob_uploads` rows in the same transaction. A test holds this rather than trusting the pragma.
+12. **Docs.**
     - docs/07: the `POST /blobs` and `GET /blobs/{hash}` rows. The `POST /threads/{id}/posts` row, where "any attachment (nothing uploads yet)" is replaced by the attach rules. The `POST /forums/{slug}/threads` row gains `attachments`. The thread page's `viewer` gains `can_upload`.
     - docs/04: the tables in step 1.
 
@@ -191,6 +194,8 @@ Groomed 2026-10-01 for Phase 3 (TKT-01M3V3BVPY), against main at a599b48. Read f
   - `TestServeSweepsStagedUploads`.
   - `TestRefusedUploadLeavesNoStagedFile`, a table: over the cap, a type off the allowlist, a failed `DecodeConfig`, quarantined bytes, an injected `db.Write` failure, and a client that disconnects mid-body. Each leaves `blobs/tmp/` empty.
   - `TestCollectorSweepsStaleStagedFiles`: a staged file two hours old is removed and one a minute old is kept.
+  - `TestUploadCommitFailureLeavesNoOrphan`: a `db.Write` failure injected after `Commit` placed the file leaves no blob file and no row. When the cleanup write is also failed, the file is not served, and the collector's next pass removes it.
+  - `TestCollectorRemovesOrphanBlobFiles`: an hour-old blob file with no row is removed. A fresh one is kept, and so is a file whose row exists.
 - **Attach.**
   - `TestAttachRaisesRefcountBeforeAppend`;
   - `TestAttachCollectedBlobRefused`;
