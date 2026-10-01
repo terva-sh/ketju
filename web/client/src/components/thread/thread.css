@@ -48,6 +48,148 @@
   outline: none;
 }
 
+/* The lens bar and the thread's actions under the head, in one row on
+   desktop as the mockups draw them (LensBar, Toolbar). */
+.thread-tools {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 0 16px;
+}
+.thread-tools:empty {
+  display: none;
+}
+.thread-tools .toolbar {
+  margin: 0;
+}
+.lens-bar {
+  position: relative;
+  display: flex;
+  gap: 8px;
+}
+.lens-tool {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-sizing: border-box;
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  text-decoration: none;
+  cursor: pointer;
+}
+.lens-tool[aria-current],
+.lens-menu a[aria-current] {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+/* The switcher (LensMenu): a list of links under Lens, drawn as a post's
+   more list is. */
+.lens-menu {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 4px);
+  z-index: 5;
+  min-width: 220px;
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  font-size: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  box-shadow: 0 8px 24px rgba(27, 33, 48, 0.18);
+}
+.lens-menu a {
+  display: flex;
+  align-items: center;
+  min-height: 36px;
+  padding: 0 16px;
+  color: var(--ink);
+  text-decoration: none;
+  border-left: 3px solid transparent;
+}
+.lens-menu a:hover,
+.lens-menu a:focus-visible {
+  background: var(--surface2);
+}
+.lens-since {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-top: 1px solid var(--rule);
+}
+.lens-since input,
+.lens-since button {
+  box-sizing: border-box;
+  min-height: 32px;
+  font: inherit;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.lens-since button {
+  padding: 0 12px;
+  cursor: pointer;
+}
+
+/* The lens header over a lens's posts (LensHeader): what is filtered, the
+   counts, and Full thread. */
+.lens-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 16px;
+  margin: 0 0 12px;
+  padding: 10px 16px;
+  font-size: 14px;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+}
+.lens-what {
+  margin: 0;
+}
+.lens-count {
+  color: var(--ink2);
+  font-size: 13px;
+}
+.lens-full {
+  margin-left: auto;
+  color: var(--accent);
+  font-weight: 500;
+}
+.lens-empty {
+  flex-basis: 100%;
+  margin: 4px 0 0;
+}
+.lens-empty a {
+  color: var(--accent);
+}
+.posts:empty {
+  display: none;
+}
+/* Where a lens skipped posts (GapDivider): "… N posts …" across the list. */
+.lens-gap {
+  padding: 6px 24px;
+  text-align: center;
+  font-size: 12.5px;
+  background: var(--surface2);
+  border-bottom: 1px solid var(--rule);
+}
+.lens-gap a {
+  color: var(--ink2);
+  text-decoration: none;
+}
+
 /* The moderation panel under the thread head (ModerateDialog): inline, not
    modal, and drawn like the flag dialog. */
 .moderate-panel {
@@ -766,6 +908,28 @@
   }
   .unread-divider {
     padding: 6px 16px;
+  }
+  /* Full targets at 390 px (docs/06 "Mobile"): the mockup's 44 px row. */
+  .lens-tool,
+  .lens-menu a,
+  .lens-since input,
+  .lens-since button {
+    min-height: var(--target);
+  }
+  .lens-tool {
+    height: auto;
+    padding: 0 14px;
+  }
+  .lens-header {
+    margin: 0 16px 12px;
+  }
+  .lens-gap {
+    padding: 6px 16px;
+  }
+  /* The count's target reaches 44 px about its line. */
+  .lens-gap a {
+    display: inline-block;
+    padding-block: 8px;
   }
   .post-popover {
     inset: auto 0 0 0;

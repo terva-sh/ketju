@@ -1378,7 +1378,11 @@ describe('live updates on the thread screen', () => {
     const pageFor = (u: string) => {
       const q = new URLSearchParams(u.split('?')[1] ?? '');
       const o = Number(q.get('ordinal') ?? 0);
-      return { status: 200, body: pageOf(o ? Math.ceil(o / 25) : Number(q.get('page') ?? 1)), headers: { ETag: `"${len}"` } };
+      const body = pageOf(o ? Math.ceil(o / 25) : Number(q.get('page') ?? 1));
+      // A lens is answered as one, as the server answers a lens it knows.
+      const [kind, value = ''] = (q.get('lens') ?? '').split(':');
+      if (kind) body.lens = { kind, value, shown: posts.length, hidden: 0, gaps: [] };
+      return { status: 200, body, headers: { ETag: `"${len}"` } };
     };
     server = stubServer({});
     server.routes = new Proxy(

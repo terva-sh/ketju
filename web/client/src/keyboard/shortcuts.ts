@@ -3,9 +3,11 @@ import { useEffect, useRef } from 'preact/hooks';
 import { apiGet } from '../api/client';
 import type { ThreadList, ThreadPage, ThreadRow } from '../api/dto';
 import { pageHref } from '../components/thread/Pager';
+import { lensQuery } from '../components/thread/lens';
 import { permalink, type ThreadRef } from '../components/thread/Post';
 import { unreadHref } from '../components/ThreadRow';
 import { isPhone } from '../state/layout';
+import { readPosition } from '../state/readTracker';
 import { viewer } from '../state/viewer';
 
 // The desktop keyboard shortcuts on a thread page (docs/06 "Paged, not
@@ -110,17 +112,33 @@ export function goToOrdinal(n: number, page: ThreadPage, route: (url: string) =>
 
 // firstUnread goes to the first post the reader has not read: the post
 // after their read position, here or by its permalink, or with no position,
-// the thread's own address, where the server lands them on it.
-export function firstUnread(thread: ThreadRef, lastRead: number, postCount: number, route: (url: string) => void) {
+// the thread's own address, where the server lands them on it. lastRead is
+// the position as the read tracker knows it now (readPosition), not the
+// one the page was drawn with, which reading since has passed.
+//
+// Under a held unread lens, lens unread:B, the post goes by its permalink
+// under the lens, which serves the lens page holding it, and with no
+// position that is the thread's first post. It is never B + 1: the reader
+// may have read past it since the lens opened (Terva review 1730). A lens
+// whose B is above the position, a shared or typed one, leaves that post
+// out, so it goes by the canonical permalink instead (Terva review 1792).
+export function firstUnread(
+  thread: ThreadRef,
+  lastRead: number,
+  postCount: number,
+  route: (url: string) => void,
+  lens = '',
+) {
   if (lastRead >= postCount) {
     hint.value = 'Nothing unread in this thread.';
     return;
   }
   hint.value = '';
-  if (lastRead > 0) {
+  const held = /^unread:[0-9]+$/.test(lens) && Number(lens.slice(7)) <= lastRead;
+  if (lastRead > 0 || held) {
     const here = document.getElementById(`post-${lastRead + 1}`);
     if (here?.matches(postSelector)) return focusPost(here);
-    moveTo(permalink(thread, lastRead + 1), lastRead + 1, route);
+    moveTo(permalink(thread, lastRead + 1) + (held ? `?lens=${lensQuery(lens)}` : ''), lastRead + 1, route);
     return;
   }
   const landing = `/t/${encodeURIComponent(thread.id)}/${encodeURIComponent(thread.slug)}`;
@@ -326,7 +344,7 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
         case 'u':
           if (!tracksUnread()) return;
           e.preventDefault();
-          firstUnread(page.thread, page.viewer.last_read_ordinal, page.thread.post_count, route);
+          firstUnread(page.thread, readPosition(page.thread.id, page), page.thread.post_count, route, lens);
           return;
         case 'n':
           if (!tracksUnread()) return;

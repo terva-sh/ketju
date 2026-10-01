@@ -69,6 +69,18 @@ function known(id: string, stored: number) {
   if ((pending.get(id) ?? 0) <= (floor.get(id) ?? 0)) pending.delete(id);
 }
 
+// readPosition is the viewer's position in thread id as this page knows it
+// now: the highest of what has been read here and not yet sent, what has
+// been sent or answered, and page's viewer.last_read_ordinal, unless page
+// was asked for before a mark-unread answered and so reports the position
+// the mark lowered. First unread goes to the post after it, and the unread
+// lens tracks reads only from a boundary at or below it (TKT-01M29CTY71).
+export function readPosition(id: string, page?: ThreadPage): number {
+  const at = markedAt.get(id);
+  const stored = page && (at === undefined || pageRequestedAt(page) > at) ? page.viewer.last_read_ordinal : 0;
+  return Math.max(floor.get(id) ?? 0, pending.get(id) ?? 0, stored);
+}
+
 // read records that a post has been on screen for the dwell. While a mark is
 // in progress it is kept for after the mark.
 function read(id: string, ordinal: number) {

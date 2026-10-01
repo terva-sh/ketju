@@ -385,7 +385,8 @@ describe('the pager', () => {
   it('always names the page, the first included, and keeps the lens', () => {
     const t = { id, slug: 's' };
     expect(pageHref(t, 1, '')).toBe(`/t/${id}/s?page=1`);
-    expect(pageHref(t, 4, 'author:drew')).toBe(`/t/${id}/s?page=4&lens=author%3Adrew`);
+    expect(pageHref(t, 4, 'author:drew')).toBe(`/t/${id}/s?page=4&lens=author:drew`);
+    expect(pageHref(t, 2, 'since:2026-09-01T00:00:00+02:00')).toBe(`/t/${id}/s?page=2&lens=since:2026-09-01T00:00:00%2B02:00`);
   });
 
   it('draws both rows, with the current page and the span', async () => {
@@ -438,7 +439,7 @@ describe('a post', () => {
   });
 
   it('says it was edited, and links to itself and its history', async () => {
-    serve(page([post(7, { edited_at: 1757500200000 }), post(8, { edited_at: null })]));
+    serve(page([post(7, { edited_at: 1757500200000, reply_count: 0 }), post(8, { edited_at: null })]));
     const root = await renderAt(`/t/${id}/s?page=1`);
     expect(at(root, '#post-7 .edited')).not.toBeNull();
     expect(at(root, '#post-8 .edited')).toBeNull();

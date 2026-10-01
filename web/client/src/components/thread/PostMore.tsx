@@ -19,6 +19,9 @@ import { permalink, type FlagHandler, type ThreadRef } from './Post';
 // one closes the list, and the editor or the confirmation opens in the
 // post; when it closes, focus comes back to this button (useOwn).
 //
+// Conversation, the post's reply chain lens, follows link when the post
+// hands it over: a post that is a reply or has replies (TKT-01M29CTY71).
+//
 // Unread from here is there only when the post hands it over too, and is
 // disabled while its mark is out (unreadBusy). Choosing it closes the list
 // and puts focus back on the button, as Escape does; a mark that succeeds
@@ -32,6 +35,7 @@ export function PostMore({
   onDelete,
   onUnread,
   unreadBusy = false,
+  chain,
 }: {
   thread: ThreadRef;
   ordinal: number;
@@ -40,6 +44,7 @@ export function PostMore({
   onDelete?: () => void;
   onUnread?: () => void;
   unreadBusy?: boolean;
+  chain?: string;
 }) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
@@ -95,6 +100,13 @@ export function PostMore({
             link
           </a>
         </li>
+        {chain && (
+          <li>
+            <a href={chain} data-conversation onClick={() => setOpen(false)}>
+              conversation
+            </a>
+          </li>
+        )}
         {onFlag && (
           <li>
             <button

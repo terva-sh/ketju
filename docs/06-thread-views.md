@@ -258,12 +258,32 @@ boundary in server state lost because lenses are URL state (07 "Path to a
 non-JS client") (TKT-01M29CTY4J).
 
 **Decided by the run (2026-10-01, pending maintainer review): read tracking
-under a lens.** The read beacon runs under the unread and since lenses, whose
-posts run on without a gap, and under no other lens. Under author, chain,
-mentions or moderator, marking the highest post seen would mark every post
-the lens skipped as read. Alternatives: tracking under every lens lost for
-that reason. Tracking under none lost because the unread lens is where a daily
-reader reads (TKT-01M29CTY71).
+under a lens.** The read beacon runs on the canonical view and under the
+unread lens, and under no other lens. The beacon sends the highest post
+seen, so under author, chain, mentions or moderator it would mark every post
+the lens skipped as read. Since skips posts too: its first post can be well
+after the reader's place, and reading it would mark the gap before it read.
+Under `unread:B` the beacon runs only when B is at or below the reader's
+read position as the client knows it then. The lens then starts at or
+before their first unread post, as it does when they open their own bare
+`?lens=unread`. A shared or typed `unread:99` opened by a reader at #10
+would otherwise mark #11 to #98 read unseen, so that view tracks nothing.
+First unread under the unread lens goes to the reader's current position
+plus one, within the lens, never to B + 1, which they may have read since
+the lens opened. Under an `unread:B` whose B is above the position, the
+lens leaves that post out, so First unread goes to it in the full thread
+(Terva review 1792).
+
+Alternatives:
+- Tracking under every lens lost for the skipped-posts reason.
+- Tracking under none lost because the unread lens is where a daily reader
+  reads.
+- Tracking under since, whose posts run on without a gap once it starts,
+  lost to the gap before its first post (Terva review 1730).
+- Tracking under any `unread:B` lost to the shared-link case (Terva review
+  1741).
+
+(TKT-01M29CTY71)
 
 **Decided by the run (2026-10-01, pending maintainer review): the lens bar.**
 It sits under the thread head at both widths, as the mockups draw it. It holds
@@ -284,6 +304,30 @@ because on a phone those sit under the more menu, and 10 Q15 leaned to the
 header. Dividers in the chain lens alone lost because an author lens would
 then read as one unbroken conversation, which it is not (TKT-01M29CTY71,
 TKT-01M29CTY58).
+
+**Decided by the run (2026-10-01, pending maintainer review): the lens
+header's details.**
+- **Counts.** The header reads "Showing N of M posts · H hidden". M is the
+  thread's posts, shown and hidden together, so it matches the head's post
+  count.
+- **The unread divider.** It is drawn on the canonical view and under the
+  unread lens, and under no other lens, whose neighbouring posts are not the
+  thread's.
+- **The switcher's authors.** "By @handle" lists the authors of the page's
+  posts that are shown as themselves, so a removed post does not offer a
+  lens that would leave its author out.
+- **The date field.** It shows a since lens's moment as its UTC day, the
+  same rule by which a chosen day is read.
+
+Alternatives:
+- A count of the lens's posts alone lost because "showing 7 of 212" is
+  what the table above promises.
+- The unread divider under every lens lost because "N new posts below"
+  under an author lens would count posts the lens does not show.
+- The field in the viewer's own timezone lost for the reason the address
+  does not use it (07).
+
+(TKT-01M29CTY71)
 
 **Decided by the run (2026-10-01, pending maintainer review): the mentions
 lens** keeps the posts that mention the viewer, by the user id the `mentions`

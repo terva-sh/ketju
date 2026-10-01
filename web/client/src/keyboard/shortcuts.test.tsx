@@ -5,8 +5,9 @@ import golden from '../../../../internal/dto/testdata/golden/thread.member.json'
 import threadsGolden from '../../../../internal/dto/testdata/golden/threads.member.json';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
 import { isPhone } from '../state/layout';
+import { resetReadTracker } from '../state/readTracker';
 import { viewer } from '../state/viewer';
-import { renderAt, route, settle } from '../testing';
+import { renderAt, route, settle, unmount } from '../testing';
 import { helpOpen, hint, ignored, nextUnread, shortcuts, step } from './shortcuts';
 
 // The desktop keyboard shortcuts (TKT-01M29CGBX4; docs/06 "Paged, not
@@ -72,6 +73,9 @@ const list = (threads: ThreadRow[], next = ''): ThreadList => ({ forum: { slug: 
 let saved: Me;
 let rect: typeof Element.prototype.getBoundingClientRect;
 beforeEach(() => {
+  // First unread goes by the position the read tracker knows, which is
+  // this page's own: each test is a fresh page.
+  resetReadTracker();
   saved = viewer.value;
   viewer.value = structuredClone(member) as Me;
   isPhone.value = false;
@@ -84,7 +88,11 @@ beforeEach(() => {
     return { top, bottom: top + 180, left: 0, right: 0, width: 0, height: 180, x: 0, y: top, toJSON() {} } as DOMRect;
   };
 });
-afterEach(() => {
+afterEach(async () => {
+  // Unmounted before the reset in beforeEach, and while fetch is still the
+  // stub: leaving a page stops its tracking and flushes.
+  vi.useRealTimers();
+  await unmount();
   viewer.value = saved;
   isPhone.value = false;
   Element.prototype.getBoundingClientRect = rect;

@@ -2,7 +2,7 @@ import { Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { forgetGets, peekGet } from '../api/client';
-import type { CreatedPost, Pinned, Post as PostDTO, ThreadPage, ThreadViewer } from '../api/dto';
+import type { CreatedPost, Lens, Pinned, Post as PostDTO, ThreadPage, ThreadViewer } from '../api/dto';
 import { isProblem, problemMessage, revokesAccess } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
@@ -10,6 +10,9 @@ import { Composer } from '../composer/Composer';
 import { ComposerSheet } from '../composer/ComposerSheet';
 import { delayUntil } from '../components/thread/deadline';
 import { FlagDialog } from '../components/thread/FlagDialog';
+import { heldSearch, lensParam, placeGaps, tracksUnder } from '../components/thread/lens';
+import { LensBar } from '../components/thread/LensBar';
+import { GapDivider, LensHeader } from '../components/thread/LensHeader';
 import { ModerateDialog } from '../components/thread/ModerateDialog';
 import { NewPostsPill } from '../components/thread/NewPostsPill';
 import { Pager } from '../components/thread/Pager';
@@ -39,7 +42,7 @@ import { isPhone } from '../state/layout';
 import { composerFor, loadReplyDraft, quotePost, replyToPost, type Slow } from '../state/composer';
 import { listFor } from '../state/lists';
 import { subscribe } from '../state/live';
-import { marking, markUnread, trackPosts } from '../state/readTracker';
+import { marking, markUnread, readPosition, trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
 import { refreshViewer, viewer } from '../state/viewer';
 import { cachedThread, loadThreadPage, threadUrl, type ThreadQuery } from '../state/threads';
@@ -117,13 +120,23 @@ export function ThreadScreen() {
   // screen asks for nothing new, and must still land on the canonical URL.
   // It is checked against the header shown, so a rename's answer, stored
   // before the page is answered again, is not undone by the older page.
+  //
+  // The lens is checked against the request's answer too (heldSearch): a
+  // bare unread takes the boundary the server resolved, and a lens the
+  // server did not know leaves the address.
   useEffect(() => {
     if (!res.data || !head) return;
-    const to = canonicalThreadUrl(location, head);
+    const held = history ? null : heldSearch(location.search, res.data.lens);
+    const at = held === null ? location : { pathname: location.pathname, search: held, hash: location.hash };
+    const to = canonicalThreadUrl(at, head) ?? (held === null ? null : at.pathname + held + at.hash);
     if (to) route(to, true);
   }, [res.data, url, head?.slug]);
 
-  const landing = !view.hasPage && !params.ordinal;
+  // The lens on screen: the answer's, for an address that asked for one. A
+  // lens page is the lens's own pages, and the landing rule does not apply
+  // to it (docs/07).
+  const lens = view.lens && shown?.lens ? shown.lens : null;
+  const landing = !view.hasPage && !params.ordinal && !view.lens;
   useArrival(key, res.data, params.ordinal, landing);
 
   // The phone top bar shows the forum this thread is in, back to it, and the
@@ -185,12 +198,19 @@ export function ThreadScreen() {
   const offerMark = !history && !!shown && tracksUnread() && !!forumSlug;
   const pressed = useRef(false);
   const [markFailed, setMarkFailed] = useState<{ thread: string; error: unknown } | null>(null);
+  // First unread goes by the position as the read tracker knows it at the
+  // press, which reading since the page arrived has moved (Terva review
+  // 1730), and under a held unread lens stays in the lens.
+  const now = useRef(shown);
+  now.current = shown;
   const actions = useMemo(
     () =>
       known
         ? threadActions(known, {
             canReply,
-            firstUnread: unread ? () => firstUnread(known, lastRead, postCount, route) : undefined,
+            firstUnread: unread
+              ? () => firstUnread(known, readPosition(known.id, now.current), postCount, route, view.lens)
+              : undefined,
             markUnread: offerMark
               ? () => {
                   if (pressed.current) return;
@@ -212,8 +232,8 @@ export function ThreadScreen() {
       known?.slug,
       canReply,
       unread,
-      lastRead,
       postCount,
+      view.lens,
       offerMark,
       forumSlug,
       mayModerate,
@@ -277,7 +297,10 @@ export function ThreadScreen() {
           </p>
         )}
         {head?.pinned && <PinnedNote pinned={head.pinned} />}
-        {!isPhone.value && <Toolbar actions={actions} label="Thread actions" />}
+        <div class="thread-tools">
+          {shown && !history && <LensBar page={shown} lens={lens} />}
+          {!isPhone.value && <Toolbar actions={actions} label="Thread actions" />}
+        </div>
         {markFailed && markFailed.thread === params.id && (
           <p class="unread-refused" role="alert" data-mark-unread-refused>
             This thread could not be marked unread. {problemMessage(markFailed.error).text}
@@ -317,7 +340,7 @@ export function ThreadScreen() {
               page={page}
               read={res.data!.viewer}
               opening={res.loading}
-              lens={view.lens}
+              lens={lens}
               onChanged={res.retry}
               current={pageFor === me}
             />
@@ -371,7 +394,8 @@ function ThreadBody({
   read: ThreadViewer;
   // opening is whether the request for this page is still out.
   opening: boolean;
-  lens: string;
+  // lens is the lens on screen, null for the full thread.
+  lens: Lens | null;
   onChanged: () => void;
   // current is whether page was asked for by the viewer signed in now.
   current: boolean;
@@ -425,11 +449,13 @@ function ThreadBody({
     else route(permalink(thread, known.current + 1));
   };
 
-  const divider = dividerBefore(
-    posts.map((p) => p.ordinal),
-    lastRead,
-    known.current,
-  );
+  // The unread divider is the canonical view's, and the unread lens's, whose
+  // posts run on from the reader's place; under any other lens the posts
+  // around it are not the thread's.
+  const ordinals = posts.map((p) => p.ordinal);
+  const divider = !lens || lens.kind === 'unread' ? dividerBefore(ordinals, lastRead, known.current) : null;
+  const gaps = placeGaps(ordinals, lens?.gaps ?? []);
+  const lensArg = lens ? lensParam(lens.kind, lens.value) : '';
   const [popover, setPopover] = useState<number | null>(null);
 
   // Quote and reply, and the composer they feed, are offered to a reader
@@ -485,9 +511,12 @@ function ThreadBody({
     nextPostAt: page.viewer.next_post_at,
     exempt: page.viewer.can_moderate,
   };
-  useThreadShortcuts(page, lens, route);
+  useThreadShortcuts(page, lensArg, route);
   const list = useRef<HTMLElement>(null);
-  useReadTracking(thread.id, list, page, lastRead, posts.length);
+  // The beacon runs on the canonical view, and under the unread lens only
+  // from a boundary at or below the reader's position (lens.ts).
+  const tracks = tracksUnder(lens, readPosition(thread.id, page));
+  useReadTracking(thread.id, list, page, lastRead, posts.length, tracks);
   // A posted reply is shown where it landed: its permalink, which asks for
   // the page holding it at the log length the post made, and scrolls to it.
   // Nothing moves a reader who has left the thread while it was posting.
@@ -514,13 +543,15 @@ function ThreadBody({
     } else setPopover(ordinal);
   };
 
-  const pager = <Pager page={page.page} thread={thread} lens={lens} postCount={page.thread.post_count} />;
+  const pager = <Pager page={page.page} thread={thread} lens={lensArg} postCount={page.thread.post_count} />;
   return (
     <>
+      {lens && <LensHeader lens={lens} thread={thread} first={posts[0]?.ordinal} />}
       {pager}
       <section class="posts" ref={list} onClick={follow}>
         {posts.map((p, i) => (
           <Fragment key={p.ordinal}>
+            {gaps.before.has(p.ordinal) && <GapDivider gap={gaps.before.get(p.ordinal)!} thread={thread} />}
             {p.ordinal === divider && <UnreadDivider unread={known.current - lastRead} lastRead={lastRead} at={read.last_read_at} />}
             {isTombstone(p) ? (
               <Tombstone
@@ -544,6 +575,7 @@ function ThreadBody({
             )}
           </Fragment>
         ))}
+        {gaps.end && <GapDivider gap={gaps.end} thread={thread} />}
       </section>
       <div class="posts-end" ref={end} />
       <NewPostsPill count={posting ? 0 : waiting} onShow={show} />
@@ -585,12 +617,21 @@ function ThreadBody({
 //
 // Only the posts drawn are tracked, so one held behind the new-posts pill is
 // not read, and tracking starts again when more are drawn.
-function useReadTracking(id: string, list: { current: HTMLElement | null }, page: ThreadPage, lastRead: number, drawn: number) {
+//
+// on is false under a lens the beacon does not run under (lens.ts).
+function useReadTracking(
+  id: string,
+  list: { current: HTMLElement | null },
+  page: ThreadPage,
+  lastRead: number,
+  drawn: number,
+  on: boolean,
+) {
   const signedIn = !!viewer.value.user;
   useEffect(() => {
-    if (!signedIn || !list.current) return;
+    if (!on || !signedIn || !list.current) return;
     return trackPosts(id, list.current, lastRead, page);
-  }, [id, page, signedIn, drawn]);
+  }, [id, page, signedIn, drawn, on]);
 }
 
 // Live is a page a live hint asked for again: for the request key and the

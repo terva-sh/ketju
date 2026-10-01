@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, peekGet, resetApiCache } from '../api/client';
 import type { ThreadPage } from '../api/dto';
-import { batchMs, dwellMs, flush, marking, markUnread, readUrl, resetReadTracker, trackPosts } from './readTracker';
+import { batchMs, dwellMs, flush, marking, markUnread, readPosition, readUrl, resetReadTracker, trackPosts } from './readTracker';
 import { loadThreadPage, resetThreadCache } from './threads';
 import golden from '../../../../internal/dto/testdata/golden/thread.member.json';
 
@@ -758,5 +758,40 @@ describe('markUnread', () => {
       ['PUT', { ordinal: 7 }],
     ]);
     stop();
+  });
+});
+
+// readPosition is the position as this page knows it now, which First unread
+// and the unread lens go by (TKT-01M29CTY71, Terva review 1730).
+describe('readPosition', () => {
+  const pageAt = (n: number) => {
+    const g = structuredClone(golden) as ThreadPage;
+    return { ...g, viewer: { ...g.viewer, last_read_ordinal: n } };
+  };
+
+  it('is the highest of the page, what is read and waiting, and what was sent', async () => {
+    expect(readPosition('t1')).toBe(0);
+    expect(readPosition('t1', pageAt(4))).toBe(4);
+    const stop = trackPosts('t1', list(10), 4);
+    io().show(post(7), 200);
+    vi.advanceTimersByTime(dwellMs);
+    // Read and not yet sent.
+    expect(readPosition('t1', pageAt(4))).toBe(7);
+    await flush();
+    expect(puts().map((s) => s.body)).toEqual([{ ordinal: 7 }]);
+    // Sent: a page drawn before it still says 4.
+    expect(readPosition('t1', pageAt(4))).toBe(7);
+    stop();
+  });
+
+  it('does not take a page from before a mark at its word', async () => {
+    answer = (s) => {
+      if (s.method !== 'GET') return stored(s.method === 'DELETE' ? 2 : s.body!.ordinal!);
+      const g = structuredClone(golden) as ThreadPage;
+      return new Response(JSON.stringify({ ...g, thread: { ...g.thread, id: 't1' } }), { status: 200 });
+    };
+    const old = await loadThreadPage('t1', { page: 2 });
+    await markUnread('t1', 2);
+    expect(readPosition('t1', old)).toBe(2);
   });
 });

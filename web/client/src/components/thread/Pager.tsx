@@ -1,4 +1,5 @@
 import type { Pagination } from '../../api/dto';
+import { lensQuery } from './lens';
 import type { ThreadRef } from './Post';
 
 // Pager moves between a thread's pages (docs/06 "Paged, not infinite"). The
@@ -80,12 +81,10 @@ function PageStep({ to, href, label, text }: { to: number | null; href: (n: numb
 // pageHref always names the page, the first included: an address with no
 // page means "where I left off", which for a signed-in reader is their
 // landing page, not page 1.
+// The lens is written as lensQuery writes it, so the address reads
+// lens=unread:25 as every other lens link does.
 export function pageHref(thread: ThreadRef, n: number, lens: string): string {
-  const q = new URLSearchParams();
-  q.set('page', String(n));
-  if (lens) q.set('lens', lens);
-  const s = q.toString();
-  return `/t/${encodeURIComponent(thread.id)}/${encodeURIComponent(thread.slug)}${s ? '?' + s : ''}`;
+  return `/t/${encodeURIComponent(thread.id)}/${encodeURIComponent(thread.slug)}?page=${n}${lens ? `&lens=${lensQuery(lens)}` : ''}`;
 }
 
 // pageWindow is the page numbers to show: the first, the last, and two either

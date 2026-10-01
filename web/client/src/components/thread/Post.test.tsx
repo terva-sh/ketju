@@ -23,6 +23,10 @@ function post(over: Partial<PostDTO> = {}): PostDTO {
     deleted: false,
     removal: null,
     moved_to: null,
+    // Neither a reply nor replied to, so it offers no Conversation unless a
+    // test gives it one.
+    reply_to: null,
+    reply_count: 0,
     html: '<p>body</p>',
     ...over,
   };
@@ -130,5 +134,31 @@ describe("the phone's more control", () => {
     await draw(post({ author: { ...post().author, handle: 'alice' } }), vi.fn());
     const list = root.querySelector('.post-more-list')!;
     expect([...list.querySelectorAll('a, button')].map((e) => e.textContent)).toEqual(['link', 'history']);
+  });
+});
+
+// Conversation, a post's reply chain lens (TKT-01M29CTY71, docs/06 "the
+// lens bar"): on a reply and on a replied-to post, after link in the
+// footer, and in the more list on a phone.
+describe('conversation', () => {
+  const href = `/t/${thread.id}/${thread.slug}?lens=chain:7`;
+  const footer = () => [...root.querySelectorAll('.post-footer > *')].map((e) => e.textContent);
+
+  it('is on a reply and on a post with replies, and nowhere else', async () => {
+    await draw(post({ reply_to: 3 }), vi.fn());
+    expect(footer()).toEqual(['link', 'conversation', 'flag', 'history']);
+    expect(root.querySelector('[data-conversation]')?.getAttribute('href')).toBe(href);
+    await draw(post({ reply_count: 2 }), vi.fn());
+    expect(root.querySelector('[data-conversation]')?.getAttribute('href')).toBe(href);
+    await draw(post(), vi.fn());
+    expect(root.querySelector('[data-conversation]')).toBeNull();
+  });
+
+  it('is in the more list on a phone', async () => {
+    isPhone.value = true;
+    await draw(post({ reply_to: 3 }), vi.fn());
+    const list = root.querySelector('.post-more-list')!;
+    expect([...list.querySelectorAll('a, button')].map((e) => e.textContent)).toEqual(['link', 'conversation', 'flag', 'history']);
+    expect(list.querySelector('[data-conversation]')?.getAttribute('href')).toBe(href);
   });
 });

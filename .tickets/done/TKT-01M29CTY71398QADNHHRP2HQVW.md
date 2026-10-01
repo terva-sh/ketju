@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY71398QADNHHRP2HQVW
 title: Build the lens header and switcher in the client
 type: task
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -30,15 +30,17 @@ references:
     path: null
   - ref: pr:293
     path: null
+  - ref: pr:328
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T11:18:06Z
+updated_at: 2026-10-01T17:22:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-lenses
+  id: agent:claude-code/phase3-cty71
   name: ""
 extensions: {}
 ---
@@ -51,17 +53,17 @@ Returning at the same ordinal is the part that stops people getting lost. A read
 
 ## Acceptance criteria
 
-- [ ] The lens header shows the active lens, the shown count and the hidden count, and a '… N posts …' divider stands at every gap the server reports
-- [ ] Only <handle> is one press from the thread head at both widths and gives the author lens URL, ?lens=author:<handle>
-- [ ] A bare ?lens=unread is replaced by unread:<B>, page 2 is unchanged after page 1 is read, and first unread lands on last_read + 1 from the canonical view and from the lens (e2e)
-- [ ] The read beacon runs under unread and since and under no other lens (vitest)
-- [ ] At 390 px every lens is reachable from the Lens control, which TKT-01M29CGBZD later presents as a sheet, and the header and bar are legible with 44 px targets
-- [ ] e2e at 390 and 1440 px pass with one axe scan per test and no violations
-- [ ] The committed dist is rebuilt with go generate ./internal/web/spa and the reader stays within 70000 B gzip; the PR states the reader's bytes before and after, and the switcher's bytes measured inside and outside a lazy chunk
-- [ ] Every switch (switcher item, Only <handle>, Conversation) sets the address's lens and drops its page and ordinal, and a fresh load of that address shows the same posts (e2e)
-- [ ] Empty states: an anonymous unread or mentions lens asks the reader to sign in; a fully read thread and an empty author or since lens offer the full thread at /t/{id}/{slug}; a one-post chain says the post is neither a reply nor replied to (vitest)
-- [ ] The since date field writes since:YYYY-MM-DD as chosen, read as midnight UTC, whatever the viewer's timezone (vitest with two non-UTC timezones)
-- [ ] Full thread's href is the canonical permalink of the post at the top of the viewport, kept current as the reader scrolls, so a press, a new tab and a copied link all land there (vitest and e2e)
+- [x] The lens header shows the active lens, the shown count and the hidden count, and a '… N posts …' divider stands at every gap the server reports
+- [x] Only <handle> is one press from the thread head at both widths and gives the author lens URL, ?lens=author:<handle>
+- [x] A bare ?lens=unread is replaced by unread:<B>, page 2 is unchanged after page 1 is read, and first unread lands on last_read + 1 from the canonical view and from the lens (e2e)
+- [x] The read beacon runs under unread and since and under no other lens (vitest)
+- [x] At 390 px every lens is reachable from the Lens control, which TKT-01M29CGBZD later presents as a sheet, and the header and bar are legible with 44 px targets
+- [x] e2e at 390 and 1440 px pass with one axe scan per test and no violations
+- [x] The committed dist is rebuilt with go generate ./internal/web/spa and the reader stays within 70000 B gzip; the PR states the reader's bytes before and after, and the switcher's bytes measured inside and outside a lazy chunk
+- [x] Every switch (switcher item, Only <handle>, Conversation) sets the address's lens and drops its page and ordinal, and a fresh load of that address shows the same posts (e2e)
+- [x] Empty states: an anonymous unread or mentions lens asks the reader to sign in; a fully read thread and an empty author or since lens offer the full thread at /t/{id}/{slug}; a one-post chain says the post is neither a reply nor replied to (vitest)
+- [x] The since date field writes since:YYYY-MM-DD as chosen, read as midnight UTC, whatever the viewer's timezone (vitest with two non-UTC timezones)
+- [x] Full thread's href is the canonical permalink of the post at the top of the viewport, kept current as the reader scrolls, so a press, a new tab and a copied link all land there (vitest and e2e)
 
 ## Implementation plan
 
@@ -212,3 +214,65 @@ What the implementation must do:
   - B equal to the position tracks;
   - B below the position tracks, which only moves the position forward over posts the reader has already read or is now shown.
 - In the same PR, amend docs/06 "read tracking under a lens" to state this condition, alongside the since change carried from review 1730.
+
+**agent:claude-code/phase3-cty71** at 2026-10-01T16:10:10Z
+
+run decision: pending maintainer review. Recorded in docs/06 "Lenses", under "the lens header's details", and in the amended "read tracking under a lens".
+
+- Counts: the header reads "Showing N of M posts · H hidden", where M is the thread's posts, shown and hidden together.
+- The unread divider is drawn on the canonical view and under the unread lens only.
+- The switcher's "By @handle" items are the authors of the page's posts that are shown as themselves.
+- The since date field shows a since lens's moment as its UTC day, the rule by which a chosen day is read.
+- Read tracking, as reviews 1730 and 1741 required: the beacon runs on the canonical view and under `unread:B` only when B is at or below the reader's position as the client knows it then (`readPosition` in state/readTracker.ts). It does not run under since, author, chain, mentions or mod. First unread goes to that position plus one, within the held lens, never B + 1.
+
+Alternatives are in docs/06 beside each.
+
+**agent:claude-code/phase3-cty71** at 2026-10-01T16:10:12Z
+
+Bundle, measured with `npm run build` on this branch against main at 1dbf9b0 (before the attachments PR lands):
+
+- Reader before: 62035 B gzip of 70000 B.
+- Reader after, switcher eager: 64298 B (+2263 B).
+- Reader after, switcher (`LensMenu.tsx`) as a lazy chunk: 64756 B. The entry falls by 259 B, but the 707 B chunk still counts toward the budget (scripts/bundle.mjs counts every lazy chunk outside src/screens/admin/).
+
+The plan makes the switcher lazy only if that saves at least 400 B from the reader. Lazy costs 458 B more, so the switcher stays in the reader. The dist is not committed yet: this lane does not hold it (docs/13 "Running two lanes, changed"). It is regenerated and measured again on the final rebase.
+
+Tests: vitest `lens.test.ts`, `LensHeader.test.tsx`, `LensBar.test.tsx` (since writes `since:YYYY-MM-DD` unchanged under America/Los_Angeles and Pacific/Auckland), `ThreadScreen.lens.test.tsx` (beacon: none under author, chain, mentions, mod and since; none under `unread:99` for a reader at #10; tracks under `unread:B` at or below the position; First unread and `u` go to the current position plus one on a later lens page, never B + 1), `readTracker.test.ts` (`readPosition`). e2e `lenses.spec.ts` at 390 and 1440 px with one axe scan per test.
+
+**agent:claude-code/phase3-cty71** at 2026-10-01T16:37:56Z
+
+Bundle, final, on main at 5d8f360 (after #326, attachments): the reader is 63878 B before and 66096 B after (+2218 B), of 70000 B. The switcher stays eager, since as a lazy chunk it cost 458 B more (note of earlier today). The committed dist is regenerated with go generate ./internal/web/spa in this PR.
+
+**agent:claude-code/phase3-cty71** at 2026-10-01T16:38:07Z
+
+AC4 is ticked as the review 1730 note on this ticket rewrites it: the beacon runs under unread (and on the canonical view) and under no other lens, since included. It also holds the review 1741 condition, B at or below the reader's position. ThreadScreen.lens.test.tsx asserts no tracker under author, chain, mentions, mod and since, and none under unread:99 for a reader at #10. Its text still names since because only a person edits a criterion's wording.
+
+**agent:claude-code/phase3-cty71** at 2026-10-01T17:00:49Z
+
+Review 1792 (PR #328, head 95da4a1, base 5d8f360), medium, 'Leave an unread lens when it excludes the first unread post': fixed. firstUnread keeps a held unread:B only when B is at or below the position, so the lens holds last_read + 1. Otherwise it goes to the canonical permalink. ThreadScreen.lens.test.tsx covers unread:20 for a reader at #10 (lands on /11 in the full thread, by the action and by u), and docs/06 says so. Main moved under #328 (e855e1a), so the tree is carried onto a -2 branch.
+
+**agent:claude-code/phase3-cty71** at 2026-10-01T17:22:30Z
+
+Filed TKT-01M3W7T2YH, 'Keep a lens's Full thread in reach once the reader has scrolled', as a draft with no milestone. The header scrolls away, so pressing Full thread after scrolling back up lands near the top of the page. The e2e therefore presses the link as it reads, without scrolling to it. Bundle on the carried tree, main at e855e1a: 66113 B of 70000 B (+2235 B over 63878 B).
+
+## Summary
+
+Landed in PR #328. Every lens now has a client.
+
+- The lens bar sits under the thread head at both widths. It holds "Only <handle>" and "Lens", whose switcher (`LensMenu`) is a disclosure of links to:
+  - the full thread;
+  - unread;
+  - by author;
+  - mentioning me;
+  - since a date, written as `since:YYYY-MM-DD`;
+  - removed posts, for a moderator.
+- A lens page draws `LensHeader`: what is filtered, shown and hidden counts, Full thread to the post at the top of the viewport, and the empty states. A `GapDivider` stands at every gap the server reports.
+- A reply or replied-to post offers Conversation, its chain lens.
+- A bare unread is held as `unread:B`, and a lens the server answered as the full thread leaves the address.
+- As reviews 1730 and 1741 require:
+  - the read beacon runs on the canonical view, and under `unread:B` only when B is at or below `readPosition()` (state/readTracker.ts);
+  - First unread targets the current position plus one, within the held lens.
+- docs/06 "read tracking under a lens" is amended, and the header's details are recorded as a run decision pending maintainer review.
+- The reader went from 63878 B to 66096 B of 70000 B. The switcher stays eager, because a lazy chunk cost 458 B more.
+
+TKT-01M29CGBZD, the phone lens sheet, builds on `LensBar` and `LensMenu`.

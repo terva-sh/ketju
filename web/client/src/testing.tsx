@@ -2,7 +2,7 @@ import { render } from 'preact';
 import { act } from 'preact/test-utils';
 import { vi } from 'vitest';
 import { resetApiCache } from './api/client';
-import type { ThreadPage } from './api/dto';
+import type { Lens, LensGap, Post, ThreadPage } from './api/dto';
 import { App } from './app';
 import { resetThreadCache } from './state/threads';
 import golden from '../../../internal/dto/testdata/golden/thread.member.json';
@@ -159,3 +159,171 @@ export const problemAnswer = (
   extra: Record<string, unknown> = {},
   headers?: Record<string, string>,
 ): Answer => ({ status, body: { type, title: type, status, ...extra }, headers });
+
+// A thread served under every lens, for the lens tests (TKT-01M29CTY71):
+// sixty posts, five to a page, carol's odd and alice's even, started by
+// carol. The selections stand in for the server's (internal/service/threads
+// lenses.go); what the client does with an answer is what is under test.
+
+const lensId = '01k4z3j0w8xl1';
+export const lensHome = `/t/${lensId}/a`;
+const size = 5;
+const count = 60;
+const all = Array.from({ length: count }, (_, i) => i + 1);
+
+export interface LensServed {
+  // lastRead is the viewer's position as the server reports it.
+  lastRead: number;
+  moderator: boolean;
+  // over changes a post as served.
+  over: Record<number, Partial<Post>>;
+  gets: string[];
+  puts: number[];
+}
+
+export function lensPost(o: number, over: Partial<Post> = {}): Post {
+  const handle = o % 2 ? 'carol' : 'alice';
+  return {
+    ...(golden as ThreadPage).posts[0],
+    ordinal: o,
+    author: { ...(golden as ThreadPage).posts[0].author, handle, display_name: handle },
+    reply_to: null,
+    reply_to_suppressed: false,
+    reply_count: 0,
+    deleted: false,
+    removal: null,
+    moved_to: null,
+    html: `<p>post ${o}</p>`,
+    ...over,
+  };
+}
+
+// select is what a lens keeps, and the value the answer names; null for a
+// lens the server does not know, which it serves as the full thread.
+function select(raw: string, lastRead: number): { sel: number[]; kind: string; value: string } | null {
+  const [kind, value = ''] = raw.split(':');
+  switch (kind) {
+    case 'unread': {
+      const b = value === '' ? lastRead : Number(value);
+      return { sel: all.filter((o) => o > b), kind, value: String(b) };
+    }
+    case 'author':
+      return { sel: all.filter((o) => (o % 2 === 1) === (value === 'carol')), kind, value };
+    case 'chain':
+      return { sel: [1, Number(value), 55].filter((o, i, a) => a.indexOf(o) === i).sort((a, b) => a - b), kind, value };
+    case 'since':
+      return { sel: all.filter((o) => o > 40), kind, value: String(Date.UTC(2026, 8, 1)) };
+    case 'mentions':
+      return { sel: [12, 40], kind, value: '' };
+    case 'mod':
+      return { sel: [57], kind, value: '' };
+  }
+  return null;
+}
+
+// pageOf answers the thread endpoint's query q.
+function pageOf(q: URLSearchParams, s: LensServed): ThreadPage {
+  const raw = q.get('lens');
+  const chosen = raw ? select(raw, s.lastRead) : null;
+  const sel = chosen ? chosen.sel : all;
+  const o = Number(q.get('ordinal') ?? 0);
+  let n = Number(q.get('page') ?? 1);
+  if (o) {
+    const i = sel.findIndex((x) => x >= o);
+    n = Math.floor((i < 0 ? sel.length - 1 : i) / size) + 1;
+  }
+  const on = sel.slice((n - 1) * size, n * size);
+  let lens: Lens | null = null;
+  if (chosen) {
+    // Every gap that touches the page: before its first post, between its
+    // posts, and after its last.
+    const gaps: LensGap[] = [];
+    const touches = new Set(on.length ? [sel[(n - 1) * size - 1] ?? 0, ...on] : []);
+    let prev = 0;
+    for (const x of [...sel, count + 1]) {
+      if (x - prev > 1 && touches.has(prev)) gaps.push({ after: prev, count: x - prev - 1 });
+      prev = x;
+    }
+    lens = { kind: chosen.kind, value: chosen.value, shown: sel.length, hidden: count - sel.length, gaps };
+  }
+  const base = golden as ThreadPage;
+  return {
+    ...base,
+    thread: {
+      ...base.thread,
+      id: lensId,
+      slug: 'a',
+      title: 'Lenses',
+      post_count: count,
+      pinned: null,
+      author: { ...base.thread.author, handle: 'carol', display_name: 'carol' },
+    },
+    page: { number: n, size, total_pages: Math.max(1, Math.ceil(sel.length / size)) },
+    lens,
+    viewer: { ...base.viewer, last_read_ordinal: s.lastRead, can_moderate: s.moderator, can_reply: false },
+    posts: on.map((x) => lensPost(x, s.over[x])),
+  };
+}
+
+// serveLenses answers the thread endpoint as s says, and records every GET and
+// every read beacon.
+export function serveLenses(over: Partial<LensServed> = {}): LensServed {
+  const s: LensServed = { lastRead: 0, moderator: false, over: {}, gets: [], puts: [], ...over };
+  vi.stubGlobal('fetch', async (url: string, init: RequestInit = {}) => {
+    const u = new URL(url, 'http://x');
+    if (init.method === 'PUT' && u.pathname === `/api/v1/threads/${lensId}/read`) {
+      const { ordinal } = JSON.parse(String(init.body)) as { ordinal: number };
+      s.puts.push(ordinal);
+      return new Response(JSON.stringify({ last_read_ordinal: ordinal }), { status: 200 });
+    }
+    if (u.pathname === `/api/v1/threads/${lensId}`) {
+      s.gets.push(url);
+      return new Response(JSON.stringify(pageOf(u.searchParams, s)), { status: 200 });
+    }
+    if (u.pathname.startsWith('/api/v1/drafts/')) return new Response(null, { status: 204, headers: { 'Draft-Revision': '0' } });
+    return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/problem+json' } });
+  });
+  return s;
+}
+
+// observers is every IntersectionObserver made since watchObservers was called. The
+// read tracker's watch posts; the screen's own watches the foot of the list.
+export const lensObservers: { observed: Element[]; callback: IntersectionObserverCallback }[] = [];
+export function watchObservers() {
+  lensObservers.length = 0;
+  vi.stubGlobal(
+    'IntersectionObserver',
+    class {
+      observed: Element[] = [];
+      constructor(readonly callback: IntersectionObserverCallback) {
+        lensObservers.push(this);
+      }
+      observe(el: Element) {
+        this.observed.push(el);
+      }
+      disconnect() {}
+    },
+  );
+}
+export const trackerObservers = () => lensObservers.filter((o) => o.observed.some((el) => el.id.startsWith('post-')));
+
+// dwellOn puts post o on screen for the tracker's second, through the newest
+// tracker, with fake timers running.
+export function dwellOn(o: number, ms: number) {
+  const io = trackerObservers().at(-1)!;
+  const el = io.observed.find((e) => e.id === `post-${o}`)!;
+  el.getBoundingClientRect = () => ({ top: 100, bottom: 300, height: 200 }) as DOMRect;
+  io.callback(
+    [
+      {
+        target: el,
+        isIntersecting: true,
+        intersectionRect: { height: 200 },
+        boundingClientRect: { height: 200 },
+        rootBounds: { height: 800 },
+      } as unknown as IntersectionObserverEntry,
+    ],
+    io as unknown as IntersectionObserver,
+  );
+  vi.advanceTimersByTime(ms);
+}

@@ -6,6 +6,7 @@ import { isPhone } from '../../state/layout';
 import { viewer } from '../../state/viewer';
 import { Attachments } from './Attachments';
 import { Avatar } from './Avatar';
+import { lensHref } from './lens';
 import { isOwn } from './postControls';
 import { DeleteConfirm, PostEditor, Restore, useOwn, type Own } from './OwnControls';
 import { PostMore } from './PostMore';
@@ -54,6 +55,9 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // not offered while the editor or the confirmation is open, since it leaves
 // the page and would drop what is being edited.
 //
+// Conversation, the post's reply chain lens, follows link on a post that is
+// a reply or has replies, under PostMore on a phone (TKT-01M29CTY71).
+//
 // A post whose current revision is a moderator's edit says so in place of
 // "(edited)", naming nobody: the post's history names them (docs/08 "Post
 // history").
@@ -88,6 +92,9 @@ export function Post({
   const toggle = useHeldStill(() => setOpen((o) => !o));
   const mark = useMarkFromHere(post.ordinal, onUnread);
   const markHere = idle ? mark.run : undefined;
+  // Conversation is the post's reply chain lens, on a post that answers
+  // another or has answers (docs/06 "the lens bar").
+  const chain = post.reply_to !== null || post.reply_count > 0 ? lensHref(thread, `chain:${post.ordinal}`) : undefined;
   return (
     <article
       class={'post' + (unread ? ' unread' : '') + (post.deleted ? ' removed' : '')}
@@ -148,12 +155,18 @@ export function Post({
               onDelete={del}
               onUnread={markHere}
               unreadBusy={mark.busy}
+              chain={chain}
             />
           ) : (
             <>
               <a class="hit" href={permalink(thread, post.ordinal)}>
                 link
               </a>
+              {chain && (
+                <a class="hit" href={chain} data-conversation>
+                  conversation
+                </a>
+              )}
               {flag && (
                 <button
                   type="button"
