@@ -25,7 +25,8 @@ interface Answer<T> {
 // not even for the one render before the new request starts. A superseded
 // request is aborted, and whatever it settles with is ignored. A failure
 // keeps any data this key already had, beside the error, unless the failure
-// says the viewer may no longer see it. A null key asks for nothing.
+// says the viewer may no longer see it. A null key asks for nothing, and
+// drops what the hook held.
 export function useResource<T>(
   key: string | null,
   fetcher: (signal: AbortSignal) => Promise<T>,
@@ -35,7 +36,13 @@ export function useResource<T>(
   const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
-    if (key === null) return;
+    // A null key holds nothing either. Kept, the last answer would show at
+    // once if the same key came back, before any request had asked again:
+    // search's query cleared and typed again (Terva review 1799).
+    if (key === null) {
+      setAnswer(null);
+      return;
+    }
     const ctl = new AbortController();
     setAnswer((a) => ({
       key,

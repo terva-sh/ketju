@@ -80,7 +80,12 @@ export function SearchScreen() {
   const key = searchQuery(asked, cursor);
   const url = '/api/v1/search' + key;
   const res = useResource(asked.q ? url : null, (signal) => apiGet<SearchResults>(url, { signal }));
-  const data = asked.q ? res.data : undefined;
+  // Only the answer to the request just made is shown: none while a
+  // request is out, and none beside a failure, so nothing on screen was
+  // served before the server last checked what the viewer may read
+  // (Terva review 1799). useResource's held copy and its data kept beside an
+  // error are for other screens.
+  const data = asked.q && !res.loading && !res.error ? res.data : undefined;
   useShellContext({ title: 'Search', actions: [] }, []);
   useScrollMemory(key, !!data);
 
@@ -94,7 +99,7 @@ export function SearchScreen() {
   return (
     <main class="search-page" data-screen="search">
       <h1>Search</h1>
-      <SearchForm asked={asked} qError={qError} />
+      <SearchForm asked={asked} current={key} again={res.retry} qError={qError} />
       <p class="visually-hidden" role="status">
         {data ? (count ? `${count} result${count === 1 ? '' : 's'} on this page` : 'No results') : ''}
       </p>
@@ -157,7 +162,20 @@ export function SearchScreen() {
 
 // SearchForm is the query and the filters. It edits a draft, seeded from the
 // address and put back there by Search; a new address replaces the draft.
-function SearchForm({ asked, qError }: { asked: Query; qError?: string }) {
+// Search on the address already shown asks the server again (again), since
+// routing to it changes nothing: the index may have caught up, or the last
+// request failed (Terva review 1799). current is that address's query.
+function SearchForm({
+  asked,
+  current,
+  again,
+  qError,
+}: {
+  asked: Query;
+  current: string;
+  again: () => void;
+  qError?: string;
+}) {
   const { route } = useLocation();
   const [draft, setDraft] = useState<Query>(asked);
   // The draft follows the address, as Search, Back and a link change it,
@@ -176,7 +194,9 @@ function SearchForm({ asked, qError }: { asked: Query; qError?: string }) {
   const text = (e: Event) => (e.target as HTMLInputElement).value;
   const submit = (e: Event) => {
     e.preventDefault();
-    route('/search' + searchQuery({ ...draft, q: draft.q.trim() }));
+    const next = searchQuery({ ...draft, q: draft.q.trim() });
+    if (next === current) again();
+    else route('/search' + next);
   };
   const n = filtersSet(asked);
   const phone = isPhone.value;

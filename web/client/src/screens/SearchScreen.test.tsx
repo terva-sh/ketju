@@ -103,6 +103,62 @@ describe('the form', () => {
     expect(field<HTMLInputElement>(root, 'q').value).toBe('hosting bill');
   });
 
+  // Terva review 1799: Search on the address already shown routes nowhere,
+  // so it asks the server again itself, and shows nothing from before while
+  // that request is out.
+  it('asks again when Search submits the address already shown, hiding the last answer meanwhile', async () => {
+    let release!: () => void;
+    let calls = 0;
+    server.routes['GET /api/v1/search?q=bill'] = async () => {
+      if (++calls === 1) return { status: 200, body: found() };
+      await new Promise<void>((r) => (release = r));
+      return { status: 200, body: nothing() };
+    };
+    const root = await renderAt('/search?q=bill');
+    expect(results(root)).toHaveLength(2);
+    await submit(root);
+    expect(searches()).toEqual(['/api/v1/search?q=bill', '/api/v1/search?q=bill']);
+    expect(results(root)).toHaveLength(0);
+    expect(root.querySelector('[data-searching]')).not.toBeNull();
+    await act(async () => release());
+    await settle(root);
+    expect(root.querySelector('[data-no-results]')).not.toBeNull();
+    expect(location.search).toBe('?q=bill');
+  });
+
+  it('retries a refused query on Search, though the field is unchanged', async () => {
+    let calls = 0;
+    server.routes['GET /api/v1/search?q=bill'] = () =>
+      ++calls === 1
+        ? problemAnswer('validation-failed', 422, { errors: [{ field: 'q', code: 'too_long' }] })
+        : { status: 200, body: found() };
+    const root = await renderAt('/search?q=bill');
+    expect(root.querySelector('[data-q-error]')).not.toBeNull();
+    await submit(root);
+    expect(root.querySelector('[data-q-error]')).toBeNull();
+    expect(results(root)).toHaveLength(2);
+  });
+
+  // Terva review 1799: an answer is never shown again before the server is
+  // asked again, even when the query is cleared and then typed again.
+  it('shows no earlier answer when a cleared query is searched again', async () => {
+    let calls = 0;
+    server.routes['GET /api/v1/search?q=bill'] = () =>
+      ++calls === 1 ? { status: 200, body: found() } : new Promise(() => {});
+    const root = await renderAt('/search?q=bill');
+    expect(results(root)).toHaveLength(2);
+    await type(field(root, 'q'), '');
+    await submit(root);
+    expect(location.search).toBe('');
+    expect(root.querySelector('[data-search-intro]')).not.toBeNull();
+    await type(field(root, 'q'), 'bill');
+    await submit(root);
+    expect(location.search).toBe('?q=bill');
+    expect(results(root)).toHaveLength(0);
+    expect(root.querySelector('[data-searching]')).not.toBeNull();
+    expect(calls).toBe(2);
+  });
+
   it('offers every forum, children indented under their parent, after All forums', async () => {
     const root = await renderAt('/search');
     const options = [...field<HTMLSelectElement>(root, 'forum').options].map((o) => [o.value, o.textContent]);

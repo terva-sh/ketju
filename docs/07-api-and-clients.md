@@ -1306,7 +1306,11 @@ As built (TKT-01M3V70X0F): `web/client/src/screens/SearchScreen.tsx`.
   until it answers, and then puts the reader back where they were. A held
   copy would render at once, as a thread list does, but it would show
   results without the check the server makes on every request, which
-  docs/14's access invariant forbids.
+  docs/14's access invariant forbids. The screen shows only the answer to
+  the request it last made: nothing while one is out, nothing kept beside
+  a failure, and `useResource` drops what it held when its key goes null,
+  as it does while the query is empty. Search on the address already shown
+  asks again (Terva review 1799).
 - **A post's result names its number** beside the thread's title (`#61`),
   so several results from one thread read as different links. A title
   match has none.
@@ -1320,7 +1324,7 @@ As built (TKT-01M3V70X0F): `web/client/src/screens/SearchScreen.tsx`.
   alone. `focusMainHeading` focuses a control marked `data-autofocus`
   first, and the query field carries the mark only when there is no query.
 - **Placement, measured.** In the entry, the reader bundle went from
-  67802 B to 70172 B gzip (2370 B, against the 2.6 KB estimate) on main
+  67802 B to 70218 B gzip (2416 B, against the 2.6 KB estimate) on main
   at 26bea62b. Measured both ways on an earlier main, at 66189 B, the
   entry came to 68626 B and a lazy chunk to 70151 B, because the chunk and
   its CSS repeat what the entry already loads.

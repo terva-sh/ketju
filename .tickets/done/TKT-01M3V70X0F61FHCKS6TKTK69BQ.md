@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:49:20Z
-updated_at: 2026-10-01T20:16:30Z
+updated_at: 2026-10-01T20:23:59Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
@@ -166,6 +166,19 @@ Caught while checking screenshots: the top bar's search link is `class="search"`
 
 Criterion 4 and the budget. The criterion names the 70000 B budget it was groomed against. The maintainer raised the budget to 120000 B on 2026-10-01 (#331, docs/14 "The stop rule, changed", class 5), and that is the budget in force and in budget.json. The reader on main 26bea62b was 67802 B before this screen and 70172 B after it (+2370 B, against the 2.6 KB estimate). That is over the old figure the criterion quotes and well within the budget that holds, so the criterion is ticked against 120000 B. Without the raise, the merges before this one (notifications, phone header) had already left only 2198 B of the old budget, and this screen would have stopped the run under class 5.
 
+**agent:claude-code/phase3-v70x0f** at 2026-10-01T20:23:44Z
+
+Terva review 1799 (PR #336, head d8ec671, base 26bea62b, run 6732dabc-692d-48b5-9e1f-ed36455a92af, Actions run #2235). Both findings are fixed.
+
+- **(high, access invariant) "Discard retained results when the search query is cleared".** Correct. `useResource` kept its answer when the key went null, so a query that was cleared and then searched again showed the old answer for a render, before any request. Two fixes:
+  - The hook now drops its answer on a null key (`api/resource.ts`). The test "drops what it held when the key goes null" fails without the change.
+  - The screen shows data only when `!res.loading && !res.error`. That rules out a held copy while a request is out, and data kept beside a failure.
+
+  The other callers that pass null (NewThreadScreen, and the detail panel in QueueScreen) only ask again, so dropping the answer changes nothing they show.
+- **(medium) "Issue a new request when Search submits the current address".** Correct. Search now compares the draft's query with the address on screen and calls `res.retry()` when they match, instead of routing to the same address. The Vitest cases are "asks again when Search submits the address already shown" and "retries a refused query on Search".
+
+The reader bundle is now 70218 B (+2416 B on 26bea62b).
+
 ## Summary
 
 The `/search` screen (`web/client/src/screens/SearchScreen.tsx`, `search.css`) replaces the placeholder route, built to docs/07 "Search" and the plan.
@@ -175,12 +188,12 @@ The `/search` screen (`web/client/src/screens/SearchScreen.tsx`, `search.css`) r
 - **The filters** are a fieldset from 720 px up, and a Filters disclosure on the phone that is open when a filter is set.
 - **Results** link to the post's permalink, or to the thread for a title match. Each shows the forum, the author with `RoleBadge`, `PostTime`, and the snippet as text nodes, each match in `<mark>`.
 - **Paging:** More results follows `next_cursor`, and First results drops the cursor.
-- **States:** no query; no results, with Clear filters when a filter is set; the `indexing` note; a refused query beside the field; an unknown forum, with Clear filters; any other failure in `ErrorPanel` with Retry; and a hidden status region with the count.
+- **States:** no query; no results, with Clear filters when a filter is set; the `indexing` note; a refused query beside the field; an unknown forum, with Clear filters; any other failure in `ErrorPanel` with Retry; and a hidden status region with the count. Only the answer to the last request is shown, and Search on the address shown asks again (Terva review 1799).
 - **Focus:** with no query, focus starts in the field. `focusMainHeading` now prefers `main [data-autofocus]`.
 
 Run decisions, pending maintainer review, are recorded in docs/07 "As built" and in the run-decision note: nothing a search answers is held in the client, `#N` sits beside a post's title, and the query errors are in the screen's own words.
 
-Reader bundle on main 26bea62b: 67802 B before, 70172 B after (+2370 B, against the 2.6 KB estimate), against the 120000 B budget. It stays in the entry, because a lazy chunk measured 1525 B worse.
+Reader bundle on main 26bea62b: 67802 B before, 70218 B after (+2416 B, against the 2.6 KB estimate), against the 120000 B budget. It stays in the entry, because a lazy chunk measured 1525 B worse.
 
 Tests:
 - `SearchScreen.test.tsx`, 22 cases, including a snippet holding `<script>` and `&`;

@@ -177,6 +177,30 @@ describe('useResource', () => {
     expect(m.last()).toMatchObject({ data: undefined, error: undefined, loading: false });
   });
 
+  // Terva review 1799: a key that goes null and comes back is asked for
+  // again, and nothing the hook held for it shows in the meantime.
+  it('drops what it held when the key goes null', async () => {
+    const answers = [deferred<string>(), deferred<string>()];
+    let calls = 0;
+    const m = mount(() => answers[calls++].promise);
+    cleanup = m.unmount;
+    await m.show('a');
+    await act(() => answers[0].resolve('first'));
+    await flush();
+    expect(m.last()).toMatchObject({ data: 'first', loading: false });
+
+    await m.show(null);
+    await flush();
+    const from = m.seen.length;
+    await m.show('a');
+    expect(calls).toBe(2);
+    expect(m.seen.slice(from).map((s) => s.res.data)).toEqual(m.seen.slice(from).map(() => undefined));
+    expect(m.last().loading).toBe(true);
+    await act(() => answers[1].resolve('second'));
+    await flush();
+    expect(m.last()).toMatchObject({ data: 'second', loading: false });
+  });
+
   // An abort the hook did not cause is a failure like any other: only its
   // own abort, of a superseded request, is silent. Ignoring this one would
   // leave the screen loading for good.
