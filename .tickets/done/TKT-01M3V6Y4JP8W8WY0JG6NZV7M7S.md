@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:49Z
-updated_at: 2026-10-01T21:28:56Z
+updated_at: 2026-10-01T21:31:56Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -141,6 +141,10 @@ Implementation notes (prepared on run/v6y4jp-list-screens; dist not yet committe
 Criterion 5 left unticked. The dist is rebuilt with `go generate ./internal/web/spa` and committed, and the reader's growth is recorded, measured both ways. But the criterion names a 70000 B budget, and the reader is now 72670 B gzip. The maintainer raised the budget to 120000 B on 2026-10-01 (#331, docs/14 class 5). Main was already 71808 B before this change, so no client change could meet the number as written. `npm run budget` passes against the current 120000 B.
 
 Growth on main d2b4f208: 71808 B to 72670 B (+862 B), with the four screens eager. On the earlier base 86752c42 it was 66189 B to 67146 B eager (+957 B), against 67629 B with CrossListScreen lazy (+1440 B). Lazy non-admin chunks count toward the budget, and the split adds chunk overhead, so eager stays.
+
+**agent:claude-code/phase3-v6y4jp** at 2026-10-01T21:31:56Z
+
+Terva review 1801 (PR #339, head 20988de, base d2b4f20), medium: "Prevent in-flight thread requests from repopulating the invalidated thread cache". Fixed. state/threads.ts records `wipedAt`, the newest load number when forgetAllThreadPages wiped the cache. A load numbered no higher asked before the wipe: its answer has the same log length and the old read boundary, so it is not stored or held. It goes through the existing `instead` path, which serves the cache's newer page or asks once more. threads.test.ts covers a pre-wipe GET that lands after the wipe, and a mutation dropping the check fails that test. The reader is 72681 B (+11 B).
 
 ## Summary
 

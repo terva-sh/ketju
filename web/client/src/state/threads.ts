@@ -116,7 +116,11 @@ async function load(id: string, q: ThreadQuery, signal: AbortSignal | undefined,
     if (r.n > (stored.get(id) ?? 0)) throw r.err;
     return instead(id, q, page, signal, again);
   }
-  if (!storeThreadPage(id, page, url)) {
+  // A page asked for before the whole cache was wiped (a mark all read,
+  // forgetAllThreadPages) reports the viewer's place from before it, at the
+  // same log length, so nothing above can tell it is stale. It is not
+  // stored, and is answered as a refused page is (Terva review 1801).
+  if (n <= wipedAt || !storeThreadPage(id, page, url)) {
     forgetHeld(url, page);
     return instead(id, q, page, signal, again);
   }
@@ -219,6 +223,11 @@ const stored = new Map<string, number>();
 // (state/readTracker.ts).
 const requested = new WeakMap<ThreadPage, number>();
 
+// wipedAt is the number of the newest load to have started when the whole
+// cache was last wiped (forgetAllThreadPages): a load numbered no higher
+// asked before the wipe, and its answer is not stored.
+let wipedAt = 0;
+
 // loadCount is the number of the newest load to have started.
 export const loadCount = () => loads;
 
@@ -239,11 +248,12 @@ export function forgetThreadPages(id: string) {
 
 // forgetAllThreadPages drops every held thread page and the whole cache,
 // as a mark all read does (state/lists.ts forgetReadState): it moves the
-// viewer's place in threads the client cannot name. A request still out is
-// superseded too, since it began before the mark.
+// viewer's place in threads the client cannot name. A request still out
+// began before the mark: its answer is neither held nor stored (wipedAt).
 export function forgetAllThreadPages() {
   forgetGets((u) => u.startsWith('/api/v1/threads/'), { inFlight: true });
   threadCache.value = new Map();
+  wipedAt = loads;
 }
 
 // resetThreadCache empties the cache, for tests.
@@ -251,4 +261,5 @@ export function resetThreadCache() {
   threadCache.value = new Map();
   refused.clear();
   stored.clear();
+  wipedAt = loads;
 }

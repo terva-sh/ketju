@@ -5,6 +5,7 @@ import { isProblem } from '../api/problem';
 import { threadPage } from '../testing';
 import {
   cachedThread,
+  forgetAllThreadPages,
   loadThreadPage,
   pageKey,
   resetThreadCache,
@@ -581,6 +582,41 @@ describe('the thread cache', () => {
     serve(page(3, 100));
     await loadThreadPage(id, {}); // the server picks the landing page
     expect([...cachedThread(id)!.pages.keys()]).toEqual(['3']);
+  });
+
+  // Terva review 1801: a mark all read wipes the cache (forgetAllThreadPages)
+  // while a page asked for before it is still out. That page has the same
+  // log length and the old read boundary; it is not stored, and the page is
+  // asked for again.
+  it('does not store a page asked for before the cache was wiped', async () => {
+    const before = page(1, 100);
+    before.viewer = { ...before.viewer, last_read_ordinal: 3 };
+    const after = page(1, 100);
+    after.viewer = { ...after.viewer, last_read_ordinal: 100 };
+    let answer!: () => void;
+    const urls: string[] = [];
+    vi.stubGlobal('fetch', (url: string) => {
+      urls.push(url);
+      if (urls.length === 1)
+        return new Promise<Response>((r) => (answer = () => r(new Response(JSON.stringify(before), { headers: { ETag: '"b"' } }))));
+      return Promise.resolve(new Response(JSON.stringify(after)));
+    });
+    const loading = loadThreadPage(id, { page: 1 });
+    await Promise.resolve();
+    forgetAllThreadPages();
+    answer();
+    const got = await loading;
+    expect(got.viewer.last_read_ordinal).toBe(100);
+    expect(urls).toHaveLength(2);
+    expect(cachedThread(id)!.pages.get('1')!.viewer.last_read_ordinal).toBe(100);
+    expect(peekGet(threadUrl(id, { page: 1 }))).toBeUndefined();
+  });
+
+  it('stores a page asked for after the cache was wiped', async () => {
+    serve(page(1, 100));
+    forgetAllThreadPages();
+    await loadThreadPage(id, { page: 1 });
+    expect([...cachedThread(id)!.pages.keys()]).toEqual(['1']);
   });
 
   it('keeps each thread apart', async () => {

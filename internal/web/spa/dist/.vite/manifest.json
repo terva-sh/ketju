@@ -1,6 +1,10 @@
 {
-  "_ApplyRoot-BDWwt9Nl.js": {
-    "file": "assets/ApplyRoot-BDWwt9Nl.js",
+  "_ApplyRoot-C_SWIqcC.css": {
+    "file": "assets/ApplyRoot-C_SWIqcC.css",
+    "src": "_ApplyRoot-C_SWIqcC.css"
+  },
+  "_ApplyRoot-C_y65165.js": {
+    "file": "assets/ApplyRoot-C_y65165.js",
     "name": "ApplyRoot",
     "imports": [
       "index.html"
@@ -9,22 +13,18 @@
       "assets/ApplyRoot-C_SWIqcC.css"
     ]
   },
-  "_ApplyRoot-C_SWIqcC.css": {
-    "file": "assets/ApplyRoot-C_SWIqcC.css",
-    "src": "_ApplyRoot-C_SWIqcC.css"
-  },
   "_theme-early-DbsvcKdk.js": {
     "file": "assets/theme-early-DbsvcKdk.js",
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-CFIyOCuh.js",
+    "file": "assets/index-chGlcr1R.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-BDWwt9Nl.js"
+      "_ApplyRoot-C_y65165.js"
     ],
     "css": [
       "assets/index-BPHDmE1z.css"
@@ -78,12 +78,12 @@
     "src": "src/assets/fonts/newsreader-latin-600-normal.woff2"
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-DL46PhE6.js",
+    "file": "assets/AdminRoot-Dno2N4Ul.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-BDWwt9Nl.js",
+      "_ApplyRoot-C_y65165.js",
       "index.html"
     ],
     "css": [
