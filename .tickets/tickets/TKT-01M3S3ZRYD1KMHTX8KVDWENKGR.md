@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:48Z
-updated_at: 2026-10-01T19:12:53Z
+updated_at: 2026-10-01T19:32:47Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -47,11 +47,11 @@ Add the member and post counts to the forum index's response, and draw the foote
 
 ## Acceptance criteria
 
-- [ ] At 390 px and 1440 px the forum index ends with N members · M posts for a member and M posts for an anonymous viewer, M summing post_count over the listed forums and their children
-- [ ] At 720 px and above the footer offers Press ? for keyboard shortcuts, which opens the help overlay; a phone shows no hint
-- [ ] The forum index passes axe at 390 px and 1440 px and forum-index-*.png are refreshed
+- [x] At 390 px and 1440 px the forum index ends with N members · M posts for a member and M posts for an anonymous viewer, M summing post_count over the listed forums and their children
+- [x] At 720 px and above the footer offers Press ? for keyboard shortcuts, which opens the help overlay; a phone shows no hint
+- [x] The forum index passes axe at 390 px and 1440 px and forum-index-*.png are refreshed
 - [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
-- [ ] GET /forums carries members, the count of exactly the accounts the mention lookup can offer (active, handle not ending in -), to a member session only, and null to anonymous viewers and applicants (TestForumTreeMembersOnlyForMembers, TestForumTreeMembersCountsActiveAccounts; golden, dto-contract.ts and docs/07 updated)
+- [x] GET /forums carries members, the count of exactly the accounts the mention lookup can offer (active, handle not ending in -), to a member session only, and null to anonymous viewers and applicants (TestForumTreeMembersOnlyForMembers, TestForumTreeMembersCountsActiveAccounts; golden, dto-contract.ts and docs/07 updated)
 
 ## Implementation plan
 
@@ -113,3 +113,15 @@ run decision: pending maintainer review. The footer reads 'N members · M posts'
 **agent:claude-code/phase3-groom-polish** at 2026-10-01T08:30:43Z
 
 Terva review 1705 on PR #269 (head 8aa50f3, base a599b48), medium, 'Reassess whether the member count widens disclosure'. Fixed by making the parity exact. N now counts the accounts the mention lookup can offer, active with a handle not ending in '-', and a test holds the two WHERE clauses equal. Counting every active account is recorded as the alternative that lost, in docs/06 and in the plan. This supersedes the run-decision note's definition of N as 'status-active accounts'.
+
+**agent:claude-code/phase3-s3zryd** at 2026-10-01T19:32:37Z
+
+run decision: pending maintainer review. The hint is a button that opens the shortcut list, and ? opens the list on the forum index as well, so "Press ? for keyboard shortcuts" is true there. The list opened from the index leads with "These keys work on a thread page." (HelpOverlay's new `lead` prop), since every other key in it is a thread page's. Alternatives that lost: the hint as plain text, because ? did nothing outside a thread page and the hint would have been false; front-page shortcuts of their own (j and k between forums), because nothing asked for them and the list would then differ by screen. Recorded in docs/06 "Thread list views (forum index)".
+
+Implementation, prepared on run/s3zryd-front-footer (source only; the dist waits for the orchestrator):
+- Server: `CountActiveMembers` in queries/identity.sql beside `UsersByHandlePrefix`, with a comment tying the two WHERE clauses. `forums.Service.Tree` reads it in its first read transaction, only when `v.Member()`, so an empty tree carries it too. `dto.ForumTree.Members *int`, goldens regenerated (anon null, member 34). dto-contract.ts needed no edit: it imports the goldens, and tsc passes with `members: number | null` required in dto.ts. docs/07's GET /forums row names the field.
+- Caching: GET /forums is built per request by `forums.Service.Tree`, answered `no-store` with no ETag, and goes through neither the response cache (respcache, thread pages only) nor the shell. No key or split was needed. `TestForumTreeMembersNeverShared` (internal/web/api) alternates member and anonymous requests and holds every answer no-store with no ETag, and every anonymous answer null.
+- Tests: `TestForumTreeMembersOnlyForMembers` (service and handler: anonymous, pre-user and an inactive signed-in account get null; a member gets the count), `TestForumTreeMembersCountsActiveAccounts` (pending, suspended, deactivated, anonymized and a handle ending in '-' not counted; an agent counted; equal to the distinct accounts UsersByHandlePrefix returns over all 36 first characters; moves on a suspension).
+- Client: `IndexFoot` in ForumIndex.tsx; numbers through toLocaleString with the viewer's locale; `data-members` and `data-posts-total` carry the raw numbers for tests. Phone: the footer keeps 88 px clear on the right for the floating button.
+- e2e: forum-index.spec.ts gains an anonymous footer test and a member footer test (390 px: no hint, ? inert, clear of the FAB, axe on the footer; 1440 px: hint opens the list, Escape returns focus, ? opens it, axe with the list open). forum-index-*.png refreshed.
+- Reader bundle measured with go generate: 66220 B before, 66738 B after (+518 B gzip) of 120000 B.
