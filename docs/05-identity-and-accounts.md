@@ -522,6 +522,12 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
   identity the current session came through lost because the
   remaining-identity rule already prevents a lock-out, and the refusal
   would only send the member to sign in again first.
+- None of signing out everywhere, linking an identity (`/auth/link`) or
+  removing one asks for a recent sign-in. **Decided 2026-10-01 by the
+  maintainer (TKT-01M3V6XSW2):** "I don't think we need a recent fresh
+  signin for any of those actions." The risk accepted is that whoever holds
+  a stolen session cookie can link their own identity and remove the
+  owner's.
 - Suspending, deactivating or anonymizing a user deletes their sessions, in
   the transaction that changes the status ("Account lifecycle").
 - CSRF: the API is JSON-only and rejects non-JSON content types on

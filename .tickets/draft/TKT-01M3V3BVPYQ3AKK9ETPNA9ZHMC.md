@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:24Z
-updated_at: 2026-10-01T15:16:52Z
+updated_at: 2026-10-01T17:14:50Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -104,3 +104,17 @@ Orchestrator log, 2026-10-01 (covers merges #264 to #321).
 - CI runner b3cc8959 freezes ~10 s (TKT-01M3VDYENN, class 3). The exit check depends on TKT-01M3VBWMA8, which is blocked on it, so Phase 3 cannot exit until it is fixed.
 - Redeploy the dogfood instance with the TKT-01M3VHSYFR fix (class 3).
 - TKT-01M3V6XSW2 (no milestone): should linking, unlinking and signing out everywhere need a recent sign-in?
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-01T17:14:50Z
+
+Orchestrator log, 2026-10-01 (merges #320 to #327).
+
+- #320 TKT-01M29CTYA0 live SSE + new-posts pill merged 1dbf9b0; reviews 1778 (3 medium), 1779, 1780 fixed; clean ba5ec8c9 on 09ade8a / base 40b9c2d; CI 2140; reader 60823 -> 62035 B (+1212). Run decision (docs/06 Live updates): lens pages hold no live subscription.
+- Main push run 2155 completed: success (first green completed push run since 1872).
+- #324 TKT-01M29CTY7K cross-forum lists merged 0ed44eb (code 276ff09); clean 493c7374 on 3d69ac4 / base 1dbf9b0, first round; CI 2152; migration 0023. Benchmark (10k threads): first pages 0.5-1.2 ms, worst /unread,/new ~10 ms, MeCounts 5.4-6 ms (37 ms at 9,970 read positions); docs/04. Run decisions (docs/06): one shared read boundary (dbq.ReadBoundary) for page, unread lens, list rows and read PUT/DELETE; divider time is the mark's time when the mark moved it; forum mark writes no row for threads the site mark already read.
+- #325 -> #326 TKT-01M3V73J8K composer attachments: #325 CI failed in go test -race (TestMutationsGoThroughPerm refused the e2e seed's direct GrantPermission; lane had not run -race locally); seed now grants through perm. Two medium review findings fixed, 5e23629b clean on #325; carried onto main as #326 (5d8f360 / 0ed44eb), fresh full review. Reader 62035 -> 63878 B (+1843).
+- #323 -> #327 TKT-01M29CRJ2T notification generator: carried after #324 (migration renumbered 0024, MeCounts merged). Review 1781 on #323: HIGH security (a reader of the old forum could see/count a notification for a thread moved away before the projection caught up; now held until the projection reaches the move, threadlog.Reader.Moved, TestNotificationsTrailingMove) and medium (edit upgraded a read notification) both fixed with tests that fail on revert.
+- #326 TKT-01M3V73J8K composer attachments merged 5d8f360 (code c133544); clean 61bb5ee5 on 5d8f360 / base 0ed44eb; CI 2169; reader 62035 -> 63878 B (+1843).
+- #323 -> #327 TKT-01M29CRJ2T notification generator merged e855e1a (code d0a6213, b768b4f); reviews 1781 (high security: moved-thread notification visible before projection caught up; medium) and 1784 (medium: SQLite variable limit stalled catch-up) fixed; 1791 clean on 1675897 / base 5d8f360; CI 2178 (new non-race backlog step); migration 0024. Run decisions: threads with an unprojected move are held from list and badge; only unread notifications upgrade.
+- /tmp (7.8 GB tmpfs) filled to 100% and broke every lane. The run freed its own Playwright run directories and moved lane temp files to ~/.cache/agent-scratch (run brief "Temporary files"); the maintainer then asked for /tmp to be cleaned, and 4133 of their entries older than 2026-10-01, none in use, were removed (mostly old acp-sess-* harness directories), leaving 13% used.
+- Maintainer decision: TKT-01M3V6XSW2 (recent sign-in) answered "I don't think we need a recent fresh signin for any of those actions"; recorded in docs/05 and archived.
