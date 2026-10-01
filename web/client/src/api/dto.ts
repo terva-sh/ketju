@@ -219,10 +219,15 @@ export interface UnreadCounts {
   watching: number;
 }
 
+// Settings is /me's settings, and GET and PATCH /settings (TKT-01M29CCC0X).
+// theme is system, light or dark, and the server always sends it. It is
+// optional here only until the settings screens (TKT-01M29CXK4E) give the
+// bootstrap's anonymous fallback one.
 export interface Settings {
   timezone: string;
   locale: string;
   page_size: number;
+  theme?: string;
 }
 
 export interface Me {
@@ -304,6 +309,53 @@ export interface HandleChange {
   handle: string;
   previous: string;
   next_change_at: Millis | null;
+}
+
+// SessionList is GET /settings/sessions (TKT-01M29CCC0X): the viewer's live
+// sessions, most recently used first. id names one to DELETE
+// /settings/sessions/{id}; current is the request's own; device is a label
+// read from user_agent; provider is the identity provider's key, empty when
+// none was recorded.
+export interface SessionInfo {
+  id: string;
+  current: boolean;
+  device: string;
+  user_agent: string;
+  ip: string;
+  provider: string;
+  created_at: Millis;
+  last_used_at: Millis;
+}
+
+export interface SessionList {
+  sessions: SessionInfo[];
+}
+
+// IdentityList is GET /settings/identities (TKT-01M29CCC0X): the sign-ins
+// linked to the account, oldest first. provider_name is empty, and
+// configured false, once the operator has removed the provider. removable
+// says whether DELETE /settings/identities/{id} would succeed now.
+export interface IdentityInfo {
+  id: number;
+  provider: string;
+  provider_name: string;
+  configured: boolean;
+  email: string | null;
+  created_at: Millis;
+  last_login_at: Millis | null;
+  current: boolean;
+  removable: boolean;
+}
+
+export interface IdentityList {
+  identities: IdentityInfo[];
+}
+
+// IdentityRemoved answers DELETE /settings/identities/{id}. signed_out is
+// true when the request's own session came through the removed identity:
+// the cookie is cleared and the client is signed out.
+export interface IdentityRemoved {
+  signed_out: boolean;
 }
 
 // UserPosts is GET /users/{handle}/posts?cursor=: a page of the account's

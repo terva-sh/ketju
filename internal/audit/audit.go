@@ -108,6 +108,7 @@ var Actions = []string{
 	"group.updated",
 	"identity.linked",
 	"identity.unblocked",
+	"identity.unlinked",
 	"permission.granted",
 	"permission.revoked",
 	"post.auto_hidden",

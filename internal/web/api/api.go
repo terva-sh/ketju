@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/problem"
@@ -50,8 +51,18 @@ type Deps struct {
 	// the one optional service: nil answers the route not-implemented, as
 	// web.Groups answers a group it lacks, so a test of something else
 	// need not build a blob store.
-	Blobs  *blobs.Service
-	Logger *slog.Logger
+	Blobs *blobs.Service
+	// Sessions lists and ends the viewer's own sessions under
+	// /api/v1/settings (settings.go, TKT-01M29CCC0X). serve passes the
+	// store its session middleware reads, so the two share a clock; nil is
+	// a store over Users.DB on Users.Now.
+	Sessions *session.Store
+	// Providers are the identity providers config.toml configures now. An
+	// identity on any other provider cannot sign in, so it does not count
+	// when another is removed (identity.Service.Unlink). None means no
+	// identity may be removed.
+	Providers []identity.ProviderName
+	Logger    *slog.Logger
 	// Now is the clock of the per-identity limiter and of the per-agent
 	// bucket; nil is time.Now. Tests set it.
 	Now func() time.Time
@@ -80,6 +91,10 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 	if log == nil {
 		log = slog.Default()
 	}
+	sessions := d.Sessions
+	if sessions == nil {
+		sessions = &session.Store{DB: d.Users.DB, Now: d.Users.Now}
+	}
 	h := &handlers{threads: d.Threads, users: d.Users, forums: d.Forums, forms: d.Forms, applications: d.Applications,
 		perm: d.Perm, blobs: d.Blobs, log: log, applyLimit: web.KeyedLimit(web.ApplyRate, applicantKey, d.Now),
 		// The per-agent bucket (agents.go, TKT-01M29P9RSW): one for the
@@ -94,8 +109,10 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		// (TKT-01M29CP2QK).
 		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Threads: d.Threads, Now: d.Users.Now},
 		// Handle changes likewise (TKT-01M3NRP3W9): a rename needs only the
-		// database and the clock.
-		identity: &identity.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now},
+		// database and the clock. Removing a sign-in (TKT-01M29CCC0X) needs
+		// the configured providers too.
+		identity: &identity.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now, Providers: d.Providers},
+		sessions: sessions,
 		// The audit log likewise (TKT-01M29CP2R4): it only reads.
 		auditlog: &auditlog.Service{DB: d.Users.DB},
 		// The site settings likewise (TKT-01M29CXK2H): the database and
@@ -149,6 +166,13 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/users", Handler: h.usersByPrefix},
 		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
 		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},
+		{Method: get, Path: "/api/v1/settings", Handler: h.settings},
+		{Method: patch, Path: "/api/v1/settings", Handler: h.patchSettings},
+		{Method: get, Path: "/api/v1/settings/sessions", Handler: h.sessionList},
+		{Method: del, Path: "/api/v1/settings/sessions", Handler: h.endEverySession},
+		{Method: del, Path: "/api/v1/settings/sessions/{id}", Handler: h.endSession},
+		{Method: get, Path: "/api/v1/settings/identities", Handler: h.identityList},
+		{Method: del, Path: "/api/v1/settings/identities/{id}", Handler: h.removeIdentity},
 		{Method: post, Path: "/api/v1/settings/deactivate", Handler: h.deactivate},
 		{Method: put, Path: "/api/v1/settings/handle", Handler: h.changeHandle},
 	}, h.applyRoutes()...)
@@ -178,6 +202,7 @@ type handlers struct {
 	groups       *groups.Service
 	account      *account.Service
 	identity     *identity.Service
+	sessions     *session.Store
 	auditlog     *auditlog.Service
 	sitesettings *sitesettings.Service
 	log          *slog.Logger
@@ -220,7 +245,12 @@ func (h *handlers) thread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	res, err := h.threads.View(r.Context(), domain.ViewerFrom(r.Context()), id, q, r.Header.Get("If-None-Match"))
+	// The viewer's own page size (TKT-01M29CCC0X), read from the account the
+	// request authenticated as. The response cache keys a page by it, so a
+	// page drawn at one size is never served at another.
+	v := domain.ViewerFrom(r.Context())
+	q.PageSize = users.PageSize(r.Context(), v)
+	res, err := h.threads.View(r.Context(), v, id, q, r.Header.Get("If-None-Match"))
 	respond(h, w, r, res, err)
 }
 

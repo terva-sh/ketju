@@ -1,0 +1,37 @@
+{
+  "identities": [
+    {
+      "id": 3,
+      "provider": "github",
+      "provider_name": "GitHub",
+      "configured": true,
+      "email": "alice@example.org",
+      "created_at": 1757000000000,
+      "last_login_at": 1757400000000,
+      "current": true,
+      "removable": true
+    },
+    {
+      "id": 8,
+      "provider": "club",
+      "provider_name": "The Club's sign-in",
+      "configured": true,
+      "email": null,
+      "created_at": 1757100000000,
+      "last_login_at": null,
+      "current": false,
+      "removable": true
+    },
+    {
+      "id": 9,
+      "provider": "oldidp",
+      "provider_name": "",
+      "configured": false,
+      "email": null,
+      "created_at": 1756000000000,
+      "last_login_at": 1756100000000,
+      "current": false,
+      "removable": true
+    }
+  ]
+}

@@ -349,7 +349,7 @@ func me(class string) Me {
 			User:          nil,
 			Unread:        UnreadCounts{},
 			Notifications: 0,
-			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
 			SiteName:      "The Supper Club",
 		}
 	case tPreUser:
@@ -358,7 +358,7 @@ func me(class string) Me {
 			PreUser:       &PreUser{Provider: "github", Tag: "5b0e2c9d71a4f38e6c1d0b27"},
 			Unread:        UnreadCounts{},
 			Notifications: 0,
-			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
 			SiteName:      "The Supper Club",
 		}
 	case tModerator:
@@ -367,7 +367,7 @@ func me(class string) Me {
 			Unread:        UnreadCounts{Threads: 3, Participated: 1, Watching: 2},
 			Notifications: 9,
 			Queue:         ptr(4),
-			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50},
+			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50, Theme: "dark"},
 			SiteName:      "The Supper Club",
 		}
 	case tAgent:
@@ -375,7 +375,7 @@ func me(class string) Me {
 			User:          &scribe,
 			Unread:        UnreadCounts{Threads: 7, Participated: 3, Watching: 1},
 			Notifications: 4,
-			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 40},
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 40, Theme: "system"},
 			SiteName:      "The Supper Club",
 		}
 	default:
@@ -383,7 +383,7 @@ func me(class string) Me {
 			User:          &alice,
 			Unread:        UnreadCounts{Threads: 12, Participated: 5, Watching: 4},
 			Notifications: 2,
-			Settings:      Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 25},
+			Settings:      Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 25, Theme: "light"},
 			SiteName:      "The Supper Club",
 		}
 	}

@@ -146,6 +146,19 @@ func (s Session) Tag() string {
 	return hex.EncodeToString(sum[:12])
 }
 
+// ID names the session in its member's session list, so "sign out this
+// device" can say which (TKT-01M29CCC0X). It is a hash of the stored hash
+// under its own prefix, so it is neither the cookie, the row, the
+// SessionKey a cache is keyed by, nor Tag, and nothing can be signed in
+// with it. Info.ID is the same derivation, so a handler can tell which
+// listed row is the request's own.
+func (s Session) ID() string { return publicID(s.hash) }
+
+func publicID(h sqltypes.SessionHash) string {
+	sum := sha256.Sum256(append([]byte("ketju session id\x00"), h[:]...))
+	return hex.EncodeToString(sum[:16])
+}
+
 // Store reads and writes sessions.
 type Store struct {
 	DB *db.DB
@@ -235,21 +248,43 @@ func (s *Store) lookup(ctx context.Context, h sqltypes.SessionHash) (Session, er
 // the commit. Account linking is the one such write (TKT-01M29CKRES). It
 // reads, and creates nothing.
 func HeldBy(ctx context.Context, q *dbq.Queries, token string, userID int64, now time.Time) error {
+	_, err := HeldThrough(ctx, q, token, userID, now)
+	return err
+}
+
+// HeldThrough is HeldBy, and also says which identity the session signed
+// in through, 0 for none. Removing an identity reads it (TKT-01M29CCC0X):
+// the removal ends every session through the identity, and the browser
+// that asked is told whether its own was one of them.
+func HeldThrough(ctx context.Context, q *dbq.Queries, token string, userID int64, now time.Time) (int64, error) {
 	h, ok := hashToken(token)
 	if !ok {
-		return ErrNoSession
+		return 0, ErrNoSession
 	}
 	c := ExpiredBefore(now)
 	row, err := q.LookupSession(ctx, dbq.LookupSessionParams{IDHash: h, ExpiresAfter: c.ExpiresAt, LastUsedAfter: c.LastUsedAt})
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		return ErrNoSession
+		return 0, ErrNoSession
 	case err != nil:
-		return fmt.Errorf("session: lookup: %w", err)
+		return 0, fmt.Errorf("session: lookup: %w", err)
 	case Kind(row.Kind) != KindUser || !row.UserID.Valid || row.UserID.Int64 != userID:
-		return ErrNoSession
+		return 0, ErrNoSession
 	}
-	return nil
+	return row.IdentityID.Int64, nil
+}
+
+// EndThrough deletes, through q inside the caller's transaction, every
+// session signed in through identityID, of either kind, and returns how many
+// it deleted. Removing an identity calls it in the transaction that deletes
+// the identity (TKT-01M29CCC0X), so the sessions it opened close with it,
+// and the foreign key from sessions to identities holds.
+func EndThrough(ctx context.Context, q *dbq.Queries, identityID int64) (int64, error) {
+	n, err := q.DeleteSessionsThroughIdentity(ctx, sql.NullInt64{Int64: identityID, Valid: true})
+	if err != nil {
+		return 0, fmt.Errorf("session: ending the sessions through identity %d: %w", identityID, err)
+	}
+	return n, nil
 }
 
 // touchDue reports whether a session last used at t may be touched at now.
@@ -288,13 +323,52 @@ func (s *Store) Revoke(ctx context.Context, token string) error {
 	return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error { return q.DeleteSession(ctx, h) })
 }
 
-// RevokeUser ends every session a user has: sign out everywhere, and what
-// suspension does (docs/05). It takes effect on each device's next request,
-// because every request looks its session up.
+// RevokeUser ends every session a user has: sign out everywhere
+// (TKT-01M29CCC0X), the session asking included. It takes effect on each
+// device's next request, because every request looks its session up. A
+// pre-user session still bound to one of the user's identities from before
+// they had an account goes too, in the same transaction, as perm's status
+// changes delete them: it no longer resolves, and nothing should be left
+// that names the account's identities.
 func (s *Store) RevokeUser(ctx context.Context, userID int64) error {
+	id := sql.NullInt64{Int64: userID, Valid: true}
 	return s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		return q.DeleteUserSessions(ctx, sql.NullInt64{Int64: userID, Valid: true})
+		if err := q.DeleteUserSessions(ctx, id); err != nil {
+			return err
+		}
+		return q.DeleteIdentitySessions(ctx, id)
 	})
+}
+
+// RevokeOwn ends the session of userID's that the session list names id
+// (Info.ID): sign out that device (TKT-01M29CCC0X). It reports false, and
+// deletes nothing, when no live session of the user's has that id, so an id
+// of another member's session, an expired one, and one that never existed
+// all answer the same. The match and the delete share one transaction, and
+// the delete names the user as well as the row.
+func (s *Store) RevokeOwn(ctx context.Context, userID int64, id string) (bool, error) {
+	c := ExpiredBefore(s.now())
+	user := sql.NullInt64{Int64: userID, Valid: true}
+	var ended bool
+	err := s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		rows, err := q.ListUserSessions(ctx, user)
+		if err != nil {
+			return err
+		}
+		for _, r := range rows {
+			if !c.Live(r.ExpiresAt, r.LastUsedAt) || publicID(r.IDHash) != id {
+				continue
+			}
+			n, err := q.DeleteUserSession(ctx, dbq.DeleteUserSessionParams{IDHash: r.IDHash, UserID: user})
+			ended = n > 0
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return false, fmt.Errorf("session: revoking a session of user %d: %w", userID, err)
+	}
+	return ended, nil
 }
 
 // RevokePreUser ends every pre-user session bound to identityID. Approving
@@ -336,11 +410,17 @@ func (s *Store) Sweep(ctx context.Context) (int64, error) {
 	return n, nil
 }
 
-// Info is one of a user's sessions as the session list shows it. Key names
-// the row for a later "sign out this device" and is not the cookie value.
+// Info is one of a user's sessions as the session list shows it. ID names
+// the row for "sign out this device" (RevokeOwn), by Session.ID's
+// derivation: it is not the cookie value, the row, or the SessionKey.
 type Info struct {
-	Key        string
-	Kind       Kind
+	ID   string
+	Kind Kind
+	// IdentityID is the identity the session signed in through, and
+	// Provider that identity's provider key; 0 and "" when none was
+	// recorded.
+	IdentityID int64
+	Provider   string
 	CreatedAt  time.Time
 	ExpiresAt  time.Time
 	LastUsedAt time.Time
@@ -358,7 +438,8 @@ func (s *Store) ListForUser(ctx context.Context, userID int64) ([]Info, error) {
 	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		rows, err := q.ListUserSessions(ctx, sql.NullInt64{Int64: userID, Valid: true})
 		for _, r := range rows {
-			out = append(out, Info{Key: key(r.IDHash), Kind: Kind(r.Kind), CreatedAt: time.UnixMilli(r.CreatedAt),
+			out = append(out, Info{ID: publicID(r.IDHash), Kind: Kind(r.Kind), IdentityID: r.IdentityID.Int64,
+				Provider: r.OidcProviderKey.String, CreatedAt: time.UnixMilli(r.CreatedAt),
 				ExpiresAt: time.UnixMilli(r.ExpiresAt), LastUsedAt: time.UnixMilli(r.LastUsedAt),
 				IP: r.Ip.String, UserAgent: r.UserAgent.String, Live: c.Live(r.ExpiresAt, r.LastUsedAt)})
 		}

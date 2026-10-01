@@ -34,8 +34,9 @@ import (
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
-// DefaultPageSize is docs/06's decided default. The per-user setting (10 to
-// 50) arrives with the settings endpoint; until then every page is this size.
+// DefaultPageSize is docs/06's decided default: the page size of a viewer who
+// has not chosen one, and of anyone not signed in. A member's own choice, 10
+// to 50, reaches View as Query.PageSize (users.PageSize, TKT-01M29CCC0X).
 const DefaultPageSize = 25
 
 // Viewer classes (docs/07): what a response's cacheable part depends on.

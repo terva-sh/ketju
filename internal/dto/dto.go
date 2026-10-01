@@ -444,16 +444,20 @@ type UnreadCounts struct {
 	Watching     int `json:"watching"`
 }
 
-// Settings is the viewer's own preferences.
+// Settings is the viewer's own preferences: in /me, and GET and PATCH
+// /settings (TKT-01M29CCC0X).
 //
 // Deliberately the subset the documents pin. docs/04 gives timezone and locale
 // on the users row and docs/06 gives the page size with its 10 to 50 range.
-// prefs_json holds more, but what is in it is not decided, and a golden over
-// an undecided field would read as a decision.
+// Theme is system, light or dark, stored in prefs_json and system until the
+// member chooses (docs/07 "Preact client", decided by the run 2026-10-01).
+// prefs_json may hold more, but nothing else in it is decided, and a golden
+// over an undecided field would read as a decision.
 type Settings struct {
 	Timezone string `json:"timezone"`
 	Locale   string `json:"locale"`
 	PageSize int    `json:"page_size"`
+	Theme    string `json:"theme"`
 }
 
 // Me is the response to GET /me.
@@ -669,6 +673,63 @@ type HandleChange struct {
 	// 30 days after their last own change; null when they may now. An
 	// admin's rename does not move it.
 	NextChangeAt *Millis `json:"next_change_at"`
+}
+
+// SessionList is GET /settings/sessions (TKT-01M29CCC0X): where the viewer
+// is signed in, live sessions only, most recently used first.
+type SessionList struct {
+	Sessions []SessionInfo `json:"sessions"`
+}
+
+// SessionInfo is one session in the list. ID names it to DELETE
+// /settings/sessions/{id}; it is neither the cookie nor anything a session
+// can be resumed with. Current marks the session the request came with.
+// Device is a label read from UserAgent ("Firefox on Linux"), and UserAgent
+// the header as the sign-in sent it. Provider is the key of the identity
+// provider the session signed in through, empty when none was recorded.
+type SessionInfo struct {
+	ID         string `json:"id"`
+	Current    bool   `json:"current"`
+	Device     string `json:"device"`
+	UserAgent  string `json:"user_agent"`
+	IP         string `json:"ip"`
+	Provider   string `json:"provider"`
+	CreatedAt  Millis `json:"created_at"`
+	LastUsedAt Millis `json:"last_used_at"`
+}
+
+// IdentityList is GET /settings/identities (TKT-01M29CCC0X): the sign-ins
+// linked to the viewer's account, oldest first.
+type IdentityList struct {
+	Identities []IdentityInfo `json:"identities"`
+}
+
+// IdentityInfo is one linked sign-in. ProviderName is the provider's name
+// in config.toml, empty once the operator has removed the provider, and
+// Configured says which. Email is what the provider asserted, null when it
+// asserted none; LastLoginAt is null for an identity never used to sign in.
+// Current marks the identity the request's session signed in through.
+// Removable is whether DELETE /settings/identities/{id} would remove it now:
+// another identity on a configured provider remains (docs/05 "Sessions and
+// CSRF", decided by the run 2026-10-01).
+type IdentityInfo struct {
+	ID           int64   `json:"id"`
+	Provider     string  `json:"provider"`
+	ProviderName string  `json:"provider_name"`
+	Configured   bool    `json:"configured"`
+	Email        *string `json:"email"`
+	CreatedAt    Millis  `json:"created_at"`
+	LastLoginAt  *Millis `json:"last_login_at"`
+	Current      bool    `json:"current"`
+	Removable    bool    `json:"removable"`
+}
+
+// IdentityRemoved is the answer to DELETE /settings/identities/{id}
+// (TKT-01M29CCC0X). SignedOut is true when the request's own session came
+// through the removed identity and so ended with it: the cookie is cleared,
+// and the client is signed out.
+type IdentityRemoved struct {
+	SignedOut bool `json:"signed_out"`
 }
 
 // UserPosts is GET /users/{handle}/posts (docs/07): a page of an account's

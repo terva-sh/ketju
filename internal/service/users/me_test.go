@@ -185,14 +185,24 @@ func TestThreadRuleMatchesPostRule(t *testing.T) {
 	}
 }
 
-func TestPageSize(t *testing.T) {
-	for prefs, want := range map[string]int{
-		`{}`: 25, `{"page_size": 10}`: 10, `{"page_size": 50}`: 50, `{"page_size": 9}`: 25,
-		`{"page_size": 51}`: 25, `{"page_size": 30.5}`: 25, `{"page_size": "30"}`: 25,
-		`{"page_size": null}`: 25, `not json`: 25, ``: 25, `{"page_size": 30, "other": [1]}`: 30,
+func TestPrefs(t *testing.T) {
+	type want struct {
+		size  int
+		theme string
+	}
+	for prefs, w := range map[string]want{
+		`{}`: {25, "system"}, `{"page_size": 10}`: {10, "system"}, `{"page_size": 50}`: {50, "system"},
+		`{"page_size": 9}`: {25, "system"}, `{"page_size": 51}`: {25, "system"}, `{"page_size": 30.5}`: {25, "system"},
+		`{"page_size": "30"}`: {25, "system"}, `{"page_size": null}`: {25, "system"}, `not json`: {25, "system"},
+		``: {25, "system"}, `[1]`: {25, "system"}, `null`: {25, "system"},
+		`{"page_size": 30, "other": [1]}`: {30, "system"},
+		`{"theme": "dark"}`:               {25, "dark"}, `{"theme": "light", "page_size": 40}`: {40, "light"},
+		`{"theme": "sepia"}`: {25, "system"}, `{"theme": 1}`: {25, "system"}, `{"theme": "Dark"}`: {25, "system"},
+		// One bad key does not cost the other its value.
+		`{"theme": "dark", "page_size": "30"}`: {25, "dark"},
 	} {
-		if got := pageSize(prefs); got != want {
-			t.Errorf("pageSize(%s) = %d, want %d", prefs, got, want)
+		if size, theme := Prefs(prefs); size != w.size || theme != w.theme {
+			t.Errorf("Prefs(%s) = %d, %q; want %d, %q", prefs, size, theme, w.size, w.theme)
 		}
 	}
 }

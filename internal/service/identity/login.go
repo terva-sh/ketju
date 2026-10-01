@@ -98,6 +98,11 @@ type Service struct {
 	// bootstrap promotion, and the IdP group mapping, which runs at every
 	// sign-in. A sign-in fails without it.
 	Perm *perm.Evaluator
+	// Providers are the providers config.toml configures now, which decide
+	// whether an identity counts as a way to sign in when another is
+	// removed (unlink.go). Nil means none is configured, so no identity may
+	// be removed.
+	Providers []ProviderName
 	// Policy is each provider's configuration of a sign-in through it
 	// (PolicyFrom). Nil means no provider maps groups.
 	Policy Policy

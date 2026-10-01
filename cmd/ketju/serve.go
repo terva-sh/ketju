@@ -544,7 +544,11 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	agentCreds := &agentcred.Store{DB: d}
 	var root http.Handler = web.New(web.Groups{
 		API: api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Forms: formSvc,
-			Applications: &applications.Service{DB: d}, Perm: perms, Blobs: blobSvc, Logger: log}),
+			Applications: &applications.Service{DB: d}, Perm: perms, Blobs: blobSvc, Logger: log,
+			// The settings routes list and end sessions through the store the
+			// session middleware reads, and count only the providers
+			// configured now when a sign-in is removed (TKT-01M29CCC0X).
+			Sessions: sessions, Providers: identity.ProviderNames(cfg.OIDC.Providers)}),
 		Auth:   auth.New(authh),
 		Blobs:  blobsweb.New(blobSvc, log),
 		Events: &sse.Handler{Hub: hub, Threads: threadSvc, Sessions: sessions, Credentials: agentCreds, Logger: log},

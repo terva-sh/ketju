@@ -255,7 +255,7 @@ func decodeMe(t *testing.T, b []byte) dto.Me {
 // admin chose rather than the default.
 const siteName = "The Supper Club"
 
-var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25}, SiteName: siteName}
+var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"}, SiteName: siteName}
 
 // TestMeShapes is AC1: the documented shape for an anonymous viewer, a member,
 // a moderator, a pre-user session and an agent by its credential, from seeded
@@ -279,7 +279,7 @@ func TestMeShapes(t *testing.T) {
 			// read, 7 is in a forum she cannot see.
 			Unread:        dto.UnreadCounts{Threads: 3, Participated: 1, Watching: 1},
 			Notifications: 2,
-			Settings:      dto.Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 30},
+			Settings:      dto.Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 30, Theme: "dark"},
 			SiteName:      siteName,
 		}},
 		{"moderator", sessiontest.SignIn(t, w.db, w.id["bob"], w.now), dto.Me{
@@ -291,7 +291,7 @@ func TestMeShapes(t *testing.T) {
 			// The flagged post in the general forum, as one item, and the
 			// application; not the staff forum's flag.
 			Queue:    new(2),
-			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
 			SiteName: siteName,
 		}},
 		// A member granted moderate on one forum through a group has a
@@ -300,7 +300,7 @@ func TestMeShapes(t *testing.T) {
 			User:     &dto.Author{Handle: "dave", DisplayName: "Dave", Role: "member", Kind: "human"},
 			Unread:   dto.UnreadCounts{Threads: 6},
 			Queue:    new(1),
-			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25},
+			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
 			SiteName: siteName,
 		}},
 		{"suspended admin", sessiontest.SignIn(t, w.db, w.id["carol"], w.now), anonMe},
@@ -313,7 +313,7 @@ func TestMeShapes(t *testing.T) {
 			User:          &dto.Author{Handle: "scribe", DisplayName: "Scribe", Avatar: "e5f6a7", Role: "member", Kind: "agent"},
 			Unread:        dto.UnreadCounts{Threads: 5, Participated: 1, Watching: 1},
 			Notifications: 1,
-			Settings:      dto.Settings{Timezone: "America/Toronto", Locale: "fr", PageSize: 40},
+			Settings:      dto.Settings{Timezone: "America/Toronto", Locale: "fr", PageSize: 40, Theme: "system"},
 			SiteName:      siteName,
 		}},
 	} {

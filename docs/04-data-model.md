@@ -68,6 +68,16 @@ handle_changed_at (nullable, Unix ms)
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.
 
+`prefs_json` is a JSON object of the member's own preferences, written by
+`PATCH /settings` (07, TKT-01M29CCC0X). Two keys are read: `page_size`, the
+posts per thread page, an integer from 10 to 50 (06 "Paged, not infinite"),
+and `theme`, one of `system`, `light` and `dark` (07 "Preact client").
+Each key that is missing or out of range reads as its default, 25 and
+`system`, and so does every key when the column is not a JSON object. A
+write keeps the keys it does not name, and replaces a column that is not an
+object with one. `timezone` is its own column, an IANA zone name; `locale`
+has no writer yet.
+
 **The account lifecycle** (migration 0012, TKT-01M29CKRFS, 05 "Account
 lifecycle"). `status_reason` and `status_until` are a suspension's reason and
 end, which the member is shown at sign-in; `status_until` is null when no end
@@ -514,6 +524,10 @@ transaction that projects the record, with the frame's timestamp as `at`.
   identity's id, in the transaction that writes the identity (05 "Login
   flow" step 3). It is the record of when the link happened: the identity's
   `last_login_at` stays empty until it first signs in.
+- Removing a linked identity (TKT-01M29CCC0X) writes `identity.unlinked`
+  against the user, with the member as actor, `"provider"` and
+  `"identity"`, the removed identity's id, in the transaction that ends the
+  sessions signed in through it and deletes it (05 "Sessions and CSRF").
 - Application review (TKT-01M29CP2MG) writes one row per decision, in the
   transaction that makes it, with the deciding moderator as actor:
   `application.approved` against the application, with `"user_id"`,
@@ -623,6 +637,7 @@ names that the list lacks.
 | `group.updated` | `group` | TKT-01M29CXK1X |
 | `identity.linked` | `user` | TKT-01M29CKRES |
 | `identity.unblocked` | `identity` | TKT-01M29CP2MG |
+| `identity.unlinked` | `user` | TKT-01M29CCC0X |
 | `permission.granted` | `permission` | TKT-01M29CXK1X |
 | `permission.revoked` | `permission` | TKT-01M29CXK1X |
 | `post.auto_hidden` | `post` | TKT-01M29CP2PJ |

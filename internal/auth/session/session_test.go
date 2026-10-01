@@ -562,7 +562,7 @@ func TestTheLogNamesTheViewerNotTheToken(t *testing.T) {
 	}
 }
 
-// TestListForUser: the list names each session by a key that is not the
+// TestListForUser: the list names each session by an id that is not the
 // cookie, and says which have expired.
 func TestListForUser(t *testing.T) {
 	w := newWorld(t)
@@ -577,11 +577,203 @@ func TestListForUser(t *testing.T) {
 		t.Fatalf("list %+v: want the fresh one live and first", list)
 	}
 	for _, i := range list {
-		if strings.Contains(old, i.Key) || strings.Contains(fresh, i.Key) || i.Key == "" ||
-			strings.Contains(storedHex(t, old), i.Key) || strings.Contains(storedHex(t, fresh), i.Key) {
-			t.Fatalf("key %q", i.Key)
+		if strings.Contains(old, i.ID) || strings.Contains(fresh, i.ID) || i.ID == "" ||
+			strings.Contains(storedHex(t, old), i.ID) || strings.Contains(storedHex(t, fresh), i.ID) {
+			t.Fatalf("id %q", i.ID)
 		}
 	}
+}
+
+// TestSessionIDIsNeitherCookieNorCacheKey (TKT-01M29CCC0X): the id the
+// session list shows differs from the token, the stored hash, the
+// SessionKey perm's cache is keyed by, and Tag, for the same session; it is
+// stable across lookups; and Session.ID and Info.ID agree.
+func TestSessionIDIsNeitherCookieNorCacheKey(t *testing.T) {
+	w := newWorld(t)
+	tok := w.signIn(w.member)
+	s1, err := w.store.Lookup(t.Context(), tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s2, err := w.store.Lookup(t.Context(), tok)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id := s1.ID()
+	if id == "" || id != s2.ID() {
+		t.Fatalf("the id is %q then %q", id, s2.ID())
+	}
+	for name, other := range map[string]string{"the token": tok, "the stored hash": storedHex(t, tok),
+		"the SessionKey": s1.Viewer().SessionKey, "the tag": s1.Tag()} {
+		if strings.Contains(other, id) || strings.Contains(id, other) {
+			t.Errorf("the id %q overlaps %s %q", id, name, other)
+		}
+	}
+	list, err := w.store.ListForUser(t.Context(), w.member)
+	if err != nil || len(list) != 1 || list[0].ID != id {
+		t.Fatalf("listed %+v, %v; want the id %q", list, err, id)
+	}
+}
+
+// TestRevokeOwnEndsTheSessionServerSide (TKT-01M29CCC0X): revoking one of
+// a member's sessions by its listed id deletes that row, so its cookie's
+// next request is anonymous, and leaves the member's other session live.
+func TestRevokeOwnEndsTheSessionServerSide(t *testing.T) {
+	w := newWorld(t)
+	h := w.server(nil)
+	mine, other := w.signIn(w.member), w.signIn(w.member)
+	o, err := w.store.Lookup(t.Context(), other)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ended, err := w.store.RevokeOwn(t.Context(), w.member, o.ID())
+	if err != nil || !ended {
+		t.Fatalf("RevokeOwn = %v, %v", ended, err)
+	}
+	if _, err := w.store.Lookup(t.Context(), other); !errors.Is(err, ErrNoSession) {
+		t.Fatalf("the revoked session still resolves: %v", err)
+	}
+	if rec := get(h, other); rec.Code != http.StatusUnauthorized {
+		t.Errorf("the revoked cookie's next request: %d", rec.Code)
+	}
+	if rec := get(h, mine); rec.Code != http.StatusOK {
+		t.Errorf("the other session's next request: %d", rec.Code)
+	}
+	if ended, err := w.store.RevokeOwn(t.Context(), w.member, o.ID()); err != nil || ended {
+		t.Errorf("revoking it again = %v, %v; want false", ended, err)
+	}
+}
+
+// TestRevokeOwnRefusesAnotherMembersSession (TKT-01M29CCC0X): an id of
+// another member's session, an expired session's and a made-up one all
+// answer false, and delete nothing.
+func TestRevokeOwnRefusesAnotherMembersSession(t *testing.T) {
+	w := newWorld(t)
+	var bob int64
+	if err := w.db.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		bob, err = q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "bob", DisplayName: "Bob", Status: "active",
+			Role: "member", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	stale := w.signIn(w.member)
+	st, err := w.store.Lookup(t.Context(), stale)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w.clock.add(IdleExpiry)
+	bobs := w.signIn(bob)
+	b, err := w.store.Lookup(t.Context(), bobs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, id := range map[string]string{"bob's": b.ID(), "an expired one": st.ID(), "a made-up one": "00", "empty": ""} {
+		if ended, err := w.store.RevokeOwn(t.Context(), w.member, id); err != nil || ended {
+			t.Errorf("RevokeOwn(%s) = %v, %v; want false", name, ended, err)
+		}
+	}
+	if _, err := w.store.Lookup(t.Context(), bobs); err != nil {
+		t.Errorf("bob's session: %v", err)
+	}
+	if n := countRows(t, w.db, `SELECT count(*) FROM sessions`); n != 2 {
+		t.Errorf("%d session rows, want 2: a refused revoke deleted something", n)
+	}
+}
+
+// TestRevokeUserEndsEveryRowOfTheAccount (TKT-01M29CCC0X): sign out
+// everywhere deletes every member session of the account and a stale
+// pre-user row bound to one of its identities, and nobody else's.
+func TestRevokeUserEndsEveryRowOfTheAccount(t *testing.T) {
+	w := newWorld(t)
+	w.preUser()
+	var bob int64
+	if err := w.db.Write(t.Context(), func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		bob, err = q.CreateUser(t.Context(), dbq.CreateUserParams{Handle: "bob", DisplayName: "Bob", Status: "active",
+			Role: "member", Kind: "human", CreatedAt: 1, UpdatedAt: 1})
+		if err != nil {
+			return err
+		}
+		// The applicant was approved as alice's identity: the pre-user row
+		// no longer resolves, and stays until something deletes it.
+		_, err = tx.ExecContext(t.Context(), `UPDATE identities SET user_id = ? WHERE id = ?`, w.member, w.identity)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	for range 3 {
+		w.signIn(w.member)
+	}
+	bobs := w.signIn(bob)
+	if err := w.store.RevokeUser(t.Context(), w.member); err != nil {
+		t.Fatal(err)
+	}
+	if n := countRows(t, w.db, `SELECT count(*) FROM sessions`); n != 1 {
+		t.Errorf("%d session rows, want bob's alone", n)
+	}
+	if _, err := w.store.Lookup(t.Context(), bobs); err != nil {
+		t.Errorf("bob's session: %v", err)
+	}
+}
+
+// TestEndThroughEndsOnlyThatIdentitysSessions: EndThrough deletes the
+// sessions through one identity, of either kind, and no others.
+func TestEndThroughEndsOnlyThatIdentitysSessions(t *testing.T) {
+	w := newWorld(t)
+	w.preUser()
+	plain := w.signIn(w.member)
+	var n int64
+	if err := w.db.Write(t.Context(), func(q *dbq.Queries, _ *sql.Tx) error {
+		var err error
+		n, err = EndThrough(t.Context(), q, w.identity)
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Errorf("EndThrough deleted %d rows, want the pre-user one", n)
+	}
+	if _, err := w.store.Lookup(t.Context(), plain); err != nil {
+		t.Errorf("a session through no identity: %v", err)
+	}
+}
+
+// TestDeviceLabel: real User-Agent headers, and the fallbacks.
+func TestDeviceLabel(t *testing.T) {
+	for _, c := range []struct{ ua, want string }{
+		{"Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0", "Firefox on Linux"},
+		{"Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1", "Safari on iPhone"},
+		{"Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Mobile Safari/537.36", "Chrome on Android"},
+		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 Edg/129.0.0.0", "Edge on Windows"},
+		{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Safari/605.1.15", "Safari on macOS"},
+		{"Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36", "Chrome on macOS"},
+		{"Mozilla/5.0 (iPad; CPU OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) CriOS/129.0 Mobile/15E148 Safari/604.1", "Chrome on iPad"},
+		{"Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) FxiOS/131.0 Mobile/15E148 Safari/605.1.15", "Firefox on iPhone"},
+		{"Mozilla/5.0 (Linux; Android 14; SM-S918B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/26.0 Chrome/122.0.0.0 Mobile Safari/537.36", "Samsung Internet on Android"},
+		{"Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36 OPR/114.0.0.0", "Opera on Windows"},
+		{"Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36", "Chrome on ChromeOS"},
+		{"Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chromium/129.0.0.0 Chrome/129.0.0.0 Safari/537.36", "Chromium on Linux"},
+		{"Mozilla/5.0 (X11; Linux x86_64)", "Linux"},
+		{"curl/8.9.1", "Unknown device"},
+		{"", "Unknown device"},
+	} {
+		if got := DeviceLabel(c.ua); got != c.want {
+			t.Errorf("DeviceLabel(%q) = %q, want %q", c.ua, got, c.want)
+		}
+	}
+}
+
+func countRows(t *testing.T, d *db.DB, query string) int {
+	t.Helper()
+	var n int
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		return tx.QueryRowContext(t.Context(), query).Scan(&n)
+	}); err != nil {
+		t.Fatal(err)
+	}
+	return n
 }
 
 // storedHex is the hash the table stores for token, in hex.

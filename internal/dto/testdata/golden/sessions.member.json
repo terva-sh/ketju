@@ -1,0 +1,24 @@
+{
+  "sessions": [
+    {
+      "id": "6f1c0a9e2b7d4c58a3e1f0b29d8c7e61",
+      "current": true,
+      "device": "Firefox on Linux",
+      "user_agent": "Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0",
+      "ip": "192.0.2.10",
+      "provider": "github",
+      "created_at": 1757400000000,
+      "last_used_at": 1757500000000
+    },
+    {
+      "id": "0d2e4f6a8c1b3d5e7f9a0b2c4d6e8f10",
+      "current": false,
+      "device": "Safari on iPhone",
+      "user_agent": "Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1",
+      "ip": "198.51.100.7",
+      "provider": "",
+      "created_at": 1757000000000,
+      "last_used_at": 1757300000000
+    }
+  ]
+}

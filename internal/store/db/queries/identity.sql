@@ -87,11 +87,23 @@ WHERE id_hash = sqlc.arg(id_hash)
   AND last_used_at > sqlc.arg(last_used_after);
 
 -- name: ListUserSessions :many
-SELECT id_hash, kind, created_at, expires_at, last_used_at, ip, user_agent
-FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC;
+SELECT id_hash, kind, identity_id, oidc_provider_key, created_at, expires_at, last_used_at, ip, user_agent
+FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC, created_at DESC;
 
 -- name: DeleteSession :exec
 DELETE FROM sessions WHERE id_hash = ?;
+
+-- DeleteUserSession ends one session, only if it is the user's: "sign out
+-- this device" from the session list (TKT-01M29CCC0X). The user_id guard
+-- means another member's session is never deleted, whatever was matched.
+-- name: DeleteUserSession :execrows
+DELETE FROM sessions WHERE id_hash = sqlc.arg(id_hash) AND user_id = sqlc.arg(user_id);
+
+-- DeleteSessionsThroughIdentity ends every session signed in through one
+-- identity, of either kind: what removing that identity does in its own
+-- transaction (TKT-01M29CCC0X).
+-- name: DeleteSessionsThroughIdentity :execrows
+DELETE FROM sessions WHERE identity_id = ?;
 
 -- name: DeleteUserSessions :exec
 DELETE FROM sessions WHERE user_id = ?;
@@ -202,6 +214,38 @@ DELETE FROM identities WHERE user_id = ?;
 -- user_id is null and which DeleteUserSessions would miss.
 -- name: DeleteIdentitySessions :exec
 DELETE FROM sessions WHERE identity_id IN (SELECT i.id FROM identities i WHERE i.user_id = sqlc.arg(user_id));
+
+-- UserIdentities is every identity an account has, oldest first: the
+-- settings screen's list, and what removing one counts (TKT-01M29CCC0X).
+-- name: UserIdentities :many
+SELECT * FROM identities WHERE user_id = ? ORDER BY id;
+
+-- DeleteIdentity removes one identity, only if it is the user's
+-- (TKT-01M29CCC0X). An application's identity_id is set to null by its
+-- foreign key; the sessions naming it go first
+-- (DeleteSessionsThroughIdentity).
+-- name: DeleteIdentity :execrows
+DELETE FROM identities WHERE id = sqlc.arg(id) AND user_id = sqlc.arg(user_id);
+
+-- UpdateUserSettings writes a member's own settings in one statement
+-- (TKT-01M29CCC0X). timezone is kept when null. prefs is a JSON object of
+-- only the keys the request named, merged into prefs_json, so a key the
+-- request did not name is kept. A stored prefs_json that is not a JSON
+-- object starts again from '{}': the reader already treats it as no
+-- preferences, and json_patch would refuse it. The guard nests because
+-- SQLite does not promise to short-circuit AND and json_type raises on
+-- malformed JSON (Terva reviews 1704 and 1734).
+-- name: UpdateUserSettings :one
+UPDATE users
+SET timezone = COALESCE(sqlc.narg(timezone), timezone),
+    prefs_json = json_patch(
+        CASE WHEN json_valid(prefs_json)
+             THEN CASE WHEN json_type(prefs_json) = 'object' THEN prefs_json ELSE '{}' END
+             ELSE '{}' END,
+        sqlc.arg(prefs)),
+    updated_at = sqlc.arg(updated_at)
+WHERE id = sqlc.arg(id)
+RETURNING timezone, locale, prefs_json;
 
 -- The authors on one page of a thread, in one query rather than one per post.
 -- name: UsersByIDs :many

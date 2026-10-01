@@ -11,6 +11,10 @@ package main
 import (
 	"fmt"
 	"os"
+	// The IANA zone database, embedded, so PATCH /settings checks a
+	// member's timezone the same way on every host, whether or not it has
+	// /usr/share/zoneinfo (TKT-01M29CCC0X). It adds about 450 KB.
+	_ "time/tzdata"
 )
 
 const usage = `ketju — a message board

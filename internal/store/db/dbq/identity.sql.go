@@ -160,6 +160,27 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (int64, 
 	return id, err
 }
 
+const deleteIdentity = `-- name: DeleteIdentity :execrows
+DELETE FROM identities WHERE id = ?1 AND user_id = ?2
+`
+
+type DeleteIdentityParams struct {
+	ID     int64
+	UserID sql.NullInt64
+}
+
+// DeleteIdentity removes one identity, only if it is the user's
+// (TKT-01M29CCC0X). An application's identity_id is set to null by its
+// foreign key; the sessions naming it go first
+// (DeleteSessionsThroughIdentity).
+func (q *Queries) DeleteIdentity(ctx context.Context, arg DeleteIdentityParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteIdentity, arg.ID, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteIdentitySessions = `-- name: DeleteIdentitySessions :exec
 DELETE FROM sessions WHERE identity_id IN (SELECT i.id FROM identities i WHERE i.user_id = ?1)
 `
@@ -194,6 +215,21 @@ func (q *Queries) DeleteSession(ctx context.Context, idHash sqltypes.SessionHash
 	return err
 }
 
+const deleteSessionsThroughIdentity = `-- name: DeleteSessionsThroughIdentity :execrows
+DELETE FROM sessions WHERE identity_id = ?
+`
+
+// DeleteSessionsThroughIdentity ends every session signed in through one
+// identity, of either kind: what removing that identity does in its own
+// transaction (TKT-01M29CCC0X).
+func (q *Queries) DeleteSessionsThroughIdentity(ctx context.Context, identityID sql.NullInt64) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteSessionsThroughIdentity, identityID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteUserIdentities = `-- name: DeleteUserIdentities :exec
 DELETE FROM identities WHERE user_id = ?
 `
@@ -204,6 +240,26 @@ DELETE FROM identities WHERE user_id = ?
 func (q *Queries) DeleteUserIdentities(ctx context.Context, userID sql.NullInt64) error {
 	_, err := q.db.ExecContext(ctx, deleteUserIdentities, userID)
 	return err
+}
+
+const deleteUserSession = `-- name: DeleteUserSession :execrows
+DELETE FROM sessions WHERE id_hash = ?1 AND user_id = ?2
+`
+
+type DeleteUserSessionParams struct {
+	IDHash sqltypes.SessionHash
+	UserID sql.NullInt64
+}
+
+// DeleteUserSession ends one session, only if it is the user's: "sign out
+// this device" from the session list (TKT-01M29CCC0X). The user_id guard
+// means another member's session is never deleted, whatever was matched.
+func (q *Queries) DeleteUserSession(ctx context.Context, arg DeleteUserSessionParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUserSession, arg.IDHash, arg.UserID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const deleteUserSessions = `-- name: DeleteUserSessions :exec
@@ -500,18 +556,20 @@ func (q *Queries) InsertHandleRelease(ctx context.Context, arg InsertHandleRelea
 }
 
 const listUserSessions = `-- name: ListUserSessions :many
-SELECT id_hash, kind, created_at, expires_at, last_used_at, ip, user_agent
-FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC
+SELECT id_hash, kind, identity_id, oidc_provider_key, created_at, expires_at, last_used_at, ip, user_agent
+FROM sessions WHERE user_id = ? ORDER BY last_used_at DESC, created_at DESC
 `
 
 type ListUserSessionsRow struct {
-	IDHash     sqltypes.SessionHash
-	Kind       string
-	CreatedAt  int64
-	ExpiresAt  int64
-	LastUsedAt int64
-	Ip         sql.NullString
-	UserAgent  sql.NullString
+	IDHash          sqltypes.SessionHash
+	Kind            string
+	IdentityID      sql.NullInt64
+	OidcProviderKey sql.NullString
+	CreatedAt       int64
+	ExpiresAt       int64
+	LastUsedAt      int64
+	Ip              sql.NullString
+	UserAgent       sql.NullString
 }
 
 func (q *Queries) ListUserSessions(ctx context.Context, userID sql.NullInt64) ([]ListUserSessionsRow, error) {
@@ -526,6 +584,8 @@ func (q *Queries) ListUserSessions(ctx context.Context, userID sql.NullInt64) ([
 		if err := rows.Scan(
 			&i.IDHash,
 			&i.Kind,
+			&i.IdentityID,
+			&i.OidcProviderKey,
 			&i.CreatedAt,
 			&i.ExpiresAt,
 			&i.LastUsedAt,
@@ -788,6 +848,95 @@ func (q *Queries) TouchSession(ctx context.Context, arg TouchSessionParams) (int
 		return 0, err
 	}
 	return result.RowsAffected()
+}
+
+const updateUserSettings = `-- name: UpdateUserSettings :one
+UPDATE users
+SET timezone = COALESCE(?1, timezone),
+    prefs_json = json_patch(
+        CASE WHEN json_valid(prefs_json)
+             THEN CASE WHEN json_type(prefs_json) = 'object' THEN prefs_json ELSE '{}' END
+             ELSE '{}' END,
+        ?2),
+    updated_at = ?3
+WHERE id = ?4
+RETURNING timezone, locale, prefs_json
+`
+
+type UpdateUserSettingsParams struct {
+	Timezone  sql.NullString
+	Prefs     interface{}
+	UpdatedAt int64
+	ID        int64
+}
+
+type UpdateUserSettingsRow struct {
+	Timezone  sql.NullString
+	Locale    sql.NullString
+	PrefsJson string
+}
+
+// UpdateUserSettings writes a member's own settings in one statement
+// (TKT-01M29CCC0X). timezone is kept when null. prefs is a JSON object of
+// only the keys the request named, merged into prefs_json, so a key the
+// request did not name is kept. A stored prefs_json that is not a JSON
+// object starts again from '{}': the reader already treats it as no
+// preferences, and json_patch would refuse it. The guard nests because
+// SQLite does not promise to short-circuit AND and json_type raises on
+// malformed JSON (Terva reviews 1704 and 1734).
+func (q *Queries) UpdateUserSettings(ctx context.Context, arg UpdateUserSettingsParams) (UpdateUserSettingsRow, error) {
+	row := q.db.QueryRowContext(ctx, updateUserSettings,
+		arg.Timezone,
+		arg.Prefs,
+		arg.UpdatedAt,
+		arg.ID,
+	)
+	var i UpdateUserSettingsRow
+	err := row.Scan(&i.Timezone, &i.Locale, &i.PrefsJson)
+	return i, err
+}
+
+const userIdentities = `-- name: UserIdentities :many
+SELECT id, user_id, provider_key, subject, email, email_verified, issuer, last_login_at, raw_claims_json, created_at, updated_at, blocked_at, blocked_by FROM identities WHERE user_id = ? ORDER BY id
+`
+
+// UserIdentities is every identity an account has, oldest first: the
+// settings screen's list, and what removing one counts (TKT-01M29CCC0X).
+func (q *Queries) UserIdentities(ctx context.Context, userID sql.NullInt64) ([]Identity, error) {
+	rows, err := q.db.QueryContext(ctx, userIdentities, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Identity
+	for rows.Next() {
+		var i Identity
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ProviderKey,
+			&i.Subject,
+			&i.Email,
+			&i.EmailVerified,
+			&i.Issuer,
+			&i.LastLoginAt,
+			&i.RawClaimsJson,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.BlockedAt,
+			&i.BlockedBy,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const usersByHandlePrefix = `-- name: UsersByHandlePrefix :many

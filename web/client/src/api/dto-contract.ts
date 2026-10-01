@@ -33,6 +33,8 @@ import type {
   GroupDetail,
   GroupList,
   HandleChange,
+  IdentityList,
+  IdentityRemoved,
   IssuedCredential,
   ManagedForumList,
   Me,
@@ -46,6 +48,8 @@ import type {
   Queue,
   QueueResolution,
   ReadPosition,
+  SessionList,
+  Settings,
   RenderResult,
   SiteSettings,
   SlowMode,
@@ -97,6 +101,8 @@ import historyMember from '../../../../internal/dto/testdata/golden/history.memb
 import historyModerator from '../../../../internal/dto/testdata/golden/history.moderator.json';
 import handleChangeAdmin from '../../../../internal/dto/testdata/golden/handle-change.admin.json';
 import handleChangeMember from '../../../../internal/dto/testdata/golden/handle-change.member.json';
+import identitiesMember from '../../../../internal/dto/testdata/golden/identities.member.json';
+import identityRemovedMember from '../../../../internal/dto/testdata/golden/identity-removed.member.json';
 import issuedCredentialAdmin from '../../../../internal/dto/testdata/golden/issued-credential.admin.json';
 import meAgent from '../../../../internal/dto/testdata/golden/me.agent.json';
 import meAnon from '../../../../internal/dto/testdata/golden/me.anon.json';
@@ -116,6 +122,7 @@ import renderMember from '../../../../internal/dto/testdata/golden/render.member
 import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
 import repliesMember from '../../../../internal/dto/testdata/golden/replies.member.json';
 import repliesModerator from '../../../../internal/dto/testdata/golden/replies.moderator.json';
+import sessionsMember from '../../../../internal/dto/testdata/golden/sessions.member.json';
 import settingsAdmin from '../../../../internal/dto/testdata/golden/settings.admin.json';
 import slowModeModerator from '../../../../internal/dto/testdata/golden/slow-mode.moderator.json';
 import threadAnon from '../../../../internal/dto/testdata/golden/thread.anon.json';
@@ -127,6 +134,7 @@ import threadModerator from '../../../../internal/dto/testdata/golden/thread.mod
 import threadsAnon from '../../../../internal/dto/testdata/golden/threads.anon.json';
 import threadsMember from '../../../../internal/dto/testdata/golden/threads.member.json';
 import unreadMember from '../../../../internal/dto/testdata/golden/unread.member.json';
+import userSettingsMember from '../../../../internal/dto/testdata/golden/user-settings.member.json';
 import userPostsMember from '../../../../internal/dto/testdata/golden/user-posts.member.json';
 import userPostsModerator from '../../../../internal/dto/testdata/golden/user-posts.moderator.json';
 import userPostsOwnMember from '../../../../internal/dto/testdata/golden/user-posts-own.member.json';
@@ -199,6 +207,8 @@ export const contract = [
   matches<PostHistory>()(historyModerator),
   matches<HandleChange>()(handleChangeAdmin),
   matches<HandleChange>()(handleChangeMember),
+  matches<IdentityList>()(identitiesMember),
+  matches<IdentityRemoved>()(identityRemovedMember),
   matches<IssuedCredential>()(issuedCredentialAdmin),
   matches<Me>()(meAgent),
   matches<Me>()(meAnon),
@@ -218,7 +228,9 @@ export const contract = [
   matches<ReadPosition>()(readMember),
   matches<RenderResult>()(renderMember),
   matches<RenderResult>()(renderPlainMember),
+  matches<SessionList>()(sessionsMember),
   matches<SiteSettings>()(settingsAdmin),
+  matches<Settings>()(userSettingsMember),
   matches<SlowMode>()(slowModeModerator),
   matches<ThreadPage>()(threadAnon),
   matches<ThreadPage>()(threadLockedMember),

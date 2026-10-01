@@ -6,6 +6,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"slices"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/auth/agentcred"
@@ -39,10 +40,15 @@ const (
 	defaultPageSize = 25
 	minPageSize     = 10
 	maxPageSize     = 50
+	defaultTheme    = "system"
 )
 
+// Themes are the values theme takes (docs/07 "Preact client").
+var Themes = []string{"system", "light", "dark"}
+
 func anonymousMe() dto.Me {
-	return dto.Me{Settings: dto.Settings{Timezone: defaultTimezone, Locale: defaultLocale, PageSize: defaultPageSize}}
+	return dto.Me{Settings: dto.Settings{Timezone: defaultTimezone, Locale: defaultLocale, PageSize: defaultPageSize,
+		Theme: defaultTheme}}
 }
 
 // Me is GET /me for the request's viewer (docs/07).
@@ -86,9 +92,8 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 		return s.withSiteName(ctx, anonymousMe())
 	}
 	me := dto.Me{
-		User: &dto.Author{Handle: u.Handle, DisplayName: u.DisplayName, Avatar: u.AvatarBlob, Role: u.Role, Kind: u.Kind},
-		Settings: dto.Settings{Timezone: orDefault(u.Timezone, defaultTimezone), Locale: orDefault(u.Locale, defaultLocale),
-			PageSize: pageSize(u.PrefsJSON)},
+		User:     &dto.Author{Handle: u.Handle, DisplayName: u.DisplayName, Avatar: u.AvatarBlob, Role: u.Role, Kind: u.Kind},
+		Settings: settingsOf(u.Timezone, u.Locale, u.PrefsJSON),
 	}
 
 	// First, because the queue's scope evaluates every forum in one
@@ -182,19 +187,51 @@ func orDefault(s, def string) string {
 	return s
 }
 
-// pageSize reads prefs_json's page_size, which docs/06 bounds to 10..50. What
-// else prefs_json holds is undecided, so this reads the one key and ignores
-// the rest; anything missing, malformed or out of range is the default.
-func pageSize(prefs string) int {
+// settingsOf is an account's settings as /me and GET /settings show them,
+// from its columns, each missing one its default.
+func settingsOf(timezone, locale, prefs string) dto.Settings {
+	size, theme := Prefs(prefs)
+	return dto.Settings{Timezone: orDefault(timezone, defaultTimezone), Locale: orDefault(locale, defaultLocale),
+		PageSize: size, Theme: theme}
+}
+
+// Prefs reads the two keys of prefs_json anything decides on: page_size,
+// which docs/06 bounds to 10..50, and theme (docs/07 "Preact client"). /me,
+// GET /settings and the thread page read them here, so they read one rule.
+// Anything else prefs_json holds is ignored. Each key that is missing,
+// malformed or out of range is its default, and so is everything when
+// prefs_json itself is not a JSON object.
+func Prefs(prefs string) (pageSize int, theme string) {
 	var p struct {
 		PageSize json.RawMessage `json:"page_size"`
+		Theme    json.RawMessage `json:"theme"`
+	}
+	pageSize, theme = defaultPageSize, defaultTheme
+	if json.Unmarshal([]byte(prefs), &p) != nil {
+		return pageSize, theme
 	}
 	var n int64
 	// Decoding into an int64 refuses "30", 30.5 and anything else that is
 	// not a JSON integer; null leaves 0, which is out of range.
-	if json.Unmarshal([]byte(prefs), &p) != nil || json.Unmarshal(p.PageSize, &n) != nil ||
-		n < minPageSize || n > maxPageSize {
+	if json.Unmarshal(p.PageSize, &n) == nil && n >= minPageSize && n <= maxPageSize {
+		pageSize = int(n)
+	}
+	var t string
+	if json.Unmarshal(p.Theme, &t) == nil && slices.Contains(Themes, t) {
+		theme = t
+	}
+	return pageSize, theme
+}
+
+// PageSize is the posts per thread page for v: their own page_size when
+// they are a member or an agent, read from the account the request
+// authenticated as, so a change shows on their next request; and the
+// default for anyone else (docs/06 "Paged, not infinite").
+func PageSize(ctx context.Context, v domain.Viewer) int {
+	u, ok := accountOf(ctx, v)
+	if !v.Member() || !ok {
 		return defaultPageSize
 	}
-	return int(n)
+	size, _ := Prefs(u.PrefsJSON)
+	return size
 }

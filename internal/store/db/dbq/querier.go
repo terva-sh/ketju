@@ -172,6 +172,11 @@ type Querier interface {
 	DeleteForumDraft(ctx context.Context, arg DeleteForumDraftParams) (int64, error)
 	// Clears every IdP-sourced row of a user. Admin rows are not touched.
 	DeleteIdPMemberships(ctx context.Context, userID int64) error
+	// DeleteIdentity removes one identity, only if it is the user's
+	// (TKT-01M29CCC0X). An application's identity_id is set to null by its
+	// foreign key; the sessions naming it go first
+	// (DeleteSessionsThroughIdentity).
+	DeleteIdentity(ctx context.Context, arg DeleteIdentityParams) (int64, error)
 	// DeleteIdentitySessions ends every session bound to one of the user's
 	// identities, a pre-user session from before an approval included, whose
 	// user_id is null and which DeleteUserSessions would miss.
@@ -184,6 +189,10 @@ type Querier interface {
 	// removes the rows.
 	DeletePreUserSessions(ctx context.Context, identityID sql.NullInt64) error
 	DeleteSession(ctx context.Context, idHash sqltypes.SessionHash) error
+	// DeleteSessionsThroughIdentity ends every session signed in through one
+	// identity, of either kind: what removing that identity does in its own
+	// transaction (TKT-01M29CCC0X).
+	DeleteSessionsThroughIdentity(ctx context.Context, identityID sql.NullInt64) (int64, error)
 	// DELETE /drafts/{thread_id}: a live draft becomes a tombstone one revision
 	// on. A tombstone, or a key with no row, is left as it is.
 	DeleteThreadDraft(ctx context.Context, arg DeleteThreadDraftParams) (int64, error)
@@ -192,6 +201,10 @@ type Querier interface {
 	// (docs/05). An application's identity_id is set to null by its foreign
 	// key. The sessions naming the identities go first (DeleteIdentitySessions).
 	DeleteUserIdentities(ctx context.Context, userID sql.NullInt64) error
+	// DeleteUserSession ends one session, only if it is the user's: "sign out
+	// this device" from the session list (TKT-01M29CCC0X). The user_id guard
+	// means another member's session is never deleted, whatever was matched.
+	DeleteUserSession(ctx context.Context, arg DeleteUserSessionParams) (int64, error)
 	DeleteUserSessions(ctx context.Context, userID sql.NullInt64) error
 	// A post's open flags, dismissed in place by a moderator's restore
 	// (TKT-01M29CP2PJ). The ids come back so that the restore can reopen
@@ -625,6 +638,15 @@ type Querier interface {
 	// A system group's slug and flag are fixed by trigger; its name and
 	// description are not.
 	UpdateGroup(ctx context.Context, arg UpdateGroupParams) (int64, error)
+	// UpdateUserSettings writes a member's own settings in one statement
+	// (TKT-01M29CCC0X). timezone is kept when null. prefs is a JSON object of
+	// only the keys the request named, merged into prefs_json, so a key the
+	// request did not name is kept. A stored prefs_json that is not a JSON
+	// object starts again from '{}': the reader already treats it as no
+	// preferences, and json_patch would refuse it. The guard nests because
+	// SQLite does not promise to short-circuit AND and json_type raises on
+	// malformed JSON (Terva reviews 1704 and 1734).
+	UpdateUserSettings(ctx context.Context, arg UpdateUserSettingsParams) (UpdateUserSettingsRow, error)
 	// PUT /forums/{slug}/draft: as UpsertThreadDraft, for the one new-thread
 	// draft per (user, forum). The title is replaced as a whole, so a save
 	// without one clears it.
@@ -649,6 +671,9 @@ type Querier interface {
 	// conflict target names the partial index's predicate, which SQLite requires
 	// to match it.
 	UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftParams) (Draft, error)
+	// UserIdentities is every identity an account has, oldest first: the
+	// settings screen's list, and what removing one counts (TKT-01M29CCC0X).
+	UserIdentities(ctx context.Context, userID sql.NullInt64) ([]Identity, error)
 	// Mention autocomplete (GET /api/v1/users?prefix=). lo is the prefix as
 	// typed and hi is lo with '{' appended, which sorts after every handle
 	// character. Both compare under the column's NOCASE collation, which folds
