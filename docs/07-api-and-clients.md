@@ -680,7 +680,10 @@ viewer_class)` where `viewer_class ∈ {anon, member, moderator, author:<id>}`
 moderator removed; see "Removed posts" below). In practice only the posts are
 cached; the thread block is drawn on every request, and its `author`, the
 thread's starter, is read from the users row each time, so a rename or an
-anonymization shows on the next view (TKT-01M3S3ZF6J).
+anonymization shows on the next view (TKT-01M3S3ZF6J). The thread page reads
+it in the same users lookup as the page's authors, so it costs the page no
+statement, and keys the cached posts by the page's authors alone
+(TKT-01M29CTY58). It is what "Only <handle>" builds `author:<handle>` from.
 
 #### What the thread endpoint does (TKT-01M29CA9AX)
 

@@ -136,3 +136,16 @@ func After(after uint32) Filter { return unreadAfter(after) }
 type unreadAfter uint32
 
 func (b unreadAfter) keep(o uint32, _ threadlog.IndexEntry) bool { return o > uint32(b) }
+
+// ByAuthor keeps the posts user id author wrote that are shown as
+// themselves: the author lens (docs/06 "what each lens keeps of removed
+// posts"). A deleted, hidden, moved or redacted post is left out, so
+// "showing 7 of 212" counts posts a reader can read. It reads the index
+// entry's author id alone.
+func ByAuthor(author uint64) Filter { return byAuthor(author) }
+
+type byAuthor uint64
+
+func (a byAuthor) keep(_ uint32, e threadlog.IndexEntry) bool {
+	return e.Author == uint64(a) && e.Flags.Visible()
+}

@@ -2,13 +2,18 @@ package threads
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 	"math"
 	"strconv"
+	"strings"
 
+	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/threads/lens"
+	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
 )
 
@@ -53,6 +58,87 @@ type lensViewer struct {
 // since, mentions and mod TKT-01M29CTY6E.
 var lensResolvers = map[lens.Kind]lensResolver{
 	lens.Unread: resolveUnread,
+	lens.Author: resolveAuthor,
+}
+
+// keepNothing is the filter of a lens that selects no post.
+func keepNothing(*threadlog.Index) (lens.Filter, error) { return lens.Ordinals(), nil }
+
+// resolveAuthor is the author lens (TKT-01M29CTY58, docs/07 "the lens
+// parameter"): the posts, shown as themselves, of the member who holds the
+// handle now, matched in any case. It costs one statement, the handle's
+// lookup, and the selection is read from the index's author ids.
+//
+// A handle nobody holds answers exactly as a handle with no posts here: the
+// same kind, the handle echoed back as asked, shown 0 and every post hidden.
+// A handle a rename released is held by nobody, so it is not followed to the
+// member who gave it up. The lens therefore tells a stranger nothing about
+// who exists or who renamed.
+//
+// The key is author:<user id>, or author:- when the handle names nobody.
+// Two spellings of one handle share the posts, which are all the cache
+// holds; lens.value, which echoes the spelling, is built on every request.
+func resolveAuthor(ctx context.Context, s *Service, _ lensViewer, spec lens.Spec) (resolvedLens, error) {
+	rl := resolvedLens{kind: lens.Author, value: spec.Value(), key: "author:-", filter: keepNothing}
+	id, ok, err := s.authorByHandle(ctx, spec.Handle)
+	if err != nil || !ok {
+		return rl, err
+	}
+	rl.key = "author:" + strconv.FormatInt(id, 10)
+	rl.filter = func(*threadlog.Index) (lens.Filter, error) { return lens.ByAuthor(uint64(id)), nil }
+	return rl, nil
+}
+
+// authorByHandle is the user id an author lens's handle names: the account
+// that holds it now, in any case (users.handle is COLLATE NOCASE).
+//
+// The one exception is deleted-user-<id>, the placeholder member.Missing
+// draws for an author id the database lacks (docs/04 "Projection tables").
+// When no account holds it and no users row has that id, it names that id,
+// so "Only <handle>" works on a thread whose starter the database lost. When
+// a row has that id, it names nobody, so the placeholder never reaches a
+// live account's posts. That costs one more statement on this path only.
+func (s *Service) authorByHandle(ctx context.Context, handle string) (int64, bool, error) {
+	var (
+		id int64
+		ok bool
+	)
+	err := s.DB.Read(ctx, func(dq *dbq.Queries, _ *sql.Tx) error {
+		u, err := dq.GetUserByHandle(ctx, handle)
+		switch {
+		case err == nil:
+			id, ok = u.ID, true
+			return nil
+		case !errors.Is(err, sql.ErrNoRows):
+			return err
+		}
+		missing, placeholder := placeholderID(handle)
+		if !placeholder {
+			return nil
+		}
+		switch _, err := dq.GetUser(ctx, missing); {
+		case errors.Is(err, sql.ErrNoRows):
+			id, ok = missing, true
+			return nil
+		default:
+			return err
+		}
+	})
+	return id, ok, err
+}
+
+// placeholderID is the id in deleted-user-<id>, the handle
+// domain.DeletedMemberHandle draws for it, written exactly as it draws it.
+func placeholderID(handle string) (int64, bool) {
+	rest, ok := strings.CutPrefix(handle, domain.AnonymizedHandlePrefix+"-")
+	if !ok {
+		return 0, false
+	}
+	id, err := strconv.ParseInt(rest, 10, 64)
+	if err != nil || id <= 0 || domain.DeletedMemberHandle(id) != handle {
+		return 0, false
+	}
+	return id, true
 }
 
 // resolveUnread is the unread lens (TKT-01M29CTY4J, docs/06 "the unread lens
@@ -72,8 +158,7 @@ func resolveUnread(_ context.Context, _ *Service, v lensViewer, spec lens.Spec) 
 	after := spec.Ordinal
 	if spec.Bare {
 		if !v.viewer.Member() {
-			return resolvedLens{kind: lens.Unread, key: "unread",
-				filter: func(*threadlog.Index) (lens.Filter, error) { return lens.Ordinals(), nil }}, nil
+			return resolvedLens{kind: lens.Unread, key: "unread", filter: keepNothing}, nil
 		}
 		after = uint32(min(max(v.lastRead, 0), math.MaxUint32))
 	}

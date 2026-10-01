@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"slices"
-	"strings"
 	"testing"
 
 	"github.com/terva-sh/ketju/internal/domain"
@@ -208,8 +207,8 @@ func TestUnreadLensCacheSeparatesViewers(t *testing.T) {
 // canonical page runs, bare and with a boundary, for an anonymous viewer and
 // a member with a position. The boundary is the position View reads for the
 // viewer block, so the lens costs no statement of its own. An anonymous
-// viewer's bare lens has no posts, so its one users lookup is asked for an
-// empty list, which sqlc writes as IN (NULL).
+// viewer's bare lens has no posts, and still runs the one users lookup, for
+// the thread's starter (TKT-01M29CTY58).
 func TestUnreadLensStatements(t *testing.T) {
 	st := &statements{}
 	w := newWorldTraced(t, threadlog.SyncNever, st.trace)
@@ -225,11 +224,6 @@ func TestUnreadLensStatements(t *testing.T) {
 		ranL := st.during(func() { l = w.get(v, lensed) })
 		if cr.Code != http.StatusOK || l.Code != http.StatusOK {
 			t.Fatalf("%q %s: %d and %d", c.who, c.lens, cr.Code, l.Code)
-		}
-		if p := page(t, l); len(p.Posts) == 0 {
-			for i, s := range ranL {
-				ranL[i] = strings.Replace(s, "WHERE id IN (NULL)", "WHERE id IN (?)", 1)
-			}
 		}
 		if who := c.who + " " + c.lens; !slices.Equal(ranC, ranL) {
 			t.Errorf("%q: the canonical page ran %d statements, the unread lens %d\ncanonical %q\nlens      %q",

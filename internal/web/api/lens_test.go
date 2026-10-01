@@ -369,7 +369,8 @@ func (w *world) forumModerator(handle string, forum int64) domain.Viewer {
 // each post alone, the odd posts, the even posts, and all of them, so each
 // post is drawn on pages whose other posts, and so whose viewer class
 // (pageClass), differ. Each served kind adds its own rows: the unread lens
-// over several boundaries and over each viewer's own position. Each lens is
+// over several boundaries and over each viewer's own position, and the
+// author lens for every author in the thread and for none. Each lens is
 // read twice in two orders of viewers, so a page the response cache stored
 // for one viewer is offered to every other.
 func TestLensPostsMatchCanonical(t *testing.T) {
@@ -454,6 +455,15 @@ func TestLensPostsMatchCanonical(t *testing.T) {
 		}
 		return span(int(max(viewers[i].read, 0))+1, n)
 	}})
+	// The author lens (TKT-01M29CTY58): each author's posts shown as
+	// themselves, which is the same for every viewer. dave's one post his
+	// suspension hid, and bob's he deleted, leave them empty, as are a
+	// member with no posts here and a handle nobody holds.
+	for raw, want := range map[string][]int{"author:alice": {1}, "author:ALICE": {1}, "author:scribe": {2},
+		"author:bob": {}, "author:carol": {4}, "author:dave": {}, "author:erin": {10}, "author:gina": {},
+		"author:nobody": {}} {
+		lenses = append(lenses, lensCase{name: raw, raw: raw, want: func(int) []int { return want }})
+	}
 	order := make([]int, len(viewers))
 	for i := range order {
 		order[i] = i

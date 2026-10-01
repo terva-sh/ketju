@@ -248,7 +248,6 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 	var (
 		forum    dbq.Forum
 		tags     []string
-		starter  dto.Author
 		lastRead int64
 		watch    string
 		authorW  *dto.AuthorWindows
@@ -259,9 +258,6 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			return fmt.Errorf("threads: the forum of %s: %w", id, err)
 		}
 		if tags, err = dq.ThreadTags(ctx, int64(id)); err != nil {
-			return err
-		}
-		if starter, err = starterOf(ctx, dq, row.AuthorID); err != nil {
 			return err
 		}
 		if !v.Member() {
@@ -375,9 +371,19 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 			return pageErr
 		}
 
-		authors, err := s.users(ctx, snap.authors())
+		// The starter is read in the same batch as the page's authors, so
+		// the header's author costs the page no statement (TKT-01M29CTY58).
+		// The posts are drawn and keyed from the page's authors alone.
+		ids := snap.authors()
+		onPage := ids[row.AuthorID]
+		ids[row.AuthorID] = true
+		authors, err := s.users(ctx, ids)
 		if err != nil {
 			return err
+		}
+		starter := authors[row.AuthorID]
+		if !onPage {
+			delete(authors, row.AuthorID)
 		}
 
 		res.Body = dto.ThreadPage{
