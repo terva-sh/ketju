@@ -11,7 +11,7 @@ labels:
   - area:api
   - effort:M
 assignees: []
-milestone: phase-4
+milestone: phase-3
 parent: TKT-01M29BKBMCNDSYHYF9WXAPDNRN
 origin: null
 dependencies:
@@ -24,13 +24,13 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-09-11T23:20:57Z
+updated_at: 2026-10-01T06:45:52Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:terva/mieli
-  name: Mieli
+  id: agent:claude-code/phase3-run-orchestrator
+  name: ""
 extensions: {}
 ---
 
