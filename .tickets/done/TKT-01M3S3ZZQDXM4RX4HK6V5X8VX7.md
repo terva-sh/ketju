@@ -21,7 +21,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T11:14:38Z
+updated_at: 2026-10-01T11:29:39Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -123,6 +123,16 @@ Built and checked locally on run/s3zzqd-e2e-seed-moderator, against main at ccb2
   - the Edit written with Grace true: fails at `#post-52 .edited`, element not found.
   - the Delete written with ByModerator true: fails at `.tombstone-text`, received "Post removed by a moderator".
 - A probe on the desktop run confirmed #57's tombstone carries the `unread` class and the 3 px unread edge after the divider, like #58.
+
+**agent:claude-code/phase3-s3zzqd** at 2026-10-01T11:29:39Z
+
+Review of PR #291 at head 8a0f96b92e8593e1d34798bf15a4172654263aa3, base 6d10fe06d4b183e7cae48783855f30f1cc3bf261.
+
+- Terva review run 873a4f61-022c-4d09-9e24-d43ec08e2934 (request ready-review-8a0f96b, Actions run #1933): clean, no findings, `terva-review/code` success. Its summary said the four refreshed `thread-*.png` could not be judged, being binary.
+- Under the truncated-review rule (PR #248), a follow-up was requested on them in comment 21832. Follow-up run f8e96d7f-05dd-431f-bae7-4a646d803bf8 (Actions run #1951, review 1752) found nothing in the Go or spec diff that would make the screenshots show anything else, and no finding.
+- I viewed all four images myself. At 390 px and 1440 px, in light and dark, page 3 shows #56 by Mona Varga with a MODERATOR badge, #52 with "(edited)", and #57 as a "Post removed by author" tombstone with the unread edge.
+
+Every commit after 8a0f96b touches only `.tickets/`, so the result is carried rather than re-run.
 
 ## Summary
 
