@@ -201,10 +201,12 @@ SELECT * FROM drafts WHERE user_id = ? AND thread_id = ?;
 -- tombstone comes back to life. A new row starts at revision 1 and each save
 -- adds one. The conflict target names the partial index's predicate, which
 -- SQLite requires to match it. attachments is a JSON array of the hashes the
--- attach check answered (TKT-01M3V73DP6); saving one adds no reference.
+-- attach check answered (TKT-01M3V73DP6); saving one adds no reference. An
+-- empty parameter, a caller's zero value, is stored as '[]', as the column's
+-- default would be, rather than refused by its CHECK (Terva review 1754).
 -- name: UpsertThreadDraft :one
 INSERT INTO drafts (user_id, thread_id, source, reply_to, attachments, created_at, updated_at, revision)
-VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(source), sqlc.arg(reply_to), sqlc.arg(attachments), sqlc.arg(now), sqlc.arg(now), 1)
+VALUES (sqlc.arg(user_id), sqlc.arg(thread_id), sqlc.arg(source), sqlc.arg(reply_to), coalesce(nullif(CAST(sqlc.arg(attachments) AS TEXT), ''), '[]'), sqlc.arg(now), sqlc.arg(now), 1)
 ON CONFLICT (user_id, thread_id) WHERE thread_id IS NOT NULL DO UPDATE SET
 	source = excluded.source,
 	reply_to = excluded.reply_to,
@@ -230,7 +232,7 @@ SELECT * FROM drafts WHERE user_id = ? AND forum_id = ? AND thread_id IS NULL;
 -- whole, so a save without them clears them.
 -- name: UpsertForumDraft :one
 INSERT INTO drafts (user_id, forum_id, title, source, attachments, created_at, updated_at, revision)
-VALUES (sqlc.arg(user_id), sqlc.arg(forum_id), sqlc.arg(title), sqlc.arg(source), sqlc.arg(attachments), sqlc.arg(now), sqlc.arg(now), 1)
+VALUES (sqlc.arg(user_id), sqlc.arg(forum_id), sqlc.arg(title), sqlc.arg(source), coalesce(nullif(CAST(sqlc.arg(attachments) AS TEXT), ''), '[]'), sqlc.arg(now), sqlc.arg(now), 1)
 ON CONFLICT (user_id, forum_id) WHERE thread_id IS NULL DO UPDATE SET
 	title = excluded.title,
 	source = excluded.source,

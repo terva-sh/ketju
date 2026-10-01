@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:50:42Z
-updated_at: 2026-10-01T11:25:34Z
+updated_at: 2026-10-01T11:39:50Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
@@ -125,6 +125,12 @@ Terva review 1749 (run 5f8a5fe6-aafb-4f19-bfbc-6879ea9728e1, Actions run #1927) 
 - **medium: Do not report a committed save as failed when metadata lookup fails.** Accepted. The response's attachment metadata was read in a separate transaction after the commit. Fix: `draftAttachments`, `draftDTO` and `forumDraftDTO` now read through the caller's `q`. Both saves build their answer inside the write transaction, before it commits, and both GETs build theirs inside the read. No read follows a commit, so an error can only come from a save that did not commit. No test injects a failed read. The fix is structural: no database call remains after `DB.Write` returns.
 
 docs/03 "Blob garbage collection" now states the write-boundary rule.
+
+**agent:claude-code/phase3-v73dp6** at 2026-10-01T11:39:50Z
+
+Terva review 1754 (run 2e2cd22f-2cb4-4e4e-b4c4-4f365322e812, Actions run #1955) on PR #289, head b5ba2554c56def878cf746f62dcc3e29adb68478, base 6d10fe06d4b183e7cae48783855f30f1cc3bf261. Status failure. It marks review 1749's two findings resolved and raises one new finding, which is fixed.
+
+- **medium: Preserve the draft upserts' behavior for callers without attachments.** Accepted. Every caller in the tree sets `Attachments` (the two service saves and two tests). But a caller that left it at Go's zero value would bind `""`, and the column's JSON-array CHECK would refuse the save. Fix: both upserts now bind `coalesce(nullif(CAST(sqlc.arg(attachments) AS TEXT), ''), '[]')`, so an empty parameter is stored as `'[]'`, as the column default would be. The generated parameter stays a `string`. Test: `TestDraftUpsertsDefaultAttachments` (internal/store/db) saves both kinds with a list and then with `""` over the same rows. Removing the fallback from the generated SQL makes it fail.
 
 ## Summary
 

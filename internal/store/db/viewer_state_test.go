@@ -254,6 +254,41 @@ func TestDraftAttachmentsColumn(t *testing.T) {
 	}
 }
 
+// TestDraftUpsertsDefaultAttachments is Terva review 1754: a caller that
+// leaves the upserts' Attachments at its zero value saves a draft with none,
+// as the column's default would, on both kinds and over an existing row,
+// rather than having the column's CHECK refuse "".
+func TestDraftUpsertsDefaultAttachments(t *testing.T) {
+	d, _ := openTest(t)
+	u := newUser(t, d, "writer")
+	f, err := newForum(t, d, "f", 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	h := `["` + strings.Repeat("b", 64) + `"]`
+	for _, attachments := range []string{h, ""} {
+		var reply, forum dbq.Draft
+		write(t, d, func(q *dbq.Queries, _ *sql.Tx) error {
+			var err error
+			reply, err = q.UpsertThreadDraft(t.Context(), dbq.UpsertThreadDraftParams{UserID: u,
+				ThreadID: sql.NullInt64{Int64: 70, Valid: true}, Source: "s", Attachments: attachments, Now: 1})
+			if err != nil {
+				return err
+			}
+			forum, err = q.UpsertForumDraft(t.Context(), dbq.UpsertForumDraftParams{UserID: u,
+				ForumID: sql.NullInt64{Int64: f, Valid: true}, Source: "s", Attachments: attachments, Now: 1})
+			return err
+		})
+		want := attachments
+		if want == "" {
+			want = "[]"
+		}
+		if reply.Attachments != want || forum.Attachments != want {
+			t.Errorf("saved with %q: reply %q, new-thread %q; want %q", attachments, reply.Attachments, forum.Attachments, want)
+		}
+	}
+}
+
 // TestNotificationKindsClosed is AC3: the six kinds are accepted, anything
 // else is refused, and the CHECK's list is domain.NotificationKinds.
 func TestNotificationKindsClosed(t *testing.T) {

@@ -675,7 +675,9 @@ type Querier interface {
 	// tombstone comes back to life. A new row starts at revision 1 and each save
 	// adds one. The conflict target names the partial index's predicate, which
 	// SQLite requires to match it. attachments is a JSON array of the hashes the
-	// attach check answered (TKT-01M3V73DP6); saving one adds no reference.
+	// attach check answered (TKT-01M3V73DP6); saving one adds no reference. An
+	// empty parameter, a caller's zero value, is stored as '[]', as the column's
+	// default would be, rather than refused by its CHECK (Terva review 1754).
 	UpsertThreadDraft(ctx context.Context, arg UpsertThreadDraftParams) (Draft, error)
 	// UserIdentities is every identity an account has, oldest first: the
 	// settings screen's list, and what removing one counts (TKT-01M29CCC0X).
