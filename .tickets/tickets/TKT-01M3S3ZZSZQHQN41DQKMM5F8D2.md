@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZZSZQHQN41DQKMM5F8D2
 title: Close the small visual gaps between the client and the mockups
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -17,15 +17,22 @@ dependencies:
   - TKT-01M29CGBZDVGWNDTKHJFHHSGY5
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-visual-client
+  branch: run/s3zzsz-visual-gaps
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa69ff635c22d83cb
+  commit: 0009f715bf9eea8fb42021a4354562511cf33b81
+  session: null
+  claimed_at: 2026-10-01T22:52:33Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T10:23:03Z
+updated_at: 2026-10-01T22:52:37Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-visual-client
   name: ""
 extensions: {}
 ---
@@ -122,3 +129,7 @@ Terva review 1710 on PR #269 (head 151a234, base a599b48), medium, 'Do not add a
 **agent:claude-code/phase3-groom-polish** at 2026-10-01T10:23:03Z
 
 run decision: pending maintainer review. This supersedes the earlier D1 notes. While carrying this grooming onto main at 3890b38, a contradiction showed up. The search lane's docs/07 'Search' (TKT-01M3V70X0F, merged first) chose the top bar's link to /search over a field in the bar. This ticket's D1 had drawn the mockups' 240 px field. Neither decision is the maintainer's, so the safer reading is the one already on main: D1 keeps the link, has no code, and the / key hint stays out. / belongs to TKT-01M3V7GE59 and waits on TKT-01M3V9DWTN's off switch. docs/06 'Paged, not infinite' says why the client differs from its mockup. The dependency on TKT-01M29CTY8T, which only D1 needed, is removed.
+
+**agent:claude-code/phase3-visual-client** at 2026-10-01T22:52:37Z
+
+Acceptance criterion 2's 70000 B figure is superseded: the maintainer raised the reader budget to 120000 B gzip on 2026-10-01 (#331). This ticket is judged against 120000 B; the criterion text is left as filed. The reader is 73762 B on main at 0009f715. D1 needs no code: docs/06 'Paged, not infinite' already carries the D1 decision on main at 0009f715.
