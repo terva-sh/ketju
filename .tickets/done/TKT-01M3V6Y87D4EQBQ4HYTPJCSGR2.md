@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T23:50:15Z
+updated_at: 2026-10-01T23:53:41Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -144,6 +144,12 @@ Review 1829 (head 92319bf, base 0009f715), medium "Apply a completed save to the
 
 Review 1830 (head 507f05f, base 0009f715), medium "Apply a completed save to the viewer block currently displayed" was review 1829's finding, judged "present". Answered: the code it describes is not at that head. ThreadScreen no longer has pageViewer, and the override is keyed by thread and load generation. The regression test it asked for (ThreadScreen.watch.test.tsx, "shows the saved level over a live page that landed while the save was out") is there. Follow-up review 1831 (run ae0791a6, requested in comment 22803, same head and base) judged it "resolved in the supplied diff; the prior review incorrectly described an identity-based implementation that is no longer present", with no finding remaining. A first follow-up request used run:<uuid> and failed with source_run_not_found (Actions run 2279). The run: form is only for clean results; a review with findings takes its review ID. No code changed.
 
+**agent:claude-code/phase3-v6y87d** at 2026-10-01T23:53:41Z
+
+Review 1832 (head a07711a, base 0009f715), medium "Keep a late forum save scoped to the forum it changed". The finding is valid, and the 1829 fix had introduced it. A dismissed save for General that answered after the reader moved to Chatter set General's level on Chatter's list. Fixed in the commit after a07711a. ThreadListScreen's override now carries the forum it was saved for and applies only on that forum. A late answer for another forum labels nothing and does not reload the list. The new test in ThreadListScreen.test.tsx, "keeps a late save to one forum off another forum's control", holds back Chatter's reload and fails on a07711a. Review 1832 judged review 1830's finding 1 resolved. Reader bundle: 75231 B (+1469 B over main's 73762 B).
+
+Review cap: 1832 was the fifth full review round on PR #341 (1820, 1822, 1829, 1830, 1832; 1831 was a follow-up). Under the run brief I have not dispatched a sixth. The fix is pushed and unreviewed, and the PR is left open for the orchestrator.
+
 ## Summary
 
 A member can now watch or mute a thread from the desktop toolbar and the phone's more menu, and a forum from its thread-list header. Anonymous readers and pre-users are not offered the control. The PR is #341.
@@ -151,8 +157,8 @@ A member can now watch or mute a thread from the desktop toolbar and the phone's
 - `components/WatchDialog.tsx` offers Watch, Mute, and a third choice that posts `""`. The third reads "Normal" when the forum has no level, and "Follow the forum (Watch)" or "Follow the forum (Mute)" otherwise (review 1693).
 - The thread action is labelled with the effective level: Watching, Muted or Watch. The forum control is labelled with the forum's own level and sits first in the header's `.list-actions`, before Mark all read and New thread.
 - A save calls `forgetLists()`, which includes Watching, and `forgetAllThreadPages()`, so no list or thread page asked for before the save is held or stored after it (review 1822). It then refreshes `/me`. The forum list asks for itself again, so a mute takes its badges away.
-- The thread page shows a saved level over any page whose load started before the save answered, a live page included (review 1829).
+- The thread page shows a saved level over any page whose load started before the save answered, a live page included (review 1829). The forum list shows it only on the forum it was saved for (review 1832).
 - A late answer closes only its own dialog, and never undoes a newer save to the same target (review 1820).
 - `ThreadList.watch` is required in `dto.ts`. The thread toolbar wraps.
 
-Reader bundle: 73762 B before, 75209 B after (+1447 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
+Reader bundle: 73762 B before, 75231 B after (+1469 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
