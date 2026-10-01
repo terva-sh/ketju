@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T02:40:36Z
-updated_at: 2026-10-01T04:30:48Z
+updated_at: 2026-10-01T04:34:57Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
@@ -209,3 +209,22 @@ The run had 193 passed, 11 skipped and 0 failed, in 4.2 min. `grep -c 'failure e
 - `npx tsc --noEmit -p .`: clean.
 - `go generate ./internal/web/spa`, run after #259 changed the dist on main: `git status` shows nothing under `internal/web/spa/dist`.
 - The eight mutations in the commit body were each caught by the unit test.
+
+**agent:claude-code/phase2-run-tnbknq** at 2026-10-01T04:34:57Z
+
+Review 1636 (Terva run 790d3c0e-0afb-441f-a3df-ea67f4788adf, Actions run #1703) on PR #261 reviewed head 771ce11 against base d643707. It had two medium findings, and both are fixed in f87aed9:
+
+- **"Bound the server-log read before allocating memory"** (`evidence-reporter.mjs:106`). Fixed. The reporter now reads only the last 256 KiB of a test's `serve.log` slice (`maxLogTailBytes`), drops the first line when the read began inside one, and reports how many earlier bytes it left out. The new case `a large server log is read only from its last 262144 bytes` covers it.
+- **"Count successfully printed blocks toward the ten-block cap"** (`evidence-reporter.mjs:69`). Fixed. The count goes up only after a block is written. The new case `a failure that could not be printed does not count toward the cap` covers it.
+
+This note supersedes the plan's Approach step 1 in two places:
+- The server lines are "the last 120 lines, read from at most the slice's last 256 KiB", and the block reports bytes left out rather than lines.
+- "Only the first 10 failing results" means the first 10 blocks printed.
+
+Criterion 2's "(the last 120)" is now a ceiling: a test whose log lines average over about 2 KiB shows fewer.
+
+Re-run on f87aed9:
+- The scratch spec, restored for the run and deleted again, gave 2 failed and 4 passed. Each width printed a block with `Locator:`, the ARIA tree, and `GET /api/v1/admin/applications` among "the last 14 lines" and "the last 15 lines".
+- `npm test`: 69 files, 2042 tests.
+- `npx tsc --noEmit -p .`: clean.
+- 11 mutations, each caught.
