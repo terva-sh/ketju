@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T13:40:12Z
+updated_at: 2026-10-01T14:09:10Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -127,6 +127,10 @@ Implementation decisions (internal, recorded in docs/03 'Durability and recovery
 **agent:claude-code/phase3-search-cli** at 2026-10-01T13:40:12Z
 
 Terva review 1766 (PR #313, head dad08e7, base eaf54f6; run 2cf3245b), fixed. (high) 'Do not treat filesystem read failures as damaged logs': threadlog.Open and the frame scan report what a failed read left them as damage, so an EIO could be committed as a failed thread (exit 1) with no rows. The indexer now reads each log through a readRecorder that remembers the first read error other than EOF; a fault found after one is that read error, not a logFault, so Rebuild rolls the whole run back and exits 4. TestRebuildStopsOnAReadError covers a failure at the header, in the replay and at a later frame; TestRebuildRollsBackAFailedThread now injects corrupted bytes (a real checksum failure) rather than a read error. Earlier review on #307: run 01d37b20 at head 0a6209d, base 2e937eb, clean with no findings; its remark that 'transaction commit handling could not be judged' is about db.Write, unchanged, which commits only when fn returns nil and is exercised by TestRebuildKeepsTheOldIndexOnFailure and TestReindexSearchInterrupted. CI run 2069 on dad08e7 failed only in Playwright: apply.spec.ts 'page.emulateMedia: Test timeout of 42500ms exceeded', a timeout-only failure in a client spec this PR does not touch (TKT-01M3VDYENN).
+
+**agent:claude-code/phase3-search-cli** at 2026-10-01T14:09:10Z
+
+Merged: PR #313 (replacing #307), merge commit ca5e50c on main. Reviewed head 4ca74ad, base 0d5a4d0: clean Terva run 83f8a4f4 (round 2), which marked review 1766's finding resolved. CI run 2077 green on that head, every step run. Before merging, the head was merged locally with main at 49d3713 (the search API, TKT-01M29CTY8T), built, and cmd/ketju, search, service/threads, web/api and store/db tests passed.
 
 ## Summary
 

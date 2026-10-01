@@ -1050,9 +1050,14 @@ func TestRedactDryRunWritesNothing(t *testing.T) {
 	n := w.post(id, "DRY-SECRET", h)
 	w.ready()
 	before := w.hashes()
+	catchUp(t, w.data) // so the post has a search row to count
+	before = w.hashes()
 	out, err := w.redact("", append([]string{"--dry-run"}, postArgs(id, n)...)...)
 	if err != nil || !strings.Contains(out, "dry run: nothing was written") || !strings.Contains(out, fmt.Sprintf("%s/%d", id, n)) {
 		t.Fatalf("dry run: %v\n%s", err, out)
+	}
+	if !strings.Contains(out, "search index: 1 row(s) to clear or rewrite") {
+		t.Errorf("the dry run does not count the post's search row:\n%s", out)
 	}
 	if !mapsEqual(before, w.hashes()) || w.journal() {
 		t.Fatal("the dry run wrote something")
@@ -1082,7 +1087,8 @@ func TestRedactDryRunWritesNothing(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s %v: %v\n%s", c.step, args, err, out)
 			}
-			for _, want := range []string{"log " + id.String() + ": " + c.log, "audit row: " + c.audit, "blob " + h + ": " + c.row, "nothing was written"} {
+			for _, want := range []string{"log " + id.String() + ": " + c.log, "audit row: " + c.audit, "blob " + h + ": " + c.row,
+				"search index: ", "nothing was written"} {
 				if !strings.Contains(out, want) {
 					t.Errorf("%s %v: the report lacks %q:\n%s", c.step, args, want, out)
 				}

@@ -24,6 +24,7 @@ import (
 	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/events/projection"
+	"github.com/terva-sh/ketju/internal/events/search"
 	"github.com/terva-sh/ketju/internal/fsutil"
 	"github.com/terva-sh/ketju/internal/jobs"
 	"github.com/terva-sh/ketju/internal/lock"
@@ -64,6 +65,14 @@ so does running the first form again for the same target.
 
 --dry-run writes nothing: it prints the plan, or with a redaction pending,
 the work that remains.
+
+The search index loses the redacted text too: each thread's rows are
+brought current after its log is rewritten, the row of every redacted post
+is deleted and a redacted title's row rewritten, and then the database is
+compacted (VACUUM) and its write-ahead log folded in, every run, so no page
+of the database file keeps the text. That rewrites the database and needs
+free disk of about its size. A database not yet migrated to the search index
+has nothing to clear.
 
 Backups and filesystem snapshots taken before the run still hold the text.
 The command cannot reach them.
@@ -291,6 +300,9 @@ func redactMain(ctx context.Context, out, errOut io.Writer, args []string, o red
 	}
 	defer d.Close()
 	r := &redactor{root: a.root, db: d, out: out, o: o}
+	if r.search, err = searchIndexer(ctx, d, a.root); err != nil {
+		return err
+	}
 
 	// A pending journal comes first, before any check on the post's state:
 	// right after the named post's swap it already reads as redacted, and
@@ -316,12 +328,14 @@ func redactMain(ctx context.Context, out, errOut io.Writer, args []string, o red
 	if err != nil {
 		return err
 	}
+	r.printPlan(j)
+	if err := r.printSearchRows(ctx, j); err != nil {
+		return err
+	}
 	if a.dryRun {
-		r.printPlan(j)
 		fmt.Fprintln(out, "dry run: nothing was written")
 		return nil
 	}
-	r.printPlan(j)
 	if err := writeJournal(a.root, j); err != nil {
 		return fmt.Errorf("redact: writing the journal: %w", err)
 	}
@@ -337,6 +351,42 @@ type redactor struct {
 	db   *db.DB
 	out  io.Writer
 	o    redactOpts
+
+	// search keeps the search index's copy of the text in step (docs/03
+	// "Hard redaction", "The search index"); nil when the database has no
+	// search index yet.
+	search *search.Indexer
+}
+
+// searchIndexer is the indexer the run brings the search index current
+// with, or nil for a database whose migrations stop before the search index,
+// which has nothing to clear: serve's migration later builds its index from
+// the already-redacted logs. A database holding only some of the search
+// tables, as one dropped by hand leaves it, is refused before anything is
+// touched, since the tables left may hold the text and the run could not say
+// it had cleared them.
+func searchIndexer(ctx context.Context, d *db.DB, root string) (*search.Indexer, error) {
+	var missing []string
+	if err := d.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		missing, err = db.MissingSearchTables(ctx, tx)
+		return err
+	}); err != nil {
+		return nil, fmt.Errorf("redact: looking for the search index: %w", err)
+	}
+	switch {
+	case len(missing) == len(db.SearchTables)+1:
+		return nil, nil
+	case len(missing) > 0:
+		return nil, fmt.Errorf("redact: the database lacks the search table(s) %s but has the others, so they "+
+			"were dropped by hand, and the ones left may hold the text: restore the database from a backup, "+
+			"then run redact again; nothing was changed", strings.Join(missing, ", "))
+	}
+	x, err := search.New(search.Options{DB: d, Root: root, Logger: slog.New(slog.DiscardHandler)})
+	if err != nil {
+		return nil, fmt.Errorf("redact: %w", err)
+	}
+	return x, nil
 }
 
 func journalPath(root string) string { return filepath.Join(root, journalName) }
@@ -760,6 +810,13 @@ func (r *redactor) run(ctx context.Context, j *redactJournal) error {
 	if err != nil {
 		return fmt.Errorf("redact: %w", err)
 	}
+	if r.search != nil {
+		// An index another version built is emptied here, as serve's start
+		// would empty it, and holds no text at all from then on.
+		if err := r.search.Prepare(ctx); err != nil {
+			return fmt.Errorf("redact: %w", err)
+		}
+	}
 	ids, groups := byThread(j)
 	for _, id := range ids {
 		ts := groups[id]
@@ -788,6 +845,17 @@ func (r *redactor) run(ctx context.Context, j *redactJournal) error {
 		if err := r.o.step("projected:" + id.String()); err != nil {
 			return err
 		}
+		if r.search != nil {
+			// Catch-up reads the appended Redacted records: a redacted
+			// post's row goes, and a redacted title's row becomes the
+			// replacement.
+			if err := r.search.IndexThread(ctx, id, size); err != nil {
+				return fmt.Errorf("redact: bringing the search index of %s current: %w", id, err)
+			}
+			if err := r.o.step("searched:" + id.String()); err != nil {
+				return err
+			}
+		}
 		fmt.Fprintf(r.out, "rewrote %s\n", id)
 	}
 
@@ -803,6 +871,12 @@ func (r *redactor) run(ctx context.Context, j *redactJournal) error {
 			return err
 		}
 		if err := r.deleteBlobs(ctx, j); err != nil {
+			return err
+		}
+	}
+
+	if r.search != nil {
+		if err := r.clearSearch(ctx, j); err != nil {
 			return err
 		}
 	}
@@ -888,6 +962,107 @@ func (r *redactor) reindex(id threadid.ID) (int64, error) {
 		}
 	}
 	return rec.LogLength, nil
+}
+
+// searchKeys are the search rows a journal clears: every target post, its
+// copies included, and every skipped member of the copy set, whose rows
+// should already be gone and are deleted all the same. A title is its
+// thread's row 0, which is rewritten rather than deleted.
+func searchKeys(j *redactJournal) (posts []postRef, titles []threadid.ID) {
+	for _, t := range j.Targets {
+		if t.Title {
+			titles = append(titles, t.id())
+			continue
+		}
+		posts = append(posts, postRef{Thread: t.id(), Ordinal: t.Ordinal})
+	}
+	for _, s := range j.Skipped {
+		if id, err := threadid.Parse(s.Thread); err == nil {
+			posts = append(posts, postRef{Thread: id, Ordinal: s.Ordinal})
+		}
+	}
+	return posts, titles
+}
+
+// clearSearch takes the redacted text out of the search index whatever
+// state the index was in, then out of every page of the database file
+// (docs/03 "Hard redaction", "The search index"). In one transaction it
+// deletes the row of every journaled post, rewrites a redacted title's row
+// from its replacement, and merges the FTS5 index into one segment
+// (optimize). Then VACUUM rebuilds the file from its live pages, so a page
+// an earlier edit, delete or merge freed keeps nothing, and a checkpoint
+// folds the rebuilt pages into ketju.db and truncates the WAL: until it
+// completes, ketju.db still holds the old pages. A checkpoint a reader holds
+// back fails the run with the journal kept, and a resume tries again. Every
+// part is idempotent, so a resumed run repeats it harmlessly, and it runs on
+// every run, not only when a term is found.
+func (r *redactor) clearSearch(ctx context.Context, j *redactJournal) error {
+	posts, titles := searchKeys(j)
+	err := r.db.Write(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+		for _, p := range posts {
+			if err := db.DropSearchDoc(ctx, tx, int64(p.Thread), int64(p.Ordinal)); err != nil {
+				return err
+			}
+		}
+		for _, id := range titles {
+			if err := r.search.PutTitle(ctx, tx, id, j.Replacement); err != nil {
+				return err
+			}
+		}
+		if err := db.OptimizeSearchIndex(ctx, tx); err != nil {
+			return err
+		}
+		return r.o.step("search-rows")
+	})
+	if err != nil {
+		return fmt.Errorf("redact: clearing the search index: %w", err)
+	}
+	if err := r.db.Vacuum(ctx); err != nil {
+		return fmt.Errorf("redact: compacting the database (VACUUM needs free disk of about its size): %w", err)
+	}
+	if err := r.o.step("vacuumed"); err != nil {
+		return err
+	}
+	if err := r.db.Checkpoint(ctx); err != nil {
+		return fmt.Errorf("redact: folding the compacted database into ketju.db: %w; rerun to resume", err)
+	}
+	return r.o.step("search-cleared")
+}
+
+// printSearchRows says how many search rows the run clears or rewrites,
+// from a read.
+func (r *redactor) printSearchRows(ctx context.Context, j *redactJournal) error {
+	if r.search == nil {
+		fmt.Fprintln(r.out, "search index: none yet, nothing to clear")
+		return nil
+	}
+	posts, titles := searchKeys(j)
+	n := 0
+	err := r.db.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+		count := func(id threadid.ID, ordinal uint32) error {
+			var c int
+			err := tx.QueryRowContext(ctx, `SELECT count(*) FROM search_docs WHERE thread_id = ? AND ordinal = ?`,
+				int64(id), int64(ordinal)).Scan(&c)
+			n += c
+			return err
+		}
+		for _, p := range posts {
+			if err := count(p.Thread, p.Ordinal); err != nil {
+				return err
+			}
+		}
+		for _, id := range titles {
+			if err := count(id, 0); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return fmt.Errorf("redact: reading the search index: %w", err)
+	}
+	fmt.Fprintf(r.out, "search index: %d row(s) to clear or rewrite, then the database is compacted\n", n)
+	return nil
 }
 
 // postTarget is the named post's audit target.
@@ -1135,6 +1310,9 @@ func (r *redactor) report(ctx context.Context, j *redactJournal) error {
 				map[bool]string{true: "present", false: "gone"}[row],
 				map[bool]string{true: "present", false: "gone"}[ferr == nil])
 		}
+	}
+	if err := r.printSearchRows(ctx, j); err != nil {
+		return err
 	}
 	fmt.Fprintf(r.out, "dry run: nothing was written; ketju redact --root %s --resume finishes it\n", r.root)
 	return nil

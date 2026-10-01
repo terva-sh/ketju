@@ -293,6 +293,40 @@ func (d *DB) Write(ctx context.Context, fn func(q *dbq.Queries, tx *sql.Tx) erro
 	return wrap(tx.Commit())
 }
 
+// Vacuum rebuilds the database file from its live pages (SQLite's VACUUM),
+// on the write connection and outside any transaction, so no page an earlier
+// write freed keeps what it held. In WAL mode the rebuilt pages go to the WAL
+// first: run Checkpoint after it, or the main file still holds the old pages
+// until the next checkpoint. It needs free disk of about the database's size.
+// `ketju redact` runs it on every run (docs/03 "Hard redaction",
+// TKT-01M3NS122F).
+func (d *DB) Vacuum(ctx context.Context) error {
+	if d.write == nil {
+		return ErrReadOnly
+	}
+	_, err := d.write.ExecContext(ctx, "VACUUM")
+	return wrap(err)
+}
+
+// Checkpoint copies the whole WAL into the main file and truncates the WAL
+// to nothing (wal_checkpoint(TRUNCATE)). A reader that holds the checkpoint
+// back is ErrBusy rather than silence: until a checkpoint completes, the
+// main file still holds the pages it held before.
+func (d *DB) Checkpoint(ctx context.Context) error {
+	if d.write == nil {
+		return ErrReadOnly
+	}
+	var busy, logFrames, checkpointed int64
+	if err := d.write.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &checkpointed); err != nil {
+		return wrap(err)
+	}
+	if busy != 0 {
+		return fmt.Errorf("%w: the WAL checkpoint was blocked by a reader (%d of %d frames checkpointed)",
+			ErrBusy, checkpointed, logFrames)
+	}
+	return nil
+}
+
 // Close checkpoints the WAL into the main file and closes both pools. The
 // -wal file is truncated, not removed, because every connection persists it.
 //

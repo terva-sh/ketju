@@ -486,6 +486,14 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   pages freed before it was turned on, and the terms would stay in the
   database file, which a takedown has to reach as it reaches the log (Terva
   review 1719).
+  As built (TKT-01M3NS122F), three details beyond that. The rows deleted
+  before the journal goes include those of the copy set's skipped members,
+  which should already have none. An index another version built is emptied
+  at the start of the run, as `serve`'s start would empty it. And a database
+  holding only some of the search tables, as dropping one by hand leaves it,
+  is refused before anything is touched, because the tables left may hold
+  the text and the run could not say it had cleared them. `--dry-run` says
+  how many rows the run clears or rewrites.
 - **Titles.** Decided 2026-09-29 (TKT-01M3NS147C): the command also redacts
   a thread's title, because a takedown or an erasure can cover a title as
   easily as a post, and a rename leaves every earlier title in the log. It
