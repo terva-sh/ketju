@@ -495,6 +495,33 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
 - Server-side sessions (table `sessions`), 30-day idle expiry, 90-day hard
   expiry, sliding `last_used_at` updated at most once per 5 minutes.
 - Session list in user settings with "sign out this device / everywhere".
+  **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M29CCC0X):** "everywhere" ends every session the account holds,
+  the one making the request included, and clears its cookie, so the
+  browser that pressed it is signed out too. Each other session also has
+  its own sign-out in the list. Alternatives: keeping the current session
+  ("everywhere else") lost because both this section and 04 "sessions"
+  say everywhere, and the member who reaches for it after losing a laptop
+  cannot be sure the device in hand is clean; offering both buttons lost
+  because the per-session sign-out already covers "everyone but me".
+- Removing a linked identity (07 `DELETE /settings/identities/{id}`).
+  **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M29CCC0X):** the removal is refused, as `conflict`, unless the
+  account keeps at least one other identity whose provider is in
+  `config.toml` now. An identity of a provider the operator removed is
+  inert (04 "identities") and does not count. The check and the delete
+  run in one write transaction, so two removals that race leave one
+  identity. Every session signed in through the removed identity ends in
+  that transaction, the current one included, which clears its cookie.
+  The subject is then nobody's: a later sign-in with it, signed out, takes
+  the registration path, as a subject never seen does. Alternatives:
+  counting every remaining identity lost because an identity of a removed
+  provider cannot sign anyone in; keeping the sessions with their
+  `identity_id` cleared lost because a member who removes an identity they
+  no longer trust expects what it opened to close; refusing to remove the
+  identity the current session came through lost because the
+  remaining-identity rule already prevents a lock-out, and the refusal
+  would only send the member to sign in again first.
 - Suspending, deactivating or anonymizing a user deletes their sessions, in
   the transaction that changes the status ("Account lifecycle").
 - CSRF: the API is JSON-only and rejects non-JSON content types on

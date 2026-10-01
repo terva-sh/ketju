@@ -394,6 +394,24 @@ arrangement.
 - **Pages.** A "Page 3 of 9" control with previous and next; tapping the
   label opens a picker sheet with page numbers and the jump-to-unread and
   jump-to-date actions. Lenses open from a sheet as well.
+  **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M29CGBZD):** the picker sheet shows the pages as numbered links
+  in a grid, each at least 44 px, with the current page marked and
+  scrolled into view. Up to 60 pages, the grid holds every page. Past
+  60, it holds the first and last pages and the 20 on either side of the
+  current one, and a "Go to page" number field above it reaches any other,
+  so the sheet's size does not grow with the thread. "First unread" sits above the grid, offered on the
+  terms the thread page already offers it: a signed-in reader with posts
+  they have not read. "Jump to date" is a date field that opens the `since`
+  lens at that date. The lens sheet opens from a "Lens" button in the
+  thread header, as the phone mockups draw it, and lists exactly the
+  lenses the desktop switcher offers this viewer. Every choice is a link,
+  so it changes the URL. Alternatives: a page-number field alone lost
+  because a tap on a number beats typing on a phone keyboard; the desktop
+  pager's window of five pages lost because the sheet exists to reach a
+  nearby page in one tap; a grid of every page however many lost because
+  a thread of thousands of pages would draw thousands of controls
+  (Terva review 1691).
 - **Targets and gestures.** Every standalone control (buttons, tabs,
   pager, post actions, the "more" menu) is at least 44 px on its shorter
   side. Inline links inside text (author names, ordinals, tag chips) keep
@@ -405,7 +423,19 @@ arrangement.
   bar height.
 - **Installable.** The SPA ships a web app manifest so it can be added to a
   home screen. Offline caching and push notifications are not in v1 (see
-  10).
+  10). **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M29CGBYY):** the design names no icon, so the run draws a
+  placeholder: two linked rings ("ketju" is Finnish for chain) in the
+  light theme's accent and white, as an SVG source with PNGs at 180, 192
+  and 512 px and a maskable 512 px with the mark inside the safe zone. The
+  server writes the manifest at `/manifest.webmanifest` so that its `name`
+  and `short_name` are the `site_name` setting, as the title and the
+  wordmarks are. `theme-color` is given for the light and the dark theme,
+  and follows a theme the reader chose. Alternatives: a letterform lost
+  because drawing one needs a font rasterizer in the build or a
+  hand-traced path, for a placeholder; a static manifest under `/assets/`
+  lost because a club's home-screen icon would then carry the software's
+  name rather than the club's.
 
 Mockups for both widths are in `docs/mockups/`.
 

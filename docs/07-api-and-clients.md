@@ -1271,6 +1271,17 @@ work stays where it is.
   alternatives lost. A system font stack would drift from every mockup, and
   counting fonts inside the budget would force dropping Newsreader.
   (Decided 2026-09-24 in Phase 1 grooming.)
+- **Theme:** `system`, `light` or `dark`. **Decided by the run (2026-10-01,
+  pending maintainer review; TKT-01M29CCC0X, TKT-01M29CXK4E):** a member's
+  choice is stored on the account, as `theme` in `prefs_json`, and `/me`'s
+  `settings` carries it, so it follows them to every device. The browser
+  keeps a copy in `localStorage` only so the first paint is not the wrong
+  theme. On every load the account's value wins over the copy, and
+  replaces it. A signed-out reader's choice stays in the browser.
+  Alternatives: a per-device theme lost because docs/09 lists theme among
+  the account's settings and the settings screen's criterion asks for it
+  to persist across devices; letting the device's copy win lost because a
+  change made on one device would never reach the others.
 - **State:** signals for viewer, notifications, and per-thread caches keyed
   by `log_length`; SWR-style fetch wrapper that honors `ETag`.
 - **Routing:** the URL scheme above, one route per screen, lazy-loaded
