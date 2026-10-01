@@ -41,6 +41,9 @@
   flex: none;
   text-decoration: none;
 }
+.thread-list-head .list-actions {
+  flex: none;
+}
 
 .thread-list-sort,
 .thread-list-pages {
@@ -91,6 +94,16 @@
   }
   .thread-list-head h1 {
     font-size: 24px;
+  }
+  /* A forum's name and its two buttons do not share 390 px: the buttons
+     take the line under the name. */
+  .thread-list-head {
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  .thread-list-head .list-actions {
+    flex: 1 1 auto;
   }
   /* forums.css hides the index's header button on phones, where the index
      has its floating one; here the header's is the only one. */

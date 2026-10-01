@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { ForumTree, Me } from '../api/dto';
 import { viewer } from '../state/viewer';
-import { renderAt, screenOf, settle } from '../testing';
+import { renderAt, screenOf, settle, stubServer } from '../testing';
 import { render } from 'preact';
 import { groups } from './ForumIndex';
 import { ForumPicker } from './ForumPicker';
@@ -257,5 +257,47 @@ describe('the forum picker', () => {
     await act(async () => void dialog.dispatchEvent(e));
     expect(e.defaultPrevented).toBe(true);
     expect(dialog.contains(document.activeElement)).toBe(true);
+  });
+});
+
+// The mockup header's Mark all read (TKT-01M39WBN4Q divergence F3,
+// TKT-01M3V6Y4JP): the whole site, offered to a member, beside New thread.
+describe('mark all read', () => {
+  it('marks the site read, then asks for the forums and /me again', async () => {
+    let marked = false;
+    const tree = () => {
+      const t = structuredClone(memberTree) as ForumTree;
+      if (marked) for (const f of t.forums.flatMap((r) => [r, ...r.children])) f.unread = 0;
+      return t;
+    };
+    const s = stubServer({
+      'GET /api/v1/forums': () => ({ status: 200, body: tree() }),
+      'PUT /api/v1/me/read': () => ((marked = true), { status: 200, body: { at: 1 } }),
+      'GET /api/v1/me': () => ({ status: 200, body: { ...memberMe, unread: { ...memberMe.unread, threads: 0, new: 0 } } }),
+    });
+    viewer.value = structuredClone(memberMe) as Me;
+    const root = await renderAt('/');
+    const button = root.querySelector<HTMLButtonElement>('.forum-index-head [data-mark-read]')!;
+    expect(button.textContent).toBe('Mark all read');
+    // Before New thread, as the mockup draws them.
+    expect(button.nextElementSibling?.classList.contains('new-thread')).toBe(true);
+    await act(async () => button.click());
+    for (let i = 0; i < 100 && root.querySelector('[data-unread]'); i++) await act(() => new Promise((r) => setTimeout(r, 5)));
+    expect(s.sent.filter((r) => r.method === 'PUT').map((r) => r.url)).toEqual(['/api/v1/me/read']);
+    expect(s.sent.filter((r) => r.url === '/api/v1/forums')).toHaveLength(2);
+    expect(root.querySelector('[data-unread]')).toBeNull();
+    for (let i = 0; i < 100 && !s.sent.some((r) => r.url === '/api/v1/me'); i++) await act(() => new Promise((r) => setTimeout(r, 5)));
+    await settle(root);
+    expect(root.querySelector('.forum-index-summary')?.textContent).toBe('Nothing unread.');
+  });
+
+  it('is not offered to an anonymous reader', async () => {
+    const root = await index(anonTree, anonMe);
+    expect(root.querySelector('[data-mark-read]')).toBeNull();
+  });
+
+  it('is not offered with no forums', async () => {
+    const root = await index({ ...memberTree, forums: [] }, memberMe);
+    expect(root.querySelector('[data-mark-read]')).toBeNull();
   });
 });

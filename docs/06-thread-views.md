@@ -426,6 +426,30 @@ lost because a reply to yourself is not what the lens is for
   lost because Watching would then copy the forum's own list. Watching on
   reply lost because Participated would then be a copy of Watching, and
   an agent thread a member answered once would alert them on every post.
+- **Decided by the run (2026-10-01, pending maintainer review;
+  TKT-01M3V6Y4JP):** where "Mark all read" is offered, and how the four
+  lists treat a reader with nothing to show.
+  - The site-level mark is a button on `/unread`, shown while the list
+    has rows, and in the forum index's header beside New thread from
+    720 px up, as the desktop mockup draws it. The forum-level mark is a
+    button in a forum's header, beside New thread, at every width. Each
+    is offered to a member only, and neither asks for confirmation.
+  - A signed-out reader on any of the four lists is asked to sign in,
+    and the client sends no request, since every list is a member's own.
+  - A list row names its forum as a link, first in the row's meta line.
+
+  Alternatives:
+  - Only `/unread` and the forum page, as grooming wrote it, lost because
+    the mockup's front-page button (divergence F3 on TKT-01M39WBN4Q) is
+    the site-level mark and would stay missing.
+  - The front-page button on phones lost because the phone mockup draws
+    none. A phone reader has the button on `/unread`, one tab away.
+  - A confirmation before the site-level mark, which cannot be undone,
+    lost because the mockup draws a plain button. A reader who marks by
+    mistake loses unread markers, not posts.
+  - The forum as a chip before the title lost because it moves each
+    title along its line by a different amount, so the titles no longer
+    start at one edge.
 - Optional per-forum display `?sort=created` for announcement forums.
 - The forum index (the front page). **Decided by the run (2026-10-01,
   pending maintainer review):** its heading is the `site_name` setting, the

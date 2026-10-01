@@ -10,6 +10,8 @@ export interface NavItem {
   href: string;
   icon: IconName;
   badge?: number;
+  // what is what the badge counts, in words for a screen reader (Badge).
+  what?: string;
 }
 
 // meHref is where the Me tab and the top bar's user go from url, the
@@ -51,17 +53,17 @@ export function sameHandle(a: string, b: string): boolean {
 // (decided at claim for TKT-01M29CEE4K).
 export const tabs = (url: string): NavItem[] => [
   { id: 'forums', label: 'Forums', href: '/', icon: 'home' },
-  { id: 'unread', label: 'Unread', href: '/unread', icon: 'list', badge: badges.value.unread },
-  { id: 'new', label: 'New', href: '/new', icon: 'clock' },
-  { id: 'alerts', label: 'Alerts', href: '/notifications', icon: 'bell', badge: badges.value.alerts },
+  { id: 'unread', label: 'Unread', href: '/unread', icon: 'list', badge: badges.value.unread, what: 'unread threads' },
+  { id: 'new', label: 'New', href: '/new', icon: 'clock', badge: badges.value.new, what: 'new threads' },
+  { id: 'alerts', label: 'Alerts', href: '/notifications', icon: 'bell', badge: badges.value.alerts, what: 'notifications' },
   { id: 'me', label: 'Me', href: meHref(url), icon: 'user' },
 ];
 
 // links are the desktop top bar's (mockup nav()).
 export const links = computed<Omit<NavItem, 'icon'>[]>(() => [
   { id: 'forums', label: 'Forums', href: '/' },
-  { id: 'unread', label: 'Unread', href: '/unread', badge: badges.value.unread },
-  { id: 'new', label: 'New', href: '/new' },
+  { id: 'unread', label: 'Unread', href: '/unread', badge: badges.value.unread, what: 'unread threads' },
+  { id: 'new', label: 'New', href: '/new', badge: badges.value.new, what: 'new threads' },
   { id: 'participated', label: 'Participated', href: '/participated' },
   { id: 'watching', label: 'Watching', href: '/watching' },
 ]);

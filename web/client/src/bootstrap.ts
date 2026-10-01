@@ -9,7 +9,7 @@ export type { Me };
 export const anonymous: Me = {
   user: null,
   pre_user: null,
-  unread: { threads: 0, participated: 0, watching: 0 },
+  unread: { threads: 0, participated: 0, watching: 0, new: 0 },
   notifications: 0,
   queue: null,
   settings: { timezone: '', locale: '', page_size: 25 },

@@ -77,6 +77,17 @@ test('the thread list', async ({ browser }, info) => {
   await ctx.close();
 });
 
+// A cross-forum list's rows name their forum in a link beside the title
+// (TKT-01M3V6Y4JP). alice has posts in the main thread, so Participated
+// always has rows, whatever she has read.
+test('a cross-forum list', async ({ browser }, info) => {
+  const { ctx, page } = await signedIn(browser, info);
+  await page.goto('/participated');
+  await expect(page.locator('[data-thread] [data-forum-link]').first()).toBeVisible();
+  expect(await small(page)).toEqual([]);
+  await ctx.close();
+});
+
 test('the thread page, and its composer sheet', async ({ browser }, info) => {
   const { ctx, page } = await signedIn(browser, info);
   // Page 1, where post 2 quotes post 1 (cmd/ketju e2e.go).

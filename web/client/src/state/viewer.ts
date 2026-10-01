@@ -13,12 +13,14 @@ export const viewer = signal<Me>(readBootstrap());
 export const notifications = computed(() => viewer.value.notifications);
 
 // badges are the counts the navigation shows, the same numbers at every
-// width (docs/06 "Mobile"). Only counts /me provides are here: it has none
-// for New, so New shows no badge until one exists (settled in grooming for
-// TKT-01M29CEE4K). queue is the moderator queue's, null for a viewer with no
-// queue, who is offered none (TKT-01M29CRJ4E).
+// width (docs/06 "Mobile"). Only counts /me provides are here: unread and
+// new are the rows of /unread and /new (TKT-01M29CTY7K), and Participated
+// and Watching keep no badge, as in the mockup's nav() (TKT-01M3V6Y4JP).
+// queue is the moderator queue's, null for a viewer with no queue, who is
+// offered none (TKT-01M29CRJ4E).
 export const badges = computed(() => ({
   unread: viewer.value.unread.threads,
+  new: viewer.value.unread.new,
   alerts: viewer.value.notifications,
   queue: viewer.value.queue ?? null,
 }));

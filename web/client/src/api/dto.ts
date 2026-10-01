@@ -186,10 +186,8 @@ export interface ThreadRow {
   pinned: Pinned | null;
   locked: boolean;
   // forum is the row's forum on a cross-forum list, null on a forum's own
-  // (TKT-01M29CTY7K). The server always sends it; it is optional here only
-  // so that the fixtures that build a row by hand need no change before the
-  // list screens read it (TKT-01M3V6Y4JP).
-  forum?: ForumRef | null;
+  // (TKT-01M29CTY7K).
+  forum: ForumRef | null;
   unread: number;
   last_read_ordinal: number;
 }
@@ -241,10 +239,8 @@ export interface UnreadCounts {
   threads: number;
   participated: number;
   watching: number;
-  // new is the New badge's count (TKT-01M29CTY7K). The server always sends
-  // it; it is optional here only so that the fixtures that build /me by
-  // hand need no change before the New tab reads it (TKT-01M3V6Y4JP).
-  new?: number;
+  // new is the New badge's count: the rows of /new (TKT-01M29CTY7K).
+  new: number;
 }
 
 // Settings is /me's settings, and GET and PATCH /settings (TKT-01M29CCC0X).

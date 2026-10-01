@@ -5,6 +5,7 @@ import type { ThreadList } from '../api/dto';
 import { isProblem } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
+import { MarkAllRead } from '../components/MarkAllRead';
 import { ThreadRow } from '../components/ThreadRow';
 import { rememberList } from '../state/lists';
 import { useScrollMemory } from '../state/scroll';
@@ -40,6 +41,10 @@ function pageHref(forum: string, cursor?: string, sort?: string): string {
 //
 // A page's answer is held (useResource's peek), so going back to it renders
 // at once and useScrollMemory can put the reader where they were.
+//
+// A member is offered Mark all read for this forum (PUT /forums/{slug}/read,
+// TKT-01M3V6Y4JP): their place in each of its threads moves to the last
+// post, and every other forum is left as it was (docs/06 "Read tracking").
 export function ThreadListScreen() {
   const { params } = useRoute();
   const { query } = useLocation();
@@ -72,9 +77,12 @@ export function ThreadListScreen() {
           <h1>{name || ' '}</h1>
         </div>
         {signedIn && list && (
-          <a class="new-thread" href={`/f/${encodeURIComponent(forum)}/new`}>
-            New thread
-          </a>
+          <div class="list-actions">
+            <MarkAllRead url={`/api/v1/forums/${encodeURIComponent(forum)}/read`} onMarked={res.retry} />
+            <a class="new-thread" href={`/f/${encodeURIComponent(forum)}/new`}>
+              New thread
+            </a>
+          </div>
         )}
       </header>
       <nav class="thread-list-sort" aria-label="Sort threads">

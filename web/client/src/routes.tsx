@@ -1,6 +1,7 @@
 import type { AnyComponent } from 'preact';
 import { useEffect } from 'preact/hooks';
 import { lazy, useLocation } from 'preact-iso';
+import { crossListScreen } from './screens/CrossListScreen';
 import { ForumIndex } from './screens/ForumIndex';
 import { NewThreadScreen } from './screens/NewThreadScreen';
 import { NotificationsScreen } from './screens/NotificationsScreen';
@@ -129,10 +130,10 @@ export const routes: RouteEntry[] = [
   { path: '/t/:id/:slug', screen: 'thread', component: ThreadScreen },
   { path: '/t/:id/:slug/:ordinal', screen: 'thread', component: ThreadScreen },
   { path: '/t/:id/:slug/:ordinal/history', screen: 'post-history', component: ThreadScreen },
-  { path: '/unread', screen: 'unread', component: placeholder('unread', 'Unread') },
-  { path: '/new', screen: 'new', component: placeholder('new', 'New') },
-  { path: '/participated', screen: 'participated', component: placeholder('participated', 'Participated') },
-  { path: '/watching', screen: 'watching', component: placeholder('watching', 'Watching') },
+  { path: '/unread', screen: 'unread', component: crossListScreen('unread') },
+  { path: '/new', screen: 'new', component: crossListScreen('new') },
+  { path: '/participated', screen: 'participated', component: crossListScreen('participated') },
+  { path: '/watching', screen: 'watching', component: crossListScreen('watching') },
   { path: '/notifications', screen: 'notifications', component: NotificationsScreen },
   { path: '/search', screen: 'search', component: SearchScreen },
   { path: '/u/:handle', screen: 'profile', component: ProfileScreen },

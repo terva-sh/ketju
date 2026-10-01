@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:49Z
-updated_at: 2026-10-01T18:09:19Z
+updated_at: 2026-10-01T18:42:47Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -114,3 +114,29 @@ The server half is TKT-01M29CTY7K (Build the cross-forum unread, new, participat
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T10:55:40Z
 
 Requirement carried from review 1743 (2026-10-01; PR #285, head fb1c38d, base ccb234d). Finding (medium): 'Restore the site-wide mark in the unread-list E2E test'. users.mark_all_read_at only moves forward, so setReadPosition cannot undo a site-level Mark all read on alice's shared stored session, and other specs would see changed unread state. What the implementation must do: run the site-level 'Mark all read' test as a member whose stored session no other spec reads its unread state from, or reset that member's mark in an e2e fixture. Adding a stored session means a row in e2e/session.ts and paceAuth for its sign-in. Seed separate unread activity for the forum-level check, such as a fresh post in that forum made through another stored session, so it has something to clear and does not depend on the site-level test's order.
+
+**agent:claude-code/phase3-v6y4jp** at 2026-10-01T18:42:45Z
+
+run decision: pending maintainer review (2026-10-01). Recorded in docs/06 "Thread list views" under "Decided by the run (2026-10-01, pending maintainer review; TKT-01M3V6Y4JP)".
+
+- Where "Mark all read" is offered. The site-level mark (PUT /me/read) is a button on /unread, shown while the list has rows, and in the forum index's header beside New thread from 720 px up, as the desktop mockup draws it. The forum-level mark (PUT /forums/{slug}/read) is a button in a forum's header beside New thread, at every width. Each is offered to a member only, with no confirmation.
+- A signed-out reader on any of the four lists is asked to sign in, and no request is sent.
+- A row names its forum as a link, first in the meta line.
+
+Why the front page too: divergence F3 on TKT-01M39WBN4Q is the front page's button (Main.dc.html and FrontDark.dc.html draw "Mark all read" beside New thread on the forum index). The settled item calls the forum header's control "the F3 divergence", but F3 names the front page. Building only the forum header would have left F3 open, so both are built, and the settled item (the forum header's control) stands as written.
+
+Alternatives that lost: only /unread and the forum page (leaves F3 open); the front-page button on phones (the phone mockup draws none, and /unread is one tab away); a confirmation before the irreversible site mark (the mockup draws a plain button, and a mistaken mark loses unread markers, not posts); the forum as a chip before the title (titles would no longer start at one edge).
+
+**agent:claude-code/phase3-v6y4jp** at 2026-10-01T18:42:47Z
+
+Implementation notes (prepared on run/v6y4jp-list-screens; dist not yet committed, waiting for the orchestrator's turn).
+
+- DTOs. `ThreadRow.forum` and `UnreadCounts.new` are required in dto.ts, as the server lane asked. No hand-built fixture needed a change. bootstrap.ts's anonymous default gains `new: 0`.
+- Screen. `screens/CrossListScreen.tsx` serves all four routes, configured per list. It reuses `ThreadRow` and the forum list's paging. The cursor is carried in the address, with "Older threads" and "Newest" links, so a page can be linked and gone back to with its scroll position kept. The plan's test list said "Older appending". The forum list does not append, and the lane prompt asked to reuse its paging, so the tests check the cursor link and the next page's request instead.
+- Mark all read is `components/MarkAllRead.tsx`, used on /unread, in the forum header and in the forum index header. On success it drops every held list (`state/lists.ts forgetLists`) and every held thread page and the thread cache (`state/threads.ts forgetAllThreadPages`), since the read boundary, divider and landing page have moved. It then refetches its own list and calls `refreshViewer()` without waiting. A failure keeps the list and shows an alert.
+- Mark unread on the thread page now drops the cross-forum lists too (`forgetLists`), so a reader sent back to /unread does not see the held list first.
+- `state/lists.ts`: `rememberList(null, href)` records a cross-forum list, and `listFor` returns it for a thread in any forum.
+- Nav: New carries `badges.new` at both widths. Each badge's screen-reader words now come from its nav item ("new threads" for New; the desktop top bar used to say "unread threads" for every link).
+- e2e (review 1743's requirement): the site-wide mark runs as `nell`, a member seeded for it in cmd/ketju e2e.go (after ada, so the earlier ids keep their values). She signs in inside the spec with `paceAuth(2)`, and has a row in e2e/session.ts's budget table. No other spec signs her in. Each test first has carol start a fresh thread in site-feedback, so there is something to clear whatever ran before. The forum-level mark runs as alice in site-feedback, where only live.spec.ts reads her, and only in threads it starts itself. It sets Minutes back to the seeded #30 with setReadPosition, as thread-list.spec.ts also does, and checks that the mark left it unread.
+- targets.spec.ts gains /participated at 390 px (alice always has rows there), which measures the forum link's hit area beside the title.
+- Bundle. The reader was 66189 B on main. With the screens eager it is 67146 B (+957 B). With CrossListScreen lazy it is 67629 B (+1440 B), because lazy non-admin chunks count and the chunk adds its own overhead. Eager stays.

@@ -20,7 +20,7 @@ export function TopBar() {
         {links.value.map((l) => (
           <a key={l.id} href={l.href} data-nav={l.id} aria-current={current(l.href, path) ? 'page' : undefined}>
             {l.label}
-            <Badge n={l.badge} what="unread threads" />
+            <Badge n={l.badge} what={l.what ?? ''} />
           </a>
         ))}
       </nav>

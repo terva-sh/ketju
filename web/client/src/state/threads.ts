@@ -237,6 +237,15 @@ export function forgetThreadPages(id: string) {
   threadCache.value = next;
 }
 
+// forgetAllThreadPages drops every held thread page and the whole cache,
+// as a mark all read does (state/lists.ts forgetReadState): it moves the
+// viewer's place in threads the client cannot name. A request still out is
+// superseded too, since it began before the mark.
+export function forgetAllThreadPages() {
+  forgetGets((u) => u.startsWith('/api/v1/threads/'), { inFlight: true });
+  threadCache.value = new Map();
+}
+
 // resetThreadCache empties the cache, for tests.
 export function resetThreadCache() {
   threadCache.value = new Map();

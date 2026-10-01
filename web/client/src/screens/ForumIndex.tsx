@@ -4,6 +4,7 @@ import type { Forum, ForumTree } from '../api/dto';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
 import { Icon } from '../components/Icon';
+import { MarkAllRead } from '../components/MarkAllRead';
 import { PostTime } from '../components/thread/PostTime';
 import { siteName, viewer } from '../state/viewer';
 import { ForumPicker, pickable } from './ForumPicker';
@@ -28,6 +29,11 @@ export const forumsUrl = '/api/v1/forums';
 // the shell. The floating new-thread button is the phone's; desktop has the
 // header's button. Both open the forum picker, because a thread needs a
 // forum (settled in grooming).
+//
+// Beside it on desktop is Mark all read for the whole site (PUT /me/read),
+// as the mockup's header draws it (TKT-01M39WBN4Q divergence F3,
+// TKT-01M3V6Y4JP). The phone mockup has none; a phone marks the site read
+// from /unread, as the desktop can too.
 export function ForumIndex() {
   const res = useResource(forumsUrl, (signal) => apiGet<ForumTree>(forumsUrl, { signal }), () =>
     peekGet<ForumTree>(forumsUrl),
@@ -52,10 +58,15 @@ export function ForumIndex() {
           <h1>{siteName}</h1>
           {signedIn && <p class="forum-index-summary">{summary(me.unread.threads)}</p>}
         </div>
-        {canStart && (
-          <button type="button" class="new-thread" onClick={pick} aria-haspopup="dialog">
-            New thread
-          </button>
+        {signedIn && forums && (
+          <div class="list-actions">
+            {forums.length > 0 && <MarkAllRead url="/api/v1/me/read" onMarked={res.retry} />}
+            {canStart && (
+              <button type="button" class="new-thread" onClick={pick} aria-haspopup="dialog">
+                New thread
+              </button>
+            )}
+          </div>
         )}
       </header>
       {res.error && !forums && <ErrorPanel error={res.error} what="The forums" onRetry={res.retry} />}

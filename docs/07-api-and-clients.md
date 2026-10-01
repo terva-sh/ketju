@@ -1559,7 +1559,7 @@ here.
 | `DELETE /api/v1/forums/{slug}/draft` | `POST /f/{slug}/draft/delete` | none | `DeleteForumDraft` |
 | `POST /api/v1/threads/{id}/watch` | `POST /t/{id}/watch` | `level` (`watch`, `mute`, or empty to follow the forum) | `SetThreadWatch` |
 | `POST /api/v1/forums/{slug}/watch` | `POST /f/{slug}/watch` | `level` (`watch`, `mute`, or empty to clear) | `SetForumWatch` |
-| `PUT /api/v1/me/read` | `POST /read`, the cross-forum lists' "Mark all read" button | none | `MarkAllRead` |
+| `PUT /api/v1/me/read` | `POST /read`, the "Mark all read" button on `/unread` and the forum index (06 "Thread list views") | none | `MarkAllRead` |
 | `PUT /api/v1/forums/{slug}/read` | `POST /f/{slug}/read`, the forum page's "Mark all read" button | none | `MarkForumRead` |
 | `POST /api/v1/notifications/read` | `POST /notifications/read`, the notifications page's "Mark read" buttons | `ids` (repeated) or `up_to` | `MarkNotificationsRead` |
 | `POST /api/v1/threads/{id}/flags` | `POST /t/{id}/posts/{ordinal}/flag` | `reason`, `note` | the JSON route is built (TKT-01M29CP2PJ); the form route is Phase 5 |

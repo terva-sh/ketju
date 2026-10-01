@@ -25,7 +25,9 @@ export function unreadHref(t: Pick<Row, 'id' | 'slug' | 'last_read_ordinal'>): s
 // ThreadRow is one thread in a list (docs/06 "Thread list views"): title,
 // tags, author, replies, last poster and time, and for a signed-in reader
 // the unread badge. The badge is a control, not an ornament: it and the
-// title are separate links to different places.
+// title are separate links to different places. On a cross-forum list the
+// row names its forum first in the meta line, a link to the forum's list
+// (TKT-01M3V6Y4JP); a forum's own list sends forum null and draws none.
 export function ThreadRow({ thread: t, signedIn }: { thread: Row; signedIn: boolean }) {
   return (
     <li class={`thread-row${t.pinned ? ' row-pinned' : ''}`} data-thread={t.id}>
@@ -55,6 +57,11 @@ export function ThreadRow({ thread: t, signedIn }: { thread: Row; signedIn: bool
           </ul>
         )}
         <div class="thread-row-meta">
+          {t.forum && (
+            <a class="thread-forum hit" href={`/f/${encodeURIComponent(t.forum.slug)}`} data-forum-link={t.forum.slug}>
+              {t.forum.name}
+            </a>
+          )}
           <span>by {t.author.handle}</span>
           <span>
             {t.reply_count} repl{t.reply_count === 1 ? 'y' : 'ies'}

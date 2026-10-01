@@ -111,6 +111,19 @@
   font-size: 13px;
   color: var(--muted);
 }
+/* The row's forum, on a cross-forum list: a link in the meta line, set
+   apart from the plain text beside it by weight and colour. */
+.thread-forum {
+  color: var(--ink2);
+  font-weight: 500;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+.thread-forum:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
 .thread-row-meta .tnum,
 .thread-row-meta time {
   font-variant-numeric: tabular-nums;

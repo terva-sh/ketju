@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me, ThreadList } from '../api/dto';
 import { rememberScroll, savedScroll } from '../state/scroll';
 import { viewer } from '../state/viewer';
-import { renderAt, route, screenOf, settle } from '../testing';
+import { renderAt, route, screenOf, settle, stubServer } from '../testing';
 import anonMe from '../../../../internal/dto/testdata/golden/me.anon.json';
 import memberMe from '../../../../internal/dto/testdata/golden/me.member.json';
 import anonList from '../../../../internal/dto/testdata/golden/threads.anon.json';
@@ -163,6 +163,42 @@ describe('paging and sort', () => {
     serve(memberList);
     const root = await renderAt('/f/elsewhere');
     expect(screenOf(root)).toBe('not-found');
+  });
+});
+
+// TKT-01M3V6Y4JP: the forum header's Mark all read, for this forum only
+// (PUT /forums/{slug}/read), offered to a member.
+describe('mark all read', () => {
+  it('marks the forum read, then asks for the list and /me again', async () => {
+    let marked = false;
+    const s = stubServer({
+      'GET /api/v1/forums/general/threads': () => {
+        const l = structuredClone(memberList) as ThreadList;
+        if (marked) for (const t of l.threads) t.unread = 0;
+        return { status: 200, body: l };
+      },
+      'PUT /api/v1/forums/general/read': () => ((marked = true), { status: 200, body: { at: 1 } }),
+      'GET /api/v1/me': () => ({ status: 200, body: { ...memberMe, unread: { ...memberMe.unread, threads: 3 } } }),
+    });
+    viewer.value = structuredClone(memberMe) as Me;
+    const root = await renderAt('/f/general');
+    const button = root.querySelector<HTMLButtonElement>('.thread-list-head [data-mark-read]')!;
+    expect(button.textContent).toBe('Mark all read');
+    expect(button.nextElementSibling?.classList.contains('new-thread')).toBe(true);
+    expect(root.querySelectorAll('[data-unread]')).toHaveLength(2);
+    await act(async () => button.click());
+    for (let i = 0; i < 100 && (root.querySelector('[data-unread]') || viewer.value.unread.threads !== 3); i++) {
+      await act(() => new Promise((r) => setTimeout(r, 5)));
+    }
+    expect(s.sent.filter((r) => r.method === 'PUT').map((r) => r.url)).toEqual(['/api/v1/forums/general/read']);
+    expect(s.sent.filter((r) => r.url === '/api/v1/forums/general/threads')).toHaveLength(2);
+    expect(root.querySelector('[data-unread]')).toBeNull();
+    expect(root.querySelector('[data-nav=unread] [data-badge]')?.firstChild?.textContent).toBe('3');
+  });
+
+  it('is not offered to an anonymous reader', async () => {
+    const root = await listAt('/f/general', anonList, anonMe);
+    expect(root.querySelector('[data-mark-read]')).toBeNull();
   });
 });
 

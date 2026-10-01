@@ -60,16 +60,40 @@ describe('the navigation shell', () => {
     expect(screenOf(root)).toBe('unread');
   });
 
-  // AC4: the counts /me provides, the same at both widths; none for New,
-  // which /me has no count for.
+  // AC4: the counts /me provides, the same at both widths. New is /me's
+  // unread.new (TKT-01M3V6Y4JP); Participated and Watching keep none.
   it('shows the same badges in both layouts', async () => {
     const root = await renderAt('/');
     const desktop = badgesOf(root);
     await setPhone(true);
     const phone = badgesOf(root);
-    expect(desktop).toMatchObject({ unread: '12', new: null, alerts: '2', me: null });
-    expect(phone).toEqual({ forums: null, unread: '12', new: null, alerts: '2', me: null });
+    expect(desktop).toMatchObject({ unread: '12', new: '6', participated: null, watching: null, alerts: '2', me: null });
+    expect(phone).toEqual({ forums: null, unread: '12', new: '6', alerts: '2', me: null });
     for (const k of Object.keys(phone)) if (k in desktop) expect(desktop[k]).toBe(phone[k]);
+  });
+
+  // Each badge says what it counts to a screen reader, at both widths.
+  it('names what each badge counts', async () => {
+    const words = (root: HTMLElement) =>
+      Object.fromEntries(
+        [...root.querySelectorAll<HTMLElement>('[data-nav]')]
+          .filter((a) => a.querySelector('[data-badge]'))
+          .map((a) => [a.dataset.nav, a.querySelector('[data-badge] .visually-hidden')!.textContent!.trim()]),
+      );
+    const root = await renderAt('/');
+    expect(words(root)).toMatchObject({ unread: 'unread threads', new: 'new threads', alerts: 'notifications' });
+    await setPhone(true);
+    expect(words(root)).toEqual({ unread: 'unread threads', new: 'new threads', alerts: 'notifications' });
+  });
+
+  it('follows the New count, and shows none for none', async () => {
+    const root = await renderAt('/');
+    await act(() => void (viewer.value = { ...viewer.value, unread: { ...viewer.value.unread, new: 0 } }));
+    expect(badgesOf(root).new).toBeNull();
+    await act(() => void (viewer.value = { ...viewer.value, unread: { ...viewer.value.unread, new: 240 } }));
+    expect(badgesOf(root).new).toBe('99+');
+    await setPhone(true);
+    expect(badgesOf(root).new).toBe('99+');
   });
 
   it('follows the viewer, and shows no badge for a count of none', async () => {

@@ -13,7 +13,7 @@ export function TabBar() {
         <a key={t.id} href={t.href} data-nav={t.id} aria-current={current(t.href, path) ? 'page' : undefined}>
           <span class="tab-icon">
             <Icon name={t.icon} size={20} />
-            <Badge n={t.badge} what={t.id === 'alerts' ? 'notifications' : 'unread threads'} />
+            <Badge n={t.badge} what={t.what ?? ''} />
           </span>
           <span class="tab-label">{t.label}</span>
         </a>

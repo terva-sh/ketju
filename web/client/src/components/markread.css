@@ -1,0 +1,49 @@
+/* "Mark all read" (MarkAllRead.tsx), after the mockup front() header's
+   secondary button beside New thread: outlined, on the surface, in the
+   second ink. A list header holds it in .list-actions with New thread. */
+
+.list-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.mark-read {
+  height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink2);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.mark-read:hover {
+  color: var(--ink);
+  border-color: var(--ink2);
+}
+.mark-read:disabled {
+  cursor: progress;
+  color: var(--muted);
+}
+
+/* The failure takes a line of its own under the buttons. */
+.mark-read-error {
+  flex-basis: 100%;
+  margin: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius);
+  background: var(--unread-soft);
+  color: var(--ink);
+  font-size: 13px;
+}
+
+@media (max-width: 719.98px) {
+  .mark-read {
+    height: var(--target);
+  }
+}

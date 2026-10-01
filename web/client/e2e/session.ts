@@ -38,6 +38,9 @@ export async function signIn(page: Page, who: string) {
 //     project
 //   sign-out.spec.ts, per project  3  paceAuth(3) first: its own sign-in
 //                                     (2) and the sign-out
+//   unread-lists.spec.ts, per      2  paceAuth(2) first: nell's sign-in,
+//     project                         who marks the whole site read and
+//                                     whose state nothing else reads
 //   smoke.spec.ts, per project     0  starts from alice's stored session
 //
 // The rule for a new spec: one that spends /auth/* either calls paceAuth

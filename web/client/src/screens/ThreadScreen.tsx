@@ -1,7 +1,7 @@
 import { Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
-import { forgetGets, peekGet } from '../api/client';
+import { peekGet } from '../api/client';
 import type { CreatedPost, Lens, Pinned, Post as PostDTO, ThreadPage, ThreadViewer } from '../api/dto';
 import { isProblem, problemMessage, revokesAccess } from '../api/problem';
 import { useResource } from '../api/resource';
@@ -40,7 +40,7 @@ import { ThreadFoot } from '../keyboard/ThreadFoot';
 import { firstUnread, tracksUnread, useThreadShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
 import { composerFor, loadReplyDraft, quotePost, replyToPost, type Slow } from '../state/composer';
-import { listFor } from '../state/lists';
+import { forgetLists, listFor } from '../state/lists';
 import { subscribe } from '../state/live';
 import { marking, markUnread, readPosition, trackPosts } from '../state/readTracker';
 import { useShellContext } from '../state/shell';
@@ -785,9 +785,10 @@ async function markAndReturn(id: string, forum: string, route: (url: string, rep
   try {
     await markUnread(id, ordinal);
     landed.add(id);
-    // A forum GET still out began before the DELETE answered, and is not
-    // held when it lands (Terva review 1624).
-    forgetGets((u) => u.startsWith('/api/v1/forums'), { inFlight: true });
+    // A list GET still out began before the DELETE answered, and is not
+    // held when it lands (Terva review 1624); the cross-forum lists are
+    // lists too, and the reader may be going back to one (TKT-01M3V6Y4JP).
+    forgetLists();
     void refreshViewer().catch(() => undefined);
   } finally {
     if (!marking(id) && landed.delete(id) && onThreadBody(id)) route(listFor(forum), true);

@@ -71,6 +71,13 @@ const seedModerator = "mona"
 // TKT-01M29CP2P1): the form routes are for admins only.
 const seedAdmin = "ada"
 
+// seedMarker is a member who marks the whole site read
+// (e2e/unread-lists.spec.ts, TKT-01M3V6Y4JP). The site-level mark only
+// moves forward, so nothing can put it back, and no other spec may read
+// this member's unread state (Terva review 1743). No stored session is kept
+// for them: the spec signs them in itself.
+const seedMarker, seedMarkerName = "nell", "Nell Okoro"
+
 // seedPending are pending applications on the active registration form,
 // from identities at the fake provider with no account, one per Playwright
 // project, since each project approves one. Nobody signs in as them. Their
@@ -102,7 +109,7 @@ func runE2E(args []string) error {
 	for _, u := range seedUsers {
 		idp.Users = append(idp.Users, u.handle)
 	}
-	idp.Users = append(idp.Users, seedModerator, seedAdmin)
+	idp.Users = append(idp.Users, seedModerator, seedAdmin, seedMarker)
 	idp.Users = append(idp.Users, seedApplicants...)
 	idp.Users = append(idp.Users, seedStrangers...)
 
@@ -421,7 +428,9 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 }
 
 // seedReview writes what the admin screens need: seedAdmin for the form
-// editor (TKT-01M29CP2P1), and for the applications review (TKT-01M3NRX2NN)
+// editor (TKT-01M29CP2P1), then seedMarker, who has nothing to do with
+// review and is here only because this runs after seed() made the first
+// four accounts; and for the applications review (TKT-01M3NRX2NN)
 // seedPending, each a pending application from an identity with no account,
 // answered on the registration form's active version, a minute apart. The
 // review's moderator, seedModerator, is seed()'s, since she also posts in
@@ -442,6 +451,16 @@ func seedReview(ctx context.Context, data, issuer string) (map[string]int64, err
 		}
 		if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: ada, Valid: true},
 			ProviderKey: e2eProvider, Subject: seedAdmin, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
+			return err
+		}
+		// seedMarker after ada, so the earlier ids stay as they were.
+		marker, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: seedMarker, DisplayName: seedMarkerName,
+			Status: domain.StatusActive, Role: domain.RoleMember, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
+		if err != nil {
+			return err
+		}
+		if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: marker, Valid: true},
+			ProviderKey: e2eProvider, Subject: seedMarker, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
 			return err
 		}
 		form, err := q.GetFormByKey(ctx, "registration")
