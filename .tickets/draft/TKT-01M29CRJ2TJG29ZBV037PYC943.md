@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T09:39:35Z
+updated_at: 2026-10-01T10:55:36Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -207,3 +207,7 @@ Review 1693 (head 2b18c6f, base a599b48) fixed in the plan. High, 'Apply trailin
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T09:39:28Z
 
 Review 1718 (head f93170e, base f3538e6) fixed in the plan and in docs/04. High, 'Filter existing notifications when a member mutes a thread': VisibleNotifications now drops rows whose thread is muted for the viewer when served, for the list and /me alike; case (l) is added to TestNotificationsNeverWidenAccess. Medium, 'Make decided-application rows follow the same list and badge rule': a new_application whose application is no longer pending is served as read, with no read_at written, so the list and the badge agree. The work is carried onto groom/p3-unread-notifications-2 because main moved; that is round 4 of 5.
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T10:55:36Z
+
+Requirement carried from review 1743 (2026-10-01; PR #285, head fb1c38d, base ccb234d). Finding (high, not security): 'Catch up threads missed by both bus subscribers'. The plan's notifier CatchUp compares projection_state with notification_progress. A dropped event that also left the projection behind can therefore leave an idle thread unprocessed: the notifier sweeps before the projection catches up, and no later event or Run retries it. What the implementation must do: the notifier's sweep must find behind threads from the logs and not from projection_state alone. On a Dropped batch, and at startup, run the projection's sweep first (proj.CatchUp with the serve.go reopen). Then compare each thread's log length (the thread store's LogSize, or the projection's walk) with notification_progress, and for every thread behind call Project(ctx, id, logLength) and then process. A thread the projection cannot reach stays in the notifier's behind set, so Run keeps retrying it. Name a test TestDroppedEventOnIdleThreadIsGenerated: drop an event for a thread whose projection is also behind, send no later event, and assert the notification arrives through the sweep or Run.

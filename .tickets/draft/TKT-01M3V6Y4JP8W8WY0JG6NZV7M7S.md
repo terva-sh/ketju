@@ -22,7 +22,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:49Z
-updated_at: 2026-10-01T07:53:37Z
+updated_at: 2026-10-01T10:55:40Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -99,3 +99,9 @@ The server half is TKT-01M29CTY7K (Build the cross-forum unread, new, participat
 - The API, its access rules and its badges' counts: TKT-01M29CTY7K.
 - The watch and mute control that fills `/watching`: TKT-01M3V6Y87D.
 - Live list updates: TKT-01M29CTYA.
+
+## Notes
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T10:55:40Z
+
+Requirement carried from review 1743 (2026-10-01; PR #285, head fb1c38d, base ccb234d). Finding (medium): 'Restore the site-wide mark in the unread-list E2E test'. users.mark_all_read_at only moves forward, so setReadPosition cannot undo a site-level Mark all read on alice's shared stored session, and other specs would see changed unread state. What the implementation must do: run the site-level 'Mark all read' test as a member whose stored session no other spec reads its unread state from, or reset that member's mark in an e2e fixture. Adding a stored session means a row in e2e/session.ts and paceAuth for its sign-in. Seed separate unread activity for the forum-level check, such as a fresh post in that forum made through another stored session, so it has something to clear and does not depend on the site-level test's order.
