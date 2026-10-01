@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CCC0X7SY4SHJ46FV40GNW
 title: Implement the settings endpoints and session management
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: design:identity-sessions
     path: docs/05-identity-and-accounts.md
-claim:
-  actor: agent:claude-code/phase3-ccc0x
-  branch: run/ccc0x-settings-sessions
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-af671810d1dec4448
-  commit: 6d10fe06d4b183e7cae48783855f30f1cc3bf261
-  session: null
-  claimed_at: 2026-10-01T11:12:12Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:20:57Z
-updated_at: 2026-10-01T11:18:27Z
+updated_at: 2026-10-01T11:39:22Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,13 +44,13 @@ Removing the last identity from an account has to be refused, or the user locks 
 
 ## Acceptance criteria
 
-- [ ] GET /settings/sessions lists the viewer's own live sessions with device, IP, provider, created and last-used times, marking the current one; DELETE /settings/sessions/{id} ends one and DELETE /settings/sessions ends all, through session.Store, server-side
-- [ ] Sign out everywhere ends every session of the account, this one included, and clears the cookie; ending the current session singly does the same; the old cookie's next request is anonymous
-- [ ] Another member's session id or identity id is not-found and changes nothing (TestRevokeOwnRefusesAnotherMembersSession, TestUnlinkOtherUsersIdentityIsNotFound)
-- [ ] DELETE /settings/identities/{id} is conflict unless another identity on a configured provider remains, holds under concurrent removals (TestUnlinkRaceLeavesOneIdentity), ends the sessions signed in through it, and writes identity.unlinked
-- [ ] PATCH /settings validates and stores timezone, page_size and theme with field errors; GET /me and the next thread page reflect them without a re-login, and page_size is in the response cache key (TestPageSizeIsInTheCacheKey)
-- [ ] The session and identity routes refuse an agent credential with forbidden; anonymous is unauthenticated and a pre-user forbidden
-- [ ] Goldens for Settings, SessionList and IdentityList; audit.Actions and docs/04 list identity.unlinked; docs/07 describes the routes
+- [x] GET /settings/sessions lists the viewer's own live sessions with device, IP, provider, created and last-used times, marking the current one; DELETE /settings/sessions/{id} ends one and DELETE /settings/sessions ends all, through session.Store, server-side
+- [x] Sign out everywhere ends every session of the account, this one included, and clears the cookie; ending the current session singly does the same; the old cookie's next request is anonymous
+- [x] Another member's session id or identity id is not-found and changes nothing (TestRevokeOwnRefusesAnotherMembersSession, TestUnlinkOtherUsersIdentityIsNotFound)
+- [x] DELETE /settings/identities/{id} is conflict unless another identity on a configured provider remains, holds under concurrent removals (TestUnlinkRaceLeavesOneIdentity), ends the sessions signed in through it, and writes identity.unlinked
+- [x] PATCH /settings validates and stores timezone, page_size and theme with field errors; GET /me and the next thread page reflect them without a re-login, and page_size is in the response cache key (TestPageSizeIsInTheCacheKey)
+- [x] The session and identity routes refuse an agent credential with forbidden; anonymous is unauthenticated and a pre-user forbidden
+- [x] Goldens for Settings, SessionList and IdentityList; audit.Actions and docs/04 list identity.unlinked; docs/07 describes the routes
 
 ## Implementation plan
 
@@ -191,3 +184,28 @@ Terva review 1704 (head 37bcff8, base a599b48), finding 'Allow settings updates 
 **agent:claude-code/phase3-groom-pages** at 2026-10-01T10:18:44Z
 
 Terva review 1734 (head 0d015f4, base f3538e6), finding 'Guard json_type before calling it on malformed preferences': fixed in the plan with a nested CASE, so json_type runs only on valid JSON. TestUpdateSettingsRepairsMalformedPrefs's 'not json' case covers it.
+
+**agent:claude-code/phase3-ccc0x** at 2026-10-01T11:38:54Z
+
+Built as the plan and its "Revised at claim" section say. These choices were left open by the plan, and none changes what a member can do:
+
+- `PATCH /settings` treats `null` for any key as `wrong_type`, because `json.Unmarshal` would otherwise accept it as the zero value. A timezone of `""`, `Local` or over 64 bytes is `not_an_option`.
+- `DELETE /settings/identities/{id}` with an id that is not a positive integer is `not-found`, the same answer as an id nobody has. It is not `bad-request`.
+- `RevokeOwn` matches live sessions only. An expired, unswept session's id is `not-found`, the same as an id the list never showed.
+- `Unlink` refuses a session that ended mid-request with `ErrNotSignedIn` (`unauthenticated`). It refuses an agent or inactive account with `ErrCannotUnlink` (`forbidden`).
+
+Client source. The orchestrator asked this lane not to change client source or `internal/web/spa/dist`. The contract test fails on any golden that `dto-contract.ts` does not import, and `me.*.json` gains `theme`. So the PR edits only `web/client/src/api/dto.ts` (types) and `dto-contract.ts` (a type check that is never bundled). `go generate ./internal/web/spa` leaves the dist byte-identical, and the reader bundle stays at 60465 B (delta 0). `Settings.theme` is optional in TypeScript for now. `bootstrap.ts`'s anonymous fallback builds a `Settings` without it, and changing that file would change the dist. TKT-01M29CXK4E (Build the user settings screens) should make it required when it wires the bootstrap.
+
+Not done: TKT-01M3V6XSW2 (recent sign-in before these actions) is untouched, as the orchestrator directed. No migration was needed.
+
+## Summary
+
+The settings, session and identity routes are built under `/api/v1/settings` as docs/07 now describes them. All seven criteria are met and tested, and nothing is left open.
+
+- **Settings.** `GET` and `PATCH /settings` read and write `timezone`, `page_size` and `theme`, with field errors from the existing codes. The write is one `UpdateUserSettings` statement that merges the named keys into `prefs_json`, behind the nested-CASE guard. `users.Prefs` is the one reader of `page_size` and `theme`. `users.PageSize` sets `threads.Query.PageSize` in the thread handler, so `/me` and the next thread page change with no new sign-in, and `respcache.Key.PageSize` keeps two sizes apart (`TestPageSizeIsInTheCacheKey`, proven to fail without it).
+- **Sessions.** `GET /settings/sessions` lists live sessions with the current one marked, a device label, the IP and the provider. Each is named by `Session.ID`, a hash under its own prefix. `Info.Key` exposed the SessionKey perm's cache uses, and is gone. `DELETE /settings/sessions/{id}` goes through `session.Store.RevokeOwn`, and `DELETE /settings/sessions` through `RevokeUser`, which also deletes pre-user rows bound to the account's identities. Ending the request's own session clears the cookie.
+- **Identities.** `GET /settings/identities` and `DELETE /settings/identities/{id}` go through `identity.Service.ListIdentities` and `Unlink`. One write transaction checks the account and the session, finds the identity among the member's own, applies the configured-provider rule, ends the sessions through it (`session.EndThrough`), deletes it, and writes `identity.unlinked`. `TestUnlinkRaceLeavesOneIdentity` fails if the rule is read outside that transaction.
+- **Access.** Anonymous is `unauthenticated` and a pre-user `forbidden` on every route. An agent's credential is `forbidden` on the session and identity routes and allowed on `/settings`.
+- **Contracts.** `dto.Settings.theme`, `SessionList`, `IdentityList` and `IdentityRemoved` have goldens and are mirrored in `dto.ts` as types only. The dist is unchanged. `audit.Actions` and docs/04 list `identity.unlinked`, docs/04 names the `prefs_json` keys, and `cmd/ketju` embeds `time/tzdata`.
+
+For the next ticket: TKT-01M29CXK4E (Build the user settings screens) should make `Settings.theme` required in `dto.ts` and give `bootstrap.ts`'s fallback a theme. TKT-01M29CRJ3X (Build the SSE endpoint and fan-out) must notice sessions that `RevokeOwn`, `RevokeUser` and `EndThrough` end.
