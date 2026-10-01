@@ -121,6 +121,18 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   describes a human reading and generalizes to nothing.
 - Forum and site level "mark all read" set `users.mark_all_read_at`; a thread
   with `last_post_at < mark_all_read_at` and no row is read.
+  **Decided by the run (2026-10-01, pending maintainer review):** only the
+  site-level mark sets `users.mark_all_read_at`, which is one moment for the
+  whole site. The forum-level mark moves the member's read position in each
+  of that forum's threads to its last post, forward only, in one statement.
+  Read literally, the line above has a forum's mark set a site-wide value
+  and mark every other forum read with it. Alternatives: a per-forum mark
+  table lost because it adds a third input to every unread rule (`MeCounts`,
+  `ForumUnread`, the thread list's badge, `UnreadCount` and the unread
+  lens); setting the site-wide mark lost because it does what the member did
+  not ask for. The forum-level cost is one row per thread in the forum the
+  member has not opened, which docs/04's sizing already allows for
+  (TKT-01M29CTY7K).
 
 ### Post anatomy
 
@@ -307,6 +319,33 @@ lost because a reply to yourself is not what the lens is for
 - **Unread** across all forums (`/unread`), **New since your last visit**,
   **Participated**, **Watching**. These are the "what's new" surfaces and
   live in the top navigation.
+  **Decided by the run (2026-10-01, pending maintainer review)**, for
+  TKT-01M29CTY7K, so that each list agrees with its `/me` badge:
+  - *Unread* lists the threads with an unread post, by the rule `/me`
+    counts (docs/04 `read_positions`), most recent activity first.
+  - *New* lists the threads the member has never opened, meaning they have
+    no read position there, that were started after their site-level mark
+    (any thread, with no mark), newest started first. This is the
+    Discourse reading: New is conversations you have not joined, and Unread
+    is conversations with posts you have not read. `/me` gains a `new` count
+    for the New badge that docs/06 "Mobile" asks for.
+  - *Participated* lists every thread where the member has a post that was
+    not moved, read or unread, by most recent activity, and each row
+    carries its unread count.
+  - *Watching* lists the threads with a thread-level `watch`, in the same
+    order and with the same counts. A forum-level watch drives
+    notifications only (docs/04 `watches`).
+  - A thread whose effective level is `mute` is in none of the four lists.
+  - Neither replying to a thread nor starting one changes its watch level.
+
+  Alternatives: "since your last visit" read as a timestamp lost because
+  `users.last_seen_at` is never written, and a visit boundary across two
+  devices ends the "new" on one before it was read on the other. New as
+  threads started in the last N days lost because the threads drop out
+  whether or not they were read. Watching including forum-watched threads
+  lost because Watching would then copy the forum's own list. Watching on
+  reply lost because Participated would then be a copy of Watching, and
+  an agent thread a member answered once would alert them on every post.
 - Optional per-forum display `?sort=created` for announcement forums.
 - The forum index (the front page). **Decided by the run (2026-10-01,
   pending maintainer review):** its heading is the `site_name` setting, the

@@ -699,12 +699,80 @@ sets it: closing an application does not. `GET /me`'s `notifications` count
 drops when an application is decided or withdrawn and the row stays unread
 for the notification list (TKT-01M29CTY86).
 
+The post kinds are written by the notification generator, a subscriber on
+the event bus (TKT-01M29CRJ2T). These run decisions bind it:
+
+- **Decided by the run (2026-10-01, pending maintainer review):** one post
+  gives one member at most one notification. When it would give several,
+  the kept kind is the strongest: `mention`, then `reply_to_you`, then
+  `quoted`, then `thread_you_watch`. A mention is the author addressing
+  the member by name. A reply answers something they wrote. A quote
+  repeats their words. A watch is ambient. Alternatives: a reply ranked
+  first, as in Discourse, lost because a post that names someone is
+  written to them whatever it answers; one row per kind lost because the
+  ticket that asked for this collapse exists to stop three alerts for one
+  post.
+- **Decided by the run (2026-10-01, pending maintainer review):** a member
+  has at most one unread `thread_you_watch` per thread. It names the first
+  post they were alerted to, and later posts add nothing until they read it,
+  so the link lands where the new posts begin. Alternatives: one row per
+  post lost because an agent thread at twenty posts a minute (06 "Live
+  updates") would bury every other alert; a row with a running count lost
+  because the count needs a column and goes stale whenever a post is
+  removed.
+- **Decided by the run (2026-10-01, pending maintainer review):** an `Edit`
+  notifies the members its `mentions` names, as `mention`, and nothing else.
+  A member already notified about the post is not notified again, though an
+  unread row may move to a stronger kind. This way a mention added to fix a
+  forgotten `@` reaches the person. Alternatives: edits notify nobody,
+  which lost because the author believes they addressed someone who never
+  hears of it; every edit notifying everyone again lost because it repeats
+  alerts.
+- **Decided by the run (2026-10-01, pending maintainer review):** a post
+  notification is served (listed and counted) only while two things hold:
+  the post is visible to every reader, so not deleted, hidden, hidden
+  pending review, redacted or moved; and the viewer may read the thread's
+  forum at that moment. Both are checked when the list is served, and
+  moderators are held to the same rule. Rows are never deleted for this, so
+  a restored post's notification comes back. A `new_application` row is
+  served only to a viewer whose role is moderator or admin at that moment.
+  No notification carries any of the post's text. It carries the kind, the
+  actor, the thread's title, the forum and the ordinal. Alternatives: let
+  moderators see notifications of removed posts lost because an alert asks
+  the reader to go and read, and a moderator reaches removed posts through
+  the queue and the moderator lens instead; an excerpt of the body lost
+  because it is a second path for post text, and that path would have to
+  follow edits, removals and redaction the way the thread page does.
+
+Generation skips the post's author, any member who is not `active`, any
+member who cannot read the forum when the post is processed, and any member
+whose effective level on the thread is `mute` (see `watches`). It also skips
+a post whose record is more than seven days older than the moment it is
+processed. That covers a database restored without the generator's
+progress, which would otherwise alert everyone to history. Progress is kept
+per thread in `notification_progress` (TKT-01M29CRJ2T). That table is
+authoritative and is not a projection: `ketju reindex` leaves both it and
+`notifications` alone.
+
 ### watches
 ```
 user_id, thread_id (nullable), forum_id (nullable), level ('watch'|'mute')
 ```
 Exactly one of thread and forum, and at most one watch per user per thread
 and per user per forum.
+
+**Decided by the run (2026-10-01, pending maintainer review):** a thread's
+effective level for a member is the thread's own row when it has one, then
+the row for the forum the thread is in now, then none. So a muted thread in
+a watched forum is muted, and a watched thread in a muted forum is watched.
+A forum's row covers that forum's own threads, not its children's, as
+`GET /forums` counts each forum's own (07). `mute` removes the thread from
+every notification kind and from every unread count: `/me`, the forum
+index, the thread list's badge and the cross-forum lists. `watch` adds
+`thread_you_watch`. Alternatives: forum before thread lost because it makes
+mute useless in a watched forum, the case the ticket names; a forum row
+covering child forums lost because nothing else in the forum tree inherits
+down, and a member can watch a child forum directly.
 
 ### read_positions
 ```
