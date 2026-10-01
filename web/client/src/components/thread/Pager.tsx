@@ -1,3 +1,4 @@
+import type { ComponentChildren } from 'preact';
 import { useRef, useState } from 'preact/hooks';
 import type { Pagination } from '../../api/dto';
 import { Icon } from '../Icon';
@@ -7,7 +8,7 @@ import type { ThreadRef } from './Post';
 
 // Pager moves between a thread's pages (docs/06 "Paged, not infinite"). The
 // desktop row numbers the pages around the current one; the phone row is
-// "Page N of M" between previous and next. Both are rendered and CSS shows
+// "Page N of M" between icon-only previous and next steps. Both are rendered and CSS shows
 // one, at the 720 px breakpoint. Every page is a link, so it can be opened in
 // a new tab and the router follows it in this one; a link keeps the lens and
 // leaves any permalink, since the page is now the reader's choice.
@@ -63,7 +64,7 @@ export function Pager({
         )}
       </div>
       <div class="pager-narrow">
-        <PageStep to={prev} href={href} label="Previous page" text="‹ Prev" />
+        <PageStep to={prev} href={href} label="Previous page" text={<Icon name="back" />} />
         <button
           ref={opener}
           type="button"
@@ -75,7 +76,7 @@ export function Pager({
           Page {page.number} of {page.total_pages}
           <Icon name="down" size={12} />
         </button>
-        <PageStep to={next} href={href} label="Next page" text="Next ›" />
+        <PageStep to={next} href={href} label="Next page" text={<Icon name="back" />} />
       </div>
       {sheet && (
         <PageSheet
@@ -91,7 +92,19 @@ export function Pager({
   );
 }
 
-function PageStep({ to, href, label, text }: { to: number | null; href: (n: number) => string; label: string; text: string }) {
+// On a phone a step is the mockup's 44 px icon square, the back chevron,
+// which thread.css mirrors for next; its aria-label names it either way.
+function PageStep({
+  to,
+  href,
+  label,
+  text,
+}: {
+  to: number | null;
+  href: (n: number) => string;
+  label: string;
+  text: ComponentChildren;
+}) {
   return to === null ? (
     // An inactive step holds the place, so the pager does not shift between
     // pages. It is hidden from assistive technology and marked disabled,

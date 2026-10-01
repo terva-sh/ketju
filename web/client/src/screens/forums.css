@@ -364,6 +364,11 @@
   .forum-main {
     grid-area: main;
   }
+  /* The lock sits at the card's right edge, before the unread badge, as
+     mobile_front() draws it. */
+  .forum-lock {
+    margin-left: auto;
+  }
   .forum-unread {
     grid-area: unread;
     padding-top: 2px;

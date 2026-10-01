@@ -5,8 +5,9 @@ import { Badge } from './Badge';
 import { MoreMenu } from './MoreMenu';
 
 // PhoneTopBar is the phone's 52 px bar (mockup mtopbar()): back, the
-// screen's title on one line, cut short rather than wrapped or pushing the
-// controls off screen, then search, the moderation queue for those who have
+// screen's title on one line, muted and centred, cut short rather than
+// wrapped or pushing the controls off screen (a screen with no title opens
+// with the wordmark at the left instead, mockup mobile_front()), then search, the moderation queue for those who have
 // one, with the top bar's badge (mockup mtopbar(); it is no sixth tab, docs/10
 // item 25), the screen's primary action when it has one (the new-thread
 // screen's Post), and the screen's more menu.
@@ -19,9 +20,9 @@ export function PhoneTopBar() {
         <a class="tb-button" href={ctx.back.href} aria-label={`Back to ${ctx.back.label}`}>
           <Icon name="back" size={20} />
         </a>
-      ) : (
+      ) : ctx ? (
         <span class="tb-spacer" />
-      )}
+      ) : null}
       {ctx ? (
         <span class="title" data-shell="title" title={ctx.title}>
           {ctx.title}

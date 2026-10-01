@@ -1,12 +1,14 @@
 import { useLocation } from 'preact-iso';
 import { Icon } from '../components/Icon';
+import { Avatar } from '../components/thread/Avatar';
 import { badges, siteName, viewer } from '../state/viewer';
 import { Badge } from './Badge';
 import { alerts, current, links, meHref } from './nav';
 
 // TopBar is the desktop and tablet navigation (mockup nav()): the wordmark,
 // the sections, then search, alerts, the moderation queue for those who
-// have one (/me's queue is a number for them), and the reader.
+// have one (/me's queue is a number for them), and the reader: their avatar
+// beside their handle, or Sign in.
 export function TopBar() {
   const { path, url } = useLocation();
   const me = viewer.value;
@@ -52,7 +54,14 @@ export function TopBar() {
           </a>
         )}
         <a class="who" href={meHref(url)} data-nav="me">
-          {me.user ? me.user.handle : 'Sign in'}
+          {me.user ? (
+            <>
+              <Avatar author={me.user} />
+              <span class="handle">{me.user.handle}</span>
+            </>
+          ) : (
+            'Sign in'
+          )}
         </a>
       </div>
     </header>

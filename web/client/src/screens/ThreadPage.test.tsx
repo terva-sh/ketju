@@ -399,6 +399,24 @@ describe('the pager', () => {
     expect(nav.querySelector('a[rel=prev]')?.getAttribute('href')).toBe(`/t/${id}/why-we-left-slack?page=1`);
   });
 
+  // TKT-01M3S3ZZSZ P4: the phone's steps are the mockup's icon squares,
+  // named by their labels; the last page's inactive next holds its place.
+  it('the phone steps are icon buttons named Previous page and Next page', async () => {
+    serve(page([post(26), post(27)], { number: 2, totalPages: 9 }));
+    const root = await renderAt(`/t/${id}/s?page=2`);
+    const steps = [...at(root, '.pager-narrow')!.querySelectorAll<HTMLElement>('.step')];
+    expect(steps.map((s) => s.getAttribute('aria-label'))).toEqual(['Previous page', 'Next page']);
+    for (const s of steps) {
+      expect(s.textContent).toBe('');
+      expect(s.querySelector('svg.icon[aria-hidden=true]')).not.toBeNull();
+    }
+    serve(page([post(201), post(212)], { number: 9, totalPages: 9, postCount: 212 }));
+    const last = await renderAt(`/t/${id}/s?page=9`);
+    const held = at(last, '.pager-narrow')!.lastElementChild!;
+    expect(held.matches('.step.disabled[aria-hidden=true]')).toBe(true);
+    expect(held.querySelector('svg.icon')).not.toBeNull();
+  });
+
   it('ends the span at the last post on the last page', async () => {
     serve(page([post(201), post(212)], { number: 9, totalPages: 9, postCount: 212 }));
     const root = await renderAt(`/t/${id}/s?page=9`);

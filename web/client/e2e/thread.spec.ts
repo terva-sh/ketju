@@ -133,18 +133,58 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
   // The pager: numbered on the desktop, "Page N of M" on the phone. M is not
   // named, since other specs add posts to the thread. The phone replies from
   // its reply bar, the desktop from the composer at the foot.
+  //
+  // The mockups' measures (TKT-01M3S3ZZSZ): on the desktop the current page
+  // is filled with ink (T4), the span is set in mono (T4), and the posts are
+  // a 900 px column (T10); on the phone the top bar's title is muted (P1)
+  // and the steps are 44 px icon squares with no text (P4).
   if (isMobile) {
     await expect(page.locator('.pager-narrow .where').first()).toHaveText(new RegExp(`^Page ${onPage} of \\d+$`));
     await expect(page.locator('.pager-wide').first()).toBeHidden();
     await expect(page.locator('[data-shell="replybar"]')).toBeVisible();
+    const title = page.locator('[data-shell="phone-topbar"] [data-shell="title"]');
+    expect(await title.evaluate((el) => getComputedStyle(el).color)).toBe(await token(page, 'color', '--muted'));
+    const steps = page.locator('.pager-narrow').first().locator('.step');
+    await expect(steps).toHaveCount(2);
+    for (const step of await steps.all()) {
+      const b = await box(step);
+      expect([Math.round(b.width), Math.round(b.height)]).toEqual([44, 44]);
+      await expect(step).toHaveText('');
+      await expect(step.locator('svg.icon')).toHaveCount(1);
+    }
   } else {
-    await expect(page.locator('.pager-wide .page.current').first()).toHaveText(String(onPage));
+    const current = page.locator('.pager-wide .page.current').first();
+    await expect(current).toHaveText(String(onPage));
     await expect(page.locator('.pager-narrow').first()).toBeHidden();
     await expect(page.locator('.composer')).toBeVisible();
+    expect(await current.evaluate((el) => getComputedStyle(el).backgroundColor)).toBe(
+      await token(page, 'color', '--ink'),
+    );
+    expect(await page.locator('.pager .span').first().evaluate((el) => getComputedStyle(el).fontFamily)).toBe(
+      await token(page, 'font-family', '--font-mono'),
+    );
+    expect(Math.round((await box(page.locator('.posts').first())).width)).toBe(900);
   }
 
   if (process.env.KETJU_SCREENSHOTS === '1') await capture(page, `thread-${info.project.name}`);
 });
+
+// token is a design token as the browser computes it for a property, read
+// from a probe element, so it compares equal to another element's computed
+// style whatever form tokens.css writes it in.
+async function token(page: Page, property: string, name: string): Promise<string> {
+  return page.evaluate(
+    ([property, name]) => {
+      const probe = document.createElement('span');
+      probe.style.setProperty(property, `var(${name})`);
+      document.body.append(probe);
+      const value = getComputedStyle(probe).getPropertyValue(property);
+      probe.remove();
+      return value;
+    },
+    [property, name],
+  );
+}
 
 // capture writes name-{light,dark}.png of the page at its full height: a
 // taller viewport rather than a full-page capture, so the bars that stick to

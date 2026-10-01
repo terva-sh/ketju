@@ -40,6 +40,27 @@ test('a member sees counts, empty forums, and a new-thread button clear of the t
   expect(wordmark).not.toBe('');
   await expect(page.locator('.forum-index-head h1')).toHaveText(wordmark);
 
+  // The phone's measures from mobile_front() (TKT-01M3S3ZZSZ): the wordmark
+  // sits at the bar's left (M1), and the members-only garden's lock sits
+  // right of its name, at the card's right edge (F9).
+  if (isMobile) {
+    const bar = (await page.locator('[data-shell="phone-topbar"]').boundingBox())!;
+    const mark = (await page.locator('[data-shell="phone-topbar"] .wordmark').boundingBox())!;
+    expect(mark.x - bar.x).toBeLessThanOrEqual(24);
+    const garden = page.locator('[data-forum="garden"]');
+    const row = (await garden.boundingBox())!;
+    const name = (await garden.locator('.forum-name').boundingBox())!;
+    const lock = (await garden.locator('.forum-lock').boundingBox())!;
+    expect(lock.x).toBeGreaterThan(name.x + name.width);
+    // It ends where the name's column ends, before the unread badge's
+    // column, and that is the row's right edge less its 16 px padding and
+    // the 8 px gap, and the badge when the garden has one.
+    const main = (await garden.locator('.forum-main').boundingBox())!;
+    expect(Math.abs(lock.x + lock.width - (main.x + main.width))).toBeLessThanOrEqual(1);
+    const badge = await garden.locator('[data-unread]').boundingBox();
+    expect(row.x + row.width - (lock.x + lock.width)).toBeLessThanOrEqual(24 + (badge ? badge.width : 0) + 1);
+  }
+
   // Before anything is focused or opened, at the page's full height: a
   // taller viewport rather than a full-page capture, so the tab bar and the
   // floating button sit where a reader sees them, at the foot. The last

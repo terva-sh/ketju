@@ -118,6 +118,26 @@ describe('the navigation shell', () => {
     expect(root.querySelector('[data-nav=me]')!.getAttribute('href')).toBe(back);
   });
 
+  // TKT-01M3S3ZZSZ D2: the mockup's nav() draws the reader's avatar beside
+  // their name. It is decoration; the link is named by the handle.
+  it('the desktop bar shows the reader’s avatar beside the handle', async () => {
+    const root = await renderAt('/');
+    const me = root.querySelector<HTMLAnchorElement>('[data-shell=topbar] [data-nav=me]')!;
+    const avatar = me.querySelector<HTMLElement>('.avatar')!;
+    expect(avatar).not.toBeNull();
+    expect(avatar.getAttribute('aria-hidden') === 'true' || avatar.getAttribute('alt') === '').toBe(true);
+    expect(me.querySelector('.handle')!.textContent).toBe(viewer.value.user!.handle);
+    expect(me.children[0]).toBe(avatar);
+  });
+
+  it('an anonymous reader sees Sign in and no avatar', async () => {
+    viewer.value = structuredClone(anon) as Me;
+    const root = await renderAt('/');
+    const me = root.querySelector<HTMLAnchorElement>('[data-shell=topbar] [data-nav=me]')!;
+    expect(me.textContent).toBe('Sign in');
+    expect(me.querySelector('.avatar')).toBeNull();
+  });
+
   it('points Sign in back at the page the reader moved to', async () => {
     viewer.value = structuredClone(anon) as Me;
     const root = await renderAt('/');
@@ -209,6 +229,16 @@ describe('the phone top bar', () => {
     expect(index.querySelector('[data-shell=title]')?.textContent).toBe('The Supper Club');
   });
 
+  // TKT-01M3S3ZZSZ M1: mobile_front() sets the wordmark at the bar's left,
+  // so nothing holds a place before it; a titled screen keeps its spacer.
+  it('opens the index’s bar with the wordmark, and keeps a titled screen’s spacer', async () => {
+    isPhone.value = true;
+    const index = await renderAt('/');
+    expect(index.querySelector('[data-shell=phone-topbar]')!.firstElementChild!.classList.contains('wordmark')).toBe(true);
+    const unread = await renderAt('/unread');
+    expect(unread.querySelector('[data-shell=phone-topbar]')!.firstElementChild!.classList.contains('tb-spacer')).toBe(true);
+  });
+
   it("titles a thread with its forum, with back to the forum", async () => {
     vi.stubGlobal('fetch', async () => new Response(threadJSON(thread), { status: 200 }));
     isPhone.value = true;
@@ -288,8 +318,10 @@ describe('the phone top bar', () => {
     expect(/\.topbar\.desktop nav \{([^}]*)\}/.exec(css)?.[1]).toContain('flex: none');
     expect(/\.topbar \.tools \{([^}]*)\}/.exec(css)?.[1]).toContain('min-width: 0');
     const who = /\.topbar \.who \{([^}]*)\}/.exec(css)?.[1] ?? '';
-    for (const decl of ['min-width: 0', 'max-width: 16ch', 'overflow: hidden', 'white-space: nowrap', 'text-overflow: ellipsis']) {
-      expect(who).toContain(decl);
+    for (const decl of ['min-width: 0', 'white-space: nowrap']) expect(who).toContain(decl);
+    const handle = /\.topbar \.who \.handle \{([^}]*)\}/.exec(css)?.[1] ?? '';
+    for (const decl of ['min-width: 0', 'max-width: 16ch', 'overflow: hidden', 'text-overflow: ellipsis']) {
+      expect(handle).toContain(decl);
     }
   });
 });
