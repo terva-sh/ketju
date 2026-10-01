@@ -23,10 +23,12 @@ references:
     path: docs/02-architecture.md
   - ref: pr:281
     path: null
+  - ref: pr:287
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T10:56:27Z
+updated_at: 2026-10-01T11:05:23Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -257,6 +259,12 @@ Terva review 1745 (run 22b6f331-1215-4493-8cab-504b49d90dc1, Actions run 1906), 
 2. **Low: enforce subscription limits before deduplicating entries.** Fixed. `parse` bounds the raw comma-separated count against `MaxThreads` and `MaxForums` before it drops duplicates. Test: `TestParseBoundsTheListAsSent`. A mutation is caught.
 
 This was review round 4 of 5. The full `go test -race ./...` passes on this tree.
+
+**agent:claude-code/phase3-run-crj3x** at 2026-10-01T11:05:23Z
+
+Carried to #287. Main moved under #281 when the blob store (#284, TKT-01M29CXK0K) landed, and the two PRs conflicted in `cmd/ketju/serve.go` and docs/07. Per the run brief, the final tree of #281 is carried onto main ccb234d as one commit, bc34f19, on `run/crj3x-sse-fanout-2`, and #281 is closed with a comment. Both sides of each conflict are kept: `Blobs` and `Events` are both mounted, and docs/07's request limits keep #284's upload row and the three stream rows.
+
+Terva review 1746 (round 5 on #281: head c5eef67, base ccb234d, run bc2937e2-8935-456c-a64b-d47d517eac77): the status was success, with one low finding, "Reject malformed query parameters instead of silently ignoring them" (handler.go:105). `URL.Query()` drops a pair it cannot decode, so `forums=%ZZ` was read as absent. It is fixed in #287: `parse` uses `url.ParseQuery(r.URL.RawQuery)` and answers `bad-request` on its error. `TestParseRefusesAMalformedQuery` covers a bad escape in a value, a bad escape in a key and a `;` separator, and checks that a well-formed escape still decodes. Reverting the check is caught. The docs/07 /events row says so.
 
 ## Summary
 
