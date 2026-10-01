@@ -60,8 +60,9 @@ var seedApplicants = []string{"dana", "erin"}
 // identity until they sign in.
 var seedStrangers = []string{"stranger-phone", "stranger-desktop"}
 
-// seedModerator reviews applications (e2e/admin-applications.spec.ts). The
-// fake provider signs them in like the members.
+// seedModerator reviews applications (e2e/admin-applications.spec.ts), and
+// wrote #56 of the main thread, so the thread page draws a role badge
+// (e2e/thread.spec.ts). The fake provider signs them in like the members.
 const seedModerator = "mona"
 
 // seedAdmin edits the registration form (e2e/admin-forms.spec.ts,
@@ -151,6 +152,21 @@ func runE2E(args []string) error {
 // only reply opens page 2; and #1's two are on pages 2 and 3.
 var seedReplies = map[int]uint32{4: 3, 6: 5, 8: 5, 26: 25, 30: 1, 55: 1}
 
+// The main thread's page 3 carries the parts of the mockups' thread page
+// that members' plain posts cannot (TKT-01M3S3ZZQD, e2e/thread.spec.ts),
+// on ordinals no other spec names: seedAuthors writes #56 as mona, so it
+// carries her role badge; seedEdited is edited by its author, alice, past
+// the grace window, so it carries the edited mark; and seedRemoved is
+// deleted by its author, carol, so everyone but a moderator sees its
+// tombstone. Every other post keeps the alternation, alice's even and
+// carol's odd.
+var seedAuthors = map[int]string{56: seedModerator}
+
+const (
+	seedEdited  = 52
+	seedRemoved = 57
+)
+
 // seedForums is the forum tree the fixture adds around seedForum, shaped
 // like the mockup's front page (docs/mockups Main.dc.html) so the forum
 // index's screenshots have something to compare: roots with children, a
@@ -196,9 +212,9 @@ var (
 	seedLongTags = []string{"garden", "water", "hardware", "long-read", "photos", "budgets"}
 )
 
-// seed writes the fixture: two members with identities at the fake
-// provider, the forum tree, one thread of seedPosts posts in seedForum, all
-// read by carol, a few short threads elsewhere, and the thread list's
+// seed writes the fixture: two members and seedModerator with identities at
+// the fake provider, the forum tree, one thread of seedPosts posts in
+// seedForum, all read by carol, a few short threads elsewhere, and the thread list's
 // threads (seedPinnedTitle and the rest). serve projects the
 // threads when it starts, as it would any log it finds. It answers the main
 // thread's id.
@@ -233,6 +249,18 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 				return err
 			}
 		}
+		// mona after alice and carol, so the ids stay as they were when
+		// seedReview made her: alice 1, carol 2, mona 3, and ada 4.
+		mona, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: seedModerator, DisplayName: "Mona Varga",
+			Status: domain.StatusActive, Role: domain.RoleModerator, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
+		if err != nil {
+			return err
+		}
+		users[seedModerator] = mona
+		if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: mona, Valid: true},
+			ProviderKey: e2eProvider, Subject: seedModerator, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
+			return err
+		}
 		id, err := q.CreateForum(ctx, dbq.CreateForumParams{Slug: seedForum, Name: "General",
 			Description: "Anything that does not fit elsewhere", Visibility: domain.VisibilityPublic,
 			CreatedAt: now, UpdatedAt: now})
@@ -264,8 +292,10 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	// thread appends a thread of n posts to forum, a minute apart and ending
 	// at end, alternating between the two users, with the tags given, and
 	// pinned in its forum if pinned is true. body, if not nil, writes post
-	// i instead of the default.
-	thread := func(forum int64, title, slug string, n int, end int64, tags []string, pinned bool, body func(i int) threadlog.PostBody) (threadid.ID, error) {
+	// i instead of the default, and names its author unless it answers "".
+	// then is appended after the posts.
+	thread := func(forum int64, title, slug string, n int, end int64, tags []string, pinned bool,
+		body func(i int) (string, threadlog.PostBody), then ...threadlog.Append) (threadid.ID, error) {
 		id, err := ids.New()
 		if err != nil {
 			return 0, err
@@ -291,10 +321,18 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 			author := seedUsers[i%2].handle
 			post := threadlog.PostBody{Source: fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)}
 			if body != nil {
-				post = body(i)
+				var who string
+				if who, post = body(i); who != "" {
+					author = who
+				}
 			}
 			if _, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: uint64(users[author]),
 				TimeMS: start + int64(i)*60_000, Body: &post}); err != nil {
+				return 0, err
+			}
+		}
+		for _, rec := range then {
+			if _, err := th.Actor.Append(rec); err != nil {
 				return 0, err
 			}
 		}
@@ -303,13 +341,31 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	// The main thread's second post quotes the first, so its first page has
 	// a quote's header, a link and a toggle, for the accessibility checks.
 	// Some of its posts answer others (seedReplies), for the reply expander.
-	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now, []string{}, false, func(i int) threadlog.PostBody {
+	// After the posts, at now, alice edits seedEdited, written 8 minutes
+	// earlier and so past the default 300 s grace window
+	// (posts.grace_edit_seconds), and carol deletes seedRemoved. Both bodies
+	// are the ones threads.Service writes for an author's own edit and
+	// delete: the edit is not a grace edit, so the post is marked edited,
+	// and the delete is not a moderator's, so the post is deleted rather
+	// than hidden.
+	mainSource := func(i int) string {
 		src := fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)
 		if i == 2 {
 			src = "> [quote=#1]\n> Seeded post 1.\n\n" + src
 		}
-		return threadlog.PostBody{Source: src, ReplyTo: seedReplies[i]}
-	})
+		return src
+	}
+	main, err := thread(forums[seedForum], seedTitle, seedSlug, seedPosts, now, []string{}, false,
+		func(i int) (string, threadlog.PostBody) {
+			return seedAuthors[i], threadlog.PostBody{Source: mainSource(i), ReplyTo: seedReplies[i]}
+		},
+		threadlog.Append{Type: threadlog.TypeEdit, Author: uint64(users[seedUsers[seedEdited%2].handle]),
+			Ordinal: seedEdited, TimeMS: now, Body: &threadlog.EditBody{
+				Source: mainSource(seedEdited) + " (edited in the seed)", ReplyTo: seedReplies[seedEdited],
+				Mentions: &[]uint64{}}},
+		threadlog.Append{Type: threadlog.TypeDelete, Author: uint64(users[seedUsers[seedRemoved%2].handle]),
+			Ordinal: seedRemoved, TimeMS: now, Body: &threadlog.DeleteBody{}},
+	)
 	for i, t := range seedSideThreads {
 		if err != nil {
 			break
@@ -351,9 +407,10 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 
 // seedReview writes what the admin screens need: seedAdmin for the form
 // editor (TKT-01M29CP2P1), and for the applications review (TKT-01M3NRX2NN)
-// seedModerator, and seedPending, each a pending application from an
-// identity with no account, answered on the registration form's active
-// version, a minute apart. It answers the applications' ids by project.
+// seedPending, each a pending application from an identity with no account,
+// answered on the registration form's active version, a minute apart. The
+// review's moderator, seedModerator, is seed()'s, since she also posts in
+// the main thread. It answers the applications' ids by project.
 func seedReview(ctx context.Context, data, issuer string) (map[string]int64, error) {
 	d, err := db.Open(ctx, db.Options{Path: filepath.Join(data, "db", "ketju.db")})
 	if err != nil {
@@ -363,15 +420,6 @@ func seedReview(ctx context.Context, data, issuer string) (map[string]int64, err
 	now := time.Now().UnixMilli()
 	ids := map[string]int64{}
 	err = d.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
-		mona, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: seedModerator, DisplayName: "Mona Varga",
-			Status: domain.StatusActive, Role: domain.RoleModerator, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
-		if err != nil {
-			return err
-		}
-		if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: mona, Valid: true},
-			ProviderKey: e2eProvider, Subject: seedModerator, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
-			return err
-		}
 		ada, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: seedAdmin, DisplayName: "Ada Brandt",
 			Status: domain.StatusActive, Role: domain.RoleAdmin, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
 		if err != nil {

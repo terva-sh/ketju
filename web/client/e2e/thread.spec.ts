@@ -33,16 +33,28 @@ test('the thread page renders the mockup’s parts', async ({ page, isMobile }, 
   await page.goto(`${seed.thread}?page=${onPage}`);
   await expect(page.locator('#post-51')).toBeVisible();
 
-  // The header: ordinal, name and time. The seeded posts are by members, so
-  // no role badge is drawn (RoleBadge), and none is removed, so there is no
-  // tombstone row; the pull request lists both as divergences of the seed.
+  // The header: ordinal, name and time. A member's post carries no role
+  // badge (RoleBadge).
   const first = page.locator('#post-51 .post-header');
   await expect(first.locator('.ordinal')).toHaveText('#51');
   await expect(first.locator('.author')).not.toBeEmpty();
   await expect(first.locator('time')).toHaveAttribute('datetime', /^\d{4}-\d\d-\d\dT/);
+  await expect(page.locator('#post-51 .role-badge')).toHaveCount(0);
   // #55 answers #1 (seedReplies), two pages back, so it carries the reply-to
   // indicator.
   await expect(page.locator('#post-55 .post-header .reply-to')).toHaveText('↩ #1');
+
+  // The parts the seed puts on this page (cmd/ketju e2e.go seedAuthors,
+  // seedEdited and seedRemoved): #56 is the moderator's, so it carries her
+  // role badge; #52 was edited by its author past the grace window, so it
+  // carries the edited mark; and #57 was deleted by its author, so alice
+  // sees a tombstone row in its place, keeping its ordinal.
+  await expect(page.locator('#post-56 .role-badge')).toHaveText('moderator');
+  await expect(page.locator('#post-52 .edited')).toHaveText('(edited)');
+  const removed = page.locator('#post-57');
+  await expect(removed).toHaveClass(/\btombstone\b/);
+  await expect(removed.locator('.tombstone-line .ordinal')).toHaveText('#57');
+  await expect(removed.locator('.tombstone-text')).toHaveText('Post removed by author');
 
   // The divider sits between the last read post and the first unread, and
   // only the posts after it carry the unread edge.

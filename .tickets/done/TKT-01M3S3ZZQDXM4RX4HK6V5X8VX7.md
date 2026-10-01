@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZZQDXM4RX4HK6V5X8VX7
 title: Seed a moderator post, a tombstone and an edit in the e2e thread
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-s3zzqd
-  branch: run/s3zzqd-e2e-seed-moderator
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a17c0bda8d4969053
-  commit: ccb234d753a96820821414af2e47917622be5578
-  session: null
-  claimed_at: 2026-10-01T10:56:23Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T10:56:25Z
+updated_at: 2026-10-01T11:13:57Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -47,9 +40,9 @@ Seed, on page 3 of the main thread, a post by the seeded moderator (mona), a pos
 
 ## Acceptance criteria
 
-- [ ] The e2e seed's main thread has, on page 3, a post by mona (moderator) at #56, #57 removed by its author and #52 edited by its author past the grace window, with every ordinal, reply and seedPosts value the suite names unchanged
-- [ ] e2e/thread.spec.ts asserts #56's role badge, #57's tombstone row and #52's (edited) mark at 390 px and 1440 px, and thread-*.png are refreshed
-- [ ] The whole Playwright suite passes in both projects with every axe scan, and no client source changes
+- [x] The e2e seed's main thread has, on page 3, a post by mona (moderator) at #56, #57 removed by its author and #52 edited by its author past the grace window, with every ordinal, reply and seedPosts value the suite names unchanged
+- [x] e2e/thread.spec.ts asserts #56's role badge, #57's tombstone row and #52's (edited) mark at 390 px and 1440 px, and thread-*.png are refreshed
+- [x] The whole Playwright suite passes in both projects with every axe scan, and no client source changes
 
 ## Implementation plan
 
@@ -98,3 +91,37 @@ Groomed 2026-10-01 for the Phase 3 run (docs/14), against main at a599b48.
 - Seeding an attachment: TKT-01M29CXK0K, then TKT-01M29CYS9W.
 - Seeding a tag: TKT-01M29CYSCP.
 - The tombstone's wording, "Post removed by author" against the mockup's "Post removed by its author.". No ticket asks for it, and docs/08 "Tombstones" owns it.
+### Revised at claim (2026-10-01, against main at ccb234d)
+
+The approach above stands. What reading the code added:
+
+- **How thread() takes the new parts.** Its `body` function also answers the post's author, "" keeping the alternation, so only the main thread reads `seedAuthors`; the badge thread, also 60 posts, keeps its authors. A new `then []threadlog.Append` argument is appended after the posts, under the same thread handle, which is how the Edit of #52 and the Delete of #57 reach the main thread's log.
+- **The Edit's body** is the one `threads.Service.Edit` writes for an author's edit of a post with no reply: `Source`, `ReplyTo` 0, `Mentions` a non-nil empty slice, and `Grace` false. The projection marks a post edited from `Grace` alone (`applyEdit`), so the record says what the window would have decided at `now`.
+- **The Delete's body** is the author's own: `ByModerator` false, so the index marks #57 deleted rather than hidden, and the client's tombstone reads "Post removed by author" to alice and anyone else who is not a moderator.
+- **Counts.** `threads.post_count` counts a deleted post (viewer_state.sql), so the thread list's reply count and every unread count are unchanged. `forum_thread_counts.live_posts` drops by one for General (migration 0009). No spec names General's post count (grep of `web/client/e2e` at ccb234d).
+- **mona's ids.** She is created in seed()'s first transaction, after alice and carol, so she stays user 3 and ada user 4.
+
+## Notes
+
+**agent:claude-code/phase3-s3zzqd** at 2026-10-01T11:13:42Z
+
+Built and checked locally on run/s3zzqd-e2e-seed-moderator, against main at ccb234d.
+
+### What changed
+- `cmd/ketju/e2e.go`: mona is created in seed()'s first transaction, after alice and carol, so the ids stay alice 1, carol 2, mona 3, ada 4. seedReview no longer creates her. thread()'s body function also names the author ("" keeps the alternation), and a `then` list is appended after the posts. The main thread writes #56 as mona (`seedAuthors`), then at `now` an Edit of #52 by alice (Grace false, ReplyTo 0, Mentions a non-nil empty slice, as `threads.Service.Edit` writes) and a Delete of #57 by carol (ByModerator false).
+- `web/client/e2e/thread.spec.ts`: asserts #51 has no role badge, #56's `.role-badge` reads "moderator", #52's `.edited` reads "(edited)", and #57 is a `.tombstone` keeping its ordinal and reading "Post removed by author". The comment that listed the badge and tombstone as seed gaps is gone.
+- `thread-{phone,desktop}-{light,dark}.png` refreshed from a fresh seed running thread.spec.ts alone with KETJU_SCREENSHOTS=1.
+- No client source and no `internal/web/spa/dist` change, so the reader bundle is unchanged.
+
+### Evidence
+- Full Playwright suite, both projects, fresh seed: 193 passed, 11 skipped (the project-specific skips), 0 failed, in 7.1 min. Every a11y scan passed in both themes.
+- `gofmt -l .` empty; `go build ./...`, `go vet ./...` and `go vet -tags e2e ./cmd/ketju` clean; `go test -race ./...` passed.
+- Mutations against thread.spec.ts, each on a fresh seed, each caught:
+  - seedAuthors emptied: fails at `#post-56 .role-badge`, element not found.
+  - the Edit written with Grace true: fails at `#post-52 .edited`, element not found.
+  - the Delete written with ByModerator true: fails at `.tombstone-text`, received "Post removed by a moderator".
+- A probe on the desktop run confirmed #57's tombstone carries the `unread` class and the 3 px unread edge after the divider, like #58.
+
+## Summary
+
+The e2e seed's main thread now carries, on page 3, mona's post at #56 (role badge), alice's edit of #52 past the grace window (edited mark) and carol's own delete of #57 (tombstone), with every ordinal, reply and seedPosts value the suite names unchanged; mona moved from seedReview into seed() and keeps id 3. e2e/thread.spec.ts asserts the badge, the edited mark and the tombstone row at 390 px and 1440 px, and the four thread screenshots are refreshed. The full Playwright suite passed locally in both projects (193 passed, 11 project skips), with no client source or dist change. Attachments and tags stay with TKT-01M29CYS9W and TKT-01M29CYSCP.
