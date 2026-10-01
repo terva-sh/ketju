@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:50:46Z
+updated_at: 2026-10-01T09:44:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,6 +51,7 @@ Snippets come from FTS5 rather than from re-reading logs, which keeps a search o
 - [ ] Responses are no-store and never in the response cache, and the goldens search.member.json and search-empty.anonymous.json are held by the client's DTO contract with the dist unchanged (TestSearchRoute, TestSearchIsNotCached, contract.test.ts)
 - [ ] No result reaches a viewer who may not read the post when it is served, with a case each for a hidden forum, a signed-in-only forum to an anonymous reader, an author's delete, a moderator's hide including a group-grant moderator, an auto-hide, a redaction, a move to an unreadable forum (projected, and with the projection held behind the log), a suspended author's hidden posts, a revoked grant and a quarantined thread (TestSearchNeverWidensAccess)
 - [ ] A post edited, removed or moved, or a thread renamed, after indexing is not served until the index catches up, and a title is judged at the log length the request read even when the projection trails, so no snippet or title shows text the thread no longer shows (TestSearchIsFreshWhenServed)
+- [ ] Results are ordered newest first using only each post's own facts, so a viewer's pages, in order and content, do not change when posts are added in a forum they cannot read (TestSearchPagesIgnoreUnreadableForums)
 
 ## Implementation plan
 
@@ -75,7 +76,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
   - `forum` is answered as the thread list answers;
   - `author` is a handle, and an unknown one is an empty page;
   - `after` and `before` are ms;
-  - relevance order, 25 to a page, at most 1000 results, no total;
+  - newest-first order, which uses only each post's own facts, 25 to a page, at most 1000 results, no total (relevance lost to review 1728: bm25's index-wide statistics let unreadable posts reorder readable ones);
   - the result shape, with `snippet` as plain-text segments;
   - the freshness check at serve time;
   - the `indexing` flag.
@@ -126,6 +127,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
     - a quarantined thread.
   - **`TestSearchIsFreshWhenServed`**: with the indexer stopped after indexing, none of these is served: a delete, a hide, a split, an edit (no snippet of the old revision), or a rename (no title hit for the old title). The rename case also holds the projection behind, so the title is judged at the log length the request read. Once the indexer runs, the edited post is served with its new text.
   - **`TestSearchPageLengthIgnoresUnreadableForums`**: 30 matches in a forum the viewer cannot read and one they can give one result and no `next_cursor`.
+  - **`TestSearchPagesIgnoreUnreadableForums`**: two readable forums with 40 matches between them. The same viewer's pages, in order and content, are identical before and after 200 matching posts are added in a forum the viewer cannot read (Terva review 1728).
   - **`TestSearchPagesFill`**: 60 matches with 10 stale rows among them give full pages with no repeats, a short page only at the end, and no cursor past 1000.
   - **`TestSearchSnippetIsNeverMarkup`**: a post whose *text* holds markup characters, written so that `render.Plain` keeps them: `` `<script>alert(1)</script>` `` in a code span, and `\<mark\>` and `&amp;amp;` as escaped text. Its snippet's segments carry `<script>`, `<mark>` and `&amp;` as literal text, and the JSON escapes them. The same post's raw HTML, `<b>bold</b>`, is absent from the snippet, because `render.Plain` drops raw HTML before indexing (Terva review 1713).
   - **`TestSearchQueryRules`**:
@@ -165,3 +167,7 @@ Terva review 1701 (PR #270, head b52fce1, base a599b48), both findings fixed in 
 **agent:claude-code/phase3-groom-search** at 2026-10-01T08:50:46Z
 
 Terva review 1713 (PR #270, head d0b6f16, base a599b48), fixed. (medium) 'Make the literal-markup snippet test compatible with plain-text extraction': TestSearchSnippetIsNeverMarkup now writes the markup characters as text Plain keeps (a code span and backslash escapes) and asserts the post's raw HTML is absent from the snippet. Review round 5 of 5 on PR #270; the head carrying this fix has not been reviewed.
+
+**agent:claude-code/phase3-groom-search** at 2026-10-01T09:44:32Z
+
+Terva review 1728 (PR #275, head b5fa248), finding 2 (medium) 'Account for restricted documents affecting relevance-ranked pages': fixed. Relevance (bm25) is dropped because its statistics are index-wide; results are ordered newest first (created_at, then row), which uses only each post's own facts, so the docs/07 guarantee that pages do not depend on unreadable forums now holds for order too. This supersedes the run decision 'relevance order' recorded earlier; docs/07 'Search' records the change and why relevance lost. TestSearchPagesIgnoreUnreadableForums; criterion 7.

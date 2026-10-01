@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T09:38:45Z
+updated_at: 2026-10-01T09:44:51Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -56,6 +56,7 @@ Indexing plain source rather than HTML keeps markdown syntax out of the results 
 - [ ] search_state never records a length past the frames scanned, so a later record is never skipped (TestStateNeverPassesTheScan)
 - [ ] A thread that fails partway through a batch keeps its earlier rows and search_state while the batch's other threads commit (TestAFailedThreadKeepsItsRows)
 - [ ] A version change or a missing search_meta row empties the index and records the version in one transaction, which serve runs before its listener opens, so no row of another version is ever served; every thread is then re-indexed once, a restart mid-pass resumes, and a restart after it re-indexes nothing (TestVersionChangeReindexes, TestVersionChangeServesNoOldRows, TestServePreparesSearchBeforeListening)
+- [ ] A search_state length that is not a frame boundary re-indexes the thread from its first frame, and catch-up after a redaction swap resumes on a boundary and drops the row (TestStateNotAtAFrameBoundaryReindexesTheThread, TestCatchUpAfterARedactionSwap)
 
 ## Implementation plan
 
@@ -80,7 +81,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
 1. **FTS5 on every connection.** In `internal/store/db/driver.go`, import `github.com/ncruces/go-sqlite3/ext/fts5` and call `fts5.Register(c)` in `openPool`'s callback, before the `FCNTL_PERSIST_WAL` call. This is the one file allowed to import the driver (`TestOnlyDriverGoImportsADriver`). Every pool goes through `openPool`, the read-only one from `OpenReadOnly` included. Without the module, `ketju fsck` and a `VACUUM INTO` backup would fail on a database that has the table.
 2. **Migration `0020_search.sql`.** Take the next free number at implementation. It creates three tables and one virtual table:
    - `search_docs (rowid INTEGER PRIMARY KEY, thread_id INTEGER NOT NULL, ordinal INTEGER NOT NULL CHECK (ordinal >= 0), revision INTEGER NOT NULL, author_id INTEGER NOT NULL, created_at INTEGER NOT NULL, title TEXT NOT NULL DEFAULT '', source_plain TEXT NOT NULL DEFAULT '', UNIQUE (thread_id, ordinal))`;
-   - `CREATE VIRTUAL TABLE search USING fts5(title, source_plain, content='search_docs', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2')`, with `INSERT INTO search(search, rank) VALUES ('rank', 'bm25(10.0, 1.0)')`, so a title match outranks a body match;
+   - `CREATE VIRTUAL TABLE search USING fts5(title, source_plain, content='search_docs', content_rowid='rowid', tokenize='unicode61 remove_diacritics 2')`. No `rank` is configured and nothing orders by it: bm25's statistics span the whole index, so posts in forums a viewer cannot read would reorder what they can (docs/07 "Search", Terva review 1728);
    - no triggers. `search` is kept in step with `search_docs` by the two writers of step 3 and by nothing else. Triggers lost because they would make step 3's `ClearSearch` unsafe: FTS5's `delete-all`, the one clear that works on a damaged index, followed by trigger-issued `delete`s on rows the index no longer holds, is undefined behaviour in FTS5's documentation;
    - `search_state (thread_id INTEGER PRIMARY KEY, log_length INTEGER NOT NULL, updated_at INTEGER NOT NULL)`;
    - `search_meta (id INTEGER PRIMARY KEY CHECK (id = 1), version INTEGER NOT NULL)`.
@@ -101,7 +102,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
 5. **The indexer: a new `internal/events/search` package**, shaped after `internal/events/projection`.
    - `Indexer` implements `events.Subscriber` with `Name() "search"`.
    - `Options{DB, Root, Threads, Quarantined, Logger, Now}`. `Threads` is the open-thread cache. It is only `Peek`ed, never `Acquire`d, so indexing never evicts a thread a reader has open.
-   - **`IndexThread(ctx, id, logLength)`** reads `search_state` for the thread (absent means the file header's end). A recorded length past the log's end means the row is stale: search is disposable, so the thread is re-indexed from its first frame and logged, not quarantined. The method walks `[from, logLength)` with `threadlog.ScanFramesFrom` and collects two things:
+   - **`IndexThread(ctx, id, logLength)`** reads `search_state` for the thread (absent means the file header's end). A recorded length past the log's end means the row is stale: search is disposable, so the thread is re-indexed from its first frame and logged, not quarantined. The same holds for a recorded length that is not a frame boundary, which `ScanFramesFrom` refuses. A hard redaction's rewrite keeps every frame at its original length, so a length recorded before it is still a boundary after it (docs/03 "Hard redaction": "The log never gets shorter"). Re-indexing on refusal covers whatever else could break that, such as a restored database paired with a log it never saw (Terva review 1728). The method walks `[from, logLength)` with `threadlog.ScanFramesFrom` and collects two things:
      - The *touched ordinals*: the ordinal of every record that can change a post's text or its `Visible()`, and nothing else changes either. Those records are:
        - `Post` and `Edit`, for text;
        - `Delete` in every form, for visibility. The docs/03 record table and `threadlog.postFlagEffect` read one record type here, with these effects:
@@ -139,7 +140,7 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
    JOIN threads AS t ON t.id = d.thread_id JOIN forums AS f ON f.id = t.forum_id
    WHERE search MATCH ? AND t.forum_id IN (SELECT value FROM json_each(?)) AND t.post_count > 0
      [AND t.forum_id = ?] [AND d.author_id = ?] [AND d.created_at >= ?] [AND d.created_at < ?]
-   ORDER BY rank, d.created_at DESC, d.rowid DESC LIMIT ? OFFSET ?
+   ORDER BY d.created_at DESC, d.rowid DESC LIMIT ? OFFSET ?
    ```
    - The forum list is bound as one JSON parameter through `forumList`, as `UserPosts` does.
    - `t.post_count > 0` leaves out a thread with no post, as `threads.access` does.
@@ -180,6 +181,8 @@ Groomed 2026-10-01 against main at a599b48 (TKT-01M3V3BVPY, Phase 3 grooming, la
   - `TestDroppedEventsAreCaughtUp`.
   - `TestAFailedThreadKeepsItsRows`: in one batch with two healthy threads, a thread whose log is damaged after posts that were already put keeps its earlier rows and `search_state` unchanged. The healthy threads commit, and the failed one is reported by `Lag`.
   - `TestStateAheadOfLogReindexesTheThread`.
+  - `TestStateNotAtAFrameBoundaryReindexesTheThread`: a `search_state` length inside a frame re-indexes the thread from its first frame, so no row is left over from before.
+  - `TestCatchUpAfterARedactionSwap`: a database copy taken before `ketju redact` rewrites a log, then caught up against the rewritten log. The resume offset is a frame boundary, the `Redacted` record is scanned, and the row is gone.
   - `TestVersionChangeReindexes`: a different version, and a missing `search_meta` row, each re-index every thread. A restart after that pass finishes re-indexes nothing. A restart in the middle of the pass indexes only the threads it had not reached.
   - `TestServePreparesSearchBeforeListening` (`cmd/ketju`): a data directory whose index carries another version, with `CatchUp` stalled by a hook. The first search request after `ready` finds none of the old rows, and `search_meta.version` is already current.
   - `TestVersionChangeServesNoOldRows`: an index built by an earlier version whose extraction kept link destinations, then a version change with the pass stalled after one thread. A search for a link destination finds nothing. A search for a word in the unreached threads finds nothing, and `Indexing()` is true. The rebuilt thread is found.
@@ -231,3 +234,15 @@ Orchestrator, 2026-10-01: grooming PR #270 reached the five-round review cap (do
 **agent:claude-code/phase3-groom-search** at 2026-10-01T09:38:45Z
 
 Terva review 1719 (PR #270, head 8572a70, base a599b48), fixed on groom/p3-search-2. (high) 'Clear an obsolete index before search requests can reach it': the version check and atomic clear move out of background CatchUp into a synchronous Indexer.Prepare, which serve calls before net.Listen (and reindex and redact call before indexing); a failure fails startup. docs/04 'search (FTS)' says so; TestServePreparesSearchBeforeListening; criterion 12 rewritten.
+
+**agent:claude-code/phase3-groom-search** at 2026-10-01T09:44:31Z
+
+Terva review 1728 (PR #275, head b5fa248, base 8a2c... see PR), finding 1 (high) 'Do not resume a restored search index at an offset from a rewritten log': answered and hardened. docs/03 'Hard redaction' keeps every rewritten frame at its original length ('The log never gets shorter'), so a pre-redaction offset is still a frame boundary and catch-up scans the appended Redacted record; docs/03 now says so in the search paragraph. The plan adds a defensive rule: an offset ScanFramesFrom refuses re-indexes the thread from its first frame. Tests TestStateNotAtAFrameBoundaryReindexesTheThread and TestCatchUpAfterARedactionSwap; criterion 13. Finding 2 also removes the bm25 rank configuration from the migration (see TKT-01M29CTY8T).
+
+**agent:claude-code/phase3-groom-search** at 2026-10-01T09:44:40Z
+
+Correction to the review 1728 note above: its base is f3538e6, main as PR #275 was opened; 'base 8a2c... see PR' was a typing error.
+
+**agent:claude-code/phase3-groom-search** at 2026-10-01T09:44:51Z
+
+Supersedes the correction above: review 1728's base is 6dfd01d, the main commit PR #275 branched from. f3538e6 is a later main commit.

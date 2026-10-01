@@ -1063,7 +1063,8 @@ cache. It searches the index docs/04 "search" describes.
   for thread pages. A pre-user never reaches it (05 "mode = approval").
   Results come only from the forums `perm.ReadableForums` lists for the
   viewer, and that list is a condition of the one statement that matches,
-  ranks and pages, so neither a page nor its length depends on a forum the
+  orders and pages. The order uses only facts of each result's own post,
+  so neither a page, its order nor its length depends on a forum the
   viewer cannot read.
 - **`q`** is required: 1 to 200 characters once trimmed, and at most 16
   words, or `validation-failed`. Its words must all match, and a
@@ -1078,8 +1079,8 @@ cache. It searches the index docs/04 "search" describes.
 - **`after`, `before`** are Unix ms, `after` the first included and
   `before` the first not, as the audit log's `from` and `to` are. Anything
   but a non-negative integer is `bad-request`.
-- **Order and pages.** By relevance (FTS5's bm25, the title weighted above
-  the body), ties newest first, 25 to a page. `next_cursor` is opaque and
+- **Order and pages.** Newest first (`created_at`, then the row), 25 to a
+  page. `next_cursor` is opaque and
   empty on the last page, and a cursor the server did not issue is
   `bad-request`. A search reaches at most 1000 results. No total is
   returned.
@@ -1108,8 +1109,12 @@ cache. It searches the index docs/04 "search" describes.
 Alternatives: refusing anonymous readers lost, because they can already
 read every public post and search shows nothing more. A total count lost:
 it costs a second full match per search, and the freshness check can leave
-out a counted row. Newest first only lost, because relevance is what a
-search box promises; a sort option is left for later. Passing FTS5's own
+out a counted row. Relevance order (FTS5's bm25) lost, although it is what
+a search box usually promises: bm25 scores with index-wide statistics, so
+posts in forums the viewer cannot read would shift the order, and so the
+pages, of what they can read (Terva review 1728). A relevance order that
+is safe would need statistics per forum set, which FTS5 does not keep; it
+is left for later, with a sort option. Passing FTS5's own
 syntax through lost, because a malformed query would be a server error and
 a column filter names internals. Calendar dates lost to the audit log's
 precedent: the client knows the reader's time zone and the server does not.

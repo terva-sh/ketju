@@ -476,7 +476,10 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   search tables (one not yet migrated) has nothing to clear. A database
   restored from a backup taken before the redaction drops the rows by
   itself: its `search_state` trails the log, and catch-up reaches the
-  `Redacted` records. Alternatives: relying on catch-up alone lost, because
+  `Redacted` records. The offset it resumes from is still a frame boundary,
+  because the rewrite keeps every frame at its original length ("The log
+  never gets shorter" above), and an offset that is not one makes the
+  indexer re-index that thread from its first frame (Terva review 1728). Alternatives: relying on catch-up alone lost, because
   a stale `search_state` or a damaged index would leave the text searchable
   after the command reported success; deleting the rows with only `PRAGMA
   secure_delete` and `optimize` lost, because `secure_delete` cannot reach
