@@ -460,6 +460,20 @@ lost because a reply to yourself is not what the lens is for
     in the shell, for a number one screen shows.
   - The shortcut hint on phones lost because shortcuts are absent there
     ("Mobile").
+- The Alerts screen (`/notifications`, TKT-01M29CTY86) lists the viewer's
+  notifications as one sentence each, the thread's title linking to the
+  post's permalink, and never shows post text (04 "notifications"). The
+  rows a page shows are marked read as they are shown, and keep their
+  unread marking until the reader leaves. **Decided by the run
+  (2026-10-01, pending maintainer review):** "Older" adds the next page
+  below the rows already shown and moves focus to its first row, rather
+  than replacing the page as a thread list's "Older threads" does, because
+  the rows shown stay marked unread only for this visit, and a page
+  replaced would lose that marking. "Mark all read" clears the unread
+  marking of every row shown at once, because the reader asked for exactly
+  that. Alternatives: a paged list in the address, as the thread lists
+  have, lost for the reason above; keeping the marking after mark-all lost
+  because the reader would see no effect of the button but a status line.
 
 ## Moderator flow for drift: split and merge
 

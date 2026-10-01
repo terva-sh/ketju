@@ -1,0 +1,179 @@
+/* The Alerts screen (NotificationsScreen.tsx). There is no mockup for it; it
+   follows the thread list's page (threadlist.css) and rows (threadrow.css):
+   the same heading, one bordered surface ruled between rows, and the unread
+   colour the badges use. The column is narrower, because a row is one
+   sentence. */
+
+.alerts {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 28px 24px 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.alerts-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+}
+.alerts-head h1 {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-weight: 500;
+  font-size: 32px;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ink);
+}
+
+.alerts-clear,
+.alerts-older {
+  flex: none;
+  min-height: 36px;
+  padding: 0 14px;
+  border: 1px solid var(--rule2);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+}
+.alerts-clear:hover,
+.alerts-older:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.alerts-clear:disabled,
+.alerts-older:disabled {
+  cursor: default;
+  color: var(--muted);
+  border-color: var(--rule);
+}
+
+/* The status line holds its place only when it has something to say. */
+.alerts-status:empty {
+  display: none;
+}
+.alerts-status,
+.alerts-error,
+.alerts-empty {
+  margin: 0;
+  color: var(--ink2);
+}
+
+.alert-rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.alert-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 14px 20px;
+}
+.alert-row + .alert-row {
+  border-top: 1px solid var(--rule);
+}
+.alert-row:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+/* An unread row is tinted, its sentence is weighted, and it carries a dot:
+   the dot and the weight say it without the colour. */
+.alert-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  margin-top: 8px;
+  border-radius: 50%;
+}
+.alert-row.unread {
+  background: var(--unread-soft);
+}
+.alert-row.unread .alert-dot {
+  background: var(--unread);
+}
+.alert-row.unread .alert-what {
+  font-weight: 600;
+}
+/* muted on the tint is 4.49:1 in the light theme, under AA's 4.5. */
+.alert-row.unread .alert-meta {
+  color: var(--ink2);
+}
+
+.alert-main {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.alert-what {
+  margin: 0;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.alert-thread {
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+.alert-thread:hover {
+  text-decoration: underline;
+}
+.alert-meta {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.alerts-pages {
+  display: flex;
+  justify-content: center;
+}
+
+@media (max-width: 719.98px) {
+  .alerts {
+    padding: 16px 0 32px;
+    gap: 12px;
+  }
+  .alerts-head,
+  .alerts-status,
+  .alerts-error,
+  .alerts-empty,
+  .alerts-pages {
+    padding: 0 16px;
+  }
+  .alerts-head {
+    align-items: center;
+  }
+  .alerts-head h1 {
+    font-size: 24px;
+  }
+  .alerts-clear,
+  .alerts-older {
+    min-height: var(--target);
+  }
+  .alert-rows {
+    border-left: 0;
+    border-right: 0;
+    border-radius: 0;
+  }
+  .alert-row {
+    padding: 12px 16px;
+  }
+}

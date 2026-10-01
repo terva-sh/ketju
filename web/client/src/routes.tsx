@@ -3,6 +3,7 @@ import { useEffect } from 'preact/hooks';
 import { lazy, useLocation } from 'preact-iso';
 import { ForumIndex } from './screens/ForumIndex';
 import { NewThreadScreen } from './screens/NewThreadScreen';
+import { NotificationsScreen } from './screens/NotificationsScreen';
 import { ThreadListScreen } from './screens/ThreadListScreen';
 import { NotFound, Placeholder } from './screens/Placeholder';
 import { ProfilePlaceholder } from './screens/ProfilePlaceholder';
@@ -126,7 +127,7 @@ export const routes: RouteEntry[] = [
   { path: '/new', screen: 'new', component: placeholder('new', 'New') },
   { path: '/participated', screen: 'participated', component: placeholder('participated', 'Participated') },
   { path: '/watching', screen: 'watching', component: placeholder('watching', 'Watching') },
-  { path: '/notifications', screen: 'notifications', component: placeholder('notifications', 'Alerts') },
+  { path: '/notifications', screen: 'notifications', component: NotificationsScreen },
   { path: '/search', screen: 'search', component: placeholder('search', 'Search') },
   { path: '/u/:handle', screen: 'profile', component: ProfilePlaceholder },
   { path: '/u/:handle/posts', screen: 'profile-posts', component: placeholder('profile-posts', 'Posts') },

@@ -34,7 +34,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T18:09:34Z
+updated_at: 2026-10-01T18:23:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -131,3 +131,19 @@ Scope change in Phase 3 grooming (2026-10-01): this ticket is now client only. G
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T09:03:52Z
 
 Review 1709 (head 5c4846a, base a599b48), medium 'Use the list order, not the newest displayed ID, for Mark all read', fixed in the plans here and on TKT-01M29CRJ2T. The list is now keyset on id descending, the order the alerts arrived, with at shown only. Mark all read posts the first row's id as up_to, which clears every unread row at or below it.
+
+**agent:claude-code/phase3-cty86** at 2026-10-01T18:23:30Z
+
+run decision: pending maintainer review (2026-10-01, recorded in docs/06 "Thread list views", the Alerts bullet).
+
+"Older" appends the next page below the rows already shown and moves focus to its first new row, and "Mark all read" clears the unread marking of every row shown at once. Alternatives: a paged list carried in the address, as the thread lists have, lost because the rows shown keep their unread marking only for this visit, and replacing the page would lose it. Keeping the marking after mark-all lost because the reader would see no effect of the button except a status line.
+
+Smaller choices inside the plan, not run decisions:
+- `application_decided` is plain text with no link. The plan gives it no destination, and the member already holds the account the approval created.
+- A kind this client does not know falls back to "New activity in <thread>" when it names a thread, and to "An alert this version cannot show" when it does not.
+- An unread row's meta line uses `--ink2`, not `--muted`. Muted on the unread tint is 4.49:1 in the light theme, under AA's 4.5:1.
+- A failed view-mark is not retried on the screen. The row comes back unread on the next visit and is marked then. A failed /me after a mark leaves the badge until the next page load.
+
+Bundle (npm run budget, reader as counted by scripts/bundle.mjs): 66189 B before, 67619 B eager (+1430 B: JS +1098, CSS +334). Made lazy, the screen would cost 69591 B (+3402 B), because Vite splits a shared chunk and every non-admin chunk counts. So the screen is eager, as the plan expected.
+
+The empty-state e2e test answers the list empty through page.route, because by then every seeded reader may already have alerts from other specs. The first test clears alice's alerts with up_to first, so its count of 1 belongs to that test alone.
