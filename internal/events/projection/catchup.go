@@ -255,6 +255,22 @@ func (w *Writer) Quarantined(id threadid.ID) bool {
 	return w.quarantined[id]
 }
 
+// QuarantinedIDs is the threads Quarantined reports, in no order, for GET
+// /me to take out of its unread counts what no list shows
+// (TKT-01M29CTY7K). It is for the process's own services: the health check
+// still gets only the count.
+func (w *Writer) QuarantinedIDs() []threadid.ID {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	out := make([]threadid.ID, 0, len(w.quarantined))
+	for id, q := range w.quarantined {
+		if q {
+			out = append(out, id)
+		}
+	}
+	return out
+}
+
 // QuarantinedCount is how many threads are quarantined, for the health
 // check. Only the count leaves the package: which threads they are is for the
 // log and `ketju fsck`, not for an unauthenticated endpoint.

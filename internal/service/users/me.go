@@ -17,6 +17,8 @@ import (
 	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
+	"github.com/terva-sh/ketju/internal/store/db/views"
+	"github.com/terva-sh/ketju/internal/store/threadid"
 )
 
 // Service is the users service.
@@ -30,6 +32,11 @@ type Service struct {
 	// viewer, or nil for one with no queue (threads.Service.QueueCount,
 	// TKT-01M29CRJ4E). Nil here answers null for everyone.
 	QueueCount func(ctx context.Context, v domain.Viewer) (*int, error)
+	// Quarantined lists the threads startup catch-up quarantined
+	// (projection.Writer.QuarantinedIDs). Every list drops them and MeCounts
+	// cannot see them, so Me takes them out of its counts (TKT-01M29CTY7K).
+	// Nil quarantines nothing.
+	Quarantined func() []threadid.ID
 }
 
 // The settings a viewer has not chosen (docs/06 "Paged, not infinite" for the
@@ -108,9 +115,13 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 	}
 
 	var rows []dbq.MeCountsRow
-	if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+	var held []views.Membership
+	if err := s.DB.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
 		var err error
 		if rows, err = q.MeCounts(ctx, v.UserID); err != nil {
+			return err
+		}
+		if held, err = s.quarantinedMemberships(ctx, tx, v); err != nil {
 			return err
 		}
 		me.SiteName, err = settings.SiteName.In(ctx, q)
@@ -123,6 +134,9 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 		if r.ForumID.Valid {
 			forums = append(forums, r.ForumID.Int64)
 		}
+	}
+	for _, m := range held {
+		forums = append(forums, m.ForumID)
 	}
 	readable := map[int64]bool{}
 	if len(forums) > 0 {
@@ -139,8 +153,45 @@ func (s *Service) Me(ctx context.Context) (dto.Me, error) {
 		me.Unread.Threads += int(r.Threads.Int64)
 		me.Unread.Participated += int(r.Participated.Int64)
 		me.Unread.Watching += int(r.Watching.Int64)
+		me.Unread.New += int(r.New.Int64)
+	}
+	// A quarantined thread MeCounts counted, in a forum v may read, comes
+	// back out: no list shows it, and each badge is its list's count.
+	for _, m := range held {
+		if !readable[m.ForumID] {
+			continue
+		}
+		me.Unread.Threads -= b2i(m.Unread)
+		me.Unread.Participated -= b2i(m.Unread && m.Participated)
+		me.Unread.Watching -= b2i(m.Unread && m.Watching)
+		me.Unread.New -= b2i(m.New)
 	}
 	return me, nil
+}
+
+// quarantinedMemberships is which lists each quarantined thread is in for
+// v, read only when a thread is quarantined, so /me's budget is unchanged
+// on a healthy site.
+func (s *Service) quarantinedMemberships(ctx context.Context, tx *sql.Tx, v domain.Viewer) ([]views.Membership, error) {
+	if s.Quarantined == nil {
+		return nil, nil
+	}
+	ids := s.Quarantined()
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	raw := make([]int64, len(ids))
+	for i, id := range ids {
+		raw[i] = int64(id)
+	}
+	return views.Memberships(ctx, tx, v.UserID, raw)
+}
+
+func b2i(b bool) int {
+	if b {
+		return 1
+	}
+	return 0
 }
 
 // withSiteName is me with the site name, for a viewer who is not a member:

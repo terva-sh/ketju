@@ -47,7 +47,9 @@ type ThreadRow struct {
 	Locked           bool
 	PinnedScope      sql.NullString
 	PinnedUntil      sql.NullInt64
-	// LastReadOrdinal is the viewer's read position, 0 with no row.
+	// LastReadOrdinal is the viewer's read boundary: their read position, 0
+	// with no row, moved past the posts mark_all_read_at made read, which
+	// is dbq's ReadBoundary and what the thread page lands on.
 	LastReadOrdinal int64
 	// Unread is the viewer's unread posts in the thread, by docs/04's
 	// per-post rule (dbq's UnreadCount): past the read position and after
@@ -85,10 +87,23 @@ func (r ThreadRow) Key(s Sort) Key {
 // sides of the mark counts post_meta, by a primary key range that reads the
 // posts past the read position. TestUnreadMatchesUnreadCount holds the two
 // rules together.
+//
+// The read boundary is dbq's ReadBoundary for each row, by the same cases:
+// only a thread with posts on both sides of the mark reads post_meta, for
+// the first post past the position written after the mark.
+// TestUnreadMatchesUnreadCount holds the two together.
 const rowColumns = `
 SELECT t.id, t.forum_id, t.slug, t.title, t.author_id, t.created_at, t.post_count, t.last_post_at,
        t.last_post_author_id, t.last_post_ordinal, t.locked, t.pinned_scope, t.pinned_until,
-       coalesce(rp.last_read_ordinal, 0),
+       CASE
+         WHEN me.mark_all_read_at IS NULL OR t.last_post_ordinal <= coalesce(rp.last_read_ordinal, 0)
+           THEN coalesce(rp.last_read_ordinal, 0)
+         WHEN t.last_post_at <= me.mark_all_read_at THEN t.last_post_ordinal
+         ELSE coalesce((SELECT pm.ordinal - 1 FROM post_meta AS pm
+                        WHERE pm.thread_id = t.id AND pm.ordinal > coalesce(rp.last_read_ordinal, 0)
+                          AND pm.created_at > me.mark_all_read_at
+                        ORDER BY pm.ordinal LIMIT 1), t.last_post_ordinal)
+       END,
        CASE
          WHEN t.last_post_ordinal <= coalesce(rp.last_read_ordinal, 0) THEN 0
          WHEN me.mark_all_read_at IS NULL THEN t.last_post_ordinal - coalesce(rp.last_read_ordinal, 0)

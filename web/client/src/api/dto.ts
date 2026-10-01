@@ -185,6 +185,11 @@ export interface ThreadRow {
   last_post_at: Millis;
   pinned: Pinned | null;
   locked: boolean;
+  // forum is the row's forum on a cross-forum list, null on a forum's own
+  // (TKT-01M29CTY7K). The server always sends it; it is optional here only
+  // so that the fixtures that build a row by hand need no change before the
+  // list screens read it (TKT-01M3V6Y4JP).
+  forum?: ForumRef | null;
   unread: number;
   last_read_ordinal: number;
 }
@@ -236,6 +241,10 @@ export interface UnreadCounts {
   threads: number;
   participated: number;
   watching: number;
+  // new is the New badge's count (TKT-01M29CTY7K). The server always sends
+  // it; it is optional here only so that the fixtures that build /me by
+  // hand need no change before the New tab reads it (TKT-01M3V6Y4JP).
+  new?: number;
 }
 
 // Settings is /me's settings, and GET and PATCH /settings (TKT-01M29CCC0X).
@@ -426,6 +435,13 @@ export interface SnippetPart {
 // raises, so it can differ from the ordinal sent (internal/dto ReadPosition).
 export interface ReadPosition {
   last_read_ordinal: number;
+}
+
+// MarkedRead is PUT /me/read and PUT /forums/{slug}/read, mark all read at
+// site and forum level: the moment up to which everything is now read
+// (internal/dto MarkedRead, TKT-01M29CTY7K).
+export interface MarkedRead {
+  at: Millis;
 }
 
 // ThreadWatch is POST /threads/{id}/watch: the thread's own level and its

@@ -270,12 +270,10 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		if !v.Member() {
 			return nil
 		}
-		rp, err := dq.GetReadPosition(ctx, dbq.GetReadPositionParams{UserID: v.UserID, ThreadID: int64(id)})
+		b, err := dq.ReadBoundary(ctx, dbq.ReadBoundaryParams{UserID: v.UserID, ThreadID: int64(id)})
 		switch {
 		case err == nil:
-			lastRead = rp.LastReadOrdinal
-			at := dto.Millis(rp.LastReadAt)
-			readAt = &at
+			lastRead, readAt = boundaryOf(b)
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		}

@@ -317,6 +317,45 @@ func (q *Queries) LowerReadPosition(ctx context.Context, arg LowerReadPositionPa
 	return last_read_ordinal, err
 }
 
+const markForumRead = `-- name: MarkForumRead :execrows
+INSERT INTO read_positions (user_id, thread_id, last_read_ordinal, last_read_at)
+SELECT ?1, t.id, t.last_post_ordinal, ?2
+FROM threads AS t INDEXED BY threads_forum_active
+WHERE t.forum_id = ?3
+  AND t.last_post_at > coalesce((SELECT u.mark_all_read_at FROM users AS u WHERE u.id = ?1), -1)
+  AND t.last_post_ordinal > 0
+ON CONFLICT (user_id, thread_id) DO UPDATE SET
+	last_read_ordinal = excluded.last_read_ordinal,
+	last_read_at = excluded.last_read_at
+WHERE excluded.last_read_ordinal > read_positions.last_read_ordinal
+`
+
+type MarkForumReadParams struct {
+	UserID  int64
+	Now     int64
+	ForumID int64
+}
+
+// MarkForumRead is the forum-level "mark all read" (PUT /forums/{slug}/read,
+// docs/06 "Read tracking", TKT-01M29CTY7K): the viewer's position in each of
+// the forum's threads with a post moves to its last post, in one statement.
+// It never moves a position back, and a row it does not move keeps its
+// last_read_at, so the divider's time stays the time the place was last
+// set. A thread whose last post is at or before the viewer's site-level
+// mark is read already and gets no row. The forum's threads are read
+// through threads_forum_active from the mark on, so the statement reads
+// only the threads it may write.
+//
+// The WHERE on the SELECT is what lets SQLite parse the ON CONFLICT clause
+// as the upsert's rather than as a join constraint.
+func (q *Queries) MarkForumRead(ctx context.Context, arg MarkForumReadParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markForumRead, arg.UserID, arg.Now, arg.ForumID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const meCounts = `-- name: MeCounts :many
 WITH me AS (
 	SELECT coalesce(mark_all_read_at, -1) AS mark FROM users WHERE id = ?1
@@ -326,11 +365,15 @@ active AS (
 	       CASE WHEN me.mark < 0 THEN c.threads
 	            ELSE (SELECT count(*) FROM threads AS t INDEXED BY threads_forum_active
 	                  WHERE t.forum_id = c.forum_id AND t.last_post_at > me.mark AND t.last_post_ordinal > 0)
-	       END AS threads
+	       END AS threads,
+	       CASE WHEN me.mark < 0 THEN c.threads
+	            ELSE (SELECT count(*) FROM threads AS t INDEXED BY threads_forum_fresh
+	                  WHERE t.forum_id = c.forum_id AND t.created_at > me.mark AND t.last_post_ordinal > 0)
+	       END AS fresh
 	FROM forum_thread_counts AS c, me
 ),
 mine AS (
-	SELECT DISTINCT thread_id FROM post_meta WHERE author_id = ?1
+	SELECT DISTINCT thread_id FROM post_meta WHERE author_id = ?1 AND moved = 0
 ),
 touched AS (
 	SELECT thread_id FROM read_positions WHERE user_id = ?1
@@ -343,7 +386,11 @@ state AS (
 	       t.last_post_ordinal > coalesce(rp.last_read_ordinal, 0)
 	         AND coalesce(w.level, fw.level, '') <> 'mute' AS unread,
 	       coalesce(w.level, '') = 'watch' AS watched,
-	       m.thread_id IS NOT NULL AS participated
+	       m.thread_id IS NOT NULL AS participated,
+	       t.last_post_at > me.mark AS recent,
+	       t.last_post_ordinal > 0 AND t.created_at > me.mark AS fresh,
+	       t.last_post_ordinal > 0 AND t.created_at > me.mark AND rp.user_id IS NULL
+	         AND coalesce(w.level, fw.level, '') <> 'mute' AS new
 	FROM touched
 	JOIN threads AS t ON t.id = touched.thread_id
 	CROSS JOIN me
@@ -351,16 +398,19 @@ state AS (
 	LEFT JOIN watches AS w ON w.user_id = ?1 AND w.thread_id = t.id
 	LEFT JOIN watches AS fw ON fw.user_id = ?1 AND fw.forum_id = t.forum_id
 	LEFT JOIN mine AS m ON m.thread_id = t.id
-	-- Only threads with a post after the mark: the rest are read by the mark,
-	-- and are not in active's count.
-	WHERE t.last_post_at > me.mark
+	-- Only threads with a post after the mark, or started after it: the rest
+	-- are read by the mark and too old to be new, and are in neither of
+	-- active's counts.
+	WHERE t.last_post_at > me.mark OR t.created_at > me.mark
 ),
 adjust AS (
 	SELECT forum_id,
-	       sum(active) AS touched,
-	       sum(unread) AS unread,
-	       sum(unread AND participated) AS participated,
-	       sum(unread AND watched) AS watching
+	       sum(active AND recent) AS touched,
+	       sum(unread AND recent) AS unread,
+	       sum(unread AND recent AND participated) AS participated,
+	       sum(unread AND recent AND watched) AS watching,
+	       sum(fresh) AS touched_fresh,
+	       sum(new) AS new
 	FROM state GROUP BY forum_id
 ),
 by_forum AS (
@@ -368,7 +418,9 @@ by_forum AS (
 	       CAST(CASE WHEN fw.level = 'mute' THEN 0 ELSE a.threads - coalesce(j.touched, 0) END
 	            + coalesce(j.unread, 0) AS INTEGER) AS threads,
 	       CAST(coalesce(j.participated, 0) AS INTEGER) AS participated,
-	       CAST(coalesce(j.watching, 0) AS INTEGER) AS watching
+	       CAST(coalesce(j.watching, 0) AS INTEGER) AS watching,
+	       CAST(CASE WHEN fw.level = 'mute' THEN 0 ELSE a.fresh - coalesce(j.touched_fresh, 0) END
+	            + coalesce(j.new, 0) AS INTEGER) AS new
 	FROM active AS a
 	LEFT JOIN adjust AS j ON j.forum_id = a.forum_id
 	LEFT JOIN watches AS fw ON fw.user_id = ?1 AND fw.forum_id = a.forum_id
@@ -377,9 +429,10 @@ SELECT (SELECT count(*) FROM notifications AS n
         LEFT JOIN applications AS na ON na.id = n.application_id
         WHERE n.user_id = ?1 AND n.read_at IS NULL
           AND (n.kind <> 'new_application' OR na.status = 'pending')) AS notifications,
-       f.forum_id, f.threads, f.participated, f.watching
+       f.forum_id, f.threads, f.participated, f.watching,
+       f.new
 FROM (SELECT 1) AS one
-LEFT JOIN by_forum AS f ON f.threads > 0
+LEFT JOIN by_forum AS f ON f.threads > 0 OR f.new > 0
 `
 
 type MeCountsRow struct {
@@ -388,6 +441,7 @@ type MeCountsRow struct {
 	Threads       sql.NullInt64
 	Participated  sql.NullInt64
 	Watching      sql.NullInt64
+	New           sql.NullInt64
 }
 
 // MeCounts is GET /me's count statement: the viewer's unread notifications,
@@ -410,9 +464,18 @@ type MeCountsRow struct {
 // "watches", TKT-01M29CRJ29). The effective level is the thread's own row,
 // then its forum's, coalesce(w.level, fw.level, ”), as
 // domain.EffectiveWatch says in Go. participated is a thread the viewer has
-// written in; watching is a thread-level watch (docs/06 "Thread list
-// views": a forum-level watch drives notifications only). Both count only
-// unread threads, so a muted one is in neither.
+// a post in that was not moved out; watching is a thread-level watch
+// (docs/06 "Thread list views": a forum-level watch drives notifications
+// only). Both count only unread threads, so a muted one is in neither.
+//
+// new is the New list's rule (docs/06 "Thread list views", TKT-01M29CTY7K):
+// a thread with a post, started after the mark, that the viewer has no read
+// position in and has not muted. It starts, per forum, from the threads
+// with a post started after the mark: forum_thread_counts with no mark, or
+// a count over threads_forum_fresh after it. From that it takes the
+// touched ones, and adds back those of them that are new, as threads does.
+// The lists in package views apply the same rules row by row, and
+// TestBadgesMatchLists holds every count to its list.
 //
 // The shape is for cost, because the shell runs this on every page load.
 // It starts from, per forum, the threads with a post after the mark, all of
@@ -443,6 +506,7 @@ func (q *Queries) MeCounts(ctx context.Context, userID int64) ([]MeCountsRow, er
 			&i.Threads,
 			&i.Participated,
 			&i.Watching,
+			&i.New,
 		); err != nil {
 			return nil, err
 		}
@@ -494,6 +558,65 @@ func (q *Queries) MentionedOrdinals(ctx context.Context, arg MentionedOrdinalsPa
 	return items, nil
 }
 
+const readBoundary = `-- name: ReadBoundary :one
+SELECT CAST(coalesce(rp.last_read_ordinal, 0) AS INTEGER) AS last_read_ordinal,
+       rp.last_read_at,
+       u.mark_all_read_at,
+       CAST(CASE
+         WHEN u.mark_all_read_at IS NULL OR t.last_post_ordinal <= coalesce(rp.last_read_ordinal, 0)
+           THEN coalesce(rp.last_read_ordinal, 0)
+         WHEN t.last_post_at <= u.mark_all_read_at THEN t.last_post_ordinal
+         ELSE coalesce((SELECT p.ordinal - 1 FROM post_meta AS p
+                        WHERE p.thread_id = t.id AND p.ordinal > coalesce(rp.last_read_ordinal, 0)
+                          AND p.created_at > u.mark_all_read_at
+                        ORDER BY p.ordinal LIMIT 1), t.last_post_ordinal)
+       END AS INTEGER) AS boundary
+FROM threads AS t
+JOIN users AS u ON u.id = ?1
+LEFT JOIN read_positions AS rp ON rp.user_id = u.id AND rp.thread_id = t.id
+WHERE t.id = ?2
+`
+
+type ReadBoundaryParams struct {
+	UserID   int64
+	ThreadID int64
+}
+
+type ReadBoundaryRow struct {
+	LastReadOrdinal int64
+	LastReadAt      sql.NullInt64
+	MarkAllReadAt   sql.NullInt64
+	Boundary        int64
+}
+
+// ReadBoundary is the viewer's place in a thread as the thread page, its
+// unread lens and the read routes' answers use it (docs/06 "Read tracking",
+// TKT-01M29CTY7K): every post after the boundary is unread and none at or
+// before it is. It is the stored position, moved forward past the posts
+// users.mark_all_read_at has made read: to just before the first post past
+// the position that was written after the mark, or to the last post when
+// there is none. With no mark it is the stored position, 0 with no row.
+//
+// Posts are appended in time order, so every post after that first one is
+// after the mark too, and the posts past the boundary are exactly the ones
+// UnreadCount counts. rowColumns in package views computes the same column
+// for a thread list's rows, and TestUnreadMatchesUnreadCount holds the
+// two together.
+//
+// last_read_at is the row's, null with none; mark_all_read_at is the
+// user's, so the caller can say which of the two set the boundary.
+func (q *Queries) ReadBoundary(ctx context.Context, arg ReadBoundaryParams) (ReadBoundaryRow, error) {
+	row := q.db.QueryRowContext(ctx, readBoundary, arg.UserID, arg.ThreadID)
+	var i ReadBoundaryRow
+	err := row.Scan(
+		&i.LastReadOrdinal,
+		&i.LastReadAt,
+		&i.MarkAllReadAt,
+		&i.Boundary,
+	)
+	return i, err
+}
+
 const setForumWatch = `-- name: SetForumWatch :exec
 INSERT INTO watches (user_id, forum_id, level, created_at, updated_at)
 VALUES (?1, ?2, ?3, ?4, ?4)
@@ -517,6 +640,29 @@ func (q *Queries) SetForumWatch(ctx context.Context, arg SetForumWatchParams) er
 		arg.Now,
 	)
 	return err
+}
+
+const setMarkAllRead = `-- name: SetMarkAllRead :one
+UPDATE users SET mark_all_read_at = max(coalesce(mark_all_read_at, 0), CAST(?1 AS INTEGER))
+WHERE id = ?2
+RETURNING CAST(mark_all_read_at AS INTEGER) AS mark_all_read_at
+`
+
+type SetMarkAllReadParams struct {
+	Now    int64
+	UserID int64
+}
+
+// SetMarkAllRead is the site-level "mark all read" (PUT /me/read,
+// TKT-01M29CTY7K): everything written up to now is read. The mark only
+// moves forward, so a request from a device whose clock is behind, or one
+// that arrives late, leaves a later mark where it is. The answer is the mark
+// as it now stands.
+func (q *Queries) SetMarkAllRead(ctx context.Context, arg SetMarkAllReadParams) (int64, error) {
+	row := q.db.QueryRowContext(ctx, setMarkAllRead, arg.Now, arg.UserID)
+	var mark_all_read_at int64
+	err := row.Scan(&mark_all_read_at)
+	return mark_all_read_at, err
 }
 
 const setThreadWatch = `-- name: SetThreadWatch :exec

@@ -51,7 +51,8 @@ func (s *Service) postCount(id threadid.ID) (int, error) {
 // MarkRead is PUT /threads/{id}/read (docs/06 "Read tracking", docs/07): the
 // viewer has read up to ordinal. The position only moves forward, so a
 // beacon that arrives late, out of order or from another device leaves a
-// higher position where it is; the answer is the position as it now stands.
+// higher position where it is; the answer is the read boundary as it now
+// stands, the position moved past the posts the viewer's mark made read.
 // An ordinal past the thread's last post is read as the last post, since a
 // client cannot have read a post that does not exist.
 func (s *Service) MarkRead(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal uint32) (dto.ReadPosition, error) {
@@ -75,7 +76,7 @@ func (s *Service) MarkRead(ctx context.Context, v domain.Viewer, id threadid.ID,
 	// The read-back shares the write transaction, which holds the one write
 	// connection from BEGIN IMMEDIATE, so no other beacon lands between the
 	// upsert and the answer.
-	var rp dbq.ReadPosition
+	var boundary int64
 	err = s.DB.Write(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
 		if err := q.UpsertReadPosition(ctx, dbq.UpsertReadPositionParams{
 			UserID: v.UserID, ThreadID: int64(id),
@@ -84,24 +85,64 @@ func (s *Service) MarkRead(ctx context.Context, v domain.Viewer, id threadid.ID,
 			return err
 		}
 		var err error
-		rp, err = q.GetReadPosition(ctx, dbq.GetReadPositionParams{UserID: v.UserID, ThreadID: int64(id)})
+		boundary, err = readBoundary(ctx, q, v, id)
 		return err
 	})
 	if err != nil {
 		return out, err
 	}
-	return dto.ReadPosition{LastReadOrdinal: int(rp.LastReadOrdinal)}, nil
+	return dto.ReadPosition{LastReadOrdinal: int(boundary)}, nil
+}
+
+// readBoundary is v's read boundary in thread id, the integer the thread
+// page's viewer.last_read_ordinal is (dbq's ReadBoundary): the stored
+// position, moved past the posts v's site-level mark made read. A thread
+// with no projection row has no boundary past the stored position, which
+// is then read alone.
+func readBoundary(ctx context.Context, q *dbq.Queries, v domain.Viewer, id threadid.ID) (int64, error) {
+	b, err := q.ReadBoundary(ctx, dbq.ReadBoundaryParams{UserID: v.UserID, ThreadID: int64(id)})
+	if err == nil {
+		return b.Boundary, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return 0, err
+	}
+	rp, err := q.GetReadPosition(ctx, dbq.GetReadPositionParams{UserID: v.UserID, ThreadID: int64(id)})
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return rp.LastReadOrdinal, err
+}
+
+// boundaryOf is the thread page's read boundary and the time that set it,
+// from b (docs/06 "Read tracking", TKT-01M29CTY7K). When the site-level
+// mark moved the boundary past the stored position, the mark is what set
+// the viewer's place, so its time is the one the divider shows. Otherwise
+// it is the stored position's time, and nil with no row.
+func boundaryOf(b dbq.ReadBoundaryRow) (int64, *dto.Millis) {
+	var at *dto.Millis
+	switch {
+	case b.Boundary > b.LastReadOrdinal && b.MarkAllReadAt.Valid:
+		m := dto.Millis(b.MarkAllReadAt.Int64)
+		at = &m
+	case b.LastReadAt.Valid:
+		m := dto.Millis(b.LastReadAt.Int64)
+		at = &m
+	}
+	return b.Boundary, at
 }
 
 // MarkUnread is DELETE /threads/{id}/read (docs/07): the viewer marks the
 // thread unread after ordinal, or the whole thread when ordinal is nil. It
 // is the only way a position moves back, and it never moves one forward:
 // asking to mark unread from a post the viewer has not reached changes
-// nothing. The answer is the position as it now stands.
+// nothing. The answer is the read boundary as it now stands, which the
+// thread page will show.
 //
 // A post written before the viewer's users.mark_all_read_at stays read
 // whatever the position says, because docs/04's rule reads a post as unread
-// only when it is past the position and after the mark.
+// only when it is past the position and after the mark. So the answer is
+// never below the posts the mark made read (TKT-01M29CTY7K).
 func (s *Service) MarkUnread(ctx context.Context, v domain.Viewer, id threadid.ID, ordinal *uint32) (dto.ReadPosition, error) {
 	var out dto.ReadPosition
 	if err := s.MayKeepState(v); err != nil {
@@ -121,10 +162,13 @@ func (s *Service) MarkUnread(ctx context.Context, v domain.Viewer, id threadid.I
 		if err := q.EnsureReadPosition(ctx, key); err != nil {
 			return err
 		}
-		var err error
-		pos, err = q.LowerReadPosition(ctx, dbq.LowerReadPositionParams{
+		if _, err := q.LowerReadPosition(ctx, dbq.LowerReadPositionParams{
 			Ordinal: to, LastReadAt: now, UserID: v.UserID, ThreadID: int64(id),
-		})
+		}); err != nil {
+			return err
+		}
+		var err error
+		pos, err = readBoundary(ctx, q, v, id)
 		return err
 	})
 	if err != nil {

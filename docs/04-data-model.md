@@ -803,6 +803,12 @@ written after `mark_all_read_at`. A post written at the mark's exact
 millisecond counts as read. The time is revision 1's, so an edit does not make
 an old post unread, and a read position only moves forward.
 
+The thread page reads the two together as one *read boundary* (`ReadBoundary`,
+TKT-01M29CTY7K): the stored position, moved to just before the first post past
+it written after the mark, or to the last post when there is none. Posts are
+appended in time order, so the posts after the boundary are exactly the unread
+ones, and the thread list's rows compute the same column.
+
 ### flags
 ```
 id, thread_id, ordinal, reporter_id, reason, note, created_at,
@@ -1009,6 +1015,16 @@ threads with a post after a moment by a seek rather than a scan: GET /me's
 unread count for a reader who has used "mark all read" (migration 0007,
 TKT-01M29CA99R).
 
+Migration 0023 (TKT-01M29CTY7K) adds three for the cross-forum lists.
+`threads_activity (last_post_at)` and `threads_created (created_at)` let
+`/unread` and `/new` walk the whole site newest first, from the reader's
+mark up to the cursor, and stop at a page, rather than sort every
+qualifying thread across the reader's forums.
+`threads_forum_fresh (forum_id, created_at, last_post_ordinal)` is GET /me's
+new count for a reader with a mark: per forum, the threads with a post
+started after it, from index entries alone. It is not folded into
+`threads_forum_created`, whose keyset needs `created_at` beside the rowid.
+
 ### forum_thread_counts
 ```
 forum_id (pk), threads     -- threads in the forum with at least one post
@@ -1177,3 +1193,24 @@ For 1 000 users, 10 000 threads, 500 000 posts: `post_meta` ≈ 500 k rows ×
 realistically < 1 M. The FTS index is the largest object, roughly the size of
 the plain text (~0.5–1 GB) — and rebuildable. Whole database comfortably under
 2 GB; SQLite-class engines handle this trivially.
+
+Measured for the cross-forum lists (TKT-01M29CTY7K, `BenchmarkCrossLists10k`
+in `internal/store/db/views`, 2026-10-01, one core of a Ryzen 9 5950X under a
+load average near 9): 10 000 threads in 50 forums, five posts each, and a
+reader with 1 000 read positions, 100 watches, 20 mutes and 200 threads
+posted in. A first page of 25 rows, and GET /me's count statement:
+
+| Reader | `/unread` | `/new` | `/participated` | `/watching` | `MeCounts` |
+|--------|-----------|--------|-----------------|-------------|------------|
+| no mark | 0.5 ms | 0.5 ms | 1.0 ms | 0.7 ms | 5.4 ms |
+| mark halfway through the site | 0.6 ms | 0.6 ms | 1.2 ms | 0.8 ms | 6.0 ms |
+| no mark, all but the 30 oldest threads read | 9.8 ms | 10.2 ms | 1.2 ms | 0.7 ms | 37 ms |
+
+The last row is the walk's worst case: `/unread` and `/new` read the whole
+site through their index to fill one page, since everything recent is read.
+A mark bounds the walk from below, so a reader who uses "mark all read" never
+pays it. `MeCounts` grows with the reader's own read positions (9 970 in the
+last row), as it did before the lists: on the same site it measured about 5 ms,
+4.5 ms and about 31 ms before `new` was added. Without
+`threads_activity` and `threads_created`, `/unread` and `/new` would sort
+every qualifying thread on every page instead.

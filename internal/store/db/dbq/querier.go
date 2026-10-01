@@ -295,6 +295,8 @@ type Querier interface {
 	// Only forums with an unread thread have a row.
 	ForumUnread(ctx context.Context, userID int64) ([]ForumUnreadRow, error)
 	ForumWatchLevel(ctx context.Context, arg ForumWatchLevelParams) (string, error)
+	// The forums a page of a cross-forum list names (TKT-01M29CTY7K), by id.
+	ForumsByIDs(ctx context.Context, ids []int64) ([]ForumsByIDsRow, error)
 	GetAgent(ctx context.Context, userID int64) (Agent, error)
 	GetApplication(ctx context.Context, id int64) (Application, error)
 	// The upload, attach and serve paths' queries (TKT-01M29CXK0K, docs/07
@@ -450,6 +452,19 @@ type Querier interface {
 	// session.IssueUser's status check.
 	LookupSession(ctx context.Context, arg LookupSessionParams) (LookupSessionRow, error)
 	LowerReadPosition(ctx context.Context, arg LowerReadPositionParams) (int64, error)
+	// MarkForumRead is the forum-level "mark all read" (PUT /forums/{slug}/read,
+	// docs/06 "Read tracking", TKT-01M29CTY7K): the viewer's position in each of
+	// the forum's threads with a post moves to its last post, in one statement.
+	// It never moves a position back, and a row it does not move keeps its
+	// last_read_at, so the divider's time stays the time the place was last
+	// set. A thread whose last post is at or before the viewer's site-level
+	// mark is read already and gets no row. The forum's threads are read
+	// through threads_forum_active from the mark on, so the statement reads
+	// only the threads it may write.
+	//
+	// The WHERE on the SELECT is what lets SQLite parse the ON CONFLICT clause
+	// as the upsert's rather than as a join constraint.
+	MarkForumRead(ctx context.Context, arg MarkForumReadParams) (int64, error)
 	MaxFormVersion(ctx context.Context, formID int64) (int64, error)
 	// MeCounts is GET /me's count statement: the viewer's unread notifications,
 	// and their unread threads by forum, so the service can drop the forums they
@@ -471,9 +486,18 @@ type Querier interface {
 	// "watches", TKT-01M29CRJ29). The effective level is the thread's own row,
 	// then its forum's, coalesce(w.level, fw.level, ''), as
 	// domain.EffectiveWatch says in Go. participated is a thread the viewer has
-	// written in; watching is a thread-level watch (docs/06 "Thread list
-	// views": a forum-level watch drives notifications only). Both count only
-	// unread threads, so a muted one is in neither.
+	// a post in that was not moved out; watching is a thread-level watch
+	// (docs/06 "Thread list views": a forum-level watch drives notifications
+	// only). Both count only unread threads, so a muted one is in neither.
+	//
+	// new is the New list's rule (docs/06 "Thread list views", TKT-01M29CTY7K):
+	// a thread with a post, started after the mark, that the viewer has no read
+	// position in and has not muted. It starts, per forum, from the threads
+	// with a post started after the mark: forum_thread_counts with no mark, or
+	// a count over threads_forum_fresh after it. From that it takes the
+	// touched ones, and adds back those of them that are new, as threads does.
+	// The lists in package views apply the same rules row by row, and
+	// TestBadgesMatchLists holds every count to its list.
 	//
 	// The shape is for cost, because the shell runs this on every page load.
 	// It starts from, per forum, the threads with a post after the mark, all of
@@ -548,6 +572,23 @@ type Querier interface {
 	// an ill-typed value and writes the audit row in the same transaction.
 	PutSetting(ctx context.Context, arg PutSettingParams) error
 	PutThreadSlowMode(ctx context.Context, arg PutThreadSlowModeParams) error
+	// ReadBoundary is the viewer's place in a thread as the thread page, its
+	// unread lens and the read routes' answers use it (docs/06 "Read tracking",
+	// TKT-01M29CTY7K): every post after the boundary is unread and none at or
+	// before it is. It is the stored position, moved forward past the posts
+	// users.mark_all_read_at has made read: to just before the first post past
+	// the position that was written after the mark, or to the last post when
+	// there is none. With no mark it is the stored position, 0 with no row.
+	//
+	// Posts are appended in time order, so every post after that first one is
+	// after the mark too, and the posts past the boundary are exactly the ones
+	// UnreadCount counts. rowColumns in package views computes the same column
+	// for a thread list's rows, and TestUnreadMatchesUnreadCount holds the
+	// two together.
+	//
+	// last_read_at is the row's, null with none; mark_all_read_at is the
+	// user's, so the caller can say which of the two set the boundary.
+	ReadBoundary(ctx context.Context, arg ReadBoundaryParams) (ReadBoundaryRow, error)
 	// RecordIdentityLogin notes a sign-in on the identity: when, and the claims
 	// the IdP asserted this time, which may have changed since the last.
 	RecordIdentityLogin(ctx context.Context, arg RecordIdentityLoginParams) error
@@ -605,6 +646,12 @@ type Querier interface {
 	SetForumPosition(ctx context.Context, arg SetForumPositionParams) error
 	SetForumVisibility(ctx context.Context, arg SetForumVisibilityParams) error
 	SetForumWatch(ctx context.Context, arg SetForumWatchParams) error
+	// SetMarkAllRead is the site-level "mark all read" (PUT /me/read,
+	// TKT-01M29CTY7K): everything written up to now is read. The mark only
+	// moves forward, so a request from a device whose clock is behind, or one
+	// that arrives late, leaves a later mark where it is. The answer is the mark
+	// as it now stands.
+	SetMarkAllRead(ctx context.Context, arg SetMarkAllReadParams) (int64, error)
 	// log_offset is the current revision's record, as the index entry's Offset
 	// is, so a Delete or Restore (which is not a revision) leaves it alone.
 	SetPostDeleted(ctx context.Context, arg SetPostDeletedParams) (int64, error)

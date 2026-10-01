@@ -422,6 +422,50 @@ func (q *Queries) ForumThreadCounts(ctx context.Context) ([]ForumThreadCount, er
 	return items, nil
 }
 
+const forumsByIDs = `-- name: ForumsByIDs :many
+SELECT id, slug, name FROM forums WHERE id IN (/*SLICE:ids*/?) ORDER BY id
+`
+
+type ForumsByIDsRow struct {
+	ID   int64
+	Slug string
+	Name string
+}
+
+// The forums a page of a cross-forum list names (TKT-01M29CTY7K), by id.
+func (q *Queries) ForumsByIDs(ctx context.Context, ids []int64) ([]ForumsByIDsRow, error) {
+	query := forumsByIDs
+	var queryParams []interface{}
+	if len(ids) > 0 {
+		for _, v := range ids {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ids*/?", strings.Repeat(",?", len(ids))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ids*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ForumsByIDsRow
+	for rows.Next() {
+		var i ForumsByIDsRow
+		if err := rows.Scan(&i.ID, &i.Slug, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getForum = `-- name: GetForum :one
 SELECT id, parent_id, slug, name, description, position, visibility, archived, created_at, updated_at FROM forums WHERE id = ?
 `

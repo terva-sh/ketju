@@ -373,6 +373,8 @@ func TestEveryViewerStateRouteHasAFormPost(t *testing.T) {
 		"DELETE /api/v1/forums/{slug}/draft",
 		"POST /api/v1/threads/{id}/watch",
 		"POST /api/v1/forums/{slug}/watch",
+		"PUT /api/v1/me/read",
+		"PUT /api/v1/forums/{slug}/read",
 	}
 	w := newWorld(t)
 	id, _ := w.seed()

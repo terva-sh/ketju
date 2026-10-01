@@ -567,7 +567,7 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	})
 
 	step("listener")
-	userSvc := &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount}
+	userSvc := &users.Service{DB: d, Perm: perms, QueueCount: threadSvc.QueueCount, Quarantined: proj.QuarantinedIDs}
 	forumSvc := &forums.Service{DB: d, Perm: perms, Logger: log}
 	tmpl, err := spa.Shell()
 	if err != nil {

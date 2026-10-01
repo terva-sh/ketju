@@ -172,11 +172,17 @@ type ThreadHeader struct {
 // viewer, so a field that belongs to one person specifically belongs in here or
 // it defeats the cache.
 type ThreadViewer struct {
+	// LastReadOrdinal is the viewer's read boundary: every post after it is
+	// unread. It is read_positions.last_read_ordinal, moved past the posts
+	// the viewer's site-level mark all read made read (docs/06 "Read
+	// tracking", TKT-01M29CTY7K). The landing page, the divider, first
+	// unread and the bare unread lens all start after it.
 	LastReadOrdinal int `json:"last_read_ordinal"`
-	// LastReadAt is read_positions.last_read_at: when this viewer's place in
-	// the thread was last set, by a read beacon or by marking it unread
-	// (docs/06 "Landing on return"). Nil with no read position, which covers
-	// every anonymous viewer.
+	// LastReadAt is when this viewer's place in the thread was last set:
+	// read_positions.last_read_at, by a read beacon or by marking it unread
+	// (docs/06 "Landing on return"), or users.mark_all_read_at when the mark
+	// moved the boundary past the stored position. Nil when nothing set a
+	// place, which covers every anonymous viewer.
 	LastReadAt *Millis `json:"last_read_at"`
 	// Watch is the thread's own level: watch, mute, or empty when the
 	// thread follows its forum.
@@ -387,11 +393,18 @@ type ThreadRow struct {
 	Pinned *Pinned `json:"pinned"`
 	Locked bool    `json:"locked"`
 
+	// Forum is the thread's forum on a cross-forum list (/unread, /new,
+	// /participated, /watching), where rows from many forums meet, and nil
+	// on a forum's own list, which names its forum once (TKT-01M29CTY7K).
+	Forum *ForumRef `json:"forum"`
+
 	// Unread is the badge count. LastReadOrdinal is what the badge links to:
-	// the client jumps to LastReadOrdinal+1. Both are zero for a viewer with
-	// no read position, including every anonymous one. Unread is zero for a
-	// thread the viewer muted, by its own row or its forum's (docs/04
-	// "watches"), and LastReadOrdinal is still sent.
+	// the client jumps to LastReadOrdinal+1. It is the thread page's
+	// viewer.last_read_ordinal, the read position moved past the posts
+	// mark all read made read (docs/06 "Read tracking"). Both are zero for
+	// a viewer with nothing read, including every anonymous one. Unread is
+	// zero for a thread the viewer muted, by its own row or its forum's
+	// (docs/04 "watches"), and LastReadOrdinal is still sent.
 	Unread          int `json:"unread"`
 	LastReadOrdinal int `json:"last_read_ordinal"`
 }
@@ -477,6 +490,19 @@ type UnreadCounts struct {
 	Threads      int `json:"threads"`
 	Participated int `json:"participated"`
 	Watching     int `json:"watching"`
+	// New is the New list's count: threads with a post the viewer has never
+	// opened, started after their site-level mark, and not muted (docs/06
+	// "Thread list views", TKT-01M29CTY7K). The phone tab bar's New badge.
+	New int `json:"new"`
+}
+
+// MarkedRead is the answer to PUT /me/read and PUT /forums/{slug}/read, mark
+// all read at site and forum level (docs/06 "Read tracking",
+// TKT-01M29CTY7K). At is the moment everything up to which is now read: the
+// viewer's site-level mark as it stands after the request, which a request
+// never moves back, or the time the forum was marked.
+type MarkedRead struct {
+	At Millis `json:"at"`
 }
 
 // Settings is the viewer's own preferences: in /me, and GET and PATCH
@@ -629,6 +655,8 @@ type CreatedThread struct {
 //
 // LastReadOrdinal is the thread page's viewer.last_read_ordinal, the same
 // integer: every post after it is unread, and 0 means none has been read.
+// So it is the stored position moved past the posts the viewer's mark all
+// read made read, which a DELETE cannot make unread (TKT-01M29CTY7K).
 type ReadPosition struct {
 	LastReadOrdinal int `json:"last_read_ordinal"`
 }

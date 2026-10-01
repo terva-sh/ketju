@@ -38,6 +38,7 @@ import type {
   IdentityRemoved,
   IssuedCredential,
   ManagedForumList,
+  MarkedRead,
   Me,
   PermissionGrid,
   PermissionPreview,
@@ -121,6 +122,7 @@ import profileAnonymizedMember from '../../../../internal/dto/testdata/golden/pr
 import queueModerator from '../../../../internal/dto/testdata/golden/queue.moderator.json';
 import queueResolutionModerator from '../../../../internal/dto/testdata/golden/queue-resolution.moderator.json';
 import readMember from '../../../../internal/dto/testdata/golden/read.member.json';
+import markedReadMember from '../../../../internal/dto/testdata/golden/marked-read.member.json';
 import renderMember from '../../../../internal/dto/testdata/golden/render.member.json';
 import renderPlainMember from '../../../../internal/dto/testdata/golden/render-plain.member.json';
 import repliesMember from '../../../../internal/dto/testdata/golden/replies.member.json';
@@ -233,6 +235,7 @@ export const contract = [
   matches<Queue>()(queueModerator),
   matches<QueueResolution>()(queueResolutionModerator),
   matches<ReadPosition>()(readMember),
+  matches<MarkedRead>()(markedReadMember),
   matches<RenderResult>()(renderMember),
   matches<RenderResult>()(renderPlainMember),
   matches<SearchResults>()(searchMember),

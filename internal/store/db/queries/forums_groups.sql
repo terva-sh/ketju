@@ -9,6 +9,10 @@ SELECT * FROM forums WHERE id = ?;
 -- name: GetForumBySlug :one
 SELECT * FROM forums WHERE slug = ?;
 
+-- The forums a page of a cross-forum list names (TKT-01M29CTY7K), by id.
+-- name: ForumsByIDs :many
+SELECT id, slug, name FROM forums WHERE id IN (sqlc.slice('ids')) ORDER BY id;
+
 -- Roots in position order, each followed by its children in position order.
 -- A child sorts by its root's position and id, then after the root itself.
 -- name: ListForums :many

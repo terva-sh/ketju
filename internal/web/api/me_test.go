@@ -276,7 +276,8 @@ func TestMeShapes(t *testing.T) {
 			User: &dto.Author{Handle: "alice", DisplayName: "Alice </script><script>alert(1)</script>", Avatar: "b2c3d4",
 				Role: "member", Kind: "human"},
 			// Threads 1, 2 and 6; 1 is hers; 2 is watched. 4 is muted, 3 and 5 are
-			// read, 7 is in a forum she cannot see.
+			// read, 7 is in a forum she cannot see. None is new: every thread
+			// was started before her mark (TKT-01M29CTY7K).
 			Unread:        dto.UnreadCounts{Threads: 3, Participated: 1, Watching: 1},
 			Notifications: 2,
 			Settings:      dto.Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 30, Theme: "dark"},
@@ -284,9 +285,9 @@ func TestMeShapes(t *testing.T) {
 		}},
 		{"moderator", sessiontest.SignIn(t, w.db, w.id["bob"], w.now), dto.Me{
 			User: &dto.Author{Handle: "bob", DisplayName: "Bob", Role: "moderator", Kind: "agent"},
-			// Every thread in the public forum; no read positions, no mark. Not
-			// thread 7: a moderator is not an admin.
-			Unread:        dto.UnreadCounts{Threads: 6},
+			// Every thread in the public forum; no read positions, no mark, so
+			// every one is new too. Not thread 7: a moderator is not an admin.
+			Unread:        dto.UnreadCounts{Threads: 6, New: 6},
 			Notifications: 1,
 			// The flagged post in the general forum, as one item, and the
 			// application; not the staff forum's flag.
@@ -298,7 +299,7 @@ func TestMeShapes(t *testing.T) {
 		// queue: that forum's items, and no applications (TKT-01M29CRJ4E).
 		{"forum moderator", sessiontest.SignIn(t, w.db, w.id["dave"], w.now), dto.Me{
 			User:     &dto.Author{Handle: "dave", DisplayName: "Dave", Role: "member", Kind: "human"},
-			Unread:   dto.UnreadCounts{Threads: 6},
+			Unread:   dto.UnreadCounts{Threads: 6, New: 6},
 			Queue:    new(1),
 			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
 			SiteName: siteName,
@@ -311,7 +312,7 @@ func TestMeShapes(t *testing.T) {
 		// 3 it wrote in; 2 it watches.
 		{"agent by credential", "bearer:" + w.issue("scribe"), dto.Me{
 			User:          &dto.Author{Handle: "scribe", DisplayName: "Scribe", Avatar: "e5f6a7", Role: "member", Kind: "agent"},
-			Unread:        dto.UnreadCounts{Threads: 5, Participated: 1, Watching: 1},
+			Unread:        dto.UnreadCounts{Threads: 5, Participated: 1, Watching: 1, New: 5},
 			Notifications: 1,
 			Settings:      dto.Settings{Timezone: "America/Toronto", Locale: "fr", PageSize: 40, Theme: "system"},
 			SiteName:      siteName,

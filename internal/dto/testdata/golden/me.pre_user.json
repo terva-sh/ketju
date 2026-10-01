@@ -7,7 +7,8 @@
   "unread": {
     "threads": 0,
     "participated": 0,
-    "watching": 0
+    "watching": 0,
+    "new": 0
   },
   "notifications": 0,
   "queue": null,

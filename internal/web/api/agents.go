@@ -52,6 +52,8 @@ var unchargedPaths = []string{
 	"/api/v1/forums/{slug}/draft",
 	"/api/v1/threads/{id}/watch",
 	"/api/v1/forums/{slug}/watch",
+	"/api/v1/me/read",
+	"/api/v1/forums/{slug}/read",
 }
 
 // charged is fn behind the agent's bucket, unless method does not write or

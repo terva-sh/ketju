@@ -371,7 +371,7 @@ func me(class string) Me {
 	case tModerator:
 		return Me{
 			User:          &bob,
-			Unread:        UnreadCounts{Threads: 3, Participated: 1, Watching: 2},
+			Unread:        UnreadCounts{Threads: 3, Participated: 1, Watching: 2, New: 1},
 			Notifications: 9,
 			Queue:         ptr(4),
 			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50, Theme: "dark"},
@@ -380,7 +380,7 @@ func me(class string) Me {
 	case tAgent:
 		return Me{
 			User:          &scribe,
-			Unread:        UnreadCounts{Threads: 7, Participated: 3, Watching: 1},
+			Unread:        UnreadCounts{Threads: 7, Participated: 3, Watching: 1, New: 0},
 			Notifications: 4,
 			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 40, Theme: "system"},
 			SiteName:      "The Supper Club",
@@ -388,7 +388,7 @@ func me(class string) Me {
 	default:
 		return Me{
 			User:          &alice,
-			Unread:        UnreadCounts{Threads: 12, Participated: 5, Watching: 4},
+			Unread:        UnreadCounts{Threads: 12, Participated: 5, Watching: 4, New: 6},
 			Notifications: 2,
 			Settings:      Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 25, Theme: "light"},
 			SiteName:      "The Supper Club",
@@ -457,6 +457,11 @@ func crossForumList() ThreadList {
 	l.Forum = nil
 	l.Watch = ""
 	l.NextCursor = ""
+	// Rows from two forums meet here, so each names its own
+	// (TKT-01M29CTY7K); a pin is shown only on a forum's own list.
+	l.Threads[0].Pinned = nil
+	l.Threads[0].Forum = &ForumRef{Slug: "general", Name: "General"}
+	l.Threads[1].Forum = &ForumRef{Slug: "standups", Name: "Standups"}
 	return l
 }
 
@@ -542,6 +547,8 @@ var corpus = map[string]any{
 	"created-thread." + tMember: createdThread(),
 	"unread." + tMember:         crossForumList(),
 	"read." + tMember:           ReadPosition{LastReadOrdinal: 62},
+	// Mark all read, at either level (TKT-01M29CTY7K).
+	"marked-read." + tMember: MarkedRead{At: 1757500400000},
 	// A thread muted in a watched forum, and a forum muted
 	// (TKT-01M29CRJ29).
 	"watch-thread." + tMember: ThreadWatch{Watch: "mute", ForumWatch: "watch"},

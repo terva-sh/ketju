@@ -119,8 +119,13 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   with the same `PUT` (07), so the position is whatever it last declared, and an
   agent that never calls it has none. "On screen for at least a second"
   describes a human reading and generalizes to nothing.
-- Forum and site level "mark all read" set `users.mark_all_read_at`; a thread
-  with `last_post_at < mark_all_read_at` and no row is read.
+- "Mark all read" works at two levels (TKT-01M29CTY7K). The site level
+  (`PUT /me/read`) sets `users.mark_all_read_at` to now, never back: every
+  post written up to then is read, whatever the read positions say, and a
+  thread with no row whose last post is at or before the mark is read. The
+  forum level (`PUT /forums/{slug}/read`) moves the member's position in
+  each of that forum's threads to its last post, forward only, and leaves
+  the mark and every other forum alone.
   **Decided by the run (2026-10-01, pending maintainer review):** only the
   site-level mark sets `users.mark_all_read_at`, which is one moment for the
   whole site. The forum-level mark moves the member's read position in each
@@ -133,6 +138,26 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   not ask for. The forum-level cost is one row per thread in the forum the
   member has not opened, which docs/04's sizing already allows for
   (TKT-01M29CTY7K).
+- **Decided by the run (2026-10-01, pending maintainer review):** the thread
+  page reads one integer for the member's place, the *read boundary*: the
+  stored position, moved forward to just before the first post past it
+  that was written after the site-level mark, or to the last post when
+  there is none (dbq `ReadBoundary`, TKT-01M29CTY7K). The landing page,
+  the divider, first unread, the bare unread lens (`unread:<boundary>`),
+  each list row's `last_read_ordinal` and the read routes' answers all use
+  it, so after a site-level mark a thread opens past the posts the badge
+  already counts as read. Posts are appended in time order, so the posts
+  after the boundary are exactly the unread ones. When the mark is what
+  moved the boundary, the divider's time is the mark's, since the mark is
+  what set the place. Alternatives:
+  - Leaving the page on the stored position lost because, after a mark,
+    a thread the badge calls read would open on post 1 under "N new posts
+    below", and the unread lens would show posts nothing counts.
+  - Writing every thread's position when the site is marked lost because
+    it is a row per thread per member, which the mark exists to avoid.
+  - Showing the stored position's time beside a boundary the mark set lost
+    because that time is when the reader was at a place they are no longer
+    shown.
 
 ### Post anatomy
 

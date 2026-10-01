@@ -26,11 +26,12 @@
         "kind": "human"
       },
       "last_post_at": 1757500400000,
-      "pinned": {
-        "scope": "forum",
-        "until": null
-      },
+      "pinned": null,
       "locked": false,
+      "forum": {
+        "slug": "general",
+        "name": "General"
+      },
       "unread": 12,
       "last_read_ordinal": 200
     },
@@ -57,6 +58,10 @@
       "last_post_at": 1757400000000,
       "pinned": null,
       "locked": true,
+      "forum": {
+        "slug": "standups",
+        "name": "Standups"
+      },
       "unread": 4,
       "last_read_ordinal": 0
     }

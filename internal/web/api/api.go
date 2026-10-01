@@ -30,6 +30,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/sitesettings"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
+	"github.com/terva-sh/ketju/internal/store/db/views"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/web"
 )
@@ -139,6 +140,11 @@ func (h *handlers) routes() []web.Route {
 	get, post, put, patch, del := http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete
 	return append([]web.Route{
 		{Method: get, Path: "/api/v1/me", Handler: h.me},
+		{Method: put, Path: "/api/v1/me/read", Handler: h.markAllRead},
+		{Method: get, Path: "/api/v1/unread", Handler: h.crossList(views.Unread)},
+		{Method: get, Path: "/api/v1/new", Handler: h.crossList(views.New)},
+		{Method: get, Path: "/api/v1/participated", Handler: h.crossList(views.Participated)},
+		{Method: get, Path: "/api/v1/watching", Handler: h.crossList(views.Watching)},
 		{Method: get, Path: "/api/v1/forums", Handler: h.forumTree},
 		{Method: get, Path: "/api/v1/threads/{id}", Handler: h.thread},
 		{Method: patch, Path: "/api/v1/threads/{id}", Handler: h.renameThread},
@@ -165,6 +171,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: put, Path: "/api/v1/forums/{slug}/draft", Handler: h.putForumDraft},
 		{Method: del, Path: "/api/v1/forums/{slug}/draft", Handler: h.deleteForumDraft},
 		{Method: post, Path: "/api/v1/forums/{slug}/watch", Handler: h.watchForum},
+		{Method: put, Path: "/api/v1/forums/{slug}/read", Handler: h.markForumRead},
 		{Method: get, Path: "/api/v1/users", Handler: h.usersByPrefix},
 		{Method: get, Path: "/api/v1/users/{handle}", Handler: h.userProfile},
 		{Method: get, Path: "/api/v1/users/{handle}/posts", Handler: h.userPosts},

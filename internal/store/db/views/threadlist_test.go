@@ -16,13 +16,13 @@ import (
 	"github.com/terva-sh/ketju/internal/store/db/dbtest"
 )
 
-func open(t *testing.T) *db.DB {
+func open(t testing.TB) *db.DB {
 	t.Helper()
 	d := dbtest.Open(t, db.Options{Path: filepath.Join(t.TempDir(), "ketju.db")})
 	return d
 }
 
-func exec(t *testing.T, d *db.DB, stmts ...string) {
+func exec(t testing.TB, d *db.DB, stmts ...string) {
 	t.Helper()
 	if err := d.Write(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
 		for _, s := range stmts {
@@ -152,26 +152,32 @@ func TestPlansSeek(t *testing.T) {
 
 // TestUnreadMatchesUnreadCount is AC3's rule: over random threads, read
 // positions and marks, each row's Unread is what dbq's UnreadCount (docs/04's
-// per-post rule) says for that thread, and LastReadOrdinal is the position,
-// 0 with no row.
+// per-post rule) says for that thread. LastReadOrdinal is the read boundary
+// (TKT-01M29CTY7K): the position, 0 with no row, moved to just before the
+// first post past it written after the mark, or to the last post when there
+// is none. It is what dbq's ReadBoundary says, and the posts past it are
+// exactly the unread ones.
 func TestUnreadMatchesUnreadCount(t *testing.T) {
 	d := open(t)
 	for seed := range uint64(60) {
 		rng := rand.New(rand.NewPCG(seed, 11))
-		mark := "NULL"
+		mark, markAt := "NULL", int64(-1)
 		if rng.IntN(2) == 0 {
-			mark = fmt.Sprint(1000 + rng.IntN(100))
+			markAt = int64(1000 + rng.IntN(100))
+			mark = fmt.Sprint(markAt)
 		}
 		stmts := []string{`DELETE FROM read_positions`, `DELETE FROM post_meta`, `DELETE FROM threads`, `DELETE FROM users`,
 			`INSERT INTO users (id, handle, display_name, mark_all_read_at, created_at, updated_at)
 			 VALUES (1, 'reader', 'R', ` + mark + `, 1, 1)`}
 		n := 1 + rng.IntN(12)
 		position := map[int64]int64{}
+		times := map[int64][]int64{}
 		for th := 1; th <= n; th++ {
 			posts := 1 + rng.IntN(6)
 			at := int64(990 + rng.IntN(60))
 			for o := 1; o <= posts; o++ {
 				at += int64(rng.IntN(20)) // non-decreasing, ties included
+				times[int64(th)] = append(times[int64(th)], at)
 				stmts = append(stmts, fmt.Sprintf(`INSERT INTO post_meta (thread_id, ordinal, author_id, created_at,
 					log_offset) VALUES (%d, %d, 1, %d, 0)`, th, o, at))
 			}
@@ -196,9 +202,32 @@ func TestUnreadMatchesUnreadCount(t *testing.T) {
 				if err != nil {
 					return err
 				}
-				if r.Unread != want || r.LastReadOrdinal != position[r.ID] {
-					t.Errorf("seed %d, thread %d (mark %s, position %d of %d): unread %d, last read %d; want %d, %d",
-						seed, r.ID, mark, position[r.ID], r.LastPostOrdinal, r.Unread, r.LastReadOrdinal, want, position[r.ID])
+				pos, ts := position[r.ID], times[r.ID]
+				boundary := pos
+				if markAt >= 0 && int64(len(ts)) > pos {
+					boundary = int64(len(ts))
+					for o := pos + 1; o <= int64(len(ts)); o++ {
+						if ts[o-1] > markAt {
+							boundary = o - 1
+							break
+						}
+					}
+				}
+				if r.Unread != want || r.LastReadOrdinal != boundary {
+					t.Errorf("seed %d, thread %d (mark %s, position %d of %d): unread %d, boundary %d; want %d, %d",
+						seed, r.ID, mark, pos, r.LastPostOrdinal, r.Unread, r.LastReadOrdinal, want, boundary)
+				}
+				if r.LastPostOrdinal > r.LastReadOrdinal && r.Unread != r.LastPostOrdinal-r.LastReadOrdinal {
+					t.Errorf("seed %d, thread %d: %d unread past boundary %d of %d", seed, r.ID, r.Unread,
+						r.LastReadOrdinal, r.LastPostOrdinal)
+				}
+				b, err := q.ReadBoundary(t.Context(), dbq.ReadBoundaryParams{UserID: 1, ThreadID: r.ID})
+				if err != nil {
+					return err
+				}
+				if b.Boundary != r.LastReadOrdinal || b.LastReadOrdinal != pos {
+					t.Errorf("seed %d, thread %d: ReadBoundary %+v; the row's boundary is %d, the position %d",
+						seed, r.ID, b, r.LastReadOrdinal, pos)
 				}
 			}
 			return nil

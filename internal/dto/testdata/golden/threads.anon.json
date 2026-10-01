@@ -34,6 +34,7 @@
         "until": null
       },
       "locked": false,
+      "forum": null,
       "unread": 0,
       "last_read_ordinal": 0
     },
@@ -60,6 +61,7 @@
       "last_post_at": 1757400000000,
       "pinned": null,
       "locked": true,
+      "forum": null,
       "unread": 0,
       "last_read_ordinal": 0
     }
