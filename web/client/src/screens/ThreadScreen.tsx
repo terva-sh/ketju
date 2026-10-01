@@ -406,7 +406,8 @@ function ThreadBody({
     known.current = count;
     redraw((n) => n + 1);
   };
-  useEffect(() => {
+  // Before paint, so a post that streams in never shows the pill first.
+  useLayoutEffect(() => {
     if (bottom && fits) take(false);
   }, [bottom, fits, count]);
   useLayoutEffect(() => {
@@ -619,21 +620,28 @@ function useLive(
   at.current = now;
   useEffect(() => {
     if (!on) return;
+    // An answer that lands after the subscription closed is for a screen
+    // that has gone, and sets nothing.
+    let open = true;
     const held = () => at.current.page?.thread.log_length ?? Infinity;
-    return subscribe(id, held, () => {
+    const close = subscribe(id, held, () => {
       const { key, me, page, retry } = at.current;
       if (!page) return;
       loadThreadPage(id, { page: page.page.number }).then(
         (p) => {
-          if (at.current.key !== key || p.thread.log_length <= held()) return;
+          if (!open || at.current.key !== key || p.thread.log_length <= held()) return;
           anchor = firstInView();
           setLive({ key, me, page: p });
         },
         (err: unknown) => {
-          if (at.current.key === key && revokesAccess(err)) retry();
+          if (open && at.current.key === key && revokesAccess(err)) retry();
         },
       );
     });
+    return () => {
+      open = false;
+      close();
+    };
   }, [id, on]);
 }
 
