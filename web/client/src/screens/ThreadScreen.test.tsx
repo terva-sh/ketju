@@ -1010,6 +1010,16 @@ describe('moderating from the thread screen', () => {
     expect(panel()!.querySelector<HTMLInputElement>('input[inputmode=numeric]')!.value).toBe('45');
   });
 
+  // Terva review 1795: a click on the radio already chosen is a choice too.
+  it('a click on the slow-mode radio already chosen is kept when the page refetch lands', async () => {
+    const landed = await saveThenReopen(10);
+    await pick('0');
+    await landed();
+    expect(checked()).toBe('0');
+    await submit();
+    expect(puts().map((p) => p.body)).toEqual([{ seconds: 10 }, { seconds: 0 }]);
+  });
+
   it("a moderator's slow-mode choice is kept when the page refetch lands", async () => {
     const landed = await saveThenReopen(10);
     await landed();

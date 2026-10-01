@@ -416,7 +416,10 @@ export function ModerateDialog({
                       name={`moderate-slow-${thread}`}
                       value={v}
                       checked={choice === v}
-                      onChange={() => {
+                      // Click, not change: a click on the radio already
+                      // chosen is a choice too, and fires no change (Terva
+                      // review 1795). Keys that choose a radio click it.
+                      onClick={() => {
                         chose.current = true;
                         setChoice(v);
                       }}
