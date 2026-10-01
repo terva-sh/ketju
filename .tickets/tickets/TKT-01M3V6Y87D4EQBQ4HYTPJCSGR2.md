@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T18:47:13Z
+updated_at: 2026-10-01T19:02:56Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -49,11 +49,11 @@ The server half is TKT-01M29CRJ29 (Implement watches and mutes). It builds `POST
 
 ## Acceptance criteria
 
-- [ ] Anonymous readers are not offered the control
-- [ ] The control works at 390 px and 1440 px, each test with one axe scan and no violations (watch.spec.ts)
+- [x] Anonymous readers are not offered the control
+- [x] The control works at 390 px and 1440 px, each test with one axe scan and no violations (watch.spec.ts)
 - [ ] The committed dist is rebuilt with go generate ./internal/web/spa and npm run budget stays within 70000 B, with the reader's growth recorded in the PR
-- [ ] A member can set Watch or Mute, or follow the forum (Normal when the forum has no level), on a thread from the desktop toolbar and the phone's more menu, and on a forum from its thread-list header (WatchDialog.test.tsx, watch.spec.ts)
-- [ ] The control shows the effective level, and the follow-the-forum choice names the forum's level and what it will do
+- [x] A member can set Watch or Mute, or follow the forum (Normal when the forum has no level), on a thread from the desktop toolbar and the phone's more menu, and on a forum from its thread-list header (WatchDialog.test.tsx, watch.spec.ts)
+- [x] The control shows the effective level, and the follow-the-forum choice names the forum's level and what it will do
 
 ## Implementation plan
 
@@ -112,3 +112,23 @@ The server half is TKT-01M29CRJ29 (Implement watches and mutes). It builds `POST
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T08:27:24Z
 
 Review 1693 (head 2b18c6f, base a599b48), medium 'Do not present an inherited forum setting as Normal', fixed in the plan. The third choice posts an empty level, which removes the thread's own row. It reads Normal only when the forum has no level. Otherwise it reads 'Follow the forum (Watch)' or 'Follow the forum (Mute)' and states that effect. There is no explicit normal override, because watches.level is watch or mute.
+
+**agent:claude-code/phase3-v6y87d** at 2026-10-01T19:02:48Z
+
+Implemented on run/v6y87d-watch-control (commit 4db6bdcd, source and tests only; the dist waits for the orchestrator's hand-off).
+
+What landed, against the plan:
+- `components/WatchDialog.tsx` opens through `useModal`. Its three choices are Watch, Mute, and a third that posts `""`. The third reads "Normal" when the forum has no level, and "Follow the forum (Watch)" or "Follow the forum (Mute)" otherwise (review 1693). A forum's own dialog always reads Normal, and adds one line: "This covers the threads in NAME, not its subforums. A thread's own setting comes first." The title is "Alerts for this thread" or "Alerts for NAME". A refusal shows through `ErrorPanel`. An answer without a string `watch` counts as internal.
+- On save the dialog drops the held GETs that count unread (`/api/v1/forums*`, `/unread`, `/new`, `/participated`, `/watching`). It also drops the held thread pages that carry the level: for a thread, that thread's pages; for a forum, every thread page. Then it calls `refreshViewer()`.
+- `threadActions` gains `watch`, placed after Mark unread. ThreadScreen hands it over only to a signed-in member whose viewer block is their own (`pageFor === me`). A saved level shows at once while the viewer block it replaced is still on screen. The next page answer carries the level itself.
+- ThreadListScreen's header has a `.watch-control` button before New thread, for members on a forum's own list. After a save it asks for the list again, so a mute takes the badges away.
+- `ThreadList.watch` is required in `dto.ts`, as the server lane asked.
+- `.thread-tools .toolbar` now wraps. With Watch added, a moderator's toolbar is wider than the tablet column.
+
+Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, plus additions to `threadActions.test.ts`, `ThreadListScreen.test.tsx` and `Shell.test.tsx`. `e2e/watch.spec.ts` runs two tests, each with one axe scan with the dialog open and no `/auth/*` spend, from alice's stored session:
+- the first mutes "Minutes from the September meeting" from the toolbar at 1440 px or the more menu at 390 px, checks that the badge leaves `/f/general`, then sets the thread back to Normal through the UI;
+- the second mutes and unmutes chatter from its header.
+
+Both put alice's level back in a `finally`.
+
+Reader bundle (`npm run budget`, measured with the dist generated locally and then restored): 66189 B before, 67360 B after (+1171 B gzip).
