@@ -18,6 +18,8 @@ blocks_on: none
 references:
   - ref: pr:306
     path: null
+  - ref: pr:312
+    path: null
 claim:
   actor: agent:claude-code/phase3-run-vhsyfr
   branch: run/vhsyfr-extended-writeback
@@ -28,7 +30,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T10:57:46Z
-updated_at: 2026-10-01T13:21:09Z
+updated_at: 2026-10-01T13:24:29Z
 created_by:
   id: agent:claude-code/phase3-run-crj3b
   name: ""
