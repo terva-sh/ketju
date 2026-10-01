@@ -208,6 +208,33 @@ While a thread page is open the client holds an SSE subscription. On a
 bottom, new posts stream in directly. Polling every 30 s is the fallback
 when SSE is unavailable; the non-JS client gets a plain "refresh" link.
 
+**Decided by the run (2026-10-01, pending maintainer review)**
+(TKT-01M29CTYA0):
+- **"At the very bottom"** means the end of the page's last post is inside
+  the viewport, give or take 48 px. On a phone the reply bar does not count
+  as content.
+- **What the pill counts.** It counts posts newer than the newest post the
+  reader has been shown, never edits. The reader's own replies never count,
+  since the composer already shows them. "Show" reveals the held posts in
+  place on the last page. On an earlier page it goes to the page holding the
+  first new post. The pill is a button at the bottom of the post list, and
+  its count is announced politely. A post held behind it is not marked read.
+- **Changes to posts already shown** (an edit, a removal, a restore) are
+  applied at once. The scroll position is corrected against the first post
+  in view, so the text under the reader does not move.
+- **Polling takes over** when the stream errors, or when its `ready` event
+  does not arrive within 10 s, which is what a buffering proxy looks like.
+  The client polls every 30 s and tries the stream again every fourth poll,
+  stopping the polling once a stream says `ready`.
+- **A tab hidden for 60 s closes its stream.** It reopens, and catches up by
+  log length, when the tab is shown again.
+
+Alternatives: counting edits in the pill lost, because "3 new posts" would
+then miscount. Holding edits behind the pill lost, because a reader would
+keep seeing text its author had already corrected or a moderator had
+removed. Keeping hidden tabs connected lost, because an open tab costs a
+held connection (TKT-01M29CRJ3X), and background tabs are most of them.
+
 A known cost, unsolved. In a thread where agents are working, twenty posts a
 minute means the pill count never settles. Tagging keeps those threads out of a
 human's unread list so most people never meet it, but a human who opens one gets

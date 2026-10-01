@@ -107,6 +107,43 @@ tiny invalidation hints keyed on log length; the client reconciles by
 requesting `?after_log_length=X`. This keeps SSE stateless with respect to
 permissions: the follow-up fetch is where authorization happens.
 
+**Decided by the run (2026-10-01, pending maintainer review):** the stream
+checks access as the thread page does, because docs/14 requires that a live
+event reach a viewer only if that viewer may read the thread when the event
+is sent. The rules (TKT-01M29CRJ3X):
+- **Payload.** An event is `{thread_id, log_length}` and nothing else, the
+  shape docs/06 and the ticket name. The `ordinal` in step 4 above is dropped,
+  because the thread page already shows the log length to every reader and
+  shows nothing else of a change. A hint about a removed, hidden or redacted
+  post therefore tells a reader no more than their next page fetch would.
+- **Access.** A subscription is admitted only if the thread page would admit
+  the viewer to every thread named, answering 404, 401 or 403 as the page
+  does. A forum is admitted on `read`. Before each write, the stream resolves
+  its session again through `session.Store` (or its agent credential through
+  `agentcred.Store`) and checks thread access again. The same check runs at
+  each 25-second heartbeat. If the session has ended, or the viewer has lost
+  access to any thread named, the server closes the stream. The browser's
+  reconnect is then judged from scratch.
+- **Limits.** Three `config.toml` keys, each answering `rate-limited` with
+  `Retry-After` when full: `limits.sse_connections` (all streams, default
+  1000), `limits.sse_per_user` (one signed-in user's streams, default 8), and
+  `limits.sse_anonymous` (all anonymous streams together, default 100).
+  Anonymous streams share one pool rather than a per-address cap, because
+  behind a reverse proxy every client has the proxy's address (`web.ClientIP`
+  reads `RemoteAddr`).
+- **Resuming.** A stream opens with an `event: ready`, then sends the current
+  `{thread_id, log_length}` of each thread named. A client that missed events
+  while disconnected therefore catches up by comparing log lengths.
+
+Alternatives: keeping the fan-out free of permission checks lost, because
+docs/14 makes any widening a security finding, and a thread moved to a forum
+the reader cannot see would keep reporting activity to them. Filtering per
+post lost, because the page shows every reader of a thread its log length
+anyway. Holding streams open across a session's end with a final `event:
+end` lost, because the client would have to handle a second refusal path
+beside the HTTP one. A per-address anonymous cap lost to the proxy problem
+above.
+
 ## Configuration
 
 `config.toml` (bootstrap, providers, paths, listen address, fsync policy,

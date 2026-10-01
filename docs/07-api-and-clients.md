@@ -1042,6 +1042,17 @@ its clock with `updated_at` (TKT-01M3NS1931):
 - An agent's writes to either draft route are not charged to its bucket
   (see "Agents on the API" below).
 
+**Decided by the run (2026-10-01, pending maintainer review):** both kinds
+of draft carry the composer's attachments. `PUT` takes `attachments?`, the
+same list of hashes a post takes and checked by the same rules (see
+"Attachments" below), but it adds no reference. `GET` answers them as
+`attachments: [Attachment]`. A tombstone holds none. Blob GC keeps a blob
+that a draft's attachments name, as it keeps one a draft's source names.
+This follows the maintainer's decision of 2026-09-28 (TKT-01M3K9XBJA) that
+a draft restored on another device should come back whole. Leaving
+attachments out of drafts lost, because a restored draft would silently
+drop files whose bytes the collector then deletes after seven days.
+
 ### Where the shapes live
 
 `internal/dto` holds the structs, and `internal/dto/testdata/golden` holds one
@@ -1384,3 +1395,65 @@ it and nothing is there for a cross-site form to ride. Rule 1 still does. Its
 writes are charged to the per-agent token bucket (08).
 
 Still to come: upload MIME sniffing with an allowlist.
+
+### Attachments
+
+**Decided by the run (2026-10-01, pending maintainer review)**
+(TKT-01M29CXK0K, TKT-01M29CYS9W). These settle what the design leaves open
+about uploads and serving:
+- **Upload.** `POST /api/v1/blobs?thread={id}` or `?forum={slug}` takes one
+  multipart part named `file`. The query names where the file is going,
+  because `upload` is granted per forum (04 "permissions"). It needs a
+  member session and `upload` in that forum, and is refused as a post in
+  that forum is: `not-found` if the forum is hidden, `unauthenticated` for
+  an anonymous viewer, `forbidden` without `upload`. An archived forum
+  denies `upload` to all but admins. No migration grants `upload` to the
+  members group. An admin grants it, as for any other permission. A grant
+  in a migration would change what members of an existing install may do
+  without anyone deciding it.
+- **Type.** The type is sniffed from the first 512 bytes with
+  `http.DetectContentType`, never taken from the part's `Content-Type` or
+  the file's name. The allowlist is `image/png`, `image/jpeg`, `image/gif`,
+  `application/pdf` and `text/plain`. An image must also pass the standard
+  library's `DecodeConfig` for its type. Anything else is
+  `validation-failed` with `{field: "file", code: "type_not_allowed"}`.
+  Bytes identical to a quarantined blob are `{field: "file", code:
+  "blocked"}`. SVG and HTML lost, because both run script on this origin.
+  WebP lost, because the standard library can neither check nor thumbnail
+  it. Archives lost, because nothing here needs them yet.
+- **Answer.** 201 `dto.Attachment` `{hash, size, mime, original_name, width,
+  height}` for new bytes and known bytes alike, so an upload does not reveal
+  whether someone else sent the same file. `original_name` is the name this
+  upload sent, and `width` and `height` are null for anything that is not
+  an image.
+- **Attach.** `POST /threads/{id}/posts` and `POST /forums/{slug}/threads`
+  take `attachments`, at most 10 distinct hashes. Each must be a blob the
+  poster uploaded and that is not quarantined, and the poster needs
+  `upload` in the forum. An edit takes none, since `Edit` has no
+  attachments field (03).
+- **Serving.** `GET /blobs/{hash}` and `GET /blobs/{hash}/thumb` serve only
+  a viewer who may read a post naming the hash in its `attachments`. "May
+  read" uses the thread page's rules for that post's body, so a removed post
+  counts only for those its tombstone opens to (a moderator, and the author
+  of a post a moderator removed), and a redacted post counts for nobody.
+  Every other request gets `not-found`, including the uploader's own
+  request for a blob no post names yet, and a request for a hash with no
+  blob. A `/blobs/<hash>` URL written into a post's source is not a
+  reference. Responses carry the stored type, `Cache-Control: private,
+  max-age=31536000, immutable`, `Vary: Cookie`, the hash as `ETag`,
+  `Content-Security-Policy: default-src 'none'; sandbox`,
+  `Cross-Origin-Resource-Policy: same-origin`, and `Content-Disposition:
+  inline` for images and `attachment` for everything else.
+- **Names.** A post's attachment shows the name its author uploaded the
+  bytes under (the `blob_uploads` table, 04), so a second uploader of the
+  same bytes never learns the first one's file name.
+
+Alternatives: letting an uploader fetch a blob before a post names it lost,
+because docs/14 says a blob is served only to a reader of a post that
+references it, and widening that is the maintainer's call (docs/14 class 1).
+The composer shows its own uploads by name and size instead. Counting a
+`/blobs/` URL in a post's source as a reference lost, because then anyone
+who learned a hash could publish the bytes by writing the URL into a public
+post. Attaching any blob the poster may read lost to the same reasoning: a
+re-upload is the honest way to re-share. A public `Cache-Control` lost,
+because the answer depends on who asks.

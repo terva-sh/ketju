@@ -878,6 +878,30 @@ That sets two rules for the upload and attach paths (TKT-01M29CXK0):
 Thumbnails are not named yet. The collector removes only the blob's own file,
 and whoever defines the thumbnail name removes thumbnails the same way.
 
+**Decided by the run (2026-10-01, pending maintainer review)**
+(TKT-01M29CXK0K, TKT-01M29CYS9W):
+- **A blob's thumbnail is `<hash>.thumb`, beside the blob** in
+  `blobs/sha256/ab/`. There is one size, fitted inside 160 × 160 px with
+  the aspect ratio kept. It is JPEG for a JPEG blob and PNG for a PNG or GIF
+  blob. It is a cache: it is made from the blob on the first request that
+  needs it and made again whenever it is missing, so no backup needs it and
+  deleting every thumbnail loses nothing.
+- **Uploads are staged in `blobs/tmp/`**, on the same filesystem, so the
+  rename to the blob's path is atomic. Serve empties the directory at
+  startup, under the data-directory lock.
+- **The collector and `ketju redact`** remove `<hash>.thumb` once the row's
+  deletion has committed. The collector also removes a `.thumb` whose blob
+  has no row. A thumbnail needs no move-aside, because losing one costs only
+  its regeneration.
+
+The blob layout itself is the one above ("On-disk layout", `internal/store/blob`)
+and does not change. Alternatives: a separate `thumbs/` tree lost, because
+the design asks for thumbnails "next to the blob" and a second tree would
+need its own collector. Several sizes lost, because the post card in the
+mockups shows one 48 × 36 box, and 160 px covers it at 3× density.
+Recording a failed decode on disk lost, because a cache entry that means
+"never" outlives the decoder that failed.
+
 ## Alternatives considered
 
 - **Posts as individual files.** Simple but millions of tiny files stress
