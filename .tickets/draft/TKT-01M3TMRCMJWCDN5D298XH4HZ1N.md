@@ -17,16 +17,18 @@ parent: null
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: ticket:TKT-01M3SZ3GCE
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T02:30:06Z
-updated_at: 2026-10-01T02:30:06Z
+updated_at: 2026-10-01T03:45:00Z
 created_by:
   id: agent:claude-code/phase2-run-sz3gce
   name: ""
 updated_by:
-  id: agent:claude-code/phase2-run-sz3gce
+  id: agent:claude-code/phase2-run-tmrcmj
   name: ""
 extensions: {}
 ---
@@ -55,3 +57,73 @@ The step is `page.keyboard.press('Escape')`, followed by `expect(dialog).toHaveC
 2. Fix it in the app, not the spec. For example, move focus in `useLayoutEffect`, or handle Escape for the open overlay at the document level.
 3. Add a vitest test that presses Escape before the effect would have run.
 4. Show 20 runs under load without the failure. Do not add a retry, a longer timeout or a skip.
+
+## Acceptance criteria
+
+- [ ] A Vitest case in web/client/src/keyboard/shortcuts.test.tsx dispatches ? then Escape on a focused post with no frame between them (outside act, one microtask apart) and asserts the overlay closed and focus returned to the post; a ticket note records it failing on unchanged code and passing after the fix
+- [ ] HelpOverlay moves focus to Close in a useLayoutEffect, and takes Escape and Tab through a document keydown listener added and removed by that effect; the dialog's own onKeyDown Escape handler is gone
+- [ ] A Vitest case shows that with the overlay open and focus on document.body, Escape closes it and Tab moves focus to Close; that j moves no post while it is open; and that after it closes j works again and no overlay listener remains
+- [ ] e2e/shortcuts.spec.ts keeps every existing assertion, adds ? then Escape pressed back to back with expect(dialog).toHaveCount(0), and adds exactly one axe scan of the open overlay, run as alice from her stored session; no retry, longer timeout or skip is added
+- [ ] e2e/shortcuts.spec.ts passed 20 of 20 desktop runs on port 18911 under CPU contention, with the command, load and results in a ticket note
+- [ ] internal/web/spa/dist is regenerated with go generate ./internal/web/spa, and the PR states the reader bundle's gzip size before and after (under 70000 B)
+
+## Implementation plan
+
+Groomed 2026-10-01 against main at c3de983.
+
+### Settled in grooming
+
+- Fix the product, not the spec. The ticket's description (TKT-01M3SZ3GCE lane, 2026-10-01) rules out a retry, a longer timeout or a skip in `e2e/shortcuts.spec.ts`, and so does the run's prompt for this ticket. The spec's existing assertions stay as they are.
+- The behaviour to build: an Escape pressed while the shortcuts overlay is open closes it, wherever focus is. This is the run prompt's wording for this ticket (2026-10-01). The overlay's own comment (HelpOverlay.tsx: "Escape, Close or a click outside ends it") and TKT-01M29CGBX4's plan step 6 say the same. docs/06 "Paged, not infinite" lists the keys and says nothing about how the overlay closes, so no design document changes.
+- The race is confirmed and named, and is not just suspected. A throwaway Vitest probe was run during grooming against main at c3de983 and not committed. It mounted the thread page, focused a post, and dispatched `?` on it outside `act`. After one microtask the dialog was in the DOM, `helpOpen` was true, and `document.activeElement` was still the post. An Escape dispatched on the post then left the dialog open. 60 ms later the focus effect had run, and focus was on Close with the dialog still open. That is the failure #1592's sibling runs showed in e2e. The mechanism:
+  - `?` sets `helpOpen` in `useThreadShortcuts`'s document listener (keyboard/shortcuts.ts). Preact renders `<HelpOverlay />` on the following microtask, within the same task.
+  - `HelpOverlay` moves focus to Close in a `useEffect`. Preact runs that after the next frame: `afterNextFrame`, which waits for `requestAnimationFrame` or a 35 ms timeout, whichever comes first. A loaded runner delays both.
+  - Escape is caught only by the dialog's `onKeyDown`, so it must be dispatched inside the dialog. Before the effect runs, its target is the post. The thread listener returns early because `helpOpen` is true, so nothing handles the key.
+  - The same race lets a Tab pressed in that window move focus out of the page's posts rather than into the dialog.
+
+### Approach
+
+1. **Commit the failing test first.** Add a Vitest case to `web/client/src/keyboard/shortcuts.test.tsx`, beside "? opens the list of shortcuts, and Escape closes it and gives focus back". It reproduces the window the grooming probe found:
+   - Mount the thread with `renderAt` and focus `#post-2`.
+   - Dispatch `?` on the post with a plain `dispatchEvent`, outside `act`, so Preact's effects are not flushed.
+   - Await one microtask, so the overlay has rendered and no frame has passed.
+   - Assert the dialog is present. Then dispatch Escape on `document.activeElement`.
+   - Assert the dialog is gone and focus is back on `#post-2`.
+   Run it on unchanged code and record in a ticket note that it fails, with the assertion it fails on.
+2. **Move focus in the commit that draws the overlay.** In `web/client/src/keyboard/HelpOverlay.tsx`, change the focus effect from `useEffect` to `useLayoutEffect`. Layout effects run synchronously when Preact commits the render that inserts the dialog. That render is in the same task as the `?` keydown, so no later key can arrive before focus is on Close. The opener is still `document.activeElement` at that point, because nothing has moved focus yet. The cleanup, which returns focus to the opener, then also runs synchronously on unmount. `ComposerSheet.tsx` already uses `useLayoutEffect` for its open and close for the same reason, so this follows an existing pattern.
+3. **Take the overlay's keys on the document while it is mounted.** The same layout effect adds a `keydown` listener on `document` and removes it in its cleanup. It replaces the dialog's `onKeyDown`, which is removed:
+   - Escape, not `defaultPrevented`: `preventDefault()` and close. This holds wherever focus is: on the post that opened it, or on the body after a click on the dialog's text.
+   - Tab: `trapTab(e, root.current)`. `trapTab` already handles focus outside the root (`!root.contains(at)`) by moving to the first or last control, so a Tab from outside goes into the dialog, as `aria-modal` promises.
+   The thread's own listener in `useThreadShortcuts` is registered earlier and returns at once while `helpOpen` is true, so the two never both act on one key. The order is pinned by a test (Tests).
+4. **Strengthen the e2e step without weakening it.** In `web/client/e2e/shortcuts.spec.ts`, the test "j and k move between posts, g goes to one, ? lists them" keeps every current assertion. After the button-and-Close sequence, it adds:
+   - `?` then Escape pressed back to back, with no wait between them, then `expect(dialog).toHaveCount(0)`. This is the reader's quick `?` then Escape, and on unchanged code it fails whenever the frame has not come.
+   - One axe scan of the open overlay, using the existing `wcag2a/aa, wcag21a/aa` tags. This is the test's only scan; no spec scans the overlay today. The test already runs as alice from her stored session (`asAlice` and `stateFile`), and stays that way.
+5. **Rebuild and measure.** Run `go generate ./internal/web/spa` and commit `internal/web/spa/dist`. Report the reader bundle's gzip size before and after (60438 B of 70000 B at grooming). Expect a change of a few bytes.
+6. **Prove it under load.** Run `e2e/shortcuts.spec.ts` 20 times on the desktop project with `KETJU_E2E_PORT=18911`, under CPU contention: busy loops on every core, with the TKT-01M3SZ3GCE note's setup as the model. Record the command, the load and the pass count in a ticket note. No retry, no longer timeout, no skip.
+
+### Tests
+
+- New Vitest case: "Escape pressed before the overlay has taken focus still closes it" (Approach 1). It must fail on main and pass after the fix, and the ticket note records both runs.
+- New Vitest case: "Escape closes the overlay from outside it". Open the overlay through `act`, then move focus to `document.body`, as a click on the dialog's text leaves it. Escape on the body closes the overlay, and Tab on the body moves focus to Close. This case pins "wherever focus is", which Approach 2 alone does not give.
+- In the same case: with the overlay open and focus on the body, `j` moves no post's focus, because the thread's listener stands aside while `helpOpen` is true. After Escape, `j` works again, and the overlay's listener is gone, so a second Escape changes nothing. This guards the listener order and the cleanup in Approach 3.
+- The existing case "? opens the list of shortcuts, and Escape closes it and gives focus back", and "Keyboard shortcuts opens the list", pass unchanged.
+- e2e: the added steps in `shortcuts.spec.ts` (Approach 4), with 20 loaded runs (Approach 6).
+- `npx tsc --noEmit -p .` in `web/client`, because Vitest does not typecheck test files.
+
+### Alternatives that lost
+
+- **Change the spec to wait for focus on Close before pressing Escape.** This hides a real bug a quick reader hits. The ticket and the run prompt both forbid it.
+- **`useLayoutEffect` alone (Approach 2 without 3).** It closes this race. But Escape then still depends on focus being inside the dialog, and a click on the dialog's text puts focus on the body, where Escape does nothing. That fails "wherever focus is".
+- **Handle Escape for the overlay in `useThreadShortcuts`'s listener.** That listener is installed before the overlay exists, so it has no race. But it would put the overlay's dismissal in the thread hook, and the overlay also opens from its button, so ownership would sit in the wrong module. The overlay owns its keys.
+- **A shared `useModalKeys` hook in `components/focus.ts` now.** FlagDialog, ModerateDialog and ForumPicker share the race (below). Extracting the hook is that follow-up ticket's to do, once it has three callers to fit. This ticket changes one dialog.
+
+### Out of scope
+
+- The same `useEffect` focus race in `components/thread/FlagDialog.tsx`, `components/thread/ModerateDialog.tsx` and `screens/ForumPicker.tsx`. Each moves focus in a `useEffect` and catches Escape only on the dialog. Filed as TKT-01M3TS0ZV9 (Take Escape in the flag, moderate and forum-picker dialogs before focus).
+- TKT-01M3SZ3GCE (Stop admin-applications.spec.ts timing out under CI load) and TKT-01M3TNBKNQ (Print Playwright's error context into the CI log when a test fails). They are separate flakes and tooling.
+
+## Notes
+
+**agent:claude-code/phase2-run-tmrcmj** at 2026-10-01T03:45:00Z
+
+Grooming, 2026-10-01, against main at c3de983. The race is confirmed in Vitest, not inferred: after ? the overlay renders on the next microtask with focus still on the post, an Escape dispatched there is dropped, and the focus effect later puts focus on Close with the dialog open (details in the plan's Settled in grooming). The plan fixes HelpOverlay with a layout effect and a document listener. Filed TKT-01M3TS0ZV9 (Take Escape in the flag, moderate and forum-picker dialogs before focus) for the same race in three other dialogs. No open decision.
