@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTY58PZ9W4DJ8Y0NEECE0
 title: Implement the author lens and the only-OP button
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:293
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase3-lenses
+  branch: run/cty58-author-lens
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a64c824ddbdb7377f
+  commit: 2e937eb728b7ca438b01f1a3d3e0d7b849688976
+  session: null
+  claimed_at: 2026-10-01T13:09:41Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T11:18:01Z
+updated_at: 2026-10-01T13:09:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-lenses
+  id: agent:claude-code/phase3-lenses
   name: ""
 extensions: {}
 ---
