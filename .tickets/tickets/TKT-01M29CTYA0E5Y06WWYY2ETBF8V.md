@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CTYA0E5Y06WWYY2ETBF8V
 title: Add the client SSE subscription with the new-posts pill
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: design:live-updates
     path: docs/06-thread-views.md
-claim: null
+claim:
+  actor: agent:claude-code/phase3-ctya0
+  branch: run/ctya0-live-pill
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a2a3373478e22fdf9
+  commit: c403e67a0142b3617f33ceee3375081b6638a051
+  session: null
+  claimed_at: 2026-10-01T14:18:14Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T08:58:40Z
+updated_at: 2026-10-01T14:18:17Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-groom-live
+  id: agent:claude-code/phase3-ctya0
   name: ""
 extensions: {}
 ---
