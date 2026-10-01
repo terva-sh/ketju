@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V70X0F61FHCKS6TKTK69BQ
 title: Build the search results screen
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -19,15 +19,22 @@ dependencies:
   - TKT-01M29CTY8TB2CHCBQH3ABHCG3Q
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-v70x0f
+  branch: run/v70x0f-search-screen
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-afb3b3055ac2b1ea3
+  commit: 86752c422f9d6152ce015e2c1b52cdd721f33910
+  session: null
+  claimed_at: 2026-10-01T18:09:09Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:49:20Z
-updated_at: 2026-10-01T08:43:37Z
+updated_at: 2026-10-01T18:09:10Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-search
+  id: agent:claude-code/phase3-v70x0f
   name: ""
 extensions: {}
 ---
