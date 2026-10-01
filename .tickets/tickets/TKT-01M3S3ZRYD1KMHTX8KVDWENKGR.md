@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZRYD1KMHTX8KVDWENKGR
 title: Add the front page footer with member and post counts
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -16,15 +16,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-s3zryd
+  branch: run/s3zryd-front-footer
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa4024efb5ca34bce
+  commit: a3ed2334b61bfab8ab65d9d4d76e1be9b33c64ad
+  session: null
+  claimed_at: 2026-10-01T19:12:49Z
+  expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:48Z
-updated_at: 2026-10-01T08:30:43Z
+updated_at: 2026-10-01T19:12:53Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-polish
+  id: agent:claude-code/phase3-s3zryd
   name: ""
 extensions: {}
 ---
