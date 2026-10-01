@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-01T07:54:14Z
+updated_at: 2026-10-01T08:27:24Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -74,7 +74,7 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
 ### Approach
 
 1. **Migration**, at the next free number (0020 or later, checked at implementation):
-   - `notification_progress (thread_id INTEGER PRIMARY KEY, log_length INTEGER NOT NULL, updated_at INTEGER NOT NULL)`. It is authoritative and carries no PROJECTION marker, so `db.ProjectionTables` and reindex leave it alone. The migration seeds it with `INSERT ... SELECT thread_id, log_length, updated_at FROM projection_state`, so the first start notifies nobody about history.
+   - `notification_progress (thread_id INTEGER PRIMARY KEY, log_length INTEGER NOT NULL, updated_at INTEGER NOT NULL)`. It is authoritative and carries no PROJECTION marker, so `db.ProjectionTables` and reindex leave it alone. The migration seeds it with `INSERT ... SELECT thread_id, log_length, updated_at FROM projection_state`. That only saves the first catch-up a scan. The projection may be behind when the migration runs, so the seed cannot be what keeps history quiet. The **install cutoff** does that: the generator reads its own migration's `schema_migrations.created_at` once at start, and a record whose frame timestamp is at or before it generates nothing. A post written before the generator existed is history whatever the projection had reached (review 1693).
    - `CREATE UNIQUE INDEX notifications_post ON notifications (user_id, thread_id, ordinal) WHERE thread_id IS NOT NULL`.
    - `CREATE UNIQUE INDEX notifications_watch_unread ON notifications (user_id, thread_id) WHERE kind = 'thread_you_watch' AND read_at IS NULL`.
    - `CREATE INDEX notifications_recent ON notifications (user_id, at)`, for the newest-first list. It ends in the rowid, which breaks ties.
@@ -123,7 +123,7 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
    - An event for a range already processed is a no-op by progress. Processing a range again with its progress reset converges anyway, because of the unique indexes and the upsert that only ever strengthens a kind.
    - `ketju reindex` leaves `notifications` and `notification_progress` alone and does not move offsets.
    - Hard redaction keeps every frame's length (docs/03), so progress stays valid.
-   - The seven-day rule covers a database restored without progress rows.
+   - The install cutoff keeps the first start, and any range the projection had not reached at install, from alerting on history. The seven-day rule covers a database restored without progress rows.
    - The generator's goroutine and closer follow the projection runner's (stop before the store closes, `busDrain`).
 5. **Serving**, in `internal/service/threads/notifications.go`. It is beside `userposts.go` because it uses the same quarantine, `LogSize` and index checks.
    - `Notifications(ctx, v, cursor)` requires a member (`member.Require`). It reads a page of 25, newest first. The SQL joins `threads` (forum, slug, title, `log_length_projected`) and `post_meta`, and drops a row whose post is `deleted` or `moved`.
@@ -133,7 +133,9 @@ Notifying yourself for your own post is the other obvious case, and it needs sup
    - The answer is `dto.NotificationList{notifications, next_cursor}`. Each `dto.Notification` is `{id, kind, thread {id, slug, title} | null, forum {slug, name} | null, ordinal, actor Author | null, at, read}`. The actor goes through `member.Author`, so an anonymized one is the placeholder.
    - A page may be short after filtering, and `next_cursor` is empty only at the end.
    - `MarkNotificationsRead(ctx, v, req)` takes `{ids}` or `{up_to}` and touches only the viewer's own unread rows. It answers `dto.NotificationsRead{marked}`.
-   - `MeCounts`'s notifications count gains the same filter in its one statement. It joins `post_meta` for live posts and `threads` for the forum, grouped so `users.Me` applies the `CanEach` result it already has, and counts `new_application` only for a staff role.
+   - **One visibility decision for both surfaces** (review 1693). `threads.Service.VisibleNotifications(ctx, v, refs)` takes candidate rows, each with thread, ordinal, forum, `log_length_projected` and the `post_meta` live flag. It applies the forum check (`CanEach`), the quarantine, and the trailing-projection index check, and returns the rows that may be served. The list calls it on its page.
+   - `/me` calls the same function. `MeCounts`'s notifications part becomes per-thread rows in the same one statement, through a `UNION ALL` with a row-kind column: `forum_id`, `thread_id`, `log_length_projected`, and `json_group_array(ordinal)` of the viewer's unread post notifications whose `post_meta` row is live, plus one row counting the unread application kinds, with `new_application` only while pending and only for a staff role. `users.Service` gains a `VisibleNotifications` hook, wired in `serve.go` as `QueueCount` is. So the badge and the list cannot disagree, even while the projection trails the log.
+   - The statement count does not change. The index is consulted only for a thread whose projection trails its log, which is a thread just appended to and so already open in the cache.
 6. **Routes:** `GET /api/v1/notifications?cursor=` and `POST /api/v1/notifications/read`, both `no-store`. The POST joins `unchargedPaths`. Anonymous is `unauthenticated` and a pre-user is `forbidden`.
 7. **Docs.**
    - docs/07: resources rows with the rules above, plus a form-post row `POST /api/v1/notifications/read` to `POST /notifications/read`, `ids` or `up_to`, `MarkNotificationsRead`.
@@ -151,7 +153,7 @@ Generation (`internal/events/notifier`):
   - a projected range with no generation is generated once by `CatchUp`;
   - an error injected after the inserts and before the commit leaves no rows, and the retry writes them once;
   - a held thread is retried by `Run`.
-- `TestFirstStartAlertsNoHistory`: threads that existed before the migration get no rows.
+- `TestFirstStartAlertsNoHistory`: records written before the migration get no rows. That includes a range the projection had not reached when the migration ran and that startup catch-up projects afterwards.
 - `TestHorizonSkipsOldRecords`.
 - `TestWatchCollapsesToFirstUnread`: five posts give one unread row naming the first. After it is read, the next post adds a row.
 - `TestEditNotifiesNewMentionsOnly`.
@@ -174,7 +176,7 @@ Serving and access (`internal/web/api`). Each case asserts both `GET /notificati
   - (j) a quarantined thread;
   - (k) `new_application` after the viewer is demoted;
   - a restore that brings a row back.
-- `TestNotificationsTrailingProjection`: a `Delete` appended while the projection is held hides the row through the index check.
+- `TestNotificationsTrailingProjection`: a `Delete` appended while the projection is held hides the row through the index check, from the list and from `/me`'s count alike.
 - `TestNotificationList`: the golden `notifications.member.json`, paging by cursor, and a malformed cursor `bad-request`.
 - `TestMarkNotificationsRead`: by ids and by `up_to`. Another user's ids are ignored, and `/me` drops.
 - `TestBadgeMatchesNotificationList`: `/me` equals the unread rows the list serves.
@@ -194,3 +196,7 @@ Serving and access (`internal/web/api`). Each case asserts both `GET /notificati
 **agent:claude-code/phase3-groom-unread** at 2026-10-01T07:54:14Z
 
 run decision: pending maintainer review. Four decisions bind this ticket, recorded in docs/04 'notifications' on 2026-10-01. (1) One row per post per recipient, ranked mention > reply_to_you > quoted > thread_you_watch. (2) At most one unread thread_you_watch per thread, naming the first new post. (3) An Edit notifies the members its mentions key names, as mention, and nothing else. (4) A post notification is served and counted only while the post is visible to every reader and its forum is readable by the viewer at that moment, moderators included. new_application is served only to current staff, and no row carries post text. Scope change: GET /notifications, POST /notifications/read and the /me count's filter moved here from TKT-01M29CTY86 (Build the notifications UI and alerts tab), so the serve-time access rule and its security tests ship in the same PR as the rows they guard. This ticket now depends on TKT-01M29CRJ29 (Implement watches and mutes) for the precedence.
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T08:27:24Z
+
+Review 1693 (head 2b18c6f, base a599b48) fixed in the plan. High, 'Apply trailing-projection visibility checks to the notification badge': the list and /me now share one function, threads.Service.VisibleNotifications. It checks forum access, quarantine and the index for a trailing projection. MeCounts returns per-thread ordinals in the same single statement so /me can call it. Medium, 'Do not seed progress from a projection that may still be behind': history is now cut off by the generator migration's schema_migrations.created_at, and records at or before it generate nothing. The projection_state seed only saves a scan. docs/04 says the same.

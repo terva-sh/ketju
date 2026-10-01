@@ -747,9 +747,12 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
 Generation skips the post's author, any member who is not `active`, any
 member who cannot read the forum when the post is processed, and any member
 whose effective level on the thread is `mute` (see `watches`). It also skips
-a post whose record is more than seven days older than the moment it is
-processed. That covers a database restored without the generator's
-progress, which would otherwise alert everyone to history. Progress is kept
+two kinds of record. The first is one written at or before the moment the
+generator's migration was applied (its `schema_migrations.created_at`), so
+installing it alerts nobody to history, even in a range the projection had
+not reached by then. The second is one more than seven days older than the
+moment it is processed, which covers a database restored without the
+generator's progress. Progress is kept
 per thread in `notification_progress` (TKT-01M29CRJ2T). That table is
 authoritative and is not a projection: `ketju reindex` leaves both it and
 `notifications` alone.

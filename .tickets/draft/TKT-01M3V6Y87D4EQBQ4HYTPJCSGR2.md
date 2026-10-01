@@ -22,7 +22,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T07:54:01Z
+updated_at: 2026-10-01T08:27:24Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -40,11 +40,11 @@ The server half is TKT-01M29CRJ29 (Implement watches and mutes). It builds `POST
 
 ## Acceptance criteria
 
-- [ ] A member can set Watch, Normal or Mute on a thread from the desktop toolbar and the phone's more menu, and on a forum from its thread-list header (WatchDialog.test.tsx, watch.spec.ts)
-- [ ] The control shows the effective level and says when it comes from the forum
 - [ ] Anonymous readers are not offered the control
 - [ ] The control works at 390 px and 1440 px, each test with one axe scan and no violations (watch.spec.ts)
 - [ ] The committed dist is rebuilt with go generate ./internal/web/spa and npm run budget stays within 70000 B, with the reader's growth recorded in the PR
+- [ ] A member can set Watch or Mute, or follow the forum (Normal when the forum has no level), on a thread from the desktop toolbar and the phone's more menu, and on a forum from its thread-list header (WatchDialog.test.tsx, watch.spec.ts)
+- [ ] The control shows the effective level, and the follow-the-forum choice names the forum's level and what it will do
 
 ## Implementation plan
 
@@ -61,8 +61,13 @@ The server half is TKT-01M29CRJ29 (Implement watches and mutes). It builds `POST
 1. **DTOs.** `api/dto.ts` gains `ThreadViewer.forum_watch`, `ThreadList.watch`, `ThreadWatch` and `ForumWatch`, with their `dto-contract.ts` rows.
 2. **Dialog.** `components/WatchDialog.tsx` opens through `useModal`, as `FlagDialog` does. It is a fieldset of three radio choices with one line each:
    - Watch: "Alert me to every new post."
-   - Normal: "Alert me when someone mentions, replies to or quotes me." When the forum has a level, it adds "This forum is set to Watch" or "...to Mute, which applies to this thread."
    - Mute: "No alerts, and no unread count."
+   - The third choice posts `""`, which removes the thread's own setting. Under docs/04's precedence the thread then follows its forum, so the label and line say what that will do (review 1693):
+     - when the forum has no level, "Normal: alert me when someone mentions, replies to or quotes me";
+     - when the forum is watched, "Follow the forum (Watch): alert me to every new post";
+     - when the forum is muted, "Follow the forum (Mute): no alerts, and no unread count".
+
+     The server has no explicit "normal" level that overrides a forum. `watches.level` is `watch` or `mute`. In a watched or muted forum, the member picks Watch or Mute for the thread, or follows the forum.
 
    Save posts the level, closes the dialog, updates the screen's state from the answer, and calls `refreshViewer()` so the badges follow. A refusal shows in the dialog through `ErrorPanel`.
 3. **Thread action.** `threadActions` gains `watch?: { level: string; forumLevel: string; open: () => void }`. The label is the effective level: "Watching", "Muted", or "Watch" when neither is set. `ThreadScreen` passes it only for a member, so both the desktop toolbar and the phone's more menu carry it.
@@ -73,8 +78,8 @@ The server half is TKT-01M29CRJ29 (Implement watches and mutes). It builds `POST
 ### Tests
 
 - `WatchDialog.test.tsx`:
-  - each choice posts its level, with Normal posting `""`;
-  - the forum line appears only when the forum has a level;
+  - each choice posts its level, with the third posting `""`;
+  - the third choice reads Normal with no forum level, and "Follow the forum" with the forum's level and its effect otherwise;
   - focus is trapped and returned (`useModal`);
   - a refusal is shown;
   - `/me` is refreshed after a save.
@@ -92,3 +97,9 @@ The server half is TKT-01M29CRJ29 (Implement watches and mutes). It builds `POST
 - The routes, the precedence and the counts: TKT-01M29CRJ29.
 - The alerts a watch produces: TKT-01M29CRJ2T and TKT-01M29CTY86.
 - The `/watching` screen: TKT-01M3V6Y4JP.
+
+## Notes
+
+**agent:claude-code/phase3-groom-unread** at 2026-10-01T08:27:24Z
+
+Review 1693 (head 2b18c6f, base a599b48), medium 'Do not present an inherited forum setting as Normal', fixed in the plan. The third choice posts an empty level, which removes the thread's own row. It reads Normal only when the forum has no level. Otherwise it reads 'Follow the forum (Watch)' or 'Follow the forum (Mute)' and states that effect. There is no explicit normal override, because watches.level is watch or mute.

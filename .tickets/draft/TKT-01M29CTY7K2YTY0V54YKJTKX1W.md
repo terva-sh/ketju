@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:28:54Z
-updated_at: 2026-10-01T07:54:18Z
+updated_at: 2026-10-01T08:27:14Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -81,7 +81,7 @@ These are the queries most likely to get slow. Unread across all forums combines
 3. **Service** `threads.Service.CrossList(ctx, v, list, cursor)`, in `internal/service/threads/crosslist.go`:
    - It requires a member (`member.Require`). The forums come from `s.Perm.ReadableForums(ctx, v)`.
    - The cursor reuses `cursor`, with the list's name bound in. A malformed cursor, or one from another list or a forum's list, is `bad-request`.
-   - Quarantined threads (`s.Quarantined`) are dropped. `listDetails` supplies tags and authors, and one `ForumsByID` read names each row's forum.
+   - Quarantined threads (`s.Quarantined`) are dropped. `listDetails` supplies tags and authors, and a new `ForumsByID` query (in `forums_groups.sql`) names each row's forum.
    - The answer is `dto.ThreadList{Forum: nil}`, 25 to a page (`ListPageSize`).
 4. **DTO.** `dto.ThreadRow` gains `forum *ForumRef`, set on cross-forum rows and null on a forum's own list. `dto.UnreadCounts` gains `new`. Regenerate the goldens (dto fixtures, `me.*`, the thread list, and the four new `crosslist.*.json`).
 5. **`/me`.** `MeCounts` gains a per-forum `new` column by the New rule, in the same statement. With no mark it starts from `forum_thread_counts.threads`. With a mark it starts from a count over `threads_forum_created` after the mark. From that start it subtracts the threads the viewer has opened, and the muted ones, from the viewer's own rows, as `threads` already does. `users.Me` sums it over readable forums.
