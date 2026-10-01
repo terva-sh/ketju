@@ -19,10 +19,14 @@
 import { closeSync, openSync, readSync, statSync } from 'node:fs';
 import { dirname, join, relative } from 'node:path';
 
-// The bounds keep a broken run's log readable. An error context is a few KB
-// (the whole page's ARIA tree); a test's own server lines are tens.
+// The bounds keep a broken run's log readable, and what this reads into
+// memory small. An error context is a few KB (the whole page's ARIA tree); a
+// test's own server lines are tens of about 200 bytes. Only the slice's last
+// maxLogTailBytes are read, so a test that logged a great deal costs no more
+// (review 1636 on PR #261).
 export const maxContextBytes = 64 * 1024;
 export const maxLogLines = 120;
+export const maxLogTailBytes = 256 * 1024;
 export const maxBlocks = 10;
 
 export default class EvidenceReporter {
@@ -58,11 +62,15 @@ export default class EvidenceReporter {
     if (result.status === test.expectedStatus || result.status === 'skipped') return;
     try {
       const context = result.attachments.find((a) => a.name === 'error-context' && a.path)?.path;
-      if (++this.printed > maxBlocks) {
+      if (this.printed >= maxBlocks) {
         this.write(`failure evidence: ${this.name(test, result)}: error context ${context ?? 'not written'}\n`);
         return;
       }
+      // Only a block that was built and written counts toward the cap, so
+      // a failure that could not be printed leaves its place to the next
+      // (review 1636 on PR #261).
       this.write(this.block(test, result, context, from));
+      this.printed++;
     } catch (e) {
       this.write(`failure evidence: could not print (${e instanceof Error ? e.message : String(e)})\n`);
     }
@@ -91,10 +99,15 @@ export default class EvidenceReporter {
     } else {
       const end = size(this.log);
       const start = from <= end ? from : 0;
-      const lines = readRange(this.log, start, end - start).text.split('\n').filter((l) => l !== '');
-      const kept = lines.slice(-maxLogLines);
-      out.push(`serve.log during this test (${this.log}), ${lines.length} lines:\n`);
-      if (lines.length > kept.length) out.push(`… ${lines.length - kept.length} earlier lines left out\n`);
+      const tail = Math.max(start, end - maxLogTailBytes);
+      const lines = readRange(this.log, tail, end - tail).text.split('\n');
+      // A read that starts inside the slice may start inside a line.
+      if (tail > start) lines.shift();
+      const kept = lines.filter((l) => l !== '').slice(-maxLogLines);
+      const shown = kept.reduce((n, l) => n + Buffer.byteLength(l) + 1, 0);
+      const left = Math.max(0, end - start - shown);
+      out.push(`serve.log during this test (${this.log}), the last ${kept.length} lines:\n`);
+      if (left > 0) out.push(`… ${left} earlier bytes left out\n`);
       for (const l of kept) out.push(`${l}\n`);
     }
     out.push('── end of failure evidence ──\n');

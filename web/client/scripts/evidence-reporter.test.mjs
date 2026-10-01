@@ -9,7 +9,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'n
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import EvidenceReporter, { maxBlocks, maxContextBytes, maxLogLines } from './evidence-reporter.mjs';
+import EvidenceReporter, { maxBlocks, maxContextBytes, maxLogLines, maxLogTailBytes } from './evidence-reporter.mjs';
 
 let dir;
 let saved;
@@ -114,11 +114,36 @@ describe('the evidence reporter', () => {
     for (let i = 0; i < maxLogLines + 30; i++) appendFileSync(serveLog(), logLine(`/n/${i}`));
     r.onTestEnd(t, result('failed', withContext(context())));
     const got = text();
-    expect(got).toContain(`${maxLogLines + 30} lines:`);
-    expect(got).toContain('… 30 earlier lines left out');
+    const leftOut = Array.from({ length: 30 }, (_, i) => logLine(`/n/${i}`).length).reduce((a, b) => a + b);
+    expect(got).toContain(`the last ${maxLogLines} lines:`);
+    expect(got).toContain(`… ${leftOut} earlier bytes left out`);
     expect(got).not.toContain('"/n/29"');
     expect(got).toContain('"/n/30"');
     expect(got).toContain(`"/n/${maxLogLines + 29}"`);
+  });
+
+  // Review 1636 on PR #261: the slice is read from its last
+  // maxLogTailBytes, not whole, so a test that logged a great deal costs no
+  // more memory. Lines of 4 KiB put fewer than maxLogLines in that tail.
+  it(`a large server log is read only from its last ${maxLogTailBytes} bytes`, () => {
+    const { r, text } = started();
+    const t = testCase();
+    const pad = 'p'.repeat(4096);
+    const line = (i) => `{"path":"/big/${i}","pad":"${pad}"}\n`;
+    r.onTestBegin(t);
+    for (let i = 0; i < 150; i++) appendFileSync(serveLog(), line(i));
+    r.onTestEnd(t, result('failed', withContext(context())));
+    const got = text();
+    const shown = got.split('\n').filter((l) => l.includes('"/big/'));
+    expect(shown.length).toBeLessThan(maxLogLines);
+    expect(shown.length).toBeGreaterThan(0);
+    // Every line shown is whole, though the read began inside one.
+    for (const l of shown) expect(l).toMatch(/^\{"path":"\/big\/\d+","pad":"p+"\}$/);
+    expect(shown.at(-1)).toContain('"/big/149"');
+    const total = Array.from({ length: 150 }, (_, i) => line(i).length).reduce((a, b) => a + b);
+    const shownBytes = shown.reduce((n, l) => n + l.length + 1, 0);
+    expect(got).toContain(`the last ${shown.length} lines:`);
+    expect(got).toContain(`… ${total - shownBytes} earlier bytes left out`);
   });
 
   it(`a large error context is cut at ${maxContextBytes} bytes`, () => {
@@ -148,6 +173,23 @@ describe('the evidence reporter', () => {
       `failure evidence: [desktop] › e2e/admin-applications.spec.ts:40 › the review screen › failure ${maxBlocks} (failed): error context ${paths[maxBlocks]}\n`,
     );
     expect(out[maxBlocks + 1]).not.toContain('serve.log');
+  });
+
+  // Review 1636 on PR #261: a block that could not be built is not one of
+  // the ten, so the evidence of a later failure still prints in full.
+  it('a failure that could not be printed does not count toward the cap', () => {
+    const { r, out } = started();
+    for (let i = 0; i < maxBlocks; i++) {
+      const t = testCase({ title: `unreadable ${i}` });
+      r.onTestBegin(t);
+      r.onTestEnd(t, result('failed', withContext(dir)));
+    }
+    const t = testCase({ title: 'readable' });
+    r.onTestBegin(t);
+    r.onTestEnd(t, result('failed', withContext(context())));
+    expect(out.slice(0, maxBlocks).every((s) => s.startsWith('failure evidence: could not print'))).toBe(true);
+    expect(out[maxBlocks]).toContain('── failure evidence: [desktop] › e2e/admin-applications.spec.ts:40 › the review screen › readable (failed) ──');
+    expect(out[maxBlocks]).toContain('── end of failure evidence ──');
   });
 
   it('a missing error context or serve.log is said, not thrown', () => {
