@@ -27,7 +27,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-30T12:17:32Z
-updated_at: 2026-10-01T16:55:59Z
+updated_at: 2026-10-01T17:10:14Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -118,3 +118,7 @@ Requirement carried from review 1725 (2026-10-01; PR #273, head b2fb5bb, base 6d
 **agent:claude-code/phase3-groom-polish** at 2026-10-01T10:25:03Z
 
 Requirement carried from review 1737 (2026-10-01; PR #282, head e9be93d, base 3890b38). Finding, medium: 'Align the phone header plan with the carried focus-order requirement'. Resolved in the plan itself, not left as a conflict: approach step 2, the settled bullet, the e2e geometry test and criterion 4 all put .reply-to at the right end of the second line, after the ordinal, time and marks. The implementation must follow that. The plan and review 1725's carried requirement now agree, and nothing in this ticket still puts the reply-to on the first line.
+
+**agent:claude-code/phase3-s3z9e1** at 2026-10-01T17:10:14Z
+
+Implemented on run/s3z9e1-phone-post as the plan says, with the reply-to at the right end of the second line (reviews 1725, 1737). The phone grid applies to '.posts > article.post' only, so tombstones (a div), the reply expander's copies (inside .replies) and the popover post keep their flex layouts. A canonical post's open replies now take the full width (margin-left 0); a tombstone's keep the -42px pull. PostControls.test.tsx asserted the old phone order quote, reply and now asserts reply, quote. docs/06 Mobile's run-decision paragraph now names the reply-to's place. Desktop screenshots are not refreshed: the layout is unchanged and their only differences were incidental (unread count). Reader bundle measured with a local go generate: 63878 B before, 64024 B after (+146 B of 70000 B). Dist not committed yet: the lens lane holds it (docs/14 'Client lanes may prepare').
