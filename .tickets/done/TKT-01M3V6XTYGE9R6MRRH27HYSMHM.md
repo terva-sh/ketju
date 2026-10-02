@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V6XTYGE9R6MRRH27HYSMHM
 title: Add handle change and self-deactivation to the settings screen
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -22,17 +22,10 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-6xtyg
-  branch: run/6xtyg-account-settings
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
-  commit: 56636cacfc618dc31d9dca99b287214e73c20972
-  session: null
-  claimed_at: 2026-10-02T22:30:00Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:47:39Z
-updated_at: 2026-10-02T22:51:40Z
+updated_at: 2026-10-02T23:59:06Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
@@ -56,7 +49,7 @@ The handle control shows the 30-day cooldown from `next_change_at` or `available
 - [x] /settings/account shows the handle and, while the cooldown runs, the date it ends; a change is sent only after a confirmation naming the 30 days and the 90-day reservation, and each field code and the cooldown conflict show their words
 - [x] Deactivation is sent only after a confirmation that says how to come back; it ends every session and loads / signed out, and the last active admin's conflict shows in the dialog
 - [x] An e2e test with a seed member of its own per project covers both at 390 px and 1440 px, with one axe scan per test, paceAuth first and a row in e2e/session.ts
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 - [x] After a change, this tab's top bar and Back link show the new handle without a reload, and /u/{old} redirects to /u/{new}
 
 ## Implementation plan
@@ -178,3 +171,12 @@ Implemented (Phase A, before the dist), as planned, with these readings:
 - The profile's Account block now names the handle among what Settings holds.
 - e2e: `e2e/account.spec.ts`, seed members `acct-phone` and `acct-desktop` (`seedAccount`, after `seedSettings`, so earlier ids stay). One sign-in, `paceAuth(2)`, row added in `e2e/session.ts`. Passed at 390 px and 1440 px locally. The test also replays the old session cookie after deactivating and finds `/me` anonymous.
 - Reader bundle measured with the dist built from this branch: 79859 B on main at 56636ca, 81070 B with this change (+1211 B; the plan estimated +1300).
+
+## Summary
+
+A member can now change their handle and deactivate their account from `/settings/account` ("Account"), last in the settings links.
+
+- Server: `GET /api/v1/settings/handle` answers `dto.HandleState {handle, next_change_at}`, no-store, behind the PUT's gates, through `identity.Service.HandleState`. It uses `nextChange`, the rule the PUT refuses by. It has goldens `handle-state.member` and `handle-state.moderator`, and a docs/07 row. `/settings/account` is in docs/07's URL scheme.
+- Client: `screens/account/AccountScreen.tsx`. Both actions are confirmed first. A change takes the new handle into the viewer at once and asks /me again. A deactivation loads / in full. The refused-handle words moved to `src/handles.ts`, `ProblemError` reads `available_at`, and `Confirm` takes an optional `explain`.
+- Tests: TestHandleStateRoute, vitest (AccountScreen, problem, viewerGuard, routes, settings links), and `e2e/account.spec.ts` with seed members `acct-phone` and `acct-desktop`.
+- Reader bundle: 81213 B gzip, 1230 B more than main's 79983 B at 74105a5.
