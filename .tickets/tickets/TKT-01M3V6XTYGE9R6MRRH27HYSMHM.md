@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V6XTYGE9R6MRRH27HYSMHM
 title: Add handle change and self-deactivation to the settings screen
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -22,15 +22,22 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-6xtyg
+  branch: run/6xtyg-account-settings
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae4f1c07204ca9588
+  commit: 56636cacfc618dc31d9dca99b287214e73c20972
+  session: null
+  claimed_at: 2026-10-02T22:30:00Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:39Z
-updated_at: 2026-10-02T18:30:52Z
+updated_at: 2026-10-02T22:30:01Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-run-orchestrator
+  id: agent:claude-code/phase4-run-6xtyg
   name: ""
 extensions: {}
 ---
