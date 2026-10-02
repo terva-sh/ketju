@@ -39,8 +39,11 @@ type ReplyRequest struct {
 type CreateThreadRequest struct {
 	Title  string
 	Source string
-	// Tags must be empty: nothing yet says what a tag may be, and a log keeps
-	// whatever it is given forever, so none is accepted until something does.
+	// Tags are as the request sent them, nil or empty for none. CreateThread
+	// trims and folds each, keeps a repeat once and sorts them, and refuses
+	// the thread for one that breaks docs/04 `thread_tags`, or for a reserved
+	// tag from a viewer who neither moderates the forum nor is an agent
+	// account (docs/08 "Thread tags", TKT-01M3B12ZZ4).
 	Tags []string
 	// Attachments are the first post's, as for a reply.
 	Attachments []string
@@ -225,8 +228,15 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 	if err != nil {
 		return out, err
 	}
-	if len(req.Tags) > 0 {
-		return out, problem.Coded(problem.CodeValidationFailed, errors.New("threads: tags are not accepted yet"))
+	// The account's kind is read before the tags, which need it for the
+	// reserved rule, and the records carry the same flags.
+	flags, err := s.authorFlags(ctx, v)
+	if err != nil {
+		return out, err
+	}
+	tags, err := s.checkTags(ctx, v, forum.ID, flags, req.Tags)
+	if err != nil {
+		return out, err
 	}
 	if err := checkPost(req.Source); err != nil {
 		return out, err
@@ -238,10 +248,6 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 	// No thread to quote from or reply to yet: this is for the render's
 	// errors and mentions. The post is drawn against its thread when read.
 	r, err := s.renderSource(ctx, nil, req.Source, nil)
-	if err != nil {
-		return out, err
-	}
-	flags, err := s.authorFlags(ctx, v)
 	if err != nil {
 		return out, err
 	}
@@ -259,7 +265,7 @@ func (s *Service) CreateThread(ctx context.Context, v domain.Viewer, forumSlug s
 		defer s.Threads.Release(th)
 		if _, err := s.Writer.Append(th, threadlog.Append{
 			Type: threadlog.TypeThreadCreated, Flags: flags, Author: uint64(v.UserID), TimeMS: now,
-			Body: &threadlog.ThreadCreatedBody{Title: title, Slug: Slug(title), ForumID: uint64(forum.ID), Tags: []string{}},
+			Body: &threadlog.ThreadCreatedBody{Title: title, Slug: Slug(title), ForumID: uint64(forum.ID), Tags: tags},
 		}); err != nil {
 			return threadlog.Result{}, err
 		}

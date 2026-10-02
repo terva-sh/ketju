@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-25T00:57:46Z
-updated_at: 2026-10-02T19:14:57Z
+updated_at: 2026-10-02T19:23:05Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -76,18 +76,20 @@ Decide these in docs/04 or docs/08. Then accept tags in `CreateThread` (internal
 
 ### Approach
 
+Revised at claim (2026-10-02, agent:claude-code/phase4-run-b12zz4) against main at 30834b8e. `internal/domain` imports nothing in the module, so it keeps the rule and `NormalizeTags` goes to the threads service, the fallback the grooming plan named. The `wrong_type` checks happen in the API decode, so they are answered alone.
+
 1. **`domain` tag rules.** Add `internal/domain/tags.go`, beside `ValidateGroupSlug`:
    - `MaxTagLen = 24` and `MaxTags = 8`.
    - `ReservedTags = []string{"agent"}`.
-   - `NormalizeTag(s string) (string, code string)`: trim with `strings.TrimSpace`, fold bytes `A`–`Z` only, then check the length (1 to 24 bytes, which is characters, since the result is ASCII) and the pattern. The pattern is checked by a byte loop or a compiled `regexp`, anchored. Answer `invalid_tag` for an empty tag or a pattern miss, and `too_long` past 24. Check the length on the folded string, but refuse anything over 24 bytes before the fold, so a long input is not copied.
-   - `NormalizeTags(in []string) ([]string, []forms.FieldError)`: normalize each tag, recording an error with field `tags.N` against its index in the request, drop repeats, and sort. Past 8 distinct tags, add `{tags, too_many}`. Collect every error rather than stopping at the first, as forms validation does. Decide in code review whether `domain` may import `forms` for `FieldError`. If it may not, put the function in `internal/service/threads/tags.go` and keep only the constants and `NormalizeTag` in `domain`.
+   - `NormalizeTag(s string) (string, error)`, with the sentinels `ErrInvalidTag` and `ErrTagTooLong`. Trim with `strings.TrimSpace`. Refuse an empty tag. Refuse over 24 characters, counted with `utf8.RuneCountInString` and only when over 24 bytes, so a long input costs one scan and no copy. Then a byte loop checks the pattern and finds any `A`–`Z`. Copy the string only to fold it.
    - `IsReservedTag(t string) bool`.
+   - `NormalizeTags(in []string) ([]string, error)` goes in `internal/service/threads/tags.go`. It maps the sentinels to `invalid_tag` and `too_long` at `tags.N`, drops repeats, sorts, and adds `{tags, too_many}` past 8 distinct tags. It lists every error in index order as a `*forms.Invalid`. The answer is never nil. TKT-01M29CYSCP's retag and filter reuse it.
 2. **Codes.** Add `CodeInvalidTag = "invalid_tag"` and `CodeReservedTag = "reserved_tag"` to `internal/forms/schema.go` and to `forms.Codes`. Add two rows to docs/07's `form-codes` table, which `TestCodesAndTypesAreDocumented` holds to `forms.Codes`. Extend docs/07's sentence "A search names `q` ..." with what create names (`tags.N` and `tags`).
-3. **API decode.** In `internal/web/api/create.go`, make `threadRequest.Tags` a `[]json.RawMessage`. Turn each element into a string, or into `{tags.N, wrong_type}` for one that is not a JSON string, as the watch route turns `level`. A `tags` that is not a list is `{tags, wrong_type}`. Pass the strings in `threads.CreateThreadRequest.Tags`. The body bound stays as it is.
+3. **API decode.** In `internal/web/api/create.go`, make `threadRequest.Tags` a `json.RawMessage` and read it with `decodeTags`. Absent or null is none. Each element becomes a string, or `{tags.N, wrong_type}` when it is not a JSON string (null included), as the watch route turns `level`. A `tags` that is not a list is `{tags, wrong_type}`. These are answered alone, before the service runs. Pass the strings in `threads.CreateThreadRequest.Tags`. TKT-01M29CYSCP's retag body reuses `decodeTags`. The body bound stays as it is.
 4. **Service.** In `CreateThread` (internal/service/threads/create.go), replace the `len(req.Tags) > 0` refusal with `checkTags`. It runs after `checkTitle` and before `checkPost`, and returns the normalized list or a `forms.Invalid` (`problem` maps it to `validation-failed` with `errors`). When any normalized tag is reserved:
-   - Ask `s.Perm.Can(ctx, v, forum.ID, domain.PermModerate)`.
-   - Call `authorFlags(ctx, v)`, which is already called later, and is moved earlier so it is read once.
-   - If the viewer neither moderates the forum nor is an agent account, refuse with `{tags.N, reserved_tag}` for each reserved tag.
+   - `authorFlags(ctx, v)`, which used to come later, moves before `checkTags` so it is read once.
+   - An agent account passes. Otherwise ask `s.Perm.Can(ctx, v, forum.ID, domain.PermModerate)`.
+   - If the viewer neither moderates the forum nor is an agent account, refuse with `{tags.N, reserved_tag}` for each reserved tag. These are listed in index order beside any `invalid_tag` and `too_long` errors.
 
    Write the normalized, sorted tags into `ThreadCreatedBody.Tags` in place of `[]string{}`. Delete the comment on `CreateThreadRequest.Tags` and write the rule there instead. All refusals still come before `Threads.Create`, so a refused request leaves no files.
 5. **Docs.** The docs/07 row already states the rules (written in grooming). Check the row against the built behaviour, and add "(TKT-01M3B12ZZ4)" wherever the refusal order is described.
@@ -101,9 +103,9 @@ Decide these in docs/04 or docs/08. Then accept tags in `CreateThread` (internal
   - `-a`, `a-`, `a--b`, `a_b`, `a b`, `ä` and `""` are `invalid_tag`.
   - `"K"` (the Kelvin sign) is `invalid_tag` and never `k`.
   - A 10 KB string is refused without being folded.
-- `TestNormalizeTagsDedupesAndSorts`: `["b","A","a","B"]` gives `["a","b"]`. Nine distinct tags give `too_many`, and eight tags with repeats among nine entries pass.
+- `TestNormalizeTagsDedupesAndSorts` (internal/service/threads): `["b","A","a","B"]` gives `["a","b"]`. Nine distinct tags give `too_many`, and eight tags with repeats among nine entries pass.
 - `TestReservedTagsDocumented`: docs/08 "Thread tags"'s reserved list and `domain.ReservedTags` name the same tags, read between the `reserved-tags:begin` and `reserved-tags:end` markers, as `TestActionsDocumented` reads docs/04.
-- `TestCreateThreadWithTags` (internal/web/api/create_test.go):
+- `TestCreateThreadWithTags` and the API tests below (internal/web/api/tags_test.go):
   - A member creates a thread with `["Garden","long-read","garden"]`.
   - The 201 header's `tags` is `["garden","long-read"]`.
   - `GET /threads/{id}` and the forum's thread list agree.

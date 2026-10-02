@@ -391,7 +391,10 @@ func TestCreateThreadRefusals(t *testing.T) {
 		{"a control character", "carol", "general", `{"title":"a\u0007b","source":"s"}`, "validation-failed"},
 		{"a trailing newline", "carol", "general", `{"title":"Topic\n","source":"s"}`, "validation-failed"},
 		{"a leading tab", "carol", "general", `{"title":"\tTopic","source":"s"}`, "validation-failed"},
-		{"a tag", "carol", "general", `{"title":"t","source":"s","tags":["meta"]}`, "validation-failed"},
+		// Tags are accepted since TKT-01M3B12ZZ4; TestCreateThreadTagRefusals
+		// has the refusals, of which this is one.
+		{"a malformed tag", "carol", "general", `{"title":"t","source":"s","tags":["a_b"]}`, "validation-failed"},
+		{"a reserved tag", "carol", "general", `{"title":"t","source":"s","tags":["agent"]}`, "validation-failed"},
 		{"an empty source", "carol", "general", `{"title":"t","source":""}`, "validation-failed"},
 		{"a source over the limit", "carol", "general", `{"title":"t","source":"` + strings.Repeat("a", render.MaxSource+1) + `"}`, "payload-too-large"},
 		{"no title", "carol", "general", `{"source":"s"}`, "bad-request"},

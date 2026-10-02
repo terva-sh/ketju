@@ -1,13 +1,16 @@
 package api
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 
 	"github.com/terva-sh/ketju/internal/domain"
+	"github.com/terva-sh/ketju/internal/forms"
 	"github.com/terva-sh/ketju/internal/problem"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -21,11 +24,41 @@ type replyRequest struct {
 }
 
 // threadRequest is the body of POST /api/v1/forums/{slug}/threads (docs/07).
+// Tags is kept raw so that a tag of the wrong JSON type is a field error
+// (decodeTags), as a watch's level is.
 type threadRequest struct {
-	Title       *string  `json:"title"`
-	Source      *string  `json:"source"`
-	Tags        []string `json:"tags"`
-	Attachments []string `json:"attachments"`
+	Title       *string         `json:"title"`
+	Source      *string         `json:"source"`
+	Tags        json.RawMessage `json:"tags"`
+	Attachments []string        `json:"attachments"`
+}
+
+// decodeTags reads a request's tags: absent or null is none, and otherwise
+// they must be a JSON list of strings. A list holding anything else is
+// validation-failed with wrong_type at each such `tags.N`, and a tags that
+// is not a list is wrong_type on `tags` (docs/07). These are answered
+// before the request reaches the threads service, which says whether each
+// string is a tag.
+func decodeTags(raw json.RawMessage) ([]string, error) {
+	if raw == nil || bytes.Equal(raw, []byte("null")) {
+		return nil, nil
+	}
+	var elems []json.RawMessage
+	if err := json.Unmarshal(raw, &elems); err != nil {
+		return nil, &forms.Invalid{Kind: forms.ErrInvalidAnswers,
+			Fields: []forms.FieldError{{Field: "tags", Code: forms.CodeWrongType}}}
+	}
+	tags := make([]string, len(elems))
+	var bad []forms.FieldError
+	for i, e := range elems {
+		if bytes.Equal(e, []byte("null")) || json.Unmarshal(e, &tags[i]) != nil {
+			bad = append(bad, forms.FieldError{Field: "tags." + strconv.Itoa(i), Code: forms.CodeWrongType})
+		}
+	}
+	if bad != nil {
+		return nil, &forms.Invalid{Kind: forms.ErrInvalidAnswers, Fields: bad}
+	}
+	return tags, nil
 }
 
 // reply is POST /api/v1/threads/{id}/posts and createThread is POST
@@ -82,8 +115,13 @@ func (h *handlers) createThread(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: the thread body needs a title and a source")))
 		return
 	}
+	tags, err := decodeTags(in.Tags)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
 	res, err := h.threads.CreateThread(r.Context(), v, r.PathValue("slug"), threads.CreateThreadRequest{
-		Title: *in.Title, Source: *in.Source, Tags: in.Tags, Attachments: in.Attachments,
+		Title: *in.Title, Source: *in.Source, Tags: tags, Attachments: in.Attachments,
 	})
 	if err != nil {
 		h.fail(w, r, err)
