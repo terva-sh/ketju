@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3XP6ZRZQ968B8QPZ1RJBEGM
 title: Show a thread as read on Unread after going back from reading it
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -16,15 +16,22 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-unread-race
+  branch: run/p6zrz-unread-race
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a44a02e9b74da2287
+  commit: 6808048b49e403fbabcf81f07a20584ad16eab30
+  session: null
+  claimed_at: 2026-10-02T06:56:34Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T06:53:16Z
-updated_at: 2026-10-02T06:53:16Z
+updated_at: 2026-10-02T06:56:35Z
 created_by:
   id: agent:claude-code/phase3-exit-check
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-exit-check
+  id: agent:claude-code/phase3-unread-race
   name: ""
 extensions: {}
 ---
