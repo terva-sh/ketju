@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T23:06:28Z
+updated_at: 2026-10-02T23:26:31Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -173,6 +173,22 @@ Implementation notes (branch run/9az-quote-backlinks), against main at 56636cac.
 - Catch-up bound: the no-drift bound renders nothing, so quotations cannot move it. `TestCatchUpTenThousandUnderBound` now also catches up 10000 posts over 100 threads from nothing, once with none quoting and once with 100 quoting (one in a hundred), and holds the quoting run to twice the plain one plus a second. Projecting 10000 posts takes over 2 s on this shared machine with no quotations at all, so the 2 s bound could not apply to it. Measured locally (2026-10-02, 12-core shared host, other lanes running): no drift 53-94 ms; plain corpus 2.59 s; quoting corpus 2.74 s (+6%).
 - Mutations tried: dropping the `Visible()` check in `visibleQuoting` fails TestQuotedByListsOnlyVisibleQuotingPosts (the moved #8 appears) and TestAMovedQuotingPostIsNotABacklink; dropping the notifier's `quoted < ordinal` filter fails TestQuotedReadsTheRecordedBacklinks.
 - `web/client/src/api/dto.ts` gains `quoted_by: number[]`. `go generate ./internal/web/spa` leaves the committed dist byte-identical (type-only change), tsc and the 2566 Vitest tests pass. The drawing is TKT-01M3YTHAZB.
+
+**agent:claude-code/phase4-run-9az** at 2026-10-02T23:26:31Z
+
+Terva review 1998 (PR #380, head 207be9de, base ee77e54e, run 67cb0fd9-f3a6-4f2c-a74d-b0bddd1c01aa, Actions #2549): one medium finding, "Backfill quotes for already-projected threads when upgrading". Accepted and fixed.
+
+The finding is right: migration 0025 created an empty table, and nothing would replay the Post and Edit records of a database projected before it, so quoted_by would miss every older quotation until a reindex, and the notifier would miss a quote in a post projected but not yet generated.
+
+Fix: 0025 now ends with `UPDATE projection_state SET log_length = 64 WHERE log_length > 64`, which makes the next start's catch-up replay every log from the end of its header over the rows already there. That is safe because every apply sets absolute values and writeAudit writes one row per record (AuditExistsForRecord), and the generator processes a thread only up to the projection's length, so it waits for the replay. The rows are kept rather than deleted so a projection whose log is gone still classifies as corrupt.
+
+Alternatives considered:
+- Deleting projection_state: also replays, but loses the row that makes a missing log classify as corrupt (Classify, fsck).
+- A Go backfill job that scans only Post and Edit frames: avoids replaying everything, but is a second writer of a projection table outside apply and reindex, with its own progress and crash story.
+- Telling operators to run `ketju reindex`: a manual step on upgrade, and reindex needs the server stopped.
+The cost of the chosen fix is one replay of every log at the first start after upgrading; docs/04 "post_quotes" says so.
+
+Tests: TestPostQuotesMigrationRewindsTheProjection (internal/store/db: 0025 rewinds every projection_state row, keeps them, and leaves notification_progress alone), TestCatchUpBackfillsTheBacklinksAfterTheMigration (internal/events/projection: three projected threads, post_quotes emptied and projection_state rewound as 0025 does, catch-up ends on exactly the rows a projection that always had the table made, with no extra audit rows), and TestQuotedReadsTheRecordedBacklinks/"projected before the table existed" (internal/events/notifier: a post projected but not generated before the upgrade gives quoted after it).
 
 ## Summary
 
