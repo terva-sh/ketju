@@ -15,11 +15,13 @@ parent: TKT-01M29BN36D34YVKVRPNQD3PHDV
 origin: null
 dependencies: []
 blocks_on: none
-references: []
+references:
+  - ref: pr:349
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T06:44:40Z
-updated_at: 2026-10-02T07:13:27Z
+updated_at: 2026-10-02T07:13:31Z
 created_by:
   id: agent:claude-code/phase3-exit-check
   name: ""
