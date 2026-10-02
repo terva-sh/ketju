@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:50:19Z
-updated_at: 2026-10-02T02:26:32Z
+updated_at: 2026-10-02T05:05:04Z
 created_by:
   id: agent:claude-code/phase3-run-vbwma8
   name: ""
@@ -102,3 +102,18 @@ Correction, superseding the recurrence test in this ticket's note of 2026-10-02 
 On recurrence:
 - **Every job on the runner stalled together.** This is the known runner freeze. Add the run to TKT-01M3VDYENN.
 - **The other jobs kept running.** Rule out the job's own infrastructure first: its container's memory and CPU limits, and anything it fetched from outside during the window. If nothing explains it, use the probe method of TKT-01M3VBWMA8's investigation note to look inside ketju. A cause in ketju is established only when the goroutine dump or block profile shows what the request waited on.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T05:05:04Z
+
+Possible recurrence, 2026-10-02, classified under the correction note of the same day. It is **not** the build-1 freeze: no ketju job stalled alongside it, and the server answered fast, so this is a slowdown confined to one job on build-0, with no cause seen in ketju.
+
+- **Run 2316** (Build and Test, pull_request, PR #344, 03:51 to 04:20 UTC) ran on **build-0** (v12.1.0), not b3cc8959. Two phone tests hit Playwright's 30 s test timeout:
+  - `flag.spec.ts:17`, 1.7 min, waiting for `#post-3 [data-post-action=flag]`, ending 04:00:26;
+  - `lenses.spec.ts:79`, 38.2 s, ending 04:03:19.
+- **Re-run 2320**, also on build-0, passed the same tests in 2.1 s and 4.0 s.
+- **The whole step was slow, not a short window.** The Playwright step took 26m5s in 2316, against 19m20s in 2320 and about 10 min in recent runs (2264, 2310).
+- **The server was not the slow part.** The slowest request in 2316's printed serve.log was 67 ms, a thread GET at 04:01:12. That excludes `/events`, the SSE stream, which stays open by design.
+- **No other ketju job ran in the window.** Run 2312 (push) ended at 03:46:02; the reviews 2317 to 2319 lasted seconds.
+- **Not visible from the repository:** jobs from other repositories on build-0, and that host's load.
+
+This fits build-0's known CPU starvation, since it shares its VM with Forgejo (note of 2026-10-01). No ketju probe is warranted.
