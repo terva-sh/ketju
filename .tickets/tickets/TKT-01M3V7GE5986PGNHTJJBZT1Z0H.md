@@ -31,7 +31,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:57:49Z
-updated_at: 2026-10-02T21:18:57Z
+updated_at: 2026-10-02T21:31:35Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
@@ -120,3 +120,7 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15.
 **agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:21:26Z
 
 run decision: pending maintainer review. / opens search on every desktop screen with the top bar while the shortcuts are on: it goes to /search, whose field takes focus, and on /search it focuses and selects the field. The top bar's Search link is its visible control. Recorded with the alternatives in docs/06 'Paged, not infinite' (2026-10-02). The questions the description asked (whether / belongs in the list, and whether a shortcut outside the thread page fits 'each shortcut has a visible control') are answered there.
+
+**agent:claude-code/phase4-run-7GE59** at 2026-10-02T21:31:35Z
+
+Implemented as planned. useGlobalShortcuts and openSearch live in keyboard/shortcuts.ts; shell/Shell.tsx mounts the hook once with preact-iso's route. The tests are in a new shell/Shell.shortcuts.test.tsx. Wording the plan left open: the index list's lead reads 'Here ? opens this list and / opens search. The other keys work on a thread page.' while the shortcuts are on, and 'When they are on, ? and / work here, and the other keys on a thread page.' while off (replacing TKT-01M3V9DWTN's 'These keys work on a thread page.', which / made untrue). The /settings hint now lists '/'. The '/' row's visible control is checked by the existing 'has one' table (.tools a.search). The 390 px inert e2e test gains its axe scan. Reader bundle measured at 79859 B -> 79988 B gzip (+129 B) in Phase A.
