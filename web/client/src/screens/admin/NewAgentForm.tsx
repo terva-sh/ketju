@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { CreatedAgent } from '../../api/dto';
 import { isProblem } from '../../api/problem';
 import { Field } from './common/Field';
@@ -27,7 +27,10 @@ export function NewAgentForm({ onCreated }: { onCreated: (created: CreatedAgent)
   const opener = useRef<HTMLButtonElement>(null);
   const first = useRef<HTMLInputElement>(null);
   const opened = useRef(false);
-  useEffect(() => {
+  // In the commit that opens or closes the form: New agent goes as it
+  // opens, so a plain effect left a key pressed before the next frame on
+  // nothing (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     if (open) first.current?.focus();
     else if (opened.current) opener.current?.focus();
     opened.current = opened.current || open;

@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminUserDetail, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
-import { renderAt, settle } from '../../testing';
+import { pressRaw, raceSettle, renderAt, settle } from '../../testing';
 import moderatorMe from '../../../../../internal/dto/testdata/golden/me.moderator.json';
 import userList from '../../../../../internal/dto/testdata/golden/admin-users.admin.json';
 import userAdmin from '../../../../../internal/dto/testdata/golden/admin-user.admin.json';
@@ -92,6 +92,26 @@ describe('the users tab', () => {
     expect(location.pathname + location.search).toBe('/admin/users');
     expect(root.querySelector('[data-detail]')).toBeNull();
     expect(document.activeElement).toBe(root.querySelector('[data-user="alice"]'));
+  });
+
+  // TKT-01M3V7CFJ5: Close goes with the detail, so before a plain effect's
+  // frame focus is on nothing. The click is outside act, and the key goes
+  // one microtask after the detail has gone.
+  it('a key one microtask after closing a detail lands on its row', async () => {
+    viewer.value = asAdmin();
+    const root = await renderAt('/admin/users');
+    await open(root, 'alice');
+    const close = [...root.querySelectorAll<HTMLButtonElement>('[data-detail] button')].find((b) => b.textContent === 'Close')!;
+    close.focus();
+    try {
+      close.click();
+      for (let i = 0; i < 2000 && root.querySelector('[data-detail]'); i++) await Promise.resolve();
+      expect(root.querySelector('[data-detail]')).toBeNull();
+      await Promise.resolve();
+      expect(pressRaw('Enter')).toBe(root.querySelector('[data-user="alice"]'));
+    } finally {
+      await raceSettle();
+    }
   });
 
   it('marks an identity provider membership, and offers no remove for it', async () => {

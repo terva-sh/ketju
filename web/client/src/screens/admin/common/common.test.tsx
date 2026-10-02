@@ -5,6 +5,7 @@ import { ProblemError } from '../../../api/problem';
 import { ConfirmButton } from './ConfirmButton';
 import { Field } from './Field';
 import { send } from './send';
+import { pressRaw, raceSettle } from '../../../testing';
 import { Table } from './Table';
 
 afterEach(() => {
@@ -129,6 +130,44 @@ describe('ConfirmButton', () => {
     await act(async () => root.querySelector('button')!.click());
     await act(async () => root.querySelectorAll('button')[0].click());
     expect(document.activeElement).toBe(elsewhere);
+  });
+
+  // TKT-01M3V7CFJ5: a key pressed one microtask after the press that asks
+  // or cancels, before a plain effect's frame, lands where focus is meant
+  // to be. The presses go outside act, which would run the effects.
+  it('Enter one microtask after asking does not confirm, and lands on Cancel', async () => {
+    const acted = vi.fn();
+    const root = await mount(<ConfirmButton label="Suspend" prompt="Suspend alice?" onConfirm={acted} />);
+    const suspend = root.querySelector('button')!;
+    suspend.focus();
+    try {
+      suspend.click();
+      await Promise.resolve();
+      expect(document.activeElement?.textContent).toBe('Cancel');
+      pressRaw('Enter');
+      await Promise.resolve();
+      expect(acted).not.toHaveBeenCalled();
+      expect([...root.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Suspend']);
+    } finally {
+      await raceSettle();
+    }
+  });
+
+  it('after Cancel, a key one microtask later lands on the action', async () => {
+    const root = await mount(<ConfirmButton label="Suspend" prompt="Suspend alice?" onConfirm={vi.fn()} />);
+    await act(async () => root.querySelector('button')!.click());
+    const cancel = [...root.querySelectorAll('button')].find((b) => b.textContent === 'Cancel')!;
+    expect(document.activeElement).toBe(cancel);
+    try {
+      cancel.click();
+      await Promise.resolve();
+      expect(pressRaw('Enter')?.textContent).toBe('Suspend');
+      await Promise.resolve();
+      // Enter on the action asks again.
+      expect(root.textContent).toContain('Suspend alice?');
+    } finally {
+      await raceSettle();
+    }
   });
 
   it('stays open when the action reports its own failure with false', async () => {

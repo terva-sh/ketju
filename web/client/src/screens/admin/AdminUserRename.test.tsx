@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminUserDetail, AdminUserList, HandleChange, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
-import { problemAnswer, renderAt, route, settle, stubServer, unmount, type StubServer } from '../../testing';
+import { pressRaw, problemAnswer, raceSettle, renderAt, route, settle, stubServer, unmount, type StubServer } from '../../testing';
 import moderatorMe from '../../../../../internal/dto/testdata/golden/me.moderator.json';
 import userList from '../../../../../internal/dto/testdata/golden/admin-users.admin.json';
 import userAdmin from '../../../../../internal/dto/testdata/golden/admin-user.admin.json';
@@ -118,6 +118,41 @@ describe('renaming an account', () => {
     expect(server.sent.filter((s) => s.url === '/api/v1/admin/users')).toHaveLength(2);
     expect(root.querySelector('[data-user="alicia"]')).not.toBeNull();
     expect(root.querySelector('[data-user="alice"]')).toBeNull();
+  });
+
+  // TKT-01M3V7CFJ5: the Rename button focus was on goes with the old
+  // detail, so the new one's title takes focus once it has loaded. Its
+  // answer is held and let go outside act, and the key goes one microtask
+  // after the new detail is drawn.
+  it('after a rename, a key one microtask after the new detail loads lands on its title', async () => {
+    let answer: () => void = () => {};
+    const held = new Promise<void>((r) => (answer = r));
+    server.routes['POST /api/v1/admin/users/alice/rename'] = () => ({ status: 200, body: renamed('alicia', 'alice') });
+    server.routes['GET /api/v1/admin/users/alicia'] = async () => {
+      await held;
+      return { status: 200, body: detail('alicia') };
+    };
+    const root = await renderAt('/admin/users');
+    await open(root, 'alice');
+    const rename = root.querySelector('[data-detail="alice"] [data-rename]')!;
+    await type(field(root)!, 'alicia');
+    await press(root, rename, 'Rename');
+    await act(async () => button(rename, 'Confirm').click());
+    // The new detail is mounted and waiting on its own answer.
+    for (let i = 0; i < 200 && !server.sent.some((s) => s.url === '/api/v1/admin/users/alicia'); i++) {
+      await act(() => new Promise((r) => setTimeout(r, 5)));
+    }
+    expect(root.querySelector('[data-detail-pending="alicia"]')).not.toBeNull();
+    const title = () => root.querySelector<HTMLElement>('[data-detail="alicia"] [data-renamed]') && root.querySelector<HTMLElement>('[data-detail="alicia"] h2');
+    try {
+      answer();
+      for (let i = 0; i < 2000 && !title(); i++) await Promise.resolve();
+      expect(title()).not.toBeNull();
+      await Promise.resolve();
+      expect(pressRaw('x')).toBe(title());
+    } finally {
+      await raceSettle();
+    }
   });
 
   // Renaming your own account must not make it look like someone else's:

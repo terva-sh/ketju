@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from 'preact/hooks';
+import { useId, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { AdminUserDetail, Me } from '../../api/dto';
 import { isProblem } from '../../api/problem';
 import { hasStatus } from '../../api/status';
@@ -330,7 +330,10 @@ function SuspendForm({
   const opener = useRef<HTMLButtonElement>(null);
   const reasonInput = useRef<HTMLInputElement>(null);
   const wasOpen = useRef(false);
-  useEffect(() => {
+  // In the commit that opens or closes the form: its opener goes as it
+  // opens, so a plain effect left a key pressed before the next frame on
+  // nothing (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     if (open) reasonInput.current?.focus();
     else if (wasOpen.current) opener.current?.focus();
     wasOpen.current = open;

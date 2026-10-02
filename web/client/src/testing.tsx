@@ -104,6 +104,32 @@ export async function settle(root: HTMLElement) {
 export const screenOf = (root: HTMLElement) =>
   root.querySelector('[data-screen]')?.getAttribute('data-screen') ?? null;
 
+// pressRaw is a key pressed outside act, on whatever has focus, with what
+// the browser would do with it by default, since a dispatched keydown does
+// none of it: Enter clicks a focused button or submits a focused field's
+// form, and a printable character is typed into a focused text field. It
+// answers the element the key landed on. The focus-race cases
+// (TKT-01M3V7CFJ5) press it one microtask after the press that opens
+// something, before a plain effect would have moved focus.
+export function pressRaw(key: string): Element | null {
+  const target = document.activeElement;
+  const e = new KeyboardEvent('keydown', { key, bubbles: true, cancelable: true });
+  (target ?? document.body).dispatchEvent(e);
+  if (e.defaultPrevented || !(target instanceof HTMLElement)) return target;
+  if (key === 'Enter') {
+    if (target instanceof HTMLButtonElement && !target.disabled) target.click();
+    else if (target instanceof HTMLInputElement && target.form) target.form.requestSubmit();
+  } else if (key.length === 1 && (target instanceof HTMLInputElement || target instanceof HTMLTextAreaElement)) {
+    target.value += key;
+    target.dispatchEvent(new Event('input', { bubbles: true }));
+  }
+  return target;
+}
+
+// raceSettle lets the frame a focus-race case raced run, before the next
+// case, outside the case's own assertions.
+export const raceSettle = () => act(() => new Promise((r) => setTimeout(r, 50)));
+
 // route navigates in the same document, as a link click does: preact-iso
 // follows pushState through its popstate listener.
 export async function route(url: string) {

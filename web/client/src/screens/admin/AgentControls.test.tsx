@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminUserDetail, AdminUserList, CreatedAgent, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
-import { renderAt, route, settle, unmount } from '../../testing';
+import { pressRaw, raceSettle, renderAt, route, settle, unmount } from '../../testing';
 import moderatorMe from '../../../../../internal/dto/testdata/golden/me.moderator.json';
 import userList from '../../../../../internal/dto/testdata/golden/admin-users.admin.json';
 import userAdmin from '../../../../../internal/dto/testdata/golden/admin-user.admin.json';
@@ -173,6 +173,23 @@ describe('creating an agent', () => {
     expect(root.querySelector('[data-user="indexer"]')).not.toBeNull();
   });
 
+  // TKT-01M3V7CFJ5: New agent goes as the form opens, so before a plain
+  // effect's frame focus is on nothing and a character typed is lost.
+  it('a character typed one microtask after opening reaches the handle', async () => {
+    const root = await renderAt('/admin/users');
+    const opener = button(root, 'New agent');
+    opener.focus();
+    try {
+      opener.click();
+      await Promise.resolve();
+      pressRaw('x');
+      const handle = root.querySelector<HTMLInputElement>('form[data-new-agent] input[type="text"]')!;
+      expect(handle.value).toBe('x');
+    } finally {
+      await raceSettle();
+    }
+  });
+
   it('holds no token in the form', async () => {
     routes['POST /api/v1/admin/users'] = () => ({ status: 201, body: created() });
     const root = await renderAt('/admin/users');
@@ -198,6 +215,36 @@ describe('creating an agent', () => {
     const detail = root.querySelector('[data-detail="indexer"]')!;
     expect(detail.querySelector('[data-no-credential]')).not.toBeNull();
     expect(buttons(detail)).toContain('Issue token');
+  });
+
+  // TKT-01M3V7CFJ5: the form goes when the agent is made, and the new
+  // agent's detail takes focus on mount. The answer is held and let go
+  // outside act, and the key goes one microtask after the detail is drawn.
+  it('a key one microtask after creating a tokenless agent lands on its title', async () => {
+    let answer: () => void = () => {};
+    const held = new Promise<void>((r) => (answer = r));
+    routes['POST /api/v1/admin/users'] = async () => {
+      await held;
+      return { status: 201, body: structuredClone(createdTokenless) };
+    };
+    const root = await renderAt('/admin/users');
+    await press(root, root, 'New agent');
+    const form = root.querySelector<HTMLFormElement>('form[data-new-agent]')!;
+    const [h, n] = [...form.querySelectorAll<HTMLInputElement>('input[type="text"]')];
+    await type(h, 'indexer');
+    await type(n, 'Indexer');
+    await act(async () => form.querySelector<HTMLInputElement>('input[type="checkbox"]')!.click());
+    await act(async () => void form.dispatchEvent(new Event('submit', { cancelable: true })));
+    const title = () => root.querySelector<HTMLElement>('[data-detail="indexer"] h2');
+    try {
+      answer();
+      for (let i = 0; i < 2000 && !title(); i++) await Promise.resolve();
+      expect(title()).not.toBeNull();
+      await Promise.resolve();
+      expect(pressRaw('x')).toBe(title());
+    } finally {
+      await raceSettle();
+    }
   });
 
   it('says a taken handle is taken, and a refused one is refused', async () => {
@@ -345,6 +392,38 @@ describe('an agent’s credential', () => {
 
     await press(root, root.querySelector('[data-token-panel]')!, 'Done');
     expect(anywhere()).not.toContain(issuedToken);
+  });
+
+  // TKT-01M3V7CFJ5: issuing revokes the live token first, so Enter landing
+  // on Issue new token before the shown token takes focus would ask to
+  // replace the token just shown. The answer is held, then let go outside
+  // act, and the key goes one microtask after the token panel is drawn.
+  it('Enter one microtask after a token is issued does not issue another', async () => {
+    let answer: () => void = () => {};
+    const held = new Promise<void>((r) => (answer = r));
+    routes['POST /api/v1/admin/users/scribe/credential'] = async () => {
+      await held;
+      return { status: 201, body: { ...issuedGolden, token: issuedToken } };
+    };
+    const root = await renderAt('/admin/users');
+    await open(root, 'scribe');
+    const panel = root.querySelector('[data-agent-panel]')!;
+    await press(root, panel, 'Issue new token');
+    const confirm = button(panel, 'Confirm');
+    confirm.focus();
+    await act(async () => confirm.click());
+    try {
+      answer();
+      for (let i = 0; i < 2000 && !tokenInput(root); i++) await Promise.resolve();
+      expect(tokenInput(root)).not.toBeNull();
+      await Promise.resolve();
+      expect(pressRaw('Enter')).toBe(tokenInput(root));
+      await Promise.resolve();
+      expect(panel.textContent).not.toContain('The current token stops working at once.');
+      expect(sent.filter((s) => s.method === 'POST')).toHaveLength(1);
+    } finally {
+      await raceSettle();
+    }
   });
 
   it('says why when an agent cannot be given a token', async () => {

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { isAbort } from '../../../api/problem';
 import { sentence } from './send';
 
@@ -17,7 +17,10 @@ import { sentence } from './send';
 // that has gone: opening it focuses Cancel, the choice that changes
 // nothing, and closing it focuses the action's button again. An action that
 // moved focus itself, to what it opened, keeps it there: the button is
-// focused only when focus went with the question, to the page's body.
+// focused only when focus went with the question, to the page's body. Focus
+// moves in a layout effect, in the commit that asks or closes, so a key
+// pressed before the next frame lands on Cancel or the action rather than
+// on the body (TKT-01M3V7CFJ5).
 export function ConfirmButton({
   label,
   prompt,
@@ -48,7 +51,7 @@ export function ConfirmButton({
   const action = useRef<HTMLButtonElement>(null);
   const cancelButton = useRef<HTMLButtonElement>(null);
   const opened = useRef(false);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (asking) cancelButton.current?.focus();
     else if (opened.current && (document.activeElement === null || document.activeElement === document.body)) {
       action.current?.focus();

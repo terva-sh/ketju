@@ -1,5 +1,5 @@
 import { useLocation } from 'preact-iso';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { apiGet } from '../../api/client';
 import type {
   AdminUser,
@@ -238,7 +238,10 @@ function UsersTab({ admin }: { admin: boolean }) {
     closed.current = selected;
     choose(null);
   };
-  useEffect(() => {
+  // In the commit that closes the detail: Close goes with it, so a plain
+  // effect left a key pressed before the next frame on nothing
+  // (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     if (renamed && renamed.to !== selected) setRenamed(null);
     const h = closed.current;
     closed.current = null;
@@ -358,7 +361,10 @@ function UserDetail({
   const res = useResource(url, (signal) => apiGet<AdminUserDetail>(url, { signal }));
   const [fresh, setFresh] = useState<AdminUserDetail | null>(initial);
   const title = useRef<HTMLHeadingElement>(null);
-  useEffect(() => {
+  // Both title focuses are layout effects, in the commit that draws the
+  // title: the control focus was on has gone, so a plain effect left a key
+  // pressed before the next frame on nothing (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     // A new agent's detail takes focus from the form that made it; with a
     // token, the token panel takes it instead.
     if (initial && !issued) title.current?.focus();
@@ -369,7 +375,7 @@ function UserDetail({
   // After a rename the Rename button focus was on has gone with the old
   // detail, so the new one's heading takes focus once it is there.
   const focusTitle = useRef(renamedFrom !== null);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (d && focusTitle.current) {
       focusTitle.current = false;
       title.current?.focus();

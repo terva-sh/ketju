@@ -3,7 +3,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { AdminUserDetail, AdminUserList, Me } from '../../api/dto';
 import { viewer } from '../../state/viewer';
-import { renderAt, settle, unmount } from '../../testing';
+import { pressRaw, raceSettle, renderAt, settle, unmount } from '../../testing';
 import { mayAct, SuspensionPanel } from './SuspensionPanel';
 import moderatorMe from '../../../../../internal/dto/testdata/golden/me.moderator.json';
 import userList from '../../../../../internal/dto/testdata/golden/admin-users.admin.json';
@@ -163,6 +163,37 @@ describe('suspending', () => {
     expect(posts()).toHaveLength(1);
     expect(JSON.stringify(posts()[0].body)).toBe(`{"reason":"spam","until":${now + 7 * day},"hide_posts":false}`);
     expect(message(root)).toBe('@alice is suspended.');
+  });
+
+  // TKT-01M3V7CFJ5: the form's opener goes when it opens, so before a plain
+  // effect's frame focus is on nothing and a character typed is lost. The
+  // press is outside act, which would run the effect.
+  it('a character typed one microtask after opening reaches the reason', async () => {
+    const root = await openAlice();
+    const suspend = button(panel(root)!, 'Suspend');
+    suspend.focus();
+    try {
+      suspend.click();
+      await Promise.resolve();
+      pressRaw('s');
+      expect(panel(root)!.querySelector<HTMLInputElement>('[data-reason]')!.value).toBe('s');
+    } finally {
+      await raceSettle();
+    }
+  });
+
+  it('a key one microtask after Cancel lands on Suspend again', async () => {
+    const root = await openAlice();
+    await press(root, 'Suspend');
+    const cancel = button(panel(root)!, 'Cancel');
+    cancel.focus();
+    try {
+      cancel.click();
+      await Promise.resolve();
+      expect(pressRaw('Enter')?.textContent).toBe('Suspend');
+    } finally {
+      await raceSettle();
+    }
   });
 
   it('suspends for 1 and 30 days from now', async () => {
