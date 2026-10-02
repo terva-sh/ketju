@@ -69,11 +69,13 @@ handle_changed_at (nullable, Unix ms)
 their identity when providers change.
 
 `prefs_json` is a JSON object of the member's own preferences, written by
-`PATCH /settings` (07, TKT-01M29CCC0X). Two keys are read: `page_size`, the
-posts per thread page, an integer from 10 to 50 (06 "Paged, not infinite"),
-and `theme`, one of `system`, `light` and `dark` (07 "Preact client").
-Each key that is missing or out of range reads as its default, 25 and
-`system`, and so does every key when the column is not a JSON object. A
+`PATCH /settings` (07, TKT-01M29CCC0X). Three keys are read: `page_size`,
+the posts per thread page, an integer from 10 to 50 (06 "Paged, not
+infinite"); `theme`, one of `system`, `light` and `dark` (07 "Preact
+client"); and `shortcuts`, a JSON boolean saying whether the single-key
+shortcuts are on (06 "Paged, not infinite", TKT-01M3V9DWTN). Each key that
+is missing, malformed or out of range reads as its default, 25, `system`
+and `true`, and so does every key when the column is not a JSON object. A
 write keeps the keys it does not name, and replaces a column that is not an
 object with one. `timezone` is its own column, an IANA zone name; `locale`
 has no writer yet.

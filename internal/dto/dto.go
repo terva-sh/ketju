@@ -518,13 +518,16 @@ type MarkedRead struct {
 // on the users row and docs/06 gives the page size with its 10 to 50 range.
 // Theme is system, light or dark, stored in prefs_json and system until the
 // member chooses (docs/07 "Preact client", decided by the run 2026-10-01).
-// prefs_json may hold more, but nothing else in it is decided, and a golden
-// over an undecided field would read as a decision.
+// Shortcuts is whether the single-key shortcuts are on, stored in prefs_json
+// and true until the member turns them off (docs/06 "Paged, not infinite",
+// TKT-01M3V9DWTN). prefs_json may hold more, but nothing else in it is
+// decided, and a golden over an undecided field would read as a decision.
 type Settings struct {
-	Timezone string `json:"timezone"`
-	Locale   string `json:"locale"`
-	PageSize int    `json:"page_size"`
-	Theme    string `json:"theme"`
+	Timezone  string `json:"timezone"`
+	Locale    string `json:"locale"`
+	PageSize  int    `json:"page_size"`
+	Theme     string `json:"theme"`
+	Shortcuts bool   `json:"shortcuts"`
 }
 
 // Me is the response to GET /me.

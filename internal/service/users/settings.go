@@ -29,9 +29,10 @@ import (
 // key left out is nil and left as it is. locale is not here: nothing sets it
 // yet, and the body decoder refuses a key this does not name.
 type SettingsPatch struct {
-	Timezone json.RawMessage `json:"timezone"`
-	PageSize json.RawMessage `json:"page_size"`
-	Theme    json.RawMessage `json:"theme"`
+	Timezone  json.RawMessage `json:"timezone"`
+	PageSize  json.RawMessage `json:"page_size"`
+	Theme     json.RawMessage `json:"theme"`
+	Shortcuts json.RawMessage `json:"shortcuts"`
 }
 
 // Settings is GET /settings for v: their settings as the request's
@@ -50,7 +51,8 @@ func (s *Service) Settings(ctx context.Context, v domain.Viewer) (dto.Settings, 
 // UpdateSettings is PATCH /settings: v changes the settings p names and
 // keeps the rest. Every named value is checked first, and any refusal is
 // validation-failed with a field error for each, from forms' codes:
-// wrong_type for a value of the wrong JSON type, not_an_option for a
+// wrong_type for a value of the wrong JSON type (shortcuts takes only a JSON
+// boolean), not_an_option for a
 // timezone time.LoadLocation does not know or a theme outside Themes, and
 // out_of_range for a page size outside 10 to 50. A refusal writes nothing.
 //
@@ -96,6 +98,14 @@ func (s *Service) UpdateSettings(ctx context.Context, v domain.Viewer, p Setting
 			refuse("theme", forms.CodeNotAnOption)
 		default:
 			prefs["theme"] = t
+		}
+	}
+	if p.Shortcuts != nil {
+		var on bool
+		if isNull(p.Shortcuts) || json.Unmarshal(p.Shortcuts, &on) != nil {
+			refuse("shortcuts", forms.CodeWrongType)
+		} else {
+			prefs["shortcuts"] = on
 		}
 	}
 	if len(bad) > 0 {

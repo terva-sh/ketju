@@ -222,9 +222,29 @@ func TestPrefs(t *testing.T) {
 		// One bad key does not cost the other its value.
 		`{"theme": "dark", "page_size": "30"}`: {25, "dark"},
 	} {
-		if size, theme := Prefs(prefs); size != w.size || theme != w.theme {
-			t.Errorf("Prefs(%s) = %d, %q; want %d, %q", prefs, size, theme, w.size, w.theme)
+		if p := Prefs(prefs); p.PageSize != w.size || p.Theme != w.theme {
+			t.Errorf("Prefs(%s) = %d, %q; want %d, %q", prefs, p.PageSize, p.Theme, w.size, w.theme)
 		}
+	}
+}
+
+// Only a JSON false turns the shortcuts off (TKT-01M3V9DWTN): every key
+// that is missing or is not a boolean reads as on, and so does a column
+// that is not an object.
+func TestPrefsShortcuts(t *testing.T) {
+	for prefs, want := range map[string]bool{
+		`{}`: true, `{"shortcuts": true}`: true, `{"shortcuts": false}`: false,
+		`{"shortcuts": null}`: true, `{"shortcuts": "false"}`: true, `{"shortcuts": 0}`: true,
+		`{"shortcuts": []}`: true, `not json`: true, ``: true, `[false]`: true, `null`: true, `false`: true,
+		// One bad key does not cost the others their values.
+		`{"shortcuts": false, "page_size": "30", "theme": "dark"}`: false,
+	} {
+		if got := Prefs(prefs).Shortcuts; got != want {
+			t.Errorf("Prefs(%s).Shortcuts = %v, want %v", prefs, got, want)
+		}
+	}
+	if p := Prefs(`{"shortcuts": false, "page_size": 40, "theme": "dark"}`); p != (UserPrefs{40, "dark", false}) {
+		t.Errorf("Prefs with all three = %+v", p)
 	}
 }
 

@@ -6,7 +6,7 @@ package dto
 // settings (sitesettings_fixtures_test.go).
 
 func init() {
-	corpus["user-settings."+tMember] = Settings{Timezone: "Europe/Helsinki", Locale: "en", PageSize: 40, Theme: "dark"}
+	corpus["user-settings."+tMember] = Settings{Timezone: "Europe/Helsinki", Locale: "en", PageSize: 40, Theme: "dark", Shortcuts: false}
 
 	// Two devices: this one, signed in through GitHub, and a phone whose
 	// sign-in recorded no provider.

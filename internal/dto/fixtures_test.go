@@ -362,7 +362,7 @@ func me(class string) Me {
 			User:          nil,
 			Unread:        UnreadCounts{},
 			Notifications: 0,
-			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system", Shortcuts: true},
 			SiteName:      "The Supper Club",
 		}
 	case tPreUser:
@@ -371,7 +371,7 @@ func me(class string) Me {
 			PreUser:       &PreUser{Provider: "github", Tag: "5b0e2c9d71a4f38e6c1d0b27"},
 			Unread:        UnreadCounts{},
 			Notifications: 0,
-			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system", Shortcuts: true},
 			SiteName:      "The Supper Club",
 		}
 	case tModerator:
@@ -380,7 +380,7 @@ func me(class string) Me {
 			Unread:        UnreadCounts{Threads: 3, Participated: 1, Watching: 2, New: 1},
 			Notifications: 9,
 			Queue:         ptr(4),
-			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50, Theme: "dark"},
+			Settings:      Settings{Timezone: "Asia/Tokyo", Locale: "ja", PageSize: 50, Theme: "dark", Shortcuts: true},
 			SiteName:      "The Supper Club",
 		}
 	case tAgent:
@@ -388,7 +388,7 @@ func me(class string) Me {
 			User:          &scribe,
 			Unread:        UnreadCounts{Threads: 7, Participated: 3, Watching: 1, New: 0},
 			Notifications: 4,
-			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 40, Theme: "system"},
+			Settings:      Settings{Timezone: "UTC", Locale: "en", PageSize: 40, Theme: "system", Shortcuts: true},
 			SiteName:      "The Supper Club",
 		}
 	default:
@@ -396,7 +396,7 @@ func me(class string) Me {
 			User:          &alice,
 			Unread:        UnreadCounts{Threads: 12, Participated: 5, Watching: 4, New: 6},
 			Notifications: 2,
-			Settings:      Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 25, Theme: "light"},
+			Settings:      Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 25, Theme: "light", Shortcuts: true},
 			SiteName:      "The Supper Club",
 		}
 	}

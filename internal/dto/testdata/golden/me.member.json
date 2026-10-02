@@ -19,7 +19,8 @@
     "timezone": "Europe/Helsinki",
     "locale": "fi",
     "page_size": 25,
-    "theme": "light"
+    "theme": "light",
+    "shortcuts": true
   },
   "site_name": "The Supper Club"
 }

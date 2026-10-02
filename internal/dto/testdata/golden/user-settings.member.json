@@ -2,5 +2,6 @@
   "timezone": "Europe/Helsinki",
   "locale": "en",
   "page_size": 40,
-  "theme": "dark"
+  "theme": "dark",
+  "shortcuts": false
 }

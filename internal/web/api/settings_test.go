@@ -325,6 +325,7 @@ func TestSettingsRoutesRefuseAgentsAndAnonymous(t *testing.T) {
 	settings := []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/settings", ""},
 		{http.MethodPatch, "/api/v1/settings", `{"page_size": 20}`},
+		{http.MethodPatch, "/api/v1/settings", `{"shortcuts": false}`},
 	}
 	for _, r := range ownOnly {
 		if rec := w.do(agent, r.method, r.path, ""); rec.Code != http.StatusForbidden || problemType(t, rec) != "forbidden" {
@@ -482,6 +483,11 @@ func TestUpdateSettingsValidates(t *testing.T) {
 		{`{"theme": true}`, "theme:wrong_type"},
 		{`{"theme": null}`, "theme:wrong_type"},
 		{`{"timezone": null}`, "timezone:wrong_type"},
+		{`{"shortcuts": "no"}`, "shortcuts:wrong_type"},
+		{`{"shortcuts": "false"}`, "shortcuts:wrong_type"},
+		{`{"shortcuts": 0}`, "shortcuts:wrong_type"},
+		{`{"shortcuts": null}`, "shortcuts:wrong_type"},
+		{`{"shortcuts": 0, "theme": "dark"}`, "shortcuts:wrong_type"},
 		{`{"timezone": "Europe/Helsinki", "page_size": 51, "theme": "sepia"}`, "page_size:out_of_range theme:not_an_option"},
 	} {
 		got := strings.Join(settingsFieldErrors(t, w.do(alice, http.MethodPatch, "/api/v1/settings", c.body)), " ")
@@ -507,7 +513,7 @@ func TestUpdateSettingsKeepsOtherPrefs(t *testing.T) {
 	w.exec(`UPDATE users SET timezone = 'Asia/Tokyo', prefs_json = '{"page_size": 20, "later": {"a": 1}}' WHERE id = ?`,
 		w.users["alice"])
 	s := decodeAs[dto.Settings](t, w.do(alice, http.MethodPatch, "/api/v1/settings", `{"theme": "dark"}`))
-	if s != (dto.Settings{Timezone: "Asia/Tokyo", Locale: "en", PageSize: 20, Theme: "dark"}) {
+	if s != (dto.Settings{Timezone: "Asia/Tokyo", Locale: "en", PageSize: 20, Theme: "dark", Shortcuts: true}) {
 		t.Errorf("answered %+v", s)
 	}
 	tz, prefs := w.prefsOf("alice")
@@ -517,6 +523,25 @@ func TestUpdateSettingsKeepsOtherPrefs(t *testing.T) {
 	}
 	if tz != "Asia/Tokyo" || fmt.Sprint(got) != "map[later:map[a:1] page_size:20 theme:dark]" {
 		t.Errorf("stored %q %s", tz, prefs)
+	}
+
+	// A shortcuts write keeps page_size and theme, and a theme write then
+	// keeps shortcuts (TKT-01M3V9DWTN).
+	s = decodeAs[dto.Settings](t, w.do(alice, http.MethodPatch, "/api/v1/settings", `{"shortcuts": false}`))
+	if s != (dto.Settings{Timezone: "Asia/Tokyo", Locale: "en", PageSize: 20, Theme: "dark", Shortcuts: false}) {
+		t.Errorf("after shortcuts: answered %+v", s)
+	}
+	s = decodeAs[dto.Settings](t, w.do(alice, http.MethodPatch, "/api/v1/settings", `{"theme": "light"}`))
+	if s != (dto.Settings{Timezone: "Asia/Tokyo", Locale: "en", PageSize: 20, Theme: "light", Shortcuts: false}) {
+		t.Errorf("after theme: answered %+v", s)
+	}
+	_, prefs = w.prefsOf("alice")
+	got = nil
+	if err := json.Unmarshal([]byte(prefs), &got); err != nil {
+		t.Fatal(err)
+	}
+	if fmt.Sprint(got) != "map[later:map[a:1] page_size:20 shortcuts:false theme:light]" {
+		t.Errorf("stored %s", prefs)
 	}
 }
 
@@ -557,7 +582,7 @@ func TestSettingsApplyWithoutReLogin(t *testing.T) {
 		t.Fatalf("PATCH: %d %s", rec.Code, rec.Body)
 	}
 	me := decodeMe(t, w.do(alice, http.MethodGet, "/api/v1/me", "").Body.Bytes())
-	if me.Settings != (dto.Settings{Timezone: "Europe/Helsinki", Locale: "en", PageSize: 10, Theme: "light"}) {
+	if me.Settings != (dto.Settings{Timezone: "Europe/Helsinki", Locale: "en", PageSize: 10, Theme: "light", Shortcuts: true}) {
 		t.Errorf("/me after: %+v", me.Settings)
 	}
 	if s := decodeAs[dto.Settings](t, w.do(alice, http.MethodGet, "/api/v1/settings", "")); s != me.Settings {
@@ -573,6 +598,19 @@ func TestSettingsApplyWithoutReLogin(t *testing.T) {
 	// Anonymous is still 25.
 	if p := page(t, w.do("", http.MethodGet, thread, "")); p.Page.Size != 25 {
 		t.Errorf("anonymous: size %d", p.Page.Size)
+	}
+
+	// Turning the shortcuts off shows on the next /me (TKT-01M3V9DWTN), and
+	// anonymous still has them on.
+	rec := w.do(alice, http.MethodPatch, "/api/v1/settings", `{"shortcuts": false}`)
+	if s := decodeAs[dto.Settings](t, rec); rec.Code != http.StatusOK || s.Shortcuts {
+		t.Fatalf("PATCH shortcuts: %d %+v", rec.Code, s)
+	}
+	if me := decodeMe(t, w.do(alice, http.MethodGet, "/api/v1/me", "").Body.Bytes()); me.Settings.Shortcuts {
+		t.Errorf("/me after turning the shortcuts off: %+v", me.Settings)
+	}
+	if me := decodeMe(t, w.do("", http.MethodGet, "/api/v1/me", "").Body.Bytes()); !me.Settings.Shortcuts {
+		t.Errorf("anonymous /me: %+v", me.Settings)
 	}
 }
 

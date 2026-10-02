@@ -170,7 +170,7 @@ func (w *meWorld) seed() {
 		`INSERT INTO users (id, handle, display_name, avatar_blob, status, role, kind, timezone, locale, prefs_json,
 		                    mark_all_read_at, created_at, updated_at) VALUES
 		 (1, 'alice', 'Alice </script><script>alert(1)</script>', 'b2c3d4', 'active', 'member', 'human',
-		  'Europe/Helsinki', 'fi', '{"page_size": 30, "theme": "dark"}', `+itoa(mark)+`, 1, 1),
+		  'Europe/Helsinki', 'fi', '{"page_size": 30, "theme": "dark", "shortcuts": false}', `+itoa(mark)+`, 1, 1),
 		 (2, 'bob', 'Bob', NULL, 'active', 'moderator', 'agent', NULL, NULL, '{}', NULL, 1, 1),
 		 (3, 'carol', 'Carol', NULL, 'suspended', 'admin', 'human', NULL, NULL, '{}', NULL, 1, 1)`,
 		`INSERT INTO identities (id, provider_key, subject, issuer, created_at, updated_at)
@@ -283,7 +283,7 @@ func decodeMe(t *testing.T, b []byte) dto.Me {
 // admin chose rather than the default.
 const siteName = "The Supper Club"
 
-var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"}, SiteName: siteName}
+var anonMe = dto.Me{Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system", Shortcuts: true}, SiteName: siteName}
 
 // TestMeShapes is AC1: the documented shape for an anonymous viewer, a member,
 // a moderator, a pre-user session and an agent by its credential, from seeded
@@ -308,7 +308,7 @@ func TestMeShapes(t *testing.T) {
 			// was started before her mark (TKT-01M29CTY7K).
 			Unread:        dto.UnreadCounts{Threads: 3, Participated: 1, Watching: 1},
 			Notifications: 2,
-			Settings:      dto.Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 30, Theme: "dark"},
+			Settings:      dto.Settings{Timezone: "Europe/Helsinki", Locale: "fi", PageSize: 30, Theme: "dark", Shortcuts: false},
 			SiteName:      siteName,
 		}},
 		{"moderator", sessiontest.SignIn(t, w.db, w.id["bob"], w.now), dto.Me{
@@ -320,7 +320,7 @@ func TestMeShapes(t *testing.T) {
 			// The flagged post in the general forum, as one item, and the
 			// application; not the staff forum's flag.
 			Queue:    new(2),
-			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
+			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system", Shortcuts: true},
 			SiteName: siteName,
 		}},
 		// A member granted moderate on one forum through a group has a
@@ -329,7 +329,7 @@ func TestMeShapes(t *testing.T) {
 			User:     &dto.Author{Handle: "dave", DisplayName: "Dave", Role: "member", Kind: "human"},
 			Unread:   dto.UnreadCounts{Threads: 6, New: 6},
 			Queue:    new(1),
-			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system"},
+			Settings: dto.Settings{Timezone: "UTC", Locale: "en", PageSize: 25, Theme: "system", Shortcuts: true},
 			SiteName: siteName,
 		}},
 		{"suspended admin", sessiontest.SignIn(t, w.db, w.id["carol"], w.now), anonMe},
@@ -342,7 +342,7 @@ func TestMeShapes(t *testing.T) {
 			User:          &dto.Author{Handle: "scribe", DisplayName: "Scribe", Avatar: "e5f6a7", Role: "member", Kind: "agent"},
 			Unread:        dto.UnreadCounts{Threads: 5, Participated: 1, Watching: 1, New: 5},
 			Notifications: 1,
-			Settings:      dto.Settings{Timezone: "America/Toronto", Locale: "fr", PageSize: 40, Theme: "system"},
+			Settings:      dto.Settings{Timezone: "America/Toronto", Locale: "fr", PageSize: 40, Theme: "system", Shortcuts: true},
 			SiteName:      siteName,
 		}},
 	} {

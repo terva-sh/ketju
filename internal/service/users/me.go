@@ -63,7 +63,7 @@ var Themes = []string{"system", "light", "dark"}
 
 func anonymousMe() dto.Me {
 	return dto.Me{Settings: dto.Settings{Timezone: defaultTimezone, Locale: defaultLocale, PageSize: defaultPageSize,
-		Theme: defaultTheme}}
+		Theme: defaultTheme, Shortcuts: true}}
 }
 
 // Me is GET /me for the request's viewer (docs/07).
@@ -274,37 +274,52 @@ func orDefault(s, def string) string {
 // settingsOf is an account's settings as /me and GET /settings show them,
 // from its columns, each missing one its default.
 func settingsOf(timezone, locale, prefs string) dto.Settings {
-	size, theme := Prefs(prefs)
+	p := Prefs(prefs)
 	return dto.Settings{Timezone: orDefault(timezone, defaultTimezone), Locale: orDefault(locale, defaultLocale),
-		PageSize: size, Theme: theme}
+		PageSize: p.PageSize, Theme: p.Theme, Shortcuts: p.Shortcuts}
 }
 
-// Prefs reads the two keys of prefs_json anything decides on: page_size,
-// which docs/06 bounds to 10..50, and theme (docs/07 "Preact client"). /me,
-// GET /settings and the thread page read them here, so they read one rule.
-// Anything else prefs_json holds is ignored. Each key that is missing,
-// malformed or out of range is its default, and so is everything when
-// prefs_json itself is not a JSON object.
-func Prefs(prefs string) (pageSize int, theme string) {
+// UserPrefs is what prefs_json decides, each key read as Prefs reads it.
+type UserPrefs struct {
+	PageSize  int
+	Theme     string
+	Shortcuts bool
+}
+
+// Prefs reads the three keys of prefs_json anything decides on: page_size,
+// which docs/06 bounds to 10..50, theme (docs/07 "Preact client"), and
+// shortcuts, whether the single-key shortcuts are on (docs/06 "Paged, not
+// infinite", TKT-01M3V9DWTN). /me, GET /settings and the thread page read
+// them here, so they read one rule. Anything else prefs_json holds is
+// ignored. Each key that is missing, malformed or out of range is its
+// default, and so is everything when prefs_json itself is not a JSON object.
+func Prefs(prefs string) UserPrefs {
 	var p struct {
-		PageSize json.RawMessage `json:"page_size"`
-		Theme    json.RawMessage `json:"theme"`
+		PageSize  json.RawMessage `json:"page_size"`
+		Theme     json.RawMessage `json:"theme"`
+		Shortcuts json.RawMessage `json:"shortcuts"`
 	}
-	pageSize, theme = defaultPageSize, defaultTheme
+	out := UserPrefs{PageSize: defaultPageSize, Theme: defaultTheme, Shortcuts: true}
 	if json.Unmarshal([]byte(prefs), &p) != nil {
-		return pageSize, theme
+		return out
 	}
 	var n int64
 	// Decoding into an int64 refuses "30", 30.5 and anything else that is
 	// not a JSON integer; null leaves 0, which is out of range.
 	if json.Unmarshal(p.PageSize, &n) == nil && n >= minPageSize && n <= maxPageSize {
-		pageSize = int(n)
+		out.PageSize = int(n)
 	}
 	var t string
 	if json.Unmarshal(p.Theme, &t) == nil && slices.Contains(Themes, t) {
-		theme = t
+		out.Theme = t
 	}
-	return pageSize, theme
+	// Only a JSON boolean counts: null would decode into false, and "false"
+	// and 0 are not booleans, so each of them leaves the shortcuts on.
+	var on bool
+	if p.Shortcuts != nil && !isNull(p.Shortcuts) && json.Unmarshal(p.Shortcuts, &on) == nil {
+		out.Shortcuts = on
+	}
+	return out
 }
 
 // PageSize is the posts per thread page for v: their own page_size when
@@ -316,6 +331,5 @@ func PageSize(ctx context.Context, v domain.Viewer) int {
 	if !v.Member() || !ok {
 		return defaultPageSize
 	}
-	size, _ := Prefs(u.PrefsJSON)
-	return size
+	return Prefs(u.PrefsJSON).PageSize
 }
