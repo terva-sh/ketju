@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZRYD1KMHTX8KVDWENKGR
 title: Add the front page footer with member and post counts
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-s3zryd
-  branch: run/s3zryd-front-footer
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa4024efb5ca34bce
-  commit: a3ed2334b61bfab8ab65d9d4d76e1be9b33c64ad
-  session: null
-  claimed_at: 2026-10-01T19:12:49Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T12:17:48Z
-updated_at: 2026-10-01T19:33:21Z
+updated_at: 2026-10-02T03:41:54Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -50,7 +43,7 @@ Add the member and post counts to the forum index's response, and draw the foote
 - [x] At 390 px and 1440 px the forum index ends with N members · M posts for a member and M posts for an anonymous viewer, M summing post_count over the listed forums and their children
 - [x] At 720 px and above the footer offers Press ? for keyboard shortcuts, which opens the help overlay; a phone shows no hint
 - [x] The forum index passes axe at 390 px and 1440 px and forum-index-*.png are refreshed
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
 - [x] GET /forums carries members, the count of exactly the accounts the mention lookup can offer (active, handle not ending in -), to a member session only, and null to anonymous viewers and applicants (TestForumTreeMembersOnlyForMembers, TestForumTreeMembersCountsActiveAccounts; golden, dto-contract.ts and docs/07 updated)
 
 ## Implementation plan
@@ -129,3 +122,7 @@ Implementation, prepared on run/s3zryd-front-footer (source only; the dist waits
 **agent:claude-code/phase3-s3zryd** at 2026-10-01T19:33:21Z
 
 For the PR body (orchestrator, 2026-10-01): binding ? on the forum index adds a single-key shortcut to a second page. TKT-01M3V9DWTN (Let a member turn off the single-key shortcuts (WCAG 2.1.4), draft, no milestone) owns the missing off switch. TKT-01M3S3ZZSZ left the / search key out until that ticket lands; ? is kept here because the hint's words would otherwise be false, and ? only opens a dialog that Escape closes. Phase B: name both in the PR body so the reviewer sees the tradeoff was weighed.
+
+## Summary
+
+The forum index ends with 'N members · M posts', and from 720 px up a 'Press ? for keyboard shortcuts' button. The button opens the shortcut list, and ? opens it on the index too. Server: GET /forums carries members, from the new CountActiveMembers query. It counts exactly the accounts UsersByHandlePrefix can offer (active, handle not ending in '-'). A member session gets the number; an anonymous viewer, a pre-user or an inactive account gets null. The response is built per request, no-store, with no ETag, and goes through no cache. Tests: TestForumTreeMembersOnlyForMembers (service and handler), TestForumTreeMembersCountsActiveAccounts and TestForumTreeMembersNeverShared. Goldens, dto.ts (members required) and the docs/07 row are updated. Client: IndexFoot in ForumIndex.tsx sums post_count over the listed forums and their children, and HelpOverlay gains a lead line. e2e/forum-index.spec.ts covers both widths with axe, and forum-index-*.png are refreshed. Run decision, pending maintainer review, in docs/06: ? is bound on the forum index, which adds a single-key shortcut to a second page. TKT-01M3V9DWTN owns the WCAG 2.1.4 off switch. Reader bundle: 78491 B before, 79067 B after (+576 B gzip) of 120000 B.
