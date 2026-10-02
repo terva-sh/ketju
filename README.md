@@ -141,6 +141,29 @@ ketju redact --root . --resume
 Backups and filesystem snapshots taken before the redaction still hold the
 text. The command cannot reach them. `ketju redact -h` lists the exit codes.
 
+## Metrics
+
+Ketju exports Prometheus metrics on a listener of its own, and only when
+`config.toml` names one:
+
+```toml
+metrics_listen = "127.0.0.1:9090"
+```
+
+or `KETJU_METRICS_LISTEN`. Point the scraper at
+`http://127.0.0.1:9090/metrics`. That listener serves `/metrics` and nothing
+else, and it asks for no credentials, so where it can be reached from is the
+only guard: keep it on a loopback or private address, and do not route it
+through the reverse proxy. The forum's own listener answers 404 for
+`/metrics`. With `metrics_listen` empty, the default, no metrics are served.
+
+The metrics are request latency, cache hits and misses, fsync latency,
+projection lag and the live-update streams.
+[docs/02-architecture.md](docs/02-architecture.md) "Observability" lists
+each one with its type, unit and labels. `ketju_projection_lag_bytes` is the
+one to alert on: when it stays above zero, posts are written but not yet
+listed.
+
 ## The name, and where this lives
 
 *Ketju* is Finnish for "chain", and it is the ordinary Finnish word for a forum

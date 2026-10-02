@@ -237,6 +237,20 @@ func (s Stats) HitRatio() float64 {
 	return float64(s.Hits) / float64(total)
 }
 
+// Counters is the part of Stats that is counted atomically, for the metrics
+// scrape: it takes no lock, so a scrape never waits on a lookup or holds one
+// up (TKT-01M29CEE7S). A nil cache reports zeroes.
+func (c *Cache) Counters() Stats {
+	if c == nil {
+		return Stats{}
+	}
+	return Stats{
+		Hits: c.hits.Load(), Misses: c.misses.Load(), Stale: c.stale.Load(),
+		Inserts: c.inserts.Load(), Evictions: c.evictions.Load(),
+		Rejected: c.rejected.Load(), Dropped: c.dropped.Load(),
+	}
+}
+
 // Stats returns a snapshot. A nil cache reports zeroes.
 func (c *Cache) Stats() Stats {
 	if c == nil {

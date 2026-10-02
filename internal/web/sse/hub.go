@@ -120,6 +120,11 @@ type Hub struct {
 	refused    atomic.Uint64
 	overflowed atomic.Uint64
 	lagged     atomic.Uint64
+
+	// openN and anonN follow len(streams) and anon, written with mu held,
+	// so Stats reads them without it (TKT-01M29CEE7S).
+	openN atomic.Int64
+	anonN atomic.Int64
 }
 
 // stream is one open subscription, as the hub sees it.
@@ -211,6 +216,8 @@ func (h *Hub) open(ts []threadid.ID, forums []int64, user int64) (*stream, error
 	} else {
 		h.anon++
 	}
+	h.openN.Store(int64(len(h.streams)))
+	h.anonN.Store(int64(h.anon))
 	return s, nil
 }
 
@@ -239,6 +246,8 @@ func (h *Hub) release(s *stream) {
 	} else {
 		h.anon--
 	}
+	h.openN.Store(int64(len(h.streams)))
+	h.anonN.Store(int64(h.anon))
 	s.end()
 }
 
@@ -441,10 +450,10 @@ type Stats struct {
 	Lagged     uint64
 }
 
-// Stats reports the hub's standing.
+// Stats reports the hub's standing. It takes no lock, so a metrics scrape
+// never waits on a stream opening or closing; Open and Anonymous may be one
+// stream apart if one is opening as they are read.
 func (h *Hub) Stats() Stats {
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	return Stats{Open: len(h.streams), Anonymous: h.anon, Refused: h.refused.Load(),
+	return Stats{Open: int(h.openN.Load()), Anonymous: int(h.anonN.Load()), Refused: h.refused.Load(),
 		Overflowed: h.overflowed.Load(), Lagged: h.lagged.Load()}
 }

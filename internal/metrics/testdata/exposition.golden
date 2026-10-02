@@ -1,0 +1,27 @@
+# HELP ketju_labelled_total Counted per kind.
+# TYPE ketju_labelled_total counter
+ketju_labelled_total{kind="quo\"te\\back"} 1
+ketju_labelled_total{kind="zeta"} 2
+# HELP ketju_level_bytes A level, with a backslash \\ and a\nnewline in its help.
+# TYPE ketju_level_bytes gauge
+ketju_level_bytes 1.5
+# HELP ketju_read_at_scrape Read at scrape time.
+# TYPE ketju_read_at_scrape gauge
+ketju_read_at_scrape 7
+# HELP ketju_things_total Things counted.
+# TYPE ketju_things_total counter
+ketju_things_total 3
+# HELP ketju_wait_seconds Waits.
+# TYPE ketju_wait_seconds histogram
+ketju_wait_seconds_bucket{file="index",le="0.01"} 0
+ketju_wait_seconds_bucket{file="index",le="0.1"} 1
+ketju_wait_seconds_bucket{file="index",le="1"} 1
+ketju_wait_seconds_bucket{file="index",le="+Inf"} 1
+ketju_wait_seconds_sum{file="index"} 0.1
+ketju_wait_seconds_count{file="index"} 1
+ketju_wait_seconds_bucket{file="log",le="0.01"} 1
+ketju_wait_seconds_bucket{file="log",le="0.1"} 2
+ketju_wait_seconds_bucket{file="log",le="1"} 2
+ketju_wait_seconds_bucket{file="log",le="+Inf"} 3
+ketju_wait_seconds_sum{file="log"} 5.055
+ketju_wait_seconds_count{file="log"} 3

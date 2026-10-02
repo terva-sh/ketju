@@ -16,6 +16,8 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
@@ -52,6 +54,12 @@ type Options struct {
 	// Logger receives what the cache cannot return to a caller, such as an
 	// index it could not write back. Nil means slog.Default().
 	Logger *slog.Logger
+
+	// SyncObserver, when set, is told how long each fsync of a thread's log
+	// or index took, as the actor issues them: file is "log" or "index"
+	// (TKT-01M29CEE7S). It runs on the actor's goroutine, so it must be
+	// quick. Under SyncNever nothing is fsynced and it is never called.
+	SyncObserver func(file string, d time.Duration)
 }
 
 // Thread is one open thread: its index, its actor, and a reader over its log.
@@ -90,6 +98,7 @@ type Cache struct {
 	policy threadlog.SyncPolicy
 	isArch func(threadid.ID) bool
 	log    *slog.Logger
+	onSync func(file string, d time.Duration)
 
 	mu     sync.Mutex
 	open   map[threadid.ID]*entry
@@ -98,9 +107,12 @@ type Cache struct {
 
 	// opened counts how many times a thread was actually opened from disk,
 	// which is how a test tells a cache hit from a miss without reaching
-	// inside.
-	opened  int
-	evicted int
+	// inside. They and size, which follows len(open), are atomics so the
+	// metrics scrape reads them without the mutex every Acquire takes
+	// (TKT-01M29CEE7S); each is written only with mu held.
+	opened  atomic.Int64
+	evicted atomic.Int64
+	size    atomic.Int64
 }
 
 // entry wraps a thread with the machinery that lets two goroutines ask for the
@@ -134,7 +146,7 @@ func New(root string, opts Options) (*Cache, error) {
 		log = slog.Default()
 	}
 	return &Cache{
-		root: root, bound: bound, policy: opts.Sync, isArch: opts.Archived, log: log,
+		root: root, bound: bound, policy: opts.Sync, isArch: opts.Archived, log: log, onSync: opts.SyncObserver,
 		open: make(map[threadid.ID]*entry),
 	}, nil
 }
@@ -142,18 +154,14 @@ func New(root string, opts Options) (*Cache, error) {
 // Bound returns the configured maximum.
 func (c *Cache) Bound() int { return c.bound }
 
-// Len returns how many threads are open right now.
-func (c *Cache) Len() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return len(c.open)
-}
+// Len returns how many threads are open right now, those still opening
+// included. It takes no lock.
+func (c *Cache) Len() int { return int(c.size.Load()) }
 
-// Stats returns how many opens and evictions have happened.
+// Stats returns how many opens and evictions have happened. It takes no
+// lock.
 func (c *Cache) Stats() (opens, evictions int) {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.opened, c.evicted
+	return int(c.opened.Load()), int(c.evicted.Load())
 }
 
 // LogSize is the byte length of id's log on disk, without opening the
@@ -236,7 +244,8 @@ func (c *Cache) Acquire(id threadid.ID) (*Thread, error) {
 
 	e := &entry{ready: make(chan struct{}), loading: true}
 	c.open[id] = e
-	c.opened++
+	c.size.Store(int64(len(c.open)))
+	c.opened.Add(1)
 	c.mu.Unlock()
 
 	// The open does I/O — two file opens, an index read, possibly a replay —
@@ -249,6 +258,7 @@ func (c *Cache) Acquire(id threadid.ID) (*Thread, error) {
 	close(e.ready)
 	if err != nil {
 		delete(c.open, id)
+		c.size.Store(int64(len(c.open)))
 		c.mu.Unlock()
 		return nil, err
 	}
@@ -380,9 +390,16 @@ func (c *Cache) openThread(id threadid.ID) (*Thread, error) {
 		idxw = idxf
 	}
 
+	// The actor writes through timed wrappers when fsync latency is
+	// observed; the reader keeps the bare file, since it never syncs.
+	var logw threadlog.LogWriter = logf
+	if c.onSync != nil {
+		logw = timedLog{LogWriter: logf, observe: c.onSync}
+		idxw = timedIndex{IndexWriter: idxw, observe: c.onSync}
+	}
 	t := &Thread{
 		ID: id, Index: rec.Index,
-		Actor:    threadlog.NewActor(rec.Index, rec.LogLength, logf, idxw, c.policy),
+		Actor:    threadlog.NewActor(rec.Index, rec.LogLength, logw, idxw, c.policy),
 		Reader:   threadlog.NewReader(logf, rec.Index),
 		Outcome:  rec.Outcome,
 		Replayed: rec.Replayed,
@@ -413,7 +430,8 @@ func (c *Cache) evict() {
 			return
 		}
 		delete(c.open, victim.ID)
-		c.evicted++
+		c.size.Store(int64(len(c.open)))
+		c.evicted.Add(1)
 		c.mu.Unlock()
 
 		// Closing is I/O and happens outside the lock. The thread is already
@@ -489,6 +507,7 @@ func (c *Cache) Close() error {
 		}
 	}
 	c.open = make(map[threadid.ID]*entry)
+	c.size.Store(0)
 	c.mu.Unlock()
 
 	var first error
@@ -498,4 +517,31 @@ func (c *Cache) Close() error {
 		}
 	}
 	return first
+}
+
+// timedLog and timedIndex time each Sync for Options.SyncObserver. The actor
+// calls Sync only where its policy fsyncs, so what they report is exactly
+// the fsyncs a write waited on, and nothing under SyncNever.
+type timedLog struct {
+	threadlog.LogWriter
+	observe func(string, time.Duration)
+}
+
+func (t timedLog) Sync() error {
+	start := time.Now()
+	err := t.LogWriter.Sync()
+	t.observe("log", time.Since(start))
+	return err
+}
+
+type timedIndex struct {
+	threadlog.IndexWriter
+	observe func(string, time.Duration)
+}
+
+func (t timedIndex) Sync() error {
+	start := time.Now()
+	err := t.IndexWriter.Sync()
+	t.observe("index", time.Since(start))
+	return err
 }

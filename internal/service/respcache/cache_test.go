@@ -209,7 +209,8 @@ func TestNoInvalidation(t *testing.T) {
 		t.Fatal(err)
 	}
 	slices.Sort(exported)
-	want := []string{"Enabled", "Get", "HitRatio", "New", "NewMB", "Put", "Stats"}
+	// Counters only reads (TKT-01M29CEE7S).
+	want := []string{"Counters", "Enabled", "Get", "HitRatio", "New", "NewMB", "Put", "Stats"}
 	if !slices.Equal(exported, want) {
 		t.Fatalf("respcache exports %v; want exactly %v. A method that forgets entries is invalidation, "+
 			"which TKT-01M29CCBY0 rules out: put what changed into the key instead", exported, want)

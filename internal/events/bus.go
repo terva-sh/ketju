@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 )
@@ -68,6 +69,11 @@ type Bus struct {
 	subs    []*sub
 	started bool
 	closed  bool
+
+	// running is subs as Start froze it, so Stats reads it without mu once
+	// the bus is running: a metrics scrape then takes no lock a Publish
+	// takes (TKT-01M29CEE7S). The set never changes after Start.
+	running atomic.Pointer[[]*sub]
 
 	wg sync.WaitGroup
 }
@@ -174,6 +180,7 @@ func (b *Bus) Start(ctx context.Context) error {
 	}
 	b.started = true
 	subs := b.subs
+	b.running.Store(&subs)
 	b.mu.Unlock()
 
 	for _, s := range subs {
@@ -326,12 +333,19 @@ type Stat struct {
 	LastError string
 }
 
-// Stats reports every subscriber's standing, in registration order.
+// Stats reports every subscriber's standing, in registration order. Once
+// the bus has started it takes no lock.
 func (b *Bus) Stats() []Stat {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-	out := make([]Stat, len(b.subs))
-	for i, s := range b.subs {
+	var subs []*sub
+	if p := b.running.Load(); p != nil {
+		subs = *p
+	} else {
+		b.mu.RLock()
+		subs = slices.Clone(b.subs)
+		b.mu.RUnlock()
+	}
+	out := make([]Stat, len(subs))
+	for i, s := range subs {
 		st := Stat{
 			Name:      s.s.Name(),
 			Queued:    len(s.ch),

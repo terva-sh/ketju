@@ -28,6 +28,7 @@ const readBeforeDB = "Read before the database opens, so it cannot be kept in th
 
 var sectionReasons = map[string]string{
 	"listen":          readBeforeDB + " The server binds it at startup.",
+	"metrics_listen":  readBeforeDB + " The metrics listener binds it at startup, and where it can be reached from is the only guard on the metrics.",
 	"data_dir":        readBeforeDB + " It says where the database is.",
 	"site_url":        readBeforeDB + " Sign-in redirects are built from it.",
 	"cookie_key_file": readBeforeDB + " It seals sign-ins in progress, and holds a secret.",

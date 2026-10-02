@@ -129,6 +129,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 			w.quarantined = map[threadid.ID]bool{}
 		}
 		w.quarantined[id] = true
+		w.quarantinedN.Store(int64(len(w.quarantined)))
 		w.drop(id)
 		w.mu.Unlock()
 		w.logCorrupt(id, logLength, at)
@@ -215,6 +216,7 @@ func (w *Writer) CatchUp(ctx context.Context, reopen Recover) (Report, error) {
 	// made it.
 	w.mu.Lock()
 	w.quarantined = corrupt
+	w.quarantinedN.Store(int64(len(w.quarantined)))
 	w.last = &rep
 	w.mu.Unlock()
 
@@ -241,6 +243,7 @@ func (w *Writer) quarantine(id threadid.ID, logLength, at int64) {
 		w.quarantined = map[threadid.ID]bool{}
 	}
 	w.quarantined[id] = true
+	w.quarantinedN.Store(int64(len(w.quarantined)))
 	w.drop(id)
 	w.mu.Unlock()
 	w.logCorrupt(id, logLength, at)
@@ -272,12 +275,11 @@ func (w *Writer) QuarantinedIDs() []threadid.ID {
 }
 
 // QuarantinedCount is how many threads are quarantined, for the health
-// check. Only the count leaves the package: which threads they are is for the
-// log and `ketju fsck`, not for an unauthenticated endpoint.
+// check and the metrics endpoint. Only the count leaves the package: which
+// threads they are is for the log and `ketju fsck`, not for an
+// unauthenticated endpoint. It takes no lock.
 func (w *Writer) QuarantinedCount() int {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	return len(w.quarantined)
+	return int(w.quarantinedN.Load())
 }
 
 // LastCatchUp is the report of the last catch-up that finished, for the

@@ -18,7 +18,14 @@ import (
 // an operator with a server that will not start, not a developer with the
 // source open.
 func validate(c *Config, p *problemList) {
-	validateListen(c.Listen, p)
+	validateListen("listen", c.Listen, p)
+	if c.MetricsListen != "" {
+		validateListen("metrics_listen", c.MetricsListen, p)
+		if c.MetricsListen == c.Listen {
+			p.addf("metrics_listen", "%q is listen's address too; metrics are served on a listener of their own, "+
+				"never beside the forum", c.MetricsListen)
+		}
+	}
 	validateDataDir(c.DataDir, p)
 	validateStorage(c.Storage, p)
 	validateLog(c.Log, p)
@@ -67,24 +74,24 @@ const (
 	maxSSEPerUser     = 1000
 )
 
-func validateListen(addr string, p *problemList) {
+func validateListen(key, addr string, p *problemList) {
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		p.addf("listen", "%q is not host:port (a bare port needs a colon, as in \":8080\")", addr)
+		p.addf(key, "%q is not host:port (a bare port needs a colon, as in \":8080\")", addr)
 		return
 	}
 	n, err := strconv.Atoi(port)
 	if err != nil {
 		// A named service is legal for net.Listen but resolves differently on
 		// every machine, which is not a thing to discover in production.
-		p.addf("listen", "port %q is not a number", port)
+		p.addf(key, "port %q is not a number", port)
 		return
 	}
 	if n < 1 || n > 65535 {
-		p.addf("listen", "port %d is outside 1-65535", n)
+		p.addf(key, "port %d is outside 1-65535", n)
 	}
 	if host != "" && net.ParseIP(host) == nil && !isHostname(host) {
-		p.addf("listen", "%q is not an IP address or a hostname", host)
+		p.addf(key, "%q is not an IP address or a hostname", host)
 	}
 }
 

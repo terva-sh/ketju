@@ -29,6 +29,7 @@ import (
 	"github.com/terva-sh/ketju/internal/jobs"
 	"github.com/terva-sh/ketju/internal/lock"
 	"github.com/terva-sh/ketju/internal/logging"
+	"github.com/terva-sh/ketju/internal/metrics/collect"
 	"github.com/terva-sh/ketju/internal/perm"
 	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/service/account"
@@ -99,6 +100,14 @@ type serveOpts struct {
 	// ready is called with the bound address once the listener is open,
 	// which is after catch-up has finished.
 	ready func(addr string)
+
+	// metricsReady is called with the metrics listener's bound address,
+	// before ready, when metrics_listen is set.
+	metricsReady func(addr string)
+
+	// metrics is handed the metrics set once its sources are registered,
+	// so a test can scrape it directly.
+	metrics func(*collect.Set)
 
 	// wrap wraps the root handler, so a test can mount a handler of its own
 	// under the real middleware.
@@ -311,8 +320,13 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	}
 
 	step("stores")
+	// The metrics are collected whether or not metrics_listen serves them:
+	// an atomic add per request and per fsync is cheaper than a second
+	// code path (TKT-01M29CEE7S).
+	ms := collect.New()
 	cache, err := threadcache.New(cfg.DataDir, threadcache.Options{
 		Bound: cfg.Storage.OpenThreads, Sync: cfg.SyncPolicy(), Archived: archived(d), Logger: log,
+		SyncObserver: ms.ObserveSync,
 	})
 	if err != nil {
 		return fail("opening the thread store", err)
@@ -653,6 +667,13 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 			"waited", busDrain)
 	}
 
+	ms.Register(collect.Sources{Responses: threadSvc.Responses, Render: threadSvc.Render, Threads: cache, Hub: hub,
+		Bus: bus, Quarantined: proj.QuarantinedCount,
+		Lag: &collect.ProjectionLag{DB: d, Root: cfg.DataDir, Log: log.Warn}})
+	if o.metrics != nil {
+		o.metrics(ms)
+	}
+
 	agentCreds := &agentcred.Store{DB: d}
 	var root http.Handler = web.New(web.Groups{
 		API: api.New(api.Deps{Threads: threadSvc, Users: userSvc, Forums: forumSvc, Forms: formSvc,
@@ -683,10 +704,45 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		SiteURL: cfg.SiteURL,
 		// A bearer credential decides a request that carries one, and every
 		// other request goes to the session middleware (TKT-01M29P9RSW).
-		Session: agentcred.Middleware(agentCreds, session.Middleware(sessions, log), log),
+		Session:  agentcred.Middleware(agentCreds, session.Middleware(sessions, log), log),
+		Requests: ms.Requests,
 	})
 	if o.wrap != nil {
 		root = o.wrap(root)
+	}
+
+	// The metrics listener (docs/02 "Observability"): /metrics and nothing
+	// else, unauthenticated, on an address of its own, and only when one is
+	// configured. It opens before the main listener so a failure to bind
+	// stops the start before anyone is served, and it closes first, before
+	// any store a scrape reads. A failure once it is serving is logged and
+	// the forum goes on: losing metrics is not a reason to stop serving.
+	if cfg.MetricsListen != "" {
+		step("metrics")
+		mln, err := net.Listen("tcp", cfg.MetricsListen)
+		if err != nil {
+			return fail("listening for metrics on "+cfg.MetricsListen, err)
+		}
+		msrv := &http.Server{Handler: ms.Registry.Handler(), ReadHeaderTimeout: 10 * time.Second,
+			ErrorLog: slog.NewLogLogger(log.Handler(), slog.LevelWarn)}
+		go func() {
+			if err := msrv.Serve(mln); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				log.Error("the metrics listener failed; the forum is still served", "err", err)
+			}
+		}()
+		closers = append(closers, func() error {
+			step("stop metrics")
+			sctx, cancel := context.WithTimeout(context.Background(), busDrain)
+			defer cancel()
+			if err := msrv.Shutdown(sctx); err != nil {
+				return errors.Join(fmt.Errorf("serve: stopping the metrics listener: %w", err), msrv.Close())
+			}
+			return nil
+		})
+		log.Info("serving metrics", "metrics_listen", mln.Addr().String())
+		if o.metricsReady != nil {
+			o.metricsReady(mln.Addr().String())
+		}
 	}
 
 	ln, err := net.Listen("tcp", cfg.Listen)

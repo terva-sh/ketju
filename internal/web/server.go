@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/terva-sh/ketju/internal/logging"
+	"github.com/terva-sh/ketju/internal/metrics"
 	"github.com/terva-sh/ketju/internal/problem"
 )
 
@@ -106,6 +107,11 @@ type Options struct {
 	Session   func(http.Handler) http.Handler
 	RateLimit func(http.Handler) http.Handler
 	CSRF      func(http.Handler) http.Handler
+
+	// Requests, when set, receives every request's latency, labelled by
+	// the route pattern that matched, the method and the status class
+	// (TKT-01M29CEE7S). Nil records nothing.
+	Requests *metrics.HistogramVec
 }
 
 // New returns the server's root handler: the route table wrapped in the
@@ -128,6 +134,14 @@ func New(g Groups, opts Options) http.Handler {
 	// gets the shell like any other. So is /manifest.webmanifest/anything.
 	mux.Handle(HealthPath, group(g.Health))
 	mux.Handle(ManifestPath, group(g.Manifest))
+
+	// The main listener never serves metrics, so a scraper pointed at it,
+	// or at the proxy in front of it, learns nothing; metrics_listen is the
+	// only place they are (docs/02 "Observability"). Registered so the path
+	// is a 404 rather than an application route that gets the shell.
+	mux.Handle(MetricsPath, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		problem.Write(w, r, problem.CodeNotFound)
+	}))
 
 	// The bare "/api" and "/api/v1", registered exactly so that ServeMux does
 	// not answer them with its implicit redirect to the subtree.
@@ -164,7 +178,7 @@ func New(g Groups, opts Options) http.Handler {
 		group(g.SPA).ServeHTTP(w, r)
 	}))
 
-	return chain(mux, log, opts)
+	return chain(routed(mux), log, opts)
 }
 
 // isAPIPath reports whether a path belongs to the API, including the bare
@@ -184,7 +198,14 @@ func isAPIPath(p string) bool {
 // because the catalogue's titles are fixed text: the path already says which
 // group was asked for, so interpolating it bought nothing and would have been
 // the one title in the catalogue assembled at a call site.
+//
+// A group that is a ServeMux of its own reports the pattern it matched to the
+// latency histogram, which then labels by /api/v1/threads/{id} rather than
+// the /api/v1/ subtree that routed to it.
 func group(h http.Handler) http.Handler {
+	if m, ok := h.(*http.ServeMux); ok {
+		return routed(m)
+	}
 	if h != nil {
 		return h
 	}
@@ -202,6 +223,9 @@ func group(h http.Handler) http.Handler {
 //     including one that panics or is refused by the rate limiter before any
 //     handler sees it. Anything inside a middleware that rejects requests is a
 //     middleware whose rejections are invisible.
+//
+//     Request latency (TKT-01M29CEE7S) sits between 1 and 2, for the same
+//     reason: a panic must be a 500 by the time its latency is recorded.
 //
 //  2. Panic recovery, immediately inside the log. A panic must become a 500
 //     *before* the logger observes the status, or every crash is logged as the
@@ -266,10 +290,11 @@ func chain(h http.Handler, log *slog.Logger, opts Options) http.Handler {
 	h = wrap(opts.Session, h)         // 6
 	h = rateLimit(h)                  // 5
 	h = bypass(HealthPath, router, h)
-	h = limitBody(opts.Limits)(h)  // 4
-	h = securityHeaders(h)         // 3
-	h = recoverPanics(log)(h)      // 2
-	h = logging.Middleware(log)(h) // 1 outermost
+	h = limitBody(opts.Limits)(h)        // 4
+	h = securityHeaders(h)               // 3
+	h = recoverPanics(log)(h)            // 2
+	h = requestMetrics(opts.Requests)(h) // between 1 and 2
+	h = logging.Middleware(log)(h)       // 1 outermost
 	return h
 }
 

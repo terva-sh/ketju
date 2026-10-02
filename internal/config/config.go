@@ -70,6 +70,13 @@ type Config struct {
 	// Listen is the address the HTTP server binds, host:port.
 	Listen string `toml:"listen"`
 
+	// MetricsListen is the address a second listener binds to serve
+	// /metrics and nothing else, unauthenticated, host:port. Empty, the
+	// default, serves no metrics. Where it is reachable from is the only
+	// guard, so it is usually a loopback or private address (docs/02
+	// "Observability", decided by the maintainer on 2026-10-02).
+	MetricsListen string `toml:"metrics_listen"`
+
 	// DataDir is the directory holding threads/, blobs/, db/ and config.toml.
 	// Required: there is no default that is right on two machines. A relative
 	// path is resolved against the config file's directory.

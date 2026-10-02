@@ -47,6 +47,7 @@ type Override struct {
 // reviewer sees it.
 var overrides = []Override{
 	{Env: "KETJU_LISTEN", Key: "listen", apply: func(c *Config, v string, _ *problemList) { c.Listen = v }},
+	{Env: "KETJU_METRICS_LISTEN", Key: "metrics_listen", apply: func(c *Config, v string, _ *problemList) { c.MetricsListen = v }},
 	{Env: "KETJU_DATA_DIR", Key: "data_dir", apply: func(c *Config, v string, _ *problemList) { c.DataDir = v }},
 	{Env: "KETJU_COOKIE_KEY_FILE", Key: "cookie_key_file", apply: func(c *Config, v string, _ *problemList) { c.CookieKeyFile = v }},
 	{Env: "KETJU_SITE_URL", Key: "site_url", apply: func(c *Config, v string, _ *problemList) { c.SiteURL = v }},

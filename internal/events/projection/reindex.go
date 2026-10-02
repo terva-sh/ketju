@@ -141,6 +141,7 @@ func (w *Writer) Reindex(ctx context.Context, progress func(ReindexProgress)) (R
 	w.mu.Lock()
 	clear(w.behind)
 	w.quarantined = nil
+	w.quarantinedN.Store(0)
 	w.mu.Unlock()
 
 	p := ReindexProgress{Total: len(ids), TotalBytes: total}

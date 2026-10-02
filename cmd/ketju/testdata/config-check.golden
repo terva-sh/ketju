@@ -4,6 +4,7 @@
 # key = value  # where the value came from
 
 listen = "0.0.0.0:9000"                                          # file
+metrics_listen = ""                                              # default
 data_dir = "/srv/ketju"                                          # file
 site_url = "https://forum.example.org"                           # env-file KETJU_SITE_URL_FILE
 cookie_key_file = ""                                             # default
@@ -36,6 +37,7 @@ limits.sse_anonymous = 100                                       # default
 # Each but KETJU_CONFIG can instead be given as NAME_FILE, naming a file that holds the value.
 #   KETJU_CONFIG                     (the config file's path)
 #   KETJU_LISTEN                     listen
+#   KETJU_METRICS_LISTEN             metrics_listen
 #   KETJU_DATA_DIR                   data_dir
 #   KETJU_COOKIE_KEY_FILE            cookie_key_file
 # * KETJU_SITE_URL                   site_url

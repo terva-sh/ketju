@@ -35,6 +35,7 @@ import (
 	"log/slog"
 	"os"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/events"
@@ -97,6 +98,11 @@ type Writer struct {
 	quarantined map[threadid.ID]bool
 	last        *Report
 	reopen      Recover
+
+	// quarantinedN follows len(quarantined), written with mu held, so the
+	// metrics scrape and the health check count it without mu
+	// (TKT-01M29CEE7S).
+	quarantinedN atomic.Int64
 }
 
 // logFile is what the writer needs of an open log.

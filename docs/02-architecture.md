@@ -300,7 +300,16 @@ groups").
   Alternatives: a bearer token read from a file lost because it adds a new
   kind of credential; supporting both lost for the same reason; an admin
   account's credential lost because the scraper would then hold full admin
-  power.
+  power. As built (TKT-01M29CEE7S): `KETJU_METRICS_LISTEN` overrides the key;
+  a `metrics_listen` equal to `listen` is refused at startup; the main
+  listener answers `/metrics` with a 404 problem, never the shell; the
+  metrics listener answers 404 to every other path and 405 to a method other
+  than GET or HEAD, with `Cache-Control: no-store`. It binds before the main
+  listener, so an address in use stops the start, and it stops first at
+  shutdown, before any store a scrape reads. If it fails while serving, the
+  failure is logged and the forum goes on serving. The metrics are collected
+  whether or not the key is set, at the cost of an atomic add per request and
+  per fsync. "The metrics" below lists them.
 - `/healthz` checks the DB opens and the data directory is writable.
   (TKT-01M29CCBZ8.) It is unauthenticated, answers GET and HEAD only, and
   says only this:
@@ -324,6 +333,61 @@ groups").
   left running past that wait cannot touch the next owner's, and `serve`
   removes leftover probe files under the lock before it starts. The route skips rate limiting, session resolution and CSRF, so
   a poll carrying a session cookie still costs one statement.
+
+### The metrics
+
+`internal/metrics/collect` registers these, and
+`TestMetricNamesFollowConventions` fails on a name that is not in this table
+or breaks the rules: `ketju_` and lowercase, `_total` on a counter and only
+on a counter, and the unit as a suffix (TKT-01M29CEE7S). A hit ratio is
+exported as hit and miss counters, because a ratio cannot be summed or
+rated over a window; compute it in the query.
+
+| Metric | Type | Unit | Labels | Meaning |
+|--------|------|------|--------|---------|
+| `ketju_http_request_duration_seconds` | histogram | seconds | `route`, `method`, `code` | Time to answer a request. Live-update streams are not included. |
+| `ketju_threadlog_fsync_duration_seconds` | histogram | seconds | `file` | Time an fsync of a thread's `log` or `index` took. |
+| `ketju_projection_lag_bytes` | gauge | bytes | — | Log bytes the projection has not applied, summed over threads. |
+| `ketju_threads_quarantined` | gauge | — | — | Threads whose log is shorter than their projection. |
+| `ketju_cache_hits_total` | counter | — | `cache` | Lookups the `response` or `render` cache answered. |
+| `ketju_cache_misses_total` | counter | — | `cache` | Lookups it could not answer. A stale response entry is a miss. |
+| `ketju_cache_evictions_total` | counter | — | `cache` | Entries dropped to stay within the bound. |
+| `ketju_cache_stale_total` | counter | — | — | Response cache entries found with moved render dependencies. |
+| `ketju_thread_cache_opens_total` | counter | — | — | Threads opened from disk. |
+| `ketju_thread_cache_evictions_total` | counter | — | — | Threads closed to stay within `storage.open_threads`. |
+| `ketju_thread_cache_open_threads` | gauge | — | — | Threads open now. |
+| `ketju_events_queued` | gauge | — | `subscriber` | Events waiting in a bus subscriber's queue. |
+| `ketju_events_dropped_total` | counter | — | `subscriber` | Events a full queue dropped; catch-up recovers them. |
+| `ketju_sse_streams` | gauge | — | `kind` | Live-update streams open now, `member` or `anonymous`. |
+| `ketju_sse_refused_total` | counter | — | — | Streams a connection limit refused. |
+| `ketju_sse_overflowed_total` | counter | — | — | Streams closed because their queue filled. |
+| `ketju_sse_lagged_total` | counter | — | — | Times the projection missed a live event's wait. |
+| `ketju_goroutines` | gauge | — | — | Goroutines running now. |
+| `ketju_heap_bytes` | gauge | bytes | — | Heap held by live and unswept objects. |
+
+The labels take values from fixed sets, so no client can grow the series
+and no label names content:
+- `route` is the pattern the router matched, such as
+  `/api/v1/threads/{id}`, never the path. A request answered before any
+  router matched it, such as a rate-limit refusal, is `unmatched`. A path no
+  specific route matches carries its catch-all's pattern, `/` or `/api/v1/`.
+- `method` is `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` or `OPTIONS`,
+  and any other method is `other` (Terva review 1943).
+- `code` is the status class, `1xx` to `5xx`.
+- `subscriber` is a bus subscriber's name: `projection`, `sse`, `search` or
+  `notifications`.
+
+No label carries a thread id, a handle, a forum slug, a request path or a
+query, which is the rule this section holds log lines to. Per-thread and
+per-forum metrics are left out on purpose, because a label of either would
+name content.
+
+A scrape takes no lock a request takes. The cache, thread cache, hub and
+bus counters are atomics. Projection lag reads every projected length in
+one statement on the read pool and every log's size from the `threads/`
+directory walk, and a result is reused for 10 s, so a scraper polling fast
+cannot keep the walk running. Under `storage.fsync = "never"` there is no
+fsync to time, and the fsync histogram stays empty.
 
 ## Background work
 
