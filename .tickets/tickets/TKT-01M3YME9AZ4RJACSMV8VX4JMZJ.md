@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YME9AZ4RJACSMV8VX4JMZJ
 title: Record quotes as backlinks, as docs/06 promises
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-9az
+  branch: run/9az-quote-backlinks
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae0919645aa3f5e55
+  commit: 56636cacfc618dc31d9dca99b287214e73c20972
+  session: null
+  claimed_at: 2026-10-02T22:29:35Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T17:29:03Z
+updated_at: 2026-10-02T22:29:35Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-correctness
+  id: agent:claude-code/phase4-run-9az
   name: ""
 extensions: {}
 ---
