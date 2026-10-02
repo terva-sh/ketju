@@ -207,6 +207,17 @@ func decodePost(frame []byte, ordinal uint32, e IndexEntry) (Post, error) {
 	if err != nil {
 		return Post{}, &ReadError{Ordinal: ordinal, Offset: e.Offset, Err: err}
 	}
+	// An entry can be plausible and wrong: a filesystem that shows stale
+	// blocks where a lost entry was can leave another post's offset there.
+	// A Post or an Edit carries its post's ordinal, so the frame says whose
+	// it is, and a frame for another post is never served as this one
+	// (TKT-01M3VRFRFW).
+	if h.Ordinal != ordinal {
+		return Post{}, &ReadError{
+			Ordinal: ordinal, Offset: e.Offset,
+			Err: fmt.Errorf("%w: index entry %d points at the frame of ordinal %d", ErrMalformed, ordinal, h.Ordinal),
+		}
+	}
 
 	p := Post{
 		Ordinal: ordinal, Revision: e.Revision, Author: e.Author,

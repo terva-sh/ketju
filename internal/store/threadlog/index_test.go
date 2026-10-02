@@ -364,7 +364,12 @@ func TestIndexEntryToleratesNonZeroReserved(t *testing.T) {
 func TestParseIndexCatchesATruncatedFile(t *testing.T) {
 	full := NewIndex(
 		IndexHeader{ThreadID: 1, LogLength: 500, PostCount: 3},
-		[]IndexEntry{{Offset: 64}, {Offset: 128}, {Offset: 192}},
+		// Possible entries, so the intact file parses (TKT-01M3VRFRFW).
+		[]IndexEntry{
+			{Offset: 64, FrameLength: 64, Revision: 1},
+			{Offset: 128, FrameLength: 64, Revision: 1},
+			{Offset: 192, FrameLength: 64, Revision: 1},
+		},
 	).AppendTo(nil)
 
 	// Lose the last entry, as a torn write would.

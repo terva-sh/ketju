@@ -329,9 +329,43 @@ func ParseIndex(b []byte) (*Index, error) {
 		if err != nil {
 			return nil, err
 		}
+		if err := e.possibleIn(h.LogLength); err != nil {
+			return nil, fmt.Errorf("entry %d: %w", i+1, err)
+		}
 		entries[i] = e
 	}
 	return &Index{Header: h, entries: entries}, nil
+}
+
+// possibleIn reports, as an [ErrMalformed] naming the field, an entry that
+// cannot describe a frame in a log of logLength bytes (TKT-01M3VRFRFW).
+//
+// The actor writes a new post's entry and then the header, and fsyncs
+// neither for a batch of new posts. A power cut can keep the file's new
+// length and the header and lose the entry's bytes, which then read as
+// zeros, and the header still covers the log. Every entry ketju writes
+// names a frame wholly inside the log its header covers, so this costs a
+// few comparisons per entry and no log read, and an index that fails it is
+// rebuilt from the log rather than trusted. A zeroed entry fails on its
+// revision and its offset.
+//
+// The end of the frame is checked without adding: an offset near the
+// largest uint64 would wrap the sum (Terva review 1946).
+func (e IndexEntry) possibleIn(logLength uint64) error {
+	switch {
+	case e.Revision == 0:
+		return fmt.Errorf("%w: revision 0, which no record has", ErrMalformed)
+	case e.Offset < FileHeaderSize:
+		return fmt.Errorf("%w: offset %d is inside the log's %d-byte file header",
+			ErrMalformed, e.Offset, FileHeaderSize)
+	case e.FrameLength < FrameFixedSize || e.FrameLength > MaxFrameSize:
+		return fmt.Errorf("%w: frame length %d is outside [%d, %d]",
+			ErrMalformed, e.FrameLength, FrameFixedSize, MaxFrameSize)
+	case e.Offset > logLength || uint64(e.FrameLength) > logLength-e.Offset:
+		return fmt.Errorf("%w: a frame of %d bytes at offset %d ends past the %d bytes of log the index covers",
+			ErrMalformed, e.FrameLength, e.Offset, logLength)
+	}
+	return nil
 }
 
 // AppendTo encodes the whole index, header first.

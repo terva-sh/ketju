@@ -737,9 +737,15 @@ is worse. The 24 extra bytes cost 1.91 MB of memory for that thread against
 The chain and since lenses make the same trade with reply_to and created_at.
 
 Because the header records the log length the index covers, opening a thread
-is: read both headers, and if `idx.log_length == stat(log).size` the index is
-trusted; otherwise replay records from `idx.log_length` to the end and repair.
-A missing or corrupt index is rebuilt by a full replay. Rebuilding a 100 MB
+is: read both headers, and if `idx.log_length == stat(log).size` and every
+entry is possible, the index is trusted; otherwise replay records from
+`idx.log_length` to the end and repair. An entry is possible when its
+revision is not 0, its offset is past the log's file header, its frame length
+is within a frame's smallest and largest sizes, and its frame ends inside the
+`log_length` the header covers. That check is a few comparisons per entry
+over bytes already in memory, and it reads no log. An index holding an
+impossible entry is corrupt (TKT-01M3VRFRFW). A missing or corrupt index is
+rebuilt by a full replay. Rebuilding a 100 MB
 log is a sequential read and takes well under a second on ordinary hardware.
 The repair is written back before the thread actor starts: the whole index,
 to a file beside the old one, fsynced and renamed over it (TKT-01M3VHSYFR). A
@@ -786,7 +792,14 @@ Steps for a `Post`:
      fsyncs the index after its entry writes and before the header, unless
      the policy is `never`, so a power cut cannot keep the header and lose
      the entry. A batch of new posts adds no fsync; a new entry lost that way
-     hides nothing (TKT-01M3VRFRFW);
+     hides nothing (TKT-01M3VRFRFW). A power cut can still keep the file's
+     new length and the header and lose the entry's bytes, which then read as
+     zeros. The open path refuses an index holding an entry that cannot
+     describe a frame in the log it covers (see "Index file format"), so a
+     lost new entry costs one full replay and a write-back, and is never read
+     as offset 0. A stale entry that is plausible but wrong is caught when the
+     post is read: the reader checks that the frame's ordinal is the one it
+     asked for, and refuses another post's frame as a read error;
    - once an entry write, an index fsync or the in-memory apply fails, the
      actor writes no header for the rest of its life, and the next open
      replays.
