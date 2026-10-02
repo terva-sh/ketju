@@ -8,7 +8,19 @@ import { isPhone } from '../state/layout';
 import { resetReadTracker } from '../state/readTracker';
 import { viewer } from '../state/viewer';
 import { renderAt, route, settle, unmount } from '../testing';
-import { helpOpen, hint, ignored, nextUnread, shortcuts, step } from './shortcuts';
+import {
+  deviceShortcuts,
+  helpOpen,
+  hint,
+  ignored,
+  nextUnread,
+  readDeviceShortcuts,
+  setDeviceShortcuts,
+  shortcuts,
+  shortcutsKey,
+  shortcutsOn,
+  step,
+} from './shortcuts';
 
 // The desktop keyboard shortcuts (TKT-01M29CGBX4; docs/06 "Paged, not
 // infinite"). The rules are tested as tables; the keys are dispatched on the
@@ -95,6 +107,7 @@ afterEach(async () => {
   await unmount();
   viewer.value = saved;
   isPhone.value = false;
+  setDeviceShortcuts(true);
   Element.prototype.getBoundingClientRect = rect;
   vi.useRealTimers();
   vi.unstubAllGlobals();
@@ -592,5 +605,140 @@ describe('on the phone layout', () => {
     // The controls the shortcuts stand in for are all still here.
     expect(root.querySelector('.goto-post')).not.toBeNull();
     expect(root.querySelector('.next-unread')).not.toBeNull();
+  });
+});
+
+// TKT-01M3V9DWTN (WCAG 2.1.4): the shortcuts can be turned off, by a
+// member on /settings and by a signed-out reader from the list, and then no
+// character key acts.
+describe('with the shortcuts off', () => {
+  const anon = () => (viewer.value = { ...viewer.value, user: null } as Me);
+  const off = () => (viewer.value = { ...viewer.value, settings: { ...viewer.value.settings, shortcuts: false } });
+
+  it.each([
+    ['a member, by their account', off],
+    [
+      'a signed-out reader, by this browser',
+      () => {
+        anon();
+        setDeviceShortcuts(false);
+      },
+    ],
+  ])('no character key acts for %s', async (_who, turnOff) => {
+    turnOff();
+    expect(shortcutsOn.value).toBe(false);
+    const urls = serve(2, [list([row(id, 0), row('bbb', 2)])]);
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    root.querySelector<HTMLElement>('#post-2')!.focus();
+    const asked = urls.length;
+    for (const k of ['j', 'k', 'g', '1', '2', 'Enter', 'u', 'n', '?']) {
+      const ev = new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true });
+      await act(async () => void document.activeElement!.dispatchEvent(ev));
+      expect(ev.defaultPrevented, k).toBe(false);
+    }
+    await settle(root);
+    expect(focused()).toBe('post-2');
+    expect(helpOpen.value).toBe(false);
+    expect(root.querySelector('[role=dialog]')).toBeNull();
+    expect(hint.value).toBe('');
+    expect(urls.length).toBe(asked);
+    expect(location.pathname + location.search).toBe(`/t/${id}/${slug}?page=1`);
+  });
+
+  it('ends a g in progress when they are turned off', async () => {
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'g', '1');
+    expect(hint.value).toBe('Go to #1');
+    off();
+    await type(root, '2', 'Enter');
+    expect(hint.value).toBe('');
+    expect(location.pathname + location.search).toBe(`/t/${id}/${slug}?page=1`);
+  });
+
+  it("a member's account choice wins over this browser's", () => {
+    setDeviceShortcuts(false);
+    expect(shortcutsOn.value).toBe(true);
+    setDeviceShortcuts(true);
+    off();
+    expect(shortcutsOn.value).toBe(false);
+    anon();
+    expect(shortcutsOn.value).toBe(true);
+  });
+
+  it("keeps a signed-out reader's choice in this browser, on unless it says off", () => {
+    setDeviceShortcuts(false);
+    expect(localStorage.getItem(shortcutsKey)).toBe('off');
+    expect(readDeviceShortcuts()).toBe(false);
+    setDeviceShortcuts(true);
+    expect(localStorage.getItem(shortcutsKey)).toBeNull();
+    expect(readDeviceShortcuts()).toBe(true);
+    expect(readDeviceShortcuts({ getItem: () => 'on' })).toBe(true);
+    expect(readDeviceShortcuts({ getItem: () => 'nonsense' })).toBe(true);
+    const denied = {
+      getItem: (): string | null => {
+        throw new Error('denied');
+      },
+    };
+    expect(readDeviceShortcuts(denied)).toBe(true);
+    expect(readDeviceShortcuts(undefined)).toBe(true);
+    // Storage that refuses the write still turns them off for this page.
+    const full = {
+      setItem: () => {
+        throw new Error('full');
+      },
+      removeItem: () => {},
+    };
+    setDeviceShortcuts(false, full);
+    expect(deviceShortcuts.value).toBe(false);
+  });
+});
+
+describe('the list, where they are turned off and on', () => {
+  async function openList(root: HTMLElement) {
+    const button = root.querySelector<HTMLButtonElement>('.shortcuts-help')!;
+    button.focus();
+    await act(async () => button.click());
+    return root.querySelector<HTMLElement>('[role=dialog]')!;
+  }
+  const state = (dialog: HTMLElement) => dialog.querySelector('[role=status]')!.textContent;
+
+  it('gives a signed-out reader a button whose choice this browser keeps', async () => {
+    viewer.value = { ...viewer.value, user: null } as Me;
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    const dialog = await openList(root);
+    expect(state(dialog)).toBe('');
+    expect(dialog.querySelector('.help-switch a')).toBeNull();
+    const toggle = dialog.querySelector<HTMLButtonElement>('.help-switch button')!;
+    expect(toggle.textContent).toBe('Turn shortcuts off');
+    toggle.focus();
+    await act(async () => toggle.click());
+    expect(state(dialog)).toBe('Single-key shortcuts are off.');
+    expect(toggle.textContent).toBe('Turn shortcuts on');
+    expect(localStorage.getItem(shortcutsKey)).toBe('off');
+    // Focus stays on the button, inside the list.
+    expect(document.activeElement).toBe(toggle);
+    await act(async () => toggle.click());
+    expect(state(dialog)).toBe('');
+    expect(localStorage.getItem(shortcutsKey)).toBeNull();
+  });
+
+  it('gives a member a link to Settings, and no button', async () => {
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    let dialog = await openList(root);
+    expect(state(dialog)).toBe('');
+    expect(dialog.querySelector('.help-switch button')).toBeNull();
+    let link = dialog.querySelector<HTMLAnchorElement>('.help-switch a')!;
+    expect(link.getAttribute('href')).toBe('/settings');
+    expect(link.textContent).toBe('Turn them off in Settings');
+    await act(async () => root.querySelector<HTMLButtonElement>('.help-close')!.click());
+
+    viewer.value = { ...viewer.value, settings: { ...viewer.value.settings, shortcuts: false } };
+    dialog = await openList(root);
+    expect(state(dialog)).toBe('Single-key shortcuts are off.');
+    link = dialog.querySelector<HTMLAnchorElement>('.help-switch a')!;
+    expect(link.textContent).toBe('Change this in Settings');
   });
 });

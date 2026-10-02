@@ -1,7 +1,8 @@
 import { Fragment } from 'preact';
 import { useRef } from 'preact/hooks';
 import { isControl, useModal } from '../components/focus';
-import { helpOpen, shortcuts } from './shortcuts';
+import { viewer } from '../state/viewer';
+import { helpOpen, setDeviceShortcuts, shortcuts, shortcutsOn } from './shortcuts';
 import './keyboard.css';
 
 // HelpOverlay lists the keyboard shortcuts, each with the control that does
@@ -17,6 +18,11 @@ import './keyboard.css';
 //
 // The front page's footer opens it too (TKT-01M3S3ZRYD), with a lead line
 // saying where the keys work, since none of them does anything there but ?.
+//
+// It is also where the shortcuts are turned off and on (WCAG 2.1.4,
+// TKT-01M3V9DWTN). It says when they are off. A signed-out reader gets a
+// button whose choice this browser keeps; a member gets a link to
+// /settings, whose save queue is the one writer of their account.
 export function HelpOverlay({ lead }: { lead?: string }) {
   const root = useRef<HTMLDivElement>(null);
   const close = () => (helpOpen.value = false);
@@ -28,6 +34,7 @@ export function HelpOverlay({ lead }: { lead?: string }) {
       else if (opener instanceof HTMLElement && opener.isConnected && opener.matches('[tabindex="-1"]')) opener.focus({ preventScroll: true });
     };
   });
+  const on = shortcutsOn.value;
   return (
     <div class="help-backdrop" onClick={(e) => e.target === e.currentTarget && close()}>
       <div ref={root} class="help-overlay" role="dialog" aria-modal="true" aria-labelledby="help-title">
@@ -38,6 +45,20 @@ export function HelpOverlay({ lead }: { lead?: string }) {
           </button>
         </div>
         {lead && <p class="help-note">{lead}</p>}
+        <div class="help-switch">
+          <p role="status" data-shortcuts-state={on ? 'on' : 'off'}>
+            {on ? '' : 'Single-key shortcuts are off.'}
+          </p>
+          {viewer.value.user ? (
+            <a href="/settings" onClick={close}>
+              {on ? 'Turn them off in Settings' : 'Change this in Settings'}
+            </a>
+          ) : (
+            <button type="button" onClick={() => setDeviceShortcuts(!on)}>
+              {on ? 'Turn shortcuts off' : 'Turn shortcuts on'}
+            </button>
+          )}
+        </div>
         <table class="help-list">
           <thead>
             <tr>

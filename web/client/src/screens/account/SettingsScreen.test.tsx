@@ -1,6 +1,7 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me, Settings } from '../../api/dto';
+import { shortcutsOn } from '../../keyboard/shortcuts';
 import { storeThreadPage, threadCache } from '../../state/threads';
 import { viewer } from '../../state/viewer';
 import { problemAnswer, renderAt, route, screenOf, settle, stubServer, threadPage, unmount } from '../../testing';
@@ -14,7 +15,7 @@ import memberMe from '../../../../../internal/dto/testdata/golden/me.member.json
 
 // defaults are the server's for an account that never chose (internal/
 // service/users me.go).
-const defaults = (): Settings => ({ timezone: 'UTC', locale: 'en', page_size: 25, theme: 'system' });
+const defaults = (): Settings => ({ timezone: 'UTC', locale: 'en', page_size: 25, theme: 'system', shortcuts: true });
 
 let saved: Me;
 beforeEach(() => {
@@ -94,6 +95,37 @@ describe('the settings form', () => {
     expect(viewer.value.settings.theme).toBe('dark');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
     expect(localStorage.getItem('ketju.theme')).toBe('dark');
+  });
+
+  // TKT-01M3V9DWTN: the single-key shortcuts' switch saves through the
+  // same queue, and the answer turns them off at once.
+  it('turning the shortcuts off sends one PATCH and turns them off', async () => {
+    const s = serve();
+    const root = await renderAt('/settings');
+    const box = field(root, 'shortcuts');
+    expect(box.type).toBe('checkbox');
+    expect(box.checked).toBe(true);
+    expect(box.closest('fieldset')?.querySelector('legend')?.textContent).toBe('Keyboard shortcuts');
+    expect(box.closest('label')?.textContent).toBe('Use single-key shortcuts');
+    await act(async () => box.click());
+    await settle(root);
+    expect(patches(s)).toEqual([{ shortcuts: false }]);
+    expect(viewer.value.settings.shortcuts).toBe(false);
+    expect(shortcutsOn.value).toBe(false);
+    expect(field(root, 'shortcuts').checked).toBe(false);
+    await act(async () => field(root, 'shortcuts').click());
+    await settle(root);
+    expect(patches(s)).toEqual([{ shortcuts: false }, { shortcuts: true }]);
+    expect(shortcutsOn.value).toBe(true);
+  });
+
+  it('shows a refused shortcuts value beside the switch', async () => {
+    serve(defaults(), () => problemAnswer('validation-failed', 422, { errors: [{ field: 'shortcuts', code: 'wrong_type' }] }));
+    const root = await renderAt('/settings');
+    await act(async () => field(root, 'shortcuts').click());
+    await settle(root);
+    expect(root.querySelector('[data-field-error=shortcuts]')?.textContent).toBe('Choose on or off.');
+    expect(viewer.value.settings.shortcuts).toBe(true);
   });
 
   it('shows the value being saved until the answer comes', async () => {

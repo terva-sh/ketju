@@ -248,12 +248,14 @@ export interface UnreadCounts {
 // theme is system, light or dark, and the server always sends it; so does
 // the bootstrap's anonymous fallback. It is typed as a string, as the
 // goldens are, and state/theme.ts reads any value but the three as no
-// choice.
+// choice. shortcuts is whether the single-key shortcuts are on, true
+// until the member turns them off (TKT-01M3V9DWTN).
 export interface Settings {
   timezone: string;
   locale: string;
   page_size: number;
   theme: string;
+  shortcuts: boolean;
 }
 
 export interface Me {

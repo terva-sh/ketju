@@ -44,7 +44,14 @@ let settingsTaken = 0;
 export function setViewerSettings(s: Settings): boolean {
   settingsTaken++;
   const was = viewer.value.settings;
-  if (was.timezone === s.timezone && was.locale === s.locale && was.page_size === s.page_size && was.theme === s.theme) return false;
+  if (
+    was.timezone === s.timezone &&
+    was.locale === s.locale &&
+    was.page_size === s.page_size &&
+    was.theme === s.theme &&
+    was.shortcuts === s.shortcuts
+  )
+    return false;
   setViewer({ ...viewer.value, settings: s });
   return true;
 }

@@ -17,7 +17,7 @@ const defaultZone = 'UTC';
 
 const themeWords: Record<string, string> = { system: 'System', light: 'Light', dark: 'Dark' };
 
-type Key = 'timezone' | 'page_size' | 'theme';
+type Key = 'timezone' | 'page_size' | 'theme' | 'shortcuts';
 
 // adopt makes s the viewer's settings, so PostTime and the theme change at
 // once, and takes the account's theme (state/theme.ts). Thread pages cut at
@@ -75,10 +75,12 @@ const fieldText: Record<Key, string> = {
   timezone: 'This is not a timezone the server knows. Choose one such as Europe/Helsinki.',
   page_size: pageSizeWords,
   theme: 'Choose System, Light or Dark.',
+  shortcuts: 'Choose on or off.',
 };
 
 // SettingsScreen is /settings (TKT-01M29CXK4E): the member's timezone,
-// thread page size and theme, as GET /settings answers. Each field sends
+// thread page size, theme and whether the single-key shortcuts are on
+// (TKT-01M3V9DWTN), as GET /settings answers. Each field sends
 // PATCH /settings with its own key when it changes, and nothing else does;
 // the answer, the settings as stored, becomes the viewer's at once. The
 // form shows from the viewer while GET /settings revalidates it, and a
@@ -97,7 +99,12 @@ export function SettingsScreen() {
   const [errors, setErrors] = useState<Partial<Record<Key, string>>>({});
   // pending is what a field shows in place of the stored value: a page size
   // may be the text typed.
-  const [pending, setPending] = useState<{ timezone?: string; page_size?: number | string; theme?: string }>({});
+  const [pending, setPending] = useState<{
+    timezone?: string;
+    page_size?: number | string;
+    theme?: string;
+    shortcuts?: boolean;
+  }>({});
   const [saved, setSaved] = useState('');
   // Edits are numbered, and last is each field's newest, whether it was
   // sent or refused here: only the answer to that edit settles what the
@@ -116,7 +123,7 @@ export function SettingsScreen() {
 
   // edit shows value in key's field, with why beside it when it is refused
   // here, and answers the edit's number.
-  const edit = (key: Key, value: string | number, why?: string) => {
+  const edit = (key: Key, value: string | number | boolean, why?: string) => {
     const n = ++sent.current;
     last.current[key] = n;
     setPending((p) => ({ ...p, [key]: value }));
@@ -124,7 +131,7 @@ export function SettingsScreen() {
     return n;
   };
 
-  const save = (key: Key, value: string | number) => {
+  const save = (key: Key, value: string | number | boolean) => {
     const n = edit(key, value);
     setSaved('');
     made++;
@@ -185,6 +192,26 @@ export function SettingsScreen() {
               ))}
             </div>
             <FieldError id="theme" error={errors.theme} />
+          </fieldset>
+          <fieldset class="settings-field" aria-describedby="settings-shortcuts-hint settings-shortcuts-error">
+            <legend>Keyboard shortcuts</legend>
+            <div class="settings-choices">
+              <label>
+                <input
+                  id="settings-shortcuts"
+                  type="checkbox"
+                  checked={s.shortcuts}
+                  aria-invalid={!!errors.shortcuts}
+                  onChange={(e) => save('shortcuts', e.currentTarget.checked)}
+                />
+                Use single-key shortcuts
+              </label>
+            </div>
+            <p id="settings-shortcuts-hint" class="settings-hint">
+              On a desktop: j, k, g, u, n and ?. Turn them off if they get in the way of a screen reader or voice
+              control.
+            </p>
+            <FieldError id="shortcuts" error={errors.shortcuts} />
           </fieldset>
           <p class="settings-saved" role="status">
             {saved}

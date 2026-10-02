@@ -53,6 +53,15 @@ describe('the viewer', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
+  // TKT-01M3V9DWTN: a change to shortcuts alone is a change, or the
+  // settings screen's answer would be dropped and the switch would not act.
+  it('reports a change when only shortcuts differs', () => {
+    viewer.value = member;
+    expect(setViewerSettings({ ...member.settings })).toBe(false);
+    expect(setViewerSettings({ ...member.settings, shortcuts: !member.settings.shortcuts })).toBe(true);
+    expect(viewer.value.settings.shortcuts).toBe(!member.settings.shortcuts);
+  });
+
   it('takes the settings of a refresh asked for after a save', async () => {
     viewer.value = member;
     setViewerSettings({ ...member.settings, theme: 'dark' });

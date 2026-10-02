@@ -340,29 +340,85 @@ describe('the footer', () => {
     expect(foot(root)).toBeNull();
   });
 
-  // No key is bound on the index until single-key shortcuts can be turned
-  // off (WCAG 2.1.4, TKT-01M3V9DWTN; Terva review 1887).
-  it('offers the shortcut list above 720 px by its button alone, and a phone shows none', async () => {
+  // ? on the index, and the footer's words, follow the off switch (WCAG
+  // 2.1.4, TKT-01M3V9DWTN; TKT-01M3S3ZRYD criterion 2).
+  const question = () => {
+    // Outside act, as a reader's key is: the listener is the layout
+    // effect's, in place from the frame the footer is drawn in.
+    const key = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
+    document.body.dispatchEvent(key);
+    return key;
+  };
+
+  it('? opens the list on the index when shortcuts are on, above 720 px', async () => {
     const root = await index(memberTree, memberMe);
     const hint = foot(root)!.querySelector<HTMLButtonElement>('.keys-hint')!;
+    expect(hint.textContent).toBe('Press ? for keyboard shortcuts');
+    expect(hint.querySelector('kbd')?.textContent).toBe('?');
+    document.body.focus();
+    await Promise.resolve();
+    const key = question();
+    expect(key.defaultPrevented).toBe(true);
+    await settle(root);
+    const dialog = root.querySelector<HTMLElement>('[role=dialog]')!;
+    expect(dialog.textContent).toContain('Here ? opens this list. The other keys work on a thread page.');
+    await act(async () => dialog.querySelector<HTMLButtonElement>('.help-close')!.click());
+    expect(root.querySelector('[role=dialog]')).toBeNull();
+
+    // The button opens it too, and focus goes back to it.
+    hint.focus();
+    await act(async () => hint.click());
+    expect(root.querySelector('[role=dialog]')).not.toBeNull();
+    await act(async () => root.querySelector<HTMLButtonElement>('.help-close')!.click());
+    expect(document.activeElement).toBe(hint);
+
+    // Typed into a field, ? is the field's.
+    const field = document.createElement('input');
+    document.body.append(field);
+    try {
+      const typed = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
+      field.dispatchEvent(typed);
+      expect(typed.defaultPrevented).toBe(false);
+      expect(helpOpen.value).toBe(false);
+    } finally {
+      field.remove();
+    }
+  });
+
+  it('with them off, ? does nothing and the button reads Keyboard shortcuts', async () => {
+    const me = structuredClone(memberMe) as Me;
+    me.settings.shortcuts = false;
+    const root = await index(memberTree, me);
+    const hint = foot(root)!.querySelector<HTMLButtonElement>('.keys-hint')!;
     expect(hint.textContent).toBe('Keyboard shortcuts');
-    // A pointer's click focuses the button first, as jsdom's click() does not.
+    expect(hint.querySelector('kbd')).toBeNull();
+    document.body.focus();
+    const key = question();
+    expect(key.defaultPrevented).toBe(false);
+    await settle(root);
+    expect(root.querySelector('[role=dialog]')).toBeNull();
+    // The button still opens the list, which says they are off.
     hint.focus();
     await act(async () => hint.click());
     const dialog = root.querySelector<HTMLElement>('[role=dialog]')!;
-    expect(dialog.textContent).toContain('Keyboard shortcuts');
-    expect(dialog.textContent).toContain('These keys work on a thread page, where ? opens this list.');
-    await act(async () => dialog.querySelector<HTMLButtonElement>('.help-close')!.click());
-    expect(root.querySelector('[role=dialog]')).toBeNull();
-    expect(document.activeElement).toBe(hint);
+    expect(dialog.textContent).toContain('These keys work on a thread page.');
+    expect(dialog.querySelector('[role=status]')?.textContent).toBe('Single-key shortcuts are off.');
 
-    document.body.focus();
-    const key = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
-    await act(async () => void document.body.dispatchEvent(key));
-    expect(key.defaultPrevented).toBe(false);
-    expect(root.querySelector('[role=dialog]')).toBeNull();
+    // Turned back on, the same footer binds ? again.
+    await act(async () => void (helpOpen.value = false));
+    await act(async () => void (viewer.value = structuredClone(memberMe) as Me));
+    expect(hint.textContent).toBe('Press ? for keyboard shortcuts');
+    expect(question().defaultPrevented).toBe(true);
+  });
 
+  it('on a phone ? does nothing, and no hint is shown', async () => {
+    const root = await index(memberTree, memberMe);
     await act(async () => void (isPhone.value = true));
     expect(foot(root)!.querySelector('.keys-hint')).toBeNull();
+    const key = question();
+    expect(key.defaultPrevented).toBe(false);
+    await settle(root);
+    expect(helpOpen.value).toBe(false);
+    expect(root.querySelector('[role=dialog]')).toBeNull();
   });
 });

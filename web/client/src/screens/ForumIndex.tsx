@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { apiGet, peekGet } from '../api/client';
 import type { Forum, ForumTree } from '../api/dto';
 import { useResource } from '../api/resource';
@@ -8,7 +8,7 @@ import { MarkAllRead } from '../components/MarkAllRead';
 import { PostTime } from '../components/thread/PostTime';
 import { useAfterMark } from '../state/lists';
 import { HelpOverlay } from '../keyboard/HelpOverlay';
-import { helpOpen } from '../keyboard/shortcuts';
+import { helpOpen, ignored, shortcutsOn } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
 import { siteName, viewer } from '../state/viewer';
 import { ForumPicker, pickable } from './ForumPicker';
@@ -124,11 +124,13 @@ export function ForumIndex() {
 // TKT-01M3S3ZRYD): the member count, which the server sends a member alone,
 // and the posts in the forums listed here, so only forums the reader may
 // read are counted. From 720 px up it offers the shortcut list by a button;
-// a phone has no shortcuts (docs/06 "Mobile"). No key is bound here: a
-// single-character shortcut needs a way to turn it off first (WCAG 2.1.4,
-// TKT-01M3V9DWTN; Terva review 1887), so the button does not say "Press ?".
+// a phone has no shortcuts (docs/06 "Mobile"). While the shortcuts are on,
+// ? opens the list here too and the button says so, "Press ? for keyboard
+// shortcuts"; while they are off (TKT-01M3V9DWTN), ? does nothing here and
+// the button reads "Keyboard shortcuts".
 function IndexFoot({ forums, members }: { forums: Forum[]; members: number | null }) {
   const phone = isPhone.value;
+  const on = shortcutsOn.value;
   const locale = viewer.value.settings.locale || undefined;
   const count = (n: number, what: string) => `${n.toLocaleString(locale)} ${what}${n === 1 ? '' : 's'}`;
   let posts = 0;
@@ -142,6 +144,18 @@ function IndexFoot({ forums, members }: { forums: Forum[]; members: number | nul
     },
     [],
   );
+  // In a layout effect, so the key is the page's from the frame it is drawn
+  // in (TKT-01M3TV4HBF). Each condition is read at the key press, so a
+  // change of width or of the setting needs no new listener.
+  useLayoutEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '?' || isPhone.value || !shortcutsOn.value || helpOpen.value || ignored(e)) return;
+      e.preventDefault();
+      helpOpen.value = true;
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   return (
     <footer class="forum-index-foot">
       <span>
@@ -150,10 +164,24 @@ function IndexFoot({ forums, members }: { forums: Forum[]; members: number | nul
       </span>
       {!phone && (
         <button type="button" class="keys-hint" aria-haspopup="dialog" onClick={() => (helpOpen.value = true)}>
-          Keyboard shortcuts
+          {on ? (
+            <>
+              Press <kbd>?</kbd> for keyboard shortcuts
+            </>
+          ) : (
+            'Keyboard shortcuts'
+          )}
         </button>
       )}
-      {helpOpen.value && !phone && <HelpOverlay lead="These keys work on a thread page, where ? opens this list." />}
+      {helpOpen.value && !phone && (
+        <HelpOverlay
+          lead={
+            on
+              ? 'Here ? opens this list. The other keys work on a thread page.'
+              : 'These keys work on a thread page.'
+          }
+        />
+      )}
     </footer>
   );
 }

@@ -62,7 +62,9 @@ export function setThemePref(pref: ThemePref, storage: Pick<Storage, 'setItem' |
   applyTheme(pref);
 }
 
-function safeStorage(): Storage | undefined {
+// safeStorage is localStorage, or undefined where touching it throws (a
+// private window can). keyboard/shortcuts.ts keeps its choice there too.
+export function safeStorage(): Storage | undefined {
   try {
     return globalThis.localStorage;
   } catch {

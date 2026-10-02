@@ -1,4 +1,4 @@
-import { signal } from '@preact/signals';
+import { computed, signal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
 import { apiGet } from '../api/client';
 import type { ThreadList, ThreadPage, ThreadRow } from '../api/dto';
@@ -8,6 +8,7 @@ import { permalink, type ThreadRef } from '../components/thread/Post';
 import { unreadHref } from '../components/ThreadRow';
 import { isPhone } from '../state/layout';
 import { readPosition } from '../state/readTracker';
+import { safeStorage } from '../state/theme';
 import { viewer } from '../state/viewer';
 
 // The desktop keyboard shortcuts on a thread page (docs/06 "Paged, not
@@ -16,6 +17,9 @@ import { viewer } from '../state/viewer';
 // list. Each has a visible control that does the same (ThreadFoot, the
 // thread's actions, the posts and the pager), so none is the only way to
 // anything; on the phone layout there are none at all (docs/06 "Mobile").
+//
+// They can be turned off (WCAG 2.1 SC 2.1.4, TKT-01M3V9DWTN; docs/06
+// "Paged, not infinite"): then no character key acts on any page.
 
 // shortcuts is the list the help overlay shows: each key, what it does, and
 // the control that does the same.
@@ -34,6 +38,43 @@ export const shortcuts: { keys: string[]; does: string; control: string }[] = [
 export const hint = signal('');
 // helpOpen is whether the shortcut list is showing.
 export const helpOpen = signal(false);
+
+// shortcutsKey is where this browser keeps a signed-out reader's choice:
+// "off" when they turned the shortcuts off, and nothing when they are on.
+export const shortcutsKey = 'ketju.shortcuts';
+
+// readDeviceShortcuts is this browser's choice: on unless it holds "off",
+// and on where storage cannot be read.
+export function readDeviceShortcuts(storage: Pick<Storage, 'getItem'> | undefined = safeStorage()): boolean {
+  try {
+    return storage?.getItem(shortcutsKey) !== 'off';
+  } catch {
+    return true;
+  }
+}
+
+// deviceShortcuts is a signed-out reader's choice, this browser's.
+export const deviceShortcuts = signal(readDeviceShortcuts());
+
+// setDeviceShortcuts records a signed-out reader's choice and stores it.
+// A member's is their account's, changed on /settings, so the settings
+// screen's save queue stays the one writer of it.
+export function setDeviceShortcuts(on: boolean, storage: Pick<Storage, 'setItem' | 'removeItem'> | undefined = safeStorage()) {
+  deviceShortcuts.value = on;
+  try {
+    if (on) storage?.removeItem(shortcutsKey);
+    else storage?.setItem(shortcutsKey, 'off');
+  } catch {
+    // Not stored; it still holds for this page.
+  }
+}
+
+// shortcutsOn is whether the single-key shortcuts act: a member's account
+// says, as /me's settings carry it, and for anyone else this browser does.
+// A settings object with no shortcuts key reads as on, as the server does.
+export const shortcutsOn = computed(() =>
+  viewer.value.user ? viewer.value.settings.shortcuts !== false : deviceShortcuts.value,
+);
 
 // ignored says whether a keydown is not the page's to take: already
 // handled, chorded with Ctrl, Meta or Alt (Shift makes ?), or typed into
@@ -280,7 +321,7 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
     };
 
     const onKey = (e: KeyboardEvent) => {
-      if (isPhone.value || helpOpen.value || ignored(e)) {
+      if (isPhone.value || helpOpen.value || !shortcutsOn.value || ignored(e)) {
         if (digits !== null) {
           endGoto();
           hint.value = '';

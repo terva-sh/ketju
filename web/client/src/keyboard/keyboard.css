@@ -138,6 +138,36 @@
   border: 1px solid var(--rule);
   border-radius: var(--radius);
 }
+/* Where the shortcuts are turned off and on (TKT-01M3V9DWTN): the state
+   when they are off, and the control that changes it. */
+.help-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  padding: 12px 16px 0;
+  font-size: 13px;
+}
+.help-switch p {
+  margin: 0;
+}
+.help-switch p:empty {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+}
+.help-switch button {
+  height: 32px;
+  padding: 0 12px;
+  font: inherit;
+  color: var(--ink2);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
 .help-note {
   margin: 0;
   padding: 12px 16px;

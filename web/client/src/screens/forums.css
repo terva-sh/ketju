@@ -231,6 +231,13 @@
   color: inherit;
   cursor: pointer;
 }
+.keys-hint kbd {
+  padding: 0 5px;
+  font-family: var(--font-mono);
+  font-size: inherit;
+  border: 1px solid var(--rule2);
+  border-radius: 3px;
+}
 .keys-hint:hover {
   color: var(--ink2);
   text-decoration: underline;
