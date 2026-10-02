@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T06:53:16Z
-updated_at: 2026-10-02T06:56:35Z
+updated_at: 2026-10-02T06:59:06Z
 created_by:
   id: agent:claude-code/phase3-exit-check
   name: ""
@@ -61,3 +61,52 @@ TKT-01M29CTY7K (Build the cross-forum unread, new, participated, and watching li
 
 ### Why phase-3
 It fails Phase 3's exit criterion 1 (TKT-01M3V3CFRE). The exit spec is not changed to avoid it: no reload is added and no wait on the beacon.
+
+## Implementation plan
+
+### Chosen fix: forget the lists when a beacon moves the position
+
+When a read beacon's PUT answers with a position above the floor it was
+sent over, the read tracker drops every held list and supersedes any list
+GET still out (`forgetLists`, as after a mark-unread), and bumps the
+`marks` signal so the list on screen asks for itself again (`useAfterMark`,
+as after a mark all read). The bump aborts the list request that was out,
+so its answer, from before the PUT landed, is never shown.
+
+### Why the other fix lost
+
+Making the list wait for an in-flight flush before it revalidates was
+rejected for four reasons:
+- it covers only a PUT already in flight when the list asks. A PUT that
+  failed as the reader left is retried by the batch timer from whatever
+  screen they went to, and that retry would land with nothing to refresh the
+  list;
+- it ties every list fetch to the read tracker's promise. A slow or hung
+  keepalive PUT would hold the list's revalidation with it, which is the
+  "a refused or slow request blocks a later one" trap from #341 and #342;
+- it orders requests by when they were sent, not by when the server
+  stored them. The list GET would still need the PUT's answer to know the
+  write had landed, so it would be waiting on the same event the chosen fix
+  reacts to;
+- the list screens would each need the wait, while the chosen fix lives in
+  the one place that knows a position moved.
+
+### Steps
+1. `state/lists.ts`: add `readLanded()`, which runs `forgetLists()` and
+   bumps `marks`. Reword `marks` and `useAfterMark` to cover the beacon.
+2. `state/readTracker.ts`: in `send`'s success, call `readLanded()` when
+   `last_read_ordinal` is above the floor before the send. A failed PUT
+   calls nothing. Its retry does, when it lands.
+3. Tests that fail before the fix:
+   - `CrossListScreen.test.tsx`: read on a thread page, go back to /unread
+     with the PUT held and the list GET answered first. The list must refresh
+     once the PUT answers. A list GET held past the PUT's answer must not
+     overwrite the fresh list when it lands late. A refused PUT changes
+     nothing, and its successful retry refreshes the list.
+   - `readTracker.test.ts`: the held lists are dropped, and the `marks`
+     signal moves, only when a PUT answers with a higher position.
+4. Prove the Phase 3 exit spec's Unread-surface test at 1440 px inside the
+   full Playwright suite, several runs, with the spec borrowed uncommitted
+   from `run/cfre-phase3-exit`.
+5. tsc, vitest, `go test -race ./...`, the full Playwright suite, and the
+   reader bundle bytes measured only.
