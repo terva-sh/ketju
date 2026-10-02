@@ -22,6 +22,8 @@ blocks_on: none
 references:
   - ref: design:url-scheme
     path: docs/07-api-and-clients.md
+  - ref: pr:342
+    path: null
 claim:
   actor: agent:claude-code/phase3-settings-client
   branch: run/cxk4e-settings-screens
@@ -32,7 +34,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T00:38:49Z
+updated_at: 2026-10-02T00:51:21Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
