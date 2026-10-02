@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T19:31:03Z
+updated_at: 2026-10-02T19:51:09Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -134,6 +134,12 @@ settings.go:83: calls the session store through h.sessions (ListForUser).
 settings.go:112: calls the session store through h.sessions (RevokeOwn).
 settings.go:136: calls the session store through h.sessions (RevokeUser).
 ```
+
+**agent:claude-code/phase4-run-me9dm** at 2026-10-02T19:51:09Z
+
+Terva review 1961 (run 3f787345-f5bb-4860-9580-eecade6f27a7), head f8b0457b, base 30834b8e. One medium finding, "Limit the Deps exemption to its own TypeSpec". Accepted and fixed. The scan exempted a whole `type ( ... )` group when any type in it was `Deps`, so a `handlers` type declared in the same group could name `session.Store` without a finding. The scan now handles each type of a grouped declaration as its own unit, and exempts only the one named `Deps`. A new fixture, `testdata/layering/store_type_grouped`, declares `Deps` and `handlers` in one group, copies the field to a local and calls it, and expects exactly one store-type finding.
+
+One limit remains, by design. A handler that copies `Deps.Sessions` into a local variable outside `build` is not flagged. That needs a field of type `Deps` on the handler, and the scan matches calls by shape, not by type. Flagging every `.Sessions` selector would also flag dto fields of that name. On main nothing holds `Deps` outside `build`.
 
 ## Summary
 

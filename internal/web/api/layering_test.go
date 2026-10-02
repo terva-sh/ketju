@@ -25,7 +25,8 @@ import (
 //   - an import of database/sql;
 //   - a reference to the type session.Store, except in the Deps type, where
 //     serve hands the store in, and in build, which wires it into
-//     identity.Service;
+//     identity.Service. The exemption is the Deps type alone, not a type
+//     declared beside it in one type ( ... ) group;
 //   - a call through a field of that type (h.sessions.ListForUser), except
 //     in build;
 //   - a selector .DB, except in build, which reads the database handle off
@@ -138,19 +139,30 @@ func scanLayering(dir string) ([]layeringFinding, int, error) {
 		}
 
 		local := sessionName(f)
+		// Each unit is scanned on its own: a declaration, or one type of a
+		// grouped type declaration, so that the Deps exemption covers the
+		// Deps type and not a type declared beside it (review 1961).
+		type unit struct {
+			node        ast.Node
+			typeAllowed bool
+		}
+		var units []unit
 		for _, d := range f.Decls {
 			if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && fd.Name.Name == wiring {
 				continue
 			}
-			typeAllowed := false
 			if gd, ok := d.(*ast.GenDecl); ok && gd.Tok == token.TYPE {
 				for _, s := range gd.Specs {
-					if ts, ok := s.(*ast.TypeSpec); ok && ts.Name.Name == wiringType {
-						typeAllowed = true
-					}
+					ts, ok := s.(*ast.TypeSpec)
+					units = append(units, unit{s, ok && ts.Name.Name == wiringType})
 				}
+				continue
 			}
-			ast.Inspect(d, func(n ast.Node) bool {
+			units = append(units, unit{d, false})
+		}
+		for _, u := range units {
+			typeAllowed := u.typeAllowed
+			ast.Inspect(u.node, func(n ast.Node) bool {
 				sel, ok := n.(*ast.SelectorExpr)
 				if !ok {
 					return true
@@ -246,6 +258,7 @@ func TestTheLayeringScanFindsAViolation(t *testing.T) {
 		{"sql_import", []string{ruleSQLImport}},
 		{"store_type", []string{ruleStoreType}},
 		{"store_call", []string{ruleStoreCall}},
+		{"store_type_grouped", []string{ruleStoreType}},
 		{"db_selector", []string{ruleDBSelector}},
 	} {
 		t.Run(tc.dir, func(t *testing.T) {
