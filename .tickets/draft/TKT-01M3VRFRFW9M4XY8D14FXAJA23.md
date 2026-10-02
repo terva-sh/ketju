@@ -21,7 +21,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T12:54:32Z
-updated_at: 2026-10-02T17:29:03Z
+updated_at: 2026-10-02T17:59:49Z
 created_by:
   id: agent:claude-code/phase3-vhsyfr
   name: ""
@@ -53,12 +53,12 @@ A post's entry starts visible, and every record that hides it is a mutation, whi
 
 ## Acceptance criteria
 
-- [ ] ParseIndex refuses with ErrMalformed (RebuildRequired true) an entry with Revision 0, Offset below FileHeaderSize, FrameLength outside [FrameFixedSize, MaxFrameSize], or Offset+FrameLength past the header's LogLength; TestAnImpossibleEntryIsMalformed passes
 - [ ] TestATrustedOpenNeverServesALostNewEntry passes over every crash image of three posts-only batches, holes included, and the PR quotes it failing on main (a commit holding only the test) for the image with the header persisted and the last entry zeroed
 - [ ] TestEveryWrittenIndexPassesTheEntryCheck passes over the property test's random sequences, and TestAZeroedNewEntryIsRebuiltOnOpen passes through a real threadcache.Cache (Rebuilt, then Trusted)
 - [ ] decodePost refuses a frame whose ordinal differs from the one asked for; TestAnEntryPointingAtAnotherPostsFrameIsAReadError passes
 - [ ] A ticket note records BenchmarkOpenTrusted on a 50 000-post index on main and on the head
 - [ ] docs/03 write path step 4 and the Index file format open paragraph describe the entry check; no change to the log format, the .idx layout, header.go or the actor's fsync policy
+- [ ] ParseIndex refuses with ErrMalformed (RebuildRequired true) an entry with Revision 0, Offset below FileHeaderSize, FrameLength outside [FrameFixedSize, MaxFrameSize], or a frame not ending inside the header's LogLength, checked without overflow (Offset > LogLength, then FrameLength > LogLength - Offset); TestAnImpossibleEntryIsMalformed passes, including an Offset near math.MaxUint64 whose sum would wrap
 
 ## Implementation plan
 
@@ -78,7 +78,7 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15e.
   - `Revision == 0`, because `revisionOf` never returns 0;
   - `Offset < FileHeaderSize`;
   - `FrameLength < FrameFixedSize` or `FrameLength > MaxFrameSize`;
-  - `Offset + FrameLength > Header.LogLength`.
+  - the frame does not end inside the covered log. The check must not overflow: refuse `Offset > Header.LogLength` first, then `uint64(FrameLength) > Header.LogLength - Offset`. Never compute `Offset + FrameLength`, which can wrap for an `Offset` near the largest `uint64` (Terva review 1946).
 
   A zeroed entry fails the first two. An impossible entry is `ErrMalformed`. That satisfies `RebuildRequired`, so `Open` rebuilds from the log, and `threadcache.openThread` writes the result back (TKT-01M3VHSYFR).
 
@@ -117,7 +117,9 @@ The crash property goes in `internal/store/threadlog/actor_trust_test.go`, on to
   - `Offset` inside the file header;
   - `FrameLength` below `FrameFixedSize`;
   - `FrameLength` above `MaxFrameSize`;
-  - `Offset + FrameLength` one past `LogLength`;
+  - a frame ending one past `LogLength`;
+  - `Offset` near `math.MaxUint64` with a valid `FrameLength`, whose sum wraps (`Offset = math.MaxUint64 - 10`, `FrameLength = FrameFixedSize`);
+  - `Offset` past `LogLength`;
   - `Revision` 0.
 
   An entry exactly at the covered end is accepted.
