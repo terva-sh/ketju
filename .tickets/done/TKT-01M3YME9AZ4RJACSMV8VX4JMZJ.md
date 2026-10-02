@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YME9AZ4RJACSMV8VX4JMZJ
 title: Record quotes as backlinks, as docs/06 promises
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -18,17 +18,10 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-9az
-  branch: run/9az-quote-backlinks
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ae0919645aa3f5e55
-  commit: 56636cacfc618dc31d9dca99b287214e73c20972
-  session: null
-  claimed_at: 2026-10-02T22:29:35Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T22:29:35Z
+updated_at: 2026-10-02T23:00:10Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -59,12 +52,12 @@ Prefer the first option. Then:
 
 ## Acceptance criteria
 
-- [ ] A migration adds the post_quotes projection table (PROJECTION marker, in db.ProjectionTables), and the projection writer records it from Post and Edit sources through render.QuotedOrdinals, skips split and merge copies, and clears it on a Redacted post; TestQuotesAreRecordedAsBacklinks passes
-- [ ] TestProjectedQuotesMatchTheCreateRender and TestReindexRebuildsTheBacklinks pass (TKT-01M29BKBM7 criterion 3)
-- [ ] The notifier reads quoted ordinals from post_quotes and no longer renders; TestQuotedReadsTheRecordedBacklinks passes, and TestStrongestKindWins, TestMuteSuppressesEveryKind and TestGeneratorSkipsInactiveAndUnreadable pass unchanged
-- [ ] dto.Post carries quoted_by, always an array, listing only quoting posts that are not deleted or moved in post_meta and Visible() in the index, the same for every viewer class, and empty on a post served without HTML; TestQuotedByListsOnlyVisibleQuotingPosts and TestAMovedQuotingPostIsNotABacklink pass
-- [ ] TestQuotedByFollowsTheProjection passes: a page drawn before the projection catches up is not served after it
-- [ ] render.Version is unchanged, the thread log format is unchanged (format.go, records.go untouched), docs/04 documents post_quotes and docs/07 shows quoted_by, and the catch-up bound test passes with a quotation corpus whose time a ticket note records
+- [x] A migration adds the post_quotes projection table (PROJECTION marker, in db.ProjectionTables), and the projection writer records it from Post and Edit sources through render.QuotedOrdinals, skips split and merge copies, and clears it on a Redacted post; TestQuotesAreRecordedAsBacklinks passes
+- [x] TestProjectedQuotesMatchTheCreateRender and TestReindexRebuildsTheBacklinks pass (TKT-01M29BKBM7 criterion 3)
+- [x] The notifier reads quoted ordinals from post_quotes and no longer renders; TestQuotedReadsTheRecordedBacklinks passes, and TestStrongestKindWins, TestMuteSuppressesEveryKind and TestGeneratorSkipsInactiveAndUnreadable pass unchanged
+- [x] dto.Post carries quoted_by, always an array, listing only quoting posts that are not deleted or moved in post_meta and Visible() in the index, the same for every viewer class, and empty on a post served without HTML; TestQuotedByListsOnlyVisibleQuotingPosts and TestAMovedQuotingPostIsNotABacklink pass
+- [x] TestQuotedByFollowsTheProjection passes: a page drawn before the projection catches up is not served after it
+- [x] render.Version is unchanged, the thread log format is unchanged (format.go, records.go untouched), docs/04 documents post_quotes and docs/07 shows quoted_by, and the catch-up bound test passes with a quotation corpus whose time a ticket note records
 
 ## Implementation plan
 
@@ -164,3 +157,21 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15e.
 **agent:claude-code/phase4-groom-correctness** at 2026-10-02T17:28:19Z
 
 run decision: pending maintainer review. Backlinks show as a 'Quoted by #51 #60' line between a quoted post's body and its footer, at both widths. Each link scrolls to the quoting post or opens the popover, as the reply-to indicator does, and the line ends 'and N more' past ten. A quoting post is listed only while every reader sees it as itself, so no backlink comes from a deleted, hidden, moved or redacted post, moderators included. The API serves the list as quoted_by. Recorded in docs/06 'Post anatomy', with the alternatives (a count, a footer place, under 'more', listing removed posts to moderators) and why each lost. The drawing is TKT-01M3YTHAZB (Show who quoted a post on the thread page), filed phase-4 under TKT-01M29BN367. Not a docs/15 stop class: the backlinks are a projection that reindex rebuilds, and the Post record is unchanged.
+
+**agent:claude-code/phase4-run-9az** at 2026-10-02T22:59:43Z
+
+Implementation notes (branch run/9az-quote-backlinks), against main at 56636cac. Where the code departs from the plan's wording, and why:
+
+- Migration is `0025_post_quotes.sql` (0025 was still free on origin/main at push time). Primary key `(thread_id, quoted_ordinal, ordinal)` WITHOUT ROWID, index `post_quotes_quoting (thread_id, ordinal)`, a CHECK that a post never quotes itself.
+- Query names: the page's read is `QuotedBy` (projection.sql) rather than `ListQuotedBy`, and takes a slice of quoted ordinals rather than a range, because the replies expander and `/users/{handle}/posts` ask about ordinals that are not contiguous. The notifier's read is `PostQuotes` (notifications.sql). Both are chunked at 500 ordinals.
+- `visibleQuoting` (internal/service/threads/quotedby.go) also drops a quoting ordinal past the post count the page's snapshot was taken at, so a page never lists a post its own header says does not exist yet. The index check uses the live index, as `postResolver` does for quote tombstones.
+- A removed post served with html (to a moderator, or to its author after a moderator's removal) carries `quoted_by`, as the plan says ("each post the response carries with HTML"). The listed quoting posts are visible to everyone, so this shows nothing about a removed post. A post served without html has `[]`.
+- A split or merge copy clears its rows rather than skipping the call, so a replay over a reused row cannot leave stale ones.
+- Tests: `TestReindexRebuildsTheBacklinks` sits in `internal/events/projection/quotes_test.go` beside `TestQuotesAreRecordedAsBacklinks`, not in reindex_test.go. `TestProjectedQuotesMatchTheCreateRender` is in `internal/service/threads/quotedby_test.go`: it renders each source through `renderSource`, which `Reply` renders with, then creates the post through `Reply` and compares the rows. `TestQuotedByListsOnlyVisibleQuotingPosts` (internal/web/api) covers author-deleted, moderator-hidden, auto-hidden, redacted and moved (sidecar flag) quoting posts, for anon, member, moderator and the hidden post's author, on the canonical page, its cached copy, a lens page and `/posts/1`. `randomRecord`'s Edits now quote the post above, so the replay-equivalence and reindex property tests cover post_quotes.
+- Catch-up bound: the no-drift bound renders nothing, so quotations cannot move it. `TestCatchUpTenThousandUnderBound` now also catches up 10000 posts over 100 threads from nothing, once with none quoting and once with 100 quoting (one in a hundred), and holds the quoting run to twice the plain one plus a second. Projecting 10000 posts takes over 2 s on this shared machine with no quotations at all, so the 2 s bound could not apply to it. Measured locally (2026-10-02, 12-core shared host, other lanes running): no drift 53-94 ms; plain corpus 2.59 s; quoting corpus 2.74 s (+6%).
+- Mutations tried: dropping the `Visible()` check in `visibleQuoting` fails TestQuotedByListsOnlyVisibleQuotingPosts (the moved #8 appears) and TestAMovedQuotingPostIsNotABacklink; dropping the notifier's `quoted < ordinal` filter fails TestQuotedReadsTheRecordedBacklinks.
+- `web/client/src/api/dto.ts` gains `quoted_by: number[]`. `go generate ./internal/web/spa` leaves the committed dist byte-identical (type-only change), tsc and the 2566 Vitest tests pass. The drawing is TKT-01M3YTHAZB.
+
+## Summary
+
+Quotes are recorded as backlinks in a post_quotes projection (migration 0025) that the projection writer fills from each Post and Edit source through render.QuotedOrdinals, and that reindex rebuilds; the thread log is unchanged. The notifier reads quoted from it instead of rendering. dto.Post carries quoted_by, listing only quoting posts every reader sees as themselves (post_meta not deleted or moved, index entry Visible()), empty on a post served without html. docs/04 and docs/07 describe both. Every criterion met; TKT-01M29BKBM7 criterion 3 is met once this merges. The client drawing is TKT-01M3YTHAZB.
