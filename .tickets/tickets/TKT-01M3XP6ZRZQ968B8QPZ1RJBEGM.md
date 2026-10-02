@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T06:53:16Z
-updated_at: 2026-10-02T06:59:06Z
+updated_at: 2026-10-02T07:44:07Z
 created_by:
   id: agent:claude-code/phase3-exit-check
   name: ""
@@ -110,3 +110,36 @@ rejected for four reasons:
    from `run/cfre-phase3-exit`.
 5. tsc, vitest, `go test -race ./...`, the full Playwright suite, and the
    reader bundle bytes measured only.
+
+## Notes
+
+**agent:claude-code/phase3-unread-race** at 2026-10-02T07:44:07Z
+
+Phase A (prepare) done on the unpushed branch run/p6zrz-unread-race, fix commit 6481e855, from origin/main 628f1a6b. The dist is not committed yet. Another lane holds it.
+
+### Fix
+A read beacon's PUT that answers successfully now calls `readLanded()` (state/lists.ts). That runs `forgetLists()`, which drops the held lists and supersedes any list GET still out, and bumps `marks`, so the list on screen asks again through `useAfterMark`. Asking again aborts the request that was out, so an answer from before the PUT is neither shown nor held.
+
+A PUT goes out only above the floor, and the server keeps the larger position, so every successful answer is a higher position. The tracker therefore calls `readLanded()` on every successful PUT and does not compare positions. A failed PUT calls nothing. Its retry calls it when the retry lands.
+
+### Tests (all five fail with the call removed and pass with it)
+- CrossListScreen.test.tsx, "going back to a list while the read beacon is out":
+  - the list answers before the held PUT and is asked for again once the PUT lands;
+  - a list GET held past the PUT's answer does not overwrite the fresh list, and is not held;
+  - a refused PUT asks for nothing, and its retry refreshes the list.
+- readTracker.test.ts: the held lists are dropped and `marks` moves when a PUT lands, not when it fails, and they are dropped once the retry lands.
+
+### Checks
+- tsc is clean. vitest: 2553 passed.
+- `go test -race ./...` passed.
+- Playwright full suite without borrowed files: 258 passed, 18 skipped (the width-specific tests).
+- Exit spec e2e/phase3-exit.spec.ts and the cmd/ketju/e2e.go seed, borrowed uncommitted from run/cfre-phase3-exit, full suite three times on port 8795. The Unread surface test passed at 390 and 1440 px in all three runs (282 passed each time). The one failure in every run was the desktop Alerts test's axe `link-in-text-block` on `.alert-thread.hit`. That is TKT-01M3XNQ772 (Tell an unread alert's thread link apart by more than colour) and not this ticket. I did not run the exit spec without the fix in this session. The exit check's failure, and its passing twice alone, are the evidence for the race.
+
+### Reader bundle (measured, not committed)
+79192 B on main, 79196 B with the fix (+4 B), of the 120000 B budget.
+
+### Run decisions
+None. The fix is how the client keeps its lists current, and it changes nothing a member is offered.
+
+### Not done here
+A landed beacon does not ask for /me again. The forum index's summary line (`me.unread.threads`) therefore waits for the next /me, as it did before this change. The ticket asks only for the lists, so I left the summary alone.
