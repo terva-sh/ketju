@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YME9DMH3PMJGD8A4A7ZMNN
 title: Keep API handlers off the stores, and test the layering
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -18,15 +18,22 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-me9dm
+  branch: run/me9dm-api-layering
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-afae7cbdfc4c034cc
+  commit: 30834b8e9b8dc69a282dac88cc580503fd08244c
+  session: null
+  claimed_at: 2026-10-02T19:15:19Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T17:29:03Z
+updated_at: 2026-10-02T19:15:21Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-correctness
+  id: agent:claude-code/phase4-run-me9dm
   name: ""
 extensions: {}
 ---
