@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ64G7PJBPK8Z52SE8NW
 title: Implement thread archival
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -23,17 +23,10 @@ references:
     path: docs/08-moderation.md
   - ref: pr:361
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-crj64
-  branch: run/crj64-archive
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
-  commit: 06db6b6f96a53bc238455a37bf964f05a9c0c905
-  session: null
-  claimed_at: 2026-10-02T21:51:42Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-02T21:51:44Z
+updated_at: 2026-10-02T21:59:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -52,11 +45,11 @@ Archiving is stronger than locking. A locked thread is a moderation state a mode
 ## Acceptance criteria
 
 - [ ] POST /admin/threads/{id}/archive, admin only with a row in adminRouteGates, appends one ThreadArchived with its reason, writes thread.archived (in audit.Actions and docs/04), and the header and list rows say archived (TestArchiveThread, TestArchiveRefusals)
-- [ ] An archived thread refuses every write from everyone, the author, members, moderators by role and by group, admins and agents, and its log does not grow (TestArchivedThreadIsReadOnlyToEveryone)
-- [ ] The actor refuses any append after ThreadArchived, so a reply racing an archive never lands after it, and a reopened archived thread is sealed (TestArchiveRacingReplyNeverLandsAfter, TestActorRefusesAfterThreadArchived, TestArchivedThreadSealedOnReopen)
-- [ ] Archived threads are evicted from the open-thread cache ahead of live ones once archived through the service (TestArchiveDropsThreadFromCacheFirst)
-- [ ] The archived state comes from the log and survives a projection rebuild and a restart (TestArchivedStateSurvivesReindex)
-- [ ] Reading, watching and the read position are unchanged, the viewer block offers no reply or upload, the response cache key moves, and ketju redact still reaches the thread (TestArchivedThreadStaysReadable, TestArchivedViewerBlockOffersNothing, TestArchiveMovesTheResponseCacheKey, TestRedactReachesAnArchivedThread)
+- [x] An archived thread refuses every write from everyone, the author, members, moderators by role and by group, admins and agents, and its log does not grow (TestArchivedThreadIsReadOnlyToEveryone)
+- [x] The actor refuses any append after ThreadArchived, so a reply racing an archive never lands after it, and a reopened archived thread is sealed (TestArchiveRacingReplyNeverLandsAfter, TestActorRefusesAfterThreadArchived, TestArchivedThreadSealedOnReopen)
+- [x] Archived threads are evicted from the open-thread cache ahead of live ones once archived through the service (TestArchiveDropsThreadFromCacheFirst)
+- [x] The archived state comes from the log and survives a projection rebuild and a restart (TestArchivedStateSurvivesReindex)
+- [x] Reading, watching and the read position are unchanged, the viewer block offers no reply or upload, the response cache key moves, and ketju redact still reaches the thread (TestArchivedThreadStaysReadable, TestArchivedViewerBlockOffersNothing, TestArchiveMovesTheResponseCacheKey, TestRedactReachesAnArchivedThread)
 - [ ] docs/07 documents the archive route, its refusals and the archived field
 
 ## Implementation plan
@@ -200,3 +193,50 @@ run decision: pending maintainer review. The offline `ketju redact` still redact
 Phase 4 grooming (tags and archive lane) checked docs/03: `ThreadArchived` is fixed as type 30 with body `{reason}`, so archiving needs no format change. The original criterion "Unarchiving is possible and recorded" did not stay here. docs/08 says v1 has no unarchive record, and docs/04 agrees. docs/15 says a moderator unarchives. An unarchive needs a record type docs/03 does not name (docs/15 stop class 2), and the documents disagree on who may do it (class 6). The question is filed as TKT-01M3YSQQ5X (Decide whether an archived thread can be unarchived, and by whom), with options and no default, for the maintainer. This ticket does not wait on it.
 
 The client half is split into TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client).
+
+**agent:claude-code/phase4-run-crj64** at 2026-10-02T21:59:04Z
+
+Criteria 1 and 7 are left unticked. Each is met except for the `archived` field.
+
+- **Done for criterion 1:** the route is admin-only, with its row in `adminRouteGates`. It appends one `ThreadArchived` with the reason, and `thread.archived` is in `audit.Actions` and docs/04 (TestArchiveThread, TestArchiveRefusals).
+- **Done for criterion 7:** docs/07 documents the route and its refusal order.
+- **Not done:** `archived` on `ThreadHeader` and `ThreadRow`, and docs/07's description of that field. docs/07 says instead that the field is not served yet.
+
+Why: `web/client/src/dto-contract.ts` holds `dto.ts` to the Go DTO goldens with no extra keys. A new Go field therefore fails the client tests unless `dto.ts` changes in the same PR. This server lane may not change `web/client` (docs/15 "Order"; the run brief). So the field moves to TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client), which adds it to the Go DTO, `dto.ts` and docs/07 together, reading `threads.archived`. `views.selectRows` would need `t.archived` for the row.
+
+Until then a client can tell from the viewer block that it may not reply: `can_reply` and `can_upload` are false on an archived thread.
+
+## Summary
+
+Landed in one PR, server side only. The client half is TKT-01M3YSQQ33
+(Show archived threads and offer archiving in the client).
+
+- **The actor refuses after an archive.** `threadlog.ErrArchived` and
+  `Actor.Seal` are new. `frameFor` refuses a sealed actor, and it refuses
+  any record staged behind a `ThreadArchived` in the same batch. `commit`
+  seals the actor once a `ThreadArchived` is written. `threadcache` seals an
+  actor that `Options.Archived` reports archived when it opens it, and in
+  `MarkArchived`. `Thread.Archived()` also reads the seal.
+  `problem` maps `ErrArchived` to `conflict`. The flag auto-hide treats it
+  as nothing to hide.
+- **The route.** `POST /api/v1/admin/threads/{id}/archive` `{reason?}` is
+  behind the `admin` gate, with its row in `adminRouteGates`.
+  `threads.Archive` decides through `appendDecided`:
+  - a viewer who is not an admin by role is `forbidden`;
+  - a thread already archived is `conflict`;
+  - a reason over 500 characters is `validation-failed`.
+
+  Otherwise it appends `ThreadArchived` and calls `MarkArchived`.
+- **Audit and the viewer block.** The projection audits `thread.archived`
+  with `{"reason"}`. The action is in `audit.Actions` and in docs/04. On an
+  archived thread the viewer block has `can_reply` and `can_upload` false.
+- **Docs.** docs/07 has a new "Archiving threads" section.
+- **Fixtures.** Fixtures that append random records stop a thread at its
+  `ThreadArchived`. `TestArchivedThreadIsEvictedBeforeALiveOne` writes its
+  threads before it reopens them as archived.
+
+Not done here: `archived` on `ThreadHeader` and `ThreadRow`. The client's
+DTO contract test holds `dto.ts` to the goldens with no extra keys, so the
+field cannot land without a change under `web/client`, which this server
+lane may not make. TKT-01M3YSQQ33 adds it to both together. That part of
+criterion 1 stays unticked. There is no unarchive in v1 (TKT-01M3YSQQ5X).
