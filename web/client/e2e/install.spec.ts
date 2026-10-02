@@ -1,6 +1,7 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Page } from '@playwright/test';
-import { readFileSync } from 'node:fs';
+import { chromium, expect, test, type Page } from '@playwright/test';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { stateFile } from './session';
 
@@ -33,7 +34,32 @@ interface AppManifest {
 // run was written against reports nothing at all.
 const notThePages = new Set(['no-matching-service-worker']);
 
-test('the manifest Chromium reads has no errors', async ({ page }) => {
+// The manifest test runs in a browser with a profile on disk rather than in
+// the run's usual context. Every Playwright context is off the record, and
+// a Chromium that checks for it (CI's 152 does; the 1243 build Playwright
+// downloads did not) reports in-incognito, which says nothing about the
+// page and hides whatever else installability would report. The manifest
+// is fetched without credentials and names no viewer, so the profile needs
+// no session.
+test('the manifest Chromium reads has no errors', async ({ launchOptions, baseURL, viewport, isMobile, hasTouch }) => {
+  const profile = mkdtempSync(join(tmpdir(), 'ketju-install-'));
+  const ctx = await chromium.launchPersistentContext(profile, {
+    ...launchOptions,
+    baseURL,
+    viewport,
+    isMobile,
+    hasTouch,
+    ignoreHTTPSErrors: true,
+  });
+  try {
+    await checkManifest(ctx.pages()[0] ?? (await ctx.newPage()));
+  } finally {
+    await ctx.close();
+    rmSync(profile, { recursive: true, force: true });
+  }
+});
+
+async function checkManifest(page: Page) {
   await page.goto('/');
   await expect(page.locator('#app')).not.toBeEmpty();
   const cdp = await page.context().newCDPSession(page);
@@ -79,7 +105,7 @@ test('the manifest Chromium reads has no errors', async ({ page }) => {
   expect(ids.filter((id) => !notThePages.has(id))).toEqual([]);
 
   await scan(page);
-});
+}
 
 test('no service worker is registered, and no style depends on display-mode', async ({ page }) => {
   await page.goto(seed.thread);

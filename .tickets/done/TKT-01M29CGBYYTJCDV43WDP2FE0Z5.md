@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-10-02T05:18:50Z
+updated_at: 2026-10-02T05:41:53Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -129,6 +129,10 @@ Reader bundle: 66220 B before, 66299 B after (+79 B, the theme-color update), of
 **agent:claude-code/phase3-cgbyy** at 2026-10-02T05:17:41Z
 
 Phase B, on main de37cccb. AC6 is left unticked. Everything in it holds except the number: both widths pass with one axe scan per test (full Playwright suite, 258 tests), the dist is regenerated, and npm run budget passes. The reader is 79088 B (79006 B on main before this change, +82 B), within the 120000 B budget the maintainer set on 2026-10-01 (docs/14) but over the 70000 B this criterion was groomed with. Earlier lanes took main past 70000 B; this ticket adds 82 B. The criterion's number is stale, and ticking it would claim something false. AC7 (real-device install) is for a person to tick. The rebase over #342 resolved theme.test.ts: syncThemeFromAccount calls setThemePref and then applyTheme, so the account's theme also sets both theme-color tags. A new test, 'colours the browser chrome by the account's theme', proves it.
+
+**agent:claude-code/phase3-cgbyy** at 2026-10-02T05:41:53Z
+
+Carried to run/cgbyy-manifest-2 after main moved to b7d9e58e. PR #346 is replaced. #346's CI (run 2326) failed only in e2e/install.spec.ts 'the manifest Chromium reads has no errors', at both widths. CI's Chromium 152.0.7977.82 (Alpine) reported the installability error in-incognito, because every Playwright context is off the record. The local Playwright Chromium (1243) did not, so this supersedes my earlier note that installability reports nothing. I did not add in-incognito to the accepted errors: that would hide anything else installability reports. The test now launches Chromium with a persistent profile in a temporary directory, which is not off the record. It reads the manifest anonymously, so the criterion is checked for real and the only accepted error is still a missing service worker.
 
 ## Summary
 
