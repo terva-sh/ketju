@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3B12ZZ403NEPFH3DASEW1D8
 title: Define thread tag rules so new threads can carry tags
 type: task
-status: ready
+status: in-progress
 status_reason: null
 priority: normal
 due_on: null
@@ -21,15 +21,22 @@ references:
     path: null
   - ref: pr:361
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-b12zz4
+  branch: run/b12zz4-tag-rules
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
+  commit: 30834b8e9b8dc69a282dac88cc580503fd08244c
+  session: null
+  claimed_at: 2026-10-02T19:14:55Z
+  expires_at: null
 archive: null
 created_at: 2026-09-25T00:57:46Z
-updated_at: 2026-10-02T17:24:09Z
+updated_at: 2026-10-02T19:14:57Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-tags-archive
+  id: agent:claude-code/phase4-run-b12zz4
   name: ""
 extensions: {}
 ---
