@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-285 tickets: 12 epics and 273 children. Every ticket derived from the design
+291 tickets: 12 epics and 279 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
@@ -45,7 +45,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 46 in
-Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 31 carrying no
+Phase 3, 25 in Phase 4, 1 in Phase 5, 2 filed as later, and 23 carrying no
 milestone. Phase 3 grew from 21 on 2026-10-01, when its run (docs/14) pulled
 the settings pair forward from Phase 4, filed the profile screen, the exit
 check and its tracking ticket, and placed ten unplaced drafts. Its grooming
@@ -64,7 +64,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-244 done, 7 ready, 3 blocked, 26 draft, 5 archived (counted 2026-10-02 with
+247 done, 4 ready, 3 blocked, 32 draft, 5 archived (counted 2026-10-02 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -271,6 +271,21 @@ bundle is 79118 B of a 120000 B budget, which the maintainer raised from
 The maintainer has since approved the five later decisions, closed the
 disagreement as it stood, and raised CI's race step limit to 20 minutes
 (`TKT-01M3YFYYGV`, #354).
+
+**Phase 4 starts** on 2026-10-02 as an autonomous run (docs/15), tracked by
+`TKT-01M3YMG0M1`. It carries 25 tickets: the 11 Phase 4 drafts, eight
+unplaced drafts the maintainer chose to include, four follow-ups from the
+Phase 1 cleanup, the exit check and the tracking ticket. That cleanup
+checked three Phase 1 epics against the code and closed them:
+- identity (`TKT-01M29BKBKZ`), with every criterion met;
+- render (`TKT-01M29BKBM7`), with quote backlinks left unticked
+  (`TKT-01M3YME9AZ`);
+- the API (`TKT-01M29BKBMC`), with layering, served-response goldens and
+  form posts left unticked.
+
+The Phase 1 tracking ticket stays open until the last three Phase 1 epics
+close: the database epic waits on the ncruces report, the client epic on
+the real-device check and the / shortcut, and operations on Phase 4.
 
 ## The critical path
 

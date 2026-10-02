@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T13:52:34Z
-updated_at: 2026-09-28T15:01:16Z
+updated_at: 2026-10-02T15:42:09Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase1-run-438e26c1
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -102,3 +102,18 @@ The answers are written into docs/04 (beside `thread_tags`) or docs/08, and into
 **agent:claude-code/phase1-run-438e26c1** at 2026-09-28T15:01:16Z
 
 Maintainer decision, 2026-09-28: tags on create are deferred to Phase 4 ("Defer to Phase 4"). docs/09 lists thread tags under Phase 4 beside retag and tag filtering. Until then the create endpoint keeps refusing a non-empty `tags`. This ticket and TKT-01M3M4KVNW (Decide what a thread tag may be and who may set one) move to the phase-4 milestone. The rule questions in TKT-01M3M4KVNW stay open, to be decided with the rest of the tag feature.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T15:42:09Z
+
+Maintainer decision, 2026-10-02. Asked each question as a choice, the maintainer answered:
+- **Question 0, Phase 1 or Phase 4:** moot. Tags are built in the Phase 4 run (docs/15).
+- **Question 1, characters and case:** (a). A tag is lowercase ASCII words joined by single hyphens, `[a-z0-9]+(-[a-z0-9]+)*`, and uppercase input is folded to lowercase.
+- **Question 2, limits:** (b). A tag is 1 to 24 characters, and a thread has at most 8 tags. The e2e seed's six-tag thread stays creatable through the API.
+- **Question 3, vocabulary:** (c). Tags are free text now, and a moderator corrects a thread with a retag (docs/08). A curated list may come later.
+- **Question 4, who sets tags at creation:** (c). Anyone with `create_thread` may set them, except reserved tags such as `agent`, which only a moderator or an agent account may set. The reserved list lives in docs/08.
+
+The smaller points were not put to the maintainer. They are proposed as run decisions pending maintainer review:
+- A request that repeats a tag, before or after case folding, keeps one copy and is not refused. This matches how a post keeps a repeated attachment hash once.
+- Members see tags in sorted order, as the projection and the API already list them.
+
+What remains of this spike is the "Done when" work: writing the answers into docs/04, docs/07 and docs/08, and into TKT-01M3B12ZZ4's plan. That work belongs to the Phase 4 tags grooming lane.

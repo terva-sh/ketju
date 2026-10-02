@@ -11,7 +11,7 @@ labels:
   - area:render
   - effort:S
 assignees: []
-milestone: null
+milestone: phase-4
 parent: null
 origin: null
 dependencies: []
@@ -20,12 +20,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T07:50:48Z
-updated_at: 2026-10-01T07:50:48Z
+updated_at: 2026-10-02T15:42:10Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-groom-live
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---

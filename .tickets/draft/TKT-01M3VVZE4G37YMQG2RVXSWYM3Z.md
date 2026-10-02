@@ -11,7 +11,7 @@ labels:
   - area:views
   - effort:S
 assignees: []
-milestone: null
+milestone: phase-4
 parent: null
 origin: null
 dependencies: []
@@ -20,12 +20,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T13:55:32Z
-updated_at: 2026-10-01T13:58:07Z
+updated_at: 2026-10-02T15:42:10Z
 created_by:
   id: agent:claude-code/phase3-lenses
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-lenses
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
