@@ -23,10 +23,12 @@ references:
     path: docs/03-thread-storage.md
   - ref: pr:361
     path: null
+  - ref: pr:372
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T20:30:29Z
+updated_at: 2026-10-02T20:30:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
