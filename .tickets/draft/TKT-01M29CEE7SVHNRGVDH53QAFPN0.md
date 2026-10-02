@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-10-02T17:46:59Z
+updated_at: 2026-10-02T18:20:07Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-ops
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -154,3 +154,11 @@ Nothing in the approach below depends on the choice except step 7.
 **agent:claude-code/phase4-groom-ops** at 2026-10-02T17:18:03Z
 
 Open decision for the maintainer (docs/14 stop class 1, security posture): how `/metrics` is guarded. docs/02 says "an admin token or bind address" without choosing, and docs/05 and docs/07 give no rule. The plan lists four options with what each means, and it chooses none. The ticket stays in draft until the maintainer answers. Steps 1 to 6 and 8 of the plan do not depend on the answer, so if the answer is slow, the collectors could be split off and built first.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T18:20:07Z
+
+Maintainer decision, 2026-10-02, on the open decision: option 1, a separate bind address. Asked as a choice, the maintainer picked "Separate bind address (Recommended)", whose description was: a new `metrics_listen` config key (for example `127.0.0.1:9090`) with its own listener that serves only `/metrics`, unauthenticated, off when the key is empty, and the main site never serves `/metrics`. Written into docs/02 "Observability". Step 7 of the approach and criterion 1 follow it:
+- `/metrics` answers only on `metrics_listen`;
+- the main listener answers 404 for it;
+- an empty key starts no listener.
+The ticket can now be promoted.

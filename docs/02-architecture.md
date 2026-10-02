@@ -290,9 +290,17 @@ groups").
 - Request log line: method, path, status, bytes, duration, and the viewer id
   when the request is authenticated. 5xx logs at error, 4xx at warn, so a wall
   of 404s does not train anyone to ignore the error stream.
-- `/metrics` (Prometheus text format, behind an admin token or bind
-  address): request latency, cache hit ratios, thread store fsync latency,
-  projection lag (log length − projected length, summed).
+- `/metrics` (Prometheus text format): request latency, cache hit ratios,
+  thread store fsync latency, projection lag (log length − projected length,
+  summed). **Decided by the maintainer (2026-10-02, TKT-01M29CEE7S):** it is
+  guarded by a separate bind address. A `metrics_listen` key in
+  `config.toml` (for example `127.0.0.1:9090`) starts a second listener that
+  serves `/metrics` and nothing else, unauthenticated. An empty key, the
+  default, turns metrics off. The main listener never serves `/metrics`.
+  Alternatives: a bearer token read from a file lost because it adds a new
+  kind of credential; supporting both lost for the same reason; an admin
+  account's credential lost because the scraper would then hold full admin
+  power.
 - `/healthz` checks the DB opens and the data directory is writable.
   (TKT-01M29CCBZ8.) It is unauthenticated, answers GET and HEAD only, and
   says only this:

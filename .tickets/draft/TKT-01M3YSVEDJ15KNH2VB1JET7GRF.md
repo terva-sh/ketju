@@ -27,12 +27,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:16:07Z
-updated_at: 2026-10-02T17:18:46Z
+updated_at: 2026-10-02T18:20:07Z
 created_by:
   id: agent:claude-code/phase4-groom-ops
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-ops
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -107,3 +107,18 @@ This is written so that the answers above slot in. It is revised at claim.
 **agent:claude-code/phase4-groom-ops** at 2026-10-02T17:18:03Z
 
 Filed 2026-10-02 in Phase 4 grooming, split from TKT-01M29CXK3S (Build the release pipeline for the single binary). It carries an open decision under docs/14/15 stop class 3, and also outside docs/12 "Changing CI". The plan lists five questions: the workflow and its trigger, where artifacts are published, the image, signing, and the tag. It stays in draft until the maintainer answers. TKT-01M3YMG0NX's criterion that every phase-4 ticket is done or archived therefore waits on this ticket too.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T18:20:07Z
+
+Maintainer decision, 2026-10-02, on the open decision. Asked as choices, the maintainer answered:
+1. **The workflow.** Yes. They chose to publish from a workflow, which approves `.forgejo/workflows/release.yml`, triggered by `push: tags: ['v*']`, with the write permission an upload needs. It is not a required check. This is a maintainer grant beyond docs/12 "Changing CI", for this file only.
+2. **Where to publish.** "Forgejo and GitHub": a Forgejo release on git.local.sothr.com, and a GitHub release on the public mirror github.com/terva-sh/ketju.
+3. **Container image.** Yes. Base `scratch` with CA certificates, pushed to `container.local.sothr.com`. The image name is the run's to propose. The default is `container.local.sothr.com/terva-sh/ketju`, tagged with the version and `latest`.
+4. **Signing.** No signing for v1.0. The maintainer did not pick minisign.
+5. **The tag.** It stays with the maintainer, as docs/15 says.
+
+What stays with the maintainer under stop class 3:
+- creating the GitHub token, the Forgejo upload token and the registry credential, and storing them as repository secrets;
+- pushing the `v1.0` tag.
+
+The run may write the workflow so that it reads those secrets by name. It must not create them, read them, or run the publishing jobs. The PR that adds `release.yml` names each secret it expects. The workflow first runs on the maintainer's tag push.

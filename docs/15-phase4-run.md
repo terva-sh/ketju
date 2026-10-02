@@ -76,6 +76,18 @@ Out of scope, and staying out:
 
 ## Decided by the maintainer
 
+**Metrics and the release, 2026-10-02.**
+- `/metrics` is served only on a separate `metrics_listen` address, and is
+  off by default (docs/02).
+- v1.0 is published from a tag-triggered `.forgejo/workflows/release.yml`.
+  That is a grant beyond docs/12 "Changing CI", for that file only. The
+  workflow publishes to a Forgejo release and a GitHub release on the public
+  mirror, plus a `scratch`-based image on `container.local.sothr.com`. v1.0
+  is not signed.
+- The credentials and the tag stay with the maintainer
+  (`TKT-01M3YSVEDJ`'s notes).
+
+
 **Thread tags, 2026-10-02** (`TKT-01M3M4KVNW`). The tags grooming lane
 writes these into docs/04, docs/07 and docs/08:
 - A tag is lowercase ASCII words joined by single hyphens,
