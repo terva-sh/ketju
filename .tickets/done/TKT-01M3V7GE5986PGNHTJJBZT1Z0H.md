@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:57:49Z
-updated_at: 2026-10-02T21:39:29Z
+updated_at: 2026-10-02T22:46:26Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
@@ -120,6 +120,10 @@ run decision: pending maintainer review. / opens search on every desktop screen 
 
 Implemented as planned. useGlobalShortcuts and openSearch live in keyboard/shortcuts.ts; shell/Shell.tsx mounts the hook once with preact-iso's route. The tests are in a new shell/Shell.shortcuts.test.tsx. Wording the plan left open: the index list's lead reads 'Here ? opens this list and / opens search. The other keys work on a thread page.' while the shortcuts are on, and 'When they are on, ? and / work here, and the other keys on a thread page.' while off (replacing TKT-01M3V9DWTN's 'These keys work on a thread page.', which / made untrue). The /settings hint now lists '/'. The '/' row's visible control is checked by the existing 'has one' table (.tools a.search). The 390 px inert e2e test gains its axe scan. Reader bundle measured at 79859 B -> 79988 B gzip (+129 B) in Phase A.
 
+**agent:claude-code/phase4-run-7GE59** at 2026-10-02T22:46:22Z
+
+Terva review 1988 (PR #377, head 3cefd0a, base 24f4f3d), medium 'Recognize trailing-slash search URLs before routing to an empty search': fixed. openSearch now knows the search screen by its field (#search-q) being on the page rather than by location.pathname, so /search/?q=bill keeps and selects its query. New case '/ on /search/ with a query keeps it, and selects it' fails with the old pathname test. Reader bundle now 79983 B gzip (79859 B on main, +124 B).
+
 ## Summary
 
-/ opens search on every desktop screen with the top bar while the single-key shortcuts are on. useGlobalShortcuts (keyboard/shortcuts.ts), mounted once by shell/Shell.tsx, listens in a layout effect; away from /search it routes there and the field takes focus, and on /search it focuses the query field and selects its text. It does nothing on a phone, with the shortcuts off, with the shortcut list open, or in text, the composer or a dialog (ignored()). The list has a / row naming the top bar's Search, the index's lead line names ? and /, the /settings hint lists /, and docs/06's key list includes /. Reader bundle 79859 B -> 79988 B gzip. Every criterion met.
+/ opens search on every desktop screen with the top bar while the single-key shortcuts are on. useGlobalShortcuts (keyboard/shortcuts.ts), mounted once by shell/Shell.tsx, listens in a layout effect; away from the search screen it routes to /search and the field takes focus, and on the search screen (known by its field, so /search/ counts too; Terva review 1988) it focuses the query field and selects its text. It does nothing on a phone, with the shortcuts off, with the shortcut list open, or in text, the composer or a dialog (ignored()). The list has a / row naming the top bar's Search, the index's lead line names ? and /, the /settings hint lists /, and docs/06's key list includes /. Reader bundle 79859 B -> 79983 B gzip. Every criterion met.
