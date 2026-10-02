@@ -49,7 +49,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-02T21:25:56Z
+updated_at: 2026-10-02T21:56:48Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -165,7 +165,7 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), last, as docs/15 "Order" says,
      - Allowed: a same-forum split by gail through her grant.
 
      Every refusal leaves both logs byte-identical and creates no thread file.
-   - `TestPhase4ExitMovedPostsFollowTheTargetForum`. kim splits two vault posts into annex. One is mentioned in by gail and carries an attachment. The other is quoted by a post that stays in vault and is flagged. For gail (reads the source only) and anonymous, no path serves a moved post's body or blob:
+   - `TestPhase4ExitMovedPostsFollowTheTargetForum`. kim splits two vault posts into annex. One mentions gail, so she was notified before the move, and carries an attachment. The other is flagged, and is quoted by a post that stays in vault. For gail (reads the source only) and anonymous, no path serves a moved post's body or blob:
      - the vault page and post;
      - the post's replies and history;
      - the moderator lens, and the queue's flag entry, which gail moderates;
