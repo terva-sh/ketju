@@ -1813,3 +1813,32 @@ second decoder surface with no fuzzing history in this tree, and a module
 dependency for a 160 px picture. libvips and ImageMagick lost because they
 need cgo, and the binary is built without it (CI builds `./cmd/ketju` with
 `CGO_ENABLED=0`).
+
+**Decided by the run (2026-10-02, pending maintainer review;
+TKT-01M3V73KM1):** the bytes one account has stored that no post names are
+bounded. The count is the size of every blob the account first stored
+(`blobs.uploaded_by`) whose `refcount` is zero. That includes a blob a
+draft holds, which blob GC keeps for as long as the draft names it, and a
+blob waiting out its seven days. The bound is `limits.unattached_upload_mb`
+(`KETJU_LIMITS_UNATTACHED_UPLOAD_MB`), 100 MB by default, ten files at the
+default `limits.attachment_mb`. `ketju config check` refuses a value below
+`limits.attachment_mb`, since a file of the full size could then never be
+sent. The bound is asked twice:
+- before the body is read, so an account already at the bound costs no
+  read;
+- in the write that stores new bytes, so two uploads at once cannot both
+  pass.
+
+An upload over it is `validation-failed` with `{field: "file", code:
+"upload_budget"}`, and the staged file is removed. Bytes the server already
+holds store nothing new, so an upload of them is never refused for this,
+and costs no one. The bound holds for every account, admins and agents
+included. Alternatives:
+- A per-day cap on bytes uploaded lost, because a draft keeps its blobs for
+  as long as it lasts, so a rate does not bound the total.
+- Counting every byte an account uploads lost, because it would count
+  files that are posted, which are what uploads are for.
+- Counting each uploader of shared bytes lost, because a second upload of
+  stored bytes uses no disk.
+- Exempting admins lost, because an admin can raise the bound, and one
+  rule is simpler to test.

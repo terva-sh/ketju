@@ -49,6 +49,43 @@ human who does.
   chosen the link, and two run decisions should not disagree about one
   control. `/` now lost because it would add one more shortcut that does
   not meet 2.1.4.
+  **Decided by the run (2026-10-02, pending maintainer review;
+  TKT-01M3V9DWTN):** the single-key shortcuts can be turned off, which is
+  the first of the three ways WCAG 2.1 SC 2.1.4 allows. They are on unless
+  turned off. A member turns them off in Settings (`/settings`), and the
+  choice is stored on the account as `shortcuts` in `prefs_json` and
+  carried in `/me`'s `settings`, as the theme is (07 "Preact client"). A
+  signed-out reader turns them off from the shortcut list, and the choice
+  stays in the browser. For a member the list links to Settings instead,
+  so the account has one writer. With them off, no character key acts on
+  any page: not `j`, `k`, `g` and its digits, `u`, `n`, `?` or `/`. The
+  "Keyboard shortcuts" buttons still open the list, which says that the
+  shortcuts are off and how to turn them on.
+  Alternatives:
+  - Settings alone lost, because a signed-out reader has the shortcuts and
+    would have no way to turn them off.
+  - A per-browser switch for everyone lost, because a member's choice
+    would not follow them, and docs/07 keeps the theme on the account for
+    that reason.
+  - A switch in the list that saves a member's account lost, because the
+    settings screen's save queue is the one place saves are ordered (Terva
+    reviews 1838 and 1875).
+  - Off by default lost, because it would take the shortcuts away from
+    every desktop reader when an off switch is all 2.1.4 asks for.
+  - Remapping to a modifier, or acting only on focus, lost. A remap screen
+    is more UI and collides with browser keys, and `j` and `k` act on the
+    page rather than on one control.
+
+  **Decided by the run (2026-10-02, pending maintainer review;
+  TKT-01M3V7GE59):** `/` opens search on every desktop screen that has the
+  top bar, while the shortcuts are on. Elsewhere it goes to `/search`,
+  whose field takes focus with no query. On `/search` it focuses the field
+  and selects its text. The top bar's Search link is its visible control,
+  and the shortcut list names it. `ignored()` keeps it out of text fields,
+  the composer and dialogs, as for every other key. Alternatives: `/` on
+  the thread page only lost, because search is reached from every screen
+  through the top bar, which is where the mockups draw the hint; a field in
+  the top bar lost, because 07 "Search" chose the link.
 
 ### The thread head
 
@@ -536,6 +573,18 @@ lost because a reply to yourself is not what the lens is for
   lost because the hint would be false. Front-page shortcuts of their own,
   such as j and k between forums, lost for the same WCAG reason and
   because nothing asked for them.
+
+  **Decided by the run (2026-10-02, pending maintainer review;
+  TKT-01M3V9DWTN):** once the shortcuts can be turned off ("Paged, not
+  infinite"), `?` is bound on the forum index while they are on, and the
+  footer's button reads "Press ? for keyboard shortcuts", as the mockup
+  does. While they are off, `?` does nothing there and the button reads
+  "Keyboard shortcuts". The list's lead line says which keys work on the
+  index and which only on a thread page. This replaces the decision above
+  only in what it waited on, the off switch. Alternatives: keeping the
+  index unbound lost, because the reason for it was 2.1.4, and the switch
+  meets it; binding `j` and `k` on the index too lost for the reason
+  above, that nothing asks for them.
 - The Alerts screen (`/notifications`, TKT-01M29CTY86) lists the viewer's
   notifications as one sentence each, the thread's title linking to the
   post's permalink, and never shows post text (04 "notifications"). The

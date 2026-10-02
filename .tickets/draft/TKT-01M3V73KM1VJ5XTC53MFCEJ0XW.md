@@ -10,6 +10,8 @@ due_on: null
 labels:
   - area:render
   - effort:S
+  - area:api
+  - area:client
 assignees: []
 milestone: phase-4
 parent: null
@@ -20,12 +22,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-01T07:50:48Z
-updated_at: 2026-10-02T15:42:10Z
+updated_at: 2026-10-02T17:21:27Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-run-orchestrator
+  id: agent:claude-code/phase4-groom-client-account
   name: ""
 extensions: {}
 ---
@@ -37,3 +39,83 @@ extensions: {}
 `upload` is granted by an admin and is not seeded for members (docs/07 "Attachments", decided by the run 2026-10-01), so the exposure is limited to people an admin chose. A per-member byte budget over a rolling window, or a cap on unattached bytes per member, would close it.
 
 Found while grooming TKT-01M29CXK0K (Build the content-addressed blob store and upload path). No Phase 3 exit criterion needs it, so it has no milestone (docs/14 "Scope").
+
+## Acceptance criteria
+
+- [ ] An upload of new bytes that would take an account's unattached bytes over limits.unattached_upload_mb is validation-failed with file upload_budget and leaves no file or row; bytes already stored are never refused for it (TestUploadBudget, TestUploadBudgetRace)
+- [ ] An account already at the bound is refused before the body is read (TestUploadBudgetRefusedBeforeRead)
+- [ ] limits.unattached_upload_mb defaults to 100, reads KETJU_LIMITS_UNATTACHED_UPLOAD_MB, and ketju config check refuses a value below limits.attachment_mb (validate tests; docs/02 and docs/07 rows)
+- [ ] The query uses a partial index on blobs (uploaded_by) where refcount = 0, in a migration with the next free number, and a test reads its plan
+- [ ] The composer shows the upload_budget words (Composer.test.tsx), and e2e/attachments.spec.ts passes at 390 px and 1440 px with one axe scan per test
+- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+
+## Implementation plan
+
+Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15.
+
+### Settled in grooming
+
+- **The bound.** Decided by the run, pending maintainer review, in docs/07 "Attachments" (2026-10-02), with the alternatives that lost:
+  - **What is bounded:** the bytes an account has stored that no post names. That is the sum of `blobs.size` over blobs whose `uploaded_by` is the account and whose `refcount` is 0. It includes blobs a draft holds, which blob GC keeps for as long as a draft names them (`DeleteCollectableBlob`, migration 0021), and blobs waiting out their seven days (docs/03 "Blob garbage collection").
+  - **The limit:** `limits.unattached_upload_mb` (`KETJU_LIMITS_UNATTACHED_UPLOAD_MB`), 100 MB by default. `ketju config check` refuses a value below `limits.attachment_mb`.
+  - **When it is asked:** before the body is read, and again in the write transaction that stores new bytes.
+  - **The refusal:** `validation-failed` with `{field: "file", code: "upload_budget"}`. The staged file is removed.
+  - **Bytes already stored** are never refused for this, because they use no new disk.
+  - **Everyone** is bound by it, admins and agents included.
+- **Not a security-posture question.** The bound narrows what an account granted `upload` may do, and changes no one's access to anything. docs/14's upload invariant ("content-addressed and size-limited") is kept and tightened.
+- **The member sees it** in the composer, in the words of attaching (`uploadFailure`, `state/files.ts`).
+
+### Approach
+
+1. **Config.**
+   - `config.Limits` gains `UnattachedUploadMB int toml:"unattached_upload_mb"`, defaulted to `DefaultUnattachedUploadMB = 100` in the defaults block, read from `KETJU_LIMITS_UNATTACHED_UPLOAD_MB` in `env.go`.
+   - `validate.go` refuses a value below `AttachmentMB` and above a sanity ceiling, `maxUnattachedUploadMB = 1 << 20`, with the wording style of the other limits.
+   - `testdata/full.toml` gains the key.
+   - docs/02's limits list and docs/07's "Request limits" table gain the row at implementation.
+2. **Query and index.**
+   - Migration: take the next free number, 0025 on main at ed82f15 and checked again at implementation. It adds `CREATE INDEX blobs_uploader_unreferenced ON blobs (uploaded_by) WHERE refcount = 0;`.
+   - `queries/blobs.sql` gains `UnattachedBytes :one`, `SELECT coalesce(sum(size), 0) FROM blobs WHERE uploaded_by = ? AND refcount = 0`. Regenerate with sqlc.
+   - A test in `internal/service/blobs` reads `EXPLAIN QUERY PLAN` for `UnattachedBytes` and holds that it uses the index, as `TestPlansSeek` (`internal/store/db/views`) does for the thread list.
+3. **`blobs.Service`.**
+   - It gains `Budget int64` (bytes; zero means the default), wired from config in `cmd/ketju/serve.go` where `Max` is.
+   - `MayUpload` asks `UnattachedBytes` and refuses when the total is already at or over the budget. It runs before the body is read (`upload` handler, `internal/web/api/blobs.go`).
+   - `Upload`'s write transaction, in the branch that creates a new blob (`sql.ErrNoRows` from `GetBlob`), asks again. It refuses when the total plus `n` is over the budget, so two uploads at once cannot both pass: the write connection serializes them.
+   - The known-bytes branch (`RefreshBlob`) is not asked.
+   - `CodeUploadBudget = "upload_budget"` joins the codes in `blobs.go`.
+   - The refusal is a field error on `file` (`invalid("file", CodeUploadBudget)`), so the deferred cleanup removes the staged file, as it does for `blocked`.
+4. **The error catalogue.** docs/07's `POST /blobs` row and its "Attachments" section name the code.
+5. **Client.** `uploadFailure` in `state/files.ts` gains a case: `upload_budget` reads "You have too many files waiting to be posted. Post them, or wait: files you remove are cleared within 7 days."
+6. **Build.** Run `go generate ./internal/web/spa` and `npm run budget`.
+
+**Reader bundle.** One string in the reader's `state/files.ts`. Estimated at +80 B gzip. Measure it and state it in the PR.
+
+### Tests
+
+- **Go (`internal/service/blobs`).**
+  - `TestUploadBudget`:
+    - with a 3 MB budget, three 1 MB uploads pass and a fourth is `upload_budget`, and no blob file or row is left behind;
+    - attaching one to a post frees its bytes, and the next upload passes;
+    - a draft's blob still counts;
+    - re-uploading stored bytes passes at the bound;
+    - another account's unattached bytes do not count.
+  - `TestUploadBudgetRefusedBeforeRead`: an account already at the bound is refused by `MayUpload`, and the handler reads none of the body. Use a reader that fails the test if it is read.
+  - `TestUploadBudgetRace`: two uploads that each fit alone, but not together, run at once. Exactly one is stored, and the refused one's staged file is gone. Run it under `-race`.
+  - **Uploads are content-addressed and served only to readers of a referencing post.** The existing `TestBlobServedOnlyToReaders` and `TestRevalidationRechecksAccess` stay green. The bound adds no serving path.
+- **Go (`internal/config`).** `validate_test.go`: below `attachment_mb` and above the ceiling are refused; the default and the env override are read.
+- **Go (`internal/web/api/blobs_test.go`).** `TestUploadOverHTTP` gains a case: over the budget, the answer is `validation-failed` with `{field: "file", code: "upload_budget"}`.
+- **Vitest** (`composer/Composer.test.tsx`). The table of refusal words (`['type.png', () => field('type_not_allowed'), ...]`) gains an `upload_budget` row.
+- **e2e.** The Vitest row covers the words, and the Go tests cover the bound. An e2e test would need a low `limits.unattached_upload_mb` in the config `cmd/ketju/e2e.go` writes (`[limits]`), which every other upload in the run would then share. So:
+  - `e2e/attachments.spec.ts` runs unchanged at 390 px and 1440 px with its axe scans, and proves the default bound does not refuse ordinary use;
+  - no e2e step reaches the bound.
+
+### Out of scope
+
+- A per-day upload rate. The per-address write limiter already bounds request rate.
+- Showing a member how much of the bound they have used.
+- Avatars. When TKT-01M3YSQ4CR (Let a member set an avatar) is decided, a blob an `avatar_blob` names should not count against the bound. That ticket's plan carries this.
+
+## Notes
+
+**agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:21:27Z
+
+run decision: pending maintainer review. Bound the bytes an account has stored that no post names (blobs.uploaded_by, refcount 0, drafts included) by limits.unattached_upload_mb, 100 MB by default. It is asked before the body is read and again in the write that stores new bytes, and refused as validation-failed with file upload_budget. Bytes already stored are never refused. Admins and agents are bound too. Recorded with the alternatives in docs/07 'Attachments' (2026-10-02). The ticket now has the phase-4 milestone (docs/15 scope), so the description's 'no milestone' line is out of date.

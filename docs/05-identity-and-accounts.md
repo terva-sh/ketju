@@ -394,6 +394,25 @@ kept `handle_releases` rows (04), and an
 anonymized account's old handles redirect nowhere and their mentions are
 text.
 
+**Decided by the run (2026-10-02, pending maintainer review;
+TKT-01M3V6XTYG):** a member changes their handle, and deactivates their
+account, on a settings screen of its own, `/settings/account` ("Account"),
+last in the settings links. The screen reads `GET /settings/handle`, which
+answers `{handle, next_change_at}` with the same gates as the `PUT`, so the
+cooldown shows before the member types anything. The change asks for
+confirmation first, naming the 30 days and the 90-day reservation of the old
+handle, which the member cannot take back either. Deactivation asks for
+confirmation, says how to come back ("Account lifecycle"), and then loads
+`/` in full, as signing out does. Alternatives:
+- Both controls on `/settings` lost, because that screen is "Preferences"
+  and saves each field as it changes. A handle change and a deactivation
+  each need a confirmation.
+- Learning the cooldown only from a refused change lost, because the
+  member would find out by trying.
+- Putting `next_change_at` in `/me`'s `settings` lost, because `/me` is
+  read on every page and is inlined in the shell, and the date is for one
+  screen.
+
 ### Forms
 
 A minimal declarative form system, used first for registration and reusable
@@ -480,6 +499,55 @@ version that no longer parses is a 500 and an error-level log naming the
 form and version, never a form served without the field it could not read.
 The server logs the same at startup for the registration form, and keeps
 serving.
+
+## Display name and bio
+
+**Decided by the run (2026-10-02, pending maintainer review;
+TKT-01M3V6XVVG):** a member edits their own display name and bio on
+`/settings/profile` ("Profile"), first in the settings links. The screen
+reads `GET /settings/profile`, which answers `{display_name, bio}`, the bio
+as its Markdown source. It saves with `PATCH /settings/profile`, which takes
+either key or both and answers the same shape.
+- **The display name** follows the rule an agent's already follows
+  (`users.DisplayNameMaxLen`, 07 `POST /admin/users`). It is trimmed, valid
+  UTF-8, at most 100 characters, and has no control character. An empty
+  name is stored empty, and every author block then shows the handle, as
+  it already does for an empty name. Display names need not be unique.
+- **The bio** is Markdown, at most 2000 characters, and is rendered when
+  it is served, as `GET /users/{handle}` already does. It has no
+  attachments. An image in it renders as a link, as any image that is not
+  an attachment does (`internal/render`). A mention in it links and
+  notifies nobody, since only a post's create path notifies.
+- **Who.** A member session only. Anonymous is `unauthenticated`, a
+  pre-user `forbidden`, and an agent by its credential `forbidden`. An
+  agent's name is the admin's to give when they provision it ("Agent
+  accounts"). Each `PATCH` is charged to the per-address write limiter.
+- **No audit row.** `audit_log` records moderation and administration, and
+  a member's edit of their own profile is neither, as `thread.renamed` is
+  not written for an author's own rename (04 "audit_log"). The handle,
+  which names the member in URLs and mentions, keeps its `user.renamed`
+  row.
+- **The avatar** waits on a decision about who may fetch an avatar's blob,
+  which 07 "Attachments" serves only to readers of a post that names it.
+  TKT-01M3YSQ4CR (Let a member set an avatar) holds that
+  question.
+
+Alternatives:
+- Display names held to the handle's characters lost, because they come
+  from the identity provider's `name` claim at registration (above) and
+  are free text there.
+- Refusing a display name another account uses lost, because display names
+  are not unique today and an equality check is beaten by one look-alike
+  character. The role badge marks staff, and the author link and the
+  profile name the handle.
+- An audit row with the old and new text lost, because `audit_log` is
+  append-only and a hard redaction cannot reach it (04). A row naming only
+  which field changed lost, because it gives an admin nothing to act on.
+- Editing on the profile screen itself lost, because the settings screens
+  already hold what a member changes about their account, and the profile
+  is what others see.
+- Putting both fields in `PATCH /settings` lost, because that answer is
+  `/me`'s `settings`, read on every page, and a bio does not belong there.
 
 ## Sessions and CSRF
 
