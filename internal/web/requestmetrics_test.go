@@ -21,6 +21,14 @@ func metricsServer(t *testing.T) (http.Handler, *metrics.Registry, *metrics.Hist
 		_, _ = w.Write([]byte("thread"))
 	})
 	api.HandleFunc("GET /api/v1/boom", func(http.ResponseWriter, *http.Request) { panic("boom") })
+	// Flushed, then an error status, or a panic: the client has the 200.
+	api.HandleFunc("GET /api/v1/flushed/{then}", func(w http.ResponseWriter, r *http.Request) {
+		_ = http.NewResponseController(w).Flush()
+		if r.PathValue("then") == "panic" {
+			panic("after the flush")
+		}
+		w.WriteHeader(http.StatusInternalServerError)
+	})
 	api.Handle("/api/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.CodeNotFound)
 	}))
@@ -155,5 +163,25 @@ func TestEventsStreamIsNotTimed(t *testing.T) {
 	do(srv, http.MethodGet, "/events")
 	if n := h.Series(); n != 0 {
 		t.Errorf("/events added %d series", n)
+	}
+}
+
+// TestFlushedStatusIsWhatIsRecorded (Terva review 1966): a response that
+// was flushed has sent its status, so a later WriteHeader or a panic that
+// recovery answers with a 500 does not change what is recorded.
+func TestFlushedStatusIsWhatIsRecorded(t *testing.T) {
+	srv, reg, _ := metricsServer(t)
+	for _, then := range []string{"status", "panic"} {
+		rec := do(srv, http.MethodGet, "/api/v1/flushed/"+then)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("flushed then %s: the client got %d; the fixture is wrong", then, rec.Code)
+		}
+	}
+	got := scrape(t, reg)
+	if !strings.Contains(got, `{route="/api/v1/flushed/{then}",method="GET",code="2xx",le="+Inf"} 2`) {
+		t.Errorf("the flushed responses were not both recorded as 2xx:\n%s", got)
+	}
+	if strings.Contains(got, `{route="/api/v1/flushed/{then}",method="GET",code="5xx"`) {
+		t.Errorf("a flushed response was recorded as 5xx:\n%s", got)
 	}
 }

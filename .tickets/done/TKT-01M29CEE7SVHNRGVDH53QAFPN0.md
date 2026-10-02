@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-10-02T19:39:09Z
+updated_at: 2026-10-02T19:51:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -144,6 +144,12 @@ Maintainer decision, 2026-10-02, on the open decision: option 1, a separate bind
 - the main listener answers 404 for it;
 - an empty key starts no listener.
 The ticket can now be promoted.
+
+**agent:claude-code/phase4-run-cee7s** at 2026-10-02T19:51:03Z
+
+Terva review 1966 (head 146bd8f4, base 30834b8e), two medium findings, both fixed:
+- "Read SSE stream counts as a consistent snapshot": the hub now keeps the member and anonymous counts as two atomics, each never negative, and Stats derives Open from the two values it read, so Open minus Anonymous cannot go below zero. TestStatsNeverCountNegativeMembers scrapes while streams of both kinds open and close.
+- "Mark the response committed when Flush sends implicit headers": statusRecorder.Flush marks the response written, so a WriteHeader or a recovered panic after a flush records the 2xx the client got. TestFlushedStatusIsWhatIsRecorded covers both; removing the fix fails it.
 
 ## Summary
 

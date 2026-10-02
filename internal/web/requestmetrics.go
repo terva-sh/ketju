@@ -130,7 +130,12 @@ func (r *statusRecorder) Write(b []byte) (int, error) {
 
 func (r *statusRecorder) Unwrap() http.ResponseWriter { return r.ResponseWriter }
 
+// Flush commits the response, with an implicit 200 when nothing set a
+// status, so a status written after it, by the handler or by panic
+// recovery, does not change what is recorded: the client already has the
+// one that was sent (Terva review 1966).
 func (r *statusRecorder) Flush() {
+	r.wrote = true
 	if f, ok := r.ResponseWriter.(http.Flusher); ok {
 		f.Flush()
 	}

@@ -121,10 +121,13 @@ type Hub struct {
 	overflowed atomic.Uint64
 	lagged     atomic.Uint64
 
-	// openN and anonN follow len(streams) and anon, written with mu held,
-	// so Stats reads them without it (TKT-01M29CEE7S).
-	openN atomic.Int64
-	anonN atomic.Int64
+	// memberN and anonN count the member and the anonymous streams,
+	// written with mu held, so Stats reads them without it
+	// (TKT-01M29CEE7S). Two counts that are each never negative, rather
+	// than a total and a part, so a reader between two stores cannot
+	// derive a negative member count (Terva review 1966).
+	memberN atomic.Int64
+	anonN   atomic.Int64
 }
 
 // stream is one open subscription, as the hub sees it.
@@ -216,7 +219,7 @@ func (h *Hub) open(ts []threadid.ID, forums []int64, user int64) (*stream, error
 	} else {
 		h.anon++
 	}
-	h.openN.Store(int64(len(h.streams)))
+	h.memberN.Store(int64(len(h.streams) - h.anon))
 	h.anonN.Store(int64(h.anon))
 	return s, nil
 }
@@ -246,7 +249,7 @@ func (h *Hub) release(s *stream) {
 	} else {
 		h.anon--
 	}
-	h.openN.Store(int64(len(h.streams)))
+	h.memberN.Store(int64(len(h.streams) - h.anon))
 	h.anonN.Store(int64(h.anon))
 	s.end()
 }
@@ -451,9 +454,12 @@ type Stats struct {
 }
 
 // Stats reports the hub's standing. It takes no lock, so a metrics scrape
-// never waits on a stream opening or closing; Open and Anonymous may be one
-// stream apart if one is opening as they are read.
+// never waits on a stream opening or closing. Open is the sum of the two
+// counts it read, so Open minus Anonymous, the member streams, is never
+// negative, though a stream opening as Stats runs may be counted in one
+// kind and not yet the other.
 func (h *Hub) Stats() Stats {
-	return Stats{Open: int(h.openN.Load()), Anonymous: int(h.anonN.Load()), Refused: h.refused.Load(),
+	member, anon := h.memberN.Load(), h.anonN.Load()
+	return Stats{Open: int(member + anon), Anonymous: int(anon), Refused: h.refused.Load(),
 		Overflowed: h.overflowed.Load(), Lagged: h.lagged.Load()}
 }
