@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YME9KGJ1XW7RHCRFZ621A0
 title: Answer method-not-allowed for a wrong verb on an API route
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -18,17 +18,10 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-me9kg
-  branch: run/me9kg-method-not-allowed
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-afae7cbdfc4c034cc
-  commit: cac3ed9d6ffdeba7495ba7b79aef8f8ead88503f
-  session: null
-  claimed_at: 2026-10-02T20:45:26Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T20:45:27Z
+updated_at: 2026-10-02T20:54:37Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -52,10 +45,10 @@ Both found on 2026-10-02 by the check of TKT-01M29BKBMC.
 
 ## Acceptance criteria
 
-- [ ] A wrong verb on any /api/v1 route answers 405 method-not-allowed with Allow listing exactly the path's methods (HEAD with GET); TestEveryRouteAnswersAWrongVerbWithMethodNotAllowed passes over api.Routes
-- [ ] An unknown path is still not-found with no Allow, and HEAD on a GET route is served; TestAnUnknownPathIsStillNotFound and TestHeadOnAGetRouteIsServed pass
-- [ ] render_test.go and users_test.go require method-not-allowed and the exact Allow
-- [ ] docs/07's catalogue row names Allow, and its ETag example carries the renderer and the digest as view.go writes them
+- [x] A wrong verb on any /api/v1 route answers 405 method-not-allowed with Allow listing exactly the path's methods (HEAD with GET); TestEveryRouteAnswersAWrongVerbWithMethodNotAllowed passes over api.Routes
+- [x] An unknown path is still not-found with no Allow, and HEAD on a GET route is served; TestAnUnknownPathIsStillNotFound and TestHeadOnAGetRouteIsServed pass
+- [x] render_test.go and users_test.go require method-not-allowed and the exact Allow
+- [x] docs/07's catalogue row names Allow, and its ETag example carries the renderer and the digest as view.go writes them
 
 ## Implementation plan
 
@@ -106,3 +99,27 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15e.
 - CORS preflight. The API serves no cross-origin callers, so `OPTIONS` on a route gets 405 with `Allow` like any other wrong verb.
 - Routes outside `internal/web/api`: `/auth/*`, `/healthz` and the SPA shell already answer 405 themselves.
 - The rest of docs/07's cache-key prose next to the ETag example. It is not what the description names.
+
+## Notes
+
+**agent:claude-code/phase4-run-me9kg** at 2026-10-02T20:47:02Z
+
+Claimed 2026-10-02 on main at cac3ed9d. Between the grooming base ed82f15e and cac3ed9d, `build`'s catch-all did not change. The route table gained only what TKT-01M3YME9DM and the tag rules (TKT-01M3B12ZZ4) added. The plan stands as written and is not revised.
+
+### Notes from the implementation
+
+- The route walk sends every method a path does not accept, OPTIONS included, rather than one, to a URL with `{...}` filled in as `adminWorld.request` does. It checks the problem code, the exact `Allow` and the problem+json content type. A HEAD answer has no body (`problem.Write`), so for HEAD it checks the status and the headers.
+- The test writes out the `Allow` order (`GET, HEAD, POST, PUT, PATCH, DELETE`) instead of reading the handler's `probeMethods`, so dropping a method from the probe fails the test. With the probe missing HEAD, the first version of the test still passed. The written-out order is what caught the mutation.
+- Grouping the table's patterns by path string gives the same answer as the mux for every route on main. No literal segment collides with a wildcard under a different method set.
+- On main, `TestPreviewRequests` fails at render_test.go:252 and `TestSuggestions` at users_test.go:102, each with 404 and no `Allow`.
+- docs/07: the catalogue row now says `Allow` names the route's methods, with `HEAD` wherever `GET` is, and that a path no route has is `not-found`. The ETag example is `"3yymw47g00001-483920-r5-6b1f0e2a9c4d7e13"`, and `render.Version` is 5.
+
+## Summary
+
+A wrong verb on any `/api/v1` route now answers 405 `method-not-allowed`, with `Allow` listing the path's methods in the order `GET, HEAD, POST, PUT, PATCH, DELETE`, and HEAD wherever GET is. A path no route has is still `not-found`, with no `Allow`. The catch-all in `build` (`unrouted` in `internal/web/api/api.go`) asks the mux which pattern each method would reach, so wildcards and `{$}` match as they do for a real request. It never runs the handler it finds.
+
+- `TestEveryRouteAnswersAWrongVerbWithMethodNotAllowed` (`methods_test.go`) walks `api.Routes`, so a route added later is covered with no edit. `TestAnUnknownPathIsStillNotFound` and `TestHeadOnAGetRouteIsServed` pin the rest.
+- `render_test.go` and `users_test.go` require 405 with `Allow: POST` and `Allow: GET, HEAD`.
+- docs/07: the catalogue row names `Allow`, and the ETag example reads `"<id>-<log_length>-r5-<digest>"`.
+
+For later tickets: a new route needs nothing extra for a wrong verb. An API test that sent a wrong verb and expected 404 now gets 405.
