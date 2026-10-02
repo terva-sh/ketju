@@ -1,7 +1,9 @@
 package api
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -33,6 +35,41 @@ func (h *handlers) registerModeration(mux *http.ServeMux) {
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/pin", moderatesGate, h.pinThread)
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unpin", moderatesGate, h.unpinThread)
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/move", moderatesGate, h.moveThread)
+	h.adminRoute(mux, "PUT /api/v1/admin/threads/{id}/tags", moderatesGate, h.retagThread)
+}
+
+// retagRequest is the body of PUT …/tags: the thread's whole new tag set,
+// read by decodeTags.
+type retagRequest struct {
+	Tags json.RawMessage `json:"tags"`
+}
+
+// retagThread is PUT /api/v1/admin/threads/{id}/tags with {tags}, a
+// moderator's retag (docs/07 "Retagging threads", TKT-01M29CYSCP). A body
+// without tags, or with tags null, is bad-request: an empty list is how a
+// retag removes every tag, so nothing is taken to mean it.
+func (h *handlers) retagThread(w http.ResponseWriter, r *http.Request) {
+	id, err := threadid.Parse(r.PathValue("id"))
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	var in retagRequest
+	if err := optionalJSON(r.Body, maxReasonBody, &in); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if in.Tags == nil || bytes.Equal(in.Tags, []byte("null")) {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, errors.New("api: the retag has no tags")))
+		return
+	}
+	tags, err := decodeTags(in.Tags)
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.threads.Retag(r.Context(), domain.ViewerFrom(r.Context()), id, tags)
+	h.answerHeader(w, r, res, err)
 }
 
 // renameRequest is the body of PATCH /threads/{id}.

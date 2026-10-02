@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 	"unicode/utf8"
 
@@ -109,6 +110,39 @@ func (s *Service) Unpin(ctx context.Context, v domain.Viewer, id threadid.ID, sc
 			return threadlog.Append{}, err
 		}
 		return threadlog.Append{Type: threadlog.TypeThreadUnpinned, Body: &threadlog.ThreadUnpinnedBody{Scope: scope}}, nil
+	})
+}
+
+// Retag is PUT /admin/threads/{id}/tags (docs/07 "Retagging threads"): one
+// ThreadTagged record whose tags replace the thread's whole set (docs/03),
+// checked and ordered as on create by NormalizeTags. An empty set removes
+// every tag. The retagger moderates the forum, so a reserved tag may be set
+// or removed (docs/08 "Thread tags"). Refusals come in moderate's order,
+// all before the append: forbidden without moderate in the thread's forum,
+// conflict on an archived thread, then validation-failed for a set
+// NormalizeTags refuses, and conflict for the set the thread already has,
+// so the log keeps no record that changes nothing. A retag in an archived
+// forum is allowed, as a lock is.
+//
+// Every retag is audited, with no tag text, by the projection.
+func (s *Service) Retag(ctx context.Context, v domain.Viewer, id threadid.ID, tags []string) (dto.ThreadHeader, error) {
+	return s.moderate(ctx, v, id, func(a access, _ time.Time) (threadlog.Append, error) {
+		set, err := NormalizeTags(tags)
+		if err != nil {
+			return threadlog.Append{}, err
+		}
+		var have []string
+		if err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+			var err error
+			have, err = q.ThreadTags(ctx, a.row.ID)
+			return err
+		}); err != nil {
+			return threadlog.Append{}, err
+		}
+		if slices.Equal(set, have) {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s already has these tags", id))
+		}
+		return threadlog.Append{Type: threadlog.TypeThreadTagged, Body: &threadlog.ThreadTaggedBody{Tags: set}}, nil
 	})
 }
 

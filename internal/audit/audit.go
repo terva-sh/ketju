@@ -122,6 +122,7 @@ var Actions = []string{
 	"thread.moved",
 	"thread.pinned",
 	"thread.renamed",
+	"thread.retagged",
 	"thread.slow_mode",
 	"thread.title_redacted",
 	"thread.unlocked",

@@ -21,13 +21,13 @@ func (h *handlers) forumTree(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, tree)
 }
 
-// threadList is GET /api/v1/forums/{slug}/threads?cursor=&sort= (docs/07): a
+// threadList is GET /api/v1/forums/{slug}/threads?cursor=&sort=&tag= (docs/07): a
 // page of the forum's threads, pins first on the first page. Like the tree,
 // it is the viewer's and moves with every post, so no cache keeps it.
 func (h *handlers) threadList(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	list, err := h.threads.List(r.Context(), domain.ViewerFrom(r.Context()), r.PathValue("slug"),
-		threads.ListQuery{Cursor: q.Get("cursor"), Sort: q.Get("sort")})
+		threads.ListQuery{Cursor: q.Get("cursor"), Sort: q.Get("sort"), Tag: q.Get("tag")})
 	if err != nil {
 		h.fail(w, r, err)
 		return

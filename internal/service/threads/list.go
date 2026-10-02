@@ -22,10 +22,26 @@ import (
 const ListPageSize = DefaultPageSize
 
 // ListQuery is a thread list request's parameters (docs/07): the cursor from
-// the previous page's next_cursor, and the sort.
+// the previous page's next_cursor, the sort, and the one tag the list is
+// filtered to, "" for none.
 type ListQuery struct {
 	Cursor string
 	Sort   string
+	Tag    string
+}
+
+// parseTagFilter reads ?tag=: empty is no filter, and otherwise it is folded
+// as a tag is on create (domain.NormalizeTag). One that could not be a tag is
+// bad-request, as an unknown sort is.
+func parseTagFilter(s string) (string, error) {
+	if s == "" {
+		return "", nil
+	}
+	t, err := domain.NormalizeTag(s)
+	if err != nil {
+		return "", problem.Coded(problem.CodeBadRequest, fmt.Errorf("threads: the tag filter is not a tag: %w", err))
+	}
+	return t, nil
 }
 
 // List is GET /forums/{slug}/threads (docs/06 "Thread list views", docs/07).
@@ -47,13 +63,17 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	if err != nil {
 		return dto.ThreadList{}, err
 	}
+	tag, err := parseTagFilter(q.Tag)
+	if err != nil {
+		return dto.ThreadList{}, err
+	}
 	// The forum first, so a forum hidden from v is not-found whatever the
 	// cursor says, and the cursor is checked against the forum it names.
 	forum, err := s.readForum(ctx, v, slug)
 	if err != nil {
 		return dto.ThreadList{}, err
 	}
-	cur, err := decodeCursor(sort, forum.ID, q.Cursor)
+	cur, err := decodeCursor(sort, forum.ID, tag, q.Cursor)
 	if err != nil {
 		return dto.ThreadList{}, err
 	}
@@ -73,7 +93,7 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	if after == nil {
 		if err := s.DB.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
 			var err error
-			pinned, err = views.PinnedThreads(ctx, tx, forum.ID, v.UserID, now)
+			pinned, err = views.PinnedThreads(ctx, tx, forum.ID, v.UserID, now, tag)
 			return err
 		}); err != nil {
 			return dto.ThreadList{}, err
@@ -95,7 +115,7 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	if err := s.DB.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
 		var err error
 		rows, err = views.ThreadList(ctx, tx, views.ListParams{ForumID: forum.ID, UserID: v.UserID, Sort: sort,
-			After: after, Pinned: shown, Limit: ListPageSize + 1})
+			After: after, Pinned: shown, Tag: tag, Limit: ListPageSize + 1})
 		if err != nil || !v.Member() {
 			return err
 		}
@@ -107,7 +127,7 @@ func (s *Service) List(ctx context.Context, v domain.Viewer, slug string, q List
 	next := ""
 	if len(rows) > ListPageSize {
 		rows = rows[:ListPageSize]
-		next = cursor{Sort: sort, Forum: forum.ID, Key: rows[len(rows)-1].Key(sort), Pinned: shown}.encode()
+		next = cursor{Sort: sort, Forum: forum.ID, Tag: tag, Key: rows[len(rows)-1].Key(sort), Pinned: shown}.encode()
 	}
 
 	all := append(pinned, rows...)

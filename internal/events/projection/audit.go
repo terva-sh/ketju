@@ -24,6 +24,7 @@ const (
 	ActionThreadUnpinned = "thread.unpinned"
 	ActionThreadMoved    = "thread.moved"
 	ActionThreadRenamed  = "thread.renamed"
+	ActionThreadRetagged = "thread.retagged"
 	ActionPostEdited     = "post.edited"
 	ActionPostDeleted    = "post.deleted"
 	ActionPostHidden     = "post.hidden"
@@ -64,20 +65,22 @@ func readPrior(ctx context.Context, q *dbq.Queries, f frame) (prior, error) {
 // Which records are audited is decided from the record and the rows it was
 // projected against, never by the caller that appended it, so an author's
 // own action cannot produce a row:
-//   - always: a lock, unlock, pin, unpin or move;
+//   - always: a lock, unlock, pin, unpin, move or retag (ThreadTagged,
+//     which only a moderator writes; TKT-01M29CYSCP);
 //   - when the actor is not the thread's author: a rename;
 //   - when the actor is not the post's author: an Edit, Delete or Restore,
 //     a Delete with by_moderator being post.hidden and one with auto,
 //     whose actor is 0, the system, post.auto_hidden (TKT-01M29CP2PJ);
-//   - never: ThreadCreated, Post, ThreadTagged, and ThreadArchived until its
-//     own ticket decides.
+//   - never: ThreadCreated, whose tags are the author's own, Post, and
+//     ThreadArchived until its own ticket decides.
 //
-// A rename's row carries no title, old or new: only the thread and the
-// record's offset, which writeAudit adds. The log is the record of what the
-// title was, and audit_log is append-only, so a title copied into it could
-// never be removed by a hard redaction (docs/03 "Hard redaction", maintainer
-// decision 2026-09-29 on TKT-01M3NS147C). A move's row names both forums by
-// id, which are not user text.
+// A rename's row carries no title, old or new, and a retag's no tags: only
+// the thread and the record's offset, which writeAudit adds. The log is the
+// record of what the title and the tags were, and audit_log is append-only,
+// so member-written text copied into it could never be removed by a hard
+// redaction (docs/03 "Hard redaction", maintainer decision 2026-09-29 on
+// TKT-01M3NS147C). A move's row names both forums by id, which are not user
+// text.
 func auditFor(ctx context.Context, q *dbq.Queries, f frame, p prior) (action string, target audit.Target, details map[string]any, ok bool, err error) {
 	thread := audit.Thread(f.thread)
 	switch b := f.body.(type) {
@@ -97,6 +100,8 @@ func auditFor(ctx context.Context, q *dbq.Queries, f frame, p prior) (action str
 			return "", target, nil, false, err
 		}
 		return ActionThreadRenamed, thread, map[string]any{}, true, nil
+	case *threadlog.ThreadTaggedBody:
+		return ActionThreadRetagged, thread, map[string]any{}, true, nil
 	case *threadlog.EditBody:
 		return postAction(ctx, q, f, ActionPostEdited, map[string]any{"reason": b.Reason, "revision": revision(f.h)})
 	case *threadlog.DeleteBody:

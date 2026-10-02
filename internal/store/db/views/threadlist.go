@@ -146,8 +146,16 @@ type ListParams struct {
 	// pins since, is what keeps a pin that expires or is removed between
 	// pages from being shown twice (review on PR #84).
 	Pinned []int64
-	Limit  int
+	// Tag, when not empty, keeps only the threads carrying it, a tag as
+	// stored (TKT-01M29CYSCP).
+	Tag   string
+	Limit int
 }
+
+// hasTag keeps a thread carrying the one tag its parameter names. It probes
+// thread_tags's primary key, (thread_id, tag), once per row, while the
+// forum's index drives the scan and keeps its order.
+const hasTag = ` AND EXISTS (SELECT 1 FROM thread_tags AS g WHERE g.thread_id = t.id AND g.tag = ?)`
 
 // ThreadList is a page of p.ForumID's threads with a post, less p.Pinned, in
 // p.Sort's order after p.After.
@@ -184,6 +192,10 @@ WHERE t.forum_id = ? AND t.last_post_ordinal > 0`
 		q += ` AND t.id NOT IN (SELECT value FROM json_each(?))`
 		args = append(args, string(ids))
 	}
+	if p.Tag != "" {
+		q += hasTag
+		args = append(args, p.Tag)
+	}
 	q += fmt.Sprintf(` ORDER BY %s DESC, t.id DESC LIMIT ?`, col)
 	args = append(args, p.Limit)
 	return q, args
@@ -202,18 +214,25 @@ const MaxPinned = 50
 // first. It reads only pinned rows (threads_pinned), which moderators alone
 // create. The caller drops the global pins from forums the viewer may not
 // read, perm answering for all their forums at once, then keeps the first
-// MaxPinned.
-func PinnedThreads(ctx context.Context, tx *sql.Tx, forumID, userID, now int64) ([]ThreadRow, error) {
-	q, args := pinnedSQL(forumID, userID, now)
+// MaxPinned. A tag that is not empty keeps only the pins carrying it, as a
+// filtered list does (TKT-01M29CYSCP).
+func PinnedThreads(ctx context.Context, tx *sql.Tx, forumID, userID, now int64, tag string) ([]ThreadRow, error) {
+	q, args := pinnedSQL(forumID, userID, now, tag)
 	return scanRows(ctx, tx, q, args...)
 }
 
-func pinnedSQL(forumID, userID, now int64) (string, []any) {
+func pinnedSQL(forumID, userID, now int64, tag string) (string, []any) {
 	q := selectRows("threads_pinned") + `
 WHERE t.last_post_ordinal > 0 AND ` + activePin + `
-  AND (t.pinned_scope = 'global' OR (t.pinned_scope = 'forum' AND t.forum_id = ?))
+  AND (t.pinned_scope = 'global' OR (t.pinned_scope = 'forum' AND t.forum_id = ?))`
+	args := []any{userID, userID, userID, userID, now, forumID}
+	if tag != "" {
+		q += hasTag
+		args = append(args, tag)
+	}
+	q += `
 ORDER BY t.pinned_scope = 'global' DESC, t.last_post_at DESC, t.id DESC`
-	return q, []any{userID, userID, userID, userID, now, forumID}
+	return q, args
 }
 
 func scanRows(ctx context.Context, tx *sql.Tx, q string, args ...any) ([]ThreadRow, error) {

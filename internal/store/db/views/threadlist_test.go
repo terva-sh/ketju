@@ -105,10 +105,22 @@ func TestPlansSeek(t *testing.T) {
 	}
 	q, args := threadListSQL(ListParams{ForumID: 1, UserID: 1, After: after, Pinned: []int64{3, 4}, Limit: 26})
 	cases["list after pins"] = planCase{q, args, false}
-	q, args = pinnedSQL(1, 1, 1)
+	q, args = pinnedSQL(1, 1, 1, "")
 	cases["pinned"] = planCase{q, args, true}
+	// Filtered to a tag (TKT-01M29CYSCP): the forum's index still drives
+	// the scan and its order, and thread_tags is probed by its primary key
+	// per row, never scanned.
+	for _, s := range []Sort{ByActivity, ByCreated} {
+		for _, a := range []*Key{nil, after} {
+			q, args := threadListSQL(ListParams{ForumID: 1, UserID: 1, Sort: s, After: a, Pinned: []int64{3}, Tag: "garden", Limit: 26})
+			cases[fmt.Sprintf("tagged list sort %d cursor %t", s, a != nil)] = planCase{q, args, false}
+		}
+	}
+	q, args = pinnedSQL(1, 1, 1, "garden")
+	cases["tagged pinned"] = planCase{q, args, true}
 
 	scan := regexp.MustCompile(`^SCAN (\S+)`)
+	tagProbe := regexp.MustCompile(`SEARCH g (EXISTS )?USING PRIMARY KEY \(thread_id=\? AND tag=\?\)`)
 	for name, c := range cases {
 		t.Run(name, func(t *testing.T) {
 			var plan []string
@@ -142,6 +154,9 @@ func TestPlansSeek(t *testing.T) {
 			}
 			if !strings.Contains(strings.Join(plan, "\n"), "SEARCH t USING") {
 				t.Errorf("does not search threads by an index")
+			}
+			if strings.HasPrefix(name, "tagged") && !tagProbe.MatchString(strings.Join(plan, "\n")) {
+				t.Errorf("does not probe thread_tags by its key")
 			}
 			if t.Failed() {
 				t.Logf("plan:\n%s", strings.Join(plan, "\n"))
@@ -243,64 +258,89 @@ func TestUnreadMatchesUnreadCount(t *testing.T) {
 // TestKeysetSurvivesBumps is AC2: paging through a forum while threads are
 // bumped repeats no thread, and every thread that stays below the cursor
 // appears on a later page. Threads share last_post_at values, so ties are
-// broken by id and pages end in the middle of a tie.
+// broken by id and pages end in the middle of a tie. The same holds for a
+// list filtered to a tag that half the threads carry, which lists only those
+// (TKT-01M29CYSCP).
 func TestKeysetSurvivesBumps(t *testing.T) {
-	for _, s := range []Sort{ByActivity, ByCreated} {
-		for seed := range uint64(40) {
-			d := open(t)
-			rng := rand.New(rand.NewPCG(seed, 3))
-			var ts []thread
-			for id := int64(1); id <= 40; id++ {
-				at := int64(100 + rng.IntN(15))
-				ts = append(ts, thread{id: id, forum: 1, created: at, lastAt: at, ordinal: 1})
+	for _, tag := range []string{"", "odd"} {
+		for _, s := range []Sort{ByActivity, ByCreated} {
+			for seed := range uint64(40) {
+				keysetSurvivesBumps(t, s, seed, tag)
 			}
-			insertThreads(t, d, ts...)
-			clock := int64(1000)
+		}
+	}
+}
 
-			seen := map[int64]bool{}
-			var after *Key
-			for page := 0; ; page++ {
-				rows := list(t, d, ListParams{ForumID: 1, Sort: s, After: after, Limit: 7})
-				for _, r := range rows {
-					if seen[r.ID] {
-						t.Fatalf("sort %d seed %d: thread %d again on page %d", s, seed, r.ID, page)
-					}
-					seen[r.ID] = true
-				}
-				if len(rows) < 7 {
-					break
-				}
-				after = &Key{}
-				*after = rows[len(rows)-1].Key(s)
-				// Bump a few threads, some above the cursor and some below.
-				for range 3 {
-					clock++
-					exec(t, d, fmt.Sprintf(`UPDATE threads SET last_post_at = %d, last_post_ordinal = last_post_ordinal + 1,
+func keysetSurvivesBumps(t *testing.T, s Sort, seed uint64, tag string) {
+	t.Helper()
+	d := open(t)
+	rng := rand.New(rand.NewPCG(seed, 3))
+	var ts []thread
+	for id := int64(1); id <= 40; id++ {
+		at := int64(100 + rng.IntN(15))
+		ts = append(ts, thread{id: id, forum: 1, created: at, lastAt: at, ordinal: 1})
+	}
+	insertThreads(t, d, ts...)
+	// listed is whether the list filtered to tag has thread id.
+	listed := func(id int64) bool { return tag == "" || id%2 == 1 }
+	if tag != "" {
+		var tags []string
+		for id := int64(1); id <= 40; id++ {
+			if listed(id) {
+				tags = append(tags, fmt.Sprintf(`INSERT INTO thread_tags (thread_id, tag) VALUES (%d, '%s')`, id, tag))
+			} else {
+				tags = append(tags, fmt.Sprintf(`INSERT INTO thread_tags (thread_id, tag) VALUES (%d, 'even')`, id))
+			}
+		}
+		exec(t, d, tags...)
+	}
+	clock := int64(1000)
+
+	seen := map[int64]bool{}
+	var after *Key
+	for page := 0; ; page++ {
+		rows := list(t, d, ListParams{ForumID: 1, Sort: s, After: after, Tag: tag, Limit: 7})
+		for _, r := range rows {
+			if seen[r.ID] {
+				t.Fatalf("tag %q sort %d seed %d: thread %d again on page %d", tag, s, seed, r.ID, page)
+			}
+			if !listed(r.ID) {
+				t.Fatalf("tag %q sort %d seed %d: thread %d does not carry the tag", tag, s, seed, r.ID)
+			}
+			seen[r.ID] = true
+		}
+		if len(rows) < 7 {
+			break
+		}
+		after = &Key{}
+		*after = rows[len(rows)-1].Key(s)
+		// Bump a few threads, some above the cursor and some below.
+		for range 3 {
+			clock++
+			exec(t, d, fmt.Sprintf(`UPDATE threads SET last_post_at = %d, last_post_ordinal = last_post_ordinal + 1,
 						post_count = post_count + 1 WHERE id = %d`, clock, 1+rng.IntN(40)))
-				}
-			}
-			// Every thread not seen must have moved above the cursor, which
-			// only a bump does, and only in the activity order.
-			var missing []int64
-			for id := int64(1); id <= 40; id++ {
-				if !seen[id] {
-					missing = append(missing, id)
-				}
-			}
-			if s == ByCreated && len(missing) > 0 {
-				t.Fatalf("seed %d: sort by created skipped %v, and nothing changes created_at", seed, missing)
-			}
-			for _, id := range missing {
-				var at int64
-				if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
-					return tx.QueryRowContext(t.Context(), `SELECT last_post_at FROM threads WHERE id = ?`, id).Scan(&at)
-				}); err != nil {
-					t.Fatal(err)
-				}
-				if at < 1000 {
-					t.Fatalf("seed %d: thread %d was never bumped and was skipped", seed, id)
-				}
-			}
+		}
+	}
+	// Every thread not seen must have moved above the cursor, which
+	// only a bump does, and only in the activity order.
+	var missing []int64
+	for id := int64(1); id <= 40; id++ {
+		if !seen[id] && listed(id) {
+			missing = append(missing, id)
+		}
+	}
+	if s == ByCreated && len(missing) > 0 {
+		t.Fatalf("seed %d: sort by created skipped %v, and nothing changes created_at", seed, missing)
+	}
+	for _, id := range missing {
+		var at int64
+		if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+			return tx.QueryRowContext(t.Context(), `SELECT last_post_at FROM threads WHERE id = ?`, id).Scan(&at)
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if at < 1000 {
+			t.Fatalf("seed %d: thread %d was never bumped and was skipped", seed, id)
 		}
 	}
 }
@@ -325,7 +365,7 @@ func TestPins(t *testing.T) {
 		var rows []ThreadRow
 		if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
 			var err error
-			rows, err = PinnedThreads(t.Context(), tx, 1, 0, now)
+			rows, err = PinnedThreads(t.Context(), tx, 1, 0, now, "")
 			return err
 		}); err != nil {
 			t.Fatal(err)

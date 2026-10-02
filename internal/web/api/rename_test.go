@@ -409,7 +409,7 @@ func (w *world) appendUnprojected(id threadid.ID, from, forum int64) {
 // TestThreadModerationJudgesAnUnprojectedMove is TKT-01M3RQP0TG's seventh
 // criterion, first half: a thread in general, which gina moderates, has a
 // move to lounge, which she does not, in its log and not projected. Each of
-// her six actions is judged against the forum the log puts the thread in,
+// her seven actions is judged against the forum the log puts the thread in,
 // so each is forbidden and writes nothing. Judged from the row as it stood,
 // in general, each would have passed.
 func TestThreadModerationJudgesAnUnprojectedMove(t *testing.T) {
@@ -476,14 +476,14 @@ func (w *world) logHeaders(id threadid.ID) []threadlog.FrameHeader {
 // TestAMoveLandingMidDecisionIsJudged: a move to lounge lands after gina's
 // request has projected the thread in general and admitted her, and before
 // her change is written. The append's length precondition (lock, unlock,
-// pin, unpin, move) or the length check in the slow mode transaction refuses
+// pin, unpin, retag, move) or the length check in the slow mode transaction refuses
 // the stale decision, and the request is decided again against lounge, so
 // each is forbidden and writes nothing of hers. The move is landed from the
 // service's Project hook, which every decision calls once it has read the
 // length, so the timing is exact rather than raced.
 //
 // Each action is also asked when it would change nothing: locking a locked
-// thread, the slow mode the thread has, a move to the forum it is in. That
+// thread, the slow mode or the tags the thread has, a move to the forum it is in. That
 // refusal is an answer too, and it is not given at a length the log has left,
 // so it is forbidden rather than conflict (Terva review 1570, finding 1).
 func TestAMoveLandingMidDecisionIsJudged(t *testing.T) {
@@ -513,6 +513,8 @@ func moveMidDecision(t *testing.T, a threadAction, noop bool) {
 		_, err = w.svc.Pin(t.Context(), bob, id, threads.PinForum, nil)
 	case a.action == "slow-mode" && noop:
 		_, err = w.svc.SetSlowMode(t.Context(), bob, "", id, 30)
+	case a.action == "tags" && noop:
+		_, err = w.svc.Retag(t.Context(), bob, id, []string{"garden"})
 	case a.action == "move" && noop:
 		a.body = moveTo("general")
 	}
@@ -791,10 +793,11 @@ func TestRenameMovesTheResponseCacheKey(t *testing.T) {
 	}
 }
 
-// The ThreadRenamed and ThreadMoved records are the catalogue's, and this
-// ticket writes no ThreadTagged and serves no tag route (the sixth
-// criterion): TestRenameAndMoveWriteNoTags reads every record type in a
-// log that was renamed and moved through the API.
+// The ThreadRenamed and ThreadMoved records are the catalogue's, and a
+// rename or a move writes no ThreadTagged (the sixth criterion):
+// TestRenameAndMoveWriteNoTags reads every record type in a log that was
+// renamed and moved through the API. The one tag route is the retag that
+// TKT-01M29CYSCP serves.
 func TestRenameAndMoveWriteNoTags(t *testing.T) {
 	w := newWorld(t)
 	id, _ := w.seed()
@@ -810,8 +813,8 @@ func TestRenameAndMoveWriteNoTags(t *testing.T) {
 	for _, rt := range Routes(Deps{Threads: w.svc, Users: &users.Service{DB: w.db, Perm: perm.New(w.db)},
 		Forums: &forums.Service{DB: w.db, Perm: perm.New(w.db)}, Forms: &formsvc.Service{DB: w.db},
 		Applications: &applications.Service{DB: w.db}, Perm: perm.New(w.db)}) {
-		if strings.Contains(rt.Path, "tag") {
-			t.Errorf("a tag route is served: %s %s", rt.Method, rt.Path)
+		if strings.Contains(rt.Path, "tag") && rt.Method+" "+rt.Path != "PUT /api/v1/admin/threads/{id}/tags" {
+			t.Errorf("a tag route other than the retag is served: %s %s", rt.Method, rt.Path)
 		}
 	}
 }

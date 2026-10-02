@@ -31,10 +31,12 @@ func TestCursorRoundTrip(t *testing.T) {
 			{Forum: 1, Key: views.Key{At: 0, ID: 1}},
 			{Forum: 7, Key: views.Key{At: -5, ID: 7}, Pinned: []int64{3}},
 			{Forum: 1 << 40, Key: views.Key{At: 1757400000000, ID: 1 << 62}, Pinned: []int64{1, 2, 3}},
+			{Forum: 1, Tag: "long-read", Key: views.Key{At: 5, ID: 9}},
+			{Forum: 2, Tag: "a", Key: views.Key{At: 5, ID: 9}, Pinned: []int64{4}},
 		} {
 			c.Sort = s
 			text := c.encode()
-			got, err := decodeCursor(s, c.Forum, text)
+			got, err := decodeCursor(s, c.Forum, c.Tag, text)
 			if err != nil || got == nil || got.encode() != text || got.Key != c.Key || len(got.Pinned) != len(c.Pinned) {
 				t.Errorf("%+v: %q decodes to %+v, %v", c, text, got, err)
 			}
@@ -42,15 +44,26 @@ func TestCursorRoundTrip(t *testing.T) {
 			if s == views.ByCreated {
 				other = views.ByActivity
 			}
-			if _, err := decodeCursor(other, c.Forum, text); err == nil {
+			if _, err := decodeCursor(other, c.Forum, c.Tag, text); err == nil {
 				t.Errorf("%+v: accepted by the other sort", c)
 			}
-			if _, err := decodeCursor(s, c.Forum+1, text); err == nil {
+			if _, err := decodeCursor(s, c.Forum+1, c.Tag, text); err == nil {
 				t.Errorf("%+v: accepted by another forum", c)
+			}
+			if got != nil && got.Tag != c.Tag {
+				t.Errorf("%+v: decodes with tag %q", c, got.Tag)
+			}
+			for _, tag := range []string{"", "b", c.Tag + "x"} {
+				if tag == c.Tag {
+					continue
+				}
+				if _, err := decodeCursor(s, c.Forum, tag, text); err == nil {
+					t.Errorf("%+v: accepted by the list filtered to %q", c, tag)
+				}
 			}
 		}
 	}
-	if c, err := decodeCursor(views.ByActivity, 1, ""); c != nil || err != nil {
+	if c, err := decodeCursor(views.ByActivity, 1, "", ""); c != nil || err != nil {
 		t.Errorf("empty: %+v %v", c, err)
 	}
 }

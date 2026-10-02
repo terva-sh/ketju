@@ -313,7 +313,7 @@ func TestLockAnswerGolden(t *testing.T) {
 // Tests for moderators by grant (TKT-01M3RQP0TG): thread moderation follows
 // the forum grant (docs/08 "Decided 2026-09-30").
 
-// threadAction is one of the six thread moderation routes, with a body that
+// threadAction is one of the seven thread moderation routes, with a body that
 // changes the thread from the state the action before it leaves.
 type threadAction struct {
 	name, method, action, body string
@@ -321,15 +321,17 @@ type threadAction struct {
 	audit string
 }
 
-// threadActions is the six routes in an order each may follow the one
+// threadActions is the seven routes in an order each may follow the one
 // before on one thread that starts open and unpinned in general: lock,
-// unlock, pin and unpin with scope forum, slow mode 30, and a move to den.
+// unlock, pin and unpin with scope forum, slow mode 30, a retag to garden
+// (TKT-01M29CYSCP), and a move to den.
 var threadActions = []threadAction{
 	{"lock", http.MethodPost, "lock", `{"reason":"cooling off"}`, projection.ActionThreadLocked},
 	{"unlock", http.MethodPost, "unlock", ``, projection.ActionThreadUnlocked},
 	{"pin", http.MethodPost, "pin", `{"scope":"forum"}`, projection.ActionThreadPinned},
 	{"unpin", http.MethodPost, "unpin", `{"scope":"forum"}`, projection.ActionThreadUnpinned},
 	{"slow mode", http.MethodPut, "slow-mode", `{"seconds":30}`, threads.ActionSlowMode},
+	{"retag", http.MethodPut, "tags", `{"tags":["garden"]}`, projection.ActionThreadRetagged},
 	{"move", http.MethodPost, "move", moveTo("den"), projection.ActionThreadMoved},
 }
 
@@ -416,7 +418,7 @@ func TestForumModeratorActsInTheirForum(t *testing.T) {
 }
 
 // TestForumModeratorIsRefusedElsewhere is TKT-01M3RQP0TG's third criterion:
-// gina is forbidden all six actions on a thread in lounge, a forum she reads
+// gina is forbidden all seven actions on a thread in lounge, a forum she reads
 // and does not moderate, and gets not-found on a thread in vault, which is
 // hidden from her. Once her grant in general is revoked she is forbidden in
 // general too: by the service while she still moderates den, and by the
@@ -488,12 +490,12 @@ func TestForumModeratorIsRefusedElsewhere(t *testing.T) {
 	}
 }
 
-// TestThreadModerationGate is TKT-01M3RQP0TG's fifth criterion: on all six
+// TestThreadModerationGate is TKT-01M3RQP0TG's fifth criterion: on all seven
 // routes anonymous is unauthenticated, a pre-user forbidden, and carol, a
 // member with no grant, forbidden by the gate before the body is read, so a
 // body that would be bad-request still answers forbidden. Past the gate,
 // gina in her forum, bob as a moderator by role and an admin each take all
-// six on a thread of their own.
+// seven on a thread of their own.
 func TestThreadModerationGate(t *testing.T) {
 	w, _, _, _, _ := forumModWorld(t)
 	admin := w.newAdmin()

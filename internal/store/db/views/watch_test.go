@@ -66,7 +66,7 @@ func TestEffectiveWatchSQLAgrees(t *testing.T) {
 	var pins []ThreadRow
 	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
 		var err error
-		pins, err = PinnedThreads(t.Context(), tx, 1, 1, 1)
+		pins, err = PinnedThreads(t.Context(), tx, 1, 1, 1, "")
 		return err
 	}); err != nil {
 		t.Fatal(err)
