@@ -161,6 +161,22 @@ jobs:
         # run 2349. Twenty minutes still fails a real deadlock.
         run: go test -race -timeout 20m ./...
 
+      - name: ordinal bounds on a 32-bit build
+        # TKT-01M3VVZE4G. An ordinal is a uint32 and a post count an int,
+        # which is 32 bits on 386. There int(4294967295) is -1, so a bound
+        # written `int(o) > n` passes when it should fail, and on amd64 the
+        # same code is correct, so the step above cannot see the mistake.
+        # These packages hold every ordinal bound and its tests, and they run
+        # here under GOARCH=386. ketju does not ship a 32-bit build; this
+        # keeps the bounds right, it does not support one. CGO_ENABLED=0
+        # because the runner has no 32-bit C toolchain, and none is needed.
+        env:
+          GOARCH: "386"
+          CGO_ENABLED: "0"
+        run: |
+          go test -count=1 ./internal/store/threadlog/ ./internal/service/threads/lens/
+          go test -count=1 -run 'TestPageFor' -v ./internal/service/threads/
+
       - name: Phase 2 exit tests, by name
         # TKT-01M3NTSCMN. The step above runs these with the rest of the
         # suite, where a package that passes prints one line and names none

@@ -151,7 +151,7 @@ func checkOneSequence(seed int64, maxLen int) error {
 // as likely to be edited twice, or edited long after later posts arrived, as
 // it is to be touched once in order.
 func nextRecord(r *rand.Rand, posts uint32) (Append, generated, bool) {
-	ts := int64(1_700_000_000_000 + r.Intn(1<<20))
+	ts := int64(1_700_000_000_000) + int64(r.Intn(1<<20))
 	author := uint64(1 + r.Intn(5))
 
 	// Weighted so a sequence accumulates posts to operate on, while still

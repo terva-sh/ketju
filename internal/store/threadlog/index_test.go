@@ -130,7 +130,7 @@ func TestReadEntryAtIsOnePreadNoScan(t *testing.T) {
 	for i := range entries {
 		entries[i] = IndexEntry{
 			Offset: uint64(1000 + i*64), FrameLength: 64,
-			Author: uint64(i%7) + 1, CreatedMS: int64(1_700_000_000_000 + i),
+			Author: uint64(i%7) + 1, CreatedMS: int64(1_700_000_000_000) + int64(i),
 			Revision: 1,
 		}
 	}
@@ -197,7 +197,7 @@ func TestTombstonesAnswerWithoutTouchingTheLog(t *testing.T) {
 		off := len(raw)
 		raw, err = AppendFrame(raw, FrameHeader{
 			Type: TypePost, Encoding: EncodingCBOR, Ordinal: uint32(i + 1),
-			Revision: 1, TimestampMS: int64(1_700_000_000_000 + i), Actor: 42,
+			Revision: 1, TimestampMS: int64(1_700_000_000_000) + int64(i), Actor: 42,
 		}, body)
 		if err != nil {
 			t.Fatalf("AppendFrame: %v", err)
@@ -214,7 +214,7 @@ func TestTombstonesAnswerWithoutTouchingTheLog(t *testing.T) {
 		}
 		entries = append(entries, IndexEntry{
 			Offset: uint64(off), FrameLength: uint32(len(raw) - off),
-			Author: 42, CreatedMS: int64(1_700_000_000_000 + i), Revision: 1, Flags: flags,
+			Author: 42, CreatedMS: int64(1_700_000_000_000) + int64(i), Revision: 1, Flags: flags,
 		})
 	}
 	if err := os.WriteFile(logPath, raw, 0o600); err != nil {

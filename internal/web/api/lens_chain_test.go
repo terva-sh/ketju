@@ -109,7 +109,10 @@ func TestChainPastEndNotFound(t *testing.T) {
 	w := newWorld(t)
 	id := w.replyThread(1, 5, nil)
 	for _, who := range []string{"", "carol", "bob"} {
-		for _, q := range []string{"?lens=chain:6", "?lens=chain:4294967295", "?lens=chain:6&ordinal=1"} {
+		for _, q := range []string{"?lens=chain:6", "?lens=chain:4294967295", "?lens=chain:6&ordinal=1",
+			// The largest ordinal, on the thread page and on a lens page
+			// (TKT-01M3VVZE4G).
+			"?ordinal=4294967295", "?lens=chain:1&ordinal=4294967295", "?lens=since:0&ordinal=4294967295"} {
 			if rec := w.get(w.viewer(who), threadPath(id)+q); rec.Code != http.StatusNotFound {
 				t.Errorf("%q %s: %d %s", who, q, rec.Code, rec.Body)
 			}
