@@ -11,7 +11,9 @@
 // mention, the author of each earlier post it quotes quoted, and each member
 // whose effective level on the thread is watch thread_you_watch. An Edit
 // whose mentions key is present gives the members it names mention. No other
-// record generates anything.
+// record generates anything. The log carries no quotes, so a Post's are read
+// from the post_quotes projection, which the projection writer fills from
+// the source (TKT-01M3YME9AZ); nothing here renders.
 //
 // One post gives one member at most one notification, of the strongest kind
 // (rank). A member has at most one unread thread_you_watch per thread, which
@@ -55,7 +57,6 @@ import (
 	"log/slog"
 	"os"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -63,7 +64,6 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/perm"
-	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadid"
@@ -635,7 +635,7 @@ func (g *Generator) scan(id threadid.ID, from, upTo, since, horizon int64) ([]it
 			if b.Origin != nil {
 				return true // a split or merge copy: Phase 4's (TKT-01M29CXJZZ)
 			}
-			it.replyTo, it.mentions, it.quotes = b.ReplyTo, b.Mentions, quoted(b.Source, h.Ordinal)
+			it.replyTo, it.mentions = b.ReplyTo, b.Mentions
 		case *threadlog.EditBody:
 			if b.Mentions == nil {
 				return true
@@ -653,25 +653,32 @@ func (g *Generator) scan(id threadid.ID, from, upTo, since, horizon int64) ([]it
 	return items, nil
 }
 
-// quoted is the ordinals before ordinal that source quotes. Quotes are not
-// in the log, so the source is rendered to find them, as the composer and
-// the create path find them; with no resolver every quote is reported, and
-// the caller keeps those post_meta says are there and not removed.
-func quoted(source string, ordinal uint32) []uint32 {
-	if !strings.Contains(source, "[quote=#") {
-		return nil
-	}
-	r, err := render.RenderWith(source, render.Context{})
-	if err != nil {
-		return nil // a source the renderer refuses was never posted
-	}
-	var out []uint32
-	for _, q := range r.Quotes {
-		if q.Ordinal < ordinal && !slices.Contains(out, q.Ordinal) {
-			out = append(out, q.Ordinal)
+// quotesOf fills each Post item's quotes from the post_quotes projection
+// (TKT-01M3YME9AZ): the earlier posts it quotes, ascending. The rows describe
+// the range, because process scans only up to the length the projection
+// holds. They are the post's current quotations, so a Post edited later in
+// the same range is read as its edit left it, which is the post as readers
+// see it. An Edit item gets none: an Edit notifies only the members its
+// mentions key names (docs/04).
+func quotesOf(ctx context.Context, q *dbq.Queries, id threadid.ID, items []item) error {
+	at := map[uint32]int{}
+	var ordinals []int64
+	for i, it := range items {
+		if !it.edit {
+			at[it.ordinal] = i
+			ordinals = append(ordinals, int64(it.ordinal))
 		}
 	}
-	return out
+	return inChunks(ordinals, func(part []int64) error {
+		rows, err := q.PostQuotes(ctx, dbq.PostQuotesParams{ThreadID: int64(id), Ordinals: part})
+		for _, r := range rows {
+			i, ok := at[uint32(r.Ordinal)]
+			if ok && r.QuotedOrdinal < r.Ordinal {
+				items[i].quotes = append(items[i].quotes, uint32(r.QuotedOrdinal))
+			}
+		}
+		return err
+	})
 }
 
 // rank orders the post kinds: one post gives one member the strongest it
@@ -693,6 +700,9 @@ func (g *Generator) generate(ctx context.Context, q *dbq.Queries, id threadid.ID
 	th, err := q.GetThread(ctx, int64(id))
 	if err != nil {
 		return fmt.Errorf("reading the thread's projection row: %w", err)
+	}
+	if err := quotesOf(ctx, q, id, items); err != nil {
+		return err
 	}
 
 	// The posts the items answer, quote or edit.

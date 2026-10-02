@@ -641,6 +641,10 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 	if err != nil {
 		return nil, deps, err
 	}
+	quotedBy, err := s.quotedBy(ctx, th, id, snap, posts)
+	if err != nil {
+		return nil, deps, err
+	}
 
 	for i, p := range posts {
 		d := dto.Post{
@@ -649,6 +653,7 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			Author:          users[int64(p.Author)],
 			CreatedAt:       dto.Millis(p.CreatedMS),
 			ReplyCount:      snap.replies[p.Ordinal],
+			QuotedBy:        []int{},
 			Attachments:     []dto.Attachment{},
 			Deleted:         p.Flags&(threadlog.EntryDeleted|threadlog.EntryHiddenByMod|threadlog.EntryRedacted) != 0,
 			MachineAuthored: p.Flags.Has(threadlog.EntryMachineAuthored),
@@ -693,6 +698,7 @@ func (s *Service) postsDeps(ctx context.Context, th *threadcache.Thread, id thre
 			}
 			deps.Quotes = append(deps.Quotes, used.Quotes...)
 			deps.Handles = append(deps.Handles, used.Handles...)
+			d.QuotedBy = append(d.QuotedBy, quotedBy[p.Ordinal]...)
 		}
 		out = append(out, d)
 	}

@@ -82,6 +82,13 @@ SELECT tw.user_id, tw.level, 1 AS on_thread FROM watches AS tw WHERE tw.thread_i
 UNION ALL
 SELECT fw.user_id, fw.level, 0 AS on_thread FROM watches AS fw WHERE fw.forum_id = sqlc.arg(forum_id);
 
+-- PostQuotes is what each of these posts quotes, from the post_quotes
+-- projection (TKT-01M3YME9AZ). The generator reads it rather than rendering.
+-- name: PostQuotes :many
+SELECT ordinal, quoted_ordinal FROM post_quotes
+WHERE thread_id = sqlc.arg(thread_id) AND ordinal IN (sqlc.slice('ordinals'))
+ORDER BY ordinal, quoted_ordinal;
+
 -- PostAuthors is the author and liveness of each post a record replies to
 -- or quotes.
 -- name: PostAuthors :many

@@ -108,6 +108,7 @@ type Querier interface {
 	ClearMentions(ctx context.Context) error
 	ClearPostAttachments(ctx context.Context) error
 	ClearPostMeta(ctx context.Context) error
+	ClearPostQuotes(ctx context.Context) error
 	ClearProjectionState(ctx context.Context) error
 	// The statements ClearSearch runs after FTS5's delete-all, one per table in
 	// SearchTables.
@@ -200,6 +201,9 @@ type Querier interface {
 	DeleteIdentitySessions(ctx context.Context, userID sql.NullInt64) error
 	DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error
 	DeletePostAttachments(ctx context.Context, arg DeletePostAttachmentsParams) error
+	// A post's quote backlinks (migration 0025, TKT-01M3YME9AZ): a Post or Edit
+	// replaces them from its source, and a Redacted post marker removes them.
+	DeletePostQuotes(ctx context.Context, arg DeletePostQuotesParams) error
 	// DeletePreUserSessions ends every applicant session bound to an identity:
 	// what approving an application does in its own transaction (TKT-01M29CP2MG).
 	// LookupSession already refuses them once the identity has a user; this
@@ -400,6 +404,7 @@ type Querier interface {
 	InsertMention(ctx context.Context, arg InsertMentionParams) error
 	InsertMigration(ctx context.Context, arg InsertMigrationParams) error
 	InsertPostAttachment(ctx context.Context, arg InsertPostAttachmentParams) error
+	InsertPostQuote(ctx context.Context, arg InsertPostQuoteParams) error
 	InsertSearchDoc(ctx context.Context, arg InsertSearchDocParams) (int64, error)
 	InsertThreadTag(ctx context.Context, arg InsertThreadTagParams) error
 	// InsertWatchNotification writes a thread_you_watch row, unless the member
@@ -609,6 +614,9 @@ type Querier interface {
 	// PostAuthors is the author and liveness of each post a record replies to
 	// or quotes.
 	PostAuthors(ctx context.Context, arg PostAuthorsParams) ([]PostAuthorsRow, error)
+	// PostQuotes is what each of these posts quotes, from the post_quotes
+	// projection (TKT-01M3YME9AZ). The generator reads it rather than rendering.
+	PostQuotes(ctx context.Context, arg PostQuotesParams) ([]PostQuotesRow, error)
 	// The posts the auto-hide owes a hide: at least threshold open flags, and
 	// not already down in the projection. The sweep asks the index again for
 	// each before it appends anything, so a projection that lags costs at most
@@ -626,6 +634,12 @@ type Querier interface {
 	// an ill-typed value and writes the audit row in the same transaction.
 	PutSetting(ctx context.Context, arg PutSettingParams) error
 	PutThreadSlowMode(ctx context.Context, arg PutThreadSlowModeParams) error
+	// QuotedBy is who quotes these posts, for a thread page's quoted_by: each
+	// quoting post whose post_meta row is neither deleted nor moved. The caller
+	// also drops a quoting post its index does not show as visible, since the
+	// index is ahead of post_meta and knows hidden posts (docs/06 "Post
+	// anatomy").
+	QuotedBy(ctx context.Context, arg QuotedByParams) ([]QuotedByRow, error)
 	// ReadBoundary is the viewer's place in a thread as the thread page, its
 	// unread lens and the read routes' answers use it (docs/06 "Read tracking",
 	// TKT-01M29CTY7K): every post after the boundary is unread and none at or

@@ -1138,6 +1138,34 @@ rows. Nothing else changes them, since an `Edit` has no attachments field
 refcount on `blobs` is the collector's bookkeeping; this table is what
 access is checked against.
 
+### post_quotes
+```
+thread_id, ordinal, quoted_ordinal
+PRIMARY KEY (thread_id, quoted_ordinal, ordinal)
+INDEX (thread_id, ordinal)
+```
+Quote backlinks: which posts of its thread each post quotes (migration
+0025, TKT-01M3YME9AZ). The thread log carries no quotes field, and adding
+one would change the frozen `Post` record (03), so the projection writer
+finds them by rendering the current revision's source with no resolver
+(`render.QuotedOrdinals`). Every quotation is reported, nested ones
+included, each once, and never the post itself. The rows depend on the
+source alone, so a replay or a reindex writes the same ones.
+
+- A `Post` replaces the post's rows; a split or merge copy (one with
+  `origin`) has none.
+- An `Edit`, grace edits included, replaces them from its source.
+- A `Redacted` post marker removes them, as the blanked source quotes
+  nothing.
+- `Delete` and `Restore` leave them.
+
+Whether a quoted post exists, and whether a quoting post is shown, is
+decided when the rows are read. The thread page's `quoted_by` (07) lists
+a quoting post only while its `post_meta` row is neither deleted nor moved
+and its index entry is visible. The notification generator reads a new
+post's rows for `quoted`, keeping the earlier posts it quotes, instead of
+rendering the source again.
+
 ### search (FTS)
 Full-text index over `(thread_id, ordinal, revision, title, source_plain)`.
 Kept in the same database if the engine supports FTS (SQLite FTS5) or in a

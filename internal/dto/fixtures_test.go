@@ -108,7 +108,10 @@ func threadPage(class string) ThreadPage {
 				ReplyTo:           ptr(57),
 				ReplyToSuppressed: false,
 				ReplyCount:        3,
-				HTML:              "<p>The bill was the smaller half of it.</p>",
+				// Quoted by two later posts, each shown to every reader as
+				// itself (docs/06 "Post anatomy", TKT-01M3YME9AZ).
+				QuotedBy: []int{66, 71},
+				HTML:     "<p>The bill was the smaller half of it.</p>",
 				// An image, with its dimensions, and a file that is not one,
 				// whose dimensions are null (TKT-01M29CXK0K).
 				Attachments: []Attachment{{
@@ -141,6 +144,7 @@ func threadPage(class string) ThreadPage {
 				ReplyCount:        0,
 				HTML:              "<p>Summarising the thread so far.</p>",
 				Attachments:       []Attachment{},
+				QuotedBy:          []int{},
 				Deleted:           false,
 				MovedTo:           nil,
 				MachineAuthored:   true,
@@ -158,6 +162,7 @@ func threadPage(class string) ThreadPage {
 				ReplyCount:        0,
 				HTML:              deletedHTML,
 				Attachments:       []Attachment{},
+				QuotedBy:          []int{},
 				Deleted:           true,
 				Removal:           ptr(RemovalModerator),
 				MovedTo:           nil,
@@ -176,6 +181,7 @@ func threadPage(class string) ThreadPage {
 				ReplyCount:        0,
 				HTML:              "",
 				Attachments:       []Attachment{},
+				QuotedBy:          []int{},
 				Deleted:           true,
 				Removal:           nil,
 				MovedTo:           ptr("3yymw47g00099"),
@@ -202,6 +208,7 @@ func threadPage(class string) ThreadPage {
 			ReplyCount:        0,
 			HTML:              "",
 			Attachments:       []Attachment{},
+			QuotedBy:          []int{},
 			Deleted:           true,
 			Removal:           ptr(RemovalModerator),
 			Redacted:          true,
@@ -441,6 +448,7 @@ func lockedThread() ThreadPage {
 			ReplyCount:  1,
 			HTML:        "<p>We are taking the Kallio unit.</p>",
 			Attachments: []Attachment{},
+			QuotedBy:    []int{},
 		}},
 	}
 }

@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"io"
 	"regexp"
+	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/yuin/goldmark/v2/ast"
 	"github.com/yuin/goldmark/v2/parser"
@@ -43,8 +45,9 @@ var quoteLine = regexp.MustCompile(`^\[quote=#([0-9]{1,9})\][ \t]*$`)
 // thread.
 const MaxQuoteOrdinal = 999_999_999
 
-// Quote is one quotation found in a post, for the projection writer to record
-// as a backlink so the quoted post can show who quoted it.
+// Quote is one quotation found in a post. The projection writer records them
+// as backlinks, through QuotedOrdinals, so the quoted post can show who
+// quoted it.
 type Quote struct {
 	// Ordinal is the post being quoted.
 	Ordinal uint32
@@ -52,6 +55,38 @@ type Quote struct {
 	// Deleted reports that the quoted post exists but has been deleted, so the
 	// rendered output carries a tombstone instead of the quoted text.
 	Deleted bool
+}
+
+// QuotedOrdinals is every post a source quotes, other than self, each once
+// and in ascending order: the quote backlinks the projection writer records
+// (docs/04 "post_quotes", TKT-01M3YME9AZ).
+//
+// It renders with no resolver, so every quotation is reported whether or not
+// its ordinal exists, and the answer depends on the source alone. That is
+// what lets a replay or a reindex reproduce the rows exactly. Whether a
+// quoted post exists, and whether a quoting one is visible, is the reader's
+// to decide when it reads them, as a quote on the thread page resolves
+// against the thread as it is now. A quotation nested inside another counts,
+// because Result.Quotes lists it.
+//
+// A source with no attribution line is not rendered at all. A source the
+// renderer refuses quotes nothing: it was never posted.
+func QuotedOrdinals(source string, self uint32) []uint32 {
+	if !strings.Contains(source, "[quote=#") {
+		return nil
+	}
+	r, err := RenderWith(source, Context{})
+	if err != nil {
+		return nil
+	}
+	var out []uint32
+	for _, q := range r.Quotes {
+		if q.Ordinal != self {
+			out = append(out, q.Ordinal)
+		}
+	}
+	slices.Sort(out)
+	return slices.Compact(out)
 }
 
 // PostResolver answers what the renderer needs to know about a quoted post.

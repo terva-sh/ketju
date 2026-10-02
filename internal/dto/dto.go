@@ -280,6 +280,12 @@ type Post struct {
 	// tell that apart from a post that replies to nothing.
 	ReplyToSuppressed bool `json:"reply_to_suppressed"`
 	ReplyCount        int  `json:"reply_count"`
+	// QuotedBy is the ordinals of the posts that quote this one, ascending
+	// (docs/06 "Post anatomy", TKT-01M3YME9AZ). A quoting post is listed
+	// only while every reader is shown it as itself, so the list is the same
+	// for every viewer class. Always an array, and empty on a post served
+	// without HTML.
+	QuotedBy []int `json:"quoted_by"`
 
 	// HTML is rendered by internal/render, sanitized there rather than here.
 	HTML        string       `json:"html"`

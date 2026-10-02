@@ -112,6 +112,84 @@ func TestStrongestKindWins(t *testing.T) {
 	)
 }
 
+// TestQuotedReadsTheRecordedBacklinks (TKT-01M3YME9AZ): quoted comes from
+// the post_quotes rows the projection writer recorded, not from rendering
+// the source. Rows deleted before generation give nothing, a row the source
+// does not back gives a quoted, a row naming the post itself or a later one
+// gives nothing, and an Edit in the same range is read as it left the post.
+func TestQuotedReadsTheRecordedBacklinks(t *testing.T) {
+	// project brings the projection to evs' end without generating.
+	project := func(f *fixture, id threadid.ID, evs ...events.Event) {
+		t.Helper()
+		if _, err := f.proj.ProjectThread(t.Context(), id, evs[len(evs)-1].LogLength); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	t.Run("from the rows", func(t *testing.T) {
+		f := newFixture(t)
+		id, created := f.thread(f.forum)
+		evs := []events.Event{created,
+			f.post(id, "bob", "bob's", 0),
+			f.post(id, "carol", "carol's", 0),
+			f.post(id, "alice", quote("1", "")+quote("2", "quoting both"), 0),
+		}
+		f.deliver(evs...)
+		f.want("bob quoted #3 by alice", "carol quoted #3 by alice")
+	})
+
+	t.Run("no rows, no quoted", func(t *testing.T) {
+		f := newFixture(t)
+		id, created := f.thread(f.forum)
+		evs := []events.Event{created,
+			f.post(id, "bob", "bob's", 0),
+			f.post(id, "alice", quote("1", "quoting bob"), 0),
+		}
+		project(f, id, evs...)
+		if n := f.count(`SELECT count(*) FROM post_quotes`); n != 1 {
+			t.Fatalf("the projection recorded %d backlinks, want 1", n)
+		}
+		f.exec(`DELETE FROM post_quotes`)
+		f.deliver(evs...)
+		f.want()
+	})
+
+	t.Run("a row the source does not back", func(t *testing.T) {
+		f := newFixture(t)
+		id, created := f.thread(f.forum)
+		evs := []events.Event{created,
+			f.post(id, "bob", "bob's", 0),
+			f.post(id, "carol", "carol's", 0),
+			f.post(id, "alice", "quotes nobody", 0),
+		}
+		project(f, id, evs...)
+		// #3 quoting #1 is read; #3 quoting itself and #3 quoting the later
+		// #4 are not, as quoted() kept only earlier posts.
+		f.exec(`INSERT INTO post_quotes (thread_id, ordinal, quoted_ordinal) VALUES (?, 3, 1), (?, 2, 4)`,
+			int64(id), int64(id))
+		evs = append(evs, f.post(id, "dave", "dave's", 0))
+		project(f, id, evs...)
+		f.deliver(evs...)
+		f.want("bob quoted #3 by alice")
+	})
+
+	t.Run("an edit in the same range", func(t *testing.T) {
+		f := newFixture(t)
+		id, created := f.thread(f.forum)
+		evs := []events.Event{created,
+			f.post(id, "bob", "bob's", 0),
+			f.post(id, "carol", "carol's", 0),
+			f.post(id, "alice", quote("1", "quoting bob"), 0),
+		}
+		// alice's edit swaps the quotation before the generator has seen the
+		// post: carol is quoted by the post as readers see it, bob is not.
+		evs = append(evs, f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: uint64(f.users["alice"]),
+			Ordinal: 3, Body: &threadlog.EditBody{Source: quote("2", "quoting carol instead")}}))
+		f.deliver(evs...)
+		f.want("carol quoted #3 by alice")
+	})
+}
+
 // TestNoSelfNotification is AC2: an author who watches their own thread
 // and replies to, quotes and mentions themselves gets nothing, and neither
 // does an edit naming them.

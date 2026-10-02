@@ -82,6 +82,10 @@
       "reply_to": 57,
       "reply_to_suppressed": false,
       "reply_count": 3,
+      "quoted_by": [
+        66,
+        71
+      ],
       "html": "<p>The bill was the smaller half of it.</p>",
       "attachments": [
         {
@@ -123,6 +127,7 @@
       "reply_to": 61,
       "reply_to_suppressed": true,
       "reply_count": 0,
+      "quoted_by": [],
       "html": "<p>Summarising the thread so far.</p>",
       "attachments": [],
       "deleted": false,
@@ -147,6 +152,7 @@
       "reply_to": null,
       "reply_to_suppressed": false,
       "reply_count": 0,
+      "quoted_by": [],
       "html": "",
       "attachments": [],
       "deleted": true,
@@ -171,6 +177,7 @@
       "reply_to": null,
       "reply_to_suppressed": false,
       "reply_count": 0,
+      "quoted_by": [],
       "html": "",
       "attachments": [],
       "deleted": true,

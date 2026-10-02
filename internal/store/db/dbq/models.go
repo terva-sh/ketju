@@ -250,6 +250,12 @@ type PostMetum struct {
 	LogOffset       int64
 }
 
+type PostQuote struct {
+	ThreadID      int64
+	Ordinal       int64
+	QuotedOrdinal int64
+}
+
 type ProjectionState struct {
 	ThreadID  int64
 	LogLength int64

@@ -15,6 +15,7 @@
     "reply_to": 1,
     "reply_to_suppressed": false,
     "reply_count": 0,
+    "quoted_by": [],
     "html": "\u003cp\u003eAgreed with \u003ca href=\"/u/bob\" class=\"mention\" rel=\"nofollow\"\u003e@bob\u003c/a\u003e, on reflection.\u003c/p\u003e\n",
     "attachments": [],
     "deleted": false,

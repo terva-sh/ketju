@@ -15,6 +15,7 @@
     "reply_to": 61,
     "reply_to_suppressed": true,
     "reply_count": 0,
+    "quoted_by": [],
     "html": "<p>Summarising the thread so far.</p>",
     "attachments": [],
     "deleted": false,

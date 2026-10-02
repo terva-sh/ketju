@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/terva-sh/ketju/internal/render"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadid"
 	"github.com/terva-sh/ketju/internal/store/threadlog"
@@ -109,7 +110,17 @@ func applyPost(ctx context.Context, q *dbq.Queries, f frame) error {
 	if err := replaceAttachments(ctx, q, f, b.Attachments); err != nil {
 		return err
 	}
-	return replaceMentions(ctx, q, f, b.Mentions)
+	if err := replaceMentions(ctx, q, f, b.Mentions); err != nil {
+		return err
+	}
+	// A split or merge copy records no backlinks, as the notifier generates
+	// nothing for one: how its quotations resolve in its new thread is
+	// TKT-01M29CXJZZ's. Any rows the ordinal held are cleared, so a replay
+	// over a reused row cannot leave them.
+	if b.Origin != nil {
+		return replaceQuotes(ctx, q, f, "")
+	}
+	return replaceQuotes(ctx, q, f, b.Source)
 }
 
 // applyEdit moves the post to its new revision. created_at and author stay:
@@ -146,6 +157,11 @@ func applyEdit(ctx context.Context, q *dbq.Queries, f frame) error {
 		})
 	}
 	if err := one(n, err)(f, "post"); err != nil {
+		return err
+	}
+	// An Edit's source is the post's whole new text, so its quotations
+	// replace the post's, grace edits included.
+	if err := replaceQuotes(ctx, q, f, b.Source); err != nil {
 		return err
 	}
 	if b.Mentions == nil {
@@ -215,9 +231,11 @@ func applyArchived(ctx context.Context, q *dbq.Queries, f frame) error {
 }
 
 // applyRedacted is a hard redaction's marker (docs/03 "Hard redaction",
-// TKT-01M29CXJZ9). For a post, the post is deleted and has no mentions and
-// no attachments, which is what a reindex of the rewritten log leaves: its
-// blanked Post names no one and lists no blob (TKT-01M29CXK0K). So catching up by this one frame and reindexing the new log agree.
+// TKT-01M29CXJZ9). For a post, the post is deleted and has no mentions, no
+// attachments and no quote backlinks, which is what a reindex of the
+// rewritten log leaves: its blanked Post names no one, lists no blob
+// (TKT-01M29CXK0K) and quotes nothing (TKT-01M3YME9AZ). So catching up by
+// this one frame and reindexing the new log agree.
 // A title marker changes no row: the ThreadRenamed the command appends after
 // it sets the title, through applyRenamed.
 func applyRedacted(ctx context.Context, q *dbq.Queries, f frame) error {
@@ -241,7 +259,12 @@ func applyRedacted(ctx context.Context, q *dbq.Queries, f frame) error {
 		ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)}); err != nil {
 		return err
 	}
-	return q.DeleteMentions(ctx, dbq.DeleteMentionsParams{ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)})
+	if err := q.DeleteMentions(ctx, dbq.DeleteMentionsParams{ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)}); err != nil {
+		return err
+	}
+	// The blanked source quotes nothing, so a reindex of the rewritten log
+	// leaves the post no backlinks either (TKT-01M3YME9AZ).
+	return replaceQuotes(ctx, q, f, "")
 }
 
 // replaceTags sets the tag set wholesale, as ThreadTagged means (docs/03).
@@ -268,6 +291,25 @@ func replaceAttachments(ctx context.Context, q *dbq.Queries, f frame, hashes []s
 	for i, h := range hashes {
 		if err := q.InsertPostAttachment(ctx, dbq.InsertPostAttachmentParams{
 			ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal), Hash: h, Position: int64(i),
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// replaceQuotes sets a post's post_quotes rows to the posts source quotes
+// (render.QuotedOrdinals, TKT-01M3YME9AZ). The rows depend on the source
+// alone, so a replay or a reindex writes the same ones; whether a quoting
+// post is visible is decided where they are read.
+func replaceQuotes(ctx context.Context, q *dbq.Queries, f frame, source string) error {
+	if err := q.DeletePostQuotes(ctx, dbq.DeletePostQuotesParams{
+		ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal)}); err != nil {
+		return err
+	}
+	for _, o := range render.QuotedOrdinals(source, f.h.Ordinal) {
+		if err := q.InsertPostQuote(ctx, dbq.InsertPostQuoteParams{
+			ThreadID: int64(f.thread), Ordinal: int64(f.h.Ordinal), QuotedOrdinal: int64(o),
 		}); err != nil {
 			return err
 		}

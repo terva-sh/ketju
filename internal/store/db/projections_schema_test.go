@@ -175,6 +175,7 @@ func insertProjectionRows(t *testing.T, d *DB, author int64) {
 			{`INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (42, 100, 1)`, nil},
 			{`INSERT INTO post_attachments (thread_id, ordinal, hash, position) VALUES (42, 1, ?, 0)`,
 				[]any{strings.Repeat("ab", 32)}},
+			{`INSERT INTO post_quotes (thread_id, ordinal, quoted_ordinal) VALUES (42, 2, 1)`, nil},
 		} {
 			if _, err := tx.ExecContext(t.Context(), s.query, s.args...); err != nil {
 				return err

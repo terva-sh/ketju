@@ -38,6 +38,15 @@ func (q *Queries) ClearPostMeta(ctx context.Context) error {
 	return err
 }
 
+const clearPostQuotes = `-- name: ClearPostQuotes :exec
+DELETE FROM post_quotes
+`
+
+func (q *Queries) ClearPostQuotes(ctx context.Context) error {
+	_, err := q.db.ExecContext(ctx, clearPostQuotes)
+	return err
+}
+
 const clearProjectionState = `-- name: ClearProjectionState :exec
 DELETE FROM projection_state
 `
@@ -77,6 +86,22 @@ type DeleteMentionsParams struct {
 
 func (q *Queries) DeleteMentions(ctx context.Context, arg DeleteMentionsParams) error {
 	_, err := q.db.ExecContext(ctx, deleteMentions, arg.ThreadID, arg.Ordinal)
+	return err
+}
+
+const deletePostQuotes = `-- name: DeletePostQuotes :exec
+DELETE FROM post_quotes WHERE thread_id = ? AND ordinal = ?
+`
+
+type DeletePostQuotesParams struct {
+	ThreadID int64
+	Ordinal  int64
+}
+
+// A post's quote backlinks (migration 0025, TKT-01M3YME9AZ): a Post or Edit
+// replaces them from its source, and a Redacted post marker removes them.
+func (q *Queries) DeletePostQuotes(ctx context.Context, arg DeletePostQuotesParams) error {
+	_, err := q.db.ExecContext(ctx, deletePostQuotes, arg.ThreadID, arg.Ordinal)
 	return err
 }
 
@@ -140,6 +165,21 @@ type InsertMentionParams struct {
 
 func (q *Queries) InsertMention(ctx context.Context, arg InsertMentionParams) error {
 	_, err := q.db.ExecContext(ctx, insertMention, arg.ThreadID, arg.Ordinal, arg.MentionedUserID)
+	return err
+}
+
+const insertPostQuote = `-- name: InsertPostQuote :exec
+INSERT OR IGNORE INTO post_quotes (thread_id, ordinal, quoted_ordinal) VALUES (?, ?, ?)
+`
+
+type InsertPostQuoteParams struct {
+	ThreadID      int64
+	Ordinal       int64
+	QuotedOrdinal int64
+}
+
+func (q *Queries) InsertPostQuote(ctx context.Context, arg InsertPostQuoteParams) error {
+	_, err := q.db.ExecContext(ctx, insertPostQuote, arg.ThreadID, arg.Ordinal, arg.QuotedOrdinal)
 	return err
 }
 
@@ -207,6 +247,63 @@ func (q *Queries) PostAuthor(ctx context.Context, arg PostAuthorParams) (int64, 
 	var author_id int64
 	err := row.Scan(&author_id)
 	return author_id, err
+}
+
+const quotedBy = `-- name: QuotedBy :many
+SELECT pq.quoted_ordinal, pq.ordinal FROM post_quotes AS pq
+JOIN post_meta AS pm ON pm.thread_id = pq.thread_id AND pm.ordinal = pq.ordinal
+WHERE pq.thread_id = ?1 AND pq.quoted_ordinal IN (/*SLICE:quoted*/?)
+  AND pm.deleted = 0 AND pm.moved = 0
+ORDER BY pq.quoted_ordinal, pq.ordinal
+`
+
+type QuotedByParams struct {
+	ThreadID int64
+	Quoted   []int64
+}
+
+type QuotedByRow struct {
+	QuotedOrdinal int64
+	Ordinal       int64
+}
+
+// QuotedBy is who quotes these posts, for a thread page's quoted_by: each
+// quoting post whose post_meta row is neither deleted nor moved. The caller
+// also drops a quoting post its index does not show as visible, since the
+// index is ahead of post_meta and knows hidden posts (docs/06 "Post
+// anatomy").
+func (q *Queries) QuotedBy(ctx context.Context, arg QuotedByParams) ([]QuotedByRow, error) {
+	query := quotedBy
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ThreadID)
+	if len(arg.Quoted) > 0 {
+		for _, v := range arg.Quoted {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:quoted*/?", strings.Repeat(",?", len(arg.Quoted))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:quoted*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []QuotedByRow
+	for rows.Next() {
+		var i QuotedByRow
+		if err := rows.Scan(&i.QuotedOrdinal, &i.Ordinal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const repliesTo = `-- name: RepliesTo :many

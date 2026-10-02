@@ -7,7 +7,7 @@ import (
 )
 
 // ProjectionTables are the tables derived from thread logs (docs/04
-// "Projection tables"), in the order migrations 0004, 0007 and 0020 create them. Every row in
+// "Projection tables"), in the order migrations 0004, 0007, 0020 and 0025 create them. Every row in
 // them can be rebuilt by `ketju reindex`, and nothing else in the database
 // can: the rest is authoritative and must be backed up.
 //
@@ -16,13 +16,13 @@ import (
 // here or fail the tests. The search index is not one: it is SearchTables,
 // which ClearProjections leaves alone (search.go, TKT-01M29CRJ3B).
 var ProjectionTables = []string{"threads", "thread_tags", "post_meta", "mentions", "projection_state",
-	"forum_thread_counts", "post_attachments"}
+	"forum_thread_counts", "post_attachments", "post_quotes"}
 
 // ClearProjections empties every projection table, for reindex to replay the
 // logs into. Run it inside a Write so the tables are never seen half-empty.
 //
 // It empties rather than drops. The tables' DDL lives in migrations 0004,
-// 0007 and 0020 and nowhere else; dropping them would need a second copy of it to recreate
+// 0007, 0020 and 0025 and nowhere else; dropping them would need a second copy of it to recreate
 // them, because the migration runner does not re-run a recorded migration.
 func ClearProjections(ctx context.Context, q *dbq.Queries) error {
 	for _, clear := range []func(context.Context) error{
@@ -31,6 +31,7 @@ func ClearProjections(ctx context.Context, q *dbq.Queries) error {
 		// so a count that had drifted cannot survive a reindex.
 		q.ClearForumThreadCounts,
 		q.ClearPostAttachments,
+		q.ClearPostQuotes,
 	} {
 		if err := clear(ctx); err != nil {
 			return err

@@ -35,7 +35,9 @@ func randomRecord(f *fixture, rng *rand.Rand, id threadid.ID, posts uint32) (uin
 		return posts + 1, f.post(id, uint64(1+rng.IntN(4)), reply, uint64(rng.IntN(6)))
 	case k == 4:
 		m := []uint64{uint64(rng.IntN(6))}
-		body := &threadlog.EditBody{Source: "edit", ReplyTo: uint32(rng.IntN(int(target)))}
+		// The edit quotes the post it edits less one, so replays and reindexes
+		// cover post_quotes too (TKT-01M3YME9AZ).
+		body := &threadlog.EditBody{Source: quote(target - 1), ReplyTo: uint32(rng.IntN(int(target)))}
 		if rng.IntN(2) == 0 {
 			body.Mentions = &m
 		}

@@ -120,6 +120,10 @@ export interface Post {
   reply_to: number | null;
   reply_to_suppressed: boolean;
   reply_count: number;
+  // The posts that quote this one, ascending; empty on a post served without
+  // html. A quoting post is listed only while every reader sees it as itself
+  // (docs/06 "Post anatomy").
+  quoted_by: number[];
   html: string;
   attachments: Attachment[];
   deleted: boolean;

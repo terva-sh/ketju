@@ -26,6 +26,7 @@
           "reply_to": null,
           "reply_to_suppressed": false,
           "reply_count": 0,
+          "quoted_by": [],
           "html": "<p>the text a moderator still needs to read</p>",
           "attachments": [],
           "deleted": true,

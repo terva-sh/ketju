@@ -758,7 +758,7 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
   "posts": [
     {"ordinal": 61, "revision": 2, "author": {"handle": "…", "display_name": "…", "avatar": "…", "role": "member", "kind": "human"},
      "created_at": 1757500100000, "edited_at": 1757500200000,
-     "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3,
+     "reply_to": 57, "reply_to_suppressed": false, "reply_count": 3, "quoted_by": [66, 71],
      "html": "<p>…</p>", "attachments": [], "deleted": false, "removal": null, "redacted": false,
      "moved_to": null, "machine_authored": false, "edited_by_moderator": false}
   ]
@@ -805,6 +805,16 @@ statement, and keys the cached posts by the page's authors alone
   rendering is reused only while the posts it quotes keep their deleted
   state and the handles it mentions resolve as they did; a failed handle
   lookup fails the page rather than drawing the mention as unresolved.
+- **`quoted_by`** is the ordinals of the posts that quote this one, in
+  ascending order: its quote backlinks (06 "Post anatomy",
+  TKT-01M3YME9AZ). It is read from the `post_quotes` projection (04), and a
+  quoting post is listed only while every reader is shown it as itself:
+  its `post_meta` row is neither deleted nor moved and its index entry is
+  visible. So it is the same for every viewer class, moderators included,
+  and never says what a removed or moved post quoted. It is always an
+  array, and empty on a post served without `html`. The response cache key
+  carries the projection's length, so a page drawn before the projection
+  reached a quoting post is not served once it has.
 - **`after_log_length=L`** keeps the posts *on the requested page* whose
   current revision was written at or after `L`: new posts and edits. The
   header and viewer block are complete. A delete or restore writes no new

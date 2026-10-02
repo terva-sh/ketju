@@ -129,6 +129,29 @@ DELETE FROM mentions WHERE thread_id = ? AND ordinal = ?;
 -- name: InsertMention :exec
 INSERT OR IGNORE INTO mentions (thread_id, ordinal, mentioned_user_id) VALUES (?, ?, ?);
 
+-- A post's quote backlinks (migration 0025, TKT-01M3YME9AZ): a Post or Edit
+-- replaces them from its source, and a Redacted post marker removes them.
+-- name: DeletePostQuotes :exec
+DELETE FROM post_quotes WHERE thread_id = ? AND ordinal = ?;
+
+-- name: InsertPostQuote :exec
+INSERT OR IGNORE INTO post_quotes (thread_id, ordinal, quoted_ordinal) VALUES (?, ?, ?);
+
+-- name: ClearPostQuotes :exec
+DELETE FROM post_quotes;
+
+-- QuotedBy is who quotes these posts, for a thread page's quoted_by: each
+-- quoting post whose post_meta row is neither deleted nor moved. The caller
+-- also drops a quoting post its index does not show as visible, since the
+-- index is ahead of post_meta and knows hidden posts (docs/06 "Post
+-- anatomy").
+-- name: QuotedBy :many
+SELECT pq.quoted_ordinal, pq.ordinal FROM post_quotes AS pq
+JOIN post_meta AS pm ON pm.thread_id = pq.thread_id AND pm.ordinal = pq.ordinal
+WHERE pq.thread_id = sqlc.arg(thread_id) AND pq.quoted_ordinal IN (sqlc.slice('quoted'))
+  AND pm.deleted = 0 AND pm.moved = 0
+ORDER BY pq.quoted_ordinal, pq.ordinal;
+
 -- name: SetProjectionState :exec
 INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (?, ?, ?)
 ON CONFLICT (thread_id) DO UPDATE SET log_length = excluded.log_length, updated_at = excluded.updated_at;

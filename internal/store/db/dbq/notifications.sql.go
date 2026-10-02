@@ -367,6 +367,58 @@ func (q *Queries) PostAuthors(ctx context.Context, arg PostAuthorsParams) ([]Pos
 	return items, nil
 }
 
+const postQuotes = `-- name: PostQuotes :many
+SELECT ordinal, quoted_ordinal FROM post_quotes
+WHERE thread_id = ?1 AND ordinal IN (/*SLICE:ordinals*/?)
+ORDER BY ordinal, quoted_ordinal
+`
+
+type PostQuotesParams struct {
+	ThreadID int64
+	Ordinals []int64
+}
+
+type PostQuotesRow struct {
+	Ordinal       int64
+	QuotedOrdinal int64
+}
+
+// PostQuotes is what each of these posts quotes, from the post_quotes
+// projection (TKT-01M3YME9AZ). The generator reads it rather than rendering.
+func (q *Queries) PostQuotes(ctx context.Context, arg PostQuotesParams) ([]PostQuotesRow, error) {
+	query := postQuotes
+	var queryParams []interface{}
+	queryParams = append(queryParams, arg.ThreadID)
+	if len(arg.Ordinals) > 0 {
+		for _, v := range arg.Ordinals {
+			queryParams = append(queryParams, v)
+		}
+		query = strings.Replace(query, "/*SLICE:ordinals*/?", strings.Repeat(",?", len(arg.Ordinals))[1:], 1)
+	} else {
+		query = strings.Replace(query, "/*SLICE:ordinals*/?", "NULL", 1)
+	}
+	rows, err := q.db.QueryContext(ctx, query, queryParams...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []PostQuotesRow
+	for rows.Next() {
+		var i PostQuotesRow
+		if err := rows.Scan(&i.Ordinal, &i.QuotedOrdinal); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setNotificationProgress = `-- name: SetNotificationProgress :exec
 INSERT INTO notification_progress (thread_id, log_length, updated_at)
 VALUES (?1, ?2, ?3)
