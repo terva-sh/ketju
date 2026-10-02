@@ -1324,7 +1324,7 @@ func TestQueueActionRefusals(t *testing.T) {
 	// its flag is set the way an archive would leave it.
 	w.cache.Close()
 	cache, err := threadcache.New(w.root, threadcache.Options{Sync: threadlog.SyncNever,
-		Archived: func(id threadid.ID) bool { return id == w.id }})
+		Archived: func(id threadid.ID) threadcache.ArchiveState { return threadcache.ArchiveState{Archived: id == w.id} }})
 	if err != nil {
 		t.Fatal(err)
 	}

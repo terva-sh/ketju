@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-02T21:59:26Z
+updated_at: 2026-10-02T22:26:51Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -207,6 +207,26 @@ Criteria 1 and 7 are left unticked. Each is met except for the `archived` field.
 Why: `web/client/src/dto-contract.ts` holds `dto.ts` to the Go DTO goldens with no extra keys. A new Go field therefore fails the client tests unless `dto.ts` changes in the same PR. This server lane may not change `web/client` (docs/15 "Order"; the run brief). So the field moves to TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client), which adds it to the Go DTO, `dto.ts` and docs/07 together, reading `threads.archived`. `views.selectRows` would need `t.archived` for the row.
 
 Until then a client can tell from the viewer block that it may not reply: `can_reply` and `can_upload` are false on an archived thread.
+
+**agent:claude-code/phase4-run-crj64** at 2026-10-02T22:26:51Z
+
+Terva review 1989 (run e7fd2cff, Actions #2530, head c43f8a4), finding of medium severity: "Seal reopened archived logs independently of the optional callback". Fixed.
+
+The finding was right. A cache opened without `Options.Archived` reopened an archived log unsealed. The same gap existed in serve: serve's catch-up reopens threads through the cache, so a crash between writing the `ThreadArchived` and projecting it could leave a cached actor unsealed.
+
+Now the seal comes from the log:
+- `threadlog.ArchivedIn(r, from, size)` walks a range of frames for a sound `ThreadArchived`.
+- `Options.Archived` now returns `threadcache.ArchiveState{Archived, Projected}`. The projection answers for the part of the log it has applied, and the cache walks only the rest. Serve's `archived(d)` reads the thread's flag and its `projection_state.log_length` in one transaction.
+- With no callback, the cache walks the whole log.
+- A projected length that is not a frame boundary falls back to walking the whole log.
+- A walk that cannot continue is logged, and the open still succeeds.
+
+Alternatives:
+- Walking every log in full on every open lost because the index exists so that a trusted open reads no log bytes (docs/03; `threadlog.Open`'s fast path).
+- Recording the archive in the index lost because it is a format change, docs/15 stop class 2.
+- Making the callback required lost because it would still trust a lagging projection.
+
+The new test is `TestArchivedLogSealedWhateverTheProjectionSays`. It covers no projection, a projection behind the archive, and a projected length that is not a frame boundary. A mutant that skips the walk fails all three cases.
 
 ## Summary
 

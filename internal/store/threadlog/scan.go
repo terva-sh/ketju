@@ -103,6 +103,35 @@ func ScanFramesFrom(r io.ReaderAt, from, size int64, fn func(ScanRecord) bool) e
 	return nil
 }
 
+// ArchivedIn reports whether the frames in [from, size) hold a sound
+// ThreadArchived. from must be a frame boundary. A damaged frame is passed
+// over, as a reader passes it over; a walk that cannot go on is an error,
+// returned with what was found before it stopped.
+//
+// The index carries no thread-level state, so this is how a log is found to
+// be archived without a projection, or past the length a projection has
+// applied (TKT-01M29CRJ64). It reads every byte of the range, so a caller
+// keeps the range to what nothing else can answer for.
+func ArchivedIn(r io.ReaderAt, from, size int64) (bool, error) {
+	found := false
+	var fatal error
+	err := ScanFramesFrom(r, from, size, func(rec ScanRecord) bool {
+		switch {
+		case rec.Fatal:
+			fatal = rec.Err
+			return false
+		case rec.Err == nil && rec.Header.Type == TypeThreadArchived:
+			found = true
+			return false
+		}
+		return true
+	})
+	if err == nil {
+		err = fatal
+	}
+	return found, err
+}
+
 // headerOnly pulls the fixed part out of a frame whose checksum failed, so a
 // damaged record can still be named rather than reported as an offset.
 //

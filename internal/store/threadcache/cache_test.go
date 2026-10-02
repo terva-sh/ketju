@@ -120,7 +120,7 @@ func TestArchivedThreadIsEvictedBeforeALiveOne(t *testing.T) {
 	archived := map[threadid.ID]bool{id[0]: true}
 	c, err := New(root, Options{
 		Bound: 2, Sync: threadlog.SyncNever,
-		Archived: func(i threadid.ID) bool { return archived[i] },
+		Archived: func(i threadid.ID) ArchiveState { return ArchiveState{Archived: archived[i]} },
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -176,7 +176,7 @@ func TestArchivedThreadSealedOnReopen(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	c, err := New(root, Options{Sync: threadlog.SyncNever, Archived: func(i threadid.ID) bool { return i == id[0] }})
+	c, err := New(root, Options{Sync: threadlog.SyncNever, Archived: func(i threadid.ID) ArchiveState { return ArchiveState{Archived: i == id[0]} }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,6 +217,85 @@ func TestArchivedThreadSealedOnReopen(t *testing.T) {
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+}
+
+// TestArchivedLogSealedWhateverTheProjectionSays is Terva review 1989: the
+// seal comes from the log, not from an optional callback. A thread whose
+// log holds a ThreadArchived is opened sealed with no Options.Archived at
+// all, with a projection that has applied the log only up to the archive,
+// and with a projected length that is no frame boundary of the log; each
+// time an append is ErrArchived and the log does not grow. A live thread is
+// opened unsealed in each case, and when the projection has applied all of
+// its log.
+func TestArchivedLogSealedWhateverTheProjectionSays(t *testing.T) {
+	id := ids(2)
+	w, root := newCache(t, Options{Sync: threadlog.SyncNever})
+	for _, i := range id {
+		create(t, w, i, 2)
+	}
+	beforeArchive := fileSize(t, id[0].LogPath(root))
+	if err := w.With(id[0], func(th *Thread) error {
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadArchived, Author: 1,
+			Body: &threadlog.ThreadArchivedBody{Reason: "closed"}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	archivedLen, liveLen := fileSize(t, id[0].LogPath(root)), fileSize(t, id[1].LogPath(root))
+
+	for _, c := range []struct {
+		name string
+		arch func(threadid.ID) ArchiveState
+	}{
+		{"no projection", nil},
+		{"a projection behind the archive", func(i threadid.ID) ArchiveState {
+			if i == id[0] {
+				return ArchiveState{Projected: beforeArchive}
+			}
+			return ArchiveState{Projected: liveLen}
+		}},
+		{"a projected length that is no frame boundary", func(i threadid.ID) ArchiveState {
+			if i == id[0] {
+				return ArchiveState{Projected: beforeArchive + 1}
+			}
+			return ArchiveState{Projected: liveLen - 1}
+		}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			r, err := New(root, Options{Sync: threadlog.SyncNever, Archived: c.arch})
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() {
+				if err := r.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+			if err := r.With(id[0], func(th *Thread) error {
+				_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: 7, Body: &threadlog.PostBody{Source: "late"}})
+				if !th.Archived() || !errors.Is(err, threadlog.ErrArchived) {
+					t.Errorf("the archived log reopened: Archived %v, append %v, want ErrArchived", th.Archived(), err)
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+			if got := fileSize(t, id[0].LogPath(root)); got != archivedLen {
+				t.Errorf("the archived log grew from %d to %d bytes", archivedLen, got)
+			}
+			if err := r.With(id[1], func(th *Thread) error {
+				if th.Archived() {
+					t.Error("a live thread was opened sealed")
+				}
+				return nil
+			}); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 

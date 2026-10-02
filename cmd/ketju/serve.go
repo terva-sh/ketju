@@ -845,18 +845,27 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	return serveErr
 }
 
-// archived reports whether a thread is archived, from its projection row,
-// for the thread cache to evict it first. A thread with no row, or a read
-// that fails, is taken as live: evicting a live thread early costs a reopen,
-// while pinning an archived one costs only a slot.
-func archived(d *db.DB) func(threadid.ID) bool {
-	return func(id threadid.ID) bool {
-		var a bool
+// archived is what the projection knows of a thread's archive, for the
+// thread cache to seal it and evict it first: its row's flag and the log
+// length projection_state says it has applied, read in one transaction so
+// the two agree. The cache walks the log past that length itself, so a
+// thread with no row, or a read that fails, costs a walk of its log and
+// is never taken as live when its log says otherwise (TKT-01M29CRJ64).
+func archived(d *db.DB) func(threadid.ID) threadcache.ArchiveState {
+	return func(id threadid.ID) threadcache.ArchiveState {
+		var st threadcache.ArchiveState
 		_ = d.Read(context.Background(), func(q *dbq.Queries, _ *sql.Tx) error {
+			ps, err := q.GetProjectionState(context.Background(), int64(id))
+			if err != nil {
+				return nil
+			}
 			row, err := q.GetThread(context.Background(), int64(id))
-			a = err == nil && row.Archived != 0
+			if err != nil {
+				return nil
+			}
+			st = threadcache.ArchiveState{Archived: row.Archived != 0, Projected: ps.LogLength}
 			return nil
 		})
-		return a
+		return st
 	}
 }

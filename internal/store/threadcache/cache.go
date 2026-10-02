@@ -13,6 +13,7 @@ package threadcache
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"sync"
@@ -31,7 +32,8 @@ import (
 const DefaultBound = 512
 
 // Options configures a cache. The zero value is usable and means a bound of
-// DefaultBound, group commit, and nothing known to be archived.
+// DefaultBound, group commit, and no projection, so each log is walked for a
+// ThreadArchived when its thread is opened.
 type Options struct {
 	// Bound is the maximum number of threads held open. Zero means
 	// DefaultBound. Negative is refused.
@@ -40,16 +42,19 @@ type Options struct {
 	// Sync is the durability policy handed to each thread's actor.
 	Sync threadlog.SyncPolicy
 
-	// Archived reports whether a thread is archived, consulted once when the
-	// thread is opened. An archived thread is read-only and will not be
-	// written again, so the cache drops it before any live thread.
+	// Archived reports what the projection knows of a thread's archive,
+	// consulted once when the thread is opened. An archived thread is
+	// read-only: its actor is sealed, so nothing more is appended, and the
+	// cache drops it before any live thread.
 	//
-	// The log knows this — it ends in a ThreadArchived record — but the index
-	// deliberately does not carry thread-level state, and finding out would
-	// mean a replay on every open, which is the cost the index exists to
-	// avoid. So the caller supplies it; once the database in docs/04 exists,
-	// its projection is the authority. Nil means nothing is archived.
-	Archived func(threadid.ID) bool
+	// The log is the authority: it holds a ThreadArchived record. But the
+	// index deliberately carries no thread-level state, and walking the
+	// whole log on every open is the cost the index exists to avoid. So the
+	// projection answers for the part of the log it has applied, and the
+	// cache walks only the rest, which is usually nothing. Nil means no
+	// projection, and the cache walks the whole log (TKT-01M29CRJ64, Terva
+	// review 1989): the seal never depends on a caller remembering this.
+	Archived func(threadid.ID) ArchiveState
 
 	// Logger receives what the cache cannot return to a caller, such as an
 	// index it could not write back. Nil means slog.Default().
@@ -60,6 +65,16 @@ type Options struct {
 	// (TKT-01M29CEE7S). It runs on the actor's goroutine, so it must be
 	// quick. Under SyncNever nothing is fsynced and it is never called.
 	SyncObserver func(file string, d time.Duration)
+}
+
+// ArchiveState is what the projection knows of a thread's archive.
+type ArchiveState struct {
+	// Archived is the projection's flag: it has applied a ThreadArchived.
+	Archived bool
+	// Projected is the log length the projection has applied, the point
+	// past which the cache looks for a ThreadArchived itself. Zero, or a
+	// length this log does not have, means the cache walks the whole log.
+	Projected int64
 }
 
 // Thread is one open thread: its index, its actor, and a reader over its log.
@@ -97,7 +112,7 @@ type Cache struct {
 	root   string
 	bound  int
 	policy threadlog.SyncPolicy
-	isArch func(threadid.ID) bool
+	isArch func(threadid.ID) ArchiveState
 	log    *slog.Logger
 	onSync func(file string, d time.Duration)
 
@@ -367,6 +382,7 @@ func (c *Cache) openThread(id threadid.ID) (*Thread, error) {
 			return nil, err
 		}
 	}
+	archived := c.archivedOnOpen(id, logf, rec.LogLength)
 
 	// An index that was replayed onto or rebuilt describes the log only in
 	// memory. The file still holds the entries it had, or none, and the
@@ -411,13 +427,46 @@ func (c *Cache) openThread(id threadid.ID) (*Thread, error) {
 		log:      logf, idx: idxf,
 	}
 	// A thread opened archived is sealed before anyone can append to it:
-	// the index does not say the log ends in a ThreadArchived, so the
-	// actor could not know otherwise.
-	if c.isArch != nil && c.isArch(id) {
+	// the index does not say the log holds a ThreadArchived, so the actor
+	// could not know otherwise.
+	if archived {
 		t.archived = true
 		t.Actor.Seal()
 	}
 	return t, nil
+}
+
+// archivedOnOpen says whether id's log, size bytes long, holds a
+// ThreadArchived. The projection answers for the part of the log it has
+// applied, and the rest is walked: all of it when there is no projection,
+// none of it when the projection is current. So the seal comes from the
+// log, whatever the projection's lag, as after a crash between an archive
+// and its projection (TKT-01M29CRJ64, Terva review 1989).
+//
+// A walk that cannot go on is logged rather than failing the open. The
+// thread stays readable, and fsck is the tool for a damaged log.
+func (c *Cache) archivedOnOpen(id threadid.ID, log io.ReaderAt, size int64) bool {
+	from := int64(threadlog.FileHeaderSize)
+	if c.isArch != nil {
+		st := c.isArch(id)
+		if st.Archived {
+			return true
+		}
+		if st.Projected > from && st.Projected <= size {
+			from = st.Projected
+		}
+	}
+	found, err := threadlog.ArchivedIn(log, from, size)
+	if err != nil && !found && from != threadlog.FileHeaderSize {
+		// A projected length that is no frame boundary of this log, as
+		// after a restore: walk all of it.
+		found, err = threadlog.ArchivedIn(log, threadlog.FileHeaderSize, size)
+	}
+	if err != nil {
+		c.log.Warn("could not walk a thread's log for an archive; it is sealed only if the projection says it is archived",
+			"thread", id.String(), "err", err)
+	}
+	return found
 }
 
 // evict closes threads until the cache is within its bound.
