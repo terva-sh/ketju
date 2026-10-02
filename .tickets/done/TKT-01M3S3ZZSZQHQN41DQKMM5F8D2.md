@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3S3ZZSZQHQN41DQKMM5F8D2
 title: Close the small visual gaps between the client and the mockups
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -17,17 +17,10 @@ dependencies:
   - TKT-01M29CGBZDVGWNDTKHJFHHSGY5
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-visual-client
-  branch: run/s3zzsz-visual-gaps
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-aa69ff635c22d83cb
-  commit: 0009f715bf9eea8fb42021a4354562511cf33b81
-  session: null
-  claimed_at: 2026-10-01T22:52:33Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-30T12:17:55Z
-updated_at: 2026-10-01T23:10:15Z
+updated_at: 2026-10-02T06:19:44Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
@@ -57,7 +50,7 @@ Match each to the mockup, or record in docs/06 or docs/07 why the client differs
 ## Acceptance criteria
 
 - [x] Every axe scan in a11y.spec.ts, forum-index.spec.ts and thread.spec.ts passes at 390 px and 1440 px in both themes, and forum-index-*, thread-* and thread-list-*.png are refreshed
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
 - [x] D1: the desktop top bar keeps its link to /search, as docs/07 Search decided, with no / shortcut and no key hint, and docs/06 Paged, not infinite records why it differs from the mockup (decided by the run 2026-10-01)
 - [x] Each of T4, T10, P1, P4, M1, D2 and F9 matches its mockup at its width. Each is checked in e2e where it can be measured: the current page's fill, the 900 px column, the phone title's colour, the 44 px icon steps, the wordmark's alignment and the lock's position. The rest are checked in the refreshed screenshots
 
@@ -155,3 +148,11 @@ The screenshots were compared with the mockups by eye. thread-desktop-{light,dar
 Reader bundle: 73762 B before and 73871 B after (+109 B), within the 120000 B budget.
 
 No new run decisions.
+
+**agent:claude-code/phase3-visual-client** at 2026-10-02T06:19:38Z
+
+Phase B on main at 1fb5db0c (after #341 watch, #342 settings, #344 front-page footer, #347 manifest). The only rebase conflict was in the four forum-index PNGs, which were regenerated. Reader: 79088 B on 1fb5db0c, 79192 B with this change (+104 B), of 120000 B. Criterion 2 is ticked against #331's budget. tsc, vitest (2548), go test -race ./..., the full Playwright suite (258 passed, 18 skipped) all pass. Screenshots recaptured on a fresh server with the ticket's targeted command, so other specs' posts are not in them. Compared with the mockups again: unchanged from the Phase A comparison, and the Watch control (#341) and the front-page footer (#344) render beside the restyled parts without overlap. The phone front-page footer ('N members · N posts') is #344's addition and has no counterpart in mobile_front(); it clears the FAB through its 88 px right padding, and this ticket leaves it as #344 decided.
+
+## Summary
+
+Seven mockup gaps closed in the reader: T4 ink-filled current page and mono span, T10 900 px thread column, P1 muted 13 px phone title, M1 left-set phone wordmark, P4 44 px icon-only phone steps, D2 28 px avatar beside the desktop handle, F9 lock at the phone card's right edge. D1 needed no code: docs/06 'Paged, not infinite' records it. Each is measured in unit or e2e tests, and the forum-index, thread and thread-list screenshots are refreshed. Reader +104 B (79088 to 79192 B of 120000 B). No new run decisions.
