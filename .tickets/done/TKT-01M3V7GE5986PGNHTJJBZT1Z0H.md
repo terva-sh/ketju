@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V7GE5986PGNHTJJBZT1Z0H
 title: Add the / shortcut that opens search on desktop
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -21,17 +21,10 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-7GE59
-  branch: run/7ge59-slash-search
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
-  commit: d0bb743c98e7b60058afa023a5277b7861142f12
-  session: null
-  claimed_at: 2026-10-02T21:18:56Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T07:57:49Z
-updated_at: 2026-10-02T21:31:35Z
+updated_at: 2026-10-02T21:39:09Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
@@ -54,11 +47,11 @@ Not a docs/09 Phase 3 deliverable, so no milestone.
 
 ## Acceptance criteria
 
-- [ ] On a desktop screen with the top bar, / goes to /search with its field focused while the shortcuts are on, and on /search it focuses the field and selects its text
-- [ ] / does nothing in a text field, the composer or a dialog, on a phone, or with the shortcuts off (shortcuts.test.tsx)
-- [ ] The shortcut list has a / row naming the top bar's Search, and docs/06's key list includes /
-- [ ] e2e/shortcuts.spec.ts covers / at 390 px and 1440 px, with one axe scan per test
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+- [x] On a desktop screen with the top bar, / goes to /search with its field focused while the shortcuts are on, and on /search it focuses the field and selects its text
+- [x] / does nothing in a text field, the composer or a dialog, on a phone, or with the shortcuts off (shortcuts.test.tsx)
+- [x] The shortcut list has a / row naming the top bar's Search, and docs/06's key list includes /
+- [x] e2e/shortcuts.spec.ts covers / at 390 px and 1440 px, with one axe scan per test
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
 
@@ -124,3 +117,7 @@ run decision: pending maintainer review. / opens search on every desktop screen 
 **agent:claude-code/phase4-run-7GE59** at 2026-10-02T21:31:35Z
 
 Implemented as planned. useGlobalShortcuts and openSearch live in keyboard/shortcuts.ts; shell/Shell.tsx mounts the hook once with preact-iso's route. The tests are in a new shell/Shell.shortcuts.test.tsx. Wording the plan left open: the index list's lead reads 'Here ? opens this list and / opens search. The other keys work on a thread page.' while the shortcuts are on, and 'When they are on, ? and / work here, and the other keys on a thread page.' while off (replacing TKT-01M3V9DWTN's 'These keys work on a thread page.', which / made untrue). The /settings hint now lists '/'. The '/' row's visible control is checked by the existing 'has one' table (.tools a.search). The 390 px inert e2e test gains its axe scan. Reader bundle measured at 79859 B -> 79988 B gzip (+129 B) in Phase A.
+
+## Summary
+
+/ opens search on every desktop screen with the top bar while the single-key shortcuts are on. useGlobalShortcuts (keyboard/shortcuts.ts), mounted once by shell/Shell.tsx, listens in a layout effect; away from /search it routes there and the field takes focus, and on /search it focuses the query field and selects its text. It does nothing on a phone, with the shortcuts off, with the shortcut list open, or in text, the composer or a dialog (ignored()). The list has a / row naming the top bar's Search, the index's lead line names ? and /, the /settings hint lists /, and docs/06's key list includes /. Reader bundle 79859 B -> 79988 B gzip. Every criterion met.
