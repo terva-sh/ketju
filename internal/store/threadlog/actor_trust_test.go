@@ -3,6 +3,8 @@ package threadlog
 import (
 	"bytes"
 	"errors"
+	"slices"
+	"strings"
 	"sync"
 	"testing"
 )
@@ -33,6 +35,10 @@ type journalIndex struct {
 type indexWrite struct {
 	off int64
 	p   []byte
+	// extends is whether the write ran past the end of the file as it was
+	// then. Such a write changes the file's length as well as its bytes, and
+	// a power cut can keep the one and lose the other (crashImages).
+	extends bool
 }
 
 func newJournalIndex(rec *recorder, durable []byte) *journalIndex {
@@ -59,8 +65,9 @@ func (j *journalIndex) WriteAt(p []byte, off int64) (int, error) {
 			return 0, j.boom
 		}
 	}
+	extends := off+int64(len(p)) > int64(len(j.data))
 	j.data = writeInto(j.data, off, p)
-	j.pending = append(j.pending, indexWrite{off: off, p: bytes.Clone(p)})
+	j.pending = append(j.pending, indexWrite{off: off, p: bytes.Clone(p), extends: extends})
 	return len(p), nil
 }
 
@@ -83,20 +90,61 @@ func (j *journalIndex) bytes() []byte {
 
 // crashImages returns every file a power cut could leave: the durable image
 // with any subset of the pending writes on top, in the order they were made.
+//
+// A write that extended the file has a third outcome, a hole: the new length
+// persisted and the data did not, so the file reads zeros past its old end
+// (TKT-01M3VRFRFW). ext4 with data=writeback can leave that, and so can any
+// filesystem that does not order data before a size change.
 func (j *journalIndex) crashImages() [][]byte {
+	imgs, _ := j.describedCrashImages()
+	return imgs
+}
+
+// The outcomes of one pending write in a crash image.
+const (
+	writeLost = iota
+	writeKept
+	writeHole
+)
+
+// describedCrashImages is crashImages, with each image's outcome for every
+// pending write, so a failure can say which image it was.
+func (j *journalIndex) describedCrashImages() ([][]byte, [][]int) {
 	j.mu.Lock()
 	defer j.mu.Unlock()
-	var out [][]byte
-	for mask := 0; mask < 1<<len(j.pending); mask++ {
-		img := bytes.Clone(j.durable)
-		for i, w := range j.pending {
-			if mask&(1<<i) != 0 {
-				img = writeInto(img, w.off, w.p)
-			}
+	var imgs [][]byte
+	var outcomes [][]int
+	var walk func(i int, img []byte, got []int)
+	walk = func(i int, img []byte, got []int) {
+		if i == len(j.pending) {
+			imgs = append(imgs, img)
+			outcomes = append(outcomes, slices.Clone(got))
+			return
 		}
-		out = append(out, img)
+		w := j.pending[i]
+		walk(i+1, bytes.Clone(img), append(got, writeLost))
+		walk(i+1, writeInto(bytes.Clone(img), w.off, w.p), append(got, writeKept))
+		if end := int(w.off) + len(w.p); w.extends && end > len(img) {
+			walk(i+1, append(bytes.Clone(img), make([]byte, end-len(img))...), append(got, writeHole))
+		}
 	}
-	return out
+	walk(0, bytes.Clone(j.durable), nil)
+	return imgs, outcomes
+}
+
+// describeImage names each pending write's outcome in one crash image.
+func (j *journalIndex) describeImage(outcome []int) string {
+	j.mu.Lock()
+	defer j.mu.Unlock()
+	parts := make([]string, len(outcome))
+	for i, o := range outcome {
+		what := "entry " + itoa(int((j.pending[i].off-IndexHeaderSize)/IndexEntrySize)+1)
+		if j.pending[i].off == 0 {
+			what = "header"
+		}
+		parts[i] = what + " " + [...]string{"lost", "kept", "a hole"}[o]
+	}
+	return strings.Join(parts, ", ")
 }
 
 // twoPostThread is a log holding posts 1 and 2 and the index an actor left
@@ -276,4 +324,63 @@ func countIn(ops []string, want string) int {
 		}
 	}
 	return n
+}
+
+// Criterion (TKT-01M3VRFRFW): a batch of new posts adds no index fsync, so
+// after three of them a power cut can leave each of their entries lost, kept
+// or a hole, and each of their headers lost or kept. Every such file opens
+// to the index a full rebuild gives, whether the open trusted it or
+// replayed, and every post reads back as written. A file whose newest header
+// persisted over a hole used to be trusted with a zeroed entry.
+func TestATrustedOpenNeverServesALostNewEntry(t *testing.T) {
+	rec, lg, idx := twoPostThread(t)
+	ixf := newJournalIndex(rec, idx)
+	a := reopenActor(t, lg, ixf, SyncGroup)
+	defer a.Close()
+
+	sources := []string{"one", "two"}
+	for _, s := range []string{"three", "four", "five"} {
+		if _, err := a.Append(post(s)); err != nil {
+			t.Fatal(err)
+		}
+		sources = append(sources, s)
+	}
+
+	raw := lg.bytes()
+	full, err := Open(bytes.NewReader(raw), int64(len(raw)), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	imgs, outcomes := ixf.describedCrashImages()
+	holes := 0
+	for i, img := range imgs {
+		if slices.Contains(outcomes[i], writeHole) {
+			holes++
+		}
+		what := "crash image " + itoa(i) + " (" + ixf.describeImage(outcomes[i]) + ")"
+		got, err := Open(bytes.NewReader(raw), int64(len(raw)), img)
+		if err != nil {
+			t.Errorf("%s: Open: %v", what, err)
+			continue
+		}
+		if !bytes.Equal(got.Index.AppendTo(nil), full.Index.AppendTo(nil)) {
+			t.Errorf("%s opened %v, unlike a full rebuild: %s", what, got.Outcome, diffIndexes(got.Index, full.Index))
+			continue
+		}
+		posts, err := NewReader(bytes.NewReader(raw), got.Index).Range(1, uint32(len(sources)))
+		if err != nil {
+			t.Errorf("%s opened %v: reading the posts: %v", what, got.Outcome, err)
+			continue
+		}
+		for j, p := range posts {
+			if p.Source != sources[j] {
+				t.Errorf("%s opened %v: post %d reads %q, want %q", what, got.Outcome, j+1, p.Source, sources[j])
+			}
+		}
+	}
+	// Three batches of an entry and a header each: each entry lost, kept or
+	// a hole, and each header lost or kept.
+	if want := 27 * 8; len(imgs) != want || holes == 0 {
+		t.Fatalf("%d crash images, %d with a hole; want %d, most with one", len(imgs), holes, want)
+	}
 }

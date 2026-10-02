@@ -3,6 +3,7 @@ package threadlog
 import (
 	"errors"
 	"io"
+	"math"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -440,4 +441,55 @@ func popcount(x uint16) int {
 		n++
 	}
 	return n
+}
+
+// Criterion (TKT-01M3VRFRFW): an entry that cannot describe a frame in the
+// log its header covers makes the index malformed, so the open rebuilds it
+// from the log rather than trusting it. A zeroed entry, which is what a
+// power cut leaves where a new entry's data did not persist, is one.
+func TestAnImpossibleEntryIsMalformed(t *testing.T) {
+	const logLength = FileHeaderSize + 1000
+	good := IndexEntry{Offset: FileHeaderSize + 100, FrameLength: 200, Author: 1, CreatedMS: 1, Revision: 1}
+	parse := func(e IndexEntry) error {
+		ix := NewIndex(IndexHeader{ThreadID: 1, LogLength: logLength, PostCount: 2},
+			[]IndexEntry{{Offset: FileHeaderSize, FrameLength: 100, Revision: 1}, e})
+		_, err := ParseIndex(ix.AppendTo(nil))
+		return err
+	}
+	for _, c := range []struct {
+		name string
+		edit func(e *IndexEntry)
+	}{
+		{"a zero entry", func(e *IndexEntry) { *e = IndexEntry{} }},
+		{"offset 0", func(e *IndexEntry) { e.Offset = 0 }},
+		{"an offset inside the file header", func(e *IndexEntry) { e.Offset = FileHeaderSize - 1 }},
+		{"a frame shorter than its fixed part", func(e *IndexEntry) { e.FrameLength = FrameFixedSize - 1 }},
+		{"a frame longer than the largest", func(e *IndexEntry) { e.FrameLength = MaxFrameSize + 1 }},
+		{"a frame ending one past the covered log", func(e *IndexEntry) { e.FrameLength = uint32(logLength - e.Offset + 1) }},
+		{"an offset whose sum with the length wraps", func(e *IndexEntry) {
+			e.Offset, e.FrameLength = math.MaxUint64-10, FrameFixedSize
+		}},
+		{"an offset past the covered log", func(e *IndexEntry) { e.Offset = logLength + 1 }},
+		{"revision 0", func(e *IndexEntry) { e.Revision = 0 }},
+	} {
+		e := good
+		c.edit(&e)
+		err := parse(e)
+		if !errors.Is(err, ErrMalformed) || !RebuildRequired(err) {
+			t.Errorf("%s (%+v): ParseIndex = %v, want ErrMalformed", c.name, e, err)
+		}
+	}
+	if err := parse(good); err != nil {
+		t.Errorf("a possible entry: %v", err)
+	}
+	atEnd := good
+	atEnd.FrameLength = uint32(logLength - atEnd.Offset)
+	if err := parse(atEnd); err != nil {
+		t.Errorf("an entry ending exactly at the covered log: %v", err)
+	}
+	smallest := good
+	smallest.FrameLength = FrameFixedSize
+	if err := parse(smallest); err != nil {
+		t.Errorf("an entry of the smallest frame: %v", err)
+	}
 }

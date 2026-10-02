@@ -226,3 +226,58 @@ func TestAReplayedRecordIsWrittenBackBeforeTheIndexIsTrusted(t *testing.T) {
 		}
 	}
 }
+
+// Criterion (TKT-01M3VRFRFW): an .idx whose header covers the log over a
+// zeroed last entry, which a power cut leaves when a new post's entry did
+// not persist and the file length and header did, is rebuilt on open and
+// written back, so post 3 reads and the next open trusts the file.
+func TestAZeroedNewEntryIsRebuiltOnOpen(t *testing.T) {
+	root := t.TempDir()
+	id := ids(1)[0]
+	idx := id.IndexPath(root)
+
+	c := reopen(t, root, threadlog.SyncGroup)
+	create(t, c, id, 3)
+	c.Close()
+
+	b, err := os.ReadFile(idx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	off, err := threadlog.EntryFileOffset(3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int(off)+threadlog.IndexEntrySize != len(b) {
+		t.Fatalf("the .idx is %d bytes, want entry 3 to end it at %d", len(b), int(off)+threadlog.IndexEntrySize)
+	}
+	clear(b[off:])
+	if err := os.WriteFile(idx, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	c = reopen(t, root, threadlog.SyncGroup)
+	th, err := c.Acquire(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if th.Outcome != threadlog.Rebuilt {
+		t.Errorf("the open over a zeroed entry is %v, want rebuilt", th.Outcome)
+	}
+	if p, err := th.Reader.One(3); err != nil || p.Source != "post 2 in "+id.String() {
+		t.Errorf("post 3 reads %+v, %v; want its source", p, err)
+	}
+	c.Release(th)
+	c.Close()
+
+	c = reopen(t, root, threadlog.SyncGroup)
+	th, err = c.Acquire(id)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Release(th)
+	if th.Outcome != threadlog.Trusted {
+		t.Errorf("the open after the rebuild is %v, want trusted", th.Outcome)
+	}
+	sameEntries(t, th.Index, fullRebuild(t, root, id), "the open after the rebuild")
+}

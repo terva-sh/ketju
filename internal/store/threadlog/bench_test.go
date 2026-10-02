@@ -524,6 +524,32 @@ func BenchmarkIndexRebuild(b *testing.B) {
 	}
 }
 
+// BenchmarkOpenTrusted is the open path every thread takes after a clean
+// shutdown: parse the .idx, compare its log length with the log's, and
+// trust it. TKT-01M3VRFRFW added a range check per entry to the parse, so
+// this is the number to compare before and after a change to it. It reads
+// the log's file header and nothing else, so a ReadAt over a real file is
+// the whole of the I/O, and ns/op is mostly the parse.
+func BenchmarkOpenTrusted(b *testing.B) {
+	c := getCorpus(b, *benchPosts, false)
+	f, err := os.Open(c.logPath)
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer f.Close()
+	b.ReportAllocs()
+	b.ResetTimer()
+	for range b.N {
+		rec, err := Open(f, c.logSize, c.idxRaw)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if rec.Outcome != Trusted || rec.Index.Len() != c.posts {
+			b.Fatalf("outcome %v over %d posts, want trusted over %d", rec.Outcome, rec.Index.Len(), c.posts)
+		}
+	}
+}
+
 // reportLatency adds percentiles as custom metrics. A mean is the one statistic
 // none of these targets are about.
 func reportLatency(b *testing.B, lat []time.Duration) {

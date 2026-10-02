@@ -355,3 +355,39 @@ func TestRangeClampsAndOneRefusesAMissingOrdinal(t *testing.T) {
 		t.Errorf("One(9) error = %v, want ErrNoSuchOrdinal", err)
 	}
 }
+
+// Criterion (TKT-01M3VRFRFW): an entry that points at another post's frame,
+// which a filesystem showing stale blocks where a lost entry was could
+// leave, is a read error naming the ordinal, never the other post's text.
+func TestAnEntryPointingAtAnotherPostsFrameIsAReadError(t *testing.T) {
+	lg, ix := threadWith(t, 3)
+	e2, err := ix.Entry(2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	entries := ix.Entries(1, 3)
+	entries[2].Offset, entries[2].FrameLength = e2.Offset, e2.FrameLength
+	wrong := NewIndex(ix.Header, entries)
+	r := NewReader(bytes.NewReader(lg.bytes()), wrong)
+
+	check := func(what string, posts []Post, err error) {
+		t.Helper()
+		var re *ReadError
+		if !errors.As(err, &re) || re.Ordinal != 3 || !errors.Is(err, ErrMalformed) {
+			t.Errorf("%s: %+v, %v; want a ReadError for ordinal 3 wrapping ErrMalformed", what, posts, err)
+		}
+	}
+	posts, err := r.Range(1, 3)
+	check("Range(1, 3)", posts, err)
+	p, err := r.One(3)
+	check("One(3)", []Post{p}, err)
+	p, err = r.Hidden(3)
+	check("Hidden(3)", []Post{p}, err)
+	posts, err = r.ReadEntries(3, wrong.Entries(3, 3))
+	check("ReadEntries(3, ...)", posts, err)
+
+	// The posts the index describes rightly still read.
+	if posts, err := r.Range(1, 2); err != nil || len(posts) != 2 {
+		t.Errorf("Range(1, 2): %d posts, %v", len(posts), err)
+	}
+}

@@ -122,6 +122,11 @@ func checkOneSequence(seed int64, maxLen int) error {
 		return fmt.Errorf("replay outcome is %v, want Rebuilt; the test is not exercising replay", rec.Outcome)
 	}
 	replayed := rec.Index.AppendTo(nil)
+	// The rebuild is an index ketju writes too (threadcache writes it back),
+	// so the parser, entry check included, must take it (TKT-01M3VRFRFW).
+	if _, err := ParseIndex(replayed); err != nil {
+		return fmt.Errorf("parsing the rebuilt index: %w\n%s", err, describe(script))
+	}
 
 	if !bytes.Equal(incremental, replayed) {
 		return fmt.Errorf("index mismatch over %d records\n%s\n%s",
@@ -296,6 +301,49 @@ func diffIndexes(a, b *Index) string {
 // entry, so both paths must produce an empty index rather than one of them
 // inventing something.
 func TestThreadEventsOnlyStillAgree(t *testing.T) {
+	testThreadEventsOnlyStillAgree(t)
+}
+
+// Criterion (TKT-01M3VRFRFW): ParseIndex refuses an entry that cannot
+// describe a frame in the log its header covers, and no index ketju writes
+// is refused. checkOneSequence parses the index the actor wrote and the one
+// a full rebuild gives, over the property test's random sequences of posts,
+// edits, deletes, restores and thread events; a redacted thread and one of
+// thread events alone parse as well.
+func TestEveryWrittenIndexPassesTheEntryCheck(t *testing.T) {
+	base := *propSeed
+	if base == 0 {
+		base = time.Now().UnixNano()
+	}
+	t.Logf("base seed %d (-prop.seed=%d to repeat this run)", base, base)
+	for i := range *propCases {
+		if err := checkOneSequence(base+int64(i), *propLen); err != nil {
+			t.Fatalf("sequence %d: %v\n\nreproduce with -prop.seed=%d -prop.cases=1", i+1, err, base+int64(i))
+		}
+	}
+
+	lg, _ := threadWith(t, 5,
+		Append{Type: TypeEdit, Ordinal: 2, Author: 42, Body: &EditBody{Source: "two, edited"}},
+		Append{Type: TypeEdit, Ordinal: 4, Author: 42, Body: &EditBody{Source: "four, edited"}})
+	raw := lg.bytes()
+	var out bytes.Buffer
+	if _, err := RedactPosts(bytes.NewReader(raw), int64(len(raw)), &out, []uint32{2, 3},
+		RedactOptions{TimeMS: 1_800_000_000_000, Operator: 9, Reason: "court order", Journal: "01K6DHZ3Q8N6T2V4X9B7M5C1RE"}); err != nil {
+		t.Fatal(err)
+	}
+	red, err := Open(bytes.NewReader(out.Bytes()), int64(out.Len()), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ParseIndex(red.Index.AppendTo(nil)); err != nil {
+		t.Errorf("the index of a redacted thread: %v", err)
+	}
+
+	testThreadEventsOnlyStillAgree(t)
+}
+
+func testThreadEventsOnlyStillAgree(t *testing.T) {
+	t.Helper()
 	r := rand.New(rand.NewSource(99))
 	rec0 := &recorder{}
 	lg := &fakeLog{rec: rec0, data: NewFileHeader(1, 1, 7).AppendTo(nil)}
@@ -322,6 +370,9 @@ func TestThreadEventsOnlyStillAgree(t *testing.T) {
 	}
 	if !bytes.Equal(a.Index().AppendTo(nil), rec.Index.AppendTo(nil)) {
 		t.Errorf("indexes differ:\n%s", diffIndexes(a.Index(), rec.Index))
+	}
+	if _, err := ParseIndex(ixf.bytes()); err != nil {
+		t.Errorf("parsing the index the actor wrote: %v", err)
 	}
 }
 
