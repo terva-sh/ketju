@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V3CFRE38G28YGJEQ94CDHW
 title: Check Phase 3's exit criterion with named end-to-end tests
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: high
 due_on: null
@@ -56,15 +56,22 @@ dependencies:
   - TKT-01M3V6Y87D4EQBQ4HYTPJCSGR2
 blocks_on: none
 references: []
-claim: null
+claim:
+  actor: agent:claude-code/phase3-exit-check
+  branch: run/cfre-phase3-exit
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a537b1aa8ea458004
+  commit: 1fb5db0cdfc70f1b73799dd7aedb57116a2e51f4
+  session: null
+  claimed_at: 2026-10-02T06:29:52Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-01T15:16:11Z
+updated_at: 2026-10-02T06:29:56Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-run-orchestrator
+  id: agent:claude-code/phase3-exit-check
   name: ""
 extensions: {}
 ---
