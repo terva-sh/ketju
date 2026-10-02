@@ -18,10 +18,12 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
+  - ref: pr:376
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T12:54:32Z
-updated_at: 2026-10-02T21:29:52Z
+updated_at: 2026-10-02T21:30:18Z
 created_by:
   id: agent:claude-code/phase3-vhsyfr
   name: ""
