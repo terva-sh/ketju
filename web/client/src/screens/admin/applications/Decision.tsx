@@ -5,7 +5,7 @@ import { isAbort, isProblem, type ProblemError } from '../../../api/problem';
 import { fieldMessage } from '../../../forms/messages';
 import { ConfirmButton } from '../common/ConfirmButton';
 import { Field } from '../common/Field';
-import { handleMessage } from '../common/handle';
+import { handleMessage } from '../../../handles';
 import { send } from '../common/send';
 import { hasStatus } from './ApplicationList';
 

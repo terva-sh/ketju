@@ -95,7 +95,7 @@ export function AccountBlock() {
     <section class="account-block" data-account aria-labelledby="account-heading">
       <h2 id="account-heading">Account</h2>
       <p>
-        Timezone, page size, theme, and where you are signed in.{' '}
+        Timezone, page size, theme, where you are signed in, and your handle.{' '}
         <a class="hit" href="/settings" data-nav="settings">
           Settings
         </a>

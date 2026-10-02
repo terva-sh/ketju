@@ -127,6 +127,21 @@ describe('another tab', () => {
     expect(reload).toHaveBeenCalledTimes(1);
   });
 
+  // TKT-01M3V6XTYG: /settings/account takes the new handle into the viewer
+  // in place. The guard says nothing for it, so no other tab reloads at
+  // once, and this tab does not reload when a later page load says the new
+  // handle.
+  it('a rename in this tab does not reload it', () => {
+    const peer = another();
+    const heard: unknown[] = [];
+    peer.onmessage = (e) => heard.push(e.data);
+    tab(as(member));
+    viewer.value = withHandle('alicia');
+    expect(heard).toEqual(['u:alice']);
+    peer.postMessage('u:alicia');
+    expect(reload).not.toHaveBeenCalled();
+  });
+
   it('ignores anything that is not a viewer', () => {
     tab(as(member));
     another().postMessage({ user: null });

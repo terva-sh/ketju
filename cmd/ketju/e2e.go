@@ -98,6 +98,15 @@ var seedSettings = []struct{ handle, name, link string }{
 	{"sid-desktop", "Sid Desktop", "sid-desktop-link"},
 }
 
+// seedAccount are the account screen's members (TKT-01M3V6XTYG,
+// e2e/account.spec.ts), one per Playwright project, because the test
+// renames its member and then deactivates them. No other spec signs in as
+// them, and no stored session is kept for them.
+var seedAccount = []struct{ handle, name string }{
+	{"acct-phone", "Ash Phone"},
+	{"acct-desktop", "Ash Desktop"},
+}
+
 func runE2E(args []string) error {
 	fs := flag.NewFlagSet("e2e", flag.ContinueOnError)
 	dir := fs.String("dir", "", "directory to create the data directory and config in; must not exist")
@@ -125,6 +134,9 @@ func runE2E(args []string) error {
 	idp.Users = append(idp.Users, seedStrangers...)
 	for _, u := range seedSettings {
 		idp.Users = append(idp.Users, u.handle, u.link)
+	}
+	for _, u := range seedAccount {
+		idp.Users = append(idp.Users, u.handle)
 	}
 
 	site := "http://localhost:" + strconv.Itoa(*port)
@@ -493,6 +505,19 @@ func seedReview(ctx context.Context, data, issuer string) (map[string]int64, err
 		}
 		// The settings members after seedMarker, so the ids above stay as they were.
 		for _, u := range seedSettings {
+			id, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: u.handle, DisplayName: u.name,
+				Status: domain.StatusActive, Role: domain.RoleMember, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
+			if err != nil {
+				return err
+			}
+			if _, err := q.CreateIdentity(ctx, dbq.CreateIdentityParams{UserID: sql.NullInt64{Int64: id, Valid: true},
+				ProviderKey: e2eProvider, Subject: u.handle, Issuer: issuer, CreatedAt: now, UpdatedAt: now}); err != nil {
+				return err
+			}
+		}
+		// The account members after the settings members, so the ids above
+		// stay as they were.
+		for _, u := range seedAccount {
 			id, err := q.CreateUser(ctx, dbq.CreateUserParams{Handle: u.handle, DisplayName: u.name,
 				Status: domain.StatusActive, Role: domain.RoleMember, Kind: domain.KindHuman, CreatedAt: now, UpdatedAt: now})
 			if err != nil {

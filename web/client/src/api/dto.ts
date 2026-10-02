@@ -343,6 +343,15 @@ export interface HandleChange {
   next_change_at: Millis | null;
 }
 
+// HandleState is GET /settings/handle (internal/dto HandleState,
+// TKT-01M3V6XTYG): the viewer's handle, and when they may next change it
+// themselves, null when they may now. It is the available_at a PUT inside
+// the cooldown is refused with.
+export interface HandleState {
+  handle: string;
+  next_change_at: Millis | null;
+}
+
 // SessionList is GET /settings/sessions (TKT-01M29CCC0X): the viewer's live
 // sessions, most recently used first. id names one to DELETE
 // /settings/sessions/{id}; current is the request's own; device is a label

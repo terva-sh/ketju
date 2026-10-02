@@ -31,6 +31,7 @@ const urls: [string, string][] = [
   ['/settings', 'settings'],
   ['/settings/sessions', 'settings-sessions'],
   ['/settings/identities', 'settings-identities'],
+  ['/settings/account', 'settings-account'],
   ['/apply', 'apply'],
   ['/apply/status', 'apply-status'],
   ['/admin', 'admin'],

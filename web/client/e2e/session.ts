@@ -47,6 +47,9 @@ export async function signIn(page: Page, who: string) {
 //                                     first in the identities test: a
 //                                     sign-in, a link (3) and a sign-in
 //                                     with the linked identity
+//   account.spec.ts, per project   2  paceAuth(2) first: one sign-in;
+//                                     the rename and the deactivation
+//                                     are API calls
 //
 // The rule for a new spec: one that spends /auth/* either calls paceAuth
 // with its count first, or waits out a 429 through through(). Add its row

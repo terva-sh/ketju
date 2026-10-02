@@ -3,7 +3,8 @@ import type { HandleChange } from '../../api/dto';
 import { isProblem } from '../../api/problem';
 import { ConfirmButton } from './common/ConfirmButton';
 import { Field } from './common/Field';
-import { handleMessage, isAnonymizedHandle } from './common/handle';
+import { handleMessage } from '../../handles';
+import { isAnonymizedHandle } from './common/handle';
 import { send } from './common/send';
 
 // RenameControl changes an account's handle, on its detail in the users

@@ -319,11 +319,16 @@ describe('the settings form', () => {
     expect(root.querySelector('form')).toBeNull();
   });
 
-  it('links to the sessions and identities screens', async () => {
+  it('links to the sessions, identities and account screens', async () => {
     serve();
     const root = await renderAt('/settings');
     const links = [...root.querySelectorAll<HTMLAnchorElement>('nav[aria-label=Settings] a')];
-    expect(links.map((a) => a.getAttribute('href'))).toEqual(['/settings', '/settings/sessions', '/settings/identities']);
+    expect(links.map((a) => a.getAttribute('href'))).toEqual([
+      '/settings',
+      '/settings/sessions',
+      '/settings/identities',
+      '/settings/account',
+    ]);
     expect(links[0].getAttribute('aria-current')).toBe('page');
   });
 });

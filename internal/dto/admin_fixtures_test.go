@@ -40,6 +40,11 @@ func init() {
 		NextChangeAt: ptr(Millis(1760292000000))}
 	corpus["handle-change."+tAdmin] = HandleChange{Handle: "bob", Previous: "bob-"}
 
+	// GET /settings/handle (TKT-01M3V6XTYG): a member inside the cooldown of
+	// their own change, and a moderator who may change theirs now.
+	corpus["handle-state."+tMember] = HandleState{Handle: "alicia", NextChangeAt: ptr(Millis(1760292000000))}
+	corpus["handle-state."+tModerator] = HandleState{Handle: "mod"}
+
 	// The admin forum screen (TKT-01M29CXK19): a root, a child under it, and
 	// an archived restricted root, so parent_id is both null and set.
 	corpus["admin-forums."+tAdmin] = ManagedForumList{Forums: []ManagedForum{

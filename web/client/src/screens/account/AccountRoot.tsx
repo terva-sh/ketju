@@ -9,6 +9,7 @@
 import './account.css';
 import './settings.css';
 
+export { AccountScreen } from './AccountScreen';
 export { IdentitiesScreen } from './IdentitiesScreen';
 export { ProfileScreen } from './ProfileScreen';
 export { ProfilePostsScreen } from './ProfilePostsScreen';

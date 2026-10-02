@@ -16,6 +16,7 @@ import { NotFound } from './screens/Placeholder';
 // settings screens (TKT-01M29CXK4E) are inline for the same reason: 2327 B
 // fewer than a lazy chunk of their own.
 import {
+  AccountScreen,
   IdentitiesScreen,
   ProfilePostsScreen,
   ProfileScreen,
@@ -134,6 +135,7 @@ export const routes: RouteEntry[] = [
   { path: '/settings', screen: 'settings', component: SettingsScreen },
   { path: '/settings/sessions', screen: 'settings-sessions', component: SessionsScreen },
   { path: '/settings/identities', screen: 'settings-identities', component: IdentitiesScreen },
+  { path: '/settings/account', screen: 'settings-account', component: AccountScreen },
   { path: '/apply', screen: 'apply', component: ApplyForm },
   { path: '/apply/status', screen: 'apply-status', component: ApplyStatus },
   { path: '/admin', screen: 'admin', component: Admin },

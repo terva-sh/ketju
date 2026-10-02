@@ -8,17 +8,18 @@ import { profileHref } from '../../shell/nav';
 import { useShellContext } from '../../state/shell';
 import { viewer } from '../../state/viewer';
 
-// What the three settings screens share (TKT-01M29CXK4E): their heading and
-// the links between them, the confirmation dialog, and the full load of /
-// that follows signing this browser out.
+// What the settings screens share (TKT-01M29CXK4E): their heading and the
+// links between them, the confirmation dialog, and the full load of / that
+// follows signing this browser out. Account (TKT-01M3V6XTYG) is last.
 
 const pages = [
   ['/settings', 'Preferences'],
   ['/settings/sessions', 'Sessions'],
   ['/settings/identities', 'Sign-in identities'],
+  ['/settings/account', 'Account'],
 ] as const;
 
-// SettingsHead is a settings screen's heading, and the links to all three.
+// SettingsHead is a settings screen's heading, and the links to all of them.
 // Back, on a phone, and the desktop's link above the heading go to the
 // member's profile, where the Account block led here from.
 export function SettingsHead({ title }: { title: string }) {
@@ -55,18 +56,22 @@ export const leaveHome = () => nav.leave('/');
 // back (useModal): focus starts on Cancel, Tab stays inside, and Escape,
 // Cancel or a press on the backdrop close it, focus going back to the
 // control that opened it. run is the action; what it throws is shown in the
-// dialog, which stays open so the member can try again or cancel.
+// dialog, which stays open so the member can try again or cancel. explain
+// gives a refusal the screen has its own words for, and answers undefined
+// for the rest, which read as problemMessage says.
 export function Confirm({
   title,
   action,
   run,
   onClose,
+  explain,
   children,
 }: {
   title: string;
   action: string;
   run: () => Promise<void>;
   onClose: () => void;
+  explain?: (err: unknown) => string | undefined;
   children: ComponentChildren;
 }) {
   const root = useRef<HTMLDivElement>(null);
@@ -86,7 +91,7 @@ export function Confirm({
     try {
       await run();
     } catch (err) {
-      setRefused(problemMessage(err).text);
+      setRefused(explain?.(err) ?? problemMessage(err).text);
       setBusy(false);
     }
   };

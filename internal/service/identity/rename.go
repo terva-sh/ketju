@@ -54,6 +54,30 @@ func (s *Service) ChangeHandle(ctx context.Context, v domain.Viewer, ip, to stri
 	return s.rename(ctx, v, ip, "", to)
 }
 
+// HandleState is GET /settings/handle: v's handle, and when they may next
+// change it themselves. NextChangeAt comes from nextChange, the rule
+// ChangeHandle refuses by, so the date a screen shows and the available_at
+// of a refusal cannot disagree.
+func (s *Service) HandleState(ctx context.Context, v domain.Viewer) (dto.HandleState, error) {
+	if err := members.Require(v, "read a handle's cooldown"); err != nil {
+		return dto.HandleState{}, err
+	}
+	ms := s.now().UnixMilli()
+	var out dto.HandleState
+	err := s.DB.Read(ctx, func(q *dbq.Queries, _ *sql.Tx) error {
+		u, err := q.GetUser(ctx, v.UserID)
+		if err != nil {
+			return err
+		}
+		out = dto.HandleState{Handle: u.Handle, NextChangeAt: nextChange(u, ms)}
+		return nil
+	})
+	if err != nil {
+		return dto.HandleState{}, err
+	}
+	return out, nil
+}
+
 // RenameMember is POST /admin/users/{handle}/rename: an admin renames the
 // account target names to to, without the cooldown, and the account's own
 // cooldown does not move.

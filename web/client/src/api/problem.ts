@@ -83,6 +83,10 @@ export class ProblemError extends Error {
     // validation-failed"): the code for each field it names, the first
     // where it names one twice. Empty for every other answer.
     readonly fieldErrors: Record<string, string> = {},
+    // When what was refused becomes possible, in Unix ms, from a body's
+    // available_at (docs/07 "Errors"): a member's second handle change
+    // inside the 30 days is conflict with it. null where the body has none.
+    readonly availableAt: number | null = null,
   ) {
     super(type);
     this.name = 'ProblemError';
@@ -95,17 +99,19 @@ export class ProblemError extends Error {
 export async function toProblem(r: Response): Promise<ProblemError> {
   let type: ProblemType = byStatus[r.status] ?? 'internal';
   let errors: unknown;
+  let availableAt: number | null = null;
   if ((r.headers.get('Content-Type') ?? '').startsWith('application/problem+json')) {
     try {
-      const body = (await r.json()) as { type?: unknown; errors?: unknown };
+      const body = (await r.json()) as { type?: unknown; errors?: unknown; available_at?: unknown };
       if (typeof body.type === 'string' && body.type in messages) type = body.type as ProblemType;
       errors = body.errors;
+      if (Number.isSafeInteger(body.available_at)) availableAt = body.available_at as number;
     } catch {
       // An unreadable body keeps the status's code.
     }
   }
   const fields = type === 'validation-failed' ? fieldErrors(errors) : {};
-  return new ProblemError(type, r.status, retryAfter(r.headers.get('Retry-After')), fields);
+  return new ProblemError(type, r.status, retryAfter(r.headers.get('Retry-After')), fields, availableAt);
 }
 
 // fieldErrors reads the errors extension: a list of {field, code}. An entry

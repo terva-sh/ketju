@@ -776,6 +776,16 @@ type HandleChange struct {
 	NextChangeAt *Millis `json:"next_change_at"`
 }
 
+// HandleState is GET /settings/handle (TKT-01M3V6XTYG): the viewer's handle
+// and when they may next change it themselves, so the settings screen shows
+// the cooldown before they type. NextChangeAt is null when they may now,
+// and otherwise the available_at a PUT /settings/handle would be refused
+// with, from the same rule.
+type HandleState struct {
+	Handle       string  `json:"handle"`
+	NextChangeAt *Millis `json:"next_change_at"`
+}
+
 // SessionList is GET /settings/sessions (TKT-01M29CCC0X): where the viewer
 // is signed in, live sessions only, most recently used first.
 type SessionList struct {

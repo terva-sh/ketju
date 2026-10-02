@@ -40,6 +40,13 @@ func (h *handlers) changeHandle(w http.ResponseWriter, r *http.Request) {
 	h.handleChanged(w, r, res, err)
 }
 
+// handleState is GET /api/v1/settings/handle: the viewer's handle and when
+// they may next change it (TKT-01M3V6XTYG), behind the PUT's gates.
+func (h *handlers) handleState(w http.ResponseWriter, r *http.Request) {
+	res, err := h.identity.HandleState(r.Context(), domain.ViewerFrom(r.Context()))
+	h.handleChanged(w, r, res, err)
+}
+
 // adminRename is POST /api/v1/admin/users/{handle}/rename with {handle}: an
 // admin renames the account, without the cooldown.
 func (h *handlers) adminRename(w http.ResponseWriter, r *http.Request) {

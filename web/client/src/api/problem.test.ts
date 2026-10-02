@@ -128,6 +128,27 @@ describe('field errors', () => {
   });
 });
 
+// available_at, when what was refused becomes possible (docs/07 "Errors"):
+// a second handle change inside the cooldown (TKT-01M3V6XTYG).
+describe('available_at', () => {
+  const problem = (body: unknown, status = 409) =>
+    toProblem(new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/problem+json' } }));
+
+  it('is read from the body', async () => {
+    const p = await problem({ type: 'conflict', status: 409, available_at: 1760292000000 });
+    expect(p.type).toBe('conflict');
+    expect(p.availableAt).toBe(1760292000000);
+  });
+
+  it('is null when absent or not a whole number', async () => {
+    expect((await problem({ type: 'conflict', status: 409 })).availableAt).toBeNull();
+    expect((await problem({ type: 'conflict', status: 409, available_at: '1760292000000' })).availableAt).toBeNull();
+    expect((await problem({ type: 'conflict', status: 409, available_at: 1.5 })).availableAt).toBeNull();
+    expect((await toProblem(new Response('<html>', { status: 409 }))).availableAt).toBeNull();
+    expect(new ProblemError('conflict', 409).availableAt).toBeNull();
+  });
+});
+
 // hasStatus tells apart the statuses one code covers (TKT-01M3QMRE47): the
 // server's own 503 from a proxy's 502 or 504, all of them unavailable.
 describe('hasStatus', () => {

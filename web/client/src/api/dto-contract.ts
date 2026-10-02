@@ -34,6 +34,7 @@ import type {
   GroupDetail,
   GroupList,
   HandleChange,
+  HandleState,
   IdentityList,
   IdentityRemoved,
   IssuedCredential,
@@ -107,6 +108,8 @@ import historyMember from '../../../../internal/dto/testdata/golden/history.memb
 import historyModerator from '../../../../internal/dto/testdata/golden/history.moderator.json';
 import handleChangeAdmin from '../../../../internal/dto/testdata/golden/handle-change.admin.json';
 import handleChangeMember from '../../../../internal/dto/testdata/golden/handle-change.member.json';
+import handleStateMember from '../../../../internal/dto/testdata/golden/handle-state.member.json';
+import handleStateModerator from '../../../../internal/dto/testdata/golden/handle-state.moderator.json';
 import identitiesMember from '../../../../internal/dto/testdata/golden/identities.member.json';
 import identityRemovedMember from '../../../../internal/dto/testdata/golden/identity-removed.member.json';
 import issuedCredentialAdmin from '../../../../internal/dto/testdata/golden/issued-credential.admin.json';
@@ -221,6 +224,8 @@ export const contract = [
   matches<PostHistory>()(historyModerator),
   matches<HandleChange>()(handleChangeAdmin),
   matches<HandleChange>()(handleChangeMember),
+  matches<HandleState>()(handleStateMember),
+  matches<HandleState>()(handleStateModerator),
   matches<IdentityList>()(identitiesMember),
   matches<IdentityRemoved>()(identityRemovedMember),
   matches<IssuedCredential>()(issuedCredentialAdmin),

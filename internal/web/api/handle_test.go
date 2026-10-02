@@ -181,6 +181,63 @@ func TestRenameRoutes(t *testing.T) {
 	}
 }
 
+// TestHandleStateRoute is TKT-01M3V6XTYG criterion 1: GET /settings/handle
+// answers the viewer's handle and when they may next change it, behind the
+// PUT's gates and with no-store. next_change_at is null before any change,
+// the date after the member's own, the available_at a PUT inside the
+// cooldown is refused with, unmoved by an admin's rename, and null again
+// once the 30 days are over.
+func TestHandleStateRoute(t *testing.T) {
+	w := newRenameWorld(t)
+	const path = "/api/v1/settings/handle"
+	for viewer, want := range map[string]int{"anonymous": http.StatusUnauthorized, "pre-user": http.StatusForbidden} {
+		if rec := w.call(viewer, "GET", path, ""); rec.Code != want {
+			t.Errorf("%s: %d, want %d", viewer, rec.Code, want)
+		}
+	}
+	state := func(viewer string) dto.HandleState {
+		t.Helper()
+		// decodeAs holds the answer to no-store and to the type's fields.
+		return decodeAs[dto.HandleState](t, w.call(viewer, "GET", path, ""))
+	}
+	if s := state("member"); s.Handle != "member" || s.NextChangeAt != nil {
+		t.Fatalf("before any change: %+v", s)
+	}
+
+	first := w.now
+	decodeAs[dto.HandleChange](t, w.call("member", "PUT", path, `{"handle":"membre"}`))
+	next := dto.Millis(first.Add(identity.RenameCooldown).UnixMilli())
+	if s := state("member"); s.Handle != "membre" || s.NextChangeAt == nil || *s.NextChangeAt != next {
+		t.Fatalf("after the member's own change: %+v, want next_change_at %d", s, next)
+	}
+
+	w.later(24 * time.Hour)
+	rec := w.call("member", "PUT", path, `{"handle":"member2"}`)
+	var p struct {
+		AvailableAt *int64 `json:"available_at"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &p); err != nil || rec.Code != http.StatusConflict || p.AvailableAt == nil {
+		t.Fatalf("a change inside the cooldown: %d %s", rec.Code, rec.Body)
+	}
+	if s := state("member"); s.NextChangeAt == nil || int64(*s.NextChangeAt) != *p.AvailableAt {
+		t.Errorf("next_change_at %v, the refusal's available_at %d", s.NextChangeAt, *p.AvailableAt)
+	}
+
+	w.rename("membre", "member3")
+	if s := state("member"); s.Handle != "member3" || s.NextChangeAt == nil || *s.NextChangeAt != next {
+		t.Errorf("after an admin's rename: %+v, want next_change_at %d", s, next)
+	}
+	w.rename("moderator", "moderatrix")
+	if s := state("moderator"); s.Handle != "moderatrix" || s.NextChangeAt != nil {
+		t.Errorf("an admin's rename started a cooldown: %+v", s)
+	}
+
+	w.later(identity.RenameCooldown)
+	if s := state("member"); s.NextChangeAt != nil {
+		t.Errorf("30 days on: %+v", s)
+	}
+}
+
 // TestReleasedHandleRedirects is AC3 through the API: for 90 days a member
 // asking for the old handle's profile or history is sent to the account's
 // handle now, query kept, with a temporary uncached redirect, a chain of

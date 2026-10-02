@@ -230,6 +230,7 @@ func (h *handlers) routes() []web.Route {
 		{Method: get, Path: "/api/v1/settings/identities", Handler: h.identityList},
 		{Method: del, Path: "/api/v1/settings/identities/{id}", Handler: h.removeIdentity},
 		{Method: post, Path: "/api/v1/settings/deactivate", Handler: h.deactivate},
+		{Method: get, Path: "/api/v1/settings/handle", Handler: h.handleState},
 		{Method: put, Path: "/api/v1/settings/handle", Handler: h.changeHandle},
 	}, h.applyRoutes()...)
 }
