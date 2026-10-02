@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXK4E23MC6DWK4VBX6DXS
 title: Build the user settings screens
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -24,17 +24,10 @@ references:
     path: docs/07-api-and-clients.md
   - ref: pr:342
     path: null
-claim:
-  actor: agent:claude-code/phase3-settings-client
-  branch: run/cxk4e-settings-screens
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ab6a07aa04ce32dcc
-  commit: d2b4f2083bb6f70ec049944728db2cea5c877a36
-  session: null
-  claimed_at: 2026-10-01T21:17:18Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T02:58:48Z
+updated_at: 2026-10-02T03:01:08Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -57,7 +50,7 @@ The session list is the screen that makes server-side sessions worth their cost.
 - [x] e2e: signing out another session ends it server-side (its next /me has user null), using a dedicated member, with paceAuth and a row in e2e/session.ts
 - [x] The own profile's Account block links to Settings and keeps Link a sign-in and Sign out
 - [x] Tested at 390 and 1440 px with one axe scan per test
-- [ ] The committed dist is regenerated (go generate ./internal/web/spa) and npm run budget stays within 70000 B, with the before and after figures in the PR
+- [x] The committed dist is regenerated (go generate ./internal/web/spa) and npm run budget stays within 70000 B, with the before and after figures in the PR
 - [x] /settings/identities links through /auth/link and removes an identity; an identity whose removal the API marks not removable has Remove disabled and explained, a conflict answer shows the explanation, and signed_out true loads /
 
 ## Implementation plan
@@ -191,3 +184,11 @@ Terva review 1876 (head f6c0fcdf, base 25ad977a): both 1875 findings resolved; t
 **agent:claude-code/phase3-settings-client** at 2026-10-02T02:58:48Z
 
 Terva review 1879 (head c2824d5e, base 25ad977a): the 1876 finding is resolved, and the new medium 'Invalidate held thread pages when /me changes the page size' is fixed. state/viewer.ts replaces the viewer through one setViewer, which drops every thread page (forgetAllThreadPages) whenever the page size changes, whether the change came from /settings or from /me. The settings screen no longer does it itself. Regression test in state/viewer.test.ts: a /me with the same page size keeps a populated thread cache, and a /me with another size empties it. This is review round 4 on #342.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-02T03:00:28Z
+
+disagreement: pending maintainer. Terva review 1883 (head 4974bb14, base 25ad977a), medium "Isolate preference changes per Playwright project". The finding assumes the phone and desktop projects, or other specs, can run at the same time against carol's account. They cannot. playwright.config.ts sets `workers: 1` and `fullyParallel: false`, so one test runs at a time across both projects. e2e/session.ts's `paceAuth` asserts both settings, because the whole /auth/* budget depends on them too. The preferences test sets carol to 10 and dark and checks both while it is the only test running, and its afterEach puts back 25 and system before the next test starts. A dedicated member per project would cost two more sign-ins per project, 12 s of `paceAuth` each, to guard against concurrency the configuration forbids. If the suite ever goes parallel, `paceAuth`'s assertion fails first, and this test would move to its own member then. This is not a security finding. The PR merges with this recorded, after five review rounds (1838, 1875, 1876, 1879, 1883). Every earlier finding was fixed.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-02T03:00:41Z
+
+Addendum to the review 1883 disagreement (disagreement: pending maintainer). One risk remains. The afterEach reset is a PATCH through carol's stored session. If that request itself fails, carol stays at 10 posts a page and the dark theme for every later spec. The damage would show up as failures in those specs, not in this one. The afterEach asserts the reset's 200, so its own failure is reported, but the run's first visible error may be elsewhere.
