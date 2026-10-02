@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:53Z
-updated_at: 2026-10-01T23:53:41Z
+updated_at: 2026-10-02T00:13:51Z
 created_by:
   id: agent:claude-code/phase3-groom-unread
   name: ""
@@ -150,6 +150,10 @@ Review 1832 (head a07711a, base 0009f715), medium "Keep a late forum save scoped
 
 Review cap: 1832 was the fifth full review round on PR #341 (1820, 1822, 1829, 1830, 1832; 1831 was a follow-up). Under the run brief I have not dispatched a sixth. The fix is pushed and unreviewed, and the PR is left open for the orchestrator.
 
+**agent:claude-code/phase3-v6y87d** at 2026-10-02T00:13:44Z
+
+Review 1833 (head 4e4417e, base 0009f715, sixth round, granted by the orchestrator), medium "Do not let a failed newer save suppress an earlier successful save". The finding is valid, and the 1820 guard had introduced it: the guard counted a save as the latest when it started, so a newer save that was refused blocked an earlier one that succeeded. Fixed in the commit after 4e4417e. The guard is now "newest applied": an answer goes to onSaved only if its save started after the newest answer already handed over for that route. Out-of-order answers still cannot put back an older level, and the existing test for that still passes. A refused save applies nothing and so blocks nothing. The new test in ThreadScreen.watch.test.tsx, "shows an earlier save that succeeds after a newer one was refused", fails on 4e4417e. Review 1833 judged review 1832's finding resolved. Reader bundle: 75237 B (+1475 B over main's 73762 B). The orchestrator granted a seventh round for this fix only; any finding from it is to be deferred to a draft, not fixed.
+
 ## Summary
 
 A member can now watch or mute a thread from the desktop toolbar and the phone's more menu, and a forum from its thread-list header. Anonymous readers and pre-users are not offered the control. The PR is #341.
@@ -158,7 +162,7 @@ A member can now watch or mute a thread from the desktop toolbar and the phone's
 - The thread action is labelled with the effective level: Watching, Muted or Watch. The forum control is labelled with the forum's own level and sits first in the header's `.list-actions`, before Mark all read and New thread.
 - A save calls `forgetLists()`, which includes Watching, and `forgetAllThreadPages()`, so no list or thread page asked for before the save is held or stored after it (review 1822). It then refreshes `/me`. The forum list asks for itself again, so a mute takes its badges away.
 - The thread page shows a saved level over any page whose load started before the save answered, a live page included (review 1829). The forum list shows it only on the forum it was saved for (review 1832).
-- A late answer closes only its own dialog, and never undoes a newer save to the same target (review 1820).
+- A late answer closes only its own dialog. It is shown only if it started after the newest answer already shown for that target, so out-of-order answers cannot undo a newer save, and a refused save blocks nothing (reviews 1820 and 1833).
 - `ThreadList.watch` is required in `dto.ts`. The thread toolbar wraps.
 
-Reader bundle: 73762 B before, 75231 B after (+1469 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
+Reader bundle: 73762 B before, 75237 B after (+1475 B gzip, budget 120000 B). Tests: `WatchDialog.test.tsx`, `ThreadScreen.watch.test.tsx`, additions to the threadActions, ThreadListScreen and Shell tests, and `e2e/watch.spec.ts`, which runs two tests at 390 and 1440 px with one axe scan each.
