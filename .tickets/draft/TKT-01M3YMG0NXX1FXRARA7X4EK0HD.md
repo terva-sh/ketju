@@ -42,7 +42,7 @@ references: []
 claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-02T15:43:21Z
+updated_at: 2026-10-02T16:40:26Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -65,7 +65,11 @@ Grooming names the tests. At least:
 - `/metrics` serves only behind its guard;
 - the release pipeline builds the binaries in a dry run without publishing anything.
 
-Each browser test runs at 390 and 1440 px with one axe scan. The server invariants are proven through the real serve, as `TestPhase3Exit*` are. That covers split, merge and archive keeping access rules, and moved posts never widening access.
+Each browser test runs at 390 and 1440 px with one axe scan. The server invariants are proven through the real serve, as `TestPhase3Exit*` are. They cover docs/15 "Invariants, added":
+- a cross-forum split or merge is refused unless the actor holds `moderate` in both forums;
+- a moved post is served under the target forum's rules and by no other path: not a pointer, a notice, a notification, a search hit or a live event;
+- the source's moved notice names the target only to viewers who may read it;
+- an archived thread refuses every write, moderators' included.
 
 ## Acceptance criteria
 
