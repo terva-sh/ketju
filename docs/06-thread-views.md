@@ -267,6 +267,30 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   (TKT-01M29CGBW6).
 - Clicking `↩ #37` scrolls to #37 if it is on the page, otherwise shows it in
   a popover with a "go to" link. Same widget for quote links.
+- **Decided by the run (2026-10-02, pending maintainer review;
+  TKT-01M3YME9AZ):** a quoted post shows its backlinks as a line between its
+  body and its footer, "Quoted by #51 #60", at both widths. Each ordinal is a
+  link that behaves as the `↩` indicator does: it scrolls to the quoting post
+  if that post is on the page, and otherwise opens it in the popover. The
+  ordinals are in ascending order. Past ten, the line ends with "and N more"
+  as plain text. The line is absent when nothing quotes the post, and on a
+  tombstone. A quoting post is listed only while every reader is shown it
+  as itself, so no backlink comes from a deleted, hidden, moved or redacted
+  post, for moderators either. A backlink therefore never says what a
+  removed post quoted. A quotation nested inside a quotation counts, as the
+  renderer reports it. The server records backlinks as a projection
+  (04 `post_quotes`), and the API serves them as `quoted_by`.
+  Alternatives:
+  - A count, "quoted 3 times", lost because a reader cannot follow it.
+  - A place in the footer lost because the phone footer's contents and
+    order are decided below, and a row of links there would crowd its 44 px
+    targets.
+  - A place under "more" lost because docs/01 adopts backlinks as one of the
+    ways a flat thread shows its structure, and a menu hides them.
+  - Listing removed quoting posts to moderators lost because the cached posts
+    are shared by a viewer class. A post's author sees their own removed post,
+    but they form a class of their own only when that post is on the page,
+    and a quoting post usually is not.
 
 ## Lenses
 
