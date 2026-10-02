@@ -636,6 +636,75 @@ source never change (03). Split threads carry a "split from <link>" header.
 it opens a composer for a new thread that quotes the source post and
 leaves a small "continued in <link>" note under it.
 
+docs/15 "Invariants, added" governs every notice and pointer here. A notice
+names the other thread only to a viewer who may read it. Everyone else
+reads "N posts were moved to another thread", or "merged from" or "split from
+another thread".
+
+The rest of this section was **decided by the run (2026-10-02, pending
+maintainer review)** for TKT-01M29CYSAM and TKT-01M29CYSBA:
+- **Where merged posts go.**
+  - Posts merged into an existing thread land at its end, in their source
+    order, after a "N posts were merged from <link>" notice.
+  - Each keeps its original author and time, so the times run backwards at
+    the notice.
+  - A merge does not move the thread up any list, because a thread's
+    latest-post time is the newest post time it holds.
+  - A merge notifies nobody, because the posts are not new writing.
+
+  Alternatives:
+  - Interleaving by original time lost. A post's ordinal is its place:
+    pages, permalinks and the read boundary count ordinals, and 03 never
+    renumbers. Interleaving would need a second order beside the ordinal,
+    and would move every later post onto another page under a reader.
+  - Showing the move time lost, because a reply would seem to answer posts
+    written after it.
+  - Bumping the thread lost, because its list row would name a latest post
+    that the thread page shows at another time.
+- **What may move.** Only posts shown as themselves can be selected. A
+  removed post, one hidden pending review, a redacted one and one already
+  moved stay where they are.
+
+  Alternative: moving removed posts with their removal lost. A hidden post's
+  text would reach the target forum's moderators, apart from the flags that
+  led to the hide, and an author's own delete would be carried to a thread
+  they never posted in.
+- **Quotes in a moved post.** In a post a move copied, a `[quote=#N]`
+  attribution draws as "Quote from another thread", without the quoted text
+  or a link, because N counts posts in the thread the text was written in.
+
+  Alternatives:
+  - Renumbering at copy time lost. It rewrites the author's text in the log,
+    and a quote of a post left behind would keep its text after that post
+    was removed.
+  - Resolving N in the origin thread lost. A copy of a copy cannot name the
+    thread its text counted in, and a cached page would keep a quote whose
+    post was removed in another thread.
+- **Who started a split thread.** It is the moderator who split it. They wrote
+  its title, and the "split from" header and each post's author block credit
+  the posts.
+
+  Alternative: the first moved post's author lost, because that member would
+  get the starter's rename window over a title they did not write.
+- **Selecting posts.**
+  - A moderator turns selection on with "Select posts" in the thread's
+    actions, in the toolbar on a desktop and the more menu on a phone.
+  - Each selectable post then shows a checkbox at the start of its header.
+  - A bar fixed to the bottom of the viewport, above the tab bar on a phone,
+    shows the count, "Split…", "Merge…" and "Cancel".
+  - The selection survives page changes within the thread and ends on
+    leaving it.
+  - Split asks for a title and a forum, the source's by default.
+  - Merge asks for the target thread as a link or id, and shows its title
+    before it confirms.
+  - Both dialogs say that a move is undone only by moving the posts back.
+
+  Alternatives:
+  - A checkbox on every post at all times lost, because it costs a moderator
+    width on every post while they read.
+  - Selecting from the moderator lens lost, because that lens holds only
+    removed posts, which do not move.
+
 ## Live updates
 
 While a thread page is open the client holds an SSE subscription. On a

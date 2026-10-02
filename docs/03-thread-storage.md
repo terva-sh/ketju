@@ -516,6 +516,64 @@ into the target thread's log as new `Post` records with an `origin
 a pointer. Ordinals in the source thread are never renumbered. This preserves
 every permalink ever issued.
 
+**How a move is written. Decided by the run (2026-10-02, pending maintainer
+review), TKT-01M29CXJZZ.** This reads the record table above and leaves every
+body field as it stands. The choices are:
+- **Which log holds which record.**
+  - A move takes posts from a source thread into a target thread. For a
+    split, the target is new.
+  - The source log gets one `PostsSplitOut`, naming the moved ordinals and the
+    target.
+  - The target log gets one `PostsMergedIn`, naming the source and the same
+    source ordinals. It is followed by a `Post` copy for each moved post, in
+    ascending source ordinal, each with `origin` set and followed by copies of
+    that post's `Edit` records.
+  - Both records are thread-level (frame ordinal 0). A split writes a
+    `PostsMergedIn` too, so a target always says where its posts came from.
+- **A copy keeps the original's frame.**
+  - Each copied frame keeps the original's actor, timestamp, revision and
+    machine-authored flag. The target's index and projection read author and
+    time from the frame, so they show the original author and time without
+    opening another log.
+  - `reply_to`, in the `Post` and in every `Edit`, is renumbered to the
+    copy's ordinal when it names a post moved with it, and left out
+    otherwise. The text is copied byte for byte.
+  - Only posts shown as themselves move, so no `Delete` or `Restore` is
+    copied.
+  - The two move records carry the moderator as actor.
+  - Index entry flag bit 8, `copied`, marks a post whose `Post` carries an
+    `origin`. It is derived, like every entry flag.
+- **The order of writes.**
+  1. For a split only, the new thread's header and `ThreadCreated`.
+  2. The source's `PostsSplitOut`, which commits the move.
+  3. The target's `PostsMergedIn` and the copies, as one contiguous run.
+
+  A crash after step 2 leaves the posts hidden in the source and not yet
+  shown in the target, so they are never readable in both. A crash after
+  step 1 leaves a thread with no post, which no list shows.
+- **Recovery reads the logs alone.**
+  - A `PostsSplitOut` ordinal whose target holds no copy with that `origin`
+    is unfinished.
+  - The server finishes it at startup before serving, and after any move
+    that failed part-way. It appends the missing `PostsMergedIn` and copies
+    in ascending source ordinal, from the source as the `PostsSplitOut` left
+    it, since a moved post accepts no later record.
+  - Running recovery twice writes nothing the second time.
+- **The size of a move.** One move names at most 10000 posts, so one record of
+  each kind carries it, far inside the ceilings in "`MaxFrameSize` at 1 MiB".
+  A reader accepts any number of these records.
+
+Alternatives:
+- Writing the target first lost, because a crash would leave the posts
+  readable in both threads under two forums' rules.
+- A move journal in the database lost, because the source record already is
+  the intent and the database is rebuilt from the logs.
+- Copying only the current revision lost, because an edited post, a
+  moderator's edit included, would read as unedited in its new place.
+- The moderator as the copies' actor lost, because the target's index would
+  then name the moderator as author, or would need another log to say who
+  wrote the post.
+
 ### Unrecognised record types
 
 An older binary will meet a record type a newer one wrote. What it does then is
