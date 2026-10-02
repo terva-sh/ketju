@@ -650,6 +650,19 @@ TKT-01M29CYSC0):**
 - **The header.** The new thread shows a "continued from <link>" header only
   to a viewer who may read the source. Nobody else sees a header.
 
+**Decided by the run (2026-10-02, pending maintainer review)**, for
+TKT-01M3YMG0NX: "Reply as new thread" stays offered under a post of a locked
+or archived thread, to a member who may read it and may create a thread.
+It writes only the new thread's log, so the source thread's log does not
+grow and an archived thread stays read-only (08 "Locking semantics"). The
+"continued in" note then shows under the source post as above. It is not
+one of the controls an archived thread withholds ("The thread head"),
+because the server accepts it. Alternatives: withholding it on an archived
+thread lost because archiving closes a thread's history, not its subject,
+and a member picking the subject up would otherwise copy the text by hand
+and lose the link; refusing it on the server too lost because it would be a
+refusal 08 does not name, guarding a log the action never writes.
+
 docs/15 "Invariants, added" governs every notice and pointer here. A notice
 names the other thread only to a viewer who may read it. Everyone else
 reads "N posts were moved to another thread", or "merged from" or "split from
