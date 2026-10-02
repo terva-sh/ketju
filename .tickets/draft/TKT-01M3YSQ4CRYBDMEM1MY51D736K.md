@@ -19,11 +19,13 @@ dependencies:
   - TKT-01M3V6XVVGSTDA1SH15DKYP7NZ
   - TKT-01M3V73KM1VJ5XTC53MFCEJ0XW
 blocks_on: none
-references: []
+references:
+  - ref: pr:360
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-02T17:21:02Z
+updated_at: 2026-10-02T17:22:22Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
