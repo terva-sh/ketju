@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3VVZE4G37YMQG2RVXSWYM3Z
 title: Compare ordinals as unsigned in index and page bounds on 32-bit builds
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -19,17 +19,10 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-vvze4g
-  branch: run/vvze4g-unsigned-ordinals
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad5c11892789defa3
-  commit: 30834b8e9b8dc69a282dac88cc580503fd08244c
-  session: null
-  claimed_at: 2026-10-02T19:14:41Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T13:55:32Z
-updated_at: 2026-10-02T19:14:42Z
+updated_at: 2026-10-02T19:30:12Z
 created_by:
   id: agent:claude-code/phase3-lenses
   name: ""
@@ -56,11 +49,11 @@ Compare in uint64, or add one helper in `threadlog` that every caller uses. Add 
 
 ## Acceptance criteria
 
-- [ ] threadlog.PastLast(o uint32, n int) bool exists, lens.pastLast is gone, and Index.Entry, Index.Entries, Index.entryRef, lensPage, PageFor and the attachments bound all call it; grep -rnE 'int\((o|ordinal|from|to|q\.Ordinal)\) *[<>]' over non-test Go files in internal/ and cmd/ finds nothing
-- [ ] cmd/ketju/redact.go sorts ordinals with cmp.Compare rather than int subtraction
-- [ ] TestPastLast, TestEntryPastTheEndIsAnErrorNotAPanic, TestEntriesPastTheEndAreClamped, TestReplayRefusesAnOrdinalPastTheEnd and TestPageForPastTheLastOrdinal pass, and ?ordinal=4294967295 is not-found on the thread page and on a lens page
+- [x] threadlog.PastLast(o uint32, n int) bool exists, lens.pastLast is gone, and Index.Entry, Index.Entries, Index.entryRef, lensPage, PageFor and the attachments bound all call it; grep -rnE 'int\((o|ordinal|from|to|q\.Ordinal)\) *[<>]' over non-test Go files in internal/ and cmd/ finds nothing
+- [x] cmd/ketju/redact.go sorts ordinals with cmp.Compare rather than int subtraction
+- [x] TestPastLast, TestEntryPastTheEndIsAnErrorNotAPanic, TestEntriesPastTheEndAreClamped, TestReplayRefusesAnOrdinalPastTheEnd and TestPageForPastTheLastOrdinal pass, and ?ordinal=4294967295 is not-found on the thread page and on a lens page
 - [ ] A CI step in Build and Test runs the threadlog and lens packages and TestPageFor under GOARCH=386 CGO_ENABLED=0, its step log shows each package ok, and the PR quotes that step failing on a commit holding only the tests and the step
-- [ ] No change to format.go, records.go, header.go, the .idx layout or internal/dto
+- [x] No change to format.go, records.go, header.go, the .idx layout or internal/dto
 
 ## Implementation plan
 
@@ -116,3 +109,31 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15e.
 
 - Making `internal/web/api` and `internal/auth/agentcred` tests compile for 386. Their constants are 64-bit by intent (setting limits, timestamps). The fix here makes no claim that ketju supports 32-bit builds. It only removes a panic and a wrong bound. Supporting 32-bit builds would be a release decision, and docs/15 class 3 gives that to the maintainer.
 - Any other `int` conversion that is not an ordinal bound check.
+
+## Notes
+
+**agent:claude-code/phase4-run-vvze4g** at 2026-10-02T19:29:54Z
+
+Implementation notes, 2026-10-02, against main at 30834b8e.
+
+### Where the plan met the code
+
+- **`?ordinal=` never reached 4294967295.** `threadQuery` in `internal/web/api/api.go` parsed `?ordinal=` with `strconv.ParseInt(s, 10, 32)`, so any value from 2147483648 up answered 400 bad-request, and the description's "reaches the two `q.Ordinal` checks from a URL" was true only below 2^31. docs/07 "What the thread endpoint does" says an ordinal past the end is `not-found`, and a post's path (`postPath`) already parses a full uint32. The query now parses the ordinal the same way: up to `math.MaxUint32`, still `ParseInt`, so a leading `+` is accepted as before. `?page=` keeps its 31-bit bound. This follows docs/07 and is not a new decision.
+- **`TestFiftyThousandPostIndexFitsTheMemoryBudget`** pinned `unsafe.Sizeof(IndexEntry{}) == 40`. On 386 a uint64 aligns to 4 bytes and the struct is 36, inside the budget. The pin now holds exactly where a uint64 aligns to 8 and as an upper bound elsewhere. The grooming did not see this because the test package did not compile under 386 then.
+- **`TestPastLast`** is in the fix commit (063c6787 on the branch), not the test-only commit, because the helper it calls did not exist before the fix.
+- `TestSecondsDuration`: `math.MaxInt` moved to `windows64_test.go` with the plan's rows, because on a 32-bit build `secondsDuration(math.MaxInt)` is about 68 years, not the longest Duration. `math.MinInt` stays.
+
+### The step failing on the test-only commit (65c85066 on the branch)
+
+The step's commands, run on that commit under `GOARCH=386 CGO_ENABLED=0`:
+
+- `TestEntryPastTheEndIsAnErrorNotAPanic`: `panic: runtime error: index out of range [4294967294] with length 3` at `index.go:366` (`Index.Entry`).
+- `TestEntriesPastTheEndAreClamped`: `panic: runtime error: slice bounds out of range [:4294967295] with capacity 3` at `index.go:393` (`Index.Entries`).
+- `TestReplayRefusesAnOrdinalPastTheEnd`: `panic: runtime error: index out of range [4294967294] with length 6` at `apply.go:273` (`Index.entryRef`).
+- `TestPageForPastTheLastOrdinal`: `ordinal 2147483648 of 3 posts: page 85899346, <nil>; want not-found` and `ordinal 4294967295 of 3 posts: page 1, <nil>; want not-found`.
+
+A panicking test ends the package binary, so the package run shows only the first; each line above is from `-run` on that test alone.
+
+## Summary
+
+threadlog.PastLast(o uint32, n int) compares an ordinal with a post count in uint64, and every ordinal bound calls it: Index.Entry, Index.Entries, Index.entryRef, lensPage, PageFor, the attachments bound and the reply chain lens (lens.pastLast is gone). cmd/ketju/redact.go sorts ordinals with cmp.Compare. ?ordinal= now parses a full uint32, as a post's path does, so an ordinal past the end is not-found (docs/07) rather than bad-request from 2^31 up. A CI step, 'ordinal bounds on a 32-bit build', runs threadlog, lens and TestPageFor under GOARCH=386 CGO_ENABLED=0; on the test-only commit it panicked in Entry, Entries and entryRef and served page 1 for ordinal 4294967295. The threadlog and threads test packages now compile for 386; internal/web/api and internal/auth/agentcred still do not, by the plan. ketju still ships only 64-bit builds.
