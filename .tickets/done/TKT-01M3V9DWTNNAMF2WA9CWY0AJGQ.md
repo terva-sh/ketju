@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V9DWTNNAMF2WA9CWY0AJGQ
 title: Let a member turn off the single-key shortcuts (WCAG 2.1.4)
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -20,17 +20,10 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-9DWTN
-  branch: run/9dwtn-shortcut-switch
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
-  commit: 30834b8e9b8dc69a282dac88cc580503fd08244c
-  session: null
-  claimed_at: 2026-10-02T19:15:02Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T08:31:22Z
-updated_at: 2026-10-02T19:15:03Z
+updated_at: 2026-10-02T19:41:12Z
 created_by:
   id: agent:claude-code/phase3-groom-polish
   name: ""
@@ -56,12 +49,12 @@ Offer a setting that turns the single-key shortcuts off, the simplest of the thr
 
 ## Acceptance criteria
 
-- [ ] With the shortcuts off, for a member through Settings or a signed-out reader through the shortcut list, no character key acts on a thread page or the forum index: j, k, g and its digits, u, n and ? (shortcuts.test.tsx, ForumIndex.test.tsx)
-- [ ] GET /settings, PATCH /settings and /me carry shortcuts, a JSON boolean that reads true when missing or malformed; PATCH refuses any other type as wrong_type and keeps the other prefs (TestPrefs, TestUpdateSettingsValidates, TestUpdateSettingsKeepsOtherPrefs; goldens, dto.ts, docs/04 and docs/07 updated)
-- [ ] /settings has the switch, saved through the settings save queue; the shortcut list gives a member a link to Settings and a signed-out reader a button whose choice this browser keeps, and says when the shortcuts are off
-- [ ] At 720 px and above, while the shortcuts are on, the forum index footer reads Press ? for keyboard shortcuts and ? opens the list there; with them off it reads Keyboard shortcuts and ? does nothing; a phone shows no hint (TKT-01M3S3ZRYD criterion 2)
-- [ ] e2e/shortcuts.spec.ts and e2e/forum-index.spec.ts cover the switch and the footer at 390 px and 1440 px, with one axe scan per test
-- [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+- [x] With the shortcuts off, for a member through Settings or a signed-out reader through the shortcut list, no character key acts on a thread page or the forum index: j, k, g and its digits, u, n and ? (shortcuts.test.tsx, ForumIndex.test.tsx)
+- [x] GET /settings, PATCH /settings and /me carry shortcuts, a JSON boolean that reads true when missing or malformed; PATCH refuses any other type as wrong_type and keeps the other prefs (TestPrefs, TestUpdateSettingsValidates, TestUpdateSettingsKeepsOtherPrefs; goldens, dto.ts, docs/04 and docs/07 updated)
+- [x] /settings has the switch, saved through the settings save queue; the shortcut list gives a member a link to Settings and a signed-out reader a button whose choice this browser keeps, and says when the shortcuts are off
+- [x] At 720 px and above, while the shortcuts are on, the forum index footer reads Press ? for keyboard shortcuts and ? opens the list there; with them off it reads Keyboard shortcuts and ? does nothing; a phone shows no hint (TKT-01M3S3ZRYD criterion 2)
+- [x] e2e/shortcuts.spec.ts and e2e/forum-index.spec.ts cover the switch and the footer at 390 px and 1440 px, with one axe scan per test
+- [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
 
 ## Implementation plan
 
@@ -167,3 +160,11 @@ run decision: pending maintainer review. The single-key shortcuts get an off swi
 **agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:21:16Z
 
 run decision: pending maintainer review. TKT-01M3S3ZRYD (Add the front page footer with member and post counts) criterion 2 is folded into this ticket rather than filed as a follow-up: while the shortcuts are on, ? is bound on the forum index and the footer reads 'Press ? for keyboard shortcuts'; while off, it reads 'Keyboard shortcuts'. A follow-up lost because it would be a second client PR in the dist queue for about 20 lines, and the switch is what makes the hint true. Recorded in docs/06 'Thread list views (forum index)' (2026-10-02). TKT-01M3S3ZRYD is done and stays as it is; this ticket's criterion 4 is where that criterion is met.
+
+**agent:claude-code/phase4-run-9DWTN** at 2026-10-02T19:40:58Z
+
+Implemented as planned. Details the plan left open, settled here: users.Prefs now answers a UserPrefs struct (PageSize, Theme, Shortcuts) rather than two values; the shortcuts cases are in a new TestPrefsShortcuts beside TestPrefs. A signed-out reader's choice is stored as localStorage ketju.shortcuts = 'off', and the key is removed when they turn them back on. The list's status line is empty while they are on and reads 'Single-key shortcuts are off.' when off; a member's link reads 'Turn them off in Settings' while on and 'Change this in Settings' while off; a signed-out reader's button reads 'Turn shortcuts off' or 'Turn shortcuts on'. The index's lead line reads 'Here ? opens this list. The other keys work on a thread page.' while on, and 'These keys work on a thread page.' while off. The forum-index desktop screenshots are refreshed; the phone ones are unchanged. Reader bundle 79213 B -> 79833 B gzip (+620 B; the plan estimated +450).
+
+## Summary
+
+The single-key shortcuts can be turned off (WCAG 2.1 SC 2.1.4). prefs_json reads shortcuts, a JSON boolean that is true when missing or malformed; /me, GET /settings and PATCH /settings carry it, and PATCH refuses anything but a boolean as wrong_type. In the client, shortcutsOn (keyboard/shortcuts.ts) is the member's account choice, or for anyone else this browser's (localStorage ketju.shortcuts); with it false no character key acts on a thread page or the forum index. /settings has a 'Use single-key shortcuts' checkbox saved through the save queue. The shortcut list says when they are off, and links a member to Settings or gives a signed-out reader a button. The forum index binds ? in a layout effect while they are on, and its footer reads 'Press ? for keyboard shortcuts' (meeting TKT-01M3S3ZRYD criterion 2), or 'Keyboard shortcuts' when off. Reader bundle 79213 B -> 79833 B gzip. Every criterion met.
