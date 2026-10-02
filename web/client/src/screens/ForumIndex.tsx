@@ -8,7 +8,7 @@ import { MarkAllRead } from '../components/MarkAllRead';
 import { PostTime } from '../components/thread/PostTime';
 import { useAfterMark } from '../state/lists';
 import { HelpOverlay } from '../keyboard/HelpOverlay';
-import { helpOpen, ignored } from '../keyboard/shortcuts';
+import { helpOpen } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
 import { siteName, viewer } from '../state/viewer';
 import { ForumPicker, pickable } from './ForumPicker';
@@ -123,8 +123,10 @@ export function ForumIndex() {
 // IndexFoot ends the front page (docs/06 "Thread list views (forum index)",
 // TKT-01M3S3ZRYD): the member count, which the server sends a member alone,
 // and the posts in the forums listed here, so only forums the reader may
-// read are counted. From 720 px up it offers the shortcut list, which ? opens
-// here too; a phone has no shortcuts (docs/06 "Mobile").
+// read are counted. From 720 px up it offers the shortcut list by a button;
+// a phone has no shortcuts (docs/06 "Mobile"). No key is bound here: a
+// single-character shortcut needs a way to turn it off first (WCAG 2.1.4,
+// TKT-01M3V9DWTN; Terva review 1887), so the button does not say "Press ?".
 function IndexFoot({ forums, members }: { forums: Forum[]; members: number | null }) {
   const phone = isPhone.value;
   const locale = viewer.value.settings.locale || undefined;
@@ -134,18 +136,12 @@ function IndexFoot({ forums, members }: { forums: Forum[]; members: number | nul
     posts += f.post_count;
     for (const c of f.children) posts += c.post_count;
   }
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key !== '?' || isPhone.value || helpOpen.value || ignored(e)) return;
-      e.preventDefault();
-      helpOpen.value = true;
-    };
-    document.addEventListener('keydown', onKey);
-    return () => {
-      document.removeEventListener('keydown', onKey);
+  useEffect(
+    () => () => {
       helpOpen.value = false;
-    };
-  }, []);
+    },
+    [],
+  );
   return (
     <footer class="forum-index-foot">
       <span>
@@ -154,10 +150,10 @@ function IndexFoot({ forums, members }: { forums: Forum[]; members: number | nul
       </span>
       {!phone && (
         <button type="button" class="keys-hint" aria-haspopup="dialog" onClick={() => (helpOpen.value = true)}>
-          Press <kbd>?</kbd> for keyboard shortcuts
+          Keyboard shortcuts
         </button>
       )}
-      {helpOpen.value && !phone && <HelpOverlay lead="These keys work on a thread page." />}
+      {helpOpen.value && !phone && <HelpOverlay lead="These keys work on a thread page, where ? opens this list." />}
     </footer>
   );
 }

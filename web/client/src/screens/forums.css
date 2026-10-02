@@ -233,13 +233,7 @@
 }
 .keys-hint:hover {
   color: var(--ink2);
-}
-.keys-hint kbd {
-  padding: 0 5px;
-  font-family: var(--font-mono);
-  font-size: inherit;
-  border: 1px solid var(--rule);
-  border-radius: 3px;
+  text-decoration: underline;
 }
 
 /* The floating new-thread button and the picker are the phone's and

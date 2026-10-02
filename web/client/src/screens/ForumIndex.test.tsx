@@ -340,31 +340,29 @@ describe('the footer', () => {
     expect(foot(root)).toBeNull();
   });
 
-  it('offers the shortcut list above 720 px, by its button and by ?, and a phone shows none', async () => {
+  // No key is bound on the index until single-key shortcuts can be turned
+  // off (WCAG 2.1.4, TKT-01M3V9DWTN; Terva review 1887).
+  it('offers the shortcut list above 720 px by its button alone, and a phone shows none', async () => {
     const root = await index(memberTree, memberMe);
     const hint = foot(root)!.querySelector<HTMLButtonElement>('.keys-hint')!;
-    expect(hint.textContent).toBe('Press ? for keyboard shortcuts');
+    expect(hint.textContent).toBe('Keyboard shortcuts');
     // A pointer's click focuses the button first, as jsdom's click() does not.
     hint.focus();
     await act(async () => hint.click());
     const dialog = root.querySelector<HTMLElement>('[role=dialog]')!;
     expect(dialog.textContent).toContain('Keyboard shortcuts');
-    expect(dialog.textContent).toContain('These keys work on a thread page.');
+    expect(dialog.textContent).toContain('These keys work on a thread page, where ? opens this list.');
     await act(async () => dialog.querySelector<HTMLButtonElement>('.help-close')!.click());
     expect(root.querySelector('[role=dialog]')).toBeNull();
     expect(document.activeElement).toBe(hint);
 
+    document.body.focus();
     const key = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
     await act(async () => void document.body.dispatchEvent(key));
-    expect(key.defaultPrevented).toBe(true);
-    expect(root.querySelector('[role=dialog]')).not.toBeNull();
-    await act(async () => void (helpOpen.value = false));
+    expect(key.defaultPrevented).toBe(false);
+    expect(root.querySelector('[role=dialog]')).toBeNull();
 
     await act(async () => void (isPhone.value = true));
     expect(foot(root)!.querySelector('.keys-hint')).toBeNull();
-    const phoneKey = new KeyboardEvent('keydown', { key: '?', bubbles: true, cancelable: true });
-    await act(async () => void document.body.dispatchEvent(phoneKey));
-    expect(phoneKey.defaultPrevented).toBe(false);
-    expect(root.querySelector('[role=dialog]')).toBeNull();
   });
 });

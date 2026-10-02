@@ -460,7 +460,7 @@ lost because a reply to yourself is not what the lens is for
   lost because 07 already puts `site_name` in the wordmark (TKT-01M29CXK2H).
 - **Decided by the run (2026-10-01, pending maintainer review):** the forum
   index ends with a footer, "N members · M posts", then at 720 px and above
-  "Press ? for keyboard shortcuts" (TKT-01M3S3ZRYD). M is the sum of
+  a way to the keyboard shortcuts (TKT-01M3S3ZRYD; see below). M is the sum of
   `post_count` over the forums the page lists, so it counts only forums the
   viewer may read and needs no new field. N is exactly the accounts the
   mention lookup (`GET /users?prefix=`) can offer: active, with a handle
@@ -484,6 +484,19 @@ lost because a reply to yourself is not what the lens is for
     in the shell, for a number one screen shows.
   - The shortcut hint on phones lost because shortcuts are absent there
     ("Mobile").
+
+  **Decided by the run (2026-10-01, pending maintainer review)**, while
+  building it: the hint is a "Keyboard shortcuts" button that opens the
+  shortcut list, and no key is bound on the forum index. The list opened
+  there leads with "These keys work on a thread page, where ? opens this
+  list." Alternatives: binding `?` on the index so that the mockup's
+  "Press ? for keyboard shortcuts" would hold lost because it adds a
+  single-character shortcut, which WCAG 2.1 SC 2.1.4 allows only with a way
+  to turn it off, and that switch is TKT-01M3V9DWTN's (Terva review 1887,
+  as TKT-01M3S3ZZSZ left out `/`). The mockup's words with no key bound
+  lost because the hint would be false. Front-page shortcuts of their own,
+  such as j and k between forums, lost for the same WCAG reason and
+  because nothing asked for them.
 - The Alerts screen (`/notifications`, TKT-01M29CTY86) lists the viewer's
   notifications as one sentence each, the thread's title linking to the
   post's permalink, and never shows post text (04 "notifications"). The
@@ -498,16 +511,6 @@ lost because a reply to yourself is not what the lens is for
   that. Alternatives: a paged list in the address, as the thread lists
   have, lost for the reason above; keeping the marking after mark-all lost
   because the reader would see no effect of the button but a status line.
-
-  **Decided by the run (2026-10-01, pending maintainer review)**, while
-  building it: the hint is a button that opens the shortcut list, and `?`
-  opens the list on the forum index too, so the hint's words hold. The list
-  opened there leads with "These keys work on a thread page.", since every
-  other key in it is a thread page's. Alternatives: the hint as plain text
-  lost because `?` did nothing outside a thread page, so the hint would
-  have been false. Front-page shortcuts of their own, such as j and k
-  between forums, lost because nothing asked for them and the list would
-  then differ by screen.
 
 ## Moderator flow for drift: split and merge
 

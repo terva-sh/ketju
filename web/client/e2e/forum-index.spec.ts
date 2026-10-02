@@ -137,7 +137,7 @@ test('a member’s footer names the members, and the desktop offers the shortcut
   await expect(page.locator('[data-forum="moderators"]')).toHaveCount(0);
   expect(Number(await foot.locator('[data-posts-total]').getAttribute('data-posts-total'))).toBe(await sumOfRows(page));
 
-  const hint = foot.getByRole('button', { name: 'Press ? for keyboard shortcuts' });
+  const hint = foot.getByRole('button', { name: 'Keyboard shortcuts' });
   if (isMobile) {
     await expect(hint).toHaveCount(0);
     await page.keyboard.press('?');
@@ -155,12 +155,15 @@ test('a member’s footer names the members, and the desktop offers the shortcut
   }
   await hint.click();
   const list = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
-  await expect(list).toContainText('These keys work on a thread page.');
+  await expect(list).toContainText('These keys work on a thread page, where ? opens this list.');
   await page.keyboard.press('Escape');
   await expect(list).toHaveCount(0);
   await expect(hint).toBeFocused();
-  // ? opens it here too, as the hint says.
+  // No key is bound here until single-key shortcuts can be turned off
+  // (WCAG 2.1.4, TKT-01M3V9DWTN; Terva review 1887).
   await page.keyboard.press('?');
+  await expect(list).toHaveCount(0);
+  await page.keyboard.press('Enter');
   await expect(list).toBeVisible();
   // The one scan, with the list open over the footer.
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
