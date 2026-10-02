@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V7GE5986PGNHTJJBZT1Z0H
 title: Add the / shortcut that opens search on desktop
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -21,15 +21,22 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-7GE59
+  branch: run/7ge59-slash-search
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
+  commit: d0bb743c98e7b60058afa023a5277b7861142f12
+  session: null
+  claimed_at: 2026-10-02T21:18:56Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:57:49Z
-updated_at: 2026-10-02T17:22:22Z
+updated_at: 2026-10-02T21:18:57Z
 created_by:
   id: agent:claude-code/phase3-groom-search
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-client-account
+  id: agent:claude-code/phase4-run-7GE59
   name: ""
 extensions: {}
 ---
