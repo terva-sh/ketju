@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3VRFRFW9M4XY8D14FXAJA23
 title: Order a new post's index entry before the header that covers it
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -18,15 +18,22 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-vrfrfw
+  branch: run/vrfrfw-index-entry-order
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad5c11892789defa3
+  commit: 75695ad8059e75e7dfb0c60b887b5bd71211e379
+  session: null
+  claimed_at: 2026-10-02T21:22:01Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T12:54:32Z
-updated_at: 2026-10-02T17:59:49Z
+updated_at: 2026-10-02T21:22:02Z
 created_by:
   id: agent:claude-code/phase3-vhsyfr
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-correctness
+  id: agent:claude-code/phase4-run-vrfrfw
   name: ""
 extensions: {}
 ---
