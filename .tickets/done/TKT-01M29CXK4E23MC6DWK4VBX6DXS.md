@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T03:01:08Z
+updated_at: 2026-10-02T03:01:21Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -192,3 +192,17 @@ disagreement: pending maintainer. Terva review 1883 (head 4974bb14, base 25ad977
 **agent:claude-code/phase3-settings-client** at 2026-10-02T03:00:41Z
 
 Addendum to the review 1883 disagreement (disagreement: pending maintainer). One risk remains. The afterEach reset is a PATCH through carol's stored session. If that request itself fails, carol stays at 10 posts a page and the dark theme for every later spec. The damage would show up as failures in those specs, not in this one. The afterEach asserts the reset's 200, so its own failure is reported, but the run's first visible error may be elsewhere.
+
+## Summary
+
+Landed through PR #342. `/settings`, `/settings/sessions` and `/settings/identities` replace their placeholders and are in the reader's chunk: inline measured smaller than a lazy chunk.
+
+- **Bundle:** reader 75237 B on dd840125, 78491 B after, of 120000 B (#331).
+- **Theme:** the account's theme wins on every load (`syncThemeFromAccount`).
+- **Saves:** settings saves go one at a time through a module-level queue. The settings state is in `state/viewer.ts`: `setViewerSettings`, and a `refreshViewer` that keeps settings saved since its /me was asked for. `setViewer` drops every thread page through `forgetAllThreadPages` when the page size changes.
+- **Sessions and identities:** another session is signed out in place. Signing out this browser, everywhere, or removing the current sign-in loads `/`.
+- **e2e:** members `sid-phone` and `sid-desktop`, with link subjects, are seeded in `cmd/ketju/e2e.go` for `e2e/settings.spec.ts`. The spec spends 11 `/auth/*` requests per project.
+
+Reviews 1838, 1875, 1876 and 1879 were fixed. Review 1883's medium, "Isolate preference changes per Playwright project", merged as a disagreement pending maintainer review: the suite runs one test at a time. The remaining risk is a failed afterEach reset, which would leave carol at 10 posts a page and the dark theme.
+
+Run decision pending maintainer review: a session row names its provider by key, and a removed provider's identity reads "No longer configured" (docs/05).
