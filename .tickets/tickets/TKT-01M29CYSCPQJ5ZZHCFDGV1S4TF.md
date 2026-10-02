@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSCPQJ5ZZHCFDGV1S4TF
 title: Implement thread tags
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -23,15 +23,22 @@ references:
     path: docs/03-thread-storage.md
   - ref: pr:361
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-cyscp
+  branch: run/cyscp-thread-tags
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
+  commit: 6d38a74297e6d0e76391789c43e3438a554ecbbd
+  session: null
+  claimed_at: 2026-10-02T20:23:16Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T17:24:09Z
+updated_at: 2026-10-02T20:23:19Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-tags-archive
+  id: agent:claude-code/phase4-run-cyscp
   name: ""
 extensions: {}
 ---
@@ -65,6 +72,23 @@ Whether members can tag their own threads is the open call here.
 - **Audit.** Every retag is a moderation action, and docs/08's opening says every moderation action appends to `audit_log`. The projection writes `thread.retagged` against the thread, as it writes `thread.moved`. The row carries no tag text, following the rename row's precedent (internal/events/projection/audit.go `ActionThreadRenamed`, maintainer decision 2026-09-29 on TKT-01M3NS147C): the log is the record of what the tags were, and `audit_log` is append-only. Alternatives: `{"from", "to"}` tag lists lost because they copy member-written text into a table nothing can redact; no row at all lost to docs/08's "every action ... appends to `audit_log`".
 - **Vocabulary.** Free, not constrained by a setting (maintainer, 2026-10-02, question 3 (c)). The original criterion on the vocabulary is answered by docs/04, not by a setting.
 - **The client is a separate ticket.** Chips, the filtered list, the new thread field and the moderator's panel are TKT-01M3YSQPZX (Show, filter and set thread tags in the client). They were split out so this server work does not queue for the committed dist (docs/15 "Order").
+
+### Revised at claim
+
+The approach below stands as groomed, with these refinements found while
+building it:
+
+- `tags: null` in a retag body is `bad-request`, as an absent `tags` is,
+  because a retag must name the new set; `[]` is how every tag is removed.
+- The cursor gains its sixth field only when the list is filtered, so an
+  unfiltered cursor is byte-for-byte what it was and old cursors still
+  decode.
+- `TestRenameAndMoveWriteNoTags` (TKT-01M29CKRH9) asserted that no tag route
+  is served. It now allows exactly the retag route; its record-type check,
+  that a rename or move writes no `ThreadTagged`, is unchanged.
+- The mid-decision hook in `rename_test.go` (`moveMidDecision`) gains a
+  retag case, which is how `TestRetagDecidesAfterAMove` lands a move between
+  the decision and the append.
 
 ### Approach
 
