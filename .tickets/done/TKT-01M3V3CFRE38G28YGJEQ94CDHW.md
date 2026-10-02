@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V3CFRE38G28YGJEQ94CDHW
 title: Check Phase 3's exit criterion with named end-to-end tests
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -60,17 +60,10 @@ blocks_on: none
 references:
   - ref: pr:351
     path: null
-claim:
-  actor: agent:claude-code/phase3-exit-check
-  branch: run/cfre-phase3-exit
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a537b1aa8ea458004
-  commit: 1fb5db0cdfc70f1b73799dd7aedb57116a2e51f4
-  session: null
-  claimed_at: 2026-10-02T06:29:52Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-02T09:17:48Z
+updated_at: 2026-10-02T09:47:20Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -96,11 +89,11 @@ Each runs with axe, and none needs an `/auth/*` call beyond `paceAuth`.
 
 ## Acceptance criteria
 
-- [ ] e2e/phase3-exit.spec.ts holds the plan's named tests for lenses, unread, notifications, search, live updates, attachments, phone pages, the manifest, settings and the profile, each passing in the phone (390 px) and desktop (1440 px) projects with one axe scan per test; the page picker test runs on the phone only
-- [ ] A CI step in the Build and Test job, Phase 3 exit tests by name, runs go test -race ./cmd/ketju/ -run '^TestPhase3Exit' -count=1 -v, and the PR quotes the step-log lines naming every TestPhase3Exit test and every phase3-exit.spec.ts test on the merged head
+- [x] e2e/phase3-exit.spec.ts holds the plan's named tests for lenses, unread, notifications, search, live updates, attachments, phone pages, the manifest, settings and the profile, each passing in the phone (390 px) and desktop (1440 px) projects with one axe scan per test; the page picker test runs on the phone only
+- [x] A CI step in the Build and Test job, Phase 3 exit tests by name, runs go test -race ./cmd/ketju/ -run '^TestPhase3Exit' -count=1 -v, and the PR quotes the step-log lines naming every TestPhase3Exit test and every phase3-exit.spec.ts test on the merged head
 - [ ] No spec added here calls /auth/* (e2e/session.ts unchanged), and the merged head's npm run budget line shows the reader within 70000 B gzip
-- [ ] Every other phase-3 ticket except the epics and TKT-01M3V3BVPY is done or archived before this one closes
-- [ ] cmd/ketju phase3_exit_test.go's TestPhase3Exit tests prove through the real serve that search, notifications, lenses, live events and blobs answer by the viewer's effective permission: a plain member gets nothing for removed, redacted, hidden-pending-review and moved-out posts, and no more than the thread page shows for a suspended author's; a moderator by group grant gets exactly what the restricted forum's thread page serves them; and no snippet carries a redacted body or a superseded revision
+- [x] Every other phase-3 ticket except the epics and TKT-01M3V3BVPY is done or archived before this one closes
+- [x] cmd/ketju phase3_exit_test.go's TestPhase3Exit tests prove through the real serve that search, notifications, lenses, live events and blobs answer by the viewer's effective permission: a plain member gets nothing for removed, redacted, hidden-pending-review and moved-out posts, and no more than the thread page shows for a suspended author's; a moderator by group grant gets exactly what the restricted forum's thread page serves them; and no snippet carries a redacted body or a superseded revision
 
 ## Implementation plan
 
@@ -238,3 +231,17 @@ In the full suite at 1440 px, the Unread surface test found the list still showi
 **agent:claude-code/phase3-exit-check** at 2026-10-02T09:17:48Z
 
 Terva review 1909 on PR #351 (head a1bc8de, base 492405f), medium, 'Check storage directly when asserting that a rejected upload stores nothing'. Fixed. The test now reads the blobs row, the file at blob.Path and the staging directory. Its positive control is blob bv, which was stored and reads as present in both.
+
+## Summary
+
+Merged as #351. The rebase merge kept the head, so 8ae5acf8 is now main.
+- Reviewed head 8ae5acf8, base 492405f3: clean full review (run 706d5e5f, Actions #2360). Review 1909's medium finding on a1bc8de was fixed in 8ae5acf8.
+- CI run 2359 on 8ae5acf8: every step succeeded. The step logs were read, and their lines are quoted on #351 (comment 23528). They name the five TestPhase3Exit* tests, every phase3-exit.spec.ts test in both projects (the page picker skipped on the desktop by isMobile), and the budget line: 79118 B gzip / 120000 B.
+
+Criterion 3 is unticked. Its first half holds: no spec added calls /auth/*, and e2e/session.ts is unchanged. Its second half, 70000 B, was superseded by the maintainer's 120000 B budget (#331, 2026-10-01), and the reader is 79118 B.
+
+The exit tests found two real bugs, fixed before this merged:
+- TKT-01M3XNQ772 (#349): an unread alert's thread link differed by colour alone;
+- TKT-01M3XP6ZRZ (#350): Unread showed a thread as unread after the member read it and went Back.
+
+The readings of the plan are in the notes: ada for settings, search and notifications showing only posts shown as themselves, "show" meaning in place, and pixel.png as the fixture. No docs/14 run decisions were needed.
