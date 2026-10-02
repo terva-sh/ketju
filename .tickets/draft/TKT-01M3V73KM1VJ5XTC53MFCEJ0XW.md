@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:50:48Z
-updated_at: 2026-10-02T17:22:22Z
+updated_at: 2026-10-02T17:33:37Z
 created_by:
   id: agent:claude-code/phase3-groom-live
   name: ""
@@ -45,11 +45,11 @@ Found while grooming TKT-01M29CXK0K (Build the content-addressed blob store and 
 ## Acceptance criteria
 
 - [ ] An upload of new bytes that would take an account's unattached bytes over limits.unattached_upload_mb is validation-failed with file upload_budget and leaves no file or row; bytes already stored are never refused for it (TestUploadBudget, TestUploadBudgetRace)
-- [ ] An account already at the bound is refused before the body is read (TestUploadBudgetRefusedBeforeRead)
 - [ ] limits.unattached_upload_mb defaults to 100, reads KETJU_LIMITS_UNATTACHED_UPLOAD_MB, and ketju config check refuses a value below limits.attachment_mb (validate tests; docs/02 and docs/07 rows)
 - [ ] The query uses a partial index on blobs (uploaded_by) where refcount = 0, in a migration with the next free number, and a test reads its plan
 - [ ] The composer shows the upload_budget words (Composer.test.tsx), and e2e/attachments.spec.ts passes at 390 px and 1440 px with one axe scan per test
 - [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
+- [ ] Through the HTTP handler, an account at the bound is refused new bytes and gets 201 for bytes the server already holds (TestUploadBudgetOverHTTP)
 
 ## Implementation plan
 
@@ -60,7 +60,7 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15.
 - **The bound.** Decided by the run, pending maintainer review, in docs/07 "Attachments" (2026-10-02), with the alternatives that lost:
   - **What is bounded:** the bytes an account has stored that no post names. That is the sum of `blobs.size` over blobs whose `uploaded_by` is the account and whose `refcount` is 0. It includes blobs a draft holds, which blob GC keeps for as long as a draft names them (`DeleteCollectableBlob`, migration 0021), and blobs waiting out their seven days (docs/03 "Blob garbage collection").
   - **The limit:** `limits.unattached_upload_mb` (`KETJU_LIMITS_UNATTACHED_UPLOAD_MB`), 100 MB by default. `ketju config check` refuses a value below `limits.attachment_mb`.
-  - **When it is asked:** before the body is read, and again in the write transaction that stores new bytes.
+  - **When it is asked:** once, after the file is read and hashed, in the write transaction that stores new bytes. A refusal before the body is read lost (Terva review 1945): the hash is unknown then, so it would refuse stored bytes too, and the read it saves is already bounded by `limits.attachment_mb` and the per-address write limiter.
   - **The refusal:** `validation-failed` with `{field: "file", code: "upload_budget"}`. The staged file is removed.
   - **Bytes already stored** are never refused for this, because they use no new disk.
   - **Everyone** is bound by it, admins and agents included.
@@ -80,9 +80,9 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15.
    - A test in `internal/service/blobs` reads `EXPLAIN QUERY PLAN` for `UnattachedBytes` and holds that it uses the index, as `TestPlansSeek` (`internal/store/db/views`) does for the thread list.
 3. **`blobs.Service`.**
    - It gains `Budget int64` (bytes; zero means the default), wired from config in `cmd/ketju/serve.go` where `Max` is.
-   - `MayUpload` asks `UnattachedBytes` and refuses when the total is already at or over the budget. It runs before the body is read (`upload` handler, `internal/web/api/blobs.go`).
-   - `Upload`'s write transaction, in the branch that creates a new blob (`sql.ErrNoRows` from `GetBlob`), asks again. It refuses when the total plus `n` is over the budget, so two uploads at once cannot both pass: the write connection serializes them.
-   - The known-bytes branch (`RefreshBlob`) is not asked.
+   - `MayUpload` is unchanged. It runs before the body is read, when the hash is not yet known.
+   - `Upload`'s write transaction asks `UnattachedBytes` in the branch that creates a new blob (`sql.ErrNoRows` from `GetBlob`), and nowhere else. It refuses when the total plus `n` is over the budget. The write connection serializes uploads, so two at once cannot both pass.
+   - The known-bytes branch (`RefreshBlob`) is not asked, so stored bytes are never refused for the bound.
    - `CodeUploadBudget = "upload_budget"` joins the codes in `blobs.go`.
    - The refusal is a field error on `file` (`invalid("file", CodeUploadBudget)`), so the deferred cleanup removes the staged file, as it does for `blocked`.
 4. **The error catalogue.** docs/07's `POST /blobs` row and its "Attachments" section name the code.
@@ -100,11 +100,13 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15.
     - a draft's blob still counts;
     - re-uploading stored bytes passes at the bound;
     - another account's unattached bytes do not count.
-  - `TestUploadBudgetRefusedBeforeRead`: an account already at the bound is refused by `MayUpload`, and the handler reads none of the body. Use a reader that fails the test if it is read.
   - `TestUploadBudgetRace`: two uploads that each fit alone, but not together, run at once. Exactly one is stored, and the refused one's staged file is gone. Run it under `-race`.
   - **Uploads are content-addressed and served only to readers of a referencing post.** The existing `TestBlobServedOnlyToReaders` and `TestRevalidationRechecksAccess` stay green. The bound adds no serving path.
 - **Go (`internal/config`).** `validate_test.go`: below `attachment_mb` and above the ceiling are refused; the default and the env override are read.
-- **Go (`internal/web/api/blobs_test.go`).** `TestUploadOverHTTP` gains a case: over the budget, the answer is `validation-failed` with `{field: "file", code: "upload_budget"}`.
+- **Go (`internal/web/api/blobs_test.go`).** `TestUploadBudgetOverHTTP`, through the handler, so `MayUpload` is on the path (Terva review 1945):
+  - an account at the bound that uploads new bytes gets `validation-failed` with `{field: "file", code: "upload_budget"}`;
+  - the same account re-uploading bytes the server holds, its own and another account's, gets 201;
+  - an account under the bound gets 201.
 - **Vitest** (`composer/Composer.test.tsx`). The table of refusal words (`['type.png', () => field('type_not_allowed'), ...]`) gains an `upload_budget` row.
 - **e2e.** The Vitest row covers the words, and the Go tests cover the bound. An e2e test would need a low `limits.unattached_upload_mb` in the config `cmd/ketju/e2e.go` writes (`[limits]`), which every other upload in the run would then share. So:
   - `e2e/attachments.spec.ts` runs unchanged at 390 px and 1440 px with its axe scans, and proves the default bound does not refuse ordinary use;
@@ -121,3 +123,7 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15.
 **agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:21:27Z
 
 run decision: pending maintainer review. Bound the bytes an account has stored that no post names (blobs.uploaded_by, refcount 0, drafts included) by limits.unattached_upload_mb, 100 MB by default. It is asked before the body is read and again in the write that stores new bytes, and refused as validation-failed with file upload_budget. Bytes already stored are never refused. Admins and agents are bound too. Recorded with the alternatives in docs/07 'Attachments' (2026-10-02). The ticket now has the phase-4 milestone (docs/15 scope), so the description's 'no milestone' line is out of date.
+
+**agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:33:37Z
+
+Terva review 1945 on PR #360 (head 1359e58, base ed82f15), medium, 'Pre-read budget rejection blocks the stored-byte exemption'. Fixed. The bound is now asked once, after the file is read and hashed, in the write that stores new bytes. The refusal before the read is dropped, because it could not tell stored bytes from new ones. The read it saved is already bounded by limits.attachment_mb and the per-address write limiter. docs/07 'Attachments' records this as an alternative that lost. The plan replaces TestUploadBudgetRefusedBeforeRead with TestUploadBudgetOverHTTP, which goes through the handler so MayUpload is on the path. This supersedes the run-decision note's 'asked before the body is read and again in the write'.

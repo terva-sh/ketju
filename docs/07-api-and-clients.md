@@ -1823,17 +1823,17 @@ blob waiting out its seven days. The bound is `limits.unattached_upload_mb`
 (`KETJU_LIMITS_UNATTACHED_UPLOAD_MB`), 100 MB by default, ten files at the
 default `limits.attachment_mb`. `ketju config check` refuses a value below
 `limits.attachment_mb`, since a file of the full size could then never be
-sent. The bound is asked twice:
-- before the body is read, so an account already at the bound costs no
-  read;
-- in the write that stores new bytes, so two uploads at once cannot both
-  pass.
-
-An upload over it is `validation-failed` with `{field: "file", code:
-"upload_budget"}`, and the staged file is removed. Bytes the server already
-holds store nothing new, so an upload of them is never refused for this,
-and costs no one. The bound holds for every account, admins and agents
-included. Alternatives:
+sent. The bound is asked once, after the file is read and hashed, in the
+write that stores new bytes. So two uploads at once cannot both pass, and
+bytes the server already holds, which store nothing new, are never refused
+for this and cost no one. An upload over it is `validation-failed` with
+`{field: "file", code: "upload_budget"}`, and the staged file is removed.
+The bound holds for every account, admins and agents included.
+Alternatives:
+- Refusing an account already at the bound before the body is read lost
+  (Terva review 1945). The hash is not known then, so it would refuse bytes
+  the server already holds too. The read it would save is already bounded
+  by `limits.attachment_mb` and by the per-address write limiter.
 - A per-day cap on bytes uploaded lost, because a draft keeps its blobs for
   as long as it lasts, so a rate does not bound the total.
 - Counting every byte an account uploads lost, because it would count
