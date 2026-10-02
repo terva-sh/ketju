@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T17:21:58Z
+updated_at: 2026-10-02T18:03:30Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -50,13 +50,13 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
 - [ ] Source ordinals are unchanged after a split and every source permalink still resolves
 - [ ] Copied posts carry their origin reference and render with attribution to the original author
 - [ ] Projections for both threads are correct after replay from logs alone
-- [ ] A crash after the source's PostsSplitOut, or part-way through the target's copies, is finished from the logs alone: TestMoveCrashAfterSourceRecordFinishes, TestMoveCrashMidRunFinishes and TestFinishMovesIdempotent pass, and recovery runs before the server serves
 - [ ] PostsSplitOut and PostsMergedIn bodies match docs/03's fields, with key names pinned by a golden test, and both types stay advisory at 20 and 21
 - [ ] A move between forums is refused unless the actor holds moderate in both, by role or through a group, and a refusal writes nothing (TestMoveNeedsModerateInBoth)
 - [ ] A moved post is served under the target forum's rules and by no other path: the TestMovedPost* tests cover the page, post, replies, history, search, notifications, blobs, user posts, quotes, the moderator queue and live events
 - [ ] A move into or out of an archived thread is refused, moderators and admins included (TestMoveRefusesArchived)
 - [ ] ketju fsck passes a data directory holding an unfinished move and reports it as a warning; ketju redact refuses while a move is unfinished
 - [ ] docs/03's index table and flags.go assign bit 8 (copied), and docs/04 and audit.Actions list posts.moved
+- [ ] A crash after the source's PostsSplitOut, part-way through the target's copies, or between a copied Post and its Edits is finished from the logs alone: TestMoveCrashAfterSourceRecordFinishes, TestMoveCrashMidRunFinishes, TestMoveCrashBetweenPostAndEditsFinishes and TestFinishMovesIdempotent pass, and recovery runs before the server serves
 
 ## Implementation plan
 
@@ -105,11 +105,14 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
    - `posts.Writer` gets the same method and publishes one event per run.
    - `frameFor` accepts 20/21 only as thread-level (ordinal 0) records.
 4. **Projection** (`internal/events/projection`), with migration 0025, the next free number (re-check at implementation):
-   - Add a `post_moves` table: `source_thread_id, source_ordinal, target_thread_id, target_ordinal NULL, split_offset, merged_offset NULL`, with key `(source_thread_id, source_ordinal)`. Add it to `ProjectionTables`.
+   - Add a `post_moves` table: `source_thread_id, source_ordinal, source_revision, target_thread_id, target_ordinal NULL, split_offset, merged_offset NULL, opens_thread`, with key `(source_thread_id, source_ordinal)`. Add it to `ProjectionTables`.
+   - `source_revision` is the source post's revision when `PostsSplitOut` was applied. A moved post accepts no later record, so it is fixed.
+   - A row is finished when its copy's `post_meta.current_revision` equals `source_revision`, which counts every carried `Edit`.
    - Apply `PostsSplitOut`: set `post_meta.moved = 1` and upsert the `post_moves` rows. Recompute the source's `last_post_*` from its newest post that is not moved, deleted ones counted as they are today.
    - Apply `PostsMergedIn`: set `merged_offset` on its rows.
    - Apply a `Post` with an origin: set `target_ordinal`.
-   - `applyPost` sets `last_post_*` only when the post is newer than the thread's current one, or is the thread's first. `post_count` is still the ordinal. Add a new query beside `SetThreadLastPost`.
+   - Apply `PostsMergedIn`: when the thread holds no post yet (a split), mark its rows `opens_thread`.
+   - `applyPost` for a copy (one with an origin) changes `last_post_*` only when its `PostsMergedIn` opened the thread, and then only when the copy is newer than the current latest post. A copy merged into an existing thread never changes it, even when the copy is newer (docs/06). A post that is not a copy sets `last_post_*` as today. `post_count` is still the ordinal. Add the query beside `SetThreadLastPost`.
    - Write an audit row `posts.moved` from `PostsSplitOut`, with `{from_thread, to_thread, count}`, as `thread.moved` is written (`projection/audit.go`).
    - Add `posts.moved` to `audit.Actions`, `auditlog`'s related-thread handling and the docs/04 audit table.
    - `decisions` gets real entries, which satisfies `TestEveryRecordTypeHasADecision`.
@@ -128,7 +131,7 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
      1. For a split, the new thread's header and `ThreadCreated`.
      2. `PostsSplitOut` with `AtLength` = the source's admitted length. `ErrLogMoved` re-admits, up to `threadAttempts`.
      3. The target run, with `AtLength` = the target's length: `PostsMergedIn`, then each post's `Post` copy and its `Edit`s. Read these from the source chain, with the frame actor, time, flags and revision kept. Renumber `reply_to`. `ErrLogMoved` here only means a post landed, so recompute and retry.
-   - **Finish.** `finishMoves(ctx)` finds `post_moves` rows with a null `target_ordinal`. Against the target log, it appends the missing `PostsMergedIn` and copies in ascending source ordinal, under `moveMu`, with no permission check: the move was admitted when its source record was written.
+   - **Finish.** `finishMoves(ctx)` finds unfinished `post_moves` rows: a null `target_ordinal`, or a copy whose revision is below `source_revision`. Before acting, it confirms each one against the target's index. Then, under `moveMu`, in ascending source ordinal, it appends the missing `PostsMergedIn`, each missing copy, and each copy's missing `Edit`s (the source revisions above the copy's current one). There is no permission check: the move was admitted when its source record was written.
      - It runs at startup, after projection catch-up and before the listener opens.
      - It runs after a move whose target write failed. That request answers `unavailable`, saying the move will finish.
      - It runs every minute, beside the flag sweeper.
@@ -168,12 +171,15 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
 - Recovery:
   - `TestMoveCrashAfterSourceRecordFinishes`.
   - `TestMoveCrashMidRunFinishes`: a prefix of the copies is on disk.
+  - `TestMoveCrashBetweenPostAndEditsFinishes`: a copied `Post` is on disk without its `Edit`s. Recovery appends them, and the copy serves the source's current revision and full history.
   - `TestSplitCrashAfterThreadCreatedLeavesUnlistedThread`.
   - `TestFinishMovesIdempotent`: a second run writes no byte.
   - `TestFinishMovesBeforeServing`.
 - Projection:
   - `TestMoveProjectionsRebuildFromLogs`: `ketju reindex` of both threads equals the live projection, including `post_moves`, counts and `last_post_*`.
   - `TestMergeDoesNotMoveLastPostBackwards`.
+  - `TestMergeOfNewerPostDoesNotBump`: a copy newer than every target post leaves `last_post_*` unchanged.
+  - `TestSplitThreadLastPostIsNewestCopy`.
   - `TestSplitRecomputesSourceLastPost`.
   - `TestPostsMovedAuditRow`.
 - Invariants. Each builds a cross-forum move with a viewer who reads only the source forum, and checks that nothing reaches them:

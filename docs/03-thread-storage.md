@@ -552,12 +552,16 @@ body field as it stands. The choices are:
   shown in the target, so they are never readable in both. A crash after
   step 1 leaves a thread with no post, which no list shows.
 - **Recovery reads the logs alone.**
-  - A `PostsSplitOut` ordinal whose target holds no copy with that `origin`
-    is unfinished.
-  - The server finishes it at startup before serving, and after any move
-    that failed part-way. It appends the missing `PostsMergedIn` and copies
-    in ascending source ordinal, from the source as the `PostsSplitOut` left
-    it, since a moved post accepts no later record.
+  - A `PostsSplitOut` ordinal is finished only when its target holds a copy
+    with that `origin` whose revision equals the source post's. A moved post
+    accepts no later record, so the source's revision is fixed. A crash
+    between a copied `Post` and its `Edit`s therefore leaves the ordinal
+    unfinished, not lost.
+  - The server finishes unfinished ordinals at startup before serving, and
+    after any move that failed part-way. In ascending source ordinal, it
+    appends the missing `PostsMergedIn`, each missing copy, and each copy's
+    missing `Edit`s (the source revisions above the copy's), from the source
+    as the `PostsSplitOut` left it.
   - Running recovery twice writes nothing the second time.
 - **The size of a move.** One move names at most 10000 posts, so one record of
   each kind carries it, far inside the ceilings in "`MaxFrameSize` at 1 MiB".

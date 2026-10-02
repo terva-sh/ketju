@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T17:21:59Z
+updated_at: 2026-10-02T18:03:28Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -119,7 +119,7 @@ Reversal is by the opposite operation rather than an undo, which is worth tellin
   - `TestMergeNoticesBothWays` (criterion 3).
   - `TestMergeReplyToInsideSetResolves` (criterion 4: inside the set it resolves to the copy, and outside it is dropped).
   - `TestMergeBackRestoresReading`: merging copies back makes copies of copies, and the original ordinals stay moved pointers.
-  - `TestMergeDoesNotBumpThread`.
+  - `TestMergeDoesNotBumpThread`: it includes a moved post newer than every post in the target.
   - `TestMergeNotifiesNobody`.
   - `TestMergeRouteGated`.
 - Vitest:

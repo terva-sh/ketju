@@ -648,8 +648,10 @@ maintainer review)** for TKT-01M29CYSAM and TKT-01M29CYSBA:
     order, after a "N posts were merged from <link>" notice.
   - Each keeps its original author and time, so the times run backwards at
     the notice.
-  - A merge does not move the thread up any list, because a thread's
-    latest-post time is the newest post time it holds.
+  - A merge does not move the thread up any list. A copy never changes an
+    existing thread's latest post, even when the moved post is newer than
+    every post the thread holds. A split thread is the exception: its latest
+    post is its newest moved post, since it holds nothing else.
   - A merge notifies nobody, because the posts are not new writing.
 
   Alternatives:
@@ -661,6 +663,8 @@ maintainer review)** for TKT-01M29CYSAM and TKT-01M29CYSBA:
     written after it.
   - Bumping the thread lost, because its list row would name a latest post
     that the thread page shows at another time.
+  - Taking the newest time across copies too lost, because merging a post
+    newer than the target's last one would then bump it.
 - **What may move.** Only posts shown as themselves can be selected. A
   removed post, one hidden pending review, a redacted one and one already
   moved stay where they are.
