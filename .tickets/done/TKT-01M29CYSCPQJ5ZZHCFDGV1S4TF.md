@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSCPQJ5ZZHCFDGV1S4TF
 title: Implement thread tags
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: low
 due_on: null
@@ -23,17 +23,10 @@ references:
     path: docs/03-thread-storage.md
   - ref: pr:361
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-cyscp
-  branch: run/cyscp-thread-tags
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
-  commit: 6d38a74297e6d0e76391789c43e3438a554ecbbd
-  session: null
-  claimed_at: 2026-10-02T20:23:16Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T20:23:19Z
+updated_at: 2026-10-02T20:30:29Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -53,12 +46,12 @@ Whether members can tag their own threads is the open call here.
 
 ## Acceptance criteria
 
-- [ ] PUT /admin/threads/{id}/tags, behind the moderates gate with a row in adminRouteGates, writes one ThreadTagged replacing the whole set, and the header, the list and a reindex agree (TestRetag, TestRetagWritesFullReplacement)
-- [ ] A retag is refused in docs/07 order, writing nothing: a member or the author without moderate, a moderator of another forum, an archived thread to moderators and admins, an invalid tag, and the set the thread already has (TestRetagRefusals, TestRetagDecidesAfterAMove)
-- [ ] A group-granted moderator may retag until the grant is revoked, and a retag in an archived forum is allowed (TestRetagByGroupModerator, TestRetagInArchivedForum)
-- [ ] Every retag writes thread.retagged with no tag text, listed in audit.Actions and docs/04, and moves the response cache key (TestRetagAudited, TestRetagMovesTheResponseCacheKey)
-- [ ] GET /forums/{slug}/threads?tag= lists only threads carrying the folded tag, pins included, with the tag bound into the cursor, and answers a hidden or unreadable forum as the unfiltered list does (TestThreadListTagFilter, TestTagFilterNeverWidensAccess, TestPlansSeek)
-- [ ] The vocabulary is free text as docs/04 thread_tags decides, and docs/07 documents the retag route and the tag filter
+- [x] PUT /admin/threads/{id}/tags, behind the moderates gate with a row in adminRouteGates, writes one ThreadTagged replacing the whole set, and the header, the list and a reindex agree (TestRetag, TestRetagWritesFullReplacement)
+- [x] A retag is refused in docs/07 order, writing nothing: a member or the author without moderate, a moderator of another forum, an archived thread to moderators and admins, an invalid tag, and the set the thread already has (TestRetagRefusals, TestRetagDecidesAfterAMove)
+- [x] A group-granted moderator may retag until the grant is revoked, and a retag in an archived forum is allowed (TestRetagByGroupModerator, TestRetagInArchivedForum)
+- [x] Every retag writes thread.retagged with no tag text, listed in audit.Actions and docs/04, and moves the response cache key (TestRetagAudited, TestRetagMovesTheResponseCacheKey)
+- [x] GET /forums/{slug}/threads?tag= lists only threads carrying the folded tag, pins included, with the tag bound into the cursor, and answers a hidden or unreadable forum as the unfiltered list does (TestThreadListTagFilter, TestTagFilterNeverWidensAccess, TestPlansSeek)
+- [x] The vocabulary is free text as docs/04 thread_tags decides, and docs/07 documents the retag route and the tag filter
 
 ## Implementation plan
 
@@ -165,3 +158,32 @@ run decision: pending maintainer review. Phase 4 grooming (tags and archive lane
 - The filter takes one tag at a time, `/f/{slug}?tag=TAG`. A filtered list shows only threads carrying the tag, pins included (docs/06 "Thread list views").
 
 Grooming split the client half, the chips, the filtered list screen, the Tags field and "Edit tags", into TKT-01M3YSQPZX (Show, filter and set thread tags in the client), so that this server work does not queue for the committed dist. The original criteria on chips and on the phone hit area moved there.
+
+## Summary
+
+Landed in one PR, server side only. The client half is TKT-01M3YSQPZX
+(Show, filter and set thread tags in the client).
+
+- `PUT /api/v1/admin/threads/{id}/tags` `{tags}` sits behind the
+  `moderates` gate and has its row in `adminRouteGates`. `threads.Retag`
+  decides through `s.moderate`, on the log at a length, so a move landing
+  between the decision and the append makes it decide again. It normalizes
+  with `NormalizeTags` and refuses the set the thread already has as
+  `conflict`. It appends one `ThreadTagged` holding the whole new set, and
+  `[]` clears every tag. `tags` absent or null is `bad-request`, and a
+  non-string tag is `wrong_type`, as on create.
+- The projection audits every retag as `thread.retagged` with `{}`. That
+  action is in `audit.Actions` and in docs/04. Tags set on create write no
+  audit row.
+- `GET /forums/{slug}/threads?tag=` takes one tag, folded by
+  `domain.NormalizeTag`. A malformed tag is `bad-request`. Both the list
+  query and the pins query add an `EXISTS` probe on `thread_tags`'s primary
+  key, and `TestPlansSeek` checks that the plan uses it. The cursor carries
+  the tag as a sixth field, only when the list is filtered, and a cursor
+  made for another tag is refused.
+- docs/07 has a new "Retagging threads" section and the `?tag=` row. docs/08
+  says the forum grant covers a retag.
+- `TestRenameAndMoveWriteNoTags` now allows exactly the retag route.
+
+Run decisions are the groomed ones, pending maintainer review: a retag
+follows the forum grant, and the filtered list shows only tagged pins.
