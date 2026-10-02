@@ -17,11 +17,13 @@ origin: null
 dependencies:
   - TKT-01M3YME9AZ4RJACSMV8VX4JMZJ
 blocks_on: none
-references: []
+references:
+  - ref: pr:362
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T17:28:04Z
-updated_at: 2026-10-02T17:28:13Z
+updated_at: 2026-10-02T17:29:05Z
 created_by:
   id: agent:claude-code/phase4-groom-correctness
   name: ""
