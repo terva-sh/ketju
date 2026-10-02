@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-01T22:02:14Z
+updated_at: 2026-10-02T00:38:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -169,3 +169,7 @@ tsc; vitest 2415 passed; gofmt, go build, go vet and `go test -race ./...` clean
 **agent:claude-code/phase3-settings-client** at 2026-10-01T22:02:02Z
 
 run decision: pending maintainer review. In the session list a row names its provider by the key /settings/sessions sends ("signed in with github"), and on /settings/identities an identity whose provider the operator removed reads "No longer configured" with that key. Asking /settings/identities for display names lost because it is a second request on every visit for a label; leaving the provider out lost because a member signed in through two providers tells their sessions apart by it. Recorded in docs/05 "Sessions and CSRF".
+
+**agent:claude-code/phase3-settings-client** at 2026-10-02T00:38:49Z
+
+Rebased onto dd840125 (#339, #340, #341). The page-size wipe now calls #339's forgetAllThreadPages in state/threads.ts, which also sets its wipe watermark, instead of a forgetEveryThreadPage of its own; the earlier note's name for it is superseded. routes.tsx's unused placeholder helper is removed, since #339 and this ticket replaced its last users. seedSettings members come after #339's nell in cmd/ketju/e2e.go. Reader after the rebase: 75237 B on dd840125, 78361 B with this ticket (+3124 B), of 120000 B.
