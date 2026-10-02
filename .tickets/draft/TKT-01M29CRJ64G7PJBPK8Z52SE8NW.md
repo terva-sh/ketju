@@ -21,10 +21,12 @@ blocks_on: none
 references:
   - ref: design:locking-semantics
     path: docs/08-moderation.md
+  - ref: pr:361
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-02T17:20:28Z
+updated_at: 2026-10-02T17:24:09Z
 created_by:
   id: agent:terva/mieli
   name: Mieli

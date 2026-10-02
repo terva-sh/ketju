@@ -17,11 +17,13 @@ origin: null
 dependencies:
   - TKT-01M29CRJ64G7PJBPK8Z52SE8NW
 blocks_on: none
-references: []
+references:
+  - ref: pr:361
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-02T17:22:37Z
+updated_at: 2026-10-02T17:24:09Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
