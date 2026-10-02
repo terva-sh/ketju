@@ -34,10 +34,11 @@ human who does.
   top of pages, not a replacement.
 - Keyboard: `j`/`k` post navigation, `g` then a number to jump to an ordinal,
   `u` to jump to first unread, `n` to next unread thread in the forum, `?`
-  for the list. "Next" follows the forum's thread-list order: the first
+  for the list, and `/` to search from any desktop screen with the top bar
+  (TKT-01M3V7GE59). "Next" follows the forum's thread-list order: the first
   unread thread below this one, or when there is none below, the first
   above it. Each shortcut has a visible control that does the same, below
-  the posts or in the thread's actions.
+  the posts, in the thread's actions, or for `/` the top bar's Search link.
   **Decided by the run (2026-10-01, maintainer approved):** the
   desktop top bar keeps its link to `/search` rather than the mockups'
   240 px field, as 07 "Search" decided for the search screen

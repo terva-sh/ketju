@@ -134,6 +134,32 @@ test.describe('at 1440 px', () => {
     await expect(page.getByRole('heading', { level: 1 })).toContainText('Comparing every rain barrel');
     await ctx.close();
   });
+
+  // / opens search from any screen with the top bar (TKT-01M3V7GE59), and
+  // on /search selects the query so typing replaces it.
+  test('/ opens search, and on /search selects the query', async ({ browser }, info) => {
+    const { ctx, page } = await asAlice(browser, info);
+    await page.goto(`${seed.thread}?page=1`);
+    await expect(page.locator('#post-1')).toBeVisible();
+    await page.keyboard.press('/');
+    await expect(page).toHaveURL(/\/search$/);
+    const field = page.getByRole('searchbox', { name: 'Search for' });
+    await expect(field).toBeFocused();
+    await page.keyboard.type('minutes');
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL((u) => u.pathname === '/search' && u.searchParams.get('q') === 'minutes');
+    // Off the field, as after reading the results, / comes back to it.
+    await page.evaluate(() => (document.activeElement as HTMLElement | null)?.blur());
+    await page.keyboard.press('/');
+    await expect(field).toBeFocused();
+    expect(await field.evaluate((el: HTMLInputElement) => [el.selectionStart, el.selectionEnd])).toEqual([0, 'minutes'.length]);
+    // Typed into the field, / is a slash.
+    await page.keyboard.press('End');
+    await page.keyboard.press('/');
+    await expect(field).toHaveValue('minutes/');
+    await scan(page);
+    await ctx.close();
+  });
 });
 
 // The off switch (WCAG 2.1.4, TKT-01M3V9DWTN): a member turns the shortcuts
@@ -143,7 +169,7 @@ test.describe('at 1440 px', () => {
 async function inert(page: Page) {
   const url = page.url();
   const focus = await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80));
-  for (const k of ['j', 'k', 'u', 'n', '?', 'g', '4', 'Enter']) await page.keyboard.press(k);
+  for (const k of ['j', 'k', 'u', 'n', '?', '/', 'g', '4', 'Enter']) await page.keyboard.press(k);
   // Long enough for a g to have gone, had it counted.
   await page.waitForTimeout(1700);
   expect(page.url()).toBe(url);
@@ -236,7 +262,7 @@ test.describe('at 390 px', () => {
     const url = page.url();
     const scroll = await page.evaluate(() => scrollY);
     const focus = await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80));
-    for (const k of ['j', 'j', 'k', 'u', 'n', '?', 'g', '4', 'Enter']) await page.keyboard.press(k);
+    for (const k of ['j', 'j', 'k', 'u', 'n', '?', '/', 'g', '4', 'Enter']) await page.keyboard.press(k);
     // Long enough for a g to have gone, had it counted.
     await page.waitForTimeout(1700);
     expect(page.url()).toBe(url);
@@ -248,6 +274,7 @@ test.describe('at 390 px', () => {
     // The controls the shortcuts stand in for are all here (AC2).
     await expect(page.locator('.goto-post input')).toBeVisible();
     await expect(page.locator('.next-unread')).toBeVisible();
+    await scan(page);
     await ctx.close();
   });
 
