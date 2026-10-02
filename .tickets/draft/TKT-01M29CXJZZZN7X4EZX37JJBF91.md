@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T18:03:30Z
+updated_at: 2026-10-02T19:16:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -107,8 +107,10 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
 4. **Projection** (`internal/events/projection`), with migration 0025, the next free number (re-check at implementation):
    - Add a `post_moves` table: `source_thread_id, source_ordinal, source_revision, target_thread_id, target_ordinal NULL, split_offset, merged_offset NULL, opens_thread`, with key `(source_thread_id, source_ordinal)`. Add it to `ProjectionTables`.
    - `source_revision` is the source post's revision when `PostsSplitOut` was applied. A moved post accepts no later record, so it is fixed.
-   - A row is finished when its copy's `post_meta.current_revision` equals `source_revision`, which counts every carried `Edit`.
-   - Apply `PostsSplitOut`: set `post_meta.moved = 1` and upsert the `post_moves` rows. Recompute the source's `last_post_*` from its newest post that is not moved, deleted ones counted as they are today.
+   - A row is finished when its copy's `post_meta.current_revision` is at least `source_revision`, which counts every carried `Edit`.
+   - A later edit of the finished copy takes it past `source_revision` and leaves the row finished.
+   - Until the row is finished, the service refuses `Edit`, `Delete`, `Restore` and a flag hide of the copy as `conflict`, so its revisions up to the source's are always the carried ones (docs/03).
+   - Apply `PostsSplitOut`: set `post_meta.moved = 1` and upsert the `post_moves` rows. Recompute the source's `last_post_*` with the rule `applyPost` uses: its newest post that is not moved and is not a copy merged into it (a copy whose `post_moves` row has `opens_thread` false). Deleted posts count as they do today.
    - Apply `PostsMergedIn`: set `merged_offset` on its rows.
    - Apply a `Post` with an origin: set `target_ordinal`.
    - Apply `PostsMergedIn`: when the thread holds no post yet (a split), mark its rows `opens_thread`.
@@ -174,11 +176,14 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
   - `TestMoveCrashBetweenPostAndEditsFinishes`: a copied `Post` is on disk without its `Edit`s. Recovery appends them, and the copy serves the source's current revision and full history.
   - `TestSplitCrashAfterThreadCreatedLeavesUnlistedThread`.
   - `TestFinishMovesIdempotent`: a second run writes no byte.
+  - `TestEditedCopyStaysFinished`: a finished copy is edited past the source revision. `finishMoves`, `ketju reindex`, `ketju fsck` and `ketju redact` all treat the move as finished.
+  - `TestUnfinishedCopyRefusesEdit`.
   - `TestFinishMovesBeforeServing`.
 - Projection:
   - `TestMoveProjectionsRebuildFromLogs`: `ketju reindex` of both threads equals the live projection, including `post_moves`, counts and `last_post_*`.
   - `TestMergeDoesNotMoveLastPostBackwards`.
   - `TestMergeOfNewerPostDoesNotBump`: a copy newer than every target post leaves `last_post_*` unchanged.
+  - `TestSplitAfterMergeDoesNotBump`: a merged copy is newer than the thread's latest post, and an unrelated older post is then split out. `last_post_*` stays on the ordinary post.
   - `TestSplitThreadLastPostIsNewestCopy`.
   - `TestSplitRecomputesSourceLastPost`.
   - `TestPostsMovedAuditRow`.

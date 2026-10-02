@@ -553,10 +553,14 @@ body field as it stands. The choices are:
   step 1 leaves a thread with no post, which no list shows.
 - **Recovery reads the logs alone.**
   - A `PostsSplitOut` ordinal is finished only when its target holds a copy
-    with that `origin` whose revision equals the source post's. A moved post
-    accepts no later record, so the source's revision is fixed. A crash
+    with that `origin` that has reached the source post's revision. A moved
+    post accepts no later record, so the source's revision is fixed. A crash
     between a copied `Post` and its `Edit`s therefore leaves the ordinal
     unfinished, not lost.
+  - A copy accepts no `Edit`, `Delete` or `Restore` until it is finished, so
+    its revisions up to the source's are always the carried ones. After that
+    it is an ordinary post, and an edit takes it past the source's revision
+    without unfinishing the move.
   - The server finishes unfinished ordinals at startup before serving, and
     after any move that failed part-way. In ascending source ordinal, it
     appends the missing `PostsMergedIn`, each missing copy, and each copy's

@@ -651,7 +651,9 @@ maintainer review)** for TKT-01M29CYSAM and TKT-01M29CYSBA:
   - A merge does not move the thread up any list. A copy never changes an
     existing thread's latest post, even when the moved post is newer than
     every post the thread holds. A split thread is the exception: its latest
-    post is its newest moved post, since it holds nothing else.
+    post is its newest moved post, since it holds nothing else. The same rule
+    holds when a split recomputes the source's latest post: a copy merged
+    into it does not count.
   - A merge notifies nobody, because the posts are not new writing.
 
   Alternatives:
