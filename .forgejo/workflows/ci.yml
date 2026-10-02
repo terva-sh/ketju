@@ -154,7 +154,12 @@ jobs:
         # The suite is seconds, so there is no reason to run the cheap version.
         # The storage property and crash tests arrive within weeks and they are
         # exactly the kind that pass locally and fail on another filesystem.
-        run: go test -race ./...
+        #
+        # -timeout 20m (TKT-01M3YFYYGV): Go's default is 10 minutes per
+        # package, and cmd/ketju under -race runs close to it on a busy
+        # runner. Run 2345 failed at the limit on code that took 8m12s in
+        # run 2349. Twenty minutes still fails a real deadlock.
+        run: go test -race -timeout 20m ./...
 
       - name: Phase 2 exit tests, by name
         # TKT-01M3NTSCMN. The step above runs these with the rest of the
