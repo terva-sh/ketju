@@ -84,6 +84,36 @@ test('an alert leads to its post and clears the badge', async ({ page, browser, 
   expect(await alertsCount(page)).toBe(0);
 });
 
+// An unread row's sentence is weighted, as its link is, so the link needs a
+// cue besides colour: axe's link-in-text-block fails when text follows the
+// link, which a thread_you_watch row has and a mention row does not
+// (TKT-01M3XNQ772). The list is answered with one such row, and its mark
+// with nothing, so it stays unread whatever alice has.
+test('an unread watched-thread alert tells its link apart without colour', async ({ page, isMobile }) => {
+  const row = {
+    id: 9001,
+    kind: 'thread_you_watch',
+    thread: { id: 'tw', slug: 'a-watched-thread', title: 'A watched thread' },
+    forum: { slug: forum, name: 'Site feedback' },
+    ordinal: 3,
+    actor: { handle: 'carol', display_name: 'Carol Ruiz', avatar: '', role: 'member', kind: 'human' },
+    at: Date.now(),
+    read: false,
+  };
+  await page.route('**/api/v1/notifications', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ notifications: [row], next_cursor: '' }) }),
+  );
+  await page.route('**/api/v1/notifications/read', (r) =>
+    r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ marked: 0 }) }),
+  );
+  await page.goto('/');
+  await alertsLink(page, isMobile).click();
+  const shown = page.locator('[data-alert="9001"]');
+  await expect(shown).toHaveClass(/\bunread\b/);
+  await expect(shown.locator('.alert-what')).toContainText('Carol Ruiz posted in A watched thread, which you watch');
+  await scan(page);
+});
+
 test('an empty list says what would appear there', async ({ page, isMobile }) => {
   // A member with no alerts at all: the list is answered empty, since every
   // seeded reader may have some by the time this runs.

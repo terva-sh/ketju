@@ -132,6 +132,14 @@
 .alert-thread:hover {
   text-decoration: underline;
 }
+/* On an unread row the sentence is as heavy as the link, so the link is
+   underlined: accent on ink is under the 3:1 that would let colour alone
+   tell them apart (TKT-01M3XNQ772). A read row keeps the weight between
+   them. */
+.alert-row.unread .alert-thread {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 .alert-meta {
   margin: 0;
   display: flex;
