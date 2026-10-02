@@ -129,10 +129,49 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		mux.HandleFunc(rt.Pattern(), h.charged(rt.Method, rt.Path, rt.Handler))
 	}
 	h.registerAdmin(mux)
-	mux.Handle("/api/v1/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		problem.Write(w, r, problem.CodeNotFound)
-	}))
+	mux.Handle(unroutedPattern, unrouted(mux))
 	return h, mux
+}
+
+// unroutedPattern is the catch-all under /api/v1/: every request no route
+// matches with its method comes here. It matches any method, so ServeMux
+// never answers 405 itself, and every error stays problem+json (docs/07
+// "Error catalogue").
+const unroutedPattern = "/api/v1/"
+
+// probeMethods are the methods a route may be registered under, in the
+// order Allow lists them, as internal/web/health writes it.
+var probeMethods = []string{http.MethodGet, http.MethodHead, http.MethodPost, http.MethodPut, http.MethodPatch,
+	http.MethodDelete}
+
+// unrouted answers a request no route took (TKT-01M3YME9KG). When the path
+// is a route's under another method, the answer is method-not-allowed, with
+// Allow naming every method the path accepts; HEAD is among them whenever
+// GET is, because ServeMux serves HEAD through GET. Otherwise it is
+// not-found.
+//
+// It asks mux which pattern each method would reach, so wildcards and {$}
+// match exactly as they do for a real request, and there is no second
+// matcher to drift from the route table. The probe never runs the handler
+// it finds. A 405 says that a path is a route, which docs/07 and the client
+// bundle already publish; the route's own gate still answers its own verb.
+func unrouted(mux *http.ServeMux) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var allow []string
+		for _, m := range probeMethods {
+			p := r.Clone(r.Context())
+			p.Method = m
+			if _, pattern := mux.Handler(p); pattern != "" && pattern != unroutedPattern {
+				allow = append(allow, m)
+			}
+		}
+		if len(allow) == 0 {
+			problem.Write(w, r, problem.CodeNotFound)
+			return
+		}
+		w.Header().Set("Allow", strings.Join(allow, ", "))
+		problem.Write(w, r, problem.CodeMethodNotAllowed)
+	})
 }
 
 // routes is every route the API serves outside /api/v1/admin/, whose routes

@@ -91,14 +91,15 @@ func TestSuggestions(t *testing.T) {
 			t.Errorf("%s: Cache-Control %q", c.query, cc)
 		}
 	}
-	// Only a GET.
+	// Only a GET, and so HEAD (TKT-01M3YME9KG).
 	r := httptest.NewRequest(http.MethodPost, "/api/v1/users?prefix=al", strings.NewReader("{}"))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Test-Viewer", "carol")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
-	if c := problemCode(t, rec); c != string(problem.CodeNotFound) && c != string(problem.CodeMethodNotAllowed) {
-		t.Errorf("POST /api/v1/users reached the handler: %d %s", rec.Code, rec.Body)
+	if c := problemCode(t, rec); rec.Code != http.StatusMethodNotAllowed || c != string(problem.CodeMethodNotAllowed) ||
+		rec.Header().Get("Allow") != "GET, HEAD" {
+		t.Errorf("POST /api/v1/users: %d, Allow %q: %s", rec.Code, rec.Header().Get("Allow"), rec.Body)
 	}
 
 	got := decode[dto.UserSuggestions](t, suggest(h, "carol", "prefix=alice"))

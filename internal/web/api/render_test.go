@@ -242,13 +242,14 @@ func TestPreviewRequests(t *testing.T) {
 	if rec := preview(h, "carol", `source=x`, "Content-Type", "application/x-www-form-urlencoded"); rec.Code != http.StatusUnsupportedMediaType {
 		t.Errorf("a form post: %d %s", rec.Code, rec.Body)
 	}
-	// Not a GET.
+	// Not a GET: the route is POST alone (TKT-01M3YME9KG).
 	r := httptest.NewRequest(http.MethodGet, "/api/v1/render", nil)
 	r.Header.Set("X-Test-Viewer", "carol")
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, r)
-	if c := problemCode(t, rec); c != string(problem.CodeNotFound) && c != string(problem.CodeMethodNotAllowed) {
-		t.Errorf("GET /api/v1/render reached the handler: %d %s", rec.Code, rec.Body)
+	if c := problemCode(t, rec); rec.Code != http.StatusMethodNotAllowed || c != string(problem.CodeMethodNotAllowed) ||
+		rec.Header().Get("Allow") != "POST" {
+		t.Errorf("GET /api/v1/render: %d, Allow %q: %s", rec.Code, rec.Header().Get("Allow"), rec.Body)
 	}
 }
 

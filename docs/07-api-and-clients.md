@@ -169,7 +169,7 @@ fixed text and never interpolate anything from the request.
 | `delete-window-closed` | 403 | The post is the viewer's, and `posts.delete_window_seconds` has passed since it was written, so it can no longer be deleted or restored (08) |
 | `rename-window-closed` | 403 | The thread is the viewer's, and `threads.rename_window_seconds` has passed since it was started, so only a moderator may rename it (08) |
 | `not-found` | 404 | No such endpoint *or* no such object — deliberately one code, so the API does not disclose which thread ids exist |
-| `method-not-allowed` | 405 | Right route, wrong verb |
+| `method-not-allowed` | 405 | Right route, wrong verb, with `Allow` naming the methods the route accepts (`HEAD` wherever `GET` is). A path no route has under any method is `not-found` |
 | `conflict` | 409 | Lost a race, or met the object's state: posting to a closed thread |
 | `gone` | 410 | Existed and was deleted. Distinct from `not-found` so a permalink can say what happened |
 | `payload-too-large` | 413 | Over a body limit: 64 KB for a post source, the attachment cap for an upload |
@@ -719,8 +719,9 @@ wordmarks, in the desktop bar, the phone bar and the applicant's bar, show
 }
 ```
 
-`ETag: "3yymw47g00001-483920-r3"`; `Vary: Cookie`. The viewer block is the
-only per-user part, and it is cheap; everything above it comes from the
+`ETag: "3yymw47g00001-483920-r5-6b1f0e2a9c4d7e13"`; `Vary: Cookie`. The
+viewer block is the only per-user part, and it is cheap; everything above it
+comes from the
 response cache keyed on `(thread, page, lens, log_length, renderer_version,
 viewer_class)` where `viewer_class ∈ {anon, member, moderator, author:<id>}`
 (moderators see tombstone contents, and so does the author of a post a
