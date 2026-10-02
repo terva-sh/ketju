@@ -355,11 +355,24 @@ func (ix *Index) Len() int {
 	return len(ix.entries)
 }
 
+// PastLast reports whether ordinal o is past the last of n posts.
+//
+// Every bound check of an ordinal against a post count goes through here
+// (TKT-01M3VVZE4G). An ordinal is a uint32 and a count an int, which is 32
+// bits on 386, arm, mips and mipsle. There int(4294967295) is -1, so a
+// bound that converts the ordinal to int before comparing passes when it
+// should fail, and the slice index after it panics. Comparing in uint64 is
+// right on every word size. A negative n holds no posts, so every ordinal
+// is past it.
+func PastLast(o uint32, n int) bool {
+	return n < 0 || uint64(o) > uint64(n)
+}
+
 // Entry returns the entry for a one-based ordinal.
 func (ix *Index) Entry(ordinal uint32) (IndexEntry, error) {
 	ix.mu.RLock()
 	defer ix.mu.RUnlock()
-	if ordinal == 0 || int(ordinal) > len(ix.entries) {
+	if ordinal == 0 || PastLast(ordinal, len(ix.entries)) {
 		return IndexEntry{}, fmt.Errorf("%w: ordinal %d, index holds %d posts",
 			ErrNoSuchOrdinal, ordinal, len(ix.entries))
 	}
@@ -384,10 +397,10 @@ func (ix *Index) Entries(from, to uint32) []IndexEntry {
 	if from == 0 {
 		from = 1
 	}
-	if int(from) > len(ix.entries) || to < from {
+	if PastLast(from, len(ix.entries)) || to < from {
 		return nil
 	}
-	if int(to) > len(ix.entries) {
+	if PastLast(to, len(ix.entries)) {
 		to = uint32(len(ix.entries))
 	}
 	return append([]IndexEntry(nil), ix.entries[from-1:to]...)

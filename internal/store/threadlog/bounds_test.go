@@ -3,6 +3,7 @@ package threadlog
 import (
 	"bytes"
 	"errors"
+	"math"
 	"testing"
 )
 
@@ -93,6 +94,32 @@ func TestReplayRefusesAnOrdinalPastTheEnd(t *testing.T) {
 		_, err = Open(bytes.NewReader(bad), int64(len(bad)), nil)
 		if !errors.Is(err, ErrMalformed) {
 			t.Errorf("type %d naming ordinal %d: Open = %v, want ErrMalformed", typ, uint32(lastOrdinal), err)
+		}
+	}
+}
+
+// TestPastLast is the helper every bound check calls, on both sides of
+// 2^31 and at the largest count an int holds on the build running it.
+func TestPastLast(t *testing.T) {
+	for _, c := range []struct {
+		o    uint32
+		n    int
+		past bool
+	}{
+		{0, 0, false},
+		{1, 0, true},
+		{3, 3, false},
+		{4, 3, true},
+		{lastOrdinal, 3, true},
+		{1 << 31, 3, true},
+		{1<<31 - 1, 1<<31 - 1, false},
+		{1 << 31, 1<<31 - 1, true},
+		{lastOrdinal, math.MaxInt, uint64(lastOrdinal) > uint64(math.MaxInt)},
+		{1, -1, true},
+		{0, -1, true},
+	} {
+		if got := PastLast(c.o, c.n); got != c.past {
+			t.Errorf("PastLast(%d, %d) = %v, want %v", c.o, c.n, got, c.past)
 		}
 	}
 }

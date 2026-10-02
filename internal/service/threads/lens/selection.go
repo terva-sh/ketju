@@ -164,12 +164,12 @@ func (a byAuthor) keep(_ uint32, e threadlog.IndexEntry) bool {
 // first being right. A removed ancestor keeps its place, and its reply_to
 // is followed as any other's, since the index keeps it.
 //
-// Ordinals are compared with the post count as uint64, never converted to
-// int: on a 32-bit build int(4294967295) is negative, and would pass a
-// bound it should fail (review 1771).
+// Ordinals are compared with the post count through threadlog.PastLast,
+// never converted to int: on a 32-bit build int(4294967295) is negative,
+// and would pass a bound it should fail (review 1771).
 func ReplyChain(ix *threadlog.Index, n uint32) (Filter, error) {
 	posts := ix.Len()
-	if n == 0 || pastLast(n, posts) {
+	if n == 0 || threadlog.PastLast(n, posts) {
 		return nil, problem.Coded(problem.CodeNotFound,
 			fmt.Errorf("lens: chain:%d past the last post %d", n, posts))
 	}
@@ -180,7 +180,7 @@ func ReplyChain(ix *threadlog.Index, n uint32) (Filter, error) {
 			return nil, err
 		}
 		up := e.ReplyTo
-		if up == 0 || up >= cur || pastLast(up, posts) {
+		if up == 0 || up >= cur || threadlog.PastLast(up, posts) {
 			break
 		}
 		keep = append(keep, up)
@@ -188,12 +188,6 @@ func ReplyChain(ix *threadlog.Index, n uint32) (Filter, error) {
 	}
 	keep = append(keep, ix.Replies(n)...)
 	return Ordinals(keep...), nil
-}
-
-// pastLast reports whether ordinal o is past the last of posts posts,
-// compared without converting o to int.
-func pastLast(o uint32, posts int) bool {
-	return posts < 0 || uint64(o) > uint64(posts)
 }
 
 // CreatedSince keeps the posts first written at or after ms, Unix ms: the

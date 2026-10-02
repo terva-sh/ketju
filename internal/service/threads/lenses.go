@@ -313,7 +313,7 @@ func lensPage(ix *threadlog.Index, logLength int64, rl *resolvedLens, q Query, s
 	page := 1
 	switch {
 	case q.Ordinal > 0:
-		if int(q.Ordinal) > sel.Posts() {
+		if threadlog.PastLast(q.Ordinal, sel.Posts()) {
 			return snapshot{}, sel, problem.Coded(problem.CodeNotFound,
 				fmt.Errorf("threads: ordinal %d past the last post %d", q.Ordinal, sel.Posts()))
 		}

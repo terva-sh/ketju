@@ -78,7 +78,7 @@ func (s *Service) CanSeeAnyPostBody(ctx context.Context, v domain.Viewer, id thr
 		th.Actor.Stable(func(int64) {
 			n := th.Index.Len()
 			for _, o := range ordinals {
-				if o == 0 || int(o) > n {
+				if o == 0 || threadlog.PastLast(o, n) {
 					continue
 				}
 				e, err := th.Index.Entry(o)

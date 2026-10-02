@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -361,25 +362,29 @@ func postPath(r *http.Request) (threadid.ID, uint32, error) {
 // and says so, rather than being read as absent; that includes a parameter
 // given with no value, such as ?page=, which URL.Query().Get cannot tell from
 // one not given at all (review 394).
+//
+// A page is a signed 32-bit number, so an int on any build. An ordinal is a
+// uint32, as in a post's path, so every ordinal parses, and one past the
+// end is not-found (docs/07) rather than bad-request (TKT-01M3VVZE4G).
 func threadQuery(r *http.Request) (threads.Query, error) {
 	v := r.URL.Query()
 	var q threads.Query
-	positive := func(name string) (int64, error) {
+	positive := func(name string, max int64) (int64, error) {
 		if !v.Has(name) {
 			return 0, nil
 		}
 		s := v.Get(name)
-		n, err := strconv.ParseInt(s, 10, 32)
-		if err != nil || n < 1 {
+		n, err := strconv.ParseInt(s, 10, 64)
+		if err != nil || n < 1 || n > max {
 			return 0, problem.Coded(problem.CodeBadRequest, fmt.Errorf("api: %s=%q is not a positive integer", name, s))
 		}
 		return n, nil
 	}
-	page, err := positive("page")
+	page, err := positive("page", math.MaxInt32)
 	if err != nil {
 		return q, err
 	}
-	ordinal, err := positive("ordinal")
+	ordinal, err := positive("ordinal", math.MaxUint32)
 	if err != nil {
 		return q, err
 	}

@@ -478,7 +478,7 @@ func PageFor(q Query, n, size int, member bool, lastRead int64) (int, error) {
 	total := totalPages(n, size)
 	switch {
 	case q.Ordinal > 0:
-		if int(q.Ordinal) > n {
+		if threadlog.PastLast(q.Ordinal, n) {
 			return 0, problem.Coded(problem.CodeNotFound, fmt.Errorf("threads: ordinal %d past the last post %d", q.Ordinal, n))
 		}
 		return int(q.Ordinal-1)/size + 1, nil

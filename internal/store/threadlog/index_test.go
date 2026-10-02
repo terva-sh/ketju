@@ -267,7 +267,11 @@ func TestFiftyThousandPostIndexFitsTheMemoryBudget(t *testing.T) {
 	const posts = 50_000
 	const budget = 2 << 20 // 2 MiB, the docs/03 figure
 
-	if got := unsafe.Sizeof(IndexEntry{}); got != IndexEntrySize {
+	// On a 32-bit build a uint64 aligns to 4 bytes, so the struct packs
+	// tighter than its 40-byte disk form, and only a larger one blows the
+	// budget there (TKT-01M3VVZE4G runs this package under GOARCH=386).
+	got := unsafe.Sizeof(IndexEntry{})
+	if got > IndexEntrySize || (unsafe.Alignof(uint64(0)) == 8 && got != IndexEntrySize) {
 		t.Fatalf("IndexEntry is %d bytes in memory, want %d — a field reordered into "+
 			"padding blows the budget silently", got, IndexEntrySize)
 	}

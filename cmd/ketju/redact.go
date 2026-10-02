@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"cmp"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -704,7 +705,7 @@ func copySet(edges map[postRef]postRef, named postRef) []postRef {
 			}
 			return 1
 		}
-		return int(a.Ordinal) - int(b.Ordinal)
+		return cmp.Compare(a.Ordinal, b.Ordinal)
 	})
 	return out
 }

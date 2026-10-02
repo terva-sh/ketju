@@ -266,7 +266,7 @@ func (ix *Index) setFlags(ordinal uint32, set, clear EntryFlags) error {
 // entries are appended and never removed: an ordinal that exists keeps its
 // position forever. That is also why a Delete is a flag rather than a removal.
 func (ix *Index) entryRef(ordinal uint32, what string) (*IndexEntry, error) {
-	if ordinal == 0 || int(ordinal) > len(ix.entries) {
+	if ordinal == 0 || PastLast(ordinal, len(ix.entries)) {
 		return nil, fmt.Errorf("%w: %s names ordinal %d, the index holds %d posts",
 			ErrMalformed, what, ordinal, len(ix.entries))
 	}
