@@ -22,10 +22,12 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
+  - ref: pr:382
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:39Z
-updated_at: 2026-10-02T23:59:06Z
+updated_at: 2026-10-02T23:59:27Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
