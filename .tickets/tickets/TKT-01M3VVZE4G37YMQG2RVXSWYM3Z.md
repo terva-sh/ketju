@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3VVZE4G37YMQG2RVXSWYM3Z
 title: Compare ordinals as unsigned in index and page bounds on 32-bit builds
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -19,15 +19,22 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-vvze4g
+  branch: run/vvze4g-unsigned-ordinals
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-ad5c11892789defa3
+  commit: 30834b8e9b8dc69a282dac88cc580503fd08244c
+  session: null
+  claimed_at: 2026-10-02T19:14:41Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T13:55:32Z
-updated_at: 2026-10-02T17:29:03Z
+updated_at: 2026-10-02T19:14:42Z
 created_by:
   id: agent:claude-code/phase3-lenses
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-correctness
+  id: agent:claude-code/phase4-run-vvze4g
   name: ""
 extensions: {}
 ---
