@@ -504,7 +504,7 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
   say everywhere, and the member who reaches for it after losing a laptop
   cannot be sure the device in hand is clean; offering both buttons lost
   because the per-session sign-out already covers "everyone but me".
-  **Decided by the run (2026-10-01, pending maintainer review;
+  **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M29CXK4E):** in the session list a row names its provider by the
   key `/settings/sessions` sends ("signed in with github"), and on
   `/settings/identities` an identity whose provider the operator removed

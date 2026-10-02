@@ -176,9 +176,9 @@ briefs.
 - **The run's decisions were approved.** On 2026-10-01 the maintainer
   approved the decisions the run had made so far: "Yes your run decisions are
   approved" (recorded in #337). The 40 markers in docs/02 to docs/10 that
-  were on main by then now read "maintainer approved". Decisions made after
-  that still read "pending maintainer review"; the tracking ticket's summary
-  lists them.
+  were on main by then now read "maintainer approved". The five made after
+  that, listed in the tracking ticket's summary, were approved on 2026-10-02
+  and read "maintainer approved" too.
 - **Review cap for implementation PRs.** The five-round cap applies to
   implementation PRs too. A sixth or seventh round is granted when the last
   fix is narrow and would otherwise merge unreviewed (#341, clean on round

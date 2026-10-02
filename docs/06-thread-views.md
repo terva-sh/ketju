@@ -426,7 +426,7 @@ lost because a reply to yourself is not what the lens is for
   lost because Watching would then copy the forum's own list. Watching on
   reply lost because Participated would then be a copy of Watching, and
   an agent thread a member answered once would alert them on every post.
-- **Decided by the run (2026-10-01, pending maintainer review;
+- **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M3V6Y4JP):** where "Mark all read" is offered, and how the four
   lists treat a reader with nothing to show.
   - The site-level mark is a button on `/unread`, shown while the list
@@ -485,7 +485,7 @@ lost because a reply to yourself is not what the lens is for
   - The shortcut hint on phones lost because shortcuts are absent there
     ("Mobile").
 
-  **Decided by the run (2026-10-01, pending maintainer review)**, while
+  **Decided by the run (2026-10-01, maintainer approved)**, while
   building it: the hint is a "Keyboard shortcuts" button that opens the
   shortcut list, and no key is bound on the forum index. The list opened
   there leads with "These keys work on a thread page, where ? opens this
@@ -647,7 +647,7 @@ arrangement.
   between widths for no reason the sentence gives; and the desktop's quote
   before reply lost because this sentence and the phone mockup both put
   reply first.
-  **Decided by the run (2026-10-01, pending maintainer review;
+  **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M3V3CFMA):** once the author's name links to their profile, the
   phone header's ordinal is text, as the phone mockup draws it, and the
   permalink is under "more". Stacked one over the other, the name and the
@@ -682,7 +682,7 @@ arrangement.
   nearby page in one tap; a grid of every page however many lost because
   a thread of thousands of pages would draw thousands of controls
   (Terva review 1691).
-  **Decided by the run (2026-10-01, pending maintainer review;
+  **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M29CGBZD):** "First unread" in the sheet is a button that runs the
   thread page's own First unread, not a link. It goes to the reader's
   position at the press plus one, which reading on the page moves after

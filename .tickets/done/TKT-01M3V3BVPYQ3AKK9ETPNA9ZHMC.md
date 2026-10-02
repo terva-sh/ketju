@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:24Z
-updated_at: 2026-10-02T10:12:30Z
+updated_at: 2026-10-02T14:25:08Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -193,6 +193,17 @@ Orchestrator log, 2026-10-01 to 2026-10-02: merges #337 to #352. Each gate was c
   - Clean 706d5e5f; CI 2359. Comment 23528 quotes the step-log lines.
   - Reader 79118 B against the 120000 B budget.
 - #352 bdadf65c: ticket-only close of TKT-01M3V3CFRE, with a clean review of its own.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T14:25:08Z
+
+Maintainer decision, 2026-10-02: the five run decisions this summary listed as still pending are approved. Asked one by one, the maintainer approved each as it stands:
+1. On the phone, the post ordinal is plain text (docs/06 Mobile, #338).
+2. A session row names its provider by key (docs/05, #342).
+3. The front page has a site-wide Mark all read from 720 px (docs/06, #339).
+4. First unread in the phone page sheet runs the thread page's own handler (docs/06 Mobile, Pages, #340).
+5. No shortcut key on the forum index until single-key shortcuts can be turned off. The maintainer chose "Approve" over binding `?` anyway (docs/06, #344).
+
+Their markers now read "maintainer approved". The #342 disagreement (review 1883) is a separate item and is still open.
 
 ## Summary
 
