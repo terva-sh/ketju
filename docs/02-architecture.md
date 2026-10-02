@@ -47,6 +47,58 @@ Three operator commitments are decided (10 Q22–Q24, TKT-01M29BW9PB, 2026-09-24
   `data/threads/` and `data/blobs/` with `rsync` and take the database with
   `VACUUM INTO`.
 
+**Decided by the run (2026-10-02, pending maintainer review)**
+(TKT-01M29CXK35):
+- **How `ketju backup` reaches a running server.** It connects to a Unix
+  socket, `data/ketju.sock`. `serve` creates the socket under the lock with
+  mode 0600 and answers only a peer whose uid is its own. The socket takes
+  one request: take a snapshot. To take it, `serve`:
+  1. holds new appends at `posts.Writer`;
+  2. catches the projection up;
+  3. runs a passive WAL checkpoint;
+  4. runs `VACUUM INTO` a staging file inside the data directory;
+  5. lets appends go.
+
+  The pause covers only those steps, is capped, and handles one snapshot at
+  a time. The command then copies each log up to the length the snapshot
+  projected it to, so the logs and the database in the backup agree exactly.
+  With no `serve` running, the command takes the lock itself and needs no
+  pause. Alternatives:
+  - An admin API route lost. Anyone with an admin session could then make
+    the server write to its own disk, and docs/05 gives no rule for that.
+  - A signal lost. It carries no reply, and a stale pid in `ketju.lock`
+    would send it to some other process.
+  - An offline-only command lost. 10 Q23 decided that the command pauses
+    the actors of a running server.
+  - Skipping the pause lost, because the backup's logs and database would
+    then disagree. Logs copied whole run ahead of the projection, which
+    `ketju fsck` reports as drift. Logs cut to the projection can lack
+    posts that the database's flags and read positions name.
+
+  The socket gives its caller nothing that the data directory's files do
+  not already give.
+- **What a backup holds.** `db/ketju.db`, `threads/` without the `.idx`
+  files, and `blobs/` without thumbnails or `blobs/tmp/`. Each index is
+  rebuilt from its log when its thread is first opened, and each thumbnail
+  is made again when it is next requested (03). `config.toml` and
+  `secrets/` are left out. The operator keeps their own copy of the config,
+  and a lost cookie key ends only the sign-ins in progress. Alternatives:
+  - Copying the indexes lost. An index copied mid-write could be trusted
+    over its log, which is the failure TKT-01M3VHSYFR closed.
+  - Copying `secrets/` lost. It would put a key into every backup's
+    storage, and the backup gains nothing from it.
+
+**Decided by the run (2026-10-02, pending maintainer review)**
+(TKT-01M29CXK3S): **release binaries are built for `linux/amd64` and
+`linux/arm64`**, with `CGO_ENABLED=0` and `-trimpath`. Those two cover a VPS
+and a 64-bit home server such as a Raspberry Pi 4 or 5. Alternatives:
+- macOS and FreeBSD builds lost. No CI runner starts either one, and a
+  release should not offer a binary that nobody has run.
+- Windows lost. `serve` refuses to start there, because the data-directory
+  lock exists only on unix (`internal/lock`).
+- 32-bit ARM lost for v1.0. No runner tests a 32-bit build, and
+  TKT-01M3VVZE4G is fixing ordinal bounds on 32-bit builds now.
+
 ## Go module layout
 
 ```
