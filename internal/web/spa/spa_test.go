@@ -24,7 +24,7 @@ func TestTheBuildIsEmbedded(t *testing.T) {
 		path := m[1]
 		js = js || strings.HasSuffix(path, ".js")
 		css = css || strings.HasSuffix(path, ".css")
-		if !regexp.MustCompile(`-[A-Za-z0-9_-]{8}\.(js|css)$`).MatchString(path) {
+		if !regexp.MustCompile(`-[A-Za-z0-9_-]{8}\.(js|css|svg|png)$`).MatchString(path) {
 			t.Errorf("%s is not a content-hashed name, so it cannot be cached immutably", path)
 		}
 		rec := httptest.NewRecorder()

@@ -31,11 +31,23 @@ export function readThemePref(storage: Pick<Storage, 'getItem'> | undefined = sa
 
 export const themePref = signal<ThemePref>(readThemePref());
 
+// themeColors are each theme's --bg (styles/tokens.css), which the shell's
+// two theme-color tags carry, one per prefers-color-scheme (TKT-01M29CGBYY).
+// theme.test.ts holds the three places equal.
+export const themeColors = { light: '#F6F7FA', dark: '#12161E' } as const;
+
 // applyTheme puts the choice on <html>, where tokens.css reads it: no
-// data-theme for system, so the media query decides.
+// data-theme for system, so the media query decides. The browser's own
+// chrome takes its colour from the theme-color tags, which choose by media
+// query too, so a chosen theme sets both tags to its colour, and system puts
+// each back to its own scheme's.
 export function applyTheme(pref: ThemePref, root: HTMLElement = document.documentElement) {
   if (pref === 'system') root.removeAttribute('data-theme');
   else root.setAttribute('data-theme', pref);
+  for (const meta of root.querySelectorAll('meta[name="theme-color"]')) {
+    const own = meta.getAttribute('media')?.includes('dark') ? 'dark' : 'light';
+    meta.setAttribute('content', themeColors[pref === 'system' ? own : pref]);
+  }
 }
 
 // setThemePref records a new choice, stores it, and applies it.

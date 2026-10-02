@@ -12,6 +12,7 @@
 │        ├── /blobs/*       attachment serving                                               │
 │        ├── /events        SSE live updates                                                 │
 │        ├── /assets/*      embedded Preact build (embed.FS)                                 │
+│        ├── /manifest.webmanifest  web app manifest, named by site_name (06)                │
 │        └── /*             SPA shell (later: server-rendered HTML for non-JS clients)       │
 │                                                                                            │
 │  service layer ───────────────────────────────────────────────────────────────────────┐    │

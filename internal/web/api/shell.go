@@ -13,8 +13,9 @@ import (
 //
 // The title is the site name, which /me carries (TKT-01M29CXK2H), so it
 // costs no statement of its own and follows an admin's change from the next
-// page. The description stays the shell's default, and a thread's own title
-// is the thread page's (TKT-01M29CEE6V).
+// page. So does the name iOS gives the page on a home screen
+// (TKT-01M29CGBYY). The description stays the shell's default, and a
+// thread's own title is the thread page's (TKT-01M29CEE6V).
 //
 // A nil service panics here, at wiring, rather than on the first page.
 func ShellPage(u *users.Service) func(*http.Request) (web.Page, error) {
@@ -26,6 +27,6 @@ func ShellPage(u *users.Service) func(*http.Request) (web.Page, error) {
 		if err != nil {
 			return web.Page{}, err
 		}
-		return web.Page{Title: me.SiteName, Bootstrap: me}, nil
+		return web.Page{Title: me.SiteName, SiteName: me.SiteName, Bootstrap: me}, nil
 	}
 }

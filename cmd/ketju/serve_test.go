@@ -256,6 +256,11 @@ func TestStartupOrderAndShutdown(t *testing.T) {
 	if code, body := get(t, "http://"+r.addr+"/"); code != http.StatusOK || !strings.Contains(body, "<html") {
 		t.Errorf("GET / = %d, want the shell", code)
 	}
+	// The web app manifest is wired, named by the default site_name
+	// (TKT-01M29CGBYY).
+	if code, body := get(t, "http://"+r.addr+"/manifest.webmanifest"); code != http.StatusOK || !strings.Contains(body, `"name": "Ketju"`) {
+		t.Errorf("GET /manifest.webmanifest = %d: %s", code, body)
+	}
 	// The probe has run before the listener opened, so the first poll has
 	// an answer (TKT-01M29CCBZ8).
 	if code, body := get(t, "http://"+r.addr+"/healthz"); code != http.StatusOK || !strings.Contains(body, `"status":"ok"`) {

@@ -51,12 +51,13 @@ func marker(name string) http.Handler {
 
 func allGroups() Groups {
 	return Groups{
-		API:    marker("api"),
-		Auth:   marker("auth"),
-		Blobs:  marker("blobs"),
-		Events: marker("events"),
-		Assets: marker("assets"),
-		SPA:    marker("spa"),
+		API:      marker("api"),
+		Auth:     marker("auth"),
+		Blobs:    marker("blobs"),
+		Events:   marker("events"),
+		Assets:   marker("assets"),
+		Manifest: marker("manifest"),
+		SPA:      marker("spa"),
 	}
 }
 
@@ -81,6 +82,9 @@ func TestEveryPrefixRoutesToItsGroup(t *testing.T) {
 		{"/blobs/deadbeef", "blobs"},
 		{"/events", "events"},
 		{"/assets/app.js", "assets"},
+		{"/manifest.webmanifest", "manifest"},
+		// Exact, as /healthz is: anything below it is the client's.
+		{"/manifest.webmanifest/x", "spa"},
 
 		// Application routes from docs/07. None of these exist on the server;
 		// all of them are the client's, and all must reach the shell.
@@ -117,7 +121,7 @@ func TestAMissingGroupSays501NotFound(t *testing.T) {
 	log, _ := testLogger()
 	h := New(Groups{SPA: marker("spa")}, Options{Logger: log})
 
-	for _, path := range []string{"/api/v1/me", "/auth/x/start", "/blobs/x", "/events", "/assets/x"} {
+	for _, path := range []string{"/api/v1/me", "/auth/x/start", "/blobs/x", "/events", "/assets/x", "/manifest.webmanifest"} {
 		rec := do(h, http.MethodGet, path)
 		// 501 and not 404: "this build does not implement that" is a different
 		// fact from "there is no such endpoint", to a developer and to a

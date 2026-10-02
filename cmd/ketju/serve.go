@@ -41,6 +41,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/respcache"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
+	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/blob"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -664,6 +665,12 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		Blobs:  blobsweb.New(blobSvc, log),
 		Events: &sse.Handler{Hub: hub, Threads: threadSvc, Sessions: sessions, Credentials: agentCreds, Logger: log},
 		Assets: spa.Assets(),
+		// The web app manifest, named by site_name, read per request as
+		// /me reads it, so a rename shows on the browser's next check
+		// (TKT-01M29CGBYY).
+		Manifest: spa.ManifestHandler(func(ctx context.Context) (string, error) {
+			return settings.SiteName.Get(ctx, d)
+		}, log),
 		Health: health.Handler(health.Options{
 			DB: d, Dir: probe, Quarantined: proj.QuarantinedCount, Logger: log,
 		}),

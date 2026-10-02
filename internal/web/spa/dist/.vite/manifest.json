@@ -1,10 +1,6 @@
 {
-  "_ApplyRoot-C_SWIqcC.css": {
-    "file": "assets/ApplyRoot-C_SWIqcC.css",
-    "src": "_ApplyRoot-C_SWIqcC.css"
-  },
-  "_ApplyRoot-Ckf-xiOD.js": {
-    "file": "assets/ApplyRoot-Ckf-xiOD.js",
+  "_ApplyRoot-CMT7mjXq.js": {
+    "file": "assets/ApplyRoot-CMT7mjXq.js",
     "name": "ApplyRoot",
     "imports": [
       "index.html"
@@ -13,18 +9,34 @@
       "assets/ApplyRoot-C_SWIqcC.css"
     ]
   },
+  "_ApplyRoot-C_SWIqcC.css": {
+    "file": "assets/ApplyRoot-C_SWIqcC.css",
+    "src": "_ApplyRoot-C_SWIqcC.css"
+  },
+  "_icon-192-BjNXmPh-.png": {
+    "file": "assets/icon-192-BjNXmPh-.png",
+    "src": "_icon-192-BjNXmPh-.png"
+  },
+  "_icon-512-B8eMQZ_o.png": {
+    "file": "assets/icon-512-B8eMQZ_o.png",
+    "src": "_icon-512-B8eMQZ_o.png"
+  },
+  "_icon-maskable-512-ac7pMeAX.png": {
+    "file": "assets/icon-maskable-512-ac7pMeAX.png",
+    "src": "_icon-maskable-512-ac7pMeAX.png"
+  },
   "_theme-early-DbsvcKdk.js": {
     "file": "assets/theme-early-DbsvcKdk.js",
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-CO919wS2.js",
+    "file": "assets/index-DMzBt4NW.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-Ckf-xiOD.js"
+      "_ApplyRoot-CMT7mjXq.js"
     ],
     "css": [
       "assets/index-B8UgZtuP.css"
@@ -38,7 +50,9 @@
       "assets/ibm-plex-mono-latin-500-normal-DSY6xOcd.woff2",
       "assets/newsreader-latin-400-normal-BFBkh4jY.woff2",
       "assets/newsreader-latin-500-normal-B66TYsaK.woff2",
-      "assets/newsreader-latin-600-normal-30OJ_TG_.woff2"
+      "assets/newsreader-latin-600-normal-30OJ_TG_.woff2",
+      "assets/icon-CpaC7DhZ.svg",
+      "assets/icon-180-B872R5K-.png"
     ]
   },
   "src/assets/fonts/ibm-plex-mono-latin-400-normal.woff2": {
@@ -77,13 +91,21 @@
     "file": "assets/newsreader-latin-600-normal-30OJ_TG_.woff2",
     "src": "src/assets/fonts/newsreader-latin-600-normal.woff2"
   },
+  "src/assets/icon/icon-180.png": {
+    "file": "assets/icon-180-B872R5K-.png",
+    "src": "src/assets/icon/icon-180.png"
+  },
+  "src/assets/icon/icon.svg": {
+    "file": "assets/icon-CpaC7DhZ.svg",
+    "src": "src/assets/icon/icon.svg"
+  },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-ChW21k37.js",
+    "file": "assets/AdminRoot-BJrQMgta.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-Ckf-xiOD.js",
+      "_ApplyRoot-CMT7mjXq.js",
       "index.html"
     ],
     "css": [

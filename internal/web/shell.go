@@ -25,6 +25,10 @@ type ShellData struct {
 	// Title and Description are the <title> and meta description.
 	Title       string
 	Description string
+	// SiteName is the site_name setting, the name iOS gives the page added
+	// to a home screen (apple-mobile-web-app-title). Title is the page's
+	// own, and need not be the site's.
+	SiteName string
 	// Bootstrap is the viewer, rendered by html/template into a
 	// <script type="application/json"> block. That element is a JavaScript
 	// context to html/template, so the value is marshalled to JSON with <, >
@@ -36,6 +40,7 @@ type ShellData struct {
 type Page struct {
 	Title       string
 	Description string
+	SiteName    string
 	Bootstrap   dto.Me
 }
 
@@ -43,7 +48,7 @@ type Page struct {
 // name and an anonymous viewer. The site_name setting and a real /me arrive
 // with ketju serve (TKT-01M29CCBYX) and the session (TKT-01M29CA99R).
 func defaultPage(*http.Request) (Page, error) {
-	return Page{Title: "ketju", Bootstrap: dto.Me{Settings: dto.Settings{PageSize: 25}}}, nil
+	return Page{Title: "ketju", SiteName: "ketju", Bootstrap: dto.Me{Settings: dto.Settings{PageSize: 25}}}, nil
 }
 
 // Shell serves the single-page application shell.
@@ -112,7 +117,7 @@ func (s *Shell) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	var buf bytes.Buffer
 	if err := s.tmpl.Execute(&buf, ShellData{Nonce: nonce, Title: page.Title,
-		Description: page.Description, Bootstrap: page.Bootstrap}); err != nil {
+		Description: page.Description, SiteName: page.SiteName, Bootstrap: page.Bootstrap}); err != nil {
 		s.log.ErrorContext(r.Context(), "rendering the SPA shell failed", "error", err)
 		problem.Write(w, r, problem.CodeInternal)
 		return

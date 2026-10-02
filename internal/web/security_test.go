@@ -475,3 +475,79 @@ func TestTheShellRefusesAFailedPage(t *testing.T) {
 		t.Fatalf("status %d", rec.Code)
 	}
 }
+
+// TestShellHasInstallTags is AC3 of TKT-01M29CGBYY: the shell links the
+// manifest and the two hashed icons, colours the browser's chrome for both
+// themes, and carries the tags iOS and Android read when the page is added
+// to a home screen, with the site name escaped, and the status bar left at
+// default so nothing is drawn beneath it. None of it is script, so the
+// policy and the inline check above are unchanged by it.
+func TestShellHasInstallTags(t *testing.T) {
+	log, _ := testLogger()
+	shell, err := NewShell(builtShell(t), log)
+	if err != nil {
+		t.Fatal(err)
+	}
+	hostile := `Club" onload="alert(1)`
+	shell.SetPage(func(*http.Request) (Page, error) {
+		return Page{Title: "A thread", SiteName: hostile}, nil
+	})
+	h := New(Groups{SPA: shell}, Options{Logger: log})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/", nil))
+	body := rec.Body.String()
+
+	doc, err := html.Parse(strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	links := map[string]string{}
+	metas := map[string][]string{}
+	var walk func(*html.Node)
+	walk = func(n *html.Node) {
+		if n.Type == html.ElementNode {
+			switch n.Data {
+			case "link":
+				links[attr(n, "rel")] = attr(n, "href")
+			case "meta":
+				if name := attr(n, "name"); name != "" {
+					v := attr(n, "content")
+					if m := attr(n, "media"); m != "" {
+						v = m + " " + v
+					}
+					metas[name] = append(metas[name], v)
+				}
+			}
+		}
+		for c := n.FirstChild; c != nil; c = c.NextSibling {
+			walk(c)
+		}
+	}
+	walk(doc)
+
+	if links["manifest"] != "/manifest.webmanifest" {
+		t.Errorf("the manifest link is %q", links["manifest"])
+	}
+	for rel, ext := range map[string]string{"icon": ".svg", "apple-touch-icon": ".png"} {
+		if !strings.HasPrefix(links[rel], "/assets/icon") || !strings.HasSuffix(links[rel], ext) {
+			t.Errorf("the %s link is %q, want a hashed %s under /assets", rel, links[rel], ext)
+		}
+	}
+	for name, want := range map[string][]string{
+		"theme-color":                           {"(prefers-color-scheme: light) #F6F7FA", "(prefers-color-scheme: dark) #12161E"},
+		"mobile-web-app-capable":                {"yes"},
+		"apple-mobile-web-app-capable":          {"yes"},
+		"apple-mobile-web-app-status-bar-style": {"default"},
+		"apple-mobile-web-app-title":            {hostile},
+	} {
+		if got := metas[name]; strings.Join(got, "|") != strings.Join(want, "|") {
+			t.Errorf("meta %s is %q, want %q", name, got, want)
+		}
+	}
+	if strings.Contains(body, hostile) {
+		t.Error("the site name reached the shell unescaped")
+	}
+	for _, p := range inlineScriptProblems(t, body) {
+		t.Error(p)
+	}
+}

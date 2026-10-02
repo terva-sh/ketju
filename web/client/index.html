@@ -5,6 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>{{.Title}}</title>
 <meta name="description" content="{{.Description}}">
+<link rel="manifest" href="/manifest.webmanifest" vite-ignore>
+<link rel="icon" href="/src/assets/icon/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/src/assets/icon/icon-180.png">
+<meta name="theme-color" content="#F6F7FA" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#12161E" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="{{.SiteName}}">
 <script type="module" src="/src/main.tsx"></script>
 </head>
 <body>

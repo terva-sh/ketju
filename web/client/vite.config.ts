@@ -41,8 +41,34 @@ function earlyTheme(): Plugin {
   };
 }
 
+// installIcons emits the icons the web app manifest names, which no source
+// file references, so Vite would not otherwise put them in the build, and
+// writes their hashed /assets names to dist/icons.json, where the server's
+// manifest (internal/web/spa Manifest) reads them (TKT-01M29CGBYY). The
+// shell's own two, the SVG favicon and the 180 px apple-touch-icon, are
+// links in index.html, which Vite rewrites itself. The PNGs are drawn by
+// scripts/icons/main.go and committed; a build only copies them.
+function installIcons(): Plugin {
+  const dir = 'src/assets/icon';
+  const icons = { '192': 'icon-192.png', '512': 'icon-512.png', 'maskable-512': 'icon-maskable-512.png' };
+  const refs: Record<string, string> = {};
+  return {
+    name: 'ketju-install-icons',
+    apply: 'build',
+    buildStart() {
+      for (const [key, name] of Object.entries(icons)) {
+        refs[key] = this.emitFile({ type: 'asset', name, source: readFileSync(`${dir}/${name}`) });
+      }
+    },
+    generateBundle() {
+      const names = Object.fromEntries(Object.entries(refs).map(([key, ref]) => [key, `/${this.getFileName(ref)}`]));
+      this.emitFile({ type: 'asset', fileName: 'icons.json', source: JSON.stringify(names, null, 2) + '\n' });
+    },
+  };
+}
+
 export default defineConfig({
-  plugins: [preact(), earlyTheme()],
+  plugins: [preact(), earlyTheme(), installIcons()],
   html: {
     // Every script, style and link tag Vite emits carries this attribute. The
     // built index.html is a Go template (internal/web/spa), so the placeholder

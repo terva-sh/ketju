@@ -1,6 +1,7 @@
 package web_test
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"io"
@@ -26,6 +27,7 @@ import (
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/threads"
 	"github.com/terva-sh/ketju/internal/service/users"
+	"github.com/terva-sh/ketju/internal/settings"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/db/dbtest"
@@ -43,8 +45,9 @@ import (
 // theAllowlist is what a pre-user may reach, written out so that a change
 // to web.PreUserRoutes is a change to this test too, in the same diff: "GET
 // /api/v1/me, the sign-in routes, POST /auth/logout, /assets, and the /apply
-// and /apply/status pages" (AC2), and the application API TKT-01M29CP2KZ
-// added.
+// and /apply/status pages" (AC2), the application API TKT-01M29CP2KZ
+// added, and the web app manifest the shell of those pages links
+// (TKT-01M29CGBYY).
 var theAllowlist = []string{
 	"GET /api/v1/me",
 	"GET /auth/signin",
@@ -52,6 +55,7 @@ var theAllowlist = []string{
 	"GET /auth/{provider}/callback",
 	"POST /auth/logout",
 	"GET /assets/",
+	"GET /manifest.webmanifest",
 	"GET /apply",
 	"GET /apply/status",
 	"GET /api/v1/apply/form",
@@ -144,6 +148,7 @@ func (w *gateWorld) walk() []probe {
 		{"GET /blobs/", "/blobs/abc"},
 		{"POST /blobs/", "/blobs/abc"},
 		{"GET /events", "/events"},
+		{"GET /manifest.webmanifest", "/manifest.webmanifest"},
 		{"GET /apply", "/apply"},
 		{"GET /apply/status", "/apply/status"},
 		{"POST /apply", "/apply"},
@@ -254,12 +259,13 @@ func (w *gateWorld) recorded(rc *recorder) http.Handler {
 	}
 	pass := func(h http.Handler) http.Handler { return h }
 	return web.New(web.Groups{
-		API:    mount(api.Routes(w.deps), "/api/v1/"),
-		Auth:   mount(auth.Routes(w.auth), ""),
-		Blobs:  rc.handler("blobs"),
-		Events: rc.handler("events"),
-		Assets: rc.handler("assets"),
-		SPA:    rc.handler("spa"),
+		API:      mount(api.Routes(w.deps), "/api/v1/"),
+		Auth:     mount(auth.Routes(w.auth), ""),
+		Blobs:    rc.handler("blobs"),
+		Events:   rc.handler("events"),
+		Assets:   rc.handler("assets"),
+		Manifest: rc.handler("manifest"),
+		SPA:      rc.handler("spa"),
 	}, web.Options{Session: w.session, RateLimit: pass, SiteURL: "https://forum.example"})
 }
 
@@ -326,7 +332,8 @@ func TestPreUserRoutesAreExactlyTheAllowlist(t *testing.T) {
 		}
 		shell.SetPage(api.ShellPage(w.deps.Users))
 		pass := func(h http.Handler) http.Handler { return h }
-		h := web.New(web.Groups{API: api.New(w.deps), Auth: auth.New(w.auth), Assets: spa.Assets(), SPA: shell},
+		manifest := spa.ManifestHandler(func(ctx context.Context) (string, error) { return settings.SiteName.Get(ctx, w.db) }, nil)
+		h := web.New(web.Groups{API: api.New(w.deps), Auth: auth.New(w.auth), Assets: spa.Assets(), Manifest: manifest, SPA: shell},
 			web.Options{Session: w.session, RateLimit: pass, SiteURL: "https://forum.example"})
 		for _, p := range probes {
 			if p.pattern == "POST /auth/logout" {
@@ -380,10 +387,10 @@ func clientPages(t *testing.T) []string {
 // eachEntryNamesARoute checks each allowlist entry names something the
 // server serves, so a typo cannot open a path nobody meant or close one
 // somebody needs: a route in api.Routes or auth.Routes, the /assets/ group,
-// or a page of the client's route table, which the server answers with the
+// the manifest, or a page of the client's route table, which the server answers with the
 // shell.
 func eachEntryNamesARoute(t *testing.T, w *gateWorld) {
-	registered := map[string]bool{"GET /assets/": true}
+	registered := map[string]bool{"GET /assets/": true, "GET " + web.ManifestPath: true}
 	for _, rt := range append(api.Routes(w.deps), auth.Routes(w.auth)...) {
 		registered[rt.Pattern()] = true
 	}

@@ -23,6 +23,11 @@ const APIPrefix = "/api/v1/"
 // HealthPath is the health check's one path (docs/02 "Observability").
 const HealthPath = "/healthz"
 
+// ManifestPath is the web app manifest's one path (docs/06 "Installable").
+// The shell links it, and the server writes it rather than the build,
+// because its name is the site_name setting (TKT-01M29CGBYY).
+const ManifestPath = "/manifest.webmanifest"
+
 // Groups are the handler groups the router mounts, one per URL prefix in
 // docs/02.
 //
@@ -49,6 +54,10 @@ type Groups struct {
 
 	// Assets serves /assets/* -- the built client, from an embed.FS.
 	Assets http.Handler
+
+	// Manifest serves exactly ManifestPath -- the web app manifest
+	// (spa.ManifestHandler).
+	Manifest http.Handler
 
 	// Health serves exactly /healthz (internal/web/health). It runs outside
 	// rate limiting, session resolution and CSRF: see HealthPath.
@@ -116,8 +125,9 @@ func New(g Groups, opts Options) http.Handler {
 	mux.Handle("/events", group(g.Events))
 	mux.Handle("/assets/", group(g.Assets))
 	// Exact, not a subtree: /healthz/anything is an application route and
-	// gets the shell like any other.
+	// gets the shell like any other. So is /manifest.webmanifest/anything.
 	mux.Handle(HealthPath, group(g.Health))
+	mux.Handle(ManifestPath, group(g.Manifest))
 
 	// The bare "/api" and "/api/v1", registered exactly so that ServeMux does
 	// not answer them with its implicit redirect to the subtree.

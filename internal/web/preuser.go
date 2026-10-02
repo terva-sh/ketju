@@ -46,8 +46,11 @@ var PreUserRoutes = []Route{
 	{Method: http.MethodGet, Path: "/auth/{provider}/start"},
 	{Method: http.MethodGet, Path: "/auth/{provider}/callback"},
 	{Method: http.MethodPost, Path: "/auth/logout"},
-	// The built client, which draws the two pages below.
+	// The built client, which draws the two pages below, and the web app
+	// manifest their shell links: the site's name and the icons' names, the
+	// same for every viewer (TKT-01M29CGBYY).
 	{Method: http.MethodGet, Path: "/assets/"},
+	{Method: http.MethodGet, Path: ManifestPath},
 	// The application form and the status page, served as the shell.
 	{Method: http.MethodGet, Path: "/apply"},
 	{Method: http.MethodGet, Path: ApplyStatusPath},

@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it } from 'vitest';
 import type { Me } from '../api/dto';
 import anonMe from '../../../../internal/dto/testdata/golden/me.anon.json';
 import memberMe from '../../../../internal/dto/testdata/golden/me.member.json';
-import { applyTheme, readThemePref, setThemePref, syncThemeFromAccount, themePref } from './theme';
+import shell from '../../index.html?raw';
+import tokens from '../styles/tokens.css?raw';
+import { applyTheme, readThemePref, setThemePref, syncThemeFromAccount, themeColors, themePref } from './theme';
 
 function memory(initial: Record<string, string> = {}) {
   const m = new Map(Object.entries(initial));
@@ -17,7 +19,22 @@ function memory(initial: Record<string, string> = {}) {
 afterEach(() => {
   document.documentElement.removeAttribute('data-theme');
   themePref.value = 'system';
+  for (const m of document.head.querySelectorAll('meta[name="theme-color"]')) m.remove();
 });
+
+// themeColorTags puts the shell's two theme-color tags in <head>, copied
+// from index.html so the test runs on what the shell ships.
+function themeColorTags() {
+  const tags = shell.match(/<meta name="theme-color"[^>]*>/g) ?? [];
+  expect(tags).toHaveLength(2);
+  document.head.insertAdjacentHTML('beforeend', tags.join(''));
+  const [light, dark] = ['light', 'dark'].map(
+    (s) => document.head.querySelector(`meta[name="theme-color"][media="(prefers-color-scheme: ${s})"]`)!,
+  );
+  expect(light).not.toBeNull();
+  expect(dark).not.toBeNull();
+  return { light, dark };
+}
 
 describe('the theme choice', () => {
   it('follows the system until the reader chooses', () => {
@@ -71,6 +88,27 @@ describe('the theme choice', () => {
     });
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
   });
+
+  it('colours the browser chrome by each scheme until the reader chooses', () => {
+    const { light, dark } = themeColorTags();
+    expect([light.getAttribute('content'), dark.getAttribute('content')]).toEqual([themeColors.light, themeColors.dark]);
+    applyTheme('system');
+    expect([light.getAttribute('content'), dark.getAttribute('content')]).toEqual([themeColors.light, themeColors.dark]);
+  });
+
+  it.each(['light', 'dark'] as const)('sets both theme-color tags to a chosen %s, and system restores them', (pref) => {
+    const { light, dark } = themeColorTags();
+    applyTheme(pref);
+    expect([light.getAttribute('content'), dark.getAttribute('content')]).toEqual([themeColors[pref], themeColors[pref]]);
+    applyTheme('system');
+    expect([light.getAttribute('content'), dark.getAttribute('content')]).toEqual([themeColors.light, themeColors.dark]);
+  });
+
+  it("takes each theme's colour from its --bg", () => {
+    const bg = (block: RegExp) => block.exec(tokens)?.[1]?.match(/--bg:\s*(#[0-9A-Fa-f]{6})/)?.[1];
+    expect(bg(/:root \{([^}]*)\}/)).toBe(themeColors.light);
+    expect(bg(/:root\[data-theme='dark'\] \{([^}]*)\}/)).toBe(themeColors.dark);
+  });
 });
 
 // The account's theme wins over this device's copy on every load, and
@@ -100,6 +138,15 @@ describe('the account theme', () => {
     syncThemeFromAccount(as(anonMe, 'dark'), s);
     expect(s.m.get('ketju.theme')).toBe('light');
     expect(document.documentElement.getAttribute('data-theme')).toBe('light');
+  });
+
+  it("colours the browser chrome by the account's theme", () => {
+    const { light, dark } = themeColorTags();
+    const s = memory();
+    syncThemeFromAccount(as(memberMe, 'dark'), s);
+    expect([light.getAttribute('content'), dark.getAttribute('content')]).toEqual([themeColors.dark, themeColors.dark]);
+    syncThemeFromAccount(as(memberMe, 'system'), s);
+    expect([light.getAttribute('content'), dark.getAttribute('content')]).toEqual([themeColors.light, themeColors.dark]);
   });
 
   it('changes nothing for a theme it does not know', () => {
