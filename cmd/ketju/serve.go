@@ -22,6 +22,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/seal"
 	"github.com/terva-sh/ketju/internal/auth/session"
 	"github.com/terva-sh/ketju/internal/backup"
+	"github.com/terva-sh/ketju/internal/buildinfo"
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/events/notifier"
@@ -800,7 +801,9 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	// A live-update stream never finishes by itself, and Shutdown waits for
 	// every handler, so the hub ends them all as the drain begins.
 	srv.RegisterOnShutdown(hub.Close)
+	bi := buildinfo.Get()
 	log.Info("ketju started",
+		"version", bi.Version, "commit", bi.Commit,
 		"listen", ln.Addr().String(), "data_dir", cfg.DataDir,
 		"subscribers", bus.Subscribers(), "open_threads", cache.Bound(),
 		"caught_up", report.Closed, "corrupt", len(report.Corrupt), "catch_up_elapsed", report.Elapsed,

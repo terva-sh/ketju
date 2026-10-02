@@ -1,0 +1,23 @@
+A data directory written by ketju at commit ed82f15e, main as Phase 4
+began, whose database is at migration 0024. TestREADMEUpgradeProcedure
+upgrades a copy of it with the README's procedure (TKT-01M29CXK3S).
+
+It was made with the e2e build of that commit, which seeds the forum the
+Playwright suite runs against:
+
+    git archive ed82f15e | tar -x -C src
+    (cd src && CGO_ENABLED=0 go build -tags e2e -o ../ketju-ed82f15e ./cmd/ketju)
+    ./ketju-ed82f15e e2e -dir run -port 18791
+    # then SIGTERM, which stops serve cleanly and checkpoints the WAL
+
+and is run/data's db/ketju.db and every threads/**/*.log, nothing else. The
+thread indexes are rebuilt on first open. blobs/ was empty, and git keeps
+no empty directory. config.toml and secrets/ are not a backup's either.
+
+The seed (run/seed.json): the thread /t/0387y87c4m000, "Naming the monthly
+threads", with 60 posts; members alice, carol, mona, ada and nell, among
+others, each with an identity at the provider keyed "fake" whose subject is
+the handle.
+
+Do not regenerate it from a later commit: it stands for a database an older
+binary wrote, and its worth is that it is fixed.

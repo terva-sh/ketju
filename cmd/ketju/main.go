@@ -30,6 +30,7 @@ commands:
   redact   hard-redact a post or a thread title, with the server stopped
   admin    administer members and settings from the command line
   config   check the config file and print the effective configuration
+  version  print the version, commit, Go version and platform
 
 Run ketju <command> -h for a command's flags.
 `
@@ -62,6 +63,8 @@ func main() {
 		err = runRedact(os.Args[2:])
 	case "config":
 		err = runConfig(os.Args[2:])
+	case "version", "--version":
+		err = runVersion(os.Args[2:])
 	case "-h", "--help", "help":
 		fmt.Print(usage)
 		return

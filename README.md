@@ -111,6 +111,54 @@ little ahead of the database. `ketju fsck` reports that as drift and exits
 up shorter than the database says, and `serve` quarantines that thread.
 `ketju backup` has none of these caveats.
 
+## Upgrading
+
+An upgrade replaces the binary. `ketju serve` brings the database's schema
+up to date when it starts, applying each migration the new binary has in
+one transaction, so a migration that fails leaves the database as it was
+and `serve` does not start. The thread logs are never rewritten.
+
+1. Read the release notes in `docs/releases/` for every version after the
+   one you run, up to and including the new one.
+2. Back up:
+
+   ```sh
+   ketju backup --root "$KETJU_DATA" "$KETJU_BACKUP"
+   ```
+
+   With `serve` running, this is the `ketju` you run now, asking `serve`
+   for a snapshot. If that `ketju` has no `backup` command, stop `serve`
+   first and run the new binary's from wherever you downloaded it: with
+   `serve` stopped it takes the data directory's lock instead. Either way
+   the database is copied at the schema it has and never migrated, so the
+   old binary can restore the backup.
+3. Stop `serve`, if it is still running, for example with
+   `systemctl stop ketju`, and put the new binary where the old one was.
+4. Check the new binary and your configuration against each other:
+
+   ```sh
+   ketju version
+   ketju config check --config "$KETJU_CONFIG"
+   ```
+
+   A setting the new version no longer accepts, or reads differently, is
+   reported here rather than at startup.
+5. Start `serve`. It applies the migrations, catches the database up with
+   the logs, and then listens.
+6. Check the data directory:
+
+   ```sh
+   ketju fsck --root "$KETJU_DATA"
+   ```
+
+Going back to the old binary means going back to the backup as well. Once
+the new binary has migrated the database, an older binary refuses to start
+on it, saying the database's schema is newer than it knows, rather than run
+old queries against a schema they were not written for. Restore the backup
+as the "Backing up and restoring" section says, and start the old binary on
+it. What was posted after the backup is not in it, so decide soon after
+the upgrade.
+
 ## Recovering a lost or damaged database
 
 The thread logs under `threads/` hold every thread and post. The database

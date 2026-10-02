@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXK3SMVHGVBGF4N57QACG
 title: Build the release pipeline for the single binary
 type: chore
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -29,12 +29,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T17:18:46Z
+updated_at: 2026-10-02T22:06:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-ops
+  id: agent:claude-code/phase4-run-cxk3s
   name: ""
 extensions: {}
 ---
@@ -49,13 +49,13 @@ This is the v1.0 exit criterion in docs/09, so the release notes and the upgrade
 
 ## Acceptance criteria
 
-- [ ] `go run ./tools/release` builds ketju for linux/amd64 and linux/arm64 with CGO_ENABLED=0 and -trimpath. It fails unless every binary records CGO_ENABLED=0 and no build tags, and every ELF has no interpreter and no needed library
-- [ ] The run fails, naming the package, if any non-standard package in cmd/ketju's dependency graph has cgo files (TestNoDependencyUsesCgo)
-- [ ] The version and commit are stamped into internal/buildinfo, and `ketju version` reports them with the Go version and platform. An unstamped build reports its VCS revision, and the lock record and serve's start log carry the same version
-- [ ] The run writes SHA256SUMS in sha256sum format and verifies it
-- [ ] CI's Build and Test job runs the dry run as an added step and publishes nothing. No trigger, permission or job changes
-- [ ] The README's upgrade procedure runs as a test against a data directory that the build at ed82f15e wrote, migrations included (TestREADMEUpgradeProcedure)
-- [ ] The v1.0 release notes are drafted in docs/releases/v1.0.md, naming the platforms and the upgrade procedure
+- [x] `go run ./tools/release` builds ketju for linux/amd64 and linux/arm64 with CGO_ENABLED=0 and -trimpath. It fails unless every binary records CGO_ENABLED=0 and no build tags, and every ELF has no interpreter and no needed library
+- [x] The run fails, naming the package, if any non-standard package in cmd/ketju's dependency graph has cgo files (TestNoDependencyUsesCgo)
+- [x] The version and commit are stamped into internal/buildinfo, and `ketju version` reports them with the Go version and platform. An unstamped build reports its VCS revision, and the lock record and serve's start log carry the same version
+- [x] The run writes SHA256SUMS in sha256sum format and verifies it
+- [x] CI's Build and Test job runs the dry run as an added step and publishes nothing. No trigger, permission or job changes
+- [x] The README's upgrade procedure runs as a test against a data directory that the build at ed82f15e wrote, migrations included (TestREADMEUpgradeProcedure)
+- [x] The v1.0 release notes are drafted in docs/releases/v1.0.md, naming the platforms and the upgrade procedure
 
 ## Implementation plan
 
@@ -155,3 +155,37 @@ Reproducible builds (building twice and comparing) are left out, with no ticket.
 run decision: pending maintainer review (2026-10-02, Phase 4 grooming). Release binaries are built for `linux/amd64` and `linux/arm64`. Recorded in docs/02 after "Backups". Windows lost, because serve refuses to start without the unix lock. macOS, FreeBSD and 32-bit ARM lost, because no runner starts them.
 
 Split during grooming: the tag workflow, publishing, the container image and signing moved to TKT-01M3YSVEDJ (Publish release binaries, checksums and an image from a tag). They are docs/15 stop class 3 and outside docs/12 "Changing CI", so that ticket carries an open decision. This ticket is the dry run, and it can proceed. It now depends on TKT-01M29CXK35 (Ship ketju backup and the backup documentation), because the README upgrade procedure it tests takes a `ketju backup` first.
+
+**agent:claude-code/phase4-run-cxk3s** at 2026-10-02T22:06:26Z
+
+Decisions made while building this, beyond the plan:
+
+- **The upgrade backup and the schema.** Writing the upgrade test showed that `ketju backup`'s offline catch-up migrated the copy, so the backup an upgrade takes would have been one the old binary refuses. That was fixed in TKT-01M29CXK35 (PR #373) before it merged: a copy whose schema is not the binary's is left at it, neither migrated nor caught up (`db.Pending`, `TestBackupLeavesAnotherSchemaAlone`). The README's upgrade step 2 relies on it, so that the new binary can back up a data directory an older one wrote.
+- **A binary without `backup`.** The README tells someone whose ketju has no `backup` command to stop serve and run the new binary's backup. With serve running, the new binary would ask an old serve for a snapshot over a socket the old serve does not have, and get exit 4.
+- **The test runs the backup offline.** The old serve cannot run in the test, so step 2 runs the way the README gives it for an old binary. Serve is started and stopped in-process where the README says to, and the README's three sh blocks run as written.
+- **Migrations in the fixture's upgrade.** At this merge main is still at migration 0024, which is the fixture's version, so today the upgrade applies no migration. The test asserts `db.Pending` is 0 after serve starts and that the backup still records the fixture's count. It logs both numbers, so the first Phase 4 migration to land is exercised with no change to the test. AC6 is ticked on that basis: the procedure, migrations step included, runs against the ed82f15e data directory.
+- **The fixture** is db/ketju.db (516 KB, empty WAL after SIGTERM) and 68 logs, about 800 KB in all. No .idx files. blobs/ was empty and git keeps no empty directory, so the test makes it. Its README records the commit and commands.
+- **`--allow-dirty`** exists for local runs only. CI's checkout is clean.
+- **Mutations tried, each caught:**
+  - dropping CGO_ENABLED=0 from the build env (`CGO_ENABLED="1", want 0`);
+  - adding `-tags e2e` (`built with tags "e2e"`);
+  - corrupting a written sum (the digest mismatch).
+
+  A first sum mutation, overwriting the first hex digit with 0, survived, because both real digests happened to begin with 0. It was replaced with one that changes the last digit.
+
+## Summary
+
+Landed the release pipeline's dry run. Nothing is published, and publishing stays with TKT-01M3YSVEDJ.
+
+- **`internal/buildinfo`** carries the version and commit, stamped with `-ldflags -X`. An unstamped build falls back to its VCS revision. `ketju version` (also `--version`) prints the version, commit, Go version and platform. The lock record and serve's `ketju started` line carry the same version.
+- **`tools/release`** (`go run ./tools/release --version V --out DIR`) builds linux/amd64 and linux/arm64 with CGO_ENABLED=0, -trimpath and an empty GOFLAGS. It fails unless each binary:
+  - records CGO_ENABLED=0, -trimpath and its target, with no tags and no -race;
+  - is an ELF with no interpreter and no needed library;
+  - has no non-standard dependency with cgo files. This is checked with `go list -deps` and cgo on, and the failure names the package.
+
+  It then writes SHA256SUMS in sha256sum format, verifies it, and runs the host binary's `version`. A dirty tree is refused unless `--allow-dirty` is given.
+- **CI.** One step was added to `Build and Test`, after "the binary builds without cgo". Nothing else in ci.yml changed.
+- **Upgrade.**
+  - The README has an "Upgrading" section: release notes, `ketju backup`, stop serve, replace the binary, `ketju version` and `ketju config check`, start serve (which migrates), then `ketju fsck`. It also says how to go back.
+  - TestREADMEUpgradeProcedure runs the section's three sh blocks against a copy of `cmd/ketju/testdata/upgrade/ed82f15e/`, which is the ed82f15e e2e seed's db and logs. It starts serve where the README says to. It checks that the backup stays at the old schema, that nothing is pending after serve starts, that fsck is clean, that the seeded thread reads back with 60 posts, and that three seeded members sign in.
+- **Release notes.** `docs/releases/v1.0.md` is a draft.

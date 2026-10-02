@@ -37,9 +37,10 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"runtime/debug"
 	"strings"
 	"time"
+
+	"github.com/terva-sh/ketju/internal/buildinfo"
 )
 
 // FileName is the lock file's name inside the data directory.
@@ -242,10 +243,6 @@ func readHolder(path string) (*Holder, error) {
 	return &h, nil
 }
 
-// version is the module version the binary was built at, or "(devel)".
-func version() string {
-	if bi, ok := debug.ReadBuildInfo(); ok && bi.Main.Version != "" {
-		return bi.Main.Version
-	}
-	return "(devel)"
-}
+// version is the version the binary was built as (internal/buildinfo):
+// the stamped release version, or "(devel)".
+func version() string { return buildinfo.Get().Version }

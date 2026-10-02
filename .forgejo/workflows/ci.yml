@@ -76,6 +76,17 @@ jobs:
           CGO_ENABLED: "0"
         run: go build -o /dev/null ./cmd/ketju
 
+      - name: release dry run (builds and checks, publishes nothing)
+        # TKT-01M29CXK3S. Builds the release binaries for linux/amd64 and
+        # linux/arm64 as a release would, and fails unless each records
+        # CGO_ENABLED=0 and no build tags, is a static ELF, and no dependency
+        # has cgo files; then writes and verifies SHA256SUMS and runs the
+        # host's binary to see its version. The output goes to a temporary
+        # directory and is thrown away. Publishing from a tag is
+        # TKT-01M3YSVEDJ's and stays with the maintainer (docs/15, stop
+        # class 3): this step has no credential and no publish mode.
+        run: go run ./tools/release --version v0.0.0-ci --out "$(mktemp -d)"
+
       - name: generated database code is current
         # TKT-01M29BW9Q1. sqlc compiles internal/store/db/queries against the
         # migrations into package dbq, and the committed output is what ships.
