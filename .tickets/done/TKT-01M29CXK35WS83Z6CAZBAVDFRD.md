@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T21:11:25Z
+updated_at: 2026-10-02T21:31:26Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -251,6 +251,10 @@ Where the build departs from the plan, and why:
 **agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:11:25Z
 
 Terva review 1978 (head 632a48cf, base cac3ed9d), high: a DEST inside the source's blobs/ was accepted, and copyBlobs would then walk the backup's own partial copy. Fixed. backup now refuses, with exit 2, any DEST whose parent resolves to the data directory or below it, with symlinks resolved, before it writes anything. Rejecting only blobs/ lost: a backup anywhere inside the data directory it copies is a mistake, and refusing the whole directory is one rule rather than a list of subtrees to keep in step with the copy. TestBackupRefuses covers blobs/backup, the directory itself, and a symlinked alias of blobs/. The usage text and the README say it.
+
+**agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:31:26Z
+
+Terva review 1979 (head 2d209716, base cac3ed9d) resolved 1978's finding and raised a medium one: a client that went away left its staged database behind until serve restarted. Fixed. The protocol now keeps the connection open after the answer while the client takes the staged database (`backup.Ask` returns `done`, which closes it). serve removes the staging directory when the connection closes, when it has been held past `Options.Claim` (30 minutes by default), or when serve stops. A client that goes away mid-snapshot now cancels the snapshot, because its context ends when a read on the connection does. The client still removes the staging directory itself before closing, so none is left by the time `ketju backup` returns. An explicit acknowledgement message lost to the close: a client that crashes cannot send one, and the close is what serve needs to see either way. TestAbandonedSnapshotIsReclaimed covers four cases: closed without taking it, held past the claim, gone mid-snapshot, and serve stopping. Two mutations were tried and each was caught: dropping the removal, and dropping the cancel. The `busy` flag now clears when the snapshot returns rather than when the client leaves, so a slow client does not block the next backup. 'One snapshot at a time' still holds for the snapshot itself. docs/02 says this.
 
 ## Summary
 

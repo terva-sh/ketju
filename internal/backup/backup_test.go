@@ -144,7 +144,7 @@ func TestBackupSocketAnswersOnlyItsOwner(t *testing.T) {
 
 	// Another user.
 	peer.Store(int64(os.Getuid() + 1))
-	a, err := Ask(ctx, s.Path())
+	a, _, err := Ask(ctx, s.Path())
 	if err != nil || a.OK || a.Error != ErrForbidden {
 		t.Errorf("another uid was answered %+v, %v; want forbidden", a, err)
 	}
@@ -156,14 +156,15 @@ func TestBackupSocketAnswersOnlyItsOwner(t *testing.T) {
 	// One at a time.
 	first := make(chan Answer, 1)
 	go func() {
-		a, err := Ask(ctx, s.Path())
+		a, done, err := Ask(ctx, s.Path())
 		if err != nil {
 			t.Error(err)
 		}
+		done()
 		first <- a
 	}()
 	<-started
-	if a, err := Ask(ctx, s.Path()); err != nil || a.Error != ErrBusy {
+	if a, _, err := Ask(ctx, s.Path()); err != nil || a.Error != ErrBusy {
 		t.Errorf("a second request during a snapshot = %+v, %v; want busy", a, err)
 	}
 	close(gate)
@@ -187,6 +188,94 @@ func TestBackupSocketAnswersOnlyItsOwner(t *testing.T) {
 	}
 	if n := snaps.Load(); n != 1 {
 		t.Errorf("%d snapshots taken, want 1", n)
+	}
+}
+
+// TestAbandonedSnapshotIsReclaimed: serve removes a staged snapshot once its
+// client closes the connection, whether or not it took the database; when a
+// client holds the connection past the claim; and when serve stops. A client
+// that goes away mid-snapshot cancels it (Terva review 1979).
+func TestAbandonedSnapshotIsReclaimed(t *testing.T) {
+	dir := shortDir(t)
+	var w posts.Writer
+	d := deps(t, dir, &w)
+	var block atomic.Bool
+	started := make(chan struct{}, 1)
+	cancelled := make(chan struct{}, 1)
+	s, err := Listen(dir, Options{
+		Snapshot: func(ctx context.Context) (Result, error) {
+			if block.Load() {
+				started <- struct{}{}
+				<-ctx.Done()
+				cancelled <- struct{}{}
+				return Result{}, ctx.Err()
+			}
+			return Snapshot(ctx, d)
+		},
+		Claim: 300 * time.Millisecond,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer s.Close(5 * time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	reclaimed := func(name string) {
+		t.Helper()
+		for deadline := time.Now().Add(5 * time.Second); len(stagingDirs(t, dir)) > 0; {
+			if time.Now().After(deadline) {
+				t.Fatalf("%s: staging left behind: %v", name, stagingDirs(t, dir))
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+
+	// Answered, and the client closes without taking the database.
+	a, done, err := Ask(ctx, s.Path())
+	if err != nil || !a.OK {
+		t.Fatalf("the snapshot: %+v, %v", a, err)
+	}
+	if len(stagingDirs(t, dir)) != 1 {
+		t.Fatalf("staging while the client holds it: %v", stagingDirs(t, dir))
+	}
+	done()
+	reclaimed("closed without taking it")
+
+	// Answered, and the client holds the connection past the claim.
+	a, done, err = Ask(ctx, s.Path())
+	if err != nil || !a.OK {
+		t.Fatalf("the snapshot: %+v, %v", a, err)
+	}
+	reclaimed("held past the claim")
+	done()
+
+	// The client goes away while the snapshot is being taken.
+	block.Store(true)
+	c, err := net.Dial("unix", s.Path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := c.Write([]byte(`{"v":1,"op":"snapshot"}` + "\n")); err != nil {
+		t.Fatal(err)
+	}
+	<-started
+	c.Close()
+	select {
+	case <-cancelled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a snapshot went on after its client left")
+	}
+	block.Store(false)
+
+	// Serve stops while a client holds its snapshot.
+	if _, _, err := Ask(ctx, s.Path()); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Close(5 * time.Second); err != nil {
+		t.Fatal(err)
+	}
+	if left := stagingDirs(t, dir); len(left) != 0 {
+		t.Errorf("staging left after Close: %v", left)
 	}
 }
 

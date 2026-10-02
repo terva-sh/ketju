@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -20,6 +21,12 @@ import (
 // Version is the control protocol's version. The protocol is internal to one
 // binary: a command and a serve of different versions refuse each other
 // plainly rather than half understand.
+//
+// A client sends one request line and reads one answer line. After an
+// answer naming a staged snapshot it keeps the connection open while it
+// takes the staged database, and closes it when it has. Serve then removes
+// the staging directory, and it does so too if the client goes away first,
+// or holds the connection past Options.Claim (Terva review 1979).
 const Version = 1
 
 // Request is the one line a client sends.
@@ -49,6 +56,11 @@ const (
 	maxRequestSize = 4 << 10
 	ioDeadline     = 10 * time.Second
 )
+
+// ClaimTimeout is how long a client has, by default, to take a staged
+// snapshot before serve removes it: long enough to copy a large database to
+// another disk, and short of leaving one behind for good.
+const ClaimTimeout = 30 * time.Minute
 
 // ErrUnsupported is Listen on a platform with no way to learn a peer's uid.
 var ErrUnsupported = errors.New("backup: this platform cannot check a control socket peer's uid")
@@ -87,6 +99,9 @@ type Options struct {
 	// UID is the uid a peer must have; zero means os.Getuid. A test sets
 	// it with PeerUID.
 	UID int
+	// Claim is how long a client may hold its connection after the answer
+	// before its staged snapshot is removed anyway; zero is ClaimTimeout.
+	Claim time.Duration
 }
 
 // Server is a listening control socket.
@@ -121,6 +136,9 @@ func Listen(dataDir string, o Options) (*Server, error) {
 	uid := o.UID
 	if uid == 0 {
 		uid = os.Getuid()
+	}
+	if o.Claim <= 0 {
+		o.Claim = ClaimTimeout
 	}
 	path, err := SocketPath(dataDir)
 	if err != nil {
@@ -224,8 +242,22 @@ func (s *Server) serve(c *net.UnixConn) {
 		reply(Answer{Error: ErrBusy})
 		return
 	}
-	defer s.busy.Store(false)
-	res, err := s.opts.Snapshot(s.ctx)
+
+	// The client sends nothing after its request, so a read ends only when
+	// it closes the connection or dies. That cancels a snapshot still being
+	// taken, and releases one already answered.
+	ctx, cancel := context.WithCancel(s.ctx)
+	defer cancel()
+	gone := make(chan struct{})
+	go func() {
+		defer close(gone)
+		defer cancel()
+		_ = c.SetReadDeadline(time.Time{})
+		_, _ = io.Copy(io.Discard, c)
+	}()
+
+	res, err := s.opts.Snapshot(ctx)
+	s.busy.Store(false)
 	if err != nil {
 		s.opts.Logger.Error("a backup snapshot failed", "err", err)
 		reply(Answer{Error: err.Error()})
@@ -233,17 +265,50 @@ func (s *Server) serve(c *net.UnixConn) {
 	}
 	s.opts.Logger.Info("took a backup snapshot", "staging", res.Staging, "paused_ms", res.Paused.Milliseconds())
 	reply(Answer{OK: true, Staging: res.Staging, PausedMS: res.Paused.Milliseconds()})
+
+	claim := time.NewTimer(s.opts.Claim)
+	defer claim.Stop()
+	select {
+	case <-gone:
+	case <-claim.C:
+		s.opts.Logger.Warn("a backup client did not take its snapshot in time, so it was removed",
+			"staging", res.Staging, "claim", s.opts.Claim)
+	case <-s.ctx.Done():
+	}
+	s.removeStaging(res.Staging)
+}
+
+// removeStaging removes the staging directory a snapshot's path names, when
+// it is one: a directory directly in the data directory, with StagingPrefix.
+func (s *Server) removeStaging(staged string) {
+	dir := filepath.Dir(filepath.Clean(staged))
+	if !strings.HasPrefix(dir, StagingPrefix) || strings.ContainsRune(dir, filepath.Separator) {
+		s.opts.Logger.Error("a snapshot named a staging path outside the data directory; left it", "staging", staged)
+		return
+	}
+	if err := os.RemoveAll(filepath.Join(filepath.Dir(s.path), dir)); err != nil {
+		s.opts.Logger.Warn("removing a backup snapshot's staging directory", "staging", dir, "err", err)
+	}
 }
 
 // Ask sends one snapshot request to the control socket at path and returns
-// the answer. ctx bounds the whole exchange.
-func Ask(ctx context.Context, path string) (Answer, error) {
+// the answer, and done, which the caller calls once it has taken the staged
+// database or given up on it: serve then removes the staging directory. ctx
+// bounds the request and its answer. done may be called more than once, and
+// is never nil.
+func Ask(ctx context.Context, path string) (a Answer, done func(), err error) {
 	var d net.Dialer
 	c, err := d.DialContext(ctx, "unix", path)
 	if err != nil {
-		return Answer{}, err
+		return Answer{}, func() {}, err
 	}
-	defer c.Close()
+	var once sync.Once
+	done = func() { once.Do(func() { c.Close() }) }
+	defer func() {
+		if err != nil || !a.OK {
+			done()
+		}
+	}()
 	if dl, ok := ctx.Deadline(); ok {
 		_ = c.SetDeadline(dl)
 	}
@@ -257,13 +322,12 @@ func Ask(ctx context.Context, path string) (Answer, error) {
 	line, err := bufio.NewReader(io.LimitReader(c, maxRequestSize)).ReadBytes('\n')
 	if err != nil {
 		if werr != nil {
-			return Answer{}, werr
+			return Answer{}, done, werr
 		}
-		return Answer{}, fmt.Errorf("reading the answer: %w", err)
+		return Answer{}, done, fmt.Errorf("reading the answer: %w", err)
 	}
-	var a Answer
 	if err := json.Unmarshal(line, &a); err != nil {
-		return Answer{}, fmt.Errorf("reading the answer: %w", err)
+		return Answer{}, done, fmt.Errorf("reading the answer: %w", err)
 	}
-	return a, nil
+	return a, done, nil
 }

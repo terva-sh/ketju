@@ -72,7 +72,7 @@ exit codes:
 // runs with.
 type backupOpts struct {
 	// ask sends the snapshot request; nil is backup.Ask.
-	ask func(ctx context.Context, path string) (backup.Answer, error)
+	ask func(ctx context.Context, path string) (backup.Answer, func(), error)
 }
 
 // backupSummary is the report, as --json prints it.
@@ -354,7 +354,12 @@ func backupOnline(ctx context.Context, root, partial string, o backupOpts, sum *
 	}
 	actx, cancel := context.WithTimeout(ctx, backup.PauseCap+30*time.Second)
 	defer cancel()
-	a, err := ask(actx, sock)
+	a, done, err := ask(actx, sock)
+	// Closing the connection tells serve the staged database has been taken,
+	// and it removes the staging directory; it does that too if this process
+	// dies first. The removal here comes first, so none is left once backup
+	// returns.
+	defer done()
 	if err != nil {
 		return fmt.Errorf("backup: ketju serve holds %s, but its control socket %s did not answer: %w", root, sock, err)
 	}

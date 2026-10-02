@@ -61,7 +61,10 @@ Three operator commitments are decided (10 Q22–Q24, TKT-01M29BW9PB, 2026-09-24
   The pause covers only those steps, is capped, and handles one snapshot at
   a time. The command then copies each log up to the length the snapshot
   projected it to, so the logs and the database in the backup agree exactly.
-  With no `serve` running, the command takes the lock itself and needs no
+  It keeps the connection open while it takes the staged database, and
+  `serve` removes the staging directory when the connection closes, when
+  the command has held it for 30 minutes, or when `serve` stops, so an
+  interrupted backup leaves nothing behind. With no `serve` running, the command takes the lock itself and needs no
   pause. Alternatives:
   - An admin API route lost. Anyone with an admin session could then make
     the server write to its own disk, and docs/05 gives no rule for that.
