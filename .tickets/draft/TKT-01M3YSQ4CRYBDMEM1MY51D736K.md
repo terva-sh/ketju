@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:13:46Z
-updated_at: 2026-10-02T17:22:22Z
+updated_at: 2026-10-02T18:30:52Z
 created_by:
   id: agent:claude-code/phase4-groom-client-account
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-client-account
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -108,3 +108,13 @@ To be named with the approach. The invariants are fixed already. Uploads are con
 ### Out of scope
 
 - The display name and the bio, which are TKT-01M3V6XVVG's.
+
+## Notes
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T18:30:52Z
+
+Maintainer decision, 2026-10-02, on the open decision. Asked as choices, the maintainer picked:
+- who may see an avatar: 'Signed-in members (Recommended)', over 'anyone who sees the name' and over deferring avatars;
+- what an avatar may be: 'PNG/JPEG, 1 MB, square crop (Recommended)'. The server re-encodes it to a 256 px square, which strips its metadata. The member sets or clears their own, and a moderator may clear one.
+
+This is written into docs/05 'Display name and bio'. Signed-out readers and pre-users see the initials placeholder. An avatar is an explicit exception to docs/07 'Attachments' serving, so the plan must give it its own serving route and test that a signed-out request is refused. The open decision is settled, and the ticket can be promoted once its plan says this.

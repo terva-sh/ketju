@@ -527,10 +527,21 @@ either key or both and answers the same shape.
   not written for an author's own rename (04 "audit_log"). The handle,
   which names the member in URLs and mentions, keeps its `user.renamed`
   row.
-- **The avatar** waits on a decision about who may fetch an avatar's blob,
-  which 07 "Attachments" serves only to readers of a post that names it.
-  TKT-01M3YSQ4CR (Let a member set an avatar) holds that
-  question.
+- **The avatar.** **Decided 2026-10-02 by the maintainer
+  (TKT-01M3YSQ4CR):**
+  - **Who sees it.** Any signed-in member may fetch any member's avatar. A
+    signed-out reader, and a pre-user, see the initials placeholder. An
+    avatar is therefore an exception to 07 "Attachments", which serves a
+    blob only to readers of a post that names it.
+  - **What it may be.** A PNG or JPEG of at most 1 MB. The server re-encodes
+    it to a 256 px square, which strips its metadata, and serves only the
+    re-encoded image.
+  - **Who sets it.** A member sets or clears their own avatar. A moderator
+    may clear one.
+
+  Alternatives: serving it wherever the member's name is visible, signed
+  out included, lost; so did any allowed image type served as uploaded,
+  animated GIF included.
 
 Alternatives:
 - Display names held to the handle's characters lost, because they come
@@ -605,6 +616,12 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
   signin for any of those actions." The risk accepted is that whoever holds
   a stolen session cookie can link their own identity and remove the
   owner's.
+- Changing one's own handle and deactivating one's own account do not ask
+  for a recent sign-in either. **Decided 2026-10-02 by the maintainer
+  (TKT-01M3V6XTYG):** "Neither", over asking only for a handle change and
+  over asking for both. The risk accepted is the same as above. A stolen
+  session can also rename the member, after which the member cannot rename
+  for 30 days and the old handle stays reserved for 90 days.
 - Suspending, deactivating or anonymizing a user deletes their sessions, in
   the transaction that changes the status ("Account lifecycle").
 - CSRF: the API is JSON-only and rejects non-JSON content types on

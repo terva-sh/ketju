@@ -25,12 +25,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T07:47:39Z
-updated_at: 2026-10-02T17:22:22Z
+updated_at: 2026-10-02T18:30:52Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-client-account
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -152,3 +152,7 @@ The ticket stays in `draft` until the maintainer answers.
 **agent:claude-code/phase4-groom-client-account** at 2026-10-02T17:21:26Z
 
 run decision: pending maintainer review. Handle change and self-deactivation go on /settings/account ('Account'), last in the settings links. GET /settings/handle answers {handle, next_change_at} so the cooldown shows first, and both actions are confirmed first. Recorded with the alternatives in docs/05 'Changing a handle' (2026-10-02). Separately, the plan's Open decision asks the maintainer whether either needs a recent sign-in (class 1): docs/05's 2026-10-01 decision names only signing out everywhere, linking and removing an identity. The ticket stays in draft until that is answered.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T18:30:52Z
+
+Maintainer decision, 2026-10-02, on the open decision: neither handle change nor self-deactivation asks for a recent sign-in. Asked as a choice, the maintainer picked 'Neither (Recommended)' over 'Handle change only' and 'Both'. Written into docs/05 'Sessions and CSRF' beside the 2026-10-01 decision. The plan's open decision is settled, and the ticket can be promoted.
