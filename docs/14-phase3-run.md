@@ -165,3 +165,11 @@ briefs.
 - **Main's push CI.** Each merge cancels the previous push run, and Forgejo
   reports a cancelled run as `failure` with no steps. Read the run's status
   before treating a push failure as a broken build.
+- **The runner freeze does not hold the exit check.** On 2026-10-02 the
+  maintainer accepted the evidence that the nine-second thread-page stall in
+  CI run 1790 was runner b3cc8959 freezing its jobs, not ketju: "Let's accept
+  the evidence as it stands and file this away. We'll keep it on record for if
+  it happens again and we need to go fishing for some sort of race or deadlock
+  in ketju itself." TKT-01M3VBWMA8 is done with its runner criterion unticked,
+  and TKT-01M3VDYENN stays open as a draft with no milestone, to record the
+  runner problem.

@@ -3,8 +3,8 @@ schema: 3
 id: TKT-01M3VBWMA83SC252X83NTQ417Y
 title: Find the nine-second server stall on a thread page after a read reset
 type: bug
-status: blocked
-status_reason: docs/14 stop class 3, outside the repository. CI runner b3cc8959 froze three jobs at once (runs 1790, 1794, 1798) from 09:11:24 to 09:11:33 UTC on 2026-10-01. The thread GET's 8892 ms is that freeze, measured from the one request in flight. A probe under CPU and fsync load found nothing in ketju that the GET waits on (note of 2026-10-01). Unblocked when TKT-01M3VDYENN (Find why CI runner b3cc8959 freezes every job for about ten seconds) is done, which needs the runner's host.
+status: done
+status_reason: null
 priority: high
 due_on: null
 labels:
@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:14:22Z
-updated_at: 2026-10-01T09:52:27Z
+updated_at: 2026-10-02T01:59:39Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-run-vbwma8
+  id: agent:claude-code/phase3-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -63,7 +63,7 @@ Reproduce under load (the #256 method) with the server log, and name the cause i
 ## Acceptance criteria
 
 - [x] Before any code change, a note names what the thread GET waited on in run 1790, with the runs and profiles that separate it from each candidate in the description
-- [ ] No retry, no longer timeout and no skip is added for this stall, and no ketju code changes unless a cause in ketju is seen and named in a note
+- [x] No retry, no longer timeout and no skip is added for this stall, and no ketju code changes unless a cause in ketju is seen and named in a note
 - [ ] After TKT-01M3VDYENN is done, a note lists the CI runs on the changed runner in which smoke.spec.ts passed at both widths and no thread-page request in a printed serve.log took over 1 s
 
 ## Implementation plan
@@ -150,3 +150,23 @@ The same runner shows the same pattern for TKT-01M3SZ3GCE (Stop admin-applicatio
 **agent:claude-code/phase3-run-vbwma8** at 2026-10-01T09:51:09Z
 
 in-progress to blocked: docs/14 stop class 3, outside the repository. CI runner b3cc8959 froze three jobs at once (runs 1790, 1794, 1798) from 09:11:24 to 09:11:33 UTC on 2026-10-01. The thread GET's 8892 ms is that freeze, measured from the one request in flight. A probe under CPU and fsync load found nothing in ketju that the GET waits on (note of 2026-10-01). Unblocked when TKT-01M3VDYENN (Find why CI runner b3cc8959 freezes every job for about ten seconds) is done, which needs the runner's host.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T01:59:39Z
+
+Maintainer decision, 2026-10-02: accept the investigation's evidence and close this ticket without the runner change. In the maintainer's words: "Let's accept the evidence as it stands and file this away. We'll keep it on record for if it happens again and we need to go fishing for some sort of race or deadlock in ketju itself."
+
+What that settles:
+- The 8892 ms thread GET in run 1790 is taken to be runner b3cc8959's freeze, as the investigation note of 2026-10-01 argues: three containers on one runner stalled together while a job on build-0 kept running, and a probe under CPU and fsync load never caught a GET waiting on anything in ketju.
+- Nothing in ketju changes. No retry, timeout or skip was added for the stall.
+- Criterion 3 stays unticked. It asks for CI runs on a changed runner, and the runner has not changed. The maintainer chose to close without that evidence.
+- TKT-01M3VDYENN (Find why CI runner b3cc8959 freezes every job for about ten seconds) stays open as a draft with no milestone, as the record of the runner problem.
+
+The alternative was to wait for the runner change (build-1 at capacity 1, or 8 GB of RAM), then close this ticket on CI runs from the changed runner. It lost because it holds Phase 3's exit check on infrastructure outside the repository, while the evidence already points away from ketju.
+
+Evidence since the investigation: no Build and Test run has failed since run 2184 (2026-10-01 16:54 UTC, a test race fixed in #332), across about 100 runs to run 2291. Load has been lower since grooming ended, with client PRs merged one at a time, which fits a freeze that needs several concurrent jobs.
+
+If a thread-page request over 1 s shows up again in a printed serve.log, check first whether the other jobs on the same runner kept running through the same window. If they did, the cause is in ketju. In that case reopen this ticket, or file a new one that links here, and follow this ticket's approach step 3: the investigation note's method, with the watchdog goroutine dump and the block profile.
+
+## Summary
+
+Closed by the maintainer's decision of 2026-10-02 to accept the evidence as it stands. The 8892 ms thread GET in CI run 1790 is attributed to runner b3cc8959 freezing every job it ran for about nine seconds. Nothing in ketju changed. Criterion 3, CI runs on a changed runner, is unticked because the runner was not changed. TKT-01M3VDYENN stays open as a draft, with no milestone, for the runner itself. If the stall recurs while the runner's other jobs keep running, the cause is in ketju, and the 2026-10-01 investigation note's probe method is where to start.

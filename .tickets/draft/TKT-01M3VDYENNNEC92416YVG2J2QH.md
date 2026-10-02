@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:50:19Z
-updated_at: 2026-10-01T20:40:29Z
+updated_at: 2026-10-02T01:59:53Z
 created_by:
   id: agent:claude-code/phase3-run-vbwma8
   name: ""
@@ -80,3 +80,17 @@ Findings, 2026-10-01 (orchestrator, read-only over SSH as sothr; nothing changed
 - #331 budget raised to 120000 B (maintainer) merged; clean on 0b55baa, CI 2193.
 - #332 TKT-01M3W9VRTV notifications test race (run 2184) merged 004be7a; test-only (author's restore reaches the projection via the bus; docs/04 sets no time bound); reproduced 4/20 under load before, 60/60 after; clean 0963125a on 4ba1b6f / base 86752c4; CI 2201. No other racy Phase 3 tests in cmd/ketju.
 - The maintainer was given the recommendation and the hosts' details; the runner configs (/home/runner/config.yml) are not readable or writable from the sothr account, so the change is theirs.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T01:59:53Z
+
+Maintainer decision, 2026-10-02: no runner change for now. This ticket stays open as a draft with no milestone, as the record of the freeze. In the maintainer's words: "Let's accept the evidence as it stands and file this away. We'll keep it on record for if it happens again and we need to go fishing for some sort of race or deadlock in ketju itself."
+
+TKT-01M3VBWMA8 (Find the nine-second server stall on a thread page after a read reset) was closed on that decision. It no longer waits on this ticket, so Phase 3's exit check doesn't either.
+
+What to do on recurrence: compare the step-log timestamps of every job that ran on the same runner during the window, as TKT-01M3VBWMA8's investigation note of 2026-10-01 does.
+- If they all stalled together, it is this runner problem again. Add the run to this ticket.
+- If the others kept running, the cause is in ketju. Go to TKT-01M3VBWMA8's approach step 3.
+
+TKT-01M3SZ3GCE (Stop admin-applications.spec.ts timing out under CI load) is blocked on a recurrence of its own and is unaffected.
+
+Read-only findings of 2026-10-01 are in the earlier note: build-1 is overcommitted on memory, and build-0 shares its VM with Forgejo. The change recommended then still stands if the freeze becomes a nuisance: build-1 at capacity 1 or 8 GB of RAM; build-0 at capacity 1 to 2, or its runner moved off the Forgejo VM.
