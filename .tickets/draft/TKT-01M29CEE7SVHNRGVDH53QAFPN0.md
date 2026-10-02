@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-10-02T17:18:46Z
+updated_at: 2026-10-02T17:46:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,6 +48,7 @@ Projection lag is the metric that matters most and the one no generic middleware
 - [ ] Metric names, types, units and labels follow Prometheus conventions and are listed in docs/02 "Observability". A test fails on any name outside the rules or missing from that table (TestMetricNamesFollowConventions)
 - [ ] A scrape takes no lock that the request path takes. The cache counters are atomic, and projection lag reads the read pool and stats the log files (TestScrapeTakesNoRequestPathLock)
 - [ ] No label carries a thread id, a handle, a forum slug, a request path or a query (TestMetricsCarryNoIdentifiers, TestRequestLatencyLabelsArePatterns)
+- [ ] Every request-latency label comes from a fixed set, and an unknown method is recorded as "other" (TestRequestLatencyLabelsAreBounded)
 
 ## Implementation plan
 
@@ -95,7 +96,10 @@ Nothing in the approach below depends on the choice except step 7.
    - `(*Registry).WriteText(w)` writes text exposition format 0.0.4, with `# HELP` and `# TYPE`. Names and label values are escaped, and families and labels are sorted so the output is stable.
    - Registering a name that breaks the rules below panics at startup.
 2. **Request latency.**
-   - Middleware in `internal/web` (`server.go`) wraps the mux and observes `ketju_http_request_duration_seconds{route,method,code}`. `route` is `r.Pattern` after the mux has run, or `unmatched`. `code` is the status class (`2xx` to `5xx`), which bounds the label set.
+   - Middleware in `internal/web` (`server.go`) wraps the mux and observes `ketju_http_request_duration_seconds{route,method,code}`. Every label is drawn from a fixed set, so no client can grow the series:
+     - `route` is `r.Pattern` after the mux has run, or `unmatched`;
+     - `method` is one of `GET`, `HEAD`, `POST`, `PUT`, `PATCH`, `DELETE` and `OPTIONS`, and any other method is recorded as `other`, because a method is client input and can be any token (Terva review 1943);
+     - `code` is the status class (`1xx` to `5xx`).
    - Buckets: 5 ms, 10 ms, 25 ms, 50 ms, 100 ms, 250 ms, 500 ms, 1 s, 2.5 s, 5 s.
    - `GET /events` (SSE) is left out of the histogram, because a stream lasts as long as the tab does. It is counted as the gauge `ketju_sse_streams{kind="member|anonymous"}`, with the counters `ketju_sse_refused_total`, `ketju_sse_overflowed_total` and `ketju_sse_lagged_total` from `Hub.Stats`.
 3. **Caches.**
@@ -131,6 +135,7 @@ Nothing in the approach below depends on the choice except step 7.
   - ends in `_seconds` or `_bytes` if it carries a unit;
   - and the set of names equals the docs/02 table, read from the file.
 - `TestRequestLatencyLabelsArePatterns`. A request to `/api/v1/threads/<id>` is labelled with the pattern's `{id}`, never with the id itself, and an unknown path is `unmatched`.
+- `TestRequestLatencyLabelsAreBounded` (Terva review 1943). After 500 requests with distinct custom methods to matched and unmatched paths, the histogram has `method="other"` and no more series than the fixed sets of route, method and code allow.
 - `TestMetricsCarryNoIdentifiers`. After a scripted session that touches threads, handles and forums, the scrape contains none of their ids, handles, slugs or paths.
 - `TestProjectionLagSumsGaps`. Two threads ahead by known amounts give their sum. A quarantined thread is left out and counted in `ketju_threads_quarantined`.
 - `TestFsyncLatencyObserved`. With `fsync = "group"`, appends add observations to `file="log"`, and closing an actor adds one to `file="index"`.

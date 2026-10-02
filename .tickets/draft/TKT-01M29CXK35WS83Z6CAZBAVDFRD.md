@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T17:18:46Z
+updated_at: 2026-10-02T17:46:59Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -55,6 +55,7 @@ A backup nobody has restored is a guess. The restore procedure is part of this t
 - [ ] A backup leaves out .idx files, thumbnails, blobs/tmp, secrets/ and config.toml, and holds every blob that its logs name (TestBackupLeavesOutIndexesThumbnailsStagingAndSecrets)
 - [ ] The README documents ketju backup, its restore, and the rsync procedure with its order and consistency caveats. The backup-and-restore block runs as a test (TestREADMEBackupProcedure)
 - [ ] The README's database-only recovery takes the database from a ketju backup and the content from reindex, and runs as a test (TestREADMERecoveryProcedure)
+- [ ] If an append stalls, a pending pause gives up within its cap and lets the queued appends go (TestHoldGivesUpOnAStalledAppend)
 
 ## Implementation plan
 
@@ -82,21 +83,30 @@ Groomed 2026-10-02 for Phase 4 (TKT-01M3YMG0M1) against main at ed82f15e.
    - The connection registers FTS5 through `openPool`, as the `driver.go` comment already anticipates.
    - `dest` must not exist. The method fsyncs the file and its directory.
    - Add `(*DB).CheckpointPassive(ctx)` (`wal_checkpoint(PASSIVE)`). It never waits on a reader. Because `VACUUM INTO` reads through the WAL, a passive checkpoint that stops short costs nothing.
-2. **The append gate in `internal/service/posts`.** `Writer` gains a `sync.RWMutex`. `Append` holds it for reading around `th.Actor.Append`. `(*Writer).Hold() (release func())` takes it for writing:
-   - new appends wait;
-   - in-flight appends finish first;
-   - reads never touch the gate.
+2. **The append gate in `internal/service/posts`.** It must be a gate that can be abandoned, not a `sync.RWMutex`. A pending `RWMutex.Lock` cannot be cancelled, and while it waits it blocks every new reader, so one stalled append could hold all appends past the cap (Terva review 1943). `Writer` gains a small gate:
+   - **State.** A mutex guards three fields: `active`, the count of appends in flight; `held`, a bool; and `open`, a channel that is closed whenever `held` is false.
+   - **`Append`.** While `held` is true, it waits on `open` without holding the mutex. Then it increments `active`, runs `th.Actor.Append`, and decrements `active`. The decrement signals the holder when `active` reaches 0.
+   - **`(*Writer).Hold(ctx) (release func(), err error)`.**
+     1. It sets `held` and makes a fresh `open`. New appends now wait.
+     2. It waits until `active` is 0 or until `ctx` is done.
+     3. If `ctx` is done first, it clears `held`, closes `open`, and returns `ctx.Err()`. The waiting appends then go on, and the stalled one finishes whenever its actor does.
+     4. `release` clears `held` and closes `open`.
+   - Reads never touch the gate.
 
    serve builds exactly one `Writer` (`threadSvc.Writer`), and the jobs and services reach it through `threadSvc`. Add `TestEveryAppendGoesThroughTheWriter`. It scans the non-test Go files under `internal/` and `cmd/` for `.Actor.Append(` and fails on any caller outside an allowlist. The allowlist is `posts.Writer`, `cmd/ketju/e2e.go` (seeding, not served) and `threadlog` itself. This follows the session chokepoint test's pattern.
 3. **The serve side in a new `internal/backup` package.**
    - `Snapshot(ctx, Deps)` runs the five steps in order:
-     1. `Hold`;
+     1. `Hold(ctx)`;
      2. `proj.CatchUp(ctx, reopen)`, the same sweep serve's startup runs;
      3. `CheckpointPassive`;
      4. `SnapshotInto(data/backup.staging-<random>/ketju.db)`;
      5. `release`.
 
-     It returns the staging path and the pause in milliseconds. The pause has a cap, `PauseCap`, of 60 s. When the cap passes, the context cancels `VACUUM INTO` (SQLite interrupt), the pause is released, the staging directory is removed, and the request fails.
+     It returns the staging path and the pause in milliseconds. One context, with a deadline of `PauseCap` (60 s) from the call, runs all five steps, so the cap counts from the moment appends start waiting. When the cap passes, the step in progress is abandoned:
+     - `Hold` gives up as in step 2;
+     - `CatchUp` and `VACUUM INTO` are cancelled (SQLite interrupt).
+
+     Then the pause is released, the staging directory is removed, and the request fails.
    - `Listen(dataDir, uid, snap)` creates `ketju.sock`, chmods it to 0600, and accepts connections.
    - The peer's uid is read with `golang.org/x/sys/unix`:
      - `GetsockoptUcred` on Linux;
@@ -164,6 +174,14 @@ Groomed 2026-10-02 for Phase 4 (TKT-01M3YMG0M1) against main at ed82f15e.
     - a thread page read during the pause is served;
     - appends before and after the pause are not delayed;
     - a `PauseCap` seam shorter than the snapshot fails the request, releases the pause, and leaves no `backup.staging-*`.
+- `internal/service/posts` `TestHoldGivesUpOnAStalledAppend` (Terva review 1943):
+  - Setup: an actor seam blocks one append mid-write, and `Hold` runs with a short deadline.
+  - Checks:
+    - `Hold` returns `context.DeadlineExceeded` within the deadline plus a margin;
+    - appends that queued behind the pending hold complete once it gives up;
+    - the stalled append completes when it is released;
+    - a second `Hold` then succeeds.
+  - `TestHoldWaitsForInFlightAppends`: an append in flight when `Hold` is called finishes before `Hold` returns, and no append starts between `Hold` and `release`. Run under `-race`.
 - `TestBackupSocketAnswersOnlyItsOwner`:
   - Setup: a peer-credential seam reports another uid.
   - Checks:
