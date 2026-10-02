@@ -34,7 +34,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T02:56:20Z
+updated_at: 2026-10-02T02:58:48Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -187,3 +187,7 @@ Terva review 1875 (head dfb1e736, base 25ad977a): finding 1 of 1838 resolved; bo
 **agent:claude-code/phase3-settings-client** at 2026-10-02T02:56:20Z
 
 Terva review 1876 (head f6c0fcdf, base 25ad977a): both 1875 findings resolved; the new medium 'Coordinate viewer refreshes with preference saves' is fixed. state/viewer.ts gains setViewerSettings, which counts each settings answer taken from GET or PATCH /settings; refreshViewer keeps the viewer's settings over its /me answer's when one was taken since the refresh was asked for, for the same viewer, and syncs the theme from the result. Regression tests in state/viewer.test.ts: a /me asked for before a save and answered after it keeps the saved settings and theme while taking its other fields; a /me asked for after a save takes its own settings.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-02T02:58:48Z
+
+Terva review 1879 (head c2824d5e, base 25ad977a): the 1876 finding is resolved, and the new medium 'Invalidate held thread pages when /me changes the page size' is fixed. state/viewer.ts replaces the viewer through one setViewer, which drops every thread page (forgetAllThreadPages) whenever the page size changes, whether the change came from /settings or from /me. The settings screen no longer does it itself. Regression test in state/viewer.test.ts: a /me with the same page size keeps a populated thread cache, and a /me with another size empties it. This is review round 4 on #342.

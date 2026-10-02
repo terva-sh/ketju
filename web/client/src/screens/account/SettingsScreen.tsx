@@ -6,7 +6,6 @@ import { asProblem, problemMessage } from '../../api/problem';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../../components/ErrorPanel';
 import { syncThemeFromAccount, themePrefs } from '../../state/theme';
-import { forgetAllThreadPages } from '../../state/threads';
 import { setViewerSettings, viewer } from '../../state/viewer';
 import { SettingsHead } from './settings';
 
@@ -22,12 +21,10 @@ type Key = 'timezone' | 'page_size' | 'theme';
 
 // adopt makes s the viewer's settings, so PostTime and the theme change at
 // once, and takes the account's theme (state/theme.ts). Thread pages cut at
-// another page size are dropped with the old size.
+// another page size are dropped by state/viewer.ts, which does so for /me
+// too.
 function adopt(s: Settings) {
-  const size = viewer.value.settings.page_size;
-  if (!setViewerSettings(s)) return;
-  if (size !== s.page_size) forgetAllThreadPages();
-  syncThemeFromAccount(viewer.value);
+  if (setViewerSettings(s)) syncThemeFromAccount(viewer.value);
 }
 
 // saves is the queue every settings save goes through, one at a time, each

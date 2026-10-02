@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { resetApiCache } from '../api/client';
 import { anonymous } from '../bootstrap';
 import member from '../../../../internal/dto/testdata/golden/me.member.json';
+import { threadPage } from '../testing';
+import { storeThreadPage, threadCache } from './threads';
 import { notifications, refreshViewer, setViewerSettings, viewer } from './viewer';
 
 afterEach(() => {
@@ -57,6 +59,21 @@ describe('the viewer', () => {
     vi.stubGlobal('fetch', async () => new Response(JSON.stringify(member), { status: 200 }));
     await refreshViewer();
     expect(viewer.value.settings).toEqual(member.settings);
+  });
+
+  // Terva review 1879: a page size learned from /me, set on another device,
+  // drops the pages cut at the old size, as a save on this one does.
+  it('drops held thread pages when /me brings another page size', async () => {
+    viewer.value = member;
+    storeThreadPage('t1', threadPage({ id: 't1', slug: 'a', title: 'A' }));
+    expect(threadCache.value.size).toBe(1);
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(member), { status: 200 }));
+    await refreshViewer();
+    expect(threadCache.value.size).toBe(1);
+    const ten = { ...member, settings: { ...member.settings, page_size: 10 } };
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify(ten), { status: 200 }));
+    await refreshViewer();
+    expect(threadCache.value.size).toBe(0);
   });
 
   it('stays as it was when /me fails', async () => {

@@ -3,6 +3,7 @@ import { apiGet } from '../api/client';
 import type { Me, Settings } from '../api/dto';
 import { readBootstrap } from '../bootstrap';
 import { syncThemeFromAccount } from './theme';
+import { forgetAllThreadPages } from './threads';
 
 // viewer is who is reading, seeded from the bootstrap block the shell inlines
 // (docs/07 "Embedding") so the first paint needs no request, and replaced
@@ -44,8 +45,18 @@ export function setViewerSettings(s: Settings): boolean {
   settingsTaken++;
   const was = viewer.value.settings;
   if (was.timezone === s.timezone && was.locale === s.locale && was.page_size === s.page_size && was.theme === s.theme) return false;
-  viewer.value = { ...viewer.value, settings: s };
+  setViewer({ ...viewer.value, settings: s });
   return true;
+}
+
+// setViewer replaces the viewer. A page size other than the one the
+// thread pages held were cut at drops them all, however the client learned
+// of it: pages cut at 25 would otherwise sit beside pages cut at 10 under
+// one log length (Terva review 1879).
+function setViewer(me: Me) {
+  const size = viewer.value.settings.page_size;
+  viewer.value = me;
+  if (me.settings.page_size !== size) forgetAllThreadPages();
 }
 
 // refreshViewer fetches /me and replaces the viewer with it, and takes the
@@ -64,7 +75,7 @@ export async function refreshViewer(signal?: AbortSignal): Promise<Me> {
   const me = await apiGet<Me>('/api/v1/me', { signal });
   if (n === refreshes && !signal?.aborted) {
     const keep = settingsTaken !== since && me.user?.handle === viewer.value.user?.handle;
-    viewer.value = keep ? { ...me, settings: viewer.value.settings } : me;
+    setViewer(keep ? { ...me, settings: viewer.value.settings } : me);
     syncThemeFromAccount(viewer.value);
   }
   return me;
