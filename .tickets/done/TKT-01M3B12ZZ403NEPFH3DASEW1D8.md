@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3B12ZZ403NEPFH3DASEW1D8
 title: Define thread tag rules so new threads can carry tags
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,17 +21,10 @@ references:
     path: null
   - ref: pr:361
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-b12zz4
-  branch: run/b12zz4-tag-rules
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
-  commit: 30834b8e9b8dc69a282dac88cc580503fd08244c
-  session: null
-  claimed_at: 2026-10-02T19:14:55Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-25T00:57:46Z
-updated_at: 2026-10-02T19:23:05Z
+updated_at: 2026-10-02T19:31:29Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -54,11 +47,11 @@ Decide these in docs/04 or docs/08. Then accept tags in `CreateThread` (internal
 
 ## Acceptance criteria
 
-- [ ] docs/04 `thread_tags`, docs/08 "Thread tags" and the docs/07 `POST /forums/{slug}/threads` row state the syntax, the limits, who may set tags and the reserved list, and match the built behaviour
-- [ ] POST /forums/{slug}/threads folds, trims, de-duplicates and sorts tags, writes them into ThreadCreated, and the header, the thread list and a reindexed database agree (TestCreateThreadWithTags, TestCreateThreadTagsSurviveReindex)
-- [ ] A tag that is not a string, does not match, is over 24 characters, or a ninth distinct tag is validation-failed with the documented field and code, and nothing is written (TestCreateThreadTagRefusals)
-- [ ] A reserved tag is accepted from a role moderator, a group-granted moderator of the forum and an agent account, and refused with reserved_tag to anyone else, a moderator of another forum included (TestReservedTagOnCreate)
-- [ ] The six seed tags are creatable through the API, and domain.ReservedTags matches docs/08 (TestCreateThreadSixSeedTagsCreatable, TestReservedTagsDocumented)
+- [x] docs/04 `thread_tags`, docs/08 "Thread tags" and the docs/07 `POST /forums/{slug}/threads` row state the syntax, the limits, who may set tags and the reserved list, and match the built behaviour
+- [x] POST /forums/{slug}/threads folds, trims, de-duplicates and sorts tags, writes them into ThreadCreated, and the header, the thread list and a reindexed database agree (TestCreateThreadWithTags, TestCreateThreadTagsSurviveReindex)
+- [x] A tag that is not a string, does not match, is over 24 characters, or a ninth distinct tag is validation-failed with the documented field and code, and nothing is written (TestCreateThreadTagRefusals)
+- [x] A reserved tag is accepted from a role moderator, a group-granted moderator of the forum and an agent account, and refused with reserved_tag to anyone else, a moderator of another forum included (TestReservedTagOnCreate)
+- [x] The six seed tags are creatable through the API, and domain.ReservedTags matches docs/08 (TestCreateThreadSixSeedTagsCreatable, TestReservedTagsDocumented)
 
 ## Implementation plan
 
@@ -170,3 +163,7 @@ run decision: pending maintainer review. Phase 4 grooming (tags and archive lane
 - A tag named twice, before or after folding, keeps one copy. Tags are written sorted and members see them sorted (docs/04 `thread_tags`).
 - "Moderator" for a reserved tag means `moderate` in the forum, by role or through a group. An agent account is `users.kind = 'agent'` (docs/08 "Thread tags").
 - Only ASCII is folded and surrounding whitespace is trimmed. A refused tag is `validation-failed` with `{field: "tags.N", code}`, using the new codes `invalid_tag` and `reserved_tag`. A reserved tag is a field error rather than `forbidden` (docs/07 `POST /forums/{slug}/threads`).
+
+## Summary
+
+Built on run/b12zz4-tag-rules. POST /forums/{slug}/threads accepts tags under docs/04 thread_tags and docs/08 "Thread tags": trimmed, ASCII-folded, [a-z0-9]+(-[a-z0-9]+)*, 1 to 24 characters, at most 8, a repeat kept once, sorted, written into ThreadCreated. The reserved tag agent is accepted only from a viewer with moderate in the forum (role or group) or an agent account. The rule is domain.NormalizeTag and domain.ReservedTags. threads.NormalizeTags gives the set and the field errors, and api.decodeTags reads the JSON. TKT-01M29CYSCP's retag and tag filter reuse both. New form codes invalid_tag and reserved_tag. wrong_type is answered alone, from the decode, before the service runs (docs/07). Every criterion is ticked. No migration, route, audit action or log format change.
