@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T23:20:03Z
+updated_at: 2026-10-02T23:36:40Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -183,6 +183,20 @@ Terva review 1999 (head de48406e, base 60653e22) raised two medium findings. Bot
 2. A stamped build hid a dirty tree: buildinfo dropped vcs.modified whenever a commit was stamped. The release tool now stamps `buildinfo.modified=true` when it builds from a dirty tree under --allow-dirty, and prints a line saying so. Its host check expects `commit X-dirty`. buildinfo reports Modified when the stamp says so, or when the toolchain recorded uncommitted changes in the tree of the commit it reports. A toolchain record for another revision is still ignored. TestStampedKeepsADirtyTree covers this.
 
 Checked by hand: `--out reltest --allow-dirty` from the module root builds both binaries and prints `commit de48406e975c-dirty`.
+
+**agent:claude-code/phase4-run-cxk3s** at 2026-10-02T23:36:40Z
+
+Terva review 2000 (head 77964de5) resolved both findings from 1999 and raised one medium finding. It is fixed.
+
+The finding: with --out inside a clean checkout, the first binary became an untracked file before the second build ran, so the second binary recorded vcs.modified=true.
+
+The fix has two parts:
+- The binaries are now built in a temporary directory outside the checkout (`stagingDir`, which refuses a TMPDIR inside it) and moved into DIR once every check has passed.
+- A new check, `CheckProvenance`, refuses a binary whose recorded vcs.revision is not the stamped commit, or whose vcs.modified differs from the dirty state the run found at the start. Any other way a tree changes mid-run therefore fails the run instead of mislabelling a binary.
+
+Tests: TestCheckProvenance and TestStagingDirIsOutsideTheCheckout.
+
+Run by hand on a clean checkout at c645b021 with `--out reltest` inside it: both binaries built, the arm64 one records vcs.modified=false, and the host line reads `commit c645b0215830` with no -dirty.
 
 ## Summary
 
