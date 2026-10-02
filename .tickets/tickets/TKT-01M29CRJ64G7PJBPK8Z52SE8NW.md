@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CRJ64G7PJBPK8Z52SE8NW
 title: Implement thread archival
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -23,15 +23,22 @@ references:
     path: docs/08-moderation.md
   - ref: pr:361
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-crj64
+  branch: run/crj64-archive
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
+  commit: 06db6b6f96a53bc238455a37bf964f05a9c0c905
+  session: null
+  claimed_at: 2026-10-02T21:51:42Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-02T17:24:09Z
+updated_at: 2026-10-02T21:51:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-tags-archive
+  id: agent:claude-code/phase4-run-crj64
   name: ""
 extensions: {}
 ---
@@ -64,6 +71,38 @@ Archiving is stronger than locking. A locked thread is a moderation state a mode
 - **The cache.** `threadcache` already evicts archived threads first (`Options.Archived`, `MarkArchived`, and the tests `TestArchivedThreadIsEvictedBeforeALiveOne` and `TestMarkArchivedMovesAThreadToTheFrontOfTheQueue`). `cmd/ketju/serve.go` `archived(d)` reads the flag from the projection.
 - **Unarchiving is split out.** It is not done here. docs/08 says "there is no unarchive record in v1 (03)", and docs/04 says a thread's archive "cannot be undone only because the log has no unarchive record". docs/15 and this ticket's original criterion 4 say a moderator unarchives. An unarchive needs a record type docs/03 does not name, which is docs/15 stop class 2, and the documents disagree on who may do it, which is class 6. The question is TKT-01M3YSQQ5X (Decide whether an archived thread can be unarchived, and by whom), with options and no default. This ticket does not wait on it.
 - **The client is a separate ticket**, TKT-01M3YSQQ33 (Show archived threads and offer archiving in the client), so this server work does not queue for the committed dist (docs/15 "Order").
+
+### Revised at claim
+
+The approach below stands as groomed, except where this section says
+otherwise:
+
+- **The `archived` field is not added here.** Step 5's
+  `ThreadHeader.archived` and `ThreadRow.archived` change the DTO goldens,
+  and the client's `dto-contract.ts` holds `dto.ts` to those goldens with no
+  extra keys. So the field cannot land without a change under `web/client`,
+  which this server lane may not make (docs/15 "Order": one open PR changes
+  the dist). It moves to TKT-01M3YSQQ33 (Show archived threads and offer
+  archiving in the client), which adds it to the Go DTO and `dto.ts`
+  together. Criterion 1's "the header and list rows say archived" stays
+  unticked here. docs/07 says the field is not served yet. The viewer block
+  still says what a client needs to offer: `can_reply` and `can_upload` are
+  false.
+- The actor's refusal also covers a batch. `frameFor` refuses when the actor
+  is sealed or a `ThreadArchived` is already staged in the batch, and
+  `commit` seals the actor once the batch holding it is written.
+- `threadcache` reports a thread archived when its actor is sealed as well
+  as when it was marked. So a reply that checks `th.Archived()` after an
+  archive answers before doing any work.
+- `ErrArchived` maps to `conflict` in `internal/problem`. The flag sweep's
+  auto-hide treats it as nothing to hide.
+- Test fixtures that append random records through an actor stop a thread
+  at its `ThreadArchived`: `cmd/ketju` `writeThreads` and the threadlog
+  property tests. `TestArchivedThreadIsEvictedBeforeALiveOne` writes its
+  threads before it reopens them as archived.
+- `TestArchivedStateSurvivesReindex` drives the real serve: an admin
+  archives through the API, then `ketju reindex` runs and serve restarts.
+  `TestRedactReachesAnArchivedThread` uses the redact fixture's world.
 
 ### Approach
 
