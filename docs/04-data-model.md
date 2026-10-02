@@ -1065,6 +1065,31 @@ test that keeps the forum index's queries from scanning one.
 ```
 thread_id, tag
 ```
+The thread's tags, replaced wholesale by `ThreadCreated` and `ThreadTagged`
+(03). **Decided by the maintainer (2026-10-02, TKT-01M3M4KVNW):**
+- A tag is lowercase ASCII words joined by single hyphens,
+  `[a-z0-9]+(-[a-z0-9]+)*`. Uppercase input is folded to lowercase, so
+  `Garden` and `garden` are one tag, and the row holds the folded string.
+- A tag is 1 to 24 characters, and a thread carries at most 8.
+- Tags are free text: any tag that passes these rules is accepted. A
+  moderator corrects a thread with a retag (08). A curated list per forum
+  may come later.
+- Who may set a tag, and the reserved tags, are in 08 "Thread tags".
+
+These rules bind what the service writes, not what a reader accepts: a log
+written before them, or by the e2e seed, is read as it stands.
+
+**Decided by the run (2026-10-02, pending maintainer review):**
+- A request that names a tag twice, before or after folding, keeps one
+  copy and is not refused. Alternatives: refusing it with
+  `validation-failed` lost because the author meant the tag once and
+  nothing is lost by keeping it once; a post's attachments drop repeats the
+  same way (07).
+- Members see a thread's tags sorted. The service writes them sorted into
+  the record, and the projection and the API list them `ORDER BY tag`, as
+  they already do. Alternatives: the order the author gave lost because
+  this table keeps no order, a retag would reorder them anyway, and one
+  order reads the same in every row and on the thread page.
 
 ### post_meta
 ```

@@ -142,6 +142,39 @@ moderated. Whether to let an agent resolve flags or split threads is an
 operator's decision rather than a rule here. The audit log records the actor
 either way, so an agent's moderation is as reviewable as anyone's.
 
+## Thread tags
+
+What a tag may be is in 04 `thread_tags`. Who may set one is decided here.
+
+**Decided by the maintainer (2026-10-02, TKT-01M3M4KVNW):**
+- Anyone who may create a thread in a forum (`create_thread`) may tag it
+  when they create it, except with a reserved tag.
+- Only a moderator or an agent account may set a reserved tag. An agent
+  working thread is marked by one (06, 10 item 33), so a member cannot
+  make a human thread look like an agent's.
+- Tags are free text. A moderator corrects a thread's tags with a retag,
+  which writes a `ThreadTagged` replacing the whole set (03). A curated
+  list per forum may come later.
+- The reserved list lives here. It is:
+<!-- reserved-tags:begin -->
+  - `agent`
+<!-- reserved-tags:end -->
+
+**Decided by the run (2026-10-02, pending maintainer review):**
+- "Moderator" means anyone holding `moderate` in the thread's forum, by
+  role or through a group, both for a reserved tag on create and for a
+  retag. A retag needs nothing else, so a moderator may set or remove a
+  reserved tag. Retagging is refused on an archived thread and allowed in
+  an archived forum, as locking is. An agent account is one whose
+  `users.kind` is `agent`, the account the frame's machine-authored bit
+  names (03). The thread's author may not retag. Alternatives: a moderator
+  or admin by role only lost because thread moderation has followed the
+  forum grant since 2026-09-30 ("Decided 2026-09-30" above), and a
+  group-granted moderator who may lock, move and rename a thread but not
+  retag it would be a gap with no reason behind it. Letting the author
+  retag lost because the Primitives table gives the author rename alone,
+  and an author who wants different tags asks a moderator, as for a move.
+
 ## Rate limits
 
 Humans are unlimited. There is no per-user post rate limit, on the same reasoning
@@ -377,6 +410,21 @@ post (their posts are styled as such). Locking does not archive. Archiving
 (admin) is a stronger state used for very old threads: read-only for
 everyone including moderators, and the open-thread cache drops archived
 threads eagerly.
+
+"Everyone" includes admins: after its `ThreadArchived` the service appends
+nothing more to the thread's log for anyone (03; 04 "permissions" contrasts
+this with an archived forum, where an admin may still post; 07 answers
+`conflict`). Reading, watching, muting and the read position are unchanged,
+as in an archived forum (TKT-01M29CRJ64).
+
+**Decided by the run (2026-10-02, pending maintainer review)**, for
+TKT-01M29CRJ64: the offline `ketju redact` still redacts an archived
+thread. It is the tool for a takedown or an erasure that must reach every
+post (03 "Hard redaction"), and v1 cannot undo an archive, so refusing it
+would keep the text for good. Alternatives: refusing it, so that nothing at
+all is appended after `ThreadArchived`, lost for that reason; requiring an
+unarchive first lost because v1 has no unarchive record (03), and whether
+it gets one is the maintainer's question (TKT-01M3YSQQ5X).
 
 ## What is intentionally missing
 

@@ -67,6 +67,31 @@ not absorb; the mockups' "3 days ago" lost to the absolute-time decision of
 2026-10-01; and a post count without deleted posts lost because it would
 disagree with the pager's "posts 51–75 of 212" on the same screen.
 
+**Decided by the run (2026-10-02, pending maintainer review)**, for
+TKT-01M3YSQPZX and TKT-01M3YSQQ33:
+- The thread's tags follow that line as chips, drawn as the thread list
+  draws them, each a link to the forum's list filtered to it ("Thread list
+  views"). A thread with no tags shows nothing there.
+- An archived thread says "This thread is archived." where a locked one
+  says it is locked, and offers nobody, admins included, a reply,
+  an edit, a delete, a restore, a flag or a moderation control, because
+  the server refuses every one (08 "Locking semantics"). Its row in a list
+  carries an "Archived" flag where a locked row carries the lock. An
+  archived thread is listed and read as before.
+- Tags are set on the new thread screen in one optional "Tags" field below
+  the title, separated by spaces or commas, and a moderator changes them
+  from the thread's moderation menu with "Edit tags", the same field
+  filled in. A refused tag is named under the field.
+
+Alternatives: hiding an archived thread from lists lost because 04 decided
+an archived forum stays readable, and hiding makes archiving a delete in
+disguise; a disabled composer on an archived thread lost because it offers
+a control that can never work; a widget that turns each tag into a chip as
+it is typed lost because it costs reader bytes and its own keyboard
+handling for at most 8 short words, where a text field needs neither; a
+list of tags to pick from lost because tags are free text (04
+`thread_tags`).
+
 ### Landing on return
 
 A signed-in user opening a thread they have visited lands on the page
@@ -451,6 +476,20 @@ lost because a reply to yourself is not what the lens is for
     title along its line by a different amount, so the titles no longer
     start at one edge.
 - Optional per-forum display `?sort=created` for announcement forums.
+- **Filtering by tag.** **Decided by the run (2026-10-02, pending
+  maintainer review)**, for TKT-01M29CYSCP and TKT-01M3YSQPZX: a tag chip
+  is a link. In a forum's list and on the thread head it opens that
+  forum's list filtered to the tag, `/f/{slug}?tag=TAG`; on a cross-forum
+  list it opens the row's own forum filtered the same way. A filtered list
+  shows only threads carrying the tag. Pins carrying it still lead the
+  list, and a pin without it is left out. Its header says "Tagged TAG"
+  with a link back to the whole list. One tag filters at a time. Alternatives: a tag picker in the forum's header
+  lost because it needs every tag a forum uses, a new endpoint and a design
+  nobody has drawn, where the chip a reader is already looking at needs
+  none; several tags at once lost for the same reason, and because nothing
+  in 06 or 10 item 33 asks for more than "filters by tag"; keeping every
+  pin at the head of a filtered list lost because the reader asked for one
+  tag's threads.
 - The forum index (the front page). **Decided by the run (2026-10-01,
   maintainer approved):** its heading is the `site_name` setting, the
   same value the wordmark shows (07 "Site settings"), as the mockups head

@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3M4KVNW0VTZFWHRZK8V28RZ
 title: Decide what a thread tag may be and who may set one
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -21,12 +21,12 @@ references: []
 claim: null
 archive: null
 created_at: 2026-09-28T13:52:34Z
-updated_at: 2026-10-02T15:42:09Z
+updated_at: 2026-10-02T17:16:32Z
 created_by:
   id: agent:claude-code/phase1-run-438e26c1
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-run-orchestrator
+  id: agent:claude-code/phase4-groom-tags-archive
   name: ""
 extensions: {}
 ---
@@ -91,11 +91,11 @@ The answers are written into docs/04 (beside `thread_tags`) or docs/08, and into
 
 ## Acceptance criteria
 
-- [ ] Whether tags on create are Phase 1 or Phase 4 is decided
-- [ ] Tag syntax, case handling and limits are decided and written into docs/04 or docs/08
-- [ ] Whether tags are free text or a per-forum vocabulary, and who may set them on create, is decided and written into docs
-- [ ] docs/07's POST /forums/{slug}/threads row states the rules
-- [ ] TKT-01M3B12ZZ4's settled items carry the answers
+- [x] Whether tags on create are Phase 1 or Phase 4 is decided
+- [x] Tag syntax, case handling and limits are decided and written into docs/04 or docs/08
+- [x] Whether tags are free text or a per-forum vocabulary, and who may set them on create, is decided and written into docs
+- [x] docs/07's POST /forums/{slug}/threads row states the rules
+- [x] TKT-01M3B12ZZ4's settled items carry the answers
 
 ## Notes
 
@@ -117,3 +117,20 @@ The smaller points were not put to the maintainer. They are proposed as run deci
 - Members see tags in sorted order, as the projection and the API already list them.
 
 What remains of this spike is the "Done when" work: writing the answers into docs/04, docs/07 and docs/08, and into TKT-01M3B12ZZ4's plan. That work belongs to the Phase 4 tags grooming lane.
+
+## Summary
+
+The maintainer answered every question on 2026-10-02, and the answers are written into the design documents on branch groom/p4-tags-archive:
+- docs/04 `thread_tags` gives the syntax `[a-z0-9]+(-[a-z0-9]+)*`, with uppercase folded to lowercase. A tag is 1 to 24 characters and a thread carries at most 8. Tags are free text, and a moderator corrects them with a retag.
+- docs/08 "Thread tags" says who sets tags: anyone with `create_thread`, except reserved tags, which only a moderator or an agent account may set. The reserved list is `agent`, between `reserved-tags` markers that a test will read.
+- docs/07's `POST /forums/{slug}/threads` row states the rules and the refusals.
+- Question 0 (Phase 1 or Phase 4) was settled for Phase 4 on 2026-09-28.
+
+Each is marked "Decided by the maintainer (2026-10-02)".
+
+The two smaller points are run decisions pending maintainer review, in docs/04 `thread_tags`: a repeated tag keeps one copy, and members see tags sorted. The lane added three more:
+- "Moderator" means `moderate` in the forum, by role or group, for reserved tags and for retags.
+- Only ASCII is folded.
+- A refused tag is reported as a field error, with the new codes `invalid_tag` and `reserved_tag`.
+
+TKT-01M3B12ZZ4 (Define thread tag rules so new threads can carry tags) carries the answers under `### Settled in grooming` and is back in ready.
