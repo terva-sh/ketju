@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YME9KGJ1XW7RHCRFZ621A0
 title: Answer method-not-allowed for a wrong verb on an API route
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -18,15 +18,22 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-me9kg
+  branch: run/me9kg-method-not-allowed
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-afae7cbdfc4c034cc
+  commit: cac3ed9d6ffdeba7495ba7b79aef8f8ead88503f
+  session: null
+  claimed_at: 2026-10-02T20:45:26Z
+  expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T17:29:05Z
+updated_at: 2026-10-02T20:45:27Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-correctness
+  id: agent:claude-code/phase4-run-me9kg
   name: ""
 extensions: {}
 ---
