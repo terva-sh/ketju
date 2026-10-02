@@ -164,8 +164,14 @@ Every invariant of docs/13 and docs/14 holds. These are added:
   docs/08, such as refusing every move that would widen readership, would
   change what a moderator can do. That is stop class 1 and goes to the
   maintainer.
-- **Archived means read-only for everyone**, moderators included, until a
-  moderator unarchives the thread.
+- **Archived means read-only for everyone**, moderators included. Only an
+  admin archives a thread (docs/08), and v1 has no unarchive. **Decided by
+  the maintainer (2026-10-02, TKT-01M3YSQQ5X):** keep the design as written.
+  The alternatives were a `ThreadUnarchived` record (type 31) that admins
+  write, and the same record for moderators. Each would change the frozen
+  log format. An unarchive record can come after v1. An earlier draft of
+  this line said "until a moderator unarchives the thread"; that
+  contradicted docs/04 and docs/08 and was wrong.
 - **A backup restores.** A snapshot that `ketju backup` produces is one that
   `ketju fsck` passes after restoring it.
 

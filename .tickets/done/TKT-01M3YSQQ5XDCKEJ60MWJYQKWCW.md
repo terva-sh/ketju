@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YSQQ5XDCKEJ60MWJYQKWCW
 title: Decide whether an archived thread can be unarchived, and by whom
 type: spike
-status: draft
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-02T17:24:09Z
+updated_at: 2026-10-02T18:11:12Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-tags-archive
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -53,6 +53,16 @@ What each needs written: (a) changes docs/15 only. (b) and (c) add a row to docs
 
 ## Acceptance criteria
 
-- [ ] The maintainer has chosen (a), (b) or (c), or stated another answer, and it is recorded in a note
-- [ ] docs/03, docs/04, docs/08 and docs/15 agree with the answer, and a record type, if one is claimed, is in the docs/03 table with its number, body and class
-- [ ] If the answer is (b) or (c), an implementation ticket is filed with milestone phase-4, depending on TKT-01M29CRJ64
+- [x] The maintainer has chosen (a), (b) or (c), or stated another answer, and it is recorded in a note
+- [x] docs/03, docs/04, docs/08 and docs/15 agree with the answer, and a record type, if one is claimed, is in the docs/03 table with its number, body and class
+- [x] If the answer is (b) or (c), an implementation ticket is filed with milestone phase-4, depending on TKT-01M29CRJ64
+
+## Notes
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T18:11:11Z
+
+Maintainer decision, 2026-10-02: (a), no unarchive in v1. The maintainer was asked as a choice and picked 'No unarchive in v1 (Recommended)' over an admin-only ThreadUnarchived record (31) and a moderator one, each of which would change the frozen log format. docs/04 and docs/08 already say this; docs/15's invariant is corrected in the same PR. docs/03 claims no new record type. No implementation ticket is needed. An unarchive record can be considered after v1.
+
+## Summary
+
+Answered by the maintainer on 2026-10-02: no unarchive in v1. Only an admin archives a thread, archiving is permanent, and docs/03 claims no record type 31. docs/15 now agrees with docs/04 and docs/08. Criterion 3 is ticked because it does not apply: the answer was neither (b) nor (c).
