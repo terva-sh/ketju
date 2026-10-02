@@ -1,6 +1,8 @@
 import type { ComponentChildren } from 'preact';
+import { useLocation } from 'preact-iso';
 import { ReplyBar } from '../composer/ReplyBar';
 import { focusMainHeading } from '../components/focus';
+import { useGlobalShortcuts } from '../keyboard/shortcuts';
 import { isPhone } from '../state/layout';
 import { shellContext } from '../state/shell';
 import { viewer } from '../state/viewer';
@@ -21,7 +23,12 @@ import './shell.css';
 // bar's place (docs/06 "Mobile"): the screen says so through its shell
 // context. A screen that is a composer (composing) has no bar at the foot at
 // all.
+//
+// It installs / once for every screen it draws (useGlobalShortcuts,
+// TKT-01M3V7GE59), which acts only where the top bar is, above 720 px.
 export function Shell({ children }: { children: ComponentChildren }) {
+  const { route } = useLocation();
+  useGlobalShortcuts(route);
   const phone = isPhone.value;
   const reply = phone ? shellContext.value?.reply : undefined;
   const composing = phone && !!shellContext.value?.composing;

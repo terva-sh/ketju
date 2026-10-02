@@ -425,7 +425,7 @@ describe('the shortcuts on a thread page', () => {
     await type(root, '?');
     const dialog = root.querySelector('[role=dialog]')!;
     expect(dialog.getAttribute('aria-labelledby')).toBe('help-title');
-    expect([...dialog.querySelectorAll('[data-shortcut]')].map((r) => r.getAttribute('data-shortcut'))).toEqual(['j', 'k', 'g', 'u', 'n', '?']);
+    expect([...dialog.querySelectorAll('[data-shortcut]')].map((r) => r.getAttribute('data-shortcut'))).toEqual(['j', 'k', 'g', 'u', 'n', '?', '/']);
     // Keys typed in the dialog are the dialog's.
     await type(root, 'j');
     expect(focused()).not.toBe('post-3');
@@ -528,6 +528,7 @@ describe('the visible controls', () => {
       u: '[data-shell=toolbar] [data-action=first-unread]',
       n: '.thread-foot button.next-unread',
       '?': '.thread-foot button.shortcuts-help',
+      '/': '.tools a.search[href="/search"]',
     };
     expect(root.querySelector(control[key]), key).not.toBeNull();
   });

@@ -208,7 +208,7 @@ export function SettingsScreen() {
               </label>
             </div>
             <p id="settings-shortcuts-hint" class="settings-hint">
-              On a desktop: j, k, g, u, n and ?. Turn them off if they get in the way of a screen reader or voice
+              On a desktop: j, k, g, u, n, ? and /. Turn them off if they get in the way of a screen reader or voice
               control.
             </p>
             <FieldError id="shortcuts" error={errors.shortcuts} />

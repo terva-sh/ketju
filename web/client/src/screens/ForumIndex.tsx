@@ -177,8 +177,8 @@ function IndexFoot({ forums, members }: { forums: Forum[]; members: number | nul
         <HelpOverlay
           lead={
             on
-              ? 'Here ? opens this list. The other keys work on a thread page.'
-              : 'These keys work on a thread page.'
+              ? 'Here ? opens this list and / opens search. The other keys work on a thread page.'
+              : 'When they are on, ? and / work here, and the other keys on a thread page.'
           }
         />
       )}

@@ -1,5 +1,5 @@
 import { computed, effect, signal } from '@preact/signals';
-import { useEffect, useRef } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef } from 'preact/hooks';
 import { apiGet } from '../api/client';
 import type { ThreadList, ThreadPage, ThreadRow } from '../api/dto';
 import { pageHref } from '../components/thread/Pager';
@@ -20,6 +20,10 @@ import { viewer } from '../state/viewer';
 //
 // They can be turned off (WCAG 2.1 SC 2.1.4, TKT-01M3V9DWTN; docs/06
 // "Paged, not infinite"): then no character key acts on any page.
+//
+// One more works on every desktop screen with the top bar: / opens search
+// (TKT-01M3V7GE59, useGlobalShortcuts). Its visible control is the top
+// bar's Search link.
 
 // shortcuts is the list the help overlay shows: each key, what it does, and
 // the control that does the same.
@@ -30,6 +34,7 @@ export const shortcuts: { keys: string[]; does: string; control: string }[] = [
   { keys: ['u'], does: 'First unread post', control: 'First unread, in the thread’s actions' },
   { keys: ['n'], does: 'Next unread thread in this forum', control: 'Next unread thread, below the posts' },
   { keys: ['?'], does: 'Show this list', control: 'Keyboard shortcuts, below the posts' },
+  { keys: ['/'], does: 'Search', control: 'Search, in the top bar' },
 ];
 
 // hint is a short message the shortcuts and their controls leave for the
@@ -266,6 +271,42 @@ export const tracksUnread = () => !!viewer.value.user;
 
 // gotoPause is how long g waits after the last digit before going.
 export const gotoPause = 1500;
+
+// openSearch is what / does (docs/06 "Paged, not infinite", TKT-01M3V7GE59).
+// On /search it focuses the query field and selects its text, so typing
+// replaces the search. Anywhere else it goes to /search, whose field takes
+// focus when it has no query.
+export function openSearch(route: (url: string) => void) {
+  if (location.pathname === '/search') {
+    const q = document.getElementById('search-q');
+    if (q instanceof HTMLInputElement) {
+      q.focus();
+      q.select();
+      return;
+    }
+  }
+  route('/search');
+}
+
+// useGlobalShortcuts installs / on every desktop screen with the top bar;
+// the shell mounts it once. The listener goes on in a layout effect, so the
+// key is the page's from the frame the shell is drawn in (TKT-01M3TV4HBF).
+// Every condition is read at the key press: not on a phone, the shortcuts
+// on, the list closed, and not typed into text, the composer or a dialog.
+// preventDefault keeps / from opening Firefox's quick find.
+export function useGlobalShortcuts(route: (url: string) => void) {
+  const live = useRef(route);
+  live.current = route;
+  useLayoutEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== '/' || isPhone.value || !shortcutsOn.value || helpOpen.value || ignored(e)) return;
+      e.preventDefault();
+      openSearch(live.current);
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
+}
 
 // useThreadShortcuts installs the shortcuts while a thread page's body is
 // mounted, and focuses the post a move from another page left pending.

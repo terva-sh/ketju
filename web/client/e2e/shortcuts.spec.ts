@@ -69,7 +69,7 @@ test.describe('at 1440 px', () => {
     await page.keyboard.press('?');
     const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator('[data-shortcut]')).toHaveText([/^j/, /^k/, /^g then number then Enter/, /^u/, /^n/, /^\?/]);
+    await expect(dialog.locator('[data-shortcut]')).toHaveText([/^j/, /^k/, /^g then number then Enter/, /^u/, /^n/, /^\?/, /^\/Search/]);
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
     await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();

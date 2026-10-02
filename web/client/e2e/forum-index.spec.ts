@@ -179,7 +179,7 @@ test('a member’s footer names the members, and the desktop offers the shortcut
   await expect(hint).toHaveText('Press ? for keyboard shortcuts');
   const list = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
   await page.keyboard.press('?');
-  await expect(list).toContainText('Here ? opens this list. The other keys work on a thread page.');
+  await expect(list).toContainText('Here ? opens this list and / opens search. The other keys work on a thread page.');
   await page.keyboard.press('Escape');
   await expect(list).toHaveCount(0);
   await hint.click();
@@ -210,7 +210,7 @@ test('with the shortcuts off the footer reads Keyboard shortcuts and ? does noth
   await expect(page.getByRole('dialog')).toHaveCount(0);
   await hint.click();
   const list = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
-  await expect(list).toContainText('These keys work on a thread page.');
+  await expect(list).toContainText('When they are on, ? and / work here, and the other keys on a thread page.');
   await expect(list.getByRole('status')).toHaveText('Single-key shortcuts are off.');
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);

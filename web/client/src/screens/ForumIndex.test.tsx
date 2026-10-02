@@ -361,7 +361,7 @@ describe('the footer', () => {
     expect(key.defaultPrevented).toBe(true);
     await settle(root);
     const dialog = root.querySelector<HTMLElement>('[role=dialog]')!;
-    expect(dialog.textContent).toContain('Here ? opens this list. The other keys work on a thread page.');
+    expect(dialog.textContent).toContain('Here ? opens this list and / opens search. The other keys work on a thread page.');
     await act(async () => dialog.querySelector<HTMLButtonElement>('.help-close')!.click());
     expect(root.querySelector('[role=dialog]')).toBeNull();
 
@@ -401,7 +401,7 @@ describe('the footer', () => {
     hint.focus();
     await act(async () => hint.click());
     const dialog = root.querySelector<HTMLElement>('[role=dialog]')!;
-    expect(dialog.textContent).toContain('These keys work on a thread page.');
+    expect(dialog.textContent).toContain('When they are on, ? and / work here, and the other keys on a thread page.');
     expect(dialog.querySelector('[role=status]')?.textContent).toBe('Single-key shortcuts are off.');
 
     // Turned back on, the same footer binds ? again.
