@@ -108,7 +108,7 @@ tiny invalidation hints keyed on log length; the client reconciles by
 requesting `?after_log_length=X`. This keeps SSE stateless with respect to
 permissions: the follow-up fetch is where authorization happens.
 
-**Decided by the run (2026-10-01, pending maintainer review):** the stream
+**Decided by the run (2026-10-01, maintainer approved):** the stream
 checks access as the thread page does, because docs/14 requires that a live
 event reach a viewer only if that viewer may read the thread when the event
 is sent. The rules (TKT-01M29CRJ3X):

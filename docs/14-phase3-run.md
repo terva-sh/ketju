@@ -173,3 +173,9 @@ briefs.
   in ketju itself." TKT-01M3VBWMA8 is done with its runner criterion unticked,
   and TKT-01M3VDYENN stays open as a draft with no milestone, to record the
   runner problem.
+- **The run's decisions were approved.** On 2026-10-01 the maintainer
+  approved the decisions the run had made so far: "Yes your run decisions are
+  approved" (recorded in #337). The 40 markers in docs/02 to docs/10 that
+  were on main by then now read "maintainer approved". Decisions made after
+  that still read "pending maintainer review"; the tracking ticket's summary
+  lists them.

@@ -740,7 +740,7 @@ statement, and keys the cached posts by the page's authors alone
   `thread.lens.json` a lens page of it, regenerated with
   `go test ./internal/web/api -update`.
 
-**Decided by the run (2026-10-01, pending maintainer review): the `lens`
+**Decided by the run (2026-10-01, maintainer approved): the `lens`
 parameter** (TKT-01M29CRJ1P). It replaced the `bad-request` an unserved
 `lens` used to answer. The values are `unread`, `unread:<ordinal>`, `author:<handle>`,
 `chain:<ordinal>`, `since:<when>`, `mentions` and `mod`. `<when>` is one of
@@ -1146,7 +1146,7 @@ its clock with `updated_at` (TKT-01M3NS1931):
 - An agent's writes to either draft route are not charged to its bucket
   (see "Agents on the API" below).
 
-**Decided by the run (2026-10-01, pending maintainer review):** both kinds
+**Decided by the run (2026-10-01, maintainer approved):** both kinds
 of draft carry the composer's attachments. `PUT` takes `attachments?`, the
 same list of hashes a post takes and checked by the same rules (see
 "Attachments" below), but it adds no reference. `GET` answers them as
@@ -1187,7 +1187,7 @@ How it works (TKT-01M3V73DP6):
 
 #### Search (TKT-01M29CTY8T, TKT-01M3V70X0F)
 
-**Decided by the run (2026-10-01, pending maintainer review):**
+**Decided by the run (2026-10-01, maintainer approved):**
 `GET /search?q=&forum=&author=&after=&before=&cursor=` answers
 `internal/dto` `SearchResults` with `no-store`, and never from the response
 cache. It searches the index docs/04 "search" describes.
@@ -1299,7 +1299,7 @@ bar lost to the shell as built, where the top bar's link to `/search` is
 the visible control.
 
 As built (TKT-01M3V70X0F): `web/client/src/screens/SearchScreen.tsx`.
-**Decided by the run (2026-10-01, pending maintainer review):**
+**Decided by the run (2026-10-01, maintainer approved):**
 - **Nothing a search answers is held in the client.** The endpoint is
   `no-store` and sends no ETag, so `apiGet` keeps no copy, and the screen
   keeps none of its own. Back asks the server again, shows "Searching…"
@@ -1469,7 +1469,7 @@ work stays where it is.
   counting fonts inside the budget would force dropping Newsreader.
   (Decided 2026-09-24 in Phase 1 grooming.)
 - **Theme:** `system`, `light` or `dark`. **Decided by the run (2026-10-01,
-  pending maintainer review; TKT-01M29CCC0X, TKT-01M29CXK4E):** a member's
+  maintainer approved; TKT-01M29CCC0X, TKT-01M29CXK4E):** a member's
   choice is stored on the account, as `theme` in `prefs_json`, and `/me`'s
   `settings` carries it, so it follows them to every device. The browser
   keeps a copy in `localStorage` only so the first paint is not the wrong
@@ -1716,7 +1716,7 @@ Upload MIME sniffing against an allowlist is in "Attachments" below (TKT-01M29CX
 
 ### Attachments
 
-**Decided by the run (2026-10-01, pending maintainer review)**
+**Decided by the run (2026-10-01, maintainer approved)**
 (TKT-01M29CXK0K, TKT-01M29CYS9W). These settle what the design leaves open
 about uploads and serving:
 - **Upload.** `POST /api/v1/blobs?thread={id}` or `?forum={slug}` takes one

@@ -38,7 +38,7 @@ human who does.
   unread thread below this one, or when there is none below, the first
   above it. Each shortcut has a visible control that does the same, below
   the posts or in the thread's actions.
-  **Decided by the run (2026-10-01, pending maintainer review):** the
+  **Decided by the run (2026-10-01, maintainer approved):** the
   desktop top bar keeps its link to `/search` rather than the mockups'
   240 px field, as 07 "Search" decided for the search screen
   (TKT-01M3V70X0F), and the mockups' `/` key hint is left out
@@ -79,7 +79,7 @@ land on the same page in practice, and the divider carries the difference. The
 confirmation with real readers on real phones is a Phase 1 human verification
 item, not a gate on building it.
 
-**Decided by the run (2026-10-01, pending maintainer review):** the divider
+**Decided by the run (2026-10-01, maintainer approved):** the divider
 ends with "last read #N · TIME" at both widths, where TIME is
 `read_positions.last_read_at`. That is when the viewer's place in this
 thread was last set: by a read beacon, or by marking the thread unread,
@@ -126,7 +126,7 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   forum level (`PUT /forums/{slug}/read`) moves the member's position in
   each of that forum's threads to its last post, forward only, and leaves
   the mark and every other forum alone.
-  **Decided by the run (2026-10-01, pending maintainer review):** only the
+  **Decided by the run (2026-10-01, maintainer approved):** only the
   site-level mark sets `users.mark_all_read_at`, which is one moment for the
   whole site. The forum-level mark moves the member's read position in each
   of that forum's threads to its last post, forward only, in one statement.
@@ -138,7 +138,7 @@ Position-based, one integer per (user, thread): `read_positions.last_read_ordina
   not ask for. The forum-level cost is one row per thread in the forum the
   member has not opened, which docs/04's sizing already allows for
   (TKT-01M29CTY7K).
-- **Decided by the run (2026-10-01, pending maintainer review):** the thread
+- **Decided by the run (2026-10-01, maintainer approved):** the thread
   page reads one integer for the member's place, the *read boundary*: the
   stored position, moved forward to just before the first post past it
   that was written after the site-level mark, or to the last post when
@@ -225,7 +225,7 @@ in-memory index of the thread (03) and, for cross-thread data, `post_meta`.
 A lens header always shows the count of hidden posts and a one-click return to
 the full thread at the same ordinal, so nobody gets lost in a filter.
 
-**Decided by the run (2026-10-01, pending maintainer review): what each lens
+**Decided by the run (2026-10-01, maintainer approved): what each lens
 keeps of removed posts.** Unread, since and reply chain are slices of the
 thread. Each keeps a removed post in its place as the tombstone the canonical
 page shows, so numbering and the chain's reply links hold (08 "Tombstones").
@@ -244,7 +244,7 @@ because the moderator's canonical page has shown exactly that since
 TKT-01M29CKRJ9, so the lens would add nothing (TKT-01M29CRJ1P,
 TKT-01M29CTY6E).
 
-**Decided by the run (2026-10-01, pending maintainer review): the unread lens
+**Decided by the run (2026-10-01, maintainer approved): the unread lens
 holds its boundary.** `?lens=unread` takes the viewer's `last_read_ordinal` B
 and answers as `unread:B`, the posts after B. The client replaces the address
 with `?lens=unread:B`, so paging, reload and Back show the same posts while
@@ -257,7 +257,7 @@ moves the position, and page 2 would then skip a page of posts. Holding the
 boundary in server state lost because lenses are URL state (07 "Path to a
 non-JS client") (TKT-01M29CTY4J).
 
-**Decided by the run (2026-10-01, pending maintainer review): read tracking
+**Decided by the run (2026-10-01, maintainer approved): read tracking
 under a lens.** The read beacon runs on the canonical view and under the
 unread lens, and under no other lens. The beacon sends the highest post
 seen, so under author, chain, mentions or moderator it would mark every post
@@ -285,7 +285,7 @@ Alternatives:
 
 (TKT-01M29CTY71)
 
-**Decided by the run (2026-10-01, pending maintainer review): the lens bar.**
+**Decided by the run (2026-10-01, maintainer approved): the lens bar.**
 It sits under the thread head at both widths, as the mockups draw it. It holds
 "Only <handle>", the author lens for the thread's author, and "Lens", which
 opens the switcher. The switcher offers the full thread, unread, by author
@@ -305,7 +305,7 @@ header. Dividers in the chain lens alone lost because an author lens would
 then read as one unbroken conversation, which it is not (TKT-01M29CTY71,
 TKT-01M29CTY58).
 
-**Decided by the run (2026-10-01, pending maintainer review): the lens
+**Decided by the run (2026-10-01, maintainer approved): the lens
 header's details.**
 - **Counts.** The header reads "Showing N of M posts · H hidden". M is the
   thread's posts, shown and hidden together, so it matches the head's post
@@ -340,7 +340,7 @@ Alternatives:
 
 (TKT-01M29CTY71)
 
-**Decided by the run (2026-10-01, pending maintainer review): the mentions
+**Decided by the run (2026-10-01, maintainer approved): the mentions
 lens** keeps the posts that mention the viewer, by the user id the `mentions`
 projection records, and the posts that reply to a post the viewer wrote. It
 leaves out the viewer's own posts. Alternative: keeping the viewer's own posts
@@ -378,7 +378,7 @@ lost because a reply to yourself is not what the lens is for
   (05 "Changing a handle", TKT-01M3NRP3W9).
 - Drafts autosave to the server (`drafts` table, one per user+thread) so a
   half-written reply survives a browser crash and appears on another device.
-  **Decided by the run (2026-10-01, pending maintainer review):** the
+  **Decided by the run (2026-10-01, maintainer approved):** the
   composer's footer says "Draft saved TIME", where TIME is the `updated_at`
   of the server's latest answer for the draft, written as every other time
   is (absolute, `PostTime`), so a draft loaded from another device says
@@ -399,7 +399,7 @@ lost because a reply to yourself is not what the lens is for
 - **Unread** across all forums (`/unread`), **New since your last visit**,
   **Participated**, **Watching**. These are the "what's new" surfaces and
   live in the top navigation.
-  **Decided by the run (2026-10-01, pending maintainer review)**, for
+  **Decided by the run (2026-10-01, maintainer approved)**, for
   TKT-01M29CTY7K, so that each list agrees with its `/me` badge:
   - *Unread* lists the threads with an unread post, by the rule `/me`
     counts (docs/04 `read_positions`), most recent activity first.
@@ -452,13 +452,13 @@ lost because a reply to yourself is not what the lens is for
     start at one edge.
 - Optional per-forum display `?sort=created` for announcement forums.
 - The forum index (the front page). **Decided by the run (2026-10-01,
-  pending maintainer review):** its heading is the `site_name` setting, the
+  maintainer approved):** its heading is the `site_name` setting, the
   same value the wordmark shows (07 "Site settings"), as the mockups head
   the page with the community's name (TKT-01M3S3ZZYA). Alternatives: the
   client's "Forums" lost because it names no community; and the mockups'
   "Ketju" wordmark beside it, which would avoid the name appearing twice,
   lost because 07 already puts `site_name` in the wordmark (TKT-01M29CXK2H).
-- **Decided by the run (2026-10-01, pending maintainer review):** the forum
+- **Decided by the run (2026-10-01, maintainer approved):** the forum
   index ends with a footer, "N members · M posts", then at 720 px and above
   a way to the keyboard shortcuts (TKT-01M3S3ZRYD; see below). M is the sum of
   `post_count` over the forums the page lists, so it counts only forums the
@@ -502,7 +502,7 @@ lost because a reply to yourself is not what the lens is for
   post's permalink, and never shows post text (04 "notifications"). The
   rows a page shows are marked read as they are shown, and keep their
   unread marking until the reader leaves. **Decided by the run
-  (2026-10-01, pending maintainer review):** "Older" adds the next page
+  (2026-10-01, maintainer approved):** "Older" adds the next page
   below the rows already shown and moves focus to its first row, rather
   than replacing the page as a thread list's "Older threads" does, because
   the rows shown stay marked unread only for this visit, and a page
@@ -533,7 +533,7 @@ While a thread page is open the client holds an SSE subscription. On a
 bottom, new posts stream in directly. Polling every 30 s is the fallback
 when SSE is unavailable; the non-JS client gets a plain "refresh" link.
 
-**Decided by the run (2026-10-01, pending maintainer review)**
+**Decided by the run (2026-10-01, maintainer approved)**
 (TKT-01M29CTYA0):
 - **"At the very bottom"** means the end of the page's last post is inside
   the viewport, give or take 48 px. On a phone the reply bar does not count
@@ -574,7 +574,7 @@ keep seeing text its author had already corrected or a moderator had
 removed. Keeping hidden tabs connected lost, because an open tab costs a
 held connection (TKT-01M29CRJ3X), and background tabs are most of them.
 
-**Decided by the run (2026-10-01, pending maintainer review)**
+**Decided by the run (2026-10-01, maintainer approved)**
 (TKT-01M29CTYA0, while building it): a lens page holds no subscription.
 Live updates run on the canonical view, the thread's pages in ordinal order,
 and a lens page stays as it was answered until the reader asks again. The
@@ -630,7 +630,7 @@ arrangement.
   and the reply expander; link, flag, "unread from here", and history
   collapse under a "more" control. The unread divider, tombstones, and the
   unread edge marker are identical to desktop.
-  **Decided by the run (2026-10-01, pending maintainer review):** the
+  **Decided by the run (2026-10-01, maintainer approved):** the
   sentence above names what stays in the phone footer, not its order. The
   footer reads the reply expander when the post offers one, then reply,
   then quote, then "more" at the right edge, as the phone mockup draws it.
@@ -664,7 +664,7 @@ arrangement.
 - **Pages.** A "Page 3 of 9" control with previous and next; tapping the
   label opens a picker sheet with page numbers and the jump-to-unread and
   jump-to-date actions. Lenses open from a sheet as well.
-  **Decided by the run (2026-10-01, pending maintainer review;
+  **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M29CGBZD):** the picker sheet shows the pages as numbered links
   in a grid, each at least 44 px, with the current page marked and
   scrolled into view. Up to 60 pages, the grid holds every page. Past
@@ -702,7 +702,7 @@ arrangement.
   bar height.
 - **Installable.** The SPA ships a web app manifest so it can be added to a
   home screen. Offline caching and push notifications are not in v1 (see
-  10). **Decided by the run (2026-10-01, pending maintainer review;
+  10). **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M29CGBYY):** the design names no icon, so the run draws a
   placeholder: two linked rings ("ketju" is Finnish for chain) in the
   light theme's accent and white, as an SVG source with PNGs at 180, 192

@@ -787,7 +787,7 @@ version was bumped first.
   reported, and makes the exit status 1; the run goes on. A failure that is
   not the log's, such as a database write, stops the run. The README's
   recovery procedure is built on it and run as a test.
-- **Decided by the run (2026-10-01, pending maintainer review):** `ketju
+- **Decided by the run (2026-10-01, maintainer approved):** `ketju
   reindex --search` (TKT-01M29CTY9D, Phase 3; the line here used to say
   Phase 2 and name TKT-01M29C5Y25) rebuilds the search index (04 "search")
   and nothing else. `--projections` is still the default, and both flags
@@ -819,7 +819,7 @@ version was bumped first.
   FTS5 index, which is then built once (`rebuild`) and merged (`optimize`)
   before the commit. A search table dropped by hand is reported (exit 4),
   not recreated.
-- **Decided by the run (2026-10-01, pending maintainer review):** for
+- **Decided by the run (2026-10-01, maintainer approved):** for
   TKT-01M3VHSYFR (Write back index entries an Extended replay changes before
   trusting it), `ketju serve` discards every `.idx` once per data directory.
   It removes them before the thread cache opens anything, then writes the
@@ -1012,7 +1012,7 @@ A blob's thumbnail is `<hash>.thumb` beside it (the decision below,
 TKT-01M29CYS9W). The collector removes it after the row's deletion commits,
 and removes any `.thumb` whose blob has no row, except in a held pass.
 
-**Decided by the run (2026-10-01, pending maintainer review)**
+**Decided by the run (2026-10-01, maintainer approved)**
 (TKT-01M29CXK0K, TKT-01M29CYS9W):
 - **A blob's thumbnail is `<hash>.thumb`, beside the blob** in
   `blobs/sha256/ab/`. There is one size, fitted inside 160 × 160 px with

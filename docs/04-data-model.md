@@ -707,7 +707,7 @@ list alike, so neither can count what the other hides.
 The post kinds are written by the notification generator, a subscriber on
 the event bus (TKT-01M29CRJ2T). These run decisions bind it:
 
-- **Decided by the run (2026-10-01, pending maintainer review):** one post
+- **Decided by the run (2026-10-01, maintainer approved):** one post
   gives one member at most one notification. When it would give several,
   the kept kind is the strongest: `mention`, then `reply_to_you`, then
   `quoted`, then `thread_you_watch`. A mention is the author addressing
@@ -717,7 +717,7 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
   written to them whatever it answers; one row per kind lost because the
   ticket that asked for this collapse exists to stop three alerts for one
   post.
-- **Decided by the run (2026-10-01, pending maintainer review):** a member
+- **Decided by the run (2026-10-01, maintainer approved):** a member
   has at most one unread `thread_you_watch` per thread. It names the first
   post they were alerted to, and later posts add nothing until they read it,
   so the link lands where the new posts begin. Alternatives: one row per
@@ -725,7 +725,7 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
   updates") would bury every other alert; a row with a running count lost
   because the count needs a column and goes stale whenever a post is
   removed.
-- **Decided by the run (2026-10-01, pending maintainer review):** an `Edit`
+- **Decided by the run (2026-10-01, maintainer approved):** an `Edit`
   notifies the members its `mentions` names, as `mention`, and nothing else.
   A member already notified about the post is not notified again, though an
   unread row may move to a stronger kind. This way a mention added to fix a
@@ -733,7 +733,7 @@ the event bus (TKT-01M29CRJ2T). These run decisions bind it:
   which lost because the author believes they addressed someone who never
   hears of it; every edit notifying everyone again lost because it repeats
   alerts.
-- **Decided by the run (2026-10-01, pending maintainer review):** a post
+- **Decided by the run (2026-10-01, maintainer approved):** a post
   notification is served (listed and counted) only while three things
   hold. The post is visible to every reader, so not deleted, hidden, hidden
   pending review, redacted or moved. The viewer may read the thread's forum
@@ -787,7 +787,7 @@ user_id, thread_id (nullable), forum_id (nullable), level ('watch'|'mute')
 Exactly one of thread and forum, and at most one watch per user per thread
 and per user per forum.
 
-**Decided by the run (2026-10-01, pending maintainer review):** a thread's
+**Decided by the run (2026-10-01, maintainer approved):** a thread's
 effective level for a member is the thread's own row when it has one, then
 the row for the forum the thread is in now, then none. So a muted thread in
 a watched forum is muted, and a watched thread in a muted forum is watched.
@@ -1117,7 +1117,7 @@ already pinned, so `go.mod` does not change. The call belongs in `openPool`
 in `driver.go`, the one file that may import the driver, so every connection
 has it, the read-only ones included (TKT-01M29CRJ3B).
 
-**Decided by the run (2026-10-01, pending maintainer review):** what the
+**Decided by the run (2026-10-01, maintainer approved):** what the
 index holds, for TKT-01M29CRJ3B (Build the FTS5 search index and indexer).
 - **Only what every reader of the thread may see.** There is one row per
   post that is not deleted, hidden, hidden pending review, moved or redacted
@@ -1168,7 +1168,7 @@ query is `views.Search`. Split and merge records are reserved and have no body
 in this build, so no post is marked moved yet. Until TKT-01M29CXJZZ gives
 them bodies, the indexer skips them, as the index does.
 
-**Decided by the run (2026-10-01, pending maintainer review):** what the
+**Decided by the run (2026-10-01, maintainer approved):** what the
 plain text leaves out, for TKT-01M29CRJ3B.
 - **An attributed quotation (`[quote=#N]`) is left out of the quoting
   post's row.** A plain blockquote keeps its text. The quotation copies

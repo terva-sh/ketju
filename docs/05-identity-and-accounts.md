@@ -495,7 +495,7 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
 - Server-side sessions (table `sessions`), 30-day idle expiry, 90-day hard
   expiry, sliding `last_used_at` updated at most once per 5 minutes.
 - Session list in user settings with "sign out this device / everywhere".
-  **Decided by the run (2026-10-01, pending maintainer review;
+  **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M29CCC0X):** "everywhere" ends every session the account holds,
   the one making the request included, and clears its cookie, so the
   browser that pressed it is signed out too. Each other session also has
@@ -514,7 +514,7 @@ provides them. (Decided 2026-09-24, 10 Q7, TKT-01M29BSPEF.)
   lost because a member signed in through two providers tells their
   sessions apart by it.
 - Removing a linked identity (07 `DELETE /settings/identities/{id}`).
-  **Decided by the run (2026-10-01, pending maintainer review;
+  **Decided by the run (2026-10-01, maintainer approved;
   TKT-01M29CCC0X):** the removal is refused, as `conflict`, unless the
   account keeps at least one other identity whose provider is in
   `config.toml` now. An identity of a provider the operator removed is
