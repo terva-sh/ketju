@@ -27,12 +27,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T03:01:21Z
+updated_at: 2026-10-02T14:32:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-settings-client
+  id: agent:claude-code/phase3-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -192,6 +192,10 @@ disagreement: pending maintainer. Terva review 1883 (head 4974bb14, base 25ad977
 **agent:claude-code/phase3-settings-client** at 2026-10-02T03:00:41Z
 
 Addendum to the review 1883 disagreement (disagreement: pending maintainer). One risk remains. The afterEach reset is a PATCH through carol's stored session. If that request itself fails, carol stays at 10 posts a page and the dark theme for every later spec. The damage would show up as failures in those specs, not in this one. The afterEach asserts the reset's 200, so its own failure is reported, but the run's first visible error may be elsewhere.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T14:32:44Z
+
+Maintainer decision, 2026-10-02: review 1883's disagreement on #342 ('Isolate preference changes per Playwright project') is closed in the run's favour. Asked to choose, the maintainer picked 'Keep as is' over giving the test a dedicated member per project. The test keeps using carol, with the afterEach reset.
 
 ## Summary
 

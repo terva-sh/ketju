@@ -12,7 +12,6 @@ tickets, and the next fix pass overwrites it.
 | [TKT-01M29BKBM7004ZPAA9T81HC939](tickets/TKT-01M29BKBM7004ZPAA9T81HC939.md) | Markdown render pipeline and attachments | ready |
 | [TKT-01M29BKBMCNDSYHYF9WXAPDNRN](tickets/TKT-01M29BKBMCNDSYHYF9WXAPDNRN.md) | JSON API and service layer | ready |
 | [TKT-01M29BN367F3YQZESM63VN26GP](tickets/TKT-01M29BN367F3YQZESM63VN26GP.md) | Preact client: shell, thread UI, and both layouts | ready |
-| [TKT-01M29BN36D34YVKVRPNQD3PHDV](draft/TKT-01M29BN36D34YVKVRPNQD3PHDV.md) | Lenses, unread surfaces, search, and live updates | draft |
 | [TKT-01M29BN36JH4M1W5819D06PGPP](draft/TKT-01M29BN36JH4M1W5819D06PGPP.md) | Moderation primitives and admin surfaces | draft |
 | [TKT-01M29BN36Q9D32WQGYPFS336J0](tickets/TKT-01M29BN36Q9D32WQGYPFS336J0.md) | Operations: config, CLI, observability, and release | ready |
 | [TKT-01M29BN36WRBJMH049G6V1GNHE](draft/TKT-01M29BN36WRBJMH049G6V1GNHE.md) | Non-JS server-rendered HTML client | draft |

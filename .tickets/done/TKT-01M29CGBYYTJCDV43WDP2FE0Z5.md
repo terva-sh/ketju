@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:23:08Z
-updated_at: 2026-10-02T05:42:32Z
+updated_at: 2026-10-02T14:32:44Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase3-cgbyy
+  id: agent:claude-code/phase3-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -135,6 +135,10 @@ Phase B, on main de37cccb. AC6 is left unticked. Everything in it holds except t
 **agent:claude-code/phase3-cgbyy** at 2026-10-02T05:41:53Z
 
 Carried to run/cgbyy-manifest-2 after main moved to b7d9e58e. PR #346 is replaced. #346's CI (run 2326) failed only in e2e/install.spec.ts 'the manifest Chromium reads has no errors', at both widths. CI's Chromium 152.0.7977.82 (Alpine) reported the installability error in-incognito, because every Playwright context is off the record. The local Playwright Chromium (1243) did not, so this supersedes my earlier note that installability reports nothing. I did not add in-incognito to the accepted errors: that would hide anything else installability reports. The test now launches Chromium with a persistent profile in a temporary directory, which is not off the record. It reads the manifest anonymously, so the criterion is checked for real and the only accepted error is still a missing service worker.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T14:32:44Z
+
+Maintainer decision, 2026-10-02: the real-device install check (criterion 7) is deferred. It stays unticked until a person installs the app on a real iOS and a real Android device.
 
 ## Summary
 
