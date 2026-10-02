@@ -636,6 +636,20 @@ source never change (03). Split threads carry a "split from <link>" header.
 it opens a composer for a new thread that quotes the source post and
 leaves a small "continued in <link>" note under it.
 
+**Reply as a new thread, decided by the maintainer (2026-10-02,
+TKT-01M29CYSC0):**
+- **The quote.** The composer pre-fills the source post as an ordinary,
+  editable blockquote. It is the member's own text: it shows to every reader
+  of the new thread, and it does not follow a later removal of the source
+  post. It is not a `[quote=#N]` attribution, which would name a post of the
+  new thread.
+- **The link between the threads.** The new thread's `ThreadCreated` carries
+  `continues {thread_id, ordinal}` (03).
+- **The note.** The source post shows a "continued in <link>" note only to a
+  viewer who may read the new thread. Nobody else sees a note.
+- **The header.** The new thread shows a "continued from <link>" header only
+  to a viewer who may read the source. Nobody else sees a header.
+
 docs/15 "Invariants, added" governs every notice and pointer here. A notice
 names the other thread only to a viewer who may read it. Everyone else
 reads "N posts were moved to another thread", or "merged from" or "split from

@@ -279,7 +279,7 @@ uses the name, never the literal.
 
 | Type | Name | Body fields | Effect on projection |
 |-----:|------|-------------|----------------------|
-| 1 | `ThreadCreated` | title, slug, forum_id, tags[] | thread row |
+| 1 | `ThreadCreated` | title, slug, forum_id, tags[], continues (`{thread_id, ordinal}`, optional: written only by reply as a new thread; a split writes none) | thread row; with `continues`, the source post's "continued in" note |
 | 2 | `Post` | source (markdown), reply_to (ordinal, optional), mentions[], attachments[], origin (`{thread_id, ordinal}`, optional: a copy made by split or merge) | new post_meta row, ordinal = thread.post_count+1 |
 | 3 | `Edit` | source, reason, reply_to, mentions[] (optional), grace (optional bool) | post_meta.current_revision++, edited flag unless `grace`; when `mentions` is present it replaces the post's mention rows |
 | 4 | `Delete` | reason, hard (bool, always false in v1), by_moderator (optional bool), suspension (optional uint), auto (optional bool) | post_meta.deleted, tombstone shown; the entry's hidden-by-mod and auto-hidden flags when `auto`, its hidden-by-mod flag (clearing auto-hidden) when `by_moderator`, otherwise its deleted flag |
@@ -353,6 +353,25 @@ index reads the key, so a rebuild reproduces bit 6. An older reader ignores the
 key and sees a `Delete` by someone other than the author, which it shows as a
 tombstone to everyone but moderators, and fails closed.
 
+`ThreadCreated.continues` was added the same way, on 2026-10-02
+(TKT-01M29CYSC0). **Decided by the maintainer (2026-10-02, TKT-01M29CYSC0).**
+It names the post that a thread started by "reply as a new thread" continues
+from. Only that action writes it. A split writes none, because its
+`PostsMergedIn` already says where the posts came from. The source post's
+"continued in" note is a projection of this key, so `ketju reindex` rebuilds
+it from the new thread's log. An older reader ignores the key and shows no
+note and no header, which hides a link and discloses nothing.
+
+Alternatives:
+- A new advisory record type written to the source log lost. It needs a
+  number for one note, and a member's action would write into a thread they
+  only replied to, across two logs.
+- A cross-thread quote syntax, with the note rebuilt from quote backlinks,
+  lost. It stores a syntax in post text for good, and it needs a rule for
+  who sees the text of a quotation of a post in another thread.
+- Deferring the feature past v1.0 lost, because it is a docs/09 Phase 4
+  deliverable.
+
 Deletion is soft. A `Delete` record leaves the original `Post` bytes intact;
 the reader consults the index flags and returns a tombstone.
 
@@ -412,6 +431,12 @@ Decided 2026-09-28 (docs/10 item 4, TKT-01M29BSPE2):
   post, so a copy of a copy goes too (Terva review 1345). It redacts each one
   the same way, rewriting each log it touches. A redaction that cleared only
   one of them would leave the text readable through the other.
+- **Reply as a new thread is not followed.** `ketju redact` follows
+  `origin`, not `ThreadCreated.continues`. The quote that "reply as a new
+  thread" pre-fills is the member's own text, an ordinary blockquote they
+  could edit before posting (decided by the maintainer 2026-10-02,
+  TKT-01M29CYSC0), so it is not a copy, and redacting the source post does
+  not reach it.
 - **Several logs, one redaction.** Each log's swap is atomic, but a redaction
   that spans several logs is not. So before touching any log, the command
   writes a redaction journal to the data directory, fsyncs the journal, and

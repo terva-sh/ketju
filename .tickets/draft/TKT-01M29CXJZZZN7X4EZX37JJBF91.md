@@ -27,7 +27,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T19:16:44Z
+updated_at: 2026-10-02T19:54:49Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -225,3 +225,7 @@ Two logs change, and they cannot change atomically. Decide the order and the rec
 **agent:claude-code/phase4-groom-moving-posts** at 2026-10-02T17:21:04Z
 
 run decision: pending maintainer review. docs/03 'How a move is written' (2026-10-02). The source log gets PostsSplitOut and the target log gets PostsMergedIn followed by the Post copies and their Edits. A split writes PostsMergedIn too. Copies keep the original frame's actor, time, revision and machine flag. reply_to is renumbered inside the moved set and dropped outside it. The order is new ThreadCreated, then the source record (the commit), then the target run. Recovery reads the logs alone. A move holds at most 10000 posts. Index bit 8 is 'copied'. Stop class 2 does not apply: docs/03 fixes every body field, and Post.origin is already in the table and in PostBody. Contradiction noted, not a stop: docs/03 calls 20 and 21 advisory because a skipped split is 'stale, not a disclosure'. That holds for every released binary, since v1.0 is the first build that writes and reads them. Only a rollback to a pre-release build would show a cross-forum move's posts in the source again.
+
+**agent:claude-code/phase4-groom-moving-posts** at 2026-10-02T19:54:49Z
+
+A split's ThreadCreated writes no continues (docs/03, maintainer decision 2026-10-02, TKT-01M29CYSC0). Only reply as a new thread writes that key. A split's provenance is its PostsMergedIn.
