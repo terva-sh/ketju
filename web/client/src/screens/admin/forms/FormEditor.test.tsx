@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Form, FormAdmin, Me } from '../../../api/dto';
 import { viewer } from '../../../state/viewer';
-import { problemAnswer, renderAt, settle, stubServer, unmount, type StubServer } from '../../../testing';
+import { pressRaw, problemAnswer, raceSettle, renderAt, settle, stubServer, unmount, type StubServer } from '../../../testing';
 import golden from '../../../../../../internal/dto/testdata/golden/form-admin.admin.json';
 import moderatorMe from '../../../../../../internal/dto/testdata/golden/me.moderator.json';
 import { previewDelay } from './FormEditor';
@@ -331,6 +331,108 @@ describe('the form editor', () => {
     expect((sentTo('/preview').at(-1)!.body as { schema: { fields: unknown[] } }).schema.fields).toEqual(
       formAdmin().schema.fields,
     );
+  });
+
+  // TKT-01M3V7CFJ5: each press goes outside act, which would run the
+  // effects, and the key one microtask after what it waits on is drawn.
+  describe('a key pressed before the next frame', () => {
+    // held makes route answer only once let go.
+    function held(route: string, a: () => ReturnType<typeof problemAnswer>) {
+      let go: () => void = () => {};
+      const wait = new Promise<void>((r) => (go = r));
+      server.routes[route] = async () => {
+        await wait;
+        return a();
+      };
+      return () => go();
+    }
+    async function until(el: () => Element | null) {
+      for (let i = 0; i < 2000 && !el(); i++) await Promise.resolve();
+      expect(el()).not.toBeNull();
+      await Promise.resolve();
+      return el()!;
+    }
+
+    it('one microtask after Move up lands on the moved field’s Move up, which moved it once', async () => {
+      const root = await renderAt('/admin/forms');
+      const legend = fieldBox(root, 5).querySelector('legend')!.textContent!.replace(/^Field 6/, 'Field 5');
+      const up = button(fieldBox(root, 5), 'Move up')!;
+      up.focus();
+      try {
+        up.click();
+        await Promise.resolve();
+        expect(pressRaw('x')).toBe(button(fieldBox(root, 4), 'Move up'));
+        expect(fieldBox(root, 4).querySelector('legend')!.textContent).toBe(legend);
+      } finally {
+        await raceSettle();
+      }
+    });
+
+    // Add field stays on the page, so before the new field's Label takes
+    // focus, Enter would add another.
+    it('Enter one microtask after Add field adds one field, and lands on its Label', async () => {
+      const root = await renderAt('/admin/forms');
+      const add = button(root, 'Add field')!;
+      add.focus();
+      try {
+        add.click();
+        await Promise.resolve();
+        expect(pressRaw('Enter')).toBe(inBox(fieldBox(root, 6), 'Label'));
+        await Promise.resolve();
+        expect(root.querySelectorAll('.fe-field')).toHaveLength(7);
+      } finally {
+        await raceSettle();
+      }
+    });
+
+    it('the save notice takes focus before the next key', async () => {
+      const go = held(`POST ${url}/versions`, () => ({ status: 201, body: saved('Join the club') }));
+      const root = await renderAt('/admin/forms');
+      await type(root, labelled(root, 'Title'), 'Join the club');
+      await previewed(root);
+      saveButton(root).focus();
+      await act(async () => saveButton(root).click());
+      try {
+        go();
+        const notice = await until(() => (root.querySelector('[data-notice]')?.textContent ? root.querySelector('[data-notice]') : null));
+        expect(pressRaw('x')).toBe(notice);
+      } finally {
+        await raceSettle();
+      }
+    });
+
+    it('a conflict takes focus before the next key', async () => {
+      const go = held(`POST ${url}/versions`, () => problemAnswer('conflict', 409));
+      const root = await renderAt('/admin/forms');
+      await type(root, labelled(root, 'Title'), 'Mine');
+      await previewed(root);
+      saveButton(root).focus();
+      await act(async () => saveButton(root).click());
+      try {
+        go();
+        const conflict = await until(() => root.querySelector('[data-conflict]'));
+        expect(pressRaw('x')).toBe(conflict);
+      } finally {
+        await raceSettle();
+      }
+    });
+
+    it('an earlier version’s heading takes focus before the next key', async () => {
+      const go = held(`GET ${url}/versions/1`, () => ({ status: 200, body: formAdmin() }));
+      const root = await renderAt('/admin/forms');
+      const view = button(root, 'View version 1')!;
+      view.focus();
+      await act(async () => view.click());
+      try {
+        go();
+        await until(() => root.querySelector('[data-viewing="1"] fieldset.fe-readonly'));
+        const heading = root.querySelector('[data-viewing="1"] h3');
+        // Enter on View version 1 would ask for it again.
+        expect(pressRaw('Enter')).toBe(heading);
+      } finally {
+        await raceSettle();
+      }
+    });
   });
 
   it('opens an earlier version read-only in the same renderer', async () => {

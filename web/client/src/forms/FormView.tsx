@@ -1,5 +1,5 @@
 import type { ComponentChildren } from 'preact';
-import { useEffect, useId, useRef } from 'preact/hooks';
+import { useId, useLayoutEffect, useRef } from 'preact/hooks';
 import type { Form, FormField } from '../api/dto';
 import { Icon } from '../components/Icon';
 import { kindOf, type Value } from './fields';
@@ -88,7 +88,10 @@ export function FormView(props: FormViewProps) {
 
   // After a refused submission, focus goes to the first field refused, in
   // the order the form draws them, so a reader starts where the problem is.
-  useEffect(() => {
+  // In the commit that draws the refusal: a plain effect left focus on
+  // Submit until the next frame, and Enter there submitted again
+  // (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     if (refusals === 0) return;
     const i = form.fields.findIndex((f) => Object.hasOwn(errors, f.key));
     if (i < 0) return;

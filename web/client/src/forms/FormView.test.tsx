@@ -5,6 +5,7 @@ import type { ApplicationForm, Form, FormField } from '../api/dto';
 import { toProblem } from '../api/problem';
 import { answersOf, FormView, initialValues, type FormViewProps } from './FormView';
 import { fieldMessage } from './messages';
+import { pressRaw, raceSettle } from '../testing';
 import applyForm from '../../../../internal/dto/testdata/golden/apply-form.pre_user.json';
 import fieldErrorsBody from '../../../../internal/problem/testdata/field-errors.json';
 
@@ -203,6 +204,27 @@ describe('FormView', () => {
     // The next refusal moves focus again.
     draw({ rules: 'required' }, 2);
     expect(document.activeElement).toBe(rules);
+  });
+
+  // TKT-01M3V7CFJ5: until the first refused field takes focus, it is on
+  // Submit, and Enter there submits again. The refusal is drawn outside
+  // act, as an answer is, and Enter goes one microtask later.
+  it('Enter one microtask after a refused submit does not submit again, and focus is on the first refused field', async () => {
+    const g = golden();
+    const values = initialValues(g.form, g.prefill);
+    const onSubmit = vi.fn();
+    const props = { form: g.form, mode: 'fill' as const, prefill: g.prefill, values, onSubmit };
+    const root = mount(props);
+    const submit = root.querySelector<HTMLButtonElement>('button[type=submit]')!;
+    submit.focus();
+    try {
+      render(<FormView {...props} errors={{ who: 'required', rules: 'required' }} refusals={1} />, root);
+      await Promise.resolve();
+      expect(pressRaw('Enter')).toBe(fieldEl(root, 'who').querySelector('textarea'));
+      expect(onSubmit).not.toHaveBeenCalled();
+    } finally {
+      await raceSettle();
+    }
   });
 
   it('says an error for no field drawn above Submit', () => {

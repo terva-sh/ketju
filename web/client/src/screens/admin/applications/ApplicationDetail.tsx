@@ -1,5 +1,5 @@
 import { useLocation } from 'preact-iso';
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { apiGet } from '../../../api/client';
 import type { AdminApplication, AdminApplicationList, ApplicationNote } from '../../../api/dto';
 import { isAbort, isProblem } from '../../../api/problem';
@@ -41,8 +41,10 @@ export function ApplicationDetail({ id, status = 'pending' }: { id: string; stat
   const a = fresh ?? res.data;
 
   // A notice takes focus, so a keyboard user whose control has gone with
-  // the decision hears what happened and continues from there.
-  useEffect(() => {
+  // the decision hears what happened and continues from there. In the
+  // commit that draws it, so a key pressed before the next frame does not
+  // land on nothing (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     if (notice) noticeRef.current?.focus();
   }, [notice]);
 

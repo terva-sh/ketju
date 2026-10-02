@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'preact/hooks';
+import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import { apiGet } from '../../../api/client';
 import type { Form, FormAdmin } from '../../../api/dto';
 import { isAbort, isProblem } from '../../../api/problem';
@@ -169,7 +169,11 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
     setRetries((n) => n + 1);
   };
 
-  useEffect(() => {
+  // Focus moves in the commit that draws its target, in layout effects: a
+  // plain effect left a key pressed before the next frame on the control
+  // used, so Enter on Add field added a second field, and on Save as
+  // version or View version asked again (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     const want = focusNext.current;
     if (want) {
       focusNext.current = null;
@@ -184,10 +188,10 @@ function Editor({ loaded }: { loaded: FormAdmin }) {
       leadRef.current?.focus();
     }
   });
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (notice) noticeRef.current?.focus();
   }, [notice]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (conflict) conflictRef.current?.focus();
   }, [conflict]);
 
@@ -459,7 +463,9 @@ function Versions({ admin }: { admin: FormAdmin }) {
   const box = useRef<HTMLElement>(null);
   const pending = useRef<AbortController | null>(null);
   useEffect(() => () => pending.current?.abort(), []);
-  useEffect(() => {
+  // In the commit that draws the version, as the editor's focus moves are
+  // (TKT-01M3V7CFJ5).
+  useLayoutEffect(() => {
     if (open?.form) heading.current?.focus();
   }, [open?.n, !!open?.form]);
 

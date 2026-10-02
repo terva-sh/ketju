@@ -2,7 +2,7 @@ import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me } from '../../../api/dto';
 import { viewer } from '../../../state/viewer';
-import { problemAnswer, renderAt, settle, stubServer, unmount, type StubServer } from '../../../testing';
+import { pressRaw, problemAnswer, raceSettle, renderAt, settle, stubServer, unmount, type StubServer } from '../../../testing';
 import { approvedApp, appUrl, asModerator, pendingApp } from './fixtures';
 
 // The approve and deny controls (TKT-01M3NRX2NN) on a pending application,
@@ -90,6 +90,36 @@ describe('approving', () => {
     expect(root.querySelector('[data-decided]')!.textContent).toContain('Approved by @bob');
     // The notice takes focus, since the button pressed has gone.
     expect(document.activeElement).toBe(root.querySelector('[data-notice]'));
+  });
+
+  // TKT-01M3V7CFJ5: the decision's controls go with the decision, and its
+  // notice takes focus. The answer is held and let go outside act, and
+  // Enter goes one microtask after the notice is drawn.
+  it('Enter one microtask after approving sends no second decision, and lands on the notice', async () => {
+    let answer: () => void = () => {};
+    const held = new Promise<void>((r) => (answer = r));
+    server.routes[`POST ${appUrl(42)}/approve`] = async () => {
+      await held;
+      return { status: 200, body: { ...approvedApp(), id: 42 } };
+    };
+    const root = await renderAt('/admin/applications?id=42');
+    const s = section(root, 'Approve');
+    await click(root, button(s, 'Approve'));
+    const go = [...s.querySelectorAll('button')][0];
+    go.focus();
+    await act(async () => go.click());
+    const notice = () => root.querySelector<HTMLElement>('[data-notice]');
+    try {
+      answer();
+      for (let i = 0; i < 2000 && !notice()?.textContent; i++) await Promise.resolve();
+      expect(notice()?.textContent).toContain('Approved as');
+      await Promise.resolve();
+      expect(pressRaw('Enter')).toBe(notice());
+      await Promise.resolve();
+      expect(server.sent.filter((r) => r.method === 'POST')).toHaveLength(1);
+    } finally {
+      await raceSettle();
+    }
   });
 
   it('leaves the note out when none is written', async () => {
