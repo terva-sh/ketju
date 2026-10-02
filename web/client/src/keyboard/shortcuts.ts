@@ -1,4 +1,4 @@
-import { computed, signal } from '@preact/signals';
+import { computed, effect, signal } from '@preact/signals';
 import { useEffect, useRef } from 'preact/hooks';
 import { apiGet } from '../api/client';
 import type { ThreadList, ThreadPage, ThreadRow } from '../api/dto';
@@ -310,7 +310,9 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
       const d = digits;
       endGoto();
       hint.value = '';
-      if (d) goToOrdinal(Number(d), live.current.page, live.current.route);
+      // The pause's timer goes here with no key pressed, so the switch is
+      // read again (Terva review 1967).
+      if (d && shortcutsOn.value) goToOrdinal(Number(d), live.current.page, live.current.route);
     };
     // Focus moving anywhere, by pointer or by Tab, ends g: the number was
     // typed for the page as it was (review 1136).
@@ -319,6 +321,13 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
       endGoto();
       hint.value = '';
     };
+    // Turning the shortcuts off ends a g in progress at once, timer and
+    // all, rather than at the next key (Terva review 1967).
+    const stopWatching = effect(() => {
+      if (shortcutsOn.value || digits === null) return;
+      endGoto();
+      hint.value = '';
+    });
 
     const onKey = (e: KeyboardEvent) => {
       if (isPhone.value || helpOpen.value || !shortcutsOn.value || ignored(e)) {
@@ -403,6 +412,7 @@ export function useThreadShortcuts(page: ThreadPage, lens: string, route: (url: 
     return () => {
       document.removeEventListener('keydown', onKey);
       document.removeEventListener('focusin', onFocus);
+      stopWatching();
       clearTimeout(timer);
       if (digits !== null) hint.value = '';
     };

@@ -656,6 +656,22 @@ describe('with the shortcuts off', () => {
     expect(location.pathname + location.search).toBe(`/t/${id}/${slug}?page=1`);
   });
 
+  // Terva review 1967: the pause's timer goes with no key pressed, so
+  // turning them off must end g by itself.
+  it('turning them off during g cancels the pending go, with no key pressed after', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    serve();
+    const root = await renderAt(`/t/${id}/${slug}?page=1`);
+    await type(root, 'g', '4');
+    expect(hint.value).toBe('Go to #4');
+    await act(async () => void off());
+    expect(hint.value).toBe('');
+    await act(async () => void vi.advanceTimersByTime(3000));
+    await settle(root);
+    expect(focused()).not.toBe('post-4');
+    expect(location.pathname + location.search).toBe(`/t/${id}/${slug}?page=1`);
+  });
+
   it("a member's account choice wins over this browser's", () => {
     setDeviceShortcuts(false);
     expect(shortcutsOn.value).toBe(true);
