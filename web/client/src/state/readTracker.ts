@@ -1,6 +1,7 @@
 import { apiSend } from '../api/client';
 import type { ReadPosition, ThreadPage } from '../api/dto';
 import { ProblemError } from '../api/problem';
+import { readLanded } from './lists';
 import { forgetLandings, forgetThreadPages, loadCount, pageRequestedAt } from './threads';
 
 // The read-tracking beacon (docs/06 "Read tracking"): a post counts as read
@@ -117,6 +118,11 @@ function send(id: string, force = false): Promise<void> {
         known(id, r.last_read_ordinal);
         // The server now lands a return elsewhere (threads.ts).
         forgetLandings(id);
+        // And counts fewer unread posts in every list (state/lists.ts). A
+        // PUT goes out only above the floor and the server keeps the larger
+        // position, so every answer here is a higher one. A failed PUT moved
+        // nothing, and its retry lands here when it does.
+        readLanded();
       },
       (err) => {
         // Not stored. Put it back for the next flush, unless a later

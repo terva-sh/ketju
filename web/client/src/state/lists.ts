@@ -62,13 +62,29 @@ export function forgetReadState() {
   marks.value++;
 }
 
-// marks counts the marks made in this tab. A list on screen asks for itself
-// again when it moves (useAfterMark), whichever screen the mark was made
+// readLanded is a read beacon's answer moving the viewer's position in a
+// thread (state/readTracker.ts). Every list counts that thread's unread
+// posts, and the reader is usually on their way back to one: leaving the
+// thread flushes the beacon as the list asks for itself, and the list's GET
+// can reach the server first (TKT-01M3XP6ZRZ). So the held lists are
+// dropped, any GET still out is not held when it lands, and the list on
+// screen asks again. Thread pages other than the landings the tracker
+// already drops are left: their read boundary is this page's to move.
+export function readLanded() {
+  forgetLists();
+  marks.value++;
+}
+
+// marks counts what this tab has done that moves the viewer's place: a mark
+// all read, and a read beacon that landed. A list on screen asks for itself
+// again when it moves (useAfterMark), whichever screen the change was made
 // from: a reader may leave for another list while the PUT is out, and that
-// list may have answered before the mark landed (Terva review 1802).
+// list may have answered before the PUT landed (Terva review 1802,
+// TKT-01M3XP6ZRZ). Asking again ends the request still out for it, so an
+// answer from before the PUT is not shown when it lands.
 export const marks = signal(0);
 
-// useAfterMark calls retry each time a mark lands while the caller is
+// useAfterMark calls retry each time marks moves while the caller is
 // mounted. It does not call it on mount: a list mounted after a mark asked
 // for itself after it.
 export function useAfterMark(retry: () => void) {

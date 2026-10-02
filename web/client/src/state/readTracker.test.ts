@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { apiGet, peekGet, resetApiCache } from '../api/client';
 import type { ThreadPage } from '../api/dto';
 import { batchMs, dwellMs, flush, marking, markUnread, readPosition, readUrl, resetReadTracker, trackPosts } from './readTracker';
+import { marks } from './lists';
 import { loadThreadPage, resetThreadCache } from './threads';
 import golden from '../../../../internal/dto/testdata/golden/thread.member.json';
 
@@ -414,6 +415,48 @@ describe('flushing', () => {
     await flush();
     expect(peekGet(landing)).toBeUndefined();
     expect(peekGet(paged)).toEqual({ n: 1 });
+    stop();
+  });
+
+  // TKT-01M3XP6ZRZ: every list counts the thread's unread posts, and the
+  // reader is usually going back to one as the PUT lands.
+  it('forgets the held lists, and moves the list signal, once the position has moved', async () => {
+    const unread = '/api/v1/unread';
+    answer = (s) =>
+      s.method === 'GET'
+        ? new Response('{"n":1}', { status: 200, headers: { ETag: '"x"' } })
+        : stored(s.body!.ordinal!);
+    await apiGet(unread);
+    const n = marks.value;
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(5), 200);
+    vi.advanceTimersByTime(dwellMs);
+    await flush();
+    expect(peekGet(unread)).toBeUndefined();
+    expect(marks.value).toBe(n + 1);
+    stop();
+  });
+
+  it('forgets no list when a PUT fails, and forgets them when its retry lands', async () => {
+    const unread = '/api/v1/unread';
+    let put: (s: Sent) => Response = () => {
+      throw new TypeError('network down');
+    };
+    answer = (s) => (s.method === 'GET' ? new Response('{"n":1}', { status: 200, headers: { ETag: '"x"' } }) : put(s));
+    await apiGet(unread);
+    const n = marks.value;
+    const stop = trackPosts('t1', list(10), 0);
+    io().show(post(5), 200);
+    vi.advanceTimersByTime(dwellMs);
+    await flush();
+    expect(puts()).toHaveLength(1);
+    expect(peekGet(unread)).toEqual({ n: 1 });
+    expect(marks.value).toBe(n);
+    put = (s) => stored(s.body!.ordinal!);
+    await flush();
+    expect(puts().map((s) => s.body)).toEqual([{ ordinal: 5 }, { ordinal: 5 }]);
+    expect(peekGet(unread)).toBeUndefined();
+    expect(marks.value).toBe(n + 1);
     stop();
   });
 });

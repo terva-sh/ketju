@@ -4,9 +4,24 @@ import { peekGet } from '../api/client';
 import type { Me, ThreadList } from '../api/dto';
 import { isPhone } from '../state/layout';
 import { listFor, resetLists } from '../state/lists';
+import { dwellMs, resetReadTracker } from '../state/readTracker';
 import { cachedThread, storeThreadPage } from '../state/threads';
 import { viewer } from '../state/viewer';
-import { problemAnswer, renderAt, route, screenOf, settle, stubServer, threadPage, type StubServer } from '../testing';
+import {
+  dwellOn,
+  lensHome,
+  problemAnswer,
+  renderAt,
+  route,
+  screenOf,
+  serveLenses,
+  settle,
+  stubServer,
+  threadPage,
+  unmount,
+  watchObservers,
+  type StubServer,
+} from '../testing';
 import anonMe from '../../../../internal/dto/testdata/golden/me.anon.json';
 import memberMe from '../../../../internal/dto/testdata/golden/me.member.json';
 import unreadList from '../../../../internal/dto/testdata/golden/unread.member.json';
@@ -297,5 +312,146 @@ describe('the list a thread goes back to', () => {
     await renderAt('/unread?cursor=c2');
     expect(listFor('general')).toBe('/unread?cursor=c2');
     expect(listFor('standups')).toBe('/unread?cursor=c2');
+  });
+});
+
+// TKT-01M3XP6ZRZ, found by the Phase 3 exit check: leaving a thread flushes
+// its read beacon, and the list the reader goes back to asks for itself at
+// the same moment. When the list's GET reaches the server before the PUT,
+// its answer still counts the posts just read. Once the PUT answers with a
+// higher position, the held lists are dropped and the list on screen asks
+// again (state/lists.ts readLanded).
+describe('going back to a list while the read beacon is out', () => {
+  const thread = lensHome.split('/')[2];
+  // before is the list as the server holds it before the PUT lands: the
+  // thread with two new posts. After the PUT it holds nothing.
+  const before = () => list({ threads: [{ ...list().threads[0], id: thread, slug: 'a', unread: 2, last_read_ordinal: 0 }] });
+
+  interface Server {
+    // stored is whether the server has taken a PUT.
+    stored: boolean;
+    puts: number[];
+    gets: number;
+    // land answers the oldest PUT still out with status, storing it on a 200.
+    land: (status?: number) => void;
+    // hold makes the next /unread GET wait until held[i] is called.
+    hold: boolean;
+    held: (() => void)[];
+  }
+
+  // serve answers the thread from serveLenses, and the beacon and /unread
+  // here: every PUT waits for land, and /unread answers with what the server
+  // held when the GET arrived.
+  function serve(): Server {
+    serveLenses({ lastRead: 0 });
+    const inner = globalThis.fetch;
+    const waiting: ((status: number) => void)[] = [];
+    const s: Server = { stored: false, puts: [], gets: 0, land: (status = 200) => waiting.shift()!(status), hold: false, held: [] };
+    const json = (body: unknown, status = 200) =>
+      new Response(JSON.stringify(body), {
+        status,
+        headers: { 'Content-Type': status >= 400 ? 'application/problem+json' : 'application/json' },
+      });
+    vi.stubGlobal('fetch', (url: string, init: RequestInit = {}) => {
+      if (init.method === 'PUT' && url === `/api/v1/threads/${thread}/read`) {
+        const { ordinal } = JSON.parse(String(init.body)) as { ordinal: number };
+        s.puts.push(ordinal);
+        return new Promise<Response>((r) =>
+          waiting.push((status) => {
+            if (status !== 200) return r(json({ type: 'internal', title: 'internal', status }, status));
+            s.stored = true;
+            r(json({ last_read_ordinal: ordinal }));
+          }),
+        );
+      }
+      if (url === '/api/v1/unread') {
+        s.gets++;
+        // Tagged, as the server tags a list, so the client holds it.
+        const stored = s.stored;
+        const answer = () => {
+          const r = json(stored ? list({ threads: [] }) : before());
+          r.headers.set('ETag', stored ? '"after"' : '"before"');
+          return r;
+        };
+        if (!s.hold) return Promise.resolve(answer());
+        s.hold = false;
+        return new Promise<Response>((r) => s.held.push(() => r(answer())));
+      }
+      return inner(url, init);
+    });
+    return s;
+  }
+
+  // readAndGoBack reads post 3 of the thread for the dwell, then goes to
+  // /unread, which flushes the beacon as the thread page unmounts.
+  async function readAndGoBack(): Promise<HTMLElement> {
+    const root = await renderAt(`${lensHome}?page=1`);
+    vi.useFakeTimers();
+    dwellOn(3, dwellMs);
+    vi.useRealTimers();
+    await route('/unread');
+    await settle(root);
+    return root;
+  }
+
+  const badge = (root: HTMLElement) => root.querySelector(`[data-thread="${thread}"] [data-unread]`)?.textContent ?? null;
+
+  beforeEach(() => {
+    resetReadTracker();
+    watchObservers();
+    Element.prototype.scrollIntoView = () => {};
+  });
+  afterEach(async () => {
+    vi.useRealTimers();
+    await unmount();
+    resetReadTracker();
+  });
+
+  it('asks for the list again once the PUT lands, when the list answered first', async () => {
+    const s = serve();
+    const root = await readAndGoBack();
+    expect(s.puts).toEqual([3]);
+    // The GET reached the server first, and counts the posts just read.
+    expect(badge(root)).toBe('2 new');
+    expect(s.gets).toBe(1);
+    await act(async () => s.land());
+    await until(() => root.querySelector('[data-empty-list]') !== null);
+    expect(s.gets).toBe(2);
+    expect(rows(root)).toEqual([]);
+  });
+
+  // A late answer must not put back what was true when it was asked for: the
+  // GET still out when the PUT lands began before it.
+  it('does not show or hold a list GET that answers after the PUT and the GET after it', async () => {
+    const s = serve();
+    s.hold = true;
+    const root = await readAndGoBack();
+    expect(s.gets).toBe(1);
+    expect(screenOf(root)).toBe('unread');
+    await act(async () => s.land());
+    await until(() => s.gets === 2 && root.querySelector('[data-empty-list]') !== null);
+    // The first GET answers now, with the list from before the PUT.
+    await act(async () => s.held[0]());
+    await settle(root);
+    expect(rows(root)).toEqual([]);
+    expect(peekGet<ThreadList>('/api/v1/unread')?.threads).toEqual([]);
+  });
+
+  // A refused PUT moved nothing and asks for nothing, and does not stop its
+  // retry, from the list the reader went to, refreshing the list once it
+  // lands.
+  it('asks for nothing after a refused PUT, and for the list once its retry lands', async () => {
+    const s = serve();
+    const root = await readAndGoBack();
+    await act(async () => s.land(503));
+    await settle(root);
+    expect(s.gets).toBe(1);
+    expect(badge(root)).toBe('2 new');
+    // The retry goes out on the next flush; a page going away is one.
+    await act(async () => void dispatchEvent(new Event('pagehide')));
+    expect(s.puts).toEqual([3, 3]);
+    await act(async () => s.land());
+    await until(() => root.querySelector('[data-empty-list]') !== null);
+    expect(s.gets).toBe(2);
   });
 });
