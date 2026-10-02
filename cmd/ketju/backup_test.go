@@ -515,7 +515,8 @@ func besides(t *testing.T, dest string) []string {
 
 // TestBackupRefuses: DEST exists (exit 2); the lock is held by reindex
 // (exit 4, naming it); a redaction is pending (exit 4); serve holds the lock
-// but its socket is gone (exit 4). Nothing is left beside DEST.
+// but its socket is gone (exit 4); DEST is inside the data directory (exit
+// 2). Nothing is left beside DEST.
 func TestBackupRefuses(t *testing.T) {
 	path, data := backupConfig(t, "")
 	seedThreads(t, data, 1)
@@ -567,6 +568,27 @@ func TestBackupRefuses(t *testing.T) {
 
 	if _, _, err := runBackupCmd(t, t.TempDir(), filepath.Join(t.TempDir(), "b")); exitCodeFor(err) != exitUsage {
 		t.Errorf("a directory with no threads/: %v", err)
+	}
+
+	// DEST inside the data directory, directly or through a symlink to it,
+	// is refused before anything is written: under blobs/ the copy would
+	// walk itself (Terva review 1978).
+	link := filepath.Join(t.TempDir(), "alias")
+	if err := os.Symlink(filepath.Join(data, "blobs"), link); err != nil {
+		t.Fatal(err)
+	}
+	for _, dest := range []string{
+		filepath.Join(data, "blobs", "backup"),
+		filepath.Join(data, "backup"),
+		filepath.Join(link, "backup"),
+	} {
+		_, _, err := runBackupCmd(t, data, dest)
+		if exitCodeFor(err) != exitUsage || !strings.Contains(fmt.Sprint(err), "inside the data directory") {
+			t.Errorf("DEST %s: exit %d, %v; want a usage error", dest, exitCodeFor(err), err)
+		}
+		if left := besides(t, dest); len(left) != 0 {
+			t.Errorf("DEST %s: left %v", dest, left)
+		}
 	}
 }
 

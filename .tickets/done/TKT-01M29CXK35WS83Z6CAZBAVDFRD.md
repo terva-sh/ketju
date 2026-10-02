@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T20:53:53Z
+updated_at: 2026-10-02T21:11:25Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -247,6 +247,10 @@ Where the build departs from the plan, and why:
 - **The copy's indexes are removed after its catch-up**, which opens each log through the thread cache and so writes `.idx` files; a backup holds none.
 - **The copy's empty `-wal` and `-shm` are dropped**, so the backup's database is one file.
 - **A database at another schema is copied at it** (added after the plan). `catchUpCopy` asks `db.Pending` and neither migrates nor catches up a copy whose schema is older or newer than the binary's. Migrating it would have made the backup an upgrade takes one the old binary refuses (`TestNewerSchemaRefused`). Such a copy keeps whatever drift its source had, which is reported in the summary (`schema`, `drift_threads`) and not a failure; serve closes it when it next starts. TKT-01M29CXK3S's upgrade procedure relies on this. Tested by `TestBackupLeavesAnotherSchemaAlone` (older and newer) and `TestPendingCountsWithoutWriting`.
+
+**agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:11:25Z
+
+Terva review 1978 (head 632a48cf, base cac3ed9d), high: a DEST inside the source's blobs/ was accepted, and copyBlobs would then walk the backup's own partial copy. Fixed. backup now refuses, with exit 2, any DEST whose parent resolves to the data directory or below it, with symlinks resolved, before it writes anything. Rejecting only blobs/ lost: a backup anywhere inside the data directory it copies is a mistake, and refusing the whole directory is one rule rather than a list of subtrees to keep in step with the copy. TestBackupRefuses covers blobs/backup, the directory itself, and a symlinked alias of blobs/. The usage text and the README say it.
 
 ## Summary
 

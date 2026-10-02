@@ -58,18 +58,18 @@ registration once, from the command line:
 ketju backup --root "$KETJU_DATA" "$KETJU_DEST"
 ```
 
-`$KETJU_DEST` must not exist yet. With `serve` running, the command asks it
-for a snapshot over the control socket `ketju.sock` in the data directory,
-which only the user `serve` runs as can use. `serve` holds new posts for the
-moment it takes to bring the database up to date and copy it, a fraction of
-a second on a small forum and never more than a minute, and pages are served
-meanwhile. With `serve` stopped, the command takes the data directory's lock
-instead, so `serve` cannot start until it has finished. Either way the
-source is only read. The backup is checked as `ketju fsck` checks a data
-directory before it is given its name, and `ketju backup -h` lists the exit
-codes. A database written by another version of ketju is copied at its own
-schema and never migrated, so the version that wrote it can restore the
-backup.
+`$KETJU_DEST` must not exist yet, and must be outside the data directory.
+With `serve` running, the command asks it for a snapshot over the control
+socket `ketju.sock` in the data directory, which only the user `serve` runs
+as can use. `serve` holds new posts for the moment it takes to bring the
+database up to date and copy it, a fraction of a second on a small forum and
+never more than a minute, and pages are served meanwhile. With `serve`
+stopped, the command takes the data directory's lock instead, so `serve`
+cannot start until it has finished. Either way the source is only read. The
+backup is checked as `ketju fsck` checks a data directory before it is given
+its name, and `ketju backup -h` lists the exit codes. A database written by
+another version of ketju is copied at its own schema and never migrated, so
+the version that wrote it can restore the backup.
 
 A backup holds the database, every thread log and every attachment. It
 leaves out the thread indexes and thumbnails, which are rebuilt when first

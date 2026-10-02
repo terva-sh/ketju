@@ -30,10 +30,11 @@ import (
 const backupUsage = `usage: ketju backup [--root DIR] [--json] DEST
 
 Writes a consistent backup of the data directory DIR to DEST, which must not
-exist; its parent must. The backup holds the database, every thread log and
-every attachment. It leaves out the thread indexes and thumbnails, which are
-rebuilt when first needed, uploads still being staged, secrets/ and
-config.toml. Keep your own copy of config.toml and secrets/.
+exist and must lie outside DIR; its parent must exist. The backup holds the
+database, every thread log and every attachment. It leaves out the thread
+indexes and thumbnails, which are rebuilt when first needed, uploads still
+being staged, secrets/ and config.toml. Keep your own copy of config.toml
+and secrets/.
 
 With ketju serve running, backup asks it over the control socket
 DIR/ketju.sock for a snapshot: serve holds new posts for the moment it takes
@@ -60,7 +61,7 @@ exit codes:
   1  the copy failed verification: a damaged log, or a log shorter than its
      projection, which comes from the source (run ketju fsck on it); the
      unverified copy is kept beside DEST and named
-  2  usage, DEST exists, or DIR has no threads directory
+  2  usage, DEST exists or is inside DIR, or DIR has no threads directory
   4  the data directory is in use by something other than serve, a hard
      redaction is pending, serve could not be reached or refused, or a read
      or write failed; nothing is left beside DEST
@@ -131,6 +132,15 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 			return errUsage{fmt.Errorf("backup: %s has no threads directory; is --root the data directory?", *root)}
 		}
 		return fmt.Errorf("backup: %w", err)
+	}
+	// A backup inside the data directory it copies would be walked by its
+	// own copy: under blobs/ it copies itself into itself until the disk is
+	// full (Terva review 1978). Compared with symlinks resolved, so an alias
+	// of the directory is caught too.
+	if inside, err := within(*root, parent); err != nil {
+		return fmt.Errorf("backup: %w", err)
+	} else if inside {
+		return errUsage{fmt.Errorf("backup: %s is inside the data directory %s; put the backup outside it", dest, *root)}
 	}
 	if _, err := os.Stat(journalPath(*root)); err == nil {
 		return fmt.Errorf("backup: %s exists: a hard redaction is pending. Finish it with "+
@@ -244,6 +254,31 @@ const (
 	schemaOlder   = "older"
 	schemaNewer   = "newer"
 )
+
+// within reports whether dir is root or below it, once both are absolute
+// and their symlinks resolved.
+func within(root, dir string) (bool, error) {
+	resolve := func(p string) (string, error) {
+		abs, err := filepath.Abs(p)
+		if err != nil {
+			return "", err
+		}
+		return filepath.EvalSymlinks(abs)
+	}
+	r, err := resolve(root)
+	if err != nil {
+		return false, err
+	}
+	d, err := resolve(dir)
+	if err != nil {
+		return false, err
+	}
+	rel, err := filepath.Rel(r, d)
+	if err != nil {
+		return false, nil // on another volume: not inside
+	}
+	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))), nil
+}
 
 func driftNote(s fsckSummary) string {
 	if !s.DriftChecked {
