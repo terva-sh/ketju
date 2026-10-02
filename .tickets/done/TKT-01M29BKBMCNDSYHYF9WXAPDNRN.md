@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:07:17Z
-updated_at: 2026-10-02T15:41:59Z
+updated_at: 2026-10-02T22:47:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -48,7 +48,7 @@ The thread page response is the load-bearing endpoint. Everything above the view
 
 ## Acceptance criteria
 
-- [ ] No handler in internal/web/api reads from a store package directly
+- [x] No handler in internal/web/api reads from a store package directly
 - [ ] Golden JSON tests cover every endpoint in docs/07 and fail on any shape change
 - [x] Every error response is application/problem+json with a stable type code
 - [x] The thread page returns a correct ETag of thread id, log length, and renderer version, and honors If-None-Match
@@ -64,6 +64,10 @@ Verification on 2026-10-02, against origin/main at adeba570, done the same way a
 3. **problem+json with stable codes: holds.** Every error path goes through `problem.write`. Tests: `TestCatalogueGolden`, `TestTheDocumentedCatalogueMatchesTheCode`, `TestAProblemBodyIsRFC9457Shaped`. Caveat: a wrong verb answers `not-found`, not `method-not-allowed`. Follow-up: TKT-01M3YME9KG.
 4. **ETag and If-None-Match: holds.** The tag also carries a body digest, as docs/07:701 records. Tests: `TestETagAndNotModified`, `TestETagCoversAuthorsAndForum`, `TestETagCoversPageSize`.
 5. **Every mutation as a form post: partly. Left unticked.** `TestEveryViewerStateRouteHasAFormPost` covers the 13 viewer-state routes. Posting, editing, settings and the admin writes have no form route. That is the non-JS client's work, epic TKT-01M29BN36W (Phase 5).
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T22:47:32Z
+
+Criterion 1 met after close, 2026-10-02: TKT-01M3YME9DM (Keep API handlers off the stores, and test the layering) merged via PR #367 (cac3ed9d). TestHandlersReachNoStore (internal/web/api/layering_test.go) fails CI when a handler imports a store package, database/sql, or calls through a session store. Criteria 2 and 5 stay unticked: 2 waits on TKT-01M3YME9G0, 5 on the Phase 5 HTML client.
 
 ## Summary
 

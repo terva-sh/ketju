@@ -21,12 +21,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-30T12:17:48Z
-updated_at: 2026-10-02T03:51:10Z
+updated_at: 2026-10-02T22:47:32Z
 created_by:
   id: agent:claude-code/phase2-run-39wbn4q
   name: ""
 updated_by:
-  id: agent:claude-code/phase3-s3zryd
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -43,7 +43,7 @@ Add the member and post counts to the forum index's response, and draw the foote
 ## Acceptance criteria
 
 - [x] At 390 px and 1440 px the forum index ends with N members · M posts for a member and M posts for an anonymous viewer, M summing post_count over the listed forums and their children
-- [ ] At 720 px and above the footer offers Press ? for keyboard shortcuts, which opens the help overlay; a phone shows no hint
+- [x] At 720 px and above the footer offers Press ? for keyboard shortcuts, which opens the help overlay; a phone shows no hint
 - [x] The forum index passes axe at 390 px and 1440 px and forum-index-*.png are refreshed
 - [x] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 70000 B gzip, and the PR states the reader's growth
 - [x] GET /forums carries members, the count of exactly the accounts the mention lookup can offer (active, handle not ending in -), to a member session only, and null to anonymous viewers and applicants (TestForumTreeMembersOnlyForMembers, TestForumTreeMembersCountsActiveAccounts; golden, dto-contract.ts and docs/07 updated)
@@ -128,6 +128,10 @@ For the PR body (orchestrator, 2026-10-01): binding ? on the forum index adds a 
 **agent:claude-code/phase3-s3zryd** at 2026-10-02T03:51:03Z
 
 Terva review 1887 on PR #344 (head 3a231f6, base 14074f8), medium, 'Provide a safeguard before enabling the global character-key shortcut'. Fixed: no key is bound on the forum index. The footer's button reads 'Keyboard shortcuts' and opens the list, which leads with 'These keys work on a thread page, where ? opens this list.' This supersedes the run-decision note that bound ? on the index, and docs/06 records the new decision with the alternatives that lost. Criterion 2 is left unticked: it asks for the words 'Press ? for keyboard shortcuts', which would be false with no key bound. It can be met once TKT-01M3V9DWTN (Let a member turn off the single-key shortcuts (WCAG 2.1.4)) adds the off switch. The reader bundle is now 79006 B, +515 B over main's 78491 B.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T22:47:32Z
+
+Criterion 2 met after close, 2026-10-02: TKT-01M3V9DWTN (Let a member turn off the single-key shortcuts) merged via PR #370 (d0bb743c). The forum index binds ? while shortcuts are on and the footer reads Press ? for keyboard shortcuts at 720 px and above.
 
 ## Summary
 

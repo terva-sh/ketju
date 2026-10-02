@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T19:55:09Z
+updated_at: 2026-10-02T22:47:33Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-moving-posts
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -120,3 +120,7 @@ open decision (docs/15 stop class 2, with class 1 inside it). Criterion 3 wants 
 **agent:claude-code/phase4-groom-moving-posts** at 2026-10-02T19:54:44Z
 
 Maintainer decision, 2026-10-02. The orchestrator asked as choices, and the answers were 'Optional key on ThreadCreated' and 'Member's own text'. ThreadCreated gains an optional continues {thread_id, ordinal}, written only by reply as a new thread. The composer pre-fills an ordinary editable blockquote, which shows to every reader of the new thread and does not follow a later removal of the source post. The continued-in note shows only to readers of the new thread, and the continued-from header only to readers of the source. Recorded in docs/03 and docs/06. This supersedes the open decision in the earlier plan, which is rewritten.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T22:47:33Z
+
+Run decision relayed by the orchestrator (pending maintainer review), 2026-10-02. The exit-check grooming (PR #375, TKT-01M3YMG0NX) decided in docs/06 "Moderator flow for drift" that "Reply as new thread" stays available under a post of a locked or archived thread: it writes only the new thread's log, so the archived thread stays read-only. Hiding the action in the client and refusing it on the server both lost. Build to it.

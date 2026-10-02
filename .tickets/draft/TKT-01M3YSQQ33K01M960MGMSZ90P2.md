@@ -23,12 +23,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:14:05Z
-updated_at: 2026-10-02T17:24:09Z
+updated_at: 2026-10-02T22:47:33Z
 created_by:
   id: agent:claude-code/phase4-groom-tags-archive
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-tags-archive
+  id: agent:claude-code/phase4-run-orchestrator
   name: ""
 extensions: {}
 ---
@@ -105,3 +105,7 @@ What it covers:
 **agent:claude-code/phase4-groom-tags-archive** at 2026-10-02T17:22:37Z
 
 run decision: pending maintainer review. Phase 4 grooming (tags and archive lane) settled what an archived thread shows, in docs/06 "The thread head" on branch groom/p4-tags-archive. It says "This thread is archived." where a locked thread says it is locked, offers nobody a control the server refuses, and its list row carries an "Archived" flag. It stays listed and readable. If the maintainer answers TKT-01M3YSQQ5X (Decide whether an archived thread can be unarchived, and by whom) with an unarchive, the confirmation's "It cannot be undone" changes with it.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-02T22:47:33Z
+
+Run decision relayed by the orchestrator (pending maintainer review), 2026-10-02. The exit-check grooming (PR #375, TKT-01M3YMG0NX) decided in docs/06 "Moderator flow for drift" that "Reply as new thread" stays available under a post of a locked or archived thread: it writes only the new thread's log, so the archived thread stays read-only. Hiding the action in the client and refusing it on the server both lost. Build to it.
