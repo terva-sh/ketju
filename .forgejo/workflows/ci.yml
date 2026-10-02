@@ -163,6 +163,14 @@ jobs:
         # run again here, verbose, and nothing else does.
         run: go test -race ./cmd/ketju/ -run '^TestPhase2Exit' -count=1 -v
 
+      - name: Phase 3 exit tests, by name
+        # TKT-01M3V3CFRE. As the Phase 2 step above: docs/14's invariants
+        # (search, notifications, lenses, live events and blobs never widen
+        # access) are proven by reading this log, so these run again here,
+        # verbose. The Playwright step's list reporter names each test of
+        # e2e/phase3-exit.spec.ts.
+        run: go test -race ./cmd/ketju/ -run '^TestPhase3Exit' -count=1 -v
+
       - name: fuzz the frame parser, body decoder and id parser (bounded)
         # TKT-01M29C2WTV. The parser reads a length off disk and sizes work
         # from it, so a hostile or corrupt length must be refused before it is

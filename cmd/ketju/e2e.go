@@ -149,7 +149,8 @@ func runE2E(args []string) error {
 	}
 	// The suite reads what was seeded from here rather than repeating it.
 	fixture, _ := json.Marshal(map[string]any{"thread": "/t/" + thread.String() + "/" + seedSlug,
-		"title": seedTitle, "posts": seedPosts, "users": idp.Users, "applications": applications})
+		"title": seedTitle, "posts": seedPosts, "users": idp.Users, "applications": applications,
+		"restricted_word": seedRestrictedWord})
 	if err := os.WriteFile(filepath.Join(*dir, "seed.json"), fixture, 0o600); err != nil {
 		return fmt.Errorf("e2e: %w", err)
 	}
@@ -228,6 +229,13 @@ const (
 	seedChatter        = "chatter"
 	seedChatterThreads = 60
 )
+
+// seedRestrictedWord is held by one post, mona's in the restricted
+// moderators forum, which alice cannot read, and by nothing else: Phase 3's
+// exit search test (TKT-01M3V3CFRE, e2e/phase3-exit.spec.ts) has alice search
+// for it and find nothing. The thread is older than everything else, so no
+// list or index a member reads changes.
+const seedRestrictedWord = "quartzite"
 
 var (
 	seedLongTitle = "Comparing every rain barrel, diverter, first-flush filter and overflow fitting we " +
@@ -422,6 +430,12 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	}
 	if err == nil {
 		_, err = thread(forums[seedForum], seedLongTitle, "comparing-rain-barrels", 3, now-3*day, seedLongTags, false, nil)
+	}
+	if err == nil {
+		_, err = thread(forums["moderators"], "Keys to the store room", "keys-to-the-store-room", 1, now-60*day,
+			[]string{}, false, func(int) (string, threadlog.PostBody) {
+				return seedModerator, threadlog.PostBody{Source: "The " + seedRestrictedWord + " samples stay locked in the store room."}
+			})
 	}
 	for i := 0; i < seedChatterThreads && err == nil; i++ {
 		_, err = thread(forums[seedChatter], fmt.Sprintf("Chatter thread %02d", i+1), fmt.Sprintf("chatter-%02d", i+1),

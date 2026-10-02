@@ -54,6 +54,8 @@ dependencies:
   - TKT-01M3VHSYFR176FWWBAPV8PHSEK
   - TKT-01M3V6Y4JP8W8WY0JG6NZV7M7S
   - TKT-01M3V6Y87D4EQBQ4HYTPJCSGR2
+  - TKT-01M3XNQ77222FNGZHA4HM380Z8
+  - TKT-01M3XP6ZRZQ968B8QPZ1RJBEGM
 blocks_on: none
 references: []
 claim:
@@ -66,7 +68,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-02T06:29:56Z
+updated_at: 2026-10-02T06:53:30Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -187,3 +189,46 @@ Terva review 1694 on PR #269 (head f969334, base a599b48), medium, 'Do not requi
 **agent:claude-code/phase3-groom-polish** at 2026-10-01T08:18:50Z
 
 Terva review 1699 on PR #269 (head fb9d86d, base a599b48), medium, 'Make the suspended-author exit expectation consistent'. Fixed. A suspended author's post leaves the deny list and is its own case: a plain member gets no more than the thread page serves them for it, asserted equal to that page, not empty. Criterion 5 already said 'no more than the thread page shows'.
+
+**agent:claude-code/phase3-exit-check** at 2026-10-02T06:53:30Z
+
+Phase A implemented on run/cfre-phase3-exit, not yet pushed, waiting on TKT-01M3S3ZZSZ (PR #348).
+
+### What landed on the branch
+- `cmd/ketju/phase3_exit_test.go`: TestPhase3ExitSearchNeverWidensAccess, TestPhase3ExitNotificationsNeverWidenAccess, TestPhase3ExitLensesNeverWidenAccess, TestPhase3ExitLiveNeverWidensAccess and TestPhase3ExitBlobsFollowTheirPosts. Each starts its own serve and builds one world (newP3World):
+  - five sign-ins, the burst /auth/* allows;
+  - general and the restricted vault, with a keepers group (gail) granted everything in vault only and a wardens group (otto) granted everything in general only;
+  - a removed, a hidden-pending-review (flags.auto_hide_threshold 1), a redacted (ketju redact, serve stopped and started again) and a suspended author's post, each with an image;
+  - a thread moved from general to vault;
+  - posts in vault.
+
+  Each expected answer is read from the viewer's own thread page, then pinned by a table of hard expectations, so a page that widened would not carry a test with it.
+- `e2e/phase3-exit.spec.ts`: the plan's 15 tests in both projects, the page picker on the phone only, with one axe scan each and no /auth/* call. `e2e/session.ts` is unchanged.
+- Seed: one post by mona in the restricted moderators forum holding "quartzite", dated 60 days back so no list a member reads changes. seed.json names it as restricted_word.
+- CI: the "Phase 3 exit tests, by name" step after the Phase 2 one.
+
+### Readings of the plan (not product decisions; none of docs/14's stop-rule kind was needed)
+- **Search and notifications serve only posts that every reader sees as themselves.** That covers moderators too: search judges each hit by `servesPost`, and notifications follow docs/04's run decision of 2026-10-01. So for those two, "exactly what the thread page serves" a moderator means the posts that page shows as themselves. The moderator view's removed bodies show up where the merged features serve them: the moderator lens and blobs. Both tests assert this.
+- **Suspended author.** Suspension does not remove posts. pat's thread page shows sam's #5 as itself with author @sam, and search, notifications, the mentions lens and blobs are asserted equal to that page.
+- **Settings test member.** It runs as ada. She is the one stored-session account no other spec reads a thread page as (her specs are the admin screens and search's API calls), and the spec may not sign anyone in. Her page size is restored in a finally block.
+- **"show brings it in without moving the page"** is read as docs/06 "What show does": revealed in place, with no navigation, and the new post takes focus. That focus can scroll, so the test asserts that the post in view did not move before show, and that there was no navigation and focus on the new post after.
+- **Attachment fixture.** The plan asked for a small PNG fixture. `e2e/fixtures/pixel.png` (#326) already is one, so the spec reuses it.
+- **Manifest.** The test checks the link and what it serves. Installability needs a profile on disk and stays in install.spec.ts.
+- **Leaving a thread.** The unread and alerts tests leave a thread with the browser's Back, because a phone's thread page draws no tab bar.
+
+### Criterion 3
+The criterion says 70000 B. The maintainer raised the budget to 120000 B on 2026-10-01 (#331), and that change supersedes the 70000 B figure. The reader is about 79 KB, so the 70000 half of criterion 3 is left unticked and its text unchanged, as other lanes did.
+
+### A real bug, filed
+At 1440 px the notifications test's axe scan fails `link-in-text-block` on an unread `thread_you_watch` row. Filed as TKT-01M3XNQ772 (Tell an unread alert's thread link apart by more than colour), phase-3, owner TKT-01M29CTY86. This ticket now depends on it. The spec is not changed to avoid the failure, so the desktop notifications test fails until the fix lands.
+
+### A second real bug, filed
+In the full suite at 1440 px, the Unread surface test found the list still showing "2 new" after alice read the thread and went Back, although the server held position 3. The list GET races the read beacon's keepalive PUT, and nothing refetches the list after the PUT. Filed as TKT-01M3XP6ZRZ (Show a thread as read on Unread after going back from reading it), phase-3, owner TKT-01M29CTY7K. This ticket depends on it. The test passed twice when run alone. The spec is not changed to avoid the race.
+
+### Mutation checks (the plan's four)
+- Search's readable forums computed as an admin's: caught by TestPhase3ExitSearchNeverWidensAccess (pat and otto found vault and moved-thread results).
+- An SSE hint delivered without checkAll or the read check: caught by TestPhase3ExitLiveNeverWidensAccess (pat's stream of the moved thread was sent its later lengths and did not end).
+- A blob served without the referencing-post check: caught by TestPhase3ExitBlobsFollowTheirPosts (pat was served vault's blobs and thumbnails).
+- A redacted body left in the index:
+  - Skipping only redact's own index steps was NOT caught. serve's search catch-up reads the Redacted record on the next start and drops the row anyway.
+  - With that catch-up also made to ignore Redacted, it was caught by the index check (1 row for "redactedword"). The served answers stayed clean even then, because search's judge serves only Visible entries.
