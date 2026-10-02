@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T21:42:32Z
+updated_at: 2026-10-02T21:45:47Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -263,6 +263,10 @@ Terva review 1982 (head aa57900b) resolved 1979's finding and raised a medium on
 **agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:42:32Z
 
 Terva review 1983 (head c57d66c4) resolved 1982's finding and raised a medium one: the pending-redaction check ran before the lock was taken. A redact that started after the check and stopped partway would have released the lock and left its journal, and backup would then have copied the partly redacted state. Fixed. Offline, the journal is now checked again once the lock is held, before anything is copied. Online needs no second check: serve holds the lock, so no redact can run, and serve does not start while a journal exists. The early check stays, so the common case fails before a partial directory is made. A test seam, `backupOpts.beforeLock`, writes the journal between the two checks. TestBackupRefuses covers that case, and it fails when the second check is removed.
+
+**agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:45:47Z
+
+Terva review 1987 (head 585481bb) resolved 1983's finding and raised a medium one: the attachment check read the current schema's post_attachments(hash) even for a copy left at another schema. It and the fsck drift check would have failed a valid unmigrated backup of a database whose tables differ. Fixed. For a copy at another schema, each check that cannot read that schema is listed in the report as `unchecked`, with the reason, and the copy is kept: the attachment check when post_attachments(hash) is absent, the drift check when projection_state cannot be read. At this binary's schema both still fail the copy as before. TestBackupLeavesAnotherSchemaAlone now changes real tables, not only the migration record. The older copy has no post_attachments, as before 0020. The newer copy has renamed projection_state.log_length and post_attachments.hash. Each backs up, reports what went unchecked, and restores.
 
 ## Summary
 

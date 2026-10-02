@@ -98,8 +98,11 @@ type backupSummary struct {
 	Drift int `json:"drift_threads,omitempty"`
 	// MissingBlobs are attachments posts name that the source itself
 	// lacks, so the backup does too.
-	MissingBlobs int   `json:"missing_blobs,omitempty"`
-	ElapsedMS    int64 `json:"elapsed_ms"`
+	MissingBlobs int `json:"missing_blobs,omitempty"`
+	// Unchecked names each check a copy at another schema could not have,
+	// because its database does not keep what the check reads, and why.
+	Unchecked []string `json:"unchecked,omitempty"`
+	ElapsedMS int64    `json:"elapsed_ms"`
 }
 
 func runBackup(args []string) error {
@@ -218,9 +221,13 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 		return fmt.Errorf("backup: verifying the copy: %w", err)
 	}
 	// Drift fails a copy at this binary's schema, which the catch-up has
-	// just closed. A copy at another schema keeps what its source had.
-	drift := verify.DriftThreads > 0 && schema == schemaCurrent
-	if !verify.DriftChecked || verify.Damaged > 0 || verify.Quarantined > 0 || drift {
+	// just closed. A copy at another schema keeps what its source had, and
+	// may keep its projection in tables this binary cannot read; that is
+	// reported as not checked rather than failing the copy (Terva review
+	// 1987).
+	current := schema == schemaCurrent
+	drift := verify.DriftThreads > 0 && current
+	if (!verify.DriftChecked && current) || verify.Damaged > 0 || verify.Quarantined > 0 || drift {
 		keep = true
 		writeFsckText(errOut, verify, true)
 		return errCorrupt{fmt.Errorf("backup: the copy in %s failed verification: %d damaged, %d shorter than "+
@@ -229,6 +236,9 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 	}
 
 	sum.Drift = verify.DriftThreads
+	if !verify.DriftChecked {
+		sum.Unchecked = append(sum.Unchecked, "projection drift: "+verify.DriftNote)
+	}
 
 	// fsck's walk reads the logs and the projection, not the blob store, so
 	// the attachments the copy's posts name are checked here (Terva review
@@ -236,7 +246,10 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 	// source lacks too is reported and does not: the copy is as whole as its
 	// source, and refusing would refuse every backup of it.
 	lost, absent, err := checkBlobs(ctx, *root, partial)
-	if err != nil {
+	switch {
+	case errors.Is(err, errNoAttachmentTable) && !current:
+		sum.Unchecked = append(sum.Unchecked, "attachments: "+err.Error())
+	case err != nil:
 		return fmt.Errorf("backup: checking the copy's attachments: %w", err)
 	}
 	if len(lost) > 0 {
@@ -279,6 +292,9 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 		fmt.Fprintf(out, "the database's schema is %s than this binary's, so the copy was left at it, not migrated\n", sum.Schema)
 		if sum.Drift > 0 {
 			fmt.Fprintf(out, "%d thread log(s) are ahead of the database; serve closes that when it next starts on the copy\n", sum.Drift)
+		}
+		for _, u := range sum.Unchecked {
+			fmt.Fprintf(out, "not checked, at that schema: %s\n", u)
 		}
 	}
 	return nil
@@ -544,6 +560,10 @@ func copyBlobs(root, partial string) (int, error) {
 	return n, nil
 }
 
+// errNoAttachmentTable is checkBlobs on a database that keeps no
+// post_attachments(hash): one another version of ketju wrote.
+var errNoAttachmentTable = errors.New("the database has no post_attachments table with a hash column")
+
 // checkBlobs reads the attachments the copy's database says its posts name,
 // and returns those the copy lacks although the source has them (lost), and
 // those the source lacks too (absent).
@@ -555,6 +575,14 @@ func checkBlobs(ctx context.Context, root, partial string) (lost, absent []strin
 	defer d.Close()
 	var hashes []string
 	err = d.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+		var n int
+		if err := tx.QueryRowContext(ctx,
+			`SELECT count(*) FROM pragma_table_info('post_attachments') WHERE name = 'hash'`).Scan(&n); err != nil {
+			return err
+		}
+		if n == 0 {
+			return errNoAttachmentTable
+		}
 		rows, err := tx.QueryContext(ctx, `SELECT DISTINCT hash FROM post_attachments ORDER BY hash`)
 		if err != nil {
 			return err

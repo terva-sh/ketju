@@ -347,16 +347,31 @@ func TestBackupOfAStoppedDataDirectory(t *testing.T) {
 // schema than this binary's is copied at it, neither migrated nor caught up,
 // so the binary that wrote it can restore it; the source's drift is reported
 // rather than failing the backup. This is the backup an upgrade takes.
+//
+// Each schema differs in its tables, not only in its migration record: the
+// older has no post_attachments, as before 0020, and the newer has renamed
+// what the projection and attachment checks read. A check that cannot read
+// the other schema is reported as not checked, and the copy is kept (Terva
+// review 1987).
 func TestBackupLeavesAnotherSchemaAlone(t *testing.T) {
 	for _, tc := range []struct {
-		schema, change string
-		recorded       func(n int) int
+		schema    string
+		change    []string
+		recorded  func(n int) int
+		drift     int
+		unchecked int
+		fsck      int
 	}{
-		{schemaOlder, `DELETE FROM schema_migrations WHERE version = (SELECT max(version) FROM schema_migrations)`,
-			func(n int) int { return n - 1 }},
-		{schemaNewer, `INSERT INTO schema_migrations (version, name, checksum, created_at)
+		{schemaOlder, []string{
+			`DELETE FROM schema_migrations WHERE version = (SELECT max(version) FROM schema_migrations)`,
+			`DROP TABLE post_attachments`,
+		}, func(n int) int { return n - 1 }, 1, 1, exitDrift},
+		{schemaNewer, []string{
+			`INSERT INTO schema_migrations (version, name, checksum, created_at)
 			SELECT max(version) + 1, 'from_a_newer_binary', 'x', 1 FROM schema_migrations`,
-			func(n int) int { return n + 1 }},
+			`ALTER TABLE projection_state RENAME COLUMN log_length TO projected_length`,
+			`ALTER TABLE post_attachments RENAME COLUMN hash TO blob_hash`,
+		}, func(n int) int { return n + 1 }, 0, 2, -1},
 	} {
 		t.Run(tc.schema, func(t *testing.T) {
 			path, data := backupConfig(t, "")
@@ -376,7 +391,9 @@ func TestBackupLeavesAnotherSchemaAlone(t *testing.T) {
 			}
 			d := openDB(t, data)
 			n := migrationsRecorded(t, d)
-			execDB(t, d, tc.change)
+			for _, q := range tc.change {
+				execDB(t, d, q)
+			}
 			d.Close()
 
 			dest := filepath.Join(t.TempDir(), "backup")
@@ -384,8 +401,9 @@ func TestBackupLeavesAnotherSchemaAlone(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ketju backup: %v\n%s", err, errOut)
 			}
-			if sum.Schema != tc.schema || sum.CaughtUp != 0 || sum.Drift != 1 {
-				t.Errorf("report = %+v; want schema %s, nothing caught up, 1 thread of drift", sum, tc.schema)
+			if sum.Schema != tc.schema || sum.CaughtUp != 0 || sum.Drift != tc.drift || len(sum.Unchecked) != tc.unchecked {
+				t.Errorf("report = %+v; want schema %s, nothing caught up, %d thread(s) of drift, %d check(s) not made",
+					sum, tc.schema, tc.drift, tc.unchecked)
 			}
 			got := restore(t, dest)
 			cd, err := db.OpenReadOnly(t.Context(), adminDBPath(got))
@@ -397,10 +415,13 @@ func TestBackupLeavesAnotherSchemaAlone(t *testing.T) {
 				t.Errorf("the copy records %d migrations, want the source's %d", m, tc.recorded(n))
 			}
 			// What fsck says of the source, it says of the copy: drift
-			// only, which serve closes when it next starts.
-			var out bytes.Buffer
-			if err := fsckMain(&out, []string{"--root", got}); exitCodeFor(err) != exitDrift {
-				t.Errorf("fsck of the restored copy: %v, want drift only\n%s", err, out.String())
+			// only, which serve closes when it next starts, where this
+			// binary can read the projection at all.
+			if tc.fsck >= 0 {
+				var out bytes.Buffer
+				if err := fsckMain(&out, []string{"--root", got}); exitCodeFor(err) != tc.fsck {
+					t.Errorf("fsck of the restored copy: %v, want exit %d\n%s", err, tc.fsck, out.String())
+				}
 			}
 		})
 	}
