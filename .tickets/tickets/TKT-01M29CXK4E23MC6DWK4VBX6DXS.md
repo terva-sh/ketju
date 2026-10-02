@@ -34,7 +34,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T02:53:50Z
+updated_at: 2026-10-02T02:56:20Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -183,3 +183,7 @@ Terva review 1838 (head 27a8de90, base dd840125), medium 'Serialize preference s
 **agent:claude-code/phase3-settings-client** at 2026-10-02T02:53:50Z
 
 Terva review 1875 (head dfb1e736, base 25ad977a): finding 1 of 1838 resolved; both new mediums fixed. 'Keep preference-save serialization across settings-screen remounts': the save queue is the module's, not the screen's, and the GET /settings answer is taken only if no save was out when the screen asked and none was made since (module counters made and settled). 'Do not clear newer invalid input when an earlier save completes': every edit, sent or refused here, is numbered, and only the answer to a field's newest edit clears what it shows. Regression tests: a save after leaving /settings and coming back waits for the one still out; a GET answered after that save does not undo it; a refused value typed during a save survives its answer.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-02T02:56:20Z
+
+Terva review 1876 (head f6c0fcdf, base 25ad977a): both 1875 findings resolved; the new medium 'Coordinate viewer refreshes with preference saves' is fixed. state/viewer.ts gains setViewerSettings, which counts each settings answer taken from GET or PATCH /settings; refreshViewer keeps the viewer's settings over its /me answer's when one was taken since the refresh was asked for, for the same viewer, and syncs the theme from the result. Regression tests in state/viewer.test.ts: a /me asked for before a save and answered after it keeps the saved settings and theme while taking its other fields; a /me asked for after a save takes its own settings.

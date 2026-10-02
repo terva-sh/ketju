@@ -1,6 +1,6 @@
 import { computed, signal } from '@preact/signals';
 import { apiGet } from '../api/client';
-import type { Me } from '../api/dto';
+import type { Me, Settings } from '../api/dto';
 import { readBootstrap } from '../bootstrap';
 import { syncThemeFromAccount } from './theme';
 
@@ -32,6 +32,21 @@ export const badges = computed(() => ({
 export const siteName = computed(() => viewer.value.site_name || 'Ketju');
 
 let refreshes = 0;
+// settingsTaken counts the settings answers taken from GET or PATCH
+// /settings (setViewerSettings).
+let settingsTaken = 0;
+
+// setViewerSettings makes s, the account's settings as GET or PATCH
+// /settings answered, the viewer's. A /me asked for before it may carry
+// the settings from before, and refreshViewer keeps these over them
+// (Terva review 1876). It reports whether anything changed.
+export function setViewerSettings(s: Settings): boolean {
+  settingsTaken++;
+  const was = viewer.value.settings;
+  if (was.timezone === s.timezone && was.locale === s.locale && was.page_size === s.page_size && was.theme === s.theme) return false;
+  viewer.value = { ...viewer.value, settings: s };
+  return true;
+}
 
 // refreshViewer fetches /me and replaces the viewer with it, and takes the
 // account's theme (state/theme.ts). A failure leaves the viewer as it was
@@ -40,13 +55,17 @@ let refreshes = 0;
 // Only the newest refresh replaces the viewer, and not if it was aborted:
 // refreshes can overlap (a sign-in, then a sign-out) and finish in any order,
 // and an older one landing last would put back a viewer that is no longer
-// signed in, notification count and all.
+// signed in, notification count and all. Settings taken from /settings
+// since the refresh was asked for are newer than its answer's, and are
+// kept, for the same viewer.
 export async function refreshViewer(signal?: AbortSignal): Promise<Me> {
   const n = ++refreshes;
+  const since = settingsTaken;
   const me = await apiGet<Me>('/api/v1/me', { signal });
   if (n === refreshes && !signal?.aborted) {
-    viewer.value = me;
-    syncThemeFromAccount(me);
+    const keep = settingsTaken !== since && me.user?.handle === viewer.value.user?.handle;
+    viewer.value = keep ? { ...me, settings: viewer.value.settings } : me;
+    syncThemeFromAccount(viewer.value);
   }
   return me;
 }

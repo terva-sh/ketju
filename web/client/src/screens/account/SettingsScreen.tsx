@@ -7,7 +7,7 @@ import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../../components/ErrorPanel';
 import { syncThemeFromAccount, themePrefs } from '../../state/theme';
 import { forgetAllThreadPages } from '../../state/threads';
-import { viewer } from '../../state/viewer';
+import { setViewerSettings, viewer } from '../../state/viewer';
 import { SettingsHead } from './settings';
 
 export const settingsUrl = '/api/v1/settings';
@@ -24,10 +24,9 @@ type Key = 'timezone' | 'page_size' | 'theme';
 // once, and takes the account's theme (state/theme.ts). Thread pages cut at
 // another page size are dropped with the old size.
 function adopt(s: Settings) {
-  const was = viewer.value.settings;
-  if (was.timezone === s.timezone && was.locale === s.locale && was.page_size === s.page_size && was.theme === s.theme) return;
-  viewer.value = { ...viewer.value, settings: s };
-  if (was.page_size !== s.page_size) forgetAllThreadPages();
+  const size = viewer.value.settings.page_size;
+  if (!setViewerSettings(s)) return;
+  if (size !== s.page_size) forgetAllThreadPages();
   syncThemeFromAccount(viewer.value);
 }
 
