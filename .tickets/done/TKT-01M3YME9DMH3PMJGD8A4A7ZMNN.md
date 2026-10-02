@@ -18,10 +18,12 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
+  - ref: pr:367
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-02T19:30:24Z
+updated_at: 2026-10-02T19:31:03Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
