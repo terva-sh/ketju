@@ -24,7 +24,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T13:55:32Z
-updated_at: 2026-10-02T19:30:43Z
+updated_at: 2026-10-02T20:18:46Z
 created_by:
   id: agent:claude-code/phase3-lenses
   name: ""
@@ -54,7 +54,7 @@ Compare in uint64, or add one helper in `threadlog` that every caller uses. Add 
 - [x] threadlog.PastLast(o uint32, n int) bool exists, lens.pastLast is gone, and Index.Entry, Index.Entries, Index.entryRef, lensPage, PageFor and the attachments bound all call it; grep -rnE 'int\((o|ordinal|from|to|q\.Ordinal)\) *[<>]' over non-test Go files in internal/ and cmd/ finds nothing
 - [x] cmd/ketju/redact.go sorts ordinals with cmp.Compare rather than int subtraction
 - [x] TestPastLast, TestEntryPastTheEndIsAnErrorNotAPanic, TestEntriesPastTheEndAreClamped, TestReplayRefusesAnOrdinalPastTheEnd and TestPageForPastTheLastOrdinal pass, and ?ordinal=4294967295 is not-found on the thread page and on a lens page
-- [ ] A CI step in Build and Test runs the threadlog and lens packages and TestPageFor under GOARCH=386 CGO_ENABLED=0, its step log shows each package ok, and the PR quotes that step failing on a commit holding only the tests and the step
+- [x] A CI step in Build and Test runs the threadlog and lens packages and TestPageFor under GOARCH=386 CGO_ENABLED=0, its step log shows each package ok, and the PR quotes that step failing on a commit holding only the tests and the step
 - [x] No change to format.go, records.go, header.go, the .idx layout or internal/dto
 
 ## Implementation plan
@@ -135,6 +135,23 @@ The step's commands, run on that commit under `GOARCH=386 CGO_ENABLED=0`:
 - `TestPageForPastTheLastOrdinal`: `ordinal 2147483648 of 3 posts: page 85899346, <nil>; want not-found` and `ordinal 4294967295 of 3 posts: page 1, <nil>; want not-found`.
 
 A panicking test ends the package binary, so the package run shows only the first; each line above is from `-run` on that test alone.
+
+**agent:claude-code/phase4-run-vvze4g** at 2026-10-02T20:18:46Z
+
+Criterion 4, 2026-10-02: the step "ordinal bounds on a 32-bit build" passed in CI run 2444 (job 0) on PR #366's head 4694cb18, in 1m33s. Its log:
+
+```
+ok  	github.com/terva-sh/ketju/internal/store/threadlog	13.200s
+ok  	github.com/terva-sh/ketju/internal/service/threads/lens	0.019s
+=== RUN   TestPageForPastTheLastOrdinal
+--- PASS: TestPageForPastTheLastOrdinal (0.00s)
+PASS
+ok  	github.com/terva-sh/ketju/internal/service/threads	0.008s
+```
+
+The runner's kernel runs 386 binaries, so the plan's fallback (`go test -c`, compile only) was not needed. The PR description quotes the step failing on the test-only commit 65c85066, as the earlier note does.
+
+Terva review: run 3f885930-a4fd-49ac-9f77-c3d84d24808b (Actions run 2445) on head 4694cb189f0335fa71a7c98f40fa0a216d7d502f, base 30834b8e9b8dc69a282dac88cc580503fd08244c. Clean, with no findings.
 
 ## Summary
 
