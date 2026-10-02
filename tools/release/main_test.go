@@ -45,6 +45,57 @@ func TestCheckBuildInfo(t *testing.T) {
 
 func slicesClone(s []string) []string { return append([]string(nil), s...) }
 
+// TestCheckProvenance: a binary whose recorded commit or dirty state is
+// not the run's is refused (Terva review 2000).
+func TestCheckProvenance(t *testing.T) {
+	const c = "0123456789abcdef0123456789abcdef01234567"
+	if err := CheckProvenance(settings("vcs.revision", c, "vcs.modified", "false"), c, false); err != nil {
+		t.Errorf("a clean build of the stamped commit: %v", err)
+	}
+	if err := CheckProvenance(settings("vcs.revision", c, "vcs.modified", "true"), c, true); err != nil {
+		t.Errorf("a dirty build the run knew was dirty: %v", err)
+	}
+	if err := CheckProvenance(settings(), c, false); err != nil {
+		t.Errorf("a build with no VCS record: %v", err)
+	}
+	for name, bi := range map[string]*buildinfo.BuildInfo{
+		"dirtied during the run": settings("vcs.revision", c, "vcs.modified", "true"),
+		"another commit":         settings("vcs.revision", strings.Repeat("f", 40), "vcs.modified", "false"),
+	} {
+		if err := CheckProvenance(bi, c, false); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+}
+
+// TestStagingDirIsOutsideTheCheckout: the binaries are built outside the
+// checkout, and a TMPDIR inside it is refused (Terva review 2000).
+func TestStagingDirIsOutsideTheCheckout(t *testing.T) {
+	root, err := filepath.Abs(moduleRoot)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("TMPDIR", t.TempDir())
+	dir, err := stagingDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.RemoveAll(dir)
+	if rel, _ := filepath.Rel(root, dir); !strings.HasPrefix(rel, "..") {
+		t.Errorf("staging %s is inside the checkout %s", dir, root)
+	}
+	inside, err := os.MkdirTemp(".", "tmpdir-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(inside)
+	t.Setenv("TMPDIR", inside)
+	if dir, err := stagingDir(); err == nil {
+		os.RemoveAll(dir)
+		t.Errorf("a TMPDIR inside the checkout gave %s", dir)
+	}
+}
+
 // TestOutputDirIsAbsolute: --out . becomes the working directory's absolute
 // path, so the host binary is run from DIR and not looked up in PATH
 // (Terva review 1999).

@@ -101,6 +101,14 @@ func run(args []string, out io.Writer) error {
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		return err
 	}
+	// The binaries are built outside the checkout and moved to DIR once all
+	// are checked: one written into the checkout before the next build would
+	// make that build's tree look modified (Terva review 2000).
+	stage, err := stagingDir()
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
 
 	var names []string
 	for _, p := range Platforms {
@@ -108,7 +116,7 @@ func run(args []string, out io.Writer) error {
 			return err
 		}
 		name := fmt.Sprintf("ketju_%s_%s_%s", *version, p.OS, p.Arch)
-		path := filepath.Join(*dir, name)
+		path := filepath.Join(stage, name)
 		if err := build(p, *version, commit, dirty, path); err != nil {
 			return err
 		}
@@ -117,6 +125,9 @@ func run(args []string, out io.Writer) error {
 			return fmt.Errorf("%s: reading its build info: %w", name, err)
 		}
 		if err := CheckBuildInfo(bi, p); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		if err := CheckProvenance(bi, commit, dirty); err != nil {
 			return fmt.Errorf("%s: %w", name, err)
 		}
 		if err := CheckStaticELF(path); err != nil {
@@ -128,6 +139,11 @@ func run(args []string, out io.Writer) error {
 		}
 		fmt.Fprintf(out, "built %s (%s, %d bytes): static, CGO_ENABLED=0, no tags\n", name, p, fi.Size())
 		names = append(names, name)
+	}
+	for _, name := range names {
+		if err := moveFile(filepath.Join(stage, name), filepath.Join(*dir, name)); err != nil {
+			return err
+		}
 	}
 	if err := WriteSums(*dir, names); err != nil {
 		return err
@@ -155,6 +171,81 @@ func run(args []string, out io.Writer) error {
 		fmt.Fprintf(out, "%s\n", line)
 	}
 	fmt.Fprintln(out, "published nothing")
+	return nil
+}
+
+// stagingDir is a new temporary directory to build in, refused if it lies
+// inside the checkout, where a binary would change the next build's tree.
+func stagingDir() (string, error) {
+	dir, err := os.MkdirTemp("", "ketju-release-")
+	if err != nil {
+		return "", err
+	}
+	root, err := filepath.Abs(moduleRoot)
+	if err == nil {
+		root, err = filepath.EvalSymlinks(root)
+	}
+	resolved := dir
+	if err == nil {
+		resolved, err = filepath.Abs(dir)
+	}
+	if err == nil {
+		resolved, err = filepath.EvalSymlinks(resolved)
+	}
+	if err != nil {
+		os.RemoveAll(dir)
+		return "", err
+	}
+	if rel, err := filepath.Rel(root, resolved); err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		os.RemoveAll(dir)
+		return "", fmt.Errorf("the temporary directory %s is inside the checkout %s; set TMPDIR outside it", dir, root)
+	}
+	return dir, nil
+}
+
+// moveFile renames src to dst, or copies it where they are on different
+// file systems, keeping its mode.
+func moveFile(src, dst string) error {
+	if err := os.Rename(src, dst); err == nil {
+		return nil
+	}
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+	fi, err := in.Stat()
+	if err != nil {
+		return err
+	}
+	o, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, fi.Mode().Perm())
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(o, in); err != nil {
+		o.Close()
+		return err
+	}
+	return o.Close()
+}
+
+// CheckProvenance fails if the toolchain recorded another commit than the
+// one stamped, or a tree modified when the run found it clean (or clean when
+// the run found it modified): the binary would then not be the build its
+// version line names. A build with no VCS record passes.
+func CheckProvenance(bi *buildinfo.BuildInfo, commit string, dirty bool) error {
+	for _, s := range bi.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if s.Value != commit {
+				return fmt.Errorf("built from commit %s, not the stamped %s", s.Value, commit)
+			}
+		case "vcs.modified":
+			if (s.Value == "true") != dirty {
+				return fmt.Errorf("the toolchain recorded vcs.modified=%s, but the run found the tree dirty=%t; did the tree change during the run?", s.Value, dirty)
+			}
+		}
+	}
 	return nil
 }
 
