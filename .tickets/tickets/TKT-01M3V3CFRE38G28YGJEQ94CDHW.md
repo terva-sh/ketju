@@ -70,7 +70,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-02T09:15:28Z
+updated_at: 2026-10-02T09:17:48Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -234,3 +234,7 @@ In the full suite at 1440 px, the Unread surface test found the list still showi
 - A redacted body left in the index:
   - Skipping only redact's own index steps was NOT caught. serve's search catch-up reads the Redacted record on the next start and drops the row anyway.
   - With that catch-up also made to ignore Redacted, it was caught by the index check (1 row for "redactedword"). The served answers stayed clean even then, because search's judge serves only Visible entries.
+
+**agent:claude-code/phase3-exit-check** at 2026-10-02T09:17:48Z
+
+Terva review 1909 on PR #351 (head a1bc8de, base 492405f), medium, 'Check storage directly when asserting that a rejected upload stores nothing'. Fixed. The test now reads the blobs row, the file at blob.Path and the staging directory. Its positive control is blob bv, which was stored and reads as present in both.

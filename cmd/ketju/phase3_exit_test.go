@@ -16,6 +16,7 @@ import (
 	"mime/multipart"
 	"net/http"
 	"net/textproto"
+	"os"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -27,6 +28,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/oidc/oidctest"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/perm"
+	"github.com/terva-sh/ketju/internal/store/blob"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/db/views"
@@ -1215,8 +1217,49 @@ func TestPhase3ExitBlobsFollowTheirPosts(t *testing.T) {
 	if res.status != http.StatusRequestEntityTooLarge {
 		t.Errorf("an upload over limits.attachment_mb answered %d, want 413:\n%s", res.status, res)
 	}
+	// A 404 cannot tell a missing blob from a stored one no post names
+	// (Terva review on PR #351), so the store itself is read: the blobs
+	// row, the file, and the staging directory. A blob that was stored
+	// shows up in all of the first two, so the check can see storage.
 	sum = sha256.Sum256(big)
-	if got := w.blobStatus(w.admin, hex.EncodeToString(sum[:]), false); got != http.StatusNotFound {
-		t.Errorf("the refused upload is served: %d", got)
+	if row, file := w.stored(w.blobs["bv"]); !row || !file {
+		t.Fatalf("blob bv, which was stored, reads as row %t, file %t", row, file)
 	}
+	if row, file := w.stored(hex.EncodeToString(sum[:])); row || file {
+		t.Errorf("the refused upload was stored: row %t, file %t", row, file)
+	}
+	staged, err := os.ReadDir(filepath.Join(w.data, blob.Dir, blob.Tmp))
+	if err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	if len(staged) != 0 {
+		t.Errorf("the refused upload left %d files staged", len(staged))
+	}
+}
+
+// stored is whether the store holds blob h: a row in blobs, and its file.
+func (w *p3World) stored(h string) (row, file bool) {
+	w.t.Helper()
+	d, err := db.Open(w.t.Context(), db.Options{Path: filepath.Join(w.data, "db", "ketju.db")})
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	defer d.Close()
+	if err := d.Read(w.t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		var n int
+		err := tx.QueryRowContext(w.t.Context(), `SELECT count(*) FROM blobs WHERE hash = ?`, h).Scan(&n)
+		row = n > 0
+		return err
+	}); err != nil {
+		w.t.Fatal(err)
+	}
+	p, err := blob.Path(w.data, h)
+	if err != nil {
+		w.t.Fatal(err)
+	}
+	_, err = os.Stat(p)
+	if err != nil && !os.IsNotExist(err) {
+		w.t.Fatal(err)
+	}
+	return row, err == nil
 }
