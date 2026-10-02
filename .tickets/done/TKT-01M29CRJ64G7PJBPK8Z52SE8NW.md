@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-02T22:27:06Z
+updated_at: 2026-10-02T22:46:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -227,6 +227,16 @@ Alternatives:
 - Making the callback required lost because it would still trust a lagging projection.
 
 The new test is `TestArchivedLogSealedWhateverTheProjectionSays`. It covers no projection, a projection behind the archive, and a projected length that is not a frame boundary. A mutant that skips the walk fails all three cases.
+
+**agent:claude-code/phase4-run-crj64** at 2026-10-02T22:46:34Z
+
+Terva review 1992 (run f0981e67, Actions #2534, head 71332e2) marked the 1989 finding resolved and raised a new medium finding: "Do not leave the actor writable when archive detection fails". Fixed.
+
+`archivedOnOpen` now seals a thread when the walk cannot continue before it finds a `ThreadArchived`. The bytes it could not read might hold the archive, so an unknown state counts as archived, never as live. The open still succeeds and is logged, and the thread stays readable; fsck repairs the log. A walk only fails fatally on a structurally broken log: a length out of range, or a frame that runs past the end. A frame that fails its checksum is passed over and does not seal.
+
+Failing the open was the alternative the review offered. It lost because it would make a damaged thread unreadable too, while the invariant at stake only concerns writes.
+
+The new test is `TestUnreadableLogIsSealedOnOpen`. It corrupts the first frame's length under a trusted index. An append is then `ErrArchived` and the log does not grow. A mutant that returns "live" on a failed walk fails the test.
 
 ## Summary
 

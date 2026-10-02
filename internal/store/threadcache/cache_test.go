@@ -1,6 +1,7 @@
 package threadcache
 
 import (
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"os"
@@ -296,6 +297,66 @@ func TestArchivedLogSealedWhateverTheProjectionSays(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+// TestUnreadableLogIsSealedOnOpen is Terva review 1992: a log the archive
+// walk cannot get through, here a frame length past the format's maximum
+// before the ThreadArchived, under an index that is still trusted, is
+// opened sealed, because what the walk could not read may hold the
+// archive. An append is ErrArchived and the log does not grow, and the
+// thread still opens for reading.
+func TestUnreadableLogIsSealedOnOpen(t *testing.T) {
+	id := ids(1)
+	w, root := newCache(t, Options{Sync: threadlog.SyncNever})
+	create(t, w, id[0], 2)
+	if err := w.With(id[0], func(th *Thread) error {
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadArchived, Author: 1,
+			Body: &threadlog.ThreadArchivedBody{}})
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	// The first frame's length, at the end of the file header, now runs
+	// past the maximum. The size is unchanged, so the index is trusted and
+	// the open reads none of the log's frames.
+	path := id[0].LogPath(root)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	binary.LittleEndian.PutUint32(b[threadlog.FileHeaderSize:], 0xFFFFFFF0)
+	if err := os.WriteFile(path, b, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	before := fileSize(t, path)
+
+	r, err := New(root, Options{Sync: threadlog.SyncNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() {
+		if err := r.Close(); err != nil {
+			t.Error(err)
+		}
+	}()
+	if err := r.With(id[0], func(th *Thread) error {
+		if th.Outcome != threadlog.Trusted {
+			t.Errorf("the index was %v, want Trusted: the test is not opening without a walk", th.Outcome)
+		}
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: 7, Body: &threadlog.PostBody{Source: "late"}})
+		if !errors.Is(err, threadlog.ErrArchived) {
+			t.Errorf("an append to a log the walk could not read: %v, want ErrArchived", err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("the thread did not open: %v", err)
+	}
+	if got := fileSize(t, path); got != before {
+		t.Errorf("the log grew from %d to %d bytes", before, got)
 	}
 }
 

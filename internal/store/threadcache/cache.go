@@ -443,8 +443,9 @@ func (c *Cache) openThread(id threadid.ID) (*Thread, error) {
 // log, whatever the projection's lag, as after a crash between an archive
 // and its projection (TKT-01M29CRJ64, Terva review 1989).
 //
-// A walk that cannot go on is logged rather than failing the open. The
-// thread stays readable, and fsck is the tool for a damaged log.
+// A walk that cannot go on before it finds one seals the thread: it is
+// logged rather than failing the open, so the thread stays readable, and
+// fsck is the tool for the damaged log.
 func (c *Cache) archivedOnOpen(id threadid.ID, log io.ReaderAt, size int64) bool {
 	from := int64(threadlog.FileHeaderSize)
 	if c.isArch != nil {
@@ -462,9 +463,14 @@ func (c *Cache) archivedOnOpen(id threadid.ID, log io.ReaderAt, size int64) bool
 		// after a restore: walk all of it.
 		found, err = threadlog.ArchivedIn(log, threadlog.FileHeaderSize, size)
 	}
-	if err != nil {
-		c.log.Warn("could not walk a thread's log for an archive; it is sealed only if the projection says it is archived",
+	if err != nil && !found {
+		// What the walk could not read may hold the archive, so an unknown
+		// state is taken as archived, never as live: the thread stays
+		// readable and takes no append until its log is repaired (Terva
+		// review 1992).
+		c.log.Warn("could not walk a thread's log for an archive; sealing it, so it takes no append until the log is repaired",
 			"thread", id.String(), "err", err)
+		return true
 	}
 	return found
 }
