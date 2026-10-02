@@ -19,10 +19,12 @@ blocks_on: none
 references:
   - ref: pr:362
     path: null
+  - ref: pr:366
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-01T13:55:32Z
-updated_at: 2026-10-02T19:30:12Z
+updated_at: 2026-10-02T19:30:43Z
 created_by:
   id: agent:claude-code/phase3-lenses
   name: ""
