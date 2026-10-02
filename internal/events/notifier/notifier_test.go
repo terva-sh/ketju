@@ -173,6 +173,23 @@ func TestQuotedReadsTheRecordedBacklinks(t *testing.T) {
 		f.want("bob quoted #3 by alice")
 	})
 
+	// A post projected before migration 0025, and not yet generated, has
+	// no rows; the migration rewinds the projection, and the generator waits
+	// for the replay that writes them (Terva review 1998).
+	t.Run("projected before the table existed", func(t *testing.T) {
+		f := newFixture(t)
+		id, created := f.thread(f.forum)
+		evs := []events.Event{created,
+			f.post(id, "bob", "bob's", 0),
+			f.post(id, "alice", quote("1", "quoting bob"), 0),
+		}
+		project(f, id, evs...)
+		f.exec(`DELETE FROM post_quotes`)
+		f.exec(`UPDATE projection_state SET log_length = 64 WHERE log_length > 64`) // as 0025 does
+		f.deliver(evs...)
+		f.want("bob quoted #2 by alice")
+	})
+
 	t.Run("an edit in the same range", func(t *testing.T) {
 		f := newFixture(t)
 		id, created := f.thread(f.forum)

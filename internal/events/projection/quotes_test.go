@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
@@ -146,6 +147,63 @@ func TestQuotesAreRecordedAsBacklinks(t *testing.T) {
 				t.Fatalf("projecting again changed the rows:\n%s\n---\n%s", before, again)
 			}
 		})
+	}
+}
+
+// rewindAsMigration0025 leaves the database as migration 0025 leaves one
+// projected before it: post_quotes empty, since no build wrote it, and every
+// projection_state row moved back to the end of its file header, as the
+// migration's UPDATE does (db TestPostQuotesMigrationRewindsTheProjection
+// holds the migration to that).
+func (f *fixture) rewindAsMigration0025() {
+	f.t.Helper()
+	f.exec(`DELETE FROM post_quotes`)
+	f.exec(`UPDATE projection_state SET log_length = 64 WHERE log_length > 64`)
+}
+
+// TestCatchUpBackfillsTheBacklinksAfterTheMigration (Terva review 1998): a
+// database whose threads were projected before post_quotes existed gets
+// every backlink at the next start, because catch-up replays each rewound
+// log over the rows already there, and ends on exactly the rows a projection
+// that had the table all along made, audit rows included.
+func TestCatchUpBackfillsTheBacklinksAfterTheMigration(t *testing.T) {
+	f := newFixture(t)
+	f.users(5, 6, 7)
+	var ids []threadid.ID
+	for i := range 3 {
+		id, _ := f.thread(fmt.Sprintf("Quotes %d", i), "meta")
+		f.quoter(id, 5, "first")
+		f.quoter(id, 6, quote(1))
+		f.quoter(id, 7, quote(1, 2))
+		f.append(id, threadlog.Append{Type: threadlog.TypeEdit, Author: 6, Ordinal: 2,
+			Body: &threadlog.EditBody{Source: quote(3)}})
+		// A moderator's delete, which writes an audit row a replay must not
+		// write again.
+		end := f.append(id, threadlog.Append{Type: threadlog.TypeDelete, Author: 5, Ordinal: 3,
+			Body: &threadlog.DeleteBody{ByModerator: true}})
+		f.project(id, end)
+		ids = append(ids, id)
+	}
+	want := f.dump()
+	audits := len(f.auditRows())
+	if f.countQuotes() != 9 || audits == 0 {
+		t.Fatalf("the setup has %d backlinks and %d audit rows, want 9 and some", f.countQuotes(), audits)
+	}
+
+	f.rewindAsMigration0025()
+	var reopens atomic.Int64
+	rep, err := f.w.CatchUp(t.Context(), reopenWith(f.cache, &reopens))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if rep.Closed != len(ids) || len(rep.Failed) != 0 || len(rep.Corrupt) != 0 {
+		t.Fatalf("catch-up report %+v, want every thread replayed", rep)
+	}
+	if got := f.dump(); got != want {
+		t.Fatalf("after the migration and a catch-up the rows differ:\n%s\n---\n%s", want, got)
+	}
+	if got := len(f.auditRows()); got != audits {
+		t.Fatalf("the replay left %d audit rows, want the %d there were", got, audits)
 	}
 }
 

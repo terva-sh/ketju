@@ -1166,6 +1166,16 @@ and its index entry is visible. The notification generator reads a new
 post's rows for `quoted`, keeping the earlier posts it quotes, instead of
 rendering the source again.
 
+A database projected before migration 0025 has no rows for the posts it
+already holds. The migration therefore moves every `projection_state` row
+back to the end of its log's file header, and the next start's catch-up
+replays each log from the beginning over the rows already there, which
+fills the table. Every apply sets absolute values and an audit row is
+written once per record, so the replay changes nothing else. The notifier
+processes a thread only up to the length the projection holds, so it waits
+for the replay. The cost is one replay of every log at the first start
+after upgrading (Terva review 1998).
+
 ### search (FTS)
 Full-text index over `(thread_id, ordinal, revision, title, source_plain)`.
 Kept in the same database if the engine supports FTS (SQLite FTS5) or in a

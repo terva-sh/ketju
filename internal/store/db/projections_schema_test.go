@@ -47,6 +47,41 @@ func TestProjectionTablesAreMarked(t *testing.T) {
 	}
 }
 
+// TestPostQuotesMigrationRewindsTheProjection (Terva review 1998): 0025
+// moves every thread's projection_state back to the end of its file header,
+// so the next catch-up replays each log and fills post_quotes for posts
+// projected before the table existed. The rows stay, so a projection whose
+// log is gone still classifies as corrupt; nothing else in them moves, and
+// no authoritative table is touched (notification_progress included, so the
+// generator waits for the replay rather than repeating itself).
+func TestPostQuotesMigrationRewindsTheProjection(t *testing.T) {
+	d, _ := openUnmigrated(t)
+	if err := d.migrate(t.Context(), migrationsBefore(t, 25), "m"); err != nil {
+		t.Fatal(err)
+	}
+	execAll(t, d,
+		`INSERT INTO projection_state (thread_id, log_length, updated_at) VALUES (1, 4096, 11), (2, 64, 12), (3, 200, 13)`,
+		`INSERT INTO notification_progress (thread_id, log_length, updated_at) VALUES (1, 4096, 21), (3, 150, 23)`,
+	)
+	if err := d.Migrate(t.Context()); err != nil {
+		t.Fatal(err)
+	}
+	var state, progress []string
+	if err := d.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		state = rows(t, tx, `SELECT thread_id, log_length, updated_at FROM projection_state ORDER BY thread_id`)
+		progress = rows(t, tx, `SELECT thread_id, log_length, updated_at FROM notification_progress ORDER BY thread_id`)
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if want := []string{"[1 64 11]", "[2 64 12]", "[3 64 13]"}; !slices.Equal(state, want) {
+		t.Errorf("after 0025 projection_state is %v, want %v", state, want)
+	}
+	if want := []string{"[1 4096 21]", "[3 150 23]"}; !slices.Equal(progress, want) {
+		t.Errorf("after 0025 notification_progress is %v, want %v", progress, want)
+	}
+}
+
 // TestPostMetaStaysTiny is AC2: exactly docs/04's columns, and besides the
 // primary key exactly the two documented indexes. A column or index added for
 // a within-thread question fails here, because that question belongs to the
