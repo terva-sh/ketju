@@ -34,7 +34,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T02:48:45Z
+updated_at: 2026-10-02T02:53:50Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -179,3 +179,7 @@ Rebased onto dd840125 (#339, #340, #341). The page-size wipe now calls #339's fo
 **agent:claude-code/phase3-settings-client** at 2026-10-02T02:48:45Z
 
 Terva review 1838 (head 27a8de90, base dd840125), medium 'Serialize preference saves instead of ordering snapshots by send number': fixed. Settings saves now go one at a time through a promise queue, each PATCH sent once the one before it has been answered, and every answer is adopted in turn, so the last answer is the account. A refused save does not hold up the next. Regression tests: two overlapping saves to different fields with the first answered late, and a refused save followed by another. Reader 78367 B of 120000 B.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-02T02:53:50Z
+
+Terva review 1875 (head dfb1e736, base 25ad977a): finding 1 of 1838 resolved; both new mediums fixed. 'Keep preference-save serialization across settings-screen remounts': the save queue is the module's, not the screen's, and the GET /settings answer is taken only if no save was out when the screen asked and none was made since (module counters made and settled). 'Do not clear newer invalid input when an earlier save completes': every edit, sent or refused here, is numbered, and only the answer to a field's newest edit clears what it shows. Regression tests: a save after leaving /settings and coming back waits for the one still out; a GET answered after that save does not undo it; a refused value typed during a save survives its answer.

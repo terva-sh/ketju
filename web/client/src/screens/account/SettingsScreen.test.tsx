@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Me, Settings } from '../../api/dto';
 import { storeThreadPage, threadCache } from '../../state/threads';
 import { viewer } from '../../state/viewer';
-import { problemAnswer, renderAt, screenOf, settle, stubServer, threadPage, unmount } from '../../testing';
+import { problemAnswer, renderAt, route, screenOf, settle, stubServer, threadPage, unmount } from '../../testing';
 import anonMe from '../../../../../internal/dto/testdata/golden/me.anon.json';
 import memberMe from '../../../../../internal/dto/testdata/golden/me.member.json';
 
@@ -172,6 +172,81 @@ describe('the settings form', () => {
     expect(account).toEqual({ ...defaults(), timezone: 'Europe/Helsinki', theme: 'dark' });
     expect(field(root, 'timezone').value).toBe('Europe/Helsinki');
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  // Terva review 1875: the queue outlives the screen, so a save made after
+  // leaving /settings and coming back waits for one still in flight.
+  it('a save after leaving and coming back waits for the one still out', async () => {
+    const account = defaults();
+    const late: (() => void)[] = [];
+    const s = stubServer({
+      'GET /api/v1/settings': () => ({ status: 200, body: { ...account } }),
+      'GET /api/v1/settings/sessions': () => ({ status: 200, body: { sessions: [] } }),
+      'PATCH /api/v1/settings': (body) => {
+        Object.assign(account, body);
+        const answer = { status: 200, body: { ...account } };
+        if (late.length === 0) return new Promise((r) => late.push(() => r(answer)));
+        return answer;
+      },
+    });
+    let root = await renderAt('/settings');
+    await change(root, field(root, 'timezone'), 'Europe/Helsinki');
+    await route('/settings/sessions');
+    await settle(root);
+    expect(screenOf(root)).toBe('settings-sessions');
+    await route('/settings');
+    await settle(root);
+    expect(screenOf(root)).toBe('settings');
+    await act(async () => root.querySelector<HTMLInputElement>('input[name=theme][value=dark]')!.click());
+    await settle(root);
+    expect(patches(s)).toEqual([{ timezone: 'Europe/Helsinki' }]);
+    await act(async () => late[0]());
+    await settle(root);
+    expect(patches(s)).toEqual([{ timezone: 'Europe/Helsinki' }, { theme: 'dark' }]);
+    expect(viewer.value.settings).toEqual(account);
+    expect(account).toEqual({ ...defaults(), timezone: 'Europe/Helsinki', theme: 'dark' });
+  });
+
+  it('coming back while a save is out, the GET answered after it does not undo it', async () => {
+    const patch: (() => void)[] = [];
+    const get: (() => void)[] = [];
+    let gets = 0;
+    stubServer({
+      'GET /api/v1/settings': () =>
+        ++gets === 1 ? { status: 200, body: defaults() } : new Promise((r) => get.push(() => r({ status: 200, body: defaults() }))),
+      'GET /api/v1/settings/sessions': () => ({ status: 200, body: { sessions: [] } }),
+      'PATCH /api/v1/settings': (body) =>
+        new Promise((r) => patch.push(() => r({ status: 200, body: { ...defaults(), ...(body as object) } }))),
+    });
+    const root = await renderAt('/settings');
+    await change(root, field(root, 'timezone'), 'Europe/Helsinki');
+    await route('/settings/sessions');
+    await settle(root);
+    await route('/settings');
+    await settle(root);
+    await act(async () => patch[0]());
+    await settle(root);
+    expect(viewer.value.settings.timezone).toBe('Europe/Helsinki');
+    await act(async () => get[0]());
+    await settle(root);
+    expect(viewer.value.settings.timezone).toBe('Europe/Helsinki');
+  });
+
+  it('an earlier save answering does not clear a value refused since', async () => {
+    const late: (() => void)[] = [];
+    stubServer({
+      'GET /api/v1/settings': () => ({ status: 200, body: defaults() }),
+      'PATCH /api/v1/settings': (body) =>
+        new Promise((r) => late.push(() => r({ status: 200, body: { ...defaults(), ...(body as object) } }))),
+    });
+    const root = await renderAt('/settings');
+    await change(root, field(root, 'page_size'), '10');
+    await change(root, field(root, 'page_size'), '51');
+    await act(async () => late[0]());
+    await settle(root);
+    expect(viewer.value.settings.page_size).toBe(10);
+    expect(field(root, 'page_size').value).toBe('51');
+    expect(root.querySelector('[data-field-error=page_size]')?.textContent).toBe('Choose a whole number from 10 to 50.');
   });
 
   it('a refused save does not hold up the next', async () => {
