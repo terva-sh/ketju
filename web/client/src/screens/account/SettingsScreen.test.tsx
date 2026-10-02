@@ -143,6 +143,51 @@ describe('the settings form', () => {
     expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
   });
 
+  // Terva review 1838: two saves to different fields, the second made while
+  // the first is unanswered. The server here applies each PATCH as it
+  // arrives and answers the account as it then stands, the first one late.
+  // Sent at once, the theme's answer, without the zone, would arrive first.
+  it('two overlapping saves to different fields leave the viewer as the account saved it', async () => {
+    const account = defaults();
+    const late: (() => void)[] = [];
+    const s = stubServer({
+      'GET /api/v1/settings': () => ({ status: 200, body: defaults() }),
+      'PATCH /api/v1/settings': (body) => {
+        Object.assign(account, body);
+        const answer = { status: 200, body: { ...account } };
+        if (late.length === 0 && 'timezone' in (body as object)) return new Promise((r) => late.push(() => r(answer)));
+        return answer;
+      },
+    });
+    const root = await renderAt('/settings');
+    await change(root, field(root, 'timezone'), 'Europe/Helsinki');
+    await act(async () => root.querySelector<HTMLInputElement>('input[name=theme][value=dark]')!.click());
+    await settle(root);
+    // The theme waits for the zone's answer.
+    expect(patches(s)).toEqual([{ timezone: 'Europe/Helsinki' }]);
+    await act(async () => late[0]());
+    await settle(root);
+    expect(patches(s)).toEqual([{ timezone: 'Europe/Helsinki' }, { theme: 'dark' }]);
+    expect(viewer.value.settings).toEqual(account);
+    expect(account).toEqual({ ...defaults(), timezone: 'Europe/Helsinki', theme: 'dark' });
+    expect(field(root, 'timezone').value).toBe('Europe/Helsinki');
+    expect(document.documentElement.getAttribute('data-theme')).toBe('dark');
+  });
+
+  it('a refused save does not hold up the next', async () => {
+    serve(defaults(), (body) =>
+      'timezone' in body
+        ? problemAnswer('validation-failed', 422, { errors: [{ field: 'timezone', code: 'not_an_option' }] })
+        : { status: 200, body: { ...defaults(), ...body } },
+    );
+    const root = await renderAt('/settings');
+    await change(root, field(root, 'timezone'), 'Europe/Helsinki');
+    await change(root, field(root, 'page_size'), '10');
+    expect(viewer.value.settings.page_size).toBe(10);
+    expect(viewer.value.settings.timezone).toBe('UTC');
+    expect(root.querySelector('[data-field-error=timezone]')?.textContent).toMatch(/not a timezone/);
+  });
+
   it('does not let a GET answered after a change undo it', async () => {
     let answer: (a: ReturnType<typeof problemAnswer>) => void = () => {};
     stubServer({

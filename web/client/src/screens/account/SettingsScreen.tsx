@@ -89,11 +89,16 @@ export function SettingsScreen() {
   // may be the text typed.
   const [pending, setPending] = useState<{ timezone?: string; page_size?: number | string; theme?: string }>({});
   const [saved, setSaved] = useState('');
-  // Sends are numbered, and an answer older than one already taken is not:
-  // it would put back a value a newer change replaced. last is each field's
-  // newest send, whose answer alone settles what the field shows.
+  // Saves go one at a time, each sent once the one before it has been
+  // answered, so the server applies them in the order they were made and
+  // each answer is the account as of every save before it. Every answer is
+  // then taken in turn, and the last one is the account. Sent at once,
+  // two saves to different fields could be applied in either order, and an
+  // answer taken by its send order could drop a field the account had
+  // saved (Terva review 1838). last is each field's newest save, whose
+  // answer alone settles what the field shows.
+  const queue = useRef<Promise<void>>(Promise.resolve());
   const sent = useRef(0);
-  const taken = useRef(0);
   const last = useRef<Partial<Record<Key, number>>>({});
 
   // The GET's answer is taken only while nothing has been sent: one that
@@ -108,22 +113,20 @@ export function SettingsScreen() {
     setErrors((e) => ({ ...e, [key]: why }));
   };
 
-  const save = async (key: Key, value: string | number) => {
+  const save = (key: Key, value: string | number) => {
     const n = ++sent.current;
     last.current[key] = n;
     refuse(key, value, undefined);
     setSaved('');
-    try {
-      const s = await apiSend<Settings>('PATCH', settingsUrl, { [key]: value }, { status: 200 });
-      if (n > taken.current) {
-        taken.current = n;
-        adopt(s);
+    queue.current = queue.current.then(async () => {
+      try {
+        adopt(await apiSend<Settings>('PATCH', settingsUrl, { [key]: value }, { status: 200 }));
         setSaved('Saved.');
+        if (last.current[key] === n) setPending(({ [key]: _, ...rest }) => rest);
+      } catch (err) {
+        if (last.current[key] === n) setErrors((e) => ({ ...e, [key]: fieldWords(key, err) }));
       }
-      if (last.current[key] === n) setPending(({ [key]: _, ...rest }) => rest);
-    } catch (err) {
-      if (last.current[key] === n) setErrors((e) => ({ ...e, [key]: fieldWords(key, err) }));
-    }
+    });
   };
 
   const stored = res.data && viewer.value.settings;
@@ -149,7 +152,7 @@ export function SettingsScreen() {
               onChange={(e) => {
                 const v = e.currentTarget.valueAsNumber;
                 if (!Number.isInteger(v) || v < 10 || v > 50) refuse('page_size', e.currentTarget.value, pageSizeWords);
-                else if (v !== stored.page_size || pending.page_size !== undefined) void save('page_size', v);
+                else if (v !== stored.page_size || pending.page_size !== undefined) save('page_size', v);
               }}
             />
           </Field>
@@ -163,7 +166,7 @@ export function SettingsScreen() {
                     name="theme"
                     value={t}
                     checked={s.theme === t}
-                    onChange={() => void save('theme', t)}
+                    onChange={() => save('theme', t)}
                   />
                   {themeWords[t]}
                 </label>

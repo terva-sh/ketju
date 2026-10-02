@@ -34,7 +34,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T00:51:21Z
+updated_at: 2026-10-02T02:48:45Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -175,3 +175,7 @@ run decision: pending maintainer review. In the session list a row names its pro
 **agent:claude-code/phase3-settings-client** at 2026-10-02T00:38:49Z
 
 Rebased onto dd840125 (#339, #340, #341). The page-size wipe now calls #339's forgetAllThreadPages in state/threads.ts, which also sets its wipe watermark, instead of a forgetEveryThreadPage of its own; the earlier note's name for it is superseded. routes.tsx's unused placeholder helper is removed, since #339 and this ticket replaced its last users. seedSettings members come after #339's nell in cmd/ketju/e2e.go. Reader after the rebase: 75237 B on dd840125, 78361 B with this ticket (+3124 B), of 120000 B.
+
+**agent:claude-code/phase3-settings-client** at 2026-10-02T02:48:45Z
+
+Terva review 1838 (head 27a8de90, base dd840125), medium 'Serialize preference saves instead of ordering snapshots by send number': fixed. Settings saves now go one at a time through a promise queue, each PATCH sent once the one before it has been answered, and every answer is adopted in turn, so the last answer is the account. A refused save does not hold up the next. Regression tests: two overlapping saves to different fields with the first answered late, and a refused save followed by another. Reader 78367 B of 120000 B.
