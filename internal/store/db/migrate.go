@@ -61,6 +61,36 @@ func (d *DB) Migrate(ctx context.Context) error {
 	return d.migrate(ctx, migrations, "migrations")
 }
 
+// Pending is how many of this binary's migrations the database has not
+// applied, so zero means its schema is this binary's. A database a newer
+// binary has migrated answers ErrSchemaNewer. It writes nothing, so it works
+// on a read-only handle: ketju backup asks it before it brings a copy up to
+// date, because migrating the copy would make a backup the old binary
+// cannot restore (TKT-01M29CXK35).
+func (d *DB) Pending(ctx context.Context) (int, error) {
+	return d.pending(ctx, migrations, "migrations")
+}
+
+func (d *DB) pending(ctx context.Context, fsys fs.FS, dir string) (int, error) {
+	want, err := loadMigrations(fsys, dir)
+	if err != nil {
+		return 0, err
+	}
+	var have []dbq.SchemaMigration
+	if err := d.Read(ctx, func(q *dbq.Queries, tx *sql.Tx) error {
+		var err error
+		have, err = recordedMigrations(ctx, q, tx)
+		return err
+	}); err != nil {
+		return 0, err
+	}
+	if len(have) > len(want) {
+		return 0, fmt.Errorf("%w: the database is at schema version %d and this binary knows up to %d",
+			ErrSchemaNewer, len(have), len(want))
+	}
+	return len(want) - len(have), nil
+}
+
 func (d *DB) migrate(ctx context.Context, fsys fs.FS, dir string) error {
 	if d.write == nil {
 		return ErrReadOnly

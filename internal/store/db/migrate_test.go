@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 	"testing/fstest"
@@ -187,6 +188,36 @@ func TestNewerSchemaRefused(t *testing.T) {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("message %q does not say %q", err, want)
 		}
+	}
+}
+
+// TestPendingCountsWithoutWriting: Pending counts the migrations a database
+// lacks, writes nothing, and answers ErrSchemaNewer for a database a newer
+// binary migrated.
+func TestPendingCountsWithoutWriting(t *testing.T) {
+	d, _ := openUnmigrated(t)
+	older := map[string]string{"0001_init.sql": twoMigrations["0001_init.sql"]}
+	if n, err := d.pending(t.Context(), mapFS(older), "m"); err != nil || n != 1 {
+		t.Fatalf("an unmigrated database: pending = %d, %v; want 1", n, err)
+	}
+	if err := d.migrate(t.Context(), mapFS(older), "m"); err != nil {
+		t.Fatal(err)
+	}
+	before, recorded := schemaSnapshot(t, d)
+	if n, err := d.pending(t.Context(), mapFS(twoMigrations), "m"); err != nil || n != 1 {
+		t.Fatalf("one behind: pending = %d, %v; want 1", n, err)
+	}
+	if after, again := schemaSnapshot(t, d); !slices.Equal(before, after) || len(again) != len(recorded) {
+		t.Errorf("Pending changed the schema or the record")
+	}
+	if n, err := d.pending(t.Context(), mapFS(older), "m"); err != nil || n != 0 {
+		t.Errorf("current: pending = %d, %v; want 0", n, err)
+	}
+	if err := d.migrate(t.Context(), mapFS(twoMigrations), "m"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.pending(t.Context(), mapFS(older), "m"); !errors.Is(err, ErrSchemaNewer) {
+		t.Errorf("a newer database: err = %v, want ErrSchemaNewer", err)
 	}
 }
 

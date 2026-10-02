@@ -141,37 +141,9 @@ exit codes:
 		return errUsage{errors.New("fsck takes no positional arguments")}
 	}
 
-	// The projection is read before the logs are listed or sized. Logs only
-	// grow and the projection is written after the log, so in this order a
-	// write landing mid-run can make a thread look behind its log, never
-	// ahead of it, and a new thread's row never looks like one whose log is
-	// gone.
-	projected, driftNote := readProjection(context.Background(), *root)
-
-	paths, err := findLogs(*root)
+	sum, err := fsckWalk(*root, *rebuild)
 	if err != nil {
 		return err
-	}
-
-	sum := fsckSummary{DriftChecked: projected != nil, DriftNote: driftNote}
-	for _, p := range paths {
-		rep := checkThread(p, *rebuild)
-		sum.Reports = append(sum.Reports, rep)
-		sum.Threads++
-		sum.Records += rep.Records
-		sum.Posts += rep.Posts
-		if !rep.clean() {
-			sum.Damaged++
-		}
-		if rep.Truncated > 0 {
-			sum.Truncated++
-		}
-		if rep.IndexRebuilt {
-			sum.Rebuilt++
-		}
-	}
-	if projected != nil {
-		compareProjection(&sum, projected)
 	}
 
 	if *asJSON {
@@ -198,6 +170,45 @@ exit codes:
 		return errDrift{fmt.Errorf("%d thread(s) ahead of their projection by %d byte(s)", sum.DriftThreads, sum.DriftBytes)}
 	}
 	return nil
+}
+
+// fsckWalk is fsck's walk without its report: every log under root checked,
+// and compared with its projection when the database can be read. `ketju
+// backup` verifies its copy with it (TKT-01M29CXK35).
+func fsckWalk(root string, rebuild bool) (fsckSummary, error) {
+	// The projection is read before the logs are listed or sized. Logs only
+	// grow and the projection is written after the log, so in this order a
+	// write landing mid-run can make a thread look behind its log, never
+	// ahead of it, and a new thread's row never looks like one whose log is
+	// gone.
+	projected, driftNote := readProjection(context.Background(), root)
+
+	paths, err := findLogs(root)
+	if err != nil {
+		return fsckSummary{}, err
+	}
+
+	sum := fsckSummary{DriftChecked: projected != nil, DriftNote: driftNote}
+	for _, p := range paths {
+		rep := checkThread(p, rebuild)
+		sum.Reports = append(sum.Reports, rep)
+		sum.Threads++
+		sum.Records += rep.Records
+		sum.Posts += rep.Posts
+		if !rep.clean() {
+			sum.Damaged++
+		}
+		if rep.Truncated > 0 {
+			sum.Truncated++
+		}
+		if rep.IndexRebuilt {
+			sum.Rebuilt++
+		}
+	}
+	if projected != nil {
+		compareProjection(&sum, projected)
+	}
+	return sum, nil
 }
 
 // readProjection reads every thread's projected length from the data

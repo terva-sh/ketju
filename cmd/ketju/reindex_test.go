@@ -778,23 +778,14 @@ func TestREADMERecoveryProcedure(t *testing.T) {
 	data, ids := populate(t, 5)
 	catchUp(t, data) // so the backup holds a search index, older than the logs
 
-	// The backup. VACUUM INTO cannot run inside the transaction every access
-	// here goes through, and this package may not open a driver of its own,
-	// so it is a copy of the file of a database closed cleanly, which is as
-	// whole: closing checkpoints the WAL into it, and the test checks that.
+	// The backup: the database of a backup `ketju backup` wrote, as the
+	// README says (TKT-01M29CXK35).
 	_, backedUp := dumpAt(t, data)
-	dbFile := filepath.Join(data, "db", "ketju.db")
-	if fi, err := os.Stat(dbFile + "-wal"); err == nil && fi.Size() != 0 {
-		t.Fatalf("the WAL holds %d bytes after a clean close; a copy of the file alone would not be a backup", fi.Size())
+	dest := filepath.Join(t.TempDir(), "backup")
+	if _, errOut, err := runBackupCmd(t, data, dest); err != nil {
+		t.Fatalf("ketju backup: %v\n%s", err, errOut)
 	}
-	b, err := os.ReadFile(dbFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	backup := filepath.Join(t.TempDir(), "ketju-backup.db")
-	if err := os.WriteFile(backup, b, 0o600); err != nil {
-		t.Fatal(err)
-	}
+	backup := filepath.Join(dest, "db", "ketju.db")
 
 	// Written after the backup: more on an existing thread, and new threads.
 	writeThreads(t, data, 2, 2, ids[:1])
@@ -881,5 +872,77 @@ func TestREADMERecoveryProcedure(t *testing.T) {
 	}
 	if rep.Scanned != 7 || rep.Closed != 0 || len(rep.Corrupt)+len(rep.Failed)+len(rep.Unfinished) != 0 {
 		t.Errorf("catch-up after recovery = %+v", rep)
+	}
+}
+
+// readmeBackup is the sh blocks of the README's "Backing up and restoring"
+// section, before its "Backing up with your own tools", joined.
+func readmeBackup(t *testing.T) string {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join("..", "..", "README.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	const heading = "## Backing up and restoring\n"
+	_, section, ok := strings.Cut(string(b), heading)
+	if !ok {
+		t.Fatalf("the README has no %q section", strings.TrimSpace(heading))
+	}
+	if next := strings.Index(section, "\n### "); next >= 0 {
+		section = section[:next]
+	}
+	var script strings.Builder
+	for {
+		_, rest, ok := strings.Cut(section, "```sh\n")
+		if !ok {
+			break
+		}
+		block, after, ok := strings.Cut(rest, "```")
+		if !ok {
+			t.Fatal("an sh block in the backup section is not closed")
+		}
+		script.WriteString(block)
+		section = after
+	}
+	for _, want := range []string{"ketju backup", "ketju fsck", "$KETJU_DEST", "$KETJU_RESTORE"} {
+		if !strings.Contains(script.String(), want) {
+			t.Errorf("the backup procedure does not run %q:\n%s", want, script.String())
+		}
+	}
+	return script.String()
+}
+
+// TestREADMEBackupProcedure: the README's backup and restore commands run as
+// written, with `ketju` being this test binary run as the real main, against
+// a running serve, and the restored copy passes fsck.
+func TestREADMEBackupProcedure(t *testing.T) {
+	script := readmeBackup(t)
+	path, data := backupConfig(t, "")
+	seedThreads(t, data, 3)
+	r := start(t, path, serveOpts{})
+	defer r.shutdown(t)
+
+	bin := t.TempDir()
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(self, filepath.Join(bin, "ketju")); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	cmd := exec.Command("sh", "-eu", "-c", script)
+	cmd.Env = append(os.Environ(),
+		"KETJU_AS_MAIN=1", "KETJU_DATA="+data, "KETJU_DEST="+filepath.Join(dir, "backup"),
+		"KETJU_RESTORE="+filepath.Join(dir, "restored"),
+		"PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("the README procedure failed: %v\n%s", err, out)
+	}
+	for _, want := range []string{"(online)", "3 thread(s)", "no corruption found"} {
+		if !strings.Contains(string(out), want) {
+			t.Errorf("the procedure's output lacks %q:\n%s", want, out)
+		}
 	}
 }

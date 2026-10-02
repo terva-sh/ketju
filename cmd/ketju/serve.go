@@ -21,6 +21,7 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/oidc"
 	"github.com/terva-sh/ketju/internal/auth/seal"
 	"github.com/terva-sh/ketju/internal/auth/session"
+	"github.com/terva-sh/ketju/internal/backup"
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/events"
 	"github.com/terva-sh/ketju/internal/events/notifier"
@@ -132,6 +133,12 @@ type serveOpts struct {
 	// idpClient reaches the identity providers; nil is http.DefaultClient. A
 	// test passes one that trusts its in-process IdP.
 	idpClient *http.Client
+
+	// snapshotHold, when set, runs while a backup snapshot holds appends,
+	// and pauseCap overrides backup.PauseCap. A test holds the pause open
+	// with the one and shortens it with the other.
+	snapshotHold func(ctx context.Context)
+	pauseCap     time.Duration
 
 	// job, when set, runs beside the background jobs, and jobsWait
 	// overrides how long shutdown waits for them (busDrain). A test uses
@@ -283,6 +290,11 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 		log.Warn("could not empty the upload staging directory; the collector retries it", "removed", n, "err", err)
 	} else if n > 0 {
 		log.Info("removed uploads a stopped process left staged", "removed", n)
+	}
+	// A control socket and backup staging a stopped process left. Under the
+	// lock, nothing is using either (TKT-01M29CXK35).
+	if err := backup.RemoveStale(cfg.DataDir); err != nil {
+		log.Warn("could not remove a stale control socket or backup staging directory", "err", err)
 	}
 	dbPath := filepath.Join(cfg.DataDir, "db", "ketju.db")
 	d, err := db.Open(ctx, db.Options{Path: dbPath})
@@ -569,11 +581,14 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	step("jobs")
 	// The threads service is built here, before the listener, because the
 	// auto-hide sweep holds it.
+	// The one Writer every append goes through, which a backup snapshot
+	// holds (TKT-01M29CXK35).
+	writer := &posts.Writer{Publish: bus.Publish}
 	threadSvc := &threads.Service{
 		DB: d, Perm: perms, Threads: cache, Render: render.NewCacheMB(cfg.Storage.RenderedCacheMB),
 		Responses:   respcache.NewMB(cfg.Storage.ResponseCacheMB),
 		Quarantined: proj.Quarantined,
-		Writer:      &posts.Writer{Publish: bus.Publish},
+		Writer:      writer,
 		IDs:         threadid.NewGenerator(),
 		Project: func(ctx context.Context, id threadid.ID, logLength int64) error {
 			_, err := proj.ProjectThread(ctx, id, logLength)
@@ -624,6 +639,35 @@ func serve(ctx context.Context, path string, o serveOpts) (err error) {
 	closers = append(closers, func() error {
 		step("stop jobs")
 		return sched.Stop(jobsWait)
+	})
+
+	// The control socket `ketju backup` asks for a snapshot through (docs/02
+	// "Backups"). Where a peer's uid cannot be checked, or the path is too
+	// long for a socket, serve goes on and only an offline backup works. It
+	// closes before the jobs, the bus and the stores, which a snapshot uses.
+	step("control socket")
+	ctl, err := backup.Listen(cfg.DataDir, backup.Options{Logger: log,
+		Snapshot: func(ctx context.Context) (backup.Result, error) {
+			return backup.Snapshot(ctx, backup.Deps{DataDir: cfg.DataDir, DB: d, Hold: writer.Hold,
+				CatchUp: func(ctx context.Context) error {
+					_, err := proj.CatchUp(ctx, reopen)
+					return err
+				},
+				Cap: o.pauseCap, WhileHeld: o.snapshotHold})
+		}})
+	switch {
+	case errors.Is(err, backup.ErrUnsupported), errors.Is(err, backup.ErrPathTooLong):
+		log.Warn("no control socket, so ketju backup works only with serve stopped", "err", err)
+		ctl = nil
+	case err != nil:
+		return fail("opening the control socket", err)
+	}
+	closers = append(closers, func() error {
+		step("stop control socket")
+		if ctl == nil {
+			return nil
+		}
+		return ctl.Close(busDrain)
 	})
 
 	step("listener")

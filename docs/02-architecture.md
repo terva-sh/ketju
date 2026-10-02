@@ -41,11 +41,10 @@ Three operator commitments are decided (10 Q22–Q24, TKT-01M29BW9PB, 2026-09-24
   thread actors own their logs in memory and the embedded database has one
   writer, so a second process would not scale anything; it would corrupt
   it. Horizontal scaling is out of scope for the communities ketju is for.
-- **Backups.** `ketju backup` ships in Phase 4: it pauses the thread
-  actors, checkpoints the WAL, and snapshots consistently. Until then the
-  procedure is written down rather than built: stop the server, or copy
-  `data/threads/` and `data/blobs/` with `rsync` and take the database with
-  `VACUUM INTO`.
+- **Backups.** `ketju backup` pauses the thread actors, checkpoints the
+  WAL, and snapshots consistently (TKT-01M29CXK35). For operators who prefer
+  their own tools, the README documents the `rsync` and `VACUUM INTO`
+  procedure, with its order and caveats.
 
 **Decided by the run (2026-10-02, pending maintainer review)**
 (TKT-01M29CXK35):

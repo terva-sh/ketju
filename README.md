@@ -49,17 +49,76 @@ registration once, from the command line:
 
 `ketju admin setting -h` says how each kind of value is written.
 
+## Backing up and restoring
+
+`ketju backup` writes a consistent copy of the data directory, whether
+`ketju serve` is running or not:
+
+```sh
+ketju backup --root "$KETJU_DATA" "$KETJU_DEST"
+```
+
+`$KETJU_DEST` must not exist yet. With `serve` running, the command asks it
+for a snapshot over the control socket `ketju.sock` in the data directory,
+which only the user `serve` runs as can use. `serve` holds new posts for the
+moment it takes to bring the database up to date and copy it, a fraction of
+a second on a small forum and never more than a minute, and pages are served
+meanwhile. With `serve` stopped, the command takes the data directory's lock
+instead, so `serve` cannot start until it has finished. Either way the
+source is only read. The backup is checked as `ketju fsck` checks a data
+directory before it is given its name, and `ketju backup -h` lists the exit
+codes. A database written by another version of ketju is copied at its own
+schema and never migrated, so the version that wrote it can restore the
+backup.
+
+A backup holds the database, every thread log and every attachment. It
+leaves out the thread indexes and thumbnails, which are rebuilt when first
+needed, uploads still in progress, `config.toml` and `secrets/`. Keep your
+own copy of `config.toml`. Without the old `secrets/cookie.key`, only
+sign-ins in progress at the moment of the restore are lost.
+
+To restore, copy the backup into an empty data directory and check it:
+
+```sh
+mkdir "$KETJU_RESTORE"
+cp -R "$KETJU_DEST"/. "$KETJU_RESTORE"/
+ketju fsck --root "$KETJU_RESTORE"
+```
+
+Then point `data_dir` in your `config.toml` at it, and start `ketju serve`.
+
+### Backing up with your own tools
+
+With `serve` stopped, copying the whole data directory with `rsync` or any
+other tool is a consistent backup. With `serve` running, copy in this order:
+
+1. The database, with SQLite's `VACUUM INTO`, for example
+   `sqlite3 "$KETJU_DATA/db/ketju.db" "VACUUM INTO '/backups/ketju.db'"`.
+   The `sqlite3` build must include FTS5, because the search index is an
+   FTS5 table. Copying `ketju.db` itself while `serve` runs is not a backup:
+   recent changes may sit in its `-wal` file.
+2. The logs: `rsync -a --exclude '*.idx' "$KETJU_DATA/threads/" /backups/threads/`.
+3. The attachments:
+   `rsync -a --exclude tmp/ --exclude '*.thumb' "$KETJU_DATA/blobs/" /backups/blobs/`.
+
+The logs are copied after the database, so each is at least as long as the
+database says, and a blob is written before the post that names it, so
+every blob a copied log names is already on disk. The logs usually end up a
+little ahead of the database. `ketju fsck` reports that as drift and exits
+3, and `serve` closes it when it next starts, so a restored copy passes
+`fsck` once `serve` has run on it. Copied in another order, a log can end
+up shorter than the database says, and `serve` quarantines that thread.
+`ketju backup` has none of these caveats.
+
 ## Recovering a lost or damaged database
 
 The thread logs under `threads/` hold every thread and post. The database
 holds two kinds of data. Members, sign-ins, groups, permissions, read
 positions and settings exist only in the database. Its projection tables are
 derived from the logs. So recovery takes the members from a database backup
-and the content from the logs, never from the backup. Until `ketju backup`
-arrives, take backups as
-[docs/02-architecture.md](docs/02-architecture.md) describes: `rsync` the
-`threads/` and `blobs/` directories, and snapshot the database with
-`VACUUM INTO`.
+and the content from the logs, never from the backup. The database backup
+is the `db/ketju.db` of a backup `ketju backup` wrote, or a `VACUUM INTO`
+copy ("Backing up and restoring" above).
 
 1. Stop `ketju serve`. Reindex refuses to run while the server holds the data
    directory.

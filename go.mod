@@ -12,6 +12,7 @@ require (
 	github.com/yuin/goldmark/v2 v2.1.1
 	golang.org/x/net v0.26.0
 	golang.org/x/oauth2 v0.37.0
+	golang.org/x/sys v0.48.0
 )
 
 require (
@@ -20,5 +21,4 @@ require (
 	github.com/ncruces/go-sqlite3-wasm/v6 v6.3.35304 // indirect
 	github.com/ncruces/julianday v1.0.0 // indirect
 	github.com/x448/float16 v0.8.4 // indirect
-	golang.org/x/sys v0.48.0 // indirect
 )

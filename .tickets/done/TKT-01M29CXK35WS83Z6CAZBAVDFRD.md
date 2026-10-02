@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CXK35WS83Z6CAZBAVDFRD
 title: Ship ketju backup and the backup documentation
 type: task
-status: draft
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -28,12 +28,12 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T17:46:59Z
+updated_at: 2026-10-02T20:51:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-groom-ops
+  id: agent:claude-code/phase4-run-cxk35
   name: ""
 extensions: {}
 ---
@@ -48,14 +48,14 @@ A backup nobody has restored is a guess. The restore procedure is part of this t
 
 ## Acceptance criteria
 
-- [ ] Against a running serve that takes posts throughout, `ketju backup --root DIR DEST` writes a backup. Copied into an empty data directory, it passes `ketju fsck` with exit 0 and serves every thread it holds (TestBackupRestoresAndPassesFsck)
-- [ ] The same holds for a stopped data directory whose logs are ahead of their projection, and the source is never written (TestBackupOfAStoppedDataDirectory)
-- [ ] Appends are held only while serve catches the projection up, checkpoints the WAL and runs VACUUM INTO. Reads go on meanwhile, held appends complete afterwards, and the pause is capped (TestBackupPausesAppendsOnlyForTheSnapshot)
-- [ ] The control socket is mode 0600, answers only a peer with serve's uid, and takes one snapshot at a time (TestBackupSocketAnswersOnlyItsOwner). Every thread append goes through posts.Writer (TestEveryAppendGoesThroughTheWriter)
-- [ ] A backup leaves out .idx files, thumbnails, blobs/tmp, secrets/ and config.toml, and holds every blob that its logs name (TestBackupLeavesOutIndexesThumbnailsStagingAndSecrets)
-- [ ] The README documents ketju backup, its restore, and the rsync procedure with its order and consistency caveats. The backup-and-restore block runs as a test (TestREADMEBackupProcedure)
-- [ ] The README's database-only recovery takes the database from a ketju backup and the content from reindex, and runs as a test (TestREADMERecoveryProcedure)
-- [ ] If an append stalls, a pending pause gives up within its cap and lets the queued appends go (TestHoldGivesUpOnAStalledAppend)
+- [x] Against a running serve that takes posts throughout, `ketju backup --root DIR DEST` writes a backup. Copied into an empty data directory, it passes `ketju fsck` with exit 0 and serves every thread it holds (TestBackupRestoresAndPassesFsck)
+- [x] The same holds for a stopped data directory whose logs are ahead of their projection, and the source is never written (TestBackupOfAStoppedDataDirectory)
+- [x] Appends are held only while serve catches the projection up, checkpoints the WAL and runs VACUUM INTO. Reads go on meanwhile, held appends complete afterwards, and the pause is capped (TestBackupPausesAppendsOnlyForTheSnapshot)
+- [x] The control socket is mode 0600, answers only a peer with serve's uid, and takes one snapshot at a time (TestBackupSocketAnswersOnlyItsOwner). Every thread append goes through posts.Writer (TestEveryAppendGoesThroughTheWriter)
+- [x] A backup leaves out .idx files, thumbnails, blobs/tmp, secrets/ and config.toml, and holds every blob that its logs name (TestBackupLeavesOutIndexesThumbnailsStagingAndSecrets)
+- [x] The README documents ketju backup, its restore, and the rsync procedure with its order and consistency caveats. The backup-and-restore block runs as a test (TestREADMEBackupProcedure)
+- [x] The README's database-only recovery takes the database from a ketju backup and the content from reindex, and runs as a test (TestREADMERecoveryProcedure)
+- [x] If an append stalls, a pending pause gives up within its cap and lets the queued appends go (TestHoldGivesUpOnAStalledAppend)
 
 ## Implementation plan
 
@@ -234,3 +234,35 @@ Alternatives:
 - No pause lost, because the backup's logs and database would disagree.
 
 Flagged for the orchestrator: the socket is a new local control channel. The run reads it as within the design, since it grants nothing beyond the data directory's own file permissions. If the maintainer reads it as stop class 1, the offline path in step 5 still stands on its own.
+
+**agent:claude-code/phase4-run-cxk35** at 2026-10-02T20:45:50Z
+
+Where the build departs from the plan, and why:
+
+- **The control socket answers `forbidden` before reading the request.** The peer's uid is checked as soon as the connection is accepted, so a stranger's bytes are never parsed. `backup.Ask` tolerates the write failing when the server has already answered and closed.
+- **A socket that cannot be bound is a warning, not a refusal to start**, when the platform has no peer-credential call or the path is longer than a Unix socket allows. `ketju backup` then reports serve as unreachable (exit 4) and the README's own-tools procedure still applies. Any other bind failure stops the start, as every other step does.
+- **Exit codes.** A missing DEST parent is exit 2 (usage). Offline with no database is exit 4. Verification finding a log ahead of its projection on a copy at this binary's schema counts as exit 1, with the copy kept and named, because the catch-up has just closed it and drift then means the copy is wrong.
+- **The copy's indexes are removed after its catch-up**, which opens each log through the thread cache and so writes `.idx` files; a backup holds none.
+- **The copy's empty `-wal` and `-shm` are dropped**, so the backup's database is one file.
+- **A database at another schema is copied at it** (added after the plan). `catchUpCopy` asks `db.Pending` and neither migrates nor catches up a copy whose schema is older or newer than the binary's. Migrating it would have made the backup an upgrade takes one the old binary refuses (`TestNewerSchemaRefused`). Such a copy keeps whatever drift its source had, which is reported in the summary (`schema`, `drift_threads`) and not a failure; serve closes it when it next starts. TKT-01M29CXK3S's upgrade procedure relies on this. Tested by `TestBackupLeavesAnotherSchemaAlone` (older and newer) and `TestPendingCountsWithoutWriting`.
+
+## Summary
+
+Landed `ketju backup --root DIR DEST`, which writes a verified, consistent backup whether serve is running or not. docs/15's invariant is `TestBackupRestoresAndPassesFsck`: a snapshot `ketju backup` makes passes `ketju fsck` after restore.
+
+How it works with serve running:
+- serve takes snapshots through a control socket, `ketju.sock` (internal/backup). The socket is mode 0600 and checks the peer's uid; it runs one snapshot at a time.
+- A snapshot holds appends through `posts.Writer.Hold`, capped at 60 s, then catches up, checkpoints, and runs `VACUUM INTO`.
+- Each log is copied to its projected length, so the logs and the database agree.
+
+How it works with serve stopped:
+- backup takes the lock, copies the database and the whole logs, and catches the copy up.
+- A database at another schema is copied as it is and is not migrated (`db.Pending`), so the binary that wrote it can still restore it.
+
+In both cases:
+- blobs are copied; indexes, thumbnails, staging, secrets/ and config.toml are left out.
+- The copy is verified with fsck's walk, synced, and renamed into place.
+
+The README covers backup, restore, the rsync procedure, and the database-only recovery from a backup. Each runs as a test. docs/02 is updated.
+
+The deviations from the plan are in the notes. There is no migration. golang.org/x/sys is now a direct dependency.
