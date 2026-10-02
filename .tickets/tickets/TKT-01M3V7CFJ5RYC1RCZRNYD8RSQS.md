@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V7CFJ5RYC1RCZRNYD8RSQS
 title: Move focus into layout effects in the admin and apply screens
 type: bug
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -19,15 +19,22 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-7CFJ5
+  branch: run/7cfj5-layout-focus
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
+  commit: 74105a52c1f7a62b9832ad83ab1134b8615b1e57
+  session: null
+  claimed_at: 2026-10-02T23:47:17Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T07:55:39Z
-updated_at: 2026-10-02T17:22:22Z
+updated_at: 2026-10-02T23:47:19Z
 created_by:
   id: agent:claude-code/phase3-groom-polish
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-client-account
+  id: agent:claude-code/phase4-run-7CFJ5
   name: ""
 extensions: {}
 ---
