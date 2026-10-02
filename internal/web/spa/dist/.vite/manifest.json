@@ -3,8 +3,8 @@
     "file": "assets/ApplyRoot-C_SWIqcC.css",
     "src": "_ApplyRoot-C_SWIqcC.css"
   },
-  "_ApplyRoot-S7n7YqeC.js": {
-    "file": "assets/ApplyRoot-S7n7YqeC.js",
+  "_ApplyRoot-CnLUUvR8.js": {
+    "file": "assets/ApplyRoot-CnLUUvR8.js",
     "name": "ApplyRoot",
     "imports": [
       "index.html"
@@ -30,13 +30,13 @@
     "src": "_theme-early-DbsvcKdk.js"
   },
   "index.html": {
-    "file": "assets/index-BMTytRnm.js",
+    "file": "assets/index-D6BHyXTM.js",
     "name": "index",
     "src": "index.html",
     "isEntry": true,
     "dynamicImports": [
       "src/screens/admin/AdminRoot.tsx",
-      "_ApplyRoot-S7n7YqeC.js"
+      "_ApplyRoot-CnLUUvR8.js"
     ],
     "css": [
       "assets/index-Czd4kwgO.css"
@@ -100,12 +100,12 @@
     "src": "src/assets/icon/icon.svg"
   },
   "src/screens/admin/AdminRoot.tsx": {
-    "file": "assets/AdminRoot-BQ08S3ox.js",
+    "file": "assets/AdminRoot-CQE5g747.js",
     "name": "AdminRoot",
     "src": "src/screens/admin/AdminRoot.tsx",
     "isDynamicEntry": true,
     "imports": [
-      "_ApplyRoot-S7n7YqeC.js",
+      "_ApplyRoot-CnLUUvR8.js",
       "index.html"
     ],
     "css": [

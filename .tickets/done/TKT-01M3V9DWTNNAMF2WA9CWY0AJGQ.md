@@ -25,7 +25,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T08:31:22Z
-updated_at: 2026-10-02T19:41:52Z
+updated_at: 2026-10-02T20:27:56Z
 created_by:
   id: agent:claude-code/phase3-groom-polish
   name: ""
@@ -167,6 +167,10 @@ run decision: pending maintainer review. TKT-01M3S3ZRYD (Add the front page foot
 
 Implemented as planned. Details the plan left open, settled here: users.Prefs now answers a UserPrefs struct (PageSize, Theme, Shortcuts) rather than two values; the shortcuts cases are in a new TestPrefsShortcuts beside TestPrefs. A signed-out reader's choice is stored as localStorage ketju.shortcuts = 'off', and the key is removed when they turn them back on. The list's status line is empty while they are on and reads 'Single-key shortcuts are off.' when off; a member's link reads 'Turn them off in Settings' while on and 'Change this in Settings' while off; a signed-out reader's button reads 'Turn shortcuts off' or 'Turn shortcuts on'. The index's lead line reads 'Here ? opens this list. The other keys work on a thread page.' while on, and 'These keys work on a thread page.' while off. The forum-index desktop screenshots are refreshed; the phone ones are unchanged. Reader bundle 79213 B -> 79833 B gzip (+620 B; the plan estimated +450).
 
+**agent:claude-code/phase4-run-9DWTN** at 2026-10-02T20:27:52Z
+
+Terva review 1967 (PR #370, head 3d05bcc, base 5b1a6da), medium 'Cancel the pending go-to-post timer when shortcuts are disabled': fixed. useThreadShortcuts now watches shortcutsOn with a signals effect and ends a g in progress, timer and hint, the moment they turn off; commit() also reads the switch again before going. New case 'turning them off during g cancels the pending go, with no key pressed after' fails with the fix removed. Reader bundle now 79859 B gzip (79213 B on main, +646 B).
+
 ## Summary
 
-The single-key shortcuts can be turned off (WCAG 2.1 SC 2.1.4). prefs_json reads shortcuts, a JSON boolean that is true when missing or malformed; /me, GET /settings and PATCH /settings carry it, and PATCH refuses anything but a boolean as wrong_type. In the client, shortcutsOn (keyboard/shortcuts.ts) is the member's account choice, or for anyone else this browser's (localStorage ketju.shortcuts); with it false no character key acts on a thread page or the forum index. /settings has a 'Use single-key shortcuts' checkbox saved through the save queue. The shortcut list says when they are off, and links a member to Settings or gives a signed-out reader a button. The forum index binds ? in a layout effect while they are on, and its footer reads 'Press ? for keyboard shortcuts' (meeting TKT-01M3S3ZRYD criterion 2), or 'Keyboard shortcuts' when off. Reader bundle 79213 B -> 79833 B gzip. Every criterion met.
+The single-key shortcuts can be turned off (WCAG 2.1 SC 2.1.4). prefs_json reads shortcuts, a JSON boolean that is true when missing or malformed; /me, GET /settings and PATCH /settings carry it, and PATCH refuses anything but a boolean as wrong_type. In the client, shortcutsOn (keyboard/shortcuts.ts) is the member's account choice, or for anyone else this browser's (localStorage ketju.shortcuts); with it false no character key acts on a thread page or the forum index, and a g in progress ends at once (Terva review 1967). /settings has a 'Use single-key shortcuts' checkbox saved through the save queue. The shortcut list says when they are off, and links a member to Settings or gives a signed-out reader a button. The forum index binds ? in a layout effect while they are on, and its footer reads 'Press ? for keyboard shortcuts' (meeting TKT-01M3S3ZRYD criterion 2), or 'Keyboard shortcuts' when off. Reader bundle 79213 B -> 79859 B gzip. Every criterion met.
