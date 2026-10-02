@@ -38,6 +38,18 @@ func (c *cancelling) IssuePreUserWith(context.Context, session.Meta, func(contex
 	return "", session.Session{}, errors.New("not used")
 }
 
+func (c *cancelling) ListForUser(context.Context, int64) ([]session.Info, error) {
+	return nil, errors.New("not used")
+}
+
+func (c *cancelling) RevokeOwn(context.Context, int64, string) (bool, error) {
+	return false, errors.New("not used")
+}
+
+func (c *cancelling) RevokeUser(context.Context, int64) error {
+	return errors.New("not used")
+}
+
 func (c *cancelling) Revoke(ctx context.Context, token string) error {
 	if token == "old" {
 		c.cancel()

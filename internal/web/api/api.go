@@ -54,9 +54,11 @@ type Deps struct {
 	// need not build a blob store.
 	Blobs *blobs.Service
 	// Sessions lists and ends the viewer's own sessions under
-	// /api/v1/settings (settings.go, TKT-01M29CCC0X). serve passes the
-	// store its session middleware reads, so the two share a clock; nil is
-	// a store over Users.DB on Users.Now.
+	// /api/v1/settings (settings.go, TKT-01M29CCC0X), through
+	// identity.Service: build wires it there, and no handler holds it
+	// (TKT-01M3YME9DM). serve passes the store its session middleware
+	// reads, so the two share a clock; nil is a store over Users.DB on
+	// Users.Now.
 	Sessions *session.Store
 	// Providers are the identity providers config.toml configures now. An
 	// identity on any other provider cannot sign in, so it does not count
@@ -111,9 +113,11 @@ func build(d Deps) (*handlers, *http.ServeMux) {
 		account: &account.Service{DB: d.Users.DB, Perm: d.Perm, Threads: d.Threads, Now: d.Users.Now},
 		// Handle changes likewise (TKT-01M3NRP3W9): a rename needs only the
 		// database and the clock. Removing a sign-in (TKT-01M29CCC0X) needs
-		// the configured providers too.
-		identity: &identity.Service{DB: d.Users.DB, Perm: d.Perm, Now: d.Users.Now, Providers: d.Providers},
-		sessions: sessions,
+		// the configured providers too, and listing and ending sessions the
+		// session store (TKT-01M3YME9DM). No handler here signs anyone in:
+		// the auth routes do, through the identity.Service serve builds.
+		identity: &identity.Service{DB: d.Users.DB, Sessions: sessions, Perm: d.Perm, Now: d.Users.Now,
+			Providers: d.Providers},
 		// The audit log likewise (TKT-01M29CP2R4): it only reads.
 		auditlog: &auditlog.Service{DB: d.Users.DB},
 		// The site settings likewise (TKT-01M29CXK2H): the database and
@@ -214,7 +218,6 @@ type handlers struct {
 	groups       *groups.Service
 	account      *account.Service
 	identity     *identity.Service
-	sessions     *session.Store
 	auditlog     *auditlog.Service
 	sitesettings *sitesettings.Service
 	log          *slog.Logger

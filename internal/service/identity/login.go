@@ -73,13 +73,17 @@ type Result struct {
 // cleanupTimeout bounds ending a session a failed sign-in issued.
 const cleanupTimeout = 5 * time.Second
 
-// Sessions is the part of *session.Store a sign-in uses.
+// Sessions is the part of *session.Store a sign-in uses, and the session
+// list on the settings screen (sessions.go).
 type Sessions interface {
 	IssueUser(ctx context.Context, identityID int64, meta session.Meta) (string, session.Session, error)
 	IssueUserWith(ctx context.Context, meta session.Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error)
 	IssuePreUser(ctx context.Context, identityID int64, meta session.Meta) (string, session.Session, error)
 	IssuePreUserWith(ctx context.Context, meta session.Meta, create func(context.Context, *dbq.Queries) (int64, error)) (string, session.Session, error)
 	Revoke(ctx context.Context, token string) error
+	ListForUser(ctx context.Context, userID int64) ([]session.Info, error)
+	RevokeOwn(ctx context.Context, userID int64, id string) (bool, error)
+	RevokeUser(ctx context.Context, userID int64) error
 }
 
 // Service decides sign-ins.

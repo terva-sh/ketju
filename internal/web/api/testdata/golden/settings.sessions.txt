@@ -1,0 +1,72 @@
+GET /api/v1/settings/sessions
+200
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self' 'nonce-<nonce>'; style-src 'self' 'nonce-<nonce>'; connect-src 'self'
+Content-Type: application/json
+Referrer-Policy: strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+
+{"sessions":[{"id":"<laptop>","current":true,"device":"Firefox on Linux","user_agent":"Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0","ip":"192.0.2.10","provider":"github","created_at":1757500060000,"last_used_at":1757500060000},{"id":"<phone>","current":false,"device":"Safari on iPhone","user_agent":"Mozilla/5.0 (iPhone; CPU iPhone OS 17_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.6 Mobile/15E148 Safari/604.1","ip":"192.0.2.10","provider":"club","created_at":1757500000000,"last_used_at":1757500000000}]}
+
+DELETE /api/v1/settings/sessions/<bob>
+404
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self' 'nonce-<nonce>'; style-src 'self' 'nonce-<nonce>'; connect-src 'self'
+Content-Type: application/problem+json
+Referrer-Policy: strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+
+{"type":"not-found","title":"No such endpoint or object.","status":404}
+
+
+DELETE /api/v1/settings/sessions/<phone>
+204
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self' 'nonce-<nonce>'; style-src 'self' 'nonce-<nonce>'; connect-src 'self'
+Referrer-Policy: strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+
+
+
+GET /api/v1/settings/sessions
+200
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self' 'nonce-<nonce>'; style-src 'self' 'nonce-<nonce>'; connect-src 'self'
+Content-Type: application/json
+Referrer-Policy: strict-origin-when-cross-origin
+X-Content-Type-Options: nosniff
+
+{"sessions":[{"id":"<laptop>","current":true,"device":"Firefox on Linux","user_agent":"Mozilla/5.0 (X11; Linux x86_64; rv:131.0) Gecko/20100101 Firefox/131.0","ip":"192.0.2.10","provider":"github","created_at":1757500060000,"last_used_at":1757500060000}]}
+
+DELETE /api/v1/settings/sessions/<laptop>
+204
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self' 'nonce-<nonce>'; style-src 'self' 'nonce-<nonce>'; connect-src 'self'
+Referrer-Policy: strict-origin-when-cross-origin
+Set-Cookie: __Host-ketju_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax
+X-Content-Type-Options: nosniff
+
+
+
+DELETE /api/v1/settings/sessions
+204
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self' 'nonce-<nonce>'; style-src 'self' 'nonce-<nonce>'; connect-src 'self'
+Referrer-Policy: strict-origin-when-cross-origin
+Set-Cookie: __Host-ketju_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax
+X-Content-Type-Options: nosniff
+
+
+
+GET /api/v1/settings/sessions
+401
+Cache-Control: no-store
+Content-Security-Policy: default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; img-src 'self' data:; script-src 'self' 'nonce-<nonce>'; style-src 'self' 'nonce-<nonce>'; connect-src 'self'
+Content-Type: application/problem+json
+Referrer-Policy: strict-origin-when-cross-origin
+Set-Cookie: __Host-ketju_session=; Path=/; Max-Age=0; HttpOnly; Secure; SameSite=Lax
+X-Content-Type-Options: nosniff
+
+{"type":"unauthenticated","title":"You are not signed in.","status":401}
+
+

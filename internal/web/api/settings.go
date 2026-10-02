@@ -1,7 +1,6 @@
 package api
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -80,22 +79,8 @@ func (h *handlers) sessionList(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	infos, err := h.sessions.ListForUser(r.Context(), v.UserID)
-	if err != nil {
-		h.fail(w, r, err)
-		return
-	}
-	out := dto.SessionList{Sessions: []dto.SessionInfo{}}
-	current := sess.ID()
-	for _, i := range infos {
-		if !i.Live {
-			continue
-		}
-		out.Sessions = append(out.Sessions, dto.SessionInfo{ID: i.ID, Current: i.ID == current,
-			Device: session.DeviceLabel(i.UserAgent), UserAgent: i.UserAgent, IP: i.IP, Provider: i.Provider,
-			CreatedAt: dto.Millis(i.CreatedAt.UnixMilli()), LastUsedAt: dto.Millis(i.LastUsedAt.UnixMilli())})
-	}
-	answer(h, w, r, out, nil)
+	res, err := h.identity.ListSessions(r.Context(), v, sess.ID())
+	answer(h, w, r, res, err)
 }
 
 // endSession is DELETE /api/v1/settings/sessions/{id}: sign out the device
@@ -109,13 +94,8 @@ func (h *handlers) endSession(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	id := r.PathValue("id")
-	ended, err := h.sessions.RevokeOwn(r.Context(), v.UserID, id)
-	switch {
-	case err != nil:
+	if _, err := h.identity.EndSession(r.Context(), v, id); err != nil {
 		h.fail(w, r, err)
-		return
-	case !ended:
-		h.fail(w, r, problem.Coded(problem.CodeNotFound, errors.New("api: the viewer has no such session")))
 		return
 	}
 	if id == sess.ID() {
@@ -133,7 +113,7 @@ func (h *handlers) endEverySession(w http.ResponseWriter, r *http.Request) {
 		h.fail(w, r, err)
 		return
 	}
-	if err := h.sessions.RevokeUser(r.Context(), v.UserID); err != nil {
+	if err := h.identity.EndEverySession(r.Context(), v); err != nil {
 		h.fail(w, r, err)
 		return
 	}

@@ -5,7 +5,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"time"
 
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/service/member"
@@ -104,11 +103,7 @@ func ProfileRedirects(u *users.Service, next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		now := time.Now()
-		if u.Now != nil {
-			now = u.Now()
-		}
-		if _, err := member.Account(r.Context(), u.DB, v, handle, now); !moved(w, r, err, "/u/", rest) {
+		if err := u.Resolve(r.Context(), v, handle); !moved(w, r, err, "/u/", rest) {
 			next.ServeHTTP(w, r)
 		}
 	})
