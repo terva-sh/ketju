@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:50:19Z
-updated_at: 2026-10-02T01:59:53Z
+updated_at: 2026-10-02T02:26:32Z
 created_by:
   id: agent:claude-code/phase3-run-vbwma8
   name: ""
@@ -94,3 +94,11 @@ What to do on recurrence: compare the step-log timestamps of every job that ran 
 TKT-01M3SZ3GCE (Stop admin-applications.spec.ts timing out under CI load) is blocked on a recurrence of its own and is unaffected.
 
 Read-only findings of 2026-10-01 are in the earlier note: build-1 is overcommitted on memory, and build-0 shares its VM with Forgejo. The change recommended then still stands if the freeze becomes a nuisance: build-1 at capacity 1 or 8 GB of RAM; build-0 at capacity 1 to 2, or its runner moved off the Forgejo VM.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T02:26:32Z
+
+Correction, superseding the recurrence test in this ticket's note of 2026-10-02 (Terva review on PR #343, medium, accepted). That note treated sibling jobs that kept running as proof the cause is in ketju. It is only evidence against a runner-wide freeze. A stall confined to one job can also come from that job's container limits, its scheduling, or an external dependency.
+
+On recurrence:
+- **Every job on the runner stalled together.** This is the known runner freeze. Add the run to TKT-01M3VDYENN.
+- **The other jobs kept running.** Rule out the job's own infrastructure first: its container's memory and CPU limits, and anything it fetched from outside during the window. If nothing explains it, use the probe method of TKT-01M3VBWMA8's investigation note to look inside ketju. A cause in ketju is established only when the goroutine dump or block profile shows what the request waited on.

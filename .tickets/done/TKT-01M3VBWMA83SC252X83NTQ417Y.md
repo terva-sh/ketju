@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:14:22Z
-updated_at: 2026-10-02T01:59:39Z
+updated_at: 2026-10-02T02:26:32Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -167,6 +167,14 @@ Evidence since the investigation: no Build and Test run has failed since run 218
 
 If a thread-page request over 1 s shows up again in a printed serve.log, check first whether the other jobs on the same runner kept running through the same window. If they did, the cause is in ketju. In that case reopen this ticket, or file a new one that links here, and follow this ticket's approach step 3: the investigation note's method, with the watchdog goroutine dump and the block profile.
 
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T02:26:32Z
+
+Correction, superseding the recurrence test in this ticket's note of 2026-10-02 (Terva review on PR #343, medium, accepted). That note treated sibling jobs that kept running as proof the cause is in ketju. It is only evidence against a runner-wide freeze. A stall confined to one job can also come from that job's container limits, its scheduling, or an external dependency.
+
+On recurrence:
+- **Every job on the runner stalled together.** This is the known runner freeze. Add the run to TKT-01M3VDYENN.
+- **The other jobs kept running.** Rule out the job's own infrastructure first: its container's memory and CPU limits, and anything it fetched from outside during the window. If nothing explains it, use the probe method of TKT-01M3VBWMA8's investigation note to look inside ketju. A cause in ketju is established only when the goroutine dump or block profile shows what the request waited on.
+
 ## Summary
 
-Closed by the maintainer's decision of 2026-10-02 to accept the evidence as it stands. The 8892 ms thread GET in CI run 1790 is attributed to runner b3cc8959 freezing every job it ran for about nine seconds. Nothing in ketju changed. Criterion 3, CI runs on a changed runner, is unticked because the runner was not changed. TKT-01M3VDYENN stays open as a draft, with no milestone, for the runner itself. If the stall recurs while the runner's other jobs keep running, the cause is in ketju, and the 2026-10-01 investigation note's probe method is where to start.
+Closed by the maintainer's decision of 2026-10-02 to accept the evidence as it stands. The 8892 ms thread GET in CI run 1790 is attributed to runner b3cc8959 freezing every job it ran for about nine seconds. Nothing in ketju changed. Criterion 3, CI runs on a changed runner, is unticked because the runner was not changed. TKT-01M3VDYENN stays open as a draft, with no milestone, for the runner itself. If it recurs while the runner's other jobs keep running, rule out that job's own infrastructure first; the 2026-10-01 investigation note's probe method is how to look inside ketju (see the correction note of 2026-10-02).
