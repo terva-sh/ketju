@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V9DWTNNAMF2WA9CWY0AJGQ
 title: Let a member turn off the single-key shortcuts (WCAG 2.1.4)
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -20,15 +20,22 @@ blocks_on: none
 references:
   - ref: pr:360
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-9DWTN
+  branch: run/9dwtn-shortcut-switch
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-adf21bb4c458f1a36
+  commit: 30834b8e9b8dc69a282dac88cc580503fd08244c
+  session: null
+  claimed_at: 2026-10-02T19:15:02Z
+  expires_at: null
 archive: null
 created_at: 2026-10-01T08:31:22Z
-updated_at: 2026-10-02T17:22:22Z
+updated_at: 2026-10-02T19:15:03Z
 created_by:
   id: agent:claude-code/phase3-groom-polish
   name: ""
 updated_by:
-  id: agent:claude-code/phase4-groom-client-account
+  id: agent:claude-code/phase4-run-9DWTN
   name: ""
 extensions: {}
 ---
