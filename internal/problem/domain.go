@@ -55,6 +55,10 @@ var mapping = []struct {
 	// An edit of a deleted post, a delete of one already gone, a restore of
 	// one that is not deleted: the actor refused the record (TKT-01M29CA9BP).
 	{threadlog.ErrPostState, CodeConflict},
+	// Any record after a ThreadArchived: archived is read-only to everyone,
+	// and a write that raced the archive answers as one that came after it
+	// (TKT-01M29CRJ64).
+	{threadlog.ErrArchived, CodeConflict},
 
 	// The admin users, groups and permissions screens (TKT-01M29CXK1X).
 	// A user or group named by id that is not there; a change that is not

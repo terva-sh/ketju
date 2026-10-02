@@ -569,6 +569,52 @@ Every retag writes `thread.retagged` against the thread, with no tag text
 (04 "audit_log"). Tags set on create write no row. The record moves the log
 length, and so the response cache key.
 
+#### Archiving threads (TKT-01M29CRJ64)
+
+Archiving is an admin's, by role, behind the `admin` gate (08
+"Primitives"). An archived thread is closed history: after its
+`ThreadArchived` nothing more is appended to its log, for anyone, admins
+included (03, 08 "Locking semantics"). There is no unarchive in v1
+(maintainer decision, TKT-01M3YSQQ5X).
+
+| Route | Body | What it does |
+|---|---|---|
+| `POST /admin/threads/{id}/archive` | `{reason?}`, or none | `ThreadArchived` with the reason |
+
+It is decided on the log as lock and pin are, and answers 200 with the
+thread's `ThreadHeader` as its page now serves it, `no-store`, after
+projecting the record. The body is decoded strictly and bounded at 4 KiB.
+It is charged to the per-address write limiter.
+
+An archive is refused in this order, and each refusal writes nothing:
+- `unauthenticated`, or `forbidden`, from the gate;
+- `bad-request` for a malformed id, or a body that is not `{reason?}`;
+- `not-found` for a thread that does not exist;
+- `forbidden` to a viewer who is not an admin by role, checked again by the
+  service so no caller relies on the route alone;
+- `conflict` for a thread already archived;
+- `validation-failed` for a reason over 500 characters.
+
+After the archive every write to the thread is `conflict`, to everyone: a
+reply, an edit, delete or restore, a lock or unlock, a pin or unpin, a
+move, a rename, a retag, slow mode, a flag on another's post, a queue
+resolution and a second archive. The thread log's actor refuses the
+append itself, so a reply racing the archive lands before it or is
+refused, never after it. Reading is unchanged: the thread stays in every
+list, its posts and history read as before, and a member may still watch
+or mute it and set a read position. The viewer block's `can_reply` and
+`can_upload` are false and `rename_until` is null. The archived state is
+the log's, so it survives `ketju reindex` and a restart, and the open-thread
+cache drops an archived thread ahead of live ones. The offline `ketju
+redact` still reaches an archived thread (08 "Locking semantics").
+
+The projection writes `thread.archived` against the thread with
+`{"reason"}` (04 "audit_log"). The record moves the log length, and so the
+response cache key. The thread's header and list rows carry no `archived`
+field yet: the field changes the DTO contract the client checks, so it
+lands with the client's archived view, TKT-01M3YSQQ33 (Show archived
+threads and offer archiving in the client).
+
 #### Form versions (TKT-01M29CP2KE)
 
 Admins only: anonymous is `unauthenticated`, and a pre-user, member or

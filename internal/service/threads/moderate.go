@@ -146,6 +146,42 @@ func (s *Service) Retag(ctx context.Context, v domain.Viewer, id threadid.ID, ta
 	})
 }
 
+// Archive is POST /admin/threads/{id}/archive (docs/07 "Archiving
+// threads"): a ThreadArchived record with the reason, after which the
+// thread is read-only to everyone, admins included, and v1 has no unarchive
+// (docs/08 "Locking semantics", docs/15; maintainer, 2026-10-02,
+// TKT-01M3YSQQ5X). Only an admin, by role, archives (docs/08
+// "Primitives"); the route's gate says so and this says it again, so no
+// caller relies on the route alone. Refusals come in this order, all before
+// the append: forbidden to anyone but an admin, conflict on a thread
+// already archived, then validation-failed for a reason over MaxReason.
+//
+// The actor seals itself as it writes the record, so nothing lands after
+// it, however close behind. MarkArchived then moves the thread to the front
+// of the cache's eviction order. The projection writes thread.archived.
+func (s *Service) Archive(ctx context.Context, v domain.Viewer, id threadid.ID, reason string) (dto.ThreadHeader, error) {
+	if err := s.MayWrite(v); err != nil {
+		return dto.ThreadHeader{}, err
+	}
+	h, err := s.appendDecided(ctx, v, id, func(a access, th *threadcache.Thread, _ time.Time) (threadlog.Append, error) {
+		if v.Role != domain.RoleAdmin {
+			return threadlog.Append{}, problem.Coded(problem.CodeForbidden, fmt.Errorf("threads: only an admin may archive %s", id))
+		}
+		if th.Archived() || a.row.Archived != 0 {
+			return threadlog.Append{}, problem.Coded(problem.CodeConflict, fmt.Errorf("threads: %s is already archived", id))
+		}
+		if err := checkReason(reason); err != nil {
+			return threadlog.Append{}, err
+		}
+		return threadlog.Append{Type: threadlog.TypeThreadArchived, Body: &threadlog.ThreadArchivedBody{Reason: reason}}, nil
+	})
+	if err != nil {
+		return h, err
+	}
+	s.Threads.MarkArchived(id)
+	return h, nil
+}
+
 // Rename is PATCH /threads/{id} (docs/07): a ThreadRenamed record with the
 // new title and the slug Slug makes of it. The old slug keeps working,
 // because a thread is found by its id and a client corrects a stale slug

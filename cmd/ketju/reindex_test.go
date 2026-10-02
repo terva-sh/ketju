@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"math/rand/v2"
@@ -177,7 +178,9 @@ func writeThreads(t *testing.T, data string, seed uint64, n int, more []threadid
 	t.Helper()
 	d := openDB(t, data)
 	defer d.Close()
-	cache, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever})
+	// A thread an earlier call archived is opened sealed, as serve opens
+	// it, and takes nothing more (TKT-01M29CRJ64).
+	cache, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever, Archived: archived(d)})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -198,7 +201,8 @@ func writeThreads(t *testing.T, data string, seed uint64, n int, more []threadid
 
 	rng := rand.New(rand.NewPCG(seed, 0xC5))
 	clock := int64(1_700_000_000_000) + int64(seed)*1_000_000
-	appendOne := func(id threadid.ID, a threadlog.Append) {
+	// appendOne appends a, or answers false for a thread that is archived.
+	appendOne := func(id threadid.ID, a threadlog.Append) bool {
 		clock += 1000
 		a.TimeMS = clock
 		var res threadlog.Result
@@ -207,10 +211,14 @@ func writeThreads(t *testing.T, data string, seed uint64, n int, more []threadid
 			res, err = th.Actor.Append(a)
 			return err
 		})
+		if errors.Is(err, threadlog.ErrArchived) {
+			return false
+		}
 		if err != nil {
 			t.Fatalf("appending %s: %v", a.Type, err)
 		}
 		bus.Publish(events.Event{Thread: id, LogLength: res.LogLength})
+		return true
 	}
 	posts := map[threadid.ID]uint32{}
 	var ids []threadid.ID
@@ -235,9 +243,13 @@ func writeThreads(t *testing.T, data string, seed uint64, n int, more []threadid
 			appendOne(id, threadlog.Append{Type: threadlog.TypePost, Author: 1, Body: &threadlog.PostBody{Source: "first"}})
 			posts[id] = 1
 		}
+		// Nothing follows a ThreadArchived, so it ends the thread's
+		// records, here or in a later call.
 		for range 5 + rng.IntN(25) {
 			a, p := randomAppend(rng, posts[id])
-			appendOne(id, a)
+			if !appendOne(id, a) || a.Type == threadlog.TypeThreadArchived {
+				break
+			}
 			posts[id] = p
 		}
 	}

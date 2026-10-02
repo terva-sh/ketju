@@ -284,7 +284,7 @@ func (s *Service) enforceAutoHide(ctx context.Context, id threadid.ID, ordinal u
 		}, nil
 	})
 	switch {
-	case errors.Is(err, errNothingToHide), errors.Is(err, threadlog.ErrPostState):
+	case errors.Is(err, errNothingToHide), errors.Is(err, threadlog.ErrPostState), errors.Is(err, threadlog.ErrArchived):
 		return false, nil
 	case res.LogLength != 0:
 		// Durable: a failed projection is the bus's to retry, and the

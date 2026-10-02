@@ -555,6 +555,8 @@ transaction that projects the record, with the frame's timestamp as `at`.
     `thread.retagged`, a `ThreadTagged`, with nothing beyond `"thread"`
     and `"log_offset"`, for the reason a rename's row names no title: the
     log is the record of what the tags were (TKT-01M29CYSCP);
+    `thread.archived` with `"reason"`, an admin's, as a lock's is
+    (TKT-01M29CRJ64);
   - when the actor is not the thread's author: `thread.renamed`, against
     the thread, with nothing beyond `"thread"` and `"log_offset"`. It
     carries no title, old or new: the log is the record of what the title
@@ -573,7 +575,7 @@ transaction that projects the record, with the frame's timestamp as `at`.
     `flags`.
 
   An author's own rename, edit, delete or restore writes none, nor does a
-  `ThreadCreated`, its tags included, `Post` or `ThreadArchived`. A record's
+  `ThreadCreated`, its tags included, or `Post`. A record's
   actor 0 is written as NULL with `"via": "thread-log"`. An actor the log
   names but `users` lacks, as in a database restored from a backup older
   than the logs, is written as NULL with the log's id as `"log_actor"`, so
@@ -652,6 +654,7 @@ names that the list lacks.
 | `post.redacted` | `post` | TKT-01M29CXJZ9 |
 | `post.restored` | `post` | TKT-01M29CKRGS |
 | `setting.changed` | `setting` | TKT-01M29BYYJ0 |
+| `thread.archived` | `thread` | TKT-01M29CRJ64 |
 | `thread.locked` | `thread` | TKT-01M29CKRGS |
 | `thread.moved` | `thread` | TKT-01M29CKRH9 |
 | `thread.pinned` | `thread` | TKT-01M29CKRGS |

@@ -86,9 +86,10 @@ type Thread struct {
 	used     uint64
 }
 
-// Archived reports whether the thread was archived when it was opened, or has
-// been marked since.
-func (t *Thread) Archived() bool { return t.archived }
+// Archived reports whether the thread was archived when it was opened, has
+// been marked since, or its actor has written a ThreadArchived: the actor
+// knows first, before the projection or MarkArchived has caught up.
+func (t *Thread) Archived() bool { return t.archived || t.Actor.Sealed() }
 
 // Cache holds open threads, bounded, evicting least-recently-used first and
 // archived threads before that.
@@ -316,11 +317,15 @@ func (c *Cache) With(id threadid.ID, fn func(*Thread) error) error {
 }
 
 // MarkArchived records that a thread is archived, so the cache drops it ahead
-// of live threads. Call it after appending the ThreadArchived record.
+// of live threads, and seals its actor, so nothing more is appended. Call it
+// after appending the ThreadArchived record, whose actor has sealed itself
+// already, so the seal here only matters to a caller that wrote the record
+// some other way.
 func (c *Cache) MarkArchived(id threadid.ID) {
 	c.mu.Lock()
 	if e, ok := c.open[id]; ok && e.t != nil {
 		e.t.archived = true
+		e.t.Actor.Seal()
 	}
 	c.mu.Unlock()
 	c.evict()
@@ -405,8 +410,12 @@ func (c *Cache) openThread(id threadid.ID) (*Thread, error) {
 		Replayed: rec.Replayed,
 		log:      logf, idx: idxf,
 	}
-	if c.isArch != nil {
-		t.archived = c.isArch(id)
+	// A thread opened archived is sealed before anyone can append to it:
+	// the index does not say the log ends in a ThreadArchived, so the
+	// actor could not know otherwise.
+	if c.isArch != nil && c.isArch(id) {
+		t.archived = true
+		t.Actor.Seal()
 	}
 	return t, nil
 }

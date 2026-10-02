@@ -346,6 +346,13 @@ func (s *Service) View(ctx context.Context, v domain.Viewer, id threadid.ID, q Q
 		// Per viewer, so in the viewer block, which is never cached. The
 		// ETag hashes it, so a page whose window has closed revalidates.
 		viewer.RenameUntil = renameUntil(a, th.Archived(), window, now)
+		// An archived thread takes nothing from anyone, so the page offers
+		// no reply and no upload, to moderators and admins too
+		// (TKT-01M29CRJ64). The cache's flag is the actor's as well as the
+		// projection's, so it knows as soon as the record is written.
+		if th.Archived() || row.Archived != 0 {
+			viewer.CanReply, viewer.CanUpload = false, false
+		}
 		// One snapshot: the length the ETag names and the entries and reply
 		// counts the page is built from describe the same log. Without it an
 		// append landing between the two could be answered with a 304 for the

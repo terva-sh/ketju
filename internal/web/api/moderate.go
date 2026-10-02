@@ -36,6 +36,15 @@ func (h *handlers) registerModeration(mux *http.ServeMux) {
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/unpin", moderatesGate, h.unpinThread)
 	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/move", moderatesGate, h.moveThread)
 	h.adminRoute(mux, "PUT /api/v1/admin/threads/{id}/tags", moderatesGate, h.retagThread)
+	// Archiving is an admin's alone (docs/08 "Primitives"), so it keeps the
+	// admin gate (TKT-01M29CRJ64).
+	h.adminRoute(mux, "POST /api/v1/admin/threads/{id}/archive", adminGate, h.archiveThread)
+}
+
+// archiveThread is POST /api/v1/admin/threads/{id}/archive with {reason?},
+// or no body, as a lock takes (docs/07 "Archiving threads").
+func (h *handlers) archiveThread(w http.ResponseWriter, r *http.Request) {
+	h.setLocked(w, r, h.threads.Archive)
 }
 
 // retagRequest is the body of PUT …/tags: the thread's whole new tag set,
@@ -148,8 +157,8 @@ func (h *handlers) unlockThread(w http.ResponseWriter, r *http.Request) {
 	h.setLocked(w, r, h.threads.Unlock)
 }
 
-// setLocked is lock and unlock: an optional {reason} body, as a delete
-// takes.
+// setLocked is lock, unlock and archive: an optional {reason} body, as a
+// delete takes.
 func (h *handlers) setLocked(w http.ResponseWriter, r *http.Request,
 	do func(context.Context, domain.Viewer, threadid.ID, string) (dto.ThreadHeader, error)) {
 	id, err := threadid.Parse(r.PathValue("id"))

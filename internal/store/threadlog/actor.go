@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -122,6 +123,12 @@ var ErrPostState = errors.New("threadlog: the post is not in a state this record
 // grown past the length the caller read. Nothing was written.
 var ErrLogMoved = errors.New("threadlog: the log has moved on since the length this record was decided at")
 
+// ErrArchived means the thread is archived: its log holds a ThreadArchived,
+// or one is staged ahead in the same batch, or the actor was sealed. An
+// archived thread takes no further record from anyone (docs/03). Nothing
+// was written.
+var ErrArchived = errors.New("threadlog: the thread is archived")
+
 type request struct {
 	a     Append
 	reply chan answer
@@ -191,6 +198,11 @@ type Actor struct {
 	// uses it to hand a reader a length and an index that describe exactly the
 	// same log, rather than an index that may be newer than the length.
 	applying atomic.Uint64
+
+	// sealed is set once the thread is archived: by the actor when it
+	// writes a ThreadArchived, or by Seal for a thread opened archived.
+	// Every append after it fails with ErrArchived.
+	sealed atomic.Bool
 
 	mu       sync.Mutex
 	closeErr error
@@ -263,6 +275,16 @@ func (a *Actor) Close() error {
 	<-a.done
 	return a.closeErr
 }
+
+// Seal makes every later append fail with [ErrArchived]: the thread is
+// archived. The actor seals itself when it writes a ThreadArchived; Seal is
+// for a thread whose log already ended in one when it was opened, which the
+// index does not record (threadcache's Options.Archived).
+func (a *Actor) Seal() { a.sealed.Store(true) }
+
+// Sealed reports whether the actor refuses appends because the thread is
+// archived.
+func (a *Actor) Sealed() bool { return a.sealed.Load() }
 
 // Index returns the in-memory index. Valid only after Close; before then the
 // actor goroutine owns it.
@@ -426,6 +448,13 @@ func (a *Actor) commit(batch []request) {
 	}
 	a.published.Store(a.logLength)
 	a.applying.Add(1)
+	// A ThreadArchived on disk seals the actor before the batch is answered,
+	// so no later batch can follow it.
+	for i := range staging {
+		if staging[i].header.Type == TypeThreadArchived {
+			a.sealed.Store(true)
+		}
+	}
 	for i := range staging {
 		if applied[i] {
 			a.writeEntry(staging[i].header.Ordinal)
@@ -473,6 +502,12 @@ func changesEntry(h FrameHeader) bool {
 // batch — which is the exact bug the single-writer design is supposed to make
 // impossible, so it gets its own test.
 func (a *Actor) frameFor(req Append, staging []staged) (FrameHeader, []byte, error) {
+	// An archived thread is read-only to everyone (docs/03, docs/08
+	// "Locking semantics"): nothing follows a ThreadArchived, whether it is
+	// already in the log or staged ahead of req in this batch.
+	if a.sealed.Load() || slices.ContainsFunc(staging, func(s staged) bool { return s.header.Type == TypeThreadArchived }) {
+		return FrameHeader{}, nil, fmt.Errorf("%w: refusing a %s", ErrArchived, req.Type)
+	}
 	ts := req.TimeMS
 	if ts == 0 {
 		ts = time.Now().UnixMilli()

@@ -227,6 +227,7 @@ var adminRouteGates = map[string]string{
 	"POST /api/v1/admin/threads/{id}/move":              "moderates",
 	"PUT /api/v1/admin/threads/{id}/slow-mode":          "moderates",
 	"PUT /api/v1/admin/threads/{id}/tags":               "moderates",
+	"POST /api/v1/admin/threads/{id}/archive":           "admin",
 	"GET /api/v1/admin/applications":                    "staff",
 	"GET /api/v1/admin/applications/{id}":               "staff",
 	"POST /api/v1/admin/applications/{id}/approve":      "staff",

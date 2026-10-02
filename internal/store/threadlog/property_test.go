@@ -102,6 +102,10 @@ func checkOneSequence(seed int64, maxLen int) error {
 			g.ord = res.Ordinal
 		}
 		script = append(script, g)
+		// Nothing is appended after a ThreadArchived (TKT-01M29CRJ64).
+		if app.Type == TypeThreadArchived {
+			break
+		}
 	}
 
 	if err := a.Close(); err != nil {
@@ -354,6 +358,10 @@ func testThreadEventsOnlyStillAgree(t *testing.T) {
 		app, _ := threadEvent(r, 1_700_000_000_000, 3)
 		if _, err := a.Append(app); err != nil {
 			t.Fatal(err)
+		}
+		// Nothing is appended after a ThreadArchived (TKT-01M29CRJ64).
+		if app.Type == TypeThreadArchived {
+			break
 		}
 	}
 	if err := a.Close(); err != nil {

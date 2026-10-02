@@ -1,6 +1,7 @@
 package threadcache
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"sync"
@@ -107,19 +108,35 @@ func TestEvictionDropsTheLeastRecentlyUsedAndFlushesItsHeader(t *testing.T) {
 // recency.
 func TestArchivedThreadIsEvictedBeforeALiveOne(t *testing.T) {
 	id := ids(3)
+	// The threads are written first, live: an archived thread takes no
+	// appends (TKT-01M29CRJ64), and Archived is asked when one is opened.
+	w, root := newCache(t, Options{Sync: threadlog.SyncNever})
+	for _, i := range id {
+		create(t, w, i, 1)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
 	archived := map[threadid.ID]bool{id[0]: true}
-	c, _ := newCache(t, Options{
+	c, err := New(root, Options{
 		Bound: 2, Sync: threadlog.SyncNever,
 		Archived: func(i threadid.ID) bool { return archived[i] },
 	})
-
-	create(t, c, id[0], 1) // archived, and about to be the most recently used
-	create(t, c, id[1], 1)
-	if err := c.With(id[0], func(*Thread) error { return nil }); err != nil {
+	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { c.Close() })
 
-	create(t, c, id[2], 1) // forces one out
+	// id[0] is archived, and about to be the most recently used.
+	for _, i := range []threadid.ID{id[0], id[1], id[0]} {
+		if err := c.With(i, func(*Thread) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if err := c.With(id[2], func(*Thread) error { return nil }); err != nil { // forces one out
+		t.Fatal(err)
+	}
 
 	c.mu.Lock()
 	_, stillOpen := c.open[id[0]]
@@ -131,6 +148,75 @@ func TestArchivedThreadIsEvictedBeforeALiveOne(t *testing.T) {
 	}
 	if !liveOpen {
 		t.Error("the live thread was evicted instead of the archived one")
+	}
+}
+
+// TestArchivedThreadSealedOnReopen: a thread whose log already ends in a
+// ThreadArchived is opened sealed when Options.Archived says so, because
+// the index cannot, and an append is ErrArchived and writes nothing. A
+// thread MarkArchived names is sealed too, and Archived reports both
+// (TKT-01M29CRJ64).
+func TestArchivedThreadSealedOnReopen(t *testing.T) {
+	id := ids(2)
+	w, root := newCache(t, Options{Sync: threadlog.SyncNever})
+	for _, i := range id {
+		create(t, w, i, 1)
+	}
+	if err := w.With(id[0], func(th *Thread) error {
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypeThreadArchived, Author: 1,
+			Body: &threadlog.ThreadArchivedBody{}})
+		if !th.Archived() {
+			t.Error("a thread whose actor wrote ThreadArchived does not report Archived")
+		}
+		return err
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	c, err := New(root, Options{Sync: threadlog.SyncNever, Archived: func(i threadid.ID) bool { return i == id[0] }})
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { c.Close() })
+	before := fileSize(t, id[0].LogPath(root))
+	if err := c.With(id[0], func(th *Thread) error {
+		if !th.Archived() || !th.Actor.Sealed() {
+			t.Errorf("reopened archived: Archived %v, sealed %v", th.Archived(), th.Actor.Sealed())
+		}
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: 7, Body: &threadlog.PostBody{Source: "late"}})
+		if !errors.Is(err, threadlog.ErrArchived) {
+			t.Errorf("a post to the reopened archived thread: %v, want ErrArchived", err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if after := fileSize(t, id[0].LogPath(root)); after != before {
+		t.Errorf("the refused post grew the log from %d to %d bytes", before, after)
+	}
+
+	// The live thread is not sealed until it is marked.
+	if err := c.With(id[1], func(th *Thread) error {
+		if th.Archived() {
+			t.Error("a live thread reports Archived")
+		}
+		post(t, th, "still live")
+		return nil
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if err := c.With(id[1], func(th *Thread) error {
+		c.MarkArchived(id[1])
+		_, err := th.Actor.Append(threadlog.Append{Type: threadlog.TypePost, Author: 7, Body: &threadlog.PostBody{Source: "late"}})
+		if !th.Archived() || !errors.Is(err, threadlog.ErrArchived) {
+			t.Errorf("after MarkArchived: Archived %v, append %v", th.Archived(), err)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 
