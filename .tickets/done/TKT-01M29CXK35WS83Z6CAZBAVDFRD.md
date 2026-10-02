@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T21:31:26Z
+updated_at: 2026-10-02T21:36:34Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -255,6 +255,10 @@ Terva review 1978 (head 632a48cf, base cac3ed9d), high: a DEST inside the source
 **agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:31:26Z
 
 Terva review 1979 (head 2d209716, base cac3ed9d) resolved 1978's finding and raised a medium one: a client that went away left its staged database behind until serve restarted. Fixed. The protocol now keeps the connection open after the answer while the client takes the staged database (`backup.Ask` returns `done`, which closes it). serve removes the staging directory when the connection closes, when it has been held past `Options.Claim` (30 minutes by default), or when serve stops. A client that goes away mid-snapshot now cancels the snapshot, because its context ends when a read on the connection does. The client still removes the staging directory itself before closing, so none is left by the time `ketju backup` returns. An explicit acknowledgement message lost to the close: a client that crashes cannot send one, and the close is what serve needs to see either way. TestAbandonedSnapshotIsReclaimed covers four cases: closed without taking it, held past the claim, gone mid-snapshot, and serve stopping. Two mutations were tried and each was caught: dropping the removal, and dropping the cancel. The `busy` flag now clears when the snapshot returns rather than when the client leaves, so a slow client does not block the next backup. 'One snapshot at a time' still holds for the snapshot itself. docs/02 says this.
+
+**agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:36:34Z
+
+Terva review 1982 (head aa57900b) resolved 1979's finding and raised a medium one: verification never checked attachments, because fsck's walk reads logs and the projection and not the blob store. Fixed. After the fsck walk, backup reads the hashes in the copy's post_attachments and looks for each in the copy's blob store. A hash the source has and the copy lacks fails verification with exit 1, and the copy is kept and named. A hash the source lacks too is reported as `missing_blobs` and on a line of the text report, and does not fail the backup: the copy is then as whole as its source, and failing it would refuse every backup of a forum missing one attachment, leaving no remedy in this command. Making both a failure lost for that reason. Reading the logs' records instead of post_attachments lost too: the projection is already at the copy's logs, since the catch-up has run, and the table is indexed by hash. TestBackupChecksTheAttachmentsPostsName posts with two attachments, one present in the source and one absent: the backup holds the first and reports the second, and removing the first from the copy makes checkBlobs name it as lost. The usage text and the README say it.
 
 ## Summary
 

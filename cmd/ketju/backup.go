@@ -58,9 +58,11 @@ steps.
 
 exit codes:
   0  written and verified
-  1  the copy failed verification: a damaged log, or a log shorter than its
-     projection, which comes from the source (run ketju fsck on it); the
-     unverified copy is kept beside DEST and named
+  1  the copy failed verification: a damaged log or a log shorter than its
+     projection, which comes from the source (run ketju fsck on it), or an
+     attachment a post names that the source has and the copy does not; the
+     unverified copy is kept beside DEST and named. An attachment the source
+     lacks too is reported and does not fail the backup
   2  usage, DEST exists or is inside DIR, or DIR has no threads directory
   4  the data directory is in use by something other than serve, a hard
      redaction is pending, serve could not be reached or refused, or a read
@@ -90,8 +92,11 @@ type backupSummary struct {
 	Schema string `json:"schema"`
 	// Drift is the threads whose copied log is ahead of the copied
 	// database, which only a copy at another schema can have.
-	Drift     int   `json:"drift_threads,omitempty"`
-	ElapsedMS int64 `json:"elapsed_ms"`
+	Drift int `json:"drift_threads,omitempty"`
+	// MissingBlobs are attachments posts name that the source itself
+	// lacks, so the backup does too.
+	MissingBlobs int   `json:"missing_blobs,omitempty"`
+	ElapsedMS    int64 `json:"elapsed_ms"`
 }
 
 func runBackup(args []string) error {
@@ -214,6 +219,22 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 
 	sum.Drift = verify.DriftThreads
 
+	// fsck's walk reads the logs and the projection, not the blob store, so
+	// the attachments the copy's posts name are checked here (Terva review
+	// 1982). One the source has and the copy lacks fails the copy. One the
+	// source lacks too is reported and does not: the copy is as whole as its
+	// source, and refusing would refuse every backup of it.
+	lost, absent, err := checkBlobs(ctx, *root, partial)
+	if err != nil {
+		return fmt.Errorf("backup: checking the copy's attachments: %w", err)
+	}
+	if len(lost) > 0 {
+		keep = true
+		return errCorrupt{fmt.Errorf("backup: the copy in %s failed verification: %d attachment(s) its posts "+
+			"name were not copied, among them %s", partial, len(lost), lost[0])}
+	}
+	sum.MissingBlobs = len(absent)
+
 	if err := dropEmptyWAL(adminDBPath(partial)); err != nil {
 		return fmt.Errorf("backup: %w", err)
 	}
@@ -239,6 +260,10 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 		fmt.Fprintf(out, "; posts held for %d ms", sum.PausedMS)
 	}
 	fmt.Fprintf(out, "; verified in %s\n", time.Since(start).Round(time.Millisecond))
+	if sum.MissingBlobs > 0 {
+		fmt.Fprintf(out, "%d attachment(s) that posts name are missing from %s itself, so from the backup too\n",
+			sum.MissingBlobs, *root)
+	}
 	if sum.Schema != schemaCurrent {
 		fmt.Fprintf(out, "the database's schema is %s than this binary's, so the copy was left at it, not migrated\n", sum.Schema)
 		if sum.Drift > 0 {
@@ -494,6 +519,66 @@ func copyBlobs(root, partial string) (int, error) {
 		return n, fmt.Errorf("backup: copying blobs: %w", err)
 	}
 	return n, nil
+}
+
+// checkBlobs reads the attachments the copy's database says its posts name,
+// and returns those the copy lacks although the source has them (lost), and
+// those the source lacks too (absent).
+func checkBlobs(ctx context.Context, root, partial string) (lost, absent []string, err error) {
+	d, err := db.OpenReadOnly(ctx, adminDBPath(partial))
+	if err != nil {
+		return nil, nil, err
+	}
+	defer d.Close()
+	var hashes []string
+	err = d.Read(ctx, func(_ *dbq.Queries, tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, `SELECT DISTINCT hash FROM post_attachments ORDER BY hash`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var h string
+			if err := rows.Scan(&h); err != nil {
+				return err
+			}
+			hashes = append(hashes, h)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, nil, err
+	}
+	exists := func(base, h string) (bool, error) {
+		p, err := blob.Path(base, h)
+		if err != nil {
+			return false, fmt.Errorf("a post names the attachment %q: %w", h, err)
+		}
+		_, err = os.Stat(p)
+		if errors.Is(err, fs.ErrNotExist) {
+			return false, nil
+		}
+		return err == nil, err
+	}
+	for _, h := range hashes {
+		ok, err := exists(partial, h)
+		if err != nil || ok {
+			if err != nil {
+				return nil, nil, err
+			}
+			continue
+		}
+		inSource, err := exists(root, h)
+		if err != nil {
+			return nil, nil, err
+		}
+		if inSource {
+			lost = append(lost, h)
+		} else {
+			absent = append(absent, h)
+		}
+	}
+	return lost, absent, d.Close()
 }
 
 // catchUpCopy runs the projection's catch-up over the copy, as serve's

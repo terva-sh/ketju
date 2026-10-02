@@ -66,10 +66,11 @@ database up to date and copy it, a fraction of a second on a small forum and
 never more than a minute, and pages are served meanwhile. With `serve`
 stopped, the command takes the data directory's lock instead, so `serve`
 cannot start until it has finished. Either way the source is only read. The
-backup is checked as `ketju fsck` checks a data directory before it is given
-its name, and `ketju backup -h` lists the exit codes. A database written by
-another version of ketju is copied at its own schema and never migrated, so
-the version that wrote it can restore the backup.
+backup is checked as `ketju fsck` checks a data directory, and for every
+attachment its posts name, before it is given its name, and `ketju backup
+-h` lists the exit codes. A database written by another version of ketju is
+copied at its own schema and never migrated, so the version that wrote it
+can restore the backup.
 
 A backup holds the database, every thread log and every attachment. It
 leaves out the thread indexes and thumbnails, which are rebuilt when first

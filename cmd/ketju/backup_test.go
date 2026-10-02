@@ -22,6 +22,7 @@ import (
 	"github.com/terva-sh/ketju/internal/backup"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/lock"
+	"github.com/terva-sh/ketju/internal/store/blob"
 	"github.com/terva-sh/ketju/internal/store/db"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/store/threadcache"
@@ -651,6 +652,64 @@ func TestBackupLeavesOutIndexesThumbnailsStagingAndSecrets(t *testing.T) {
 		t.Errorf("the backup lacks the blob:\n%v", found)
 	}
 	mustFsck(t, restore(t, dest))
+}
+
+// TestBackupChecksTheAttachmentsPostsName: a backup holds every attachment
+// its posts name that the source has. One the source lacks too is reported
+// and does not fail the backup; one the source has and the copy lacks fails
+// verification (Terva review 1982).
+func TestBackupChecksTheAttachmentsPostsName(t *testing.T) {
+	path, data := backupConfig(t, "")
+	ids := seedThreads(t, data, 1)
+	r := start(t, path, serveOpts{})
+	if err := r.shutdown(t); err != nil {
+		t.Fatal(err)
+	}
+	have, gone := strings.Repeat("ab", 32), strings.Repeat("cd", 32)
+	c, err := threadcache.New(data, threadcache.Options{Sync: threadlog.SyncNever})
+	if err != nil {
+		t.Fatal(err)
+	}
+	appendTo(t, c, ids[0], threadlog.Append{Type: threadlog.TypePost, Author: 1, TimeMS: 1_700_000_002_000,
+		Body: &threadlog.PostBody{Source: "two attachments", Attachments: []string{have, gone}}})
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+	p, err := blob.Path(data, have)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(p), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte("attachment"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(t.TempDir(), "backup")
+	sum, errOut, err := runBackupCmd(t, data, dest)
+	if err != nil {
+		t.Fatalf("ketju backup: %v\n%s", err, errOut)
+	}
+	if sum.Blobs != 1 || sum.MissingBlobs != 1 {
+		t.Errorf("report = %+v; want 1 blob copied and 1 missing from the source", sum)
+	}
+	copied, err := blob.Path(dest, have)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b, err := os.ReadFile(copied); err != nil || string(b) != "attachment" {
+		t.Errorf("the backup's copy of the attachment: %q, %v", b, err)
+	}
+
+	// The copy losing one the source has is what verification catches.
+	if err := os.Remove(copied); err != nil {
+		t.Fatal(err)
+	}
+	lost, absent, err := checkBlobs(t.Context(), data, dest)
+	if err != nil || !slices.Equal(lost, []string{have}) || !slices.Equal(absent, []string{gone}) {
+		t.Errorf("checkBlobs = lost %v, absent %v, %v; want lost %s, absent %s", lost, absent, err, have, gone)
+	}
 }
 
 // TestServeRemovesStaleBackupStaging: a socket file and a staging directory
