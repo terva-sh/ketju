@@ -32,7 +32,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T07:47:39Z
-updated_at: 2026-10-02T22:30:01Z
+updated_at: 2026-10-02T22:51:40Z
 created_by:
   id: agent:claude-code/phase3-groom-pages
   name: ""
@@ -52,12 +52,12 @@ The handle control shows the 30-day cooldown from `next_change_at` or `available
 
 ## Acceptance criteria
 
-- [ ] GET /settings/handle answers {handle, next_change_at} with no-store and the PUT's gates, and next_change_at equals the available_at a PUT inside the cooldown answers (TestHandleStateRoute; golden, dto.ts and docs/07 row)
-- [ ] /settings/account shows the handle and, while the cooldown runs, the date it ends; a change is sent only after a confirmation naming the 30 days and the 90-day reservation, and each field code and the cooldown conflict show their words
-- [ ] Deactivation is sent only after a confirmation that says how to come back; it ends every session and loads / signed out, and the last active admin's conflict shows in the dialog
-- [ ] An e2e test with a seed member of its own per project covers both at 390 px and 1440 px, with one axe scan per test, paceAuth first and a row in e2e/session.ts
+- [x] GET /settings/handle answers {handle, next_change_at} with no-store and the PUT's gates, and next_change_at equals the available_at a PUT inside the cooldown answers (TestHandleStateRoute; golden, dto.ts and docs/07 row)
+- [x] /settings/account shows the handle and, while the cooldown runs, the date it ends; a change is sent only after a confirmation naming the 30 days and the 90-day reservation, and each field code and the cooldown conflict show their words
+- [x] Deactivation is sent only after a confirmation that says how to come back; it ends every session and loads / signed out, and the last active admin's conflict shows in the dialog
+- [x] An e2e test with a seed member of its own per project covers both at 390 px and 1440 px, with one axe scan per test, paceAuth first and a row in e2e/session.ts
 - [ ] The dist from go generate ./internal/web/spa is committed, npm run budget keeps the reader within 120000 B gzip, and the PR states the reader's growth
-- [ ] After a change, this tab's top bar and Back link show the new handle without a reload, and /u/{old} redirects to /u/{new}
+- [x] After a change, this tab's top bar and Back link show the new handle without a reload, and /u/{old} redirects to /u/{new}
 
 ## Implementation plan
 
@@ -163,3 +163,18 @@ run decision: pending maintainer review. Handle change and self-deactivation go 
 **agent:claude-code/phase4-run-orchestrator** at 2026-10-02T18:30:52Z
 
 Maintainer decision, 2026-10-02, on the open decision: neither handle change nor self-deactivation asks for a recent sign-in. Asked as a choice, the maintainer picked 'Neither (Recommended)' over 'Handle change only' and 'Both'. Written into docs/05 'Sessions and CSRF' beside the 2026-10-01 decision. The plan's open decision is settled, and the ticket can be promoted.
+
+**agent:claude-code/phase4-run-6xtyg** at 2026-10-02T22:51:40Z
+
+Implemented (Phase A, before the dist), as planned, with these readings:
+
+- `identity.Service.HandleState` serves `GET /settings/handle` through the service, not the store (TestHandlersReachNoStore). It reads `next_change_at` from `nextChange`, the function the PUT already refused by, so no new 30-day computation was needed. The handler reuses `handleChanged` (200, no-store).
+- Goldens `handle-state.member` (inside the cooldown) and `handle-state.moderator` (null), so the pointer is seen both ways.
+- The refused-handle words moved to `web/client/src/handles.ts`. `handleMessage(code, own)` gives `same` the member's words, "That is already your handle."; staff keep theirs. `screens/admin/common/handle.ts` keeps only `isAnonymizedHandle`.
+- The cooldown line reads "You can change your handle again from <PostTime>." rather than "on <date>", because PostTime shows only a time when the date is today, and "on 14:30" reads wrong.
+- A cooldown conflict from the PUT (the date moved under the screen) closes the dialog, disables the field with the `available_at` date, and says "You can change your handle once every 30 days." beside it. Focus goes to that line, since the field and the button are disabled. After a successful change, focus goes to the status line for the same reason. A conflict without `available_at` (an anonymized account, or a concurrent change) and any other refusal stay in the dialog, in the catalogue's words.
+- `Confirm` (settings.tsx) gained an optional `explain` so the last active admin's conflict reads "You are the only active admin. Make someone else an admin first." in the dialog.
+- An empty field is refused on the client with the `invalid_handle` words, without opening the dialog. Everything else is the server's to judge.
+- The profile's Account block now names the handle among what Settings holds.
+- e2e: `e2e/account.spec.ts`, seed members `acct-phone` and `acct-desktop` (`seedAccount`, after `seedSettings`, so earlier ids stay). One sign-in, `paceAuth(2)`, row added in `e2e/session.ts`. Passed at 390 px and 1440 px locally. The test also replays the old session cookie after deactivating and finds `/me` anonymous.
+- Reader bundle measured with the dist built from this branch: 79859 B on main at 56636ca, 81070 B with this change (+1211 B; the plan estimated +1300).
