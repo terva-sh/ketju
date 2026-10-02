@@ -158,7 +158,7 @@ test('a member’s footer names the members, and the desktop offers the shortcut
   await expect(page.locator('[data-forum="moderators"]')).toHaveCount(0);
   expect(Number(await foot.locator('[data-posts-total]').getAttribute('data-posts-total'))).toBe(await sumOfRows(page));
 
-  const hint = foot.getByRole('button', { name: 'Keyboard shortcuts' });
+  const hint = foot.getByRole('button', { name: /keyboard shortcuts/i });
   if (isMobile) {
     await expect(hint).toHaveCount(0);
     await page.keyboard.press('?');
@@ -174,19 +174,44 @@ test('a member’s footer names the members, and the desktop offers the shortcut
     await ctx.close();
     return;
   }
-  await hint.click();
+  // While the shortcuts are on, the hint is the mockup's and ? opens the
+  // list here (TKT-01M3V9DWTN; TKT-01M3S3ZRYD criterion 2).
+  await expect(hint).toHaveText('Press ? for keyboard shortcuts');
   const list = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
-  await expect(list).toContainText('These keys work on a thread page, where ? opens this list.');
+  await page.keyboard.press('?');
+  await expect(list).toContainText('Here ? opens this list. The other keys work on a thread page.');
+  await page.keyboard.press('Escape');
+  await expect(list).toHaveCount(0);
+  await hint.click();
+  await expect(list).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(list).toHaveCount(0);
   await expect(hint).toBeFocused();
-  // No key is bound here until single-key shortcuts can be turned off
-  // (WCAG 2.1.4, TKT-01M3V9DWTN; Terva review 1887).
-  await page.keyboard.press('?');
-  await expect(list).toHaveCount(0);
   await page.keyboard.press('Enter');
   await expect(list).toBeVisible();
   // The one scan, with the list open over the footer.
+  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
+  await ctx.close();
+});
+
+// With the shortcuts off (TKT-01M3V9DWTN), the index binds no key and the
+// footer drops "Press ?". A signed-out reader's choice is this browser's.
+test('with the shortcuts off the footer reads Keyboard shortcuts and ? does nothing', async ({ browser, isMobile }, info) => {
+  test.skip(isMobile, 'a phone has no shortcuts and no hint');
+  const ctx = await browser.newContext({ ...info.project.use, storageState: { cookies: [], origins: [] } });
+  const page = await ctx.newPage();
+  await page.addInitScript(() => localStorage.setItem('ketju.shortcuts', 'off'));
+  await page.goto('/');
+  const hint = page.locator('.forum-index-foot').getByRole('button', { name: /keyboard shortcuts/i });
+  await expect(hint).toHaveText('Keyboard shortcuts');
+  await page.keyboard.press('?');
+  await page.waitForTimeout(300);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await hint.click();
+  const list = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+  await expect(list).toContainText('These keys work on a thread page.');
+  await expect(list.getByRole('status')).toHaveText('Single-key shortcuts are off.');
   const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
   expect(violations.map((v) => `${v.id}: ${v.nodes.map((n) => n.target.join(' ')).join(', ')}`)).toEqual([]);
   await ctx.close();

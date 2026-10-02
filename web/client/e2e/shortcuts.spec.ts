@@ -136,6 +136,95 @@ test.describe('at 1440 px', () => {
   });
 });
 
+// The off switch (WCAG 2.1.4, TKT-01M3V9DWTN): a member turns the shortcuts
+// off on /settings, a signed-out reader from the list, and then no
+// character key acts. carol's choice is put back after, as settings.spec.ts
+// puts back her other preferences.
+async function inert(page: Page) {
+  const url = page.url();
+  const focus = await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80));
+  for (const k of ['j', 'k', 'u', 'n', '?', 'g', '4', 'Enter']) await page.keyboard.press(k);
+  // Long enough for a g to have gone, had it counted.
+  await page.waitForTimeout(1700);
+  expect(page.url()).toBe(url);
+  expect(await page.evaluate(() => document.activeElement?.outerHTML.slice(0, 80))).toBe(focus);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
+  await expect(page.locator('.shortcut-hint')).toHaveText('');
+}
+
+const scan = async (page: Page) => {
+  const { violations } = await new AxeBuilder({ page }).withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa']).analyze();
+  expect(violations.map((v) => `${v.id} (${v.impact}): ${v.help}\n  ${v.nodes.map((n) => n.target.join(' ')).join('\n  ')}`)).toEqual([]);
+};
+
+test.describe('the off switch at 1440 px', () => {
+  test.skip(({ isMobile }) => isMobile, 'the shortcuts are the desktop’s');
+
+  test.describe('for a member', () => {
+    test.use({ storageState: stateFile('carol') });
+    test.afterEach(async ({ page }) => {
+      const r = await page.request.patch('/api/v1/settings', { data: { shortcuts: true } });
+      expect(r.status(), await r.text()).toBe(200);
+    });
+
+    test('turned off in Settings, no key acts', async ({ page }) => {
+      await page.goto('/settings');
+      const box = page.getByRole('checkbox', { name: 'Use single-key shortcuts' });
+      await expect(box).toBeChecked();
+      const answer = page.waitForResponse((r) => new URL(r.url()).pathname === '/api/v1/settings' && r.request().method() === 'PATCH');
+      await box.uncheck();
+      expect((await answer).status()).toBe(200);
+      await expect(page.getByRole('status')).toHaveText('Saved.');
+
+      await page.goto(`${seed.thread}?page=1`);
+      await expect(page.locator('#post-1')).toBeVisible();
+      await inert(page);
+
+      // The button still opens the list, which says they are off and where
+      // to turn them on.
+      await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+      const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+      await expect(dialog.getByRole('status')).toHaveText('Single-key shortcuts are off.');
+      await expect(dialog.getByRole('button', { name: /Turn shortcuts/ })).toHaveCount(0);
+      await scan(page);
+      await dialog.getByRole('link', { name: 'Change this in Settings' }).click();
+      await page.waitForURL((u) => u.pathname === '/settings');
+      await expect(page.getByRole('dialog')).toHaveCount(0);
+      await expect(page.getByRole('checkbox', { name: 'Use single-key shortcuts' })).not.toBeChecked();
+    });
+  });
+
+  test('a signed-out reader turns them off from the list', async ({ browser }, info) => {
+    const ctx = await browser.newContext({ ...info.project.use, storageState: { cookies: [], origins: [] } });
+    const page = await ctx.newPage();
+    await page.goto(`${seed.thread}?page=1`);
+    await expect(page.locator('#post-1')).toBeVisible();
+    await page.keyboard.press('?');
+    const dialog = page.getByRole('dialog', { name: 'Keyboard shortcuts' });
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Turn shortcuts off' }).click();
+    await expect(dialog.getByRole('status')).toHaveText('Single-key shortcuts are off.');
+    await expect(dialog.getByRole('button', { name: 'Turn shortcuts on' })).toBeFocused();
+    await scan(page);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    // This browser keeps the choice across a load.
+    await page.reload();
+    await expect(page.locator('#post-1')).toBeVisible();
+    await inert(page);
+
+    // And turns them back on from the list.
+    await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+    await dialog.getByRole('button', { name: 'Turn shortcuts on' }).click();
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    await page.keyboard.press('?');
+    await expect(dialog).toBeVisible();
+    await ctx.close();
+  });
+});
+
 test.describe('at 390 px', () => {
   test.skip(({ isMobile }) => !isMobile, 'the phone layout’s');
 
@@ -159,6 +248,19 @@ test.describe('at 390 px', () => {
     // The controls the shortcuts stand in for are all here (AC2).
     await expect(page.locator('.goto-post input')).toBeVisible();
     await expect(page.locator('.next-unread')).toBeVisible();
+    await ctx.close();
+  });
+
+  // The switch is on the settings screen at every width, and its hint
+  // says it is for a desktop (TKT-01M3V9DWTN).
+  test('the switch is on the settings screen', async ({ browser }, info) => {
+    const { ctx, page } = await asAlice(browser, info);
+    await page.goto('/settings');
+    const box = page.getByRole('checkbox', { name: 'Use single-key shortcuts' });
+    await expect(box).toBeVisible();
+    await expect(box).toBeChecked();
+    await expect(page.locator('#settings-shortcuts-hint')).toContainText('On a desktop');
+    await scan(page);
     await ctx.close();
   });
 });
