@@ -28,7 +28,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:27:36Z
-updated_at: 2026-10-02T22:26:51Z
+updated_at: 2026-10-02T22:27:06Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -237,8 +237,11 @@ Landed in one PR, server side only. The client half is TKT-01M3YSQQ33
   `Actor.Seal` are new. `frameFor` refuses a sealed actor, and it refuses
   any record staged behind a `ThreadArchived` in the same batch. `commit`
   seals the actor once a `ThreadArchived` is written. `threadcache` seals an
-  actor that `Options.Archived` reports archived when it opens it, and in
-  `MarkArchived`. `Thread.Archived()` also reads the seal.
+  actor when it opens a log that holds a `ThreadArchived`, and again in
+  `MarkArchived`. The projection answers for the part of the log it has
+  applied (`Options.Archived`, now an `ArchiveState`), and the cache walks
+  the rest with `threadlog.ArchivedIn`. With no projection it walks the
+  whole log (Terva review 1989). `Thread.Archived()` also reads the seal.
   `problem` maps `ErrArchived` to `conflict`. The flag auto-hide treats it
   as nothing to hide.
 - **The route.** `POST /api/v1/admin/threads/{id}/archive` `{reason?}` is
