@@ -31,7 +31,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T23:10:18Z
+updated_at: 2026-10-02T23:20:03Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -174,6 +174,15 @@ Decisions made while building this, beyond the plan:
   - corrupting a written sum (the digest mismatch).
 
   A first sum mutation, overwriting the first hex digit with 0, survived, because both real digests happened to begin with 0. It was replaced with one that changes the last digit.
+
+**agent:claude-code/phase4-run-cxk3s** at 2026-10-02T23:20:03Z
+
+Terva review 1999 (head de48406e, base 60653e22) raised two medium findings. Both are fixed.
+
+1. `--out .` made the host binary's path a bare file name, which exec then looked up in PATH. The release tool now makes --out absolute before it builds anything (`outputDir`), which also keeps go build, which runs in the module root, writing where the caller meant. TestOutputDirIsAbsolute covers this.
+2. A stamped build hid a dirty tree: buildinfo dropped vcs.modified whenever a commit was stamped. The release tool now stamps `buildinfo.modified=true` when it builds from a dirty tree under --allow-dirty, and prints a line saying so. Its host check expects `commit X-dirty`. buildinfo reports Modified when the stamp says so, or when the toolchain recorded uncommitted changes in the tree of the commit it reports. A toolchain record for another revision is still ignored. TestStampedKeepsADirtyTree covers this.
+
+Checked by hand: `--out reltest --allow-dirty` from the module root builds both binaries and prints `commit de48406e975c-dirty`.
 
 ## Summary
 

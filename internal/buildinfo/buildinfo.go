@@ -2,12 +2,14 @@
 // commit a release stamps in, or what the Go toolchain recorded when nothing
 // was stamped (TKT-01M29CXK3S).
 //
-// A release build sets the two variables below with
+// A release build sets the variables below with
 //
 //	-ldflags "-X github.com/terva-sh/ketju/internal/buildinfo.version=v1.0.0
 //	          -X github.com/terva-sh/ketju/internal/buildinfo.commit=<sha>"
 //
-// which tools/release does. A development build leaves them empty, and Get
+// and, built from a working tree with uncommitted changes,
+// "-X github.com/terva-sh/ketju/internal/buildinfo.modified=true", which
+// tools/release does. A development build leaves them empty, and Get
 // falls back to debug.ReadBuildInfo, so `go build` from a checkout still
 // reports the commit it was built from.
 package buildinfo
@@ -20,8 +22,9 @@ import (
 
 // Set by -ldflags -X in a release build.
 var (
-	version string
-	commit  string
+	version  string
+	commit   string
+	modified string
 )
 
 // Info is one build's identity.
@@ -40,13 +43,17 @@ type Info struct {
 // Get is the running binary's Info.
 func Get() Info {
 	bi, _ := debug.ReadBuildInfo()
-	return from(version, commit, bi)
+	return from(version, commit, modified, bi)
 }
 
 // from builds an Info from the stamped values and the toolchain's record,
-// which may be nil. The stamped values win.
-func from(v, c string, bi *debug.BuildInfo) Info {
-	in := Info{Version: v, Commit: c, GoVersion: runtime.Version(), OS: runtime.GOOS, Arch: runtime.GOARCH}
+// which may be nil. The stamped values win. A build is modified when it was
+// stamped so, or when the toolchain recorded uncommitted changes in the tree
+// of the commit it reports: a stamped commit never hides a dirty tree
+// (Terva review 1999).
+func from(v, c, m string, bi *debug.BuildInfo) Info {
+	in := Info{Version: v, Commit: c, Modified: m == "true", GoVersion: runtime.Version(), OS: runtime.GOOS, Arch: runtime.GOARCH}
+	var rev, dirty string
 	if bi != nil {
 		if in.Version == "" && bi.Main.Version != "" {
 			in.Version = bi.Main.Version
@@ -54,16 +61,16 @@ func from(v, c string, bi *debug.BuildInfo) Info {
 		for _, s := range bi.Settings {
 			switch s.Key {
 			case "vcs.revision":
-				if in.Commit == "" {
-					in.Commit = s.Value
-				}
+				rev = s.Value
 			case "vcs.modified":
-				// A stamped release is built from a clean tree: tools/release
-				// refuses a dirty one unless told otherwise, and says so then.
-				if c == "" {
-					in.Modified = s.Value == "true"
-				}
+				dirty = s.Value
 			}
+		}
+		if in.Commit == "" {
+			in.Commit = rev
+		}
+		if rev != "" && rev == in.Commit && dirty == "true" {
+			in.Modified = true
 		}
 		if bi.GoVersion != "" {
 			in.GoVersion = bi.GoVersion

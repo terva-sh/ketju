@@ -45,6 +45,22 @@ func TestCheckBuildInfo(t *testing.T) {
 
 func slicesClone(s []string) []string { return append([]string(nil), s...) }
 
+// TestOutputDirIsAbsolute: --out . becomes the working directory's absolute
+// path, so the host binary is run from DIR and not looked up in PATH
+// (Terva review 1999).
+func TestOutputDirIsAbsolute(t *testing.T) {
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for in, want := range map[string]string{".": wd, "out": filepath.Join(wd, "out"), "/tmp/x/": "/tmp/x"} {
+		got, err := outputDir(in)
+		if err != nil || got != want || !filepath.IsAbs(got) {
+			t.Errorf("outputDir(%q) = %q, %v; want %q", in, got, err, want)
+		}
+	}
+}
+
 // buildProgram builds a one-file program in its own module and returns the
 // binary's path.
 func buildProgram(t *testing.T, src string, cgo bool) string {

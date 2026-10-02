@@ -72,6 +72,14 @@ func run(args []string, out io.Writer) error {
 	if *version == "" || *dir == "" || fs.NArg() != 0 {
 		return errors.New("usage: go run ./tools/release --version V --out DIR [--allow-dirty]")
 	}
+	// Absolute, so the host binary is run by its path rather than looked up
+	// in PATH when DIR is "." (Terva review 1999), and so go build, which
+	// runs in moduleRoot, writes where the caller meant.
+	out0, err := outputDir(*dir)
+	if err != nil {
+		return err
+	}
+	*dir = out0
 	if strings.ContainsAny(*version, " \t\n/'\"") {
 		return fmt.Errorf("version %q has a character a file name or -ldflags cannot carry", *version)
 	}
@@ -79,10 +87,16 @@ func run(args []string, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if dirty, err := git("status", "--porcelain"); err != nil {
+	status, err := git("status", "--porcelain")
+	if err != nil {
 		return err
-	} else if dirty != "" && !*allowDirty {
-		return fmt.Errorf("the working tree has uncommitted changes, so the binary would not be commit %s:\n%s", commit, dirty)
+	}
+	dirty := status != ""
+	if dirty && !*allowDirty {
+		return fmt.Errorf("the working tree has uncommitted changes, so the binary would not be commit %s:\n%s", commit, status)
+	}
+	if dirty {
+		fmt.Fprintf(out, "building from a working tree with uncommitted changes: the binaries say commit %s-dirty\n", commit[:12])
 	}
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		return err
@@ -95,7 +109,7 @@ func run(args []string, out io.Writer) error {
 		}
 		name := fmt.Sprintf("ketju_%s_%s_%s", *version, p.OS, p.Arch)
 		path := filepath.Join(*dir, name)
-		if err := build(p, *version, commit, path); err != nil {
+		if err := build(p, *version, commit, dirty, path); err != nil {
 			return err
 		}
 		bi, err := buildinfo.ReadFile(path)
@@ -131,13 +145,26 @@ func run(args []string, out io.Writer) error {
 			return fmt.Errorf("running %s version: %w", path, err)
 		}
 		line := strings.TrimSpace(string(got))
-		if !strings.Contains(line, " "+*version+" ") || !strings.Contains(line, "commit "+commit[:12]+",") {
-			return fmt.Errorf("%s version printed %q, which does not name %s and commit %s", path, line, *version, commit[:12])
+		want := commit[:12]
+		if dirty {
+			want += "-dirty"
+		}
+		if !strings.Contains(line, " "+*version+" ") || !strings.Contains(line, "commit "+want+",") {
+			return fmt.Errorf("%s version printed %q, which does not name %s and commit %s", path, line, *version, want)
 		}
 		fmt.Fprintf(out, "%s\n", line)
 	}
 	fmt.Fprintln(out, "published nothing")
 	return nil
+}
+
+// outputDir is DIR made absolute.
+func outputDir(dir string) (string, error) {
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", fmt.Errorf("--out %s: %w", dir, err)
+	}
+	return abs, nil
 }
 
 func git(args ...string) (string, error) {
@@ -153,9 +180,13 @@ func git(args ...string) (string, error) {
 }
 
 // build runs go build for p, with an environment that says everything the
-// checks then verify, and GOFLAGS emptied so no tag can come in from it.
-func build(p Platform, version, commit, path string) error {
+// checks then verify, and GOFLAGS emptied so no tag can come in from it. A
+// dirty tree is stamped so, and the binary's version line says -dirty.
+func build(p Platform, version, commit string, dirty bool, path string) error {
 	ldflags := fmt.Sprintf("-s -w -X %s.version=%s -X %s.commit=%s", buildinfoPkg, version, buildinfoPkg, commit)
+	if dirty {
+		ldflags += fmt.Sprintf(" -X %s.modified=true", buildinfoPkg)
+	}
 	cmd := exec.Command("go", "build", "-trimpath", "-ldflags", ldflags, "-o", path, "./cmd/ketju")
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS="+p.OS, "GOARCH="+p.Arch, "GOFLAGS=")
 	cmd.Dir = moduleRoot
