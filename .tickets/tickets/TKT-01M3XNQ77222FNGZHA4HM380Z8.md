@@ -26,7 +26,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T06:44:40Z
-updated_at: 2026-10-02T06:57:02Z
+updated_at: 2026-10-02T07:04:29Z
 created_by:
   id: agent:claude-code/phase3-exit-check
   name: ""
@@ -66,3 +66,15 @@ On an unread row the sentence is weight 600, so the 600 thread link differs from
 2. Regression check in `web/client/e2e/alerts.spec.ts`: a test that answers `/api/v1/notifications` with one unread `thread_you_watch` row, whose link has text on both sides, and runs the one axe scan at both widths. It fails at 1440 px before the fix.
 3. Prove the exit spec's notifications test passes with the spec copied in from `run/cfre-phase3-exit`, uncommitted, at 390 and 1440 px.
 4. tsc, vitest, `go test -race ./...`, the full Playwright suite; regenerate and commit the dist.
+
+## Notes
+
+**agent:claude-code/phase3-alert-link** at 2026-10-02T07:04:29Z
+
+Fixed in `web/client/src/screens/notifications.css`: `.alert-row.unread .alert-thread` is underlined (offset 2px). A read row is unchanged: 400 sentence, 600 link, underline on hover. `docs/mockups/` has no notifications mockup; the stylesheet follows threadlist.css and threadrow.css, so there was nothing to match.
+
+Regression check: `e2e/alerts.spec.ts` "an unread watched-thread alert tells its link apart without colour" answers `/api/v1/notifications` with one unread `thread_you_watch` row and makes the one axe scan. Before the fix, on 628f1a6b's dist, it passed at 390 px and failed at 1440 px with `link-in-text-block (serious)`, the exit check's finding. After the fix it passes at both widths.
+
+Exit spec: `e2e/phase3-exit.spec.ts` copied uncommitted from `run/cfre-phase3-exit` (b8383015), without its seed change, which only the search test reads. Its notifications test ("a member is notified of a mention and of a reply in a watched thread, ...") passed at 390 and 1440 px on this branch's dist. The copy was then removed.
+
+Reader bundle: 79192 B gzip on 628f1a6b, 79205 B after (+13 B), of 120000 B.
