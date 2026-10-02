@@ -276,14 +276,16 @@ export const gotoPause = 1500;
 // On /search it focuses the query field and selects its text, so typing
 // replaces the search. Anywhere else it goes to /search, whose field takes
 // focus when it has no query.
+//
+// The search screen is known by its field being on the page, not by the
+// address: the router also draws it at /search/, and a test of the path
+// would send that reader to an empty search (Terva review 1988).
 export function openSearch(route: (url: string) => void) {
-  if (location.pathname === '/search') {
-    const q = document.getElementById('search-q');
-    if (q instanceof HTMLInputElement) {
-      q.focus();
-      q.select();
-      return;
-    }
+  const q = document.getElementById('search-q');
+  if (q instanceof HTMLInputElement) {
+    q.focus();
+    q.select();
+    return;
   }
   route('/search');
 }

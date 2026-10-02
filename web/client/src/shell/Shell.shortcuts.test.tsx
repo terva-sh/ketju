@@ -72,6 +72,21 @@ describe('/ opens search', () => {
     expect([q.selectionStart, q.selectionEnd]).toEqual([0, 4]);
   });
 
+  // Terva review 1988: the router draws the search screen at /search/ too,
+  // and / there keeps the query rather than starting an empty search.
+  it('/ on /search/ with a query keeps it, and selects it', async () => {
+    const root = await renderAt('/search/?q=bill');
+    const q = query()!;
+    expect(q.value).toBe('bill');
+    document.body.focus();
+    const e = await slash(document.body);
+    expect(e.defaultPrevented).toBe(true);
+    await settle(root);
+    expect(location.pathname + location.search).toBe('/search/?q=bill');
+    expect(document.activeElement).toBe(q);
+    expect([q.selectionStart, q.selectionEnd]).toEqual([0, 4]);
+  });
+
   it('/ typed in the composer, in the search field or in a dialog is left alone', async () => {
     const root = await renderAt('/search?q=bill');
     const typed = await slash(query()!);
