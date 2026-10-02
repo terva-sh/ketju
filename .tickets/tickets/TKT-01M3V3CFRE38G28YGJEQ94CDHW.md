@@ -57,7 +57,9 @@ dependencies:
   - TKT-01M3XNQ77222FNGZHA4HM380Z8
   - TKT-01M3XP6ZRZQ968B8QPZ1RJBEGM
 blocks_on: none
-references: []
+references:
+  - ref: pr:351
+    path: null
 claim:
   actor: agent:claude-code/phase3-exit-check
   branch: run/cfre-phase3-exit
@@ -68,7 +70,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-01T06:45:45Z
-updated_at: 2026-10-02T06:53:30Z
+updated_at: 2026-10-02T09:15:28Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
