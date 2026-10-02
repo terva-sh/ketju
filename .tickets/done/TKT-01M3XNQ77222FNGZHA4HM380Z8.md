@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3XNQ77222FNGZHA4HM380Z8
 title: Tell an unread alert's thread link apart by more than colour
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-alert-link
-  branch: run/nq772-alert-link
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a444afb857f0255ac
-  commit: db61da04270000ba6ed54b5a735206fb6ad5c8a1
-  session: null
-  claimed_at: 2026-10-02T06:56:41Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T06:44:40Z
-updated_at: 2026-10-02T07:04:29Z
+updated_at: 2026-10-02T07:13:27Z
 created_by:
   id: agent:claude-code/phase3-exit-check
   name: ""
@@ -78,3 +71,7 @@ Regression check: `e2e/alerts.spec.ts` "an unread watched-thread alert tells its
 Exit spec: `e2e/phase3-exit.spec.ts` copied uncommitted from `run/cfre-phase3-exit` (b8383015), without its seed change, which only the search test reads. Its notifications test ("a member is notified of a mention and of a reply in a watched thread, ...") passed at 390 and 1440 px on this branch's dist. The copy was then removed.
 
 Reader bundle: 79192 B gzip on 628f1a6b, 79205 B after (+13 B), of 120000 B.
+
+## Summary
+
+The thread link on an unread alert row is underlined (notifications.css), so it differs from its equally weighted sentence by more than colour; read rows are unchanged. alerts.spec.ts scans an unread thread_you_watch row at both widths and failed at 1440 px before the fix. The exit spec's notifications test passed at 390 and 1440 px with the spec copied in uncommitted. Reader +13 B (79192 to 79205 B of 120000 B). No run decisions.
