@@ -30,7 +30,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-02T21:36:34Z
+updated_at: 2026-10-02T21:42:32Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -259,6 +259,10 @@ Terva review 1979 (head 2d209716, base cac3ed9d) resolved 1978's finding and rai
 **agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:36:34Z
 
 Terva review 1982 (head aa57900b) resolved 1979's finding and raised a medium one: verification never checked attachments, because fsck's walk reads logs and the projection and not the blob store. Fixed. After the fsck walk, backup reads the hashes in the copy's post_attachments and looks for each in the copy's blob store. A hash the source has and the copy lacks fails verification with exit 1, and the copy is kept and named. A hash the source lacks too is reported as `missing_blobs` and on a line of the text report, and does not fail the backup: the copy is then as whole as its source, and failing it would refuse every backup of a forum missing one attachment, leaving no remedy in this command. Making both a failure lost for that reason. Reading the logs' records instead of post_attachments lost too: the projection is already at the copy's logs, since the catch-up has run, and the table is indexed by hash. TestBackupChecksTheAttachmentsPostsName posts with two attachments, one present in the source and one absent: the backup holds the first and reports the second, and removing the first from the copy makes checkBlobs name it as lost. The usage text and the README say it.
+
+**agent:claude-code/phase4-run-cxk35** at 2026-10-02T21:42:32Z
+
+Terva review 1983 (head c57d66c4) resolved 1982's finding and raised a medium one: the pending-redaction check ran before the lock was taken. A redact that started after the check and stopped partway would have released the lock and left its journal, and backup would then have copied the partly redacted state. Fixed. Offline, the journal is now checked again once the lock is held, before anything is copied. Online needs no second check: serve holds the lock, so no redact can run, and serve does not start while a journal exists. The early check stays, so the common case fails before a partial directory is made. A test seam, `backupOpts.beforeLock`, writes the journal between the two checks. TestBackupRefuses covers that case, and it fails when the second check is removed.
 
 ## Summary
 

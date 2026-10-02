@@ -560,6 +560,23 @@ func TestBackupRefuses(t *testing.T) {
 	check("redaction pending", exitInternal, "redaction is pending")
 	os.Remove(journalPath(data))
 
+	// A redaction that starts after the first check and stops partway,
+	// releasing the lock, is caught under the lock (Terva review 1983).
+	raced := filepath.Join(t.TempDir(), "backup")
+	var out, errOut bytes.Buffer
+	err = backupMain(t.Context(), &out, &errOut, []string{"--root", data, raced}, backupOpts{beforeLock: func() {
+		if err := os.WriteFile(journalPath(data), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}})
+	if exitCodeFor(err) != exitInternal || !strings.Contains(fmt.Sprint(err), "redaction is pending") {
+		t.Errorf("a redaction pending by the time of the lock: exit %d, %v", exitCodeFor(err), err)
+	}
+	if left := besides(t, raced); len(left) != 0 {
+		t.Errorf("a redaction pending by the time of the lock: left %v", left)
+	}
+	os.Remove(journalPath(data))
+
 	lk, err = lock.Acquire(data, "serve")
 	if err != nil {
 		t.Fatal(err)

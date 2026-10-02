@@ -75,6 +75,9 @@ exit codes:
 type backupOpts struct {
 	// ask sends the snapshot request; nil is backup.Ask.
 	ask func(ctx context.Context, path string) (backup.Answer, func(), error)
+	// beforeLock runs just before the lock is taken; a test starts a
+	// redaction there.
+	beforeLock func()
 }
 
 // backupSummary is the report, as --json prints it.
@@ -147,9 +150,8 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 	} else if inside {
 		return errUsage{fmt.Errorf("backup: %s is inside the data directory %s; put the backup outside it", dest, *root)}
 	}
-	if _, err := os.Stat(journalPath(*root)); err == nil {
-		return fmt.Errorf("backup: %s exists: a hard redaction is pending. Finish it with "+
-			"ketju redact --root %s --resume, then back up", journalPath(*root), *root)
+	if err := redactionPending(*root); err != nil {
+		return err
 	}
 
 	partial, err := os.MkdirTemp(parent, filepath.Base(dest)+".partial-")
@@ -169,12 +171,21 @@ func backupMain(ctx context.Context, out, errOut io.Writer, args []string, o bac
 	}
 	sum := backupSummary{Dest: dest}
 
+	if o.beforeLock != nil {
+		o.beforeLock()
+	}
 	lk, lerr := lock.Acquire(*root, "backup")
 	var held *lock.HeldError
 	switch {
 	case lerr == nil:
 		// Held to the end, so serve, reindex and redact cannot start midway.
 		defer lk.Release()
+		// Checked again under the lock: a redact that started after the
+		// first check and stopped partway has released the lock by now and
+		// left its journal (Terva review 1983).
+		if err := redactionPending(*root); err != nil {
+			return err
+		}
 		sum.Mode = "offline"
 		if err := backupOffline(ctx, *root, partial, &sum); err != nil {
 			return err
@@ -303,6 +314,18 @@ func within(root, dir string) (bool, error) {
 		return false, nil // on another volume: not inside
 	}
 	return rel == "." || (rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))), nil
+}
+
+// redactionPending is an error naming the journal when a hard redaction
+// is pending in root.
+func redactionPending(root string) error {
+	if _, err := os.Stat(journalPath(root)); err == nil {
+		return fmt.Errorf("backup: %s exists: a hard redaction is pending. Finish it with "+
+			"ketju redact --root %s --resume, then back up", journalPath(root), root)
+	} else if !errors.Is(err, fs.ErrNotExist) {
+		return fmt.Errorf("backup: %w", err)
+	}
+	return nil
 }
 
 func driftNote(s fsckSummary) string {
