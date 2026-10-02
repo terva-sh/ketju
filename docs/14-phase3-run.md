@@ -179,3 +179,9 @@ briefs.
   were on main by then now read "maintainer approved". Decisions made after
   that still read "pending maintainer review"; the tracking ticket's summary
   lists them.
+- **Review cap for implementation PRs.** The five-round cap applies to
+  implementation PRs too. A sixth or seventh round is granted when the last
+  fix is narrow and would otherwise merge unreviewed (#341, clean on round
+  seven). At the cap, a non-security finding the lane disagrees with is
+  recorded as a disagreement pending maintainer review, and the PR merges on
+  CI (#342, review 1883). A security finding is always fixed.

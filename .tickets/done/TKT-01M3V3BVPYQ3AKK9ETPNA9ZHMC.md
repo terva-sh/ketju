@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3V3BVPYQ3AKK9ETPNA9ZHMC
 title: Drive Phase 3 to done autonomously
 type: task
-status: draft
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T06:45:24Z
-updated_at: 2026-10-01T20:40:18Z
+updated_at: 2026-10-02T10:12:30Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -49,9 +49,9 @@ This ticket tracks the run. The orchestrator logs merges here in batches, and it
 
 ## Acceptance criteria
 
-- [ ] Every phase-3 ticket other than the epics and this one is done or archived, or blocked on a question docs/14 says the maintainer must answer
-- [ ] Every run decision, recorded disagreement, unticked criterion and open question is listed in the summary for the maintainer
-- [ ] docs/11 counts are refreshed when the run ends
+- [x] Every phase-3 ticket other than the epics and this one is done or archived, or blocked on a question docs/14 says the maintainer must answer
+- [x] Every run decision, recorded disagreement, unticked criterion and open question is listed in the summary for the maintainer
+- [x] docs/11 counts are refreshed when the run ends
 
 ## Notes
 
@@ -146,3 +146,93 @@ Orchestrator log, 2026-10-01 (merges #328 to #336, and the runner investigation)
 - #328 -> #330 TKT-01M29CTY71 lens header and switcher merged (8e7c604, b1b9c2f, dfd23a6); reviews 1792 (medium: First unread kept unread:B above the reader) and 1793 (medium: Full thread lost position; lens header now sticky) fixed; clean 8f330c24 on c264e78 / base 367c90d; CI 2196; reader 63878 -> 66189 B (+2311). Run decisions (docs/06): header wording, divider only canonical/unread, switcher authors from visible posts, since date shows UTC day, sticky lens header; read-tracking decision amended for 1730/1741/1792. Remote branch run/cty71-lens-client (#328, closed, carried) left for end-of-run cleanup.
 - #331 budget raised to 120000 B (maintainer) merged; clean on 0b55baa, CI 2193.
 - #332 TKT-01M3W9VRTV notifications test race (run 2184) merged 004be7a; test-only (author's restore reaches the projection via the bus; docs/04 sets no time bound); reproduced 4/20 under load before, 60/60 after; clean 0963125a on 4ba1b6f / base 86752c4; CI 2201. No other racy Phase 3 tests in cmd/ketju.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T10:12:08Z
+
+Orchestrator log, 2026-10-01 to 2026-10-02: merges #337 to #352. Each gate was checked on the exact merged head: CI's newest pull_request run, and the clean comment naming that head.
+
+- #337 c0727ee6: recorded the maintainer's approval of the run decisions and logged #328 to #336.
+- #338 d2b4f208, TKT-01M3V3CFMA, profile and posts screens.
+  - Review 1800 found two mediums, both fixed: quote links in the history, and a failed profile request with no retry.
+  - Clean on d69f2c14; CI 2249. Reader 71808 B (+1590).
+  - Run decision, after the approval: the phone ordinal is plain text (docs/06 Mobile).
+- #339 c9065c2a, TKT-01M3V6Y4JP, the unread, new, participated and watching lists, Mark all read, and the New badge.
+  - Reviews 1801 and 1802 found two mediums, both fixed: a wipe watermark, and a marks signal.
+  - Clean 3de7748a; CI 2259. Reader 72754 B (+946). AC5 unticked: its figure is the old 70000 B budget.
+  - Run decision, after the approval: the front page has Mark all read from 720 px (docs/06).
+- #340 0009f715, TKT-01M29CGBZD, phone page picker and lens sheets.
+  - Clean on the first round; CI 2264. Reader 73762 B (+1008).
+  - Run decision, after the approval: First unread in the sheet runs the thread page's own handler (docs/06 Mobile, Pages).
+- #341 dd840125, TKT-01M3V6Y87D, watch and mute control.
+  - Seven rounds. 1820, 1822, 1829, 1832 and 1833 were mediums about late or out-of-order saves, all fixed. 1830 was a misreading, confirmed by 1831. The orchestrator granted rounds six and seven, and seven was clean.
+  - CI 2286. Reader 75237 B (+1475).
+- #342 14074f85, TKT-01M29CXK4E, settings screens.
+  - 1838, 1875, 1876 and 1879 were mediums about save ordering, /me against saves, and the page-size wipe, all fixed.
+  - Round five, 1883, raised the medium "Isolate preference changes per Playwright project". It was recorded as a disagreement pending maintainer review, because playwright.config.ts asserts workers 1 and fullyParallel false. The PR merged at the cap on CI 2310. The remaining risk: a failed afterEach reset would leave carol at 10 per page and dark.
+  - Reader 78491 B (+3254).
+  - Run decision, after the approval: a session names its provider by key (docs/05).
+- #343 25ad977a: the maintainer accepted the runner evidence. TKT-01M3VBWMA8 is done, TKT-01M3VDYENN stays a draft, and review 1846's medium was fixed.
+- #344 de37cccb, TKT-01M3S3ZRYD, front page footer.
+  - Review 1887's medium was fixed: `?` on the index failed WCAG 2.1.4, so no key is bound there.
+  - CI 2316 failed with two phone timeouts on build-0, a slowdown recorded in #345; re-run 2320 was green. Reader 79006 B (+515).
+  - AC2 waits on TKT-01M3V9DWTN.
+  - Run decision, after the approval: no shortcut key on the index (docs/06).
+- #345 b7d9e58e: a TKT-01M3VDYENN note classifying run 2316.
+- #347 1fb5db0c, TKT-01M29CGBYY, manifest and icons. It replaced #346 after main moved.
+  - Clean 87d17586; CI 2333. Reader 79088 B (+82).
+  - AC6 is unticked for its stale figure. AC7, the real-device install, is left for a person.
+- #348 628f1a6b, TKT-01M3S3ZZSZ, visual gaps T4, T10, P1, P4, M1, D2 and F9. D1 was already in docs/06.
+  - Clean on the first round; CI 2339. Reader 79192 B (+104).
+- #349 78a84635, TKT-01M3XNQ772, a bug the exit spec found: the unread alert link is now underlined.
+  - Review 2346 clean.
+  - CI 2345 failed at the 10-minute race limit on build-0, and 2348 on the build-1 freeze. The orchestrator granted a second re-run as an exception, and 2349 was green. Reader 79205 B (+13).
+- #350 492405f3, TKT-01M3XP6ZRZ, a bug the exit spec found: a read beacon that lands drops the held lists.
+  - Clean on the first round; CI 2352. Reader 79213 B (+8).
+- #351 8ae5acf8, TKT-01M3V3CFRE, the Phase 3 exit check.
+  - Review 1909's medium was fixed: an oversized upload is checked against the store.
+  - Clean 706d5e5f; CI 2359. Comment 23528 quotes the step-log lines.
+  - Reader 79118 B against the 120000 B budget.
+- #352 bdadf65c: ticket-only close of TKT-01M3V3CFRE, with a clean review of its own.
+
+## Summary
+
+Phase 3 is done. Every phase-3 ticket except the epic TKT-01M29BN36D and this one is done or archived: 44 done and 1 archived (TKT-01M3S3Z9GT, merged into TKT-01M3S3Z9E1 in grooming). The exit check, TKT-01M3V3CFRE, merged in #351. Comment 23528 there quotes the merged head's step log: all five TestPhase3Exit* tests and every phase3-exit.spec.ts test passed at 390 and 1440 px. The reader bundle is 79118 B gzip, against a budget of 120000 B.
+
+The epic TKT-01M29BN36D (Lenses, unread surfaces, search, and live updates) is left in draft. All 24 of its children are done, but its six criteria are design-level, and nobody has checked them against the code as a whole. Closing it is the maintainer's call.
+
+### Decided by the maintainer during the run
+- **Bundle budget:** raised from 70000 B to 120000 B (2026-10-01, #331).
+- **Re-authentication:** no recent sign-in is needed to sign out everywhere, link an identity or remove one (2026-10-01, #329, docs/05).
+- **Run decisions:** approved as they stood on 2026-10-01 (#337). The 40 doc markers merged before then now read "maintainer approved".
+- **Runner evidence:** accepted (2026-10-02, #343). TKT-01M3VBWMA8 is done, and TKT-01M3VDYENN stays a draft as the record.
+
+### Still pending maintainer review
+Five run decisions were made after the approval and are still marked "pending maintainer review":
+1. On the phone, the post ordinal is plain text. The permalink is under More (docs/06 Mobile, TKT-01M3V3CFMA, #338).
+2. A session row names its provider by key, and a removed provider reads "No longer configured (key)" (docs/05, TKT-01M29CXK4E, #342).
+3. The front page has a site-wide Mark all read from 720 px (docs/06, TKT-01M3V6Y4JP, #339).
+4. First unread in the phone page sheet runs the thread page's own handler (docs/06 Mobile, Pages, TKT-01M29CGBZD, #340).
+5. No shortcut key is bound on the forum index until single-key shortcuts can be turned off (docs/06, TKT-01M3S3ZRYD, #344).
+
+One recorded disagreement: #342 merged with review 1883's medium open, "Isolate preference changes per Playwright project". The run disagreed because the suite runs one test at a time and session.ts asserts it. The alternative is a dedicated member per project, which costs about 24 s of pacing per project.
+
+### Open questions for the maintainer
+- **CI time limit.** On build-0, cmd/ketju under -race runs close to Go's default 10-minute package limit. Run 2345 took 15m16s and failed; run 2359 took 10m11s. Raising the race step's -timeout, to 20m for example, changes an existing CI step, and docs/12 "Changing CI" lets a run only add steps.
+- **The runner.** TKT-01M3VDYENN records three build-1 freeze episodes (runs 1592, 1790 and 2348) and two build-0 slowdowns (runs 2316 and 2345). The recommendation still stands: give build-1 capacity 1 or 8 GB of RAM, and give build-0 capacity 1 to 2 or move its runner off the Forgejo VM.
+- **Leftover branches.** Carried PRs left local and remote branches that this run did not delete, because their commits were rewritten on the way to main and could not be proven superseded one by one. Every ticket they belong to is done. The remote ones are origin/groom/p3-* (17 branches), origin/run/cty71-lens-client and origin/groom/phase-1-autonomous-run. A detached worktree also remains at ~/.cache/agent-scratch/ketju/p270.eGUW/wt.
+
+### Unticked criteria
+- **The old 70000 B figure.** These hold except for that number: TKT-01M3V6Y4JP AC5, TKT-01M29CGBYY AC6 and TKT-01M3V3CFRE AC3. #331 superseded the figure, and each ticket has a note saying so.
+- **TKT-01M29CGBYY AC7.** A person must install it on a real iOS and a real Android device.
+- **TKT-01M3S3ZRYD AC2.** "Press ? for keyboard shortcuts" waits on TKT-01M3V9DWTN, the off switch that WCAG 2.1.4 needs.
+- **TKT-01M3VBWMA8 AC3.** It asks for runs on a changed runner, and the maintainer accepted the evidence without that.
+- **TKT-01M3VHSYFR AC9.** CI's race step does not name its tests. Follow-up: TKT-01M3VRFRFW, a draft with no milestone.
+- **TKT-01M3V73DP, the duplicate part of AC2.** A repeated hash is kept once rather than refused. That is a run decision in docs/07 "Drafts", approved on 2026-10-01.
+- **TKT-01M29CRJ3B AC9.** It is unticked only for "moved", which that build could not produce.
+
+### Requirements carried from review
+Grooming PRs past the cap carried their non-security findings as "Requirement carried from review <id>" notes on the tickets they named. Each implementing lane read them as binding. None is left open.
+
+### What the next run should know
+- docs/14 "Amended during the run" records how the run's procedure changed: review caps, carries, the client dist queue, push CI cancellations, the runner decision and the approval.
+- e2e/phase3-exit.spec.ts and cmd/ketju/phase3_exit_test.go are the Phase 3 regression net, and CI runs them by name.

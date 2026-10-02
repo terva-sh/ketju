@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:50:19Z
-updated_at: 2026-10-02T05:05:04Z
+updated_at: 2026-10-02T10:11:50Z
 created_by:
   id: agent:claude-code/phase3-run-vbwma8
   name: ""
@@ -117,3 +117,15 @@ Possible recurrence, 2026-10-02, classified under the correction note of the sam
 - **Not visible from the repository:** jobs from other repositories on build-0, and that host's load.
 
 This fits build-0's known CPU starvation, since it shares its VM with Forgejo (note of 2026-10-01). No ketju probe is warranted.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T10:11:50Z
+
+Recurrence, 2026-10-02, classified under the correction note of the same day. CI run 2348 (PR #349, on b3cc8959, build-1) failed four Playwright tests on timeouts outside that PR's change:
+- watch.spec.ts:99 [phone], on an API post;
+- a11y.spec.ts:82 [desktop], in page.evaluate;
+- admin-agents.spec.ts:50 [desktop];
+- watch.spec.ts:99 [desktop], which found the forum still muted, left behind by the phone test that timed out.
+
+The printed serve.log shows the trivial `suspension expiry` job taking 12.38 s during the a11y failure. A whole process stalling for that long matches this runner's freeze, not a ketju request waiting on something. Re-run 2349 on build-0 passed every step.
+
+Separately, run 2345 (the same PR, on build-0) failed when `go test -race` hit Go's default 10-minute package limit in cmd/ketju. That step took 15m16s, against 8m12s in run 2349, where cmd/ketju took 304.750 s. The PR changed no Go code. That is build-0's CPU starvation, and whether to raise the step's `-timeout` is a question for the maintainer, because docs/12 "Changing CI" lets a run add CI steps but not change them.
