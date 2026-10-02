@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T17:21:59Z
+updated_at: 2026-10-02T18:36:08Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -94,9 +94,12 @@ Drift is the known cost of flat threads, and moving posts is the answer to it. T
      - a quarantined thread is `unavailable`.
    - Nothing is written on any refusal.
 3. **DTO** (`internal/dto/dto.go`):
-   - `Post.MovedTo` becomes `*ThreadRef` (`{id, slug, title}`). It is null for a post that did not move, and also when the viewer may not read the target.
+   - `Post.MovedTo` becomes `*MovedTo` (`{thread: ThreadRef, ordinal: *int}`), where `ThreadRef` is `{id, slug, title}`.
+     - It is null for a post that did not move, and also when the viewer may not read the target.
+     - `ordinal` is the copy's own ordinal in the target, `post_moves.target_ordinal`. A source ordinal is never the copy's: posts 20 and 30 split out become 1 and 2, and a merge appends after the target's posts.
+     - `ordinal` is null while the move is unfinished, that is, while the copy is not yet projected.
    - Add `Post.Moved bool`, so a client can tell a moved post from a deleted one without a target.
-   - Add `Post.MoveNotice *MoveNotice` (`{count, thread: *ThreadRef}`) on the first moved post of each move.
+   - Add `Post.MoveNotice *MoveNotice` (`{count, thread: *ThreadRef, ordinal: *int}`) on the first moved post of each move. `ordinal` is the move's first copy in the target, and is null while the move is unfinished.
    - Add `ThreadHeader.SplitFrom *SplitFrom` (`{thread: *ThreadRef}`) for a thread whose post 1 is a copy: the `post_moves` row with this thread as target and `target_ordinal` 1. Its `thread` is null for a viewer who may not read the source. While the projection trails, the header is left out, which fails closed.
    - Mirror all of this in `web/client/src/api/dto.ts`.
    - Update docs/07's post example and "Removed posts".
@@ -104,7 +107,7 @@ Drift is the known cost of flat threads, and moving posts is the answer to it. T
    - A moved entry with no `post_moves` row yet, because the projection trails, is drawn moved with a null target. That fails closed.
    - The same applies to `posts.go` (one post, replies), lenses, `userposts.go` and the ETag digest, which hashes the body as served.
 5. **Client, in the reader bundle** (about 0.6 KB gzip):
-   - `components/thread/removal.tsx` `TombstoneText` draws "Post moved to <title>" with a link to `/t/{id}/{slug}/{ordinal}` when there is a target, and "Post moved to another thread" when there is none. This replaces today's slugless `/t/{id}` link, which matches no route.
+   - `components/thread/removal.tsx` `TombstoneText` draws "Post moved to <title>" when there is a target. The text links to `/t/{id}/{slug}/{ordinal}`, using `moved_to.ordinal`, the copy's ordinal. While that ordinal is null, the text links to `/t/{id}/{slug}` and adds "(still moving)". With no target, the text is "Post moved to another thread". This replaces today's slugless `/t/{id}` link, which matches no route.
    - `MoveNotice` draws "N posts were moved to <link>" (or "to another thread") above the first moved post, in the mockups' tombstone row style.
    - `ThreadScreen` draws the header's "Split from <link>" (or "Split from another thread").
 6. **Client, in the lazy chunk `MovePosts`** (about 3 KB gzip; it counts toward the 120000 B budget, as every non-admin chunk does):
@@ -127,6 +130,7 @@ Drift is the known cost of flat threads, and moving posts is the answer to it. T
     - a member: refused at the gate.
   - `TestSplitNoticeRevealsTargetOnlyToReaders`: a viewer of both forums gets `moved_to` and `move_notice.thread`; a viewer of the source only gets `moved: true` with both null; a moderator of the source only gets the same.
   - `TestSplitFromRevealsSourceOnlyToReaders`.
+  - `TestMovedToNamesCopyOrdinal`: posts 20 and 30 split out are served with `moved_to.ordinal` 1 and 2, and with null while the copies are unprojected.
   - `TestMovedToNotInCachedPosts`: two members in the same viewer class who differ only in reading the target are served different bodies and different ETags, and the second request is served from the cache.
   - `TestSplitRefusesArchived`: an archived source, moderators and admins included.
   - `TestSplitIntoArchivedForumAdminOnly`.
@@ -139,7 +143,7 @@ Drift is the known cost of flat threads, and moving posts is the answer to it. T
 - Vitest:
   - `SelectionBar.test.tsx`: the count, cancel, Escape, the 10000 stop, and keeping the selection across pages.
   - `SplitDialog.test.tsx`: focus trap, the default forum, the success flow and refusal wording.
-  - `removal.test.tsx`: moved with a target, moved without one, and the link carries the slug.
+  - `removal.test.tsx`: moved with a target, moved without one, and moved while unfinished. The link carries the slug and the target ordinal, never the source ordinal.
   - `MoveNotice.test.tsx`.
   - Split-from in the `ThreadScreen` test.
 - e2e: `e2e/posts-split.spec.ts` with mona's stored session, so it needs no `paceAuth` and no `session.ts` row.
