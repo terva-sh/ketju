@@ -20,10 +20,12 @@ blocks_on: none
 references:
   - ref: design:observability
     path: docs/02-architecture.md
+  - ref: pr:358
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:22:04Z
-updated_at: 2026-10-02T17:18:03Z
+updated_at: 2026-10-02T17:18:46Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
