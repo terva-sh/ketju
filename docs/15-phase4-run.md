@@ -144,12 +144,26 @@ docs/14.
 ## Invariants, added
 
 Every invariant of docs/13 and docs/14 holds. These are added:
-- **Moving posts never widens access.** A post split out of or merged into a
-  thread is readable by exactly the viewers who could read it before, unless
-  the target forum's rules say otherwise. In that case the target's rules
-  apply and the move is refused if it would expose a post the target cannot
-  show. A source pointer reveals nothing a viewer could not already read.
-  Any finding against this is a security finding.
+- **Moving posts follows the thread-move rule, and nothing else changes who
+  can read.** docs/08 already decides that moving a thread needs `moderate`
+  in both forums, and that the moved thread is then read under the target
+  forum's rules (decided 2026-09-30, TKT-01M3RQP0TG). Split and merge across
+  forums follow the same rule. The run does not invent a stricter or looser
+  one. Within it:
+  - A split or merge whose source and target forums differ is refused unless
+    the actor holds `moderate` in both, by role or through a group.
+  - A moved post's readership changes only as the target forum's rules
+    change it. No other path, such as a pointer, a notice, a notification, a
+    search hit or a live event, lets a viewer read a moved post they could
+    not read in its new place.
+  - The source's "N posts were moved to <link>" notice reveals the target
+    thread's title and link only to a viewer who may read the target.
+    Everyone else sees that posts were moved, and nothing more.
+
+  Any finding against this is a security finding. A rule that went past
+  docs/08, such as refusing every move that would widen readership, would
+  change what a moderator can do. That is stop class 1 and goes to the
+  maintainer.
 - **Archived means read-only for everyone**, moderators included, until a
   moderator unarchives the thread.
 - **A backup restores.** A snapshot that `ketju backup` produces is one that
