@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-09-25T00:57:46Z
-updated_at: 2026-10-02T19:31:57Z
+updated_at: 2026-10-02T19:44:41Z
 created_by:
   id: agent:claude-code/phase1-run-415af6aa
   name: ""
@@ -166,6 +166,16 @@ run decision: pending maintainer review. Phase 4 grooming (tags and archive lane
 - "Moderator" for a reserved tag means `moderate` in the forum, by role or through a group. An agent account is `users.kind = 'agent'` (docs/08 "Thread tags").
 - Only ASCII is folded and surrounding whitespace is trimmed. A refused tag is `validation-failed` with `{field: "tags.N", code}`, using the new codes `invalid_tag` and `reserved_tag`. A reserved tag is a field error rather than `forbidden` (docs/07 `POST /forums/{slug}/threads`).
 
+**agent:claude-code/phase4-run-b12zz4** at 2026-10-02T19:44:35Z
+
+Plan step 2 changed while the PR was open (PR #368, CI run 2450 on head dae89c9). In that head, `invalid_tag` and `reserved_tag` were in `forms.Codes` and docs/07's form-codes table, and CI's client tests failed. `web/client/src/forms/messages.test.ts` holds the client's field-message words to that table, so a new row needs words in `web/client`. This server lane may not touch the client while another lane holds the dist (docs/15 "Order").
+
+What changed: the two codes are now `threads.CodeInvalidTag` and `threads.CodeReservedTag`. They are outside the table, the way the handle codes and `same` are. docs/07 "Field errors on validation-failed" names them and points to the create row, which defines them. The API answers exactly as it did before the change. A client that does not know a code reads the refusal as a whole (`fieldMessage`). TKT-01M3YSQPZX (Show, filter and set thread tags in the client) can give the two codes words, then move them into `forms.Codes` and the table in the same PR.
+
+Alternatives that lost:
+- Adding the words to `web/client/src/forms/messages.ts` here would change the committed dist from a server lane.
+- Leaving CI red is not an option.
+
 ## Summary
 
-Built on run/b12zz4-tag-rules. POST /forums/{slug}/threads accepts tags under docs/04 thread_tags and docs/08 "Thread tags": trimmed, ASCII-folded, [a-z0-9]+(-[a-z0-9]+)*, 1 to 24 characters, at most 8, a repeat kept once, sorted, written into ThreadCreated. The reserved tag agent is accepted only from a viewer with moderate in the forum (role or group) or an agent account. The rule is domain.NormalizeTag and domain.ReservedTags. threads.NormalizeTags gives the set and the field errors, and api.decodeTags reads the JSON. TKT-01M29CYSCP's retag and tag filter reuse both. New form codes invalid_tag and reserved_tag. wrong_type is answered alone, from the decode, before the service runs (docs/07). Every criterion is ticked. No migration, route, audit action or log format change.
+Built on run/b12zz4-tag-rules (PR #368). POST /forums/{slug}/threads accepts tags under docs/04 thread_tags and docs/08 "Thread tags": trimmed, ASCII-folded, [a-z0-9]+(-[a-z0-9]+)*, 1 to 24 characters, at most 8, a repeat kept once, sorted, written into ThreadCreated. The reserved tag agent is accepted only from a viewer with moderate in the forum (role or group) or an agent account. The rule is domain.NormalizeTag and domain.ReservedTags. threads.NormalizeTags gives the set and the field errors, and api.decodeTags reads the JSON. TKT-01M29CYSCP's retag and tag filter reuse both. The field codes invalid_tag and reserved_tag are threads.CodeInvalidTag and threads.CodeReservedTag. They stay outside forms.Codes and docs/07's form-codes table until the client gives them words (see the note on plan step 2). wrong_type is answered alone, from the decode, before the service runs (docs/07). Every criterion is ticked. No migration, route, audit action or log format change.

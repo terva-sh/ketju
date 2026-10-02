@@ -215,8 +215,9 @@ RFC 9457 extension member. No other body has it.
   `invalid_tag`, `too_long` or `reserved_tag`, and `tags`, with
   `wrong_type` or `too_many` (above, `POST /forums/{slug}/threads`).
 - `code` is one of the codes below, or for a `handle` one of the three
-  listed with the approval route, plus `same` on a handle change. They are
-  API surface, like the `type`s above.
+  listed with the approval route, plus `same` on a handle change, or for a
+  thread's tags `invalid_tag` or `reserved_tag`, which that route's row
+  defines (TKT-01M3B12ZZ4). They are API surface, like the `type`s above.
 
 <!-- form-codes:begin -->
 | Code | Meaning |
@@ -234,11 +235,9 @@ RFC 9457 extension member. No other body has it.
 | `unknown_type` | A field type that is not one of the six |
 | `unknown_claim` | A `from_claim` that is not `name`, `email` or `preferred_username` |
 | `out_of_range` | A `max` below 1 or over the type's cap |
-| `too_many` | Over 50 fields or 100 options, or over 8 distinct tags on a thread |
+| `too_many` | Over 50 fields or 100 options |
 | `unknown_property` | A property no schema or field has |
 | `malformed` | Not JSON, or more than one JSON value |
-| `invalid_tag` | A thread tag that is empty, or does not match `[a-z0-9]+(-[a-z0-9]+)*` once trimmed and folded (04 `thread_tags`) |
-| `reserved_tag` | A reserved thread tag from a viewer who neither moderates the forum nor is an agent account (08 "Thread tags") |
 <!-- form-codes:end -->
 
 ### Moderation and admin (`/api/v1/admin/*`, role-gated)

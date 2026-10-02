@@ -112,17 +112,13 @@ const (
 	CodeTooMany         = "too_many"
 	CodeUnknownProperty = "unknown_property"
 	CodeMalformed       = "malformed"
-	// CodeInvalidTag and CodeReservedTag are a thread's tags' (docs/04
-	// `thread_tags`, docs/08 "Thread tags"), not a form's.
-	CodeInvalidTag  = "invalid_tag"
-	CodeReservedTag = "reserved_tag"
 )
 
 // Codes lists every code, for the documentation test.
 var Codes = []string{
 	CodeRequired, CodeTooLong, CodeInvalidEmail, CodeInvalidText, CodeNotAnOption, CodeDuplicateOption,
 	CodeWrongType, CodeNotAllowed, CodeInvalidKey, CodeDuplicateKey, CodeUnknownType, CodeUnknownClaim,
-	CodeOutOfRange, CodeTooMany, CodeUnknownProperty, CodeMalformed, CodeInvalidTag, CodeReservedTag,
+	CodeOutOfRange, CodeTooMany, CodeUnknownProperty, CodeMalformed,
 }
 
 // FieldError is one thing wrong: where, and which code.
