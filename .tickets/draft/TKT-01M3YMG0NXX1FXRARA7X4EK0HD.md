@@ -43,11 +43,13 @@ dependencies:
   - TKT-01M3YTHAZB21Y6T36WC4FXZVR8
   - TKT-01M3YSQQ5XDCKEJ60MWJYQKWCW
 blocks_on: none
-references: []
+references:
+  - ref: pr:375
+    path: null
 claim: null
 archive: null
 created_at: 2026-10-02T15:42:30Z
-updated_at: 2026-10-02T21:25:11Z
+updated_at: 2026-10-02T21:25:56Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
