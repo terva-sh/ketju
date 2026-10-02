@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3XP6ZRZQ968B8QPZ1RJBEGM
 title: Show a thread as read on Unread after going back from reading it
 type: bug
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-unread-race
-  branch: run/p6zrz-unread-race
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a44a02e9b74da2287
-  commit: 6808048b49e403fbabcf81f07a20584ad16eab30
-  session: null
-  claimed_at: 2026-10-02T06:56:34Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T06:53:16Z
-updated_at: 2026-10-02T07:44:07Z
+updated_at: 2026-10-02T08:45:13Z
 created_by:
   id: agent:claude-code/phase3-exit-check
   name: ""
@@ -143,3 +136,13 @@ None. The fix is how the client keeps its lists current, and it changes nothing 
 
 ### Not done here
 A landed beacon does not ask for /me again. The forum index's summary line (`me.unread.threads`) therefore waits for the next /me, as it did before this change. The ticket asks only for the lists, so I left the summary alone.
+
+## Summary
+
+A read beacon's PUT that lands now drops every held list, keeps any list GET still out from being stored, and makes the list on screen ask for itself again (`readLanded()` in state/lists.ts, called from `send` in state/readTracker.ts). Asking again aborts the stale request, so a list answered before the PUT landed is neither shown nor stored. A failed PUT asks for nothing, and its retry does once it lands. I chose this over making the list wait for an in-flight flush. The plan gives the reasons.
+
+Five regression tests fail without the fix: three app-level tests in CrossListScreen.test.tsx and two in readTracker.test.ts. The Phase 3 exit spec's Unread surface test, borrowed uncommitted, passed at 390 and 1440 px in three full-suite runs. On the rebased branch, tsc, vitest (2553), `go test -race ./...` and the full Playwright suite (260 passed) are green.
+
+Reader bundle: 79205 B on main 78a84635, 79213 B with the fix (+8 B), of 120000 B.
+
+No run decisions. The forum index's /me summary line still waits for the next /me, as it did before this change.
