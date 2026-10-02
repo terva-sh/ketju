@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M3YFYYGVFJNW9XHX521C4K5F
 title: Give CI's race test step a 20-minute package time limit
 type: chore
-status: in-progress
+status: done
 status_reason: null
 priority: high
 due_on: null
@@ -16,17 +16,10 @@ origin: null
 dependencies: []
 blocks_on: none
 references: []
-claim:
-  actor: agent:claude-code/phase3-run-orchestrator
-  branch: ci/race-timeout
-  worktree: /home/sothr/.t3/worktrees/ketju/t3code-438e26c1
-  commit: 0c88403b85826505e67718b1ab1fae071cd255d9
-  session: null
-  claimed_at: 2026-10-02T14:23:27Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-10-02T14:23:16Z
-updated_at: 2026-10-02T14:23:27Z
+updated_at: 2026-10-02T15:18:09Z
 created_by:
   id: agent:claude-code/phase3-run-orchestrator
   name: ""
@@ -66,3 +59,11 @@ Maintainer request, 2026-10-02. After the Phase 3 run closed, the maintainer was
 The 20 minutes is twice Go's default, and run 2345's slowest step took 15m16s. Two alternatives lost:
 - **A bare `-timeout 0`.** It would let a real deadlock hang the job until Forgejo's own job limit stops it.
 - **Splitting `cmd/ketju`.** That is a code change to fix a runner capacity problem.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T15:18:09Z
+
+Merged in #354 as 1495275d. Review clean on that head. The first CI run (2373) died with build-1, which went offline at 14:29:34 UTC for the maintainer's memory upgrade. The re-run 2379 ran on build-0 and passed: the race step took 11m18s, and cmd/ketju took 490.133 s. Criterion 2 is unticked. Forgejo's step log prints test output but does not echo the command, so the log cannot show the flag. The run used the PR head's ci.yml, which carries it, and cmd/ketju finished inside the old limit anyway. A later run where cmd/ketju takes over 600 s and still passes would prove the flag; none has yet.
+
+## Summary
+
+CI's go test (race) step now runs with -timeout 20m (#354, 1495275d), and its comment says why: on a busy build-0, cmd/ketju under -race runs close to Go's 10-minute default, and run 2345 failed at that limit. Criterion 2 is unticked because the step log does not echo the command.

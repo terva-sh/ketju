@@ -23,7 +23,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-01T09:50:19Z
-updated_at: 2026-10-02T10:11:50Z
+updated_at: 2026-10-02T15:20:26Z
 created_by:
   id: agent:claude-code/phase3-run-vbwma8
   name: ""
@@ -129,3 +129,13 @@ Recurrence, 2026-10-02, classified under the correction note of the same day. CI
 The printed serve.log shows the trivial `suspension expiry` job taking 12.38 s during the a11y failure. A whole process stalling for that long matches this runner's freeze, not a ketju request waiting on something. Re-run 2349 on build-0 passed every step.
 
 Separately, run 2345 (the same PR, on build-0) failed when `go test -race` hit Go's default 10-minute package limit in cmd/ketju. That step took 15m16s, against 8m12s in run 2349, where cmd/ketju took 304.750 s. The PR changed no Go code. That is build-0's CPU starvation, and whether to raise the step's `-timeout` is a question for the maintainer, because docs/12 "Changing CI" lets a run add CI steps but not change them.
+
+**agent:claude-code/phase3-run-orchestrator** at 2026-10-02T15:20:26Z
+
+Runner change, 2026-10-02: the maintainer raised both builders' memory to 16 GB ("I've bumped the memory on the builders from 8GB to 16GB as we had headroom on the host metal"). Checked read-only over SSH after each reboot:
+- **build-0:** 15 GiB total, 4 vCPU.
+- **build-1:** 14 GiB total, 6 vCPU. It was 3.76 GiB.
+
+While build-1 rebooted, CI jobs 2373 and 2376 died on it; their logs stop at 14:29:34 UTC. Their re-runs passed on build-0.
+
+The freezes in this ticket's record were attributed to memory overcommit on build-1. The check that closes this ticket is CI runs on build-1 under parallel load with no stall, and no slow trivial job in the printed serve.log. build-0 still has 4 vCPU, so the memory change does not address its CPU starvation (runs 2316 and 2345).

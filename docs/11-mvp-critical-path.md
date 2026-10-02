@@ -18,7 +18,7 @@ phone as much as on a desktop.
 
 ## The backlog in one table
 
-284 tickets: 12 epics and 272 children. Every ticket derived from the design
+285 tickets: 12 epics and 273 children. Every ticket derived from the design
 documents carries an `area:` label, an `effort:` label of S, M, L, or XL, a
 phase milestone, and a reference back to the document section it came from.
 Tickets filed later, by runs, reviews and deployments, often do not: on
@@ -45,7 +45,7 @@ before coding.
 | `TKT-01M29BN37` Later and maybe | later | XL | Placeholder, nothing committed |
 
 Distribution by phase: 25 in Phase 0, 87 in Phase 1, 82 in Phase 2, 46 in
-Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 30 carrying no
+Phase 3, 11 in Phase 4, 1 in Phase 5, 2 filed as later, and 31 carrying no
 milestone. Phase 3 grew from 21 on 2026-10-01, when its run (docs/14) pulled
 the settings pair forward from Phase 4, filed the profile screen, the exit
 check and its tracking ticket, and placed ten unplaced drafts. Its grooming
@@ -64,7 +64,7 @@ the CI pin, the instructions-block question, and this document's own refresh.
 
 ## Where it stands
 
-242 done, 7 ready, 3 blocked, 27 draft, 5 archived (counted 2026-10-02 with
+244 done, 7 ready, 3 blocked, 26 draft, 5 archived (counted 2026-10-02 with
 `git ticket list --all --json`).
 
 **Phase 0 is complete.** 24 of its 25 tickets are done and the format was
@@ -260,15 +260,17 @@ On 2026-10-01 the maintainer granted a Phase 3 run on the same terms, with a
 narrower stop rule (docs/14), tracked by `TKT-01M3V3BVPY`. Its 36 tickets
 started as drafts and were groomed before any was promoted.
 
-**Phase 3 is complete** as of 2026-10-02. Of its 46 tickets, 44 are done and
-one was archived in grooming. The forty-sixth is the epic `TKT-01M29BN36D`,
-which stays open: all 24 of its children are done, and closing it is the
-maintainer's call. The exit check `TKT-01M3V3CFRE` merged in #351, and CI
+**Phase 3 is complete** as of 2026-10-02. Of its 46 tickets, 45 are done and
+one was archived in grooming. The epic `TKT-01M29BN36D` closed last, after a
+check of its criteria against the code at the maintainer's request: five
+hold, and the sixth, that three lenses run without a database query, holds
+for chain and since but not for author, which looks up its handle. The exit check `TKT-01M3V3CFRE` merged in #351, and CI
 runs its named tests in the step "Phase 3 exit tests, by name". The reader
 bundle is 79118 B of a 120000 B budget, which the maintainer raised from
 70000 B during the run. The run's report is the summary on `TKT-01M3V3BVPY`.
-It lists five decisions and one disagreement still awaiting the maintainer,
-the criteria left unticked, and the open CI questions.
+The maintainer has since approved the five later decisions, closed the
+disagreement as it stood, and raised CI's race step limit to 20 minutes
+(`TKT-01M3YFYYGV`, #354).
 
 ## The critical path
 
