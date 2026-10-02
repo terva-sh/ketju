@@ -34,11 +34,13 @@ export function followChoice(forumLevel: string | null): { label: string; line: 
   return { label: 'Normal', line: 'Alert me when someone mentions, replies to or quotes me.' };
 }
 
-// saves numbers the saves started in this tab, and latest is the newest
-// save's number per route, so an answer can tell whether a later save to the
-// same thread or forum has started since.
+// saves numbers the saves started in this tab, and applied is the number of
+// the newest save per route whose answer was handed over. An answer is handed
+// over only if it started after that one, so answers landing out of order do
+// not put back an older level; a save that was refused applies nothing and
+// so blocks nothing (Terva review 1833).
 let saves = 0;
-const latest = new Map<string, number>();
+const applied = new Map<string, number>();
 
 export type WatchTarget = { thread: string; forumLevel: string } | { forum: string; name: string };
 
@@ -61,10 +63,9 @@ export type WatchTarget = { thread: string; forumLevel: string } | { forum: stri
 // A save outlives a dialog dismissed while it is out, and the reader may
 // open the control again and save again before it answers (Terva review
 // 1820). Its answer still drops the held copies and asks for /me, since the
-// write happened. It is handed to onSaved only if no later save has started
-// since on the same target, so answers landing out of order do not put back
-// an older level, and
-// it closes the dialog only if it is still this one.
+// write happened. It is handed to onSaved only if no answer to a later save
+// to the same target has been handed over already (applied), and it closes
+// the dialog only if it is still this one.
 export function WatchDialog({
   target,
   level,
@@ -121,7 +122,6 @@ export function WatchDialog({
     setSending(true);
     setRefused(null);
     const n = ++saves;
-    latest.set(url, n);
     try {
       const r = await apiSend<ThreadWatch | ForumWatch | undefined>('POST', url, { level: choice }, { status: 200 });
       if (typeof r?.watch !== 'string') throw new ProblemError('internal', 200);
@@ -134,7 +134,10 @@ export function WatchDialog({
       forgetLists();
       forgetAllThreadPages();
       void refreshViewer().catch(() => undefined);
-      if (latest.get(url) === n) onSaved(r);
+      if (n > (applied.get(url) ?? 0)) {
+        applied.set(url, n);
+        onSaved(r);
+      }
       if (mounted.current) onClose();
     } catch (err) {
       if (!mounted.current) return;

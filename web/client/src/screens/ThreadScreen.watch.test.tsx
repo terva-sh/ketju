@@ -181,6 +181,35 @@ describe('the watch control on the thread page', () => {
     expect(control(root)?.textContent).toBe('Muted');
   });
 
+  // Terva review 1833: a newer save that is refused applies nothing, so it
+  // does not keep an earlier save that succeeds afterwards from showing.
+  it('shows an earlier save that succeeds after a newer one was refused', async () => {
+    serve('', '');
+    const pending: ((a: { status: number; body: unknown }) => void)[] = [];
+    server.routes[`POST ${url}/watch`] = () => new Promise((resolve) => pending.push(resolve));
+    const root = await renderAt(`/t/${id}/a`);
+    const escape = () => act(async () => void document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true })));
+    const save = async (label: string) => {
+      await press(control(root));
+      await choose(label);
+      await press(dialog()!.querySelector('button[type=submit]'));
+    };
+    // Mute is sent and dismissed; Watch is sent and refused first.
+    await save('Mute');
+    await escape();
+    await save('Watch');
+    await act(async () => pending[1]({ status: 429, body: { type: 'rate-limited', title: 't', status: 429 } }));
+    await wait();
+    expect(dialog()?.querySelector('[role=alert]')).not.toBeNull();
+    expect(control(root)?.textContent).toBe('Watch');
+    // Mute's answer lands after: the server took it, and the control says so.
+    await act(async () => pending[0]({ status: 200, body: { watch: 'mute', forum_watch: '' } }));
+    await wait();
+    expect(control(root)?.textContent).toBe('Muted');
+    // The refused dialog stays open, as chosen, for the reader to retry or close.
+    expect(dialog()).not.toBeNull();
+  });
+
   // Terva review 1820: a save outlives a dialog dismissed while it is out.
   // Its answer neither closes a dialog opened since nor, once a later save
   // has started, puts back its own level.
