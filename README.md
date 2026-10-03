@@ -52,15 +52,23 @@ a release that is not a pre-release, `latest`. The image holds the binary, CA
 certificates and nothing else. It runs `ketju serve` as uid 65532, reads
 `/data/config.toml`, and keeps its data in the `/data` volume, so
 `config.toml` sets `data_dir = "/data"` and a `listen` address such as
-`":8080"`:
+`":8080"`.
+
+The data directory must belong to uid 65532 as the container sees it. Under
+rootless Podman, container uids map to your subordinate uids, so give it to
+65532 inside your user namespace with `podman unshare`:
 
 ```sh
 mkdir data
 cp config.toml data/
-sudo chown -R 65532:65532 data
+podman unshare chown -R 65532:65532 data
 podman run -d --name ketju -p 8080:8080 -v "$PWD/data:/data" \
   container.local.sothr.com/terva-sh/ketju:v1.0
 ```
+
+Under Docker or rootful Podman, container uids are host uids, so
+`sudo chown -R 65532:65532 data` takes the place of the `podman unshare`
+line, and the `run` line is the same.
 
 The other commands run the same way, with the command after the image name:
 `podman run --rm container.local.sothr.com/terva-sh/ketju:v1.0 version`.
@@ -82,8 +90,11 @@ pre-release `v0.99.0-rc1`, runs `.forgejo/workflows/release.yml`. It:
    it once, and pushes it.
 
 A tag with a hyphen is published as a pre-release, and its image does not
-move `latest`. Rerunning the workflow is safe: what is already published is
-kept if its bytes match, and the run fails if they do not.
+move `latest`. Rerunning the workflow is safe: a binary already published is
+kept if its bytes match, and the run fails if they do not. An image already
+pushed for the version is kept and nothing is pushed over it, so a rerun does
+not move `latest` either; if an earlier run stopped before pushing `latest`,
+the job's warning gives the `skopeo copy` that points it at the version.
 
 Before the first tag, create these, as secrets of `terva-sh/ketju` or of the
 `terva-sh` organization. The workflow reads each by name and fails, naming

@@ -29,7 +29,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-02T17:16:07Z
-updated_at: 2026-10-03T01:01:02Z
+updated_at: 2026-10-03T01:15:48Z
 created_by:
   id: agent:claude-code/phase4-groom-ops
   name: ""
@@ -88,7 +88,7 @@ Groomed 2026-10-02 for Phase 4 (TKT-01M3YMG0M1) against main at ed82f15e. Revise
    - `forgejo` (golang:1.27-alpine): checks the tag is `vMAJOR.MINOR[.PATCH][-PRE]` and on `main`; runs `go run ./tools/release --version "$TAG" --out /tmp/ketju-release`, the CI dry run's command; creates or reuses the Forgejo release (body from `docs/releases/$TAG.md` when it exists), uploads each binary and `SHA256SUMS`; then downloads the release anonymously into an empty directory and runs `sha256sum -c`.
    - `github` (needs forgejo): downloads and checks the Forgejo release, waits up to 30 minutes for the tag on the mirror and refuses it if it names another commit, creates or reuses the GitHub release, uploads, and checks the GitHub downloads with `sha256sum -c`.
    - `image` (needs forgejo; the instance's buildah image): downloads and checks the Forgejo release, builds `Dockerfile` per platform from those binaries, checks each image's architecture and user, runs the native one's `ketju version`, logs in, and pushes one manifest list as the version and, unless a pre-release, `latest`.
-   - A rerun keeps what is published if its bytes match and fails if they do not. A token reaches curl on stdin (`-K -`), never argv.
+   - A rerun keeps what is published if its bytes match and fails if they do not. An image already pushed for the version is kept and nothing is pushed over it; a rerun does not move `latest` (Terva review 2015). A token reaches curl on stdin (`-K -`), never argv.
 2. `Dockerfile`: a build-platform stage lays out the CA bundle, `/tmp` and a `/data` owned by 65532; the scratch stage copies them and the release binary for `$TARGETARCH`, `USER 65532:65532`, `ENV KETJU_CONFIG=/data/config.toml`, `VOLUME /data`, `ENTRYPOINT ["/ketju"]`, `CMD ["serve"]`.
 3. README "Installing a release", with "The container image" and "Publishing a release", which names the four secrets: `RELEASE_FORGEJO_TOKEN`, `RELEASE_GITHUB_TOKEN`, `CONTAINER_PUSH_REPO_USER`, `CONTAINER_PUSH_REPO_PASSWORD`.
 4. Signing: none.
@@ -150,6 +150,32 @@ Built under the maintainer's 2026-10-02 decision (note 2; docs/15 "Decided by th
 - `go run ./tools/release --version v1.0` on a clean checkout (674c7e85) built both binaries. `sha256sum -c` passed, and the host binary printed `ketju v1.0 (commit 674c7e85aba7, …)`.
 - The tag regex was tried against v1.0, v1.0.0 and v0.99.0-rc1 (accepted) and v1, 1.0, v1.0/x and `v1.0-` (refused).
 - `tools/release/workflow_test.go` keeps the workflow, the README and the Dockerfile in step. Two mutations were each caught: an expression put in a run block, and a secret dropped from the README.
+
+**agent:claude-code/phase4-run-svedj** at 2026-10-03T01:15:48Z
+
+Terva review 2015 (run 2593, request ready-review-edbb951) reviewed head edbb951d against base bb6faf74 and raised two medium findings. Both are fixed in the next commit.
+
+**1. Preserve an already-published versioned container image on reruns.**
+- **Fixed.** Before pushing, the push step runs `buildah manifest inspect docker://IMAGE:TAG`.
+  - If the version is already in the registry, the job keeps it, pushes nothing, and does not move `latest`.
+  - If the step that pushes `latest` might have been missed (not a pre-release), a warning gives the `skopeo copy --all` that points `latest` at the version.
+  - Only "manifest unknown", "name unknown" or "not found" counts as absent. Any other failure to read the registry, such as auth or network, fails the job rather than risk pushing over a published version.
+- Checked under dash with a stub buildah, across 6 cases:
+  - exists, released and pre-release: rc 0, no push;
+  - absent, released: 2 pushes;
+  - absent, pre-release: 1 push;
+  - unauthorized, either: rc 1, no push.
+- **Not adopted: comparing digests, and making the image inputs reproducible.**
+  - A rebuilt image is not byte-identical to the pushed one (layer timestamps), so a digest comparison would refuse every rerun and protect nothing.
+  - Pinning `CERTS_IMAGE` by digest would freeze the CA bundle for every later version and need its own bump process.
+  - Once a version's image is never pushed over, a different CA bundle on a later run cannot reach a published version, which is the harm the finding names.
+- `buildah manifest inspect` with a `docker://` reference is observed only on the image job's first run. That run is AC2's check, under the release checklist.
+
+**2. Make the documented data-directory setup work with rootless Podman.**
+- **Fixed.** The README now gives `podman unshare chown -R 65532:65532 data` for rootless Podman, where container uids map to subordinate uids, and `sudo chown` for Docker or rootful Podman, where they are host uids.
+- The publishing section's rerun paragraph now says how images are kept.
+
+The plan's "Approach (as built)" rerun line is updated to match. The Settled section is carried unchanged.
 
 ## Summary
 

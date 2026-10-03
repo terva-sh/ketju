@@ -43,7 +43,8 @@
 #
 # A rerun is safe. A release that already exists is reused, an asset already
 # uploaded is kept if its digest is the one SHA256SUMS lists, and the run fails
-# if it is not: a version is published once, with one set of bytes.
+# if it is not: a version is published once, with one set of bytes. An image
+# already pushed for the version is kept, and nothing is pushed over it.
 name: release
 
 on:
@@ -457,11 +458,33 @@ jobs:
       - name: Push the image
         # One manifest list for both platforms, as the version, and as
         # `latest` unless the tag is a pre-release.
+        #
+        # A version's image is published once. A rebuild is not byte-identical
+        # to the image already pushed (timestamps, and the CA bundle of the day),
+        # so there are no bytes to compare as the release assets are compared:
+        # if the version is already in the registry, a rerun keeps it, pushes
+        # nothing, and does not move `latest`. Only "manifest unknown" or "not
+        # found" counts as absent; any other failure to read the registry fails
+        # the job rather than risk pushing over a published version.
         env:
           TAG: ${{ needs.forgejo.outputs.tag }}
           PRERELEASE: ${{ needs.forgejo.outputs.prerelease }}
         run: |
           set -eu
+          if out=$(buildah manifest inspect "docker://${IMAGE}:${TAG}" 2>&1); then
+            echo "${IMAGE}:${TAG} is already in the registry and is kept; nothing is pushed."
+            if [ "${PRERELEASE}" = false ]; then
+              echo "::warning::a rerun does not move latest. If an earlier run stopped before"
+              echo "pushing it, point it at ${TAG} by hand with"
+              echo "skopeo copy --all docker://${IMAGE}:${TAG} docker://${IMAGE}:latest"
+            fi
+            exit 0
+          fi
+          if ! printf '%s\n' "${out}" | grep -Eqi 'manifest unknown|name unknown|not found'; then
+            echo "::error::could not tell whether ${IMAGE}:${TAG} is already published:"
+            printf '%s\n' "${out}"
+            exit 1
+          fi
           LIST="localhost/ketju-release:${TAG}"
           buildah manifest create "${LIST}"
           for arch in amd64 arm64; do
