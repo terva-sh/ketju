@@ -156,6 +156,41 @@ describe('following a link to another post', () => {
     expect(scrolled).toEqual(['post-1']);
   });
 
+  // A quoted post's backlinks follow the same path (docs/06 "Post anatomy",
+  // TKT-01M3YTHAZB).
+  it('scrolls to a quoting post on this page from its backlink', async () => {
+    serve(page([post(1, { quoted_by: [3] }), post(2, { quoted_by: [] }), post(3, { quoted_by: [] })]));
+    const root = await renderAt(`/t/${id}/why-we-left-slack?page=1`);
+    const before = location.href;
+    scrolled = [];
+    await act(async () => (at(root, '#post-1 [data-quoted-by] a') as HTMLElement).click());
+    expect(scrolled).toEqual(['post-3']);
+    expect(location.href).toBe(before);
+    expect(at(root, '[role=dialog]')).toBeNull();
+  });
+
+  it('opens a quoting post off this page in the popover, and Escape returns focus to the backlink', async () => {
+    const urls = serve(page([post(1, { quoted_by: [30] }), post(2, { quoted_by: [] })]), {
+      30: post(30, { html: '<p>the quoting post</p>', quoted_by: [] }),
+    });
+    const root = await renderAt(`/t/${id}/why-we-left-slack?page=1`);
+    const link = at(root, '#post-1 [data-quoted-by] a') as HTMLElement;
+    expect(link.textContent).toBe('#30');
+    link.focus();
+    await act(async () => link.click());
+    await settle(root);
+    const dialog = at(root, '[role=dialog]')!;
+    expect(dialog.textContent).toContain('the quoting post');
+    expect(urls).toContain(`/api/v1/threads/${id}/posts/30`);
+    expect(document.activeElement).toBe(dialog);
+    await act(
+      async () =>
+        void document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true })),
+    );
+    expect(at(root, '[role=dialog]')).toBeNull();
+    expect(document.activeElement).toBe(link);
+  });
+
   it('closes the popover when the reader moves to another page', async () => {
     const p2 = page([post(26), post(27, { reply_to: 4 })], { number: 2 });
     const p3 = page([post(51), post(52)], { number: 3 });

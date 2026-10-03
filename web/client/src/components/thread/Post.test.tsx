@@ -259,3 +259,47 @@ describe('the author link', () => {
     expect(root.querySelector('.post-header a.ordinal')?.getAttribute('href')).toBe('/t/3yymw47g00001/s/7');
   });
 });
+
+// A quoted post's backlinks (docs/06 "Post anatomy", TKT-01M3YTHAZB).
+describe('quoted by', () => {
+  const line = () => root.querySelector<HTMLElement>('.post [data-quoted-by]');
+  const links = () => [...root.querySelectorAll<HTMLAnchorElement>('[data-quoted-by] a')];
+
+  it('draws nothing when nothing quotes the post', async () => {
+    await draw(post({ quoted_by: [] }));
+    expect(line()).toBeNull();
+  });
+
+  it('links each quoting post, in order, between the body and the footer', async () => {
+    await draw(post({ quoted_by: [51, 60] }));
+    expect(line()!.textContent).toBe('Quoted by #51 #60');
+    expect(links().map((a) => [a.getAttribute('href'), a.dataset.replyTo, a.classList.contains('hit')])).toEqual([
+      ['#post-51', '51', true],
+      ['#post-60', '60', true],
+    ]);
+    // After the body and its attachments, and before the footer.
+    const order = [...root.querySelector('.post-main')!.children].map((e) => e.classList[0] ?? e.localName);
+    expect(order.indexOf('quoted-by')).toBeGreaterThan(order.indexOf('post-body'));
+    expect(order.indexOf('post-footer')).toBe(order.indexOf('quoted-by') + 1);
+  });
+
+  it('links ten and says how many more past that', async () => {
+    const twelve = Array.from({ length: 12 }, (_, i) => 20 + i);
+    await draw(post({ quoted_by: twelve }));
+    expect(links().map((a) => Number(a.dataset.replyTo))).toEqual(twelve.slice(0, 10));
+    expect(line()!.textContent).toMatch(/#29 and 2 more$/);
+    await draw(post({ quoted_by: twelve.slice(0, 10) }));
+    expect(links()).toHaveLength(10);
+    expect(line()!.textContent).not.toMatch(/more/);
+  });
+
+  it('draws nothing on a tombstone', async () => {
+    await draw(post({ quoted_by: [51], deleted: true, removal: 'author', html: '' }));
+    expect(line()).toBeNull();
+  });
+
+  it('is drawn on a removed post a moderator is shown with its body', async () => {
+    await draw(post({ quoted_by: [51], deleted: true, removal: 'moderator' }));
+    expect(line()!.textContent).toBe('Quoted by #51');
+  });
+});

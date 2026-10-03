@@ -1,3 +1,4 @@
+import { Fragment } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Post as PostDTO } from '../../api/dto';
 import { problemMessage } from '../../api/problem';
@@ -12,7 +13,7 @@ import { isOwn } from './postControls';
 import { DeleteConfirm, PostEditor, Restore, useOwn, type Own } from './OwnControls';
 import { PostMore } from './PostMore';
 import { PostTime } from './PostTime';
-import { removedMark } from './removal';
+import { isTombstone, removedMark } from './removal';
 import { Replies, ReplyToggle } from './ReplyExpander';
 import { RoleBadge } from './RoleBadge';
 
@@ -158,6 +159,7 @@ export function Post({
           <div class="post-body" dangerouslySetInnerHTML={{ __html: post.html }} />
         )}
         <Attachments post={post} />
+        <QuotedBy post={post} />
         {o.mode === 'delete' && <DeleteConfirm o={o} ordinal={post.ordinal} />}
         <footer class="post-footer">
           {expander && <ReplyToggle post={post} open={open} onToggle={toggle} />}
@@ -314,6 +316,42 @@ export function ReplyTo({ post }: { post: PostDTO }) {
     <a class="reply-to hit" href={`#post-${post.reply_to}`} data-reply-to={post.reply_to}>
       ↩ #{post.reply_to}
     </a>
+  );
+}
+
+// quotedByShown is how many backlinks the line links before it ends "and N
+// more" (docs/06 "Post anatomy").
+export const quotedByShown = 10;
+
+// QuotedBy is a quoted post's backlinks, "Quoted by #51 #60", between its
+// body and its footer (docs/06 "Post anatomy", run decision 2026-10-02,
+// TKT-01M3YTHAZB). Each ordinal is a link that behaves as the ↩ indicator
+// does: data-reply-to puts it on the thread page's one delegate, which
+// scrolls to a post on the page and opens any other in the popover. Past
+// quotedByShown the line ends with how many more, as text.
+//
+// Which posts are listed is the server's to decide, and it already leaves
+// out every quoting post some reader is not shown as itself, and sends an
+// empty list for a post served without its body (docs/07 quoted_by). So the
+// client applies no rule of its own beyond drawing nothing for nothing, and
+// nothing on a tombstone.
+export function QuotedBy({ post }: { post: PostDTO }) {
+  const by = post.quoted_by ?? [];
+  if (by.length === 0 || isTombstone(post)) return null;
+  const more = by.length - quotedByShown;
+  return (
+    <p class="quoted-by" data-quoted-by>
+      <span>Quoted by</span>
+      {by.slice(0, quotedByShown).map((n) => (
+        <Fragment key={n}>
+          {' '}
+          <a class="hit" href={`#post-${n}`} data-reply-to={n}>
+            #{n}
+          </a>
+        </Fragment>
+      ))}
+      {more > 0 && <> <span>and {more} more</span></>}
+    </p>
   );
 }
 

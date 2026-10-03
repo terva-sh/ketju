@@ -443,6 +443,25 @@
   text-decoration: none;
 }
 
+/* A quoted post's backlinks, "Quoted by #51 #60", between its body and its
+   footer (docs/06 "Post anatomy"): the footer's secondary text, with each
+   ordinal in the accent and the mono face, as the ↩ indicator draws one. */
+.quoted-by {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin: 8px 0 0;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.quoted-by a {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+}
+
 /* The reply expander (docs/06 "Post anatomy"): the footer's lead control,
    in the accent as the mockup draws it, and the replies it opens, recessed
    below the footer on a sunken surface. The replies are read-only copies;
@@ -1094,6 +1113,17 @@
      between them: the narrowest, "link", reaches 11.5 px past each side. */
   .post-footer {
     gap: 24px;
+  }
+  /* The backlinks' targets (.hit) reach 22 px about each centre, and each
+     must be its own 21 px either side (e2e/targets.spec.ts), so centres
+     sit at least 43 px apart: a one-digit ordinal is about 14 px wide,
+     which leaves 30 px between two, and a wrapped row is about 16 px tall.
+     The footer's targets reach up into the line, and what is above it
+     reaches down, so it keeps that room above and below too. */
+  .quoted-by {
+    gap: 28px 32px;
+    margin-top: 24px;
+    padding-bottom: 20px;
   }
   /* The toggle's target reaches 12.5 px below it, and the first reply's
      ordinal's reaches 22 px above that ordinal's centre: the margin and

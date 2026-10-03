@@ -201,6 +201,10 @@ var seedAuthors = map[int]string{56: seedModerator}
 const (
 	seedEdited  = 52
 	seedRemoved = 57
+	// seedQuotesFirst quotes #1 from page 2, as #2 does from page 1, so #1
+	// shows "Quoted by #2 #44" and one backlink opens the popover
+	// (e2e/quoted-by.spec.ts, TKT-01M3YTHAZB).
+	seedQuotesFirst = 44
 )
 
 // seedForums is the forum tree the fixture adds around seedForum, shaped
@@ -404,9 +408,11 @@ func seed(ctx context.Context, data, issuer string) (threadid.ID, error) {
 	// delete: the edit is not a grace edit, so the post is marked edited,
 	// and the delete is not a moderator's, so the post is deleted rather
 	// than hidden.
+	// seedQuotesFirst, on page 2, quotes the first post as well, so #1's
+	// backlinks name a post on its page and one off it (TKT-01M3YTHAZB).
 	mainSource := func(i int) string {
 		src := fmt.Sprintf("Seeded post %d. Month name, four-digit year, then the topic.", i)
-		if i == 2 {
+		if i == 2 || i == seedQuotesFirst {
 			src = "> [quote=#1]\n> Seeded post 1.\n\n" + src
 		}
 		return src
