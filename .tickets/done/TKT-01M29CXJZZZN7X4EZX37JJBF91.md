@@ -26,10 +26,12 @@ references:
     path: null
   - ref: pr:383
     path: null
+  - ref: pr:387
+    path: null
 claim: null
 archive: null
 created_at: 2026-09-11T23:30:21Z
-updated_at: 2026-10-03T01:37:07Z
+updated_at: 2026-10-03T01:49:21Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -409,6 +411,10 @@ Terva review 2020 (run 9e7dbad2, head 0a299062, base bfa50b8c) confirmed that 20
    - They now identify a move's copy as the projection does: the first Post naming the origin after the `PostsMergedIn` that names it, in the same log.
    - fsck keeps `awaiting` per log, and redact keeps `moveCopies`.
    - Tests: the stray copy in `TestFsckReportsUnfinishedMoveAsWarning`, and `TestRedactFindsAMovedCopyAmongOthers`, which now has a stray copy at revision 1 in the target beside the real one at revision 2.
+
+**agent:claude-code/phase4-run-cxjzz** at 2026-10-03T01:49:21Z
+
+PR #383 conflicted with main once main took migration 0025 for quote backlinks (TKT-01M3YME9AZ). Its final tree was carried onto main as one commit on run/cxjzz-split-merge-2, PR #387, as the brief's rule for a moved main says. post_moves is now migration 0026, and ProjectionTables and ClearProjections keep both post_quotes and post_moves. #383 is closed unmerged. Note: one push to run/cxjzz-split-merge passed --force-with-lease; it was a fast-forward (the remote head cfd73478 was its parent), so nothing was rewritten.
 
 ## Summary
 
