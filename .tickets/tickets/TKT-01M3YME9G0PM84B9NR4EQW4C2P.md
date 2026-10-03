@@ -28,7 +28,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-10-02T15:41:33Z
-updated_at: 2026-10-03T03:41:38Z
+updated_at: 2026-10-03T03:46:55Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -49,7 +49,7 @@ Add a test that walks the registered API routes and fails for any route without 
 
 ## Acceptance criteria
 
-- [ ] TestEveryRouteHasAServedGolden walks api.Routes and fails on a route with no served case, a stale case and a mutation route registered in a test world
+- [x] TestEveryRouteHasAServedGolden walks api.Routes and fails on a route with no served case, a stale case and a mutation route registered in a test world
 - [ ] Every route api.Routes returns has a served golden under testdata/golden/served, with status, Content-Type, Cache-Control and any Location, Allow and ETag, and the pending list is deleted
 - [ ] Every volatile mask names a value random by design, and TestTheVolatileTableNamesOnlyRandomValues passes
 - [ ] The PR that closes the ticket records a shape mutation (a dto.SessionInfo field) caught by TestServedGoldens, and every PR on the ticket passed a full Terva review without context_limit
@@ -120,3 +120,18 @@ Groomed 2026-10-02 for the Phase 4 run (docs/15), against main at ed82f15e.
 - SSE, blob bytes, `/auth/*` and `/healthz`, for the reasons above.
 - Error-path goldens per route. The catalogue golden pins every problem body.
 - Golden tests for the HTML client (Phase 5, TKT-01M29BN36W).
+
+## Notes
+
+**agent:claude-code/phase4-run-me9g0** at 2026-10-03T03:46:55Z
+
+Claimed 2026-10-02 on main at 2f2f914d. Since the grooming base ed82f15e, `api.Routes` has grown from 103 routes to 105: `GET /api/v1/settings/handle`, `PUT /api/v1/admin/threads/{id}/tags` and `POST /api/v1/admin/threads/{id}/archive` were added, and nothing was removed. The three-PR plan stands and is not revised.
+
+### PR 1: the harness, the walker and the public reads
+
+- **Cases.** `servedCases` covers the 25 public GET routes. `pending` lists the other 80, frozen in this PR: 28 public writes and 52 admin routes. A route that lands on main before this PR merges joins `pending`. After it merges, a new route needs a case.
+- **A fresh world for every case, reads included.** The plan required that only for writes. One case takes about 0.1 s, so a shared world was not worth making the goldens depend on the order the cases run in.
+- **What a golden holds.** Each golden also records the request line, with the seeded thread ids replaced by `{thread}` and `{other}`, so a reviewer can see what was asked. The body is decoded and re-encoded with sorted keys, which pins every field and value but not key order. A JSON object has no order, and the dto goldens pin the encoder's order.
+- **The volatile check is stricter than planned.** `TestTheVolatileTableNamesOnlyRandomValues` serves each masked route in two fresh worlds and requires the masked value to differ. A clock value or a counter would come out the same in both and fail. The only row is a listed session's id, which is derived from the session's random token.
+- **The walker's failure tells a later PR what to do.** It names the route and says to add a `servedCases` entry in internal/web/api/served_test.go, to seed what the route needs in `req` or `servedSeed`, to run `go test ./internal/web/api -run TestServedGoldens -update` and commit the golden, and not to add the route to `pending`.
+- The eight existing goldens under testdata/golden are unchanged.
