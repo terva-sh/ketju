@@ -219,15 +219,13 @@ func stepScript(t *testing.T, wf, step string) string {
 }
 
 // TestImageTagsFollowTheOrganization runs the GitHub workflow's tag step: a
-// release floats MAJOR.MINOR and latest, a two-part tag such as v1.0 floats
-// nothing narrower than itself, and a pre-release floats nothing.
+// release floats MAJOR.MINOR and latest, and a pre-release floats nothing.
 func TestImageTagsFollowTheOrganization(t *testing.T) {
 	script := stepScript(t, readRoot(t, githubWorkflow), "Work out the image tags")
 	const img = "ghcr.io/terva-sh/ketju"
 	for _, c := range []struct{ tag, pre, want string }{
 		{"v1.0.0", "false", img + ":1.0.0," + img + ":1.0," + img + ":latest"},
 		{"v1.2.3", "false", img + ":1.2.3," + img + ":1.2," + img + ":latest"},
-		{"v1.0", "false", img + ":1.0," + img + ":latest"},
 		{"v1.0.0-rc.1", "true", img + ":1.0.0-rc.1"},
 	} {
 		out := filepath.Join(t.TempDir(), "out")
@@ -243,6 +241,30 @@ func TestImageTagsFollowTheOrganization(t *testing.T) {
 		}
 		if !strings.Contains(string(b), "\ntags="+c.want+"\n") {
 			t.Errorf("%s: outputs\n%s\nwant tags=%s", c.tag, b, c.want)
+		}
+	}
+}
+
+// TestReleaseTagsHaveThreeParts: both workflows refuse a tag such as v1.0.
+// Its image tag, 1.0, would be the name a later v1.0.1 moves as its floating
+// MAJOR.MINOR alias, publishing over a version (review 2085).
+func TestReleaseTagsHaveThreeParts(t *testing.T) {
+	pattern := regexp.MustCompile(`grep -Eq '(\^v[^']*)'`)
+	for _, f := range []string{forgejoWorkflow, githubWorkflow} {
+		m := pattern.FindStringSubmatch(stepScript(t, readRoot(t, f), "Check the tag"))
+		if m == nil {
+			t.Fatalf("%s: the tag check has no grep -Eq pattern", f)
+		}
+		re := regexp.MustCompile(m[1])
+		for _, tag := range []string{"v1.0.0", "v1.2.3", "v1.0.0-rc.1", "v10.20.30-beta2"} {
+			if !re.MatchString(tag) {
+				t.Errorf("%s refuses %s", f, tag)
+			}
+		}
+		for _, tag := range []string{"v1.0", "v1", "1.0.0", "v1.0.0.0", "v1.0-rc.1", "v1.0.0-"} {
+			if re.MatchString(tag) {
+				t.Errorf("%s accepts %s", f, tag)
+			}
 		}
 	}
 }

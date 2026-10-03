@@ -77,9 +77,9 @@ jobs:
         run: |
           set -eu
           TAG="${REF#refs/tags/}"
-          # The same rule as the Forgejo twin.
-          if ! printf '%s\n' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$'; then
-            echo "::error::tag ${TAG} is not vMAJOR.MINOR[.PATCH][-PRERELEASE]"
+          # The same rule as the Forgejo twin, which says why three parts.
+          if ! printf '%s\n' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::tag ${TAG} is not vMAJOR.MINOR.PATCH[-PRERELEASE]"
             exit 1
           fi
           if [ "$(git rev-parse HEAD)" != "${SHA}" ]; then
@@ -224,13 +224,10 @@ jobs:
           IMAGE="ghcr.io/${REPOSITORY}"
           TAGS="${IMAGE}:${VERSION}"
           if [ "${PRERELEASE}" = false ]; then
-            # The first two components, so v1.0 and v1.0.0 both float 1.0;
-            # v1.0 names it already.
+            # The first two components. The tag check requires three, so this
+            # never names a version's own image.
             MINOR=$(printf '%s\n' "${VERSION}" | cut -d. -f1-2)
-            if [ "${MINOR}" != "${VERSION}" ]; then
-              TAGS="${TAGS},${IMAGE}:${MINOR}"
-            fi
-            TAGS="${TAGS},${IMAGE}:latest"
+            TAGS="${TAGS},${IMAGE}:${MINOR},${IMAGE}:latest"
           fi
           echo "image=${IMAGE}" >> "${GITHUB_OUTPUT}"
           echo "version=${VERSION}" >> "${GITHUB_OUTPUT}"

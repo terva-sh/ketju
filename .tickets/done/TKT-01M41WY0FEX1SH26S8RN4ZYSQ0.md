@@ -26,7 +26,7 @@ references:
 claim: null
 archive: null
 created_at: 2026-10-03T22:07:40Z
-updated_at: 2026-10-03T22:43:36Z
+updated_at: 2026-10-03T23:16:58Z
 created_by:
   id: agent:claude-code/phase4-run-orchestrator
   name: ""
@@ -84,6 +84,10 @@ Maintainer decision, 2026-10-03: "Match our release mirroring and deployment pro
 **agent:claude-code/phase4-run-orchestrator** at 2026-10-03T22:43:36Z
 
 Review 2084 (head 3759d4e, base edfad27), medium, "Preserve the minor image tag for two-component releases": fixed. The tag step took ${VERSION%.*}, which gives 1 for an accepted v1.0. It now takes the first two components with cut -d. -f1-2, and skips the alias when it equals the version. TestImageTagsFollowTheOrganization runs the step's own script for v1.0.0, v1.2.3, v1.0 and v1.0.0-rc.1.
+
+**agent:claude-code/phase4-run-orchestrator** at 2026-10-03T23:16:58Z
+
+Review 2085 (head 7f2b3c0, base edfad27), medium, "Keep immutable two-component versions separate from floating minor aliases": fixed. A v1.0 release's image tag 1.0 was the alias a later v1.0.1 moves, and the existence check looks only at the version tag. Both workflows now accept only vMAJOR.MINOR.PATCH[-PRE]. That also suits the maintainer's choice of v1.0.0 and is the form Go's module tooling reads as a version. The README says so. The alternative of keeping two-part tags and mapping them to an unambiguous image name (such as 1.0.0) lost, because it publishes an image under a name the tag does not carry. TestReleaseTagsHaveThreeParts runs each workflow's own tag pattern against accepted and refused tags.
 
 ## Summary
 

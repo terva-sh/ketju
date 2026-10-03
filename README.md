@@ -86,7 +86,7 @@ reaches that forge. Neither reaches into the other.
 `.github/workflows/release.yml` runs on the public mirror, `github.com/terva-sh/ketju`:
 
 1. refuses a tag that is not on the mirror's `main`, or not
-   `vMAJOR.MINOR[.PATCH][-PRE]`;
+   `vMAJOR.MINOR.PATCH[-PRE]`, such as `v1.0.0`;
 2. builds and checks the binaries with `go run ./tools/release`, as CI's dry
    run does, and writes `SHA256SUMS`;
 3. publishes them as a GitHub release, with `docs/releases/<tag>.md` as its

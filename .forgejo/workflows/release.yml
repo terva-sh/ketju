@@ -85,10 +85,12 @@ jobs:
         run: |
           set -eu
           TAG="${REF#refs/tags/}"
-          # vMAJOR.MINOR[.PATCH][-PRERELEASE]: what tools/release can stamp
-          # and an image tag can carry.
-          if ! printf '%s\n' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+(\.[0-9]+)?(-[0-9A-Za-z.]+)?$'; then
-            echo "::error::tag ${TAG} is not vMAJOR.MINOR[.PATCH][-PRERELEASE]"
+          # vMAJOR.MINOR.PATCH[-PRERELEASE]: what tools/release can stamp, an
+          # image tag can carry, and Go's module tooling reads as a version.
+          # Three parts, so a version's image tag (1.0.0) never shares a name
+          # with the floating MAJOR.MINOR alias (1.0) a later patch moves.
+          if ! printf '%s\n' "${TAG}" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$'; then
+            echo "::error::tag ${TAG} is not vMAJOR.MINOR.PATCH[-PRERELEASE]"
             exit 1
           fi
           if [ "$(git rev-parse HEAD)" != "${SHA}" ]; then
