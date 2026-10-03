@@ -612,7 +612,8 @@
 .post.removed .edited,
 .post.removed .deleted-mark,
 .post.removed .attachment-meta,
-.post.removed .post-footer a {
+.post.removed .post-footer a,
+.post.removed .post-footer button {
   color: var(--ink2);
 }
 
