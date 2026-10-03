@@ -14,11 +14,13 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/terva-sh/ketju/internal/audit"
 	"github.com/terva-sh/ketju/internal/auth/oidc/oidctest"
+	"github.com/terva-sh/ketju/internal/backup"
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/perm"
@@ -164,9 +166,9 @@ type p4World struct {
 }
 
 // newP4World seeds the world and starts serve with metrics_listen on a
-// port of its own, then signs people in. backup puts the data directory
+// port of its own, then signs people in. forBackup puts the data directory
 // where its control socket path fits, as `ketju backup` needs.
-func newP4World(t *testing.T, backup bool, people ...seeded) *p4World {
+func newP4World(t *testing.T, forBackup bool, people ...seeded) *p4World {
 	t.Helper()
 	if len(people) > 5 {
 		t.Fatalf("%d sign-ins on one serve; /auth/* allows five", len(people))
@@ -177,7 +179,7 @@ func newP4World(t *testing.T, backup bool, people ...seeded) *p4World {
 		w.idp.Users = append(w.idp.Users, p.subject)
 	}
 	config := writeConfig
-	if backup {
+	if forBackup {
 		config = backupConfig
 	}
 	w.path, w.data = config(t, providerBlock(w.idp.URL))
@@ -405,6 +407,7 @@ func TestPhase4ExitMovesNeedModerateInBoth(t *testing.T) {
 		{"gail merges annex into vault, moderating the target alone", func() answer { return gail.merge(t, a, []int{2}, v) }, "not-found"},
 		{"otto splits vault into annex, moderating the target alone", func() answer { return otto.split(t, v, []int{2}, "annex", "Away") }, "forbidden"},
 		{"otto merges annex into vault, moderating the source alone", func() answer { return otto.merge(t, a, []int{2}, v) }, "forbidden"},
+		{"otto splits annex into vault, moderating the source alone", func() answer { return otto.split(t, a, []int{2}, "vault", "Away") }, "forbidden"},
 		{"pat splits, at the gate", func() answer { return pat.split(t, v, []int{2}, "annex", "Away") }, "forbidden"},
 		{"pat merges, at the gate", func() answer { return pat.merge(t, a, []int{2}, v) }, "forbidden"},
 	} {
@@ -1284,17 +1287,18 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	threads := []string{v, a, s, c, tagged, z}
 	viewers := []*actor{kim, gail, pat}
 
-	// The writer: 40 replies, through the backup.
-	wrote := make(chan int, 64)
+	// The writer: 40 replies, through the backup. The backup is held after
+	// serve answers its snapshot until three more replies have landed, so
+	// the logs it copies have grown past what the snapshot projected.
+	var wrote atomic.Int32
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		for i := 0; i < 40; {
-			res := kim.do(t, http.MethodPost, "/api/v1/threads/"+busy+"/posts", map[string]any{"source": fmt.Sprintf("Reply %d.", i)})
+		for wrote.Load() < 40 {
+			res := kim.do(t, http.MethodPost, "/api/v1/threads/"+busy+"/posts", map[string]any{"source": fmt.Sprintf("Reply %d.", wrote.Load())})
 			switch res.status {
 			case http.StatusCreated:
-				i++
-				wrote <- i
+				wrote.Add(1)
 			case http.StatusTooManyRequests:
 				time.Sleep(50 * time.Millisecond)
 			default:
@@ -1303,21 +1307,34 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 			}
 		}
 	}()
-	for n := 0; n < 5; {
-		select {
-		case n = <-wrote:
-		case <-done:
-			t.Fatal("the writer stopped before the backup")
+	waitUntil(t, func() bool { return wrote.Load() >= 5 })
+	ask := func(ctx context.Context, sock string) (backup.Answer, func(), error) {
+		ans, release, err := backup.Ask(ctx, sock)
+		if err == nil {
+			at := wrote.Load()
+			waitUntil(t, func() bool { return wrote.Load() >= min(at+3, 40) })
 		}
+		return ans, release, err
 	}
 	dest := filepath.Join(t.TempDir(), "backup")
-	sum, errOut, err := runBackupCmd(t, w.data, dest)
-	if err != nil {
-		t.Fatalf("ketju backup: %v (exit %d)\n%s", err, exitCodeFor(err), errOut)
+	var out, errOut bytes.Buffer
+	if err := backupMain(t.Context(), &out, &errOut, []string{"--root", w.data, "--json", dest}, backupOpts{ask: ask}); err != nil {
+		t.Fatalf("ketju backup: %v (exit %d)\n%s", err, exitCodeFor(err), &errOut)
 	}
 	<-done
-	if sum.Mode != "online" {
-		t.Errorf("the backup ran %q, want online beside serve", sum.Mode)
+	var sum backupSummary
+	if err := json.Unmarshal(out.Bytes(), &sum); err != nil {
+		t.Fatalf("the report is not JSON: %v\n%s", err, &out)
+	}
+	t.Logf("ketju backup: %+v", sum)
+	if sum.Mode != "online" || wrote.Load() != 40 {
+		t.Errorf("the backup ran %q beside %d replies, want online beside 40", sum.Mode, wrote.Load())
+	}
+	// Each log is copied at the length the snapshot projected it to, so
+	// the copy has nothing to catch up and no drift, though the source's
+	// busy log had grown past it.
+	if sum.CaughtUp != 0 || sum.Drift != 0 {
+		t.Errorf("the copy caught up %d thread(s), with drift %d; want the logs copied at the snapshot's lengths", sum.CaughtUp, sum.Drift)
 	}
 	want := w.pages(viewers, threads)
 	source := w.logOf(busy)
@@ -1360,7 +1377,8 @@ func TestPhase4ExitBackupRestoresAndPassesFsck(t *testing.T) {
 	if err := cw.r.shutdown(t); err != nil {
 		t.Fatal(err)
 	}
-	var out, errBuf bytes.Buffer
+	out.Reset()
+	var errBuf bytes.Buffer
 	if err := reindexMain(t.Context(), &out, &errBuf, []string{"--root", got, "--projections", "--search"}, reindexOpts{}); err != nil {
 		t.Fatalf("ketju reindex on the copy: %v\n%s%s", err, &out, &errBuf)
 	}
