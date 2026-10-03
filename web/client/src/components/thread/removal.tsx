@@ -1,4 +1,4 @@
-import type { Post as PostDTO } from '../../api/dto';
+import type { MoveNotice as MoveNoticeDTO, Post as PostDTO, ThreadLink } from '../../api/dto';
 
 // How a removed post reads (docs/08 "Tombstones" and "Flags", docs/07
 // "Removed posts"). The thread page, the reply expander, the popover and the
@@ -46,16 +46,41 @@ export function removedMark(post: Pick<PostDTO, 'removal' | 'redacted'>): string
 // and served without its body.
 export const isTombstone = (post: Pick<PostDTO, 'deleted' | 'html'>) => post.deleted && !post.html;
 
+// movedHref is where a link to a moved post's other end goes: the copy's
+// permalink, with the target's slug, or the target thread while the move is
+// unfinished and the copy has no ordinal yet. A source ordinal is never
+// used: it is not the copy's (docs/07 "Removed posts").
+export function movedHref(thread: ThreadLink, ordinal: number | null): string {
+  const base = `/t/${encodeURIComponent(thread.id)}/${encodeURIComponent(thread.slug)}`;
+  return ordinal === null ? base : `${base}/${ordinal}`;
+}
+
 // TombstoneText is a tombstone's words: who removed the post, or, for a post
-// split into another thread, a pointer to it (the server fills moved_to in
-// TKT-01M29CYSAM).
-export function TombstoneText({ post }: { post: Pick<PostDTO, 'removal' | 'redacted' | 'moved_to'> }) {
-  if (post.moved_to !== null) {
+// a split or merge moved, where it went. The server names the thread only to
+// a viewer who may read it (TKT-01M29CYSAM); anyone else reads that it moved.
+export function TombstoneText({ post }: { post: Pick<PostDTO, 'removal' | 'redacted' | 'moved' | 'moved_to'> }) {
+  if (post.moved) {
+    const to = post.moved_to;
+    if (!to) return <span class="tombstone-text">Post moved to another thread</span>;
     return (
       <span class="tombstone-text">
-        Post moved to <a href={`/t/${encodeURIComponent(post.moved_to)}`}>another thread</a>
+        Post moved to <a href={movedHref(to.thread, to.ordinal)}>{to.thread.title}</a>
+        {to.ordinal === null && ' (still moving)'}
       </span>
     );
   }
   return <span class="tombstone-text">{removedText(post)}</span>;
+}
+
+// MoveNotice stands above the first post of a move: how many posts were
+// moved and, to a viewer who may read it, the thread they went to, linked at
+// the move's first copy (docs/06 "Moderator flow for drift").
+export function MoveNotice({ notice }: { notice: MoveNoticeDTO }) {
+  const what = notice.count === 1 ? '1 post was moved' : `${notice.count} posts were moved`;
+  return (
+    <p class="move-notice" data-move-notice>
+      {what} to{' '}
+      {notice.thread ? <a href={movedHref(notice.thread, notice.ordinal)}>{notice.thread.title}</a> : 'another thread'}.
+    </p>
+  );
 }

@@ -64,7 +64,7 @@ export function postControls(
   now: number,
 ): Controls {
   const own = isOwn(p);
-  if (p.moved_to !== null || p.redacted || (own && v.forum_read_only)) return noControls;
+  if (p.moved || p.redacted || (own && v.forum_read_only)) return noControls;
   if (v.can_moderate) {
     return { edit: !p.deleted, delete: !p.deleted, restore: p.deleted && !isTombstone(p), closesAt: null };
   }

@@ -260,12 +260,40 @@ describe('a removed post', () => {
     expect(t.querySelector('.reply-to')?.getAttribute('href')).toBe('#post-1');
   });
 
-  it('points a moved post at the thread it went to', async () => {
-    serve(page([post(1), post(2, { deleted: true, html: '', moved_to: '3yymw47g00099' })]));
+  // TKT-01M29CYSAM: the copy's permalink, with the target's slug and the
+  // copy's own ordinal, never the source's; the thread alone while the move
+  // is unfinished; and no link for a viewer the server does not tell.
+  const split = { id: '3yymw47g00099', slug: 'split-out', title: 'Split out' };
+  it.each([
+    [{ thread: split, ordinal: 4 }, 'Post moved to Split out', '/t/3yymw47g00099/split-out/4'],
+    [{ thread: split, ordinal: null }, 'Post moved to Split out (still moving)', '/t/3yymw47g00099/split-out'],
+    [null, 'Post moved to another thread', undefined],
+  ])('points a moved post at where it went: %j', async (moved_to, text, href) => {
+    const notice = { count: 2, thread: moved_to?.thread ?? null, ordinal: moved_to?.ordinal ?? null };
+    serve(page([post(1), post(2, { deleted: true, html: '', moved: true, moved_to, move_notice: notice }), post(3)]));
     const root = await renderAt(`/t/${id}/s?page=1`);
     const t = at(root, '#post-2')!;
-    expect(t.querySelector('.tombstone-text')?.textContent).toBe('Post moved to another thread');
-    expect(t.querySelector('.tombstone-text a')?.getAttribute('href')).toBe('/t/3yymw47g00099');
+    expect(t.querySelector('.tombstone-text')?.textContent).toBe(text);
+    expect(t.querySelector('.tombstone-text a')?.getAttribute('href')).toBe(href);
+    // The move's notice stands above its first post, in the same words.
+    const n = root.querySelector('[data-move-notice]')!;
+    expect(n.nextElementSibling).toBe(t);
+    expect(n.textContent).toBe(`2 posts were moved to ${moved_to ? 'Split out' : 'another thread'}.`);
+    expect(n.querySelector('a')?.getAttribute('href')).toBe(href);
+  });
+
+  it('says where a split thread came from, and only that it was split to a viewer not told', async () => {
+    const p = page([post(1)]);
+    serve({ ...p, thread: { ...p.thread, split_from: { thread: { id: '3yymw47g00002', slug: 'origin', title: 'The origin' } } } });
+    let root = await renderAt(`/t/${id}/s?page=1`);
+    let note = root.querySelector('[data-split-from]')!;
+    expect(note.textContent).toBe('Split from The origin.');
+    expect(note.querySelector('a')?.getAttribute('href')).toBe('/t/3yymw47g00002/origin');
+    serve({ ...p, thread: { ...p.thread, split_from: { thread: null } } });
+    root = await renderAt(`/t/${id}/s?page=2`);
+    note = root.querySelector('[data-split-from]')!;
+    expect(note.textContent).toBe('Split from another thread.');
+    expect(note.querySelector('a')).toBeNull();
   });
 
   it.each([

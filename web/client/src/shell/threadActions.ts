@@ -62,6 +62,9 @@ export interface ThreadActionOptions {
   // rename brings up the rename panel; the thread page sets it for a viewer
   // who moderates the thread, and for its author inside their window.
   rename?: () => void;
+  // select starts selecting posts to move; the thread page sets it for a
+  // viewer who moderates the thread, while no selection is on.
+  select?: () => void;
   // watch is set only for a signed-in member: level is the thread's own,
   // forumLevel its forum's, and open brings up the watch dialog.
   watch?: { level: string; forumLevel: string; open: () => void };
@@ -110,6 +113,12 @@ export interface ThreadActionOptions {
 // archived thread the page hands over no moderate, rename or archive and no
 // reply, since the server refuses them all, and keeps watch, First unread
 // and Mark unread, which it allows.
+//
+// Select posts is offered when the page hands over select: to a viewer who
+// moderates the thread, while they are not already selecting. It puts a
+// checkbox on each post shown as itself and the selection bar at the foot of
+// the screen, from which the posts are split into a new thread (docs/06
+// "Moderator flow for drift", TKT-01M29CYSAM).
 export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions = {}): ShellAction[] {
   const m = opts.moderate;
   return [
@@ -126,6 +135,7 @@ export function threadActions(t: ThreadActionTarget, opts: ThreadActionOptions =
           { id: 'tags', label: 'Edit tags…', run: () => m.open('tags') },
         ]
       : []),
+    ...(opts.select ? [{ id: 'select-posts', label: 'Select posts', run: opts.select }] : []),
     ...(opts.archive ? [{ id: 'archive', label: 'Archive…', run: opts.archive }] : []),
     {
       id: 'copy-link',

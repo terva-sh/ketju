@@ -1,0 +1,77 @@
+/* Selecting posts to move (MovePosts.tsx, TKT-01M29CYSAM): the checkbox at
+   the start of a post's header, and the bar fixed to the foot of the
+   screen. On a phone the bar sits above the tab bar, 56 px plus the home
+   indicator's inset (shell.css), and the thread page is padded by the bar's
+   height so its last post scrolls clear of it. */
+.post-select {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
+  margin-right: 2px;
+}
+/* On a phone the label's ::after (.hit) makes the 44 px target; the box
+   itself sits above it, so a press on the box is a press on the box. */
+.post-select input {
+  position: relative;
+  z-index: 1;
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
+
+.selection-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 20;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 16px;
+  box-sizing: border-box;
+  min-height: 64px;
+  padding: 10px max(16px, env(safe-area-inset-right, 0px)) calc(10px + env(safe-area-inset-bottom, 0px))
+    max(16px, env(safe-area-inset-left, 0px));
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 -1px 0 var(--rule);
+}
+.shell.phone .selection-bar {
+  bottom: calc(56px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: 10px;
+}
+.selection-count {
+  font-weight: 600;
+}
+.selection-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.selection-buttons button {
+  font: inherit;
+  min-height: 36px;
+  padding: 0 14px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--rule);
+  border-radius: 6px;
+  cursor: pointer;
+}
+.selection-buttons button:disabled {
+  color: var(--ink2);
+  cursor: default;
+}
+.shell.phone .selection-buttons button {
+  min-height: 44px;
+}
+.thread-page.selecting {
+  padding-bottom: 120px;
+}
+.split-dialog .moderate-field {
+  margin-bottom: 12px;
+}

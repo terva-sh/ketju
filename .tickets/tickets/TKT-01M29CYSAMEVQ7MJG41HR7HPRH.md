@@ -33,7 +33,7 @@ claim:
   expires_at: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T02:43:01Z
+updated_at: 2026-10-03T03:21:13Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -51,13 +51,13 @@ Drift is the known cost of flat threads, and moving posts is the answer to it. T
 
 ## Acceptance criteria
 
-- [ ] The source thread shows the moved notice at the first moved ordinal and keeps every ordinal
-- [ ] The new thread carries a link back to the source and the posts keep their original authors and timestamps
-- [ ] Both threads read correctly after a reindex from logs alone
-- [ ] Selection, the selection bar and the split dialog pass e2e/posts-split.spec.ts at 390 and 1440 px with one axe scan per test
-- [ ] A split into another forum is refused unless the actor holds moderate in both, by role or through a group, and a refusal writes nothing (TestSplitAcrossForumsNeedsModerateInBoth)
-- [ ] The source notice, moved_to and the split-from header name the other thread only to viewers who may read it, and the cached posts never hold them (TestSplitNoticeRevealsTargetOnlyToReaders, TestSplitFromRevealsSourceOnlyToReaders, TestMovedToNotInCachedPosts)
-- [ ] The split route has a row in adminRouteGates and in docs/07, and docs/07's post example and Removed posts describe moved, moved_to and move_notice
+- [x] The source thread shows the moved notice at the first moved ordinal and keeps every ordinal
+- [x] The new thread carries a link back to the source and the posts keep their original authors and timestamps
+- [x] Both threads read correctly after a reindex from logs alone
+- [x] Selection, the selection bar and the split dialog pass e2e/posts-split.spec.ts at 390 and 1440 px with one axe scan per test
+- [x] A split into another forum is refused unless the actor holds moderate in both, by role or through a group, and a refusal writes nothing (TestSplitAcrossForumsNeedsModerateInBoth)
+- [x] The source notice, moved_to and the split-from header name the other thread only to viewers who may read it, and the cached posts never hold them (TestSplitNoticeRevealsTargetOnlyToReaders, TestSplitFromRevealsSourceOnlyToReaders, TestMovedToNotInCachedPosts)
+- [x] The split route has a row in adminRouteGates and in docs/07, and docs/07's post example and Removed posts describe moved, moved_to and move_notice
 - [ ] The committed dist is regenerated and the reader, MovePosts chunk included, stays within the 120000 B gzip budget
 
 ## Implementation plan
@@ -169,3 +169,55 @@ Drift is the known cost of flat threads, and moving posts is the answer to it. T
 **agent:claude-code/phase4-groom-moving-posts** at 2026-10-02T17:21:07Z
 
 run decision: pending maintainer review. Each is under docs/06 'Moderator flow for drift' (2026-10-02). Selecting is done with 'Select posts' in the thread actions: a checkbox in each post header and a bar fixed to the bottom of the viewport. Only posts shown as themselves move. The split thread's starter is the moderator who split it. A [quote=#N] in a copied post draws as 'Quote from another thread' without text.
+
+**agent:claude-code/phase4-run-cysam** at 2026-10-03T03:20:49Z
+
+Phase A done on run/cysam-split-posts: server and client source and tests are committed. The dist is not committed yet; it waits for the queue.
+
+### Server
+
+- `POST /api/v1/admin/threads/{id}/split` is in `internal/web/api/moderate.go` behind `moderatesGate`.
+  - It takes `{ordinals, title, forum}`. Every field is required, and the body is bounded at 128 KiB.
+  - It answers `dto.MovedPosts {source, thread}` with no-store.
+  - `Service.Split` in `move.go` wraps `movePosts`.
+- `internal/service/threads/movedraw.go` resolves where moved posts went at draw time:
+  - `drawMoves` fills `moved_to` and `move_notice` after the posts are taken from the response cache or drawn. It runs in `posts()` and in `pagePosts`, on both the hit and the miss path, so the page, post, replies, user posts and the queue all get it.
+  - The header's `split_from` is drawn in `View` and `threadHeader`.
+  - Both use the thread page's own `access` for the other thread, memoised per request. A coded refusal means null.
+  - New queries:
+    - `MovesFromRange`
+    - `MovesOutOf`, which groups by the PostsSplitOut offset.
+    - `SplitSourceOf`, which looks for the row with target_ordinal 1 and opens_thread set.
+  - No migration was needed.
+- `Post.moved` is computed from the index flag and is cached. It is the same for every class.
+
+### Criterion 6 of TKT-01M29CXJZZ
+
+The TestMovedPost* tests now exist:
+
+- `TestMovedPostBlobFollowsTarget` (`internal/web/api/split_test.go`).
+  - An attachment split into a restricted forum is served to that forum's reader alone.
+  - One split into a members forum is served to members.
+  - Every other reader gets the missing-hash answer.
+  - Refcounts are unchanged.
+  - The copy's `post_attachments` row is what admits the target's readers. That is the expected behaviour, so there is no bug to file.
+- `TestMovedPostQueueServesNoBody` (`internal/service/threads/split_test.go`). A flagged post that is split stays in the queue as moved. It has no body, and `moved_to` is shown only to the admin, who reads the target.
+- `TestMovedPostSSEHintOnly` (`internal/web/sse/handler_test.go`).
+  - A reader of the source alone gets the source's hint on their thread stream and their forum stream, and nothing about the new thread.
+  - A reader of the target hears about the new thread.
+
+### Where the client departs from the Approach, and why
+
+- **"Select posts" is a `select` option on threadActions, not a new PanelKind.** PanelKind keys ModerateDialog's titles and buttons records, and selection is not a panel. Adding it would have meant dummy entries.
+- **Only Post takes a checkbox. Tombstone takes none.** Only posts shown as themselves move, and a tombstone never is one.
+- **MoveNotice lives in `removal.tsx`, beside TombstoneText.** Its tests are in `removal.test.tsx` and `ThreadPage.test.tsx`; there is no separate `MoveNotice.test.tsx`.
+- **The MovePosts chunk is loaded by a memoised `import()` in ThreadScreen, not by preact-iso `lazy`.** `lazy` suspends to the router and would blank the route while the chunk loads.
+- **The selection lives in `state/selection.ts`, which only the chunk imports.** ThreadScreen starts and ends it through the chunk, so it survives the bar being redrawn while each page loads.
+- **The split dialog uses its own `splitRefusal`.** `moderateRefusal`'s move wording names the thread.
+- **The e2e spec makes its own thread in events, one per project, as `post-history.spec.ts` does.** Splitting a seeded side thread could not be undone until merge exists (TKT-01M29CYSBA), and other specs read those threads.
+
+### Measured
+
+- The reader bundle, MovePosts included, goes from 79983 to 83279 B gzip. The MovePosts chunk is 2183 B of JS and 509 B of CSS.
+- `e2e/posts-split.spec.ts` passes at 390 and 1440 px.
+- So do `thread-moderation`, `thread-rename-move`, `thread`, `targets` and `a11y`.

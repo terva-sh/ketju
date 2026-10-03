@@ -41,6 +41,7 @@ import type {
   ManagedForumList,
   MarkedRead,
   Me,
+  MovedPosts,
   NotificationList,
   NotificationsRead,
   PermissionGrid,
@@ -144,6 +145,11 @@ import threadAnon from '../../../../internal/dto/testdata/golden/thread.anon.jso
 import threadLockedMember from '../../../../internal/dto/testdata/golden/thread-locked.member.json';
 import threadArchivedMember from '../../../../internal/dto/testdata/golden/thread-archived.member.json';
 import threadArchivedThreadMember from '../../../../internal/dto/testdata/golden/thread-archived-thread.member.json';
+import threadSplitMember from '../../../../internal/dto/testdata/golden/thread-split.member.json';
+import threadSplitAnon from '../../../../internal/dto/testdata/golden/thread-split.anon.json';
+import postMovedUnfinishedMember from '../../../../internal/dto/testdata/golden/post-moved-unfinished.member.json';
+import postMovedHiddenMember from '../../../../internal/dto/testdata/golden/post-moved-hidden.member.json';
+import splitModerator from '../../../../internal/dto/testdata/golden/split.moderator.json';
 import threadHintAnon from '../../../../internal/dto/testdata/golden/thread-hint.anon.json';
 import threadMember from '../../../../internal/dto/testdata/golden/thread.member.json';
 import threadModerator from '../../../../internal/dto/testdata/golden/thread.moderator.json';
@@ -259,6 +265,11 @@ export const contract = [
   matches<ThreadPage>()(threadLockedMember),
   matches<ThreadPage>()(threadArchivedMember),
   matches<ThreadPage>()(threadArchivedThreadMember),
+  matches<ThreadPage>()(threadSplitMember),
+  matches<ThreadPage>()(threadSplitAnon),
+  matches<Post>()(postMovedUnfinishedMember),
+  matches<Post>()(postMovedHiddenMember),
+  matches<MovedPosts>()(splitModerator),
   matches<ThreadPage>()(threadMember),
   matches<ThreadPage>()(threadModerator),
   matches<ThreadHint>()(threadHintAnon),

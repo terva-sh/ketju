@@ -1,8 +1,8 @@
-import { Fragment } from 'preact';
+import { Fragment, type ComponentChild } from 'preact';
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLocation, useRoute } from 'preact-iso';
 import { peekGet } from '../api/client';
-import type { CreatedPost, Lens, Pinned, Post as PostDTO, ThreadPage, ThreadViewer, ThreadWatch } from '../api/dto';
+import type { CreatedPost, Lens, Pinned, Post as PostDTO, SplitFrom, ThreadPage, ThreadViewer, ThreadWatch } from '../api/dto';
 import { isProblem, problemMessage, revokesAccess } from '../api/problem';
 import { useResource } from '../api/resource';
 import { ErrorPanel } from '../components/ErrorPanel';
@@ -30,7 +30,7 @@ import { isOwn, noControls, postControls, readOnlyViewer } from '../components/t
 import type { Own } from '../components/thread/OwnControls';
 import { PostPopover } from '../components/thread/PostPopover';
 import { PostTime } from '../components/thread/PostTime';
-import { isTombstone } from '../components/thread/removal';
+import { isTombstone, movedHref, MoveNotice } from '../components/thread/removal';
 import { expanderShown } from '../components/thread/ReplyExpander';
 import { Tombstone } from '../components/thread/Tombstone';
 import { dividerBefore, UnreadDivider } from '../components/thread/UnreadDivider';
@@ -51,6 +51,13 @@ import { cachedThread, loadCount, loadThreadPage, pageRequestedAt, threadUrl, ty
 import { canonicalThreadUrl, useThreadView } from '../view';
 import { NotFound } from './Placeholder';
 import { PostHistory } from './PostHistory';
+
+// MovePostsChunk is the lazy chunk that selects posts and splits them
+// (components/thread/MovePosts.tsx, TKT-01M29CYSAM). It is loaded the first
+// time a moderator chooses Select posts, and once.
+type MovePostsChunk = typeof import('../components/thread/MovePosts');
+let movePostsChunk: Promise<MovePostsChunk> | undefined;
+export const loadMovePosts = () => (movePostsChunk ??= import('../components/thread/MovePosts'));
 
 // ThreadScreen is the thread page (docs/06 "The canonical view"): the posts
 // of one page in order, the pager, and the divider between read and unread.
@@ -181,6 +188,29 @@ export function ThreadScreen() {
   const admin = viewer.value.user?.role === 'admin';
   const offerArchive = !history && !!shown && admin && !archived;
   const [moderating, setModerating] = useState<{ thread: string; kind: PanelKind } | null>(null);
+  // Select posts is offered with the rest of the moderation, and loads the
+  // MovePosts chunk; the selection is for the thread it was started on, so
+  // moving to another thread ends it, and the reply bar gives way to the
+  // selection bar while it is on (docs/06 "Moderator flow for drift").
+  // While a page of the thread loads there is no viewer block to ask, and
+  // the selection stays on; a page that says the viewer no longer moderates
+  // the thread hides it.
+  const [moves, setMoves] = useState<{ thread: string; chunk: MovePostsChunk } | null>(null);
+  const selecting = moves && head && moves.thread === head.id && !history && (mayModerate || !shown) ? moves : null;
+  const startSelecting = (thread: string) => {
+    void loadMovePosts().then(
+      (chunk) => {
+        chunk.startSelection(thread);
+        setMoves({ thread, chunk });
+      },
+      () => undefined,
+    );
+  };
+  const stopSelecting = () => {
+    moves?.chunk.endSelection();
+    setMoves(null);
+  };
+  useEffect(() => () => void movePostsChunk?.then((c) => c.endSelection()), []);
   const locked = head?.locked ?? false;
   const pinned = head?.pinned ?? null;
   // Rename is offered to a viewer who moderates the thread's forum, and to
@@ -256,6 +286,7 @@ export function ThreadScreen() {
               : undefined,
             rename: offerRename ? () => setModerating({ thread: known.id, kind: 'rename' }) : undefined,
             archive: offerArchive ? () => setModerating({ thread: known.id, kind: 'archive' }) : undefined,
+            select: mayModerate && !selecting ? () => startSelecting(known.id) : undefined,
             watch: offerWatch
               ? {
                   level: watch.watch,
@@ -280,6 +311,7 @@ export function ThreadScreen() {
       offerRename,
       offerArchive,
       offerWatch,
+      !!selecting,
       watch?.watch,
       watch?.forum_watch,
     ],
@@ -290,6 +322,7 @@ export function ThreadScreen() {
     setModerating(null);
     setMarkFailed(null);
     setWatchOpen(null);
+    stopSelecting();
   }, [params.id]);
   const forum = head?.forum;
   const ctx = useMemo(
@@ -300,17 +333,18 @@ export function ThreadScreen() {
             title: forum?.name ?? 'Thread',
             back: forum ? { href: `/f/${encodeURIComponent(forum.slug)}`, label: forum.name } : undefined,
             actions,
-            // On a phone the reply bar opens this thread's composer.
-            reply: canReply ? params.id : undefined,
+            // On a phone the reply bar opens this thread's composer, and
+            // gives way to the selection bar while posts are selected.
+            reply: canReply && !selecting ? params.id : undefined,
           },
-    [missing, forum?.slug, forum?.name, actions, canReply, params.id],
+    [missing, forum?.slug, forum?.name, actions, canReply, params.id, !!selecting],
   );
   useShellContext(ctx, [ctx]);
 
   if (missing) return <NotFound />;
   const page = shown;
   return (
-    <main class="thread-page" data-screen={history ? 'post-history' : 'thread'}>
+    <main class={'thread-page' + (selecting ? ' selecting' : '')} data-screen={history ? 'post-history' : 'thread'}>
       <header class="thread-head">
         {head && (
           <nav class="breadcrumb" aria-label="Breadcrumb">
@@ -347,6 +381,7 @@ export function ThreadScreen() {
           )
         )}
         {head?.pinned && <PinnedNote pinned={head.pinned} />}
+        {head?.split_from && <SplitFromNote split={head.split_from} />}
         <div class="thread-tools">
           {shown && !history && <LensBar page={shown} lens={lens} />}
           {!isPhone.value && <Toolbar actions={actions} label="Thread actions" />}
@@ -407,12 +442,39 @@ export function ThreadScreen() {
               current={pageFor === me}
               archived={archived}
               firstUnread={goFirstUnread}
+              select={
+                selecting && head ? (p) => <selecting.chunk.SelectBox thread={head.id} ordinal={p.ordinal} /> : undefined
+              }
+            />
+          )}
+          {selecting && head && (
+            <selecting.chunk.SelectionBar
+              key={head.id}
+              thread={head}
+              admin={viewer.value.user?.role === 'admin'}
+              onDone={stopSelecting}
+              onSplit={(to) => {
+                stopSelecting();
+                route(`/t/${encodeURIComponent(to.id)}/${encodeURIComponent(to.slug)}`);
+              }}
+              returnTo={() => title.current}
             />
           )}
           {!page && !res.error && <p class="loading">Loading…</p>}
         </>
       )}
     </main>
+  );
+}
+
+// SplitFromNote says a thread was split from another, linked when the
+// viewer may read that thread; the server names it to nobody else
+// (docs/07 "Moving posts").
+function SplitFromNote({ split }: { split: SplitFrom }) {
+  return (
+    <p class="split-from" data-split-from>
+      Split from {split.thread ? <a href={movedHref(split.thread, null)}>{split.thread.title}</a> : 'another thread'}.
+    </p>
   );
 }
 
@@ -451,6 +513,7 @@ function ThreadBody({
   current,
   archived,
   firstUnread,
+  select,
 }: {
   page: ThreadPage;
   // read is the viewer block of the page as the request answered it, whose
@@ -471,6 +534,9 @@ function ThreadBody({
   archived: boolean;
   // firstUnread is the thread page's First unread, when it offers one.
   firstUnread?: () => void;
+  // select draws a post's checkbox while a moderator selects posts; only a
+  // post shown as itself takes one, since only those move.
+  select?: (p: PostDTO) => ComponentChild;
 }) {
   const thread: ThreadRef = { id: page.thread.id, slug: page.thread.slug };
   const lastRead = read.last_read_ordinal;
@@ -628,6 +694,7 @@ function ThreadBody({
           <Fragment key={p.ordinal}>
             {gaps.before.has(p.ordinal) && <GapDivider gap={gaps.before.get(p.ordinal)!} thread={thread} />}
             {p.ordinal === divider && <UnreadDivider unread={known.current - lastRead} lastRead={lastRead} at={read.last_read_at} />}
+            {p.move_notice && <MoveNotice notice={p.move_notice} />}
             {isTombstone(p) ? (
               <Tombstone
                 post={p}
@@ -646,6 +713,7 @@ function ThreadBody({
                 onUnread={onUnread}
                 own={ownOf(p, i)}
                 expander={expanderShown(p, posts[i + 1])}
+                select={select && !p.deleted ? select(p) : undefined}
               />
             )}
           </Fragment>

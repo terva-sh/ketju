@@ -1,4 +1,4 @@
-import { Fragment } from 'preact';
+import { Fragment, type ComponentChild } from 'preact';
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
 import type { Post as PostDTO } from '../../api/dto';
 import { problemMessage } from '../../api/problem';
@@ -69,6 +69,10 @@ export const permalink = (t: ThreadRef, ordinal: number) =>
 // A post whose current revision is a moderator's edit says so in place of
 // "(edited)", naming nobody: the post's history names them (docs/08 "Post
 // history").
+//
+// select is the post's checkbox while a moderator selects posts to move,
+// drawn first in the header (TKT-01M29CYSAM); the thread page hands it over
+// from the MovePosts chunk.
 export function Post({
   post,
   thread,
@@ -78,6 +82,7 @@ export function Post({
   onUnread,
   own,
   expander = false,
+  select,
 }: {
   post: PostDTO;
   thread: ThreadRef;
@@ -87,6 +92,7 @@ export function Post({
   onUnread?: UnreadHandler;
   own?: Own;
   expander?: boolean;
+  select?: ComponentChild;
 }) {
   const flag = onFlag && mayFlag(post) ? onFlag : undefined;
   const o = useOwn(own, post.ordinal);
@@ -139,6 +145,7 @@ export function Post({
       <Avatar author={post.author} />
       <div class="post-main">
         <header class="post-header">
+          {select}
           {isPhone.value ? (
             <span class="ordinal">#{post.ordinal}</span>
           ) : (
@@ -278,7 +285,7 @@ function useMarkFromHere(ordinal: number, onUnread: UnreadHandler | undefined) {
 // (maintainer decision 2026-09-29; the server refuses a self-flag too).
 // Ownership is isOwn's, which the edit and delete offers use too.
 export function mayFlag(post: PostDTO): boolean {
-  return !!viewer.value.user && !post.deleted && post.moved_to === null && !isOwn(post);
+  return !!viewer.value.user && !post.deleted && !post.moved && !isOwn(post);
 }
 
 // useHeldStill wraps change, a toggle's handler, so the toggle keeps its

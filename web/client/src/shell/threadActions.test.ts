@@ -143,6 +143,19 @@ describe('the thread actions', () => {
     ]);
   });
 
+  // TKT-01M29CYSAM: Select posts when the page hands it over, after the
+  // thread moderation and before Copy link.
+  it('offers Select posts when handed it, and runs it', () => {
+    const select = vi.fn();
+    const actions = threadActions(t, { moderate: { locked: false, pinned: null, staff: false, open() {} }, select });
+    expect(actions.map((a) => a.id)).toEqual(['lock', 'pin', 'move', 'slow-mode', 'tags', 'select-posts', 'copy-link']);
+    const action = actions.find((a) => a.id === 'select-posts')!;
+    expect(action.label).toBe('Select posts');
+    action.run();
+    expect(select).toHaveBeenCalledOnce();
+    expect(ids({ locked: false, pinned: null, staff: true })).not.toContain('select-posts');
+  });
+
   it('counts only moderators and admins by role as staff', () => {
     expect(['moderator', 'admin', 'member', 'agent', '', undefined].map(isStaff)).toEqual([true, true, false, false, false, false]);
   });

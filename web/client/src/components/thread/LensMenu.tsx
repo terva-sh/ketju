@@ -20,7 +20,7 @@ export function LensMenu({ page, active, close }: { page: ThreadPage; active: st
   const authors: string[] = [];
   for (const p of page.posts) {
     const h = p.author.handle;
-    if (!p.deleted && p.moved_to === null && !authors.some((a) => sameHandle(a, h))) authors.push(h);
+    if (!p.deleted && !p.moved && !authors.some((a) => sameHandle(a, h))) authors.push(h);
   }
   const items: [string, string][] = [
     ['', 'Full thread'],

@@ -576,6 +576,21 @@
 .tombstone-text {
   font-style: italic;
 }
+/* A move's notice, above its first post, in the tombstone row's style
+   (TKT-01M29CYSAM). */
+.move-notice {
+  margin: 0;
+  padding: 10px 24px;
+  color: var(--muted);
+  font-size: 13px;
+  font-style: italic;
+  border-bottom: 1px solid var(--rule);
+}
+.thread-head .split-from {
+  margin: 0 0 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
 
 /* A removed post shown with its body, to a moderator or to its author
    (docs/08 "Tombstones"): the sunken surface sets it apart in either theme,

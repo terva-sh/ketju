@@ -71,6 +71,21 @@ export interface ThreadHeader {
   pinned: Pinned | null;
   tags: string[];
   created_at: Millis;
+  // split_from is set on a thread a split opened, null on any other. Its
+  // thread is null for a viewer who may not read the thread the posts came
+  // from (docs/07 "Moving posts").
+  split_from: SplitFrom | null;
+}
+
+export interface SplitFrom {
+  thread: ThreadLink | null;
+}
+
+// MovedPosts is POST /admin/threads/{id}/split's answer: both threads'
+// headers as their pages now serve them.
+export interface MovedPosts {
+  source: ThreadHeader;
+  thread: ThreadHeader;
 }
 
 export interface ThreadViewer {
@@ -137,8 +152,30 @@ export interface Post {
   // A hard redaction cleared the post: it is deleted, has no html for anyone,
   // and can never be restored or edited (docs/07 "Removed posts").
   redacted: boolean;
-  moved_to: string | null;
+  // moved marks a post a split or merge moved to another thread: deleted,
+  // with no removal and no html for anyone. moved_to and move_notice say
+  // where, only to a viewer who may read that thread (docs/07 "Removed
+  // posts").
+  moved: boolean;
+  moved_to: MovedTo | null;
+  // move_notice is on the first post of each move: "N posts were moved".
+  move_notice: MoveNotice | null;
   machine_authored: boolean;
+}
+
+// MovedTo is the thread a moved post went to and the copy's own ordinal
+// there, null while the move is unfinished.
+export interface MovedTo {
+  thread: ThreadLink;
+  ordinal: number | null;
+}
+
+// MoveNotice is a move's count, and its target and first copy when the
+// viewer may read the target.
+export interface MoveNotice {
+  count: number;
+  thread: ThreadLink | null;
+  ordinal: number | null;
 }
 
 export interface ThreadPage {

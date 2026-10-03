@@ -128,9 +128,9 @@ describe('postControls', () => {
     const redacted = post({ deleted: true, removal: 'author', redacted: true, html: '' });
     expect(postControls(redacted, bound(), now)).toEqual(noControls);
     expect(postControls(redacted, bound({ author_windows: null }), now)).toEqual(noControls);
-    const moved = post({ deleted: true, removal: null, moved_to: '3yymw47g00099', html: '' });
+    const moved = post({ deleted: true, removal: null, moved: true, html: '' });
     expect(postControls(moved, bound({ author_windows: null }), now)).toEqual(noControls);
-    expect(postControls(post({ moved_to: '3yymw47g00099' }), bound({ author_windows: null }), now)).toEqual(noControls);
+    expect(postControls(post({ moved: true }), bound({ author_windows: null }), now)).toEqual(noControls);
   });
 
   // Terva review 1488 on PR #167, finding 2: created_at is Millis, a number.
@@ -190,8 +190,8 @@ describe('postControls for a moderator', () => {
     // A removed post served without its body is a tombstone, not restorable
     // from here, even if nothing else says redacted.
     expect(postControls({ ...redacted, redacted: false }, moderating(), now)).toEqual(noControls);
-    expect(postControls(carol({ deleted: true, moved_to: '3yymw47g00099', html: '' }), moderating(), now)).toEqual(noControls);
-    expect(postControls(carol({ moved_to: '3yymw47g00099' }), moderating(), now)).toEqual(noControls);
+    expect(postControls(carol({ deleted: true, moved: true, html: '' }), moderating(), now)).toEqual(noControls);
+    expect(postControls(carol({ moved: true }), moderating(), now)).toEqual(noControls);
   });
 
   it('a member still gets only their own', () => {

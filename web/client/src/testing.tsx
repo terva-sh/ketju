@@ -22,6 +22,12 @@ const lazyChunks: [RegExp, () => Promise<unknown>][] = [
   [/^\/apply(?:[/?#]|$)/, () => import('./screens/apply/ApplyRoot')],
 ];
 
+// preloadMovePosts loads the thread page's MovePosts chunk, which it loads
+// itself the first time a moderator chooses Select posts (TKT-01M29CYSAM).
+// A test that selects posts awaits it first, for the reason lazyChunks
+// gives: the wait is then on the chunk, not on settle's bound.
+export const preloadMovePosts = () => import('./components/thread/MovePosts');
+
 // renderAt renders the whole app at url, as a reader arriving there would,
 // and waits for the screen to settle: a lazy chunk, a fetch. The previous
 // test's app is unmounted first; left mounted, it would go on following

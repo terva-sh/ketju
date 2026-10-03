@@ -68,7 +68,7 @@ describe('flag in the post footer', () => {
     expect(flagIn(root)).toBeNull();
     await draw(post({ deleted: true, removal: 'author' }), vi.fn());
     expect(flagIn(root)).toBeNull();
-    await draw(post({ moved_to: '3yymw47g00099' }), vi.fn());
+    await draw(post({ deleted: true, html: '', moved: true }), vi.fn());
     expect(flagIn(root)).toBeNull();
   });
 
