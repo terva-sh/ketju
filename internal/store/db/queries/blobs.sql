@@ -20,9 +20,38 @@ VALUES (sqlc.arg('hash'), sqlc.arg('size'), sqlc.arg('mime'), sqlc.arg('original
 -- The bytes an account has stored that no post names (TKT-01M3V73KM1,
 -- docs/07 "Attachments"): its blobs with refcount 0, drafts' and those
 -- waiting out their seven days included. The partial index
--- blobs_uploader_unreferenced holds exactly these rows.
+-- blobs_uploader_unreferenced holds exactly these rows. A blob an account's
+-- avatar names is not counted (TKT-01M3YSQ4CR): users_avatar_blob answers
+-- that with a seek.
 -- name: UnattachedBytes :one
-SELECT CAST(coalesce(sum(size), 0) AS INTEGER) FROM blobs WHERE uploaded_by = ? AND refcount = 0;
+SELECT CAST(coalesce(sum(b.size), 0) AS INTEGER) FROM blobs b
+WHERE b.uploaded_by = ? AND b.refcount = 0
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_blob = b.hash);
+
+-- The blob GET /avatars/{hash} serves (TKT-01M3YSQ4CR): one whose status is
+-- ok and that is, now, the avatar of an account that is not anonymized. A
+-- replaced or cleared avatar is not found, whoever kept its hash.
+-- name: AvatarForServing :one
+SELECT b.* FROM blobs b
+WHERE b.hash = sqlc.arg('hash') AND b.status = 'ok'
+  AND EXISTS (SELECT 1 FROM users u WHERE u.avatar_blob = sqlc.arg('hash') AND u.anonymized = 0);
+
+-- A blob for an avatar: the first one stored names its uploader, as an
+-- upload's does, and is unreferenced, since no post names it. No
+-- blob_uploads row is written, so an avatar is never the member's to
+-- attach.
+-- name: CreateAvatarBlob :exec
+INSERT INTO blobs (hash, size, mime, original_name, uploaded_by, uploaded_at, refcount, status, unreferenced_since,
+	width, height)
+VALUES (sqlc.arg('hash'), sqlc.arg('size'), sqlc.arg('mime'), 'avatar', sqlc.arg('uploaded_by'),
+	sqlc.arg('uploaded_at'), 0, 'ok', sqlc.arg('uploaded_at'), sqlc.arg('edge'), sqlc.arg('edge'));
+
+-- An account's avatar: a blob hash, or null for none. An anonymized
+-- account is left alone, as its trigger would refuse the write anyway.
+-- name: SetUserAvatar :one
+UPDATE users SET avatar_blob = sqlc.narg('hash'), updated_at = sqlc.arg('updated_at')
+WHERE id = sqlc.arg('id') AND anonymized = 0
+RETURNING avatar_blob;
 
 -- An upload of bytes already stored restarts the collector's seven days
 -- while nothing refers to them, so a blob uploaded again for a post not yet

@@ -260,8 +260,15 @@ func fitSize(w, h int) (int, int) {
 // 16-bit channel times it, times 0xffff to unpremultiply, fits in uint64.
 func fit(img image.Image) *image.NRGBA {
 	b := img.Bounds()
+	dw, dh := fitSize(b.Dx(), b.Dy())
+	return scale(img, b, dw, dh)
+}
+
+// scale is the part b of img scaled to dw × dh by fit's area averaging,
+// up or down: an avatar's square is cut from the image and may be smaller
+// than the size it is drawn at (TKT-01M3YSQ4CR).
+func scale(img image.Image, b image.Rectangle, dw, dh int) *image.NRGBA {
 	sw, sh := b.Dx(), b.Dy()
-	dw, dh := fitSize(sw, sh)
 	out := image.NewNRGBA(image.Rect(0, 0, dw, dh))
 	px := pixelReader(img)
 	cols, rows := spans(sw, dw), spans(sh, dh)

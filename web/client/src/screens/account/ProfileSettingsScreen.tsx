@@ -1,10 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'preact/hooks';
-import { apiGet, apiSend } from '../../api/client';
-import type { ProfileSettings } from '../../api/dto';
-import { asProblem, problemMessage } from '../../api/problem';
+import { apiGet, apiSend, apiUpload } from '../../api/client';
+import type { Author, ProfileSettings } from '../../api/dto';
+import { asProblem, problemMessage, ProblemError } from '../../api/problem';
 import { useResource } from '../../api/resource';
 import { ErrorPanel } from '../../components/ErrorPanel';
+import { Avatar } from '../../components/thread/Avatar';
 import { profileHref } from '../../shell/nav';
+import { budgetWords } from '../../state/files';
 import { refreshViewer, viewer } from '../../state/viewer';
 import { SettingsHead } from './settings';
 
@@ -121,6 +123,7 @@ export function ProfileSettingsScreen() {
     <main class="account" data-screen="settings-profile">
       <SettingsHead title="Profile" />
       {res.error && !base && <ErrorPanel error={res.error} what="Your profile" onRetry={res.retry} />}
+      {base && me && <AvatarCard me={me} avatar={base.avatar} onChange={(r) => setStored({ ...base, avatar: r.avatar })} />}
       {base && (
         <form class="account-card settings-form" onSubmit={save} data-profile-form>
           <div class="settings-field">
@@ -188,5 +191,112 @@ export function ProfileSettingsScreen() {
         </form>
       )}
     </main>
+  );
+}
+
+export const avatarUrlApi = '/api/v1/settings/avatar';
+// The avatar's cap (docs/05 "Display name and bio"), checked here before a
+// file is sent, and by the server, which is the rule.
+export const avatarMax = 1 << 20;
+
+// avatarWords says why an avatar was refused, by the server's code (docs/07
+// PUT /settings/avatar).
+function avatarWords(err: unknown): string {
+  const p = asProblem(err);
+  switch (p.fieldErrors.file ?? p.type) {
+    case 'type_not_allowed':
+      return 'An avatar is a PNG or JPEG image.';
+    case 'image_too_large':
+      return 'This image is too large to use. Try a smaller one.';
+    case 'payload-too-large':
+      return 'An avatar is at most 1 MB.';
+    case 'blocked':
+      return "This image can't be used.";
+    case 'upload_budget':
+      return budgetWords;
+  }
+  return problemMessage(p).text;
+}
+
+// AvatarCard is the profile's avatar (TKT-01M3YSQ4CR): the one the member
+// has, a chooser that sends a PNG or JPEG of at most 1 MB as soon as it is
+// picked, and Remove when one is set. The server crops the picture to its
+// centred square and re-encodes it. Each change asks /me again, so the top
+// bar and author blocks follow.
+function AvatarCard({ me, avatar, onChange }: { me: Author; avatar: string; onChange: (r: ProfileSettings) => void }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [done, setDone] = useState('');
+  const input = useRef<HTMLInputElement>(null);
+
+  const clearChooser = () => {
+    if (input.current) input.current.value = '';
+  };
+  const send = async (run: () => Promise<ProfileSettings>, said: string) => {
+    setBusy(true);
+    setError('');
+    setDone('');
+    try {
+      onChange(await run());
+      setDone(said);
+      refreshViewer().catch(() => {});
+    } catch (err) {
+      setError(avatarWords(err));
+    } finally {
+      setBusy(false);
+      clearChooser();
+    }
+  };
+  const chosen = (e: Event) => {
+    const file = (e.currentTarget as HTMLInputElement).files?.[0];
+    if (!file || busy) return;
+    if (file.size > avatarMax) {
+      setDone('');
+      setError(avatarWords(new ProblemError('payload-too-large', 413)));
+      clearChooser();
+      return;
+    }
+    send(() => apiUpload<ProfileSettings>(avatarUrlApi, file, 'PUT'), 'Avatar saved.');
+  };
+  const remove = () =>
+    send(() => apiSend<ProfileSettings>('DELETE', avatarUrlApi, undefined, { status: 200 }), 'Avatar removed.');
+
+  return (
+    <section class="account-card settings-form" aria-labelledby="avatar-heading" data-avatar-card>
+      <h2 id="avatar-heading" class="settings-title">
+        Avatar
+      </h2>
+      <div class="settings-avatar">
+        <Avatar author={{ ...me, avatar }} />
+        <div class="settings-field">
+          <label for="profile-avatar">{avatar ? 'Choose a new image' : 'Choose an image'}</label>
+          <input
+            id="profile-avatar"
+            ref={input}
+            type="file"
+            accept="image/png,image/jpeg"
+            disabled={busy}
+            aria-describedby="profile-avatar-hint profile-avatar-error"
+            aria-invalid={!!error}
+            onChange={chosen}
+          />
+        </div>
+      </div>
+      <p id="profile-avatar-hint" class="settings-hint">
+        A PNG or JPEG of at most 1 MB, cropped to a square from its middle. Signed-in members see it; everyone else sees
+        your initial.
+      </p>
+      <p id="profile-avatar-error" class="settings-error" data-field-error="avatar" role="alert">
+        {error}
+      </p>
+      {avatar && (
+        <button type="button" class="sign-out settings-all" disabled={busy} data-remove-avatar onClick={remove}>
+          Remove avatar
+        </button>
+      )}
+      <p class="settings-saved" role="status">
+        {done}
+      </p>
+    </section>
   );
 }

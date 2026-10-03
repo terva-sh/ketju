@@ -1,7 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Page } from '@playwright/test';
 import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { paceAuth, signIn, stateFile } from './session';
 
 // The settings screens (TKT-01M29CXK4E), at 390 px and 1440 px, one axe
@@ -16,6 +17,7 @@ import { paceAuth, signIn, stateFile } from './session';
 // is in e2e/session.ts).
 
 const seed: { thread: string } = JSON.parse(readFileSync(join(process.env.KETJU_E2E_DIR!, 'seed.json'), 'utf8'));
+const pixel = join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'pixel.png');
 
 // member is this project's settings member, and link the second subject
 // the identities test links to them.
@@ -120,7 +122,7 @@ test.describe('profile', () => {
       );
       await page.getByRole('button', { name: 'Save' }).click();
       expect((await answer).status()).toBe(200);
-      await expect(page.getByRole('status')).toContainText('Saved.');
+      await expect(page.locator('[data-profile-form]').getByRole('status')).toContainText('Saved.');
       await scan(page);
     });
 
@@ -136,6 +138,68 @@ test.describe('profile', () => {
     await test.step('a thread page she posted in carries the new name', async () => {
       await page.goto(`${seed.thread}?page=1`);
       await expect(page.locator('#post-1 .post-header a.author')).toHaveText(name);
+    });
+  });
+});
+
+// The avatar (TKT-01M3YSQ4CR, docs/05 "Display name and bio"): carol sets
+// one on /settings/profile, a signed-in reader is drawn it, a signed-out
+// request for it is not-found, and she removes it. Other specs read her
+// with no avatar, so it is removed after whatever happens.
+test.describe('avatar', () => {
+  test.use({ storageState: stateFile('carol') });
+
+  test.afterEach(async ({ page }) => {
+    const r = await page.request.delete('/api/v1/settings/avatar');
+    expect(r.status(), await r.text()).toBe(200);
+  });
+
+  const loaded = (img: ReturnType<Page['locator']>) =>
+    expect.poll(() => img.evaluate((el) => (el as HTMLImageElement).complete && (el as HTMLImageElement).naturalWidth)).toBe(256);
+
+  test('a member sets and removes an avatar, which only signed-in readers are served', async ({ page, playwright, baseURL }) => {
+    const card = page.locator('[data-avatar-card]');
+    let hash = '';
+    await test.step('choosing an image sends it at once', async () => {
+      await page.goto('/settings/profile');
+      await expect(card.getByRole('heading', { name: 'Avatar' })).toBeVisible();
+      const answer = page.waitForResponse(
+        (r) => new URL(r.url()).pathname === '/api/v1/settings/avatar' && r.request().method() === 'PUT',
+      );
+      await card.getByLabel('Choose an image').setInputFiles(pixel);
+      const r = await answer;
+      expect(r.status(), await r.text()).toBe(200);
+      hash = ((await r.json()) as { avatar: string }).avatar;
+      expect(hash).toMatch(/^[0-9a-f]{64}$/);
+      await expect(card.getByRole('status')).toHaveText('Avatar saved.');
+      const img = card.locator('img.avatar');
+      await expect(img).toHaveAttribute('src', `/avatars/${hash}`);
+      await loaded(img);
+      await scan(page);
+    });
+
+    await test.step('a thread page she posted in draws it', async () => {
+      await page.goto(`${seed.thread}?page=1`);
+      await loaded(page.locator('#post-1 img.avatar'));
+    });
+
+    await test.step('a signed-out request for it is not found', async () => {
+      const stranger = await playwright.request.newContext({ baseURL, ignoreHTTPSErrors: true, storageState: { cookies: [], origins: [] } });
+      try {
+        expect((await stranger.get(`/avatars/${hash}`)).status()).toBe(404);
+        expect((await stranger.get(`/blobs/${hash}`)).status()).toBe(404);
+      } finally {
+        await stranger.dispose();
+      }
+      expect((await page.request.get(`/avatars/${hash}`)).status()).toBe(200);
+    });
+
+    await test.step('Remove takes it away', async () => {
+      await page.goto('/settings/profile');
+      await card.getByRole('button', { name: 'Remove avatar' }).click();
+      await expect(card.getByRole('status')).toHaveText('Avatar removed.');
+      await expect(card.locator('img.avatar')).toHaveCount(0);
+      expect((await page.request.get(`/avatars/${hash}`)).status()).toBe(404);
     });
   });
 });

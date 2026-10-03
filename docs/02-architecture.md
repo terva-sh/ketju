@@ -10,6 +10,7 @@
 │        ├── /api/*         JSON API handlers (the only business-logic entry point)          │
 │        ├── /auth/*        OIDC start/callback, logout                                      │
 │        ├── /blobs/*       attachment serving                                               │
+│        ├── /avatars/*     avatars, to signed-in members only (05)                          │
 │        ├── /events        SSE live updates                                                 │
 │        ├── /assets/*      embedded Preact build (embed.FS)                                 │
 │        ├── /manifest.webmanifest  web app manifest, named by site_name (06)                │

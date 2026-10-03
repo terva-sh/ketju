@@ -9,6 +9,7 @@ import (
 
 	"github.com/terva-sh/ketju/internal/config"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/store/blob"
 )
 
 // recoverPanics turns a panic into a 500 and keeps the server up.
@@ -106,6 +107,11 @@ const MaxPostBody = 64 << 10
 // MaxPostBody. docs/07 puts attachment upload at POST /api/v1/blobs.
 const UploadPath = APIPrefix + "blobs"
 
+// AvatarPath is PUT /api/v1/settings/avatar, measured against
+// blob.AvatarMaxBytes, the avatar's own cap (docs/05 "Display name and
+// bio", TKT-01M3YSQ4CR), plus the same multipart allowance as an upload.
+const AvatarPath = APIPrefix + "settings/avatar"
+
 // UploadOverhead is what an upload's body may carry beyond the attachment
 // cap: the multipart boundaries and part headers around the file. The file
 // part itself is held to exactly the cap as it is read
@@ -143,6 +149,9 @@ func (l Limits) withDefaults() Limits {
 func (l Limits) forPath(p string) int64 {
 	if p == UploadPath || strings.HasPrefix(p, UploadPath+"/") {
 		return l.Upload + UploadOverhead
+	}
+	if p == AvatarPath {
+		return blob.AvatarMaxBytes + UploadOverhead
 	}
 	return l.Body
 }

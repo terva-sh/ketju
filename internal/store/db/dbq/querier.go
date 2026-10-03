@@ -84,6 +84,10 @@ type Querier interface {
 	// AuditThreads is the title and slug of thread and post targets, and of
 	// the posts flag targets are on.
 	AuditThreads(ctx context.Context, ids []int64) ([]AuditThreadsRow, error)
+	// The blob GET /avatars/{hash} serves (TKT-01M3YSQ4CR): one whose status is
+	// ok and that is, now, the avatar of an account that is not anonymized. A
+	// replaced or cleared avatar is not found, whoever kept its hash.
+	AvatarForServing(ctx context.Context, hash string) (Blob, error)
 	// Whether a blob has a row, for the collector's recovery of a removal that
 	// a failed commit or a crash interrupted.
 	BlobExists(ctx context.Context, hash string) (bool, error)
@@ -146,6 +150,11 @@ type Querier interface {
 	// internal/service/users (provisioning, limits) and internal/auth/agentcred
 	// (issuing and revoking), each with its audit row in the same transaction.
 	CreateAgent(ctx context.Context, arg CreateAgentParams) error
+	// A blob for an avatar: the first one stored names its uploader, as an
+	// upload's does, and is unreferenced, since no post names it. No
+	// blob_uploads row is written, so an avatar is never the member's to
+	// attach.
+	CreateAvatarBlob(ctx context.Context, arg CreateAvatarBlobParams) error
 	// A new blob has no references yet, so it is unreferenced from the moment
 	// it is uploaded; the post that carries it adds the first one.
 	CreateBlob(ctx context.Context, arg CreateBlobParams) error
@@ -811,6 +820,9 @@ type Querier interface {
 	// because sqlc does not bind a parameter inside ON CONFLICT ... DO UPDATE
 	// on SQLite (v1.31.1).
 	SetThreadWatch(ctx context.Context, arg SetThreadWatchParams) error
+	// An account's avatar: a blob hash, or null for none. An anonymized
+	// account is left alone, as its trigger would refuse the write anyway.
+	SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (sql.NullString, error)
 	SetUserRole(ctx context.Context, arg SetUserRoleParams) error
 	// SetUserStatus is every status change but anonymizing (internal/perm,
 	// lifecycle.go). It writes the reason and end with the status, so a
@@ -858,7 +870,9 @@ type Querier interface {
 	// The bytes an account has stored that no post names (TKT-01M3V73KM1,
 	// docs/07 "Attachments"): its blobs with refcount 0, drafts' and those
 	// waiting out their seven days included. The partial index
-	// blobs_uploader_unreferenced holds exactly these rows.
+	// blobs_uploader_unreferenced holds exactly these rows. A blob an account's
+	// avatar names is not counted (TKT-01M3YSQ4CR): users_avatar_blob answers
+	// that with a seek.
 	UnattachedBytes(ctx context.Context, uploadedBy sql.NullInt64) (int64, error)
 	// UnblockIdentity lifts the block that the application application_id set,
 	// and nothing else. That application must be denied, must be the

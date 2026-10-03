@@ -90,6 +90,11 @@ export function filesIn(v: unknown): Attachment[] {
     : [];
 }
 
+// budgetWords is upload_budget's refusal: the bound on files no post names
+// (TKT-01M3V73KM1), which an avatar's change meets too (TKT-01M3YSQ4CR).
+export const budgetWords =
+  'You have too many files waiting to be posted. Post them, or wait: files you remove are cleared within 7 days.';
+
 // uploadFailure says why an upload was refused, in the words of attaching
 // (docs/07 "Attachments"): the file's type, a blocked file, the size cap, the
 // bound on files no post names, no upload permission, and the write limiter.
@@ -101,7 +106,7 @@ export function uploadFailure(err: unknown): string {
     case 'blocked':
       return "This file can't be attached.";
     case 'upload_budget':
-      return 'You have too many files waiting to be posted. Post them, or wait: files you remove are cleared within 7 days.';
+      return budgetWords;
     case 'payload-too-large':
       return 'This file is larger than this forum accepts.';
     case 'forbidden':

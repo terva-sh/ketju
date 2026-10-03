@@ -417,9 +417,13 @@ export interface HandleChange {
 // ProfileSettings is GET and PATCH /settings/profile (internal/dto
 // ProfileSettings, TKT-01M3V6XVVG): the viewer's display name, empty when
 // author blocks show their handle, and their bio as its Markdown source.
+// avatar is their avatar's hash, served at /avatars/{hash}, or empty for
+// none; PUT and DELETE /settings/avatar answer this shape too
+// (TKT-01M3YSQ4CR).
 export interface ProfileSettings {
   display_name: string;
   bio: string;
+  avatar: string;
 }
 
 // HandleState is GET /settings/handle (internal/dto HandleState,

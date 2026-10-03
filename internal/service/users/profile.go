@@ -87,7 +87,7 @@ func (s *Service) Profile(ctx context.Context, v domain.Viewer) (dto.ProfileSett
 		if err != nil {
 			return err
 		}
-		out = dto.ProfileSettings{DisplayName: u.DisplayName, Bio: u.BioSource}
+		out = dto.ProfileSettings{DisplayName: u.DisplayName, Bio: u.BioSource, Avatar: u.AvatarBlob.String}
 		return nil
 	})
 	if errors.Is(err, sql.ErrNoRows) {
@@ -153,5 +153,5 @@ func (s *Service) UpdateProfile(ctx context.Context, v domain.Viewer, p ProfileP
 	if err != nil {
 		return dto.ProfileSettings{}, fmt.Errorf("users: writing the profile of %d: %w", v.UserID, err)
 	}
-	return dto.ProfileSettings{DisplayName: row.DisplayName, Bio: row.BioSource}, nil
+	return dto.ProfileSettings{DisplayName: row.DisplayName, Bio: row.BioSource, Avatar: row.AvatarBlob.String}, nil
 }

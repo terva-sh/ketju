@@ -23,6 +23,8 @@ func (h *handlers) registerLifecycle(mux *http.ServeMux) {
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/posts/hide", staffGate, h.adminHidePosts)
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/posts/restore", staffGate, h.adminRestorePosts)
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/anonymize", adminGate, h.adminAnonymize)
+	// A moderator may clear an avatar (docs/05 "Display name and bio").
+	h.adminRoute(mux, "DELETE /api/v1/admin/users/{handle}/avatar", staffGate, h.adminClearAvatar)
 	// A rename is an admin's (docs/05 "Changing a handle", handle.go).
 	h.adminRoute(mux, "POST /api/v1/admin/users/{handle}/rename", adminGate, h.adminRename)
 }
@@ -106,5 +108,12 @@ func (h *handlers) adminRestorePosts(w http.ResponseWriter, r *http.Request) {
 // be undone.
 func (h *handlers) adminAnonymize(w http.ResponseWriter, r *http.Request) {
 	h.noContent(w, r, h.account.Anonymize(r.Context(), domain.ViewerFrom(r.Context()), web.ClientIP(r),
+		r.PathValue("handle")))
+}
+
+// adminClearAvatar is DELETE /api/v1/admin/users/{handle}/avatar: staff
+// remove a member's avatar, with a user.avatar_cleared row (TKT-01M3YSQ4CR).
+func (h *handlers) adminClearAvatar(w http.ResponseWriter, r *http.Request) {
+	h.noContent(w, r, h.account.ClearAvatar(r.Context(), domain.ViewerFrom(r.Context()), web.ClientIP(r),
 		r.PathValue("handle")))
 }

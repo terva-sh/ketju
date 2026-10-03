@@ -68,6 +68,14 @@ handle_changed_at (nullable, Unix ms)
 `handle` is chosen at registration, not taken from the IdP, so a user keeps
 their identity when providers change.
 
+`avatar_blob` is the hash of the member's avatar, a blob the server
+re-encoded to 256 px and that no post names, or null for none (05 "Display
+name and bio", TKT-01M3YSQ4CR). `PUT` and `DELETE /settings/avatar` write it,
+and staff clear it. The partial index `users_avatar_blob` (migration 0029)
+holds the rows that have one, for the two reads that ask whether a blob is
+anyone's avatar: `GET /avatars/{hash}` and the upload bound, which does not
+count one.
+
 `prefs_json` is a JSON object of the member's own preferences, written by
 `PATCH /settings` (07, TKT-01M29CCC0X). Three keys are read: `page_size`,
 the posts per thread page, an integer from 10 to 50 (06 "Paged, not
@@ -672,6 +680,7 @@ names that the list lacks.
 | `thread.unlocked` | `thread` | TKT-01M29CKRGS |
 | `thread.unpinned` | `thread` | TKT-01M29CKRGS |
 | `user.anonymized` | `user` | TKT-01M29CKRFS |
+| `user.avatar_cleared` | `user` | TKT-01M3YSQ4CR |
 | `user.created` | `user` | TKT-01M29P9RSW |
 | `user.deactivated` | `user` | TKT-01M29CKRFS |
 | `user.demoted` | `user` | TKT-01M29CXK1X |

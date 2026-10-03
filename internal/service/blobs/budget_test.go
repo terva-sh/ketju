@@ -3,7 +3,10 @@ package blobs_test
 import (
 	"bytes"
 	"database/sql"
+	"encoding/binary"
 	"fmt"
+	"hash/crc32"
+	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -148,15 +151,12 @@ func TestUploadBudgetRace(t *testing.T) {
 	}
 }
 
-// TestUnattachedBytesUsesItsIndex: the bound's sum reads one account's
-// unattached blobs through blobs_uploader_unreferenced, never a scan of
-// every blob. The statement is UnattachedBytes's, from queries/blobs.sql.
-func TestUnattachedBytesUsesItsIndex(t *testing.T) {
-	s := newStore(t)
-	const q = `SELECT CAST(coalesce(sum(size), 0) AS INTEGER) FROM blobs WHERE uploaded_by = ? AND refcount = 0`
+// plan is the query plan of query with args, one detail line a step.
+func (s *store) plan(query string, args ...any) []string {
+	s.t.Helper()
 	var plan []string
-	if err := s.db.Read(t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
-		rows, err := tx.QueryContext(t.Context(), "EXPLAIN QUERY PLAN "+q, s.users["alice"])
+	if err := s.db.Read(s.t.Context(), func(_ *dbq.Queries, tx *sql.Tx) error {
+		rows, err := tx.QueryContext(s.t.Context(), "EXPLAIN QUERY PLAN "+query, args...)
 		if err != nil {
 			return err
 		}
@@ -171,9 +171,65 @@ func TestUnattachedBytesUsesItsIndex(t *testing.T) {
 		}
 		return rows.Err()
 	}); err != nil {
+		s.t.Fatal(err)
+	}
+	return plan
+}
+
+// wantPlan holds that plan has a step starting with each of want, and no
+// step that scans a table.
+func wantPlan(t *testing.T, plan []string, want ...string) {
+	t.Helper()
+	for _, w := range want {
+		if !slices.ContainsFunc(plan, func(p string) bool { return strings.HasPrefix(p, w) }) {
+			t.Errorf("no step %q in plan %q", w, plan)
+		}
+	}
+	for _, p := range plan {
+		if strings.HasPrefix(p, "SCAN") {
+			t.Errorf("plan %q scans: %q", plan, p)
+		}
+	}
+}
+
+func nullID(id int64) sql.NullInt64 { return sql.NullInt64{Int64: id, Valid: true} }
+
+// forumID is the id of the store's forum, general.
+func forumID(s *store) int64 {
+	s.t.Helper()
+	var id int64
+	s.read(func(q *dbq.Queries) error {
+		f, err := q.GetForumBySlug(s.t.Context(), "general")
+		id = f.ID
+		return err
+	})
+	return id
+}
+
+func readFile(t *testing.T, path string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil {
 		t.Fatal(err)
 	}
-	if len(plan) != 1 || !strings.HasPrefix(plan[0], "SEARCH blobs USING INDEX blobs_uploader_unreferenced (uploaded_by=?)") {
-		t.Fatalf("plan = %q", plan)
-	}
+	return b
+}
+
+// pngBomb is a PNG signature and an IHDR declaring 20000 x 20000 pixels,
+// and nothing else: what a header check must refuse before decoding.
+func pngBomb() []byte {
+	var b bytes.Buffer
+	b.WriteString("\x89PNG\r\n\x1a\n")
+	ihdr := make([]byte, 13)
+	binary.BigEndian.PutUint32(ihdr[0:], 20000)
+	binary.BigEndian.PutUint32(ihdr[4:], 20000)
+	ihdr[8], ihdr[9] = 8, 6
+	b.Write(binary.BigEndian.AppendUint32(nil, uint32(len(ihdr))))
+	crc := crc32.NewIEEE()
+	crc.Write([]byte("IHDR"))
+	crc.Write(ihdr)
+	b.WriteString("IHDR")
+	b.Write(ihdr)
+	b.Write(binary.BigEndian.AppendUint32(nil, crc.Sum32()))
+	return b.Bytes()
 }

@@ -107,11 +107,17 @@ func requireJSON(next http.Handler) http.Handler {
 // The upload route is exempt because docs/07 makes it multipart, which is
 // precisely a content type a form can send. That exemption is the reason rule
 // 2 above is not optional: CrossOriginProtection is the only thing standing
-// between a cross-origin form and the upload endpoint.
+// between a cross-origin form and the upload endpoint. PUT /settings/avatar
+// is multipart for the same reason (TKT-01M3YSQ4CR), and is exempt for PUT
+// only; a form cannot send a PUT at all, and CrossOriginProtection covers it
+// as it does the upload.
 func needsJSON(r *http.Request) bool {
 	if !isMutating(r.Method) || !isAPIPath(r.URL.Path) {
 		return false
 	}
 	p := r.URL.Path
+	if p == AvatarPath && r.Method == http.MethodPut {
+		return false
+	}
 	return p != UploadPath && !strings.HasPrefix(p, UploadPath+"/")
 }

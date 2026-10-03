@@ -256,7 +256,7 @@ SET display_name = COALESCE(sqlc.narg(display_name), display_name),
     bio_source = COALESCE(sqlc.narg(bio_source), bio_source),
     updated_at = sqlc.arg(updated_at)
 WHERE id = sqlc.arg(id)
-RETURNING display_name, bio_source;
+RETURNING display_name, bio_source, avatar_blob;
 
 -- The authors on one page of a thread, in one query rather than one per post.
 -- name: UsersByIDs :many

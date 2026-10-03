@@ -877,9 +877,13 @@ type HandleChange struct {
 // docs/05 "Display name and bio"): the viewer's display name, empty when
 // author blocks show their handle, and their bio as its Markdown source.
 // GET /users/{handle} serves the bio rendered, as Profile.bio_html.
+// Avatar is the hash of their avatar, served at /avatars/{hash}, or empty
+// for none (TKT-01M3YSQ4CR); PUT and DELETE /settings/avatar answer this
+// shape too.
 type ProfileSettings struct {
 	DisplayName string `json:"display_name"`
 	Bio         string `json:"bio"`
+	Avatar      string `json:"avatar"`
 }
 
 // HandleState is GET /settings/handle (TKT-01M3V6XTYG): the viewer's handle

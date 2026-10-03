@@ -23,7 +23,8 @@ import { GroupsTab } from './GroupsTab';
 import { NewAgentForm } from './NewAgentForm';
 import { PermissionsTab } from './PermissionsTab';
 import { RenameControl } from './RenameControl';
-import { SuspensionPanel } from './SuspensionPanel';
+import { mayAct, SuspensionPanel } from './SuspensionPanel';
+import { Avatar } from '../../components/thread/Avatar';
 
 // UsersScreen is /admin/users (TKT-01M29CXK1X): the accounts, and for an
 // admin the groups and the permission grid as its ?tab=groups and
@@ -438,6 +439,19 @@ function UserDetail({
     setRole(null);
     onRoleChanged();
   };
+  // clearAvatar is staff removing the account's avatar (TKT-01M3YSQ4CR,
+  // docs/05: a moderator may clear one), on suspension's authority, which
+  // mayAct mirrors and the server asks again.
+  const clearAvatar = async () => {
+    const r = await send('DELETE', `${url}/avatar`);
+    if (!r.ok) {
+      setFailed(r.message);
+      return false;
+    }
+    setFailed(null);
+    update((now) => ({ ...now, user: { ...now.user, user: { ...now.user.user, avatar: '' } } }));
+    onRoleChanged();
+  };
   const removeFrom = (groupID: number) => async () => {
     const r = await send('DELETE', `/api/v1/admin/groups/${groupID}/members/${encodeURIComponent(handle)}`);
     if (!r.ok) {
@@ -478,6 +492,13 @@ function UserDetail({
         )}
       </dl>
       <SuspensionPanel d={d} url={url} refetch={refetch} onListChanged={onRoleChanged} />
+
+      {u.user.avatar && mayAct(viewer.value, d) && (
+        <div class="admin-avatar" data-avatar-control>
+          <Avatar author={u.user} />
+          <ConfirmButton label="Remove avatar" prompt={`Remove ${u.user.handle}'s avatar?`} onConfirm={clearAvatar} />
+        </div>
+      )}
 
       {admin && (
         <div class="admin-role">

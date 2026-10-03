@@ -65,6 +65,64 @@ func (h *handlers) profileSettings(w http.ResponseWriter, r *http.Request) {
 	answer(h, w, r, res, err)
 }
 
+// putAvatar is PUT /api/v1/settings/avatar with one multipart part named
+// file, a PNG or JPEG of at most 1 MB (TKT-01M3YSQ4CR, docs/05 "Display
+// name and bio"): the server makes it the viewer's avatar and answers the
+// profile, as GET /settings/profile does. A member session's only, as the
+// profile is. The viewer is checked before the body is read, and the body
+// is held to the avatar's cap by web.AvatarPath.
+func (h *handlers) putAvatar(w http.ResponseWriter, r *http.Request) {
+	v, _, err := ownSession(r, "set an avatar")
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if h.blobs == nil {
+		problem.Write(w, r, problem.CodeNotImplemented)
+		return
+	}
+	mr, err := r.MultipartReader()
+	if err != nil {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, fmt.Errorf("api: an avatar is multipart/form-data: %w", err)))
+		return
+	}
+	part, err := mr.NextPart()
+	if err != nil {
+		h.fail(w, r, partError(err, "api: the avatar has no file part"))
+		return
+	}
+	if part.FormName() != "file" {
+		h.fail(w, r, problem.Coded(problem.CodeBadRequest, fmt.Errorf("api: the avatar's part is %q, not file", part.FormName())))
+		return
+	}
+	if _, err := h.blobs.SetAvatar(r.Context(), v, &onlyPart{part: part, mr: mr}); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.users.Profile(r.Context(), v)
+	answer(h, w, r, res, err)
+}
+
+// deleteAvatar is DELETE /api/v1/settings/avatar: the viewer removes their
+// own avatar, and gets the profile back.
+func (h *handlers) deleteAvatar(w http.ResponseWriter, r *http.Request) {
+	v, _, err := ownSession(r, "remove an avatar")
+	if err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	if h.blobs == nil {
+		problem.Write(w, r, problem.CodeNotImplemented)
+		return
+	}
+	if err := h.blobs.ClearAvatar(r.Context(), v); err != nil {
+		h.fail(w, r, err)
+		return
+	}
+	res, err := h.users.Profile(r.Context(), v)
+	answer(h, w, r, res, err)
+}
+
 // patchProfile is PATCH /api/v1/settings/profile with either or both of
 // {display_name, bio}. The viewer is checked before the body is read. A key
 // it does not name is bad-request; a value it refuses is validation-failed

@@ -79,6 +79,28 @@
   border-radius: var(--radius);
   resize: vertical;
 }
+/* The avatar (TKT-01M3YSQ4CR): the profile heading's size beside its
+   chooser, which keeps a full target. */
+.settings-avatar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px 16px;
+  min-width: 0;
+}
+.settings-avatar .avatar {
+  width: 64px;
+  height: 64px;
+  font-size: 26px;
+  object-fit: cover;
+}
+.settings-field input[type='file'] {
+  box-sizing: border-box;
+  max-width: 100%;
+  min-height: var(--target);
+  font: inherit;
+  color: var(--ink);
+}
 .settings-choices {
   display: flex;
   flex-wrap: wrap;

@@ -218,7 +218,40 @@ describe('the users tab', () => {
     expect(detail.textContent).not.toContain('Identities');
     // Suspension is the moderator's, on a member (TKT-01M3QMRE47).
     expect(detail.querySelector('[data-suspension-panel]')).not.toBeNull();
-    expect(buttons(detail)).toEqual(['Close', 'Suspend', 'Restore hidden posts']);
+    // So is removing a member's avatar (TKT-01M3YSQ4CR).
+    expect(buttons(detail)).toEqual(['Close', 'Suspend', 'Restore hidden posts', 'Remove avatar']);
+  });
+
+  // TKT-01M3YSQ4CR: a moderator may clear a member's avatar (docs/05), after
+  // asking; the control is gone once it is cleared, and not offered on an
+  // account the viewer may not act on.
+  it('removes a member’s avatar after asking', async () => {
+    viewer.value = asModerator();
+    routes['GET /api/v1/admin/users/alice'] = () => ({ status: 200, body: userModerator });
+    routes['DELETE /api/v1/admin/users/alice/avatar'] = () => ({ status: 204 });
+    const root = await renderAt('/admin/users');
+    await open(root, 'alice');
+    const detail = () => root.querySelector('[data-detail="alice"]')!;
+    expect(detail().querySelector('[data-avatar-control] img.avatar')?.getAttribute('src')).toBe(
+      `/avatars/${(userModerator as AdminUserDetail).user.user.avatar}`,
+    );
+    await act(async () => [...detail().querySelectorAll('button')].find((b) => b.textContent === 'Remove avatar')!.click());
+    expect(root.textContent).toContain("Remove alice's avatar?");
+    expect(sent.some((s) => s.method === 'DELETE')).toBe(false);
+    await act(async () => [...root.querySelectorAll('button')].find((b) => b.textContent === 'Confirm')!.click());
+    await settle(root);
+    expect(sent.filter((s) => s.method === 'DELETE').map((s) => s.url)).toEqual(['/api/v1/admin/users/alice/avatar']);
+    expect(detail().querySelector('[data-avatar-control]')).toBeNull();
+  });
+
+  it('offers no avatar control on staff to a moderator', async () => {
+    viewer.value = asModerator();
+    const staff = structuredClone(userModerator) as AdminUserDetail;
+    staff.user.user.role = 'moderator';
+    routes['GET /api/v1/admin/users/alice'] = () => ({ status: 200, body: staff });
+    const root = await renderAt('/admin/users');
+    await open(root, 'alice');
+    expect(root.querySelector('[data-detail="alice"] [data-avatar-control]')).toBeNull();
   });
 
   // Terva review 1414, finding 3: a page asked for under one filter is not

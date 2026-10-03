@@ -226,6 +226,8 @@ func (h *handlers) routes() []web.Route {
 		{Method: patch, Path: "/api/v1/settings", Handler: h.patchSettings},
 		{Method: get, Path: "/api/v1/settings/profile", Handler: h.profileSettings},
 		{Method: patch, Path: "/api/v1/settings/profile", Handler: h.patchProfile},
+		{Method: put, Path: "/api/v1/settings/avatar", Handler: h.putAvatar},
+		{Method: del, Path: "/api/v1/settings/avatar", Handler: h.deleteAvatar},
 		{Method: get, Path: "/api/v1/settings/sessions", Handler: h.sessionList},
 		{Method: del, Path: "/api/v1/settings/sessions", Handler: h.endEverySession},
 		{Method: del, Path: "/api/v1/settings/sessions/{id}", Handler: h.endSession},

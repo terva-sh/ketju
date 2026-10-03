@@ -874,7 +874,7 @@ SET display_name = COALESCE(?1, display_name),
     bio_source = COALESCE(?2, bio_source),
     updated_at = ?3
 WHERE id = ?4
-RETURNING display_name, bio_source
+RETURNING display_name, bio_source, avatar_blob
 `
 
 type UpdateUserProfileParams struct {
@@ -887,6 +887,7 @@ type UpdateUserProfileParams struct {
 type UpdateUserProfileRow struct {
 	DisplayName string
 	BioSource   string
+	AvatarBlob  sql.NullString
 }
 
 // UpdateUserProfile writes a member's own display name and bio in one
@@ -900,7 +901,7 @@ func (q *Queries) UpdateUserProfile(ctx context.Context, arg UpdateUserProfilePa
 		arg.ID,
 	)
 	var i UpdateUserProfileRow
-	err := row.Scan(&i.DisplayName, &i.BioSource)
+	err := row.Scan(&i.DisplayName, &i.BioSource, &i.AvatarBlob)
 	return i, err
 }
 

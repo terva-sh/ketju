@@ -17,12 +17,14 @@ import (
 	"github.com/terva-sh/ketju/internal/auth/session/sessiontest"
 	"github.com/terva-sh/ketju/internal/dto"
 	"github.com/terva-sh/ketju/internal/service/applications"
+	"github.com/terva-sh/ketju/internal/service/blobs"
 	formsvc "github.com/terva-sh/ketju/internal/service/forms"
 	"github.com/terva-sh/ketju/internal/service/forums"
 	"github.com/terva-sh/ketju/internal/service/identity"
 	"github.com/terva-sh/ketju/internal/service/users"
 	"github.com/terva-sh/ketju/internal/store/db/dbq"
 	"github.com/terva-sh/ketju/internal/web"
+	blobsweb "github.com/terva-sh/ketju/internal/web/blobs"
 )
 
 // These are TKT-01M29CCC0X's: a member's own settings, sessions and
@@ -36,6 +38,10 @@ type settingsWorld struct {
 	now      time.Time
 	sessions *session.Store
 	h        http.Handler
+	// blobs is the blob store, under data, for the avatar routes
+	// (TKT-01M3YSQ4CR).
+	blobs *blobs.Service
+	data  string
 	// ident is each identity's id, by "handle/provider".
 	ident map[string]int64
 }
@@ -52,12 +58,15 @@ func newSettingsWorld(t *testing.T) *settingsWorld {
 	clock := func() time.Time { return w.now }
 	w.sessions = &session.Store{DB: w.db, Now: clock}
 	perms := w.svc.Perm
+	w.data = t.TempDir()
+	w.blobs = &blobs.Service{DB: w.db, Root: w.data, Perm: perms, Threads: w.svc, Now: clock}
 	api := New(Deps{Threads: w.svc, Users: &users.Service{DB: w.db, Perm: perms, Now: clock},
 		Forums: &forums.Service{DB: w.db, Perm: perms}, Forms: &formsvc.Service{DB: w.db},
 		Applications: &applications.Service{DB: w.db}, Perm: perms, Now: clock, Sessions: w.sessions,
-		Providers: []identity.ProviderName{{Key: "github", Name: "GitHub"}, {Key: "club", Name: "The Club"}}})
+		Providers: []identity.ProviderName{{Key: "github", Name: "GitHub"}, {Key: "club", Name: "The Club"}},
+		Blobs:     w.blobs})
 	pass := func(h http.Handler) http.Handler { return h }
-	w.h = web.New(web.Groups{API: api}, web.Options{RateLimit: pass,
+	w.h = web.New(web.Groups{API: api, Blobs: blobsweb.New(w.blobs, nil)}, web.Options{RateLimit: pass,
 		Session: agentcred.Middleware(&agentcred.Store{DB: w.db, Now: clock}, session.Middleware(w.sessions, nil), nil)})
 	for _, id := range []struct{ handle, provider string }{{"alice", "github"}, {"alice", "club"}, {"bob", "github"}} {
 		w.write(func(q *dbq.Queries) error {
@@ -324,6 +333,9 @@ func TestSettingsRoutesRefuseAgentsAndAnonymous(t *testing.T) {
 		// TKT-01M3V6XVVG: an agent's name is the admin's to give.
 		{http.MethodGet, "/api/v1/settings/profile"},
 		{http.MethodPatch, "/api/v1/settings/profile"},
+		// TKT-01M3YSQ4CR: the avatar is the profile's.
+		{http.MethodPut, "/api/v1/settings/avatar"},
+		{http.MethodDelete, "/api/v1/settings/avatar"},
 	}
 	settings := []struct{ method, path, body string }{
 		{http.MethodGet, "/api/v1/settings", ""},

@@ -117,7 +117,7 @@ describe('the profile settings', () => {
     await submit(root);
     expect(s.sent.map((r) => `${r.method} ${r.url}`)).toContain('GET /api/v1/me');
     expect(viewer.value.user?.display_name).toBe('Alice L.');
-    const status = root.querySelector('[role=status]')!;
+    const status = root.querySelector('[data-profile-form] [role=status]')!;
     expect(status.textContent).toContain('Saved.');
     expect(status.querySelector('a')?.getAttribute('href')).toBe('/u/alice');
   });
@@ -163,7 +163,87 @@ describe('the profile settings', () => {
     const root = await renderAt('/settings/profile');
     await type(root, nameField(root), 'Alice L.');
     await submit(root);
-    expect(root.querySelector('[role=alert]')?.textContent).toMatch(/briefly unavailable/);
+    expect(root.querySelector('[data-profile-form] [role=alert]')?.textContent).toMatch(/briefly unavailable/);
     expect(nameField(root).value).toBe('Alice L.');
+  });
+});
+
+// The avatar (TKT-01M3YSQ4CR, docs/05 "Display name and bio"): chosen,
+// sent at once as PUT /settings/avatar, and removed with DELETE.
+describe('the avatar', () => {
+  const avatarUrl = '/api/v1/settings/avatar';
+  const card = (root: HTMLElement) => root.querySelector<HTMLElement>('[data-avatar-card]')!;
+  const avatarError = (root: HTMLElement) => card(root).querySelector<HTMLElement>('[data-field-error=avatar]')!;
+  const image = (size = 10, type = 'image/png') => new File([new Uint8Array(size)], 'me.png', { type });
+
+  async function pick(root: HTMLElement, f: File) {
+    const input = card(root).querySelector<HTMLInputElement>('input[type=file]')!;
+    Object.defineProperty(input, 'files', { value: [f], configurable: true });
+    await act(() => void input.dispatchEvent(new Event('change', { bubbles: true })));
+    for (let i = 0; i < 6; i++) await act(() => new Promise((r) => setTimeout(r, 0)));
+    await settle(root);
+  }
+
+  it('draws the avatar the profile has, offers PNG and JPEG, and Remove', async () => {
+    serve();
+    const root = await renderAt('/settings/profile');
+    const input = card(root).querySelector<HTMLInputElement>('input[type=file]')!;
+    expect(input.accept).toBe('image/png,image/jpeg');
+    expect(card(root).querySelector('label[for=profile-avatar]')?.textContent).toBe('Choose a new image');
+    expect(card(root).querySelector('img.avatar')?.getAttribute('src')).toBe(`/avatars/${golden.avatar}`);
+    expect(card(root).querySelector('[data-remove-avatar]')?.textContent?.trim()).toBe('Remove avatar');
+  });
+
+  it('sends a chosen image, shows the new one, and asks /me again', async () => {
+    const withAvatar = structuredClone(memberMe) as Me;
+    withAvatar.user!.avatar = 'f'.repeat(64);
+    const s = serve({
+      [`PUT ${avatarUrl}`]: () => ({ status: 200, body: { ...stored(), avatar: 'f'.repeat(64) } }),
+      'GET /api/v1/me': () => ({ status: 200, body: withAvatar }),
+    });
+    const root = await renderAt('/settings/profile');
+    await pick(root, image());
+    const put = s.sent.find((r) => r.method === 'PUT');
+    expect(put?.url).toBe(avatarUrl);
+    expect((put?.body as FormData).get('file')).toBeInstanceOf(File);
+    expect(card(root).querySelector('img.avatar')?.getAttribute('src')).toBe(`/avatars/${'f'.repeat(64)}`);
+    expect(card(root).querySelector('[role=status]')?.textContent).toBe('Avatar saved.');
+    expect(s.sent.map((r) => `${r.method} ${r.url}`)).toContain('GET /api/v1/me');
+    expect(viewer.value.user?.avatar).toBe('f'.repeat(64));
+  });
+
+  it('Remove sends DELETE and draws the initial', async () => {
+    const s = serve({ [`DELETE ${avatarUrl}`]: () => ({ status: 200, body: { ...stored(), avatar: '' } }) });
+    const root = await renderAt('/settings/profile');
+    await act(async () => card(root).querySelector<HTMLButtonElement>('[data-remove-avatar]')!.click());
+    for (let i = 0; i < 4; i++) await act(() => new Promise((r) => setTimeout(r, 0)));
+    await settle(root);
+    expect(s.sent.filter((r) => r.method === 'DELETE').map((r) => r.url)).toEqual([avatarUrl]);
+    expect(card(root).querySelector('img.avatar')).toBeNull();
+    expect(card(root).querySelector('.avatar-fallback')).not.toBeNull();
+    expect(card(root).querySelector('[data-remove-avatar]')).toBeNull();
+    expect(card(root).querySelector('[role=status]')?.textContent).toBe('Avatar removed.');
+  });
+
+  it('refuses a file over 1 MB here, without sending', async () => {
+    const s = serve();
+    const root = await renderAt('/settings/profile');
+    await pick(root, image((1 << 20) + 1));
+    expect(s.sent.filter((r) => r.method === 'PUT')).toHaveLength(0);
+    expect(avatarError(root).textContent).toBe('An avatar is at most 1 MB.');
+  });
+
+  it.each([
+    ['type_not_allowed', 'An avatar is a PNG or JPEG image.'],
+    ['image_too_large', 'This image is too large to use. Try a smaller one.'],
+    ['blocked', "This image can't be used."],
+    ['upload_budget', 'You have too many files waiting to be posted. Post them, or wait: files you remove are cleared within 7 days.'],
+  ])('says why the server refused it: %s', async (code, words) => {
+    serve({ [`PUT ${avatarUrl}`]: () => problemAnswer('validation-failed', 422, { errors: [{ field: 'file', code }] }) });
+    const root = await renderAt('/settings/profile');
+    await pick(root, image());
+    expect(avatarError(root).textContent).toBe(words);
+    expect(card(root).querySelector('input[type=file]')?.getAttribute('aria-invalid')).toBe('true');
+    expect(card(root).querySelector('img.avatar')?.getAttribute('src')).toBe(`/avatars/${golden.avatar}`);
   });
 });

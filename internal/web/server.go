@@ -46,7 +46,7 @@ type Groups struct {
 
 	// Blobs serves /blobs/* -- attachment reads (internal/web/blobs), outside
 	// /api because a post's markdown links them by that URL (docs/07
-	// "Attachments").
+	// "Attachments") -- and /avatars/*, members' avatars (TKT-01M3YSQ4CR).
 	Blobs http.Handler
 
 	// Events serves /events -- the SSE stream. It is outside the API version
@@ -128,6 +128,7 @@ func New(g Groups, opts Options) http.Handler {
 	mux.Handle(APIPrefix, group(g.API))
 	mux.Handle("/auth/", group(g.Auth))
 	mux.Handle("/blobs/", group(g.Blobs))
+	mux.Handle("/avatars/", group(g.Blobs))
 	mux.Handle("/events", group(g.Events))
 	mux.Handle("/assets/", group(g.Assets))
 	// Exact, not a subtree: /healthz/anything is an application route and

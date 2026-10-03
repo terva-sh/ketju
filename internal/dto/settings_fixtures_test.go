@@ -36,5 +36,6 @@ func init() {
 	// GET and PATCH /settings/profile (TKT-01M3V6XVVG): the bio as its
 	// Markdown source, a link and a mention in it.
 	corpus["profile-settings."+tMember] = ProfileSettings{DisplayName: "Alice Liddell",
-		Bio: "Reading group regular. Ask @carol about the [book list](https://example.org/books)."}
+		Bio:    "Reading group regular. Ask @carol about the [book list](https://example.org/books).",
+		Avatar: "c3d4e5f60718293a4b5c6d7e8f90a1b2c3d4e5f60718293a4b5c6d7e8f90a1b2"}
 }

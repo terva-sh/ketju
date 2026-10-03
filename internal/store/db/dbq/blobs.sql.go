@@ -131,6 +131,34 @@ func (q *Queries) AttachmentMeta(ctx context.Context, arg AttachmentMetaParams) 
 	return items, nil
 }
 
+const avatarForServing = `-- name: AvatarForServing :one
+SELECT b.hash, b.size, b.mime, b.original_name, b.uploaded_by, b.uploaded_at, b.refcount, b.status, b.unreferenced_since, b.width, b.height FROM blobs b
+WHERE b.hash = ?1 AND b.status = 'ok'
+  AND EXISTS (SELECT 1 FROM users u WHERE u.avatar_blob = ?1 AND u.anonymized = 0)
+`
+
+// The blob GET /avatars/{hash} serves (TKT-01M3YSQ4CR): one whose status is
+// ok and that is, now, the avatar of an account that is not anonymized. A
+// replaced or cleared avatar is not found, whoever kept its hash.
+func (q *Queries) AvatarForServing(ctx context.Context, hash string) (Blob, error) {
+	row := q.db.QueryRowContext(ctx, avatarForServing, hash)
+	var i Blob
+	err := row.Scan(
+		&i.Hash,
+		&i.Size,
+		&i.Mime,
+		&i.OriginalName,
+		&i.UploadedBy,
+		&i.UploadedAt,
+		&i.Refcount,
+		&i.Status,
+		&i.UnreferencedSince,
+		&i.Width,
+		&i.Height,
+	)
+	return i, err
+}
+
 const blobUploadedBy = `-- name: BlobUploadedBy :one
 SELECT original_name FROM blob_uploads WHERE hash = ? AND user_id = ?
 `
@@ -154,6 +182,38 @@ DELETE FROM post_attachments
 
 func (q *Queries) ClearPostAttachments(ctx context.Context) error {
 	_, err := q.db.ExecContext(ctx, clearPostAttachments)
+	return err
+}
+
+const createAvatarBlob = `-- name: CreateAvatarBlob :exec
+INSERT INTO blobs (hash, size, mime, original_name, uploaded_by, uploaded_at, refcount, status, unreferenced_since,
+	width, height)
+VALUES (?1, ?2, ?3, 'avatar', ?4,
+	?5, 0, 'ok', ?5, ?6, ?6)
+`
+
+type CreateAvatarBlobParams struct {
+	Hash       string
+	Size       int64
+	Mime       string
+	UploadedBy sql.NullInt64
+	UploadedAt int64
+	Edge       sql.NullInt64
+}
+
+// A blob for an avatar: the first one stored names its uploader, as an
+// upload's does, and is unreferenced, since no post names it. No
+// blob_uploads row is written, so an avatar is never the member's to
+// attach.
+func (q *Queries) CreateAvatarBlob(ctx context.Context, arg CreateAvatarBlobParams) error {
+	_, err := q.db.ExecContext(ctx, createAvatarBlob,
+		arg.Hash,
+		arg.Size,
+		arg.Mime,
+		arg.UploadedBy,
+		arg.UploadedAt,
+		arg.Edge,
+	)
 	return err
 }
 
@@ -386,14 +446,39 @@ func (q *Queries) RefreshBlob(ctx context.Context, arg RefreshBlobParams) error 
 	return err
 }
 
+const setUserAvatar = `-- name: SetUserAvatar :one
+UPDATE users SET avatar_blob = ?1, updated_at = ?2
+WHERE id = ?3 AND anonymized = 0
+RETURNING avatar_blob
+`
+
+type SetUserAvatarParams struct {
+	Hash      sql.NullString
+	UpdatedAt int64
+	ID        int64
+}
+
+// An account's avatar: a blob hash, or null for none. An anonymized
+// account is left alone, as its trigger would refuse the write anyway.
+func (q *Queries) SetUserAvatar(ctx context.Context, arg SetUserAvatarParams) (sql.NullString, error) {
+	row := q.db.QueryRowContext(ctx, setUserAvatar, arg.Hash, arg.UpdatedAt, arg.ID)
+	var avatar_blob sql.NullString
+	err := row.Scan(&avatar_blob)
+	return avatar_blob, err
+}
+
 const unattachedBytes = `-- name: UnattachedBytes :one
-SELECT CAST(coalesce(sum(size), 0) AS INTEGER) FROM blobs WHERE uploaded_by = ? AND refcount = 0
+SELECT CAST(coalesce(sum(b.size), 0) AS INTEGER) FROM blobs b
+WHERE b.uploaded_by = ? AND b.refcount = 0
+  AND NOT EXISTS (SELECT 1 FROM users u WHERE u.avatar_blob = b.hash)
 `
 
 // The bytes an account has stored that no post names (TKT-01M3V73KM1,
 // docs/07 "Attachments"): its blobs with refcount 0, drafts' and those
 // waiting out their seven days included. The partial index
-// blobs_uploader_unreferenced holds exactly these rows.
+// blobs_uploader_unreferenced holds exactly these rows. A blob an account's
+// avatar names is not counted (TKT-01M3YSQ4CR): users_avatar_blob answers
+// that with a seek.
 func (q *Queries) UnattachedBytes(ctx context.Context, uploadedBy sql.NullInt64) (int64, error) {
 	row := q.db.QueryRowContext(ctx, unattachedBytes, uploadedBy)
 	var column_1 int64

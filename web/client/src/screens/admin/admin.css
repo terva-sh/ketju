@@ -266,6 +266,17 @@
   min-width: 0;
   overflow-wrap: anywhere;
 }
+/* An account's avatar beside Remove avatar (TKT-01M3YSQ4CR). */
+.admin-avatar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin: 12px 0;
+}
+.admin-avatar img.avatar {
+  object-fit: cover;
+}
 .admin-new-agent {
   margin-bottom: 24px;
   padding-bottom: 8px;

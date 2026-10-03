@@ -538,6 +538,14 @@ either key or both and answers the same shape.
     re-encoded image.
   - **Who sets it.** A member sets or clears their own avatar. A moderator
     may clear one.
+  - **As built (TKT-01M3YSQ4CR).** `PUT` and `DELETE /settings/avatar` set
+    and clear it, `GET /avatars/{hash}` serves it, and `DELETE
+    /admin/users/{handle}/avatar` is staff's, on a suspension's authority,
+    with a `user.avatar_cleared` row (07). Only the current avatar is served:
+    a replaced one is not found at once, whoever kept its hash. The `avatar`
+    hash still appears in author blocks a signed-out reader is sent, since
+    `member.Author` is built without a viewer; it grants nothing, and the
+    client draws the initial for that reader.
 
   Alternatives: serving it wherever the member's name is visible, signed
   out included, lost; so did any allowed image type served as uploaded,

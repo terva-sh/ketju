@@ -243,6 +243,7 @@ var adminRouteGates = map[string]string{
 	"POST /api/v1/admin/users/{handle}/posts/hide":      "staff",
 	"POST /api/v1/admin/users/{handle}/posts/restore":   "staff",
 	"POST /api/v1/admin/users/{handle}/anonymize":       "admin",
+	"DELETE /api/v1/admin/users/{handle}/avatar":        "staff",
 	"POST /api/v1/admin/users/{handle}/rename":          "admin",
 	"PUT /api/v1/admin/users/{handle}/role":             "admin",
 	"POST /api/v1/admin/users":                          "admin",

@@ -1,6 +1,7 @@
 // Package blobs serves GET and HEAD /blobs/{hash}, an attachment's bytes
-// (docs/07 "Attachments", TKT-01M29CXK0K), and /blobs/{hash}/thumb, an
-// image attachment's thumbnail (TKT-01M29CYS9W), for web.Groups.Blobs.
+// (docs/07 "Attachments", TKT-01M29CXK0K), /blobs/{hash}/thumb, an image
+// attachment's thumbnail (TKT-01M29CYS9W), and /avatars/{hash}, a member's
+// avatar (TKT-01M3YSQ4CR), for web.Groups.Blobs.
 //
 // Who may read a blob is internal/service/blobs's question (Authorize);
 // this package asks it on every request, conditional ones included, and
@@ -40,6 +41,10 @@ func New(svc *blobsvc.Service, log *slog.Logger) http.Handler {
 	// GET also matches HEAD.
 	mux.HandleFunc("GET /blobs/{hash}", h.serve)
 	mux.HandleFunc("GET /blobs/{hash}/thumb", h.thumb)
+	mux.HandleFunc("GET /avatars/{hash}", h.avatar)
+	mux.HandleFunc("/avatars/", func(w http.ResponseWriter, r *http.Request) {
+		problem.Write(w, r, problem.CodeNotFound)
+	})
 	mux.HandleFunc("/blobs/", func(w http.ResponseWriter, r *http.Request) {
 		problem.Write(w, r, problem.CodeNotFound)
 	})
@@ -139,4 +144,45 @@ func (h *handler) thumb(w http.ResponseWriter, r *http.Request) {
 	}
 	defer f.Close()
 	content(w, r, f, ctype, `"`+hash+`.thumb"`, "inline")
+}
+
+// avatar answers an avatar to a signed-in member, and not-found to
+// everyone else, in the same bytes as for a hash nothing has: an anonymous
+// reader, a pre-user, a suspended account, a hash that is not an account's
+// avatar now, and an attachment (docs/05 "Display name and bio", an
+// exception to docs/07 "Attachments"). The headers are an attachment's,
+// and Authorize runs before any 304, so a reader who signed out gets
+// not-found rather than the bytes their browser kept.
+func (h *handler) avatar(w http.ResponseWriter, r *http.Request) {
+	hd := w.Header()
+	hd.Set("Cache-Control", "private, no-cache")
+	hd.Set("Vary", "Cookie")
+
+	hash := r.PathValue("hash")
+	b, err := h.svc.AuthorizeAvatar(r.Context(), domain.ViewerFrom(r.Context()), hash)
+	if errors.Is(err, blobsvc.ErrNotFound) {
+		problem.Write(w, r, problem.CodeNotFound)
+		return
+	}
+	if err != nil {
+		problem.WriteError(r.Context(), w, r, h.log, err)
+		return
+	}
+	path, err := h.svc.Path(hash)
+	if err != nil {
+		problem.Write(w, r, problem.CodeNotFound)
+		return
+	}
+	f, err := os.Open(path)
+	if errors.Is(err, fs.ErrNotExist) {
+		h.log.ErrorContext(r.Context(), "blobs: an avatar's row has no file", "hash", hash)
+		problem.Write(w, r, problem.CodeNotFound)
+		return
+	}
+	if err != nil {
+		problem.WriteError(r.Context(), w, r, h.log, err)
+		return
+	}
+	defer f.Close()
+	content(w, r, f, b.Mime, `"`+hash+`"`, "inline")
 }

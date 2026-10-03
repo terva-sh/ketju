@@ -1,7 +1,10 @@
 import { act } from 'preact/test-utils';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { Post, ThreadPage } from '../api/dto';
+import type { Me, Post, ThreadPage } from '../api/dto';
 import golden from '../../../../internal/dto/testdata/golden/thread.member.json';
+import memberMe from '../../../../internal/dto/testdata/golden/me.member.json';
+import anonMe from '../../../../internal/dto/testdata/golden/me.anon.json';
+import { viewer } from '../state/viewer';
 import { pageWindow, pageHref } from '../components/thread/Pager';
 import { dividerBefore } from '../components/thread/UnreadDivider';
 import { renderAt, route, settle } from '../testing';
@@ -57,7 +60,11 @@ beforeEach(() => {
     scrolled.push(this.id);
   };
 });
-afterEach(() => vi.unstubAllGlobals());
+const firstViewer = viewer.value;
+afterEach(() => {
+  vi.unstubAllGlobals();
+  viewer.value = firstViewer;
+});
 
 const at = (root: HTMLElement, sel: string) => root.querySelector(sel);
 
@@ -608,12 +615,28 @@ describe('a post', () => {
     expect(at(root, '#post-8 .edited')!.hasAttribute('data-edited-by')).toBe(false);
   });
 
-  it('draws an uploaded avatar, or the initial', async () => {
+  it('draws an uploaded avatar for a member, or the initial', async () => {
+    viewer.value = structuredClone(memberMe) as Me;
     const author = base.posts[0].author;
     serve(page([post(1, { author: { ...author, avatar: 'abc' } }), post(2, { author: { ...author, avatar: '', display_name: 'zed' } })]));
     const root = await renderAt(`/t/${id}/s?page=1`);
-    expect(at(root, '#post-1 img.avatar')?.getAttribute('src')).toBe('/blobs/abc');
+    expect(at(root, '#post-1 img.avatar')?.getAttribute('src')).toBe('/avatars/abc');
     expect(at(root, '#post-2 .avatar-fallback')?.textContent).toBe('Z');
+    // An image that does not load falls back to the initial.
+    await act(async () => void at(root, '#post-1 img.avatar')!.dispatchEvent(new Event('error')));
+    expect(at(root, '#post-1 img.avatar')).toBeNull();
+    expect(at(root, '#post-1 .avatar-fallback')).not.toBeNull();
+  });
+
+  // TKT-01M3YSQ4CR: avatars are served to signed-in members only, so a
+  // signed-out reader is drawn the initial and asks for no image.
+  it('draws the initial for a signed-out reader', async () => {
+    viewer.value = structuredClone(anonMe) as Me;
+    const author = base.posts[0].author;
+    serve(page([post(1, { author: { ...author, avatar: 'abc', display_name: 'Ann' } })]));
+    const root = await renderAt(`/t/${id}/s?page=1`);
+    expect(at(root, '#post-1 img.avatar')).toBeNull();
+    expect(at(root, '#post-1 .avatar-fallback')?.textContent).toBe('A');
   });
 
   it('lists its attachments', async () => {

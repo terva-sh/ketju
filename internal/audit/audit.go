@@ -130,6 +130,7 @@ var Actions = []string{
 	"thread.unlocked",
 	"thread.unpinned",
 	"user.anonymized",
+	"user.avatar_cleared",
 	"user.created",
 	"user.deactivated",
 	"user.demoted",

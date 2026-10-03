@@ -16,6 +16,7 @@ import (
 	"github.com/terva-sh/ketju/internal/domain"
 	"github.com/terva-sh/ketju/internal/logging"
 	"github.com/terva-sh/ketju/internal/problem"
+	"github.com/terva-sh/ketju/internal/store/blob"
 )
 
 type safeBuf struct {
@@ -80,6 +81,7 @@ func TestEveryPrefixRoutesToItsGroup(t *testing.T) {
 		{"/auth/google/callback", "auth"},
 		{"/auth/logout", "auth"},
 		{"/blobs/deadbeef", "blobs"},
+		{"/avatars/deadbeef", "blobs"},
 		{"/events", "events"},
 		{"/assets/app.js", "assets"},
 		{"/manifest.webmanifest", "manifest"},
@@ -121,7 +123,7 @@ func TestAMissingGroupSays501NotFound(t *testing.T) {
 	log, _ := testLogger()
 	h := New(Groups{SPA: marker("spa")}, Options{Logger: log})
 
-	for _, path := range []string{"/api/v1/me", "/auth/x/start", "/blobs/x", "/events", "/assets/x", "/manifest.webmanifest"} {
+	for _, path := range []string{"/api/v1/me", "/auth/x/start", "/blobs/x", "/avatars/x", "/events", "/assets/x", "/manifest.webmanifest"} {
 		rec := do(h, http.MethodGet, path)
 		// 501 and not 404: "this build does not implement that" is a different
 		// fact from "there is no such endpoint", to a developer and to a
@@ -582,6 +584,31 @@ func TestAnUploadGetsTheAttachmentCap(t *testing.T) {
 	}
 	if reached != 1 {
 		t.Errorf("the upload handler ran %d times, want 1", reached)
+	}
+}
+
+// TestTheAvatarRouteGetsTheAvatarCap: PUT /settings/avatar is measured
+// against blob.AvatarMaxBytes and the multipart allowance, not the post
+// limit and not the attachment cap (TKT-01M3YSQ4CR).
+func TestTheAvatarRouteGetsTheAvatarCap(t *testing.T) {
+	log, _ := testLogger()
+	reached := 0
+	h := New(Groups{
+		API: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { reached++ }),
+	}, Options{Logger: log, Limits: Limits{Body: 64, Upload: 64 << 20}, CSRF: func(h http.Handler) http.Handler { return h }})
+
+	fits := httptest.NewRequest(http.MethodPut, AvatarPath, strings.NewReader(strings.Repeat("x", 1024)))
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, fits)
+	if rec.Code == http.StatusRequestEntityTooLarge || reached != 1 {
+		t.Fatalf("a small avatar: %d, reached %d", rec.Code, reached)
+	}
+	over := httptest.NewRequest(http.MethodPut, AvatarPath, strings.NewReader(""))
+	over.ContentLength = blob.AvatarMaxBytes + UploadOverhead + 1
+	rec = httptest.NewRecorder()
+	h.ServeHTTP(rec, over)
+	if rec.Code != http.StatusRequestEntityTooLarge || reached != 1 {
+		t.Fatalf("one byte over the avatar cap: %d, reached %d", rec.Code, reached)
 	}
 }
 

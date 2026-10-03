@@ -60,6 +60,10 @@ func TestAMutatingAPIRequestMustBeJSON(t *testing.T) {
 			"application/x-www-form-urlencoded", "", http.StatusOK},
 		{"the upload route accepts multipart", http.MethodPost, UploadPath,
 			"multipart/form-data; boundary=x", "x", http.StatusOK},
+		{"the avatar route accepts a multipart PUT", http.MethodPut, AvatarPath,
+			"multipart/form-data; boundary=x", "x", http.StatusOK},
+		{"and only a PUT", http.MethodPost, AvatarPath,
+			"multipart/form-data; boundary=x", "x", http.StatusUnsupportedMediaType},
 	}
 
 	for _, tc := range cases {
@@ -317,5 +321,23 @@ func TestAMiddlewareCanBeDisabledExplicitly(t *testing.T) {
 
 	if !reached {
 		t.Error("an explicitly disabled CSRF middleware still refused the request")
+	}
+}
+
+// TestCrossSiteAvatarPutIsRefused: the avatar route takes multipart, which
+// the JSON rule exempts, so CrossOriginProtection is what refuses a
+// cross-site PUT to it, before the handler runs (TKT-01M3YSQ4CR).
+func TestCrossSiteAvatarPutIsRefused(t *testing.T) {
+	h, reached := csrfServer(t, "")
+	req := httptest.NewRequest(http.MethodPut, AvatarPath, strings.NewReader("x"))
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=x")
+	req.Header.Set("Sec-Fetch-Site", "cross-site")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("status = %d, want 403", rec.Code)
+	}
+	if *reached {
+		t.Error("the handler ran for a cross-site avatar PUT")
 	}
 }
