@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSC0Q4WHMQNVTKB6PN4B
 title: Implement reply as a new thread
 type: task
-status: draft
+status: in-progress
 status_reason: null
 priority: low
 due_on: null
@@ -25,15 +25,22 @@ references:
     path: null
   - ref: pr:371
     path: null
-claim: null
+claim:
+  actor: agent:claude-code/phase4-run-cysc0
+  branch: run/cysc0-reply-as-thread
+  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
+  commit: 66e3fbbafd39521be7ac8e347c6dbe1e084936d9
+  session: null
+  claimed_at: 2026-10-03T04:15:17Z
+  expires_at: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-02T22:47:33Z
+updated_at: 2026-10-03T04:15:18Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
 updated_by:
-  id: agent:claude-code/phase4-run-orchestrator
+  id: agent:claude-code/phase4-run-cysc0
   name: ""
 extensions: {}
 ---
