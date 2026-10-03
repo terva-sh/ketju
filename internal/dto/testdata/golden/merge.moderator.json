@@ -27,7 +27,8 @@
       "tools"
     ],
     "created_at": 1757500000000,
-    "split_from": null
+    "split_from": null,
+    "continued_from": null
   },
   "target": {
     "id": "3yymw47g000a7",
@@ -51,7 +52,8 @@
     "pinned": null,
     "tags": [],
     "created_at": 1757100000000,
-    "split_from": null
+    "split_from": null,
+    "continued_from": null
   },
   "first_copy": 2
 }
