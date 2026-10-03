@@ -3,7 +3,7 @@ schema: 3
 id: TKT-01M29CYSBAVXNFWDZVAK5PD71S
 title: Implement merge into an existing thread
 type: task
-status: in-progress
+status: done
 status_reason: null
 priority: normal
 due_on: null
@@ -23,17 +23,10 @@ references:
     path: docs/06-thread-views.md
   - ref: pr:359
     path: null
-claim:
-  actor: agent:claude-code/phase4-run-cysba
-  branch: run/cysba-merge-posts
-  worktree: /home/sothr/workspace/git.local.sothr.com/terva-sh/ketju/.claude/worktrees/agent-a1933242261dfde8d
-  commit: dadad068d54759ae465dc537a6abc1f2f201577e
-  session: null
-  claimed_at: 2026-10-03T03:29:32Z
-  expires_at: null
+claim: null
 archive: null
 created_at: 2026-09-11T23:31:00Z
-updated_at: 2026-10-03T04:14:08Z
+updated_at: 2026-10-03T08:49:57Z
 created_by:
   id: agent:terva/mieli
   name: Mieli
@@ -61,7 +54,7 @@ Reversal is by the opposite operation rather than an undo, which is worth tellin
 - [x] Each notice names the other thread only to viewers who may read it, and the cached posts never hold it (TestMergeNoticesRevealOnlyToReaders, TestMergeNoticeNotInCachedPosts)
 - [x] A merge into or out of an archived thread is refused, moderators and admins included (TestMergeRefusesArchived)
 - [x] The merge dialog and notice pass the merge step of e2e/posts-split.spec.ts at 390 and 1440 px with one axe scan per test
-- [ ] The committed dist is regenerated and the reader, MovePosts chunk included, stays within the 120000 B gzip budget
+- [x] The committed dist is regenerated and the reader, MovePosts chunk included, stays within the 120000 B gzip budget
 
 ## Implementation plan
 
@@ -170,3 +163,19 @@ Phase A done on run/cysba-merge-posts, cut from run/cysam-split-posts and unpush
 Go: internal/service/threads/merge_test.go (TestMergeAcrossForumsNeedsModerateInBoth, TestMergeValidation, TestMergeNoticesRevealOnlyToReaders, TestMergeNoticeNotInCachedPosts, TestMergeRefusesArchived, TestMergeIntoArchivedForumAdminOnly, TestMergeAppendsAtEndInSourceOrder, TestMergeKeepsAuthorsTimesAndOrigin, TestMergeNoticesBothWays, TestMergeReplyToInsideSetResolves, TestMergeBackRestoresReading, TestMergeDoesNotBumpThread); internal/web/api/merge_test.go (TestMergeRouteGated, TestMergeNotifiesNobody). Vitest: MergeDialog.test.tsx, MergeNotice.test.tsx, MovePosts.test.tsx, ThreadPage.test.tsx, ThreadScreen.select.test.tsx. e2e: posts-split.spec.ts gains the merge-back test; it and thread, thread-moderation, thread-rename-move, targets and a11y pass at 390 and 1440 px.
 
 Bundle, measured with go generate and not committed: thread-view 84344 B gzip of 120000 (83279 B on the split branch). MovePosts chunk 3160 B JS and 548 B CSS gzip.
+
+## Summary
+
+Landed in one PR on main, after the split (#397).
+
+- **Route.** A moderator moves selected posts into an existing thread with `POST /api/v1/admin/threads/{id}/merge` `{ordinals, into}`.
+  - The route is gated by moderatesGate and has a row in adminRouteGates.
+  - The service requires moderate in both forums.
+  - A target the actor cannot read is not-found.
+  - A merge into or out of an archived thread is conflict for everyone.
+  - A refusal writes nothing.
+- **Logs.** The posts land at the end of the target, in source order, after a merge notice (docs/06). They keep their authors and timestamps, carry an origin reference, and keep reply_to resolving inside the merged set. The merge does not bump the target and notifies nobody.
+- **Drawing.** Each thread carries a notice linking to the other, drawn per viewer at draw time. It names the other thread only to its readers and is never in the cached posts. The merge read is gated on EntryCopied in the snapshot, so a page with no copies runs no extra statement.
+- **Client.** The MovePosts chunk gains the merge dialog: paste a link or an id, see the thread named, then Merge. It also gains the merge notice. A dialog closed before its merge answers takes nobody anywhere, the gap Terva review 2057 found on the split dialog.
+- **Served golden.** The merge route has its servedCases entry and golden.
+- **Bundle.** The thread view is 89147 B gzip against the 120000 B budget. Main was 88120 B.
